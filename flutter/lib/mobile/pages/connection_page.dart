@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/formatter/id_formatter.dart';
-import 'package:flutter_hbb/mobile/pages/file_manager_page.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -15,7 +14,6 @@ import '../../consts.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import 'home_page.dart';
-import 'remote_page.dart';
 import 'scan_page.dart';
 import 'settings_page.dart';
 
@@ -97,38 +95,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
   /// Connects to the selected peer.
   void onConnect() {
     var id = _idController.id;
-    connect(id);
-  }
-
-  /// Connect to a peer with [id].
-  /// If [isFileTransfer], starts a session only for file transfer.
-  void connect(String id, {bool isFileTransfer = false}) async {
-    if (id == '') return;
-    id = id.replaceAll(' ', '');
-    if (isFileTransfer) {
-      if (!await PermissionManager.check("file")) {
-        if (!await PermissionManager.request("file")) {
-          return;
-        }
-      }
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (BuildContext context) => FileManagerPage(id: id),
-        ),
-      );
-    } else {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (BuildContext context) => RemotePage(id: id),
-        ),
-      );
-    }
-    FocusScopeNode currentFocus = FocusScope.of(context);
-    if (!currentFocus.hasPrimaryFocus) {
-      currentFocus.unfocus();
-    }
+    connect(context, id);
   }
 
   /// UI for software update.

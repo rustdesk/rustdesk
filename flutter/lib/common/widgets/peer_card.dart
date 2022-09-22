@@ -77,8 +77,11 @@ class _PeerCardState extends State<_PeerCard>
               subtitle: Text('${peer.username}@${peer.hostname}'),
               title: Text(peer.alias.isEmpty ? formatID(peer.id) : peer.alias),
               leading: Container(
+                  decoration: BoxDecoration(
+                    color: str2color('${peer.id}${peer.platform}', 0x7f),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
                   padding: const EdgeInsets.all(6),
-                  color: str2color('${peer.id}${peer.platform}', 0x7f),
                   child: getPlatformImage(peer.platform)),
               trailing: InkWell(
                   child: const Padding(
@@ -458,7 +461,7 @@ abstract class BasePeerCard extends StatelessWidget {
         }
         await bind.mainSetPeerOption(id: id, key: option, value: value);
       },
-      dismissOnClicked: true,
+      dismissOnClicked: false,
     );
   }
 
@@ -543,7 +546,6 @@ abstract class BasePeerCard extends StatelessWidget {
           if (favs.remove(id)) {
             await bind.mainStoreFav(favs: favs);
             await reloadFunc();
-            // Get.forceAppUpdate(); // TODO use inner model / state
           }
         }();
       },
@@ -624,15 +626,13 @@ class RecentPeerCard extends BasePeerCard {
     final List<MenuEntryBase<String>> menuItems = [
       _connectAction(context, peer),
       _transferFileAction(context, peer.id),
-      _tcpTunnelingAction(context, peer.id),
     ];
-    MenuEntryBase<String>? rdpAction;
-    if (peer.platform == 'Windows') {
-      rdpAction = _rdpAction(context, peer.id);
+    if (isDesktop) {
+      menuItems.add(_tcpTunnelingAction(context, peer.id));
     }
     menuItems.add(await _forceAlwaysRelayAction(peer.id));
-    if (rdpAction != null) {
-      menuItems.add(rdpAction);
+    if (peer.platform == 'Windows') {
+      menuItems.add(_rdpAction(context, peer.id));
     }
     menuItems.add(_wolAction(peer.id));
     menuItems.add(MenuEntryDivider());
@@ -656,15 +656,13 @@ class FavoritePeerCard extends BasePeerCard {
     final List<MenuEntryBase<String>> menuItems = [
       _connectAction(context, peer),
       _transferFileAction(context, peer.id),
-      _tcpTunnelingAction(context, peer.id),
     ];
-    MenuEntryBase<String>? rdpAction;
-    if (peer.platform == 'Windows') {
-      rdpAction = _rdpAction(context, peer.id);
+    if (isDesktop) {
+      menuItems.add(_tcpTunnelingAction(context, peer.id));
     }
     menuItems.add(await _forceAlwaysRelayAction(peer.id));
-    if (rdpAction != null) {
-      menuItems.add(rdpAction);
+    if (peer.platform == 'Windows') {
+      menuItems.add(_rdpAction(context, peer.id));
     }
     menuItems.add(_wolAction(peer.id));
     menuItems.add(MenuEntryDivider());
@@ -690,15 +688,13 @@ class DiscoveredPeerCard extends BasePeerCard {
     final List<MenuEntryBase<String>> menuItems = [
       _connectAction(context, peer),
       _transferFileAction(context, peer.id),
-      _tcpTunnelingAction(context, peer.id),
     ];
-    MenuEntryBase<String>? rdpAction;
-    if (peer.platform == 'Windows') {
-      rdpAction = _rdpAction(context, peer.id);
+    if (isDesktop) {
+      menuItems.add(_tcpTunnelingAction(context, peer.id));
     }
     menuItems.add(await _forceAlwaysRelayAction(peer.id));
-    if (rdpAction != null) {
-      menuItems.add(rdpAction);
+    if (peer.platform == 'Windows') {
+      menuItems.add(_rdpAction(context, peer.id));
     }
     menuItems.add(_wolAction(peer.id));
     menuItems.add(MenuEntryDivider());
@@ -721,15 +717,13 @@ class AddressBookPeerCard extends BasePeerCard {
     final List<MenuEntryBase<String>> menuItems = [
       _connectAction(context, peer),
       _transferFileAction(context, peer.id),
-      _tcpTunnelingAction(context, peer.id),
     ];
-    MenuEntryBase<String>? rdpAction;
-    if (peer.platform == 'Windows') {
-      rdpAction = _rdpAction(context, peer.id);
+    if (isDesktop) {
+      menuItems.add(_tcpTunnelingAction(context, peer.id));
     }
     menuItems.add(await _forceAlwaysRelayAction(peer.id));
-    if (rdpAction != null) {
-      menuItems.add(rdpAction);
+    if (peer.platform == 'Windows') {
+      menuItems.add(_rdpAction(context, peer.id));
     }
     menuItems.add(_wolAction(peer.id));
     menuItems.add(MenuEntryDivider());

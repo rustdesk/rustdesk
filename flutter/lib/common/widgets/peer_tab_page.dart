@@ -113,7 +113,7 @@ class _PeerTabPageState extends State<PeerTabPage>
                       color: _tabIndex.value == t.key
                           ? MyTheme.color(context).bg
                           : null,
-                      borderRadius: BorderRadius.circular(2),
+                      borderRadius: BorderRadius.circular(isDesktop ? 2 : 6),
                     ),
                     child: Align(
                       alignment: Alignment.center,
