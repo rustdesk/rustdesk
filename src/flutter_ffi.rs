@@ -15,17 +15,18 @@ use hbb_common::{message_proto::Hash, ResultType};
 
 use crate::flutter::{self, SESSIONS};
 use crate::start_server;
-use crate::ui_interface;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::ui_interface::get_sound_inputs;
 use crate::ui_interface::{
-    change_id, check_mouse_time, check_super_user_permission, discover, forget_password,
+    self, change_id, check_mouse_time, check_super_user_permission, discover, forget_password,
     get_api_server, get_app_name, get_async_job_status, get_connect_status, get_fav, get_id,
     get_lan_peers, get_langs, get_license, get_local_option, get_mouse_time, get_option,
     get_options, get_peer, get_peer_option, get_socks, get_uuid, get_version, has_hwcodec,
-    has_rendezvous_service, post_request, send_to_cm, set_local_option, set_option, set_options,
-    set_peer_option, set_permanent_password, set_socks, store_fav, test_if_valid_server,
-    update_temporary_password, using_public_server,
+    has_rendezvous_service, is_can_screen_recording, is_installed, is_installed_daemon,
+    is_installed_lower_version, is_process_trusted, is_rdp_service_open, is_share_rdp,
+    post_request, send_to_cm, set_local_option, set_option, set_options, set_peer_option,
+    set_permanent_password, set_socks, store_fav, test_if_valid_server, update_temporary_password,
+    using_public_server,
 };
 use crate::{
     client::file_trait::FileManager,
@@ -557,8 +558,17 @@ pub fn main_get_peer_option(id: String, key: String) -> String {
     get_peer_option(id, key)
 }
 
+pub fn main_get_peer_option_sync(id: String, key: String) -> SyncReturn<String> {
+    SyncReturn(get_peer_option(id, key))
+}
+
 pub fn main_set_peer_option(id: String, key: String, value: String) {
     set_peer_option(id, key, value)
+}
+
+pub fn main_set_peer_option_sync(id: String, key: String, value: String) -> SyncReturn<bool> {
+    set_peer_option(id, key, value);
+    SyncReturn(true)
 }
 
 pub fn main_forget_password(id: String) {
@@ -693,10 +703,7 @@ fn main_broadcast_message(data: &HashMap<&str, &str>) {
 }
 
 pub fn main_change_theme(dark: String) {
-    main_broadcast_message(&HashMap::from([
-        ("name", "theme"),
-        ("dark", &dark),
-    ]));
+    main_broadcast_message(&HashMap::from([("name", "theme"), ("dark", &dark)]));
     send_to_cm(&crate::ipc::Data::Theme(dark));
 }
 
@@ -970,6 +977,34 @@ fn handle_query_onlines(onlines: Vec<String>, offlines: Vec<String>) {
 
 pub fn query_onlines(ids: Vec<String>) {
     crate::rendezvous_mediator::query_online_states(ids, handle_query_onlines)
+}
+
+pub fn main_is_installed() -> SyncReturn<bool> {
+    SyncReturn(is_installed())
+}
+
+pub fn main_is_installed_lower_version() -> SyncReturn<bool> {
+    SyncReturn(is_installed_lower_version())
+}
+
+pub fn main_is_installed_daemon(prompt: bool) -> SyncReturn<bool> {
+    SyncReturn(is_installed_daemon(prompt))
+}
+
+pub fn main_is_process_trusted(prompt: bool) -> SyncReturn<bool> {
+    SyncReturn(is_process_trusted(prompt))
+}
+
+pub fn main_is_can_screen_recording(prompt: bool) -> SyncReturn<bool> {
+    SyncReturn(is_can_screen_recording(prompt))
+}
+
+pub fn main_is_share_rdp() -> SyncReturn<bool> {
+    SyncReturn(is_share_rdp())
+}
+
+pub fn main_is_rdp_service_open() -> SyncReturn<bool> {
+    SyncReturn(is_rdp_service_open())
 }
 
 #[cfg(target_os = "android")]

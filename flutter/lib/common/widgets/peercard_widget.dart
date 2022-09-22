@@ -128,7 +128,8 @@ class _PeerCardState extends State<_PeerCard>
   Widget _buildPeerTile(
       BuildContext context, Peer peer, Rx<BoxDecoration?> deco) {
     final greyStyle =
-        TextStyle(fontSize: 12, color: MyTheme.color(context).lighterText);
+        TextStyle(fontSize: 11, color: MyTheme.color(context).lighterText);
+    final alias = bind.mainGetPeerOptionSync(id: peer.id, key: 'alias');
     return Obx(
       () => Container(
         foregroundDecoration: deco.value,
@@ -150,7 +151,6 @@ class _PeerCardState extends State<_PeerCard>
                   children: [
                     Expanded(
                       child: Column(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
                           Row(children: [
                             Padding(
@@ -160,42 +160,21 @@ class _PeerCardState extends State<_PeerCard>
                                     backgroundColor: peer.online
                                         ? Colors.green
                                         : Colors.yellow)),
-                            Text(
-                              formatID(peer.id),
+                            Expanded(
+                                child: Text(
+                              alias.isEmpty ? formatID(peer.id) : alias,
                               style:
                                   const TextStyle(fontWeight: FontWeight.w400),
-                            ),
+                              overflow: TextOverflow.ellipsis,
+                            )),
                           ]),
                           Align(
                             alignment: Alignment.centerLeft,
-                            child: FutureBuilder<String>(
-                              future: bind.mainGetPeerOption(
-                                  id: peer.id, key: 'alias'),
-                              builder: (_, snapshot) {
-                                if (snapshot.hasData) {
-                                  final name = snapshot.data!.isEmpty
-                                      ? '${peer.username}@${peer.hostname}'
-                                      : snapshot.data!;
-                                  return Tooltip(
-                                    message: name,
-                                    waitDuration: const Duration(seconds: 1),
-                                    child: Text(
-                                      name,
-                                      style: greyStyle,
-                                      textAlign: TextAlign.start,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  );
-                                } else {
-                                  // alias has not arrived
-                                  return Text(
-                                    '${peer.username}@${peer.hostname}',
-                                    style: greyStyle,
-                                    textAlign: TextAlign.start,
-                                    overflow: TextOverflow.ellipsis,
-                                  );
-                                }
-                              },
+                            child: Text(
+                              '${peer.username}@${peer.hostname}',
+                              style: greyStyle,
+                              textAlign: TextAlign.start,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],
@@ -203,7 +182,7 @@ class _PeerCardState extends State<_PeerCard>
                     ),
                     _actionMore(peer),
                   ],
-                ).paddingSymmetric(horizontal: 4.0),
+                ).paddingOnly(left: 10.0, top: 3.0),
               ),
             )
           ],
@@ -272,7 +251,8 @@ class _PeerCardState extends State<_PeerCard>
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(children: [
+                      Expanded(
+                          child: Row(children: [
                         Padding(
                             padding: const EdgeInsets.fromLTRB(0, 4, 8, 4),
                             child: CircleAvatar(
@@ -280,9 +260,12 @@ class _PeerCardState extends State<_PeerCard>
                                 backgroundColor: peer.online
                                     ? Colors.green
                                     : Colors.yellow)),
-                        Text(
-                            peer.alias.isEmpty ? formatID(peer.id) : peer.alias)
-                      ]).paddingSymmetric(vertical: 8),
+                        Expanded(
+                            child: Text(
+                          peer.alias.isEmpty ? formatID(peer.id) : peer.alias,
+                          overflow: TextOverflow.ellipsis,
+                        )),
+                      ]).paddingSymmetric(vertical: 8)),
                       _actionMore(peer),
                     ],
                   ).paddingSymmetric(horizontal: 12.0),
