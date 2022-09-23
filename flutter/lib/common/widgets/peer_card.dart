@@ -155,11 +155,9 @@ class _PeerCardState extends State<_PeerCard>
                 decoration:
                     BoxDecoration(color: Theme.of(context).backgroundColor),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Expanded(
                       child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Row(children: [
                             getOnline(4, peer.online),

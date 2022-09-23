@@ -15,6 +15,8 @@ import 'package:provider/provider.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../widgets/button.dart';
+
 class DesktopHomePage extends StatefulWidget {
   const DesktopHomePage({Key? key}) : super(key: key);
 
@@ -324,16 +326,42 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   Widget buildInstallCard() {
     return Container(
       margin: EdgeInsets.only(top: 20),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            translate("install_tip"),
-            style: TextStyle(fontWeight: FontWeight.normal, fontSize: 19),
-          ),
-        ],
-      ),
+      child: Container(
+          decoration: BoxDecoration(
+              gradient: LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            colors: [
+              Color.fromARGB(255, 226, 66, 188),
+              Color.fromARGB(255, 244, 114, 124),
+            ],
+          )),
+          padding: EdgeInsets.all(20),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                translate("install_tip"),
+                style: TextStyle(
+                    height: 1.5,
+                    color: Colors.white,
+                    fontWeight: FontWeight.normal,
+                    fontSize: 13),
+              ).marginOnly(bottom: 20),
+              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Button(
+                    padding: 8,
+                    isOutline: true,
+                    text: 'Install',
+                    textColor: Colors.white,
+                    borderColor: Colors.white,
+                    textSize: 20,
+                    radius: 10,
+                    onTap: () {})
+              ]),
+            ],
+          )),
     );
   }
 

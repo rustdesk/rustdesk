@@ -6,13 +6,23 @@ import '../../common.dart';
 class Button extends StatefulWidget {
   GestureTapCallback onTap;
   String text;
+  double? textSize;
   double? minWidth;
   bool isOutline;
+  double? padding;
+  Color? textColor;
+  double? radius;
+  Color? borderColor;
 
   Button({
     Key? key,
     this.minWidth,
     this.isOutline = false,
+    this.textSize,
+    this.padding,
+    this.textColor,
+    this.radius,
+    this.borderColor,
     required this.onTap,
     required this.text,
   }) : super(key: key);
@@ -35,10 +45,10 @@ class _ButtonState extends State<Button> {
           onTap: widget.onTap,
           child: ConstrainedBox(
               constraints: BoxConstraints(
-                minWidth: widget.minWidth ?? 80.0,
+                minWidth: widget.minWidth ?? 70.0,
               ),
               child: Container(
-                height: 27,
+                padding: EdgeInsets.all(widget.padding ?? 4.5),
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: pressed.value
@@ -52,20 +62,21 @@ class _ButtonState extends State<Button> {
                         : hover.value
                             ? MyTheme.hoverBorder
                             : (widget.isOutline
-                                ? MyTheme.border
+                                ? widget.borderColor ?? MyTheme.border
                                 : MyTheme.button),
                   ),
-                  borderRadius: BorderRadius.circular(5),
+                  borderRadius: BorderRadius.circular(widget.radius ?? 5),
                 ),
                 child: Text(
                   translate(
                     widget.text,
                   ),
                   style: TextStyle(
-                      fontSize: 12,
+                      fontSize: widget.textSize ?? 12.0,
                       color: pressed.value || !widget.isOutline
                           ? Theme.of(context).backgroundColor
-                          : Theme.of(context).textTheme.titleLarge?.color),
+                          : widget.textColor ??
+                              Theme.of(context).textTheme.titleLarge?.color),
                 ).marginSymmetric(horizontal: 12),
               )),
         ));
