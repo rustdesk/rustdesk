@@ -104,7 +104,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                     return false;
                   },
                   child: Scaffold(
-                    backgroundColor: MyTheme.color(context).bg,
+                    backgroundColor: Theme.of(context).backgroundColor,
                     body: Row(
                       children: [
                         Flexible(flex: 3, child: body(isLocal: true)),

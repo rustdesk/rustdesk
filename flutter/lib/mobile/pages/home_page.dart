@@ -59,7 +59,7 @@ class _HomePageState extends State<HomePage> {
           return false;
         },
         child: Scaffold(
-          backgroundColor: MyTheme.grayBg,
+          // backgroundColor: MyTheme.grayBg,
           appBar: AppBar(
             centerTitle: true,
             title: Text("RustDesk"),
@@ -73,7 +73,7 @@ class _HomePageState extends State<HomePage> {
                 .toList(),
             currentIndex: _selectedIndex,
             type: BottomNavigationBarType.fixed,
-            selectedItemColor: MyTheme.accent,
+            selectedItemColor: MyTheme.accent, //
             unselectedItemColor: MyTheme.darkGray,
             onTap: (index) => setState(() {
               // close chat overlay when go chat page
@@ -95,7 +95,7 @@ class WebHomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: MyTheme.grayBg,
+      // backgroundColor: MyTheme.grayBg,
       appBar: AppBar(
         centerTitle: true,
         title: Text("RustDesk" + (isWeb ? " (Beta) " : "")),

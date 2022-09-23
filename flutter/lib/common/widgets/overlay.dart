@@ -26,7 +26,7 @@ class DraggableChatWindow extends StatelessWidget {
         position: position,
         width: width,
         height: height,
-        builder: (_, onPanUpdate) {
+        builder: (context, onPanUpdate) {
           return isIOS
               ? ChatPage(chatModel: chatModel)
               : Scaffold(
@@ -35,16 +35,16 @@ class DraggableChatWindow extends StatelessWidget {
                     onPanUpdate: onPanUpdate,
                     appBar: isDesktop
                         ? _buildDesktopAppBar()
-                        : _buildMobileAppBar(),
+                        : _buildMobileAppBar(context),
                   ),
                   body: ChatPage(chatModel: chatModel),
                 );
         });
   }
 
-  Widget _buildMobileAppBar() {
+  Widget _buildMobileAppBar(BuildContext context) {
     return Container(
-      color: MyTheme.accent50,
+      color: Theme.of(context).colorScheme.primary,
       height: 50,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -169,17 +169,17 @@ class DraggableMobileActions extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
                         IconButton(
-                            color: MyTheme.white,
+                            color: Colors.white,
                             onPressed: onBackPressed,
                             splashRadius: 20,
                             icon: const Icon(Icons.arrow_back)),
                         IconButton(
-                            color: MyTheme.white,
+                            color: Colors.white,
                             onPressed: onHomePressed,
                             splashRadius: 20,
                             icon: const Icon(Icons.home)),
                         IconButton(
-                            color: MyTheme.white,
+                            color: Colors.white,
                             onPressed: onRecentPressed,
                             splashRadius: 20,
                             icon: const Icon(Icons.more_horiz)),
@@ -190,7 +190,7 @@ class DraggableMobileActions extends StatelessWidget {
                           endIndent: 10,
                         ),
                         IconButton(
-                            color: MyTheme.white,
+                            color: Colors.white,
                             onPressed: onHidePressed,
                             splashRadius: 20,
                             icon: const Icon(Icons.keyboard_arrow_down)),

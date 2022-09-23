@@ -42,7 +42,7 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
         OverlayEntry(builder: (context) {
           gFFI.dialogManager.setOverlayState(Overlay.of(context));
           return Scaffold(
-              backgroundColor: MyTheme.color(context).bg,
+              backgroundColor: Theme.of(context).backgroundColor,
               body: DesktopTab(
                 controller: tabController,
                 tail: ActionIcon(

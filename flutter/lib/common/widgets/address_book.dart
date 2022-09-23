@@ -115,7 +115,8 @@ class _AddressBookState extends State<AddressBook> {
                 Card(
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20),
-                      side: const BorderSide(color: MyTheme.grayBg)),
+                      side: BorderSide(
+                          color: Theme.of(context).scaffoldBackgroundColor)),
                   child: Container(
                     width: 200,
                     height: double.infinity,
@@ -215,7 +216,8 @@ class _AddressBookState extends State<AddressBook> {
             child: Text(
               tagName,
               style: TextStyle(
-                  color: rxTags.contains(tagName) ? MyTheme.white : null),
+                  color:
+                      rxTags.contains(tagName) ? Colors.white : null), // TODO
             ),
           ),
         ),

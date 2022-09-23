@@ -119,7 +119,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
       width: 320 + 20 * 2,
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 22),
       decoration: BoxDecoration(
-        color: MyTheme.color(context).bg,
+        color: Theme.of(context).backgroundColor,
         borderRadius: const BorderRadius.all(Radius.circular(13)),
       ),
       child: Ink(
@@ -129,7 +129,10 @@ class _ConnectionPageState extends State<ConnectionPage> {
               children: [
                 Text(
                   translate('Control Remote Desktop'),
-                  style: const TextStyle(fontSize: 19, height: 1),
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleLarge
+                      ?.merge(TextStyle(height: 1)),
                 ),
               ],
             ).marginOnly(bottom: 15),
@@ -148,13 +151,12 @@ class _ConnectionPageState extends State<ConnectionPage> {
                         height: 1,
                       ),
                       maxLines: 1,
-                      cursorColor: MyTheme.color(context).text!,
+                      cursorColor:
+                          Theme.of(context).textTheme.titleLarge?.color,
                       decoration: InputDecoration(
                           hintText: inputFocused.value
                               ? null
                               : translate('Enter Remote ID'),
-                          hintStyle: TextStyle(
-                              color: MyTheme.color(context).placeholder),
                           border: OutlineInputBorder(
                               borderRadius: BorderRadius.zero,
                               borderSide: BorderSide(
