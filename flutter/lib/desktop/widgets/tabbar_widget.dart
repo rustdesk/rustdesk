@@ -490,6 +490,15 @@ class _ListView extends StatelessWidget {
       this.tabBuilder,
       this.labelGetter});
 
+  /// Check whether to show ListView
+  ///
+  /// Conditions:
+  /// - hide single item when only has one item (home) on [DesktopTabPage].
+  bool isHideSingleItem() {
+    return state.value.tabs.length == 1 &&
+        controller.tabType == DesktopTabType.main;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Obx(() => ListView(
@@ -497,38 +506,41 @@ class _ListView extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         shrinkWrap: true,
         physics: const BouncingScrollPhysics(),
-        children: state.value.tabs.asMap().entries.map((e) {
-          final index = e.key;
-          final tab = e.value;
-          return _Tab(
-            index: index,
-            label: labelGetter == null
-                ? Rx<String>(tab.label)
-                : labelGetter!(tab.label),
-            selectedIcon: tab.selectedIcon,
-            unselectedIcon: tab.unselectedIcon,
-            closable: tab.closable,
-            selected: state.value.selected,
-            onClose: () {
-              if (tab.onTabCloseButton != null) {
-                tab.onTabCloseButton!();
-              } else {
-                controller.remove(index);
-              }
-            },
-            onSelected: () => controller.jumpTo(index),
-            tabBuilder: tabBuilder == null
-                ? null
-                : (Widget icon, Widget labelWidget, TabThemeConf themeConf) {
-                    return tabBuilder!(
-                      tab.label,
-                      icon,
-                      labelWidget,
-                      themeConf,
-                    );
+        children: isHideSingleItem()
+            ? List.empty()
+            : state.value.tabs.asMap().entries.map((e) {
+                final index = e.key;
+                final tab = e.value;
+                return _Tab(
+                  index: index,
+                  label: labelGetter == null
+                      ? Rx<String>(tab.label)
+                      : labelGetter!(tab.label),
+                  selectedIcon: tab.selectedIcon,
+                  unselectedIcon: tab.unselectedIcon,
+                  closable: tab.closable,
+                  selected: state.value.selected,
+                  onClose: () {
+                    if (tab.onTabCloseButton != null) {
+                      tab.onTabCloseButton!();
+                    } else {
+                      controller.remove(index);
+                    }
                   },
-          );
-        }).toList()));
+                  onSelected: () => controller.jumpTo(index),
+                  tabBuilder: tabBuilder == null
+                      ? null
+                      : (Widget icon, Widget labelWidget,
+                          TabThemeConf themeConf) {
+                          return tabBuilder!(
+                            tab.label,
+                            icon,
+                            labelWidget,
+                            themeConf,
+                          );
+                        },
+                );
+              }).toList()));
   }
 }
 
