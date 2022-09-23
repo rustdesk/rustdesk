@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
@@ -474,7 +475,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
       _OptionCheckBox(context, 'Deny remote access', 'stop-service',
           checkedIcon: const Icon(
             Icons.warning_amber_rounded,
-            color: Color.fromARGB(255, 255, 204, 0),
+            color: kColorWarn,
           ),
           enabled: enabled),
       Offstage(

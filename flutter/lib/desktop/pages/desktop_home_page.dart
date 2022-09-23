@@ -26,6 +26,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     with TrayListener, WindowListener, AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
+  var updateUrl = '';
 
   @override
   void onWindowClose() async {
@@ -74,6 +75,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
             buildTip(context),
             buildIDBoard(context),
             buildPasswordBoard(context),
+            buildHelpCards(),
           ],
         ),
       ),
@@ -293,6 +295,46 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     );
   }
 
+  Widget buildHelpCards() {
+    if (Platform.isWindows) {
+      if (!bind.mainIsInstalled()) {
+        return buildInstallCard();
+      } else if (bind.mainIsInstalledLowerVersion()) {
+        return buildUpgradeCard();
+      }
+    }
+    if (updateUrl.isNotEmpty) {
+      return buildUpdateCard();
+    }
+    if (Platform.isMacOS) {}
+    if (bind.mainIsInstalledLowerVersion()) {}
+    return Container();
+  }
+
+  Widget buildUpdateCard() {
+    return Container();
+  }
+
+  Widget buildUpgradeCard() {
+    return Container();
+  }
+
+  Widget buildInstallCard() {
+    return Container(
+      margin: EdgeInsets.only(top: 20),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            translate("install_tip"),
+            style: TextStyle(fontWeight: FontWeight.normal, fontSize: 19),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void onTrayMenuItemClick(MenuItem menuItem) {
     debugPrint('click ${menuItem.key}');
@@ -310,6 +352,10 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   @override
   void initState() {
     super.initState();
+    Timer(const Duration(seconds: 5), () async {
+      updateUrl = await bind.mainGetSoftwareUpdateUrl();
+      if (updateUrl.isNotEmpty) setState(() {});
+    });
     trayManager.addListener(this);
     windowManager.addListener(this);
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {

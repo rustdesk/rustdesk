@@ -59,7 +59,12 @@ static void my_application_activate(GApplication* application) {
 
   FlView* view = fl_view_new(project);
   gtk_widget_show(GTK_WIDGET(view));
-  gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));
+  
+  auto border_frame = gtk_frame_new(nullptr);
+  gtk_frame_set_shadow_type(GTK_FRAME(border_frame), GTK_SHADOW_ETCHED_IN);
+  gtk_container_add(GTK_CONTAINER(border_frame), GTK_WIDGET(view));
+  gtk_widget_show(GTK_WIDGET(border_frame));
+  gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(border_frame));
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 

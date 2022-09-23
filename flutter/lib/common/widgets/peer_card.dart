@@ -1,6 +1,7 @@
 import 'package:contextmenu/contextmenu.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:get/get.dart';
 
 import '../../common.dart';
@@ -161,13 +162,7 @@ class _PeerCardState extends State<_PeerCard>
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Row(children: [
-                            Padding(
-                                padding: const EdgeInsets.fromLTRB(0, 4, 4, 4),
-                                child: CircleAvatar(
-                                    radius: 5,
-                                    backgroundColor: peer.online
-                                        ? Colors.green
-                                        : Colors.yellow)),
+                            getOnline(4, peer.online),
                             Expanded(
                                 child: Text(
                               alias.isEmpty ? formatID(peer.id) : alias,
@@ -261,13 +256,7 @@ class _PeerCardState extends State<_PeerCard>
                     children: [
                       Expanded(
                           child: Row(children: [
-                        Padding(
-                            padding: const EdgeInsets.fromLTRB(0, 4, 8, 4),
-                            child: CircleAvatar(
-                                radius: 5,
-                                backgroundColor: peer.online
-                                    ? Colors.green
-                                    : Colors.yellow)),
+                        getOnline(4, peer.online),
                         Expanded(
                             child: Text(
                           peer.alias.isEmpty ? formatID(peer.id) : peer.alias,
@@ -1000,4 +989,14 @@ void _rdpDialog(String id) async {
       onCancel: close,
     );
   });
+}
+
+Widget getOnline(int rightMargin, bool online) {
+  return Tooltip(
+      message: translate(online ? 'Online' : 'Offline'),
+      waitDuration: const Duration(seconds: 1),
+      child: Padding(
+          padding: const EdgeInsets.fromLTRB(0, 4, 8, 4),
+          child: CircleAvatar(
+              radius: 3, backgroundColor: online ? Colors.green : kColorWarn)));
 }
