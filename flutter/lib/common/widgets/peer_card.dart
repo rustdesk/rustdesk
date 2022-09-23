@@ -158,6 +158,7 @@ class _PeerCardState extends State<_PeerCard>
                   children: [
                     Expanded(
                       child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Row(children: [
                             Padding(
@@ -729,9 +730,6 @@ class DiscoveredPeerCard extends BasePeerCard {
     menuItems.add(_wolAction(peer.id));
     menuItems.add(MenuEntryDivider());
     menuItems.add(_renameAction(peer.id, false));
-    menuItems.add(_removeAction(peer.id, () async {
-      await bind.mainLoadLanPeers();
-    }));
     menuItems.add(_unrememberPasswordAction(peer.id));
     return menuItems;
   }

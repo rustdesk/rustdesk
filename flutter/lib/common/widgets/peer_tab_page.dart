@@ -42,9 +42,6 @@ class _PeerTabPageState extends State<PeerTabPage>
 
   // hard code for now
   Future<void> _handleTabSelection(int index) async {
-    // reset search text
-    peerSearchText.value = "";
-    peerSearchTextController.clear();
     _tabIndex.value = index;
     await bind.mainSetLocalOption(
         key: 'peer-tab-index', value: index.toString());
