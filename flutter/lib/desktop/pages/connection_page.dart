@@ -5,6 +5,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/widgets/address_book.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
@@ -297,7 +298,11 @@ class _ConnectionPageState extends State<ConnectionPage> {
       width: 8,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        color: svcStopped.value ? Colors.redAccent : Colors.green,
+        color: svcStopped.value || svcStatusCode.value == 0
+            ? kColorWarn
+            : (svcStatusCode.value == 1
+                ? Color.fromARGB(255, 50, 190, 166)
+                : Color.fromARGB(255, 224, 79, 95)),
       ),
     ).paddingSymmetric(horizontal: 12.0);
     if (svcStopped.value) {

@@ -11,6 +11,8 @@ const String kAppTypeDesktopPortForward = "port forward";
 const String kTabLabelHomePage = "Home";
 const String kTabLabelSettingPage = "Settings";
 
+const Color kColorWarn = Color.fromARGB(255, 245, 133, 59);
+
 const int kMobileDefaultDisplayWidth = 720;
 const int kMobileDefaultDisplayHeight = 1280;
 
