@@ -128,8 +128,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
         child: Ink(
-          decoration: const BoxDecoration(
-            color: MyTheme.white,
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
             borderRadius: BorderRadius.all(Radius.circular(13)),
           ),
           child: Row(

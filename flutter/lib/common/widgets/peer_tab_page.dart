@@ -201,9 +201,9 @@ class _PeerSearchBarState extends State<PeerSearchBar> {
                 drawer = true;
               });
             },
-            icon: const Icon(
+            icon: Icon(
               Icons.search_rounded,
-              color: MyTheme.dark,
+              color: Theme.of(context).hintColor,
             ));
   }
 
@@ -267,9 +267,9 @@ class _PeerSearchBarState extends State<PeerSearchBar> {
                             drawer = false;
                           });
                         },
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.close,
-                          color: MyTheme.dark,
+                          color: Theme.of(context).hintColor,
                         )),
                   ],
                 ),

@@ -160,7 +160,7 @@ class MyTheme {
     textTheme: const TextTheme(
         titleLarge: TextStyle(fontSize: 19),
         bodySmall: TextStyle(fontSize: 12, height: 1.25)),
-    hintColor: Color(0xFF555555),
+    cardColor: Color(0xFF252525),
     primarySwatch: Colors.blue,
     visualDensity: VisualDensity.adaptivePlatformDensity,
     tabBarTheme: const TabBarTheme(

@@ -170,7 +170,7 @@ class ServerInfo extends StatelessWidget {
                   icon: const Icon(Icons.perm_identity),
                   labelText: translate("ID"),
                   labelStyle: const TextStyle(
-                      fontWeight: FontWeight.bold, color: MyTheme.accent50),
+                      fontWeight: FontWeight.bold, color: MyTheme.accent80),
                 ),
                 onSaved: (String? value) {},
               ),
@@ -185,7 +185,7 @@ class ServerInfo extends StatelessWidget {
                     icon: const Icon(Icons.lock),
                     labelText: translate("Password"),
                     labelStyle: const TextStyle(
-                        fontWeight: FontWeight.bold, color: MyTheme.accent50),
+                        fontWeight: FontWeight.bold, color: MyTheme.accent80),
                     suffix: isPermanent
                         ? null
                         : IconButton(
@@ -213,7 +213,7 @@ class ServerInfo extends StatelessWidget {
                       fontFamily: 'WorkSans',
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
-                      color: MyTheme.accent80,
+                      color: MyTheme.accent,
                     ),
                   ))
                 ],
@@ -304,7 +304,8 @@ class _PermissionCheckerState extends State<PermissionChecker> {
                                       softWrap: true,
                                       style: const TextStyle(
                                           fontSize: 14.0,
-                                          color: MyTheme.accent50)))
+                                          fontWeight: FontWeight.w500,
+                                          color: MyTheme.accent80)))
                             ],
                           )
                         : const SizedBox.shrink())
@@ -334,7 +335,9 @@ class PermissionRow extends StatelessWidget {
                 alignment: Alignment.centerLeft,
                 child: Text(name,
                     style: const TextStyle(
-                        fontSize: 16.0, color: MyTheme.accent50)))),
+                        fontSize: 16.0,
+                        fontWeight: FontWeight.bold,
+                        color: MyTheme.accent80)))),
         Expanded(
           flex: 2,
           child: FittedBox(
@@ -398,7 +401,7 @@ class ConnectionManager extends StatelessWidget {
                                     },
                                     icon: const Icon(
                                       Icons.chat,
-                                      color: MyTheme.accent80,
+                                      color: MyTheme.accent,
                                     )))
                       ],
                     ),
@@ -460,8 +463,8 @@ class PaddingCard extends StatelessWidget {
                   titleIcon != null
                       ? Padding(
                           padding: const EdgeInsets.only(right: 10),
-                          child: Icon(titleIcon,
-                              color: MyTheme.accent80, size: 30))
+                          child:
+                              Icon(titleIcon, color: MyTheme.accent, size: 30))
                       : const SizedBox.shrink(),
                   Text(
                     title!,
@@ -469,7 +472,7 @@ class PaddingCard extends StatelessWidget {
                       fontFamily: 'WorkSans',
                       fontWeight: FontWeight.bold,
                       fontSize: 20,
-                      color: MyTheme.accent80,
+                      color: MyTheme.accent,
                     ),
                   )
                 ],
