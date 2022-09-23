@@ -68,7 +68,7 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
   Widget build(BuildContext context) {
     super.build(context);
     return Scaffold(
-      backgroundColor: MyTheme.color(context).bg,
+      backgroundColor: Theme.of(context).backgroundColor,
       body: Row(
         children: <Widget>[
           SizedBox(
@@ -83,7 +83,7 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
           const VerticalDivider(thickness: 1, width: 1),
           Expanded(
             child: Container(
-              color: MyTheme.color(context).grayBg,
+              color: Theme.of(context).scaffoldBackgroundColor,
               child: DesktopScrollWrapper(
                   scrollController: controller,
                   child: PageView(
@@ -802,7 +802,9 @@ Widget _Card({required String title, required List<Widget> children}) {
 }
 
 Color? _disabledTextColor(BuildContext context, bool enabled) {
-  return enabled ? null : MyTheme.color(context).lighterText;
+  return enabled
+      ? null
+      : Theme.of(context).textTheme.titleLarge?.color?.withOpacity(0.6);
 }
 
 // ignore: non_constant_identifier_names

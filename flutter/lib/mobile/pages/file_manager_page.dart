@@ -58,7 +58,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
               return false;
             },
             child: Scaffold(
-              backgroundColor: MyTheme.grayBg,
+              // backgroundColor: MyTheme.grayBg,
               appBar: AppBar(
                 leading: Row(children: [
                   IconButton(
@@ -69,7 +69,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
                 title: ToggleSwitch(
                   initialLabelIndex: model.isLocal ? 0 : 1,
                   activeBgColor: [MyTheme.idColor],
-                  inactiveBgColor: MyTheme.grayBg,
+                  // inactiveBgColor: MyTheme.grayBg,
                   inactiveFgColor: Colors.black54,
                   totalSwitches: 2,
                   minWidth: 100,
@@ -465,6 +465,9 @@ class _FileManagerPageState extends State<FileManagerPage> {
         );
       case JobState.none:
         break;
+      case JobState.paused:
+        // TODO: Handle this case.
+        break;
     }
     return null;
   }
@@ -530,8 +533,7 @@ class BottomSheetBody extends StatelessWidget {
                         children: [
                           Text(title, style: TextStyle(fontSize: 18)),
                           Text(text,
-                              style: TextStyle(
-                                  fontSize: 14, color: MyTheme.grayBg))
+                              style: TextStyle(fontSize: 14)) // TODO color
                         ],
                       )
                     ],
@@ -548,7 +550,7 @@ class BottomSheetBody extends StatelessWidget {
             ));
       },
       onClosing: () {},
-      backgroundColor: MyTheme.grayBg,
+      // backgroundColor: MyTheme.grayBg,
       enableDrag: false,
     );
   }

@@ -76,59 +76,22 @@ class IconFont {
 
 class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
   const ColorThemeExtension({
-    required this.bg,
-    required this.grayBg,
-    required this.text,
-    required this.lightText,
-    required this.lighterText,
-    required this.placeholder,
     required this.border,
   });
 
-  final Color? bg;
-  final Color? grayBg;
-  final Color? text;
-  final Color? lightText;
-  final Color? lighterText;
-  final Color? placeholder;
   final Color? border;
 
   static const light = ColorThemeExtension(
-    bg: Color(0xFFFFFFFF),
-    grayBg: Color(0xFFEEEEEE),
-    text: Color(0xFF222222),
-    lightText: Color(0xFF666666),
-    lighterText: Color(0xFF888888),
-    placeholder: Color(0xFFAAAAAA),
     border: Color(0xFFCCCCCC),
   );
 
   static const dark = ColorThemeExtension(
-    bg: Color(0xFF252525),
-    grayBg: Color(0xFF141414),
-    text: Color(0xFFFFFFFF),
-    lightText: Color(0xFF999999),
-    lighterText: Color(0xFF777777),
-    placeholder: Color(0xFF555555),
     border: Color(0xFF555555),
   );
 
   @override
-  ThemeExtension<ColorThemeExtension> copyWith(
-      {Color? bg,
-      Color? grayBg,
-      Color? text,
-      Color? lightText,
-      Color? lighterText,
-      Color? placeholder,
-      Color? border}) {
+  ThemeExtension<ColorThemeExtension> copyWith({Color? border}) {
     return ColorThemeExtension(
-      bg: bg ?? this.bg,
-      grayBg: grayBg ?? this.grayBg,
-      text: text ?? this.text,
-      lightText: lightText ?? this.lightText,
-      lighterText: lighterText ?? this.lighterText,
-      placeholder: placeholder ?? this.placeholder,
       border: border ?? this.border,
     );
   }
@@ -140,12 +103,6 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
       return this;
     }
     return ColorThemeExtension(
-      bg: Color.lerp(bg, other.bg, t),
-      grayBg: Color.lerp(grayBg, other.grayBg, t),
-      text: Color.lerp(text, other.text, t),
-      lightText: Color.lerp(lightText, other.lightText, t),
-      lighterText: Color.lerp(lighterText, other.lighterText, t),
-      placeholder: Color.lerp(placeholder, other.placeholder, t),
       border: Color.lerp(border, other.border, t),
     );
   }
@@ -170,6 +127,13 @@ class MyTheme {
 
   static ThemeData lightTheme = ThemeData(
     brightness: Brightness.light,
+    backgroundColor: Color(0xFFFFFFFF),
+    scaffoldBackgroundColor: Color(0xFFEEEEEE),
+    textTheme: const TextTheme(
+        titleLarge: TextStyle(fontSize: 19, color: Colors.black87),
+        bodySmall:
+            TextStyle(fontSize: 12, color: Colors.black54, height: 1.25)),
+    hintColor: Color(0xFFAAAAAA),
     primarySwatch: Colors.blue,
     visualDensity: VisualDensity.adaptivePlatformDensity,
     tabBarTheme: const TabBarTheme(
@@ -191,6 +155,12 @@ class MyTheme {
   );
   static ThemeData darkTheme = ThemeData(
     brightness: Brightness.dark,
+    backgroundColor: Color(0xFF252525),
+    scaffoldBackgroundColor: Color(0xFF141414),
+    textTheme: const TextTheme(
+        titleLarge: TextStyle(fontSize: 19),
+        bodySmall: TextStyle(fontSize: 12, height: 1.25)),
+    hintColor: Color(0xFF555555),
     primarySwatch: Colors.blue,
     visualDensity: VisualDensity.adaptivePlatformDensity,
     tabBarTheme: const TabBarTheme(

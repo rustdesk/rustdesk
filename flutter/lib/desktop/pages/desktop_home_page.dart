@@ -68,7 +68,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       value: gFFI.serverModel,
       child: Container(
         width: 200,
-        color: MyTheme.color(context).bg,
+        color: Theme.of(context).backgroundColor,
         child: Column(
           children: [
             buildTip(context),
@@ -82,7 +82,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
   buildRightPane(BuildContext context) {
     return Container(
-      color: MyTheme.color(context).grayBg,
+      color: Theme.of(context).scaffoldBackgroundColor,
       child: ConnectionPage(),
     );
   }
@@ -116,7 +116,11 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                           translate("ID"),
                           style: TextStyle(
                               fontSize: 14,
-                              color: MyTheme.color(context).lightText),
+                              color: Theme.of(context)
+                                  .textTheme
+                                  .titleLarge
+                                  ?.color
+                                  ?.withOpacity(0.5)),
                         ).marginOnly(top: 5),
                         buildPopupMenu(context)
                       ],
@@ -152,6 +156,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   }
 
   Widget buildPopupMenu(BuildContext context) {
+    final textColor = Theme.of(context).textTheme.titleLarge?.color;
     RxBool hover = false.obs;
     return InkWell(
       onTap: () async {},
@@ -159,14 +164,12 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         () => CircleAvatar(
           radius: 15,
           backgroundColor: hover.value
-              ? MyTheme.color(context).grayBg!
-              : MyTheme.color(context).bg!,
+              ? Theme.of(context).scaffoldBackgroundColor
+              : Theme.of(context).backgroundColor,
           child: Icon(
             Icons.more_vert_outlined,
             size: 20,
-            color: hover.value
-                ? MyTheme.color(context).text
-                : MyTheme.color(context).lightText,
+            color: hover.value ? textColor : textColor?.withOpacity(0.5),
           ),
         ),
       ),
@@ -178,6 +181,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     final model = gFFI.serverModel;
     RxBool refreshHover = false.obs;
     RxBool editHover = false.obs;
+    final textColor = Theme.of(context).textTheme.titleLarge?.color;
     return Container(
       margin: EdgeInsets.only(left: 20.0, right: 16, top: 13, bottom: 13),
       child: Row(
@@ -198,7 +202,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                   Text(
                     translate("Password"),
                     style: TextStyle(
-                        fontSize: 14, color: MyTheme.color(context).lightText),
+                        fontSize: 14, color: textColor?.withOpacity(0.5)),
                   ),
                   Row(
                     children: [
@@ -228,8 +232,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                           () => Icon(
                             Icons.refresh,
                             color: refreshHover.value
-                                ? MyTheme.color(context).text
-                                : Color(0xFFDDDDDD),
+                                ? textColor
+                                : Color(0xFFDDDDDD), // TODO
                             size: 22,
                           ).marginOnly(right: 8, bottom: 2),
                         ),
@@ -241,8 +245,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                           () => Icon(
                             Icons.edit,
                             color: editHover.value
-                                ? MyTheme.color(context).text
-                                : Color(0xFFDDDDDD),
+                                ? textColor
+                                : Color(0xFFDDDDDD), // TODO
                             size: 22,
                           ).marginOnly(right: 8, bottom: 2),
                         ),
@@ -270,7 +274,11 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         children: [
           Text(
             translate("Your Desktop"),
-            style: TextStyle(fontWeight: FontWeight.normal, fontSize: 19),
+            style: Theme.of(context).textTheme.titleLarge,
+            // style: TextStyle(
+            //     // color: MyTheme.color(context).text,
+            //     fontWeight: FontWeight.normal,
+            //     fontSize: 19),
           ),
           SizedBox(
             height: 10.0,
@@ -278,10 +286,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           Text(
             translate("desk_tip"),
             overflow: TextOverflow.clip,
-            style: TextStyle(
-                fontSize: 12,
-                color: MyTheme.color(context).lighterText,
-                height: 1.25),
+            style: Theme.of(context).textTheme.bodySmall,
           )
         ],
       ),

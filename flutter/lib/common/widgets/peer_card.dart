@@ -108,7 +108,9 @@ class _PeerCardState extends State<_PeerCard>
     return MouseRegion(
       onEnter: (evt) {
         deco.value = BoxDecoration(
-            border: Border.all(color: MyTheme.button, width: _borderWidth),
+            border: Border.all(
+                color: Theme.of(context).colorScheme.secondary,
+                width: _borderWidth),
             borderRadius: peerCardUiType.value == PeerUiType.grid
                 ? BorderRadius.circular(_cardRadis)
                 : null);
@@ -130,8 +132,9 @@ class _PeerCardState extends State<_PeerCard>
 
   Widget _buildPeerTile(
       BuildContext context, Peer peer, Rx<BoxDecoration?> deco) {
-    final greyStyle =
-        TextStyle(fontSize: 11, color: MyTheme.color(context).lighterText);
+    final greyStyle = TextStyle(
+        fontSize: 11,
+        color: Theme.of(context).textTheme.titleLarge?.color?.withOpacity(0.6));
     final alias = bind.mainGetPeerOptionSync(id: peer.id, key: 'alias');
     return Obx(
       () => Container(
@@ -148,7 +151,8 @@ class _PeerCardState extends State<_PeerCard>
             ),
             Expanded(
               child: Container(
-                decoration: BoxDecoration(color: MyTheme.color(context).bg),
+                decoration:
+                    BoxDecoration(color: Theme.of(context).backgroundColor),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -250,7 +254,7 @@ class _PeerCardState extends State<_PeerCard>
                   ),
                 ),
                 Container(
-                  color: MyTheme.color(context).bg,
+                  color: Theme.of(context).backgroundColor,
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -294,13 +298,21 @@ class _PeerCardState extends State<_PeerCard>
           child: CircleAvatar(
               radius: 14,
               backgroundColor: _iconMoreHover.value
-                  ? MyTheme.color(context).grayBg!
-                  : MyTheme.color(context).bg!,
+                  ? Theme.of(context).scaffoldBackgroundColor
+                  : Theme.of(context).backgroundColor,
+              // ? Theme.of(context).scaffoldBackgroundColor!
+              // : Theme.of(context).backgroundColor!,
               child: Icon(Icons.more_vert,
                   size: 18,
                   color: _iconMoreHover.value
-                      ? MyTheme.color(context).text
-                      : MyTheme.color(context).lightText))));
+                      ? Theme.of(context).textTheme.titleLarge?.color
+                      : Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.color
+                          ?.withOpacity(0.5)))));
+  // ? MyTheme.color(context).text
+  // : MyTheme.color(context).lightText))));
 
   /// Show the peer menu and handle user's choice.
   /// User might remove the peer or send a file to the peer.
@@ -865,7 +877,7 @@ class AddressBookPeerCard extends BasePeerCard {
             child: Text(
               tagName,
               style: TextStyle(
-                  color: rxTags.contains(tagName) ? MyTheme.white : null),
+                  color: rxTags.contains(tagName) ? Colors.white : null),
             ),
           ),
         ),

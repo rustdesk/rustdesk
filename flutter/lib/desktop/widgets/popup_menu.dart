@@ -1,7 +1,6 @@
 import 'dart:core';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/common.dart';
 import 'package:get/get.dart';
 
 import './material_mod_popup_menu.dart' as mod_menu;
@@ -201,7 +200,7 @@ class MenuEntryRadios<T> extends MenuEntryBase<T> {
               Text(
                 opt.text,
                 style: TextStyle(
-                    color: MyTheme.color(context).text,
+                    color: Theme.of(context).textTheme.titleLarge?.color,
                     fontSize: MenuConfig.fontSize,
                     fontWeight: FontWeight.normal),
               ),
@@ -296,7 +295,7 @@ class MenuEntrySubRadios<T> extends MenuEntryBase<T> {
               Text(
                 opt.text,
                 style: TextStyle(
-                    color: MyTheme.color(context).text,
+                    color: Theme.of(context).textTheme.titleLarge?.color,
                     fontSize: MenuConfig.fontSize,
                     fontWeight: FontWeight.normal),
               ),
@@ -345,7 +344,7 @@ class MenuEntrySubRadios<T> extends MenuEntryBase<T> {
           Text(
             text,
             style: TextStyle(
-                color: MyTheme.color(context).text,
+                color: Theme.of(context).textTheme.titleLarge?.color,
                 fontSize: MenuConfig.fontSize,
                 fontWeight: FontWeight.normal),
           ),
@@ -392,8 +391,8 @@ abstract class MenuEntrySwitchBase<T> extends MenuEntryBase<T> {
   @override
   List<mod_menu.PopupMenuEntry<T>> build(
       BuildContext context, MenuConfig conf) {
-    textStyle ??= const TextStyle(
-            color: Colors.black,
+    textStyle ??= TextStyle(
+            color: Theme.of(context).textTheme.titleLarge?.color,
             fontSize: MenuConfig.fontSize,
             fontWeight: FontWeight.normal)
         .obs;
@@ -560,7 +559,9 @@ class MenuEntrySubMenu<T> extends MenuEntryBase<T> {
           Obx(() => Text(
                 text,
                 style: TextStyle(
-                    color: super.enabled!.value ? Colors.black : Colors.grey,
+                    color: super.enabled!.value
+                        ? Theme.of(context).textTheme.titleLarge?.color
+                        : Colors.grey,
                     fontSize: MenuConfig.fontSize,
                     fontWeight: FontWeight.normal),
               )),
@@ -595,8 +596,8 @@ class MenuEntryButton<T> extends MenuEntryBase<T> {
         );
 
   Widget _buildChild(BuildContext context, MenuConfig conf) {
-    const enabledStyle = TextStyle(
-        color: Colors.black,
+    final enabledStyle = TextStyle(
+        color: Theme.of(context).textTheme.titleLarge?.color,
         fontSize: MenuConfig.fontSize,
         fontWeight: FontWeight.normal);
     const disabledStyle = TextStyle(

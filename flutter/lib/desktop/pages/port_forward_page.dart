@@ -70,7 +70,7 @@ class _PortForwardPageState extends State<PortForwardPage>
   Widget build(BuildContext context) {
     super.build(context);
     return Scaffold(
-      backgroundColor: MyTheme.color(context).grayBg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: FutureBuilder(future: () async {
         if (!widget.isRDP) {
           refreshTunnelConfig();
@@ -80,7 +80,8 @@ class _PortForwardPageState extends State<PortForwardPage>
           return Container(
             decoration: BoxDecoration(
                 border: Border.all(
-                    width: 20, color: MyTheme.color(context).grayBg!)),
+                    width: 20,
+                    color: Theme.of(context).scaffoldBackgroundColor)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -88,7 +89,7 @@ class _PortForwardPageState extends State<PortForwardPage>
                 Flexible(
                   child: Container(
                     decoration: BoxDecoration(
-                        color: MyTheme.color(context).bg,
+                        color: Theme.of(context).backgroundColor,
                         border: Border.all(width: 1, color: MyTheme.border)),
                     child:
                         widget.isRDP ? buildRdp(context) : buildTunnel(context),
@@ -131,7 +132,7 @@ class _PortForwardPageState extends State<PortForwardPage>
 
     return Theme(
       data: Theme.of(context)
-          .copyWith(backgroundColor: MyTheme.color(context).bg),
+          .copyWith(backgroundColor: Theme.of(context).backgroundColor),
       child: Obx(() => ListView.builder(
           controller: ScrollController(),
           itemCount: pfs.length + 2,
@@ -139,7 +140,7 @@ class _PortForwardPageState extends State<PortForwardPage>
             if (index == 0) {
               return Container(
                 height: 25,
-                color: MyTheme.color(context).grayBg,
+                color: Theme.of(context).scaffoldBackgroundColor,
                 child: Row(children: [
                   text('Local Port'),
                   const SizedBox(width: _kColumn1Width),
@@ -166,7 +167,7 @@ class _PortForwardPageState extends State<PortForwardPage>
 
     return Container(
       height: _kRowHeight,
-      decoration: BoxDecoration(color: MyTheme.color(context).bg),
+      decoration: BoxDecoration(color: Theme.of(context).backgroundColor),
       child: Row(children: [
         buildTunnelInputCell(context,
             controller: localPortController,
@@ -216,11 +217,12 @@ class _PortForwardPageState extends State<PortForwardPage>
       {required TextEditingController controller,
       List<TextInputFormatter>? inputFormatters,
       String? hint}) {
+    final textColor = Theme.of(context).textTheme.titleLarge?.color;
     return Expanded(
       child: TextField(
         controller: controller,
         inputFormatters: inputFormatters,
-        cursorColor: MyTheme.color(context).text,
+        cursorColor: textColor,
         cursorHeight: 20,
         cursorWidth: 1,
         decoration: InputDecoration(
@@ -228,12 +230,12 @@ class _PortForwardPageState extends State<PortForwardPage>
                 borderSide: BorderSide(color: MyTheme.color(context).border!)),
             focusedBorder: OutlineInputBorder(
                 borderSide: BorderSide(color: MyTheme.color(context).border!)),
-            fillColor: MyTheme.color(context).bg,
+            fillColor: Theme.of(context).backgroundColor,
             contentPadding: const EdgeInsets.all(10),
             hintText: hint,
-            hintStyle: TextStyle(
-                color: MyTheme.color(context).placeholder, fontSize: 16)),
-        style: TextStyle(color: MyTheme.color(context).text, fontSize: 16),
+            hintStyle:
+                TextStyle(color: Theme.of(context).hintColor, fontSize: 16)),
+        style: TextStyle(color: textColor, fontSize: 16),
       ).marginAll(10),
     );
   }
@@ -250,7 +252,7 @@ class _PortForwardPageState extends State<PortForwardPage>
               ? MyTheme.currentThemeMode() == ThemeMode.dark
                   ? const Color(0xFF202020)
                   : const Color(0xFFF4F5F6)
-              : MyTheme.color(context).bg),
+              : Theme.of(context).backgroundColor),
       child: Row(children: [
         text(pf.localPort.toString()),
         const SizedBox(width: _kColumn1Width),
@@ -292,7 +294,7 @@ class _PortForwardPageState extends State<PortForwardPage>
         ).marginOnly(left: _kTextLeftMargin));
     return Theme(
       data: Theme.of(context)
-          .copyWith(backgroundColor: MyTheme.color(context).bg),
+          .copyWith(backgroundColor: Theme.of(context).backgroundColor),
       child: ListView.builder(
           controller: ScrollController(),
           itemCount: 2,
@@ -300,7 +302,7 @@ class _PortForwardPageState extends State<PortForwardPage>
             if (index == 0) {
               return Container(
                 height: 25,
-                color: MyTheme.color(context).grayBg,
+                color: Theme.of(context).scaffoldBackgroundColor,
                 child: Row(children: [
                   text1('Local Port'),
                   const SizedBox(width: _kColumn1Width),
@@ -311,7 +313,8 @@ class _PortForwardPageState extends State<PortForwardPage>
             } else {
               return Container(
                 height: _kRowHeight,
-                decoration: BoxDecoration(color: MyTheme.color(context).bg),
+                decoration:
+                    BoxDecoration(color: Theme.of(context).backgroundColor),
                 child: Row(children: [
                   Expanded(
                     child: Align(

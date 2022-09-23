@@ -752,7 +752,7 @@ class _RemotePageState extends State<RemotePage> {
   void changeTouchMode() {
     setState(() => _showEdit = false);
     showModalBottomSheet(
-        backgroundColor: MyTheme.grayBg,
+        // backgroundColor: MyTheme.grayBg,
         isScrollControlled: true,
         context: context,
         shape: const RoundedRectangleBorder(
@@ -968,7 +968,9 @@ class ImagePainter extends CustomPainter {
   }
 }
 
+// TODO global widget
 class QualityMonitor extends StatelessWidget {
+  static final textColor = Colors.grey.shade200;
   @override
   Widget build(BuildContext context) => ChangeNotifierProvider.value(
       value: gFFI.qualityMonitorModel,
@@ -985,23 +987,23 @@ class QualityMonitor extends StatelessWidget {
                         children: [
                           Text(
                             "Speed: ${qualityMonitorModel.data.speed ?? ''}",
-                            style: TextStyle(color: MyTheme.grayBg),
+                            style: TextStyle(color: textColor),
                           ),
                           Text(
                             "FPS: ${qualityMonitorModel.data.fps ?? ''}",
-                            style: TextStyle(color: MyTheme.grayBg),
+                            style: TextStyle(color: textColor),
                           ),
                           Text(
                             "Delay: ${qualityMonitorModel.data.delay ?? ''} ms",
-                            style: TextStyle(color: MyTheme.grayBg),
+                            style: TextStyle(color: textColor),
                           ),
                           Text(
                             "Target Bitrate: ${qualityMonitorModel.data.targetBitrate ?? ''}kb",
-                            style: TextStyle(color: MyTheme.grayBg),
+                            style: TextStyle(color: textColor),
                           ),
                           Text(
                             "Codec: ${qualityMonitorModel.data.codecFormat ?? ''}",
-                            style: TextStyle(color: MyTheme.grayBg),
+                            style: TextStyle(color: textColor),
                           ),
                         ],
                       ),

@@ -101,6 +101,7 @@ class _PeerTabPageState extends State<PeerTabPage>
   }
 
   Widget _createTabBar(BuildContext context) {
+    final textColor = Theme.of(context).textTheme.titleLarge?.color;
     return ListView(
         scrollDirection: Axis.horizontal,
         shrinkWrap: true,
@@ -111,7 +112,7 @@ class _PeerTabPageState extends State<PeerTabPage>
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     decoration: BoxDecoration(
                       color: _tabIndex.value == t.key
-                          ? MyTheme.color(context).bg
+                          ? Theme.of(context).backgroundColor
                           : null,
                       borderRadius: BorderRadius.circular(isDesktop ? 2 : 6),
                     ),
@@ -123,9 +124,9 @@ class _PeerTabPageState extends State<PeerTabPage>
                         style: TextStyle(
                             height: 1,
                             fontSize: 14,
-                            color: _tabIndex.value == t.key
-                                ? MyTheme.color(context).text
-                                : MyTheme.color(context).lightText),
+                            color:
+                                _tabIndex.value == t.key ? textColor : textColor
+                                  ?..withOpacity(0.5)),
                       ),
                     )),
                 onTap: () async => await _handleTabSelection(t.key),
@@ -147,7 +148,8 @@ class _PeerTabPageState extends State<PeerTabPage>
   }
 
   Widget _createPeerViewTypeSwitch(BuildContext context) {
-    final activeDeco = BoxDecoration(color: MyTheme.color(context).bg);
+    final textColor = Theme.of(context).textTheme.titleLarge?.color;
+    final activeDeco = BoxDecoration(color: Theme.of(context).backgroundColor);
     return Row(
       children: [PeerUiType.grid, PeerUiType.list]
           .map((type) => Obx(
@@ -166,9 +168,9 @@ class _PeerTabPageState extends State<PeerTabPage>
                             ? Icons.grid_view_rounded
                             : Icons.list,
                         size: 18,
-                        color: peerCardUiType.value == type
-                            ? MyTheme.color(context).text
-                            : MyTheme.color(context).lightText,
+                        color:
+                            peerCardUiType.value == type ? textColor : textColor
+                              ?..withOpacity(0.5),
                       )),
                 ),
               ))
@@ -212,7 +214,7 @@ class _PeerSearchBarState extends State<PeerSearchBar> {
     return Container(
       width: 120,
       decoration: BoxDecoration(
-        color: MyTheme.color(context).bg,
+        color: Theme.of(context).backgroundColor,
         borderRadius: BorderRadius.circular(6),
       ),
       child: Obx(() => Row(
@@ -222,7 +224,7 @@ class _PeerSearchBarState extends State<PeerSearchBar> {
                   children: [
                     Icon(
                       Icons.search_rounded,
-                      color: MyTheme.color(context).placeholder,
+                      color: Theme.of(context).hintColor,
                     ).marginSymmetric(horizontal: 4),
                     Expanded(
                       child: TextField(
@@ -234,7 +236,11 @@ class _PeerSearchBarState extends State<PeerSearchBar> {
                         focusNode: focusNode,
                         textAlign: TextAlign.start,
                         maxLines: 1,
-                        cursorColor: MyTheme.color(context).lightText,
+                        cursorColor: Theme.of(context)
+                            .textTheme
+                            .titleLarge
+                            ?.color
+                            ?.withOpacity(0.5),
                         cursorHeight: 18,
                         cursorWidth: 1,
                         style: const TextStyle(fontSize: 14),
@@ -244,8 +250,7 @@ class _PeerSearchBarState extends State<PeerSearchBar> {
                           hintText:
                               focused.value ? null : translate("Search ID"),
                           hintStyle: TextStyle(
-                              fontSize: 14,
-                              color: MyTheme.color(context).placeholder),
+                              fontSize: 14, color: Theme.of(context).hintColor),
                           border: InputBorder.none,
                           isDense: true,
                         ),
