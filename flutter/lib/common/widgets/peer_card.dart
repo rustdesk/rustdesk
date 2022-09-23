@@ -164,11 +164,9 @@ class _PeerCardState extends State<_PeerCard>
                             Expanded(
                                 child: Text(
                               alias.isEmpty ? formatID(peer.id) : alias,
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w400),
                               overflow: TextOverflow.ellipsis,
                             )),
-                          ]),
+                          ]).marginOnly(bottom: 2),
                           Align(
                             alignment: Alignment.centerLeft,
                             child: Text(
@@ -179,7 +177,7 @@ class _PeerCardState extends State<_PeerCard>
                             ),
                           ),
                         ],
-                      ),
+                      ).marginOnly(top: 2),
                     ),
                     _actionMore(peer),
                   ],
