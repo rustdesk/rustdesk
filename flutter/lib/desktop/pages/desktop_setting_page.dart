@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
+import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:get/get.dart';
@@ -27,6 +28,8 @@ const double _kListViewBottomMargin = 15;
 const double _kTitleFontSize = 20;
 const double _kContentFontSize = 15;
 const Color _accentColor = MyTheme.accent;
+const String _kSettingPageControllerTag = "settingPageController";
+const String _kSettingPageIndexTag = "settingPageIndex";
 
 class _TabInfo {
   late final String label;
@@ -36,10 +39,30 @@ class _TabInfo {
 }
 
 class DesktopSettingPage extends StatefulWidget {
-  const DesktopSettingPage({Key? key}) : super(key: key);
+  final int initialPage;
+
+  const DesktopSettingPage({Key? key, required this.initialPage})
+      : super(key: key);
 
   @override
   State<DesktopSettingPage> createState() => _DesktopSettingPageState();
+
+  static void switch2page(int page) {
+    if (page >= 5) return;
+    try {
+      if (Get.isRegistered<PageController>(tag: _kSettingPageControllerTag)) {
+        DesktopTabPage.onAddSetting(initialPage: page);
+        PageController controller = Get.find(tag: _kSettingPageControllerTag);
+        RxInt selectedIndex = Get.find(tag: _kSettingPageIndexTag);
+        selectedIndex.value = page;
+        controller.jumpToPage(page);
+      } else {
+        DesktopTabPage.onAddSetting(initialPage: page);
+      }
+    } catch (e) {
+      debugPrint('$e');
+    }
+  }
 }
 
 class _DesktopSettingPageState extends State<DesktopSettingPage>
@@ -54,7 +77,7 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
   ];
 
   late PageController controller;
-  RxInt selectedIndex = 0.obs;
+  late RxInt selectedIndex;
 
   @override
   bool get wantKeepAlive => true;
@@ -62,7 +85,17 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
   @override
   void initState() {
     super.initState();
-    controller = PageController();
+    selectedIndex = (widget.initialPage < 5 ? widget.initialPage : 0).obs;
+    Get.put<RxInt>(selectedIndex, tag: _kSettingPageIndexTag);
+    controller = PageController(initialPage: widget.initialPage);
+    Get.put<PageController>(controller, tag: _kSettingPageControllerTag);
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+    Get.delete<PageController>(tag: _kSettingPageControllerTag);
+    Get.delete<RxInt>(tag: _kSettingPageIndexTag);
   }
 
   @override

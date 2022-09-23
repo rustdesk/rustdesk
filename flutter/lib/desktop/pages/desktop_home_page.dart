@@ -5,6 +5,8 @@ import 'package:flutter/material.dart' hide MenuItem;
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/desktop/pages/connection_page.dart';
+import 'package:flutter_hbb/desktop/pages/desktop_setting_page.dart';
+import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
@@ -161,7 +163,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     final textColor = Theme.of(context).textTheme.titleLarge?.color;
     RxBool hover = false.obs;
     return InkWell(
-      onTap: () async {},
+      onTap: DesktopTabPage.onAddSetting,
       child: Obx(
         () => CircleAvatar(
           radius: 15,
@@ -252,7 +254,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                             size: 22,
                           ).marginOnly(right: 8, bottom: 2),
                         ),
-                        onTap: () => {},
+                        onTap: () => DesktopSettingPage.switch2page(1),
                         onHover: (value) => editHover.value = value,
                       ),
                     ],
