@@ -14,7 +14,7 @@ import '../../desktop/widgets/popup_menu.dart';
 class _PopupMenuTheme {
   static const Color commonColor = MyTheme.accent;
   // kMinInteractiveDimension
-  static const double height = 25.0;
+  static const double height = 20.0;
   static const double dividerHeight = 3.0;
 }
 
@@ -319,8 +319,10 @@ class _PeerCardState extends State<_PeerCard>
 
 abstract class BasePeerCard extends StatelessWidget {
   final Peer peer;
+  final EdgeInsets? menuPadding;
 
-  BasePeerCard({required this.peer, Key? key}) : super(key: key);
+  BasePeerCard({required this.peer, this.menuPadding, Key? key})
+      : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -365,6 +367,7 @@ abstract class BasePeerCard extends StatelessWidget {
           isRDP: isRDP,
         );
       },
+      padding: menuPadding,
       dismissOnClicked: true,
     );
   }
@@ -414,17 +417,25 @@ abstract class BasePeerCard extends StatelessWidget {
               Expanded(
                   child: Align(
                 alignment: Alignment.centerRight,
-                child: IconButton(
-                  padding: EdgeInsets.zero,
-                  icon: const Icon(Icons.edit),
-                  onPressed: () => _rdpDialog(id),
-                ),
+                child: Transform.scale(
+                    scale: 0.8,
+                    child: IconButton(
+                      icon: const Icon(Icons.edit),
+                      padding: EdgeInsets.zero,
+                      onPressed: () {
+                        if (Navigator.canPop(context)) {
+                          Navigator.pop(context);
+                        }
+                        _rdpDialog(id);
+                      },
+                    )),
               ))
             ],
           )),
       proc: () {
         connect(context, id, isRDP: true);
       },
+      padding: menuPadding,
       dismissOnClicked: true,
     );
   }
@@ -439,6 +450,7 @@ abstract class BasePeerCard extends StatelessWidget {
       proc: () {
         bind.mainWol(id: id);
       },
+      padding: menuPadding,
       dismissOnClicked: true,
     );
   }
@@ -447,6 +459,7 @@ abstract class BasePeerCard extends StatelessWidget {
   Future<MenuEntryBase<String>> _forceAlwaysRelayAction(String id) async {
     const option = 'force-always-relay';
     return MenuEntrySwitch<String>(
+      switchType: SwitchType.scheckbox,
       text: translate('Always connect via relay'),
       getter: () async {
         return (await bind.mainGetPeerOption(id: id, key: option)).isNotEmpty;
@@ -461,7 +474,8 @@ abstract class BasePeerCard extends StatelessWidget {
         }
         await bind.mainSetPeerOption(id: id, key: option, value: value);
       },
-      dismissOnClicked: false,
+      padding: menuPadding,
+      dismissOnClicked: true,
     );
   }
 
@@ -475,6 +489,7 @@ abstract class BasePeerCard extends StatelessWidget {
       proc: () {
         _rename(id, isAddressBook);
       },
+      padding: menuPadding,
       dismissOnClicked: true,
     );
   }
@@ -494,6 +509,7 @@ abstract class BasePeerCard extends StatelessWidget {
           await reloadFunc();
         }();
       },
+      padding: menuPadding,
       dismissOnClicked: true,
     );
   }
@@ -508,6 +524,7 @@ abstract class BasePeerCard extends StatelessWidget {
       proc: () {
         bind.mainForgetPassword(id: id);
       },
+      padding: menuPadding,
       dismissOnClicked: true,
     );
   }
@@ -528,6 +545,7 @@ abstract class BasePeerCard extends StatelessWidget {
           }
         }();
       },
+      padding: menuPadding,
       dismissOnClicked: true,
     );
   }
@@ -549,6 +567,7 @@ abstract class BasePeerCard extends StatelessWidget {
           }
         }();
       },
+      padding: menuPadding,
       dismissOnClicked: true,
     );
   }
@@ -616,7 +635,8 @@ abstract class BasePeerCard extends StatelessWidget {
 }
 
 class RecentPeerCard extends BasePeerCard {
-  RecentPeerCard({required Peer peer, Key? key}) : super(peer: peer, key: key);
+  RecentPeerCard({required Peer peer, EdgeInsets? menuPadding, Key? key})
+      : super(peer: peer, menuPadding: menuPadding, key: key);
 
   @override
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
@@ -645,8 +665,8 @@ class RecentPeerCard extends BasePeerCard {
 }
 
 class FavoritePeerCard extends BasePeerCard {
-  FavoritePeerCard({required Peer peer, Key? key})
-      : super(peer: peer, key: key);
+  FavoritePeerCard({required Peer peer, EdgeInsets? menuPadding, Key? key})
+      : super(peer: peer, menuPadding: menuPadding, key: key);
 
   @override
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
@@ -677,8 +697,8 @@ class FavoritePeerCard extends BasePeerCard {
 }
 
 class DiscoveredPeerCard extends BasePeerCard {
-  DiscoveredPeerCard({required Peer peer, Key? key})
-      : super(peer: peer, key: key);
+  DiscoveredPeerCard({required Peer peer, EdgeInsets? menuPadding, Key? key})
+      : super(peer: peer, menuPadding: menuPadding, key: key);
 
   @override
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
@@ -706,8 +726,8 @@ class DiscoveredPeerCard extends BasePeerCard {
 }
 
 class AddressBookPeerCard extends BasePeerCard {
-  AddressBookPeerCard({required Peer peer, Key? key})
-      : super(peer: peer, key: key);
+  AddressBookPeerCard({required Peer peer, EdgeInsets? menuPadding, Key? key})
+      : super(peer: peer, menuPadding: menuPadding, key: key);
 
   @override
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
@@ -748,6 +768,7 @@ class AddressBookPeerCard extends BasePeerCard {
           await gFFI.abModel.updateAb();
         }();
       },
+      padding: super.menuPadding,
       dismissOnClicked: true,
     );
   }
@@ -762,6 +783,7 @@ class AddressBookPeerCard extends BasePeerCard {
       proc: () {
         _abEditTag(id);
       },
+      padding: super.menuPadding,
       dismissOnClicked: true,
     );
   }

@@ -224,7 +224,7 @@ abstract class BasePeersView extends StatelessWidget {
 }
 
 class RecentPeersView extends BasePeersView {
-  RecentPeersView({Key? key})
+  RecentPeersView({Key? key, EdgeInsets? menuPadding})
       : super(
           key: key,
           name: 'recent peer',
@@ -232,6 +232,7 @@ class RecentPeersView extends BasePeersView {
           offstageFunc: (Peer peer) => false,
           peerCardBuilder: (Peer peer) => RecentPeerCard(
             peer: peer,
+            menuPadding: menuPadding,
           ),
           initPeers: [],
         );
@@ -245,7 +246,7 @@ class RecentPeersView extends BasePeersView {
 }
 
 class FavoritePeersView extends BasePeersView {
-  FavoritePeersView({Key? key})
+  FavoritePeersView({Key? key, EdgeInsets? menuPadding})
       : super(
           key: key,
           name: 'favorite peer',
@@ -253,6 +254,7 @@ class FavoritePeersView extends BasePeersView {
           offstageFunc: (Peer peer) => false,
           peerCardBuilder: (Peer peer) => FavoritePeerCard(
             peer: peer,
+            menuPadding: menuPadding,
           ),
           initPeers: [],
         );
@@ -266,7 +268,7 @@ class FavoritePeersView extends BasePeersView {
 }
 
 class DiscoveredPeersView extends BasePeersView {
-  DiscoveredPeersView({Key? key})
+  DiscoveredPeersView({Key? key, EdgeInsets? menuPadding})
       : super(
           key: key,
           name: 'discovered peer',
@@ -274,6 +276,7 @@ class DiscoveredPeersView extends BasePeersView {
           offstageFunc: (Peer peer) => false,
           peerCardBuilder: (Peer peer) => DiscoveredPeerCard(
             peer: peer,
+            menuPadding: menuPadding,
           ),
           initPeers: [],
         );
@@ -287,7 +290,7 @@ class DiscoveredPeersView extends BasePeersView {
 }
 
 class AddressBookPeersView extends BasePeersView {
-  AddressBookPeersView({Key? key})
+  AddressBookPeersView({Key? key, EdgeInsets? menuPadding})
       : super(
           key: key,
           name: 'address book peer',
@@ -296,6 +299,7 @@ class AddressBookPeersView extends BasePeersView {
               !_hitTag(gFFI.abModel.selectedTags, peer.tags),
           peerCardBuilder: (Peer peer) => AddressBookPeerCard(
             peer: peer,
+            menuPadding: menuPadding,
           ),
           initPeers: _loadPeers(),
         );

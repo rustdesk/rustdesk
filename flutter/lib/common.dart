@@ -177,6 +177,12 @@ class MyTheme {
     ),
     splashColor: Colors.transparent,
     highlightColor: Colors.transparent,
+    splashFactory: isDesktop ? NoSplash.splashFactory : null,
+    textButtonTheme: isDesktop
+        ? TextButtonThemeData(
+            style: ButtonStyle(splashFactory: NoSplash.splashFactory),
+          )
+        : null,
   ).copyWith(
     extensions: <ThemeExtension<dynamic>>[
       ColorThemeExtension.light,
@@ -192,6 +198,12 @@ class MyTheme {
     ),
     splashColor: Colors.transparent,
     highlightColor: Colors.transparent,
+    splashFactory: isDesktop ? NoSplash.splashFactory : null,
+    textButtonTheme: isDesktop
+        ? TextButtonThemeData(
+            style: ButtonStyle(splashFactory: NoSplash.splashFactory),
+          )
+        : null,
   ).copyWith(
     extensions: <ThemeExtension<dynamic>>[
       ColorThemeExtension.dark,
