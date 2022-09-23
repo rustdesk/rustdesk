@@ -11,7 +11,8 @@ import '../../mobile/pages/settings_page.dart';
 import '../../models/platform_model.dart';
 
 class AddressBook extends StatefulWidget {
-  const AddressBook({Key? key}) : super(key: key);
+  final EdgeInsets? menuPadding;
+  const AddressBook({Key? key, this.menuPadding}) : super(key: key);
 
   @override
   State<StatefulWidget> createState() {
@@ -180,7 +181,9 @@ class _AddressBookState extends State<AddressBook> {
                 Expanded(
                   child: Align(
                       alignment: Alignment.topLeft,
-                      child: AddressBookPeersView()),
+                      child: AddressBookPeersView(
+                        menuPadding: widget.menuPadding,
+                      )),
                 )
               ],
             ));

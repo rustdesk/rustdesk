@@ -74,10 +74,18 @@ class _ConnectionPageState extends State<ConnectionPage> {
                       translate('Address Book')
                     ],
                     children: [
-                      RecentPeersView(),
-                      FavoritePeersView(),
-                      DiscoveredPeersView(),
-                      const AddressBook(),
+                      RecentPeersView(
+                        menuPadding: EdgeInsets.only(left: 12.0, right: 3.0),
+                      ),
+                      FavoritePeersView(
+                        menuPadding: EdgeInsets.only(left: 12.0, right: 3.0),
+                      ),
+                      DiscoveredPeersView(
+                        menuPadding: EdgeInsets.only(left: 12.0, right: 3.0),
+                      ),
+                      const AddressBook(
+                        menuPadding: EdgeInsets.only(left: 12.0, right: 3.0),
+                      ),
                     ],
                   )),
                 ],
