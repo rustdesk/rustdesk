@@ -338,10 +338,13 @@ pub fn set_socks(proxy: String, username: String, password: String) {
     .ok();
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[inline]
 pub fn is_installed() -> bool {
-    crate::platform::is_installed()
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        return crate::platform::is_installed();
+    }
+    false
 }
 
 #[inline]
