@@ -18,7 +18,7 @@ import '../../common/widgets/dialog.dart';
 
 const double _kTabWidth = 235;
 const double _kTabHeight = 42;
-const double _kCardFixedWidth = 560;
+const double _kCardFixedWidth = 540;
 const double _kCardLeftMargin = 15;
 const double _kContentHMargin = 15;
 const double _kContentHSubMargin = _kContentHMargin + 33;
@@ -516,6 +516,8 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
         child: _OptionCheckBox(context, 'Enable RDP', 'enable-rdp',
             enabled: enabled),
       ),
+      _OptionCheckBox(context, 'Deny LAN Discovery', 'enable-lan-discovery',
+          reverse: true, enabled: enabled),
       ...directIp(context),
       whitelist(),
     ]);
