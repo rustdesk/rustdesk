@@ -30,7 +30,8 @@ pub(super) fn start_listening() -> ResultType<()> {
             if let Ok(msg_in) = Message::parse_from_bytes(&buf[0..len]) {
                 match msg_in.union {
                     Some(rendezvous_message::Union::PeerDiscovery(p)) => {
-                        if p.cmd == "ping" {
+                        if p.cmd == "ping" && Config::get_option("enable-lan-discovery").is_empty()
+                        {
                             if let Some(self_addr) = get_ipaddr_by_peer(&addr) {
                                 let mut msg_out = Message::new();
                                 let peer = PeerDiscovery {

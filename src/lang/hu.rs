@@ -346,5 +346,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable RDP", ""),
         ("Pin menubar", "Menüsor rögzítése"),
         ("Unpin menubar", "Menüsor rögzítésének feloldása"),
+        ("Enable LAN Discovery", ""),
+        ("Deny LAN Discovery", ""),
     ].iter().cloned().collect();
 }
