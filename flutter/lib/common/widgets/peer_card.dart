@@ -74,9 +74,12 @@ class _PeerCardState extends State<_PeerCard>
               _showPeerMenu(peer.id);
             },
             child: ListTile(
-              contentPadding: const EdgeInsets.only(left: 12),
+              contentPadding: const EdgeInsets.only(left: 12), //
               subtitle: Text('${peer.username}@${peer.hostname}'),
-              title: Text(peer.alias.isEmpty ? formatID(peer.id) : peer.alias),
+              title: Row(children: [
+                getOnline(4, peer.online),
+                Text(peer.alias.isEmpty ? formatID(peer.id) : peer.alias)
+              ]),
               leading: Container(
                   decoration: BoxDecoration(
                     color: str2color('${peer.id}${peer.platform}', 0x7f),
@@ -160,7 +163,7 @@ class _PeerCardState extends State<_PeerCard>
                       child: Column(
                         children: [
                           Row(children: [
-                            getOnline(4, peer.online),
+                            getOnline(8, peer.online),
                             Expanded(
                                 child: Text(
                               alias.isEmpty ? formatID(peer.id) : alias,
@@ -252,7 +255,7 @@ class _PeerCardState extends State<_PeerCard>
                     children: [
                       Expanded(
                           child: Row(children: [
-                        getOnline(4, peer.online),
+                        getOnline(8, peer.online),
                         Expanded(
                             child: Text(
                           peer.alias.isEmpty ? formatID(peer.id) : peer.alias,
@@ -997,12 +1000,12 @@ void _rdpDialog(String id) async {
   });
 }
 
-Widget getOnline(int rightMargin, bool online) {
+Widget getOnline(double rightPadding, bool online) {
   return Tooltip(
       message: translate(online ? 'Online' : 'Offline'),
       waitDuration: const Duration(seconds: 1),
       child: Padding(
-          padding: const EdgeInsets.fromLTRB(0, 4, 8, 4),
+          padding: EdgeInsets.fromLTRB(0, 4, rightPadding, 4),
           child: CircleAvatar(
               radius: 3, backgroundColor: online ? Colors.green : kColorWarn)));
 }
