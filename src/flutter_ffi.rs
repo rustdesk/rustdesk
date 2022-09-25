@@ -20,13 +20,13 @@ use crate::ui_interface::get_sound_inputs;
 use crate::ui_interface::{
     self, change_id, check_mouse_time, check_super_user_permission, discover, forget_password,
     get_api_server, get_app_name, get_async_job_status, get_connect_status, get_fav, get_id,
-    get_lan_peers, get_langs, get_license, get_local_option, get_mouse_time, get_option,
-    get_options, get_peer, get_peer_option, get_socks, get_uuid, get_version, has_hwcodec,
-    has_rendezvous_service, is_can_screen_recording, is_installed, is_installed_daemon,
-    is_installed_lower_version, is_process_trusted, is_rdp_service_open, is_share_rdp,
-    post_request, send_to_cm, set_local_option, set_option, set_options, set_peer_option,
-    set_permanent_password, set_socks, store_fav, test_if_valid_server, update_temporary_password,
-    using_public_server,
+    get_lan_peers, get_langs, get_license, get_local_option, get_mouse_time, get_new_version,
+    get_option, get_options, get_peer, get_peer_option, get_socks, get_uuid, get_version,
+    goto_install, has_hwcodec, has_rendezvous_service, is_can_screen_recording, is_installed,
+    is_installed_daemon, is_installed_lower_version, is_process_trusted, is_rdp_service_open,
+    is_share_rdp, post_request, send_to_cm, set_local_option, set_option, set_options,
+    set_peer_option, set_permanent_password, set_socks, store_fav, test_if_valid_server, update_me,
+    update_temporary_password, using_public_server,
 };
 use crate::{
     client::file_trait::FileManager,
@@ -477,6 +477,9 @@ pub fn main_get_app_name() -> String {
     get_app_name()
 }
 
+pub fn main_get_app_name_sync() -> SyncReturn<String> {
+    SyncReturn(get_app_name())
+}
 pub fn main_get_license() -> String {
     get_license()
 }
@@ -1005,6 +1008,20 @@ pub fn main_is_share_rdp() -> SyncReturn<bool> {
 
 pub fn main_is_rdp_service_open() -> SyncReturn<bool> {
     SyncReturn(is_rdp_service_open())
+}
+
+pub fn main_goto_install() -> SyncReturn<bool> {
+    goto_install();
+    SyncReturn(true)
+}
+
+pub fn main_get_new_version() -> SyncReturn<String> {
+    SyncReturn(get_new_version())
+}
+
+pub fn main_update_me() -> SyncReturn<bool> {
+    update_me("".to_owned());
+    SyncReturn(true)
 }
 
 #[cfg(target_os = "android")]

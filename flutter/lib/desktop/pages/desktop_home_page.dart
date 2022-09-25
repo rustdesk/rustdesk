@@ -14,6 +14,7 @@ import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../widgets/button.dart';
 
@@ -302,28 +303,29 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   Widget buildHelpCards() {
     if (Platform.isWindows) {
       if (!bind.mainIsInstalled()) {
-        return buildInstallCard();
+        return buildInstallCard(
+            "", "install_tip", "Install", bind.mainGotoInstall);
       } else if (bind.mainIsInstalledLowerVersion()) {
-        return buildUpgradeCard();
+        return buildInstallCard("Status", "Your installation is lower version.",
+            "Click to upgrade", bind.mainUpdateMe);
       }
     }
     if (updateUrl.isNotEmpty) {
-      return buildUpdateCard();
+      return buildInstallCard(
+          "Status",
+          "There is a newer version of ${bind.mainGetAppNameSync()} ${bind.mainGetNewVersion()} available.",
+          "Click to download", () async {
+        final Uri url = Uri.parse('https://rustdesk.com');
+        await launchUrl(url);
+      });
     }
     if (Platform.isMacOS) {}
     if (bind.mainIsInstalledLowerVersion()) {}
     return Container();
   }
 
-  Widget buildUpdateCard() {
-    return Container();
-  }
-
-  Widget buildUpgradeCard() {
-    return Container();
-  }
-
-  Widget buildInstallCard() {
+  Widget buildInstallCard(String title, String content, String btnText,
+      GestureTapCallback onPressed) {
     return Container(
       margin: EdgeInsets.only(top: 20),
       child: Container(
@@ -340,27 +342,40 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.start,
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                translate("install_tip"),
-                style: TextStyle(
-                    height: 1.5,
-                    color: Colors.white,
-                    fontWeight: FontWeight.normal,
-                    fontSize: 13),
-              ).marginOnly(bottom: 20),
-              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                Button(
-                    padding: 8,
-                    isOutline: true,
-                    text: 'Install',
-                    textColor: Colors.white,
-                    borderColor: Colors.white,
-                    textSize: 20,
-                    radius: 10,
-                    onTap: () {})
-              ]),
-            ],
+            children: (title.isNotEmpty
+                    ? <Widget>[
+                        Center(
+                            child: Text(
+                          translate(title),
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15),
+                        ).marginOnly(bottom: 6)),
+                      ]
+                    : <Widget>[]) +
+                <Widget>[
+                  Text(
+                    translate(content),
+                    style: TextStyle(
+                        height: 1.5,
+                        color: Colors.white,
+                        fontWeight: FontWeight.normal,
+                        fontSize: 13),
+                  ).marginOnly(bottom: 20),
+                  Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Button(
+                      padding: 8,
+                      isOutline: true,
+                      text: translate(btnText),
+                      textColor: Colors.white,
+                      borderColor: Colors.white,
+                      textSize: 20,
+                      radius: 10,
+                      onTap: onPressed,
+                    )
+                  ]),
+                ],
           )),
     );
   }
