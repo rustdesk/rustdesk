@@ -53,7 +53,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(800, 600);
-  if (!window.CreateAndShow(L"flutter_hbb", origin, size))
+  if (!window.CreateAndShow(L"rustdesk", origin, size))
   {
     return EXIT_FAILURE;
   }
