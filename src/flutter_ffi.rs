@@ -24,9 +24,9 @@ use crate::ui_interface::{
     get_option, get_options, get_peer, get_peer_option, get_socks, get_uuid, get_version,
     goto_install, has_hwcodec, has_rendezvous_service, is_can_screen_recording, is_installed,
     is_installed_daemon, is_installed_lower_version, is_process_trusted, is_rdp_service_open,
-    is_share_rdp, post_request, send_to_cm, set_local_option, set_option, set_options,
-    set_peer_option, set_permanent_password, set_socks, store_fav, test_if_valid_server, update_me,
-    update_temporary_password, using_public_server,
+    is_share_rdp, peer_has_password, post_request, send_to_cm, set_local_option, set_option,
+    set_options, set_peer_option, set_permanent_password, set_socks, store_fav,
+    test_if_valid_server, update_me, update_temporary_password, using_public_server,
 };
 use crate::{
     client::file_trait::FileManager,
@@ -576,6 +576,10 @@ pub fn main_set_peer_option_sync(id: String, key: String, value: String) -> Sync
 
 pub fn main_forget_password(id: String) {
     forget_password(id)
+}
+
+pub fn main_peer_has_password(id: String) -> bool {
+    peer_has_password(id)
 }
 
 pub fn main_get_recent_peers() -> String {

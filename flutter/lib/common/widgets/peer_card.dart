@@ -494,7 +494,8 @@ abstract class BasePeerCard extends StatelessWidget {
 
   @protected
   MenuEntryBase<String> _removeAction(
-      String id, Future<void> Function() reloadFunc) {
+      String id, Future<void> Function() reloadFunc,
+      {bool isLan = false}) {
     return MenuEntryButton<String>(
       childBuilder: (TextStyle? style) => Text(
         translate('Remove'),
@@ -502,7 +503,11 @@ abstract class BasePeerCard extends StatelessWidget {
       ),
       proc: () {
         () async {
-          await bind.mainRemovePeer(id: id);
+          if (isLan) {
+            // TODO
+          } else {
+            await bind.mainRemovePeer(id: id);
+          }
           removePreference(id);
           await reloadFunc();
         }();
@@ -656,7 +661,9 @@ class RecentPeerCard extends BasePeerCard {
     menuItems.add(_removeAction(peer.id, () async {
       await bind.mainLoadRecentPeers();
     }));
-    menuItems.add(_unrememberPasswordAction(peer.id));
+    if (await bind.mainPeerHasPassword(id: peer.id)) {
+      menuItems.add(_unrememberPasswordAction(peer.id));
+    }
     menuItems.add(_addFavAction(peer.id));
     return menuItems;
   }
@@ -686,7 +693,9 @@ class FavoritePeerCard extends BasePeerCard {
     menuItems.add(_removeAction(peer.id, () async {
       await bind.mainLoadFavPeers();
     }));
-    menuItems.add(_unrememberPasswordAction(peer.id));
+    if (await bind.mainPeerHasPassword(id: peer.id)) {
+      menuItems.add(_unrememberPasswordAction(peer.id));
+    }
     menuItems.add(_rmFavAction(peer.id, () async {
       await bind.mainLoadFavPeers();
     }));
@@ -714,8 +723,7 @@ class DiscoveredPeerCard extends BasePeerCard {
     }
     menuItems.add(_wolAction(peer.id));
     menuItems.add(MenuEntryDivider());
-    menuItems.add(_renameAction(peer.id, false));
-    menuItems.add(_unrememberPasswordAction(peer.id));
+    menuItems.add(_removeAction(peer.id, () async {}));
     return menuItems;
   }
 }
@@ -742,8 +750,9 @@ class AddressBookPeerCard extends BasePeerCard {
     menuItems.add(MenuEntryDivider());
     menuItems.add(_renameAction(peer.id, false));
     menuItems.add(_removeAction(peer.id, () async {}));
-    menuItems.add(_unrememberPasswordAction(peer.id));
-    menuItems.add(_addFavAction(peer.id));
+    if (await bind.mainPeerHasPassword(id: peer.id)) {
+      menuItems.add(_unrememberPasswordAction(peer.id));
+    }
     menuItems.add(_editTagAction(peer.id));
     return menuItems;
   }
@@ -751,7 +760,8 @@ class AddressBookPeerCard extends BasePeerCard {
   @protected
   @override
   MenuEntryBase<String> _removeAction(
-      String id, Future<void> Function() reloadFunc) {
+      String id, Future<void> Function() reloadFunc,
+      {bool isLan = false}) {
     return MenuEntryButton<String>(
       childBuilder: (TextStyle? style) => Text(
         translate('Remove'),
