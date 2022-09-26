@@ -103,8 +103,8 @@ class Keyboard {
 
   void sendRawKey(RawKeyEvent e, {bool? down, bool? press}) {
     // for maximum compatibility
-    final label = logicalKeyMap[e.logicalKey.keyId] ??
-        physicalKeyMap[e.physicalKey.usbHidUsage] ??
+    final label = physicalKeyMap[e.physicalKey.usbHidUsage] ??
+        logicalKeyMap[e.logicalKey.keyId] ??
         e.logicalKey.keyLabel;
     _ffi.inputKey(label, down: down, press: press ?? false);
   }
