@@ -36,7 +36,7 @@ def expand():
     lang = os.path.basename(fn)[:-3] 
     if lang in ['en','cn']: continue  
     dict = get_lang(lang)
-    fw = open("%s.rs"%lang, "wt")
+    fw = open("./src/lang/%s.rs"%lang, "wt")
     for line in open('./src/lang/cn.rs'):
       line_strip = line.strip()
       if line_strip.startswith('("'):

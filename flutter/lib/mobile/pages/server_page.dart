@@ -334,9 +334,12 @@ class PermissionRow extends StatelessWidget {
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerLeft,
                 child: Text(name,
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontSize: 16.0,
-                        fontWeight: FontWeight.bold,
+                        fontWeight:
+                            Theme.of(context).brightness == Brightness.dark
+                                ? FontWeight.bold
+                                : null,
                         color: MyTheme.accent80)))),
         Expanded(
           flex: 2,
