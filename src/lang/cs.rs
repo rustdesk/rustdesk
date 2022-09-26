@@ -351,5 +351,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Unpin menubar", "Odepnout panel nabídek"),
         ("Enable LAN Discovery", ""),
         ("Deny LAN Discovery", ""),
+        ("Write a message", ""),
     ].iter().cloned().collect();
 }
