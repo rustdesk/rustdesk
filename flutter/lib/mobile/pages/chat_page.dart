@@ -62,6 +62,7 @@ class ChatPage extends StatelessWidget implements PageShape {
                       inputOptions: InputOptions(
                           sendOnEnter: true,
                           inputDecoration: defaultInputDecoration(
+                              hintText: "${translate('Write a message')}...",
                               fillColor: Theme.of(context).backgroundColor),
                           sendButtonBuilder: defaultSendButton(
                               color: Theme.of(context)
@@ -87,7 +88,8 @@ class ChatPage extends StatelessWidget implements PageShape {
                               )),
                     );
                   }),
-                  chatModel.currentID == ChatModel.clientModeID
+                  desktopType == DesktopType.cm ||
+                          chatModel.currentID == ChatModel.clientModeID
                       ? SizedBox.shrink()
                       : Padding(
                           padding: EdgeInsets.all(12),

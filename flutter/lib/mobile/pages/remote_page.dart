@@ -325,17 +325,13 @@ class _RemotePageState extends State<RemotePage> {
         },
         onPointerSignal: (e) {
           if (e is PointerScrollEvent) {
-            var dx = e.scrollDelta.dx;
-            var dy = e.scrollDelta.dy;
-            if (dx > 0)
-              dx = -1;
-            else if (dx < 0) dx = 1;
-            if (dy > 0)
+            var dy = 0;
+            if (e.scrollDelta.dy > 0) {
               dy = -1;
-            else if (dy < 0) dy = 1;
-            bind.sessionSendMouse(
-                id: widget.id,
-                msg: '{"type": "wheel", "x": "$dx", "y": "$dy"}');
+            } else if (e.scrollDelta.dy < 0) {
+              dy = 1;
+            }
+            gFFI.scroll(dy);
           }
         },
         child: MouseRegion(
