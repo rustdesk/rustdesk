@@ -1420,16 +1420,63 @@ pub fn get_user_token(session_id: u32, as_user: bool) -> HANDLE {
     }
 }
 
-pub fn check_super_user_permission() -> ResultType<bool> {
+pub fn run_uac(exe: &str, arg: &str) -> ResultType<bool> {
     unsafe {
+        let cstring;
         let ret = ShellExecuteA(
             NULL as _,
             CString::new("runas")?.as_ptr() as _,
-            CString::new("cmd")?.as_ptr() as _,
-            CString::new("/c /q")?.as_ptr() as _,
+            CString::new(exe)?.as_ptr() as _,
+            if arg.is_empty() {
+                NULL as _
+            } else {
+                cstring = CString::new(arg)?;
+                cstring.as_ptr() as _
+            },
             NULL as _,
             SW_SHOWNORMAL,
         );
         return Ok(ret as i32 > 32);
+    }
+}
+
+pub fn check_super_user_permission() -> ResultType<bool> {
+    run_uac("cmd", "/c /q")
+}
+
+pub fn elevate(arg: &str) -> ResultType<bool> {
+    run_uac(
+        std::env::current_exe()?
+            .to_string_lossy()
+            .to_string()
+            .as_str(),
+        arg,
+    )
+}
+
+pub fn run_as_system(arg: &str) -> ResultType<()> {
+    let exe = std::env::current_exe()?.to_string_lossy().to_string();
+    if impersonate_system::run_as_system(&exe, arg).is_err() {
+        bail!(format!("Failed to run {} as system", exe));
+    }
+    Ok(())
+}
+
+pub fn run_check_elevation(arg: &str) {
+    if !is_elevated::is_elevated() {
+        if let Ok(true) = elevate(arg) {
+            std::process::exit(0);
+        } else {
+            // do nothing but prompt
+        }
+    } else {
+        if !is_root() {
+            if run_as_system(arg).is_ok() {
+                std::process::exit(0);
+            } else {
+                // to-do: should not happen
+                log::error!("Failed to run as system");
+            }
+        }
     }
 }

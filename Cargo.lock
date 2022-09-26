@@ -2538,6 +2538,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "impersonate_system"
+version = "0.1.0"
+source = "git+https://github.com/21pages/impersonate-system#af4a82050580217a434c2024e181a98de24823ec"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "include_dir"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2592,6 +2600,15 @@ name = "ipnet"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "879d54834c8c76457ef4293a689b2a8c59b076067ad77b15efafbb05f92a592b"
+
+[[package]]
+name = "is_elevated"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5299060ff5db63e788015dcb9525ad9b84f4fd9717ed2cbdeba5018cbf42f9b5"
+dependencies = [
+ "winapi 0.3.9",
+]
 
 [[package]]
 name = "itertools"
@@ -4329,7 +4346,9 @@ dependencies = [
  "flutter_rust_bridge_codegen",
  "hbb_common",
  "hound",
+ "impersonate_system",
  "include_dir",
+ "is_elevated",
  "jni",
  "lazy_static",
  "libc",

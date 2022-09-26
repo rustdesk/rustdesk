@@ -57,6 +57,12 @@ pub fn core_main() -> Option<Vec<String>> {
                 .ok();
         }
     }
+    #[cfg(windows)]
+    #[cfg(not(debug_assertions))]
+    if !crate::platform::is_installed() && args.is_empty() {
+        let arg = if is_setup { "--noinstall" } else { "" };
+        crate::platform::run_check_elevation(arg);
+    }
     if args.is_empty() {
         std::thread::spawn(move || crate::start_server(false));
     } else {
