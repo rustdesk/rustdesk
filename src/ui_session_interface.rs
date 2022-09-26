@@ -309,8 +309,6 @@ impl<T: InvokeUiSession> Session<T> {
         } else {
             key
         };
-        #[cfg(not(windows))]
-        let key = self.convert_numpad_keys(key);
 
         let peer = self.peer_platform();
         let mut key_event = KeyEvent::new();
@@ -657,6 +655,9 @@ impl<T: InvokeUiSession> Session<T> {
             _ => KeyboardMode::Legacy,
         };
 
+        #[cfg(not(windows))]
+        let key = self.convert_numpad_keys(key);
+
         match mode {
             KeyboardMode::Map => {
                 if down_or_up == true {
@@ -845,6 +846,24 @@ impl<T: InvokeUiSession> Session<T> {
                 key_event.set_chr(chr);
             }
             Key::ControlKey(key) => {
+                let key = if !get_key_state(enigo::Key::NumLock) {
+                    match key {
+                        ControlKey::Numpad0 => ControlKey::Insert,
+                        ControlKey::Decimal => ControlKey::Delete,
+                        ControlKey::Numpad1 => ControlKey::End,
+                        ControlKey::Numpad2 => ControlKey::DownArrow,
+                        ControlKey::Numpad3 => ControlKey::PageDown,
+                        ControlKey::Numpad4 => ControlKey::LeftArrow,
+                        ControlKey::Numpad5 => ControlKey::Clear,
+                        ControlKey::Numpad6 => ControlKey::RightArrow,
+                        ControlKey::Numpad7 => ControlKey::Home,
+                        ControlKey::Numpad8 => ControlKey::UpArrow,
+                        ControlKey::Numpad9 => ControlKey::PageUp,
+                        _ => key,
+                    }
+                }else{
+                    key
+                };
                 key_event.set_control_key(key.clone());
             }
             Key::_Raw(raw) => {
