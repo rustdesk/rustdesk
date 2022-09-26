@@ -412,7 +412,9 @@ class ConnectionManager extends StatelessWidget {
                         ? const SizedBox.shrink()
                         : Text(
                             translate("android_new_connection_tip"),
-                            style: const TextStyle(color: Colors.black54),
+                            style: Theme.of(globalKey.currentContext!)
+                                .textTheme
+                                .bodyMedium,
                           ),
                     client.authorized
                         ? ElevatedButton.icon(

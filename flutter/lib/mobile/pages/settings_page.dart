@@ -2,12 +2,14 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'package:settings_ui/settings_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../common.dart';
+import '../../common/widgets/dialog.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../widgets/dialog.dart';
@@ -32,6 +34,8 @@ const url = 'https://rustdesk.com/';
 final _hasIgnoreBattery = androidVersion >= 26;
 var _ignoreBatteryOpt = false;
 var _enableAbr = false;
+var _denyLANDiscovery = false;
+var _onlyWhiteList = false;
 
 class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   String? username;
@@ -57,6 +61,20 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
       if (enableAbrRes != _enableAbr) {
         update = true;
         _enableAbr = enableAbrRes;
+      }
+
+      final denyLanDiscovery = !option2bool('enable-lan-discovery',
+          await bind.mainGetOption(key: 'enable-lan-discovery'));
+      if (denyLanDiscovery != _denyLANDiscovery) {
+        update = true;
+        _denyLANDiscovery = denyLanDiscovery;
+      }
+
+      final onlyWhiteList =
+          (await bind.mainGetOption(key: 'whitelist')).isNotEmpty;
+      if (onlyWhiteList != _onlyWhiteList) {
+        update = true;
+        _onlyWhiteList = onlyWhiteList;
       }
 
       if (update) {
@@ -99,11 +117,52 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
       SettingsTile.switchTile(
         title: Text('${translate('Adaptive Bitrate')} (beta)'),
         initialValue: _enableAbr,
-        onToggle: (v) {
-          bind.mainSetOption(key: "enable-abr", value: v ? "" : "N");
+        onToggle: (v) async {
+          await bind.mainSetOption(key: "enable-abr", value: v ? "" : "N");
+          final newValue = await bind.mainGetOption(key: "enable-abr") != "N";
           setState(() {
-            _enableAbr = !_enableAbr;
+            _enableAbr = newValue;
           });
+        },
+      )
+    ];
+    final shareScreenTiles = [
+      SettingsTile.switchTile(
+        title: Text(translate('Deny LAN Discovery')),
+        initialValue: _denyLANDiscovery,
+        onToggle: (v) async {
+          await bind.mainSetOption(
+              key: "enable-lan-discovery",
+              value: bool2option("enable-lan-discovery", !v));
+          final newValue = !option2bool('enable-lan-discovery',
+              await bind.mainGetOption(key: 'enable-lan-discovery'));
+          setState(() {
+            _denyLANDiscovery = newValue;
+          });
+        },
+      ),
+      SettingsTile.switchTile(
+        title: Row(children: [
+          Text(translate('Use IP Whitelisting')),
+          Offstage(
+                  offstage: !_onlyWhiteList,
+                  child: const Icon(Icons.warning_amber_rounded,
+                      color: Color.fromARGB(255, 255, 204, 0)))
+              .marginOnly(left: 5)
+        ]),
+        initialValue: _onlyWhiteList,
+        onToggle: (_) async {
+          update() async {
+            final onlyWhiteList =
+                (await bind.mainGetOption(key: 'whitelist')).isNotEmpty;
+            if (onlyWhiteList != _onlyWhiteList) {
+              setState(() {
+                _onlyWhiteList = onlyWhiteList;
+              });
+            }
+          }
+
+          changeWhiteList(callback: update);
         },
       )
     ];
@@ -182,6 +241,10 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             },
           )
         ]),
+        SettingsSection(
+          title: Text(translate("Share Screen")),
+          tiles: shareScreenTiles,
+        ),
         SettingsSection(
           title: Text(translate("Enhancements")),
           tiles: enhancementsTiles,
