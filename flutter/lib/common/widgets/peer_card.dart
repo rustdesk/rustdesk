@@ -74,9 +74,12 @@ class _PeerCardState extends State<_PeerCard>
               _showPeerMenu(peer.id);
             },
             child: ListTile(
-              contentPadding: const EdgeInsets.only(left: 12),
+              contentPadding: const EdgeInsets.only(left: 12), //
               subtitle: Text('${peer.username}@${peer.hostname}'),
-              title: Text(peer.alias.isEmpty ? formatID(peer.id) : peer.alias),
+              title: Row(children: [
+                getOnline(4, peer.online),
+                Text(peer.alias.isEmpty ? formatID(peer.id) : peer.alias)
+              ]),
               leading: Container(
                   decoration: BoxDecoration(
                     color: str2color('${peer.id}${peer.platform}', 0x7f),
@@ -160,7 +163,7 @@ class _PeerCardState extends State<_PeerCard>
                       child: Column(
                         children: [
                           Row(children: [
-                            getOnline(4, peer.online),
+                            getOnline(8, peer.online),
                             Expanded(
                                 child: Text(
                               alias.isEmpty ? formatID(peer.id) : alias,
@@ -252,7 +255,7 @@ class _PeerCardState extends State<_PeerCard>
                     children: [
                       Expanded(
                           child: Row(children: [
-                        getOnline(4, peer.online),
+                        getOnline(8, peer.online),
                         Expanded(
                             child: Text(
                           peer.alias.isEmpty ? formatID(peer.id) : peer.alias,
@@ -494,7 +497,8 @@ abstract class BasePeerCard extends StatelessWidget {
 
   @protected
   MenuEntryBase<String> _removeAction(
-      String id, Future<void> Function() reloadFunc) {
+      String id, Future<void> Function() reloadFunc,
+      {bool isLan = false}) {
     return MenuEntryButton<String>(
       childBuilder: (TextStyle? style) => Text(
         translate('Remove'),
@@ -502,7 +506,11 @@ abstract class BasePeerCard extends StatelessWidget {
       ),
       proc: () {
         () async {
-          await bind.mainRemovePeer(id: id);
+          if (isLan) {
+            // TODO
+          } else {
+            await bind.mainRemovePeer(id: id);
+          }
           removePreference(id);
           await reloadFunc();
         }();
@@ -656,7 +664,9 @@ class RecentPeerCard extends BasePeerCard {
     menuItems.add(_removeAction(peer.id, () async {
       await bind.mainLoadRecentPeers();
     }));
-    menuItems.add(_unrememberPasswordAction(peer.id));
+    if (await bind.mainPeerHasPassword(id: peer.id)) {
+      menuItems.add(_unrememberPasswordAction(peer.id));
+    }
     menuItems.add(_addFavAction(peer.id));
     return menuItems;
   }
@@ -686,7 +696,9 @@ class FavoritePeerCard extends BasePeerCard {
     menuItems.add(_removeAction(peer.id, () async {
       await bind.mainLoadFavPeers();
     }));
-    menuItems.add(_unrememberPasswordAction(peer.id));
+    if (await bind.mainPeerHasPassword(id: peer.id)) {
+      menuItems.add(_unrememberPasswordAction(peer.id));
+    }
     menuItems.add(_rmFavAction(peer.id, () async {
       await bind.mainLoadFavPeers();
     }));
@@ -714,8 +726,7 @@ class DiscoveredPeerCard extends BasePeerCard {
     }
     menuItems.add(_wolAction(peer.id));
     menuItems.add(MenuEntryDivider());
-    menuItems.add(_renameAction(peer.id, false));
-    menuItems.add(_unrememberPasswordAction(peer.id));
+    menuItems.add(_removeAction(peer.id, () async {}));
     return menuItems;
   }
 }
@@ -742,8 +753,9 @@ class AddressBookPeerCard extends BasePeerCard {
     menuItems.add(MenuEntryDivider());
     menuItems.add(_renameAction(peer.id, false));
     menuItems.add(_removeAction(peer.id, () async {}));
-    menuItems.add(_unrememberPasswordAction(peer.id));
-    menuItems.add(_addFavAction(peer.id));
+    if (await bind.mainPeerHasPassword(id: peer.id)) {
+      menuItems.add(_unrememberPasswordAction(peer.id));
+    }
     menuItems.add(_editTagAction(peer.id));
     return menuItems;
   }
@@ -751,7 +763,8 @@ class AddressBookPeerCard extends BasePeerCard {
   @protected
   @override
   MenuEntryBase<String> _removeAction(
-      String id, Future<void> Function() reloadFunc) {
+      String id, Future<void> Function() reloadFunc,
+      {bool isLan = false}) {
     return MenuEntryButton<String>(
       childBuilder: (TextStyle? style) => Text(
         translate('Remove'),
@@ -987,12 +1000,12 @@ void _rdpDialog(String id) async {
   });
 }
 
-Widget getOnline(int rightMargin, bool online) {
+Widget getOnline(double rightPadding, bool online) {
   return Tooltip(
       message: translate(online ? 'Online' : 'Offline'),
       waitDuration: const Duration(seconds: 1),
       child: Padding(
-          padding: const EdgeInsets.fromLTRB(0, 4, 8, 4),
+          padding: EdgeInsets.fromLTRB(0, 4, rightPadding, 4),
           child: CircleAvatar(
               radius: 3, backgroundColor: online ? Colors.green : kColorWarn)));
 }

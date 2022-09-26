@@ -334,9 +334,12 @@ class PermissionRow extends StatelessWidget {
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerLeft,
                 child: Text(name,
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontSize: 16.0,
-                        fontWeight: FontWeight.bold,
+                        fontWeight:
+                            Theme.of(context).brightness == Brightness.dark
+                                ? FontWeight.bold
+                                : null,
                         color: MyTheme.accent80)))),
         Expanded(
           flex: 2,
@@ -409,7 +412,9 @@ class ConnectionManager extends StatelessWidget {
                         ? const SizedBox.shrink()
                         : Text(
                             translate("android_new_connection_tip"),
-                            style: const TextStyle(color: Colors.black54),
+                            style: Theme.of(globalKey.currentContext!)
+                                .textTheme
+                                .bodyMedium,
                           ),
                     client.authorized
                         ? ElevatedButton.icon(
