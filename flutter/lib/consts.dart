@@ -19,6 +19,8 @@ const int kMobileDefaultDisplayHeight = 1280;
 const int kDesktopDefaultDisplayWidth = 1080;
 const int kDesktopDefaultDisplayHeight = 720;
 
+const Size kConnectionManagerWindowSize = Size(300, 400);
+
 /// [kDefaultScrollAmountMultiplier] indicates how many rows can be scrolled after a minimum scroll action of mouse
 const kDefaultScrollAmountMultiplier = 5.0;
 const kDefaultScrollDuration = Duration(milliseconds: 50);
