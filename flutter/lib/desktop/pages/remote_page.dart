@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 import 'package:wakelock/wakelock.dart';
 import 'package:flutter_custom_cursor/flutter_custom_cursor.dart';
 
+import '../../common/widgets/remote_input.dart';
 import '../widgets/remote_menubar.dart';
 import '../../common.dart';
 import '../../mobile/widgets/dialog.dart';
@@ -135,7 +136,13 @@ class _RemotePageState extends State<RemotePage>
               _ffi.dialogManager.setOverlayState(Overlay.of(context));
               return Container(
                   color: Colors.black,
-                  child: getRawPointerAndKeyBody(getBodyForDesktop(context)));
+                  child: RawKeyFocusScope(
+                      focusNode: _rawKeyFocusNode,
+                      onFocusChange: (bool v) {
+                        _imageFocused = v;
+                      },
+                      inputModel: _ffi.inputModel,
+                      child: getBodyForDesktop(context)));
             })
           ],
         ));
@@ -157,20 +164,6 @@ class _RemotePageState extends State<RemotePage>
           ChangeNotifierProvider.value(value: _ffi.canvasModel),
           ChangeNotifierProvider.value(value: _ffi.recordingModel),
         ], child: buildBody(context)));
-  }
-
-  Widget getRawPointerAndKeyBody(Widget child) {
-    return FocusScope(
-        autofocus: true,
-        child: Focus(
-            autofocus: true,
-            canRequestFocus: true,
-            focusNode: _rawKeyFocusNode,
-            onFocusChange: (bool v) {
-              _imageFocused = v;
-            },
-            onKey: _ffi.inputModel.handleRawKeyEvent,
-            child: child));
   }
 
   void enterView(PointerEnterEvent evt) {
@@ -200,17 +193,6 @@ class _RemotePageState extends State<RemotePage>
     _ffi.inputModel.enterOrLeave(false);
   }
 
-  Widget _buildImageListener(Widget child) {
-    return Listener(
-        onPointerHover: _ffi.inputModel.onPointHoverImage,
-        onPointerDown: _ffi.inputModel.onPointDownImage,
-        onPointerUp: _ffi.inputModel.onPointUpImage,
-        onPointerMove: _ffi.inputModel.onPointMoveImage,
-        onPointerSignal: _ffi.inputModel.onPointerSignalImage,
-        child:
-            MouseRegion(onEnter: enterView, onExit: leaveView, child: child));
-  }
-
   Widget getBodyForDesktop(BuildContext context) {
     var paints = <Widget>[
       MouseRegion(onEnter: (evt) {
@@ -226,7 +208,12 @@ class _RemotePageState extends State<RemotePage>
           cursorOverImage: _cursorOverImage,
           keyboardEnabled: _keyboardEnabled,
           remoteCursorMoved: _remoteCursorMoved,
-          listenerBuilder: _buildImageListener,
+          listenerBuilder: (child) => RawPointerMouseRegion(
+            onEnter: enterView,
+            onExit: leaveView,
+            inputModel: _ffi.inputModel,
+            child: child,
+          ),
         );
       }))
     ];

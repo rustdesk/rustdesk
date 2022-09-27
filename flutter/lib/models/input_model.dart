@@ -5,7 +5,6 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
-import 'package:get/get_core/src/get_main.dart';
 
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
@@ -40,7 +39,7 @@ class InputModel {
   var command = false;
 
   // mouse
-  var _isPhysicalMouse = false;
+  final isPhysicalMouse = false.obs;
   int _lastMouseDownButtons = 0;
 
   get id => parent.target?.id ?? "";
@@ -245,10 +244,10 @@ class InputModel {
 
   void onPointHoverImage(PointerHoverEvent e) {
     if (e.kind != ui.PointerDeviceKind.mouse) return;
-    if (!_isPhysicalMouse) {
-      _isPhysicalMouse = true;
+    if (!isPhysicalMouse.value) {
+      isPhysicalMouse.value = true;
     }
-    if (_isPhysicalMouse) {
+    if (isPhysicalMouse.value) {
       handleMouse(getEvent(e, 'mousemove'));
     }
   }
@@ -256,25 +255,25 @@ class InputModel {
   void onPointDownImage(PointerDownEvent e) {
     debugPrint("onPointDownImage");
     if (e.kind != ui.PointerDeviceKind.mouse) {
-      if (_isPhysicalMouse) {
-        _isPhysicalMouse = false;
+      if (isPhysicalMouse.value) {
+        isPhysicalMouse.value = false;
       }
     }
-    if (_isPhysicalMouse) {
+    if (isPhysicalMouse.value) {
       handleMouse(getEvent(e, 'mousedown'));
     }
   }
 
   void onPointUpImage(PointerUpEvent e) {
     if (e.kind != ui.PointerDeviceKind.mouse) return;
-    if (_isPhysicalMouse) {
+    if (isPhysicalMouse.value) {
       handleMouse(getEvent(e, 'mouseup'));
     }
   }
 
   void onPointMoveImage(PointerMoveEvent e) {
     if (e.kind != ui.PointerDeviceKind.mouse) return;
-    if (_isPhysicalMouse) {
+    if (isPhysicalMouse.value) {
       handleMouse(getEvent(e, 'mousemove'));
     }
   }

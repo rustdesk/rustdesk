@@ -7,11 +7,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/mobile/widgets/gesture_help.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
+import 'package:get/get_state_manager/src/rx_flutter/rx_obx_widget.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock/wakelock.dart';
 
 import '../../common.dart';
-import '../../consts.dart';
+import '../../common/widgets/remote_input.dart';
 import '../../models/input_model.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
@@ -26,7 +27,7 @@ class RemotePage extends StatefulWidget {
   final String id;
 
   @override
-  _RemotePageState createState() => _RemotePageState();
+  State<RemotePage> createState() => _RemotePageState();
 }
 
 class _RemotePageState extends State<RemotePage> {
@@ -44,9 +45,8 @@ class _RemotePageState extends State<RemotePage> {
   final FocusNode _mobileFocusNode = FocusNode();
   final FocusNode _physicalFocusNode = FocusNode();
   var _showEdit = false; // use soft keyboard
-  var _isPhysicalMouse = false;
 
-  get inputModel => gFFI.inputModel;
+  InputModel get inputModel => gFFI.inputModel;
 
   @override
   void initState() {
@@ -148,8 +148,8 @@ class _RemotePageState extends State<RemotePage> {
       }
       return;
     }
-    if (oldValue.length > 0 &&
-        newValue.length > 0 &&
+    if (oldValue.isNotEmpty &&
+        newValue.isNotEmpty &&
         oldValue[0] == '\1' &&
         newValue[0] != '\1') {
       // clipboard
@@ -214,14 +214,6 @@ class _RemotePageState extends State<RemotePage> {
     });
   }
 
-  void sendRawKey(RawKeyEvent e, {bool? down, bool? press}) {
-    // for maximum compatibility
-    final label = logicalKeyMap[e.logicalKey.keyId] ??
-        physicalKeyMap[e.physicalKey.usbHidUsage] ??
-        e.logicalKey.keyLabel;
-    inputModel.inputKey(label, down: down, press: press ?? false);
-  }
-
   @override
   Widget build(BuildContext context) {
     final pi = Provider.of<FfiModel>(context).pi;
@@ -234,159 +226,68 @@ class _RemotePageState extends State<RemotePage> {
         clientClose(gFFI.dialogManager);
         return false;
       },
-      child: getRawPointerAndKeyBody(
-          keyboard,
-          Scaffold(
-              // resizeToAvoidBottomInset: true,
-              floatingActionButton: !showActionButton
-                  ? null
-                  : FloatingActionButton(
-                      mini: !hideKeyboard,
-                      child: Icon(
-                          hideKeyboard ? Icons.expand_more : Icons.expand_less),
-                      backgroundColor: MyTheme.accent,
-                      onPressed: () {
-                        setState(() {
-                          if (hideKeyboard) {
-                            _showEdit = false;
-                            gFFI.invokeMethod("enable_soft_keyboard", false);
-                            _mobileFocusNode.unfocus();
-                            _physicalFocusNode.requestFocus();
-                          } else {
-                            _showBar = !_showBar;
-                          }
-                        });
-                      }),
-              bottomNavigationBar: _showBar && pi.displays.length > 0
-                  ? getBottomAppBar(keyboard)
-                  : null,
-              body: Overlay(
-                initialEntries: [
-                  OverlayEntry(builder: (context) {
-                    return Container(
-                        color: Colors.black,
-                        child: isWebDesktop
-                            ? getBodyForDesktopWithListener(keyboard)
-                            : SafeArea(child:
-                                OrientationBuilder(builder: (ctx, orientation) {
-                                if (_currentOrientation != orientation) {
-                                  Timer(const Duration(milliseconds: 200), () {
-                                    gFFI.dialogManager
-                                        .resetMobileActionsOverlay(ffi: gFFI);
-                                    _currentOrientation = orientation;
-                                    gFFI.canvasModel.updateViewStyle();
-                                  });
-                                }
-                                return Container(
-                                    color: MyTheme.canvasColor,
-                                    child: _isPhysicalMouse
-                                        ? getBodyForMobile()
-                                        : getBodyForMobileWithGesture());
-                              })));
-                  })
-                ],
-              ))),
+      child: getRawPointerAndKeyBody(Scaffold(
+          // resizeToAvoidBottomInset: true,
+          floatingActionButton: !showActionButton
+              ? null
+              : FloatingActionButton(
+                  mini: !hideKeyboard,
+                  child: Icon(
+                      hideKeyboard ? Icons.expand_more : Icons.expand_less),
+                  backgroundColor: MyTheme.accent,
+                  onPressed: () {
+                    setState(() {
+                      if (hideKeyboard) {
+                        _showEdit = false;
+                        gFFI.invokeMethod("enable_soft_keyboard", false);
+                        _mobileFocusNode.unfocus();
+                        _physicalFocusNode.requestFocus();
+                      } else {
+                        _showBar = !_showBar;
+                      }
+                    });
+                  }),
+          bottomNavigationBar: _showBar && pi.displays.isNotEmpty
+              ? getBottomAppBar(keyboard)
+              : null,
+          body: Overlay(
+            initialEntries: [
+              OverlayEntry(builder: (context) {
+                return Container(
+                    color: Colors.black,
+                    child: isWebDesktop
+                        ? getBodyForDesktopWithListener(keyboard)
+                        : SafeArea(child:
+                            OrientationBuilder(builder: (ctx, orientation) {
+                            if (_currentOrientation != orientation) {
+                              Timer(const Duration(milliseconds: 200), () {
+                                gFFI.dialogManager
+                                    .resetMobileActionsOverlay(ffi: gFFI);
+                                _currentOrientation = orientation;
+                                gFFI.canvasModel.updateViewStyle();
+                              });
+                            }
+                            return Obx(() => Container(
+                                color: MyTheme.canvasColor,
+                                child: inputModel.isPhysicalMouse.value
+                                    ? getBodyForMobile()
+                                    : getBodyForMobileWithGesture()));
+                          })));
+              })
+            ],
+          ))),
     );
   }
 
-  Widget getRawPointerAndKeyBody(bool keyboard, Widget child) {
-    return Listener(
-        onPointerHover: (e) {
-          if (e.kind != ui.PointerDeviceKind.mouse) return;
-          if (!_isPhysicalMouse) {
-            setState(() {
-              _isPhysicalMouse = true;
-            });
-          }
-          if (_isPhysicalMouse) {
-            inputModel.handleMouse(getEvent(e, 'mousemove'));
-          }
-        },
-        onPointerDown: (e) {
-          if (e.kind != ui.PointerDeviceKind.mouse) {
-            if (_isPhysicalMouse) {
-              setState(() {
-                _isPhysicalMouse = false;
-              });
-            }
-          }
-          if (_isPhysicalMouse) {
-            inputModel.handleMouse(getEvent(e, 'mousedown'));
-          }
-        },
-        onPointerUp: (e) {
-          if (e.kind != ui.PointerDeviceKind.mouse) return;
-          if (_isPhysicalMouse) {
-            inputModel.handleMouse(getEvent(e, 'mouseup'));
-          }
-        },
-        onPointerMove: (e) {
-          if (e.kind != ui.PointerDeviceKind.mouse) return;
-          if (_isPhysicalMouse) {
-            inputModel.handleMouse(getEvent(e, 'mousemove'));
-          }
-        },
-        onPointerSignal: (e) {
-          if (e is PointerScrollEvent) {
-            var dy = 0;
-            if (e.scrollDelta.dy > 0) {
-              dy = -1;
-            } else if (e.scrollDelta.dy < 0) {
-              dy = 1;
-            }
-            inputModel.scroll(dy);
-          }
-        },
-        child: MouseRegion(
-            cursor: keyboard ? SystemMouseCursors.none : MouseCursor.defer,
-            child: FocusScope(
-                autofocus: true,
-                child: Focus(
-                    autofocus: true,
-                    canRequestFocus: true,
-                    focusNode: _physicalFocusNode,
-                    onKey: (data, e) {
-                      final key = e.logicalKey;
-                      if (e is RawKeyDownEvent) {
-                        if (e.repeat &&
-                            !e.isAltPressed &&
-                            !e.isControlPressed &&
-                            !e.isShiftPressed &&
-                            !e.isMetaPressed) {
-                          sendRawKey(e, press: true);
-                        } else {
-                          sendRawKey(e, down: true);
-                          if (e.isAltPressed && !inputModel.alt) {
-                            inputModel.alt = true;
-                          } else if (e.isControlPressed && !inputModel.ctrl) {
-                            inputModel.ctrl = true;
-                          } else if (e.isShiftPressed && !inputModel.shift) {
-                            inputModel.shift = true;
-                          } else if (e.isMetaPressed && !inputModel.command) {
-                            inputModel.command = true;
-                          }
-                        }
-                      }
-                      // [!_showEdit] workaround for soft-keyboard's control_key like Backspace / Enter
-                      if (!_showEdit && e is RawKeyUpEvent) {
-                        if (key == LogicalKeyboardKey.altLeft ||
-                            key == LogicalKeyboardKey.altRight) {
-                          inputModel.alt = false;
-                        } else if (key == LogicalKeyboardKey.controlLeft ||
-                            key == LogicalKeyboardKey.controlRight) {
-                          inputModel.ctrl = false;
-                        } else if (key == LogicalKeyboardKey.shiftRight ||
-                            key == LogicalKeyboardKey.shiftLeft) {
-                          inputModel.shift = false;
-                        } else if (key == LogicalKeyboardKey.metaLeft ||
-                            key == LogicalKeyboardKey.metaRight) {
-                          inputModel.command = false;
-                        }
-                        sendRawKey(e);
-                      }
-                      return KeyEventResult.handled;
-                    },
-                    child: child))));
+  Widget getRawPointerAndKeyBody(Widget child) {
+    final keyboard = gFFI.ffiModel.permissions['keyboard'] != false;
+    return RawPointerMouseRegion(
+        cursor: keyboard ? SystemMouseCursors.none : MouseCursor.defer,
+        inputModel: inputModel,
+        child: RawKeyFocusScope(
+            focusNode: _physicalFocusNode,
+            inputModel: inputModel,
+            child: child));
   }
 
   Widget getBottomAppBar(bool keyboard) {
@@ -685,7 +586,7 @@ class _RemotePageState extends State<RemotePage> {
     if (perms['keyboard'] != false) {
       if (pi.platform == 'Linux' || pi.sasEnabled) {
         more.add(PopupMenuItem<String>(
-            child: Text(translate('Insert') + ' Ctrl + Alt + Del'),
+            child: Text('${translate('Insert')} Ctrl + Alt + Del'),
             value: 'cad'));
       }
       more.add(PopupMenuItem<String>(
@@ -694,8 +595,8 @@ class _RemotePageState extends State<RemotePage> {
           await bind.sessionGetToggleOption(id: id, arg: 'privacy-mode') !=
               true) {
         more.add(PopupMenuItem<String>(
-            child: Text(translate((gFFI.ffiModel.inputBlocked ? 'Unb' : 'B') +
-                'lock user input')),
+            child: Text(translate(
+                '${gFFI.ffiModel.inputBlocked ? 'Unb' : 'B'}lock user input')),
             value: 'block-input'));
       }
     }
@@ -720,7 +621,7 @@ class _RemotePageState extends State<RemotePage> {
       } else if (value == 'block-input') {
         bind.sessionToggleOption(
             id: widget.id,
-            value: (gFFI.ffiModel.inputBlocked ? 'un' : '') + 'block-input');
+            value: '${gFFI.ffiModel.inputBlocked ? 'un' : ''}block-input');
         gFFI.ffiModel.inputBlocked = !gFFI.ffiModel.inputBlocked;
       } else if (value == 'refresh') {
         bind.sessionRefresh(id: widget.id);
@@ -845,9 +746,9 @@ class _RemotePageState extends State<RemotePage> {
       SizedBox(width: 9999),
     ];
     for (var i = 1; i <= 12; ++i) {
-      final name = 'F' + i.toString();
+      final name = 'F$i';
       fn.add(wrap(name, () {
-        inputModel.inputKey('VK_' + name);
+        inputModel.inputKey('VK_$name');
       }));
     }
     final more = <Widget>[
@@ -920,7 +821,7 @@ class ImagePaint extends StatelessWidget {
     final adjust = gFFI.cursorModel.adjustForKeyboard();
     var s = c.scale;
     return CustomPaint(
-      painter: new ImagePainter(
+      painter: ImagePainter(
           image: m.image, x: c.x / s, y: (c.y - adjust) / s, scale: s),
     );
   }
@@ -934,7 +835,7 @@ class CursorPaint extends StatelessWidget {
     final adjust = gFFI.cursorModel.adjustForKeyboard();
     var s = c.scale;
     return CustomPaint(
-      painter: new ImagePainter(
+      painter: ImagePainter(
           image: m.image,
           x: m.x * s - m.hotx + c.x,
           y: m.y * s - m.hoty + c.y - adjust,
@@ -960,7 +861,7 @@ class ImagePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (image == null) return;
     canvas.scale(scale, scale);
-    canvas.drawImage(image!, new Offset(x, y), new Paint());
+    canvas.drawImage(image!, Offset(x, y), Paint());
   }
 
   @override
