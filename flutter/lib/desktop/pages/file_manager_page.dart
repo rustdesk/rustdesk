@@ -58,7 +58,7 @@ class _FileManagerPageState extends State<FileManagerPage>
   void initState() {
     super.initState();
     _ffi = FFI();
-    _ffi.connect(widget.id, isFileTransfer: true);
+    _ffi.start(widget.id, isFileTransfer: true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _ffi.dialogManager
           .showLoading(translate('Connecting...'), onCancel: closeConnection);

@@ -47,7 +47,7 @@ class _PortForwardPageState extends State<PortForwardPage>
   void initState() {
     super.initState();
     _ffi = FFI();
-    _ffi.connect(widget.id, isPortForward: true);
+    _ffi.start(widget.id, isPortForward: true);
     Get.put(_ffi, tag: 'pf_${widget.id}');
     if (!Platform.isLinux) {
       Wakelock.enable();

@@ -19,6 +19,7 @@ import 'package:window_manager/window_manager.dart';
 import 'common/widgets/overlay.dart';
 import 'mobile/pages/file_manager_page.dart';
 import 'mobile/pages/remote_page.dart';
+import 'models/input_model.dart';
 import 'models/model.dart';
 import 'models/platform_model.dart';
 
@@ -486,12 +487,12 @@ class OverlayDialogManager {
         position: Offset(left, top),
         width: overlayW,
         height: overlayH,
-        onBackPressed: () => session.tap(MouseButtons.right),
-        onHomePressed: () => session.tap(MouseButtons.wheel),
+        onBackPressed: () => session.inputModel.tap(MouseButtons.right),
+        onHomePressed: () => session.inputModel.tap(MouseButtons.wheel),
         onRecentPressed: () async {
-          session.sendMouse('down', MouseButtons.wheel);
+          session.inputModel.sendMouse('down', MouseButtons.wheel);
           await Future.delayed(const Duration(milliseconds: 500));
-          session.sendMouse('up', MouseButtons.wheel);
+          session.inputModel.sendMouse('up', MouseButtons.wheel);
         },
         onHidePressed: () => hideMobileActionsOverlay(),
       );

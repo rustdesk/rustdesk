@@ -5,7 +5,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_hbb/models/input_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock/wakelock.dart';
@@ -49,12 +48,9 @@ class _RemotePageState extends State<RemotePage>
   Function(bool)? _onEnterOrLeaveImage4Menubar;
 
   late FFI _ffi;
-  late Keyboard _keyboard_input;
-  late Mouse _mouse_input;
 
   void _updateTabBarHeight() {
     _ffi.canvasModel.tabBarHeight = widget.tabBarHeight;
-    _mouse_input.tabBarHeight = widget.tabBarHeight;
   }
 
   void _initStates(String id) {
@@ -84,12 +80,10 @@ class _RemotePageState extends State<RemotePage>
     _initStates(widget.id);
 
     _ffi = FFI();
-    _keyboard_input = Keyboard(_ffi, widget.id);
-    _mouse_input = Mouse(_ffi, widget.id, widget.tabBarHeight);
 
     _updateTabBarHeight();
     Get.put(_ffi, tag: widget.id);
-    _ffi.connect(widget.id, tabBarHeight: super.widget.tabBarHeight);
+    _ffi.start(widget.id, tabBarHeight: super.widget.tabBarHeight);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
       _ffi.dialogManager
@@ -175,7 +169,7 @@ class _RemotePageState extends State<RemotePage>
             onFocusChange: (bool v) {
               _imageFocused = v;
             },
-            onKey: _keyboard_input.handleRawKeyEvent,
+            onKey: _ffi.inputModel.handleRawKeyEvent,
             child: child));
   }
 
@@ -191,7 +185,7 @@ class _RemotePageState extends State<RemotePage>
         //
       }
     }
-    _ffi.enterOrLeave(true);
+    _ffi.inputModel.enterOrLeave(true);
   }
 
   void leaveView(PointerExitEvent evt) {
@@ -203,16 +197,16 @@ class _RemotePageState extends State<RemotePage>
         //
       }
     }
-    _ffi.enterOrLeave(false);
+    _ffi.inputModel.enterOrLeave(false);
   }
 
   Widget _buildImageListener(Widget child) {
     return Listener(
-        onPointerHover: _mouse_input.onPointHoverImage,
-        onPointerDown: _mouse_input.onPointDownImage,
-        onPointerUp: _mouse_input.onPointUpImage,
-        onPointerMove: _mouse_input.onPointMoveImage,
-        onPointerSignal: _mouse_input.onPointerSignalImage,
+        onPointerHover: _ffi.inputModel.onPointHoverImage,
+        onPointerDown: _ffi.inputModel.onPointDownImage,
+        onPointerUp: _ffi.inputModel.onPointUpImage,
+        onPointerMove: _ffi.inputModel.onPointMoveImage,
+        onPointerSignal: _ffi.inputModel.onPointerSignalImage,
         child:
             MouseRegion(onEnter: enterView, onExit: leaveView, child: child));
   }
