@@ -1095,3 +1095,10 @@ void connect(BuildContext context, String id,
     currentFocus.unfocus();
   }
 }
+
+Future<Map<String, String>> getHttpHeaders() async {
+  return {
+    'Authorization':
+        'Bearer ${await bind.mainGetLocalOption(key: 'access_token')}'
+  };
+}

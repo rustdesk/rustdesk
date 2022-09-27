@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -1296,29 +1295,6 @@ class FFI {
 
   Future<bool> invokeMethod(String method, [dynamic arguments]) async {
     return await platformFFI.invokeMethod(method, arguments);
-  }
-
-  Future<List<String>> getAudioInputs() async {
-    return await bind.mainGetSoundInputs();
-  }
-
-  Future<String> getDefaultAudioInput() async {
-    final input = await bind.mainGetOption(key: 'audio-input');
-    if (input.isEmpty && Platform.isWindows) {
-      return 'System Sound';
-    }
-    return input;
-  }
-
-  setDefaultAudioInput(String input) {
-    bind.mainSetOption(key: 'audio-input', value: input);
-  }
-
-  Future<Map<String, String>> getHttpHeaders() async {
-    return {
-      'Authorization':
-          'Bearer ${await bind.mainGetLocalOption(key: 'access_token')}'
-    };
   }
 }
 

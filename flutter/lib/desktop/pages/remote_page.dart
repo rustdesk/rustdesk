@@ -131,10 +131,6 @@ class _RemotePageState extends State<RemotePage>
     _removeStates(widget.id);
   }
 
-  void resetTool() {
-    _ffi.resetModifiers();
-  }
-
   Widget buildBody(BuildContext context) {
     return Scaffold(
         backgroundColor: Theme.of(context).backgroundColor,

@@ -6,6 +6,8 @@ import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 
+import '../common.dart';
+
 class AbModel with ChangeNotifier {
   var abLoading = false;
   var abError = "";
@@ -27,7 +29,7 @@ class AbModel with ChangeNotifier {
     final api = "${await getApiServer()}/api/ab/get";
     try {
       final resp =
-          await http.post(Uri.parse(api), headers: await _getHeaders());
+          await http.post(Uri.parse(api), headers: await getHttpHeaders());
       if (resp.body.isNotEmpty && resp.body.toLowerCase() != "null") {
         Map<String, dynamic> json = jsonDecode(resp.body);
         if (json.containsKey('error')) {
@@ -61,10 +63,6 @@ class AbModel with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<Map<String, String>>? _getHeaders() {
-    return _ffi?.getHttpHeaders();
-  }
-
   void addId(String id) async {
     if (idContainBy(id)) {
       return;
@@ -93,7 +91,7 @@ class AbModel with ChangeNotifier {
     abLoading = true;
     notifyListeners();
     final api = "${await getApiServer()}/api/ab";
-    var authHeaders = await _getHeaders() ?? Map<String, String>();
+    var authHeaders = await getHttpHeaders();
     authHeaders['Content-Type'] = "application/json";
     final body = jsonEncode({
       "data": jsonEncode({"tags": tags, "peers": peers})
