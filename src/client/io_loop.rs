@@ -979,6 +979,12 @@ impl<T: InvokeUiSession> Remote<T> {
                             return false;
                         }
                     }
+                    Some(misc::Union::Uac(uac)) => {
+                        if uac {
+                            self.handler
+                                .msgbox("custom-uac-nocancel", "Warning", "uac_warning");
+                        }
+                    }
                     _ => {}
                 },
                 Some(message::Union::TestDelay(t)) => {

@@ -360,5 +360,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable LAN Discovery", "允許局域網發現"),
         ("Deny LAN Discovery", "拒絕局域網發現"),
         ("Write a message", "輸入聊天消息"),
+        ("Prompt", "提示"),
+        ("elevation_prompt", "以當前用戶權限運行軟件，可能導致遠端在訪問本機時，沒有足夠的權限來操作部分窗口。"),
+        ("uac_warning", "暂时无法访问远端设备，因为远端设备正在请求用户账户权限，请等待对方关闭UAC窗口。为避免这个问题，建议在远端设备上安装或者以管理员权限运行本软件。"),
     ].iter().cloned().collect();
 }
