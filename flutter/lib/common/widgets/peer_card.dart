@@ -151,6 +151,7 @@ class _PeerCardState extends State<_PeerCard>
                 color: str2color('${peer.id}${peer.platform}', 0x7f),
               ),
               alignment: Alignment.center,
+              width: 42,
               child: getPlatformImage(peer.platform, size: 30).paddingAll(6),
             ),
             Expanded(

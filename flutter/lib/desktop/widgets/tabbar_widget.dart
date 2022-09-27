@@ -11,6 +11,7 @@ import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
 import 'package:scroll_pos/scroll_pos.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../utils/multi_window_manager.dart';
 
@@ -297,10 +298,10 @@ class DesktopTab extends StatelessWidget {
               Row(children: [
                 Offstage(
                     offstage: !showLogo,
-                    child: Image.asset(
-                      'assets/logo.ico',
-                      width: 20,
-                      height: 20,
+                    child: SvgPicture.asset(
+                      'assets/logo.svg',
+                      width: 16,
+                      height: 16,
                     )),
                 Offstage(
                     offstage: !showTitle,

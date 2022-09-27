@@ -17,6 +17,7 @@ import 'package:flutter_hbb/models/user_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tuple/tuple.dart';
 import 'package:flutter_custom_cursor/flutter_custom_cursor.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../common.dart';
 import '../common/shared_state.dart';
@@ -111,13 +112,13 @@ class FfiModel with ChangeNotifier {
     }
   }
 
-  Image? getConnectionImage() {
+  Widget? getConnectionImage() {
     if (secure == null || direct == null) {
       return null;
     } else {
       final icon =
           '${secure == true ? 'secure' : 'insecure'}${direct == true ? '' : '_relay'}';
-      return Image.asset('assets/$icon.png', width: 48, height: 48);
+      return SvgPicture.asset('assets/$icon.png', width: 48, height: 48);
     }
   }
 

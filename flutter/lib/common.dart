@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
-import 'dart:ui';
 
 import 'package:back_button_interceptor/back_button_interceptor.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -15,6 +14,7 @@ import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import 'common/widgets/overlay.dart';
 import 'mobile/pages/file_manager_page.dart';
@@ -946,7 +946,7 @@ Widget getPlatformImage(String platform, {double size = 50}) {
   } else if (platform != 'linux' && platform != 'android') {
     platform = 'win';
   }
-  return Image.asset('assets/$platform.png', height: size, width: size);
+  return SvgPicture.asset('assets/$platform.svg', height: size, width: size);
 }
 
 class LastWindowPosition {

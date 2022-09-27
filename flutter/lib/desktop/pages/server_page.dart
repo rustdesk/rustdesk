@@ -10,6 +10,7 @@ import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../common.dart';
 import '../../models/platform_model.dart';
@@ -200,8 +201,8 @@ class _AppIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: EdgeInsets.symmetric(horizontal: 4.0),
-      child: Image.asset(
-        'assets/logo.ico',
+      child: SvgPicture.asset(
+        'assets/logo.svg',
         width: 30,
         height: 30,
       ),
