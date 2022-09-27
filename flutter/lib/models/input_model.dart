@@ -22,6 +22,37 @@ class Keyboard {
       keyboardMode = result.toString();
     });
 
+    final key = e.logicalKey;
+    if (e is RawKeyDownEvent) {
+      if (!e.repeat){
+        if (e.isAltPressed && !_ffi.alt) {
+          _ffi.alt = true;
+        } else if (e.isControlPressed && !_ffi.ctrl) {
+          _ffi.ctrl = true;
+        } else if (e.isShiftPressed && !_ffi.shift) {
+          _ffi.shift = true;
+        } else if (e.isMetaPressed && !_ffi.command) {
+          _ffi.command = true;
+        }
+      }
+    }
+    if (e is RawKeyUpEvent) {
+      if (key == LogicalKeyboardKey.altLeft ||
+          key == LogicalKeyboardKey.altRight) {
+        _ffi.alt = false;
+      } else if (key == LogicalKeyboardKey.controlLeft ||
+          key == LogicalKeyboardKey.controlRight) {
+        _ffi.ctrl = false;
+      } else if (key == LogicalKeyboardKey.shiftRight ||
+          key == LogicalKeyboardKey.shiftLeft) {
+        _ffi.shift = false;
+      } else if (key == LogicalKeyboardKey.metaLeft ||
+          key == LogicalKeyboardKey.metaRight ||
+          key == LogicalKeyboardKey.superKey) {
+        _ffi.command = false;
+      }
+    }
+
     if (keyboardMode == 'map') {
       mapKeyboardMode(e);
     } else if (keyboardMode == 'translate') {
@@ -70,41 +101,18 @@ class Keyboard {
       if (e.repeat) {
         sendRawKey(e, press: true);
       } else {
-        if (e.isAltPressed && !_ffi.alt) {
-          _ffi.alt = true;
-        } else if (e.isControlPressed && !_ffi.ctrl) {
-          _ffi.ctrl = true;
-        } else if (e.isShiftPressed && !_ffi.shift) {
-          _ffi.shift = true;
-        } else if (e.isMetaPressed && !_ffi.command) {
-          _ffi.command = true;
-        }
         sendRawKey(e, down: true);
       }
     }
     if (e is RawKeyUpEvent) {
-      if (key == LogicalKeyboardKey.altLeft ||
-          key == LogicalKeyboardKey.altRight) {
-        _ffi.alt = false;
-      } else if (key == LogicalKeyboardKey.controlLeft ||
-          key == LogicalKeyboardKey.controlRight) {
-        _ffi.ctrl = false;
-      } else if (key == LogicalKeyboardKey.shiftRight ||
-          key == LogicalKeyboardKey.shiftLeft) {
-        _ffi.shift = false;
-      } else if (key == LogicalKeyboardKey.metaLeft ||
-          key == LogicalKeyboardKey.metaRight ||
-          key == LogicalKeyboardKey.superKey) {
-        _ffi.command = false;
-      }
       sendRawKey(e);
     }
   }
 
   void sendRawKey(RawKeyEvent e, {bool? down, bool? press}) {
     // for maximum compatibility
-    final label = logicalKeyMap[e.logicalKey.keyId] ??
-        physicalKeyMap[e.physicalKey.usbHidUsage] ??
+    final label = physicalKeyMap[e.physicalKey.usbHidUsage] ??
+        logicalKeyMap[e.logicalKey.keyId] ??
         e.logicalKey.keyLabel;
     _ffi.inputKey(label, down: down, press: press ?? false);
   }
