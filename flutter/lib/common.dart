@@ -134,8 +134,8 @@ class MyTheme {
     textTheme: const TextTheme(
       titleLarge: TextStyle(fontSize: 19, color: Colors.black87),
       titleSmall: TextStyle(fontSize: 14, color: Colors.black87),
-      bodySmall: TextStyle(fontSize: 12, color: Colors.black54, height: 1.25),
-      bodyMedium: TextStyle(fontSize: 14, color: Colors.black54, height: 1.25),
+      bodySmall: TextStyle(fontSize: 12, color: Colors.black87, height: 1.25),
+      bodyMedium: TextStyle(fontSize: 14, color: Colors.black87, height: 1.25),
     ),
     hintColor: Color(0xFFAAAAAA),
     primarySwatch: Colors.blue,
