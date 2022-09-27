@@ -5,14 +5,16 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/widgets/address_book.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
 import '../../common.dart';
 import '../../common/formatter/id_formatter.dart';
 import '../../common/widgets/peer_tab_page.dart';
-import '../../common/widgets/peer_widget.dart';
+import '../../common/widgets/peers_view.dart';
 import '../../models/platform_model.dart';
+import '../widgets/button.dart';
 
 /// Connection page for connecting to a remote peer.
 class ConnectionPage extends StatefulWidget {
@@ -74,10 +76,18 @@ class _ConnectionPageState extends State<ConnectionPage> {
                       translate('Address Book')
                     ],
                     children: [
-                      RecentPeerWidget(),
-                      FavoritePeerWidget(),
-                      DiscoveredPeerWidget(),
-                      const AddressBook(),
+                      RecentPeersView(
+                        menuPadding: EdgeInsets.only(left: 12.0, right: 3.0),
+                      ),
+                      FavoritePeersView(
+                        menuPadding: EdgeInsets.only(left: 12.0, right: 3.0),
+                      ),
+                      DiscoveredPeersView(
+                        menuPadding: EdgeInsets.only(left: 12.0, right: 3.0),
+                      ),
+                      const AddressBook(
+                        menuPadding: EdgeInsets.only(left: 12.0, right: 3.0),
+                      ),
                     ],
                   )),
                 ],
@@ -100,10 +110,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
   /// UI for the remote ID TextField.
   /// Search for a peer and connect to it if the id exists.
   Widget _buildRemoteIDTextField(BuildContext context) {
-    RxBool ftHover = false.obs;
-    RxBool ftPressed = false.obs;
-    RxBool connHover = false.obs;
-    RxBool connPressed = false.obs;
     RxBool inputFocused = false.obs;
     FocusNode focusNode = FocusNode();
     focusNode.addListener(() {
@@ -113,7 +119,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
       width: 320 + 20 * 2,
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 22),
       decoration: BoxDecoration(
-        color: MyTheme.color(context).bg,
+        color: Theme.of(context).backgroundColor,
         borderRadius: const BorderRadius.all(Radius.circular(13)),
       ),
       child: Ink(
@@ -123,7 +129,10 @@ class _ConnectionPageState extends State<ConnectionPage> {
               children: [
                 Text(
                   translate('Control Remote Desktop'),
-                  style: const TextStyle(fontSize: 19, height: 1),
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleLarge
+                      ?.merge(TextStyle(height: 1)),
                 ),
               ],
             ).marginOnly(bottom: 15),
@@ -142,13 +151,12 @@ class _ConnectionPageState extends State<ConnectionPage> {
                         height: 1,
                       ),
                       maxLines: 1,
-                      cursorColor: MyTheme.color(context).text!,
+                      cursorColor:
+                          Theme.of(context).textTheme.titleLarge?.color,
                       decoration: InputDecoration(
                           hintText: inputFocused.value
                               ? null
                               : translate('Enter Remote ID'),
-                          hintStyle: TextStyle(
-                              color: MyTheme.color(context).placeholder),
                           border: OutlineInputBorder(
                               borderRadius: BorderRadius.zero,
                               borderSide: BorderSide(
@@ -180,84 +188,17 @@ class _ConnectionPageState extends State<ConnectionPage> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  Obx(() => InkWell(
-                        onTapDown: (_) => ftPressed.value = true,
-                        onTapUp: (_) => ftPressed.value = false,
-                        onTapCancel: () => ftPressed.value = false,
-                        onHover: (value) => ftHover.value = value,
-                        onTap: () {
-                          onConnect(isFileTransfer: true);
-                        },
-                        child: Container(
-                          height: 27,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: ftPressed.value
-                                ? MyTheme.accent
-                                : Colors.transparent,
-                            border: Border.all(
-                              color: ftPressed.value
-                                  ? MyTheme.accent
-                                  : ftHover.value
-                                      ? MyTheme.hoverBorder
-                                      : MyTheme.border,
-                            ),
-                            borderRadius: BorderRadius.circular(5),
-                          ),
-                          child: Text(
-                            translate(
-                              "Transfer File",
-                            ),
-                            style: TextStyle(
-                                fontSize: 12,
-                                color: ftPressed.value
-                                    ? MyTheme.color(context).bg
-                                    : MyTheme.color(context).text),
-                          ).marginSymmetric(horizontal: 12),
-                        ),
-                      )),
+                  Button(
+                    isOutline: true,
+                    onTap: () {
+                      onConnect(isFileTransfer: true);
+                    },
+                    text: "Transfer File",
+                  ),
                   const SizedBox(
                     width: 17,
                   ),
-                  Obx(
-                    () => InkWell(
-                      onTapDown: (_) => connPressed.value = true,
-                      onTapUp: (_) => connPressed.value = false,
-                      onTapCancel: () => connPressed.value = false,
-                      onHover: (value) => connHover.value = value,
-                      onTap: onConnect,
-                      child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            minWidth: 80.0,
-                          ),
-                          child: Container(
-                            height: 27,
-                            decoration: BoxDecoration(
-                              color: connPressed.value
-                                  ? MyTheme.accent
-                                  : MyTheme.button,
-                              border: Border.all(
-                                color: connPressed.value
-                                    ? MyTheme.accent
-                                    : connHover.value
-                                        ? MyTheme.hoverBorder
-                                        : MyTheme.button,
-                              ),
-                              borderRadius: BorderRadius.circular(5),
-                            ),
-                            child: Center(
-                              child: Text(
-                                translate(
-                                  "Connect",
-                                ),
-                                style: TextStyle(
-                                    fontSize: 12,
-                                    color: MyTheme.color(context).bg),
-                              ),
-                            ).marginSymmetric(horizontal: 12),
-                          )),
-                    ),
-                  ),
+                  Button(onTap: onConnect, text: "Connect"),
                 ],
               ),
             )
@@ -289,7 +230,11 @@ class _ConnectionPageState extends State<ConnectionPage> {
       width: 8,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        color: svcStopped.value ? Colors.redAccent : Colors.green,
+        color: svcStopped.value || svcStatusCode.value == 0
+            ? kColorWarn
+            : (svcStatusCode.value == 1
+                ? Color.fromARGB(255, 50, 190, 166)
+                : Color.fromARGB(255, 224, 79, 95)),
       ),
     ).paddingSymmetric(horizontal: 12.0);
     if (svcStopped.value) {

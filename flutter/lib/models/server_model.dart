@@ -436,7 +436,7 @@ class ServerModel with ChangeNotifier {
             clientInfo(client),
             Text(
               translate("android_new_connection_tip"),
-              style: const TextStyle(color: Colors.black54),
+              style: Theme.of(globalKey.currentContext!).textTheme.bodyMedium,
             ),
           ],
         ),

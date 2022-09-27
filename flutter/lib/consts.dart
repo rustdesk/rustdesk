@@ -11,11 +11,15 @@ const String kAppTypeDesktopPortForward = "port forward";
 const String kTabLabelHomePage = "Home";
 const String kTabLabelSettingPage = "Settings";
 
+const Color kColorWarn = Color.fromARGB(255, 245, 133, 59);
+
 const int kMobileDefaultDisplayWidth = 720;
 const int kMobileDefaultDisplayHeight = 1280;
 
 const int kDesktopDefaultDisplayWidth = 1080;
 const int kDesktopDefaultDisplayHeight = 720;
+
+const Size kConnectionManagerWindowSize = Size(300, 400);
 
 /// [kDefaultScrollAmountMultiplier] indicates how many rows can be scrolled after a minimum scroll action of mouse
 const kDefaultScrollAmountMultiplier = 5.0;

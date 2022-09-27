@@ -5,7 +5,9 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
+import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:get/get.dart';
@@ -18,7 +20,7 @@ import '../../common/widgets/dialog.dart';
 
 const double _kTabWidth = 235;
 const double _kTabHeight = 42;
-const double _kCardFixedWidth = 560;
+const double _kCardFixedWidth = 540;
 const double _kCardLeftMargin = 15;
 const double _kContentHMargin = 15;
 const double _kContentHSubMargin = _kContentHMargin + 33;
@@ -28,6 +30,8 @@ const double _kListViewBottomMargin = 15;
 const double _kTitleFontSize = 20;
 const double _kContentFontSize = 15;
 const Color _accentColor = MyTheme.accent;
+const String _kSettingPageControllerTag = "settingPageController";
+const String _kSettingPageIndexTag = "settingPageIndex";
 
 class _TabInfo {
   late final String label;
@@ -37,10 +41,30 @@ class _TabInfo {
 }
 
 class DesktopSettingPage extends StatefulWidget {
-  const DesktopSettingPage({Key? key}) : super(key: key);
+  final int initialPage;
+
+  const DesktopSettingPage({Key? key, required this.initialPage})
+      : super(key: key);
 
   @override
   State<DesktopSettingPage> createState() => _DesktopSettingPageState();
+
+  static void switch2page(int page) {
+    if (page >= 5) return;
+    try {
+      if (Get.isRegistered<PageController>(tag: _kSettingPageControllerTag)) {
+        DesktopTabPage.onAddSetting(initialPage: page);
+        PageController controller = Get.find(tag: _kSettingPageControllerTag);
+        RxInt selectedIndex = Get.find(tag: _kSettingPageIndexTag);
+        selectedIndex.value = page;
+        controller.jumpToPage(page);
+      } else {
+        DesktopTabPage.onAddSetting(initialPage: page);
+      }
+    } catch (e) {
+      debugPrint('$e');
+    }
+  }
 }
 
 class _DesktopSettingPageState extends State<DesktopSettingPage>
@@ -50,12 +74,12 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
     _TabInfo('Security', Icons.enhanced_encryption_outlined,
         Icons.enhanced_encryption),
     _TabInfo('Network', Icons.link_outlined, Icons.link),
-    _TabInfo('Acount', Icons.person_outline, Icons.person),
+    _TabInfo('Account', Icons.person_outline, Icons.person),
     _TabInfo('About', Icons.info_outline, Icons.info)
   ];
 
   late PageController controller;
-  RxInt selectedIndex = 0.obs;
+  late RxInt selectedIndex;
 
   @override
   bool get wantKeepAlive => true;
@@ -63,14 +87,24 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
   @override
   void initState() {
     super.initState();
-    controller = PageController();
+    selectedIndex = (widget.initialPage < 5 ? widget.initialPage : 0).obs;
+    Get.put<RxInt>(selectedIndex, tag: _kSettingPageIndexTag);
+    controller = PageController(initialPage: widget.initialPage);
+    Get.put<PageController>(controller, tag: _kSettingPageControllerTag);
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+    Get.delete<PageController>(tag: _kSettingPageControllerTag);
+    Get.delete<RxInt>(tag: _kSettingPageIndexTag);
   }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
     return Scaffold(
-      backgroundColor: MyTheme.color(context).bg,
+      backgroundColor: Theme.of(context).backgroundColor,
       body: Row(
         children: <Widget>[
           SizedBox(
@@ -85,7 +119,7 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
           const VerticalDivider(thickness: 1, width: 1),
           Expanded(
             child: Container(
-              color: MyTheme.color(context).grayBg,
+              color: Theme.of(context).scaffoldBackgroundColor,
               child: DesktopScrollWrapper(
                   scrollController: controller,
                   child: PageView(
@@ -94,7 +128,7 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
                       _General(),
                       _Safety(),
                       _Network(),
-                      _Acount(),
+                      _Account(),
                       _About(),
                     ],
                   )),
@@ -387,7 +421,7 @@ class _Safety extends StatefulWidget {
 class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
-  bool locked = true;
+  bool locked = bind.mainIsInstalled();
   final scrollController = ScrollController();
 
   @override
@@ -533,7 +567,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
       _OptionCheckBox(context, 'Deny remote access', 'stop-service',
           checkedIcon: const Icon(
             Icons.warning_amber_rounded,
-            color: Color.fromARGB(255, 255, 204, 0),
+            color: kColorWarn,
           ),
           enabled: enabled),
       Offstage(
@@ -541,6 +575,8 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
         child: _OptionCheckBox(context, 'Enable RDP', 'enable-rdp',
             enabled: enabled),
       ),
+      _OptionCheckBox(context, 'Deny LAN Discovery', 'enable-lan-discovery',
+          reverse: true, enabled: enabled),
       ...directIp(context),
       whitelist(),
     ]);
@@ -700,14 +736,14 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
   }
 }
 
-class _Acount extends StatefulWidget {
-  const _Acount({Key? key}) : super(key: key);
+class _Account extends StatefulWidget {
+  const _Account({Key? key}) : super(key: key);
 
   @override
-  State<_Acount> createState() => _AcountState();
+  State<_Account> createState() => _AccountState();
 }
 
-class _AcountState extends State<_Acount> {
+class _AccountState extends State<_Account> {
   @override
   Widget build(BuildContext context) {
     final scrollController = ScrollController();
@@ -717,12 +753,12 @@ class _AcountState extends State<_Acount> {
           physics: NeverScrollableScrollPhysics(),
           controller: scrollController,
           children: [
-            _Card(title: 'Acount', children: [login()]),
+            _Card(title: 'Account', children: [accountAction()]),
           ],
         ).marginOnly(bottom: _kListViewBottomMargin));
   }
 
-  Widget login() {
+  Widget accountAction() {
     return _futureBuilder(future: () async {
       return await gFFI.userModel.getUserName();
     }(), hasData: (data) {
@@ -730,12 +766,14 @@ class _AcountState extends State<_Acount> {
       return _Button(
           username.isEmpty ? 'Login' : 'Logout',
           () => {
-                loginDialog().then((success) {
-                  if (success) {
-                    // refresh frame
-                    setState(() {});
-                  }
-                })
+                username.isEmpty
+                    ? loginDialog().then((success) {
+                        if (success) {
+                          // refresh frame
+                          setState(() {});
+                        }
+                      })
+                    : gFFI.userModel.logOut()
               });
     });
   }
@@ -859,7 +897,9 @@ Widget _Card({required String title, required List<Widget> children}) {
 }
 
 Color? _disabledTextColor(BuildContext context, bool enabled) {
-  return enabled ? null : MyTheme.color(context).lighterText;
+  return enabled
+      ? null
+      : Theme.of(context).textTheme.titleLarge?.color?.withOpacity(0.6);
 }
 
 // ignore: non_constant_identifier_names
@@ -1334,91 +1374,6 @@ void changeServer() async {
         TextButton(onPressed: submit, child: Text(translate("OK"))),
       ],
       onSubmit: submit,
-      onCancel: close,
-    );
-  });
-}
-
-void changeWhiteList({Function()? callback}) async {
-  Map<String, dynamic> oldOptions = jsonDecode(await bind.mainGetOptions());
-  var newWhiteList = ((oldOptions['whitelist'] ?? "") as String).split(',');
-  var newWhiteListField = newWhiteList.join('\n');
-  var controller = TextEditingController(text: newWhiteListField);
-  var msg = "";
-  var isInProgress = false;
-  gFFI.dialogManager.show((setState, close) {
-    return CustomAlertDialog(
-      title: Text(translate("IP Whitelisting")),
-      content: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(translate("whitelist_sep")),
-          const SizedBox(
-            height: 8.0,
-          ),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                    maxLines: null,
-                    decoration: InputDecoration(
-                      border: const OutlineInputBorder(),
-                      errorText: msg.isEmpty ? null : translate(msg),
-                    ),
-                    controller: controller,
-                    focusNode: FocusNode()..requestFocus()),
-              ),
-            ],
-          ),
-          const SizedBox(
-            height: 4.0,
-          ),
-          Offstage(
-              offstage: !isInProgress, child: const LinearProgressIndicator())
-        ],
-      ),
-      actions: [
-        TextButton(onPressed: close, child: Text(translate("Cancel"))),
-        TextButton(
-            onPressed: () async {
-              await bind.mainSetOption(key: 'whitelist', value: '');
-              callback?.call();
-              close();
-            },
-            child: Text(translate("Clear"))),
-        TextButton(
-            onPressed: () async {
-              setState(() {
-                msg = "";
-                isInProgress = true;
-              });
-              newWhiteListField = controller.text.trim();
-              var newWhiteList = "";
-              if (newWhiteListField.isEmpty) {
-                // pass
-              } else {
-                final ips =
-                    newWhiteListField.trim().split(RegExp(r"[\s,;\n]+"));
-                // test ip
-                final ipMatch = RegExp(r"^\d+\.\d+\.\d+\.\d+$");
-                for (final ip in ips) {
-                  if (!ipMatch.hasMatch(ip)) {
-                    msg = "${translate("Invalid IP")} $ip";
-                    setState(() {
-                      isInProgress = false;
-                    });
-                    return;
-                  }
-                }
-                newWhiteList = ips.join(',');
-              }
-              oldOptions['whitelist'] = newWhiteList;
-              await bind.mainSetOptions(json: jsonEncode(oldOptions));
-              callback?.call();
-              close();
-            },
-            child: Text(translate("OK"))),
-      ],
       onCancel: close,
     );
   });

@@ -91,7 +91,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       decoration: BoxDecoration(
           border: Border.all(color: MyTheme.color(context).border!)),
       child: Scaffold(
-          backgroundColor: MyTheme.color(context).bg,
+          backgroundColor: Theme.of(context).backgroundColor,
           body: DesktopTab(
             controller: tabController,
             showTabBar: fullscreen.isFalse,

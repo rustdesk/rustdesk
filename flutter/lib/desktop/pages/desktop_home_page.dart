@@ -5,6 +5,8 @@ import 'package:flutter/material.dart' hide MenuItem;
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/desktop/pages/connection_page.dart';
+import 'package:flutter_hbb/desktop/pages/desktop_setting_page.dart';
+import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
@@ -12,6 +14,9 @@ import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../widgets/button.dart';
 
 class DesktopHomePage extends StatefulWidget {
   const DesktopHomePage({Key? key}) : super(key: key);
@@ -26,6 +31,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     with TrayListener, WindowListener, AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
+  var updateUrl = '';
 
   @override
   void onWindowClose() async {
@@ -68,12 +74,13 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       value: gFFI.serverModel,
       child: Container(
         width: 200,
-        color: MyTheme.color(context).bg,
+        color: Theme.of(context).backgroundColor,
         child: Column(
           children: [
             buildTip(context),
             buildIDBoard(context),
             buildPasswordBoard(context),
+            buildHelpCards(),
           ],
         ),
       ),
@@ -82,7 +89,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
   buildRightPane(BuildContext context) {
     return Container(
-      color: MyTheme.color(context).grayBg,
+      color: Theme.of(context).scaffoldBackgroundColor,
       child: ConnectionPage(),
     );
   }
@@ -116,7 +123,11 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                           translate("ID"),
                           style: TextStyle(
                               fontSize: 14,
-                              color: MyTheme.color(context).lightText),
+                              color: Theme.of(context)
+                                  .textTheme
+                                  .titleLarge
+                                  ?.color
+                                  ?.withOpacity(0.5)),
                         ).marginOnly(top: 5),
                         buildPopupMenu(context)
                       ],
@@ -152,21 +163,20 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   }
 
   Widget buildPopupMenu(BuildContext context) {
+    final textColor = Theme.of(context).textTheme.titleLarge?.color;
     RxBool hover = false.obs;
     return InkWell(
-      onTap: () async {},
+      onTap: DesktopTabPage.onAddSetting,
       child: Obx(
         () => CircleAvatar(
           radius: 15,
           backgroundColor: hover.value
-              ? MyTheme.color(context).grayBg!
-              : MyTheme.color(context).bg!,
+              ? Theme.of(context).scaffoldBackgroundColor
+              : Theme.of(context).backgroundColor,
           child: Icon(
             Icons.more_vert_outlined,
             size: 20,
-            color: hover.value
-                ? MyTheme.color(context).text
-                : MyTheme.color(context).lightText,
+            color: hover.value ? textColor : textColor?.withOpacity(0.5),
           ),
         ),
       ),
@@ -178,6 +188,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     final model = gFFI.serverModel;
     RxBool refreshHover = false.obs;
     RxBool editHover = false.obs;
+    final textColor = Theme.of(context).textTheme.titleLarge?.color;
     return Container(
       margin: EdgeInsets.only(left: 20.0, right: 16, top: 13, bottom: 13),
       child: Row(
@@ -198,7 +209,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                   Text(
                     translate("Password"),
                     style: TextStyle(
-                        fontSize: 14, color: MyTheme.color(context).lightText),
+                        fontSize: 14, color: textColor?.withOpacity(0.5)),
                   ),
                   Row(
                     children: [
@@ -228,8 +239,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                           () => Icon(
                             Icons.refresh,
                             color: refreshHover.value
-                                ? MyTheme.color(context).text
-                                : Color(0xFFDDDDDD),
+                                ? textColor
+                                : Color(0xFFDDDDDD), // TODO
                             size: 22,
                           ).marginOnly(right: 8, bottom: 2),
                         ),
@@ -241,12 +252,12 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                           () => Icon(
                             Icons.edit,
                             color: editHover.value
-                                ? MyTheme.color(context).text
-                                : Color(0xFFDDDDDD),
+                                ? textColor
+                                : Color(0xFFDDDDDD), // TODO
                             size: 22,
                           ).marginOnly(right: 8, bottom: 2),
                         ),
-                        onTap: () => {},
+                        onTap: () => DesktopSettingPage.switch2page(1),
                         onHover: (value) => editHover.value = value,
                       ),
                     ],
@@ -270,7 +281,11 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         children: [
           Text(
             translate("Your Desktop"),
-            style: TextStyle(fontWeight: FontWeight.normal, fontSize: 19),
+            style: Theme.of(context).textTheme.titleLarge,
+            // style: TextStyle(
+            //     // color: MyTheme.color(context).text,
+            //     fontWeight: FontWeight.normal,
+            //     fontSize: 19),
           ),
           SizedBox(
             height: 10.0,
@@ -278,13 +293,90 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           Text(
             translate("desk_tip"),
             overflow: TextOverflow.clip,
-            style: TextStyle(
-                fontSize: 12,
-                color: MyTheme.color(context).lighterText,
-                height: 1.25),
+            style: Theme.of(context).textTheme.bodySmall,
           )
         ],
       ),
+    );
+  }
+
+  Widget buildHelpCards() {
+    if (Platform.isWindows) {
+      if (!bind.mainIsInstalled()) {
+        return buildInstallCard(
+            "", "install_tip", "Install", bind.mainGotoInstall);
+      } else if (bind.mainIsInstalledLowerVersion()) {
+        return buildInstallCard("Status", "Your installation is lower version.",
+            "Click to upgrade", bind.mainUpdateMe);
+      }
+    }
+    if (updateUrl.isNotEmpty) {
+      return buildInstallCard(
+          "Status",
+          "There is a newer version of ${bind.mainGetAppNameSync()} ${bind.mainGetNewVersion()} available.",
+          "Click to download", () async {
+        final Uri url = Uri.parse('https://rustdesk.com');
+        await launchUrl(url);
+      });
+    }
+    if (Platform.isMacOS) {}
+    if (bind.mainIsInstalledLowerVersion()) {}
+    return Container();
+  }
+
+  Widget buildInstallCard(String title, String content, String btnText,
+      GestureTapCallback onPressed) {
+    return Container(
+      margin: EdgeInsets.only(top: 20),
+      child: Container(
+          decoration: BoxDecoration(
+              gradient: LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            colors: [
+              Color.fromARGB(255, 226, 66, 188),
+              Color.fromARGB(255, 244, 114, 124),
+            ],
+          )),
+          padding: EdgeInsets.all(20),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: (title.isNotEmpty
+                    ? <Widget>[
+                        Center(
+                            child: Text(
+                          translate(title),
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15),
+                        ).marginOnly(bottom: 6)),
+                      ]
+                    : <Widget>[]) +
+                <Widget>[
+                  Text(
+                    translate(content),
+                    style: TextStyle(
+                        height: 1.5,
+                        color: Colors.white,
+                        fontWeight: FontWeight.normal,
+                        fontSize: 13),
+                  ).marginOnly(bottom: 20),
+                  Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Button(
+                      padding: 8,
+                      isOutline: true,
+                      text: translate(btnText),
+                      textColor: Colors.white,
+                      borderColor: Colors.white,
+                      textSize: 20,
+                      radius: 10,
+                      onTap: onPressed,
+                    )
+                  ]),
+                ],
+          )),
     );
   }
 
@@ -305,6 +397,10 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   @override
   void initState() {
     super.initState();
+    Timer(const Duration(seconds: 5), () async {
+      updateUrl = await bind.mainGetSoftwareUpdateUrl();
+      if (updateUrl.isNotEmpty) setState(() {});
+    });
     trayManager.addListener(this);
     windowManager.addListener(this);
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
@@ -331,7 +427,7 @@ Future<bool> loginDialog() async {
   var userNameMsg = "";
   String pass = "";
   var passMsg = "";
-  var userContontroller = TextEditingController(text: userName);
+  var userController = TextEditingController(text: userName);
   var pwdController = TextEditingController(text: pass);
 
   var isInProgress = false;
@@ -349,7 +445,7 @@ Future<bool> loginDialog() async {
         });
       }
 
-      userName = userContontroller.text;
+      userName = userController.text;
       pass = pwdController.text;
       if (userName.isEmpty) {
         userNameMsg = translate("Username missed");
@@ -385,6 +481,7 @@ Future<bool> loginDialog() async {
       close();
     }
 
+    // 登录dialog
     return CustomAlertDialog(
       title: Text(translate("Login")),
       content: ConstrainedBox(
@@ -411,7 +508,7 @@ Future<bool> loginDialog() async {
                     decoration: InputDecoration(
                         border: const OutlineInputBorder(),
                         errorText: userNameMsg.isNotEmpty ? userNameMsg : null),
-                    controller: userContontroller,
+                    controller: userController,
                     focusNode: FocusNode()..requestFocus(),
                   ),
                 ),

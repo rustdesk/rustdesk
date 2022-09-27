@@ -324,9 +324,12 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Scale adaptive", ""),
         ("General", ""),
         ("Security", ""),
-        ("Acount", ""),
+        ("Account", ""),
         ("Theme", ""),
         ("Dark Theme", ""),
+        ("Dark", ""),
+        ("Light", ""),
+        ("Follow System", ""),
         ("Enable hardware codec", ""),
         ("Unlock Security Settings", ""),
         ("Enable Audio", ""),
@@ -354,5 +357,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Stop session recording", ""),
         ("Enable Recording Session", ""),
         ("Allow recording session", ""),
+        ("Enable LAN Discovery", ""),
+        ("Deny LAN Discovery", ""),
+        ("Write a message", ""),
     ].iter().cloned().collect();
 }

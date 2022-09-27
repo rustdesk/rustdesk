@@ -2,12 +2,14 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'package:settings_ui/settings_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../common.dart';
+import '../../common/widgets/dialog.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../widgets/dialog.dart';
@@ -25,14 +27,15 @@ class SettingsPage extends StatefulWidget implements PageShape {
   final appBarActions = [ScanButton()];
 
   @override
-  _SettingsState createState() => _SettingsState();
+  State<SettingsPage> createState() => _SettingsState();
 }
 
 const url = 'https://rustdesk.com/';
 final _hasIgnoreBattery = androidVersion >= 26;
 var _ignoreBatteryOpt = false;
 var _enableAbr = false;
-var _isDarkMode = false;
+var _denyLANDiscovery = false;
+var _onlyWhiteList = false;
 
 class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   String? username;
@@ -60,7 +63,19 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         _enableAbr = enableAbrRes;
       }
 
-      // _isDarkMode = MyTheme.currentDarkMode(); // TODO
+      final denyLanDiscovery = !option2bool('enable-lan-discovery',
+          await bind.mainGetOption(key: 'enable-lan-discovery'));
+      if (denyLanDiscovery != _denyLANDiscovery) {
+        update = true;
+        _denyLANDiscovery = denyLanDiscovery;
+      }
+
+      final onlyWhiteList =
+          (await bind.mainGetOption(key: 'whitelist')).isNotEmpty;
+      if (onlyWhiteList != _onlyWhiteList) {
+        update = true;
+        _onlyWhiteList = onlyWhiteList;
+      }
 
       if (update) {
         setState(() {});
@@ -100,13 +115,54 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     Provider.of<FfiModel>(context);
     final enhancementsTiles = [
       SettingsTile.switchTile(
-        title: Text(translate('Adaptive Bitrate') + ' (beta)'),
+        title: Text('${translate('Adaptive Bitrate')} (beta)'),
         initialValue: _enableAbr,
-        onToggle: (v) {
-          bind.mainSetOption(key: "enable-abr", value: v ? "" : "N");
+        onToggle: (v) async {
+          await bind.mainSetOption(key: "enable-abr", value: v ? "" : "N");
+          final newValue = await bind.mainGetOption(key: "enable-abr") != "N";
           setState(() {
-            _enableAbr = !_enableAbr;
+            _enableAbr = newValue;
           });
+        },
+      )
+    ];
+    final shareScreenTiles = [
+      SettingsTile.switchTile(
+        title: Text(translate('Deny LAN Discovery')),
+        initialValue: _denyLANDiscovery,
+        onToggle: (v) async {
+          await bind.mainSetOption(
+              key: "enable-lan-discovery",
+              value: bool2option("enable-lan-discovery", !v));
+          final newValue = !option2bool('enable-lan-discovery',
+              await bind.mainGetOption(key: 'enable-lan-discovery'));
+          setState(() {
+            _denyLANDiscovery = newValue;
+          });
+        },
+      ),
+      SettingsTile.switchTile(
+        title: Row(children: [
+          Text(translate('Use IP Whitelisting')),
+          Offstage(
+                  offstage: !_onlyWhiteList,
+                  child: const Icon(Icons.warning_amber_rounded,
+                      color: Color.fromARGB(255, 255, 204, 0)))
+              .marginOnly(left: 5)
+        ]),
+        initialValue: _onlyWhiteList,
+        onToggle: (_) async {
+          update() async {
+            final onlyWhiteList =
+                (await bind.mainGetOption(key: 'whitelist')).isNotEmpty;
+            if (onlyWhiteList != _onlyWhiteList) {
+              setState(() {
+                _onlyWhiteList = onlyWhiteList;
+              });
+            }
+          }
+
+          changeWhiteList(callback: update);
         },
       )
     ];
@@ -152,7 +208,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             SettingsTile.navigation(
               title: Text(username == null
                   ? translate("Login")
-                  : translate("Logout") + ' ($username)'),
+                  : '${translate("Logout")} ($username)'),
               leading: Icon(Icons.person),
               onPressed: (context) {
                 if (username == null) {
@@ -177,18 +233,18 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
               onPressed: (context) {
                 showLanguageSettings(gFFI.dialogManager);
               }),
-          SettingsTile.switchTile(
+          SettingsTile.navigation(
             title: Text(translate('Dark Theme')),
             leading: Icon(Icons.dark_mode),
-            initialValue: _isDarkMode,
-            onToggle: (v) {
-              setState(() {
-                _isDarkMode = !_isDarkMode;
-                // MyTheme.changeDarkMode(_isDarkMode); // TODO
-              });
+            onPressed: (context) {
+              showThemeSettings(gFFI.dialogManager);
             },
           )
         ]),
+        SettingsSection(
+          title: Text(translate("Share Screen")),
+          tiles: shareScreenTiles,
+        ),
         SettingsSection(
           title: Text(translate("Enhancements")),
           tiles: enhancementsTiles,
@@ -232,7 +288,7 @@ void showLanguageSettings(OverlayDialogManager dialogManager) async {
     final langs = json.decode(await bind.mainGetLangs()) as List<dynamic>;
     var lang = await bind.mainGetLocalOption(key: "lang");
     dialogManager.show((setState, close) {
-      final setLang = (v) {
+      setLang(v) {
         if (lang != v) {
           setState(() {
             lang = v;
@@ -241,7 +297,8 @@ void showLanguageSettings(OverlayDialogManager dialogManager) async {
           HomePage.homeKey.currentState?.refreshPages();
           Future.delayed(Duration(milliseconds: 200), close);
         }
-      };
+      }
+
       return CustomAlertDialog(
           title: SizedBox.shrink(),
           content: Column(
@@ -257,13 +314,41 @@ void showLanguageSettings(OverlayDialogManager dialogManager) async {
           ),
           actions: []);
     }, backDismiss: true, clickMaskDismiss: true);
-  } catch (_e) {}
+  } catch (e) {
+    //
+  }
+}
+
+void showThemeSettings(OverlayDialogManager dialogManager) async {
+  var themeMode = MyTheme.getThemeModePreference();
+
+  dialogManager.show((setState, close) {
+    setTheme(v) {
+      if (themeMode != v) {
+        setState(() {
+          themeMode = v;
+        });
+        MyTheme.changeDarkMode(themeMode);
+        Future.delayed(Duration(milliseconds: 200), close);
+      }
+    }
+
+    return CustomAlertDialog(
+        title: SizedBox.shrink(),
+        contentPadding: 10,
+        content: Column(children: [
+          getRadio('Light', ThemeMode.light, themeMode, setTheme),
+          getRadio('Dark', ThemeMode.dark, themeMode, setTheme),
+          getRadio('Follow System', ThemeMode.system, themeMode, setTheme)
+        ]),
+        actions: []);
+  }, backDismiss: true, clickMaskDismiss: true);
 }
 
 void showAbout(OverlayDialogManager dialogManager) {
   dialogManager.show((setState, close) {
     return CustomAlertDialog(
-      title: Text(translate('About') + ' RustDesk'),
+      title: Text('${translate('About')} RustDesk'),
       content: Wrap(direction: Axis.vertical, spacing: 12, children: [
         Text('Version: $version'),
         InkWell(
@@ -429,7 +514,7 @@ void showLogin(OverlayDialogManager dialogManager) {
           ),
           controller: nameController,
         ),
-        PasswordWidget(controller: passwordController),
+        PasswordWidget(controller: passwordController, autoFocus: false),
       ]),
       actions: (loading
               ? <Widget>[CircularProgressIndicator()]

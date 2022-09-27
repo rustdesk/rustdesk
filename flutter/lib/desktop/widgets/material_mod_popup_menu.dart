@@ -14,7 +14,8 @@ import 'package:flutter/material.dart';
 // void setState(VoidCallback fn) { }
 // enum Menu { itemOne, itemTwo, itemThree, itemFour }
 
-const Duration _kMenuDuration = Duration(milliseconds: 300);
+// const Duration _kMenuDuration = Duration(milliseconds: 300);
+const Duration _kMenuDuration = Duration(milliseconds: 0);
 const double _kMenuCloseIntervalEnd = 2.0 / 3.0;
 const double _kMenuHorizontalPadding = 16.0;
 const double _kMenuDividerHeight = 16.0;
@@ -22,7 +23,7 @@ const double _kMenuDividerHeight = 16.0;
 const double _kMenuMinWidth = 2.0 * _kMenuWidthStep;
 const double _kMenuMaxWidth = double.infinity;
 // const double _kMenuVerticalPadding = 8.0;
-const double _kMenuVerticalPadding = 0.0;
+const double _kMenuVerticalPadding = 8.0;
 const double _kMenuWidthStep = 0.0;
 //const double _kMenuScreenPadding = 8.0;
 const double _kMenuScreenPadding = 0.0;

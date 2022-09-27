@@ -166,10 +166,12 @@ class ChatModel with ChangeNotifier {
     if (_isShowChatPage) {
       _isShowChatPage = !_isShowChatPage;
       notifyListeners();
-      await windowManager.setSize(Size(400, 600));
+      await windowManager.setSize(Size(300, 400));
+      await windowManager.setAlignment(Alignment.topRight);
     } else {
-      await windowManager.setSize(Size(800, 600));
+      await windowManager.setSize(Size(600, 400));
       await Future.delayed(Duration(milliseconds: 100));
+      await windowManager.setAlignment(Alignment.topRight);
       _isShowChatPage = !_isShowChatPage;
       notifyListeners();
     }

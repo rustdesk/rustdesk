@@ -325,17 +325,13 @@ class _RemotePageState extends State<RemotePage> {
         },
         onPointerSignal: (e) {
           if (e is PointerScrollEvent) {
-            var dx = e.scrollDelta.dx;
-            var dy = e.scrollDelta.dy;
-            if (dx > 0)
-              dx = -1;
-            else if (dx < 0) dx = 1;
-            if (dy > 0)
+            var dy = 0;
+            if (e.scrollDelta.dy > 0) {
               dy = -1;
-            else if (dy < 0) dy = 1;
-            bind.sessionSendMouse(
-                id: widget.id,
-                msg: '{"type": "wheel", "x": "$dx", "y": "$dy"}');
+            } else if (e.scrollDelta.dy < 0) {
+              dy = 1;
+            }
+            gFFI.scroll(dy);
           }
         },
         child: MouseRegion(
@@ -752,7 +748,7 @@ class _RemotePageState extends State<RemotePage> {
   void changeTouchMode() {
     setState(() => _showEdit = false);
     showModalBottomSheet(
-        backgroundColor: MyTheme.grayBg,
+        // backgroundColor: MyTheme.grayBg,
         isScrollControlled: true,
         context: context,
         shape: const RoundedRectangleBorder(
@@ -968,7 +964,9 @@ class ImagePainter extends CustomPainter {
   }
 }
 
+// TODO global widget
 class QualityMonitor extends StatelessWidget {
+  static final textColor = Colors.grey.shade200;
   @override
   Widget build(BuildContext context) => ChangeNotifierProvider.value(
       value: gFFI.qualityMonitorModel,
@@ -985,23 +983,23 @@ class QualityMonitor extends StatelessWidget {
                         children: [
                           Text(
                             "Speed: ${qualityMonitorModel.data.speed ?? ''}",
-                            style: TextStyle(color: MyTheme.grayBg),
+                            style: TextStyle(color: textColor),
                           ),
                           Text(
                             "FPS: ${qualityMonitorModel.data.fps ?? ''}",
-                            style: TextStyle(color: MyTheme.grayBg),
+                            style: TextStyle(color: textColor),
                           ),
                           Text(
                             "Delay: ${qualityMonitorModel.data.delay ?? ''} ms",
-                            style: TextStyle(color: MyTheme.grayBg),
+                            style: TextStyle(color: textColor),
                           ),
                           Text(
                             "Target Bitrate: ${qualityMonitorModel.data.targetBitrate ?? ''}kb",
-                            style: TextStyle(color: MyTheme.grayBg),
+                            style: TextStyle(color: textColor),
                           ),
                           Text(
                             "Codec: ${qualityMonitorModel.data.codecFormat ?? ''}",
-                            style: TextStyle(color: MyTheme.grayBg),
+                            style: TextStyle(color: textColor),
                           ),
                         ],
                       ),

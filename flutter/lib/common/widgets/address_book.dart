@@ -1,16 +1,18 @@
 import 'package:contextmenu/contextmenu.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/common/widgets/peer_widget.dart';
+import 'package:flutter_hbb/common/widgets/peers_view.dart';
 import 'package:flutter_hbb/models/ab_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 
 import '../../common.dart';
 import '../../desktop/pages/desktop_home_page.dart';
+import '../../mobile/pages/settings_page.dart';
 import '../../models/platform_model.dart';
 
 class AddressBook extends StatefulWidget {
-  const AddressBook({Key? key}) : super(key: key);
+  final EdgeInsets? menuPadding;
+  const AddressBook({Key? key, this.menuPadding}) : super(key: key);
 
   @override
   State<StatefulWidget> createState() {
@@ -37,11 +39,16 @@ class _AddressBookState extends State<AddressBook> {
       });
 
   handleLogin() {
-    loginDialog().then((success) {
-      if (success) {
-        setState(() {});
-      }
-    });
+    // TODO refactor login dialog for desktop and mobile
+    if (isDesktop) {
+      loginDialog().then((success) {
+        if (success) {
+          setState(() {});
+        }
+      });
+    } else {
+      showLogin(gFFI.dialogManager);
+    }
   }
 
   Future<Widget> buildAddressBook(BuildContext context) async {
@@ -108,7 +115,8 @@ class _AddressBookState extends State<AddressBook> {
                 Card(
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20),
-                      side: const BorderSide(color: MyTheme.grayBg)),
+                      side: BorderSide(
+                          color: Theme.of(context).scaffoldBackgroundColor)),
                   child: Container(
                     width: 200,
                     height: double.infinity,
@@ -174,7 +182,9 @@ class _AddressBookState extends State<AddressBook> {
                 Expanded(
                   child: Align(
                       alignment: Alignment.topLeft,
-                      child: AddressBookPeerWidget()),
+                      child: AddressBookPeersView(
+                        menuPadding: widget.menuPadding,
+                      )),
                 )
               ],
             ));
@@ -206,7 +216,8 @@ class _AddressBookState extends State<AddressBook> {
             child: Text(
               tagName,
               style: TextStyle(
-                  color: rxTags.contains(tagName) ? MyTheme.white : null),
+                  color:
+                      rxTags.contains(tagName) ? Colors.white : null), // TODO
             ),
           ),
         ),

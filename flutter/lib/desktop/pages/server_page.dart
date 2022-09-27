@@ -69,7 +69,7 @@ class _DesktopServerPageState extends State<DesktopServerPage>
                     OverlayEntry(builder: (context) {
                       gFFI.dialogManager.setOverlayState(Overlay.of(context));
                       return Scaffold(
-                        backgroundColor: MyTheme.color(context).bg,
+                        backgroundColor: Theme.of(context).backgroundColor,
                         body: Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.start,
@@ -145,7 +145,7 @@ class ConnectionManagerState extends State<ConnectionManager> {
                 windowManager.startDragging();
               },
               child: Container(
-                color: MyTheme.color(context).bg,
+                color: Theme.of(context).backgroundColor,
               ),
             ),
           ),
@@ -310,14 +310,15 @@ class _CmHeaderState extends State<_CmHeader>
             ],
           ),
         ),
-        Offstage(
-          offstage: client.isFileTransfer,
-          child: IconButton(
-            onPressed: () => checkClickTime(
-                client.id, () => gFFI.chatModel.toggleCMChatPage(client.id)),
-            icon: Icon(Icons.message_outlined),
-          ),
-        )
+        Consumer<ServerModel>(
+            builder: (_, model, child) => Offstage(
+                  offstage: !client.authorized || client.isFileTransfer,
+                  child: IconButton(
+                    onPressed: () => checkClickTime(client.id,
+                        () => gFFI.chatModel.toggleCMChatPage(client.id)),
+                    icon: Icon(Icons.message_outlined),
+                  ),
+                ))
       ],
     );
   }

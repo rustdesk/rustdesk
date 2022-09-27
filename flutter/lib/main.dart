@@ -103,6 +103,7 @@ void runMainApp(bool startService) async {
     restoreWindowPosition(WindowType.Main);
     await windowManager.show();
     await windowManager.focus();
+    await windowManager.setOpacity(1);
   });
 }
 
@@ -190,8 +191,13 @@ void runPortForwardScreen(Map<String, dynamic> argument) async {
 void runConnectionManagerScreen() async {
   // initialize window
   WindowOptions windowOptions =
-      getHiddenTitleBarWindowOptions(size: const Size(300, 400));
-  await initEnv(kAppTypeMain);
+      getHiddenTitleBarWindowOptions(size: kConnectionManagerWindowSize);
+  // ensure initial window size to be changed
+  await windowManager.setSize(kConnectionManagerWindowSize);
+  await Future.wait([
+    windowManager.setAlignment(Alignment.topRight),
+    initEnv(kAppTypeMain)
+  ]);
   runApp(GetMaterialApp(
       debugShowCheckedModeBanner: false,
       theme: MyTheme.lightTheme,
@@ -206,17 +212,17 @@ void runConnectionManagerScreen() async {
       home: const DesktopServerPage(),
       builder: _keepScaleBuilder()));
   windowManager.waitUntilReadyToShow(windowOptions, () async {
-    await windowManager.setAlignment(Alignment.topRight);
-    await windowManager.show();
-    await windowManager.focus();
-    await windowManager.setAlignment(Alignment.topRight); // ensure
+    windowManager.show();
+    windowManager.focus();
+    windowManager.setOpacity(1);
+    windowManager.setAlignment(Alignment.topRight); // ensure
   });
 }
 
 WindowOptions getHiddenTitleBarWindowOptions({Size? size}) {
   return WindowOptions(
     size: size,
-    center: true,
+    center: false,
     backgroundColor: Colors.transparent,
     skipTaskbar: false,
     titleBarStyle: TitleBarStyle.hidden,

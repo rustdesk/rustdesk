@@ -1,6 +1,7 @@
 import 'package:contextmenu/contextmenu.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:get/get.dart';
 
 import '../../common.dart';
@@ -14,7 +15,7 @@ import '../../desktop/widgets/popup_menu.dart';
 class _PopupMenuTheme {
   static const Color commonColor = MyTheme.accent;
   // kMinInteractiveDimension
-  static const double height = 25.0;
+  static const double height = 20.0;
   static const double dividerHeight = 3.0;
 }
 
@@ -73,12 +74,18 @@ class _PeerCardState extends State<_PeerCard>
               _showPeerMenu(peer.id);
             },
             child: ListTile(
-              contentPadding: const EdgeInsets.only(left: 12),
+              contentPadding: const EdgeInsets.only(left: 12), //
               subtitle: Text('${peer.username}@${peer.hostname}'),
-              title: Text(peer.alias.isEmpty ? formatID(peer.id) : peer.alias),
+              title: Row(children: [
+                getOnline(4, peer.online),
+                Text(peer.alias.isEmpty ? formatID(peer.id) : peer.alias)
+              ]),
               leading: Container(
+                  decoration: BoxDecoration(
+                    color: str2color('${peer.id}${peer.platform}', 0x7f),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
                   padding: const EdgeInsets.all(6),
-                  color: str2color('${peer.id}${peer.platform}', 0x7f),
                   child: getPlatformImage(peer.platform)),
               trailing: InkWell(
                   child: const Padding(
@@ -105,7 +112,9 @@ class _PeerCardState extends State<_PeerCard>
     return MouseRegion(
       onEnter: (evt) {
         deco.value = BoxDecoration(
-            border: Border.all(color: MyTheme.button, width: _borderWidth),
+            border: Border.all(
+                color: Theme.of(context).colorScheme.secondary,
+                width: _borderWidth),
             borderRadius: peerCardUiType.value == PeerUiType.grid
                 ? BorderRadius.circular(_cardRadis)
                 : null);
@@ -127,8 +136,10 @@ class _PeerCardState extends State<_PeerCard>
 
   Widget _buildPeerTile(
       BuildContext context, Peer peer, Rx<BoxDecoration?> deco) {
-    final greyStyle =
-        TextStyle(fontSize: 12, color: MyTheme.color(context).lighterText);
+    final greyStyle = TextStyle(
+        fontSize: 11,
+        color: Theme.of(context).textTheme.titleLarge?.color?.withOpacity(0.6));
+    final alias = bind.mainGetPeerOptionSync(id: peer.id, key: 'alias');
     return Obx(
       () => Container(
         foregroundDecoration: deco.value,
@@ -144,66 +155,36 @@ class _PeerCardState extends State<_PeerCard>
             ),
             Expanded(
               child: Container(
-                decoration: BoxDecoration(color: MyTheme.color(context).bg),
+                decoration:
+                    BoxDecoration(color: Theme.of(context).backgroundColor),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Expanded(
                       child: Column(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
                           Row(children: [
-                            Padding(
-                                padding: const EdgeInsets.fromLTRB(0, 4, 4, 4),
-                                child: CircleAvatar(
-                                    radius: 5,
-                                    backgroundColor: peer.online
-                                        ? Colors.green
-                                        : Colors.yellow)),
-                            Text(
-                              formatID(peer.id),
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w400),
-                            ),
-                          ]),
+                            getOnline(8, peer.online),
+                            Expanded(
+                                child: Text(
+                              alias.isEmpty ? formatID(peer.id) : alias,
+                              overflow: TextOverflow.ellipsis,
+                            )),
+                          ]).marginOnly(bottom: 2),
                           Align(
                             alignment: Alignment.centerLeft,
-                            child: FutureBuilder<String>(
-                              future: bind.mainGetPeerOption(
-                                  id: peer.id, key: 'alias'),
-                              builder: (_, snapshot) {
-                                if (snapshot.hasData) {
-                                  final name = snapshot.data!.isEmpty
-                                      ? '${peer.username}@${peer.hostname}'
-                                      : snapshot.data!;
-                                  return Tooltip(
-                                    message: name,
-                                    waitDuration: const Duration(seconds: 1),
-                                    child: Text(
-                                      name,
-                                      style: greyStyle,
-                                      textAlign: TextAlign.start,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  );
-                                } else {
-                                  // alias has not arrived
-                                  return Text(
-                                    '${peer.username}@${peer.hostname}',
-                                    style: greyStyle,
-                                    textAlign: TextAlign.start,
-                                    overflow: TextOverflow.ellipsis,
-                                  );
-                                }
-                              },
+                            child: Text(
+                              '${peer.username}@${peer.hostname}',
+                              style: greyStyle,
+                              textAlign: TextAlign.start,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],
-                      ),
+                      ).marginOnly(top: 2),
                     ),
                     _actionMore(peer),
                   ],
-                ).paddingSymmetric(horizontal: 4.0),
+                ).paddingOnly(left: 10.0, top: 3.0),
               ),
             )
           ],
@@ -268,21 +249,19 @@ class _PeerCardState extends State<_PeerCard>
                   ),
                 ),
                 Container(
-                  color: MyTheme.color(context).bg,
+                  color: Theme.of(context).backgroundColor,
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(children: [
-                        Padding(
-                            padding: const EdgeInsets.fromLTRB(0, 4, 8, 4),
-                            child: CircleAvatar(
-                                radius: 5,
-                                backgroundColor: peer.online
-                                    ? Colors.green
-                                    : Colors.yellow)),
-                        Text(
-                            peer.alias.isEmpty ? formatID(peer.id) : peer.alias)
-                      ]).paddingSymmetric(vertical: 8),
+                      Expanded(
+                          child: Row(children: [
+                        getOnline(8, peer.online),
+                        Expanded(
+                            child: Text(
+                          peer.alias.isEmpty ? formatID(peer.id) : peer.alias,
+                          overflow: TextOverflow.ellipsis,
+                        )),
+                      ]).paddingSymmetric(vertical: 8)),
                       _actionMore(peer),
                     ],
                   ).paddingSymmetric(horizontal: 12.0),
@@ -308,13 +287,21 @@ class _PeerCardState extends State<_PeerCard>
           child: CircleAvatar(
               radius: 14,
               backgroundColor: _iconMoreHover.value
-                  ? MyTheme.color(context).grayBg!
-                  : MyTheme.color(context).bg!,
+                  ? Theme.of(context).scaffoldBackgroundColor
+                  : Theme.of(context).backgroundColor,
+              // ? Theme.of(context).scaffoldBackgroundColor!
+              // : Theme.of(context).backgroundColor!,
               child: Icon(Icons.more_vert,
                   size: 18,
                   color: _iconMoreHover.value
-                      ? MyTheme.color(context).text
-                      : MyTheme.color(context).lightText))));
+                      ? Theme.of(context).textTheme.titleLarge?.color
+                      : Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.color
+                          ?.withOpacity(0.5)))));
+  // ? MyTheme.color(context).text
+  // : MyTheme.color(context).lightText))));
 
   /// Show the peer menu and handle user's choice.
   /// User might remove the peer or send a file to the peer.
@@ -333,8 +320,10 @@ class _PeerCardState extends State<_PeerCard>
 
 abstract class BasePeerCard extends StatelessWidget {
   final Peer peer;
+  final EdgeInsets? menuPadding;
 
-  BasePeerCard({required this.peer, Key? key}) : super(key: key);
+  BasePeerCard({required this.peer, this.menuPadding, Key? key})
+      : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -379,6 +368,7 @@ abstract class BasePeerCard extends StatelessWidget {
           isRDP: isRDP,
         );
       },
+      padding: menuPadding,
       dismissOnClicked: true,
     );
   }
@@ -428,17 +418,25 @@ abstract class BasePeerCard extends StatelessWidget {
               Expanded(
                   child: Align(
                 alignment: Alignment.centerRight,
-                child: IconButton(
-                  padding: EdgeInsets.zero,
-                  icon: const Icon(Icons.edit),
-                  onPressed: () => _rdpDialog(id),
-                ),
+                child: Transform.scale(
+                    scale: 0.8,
+                    child: IconButton(
+                      icon: const Icon(Icons.edit),
+                      padding: EdgeInsets.zero,
+                      onPressed: () {
+                        if (Navigator.canPop(context)) {
+                          Navigator.pop(context);
+                        }
+                        _rdpDialog(id);
+                      },
+                    )),
               ))
             ],
           )),
       proc: () {
         connect(context, id, isRDP: true);
       },
+      padding: menuPadding,
       dismissOnClicked: true,
     );
   }
@@ -453,6 +451,7 @@ abstract class BasePeerCard extends StatelessWidget {
       proc: () {
         bind.mainWol(id: id);
       },
+      padding: menuPadding,
       dismissOnClicked: true,
     );
   }
@@ -461,6 +460,7 @@ abstract class BasePeerCard extends StatelessWidget {
   Future<MenuEntryBase<String>> _forceAlwaysRelayAction(String id) async {
     const option = 'force-always-relay';
     return MenuEntrySwitch<String>(
+      switchType: SwitchType.scheckbox,
       text: translate('Always connect via relay'),
       getter: () async {
         return (await bind.mainGetPeerOption(id: id, key: option)).isNotEmpty;
@@ -475,6 +475,7 @@ abstract class BasePeerCard extends StatelessWidget {
         }
         await bind.mainSetPeerOption(id: id, key: option, value: value);
       },
+      padding: menuPadding,
       dismissOnClicked: true,
     );
   }
@@ -489,13 +490,15 @@ abstract class BasePeerCard extends StatelessWidget {
       proc: () {
         _rename(id, isAddressBook);
       },
+      padding: menuPadding,
       dismissOnClicked: true,
     );
   }
 
   @protected
   MenuEntryBase<String> _removeAction(
-      String id, Future<void> Function() reloadFunc) {
+      String id, Future<void> Function() reloadFunc,
+      {bool isLan = false}) {
     return MenuEntryButton<String>(
       childBuilder: (TextStyle? style) => Text(
         translate('Remove'),
@@ -503,12 +506,16 @@ abstract class BasePeerCard extends StatelessWidget {
       ),
       proc: () {
         () async {
-          await bind.mainRemovePeer(id: id);
+          if (isLan) {
+            // TODO
+          } else {
+            await bind.mainRemovePeer(id: id);
+          }
           removePreference(id);
           await reloadFunc();
-          // Get.forceAppUpdate(); // TODO use inner model / state
         }();
       },
+      padding: menuPadding,
       dismissOnClicked: true,
     );
   }
@@ -523,6 +530,7 @@ abstract class BasePeerCard extends StatelessWidget {
       proc: () {
         bind.mainForgetPassword(id: id);
       },
+      padding: menuPadding,
       dismissOnClicked: true,
     );
   }
@@ -543,6 +551,7 @@ abstract class BasePeerCard extends StatelessWidget {
           }
         }();
       },
+      padding: menuPadding,
       dismissOnClicked: true,
     );
   }
@@ -561,10 +570,10 @@ abstract class BasePeerCard extends StatelessWidget {
           if (favs.remove(id)) {
             await bind.mainStoreFav(favs: favs);
             await reloadFunc();
-            // Get.forceAppUpdate(); // TODO use inner model / state
           }
         }();
       },
+      padding: menuPadding,
       dismissOnClicked: true,
     );
   }
@@ -606,8 +615,6 @@ abstract class BasePeerCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
               child: Form(
                 child: TextFormField(
                   controller: controller,
@@ -634,7 +641,8 @@ abstract class BasePeerCard extends StatelessWidget {
 }
 
 class RecentPeerCard extends BasePeerCard {
-  RecentPeerCard({required Peer peer, Key? key}) : super(peer: peer, key: key);
+  RecentPeerCard({required Peer peer, EdgeInsets? menuPadding, Key? key})
+      : super(peer: peer, menuPadding: menuPadding, key: key);
 
   @override
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
@@ -642,15 +650,13 @@ class RecentPeerCard extends BasePeerCard {
     final List<MenuEntryBase<String>> menuItems = [
       _connectAction(context, peer),
       _transferFileAction(context, peer.id),
-      _tcpTunnelingAction(context, peer.id),
     ];
-    MenuEntryBase<String>? rdpAction;
-    if (peer.platform == 'Windows') {
-      rdpAction = _rdpAction(context, peer.id);
+    if (isDesktop) {
+      menuItems.add(_tcpTunnelingAction(context, peer.id));
     }
     menuItems.add(await _forceAlwaysRelayAction(peer.id));
-    if (rdpAction != null) {
-      menuItems.add(rdpAction);
+    if (peer.platform == 'Windows') {
+      menuItems.add(_rdpAction(context, peer.id));
     }
     menuItems.add(_wolAction(peer.id));
     menuItems.add(MenuEntryDivider());
@@ -658,15 +664,17 @@ class RecentPeerCard extends BasePeerCard {
     menuItems.add(_removeAction(peer.id, () async {
       await bind.mainLoadRecentPeers();
     }));
-    menuItems.add(_unrememberPasswordAction(peer.id));
+    if (await bind.mainPeerHasPassword(id: peer.id)) {
+      menuItems.add(_unrememberPasswordAction(peer.id));
+    }
     menuItems.add(_addFavAction(peer.id));
     return menuItems;
   }
 }
 
 class FavoritePeerCard extends BasePeerCard {
-  FavoritePeerCard({required Peer peer, Key? key})
-      : super(peer: peer, key: key);
+  FavoritePeerCard({required Peer peer, EdgeInsets? menuPadding, Key? key})
+      : super(peer: peer, menuPadding: menuPadding, key: key);
 
   @override
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
@@ -674,15 +682,13 @@ class FavoritePeerCard extends BasePeerCard {
     final List<MenuEntryBase<String>> menuItems = [
       _connectAction(context, peer),
       _transferFileAction(context, peer.id),
-      _tcpTunnelingAction(context, peer.id),
     ];
-    MenuEntryBase<String>? rdpAction;
-    if (peer.platform == 'Windows') {
-      rdpAction = _rdpAction(context, peer.id);
+    if (isDesktop) {
+      menuItems.add(_tcpTunnelingAction(context, peer.id));
     }
     menuItems.add(await _forceAlwaysRelayAction(peer.id));
-    if (rdpAction != null) {
-      menuItems.add(rdpAction);
+    if (peer.platform == 'Windows') {
+      menuItems.add(_rdpAction(context, peer.id));
     }
     menuItems.add(_wolAction(peer.id));
     menuItems.add(MenuEntryDivider());
@@ -690,7 +696,9 @@ class FavoritePeerCard extends BasePeerCard {
     menuItems.add(_removeAction(peer.id, () async {
       await bind.mainLoadFavPeers();
     }));
-    menuItems.add(_unrememberPasswordAction(peer.id));
+    if (await bind.mainPeerHasPassword(id: peer.id)) {
+      menuItems.add(_unrememberPasswordAction(peer.id));
+    }
     menuItems.add(_rmFavAction(peer.id, () async {
       await bind.mainLoadFavPeers();
     }));
@@ -699,8 +707,8 @@ class FavoritePeerCard extends BasePeerCard {
 }
 
 class DiscoveredPeerCard extends BasePeerCard {
-  DiscoveredPeerCard({required Peer peer, Key? key})
-      : super(peer: peer, key: key);
+  DiscoveredPeerCard({required Peer peer, EdgeInsets? menuPadding, Key? key})
+      : super(peer: peer, menuPadding: menuPadding, key: key);
 
   @override
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
@@ -708,30 +716,24 @@ class DiscoveredPeerCard extends BasePeerCard {
     final List<MenuEntryBase<String>> menuItems = [
       _connectAction(context, peer),
       _transferFileAction(context, peer.id),
-      _tcpTunnelingAction(context, peer.id),
     ];
-    MenuEntryBase<String>? rdpAction;
-    if (peer.platform == 'Windows') {
-      rdpAction = _rdpAction(context, peer.id);
+    if (isDesktop) {
+      menuItems.add(_tcpTunnelingAction(context, peer.id));
     }
     menuItems.add(await _forceAlwaysRelayAction(peer.id));
-    if (rdpAction != null) {
-      menuItems.add(rdpAction);
+    if (peer.platform == 'Windows') {
+      menuItems.add(_rdpAction(context, peer.id));
     }
     menuItems.add(_wolAction(peer.id));
     menuItems.add(MenuEntryDivider());
-    menuItems.add(_renameAction(peer.id, false));
-    menuItems.add(_removeAction(peer.id, () async {
-      await bind.mainLoadLanPeers();
-    }));
-    menuItems.add(_unrememberPasswordAction(peer.id));
+    menuItems.add(_removeAction(peer.id, () async {}));
     return menuItems;
   }
 }
 
 class AddressBookPeerCard extends BasePeerCard {
-  AddressBookPeerCard({required Peer peer, Key? key})
-      : super(peer: peer, key: key);
+  AddressBookPeerCard({required Peer peer, EdgeInsets? menuPadding, Key? key})
+      : super(peer: peer, menuPadding: menuPadding, key: key);
 
   @override
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
@@ -739,22 +741,21 @@ class AddressBookPeerCard extends BasePeerCard {
     final List<MenuEntryBase<String>> menuItems = [
       _connectAction(context, peer),
       _transferFileAction(context, peer.id),
-      _tcpTunnelingAction(context, peer.id),
     ];
-    MenuEntryBase<String>? rdpAction;
-    if (peer.platform == 'Windows') {
-      rdpAction = _rdpAction(context, peer.id);
+    if (isDesktop) {
+      menuItems.add(_tcpTunnelingAction(context, peer.id));
     }
     menuItems.add(await _forceAlwaysRelayAction(peer.id));
-    if (rdpAction != null) {
-      menuItems.add(rdpAction);
+    if (peer.platform == 'Windows') {
+      menuItems.add(_rdpAction(context, peer.id));
     }
     menuItems.add(_wolAction(peer.id));
     menuItems.add(MenuEntryDivider());
     menuItems.add(_renameAction(peer.id, false));
     menuItems.add(_removeAction(peer.id, () async {}));
-    menuItems.add(_unrememberPasswordAction(peer.id));
-    menuItems.add(_addFavAction(peer.id));
+    if (await bind.mainPeerHasPassword(id: peer.id)) {
+      menuItems.add(_unrememberPasswordAction(peer.id));
+    }
     menuItems.add(_editTagAction(peer.id));
     return menuItems;
   }
@@ -762,7 +763,8 @@ class AddressBookPeerCard extends BasePeerCard {
   @protected
   @override
   MenuEntryBase<String> _removeAction(
-      String id, Future<void> Function() reloadFunc) {
+      String id, Future<void> Function() reloadFunc,
+      {bool isLan = false}) {
     return MenuEntryButton<String>(
       childBuilder: (TextStyle? style) => Text(
         translate('Remove'),
@@ -774,6 +776,7 @@ class AddressBookPeerCard extends BasePeerCard {
           await gFFI.abModel.updateAb();
         }();
       },
+      padding: super.menuPadding,
       dismissOnClicked: true,
     );
   }
@@ -788,6 +791,7 @@ class AddressBookPeerCard extends BasePeerCard {
       proc: () {
         _abEditTag(id);
       },
+      padding: super.menuPadding,
       dismissOnClicked: true,
     );
   }
@@ -869,7 +873,7 @@ class AddressBookPeerCard extends BasePeerCard {
             child: Text(
               tagName,
               style: TextStyle(
-                  color: rxTags.contains(tagName) ? MyTheme.white : null),
+                  color: rxTags.contains(tagName) ? Colors.white : null),
             ),
           ),
         ),
@@ -994,4 +998,14 @@ void _rdpDialog(String id) async {
       onCancel: close,
     );
   });
+}
+
+Widget getOnline(double rightPadding, bool online) {
+  return Tooltip(
+      message: translate(online ? 'Online' : 'Offline'),
+      waitDuration: const Duration(seconds: 1),
+      child: Padding(
+          padding: EdgeInsets.fromLTRB(0, 4, rightPadding, 4),
+          child: CircleAvatar(
+              radius: 3, backgroundColor: online ? Colors.green : kColorWarn)));
 }

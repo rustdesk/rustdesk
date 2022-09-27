@@ -72,7 +72,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
       decoration: BoxDecoration(
           border: Border.all(color: MyTheme.color(context).border!)),
       child: Scaffold(
-          backgroundColor: MyTheme.color(context).bg,
+          backgroundColor: Theme.of(context).backgroundColor,
           body: DesktopTab(
             controller: tabController,
             onWindowCloseButton: handleWindowCloseButton,

@@ -45,7 +45,7 @@ class ChatPage extends StatelessWidget implements PageShape {
     return ChangeNotifierProvider.value(
         value: chatModel,
         child: Container(
-            color: MyTheme.color(context).grayBg,
+            color: Theme.of(context).scaffoldBackgroundColor,
             child: Consumer<ChatModel>(builder: (context, chatModel, child) {
               final currentUser = chatModel.currentUser;
               return Stack(
@@ -62,11 +62,18 @@ class ChatPage extends StatelessWidget implements PageShape {
                       inputOptions: InputOptions(
                           sendOnEnter: true,
                           inputDecoration: defaultInputDecoration(
-                              fillColor: MyTheme.color(context).bg),
+                              hintText: "${translate('Write a message')}...",
+                              fillColor: Theme.of(context).backgroundColor),
                           sendButtonBuilder: defaultSendButton(
-                              color: MyTheme.color(context).text!),
-                          inputTextStyle:
-                              TextStyle(color: MyTheme.color(context).text)),
+                              color: Theme.of(context)
+                                  .textTheme
+                                  .titleLarge!
+                                  .color!),
+                          inputTextStyle: TextStyle(
+                              color: Theme.of(context)
+                                  .textTheme
+                                  .titleLarge
+                                  ?.color)),
                       messageOptions: MessageOptions(
                           showOtherUsersAvatar: false,
                           showTime: true,
@@ -81,7 +88,8 @@ class ChatPage extends StatelessWidget implements PageShape {
                               )),
                     );
                   }),
-                  chatModel.currentID == ChatModel.clientModeID
+                  desktopType == DesktopType.cm ||
+                          chatModel.currentID == ChatModel.clientModeID
                       ? SizedBox.shrink()
                       : Padding(
                           padding: EdgeInsets.all(12),

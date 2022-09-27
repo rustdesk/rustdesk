@@ -20,7 +20,7 @@ import './material_mod_popup_menu.dart' as mod_menu;
 class _MenubarTheme {
   static const Color commonColor = MyTheme.accent;
   // kMinInteractiveDimension
-  static const double height = 25.0;
+  static const double height = 20.0;
   static const double dividerHeight = 12.0;
 }
 
@@ -391,31 +391,41 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   List<MenuEntryBase<String>> _getControlMenu(BuildContext context) {
     final pi = widget.ffi.ffiModel.pi;
     final perms = widget.ffi.ffiModel.permissions;
-
+    const EdgeInsets padding = EdgeInsets.only(left: 14.0, right: 5.0);
     final List<MenuEntryBase<String>> displayMenu = [];
     displayMenu.addAll([
       MenuEntryButton<String>(
-        childBuilder: (TextStyle? style) => Row(
-          children: [
-            Text(
-              translate('OS Password'),
-              style: style,
-            ),
-            Expanded(
-                child: Align(
-              alignment: Alignment.centerRight,
-              child: IconButton(
-                padding: EdgeInsets.zero,
-                icon: const Icon(Icons.edit),
-                onPressed: () => showSetOSPassword(
-                    widget.id, false, widget.ffi.dialogManager),
-              ),
-            ))
-          ],
-        ),
+        childBuilder: (TextStyle? style) => Container(
+            alignment: AlignmentDirectional.center,
+            height: _MenubarTheme.height,
+            child: Row(
+              children: [
+                Text(
+                  translate('OS Password'),
+                  style: style,
+                ),
+                Expanded(
+                    child: Align(
+                  alignment: Alignment.centerRight,
+                  child: Transform.scale(
+                      scale: 0.8,
+                      child: IconButton(
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(Icons.edit),
+                          onPressed: () {
+                            if (Navigator.canPop(context)) {
+                              Navigator.pop(context);
+                            }
+                            showSetOSPassword(
+                                widget.id, false, widget.ffi.dialogManager);
+                          })),
+                ))
+              ],
+            )),
         proc: () {
           showSetOSPassword(widget.id, false, widget.ffi.dialogManager);
         },
+        padding: padding,
         dismissOnClicked: true,
       ),
       MenuEntryButton<String>(
@@ -426,6 +436,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         proc: () {
           connect(context, widget.id, isFileTransfer: true);
         },
+        padding: padding,
         dismissOnClicked: true,
       ),
       MenuEntryButton<String>(
@@ -433,6 +444,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           translate('TCP Tunneling'),
           style: style,
         ),
+        padding: padding,
         proc: () {
           connect(context, widget.id, isTcpTunneling: true);
         },
@@ -451,6 +463,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           proc: () {
             showAuditDialog(widget.id, widget.ffi.dialogManager);
           },
+          padding: padding,
           dismissOnClicked: true,
         ),
       );
@@ -467,6 +480,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           proc: () {
             bind.sessionCtrlAltDel(id: widget.id);
           },
+          padding: padding,
           dismissOnClicked: true,
         ));
       }
@@ -483,6 +497,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         proc: () {
           showRestartRemoteDevice(pi, widget.id, gFFI.dialogManager);
         },
+        padding: padding,
         dismissOnClicked: true,
       ));
     }
@@ -496,6 +511,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         proc: () {
           bind.sessionLockScreen(id: widget.id);
         },
+        padding: padding,
         dismissOnClicked: true,
       ));
 
@@ -513,6 +529,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                 value: '${blockInput.value ? "un" : ""}block-input');
             blockInput.value = !blockInput.value;
           },
+          padding: padding,
           dismissOnClicked: true,
         ));
       }
@@ -527,6 +544,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         proc: () {
           bind.sessionRefresh(id: widget.id);
         },
+        padding: padding,
         dismissOnClicked: true,
       ));
     }
@@ -547,6 +565,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       //           }
       //         }();
       //       },
+      //       padding: padding,
       //       dismissOnClicked: true,
       //     ));
       //   }
@@ -559,6 +578,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         proc: () {
           widget.ffi.cursorModel.reset();
         },
+        padding: padding,
         dismissOnClicked: true,
       ));
     }
@@ -567,125 +587,155 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   }
 
   List<MenuEntryBase<String>> _getDisplayMenu(dynamic futureData) {
+    const EdgeInsets padding = EdgeInsets.only(left: 18.0, right: 8.0);
     final displayMenu = [
       MenuEntryRadios<String>(
-          text: translate('Ratio'),
-          optionsGetter: () => [
-                MenuEntryRadioOption(
-                    text: translate('Scale original'), value: 'original'),
-                MenuEntryRadioOption(
-                    text: translate('Scale adaptive'), value: 'adaptive'),
-              ],
-          curOptionGetter: () async {
-            return await bind.sessionGetOption(
-                    id: widget.id, arg: 'view-style') ??
-                'adaptive';
-          },
-          optionSetter: (String oldValue, String newValue) async {
-            await bind.sessionPeerOption(
-                id: widget.id, name: "view-style", value: newValue);
-            widget.ffi.canvasModel.updateViewStyle();
-          }),
+        text: translate('Ratio'),
+        optionsGetter: () => [
+          MenuEntryRadioOption(
+            text: translate('Scale original'),
+            value: 'original',
+            dismissOnClicked: true,
+          ),
+          MenuEntryRadioOption(
+            text: translate('Scale adaptive'),
+            value: 'adaptive',
+            dismissOnClicked: true,
+          ),
+        ],
+        curOptionGetter: () async {
+          return await bind.sessionGetOption(
+                  id: widget.id, arg: 'view-style') ??
+              'adaptive';
+        },
+        optionSetter: (String oldValue, String newValue) async {
+          await bind.sessionPeerOption(
+              id: widget.id, name: "view-style", value: newValue);
+          widget.ffi.canvasModel.updateViewStyle();
+        },
+        padding: padding,
+        dismissOnClicked: true,
+      ),
       MenuEntryDivider<String>(),
       MenuEntryRadios<String>(
-          text: translate('Scroll Style'),
-          optionsGetter: () => [
-                MenuEntryRadioOption(
-                    text: translate('ScrollAuto'), value: 'scrollauto'),
-                MenuEntryRadioOption(
-                    text: translate('Scrollbar'), value: 'scrollbar'),
-              ],
-          curOptionGetter: () async {
-            return await bind.sessionGetOption(
-                    id: widget.id, arg: 'scroll-style') ??
-                '';
-          },
-          optionSetter: (String oldValue, String newValue) async {
-            await bind.sessionPeerOption(
-                id: widget.id, name: "scroll-style", value: newValue);
-            widget.ffi.canvasModel.updateScrollStyle();
-          }),
+        text: translate('Scroll Style'),
+        optionsGetter: () => [
+          MenuEntryRadioOption(
+            text: translate('ScrollAuto'),
+            value: 'scrollauto',
+            dismissOnClicked: true,
+          ),
+          MenuEntryRadioOption(
+            text: translate('Scrollbar'),
+            value: 'scrollbar',
+            dismissOnClicked: true,
+          ),
+        ],
+        curOptionGetter: () async {
+          return await bind.sessionGetOption(
+                  id: widget.id, arg: 'scroll-style') ??
+              '';
+        },
+        optionSetter: (String oldValue, String newValue) async {
+          await bind.sessionPeerOption(
+              id: widget.id, name: "scroll-style", value: newValue);
+          widget.ffi.canvasModel.updateScrollStyle();
+        },
+        padding: padding,
+        dismissOnClicked: true,
+      ),
       MenuEntryDivider<String>(),
       MenuEntryRadios<String>(
-          text: translate('Image Quality'),
-          optionsGetter: () => [
-                MenuEntryRadioOption(
-                    text: translate('Good image quality'), value: 'best'),
-                MenuEntryRadioOption(
-                    text: translate('Balanced'), value: 'balanced'),
-                MenuEntryRadioOption(
-                    text: translate('Optimize reaction time'), value: 'low'),
-                MenuEntryRadioOption(
-                    text: translate('Custom'),
-                    value: 'custom',
-                    dismissOnClicked: true),
-              ],
-          curOptionGetter: () async {
-            String quality =
-                await bind.sessionGetImageQuality(id: widget.id) ?? 'balanced';
-            if (quality == '') quality = 'balanced';
-            return quality;
-          },
-          optionSetter: (String oldValue, String newValue) async {
-            if (oldValue != newValue) {
-              await bind.sessionSetImageQuality(id: widget.id, value: newValue);
-            }
+        text: translate('Image Quality'),
+        optionsGetter: () => [
+          MenuEntryRadioOption(
+            text: translate('Good image quality'),
+            value: 'best',
+            dismissOnClicked: true,
+          ),
+          MenuEntryRadioOption(
+            text: translate('Balanced'),
+            value: 'balanced',
+            dismissOnClicked: true,
+          ),
+          MenuEntryRadioOption(
+            text: translate('Optimize reaction time'),
+            value: 'low',
+            dismissOnClicked: true,
+          ),
+          MenuEntryRadioOption(
+              text: translate('Custom'),
+              value: 'custom',
+              dismissOnClicked: true),
+        ],
+        curOptionGetter: () async {
+          String quality =
+              await bind.sessionGetImageQuality(id: widget.id) ?? 'balanced';
+          if (quality == '') quality = 'balanced';
+          return quality;
+        },
+        optionSetter: (String oldValue, String newValue) async {
+          if (oldValue != newValue) {
+            await bind.sessionSetImageQuality(id: widget.id, value: newValue);
+          }
 
-            if (newValue == 'custom') {
-              final btnCancel = msgBoxButton(translate('Close'), () {
-                widget.ffi.dialogManager.dismissAll();
-              });
-              final quality =
-                  await bind.sessionGetCustomImageQuality(id: widget.id);
-              double initValue = quality != null && quality.isNotEmpty
-                  ? quality[0].toDouble()
-                  : 50.0;
-              const minValue = 10.0;
-              const maxValue = 100.0;
-              if (initValue < minValue) {
-                initValue = minValue;
-              }
-              if (initValue > maxValue) {
-                initValue = maxValue;
-              }
-              final RxDouble sliderValue = RxDouble(initValue);
-              final rxReplay = rxdart.ReplaySubject<double>();
-              rxReplay
-                  .throttleTime(const Duration(milliseconds: 1000),
-                      trailing: true, leading: false)
-                  .listen((double v) {
-                () async {
-                  await bind.sessionSetCustomImageQuality(
-                      id: widget.id, value: v.toInt());
-                }();
-              });
-              final slider = Obx(() {
-                return Slider(
-                  value: sliderValue.value,
-                  min: minValue,
-                  max: maxValue,
-                  divisions: 90,
-                  onChanged: (double value) {
-                    sliderValue.value = value;
-                    rxReplay.add(value);
-                  },
-                );
-              });
-              final content = Row(
-                children: [
-                  slider,
-                  SizedBox(
-                      width: 90,
-                      child: Obx(() => Text(
-                            '${sliderValue.value.round()}% Bitrate',
-                            style: const TextStyle(fontSize: 15),
-                          )))
-                ],
-              );
-              msgBoxCommon(widget.ffi.dialogManager, 'Custom Image Quality',
-                  content, [btnCancel]);
+          if (newValue == 'custom') {
+            final btnCancel = msgBoxButton(translate('Close'), () {
+              widget.ffi.dialogManager.dismissAll();
+            });
+            final quality =
+                await bind.sessionGetCustomImageQuality(id: widget.id);
+            double initValue = quality != null && quality.isNotEmpty
+                ? quality[0].toDouble()
+                : 50.0;
+            const minValue = 10.0;
+            const maxValue = 100.0;
+            if (initValue < minValue) {
+              initValue = minValue;
             }
-          }),
+            if (initValue > maxValue) {
+              initValue = maxValue;
+            }
+            final RxDouble sliderValue = RxDouble(initValue);
+            final rxReplay = rxdart.ReplaySubject<double>();
+            rxReplay
+                .throttleTime(const Duration(milliseconds: 1000),
+                    trailing: true, leading: false)
+                .listen((double v) {
+              () async {
+                await bind.sessionSetCustomImageQuality(
+                    id: widget.id, value: v.toInt());
+              }();
+            });
+            final slider = Obx(() {
+              return Slider(
+                value: sliderValue.value,
+                min: minValue,
+                max: maxValue,
+                divisions: 90,
+                onChanged: (double value) {
+                  sliderValue.value = value;
+                  rxReplay.add(value);
+                },
+              );
+            });
+            final content = Row(
+              children: [
+                slider,
+                SizedBox(
+                    width: 90,
+                    child: Obx(() => Text(
+                          '${sliderValue.value.round()}% Bitrate',
+                          style: const TextStyle(fontSize: 15),
+                        )))
+              ],
+            );
+            msgBoxCommon(widget.ffi.dialogManager, 'Custom Image Quality',
+                content, [btnCancel]);
+          }
+        },
+        padding: padding,
+      ),
       MenuEntryDivider<String>(),
     ];
 
@@ -701,30 +751,49 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       } finally {}
       if (codecs.length == 2 && (codecs[0] || codecs[1])) {
         displayMenu.add(MenuEntryRadios<String>(
-            text: translate('Codec Preference'),
-            optionsGetter: () {
-              final list = [
-                MenuEntryRadioOption(text: translate('Auto'), value: 'auto'),
-                MenuEntryRadioOption(text: 'VP9', value: 'vp9'),
-              ];
-              if (codecs[0]) {
-                list.add(MenuEntryRadioOption(text: 'H264', value: 'h264'));
-              }
-              if (codecs[1]) {
-                list.add(MenuEntryRadioOption(text: 'H265', value: 'h265'));
-              }
-              return list;
-            },
-            curOptionGetter: () async {
-              return await bind.sessionGetOption(
-                      id: widget.id, arg: 'codec-preference') ??
-                  'auto';
-            },
-            optionSetter: (String oldValue, String newValue) async {
-              await bind.sessionPeerOption(
-                  id: widget.id, name: "codec-preference", value: newValue);
-              bind.sessionChangePreferCodec(id: widget.id);
-            }));
+          text: translate('Codec Preference'),
+          optionsGetter: () {
+            final list = [
+              MenuEntryRadioOption(
+                text: translate('Auto'),
+                value: 'auto',
+                dismissOnClicked: true,
+              ),
+              MenuEntryRadioOption(
+                text: 'VP9',
+                value: 'vp9',
+                dismissOnClicked: true,
+              ),
+            ];
+            if (codecs[0]) {
+              list.add(MenuEntryRadioOption(
+                text: 'H264',
+                value: 'h264',
+                dismissOnClicked: true,
+              ));
+            }
+            if (codecs[1]) {
+              list.add(MenuEntryRadioOption(
+                text: 'H265',
+                value: 'h265',
+                dismissOnClicked: true,
+              ));
+            }
+            return list;
+          },
+          curOptionGetter: () async {
+            return await bind.sessionGetOption(
+                    id: widget.id, arg: 'codec-preference') ??
+                'auto';
+          },
+          optionSetter: (String oldValue, String newValue) async {
+            await bind.sessionPeerOption(
+                id: widget.id, name: "codec-preference", value: newValue);
+            bind.sessionChangePreferCodec(id: widget.id);
+          },
+          padding: padding,
+          dismissOnClicked: true,
+        ));
       }
     }
 
@@ -732,62 +801,74 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     displayMenu.add(() {
       final state = ShowRemoteCursorState.find(widget.id);
       return MenuEntrySwitch2<String>(
-          text: translate('Show remote cursor'),
-          getter: () {
-            return state;
-          },
-          setter: (bool v) async {
-            state.value = v;
-            await bind.sessionToggleOption(
-                id: widget.id, value: 'show-remote-cursor');
-          });
+        switchType: SwitchType.scheckbox,
+        text: translate('Show remote cursor'),
+        getter: () {
+          return state;
+        },
+        setter: (bool v) async {
+          state.value = v;
+          await bind.sessionToggleOption(
+              id: widget.id, value: 'show-remote-cursor');
+        },
+        padding: padding,
+        dismissOnClicked: true,
+      );
     }());
 
     /// Show quality monitor
     displayMenu.add(MenuEntrySwitch<String>(
-        text: translate('Show quality monitor'),
-        getter: () async {
-          return bind.sessionGetToggleOptionSync(
-              id: widget.id, arg: 'show-quality-monitor');
-        },
-        setter: (bool v) async {
-          await bind.sessionToggleOption(
-              id: widget.id, value: 'show-quality-monitor');
-          widget.ffi.qualityMonitorModel.checkShowQualityMonitor(widget.id);
-        }));
+      switchType: SwitchType.scheckbox,
+      text: translate('Show quality monitor'),
+      getter: () async {
+        return bind.sessionGetToggleOptionSync(
+            id: widget.id, arg: 'show-quality-monitor');
+      },
+      setter: (bool v) async {
+        await bind.sessionToggleOption(
+            id: widget.id, value: 'show-quality-monitor');
+        widget.ffi.qualityMonitorModel.checkShowQualityMonitor(widget.id);
+      },
+      padding: padding,
+      dismissOnClicked: true,
+    ));
 
     final perms = widget.ffi.ffiModel.permissions;
     final pi = widget.ffi.ffiModel.pi;
 
     if (perms['audio'] != false) {
-      displayMenu.add(_createSwitchMenuEntry('Mute', 'disable-audio'));
+      displayMenu
+          .add(_createSwitchMenuEntry('Mute', 'disable-audio', padding, true));
     }
 
     if (Platform.isWindows &&
         pi.platform == 'Windows' &&
         perms['file'] != false) {
       displayMenu.add(_createSwitchMenuEntry(
-          'Allow file copy and paste', 'enable-file-transfer'));
+          'Allow file copy and paste', 'enable-file-transfer', padding, true));
     }
 
     if (perms['keyboard'] != false) {
       if (perms['clipboard'] != false) {
-        displayMenu.add(
-            _createSwitchMenuEntry('Disable clipboard', 'disable-clipboard'));
+        displayMenu.add(_createSwitchMenuEntry(
+            'Disable clipboard', 'disable-clipboard', padding, true));
       }
       displayMenu.add(_createSwitchMenuEntry(
-          'Lock after session end', 'lock-after-session-end'));
+          'Lock after session end', 'lock-after-session-end', padding, true));
       if (pi.platform == 'Windows') {
         displayMenu.add(MenuEntrySwitch2<String>(
-            dismissOnClicked: true,
-            text: translate('Privacy mode'),
-            getter: () {
-              return PrivacyModeState.find(widget.id);
-            },
-            setter: (bool v) async {
-              await bind.sessionToggleOption(
-                  id: widget.id, value: 'privacy-mode');
-            }));
+          switchType: SwitchType.scheckbox,
+          text: translate('Privacy mode'),
+          getter: () {
+            return PrivacyModeState.find(widget.id);
+          },
+          setter: (bool v) async {
+            await bind.sessionToggleOption(
+                id: widget.id, value: 'privacy-mode');
+          },
+          padding: padding,
+          dismissOnClicked: true,
+        ));
       }
     }
     return displayMenu;
@@ -796,34 +877,39 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   List<MenuEntryBase<String>> _getKeyboardMenu() {
     final keyboardMenu = [
       MenuEntryRadios<String>(
-          text: translate('Ratio'),
-          optionsGetter: () => [
-                MenuEntryRadioOption(
-                    text: translate('Legacy mode'), value: 'legacy'),
-                MenuEntryRadioOption(text: translate('Map mode'), value: 'map'),
-              ],
-          curOptionGetter: () async {
-            return await bind.sessionGetKeyboardName(id: widget.id);
-          },
-          optionSetter: (String oldValue, String newValue) async {
-            await bind.sessionSetKeyboardMode(
-                id: widget.id, keyboardMode: newValue);
-            widget.ffi.canvasModel.updateViewStyle();
-          })
+        text: translate('Ratio'),
+        optionsGetter: () => [
+          MenuEntryRadioOption(text: translate('Legacy mode'), value: 'legacy'),
+          MenuEntryRadioOption(text: translate('Map mode'), value: 'map'),
+        ],
+        curOptionGetter: () async {
+          return await bind.sessionGetKeyboardName(id: widget.id);
+        },
+        optionSetter: (String oldValue, String newValue) async {
+          await bind.sessionSetKeyboardMode(
+              id: widget.id, keyboardMode: newValue);
+          widget.ffi.canvasModel.updateViewStyle();
+        },
+      )
     ];
 
     return keyboardMenu;
   }
 
-  MenuEntrySwitch<String> _createSwitchMenuEntry(String text, String option) {
+  MenuEntrySwitch<String> _createSwitchMenuEntry(
+      String text, String option, EdgeInsets? padding, bool dismissOnClicked) {
     return MenuEntrySwitch<String>(
-        text: translate(text),
-        getter: () async {
-          return bind.sessionGetToggleOptionSync(id: widget.id, arg: option);
-        },
-        setter: (bool v) async {
-          await bind.sessionToggleOption(id: widget.id, value: option);
-        });
+      switchType: SwitchType.scheckbox,
+      text: translate(text),
+      getter: () async {
+        return bind.sessionGetToggleOptionSync(id: widget.id, arg: option);
+      },
+      setter: (bool v) async {
+        await bind.sessionToggleOption(id: widget.id, value: option);
+      },
+      padding: padding,
+      dismissOnClicked: dismissOnClicked,
+    );
   }
 }
 

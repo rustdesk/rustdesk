@@ -324,9 +324,12 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Scale adaptive", "适应窗口"),
         ("General", "常规"),
         ("Security", "安全"),
-        ("Acount", "账户"),
+        ("Account", "账户"),
         ("Theme", "主题"),
         ("Dark Theme", "暗黑主题"),
+        ("Dark", "黑暗"),
+        ("Light", "明亮"),
+        ("Follow System", "跟随系统"),
         ("Enable hardware codec", "使用硬件编解码"),
         ("Unlock Security Settings", "解锁安全设置"),
         ("Enable Audio", "允许传输音频"),
@@ -354,5 +357,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Stop session recording", "结束录屏"),
         ("Enable Recording Session", "允许录制会话"),
         ("Allow recording session", "允许录制会话"),
+        ("Enable LAN Discovery", "允许局域网发现"),
+        ("Deny LAN Discovery", "拒绝局域网发现"),
+        ("Write a message", "输入聊天消息"),
     ].iter().cloned().collect();
 }

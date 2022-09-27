@@ -14,6 +14,23 @@ class DesktopTabPage extends StatefulWidget {
 
   @override
   State<DesktopTabPage> createState() => _DesktopTabPageState();
+
+  static void onAddSetting({int initialPage = 0}) {
+    try {
+      DesktopTabController tabController = Get.find();
+      tabController.add(TabInfo(
+          key: kTabLabelSettingPage,
+          label: kTabLabelSettingPage,
+          selectedIcon: Icons.build_sharp,
+          unselectedIcon: Icons.build_outlined,
+          page: DesktopSettingPage(
+            key: const ValueKey(kTabLabelSettingPage),
+            initialPage: initialPage,
+          )));
+    } catch (e) {
+      debugPrint('$e');
+    }
+  }
 }
 
 class _DesktopTabPageState extends State<DesktopTabPage> {
@@ -22,6 +39,7 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
   @override
   void initState() {
     super.initState();
+    Get.put<DesktopTabController>(tabController);
     tabController.add(TabInfo(
         key: kTabLabelHomePage,
         label: kTabLabelHomePage,
@@ -34,6 +52,12 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
   }
 
   @override
+  void dispose() {
+    super.dispose();
+    Get.delete<DesktopTabController>();
+  }
+
+  @override
   Widget build(BuildContext context) {
     RxBool fullscreen = false.obs;
     Get.put(fullscreen, tag: 'fullscreen');
@@ -42,13 +66,13 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
         OverlayEntry(builder: (context) {
           gFFI.dialogManager.setOverlayState(Overlay.of(context));
           return Scaffold(
-              backgroundColor: MyTheme.color(context).bg,
+              backgroundColor: Theme.of(context).backgroundColor,
               body: DesktopTab(
                 controller: tabController,
                 tail: ActionIcon(
                   message: 'Settings',
                   icon: IconFont.menu,
-                  onTap: onAddSetting,
+                  onTap: DesktopTabPage.onAddSetting,
                   isClose: false,
                 ),
               ));
@@ -61,14 +85,5 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
             resizeEdgeSize:
                 fullscreen.value ? kFullScreenEdgeSize : kWindowEdgeSize,
             child: tabWidget));
-  }
-
-  void onAddSetting() {
-    tabController.add(TabInfo(
-        key: kTabLabelSettingPage,
-        label: kTabLabelSettingPage,
-        selectedIcon: Icons.build_sharp,
-        unselectedIcon: Icons.build_outlined,
-        page: DesktopSettingPage(key: const ValueKey(kTabLabelSettingPage))));
   }
 }

@@ -11,7 +11,6 @@ import 'package:provider/provider.dart';
 import 'package:wakelock/wakelock.dart';
 import 'package:flutter_custom_cursor/flutter_custom_cursor.dart';
 
-import '../../consts.dart';
 import '../widgets/remote_menubar.dart';
 import '../../common.dart';
 import '../../mobile/widgets/dialog.dart';
@@ -45,7 +44,6 @@ class _RemotePageState extends State<RemotePage>
   late RxBool _keyboardEnabled;
 
   final FocusNode _rawKeyFocusNode = FocusNode();
-  var _isPhysicalMouse = false;
   var _imageFocused = false;
 
   Function(bool)? _onEnterOrLeaveImage4Menubar;
@@ -139,7 +137,7 @@ class _RemotePageState extends State<RemotePage>
 
   Widget buildBody(BuildContext context) {
     return Scaffold(
-        backgroundColor: MyTheme.color(context).bg,
+        backgroundColor: Theme.of(context).backgroundColor,
         body: Overlay(
           initialEntries: [
             OverlayEntry(builder: (context) {
@@ -445,6 +443,7 @@ class ImagePainter extends CustomPainter {
 }
 
 class QualityMonitor extends StatelessWidget {
+  static const textStyle = TextStyle(color: MyTheme.grayBg);
   final QualityMonitorModel qualityMonitorModel;
   QualityMonitor(this.qualityMonitorModel);
 
@@ -464,23 +463,23 @@ class QualityMonitor extends StatelessWidget {
                         children: [
                           Text(
                             "Speed: ${qualityMonitorModel.data.speed ?? ''}",
-                            style: const TextStyle(color: MyTheme.grayBg),
+                            style: textStyle,
                           ),
                           Text(
                             "FPS: ${qualityMonitorModel.data.fps ?? ''}",
-                            style: const TextStyle(color: MyTheme.grayBg),
+                            style: textStyle,
                           ),
                           Text(
                             "Delay: ${qualityMonitorModel.data.delay ?? ''} ms",
-                            style: const TextStyle(color: MyTheme.grayBg),
+                            style: textStyle,
                           ),
                           Text(
                             "Target Bitrate: ${qualityMonitorModel.data.targetBitrate ?? ''}kb",
-                            style: const TextStyle(color: MyTheme.grayBg),
+                            style: textStyle,
                           ),
                           Text(
                             "Codec: ${qualityMonitorModel.data.codecFormat ?? ''}",
-                            style: const TextStyle(color: MyTheme.grayBg),
+                            style: textStyle,
                           ),
                         ],
                       ),
