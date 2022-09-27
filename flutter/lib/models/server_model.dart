@@ -544,6 +544,7 @@ class Client {
   bool audio = false;
   bool file = false;
   bool restart = false;
+  bool recording = false;
 
   Client(this.id, this.authorized, this.isFileTransfer, this.name, this.peerId,
       this.keyboard, this.clipboard, this.audio);
@@ -559,6 +560,7 @@ class Client {
     audio = json['audio'];
     file = json['file'];
     restart = json['restart'];
+    recording = json['recording'];
   }
 
   Map<String, dynamic> toJson() {

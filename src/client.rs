@@ -1,10 +1,3 @@
-use std::{
-    collections::HashMap,
-    net::SocketAddr,
-    ops::{Deref, Not},
-    sync::{atomic::AtomicBool, mpsc, Arc, Mutex, RwLock},
-};
-use std::sync::atomic::Ordering;
 pub use async_trait::async_trait;
 #[cfg(not(any(target_os = "android", target_os = "linux")))]
 use cpal::{
@@ -13,6 +6,13 @@ use cpal::{
 };
 use magnum_opus::{Channels::*, Decoder as AudioDecoder};
 use sha2::{Digest, Sha256};
+use std::sync::atomic::Ordering;
+use std::{
+    collections::HashMap,
+    net::SocketAddr,
+    ops::{Deref, Not},
+    sync::{atomic::AtomicBool, mpsc, Arc, Mutex, RwLock},
+};
 use uuid::Uuid;
 
 pub use file_trait::FileManager;
@@ -39,6 +39,7 @@ pub use helper::LatencyController;
 pub use helper::*;
 use scrap::{
     codec::{Decoder, DecoderCfg},
+    record::{Recorder, RecorderContext},
     VpxDecoderConfig, VpxVideoCodecId,
 };
 
@@ -154,8 +155,7 @@ impl Client {
                     return Err(err);
                 }
             }
-            Ok(x) => {
-                Ok(x)},
+            Ok(x) => Ok(x),
         }
     }
 
@@ -798,6 +798,8 @@ pub struct VideoHandler {
     decoder: Decoder,
     latency_controller: Arc<Mutex<LatencyController>>,
     pub rgb: Vec<u8>,
+    recorder: Arc<Mutex<Option<Recorder>>>,
+    record: bool,
 }
 
 impl VideoHandler {
@@ -812,6 +814,8 @@ impl VideoHandler {
             }),
             latency_controller,
             rgb: Default::default(),
+            recorder: Default::default(),
+            record: false,
         }
     }
 
@@ -825,31 +829,20 @@ impl VideoHandler {
                 .update_video(vf.timestamp);
         }
         match &vf.union {
-            Some(frame) => self.decoder.handle_video_frame(frame, &mut self.rgb),
+            Some(frame) => {
+                let res = self.decoder.handle_video_frame(frame, &mut self.rgb);
+                if self.record {
+                    self.recorder
+                        .lock()
+                        .unwrap()
+                        .as_mut()
+                        .map(|r| r.write_frame(frame));
+                }
+                res
+            }
             _ => Ok(false),
         }
     }
-
-    /// Handle a VP9S frame.
-    // pub fn handle_vp9s(&mut self, vp9s: &VP9s) -> ResultType<bool> {
-    //     let mut last_frame = Image::new();
-    //     for vp9 in vp9s.frames.iter() {
-    //         for frame in self.decoder.decode(&vp9.data)? {
-    //             drop(last_frame);
-    //             last_frame = frame;
-    //         }
-    //     }
-    //     for frame in self.decoder.flush()? {
-    //         drop(last_frame);
-    //         last_frame = frame;
-    //     }
-    //     if last_frame.is_null() {
-    //         Ok(false)
-    //     } else {
-    //         last_frame.rgb(1, true, &mut self.rgb);
-    //         Ok(true)
-    //     }
-    // }
 
     /// Reset the decoder.
     pub fn reset(&mut self) {
@@ -859,6 +852,24 @@ impl VideoHandler {
                 num_threads: 1,
             },
         });
+    }
+
+    /// Start or stop screen record.
+    pub fn record_screen(&mut self, start: bool, w: i32, h: i32, id: String) {
+        self.record = false;
+        if start {
+            self.recorder = Recorder::new(RecorderContext {
+                id,
+                filename: "".to_owned(),
+                width: w as _,
+                height: h as _,
+                codec_id: scrap::record::RecodeCodecID::VP9,
+            })
+            .map_or(Default::default(), |r| Arc::new(Mutex::new(Some(r))));
+        } else {
+            self.recorder = Default::default();
+        }
+        self.record = start;
     }
 }
 
@@ -1395,6 +1406,7 @@ pub enum MediaData {
     AudioFrame(AudioFrame),
     AudioFormat(AudioFormat),
     Reset,
+    RecordScreen(bool, i32, i32, String),
 }
 
 pub type MediaSender = mpsc::Sender<MediaData>;
@@ -1428,6 +1440,9 @@ where
                     }
                     MediaData::Reset => {
                         video_handler.reset();
+                    }
+                    MediaData::RecordScreen(start, w, h, id) => {
+                        video_handler.record_screen(start, w, h, id)
                     }
                     _ => {}
                 }
@@ -1703,6 +1718,7 @@ pub enum Data {
     SetConfirmOverrideFile((i32, i32, bool, bool, bool)),
     AddJob((i32, String, String, i32, bool, bool)),
     ResumeJob((i32, bool)),
+    RecordScreen(bool, i32, i32, String),
 }
 
 /// Keycode for key events.

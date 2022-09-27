@@ -192,6 +192,14 @@ class MsgboxComponent: Reactor.Component {
             }
         }
     }
+
+    event click $(button#select_directory) {
+        var folder = view.selectFolder(translate("Change"), $(#folderPath).text);
+        if (folder) {
+            if (folder.indexOf("file://") == 0) folder = folder.substring(7);
+            $(#folderPath).text = folder;
+        }
+    }
     
     function show_progress(show=1, err="") {
         if (show == -1) {

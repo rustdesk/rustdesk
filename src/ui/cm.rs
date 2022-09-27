@@ -32,7 +32,8 @@ impl InvokeUiCM for SciterHandler {
                 client.clipboard,
                 client.audio,
                 client.file,
-                client.restart
+                client.restart,
+                client.recording
             ),
         );
     }

@@ -412,6 +412,13 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                   client.restart = enabled;
                 });
               }, null),
+              buildPermissionIcon(client.recording, iconRecording, (enabled) {
+                bind.cmSwitchPermission(
+                    connId: client.id, name: "recording", enabled: enabled);
+                setState(() {
+                  client.recording = enabled;
+                });
+              }, null),
             ],
           )),
         ],

@@ -116,6 +116,7 @@ class _RemotePageState extends State<RemotePage>
   void dispose() {
     debugPrint("REMOTE PAGE dispose ${widget.id}");
     _ffi.dialogManager.hideMobileActionsOverlay();
+    _ffi.recordingModel.onClose();
     _rawKeyFocusNode.dispose();
     _ffi.close();
     _timer?.cancel();
@@ -164,6 +165,7 @@ class _RemotePageState extends State<RemotePage>
           ChangeNotifierProvider.value(value: _ffi.imageModel),
           ChangeNotifierProvider.value(value: _ffi.cursorModel),
           ChangeNotifierProvider.value(value: _ffi.canvasModel),
+          ChangeNotifierProvider.value(value: _ffi.recordingModel),
         ], child: buildBody(context)));
   }
 

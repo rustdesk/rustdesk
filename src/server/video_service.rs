@@ -25,6 +25,7 @@ use hbb_common::tokio::sync::{
 };
 use scrap::{
     codec::{Encoder, EncoderCfg, HwEncoderConfig},
+    record::{Recorder, RecorderContext},
     vpxcodec::{VpxEncoderConfig, VpxVideoCodecId},
     Capturer, Display, TraitCapturer,
 };
@@ -435,6 +436,21 @@ fn run(sp: GenericService) -> ResultType<()> {
     #[cfg(windows)]
     log::info!("gdi: {}", c.is_gdi());
     let codec_name = Encoder::current_hw_encoder_name();
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let recorder = if !Config::get_option("allow-auto-record-incoming").is_empty() {
+        Recorder::new(RecorderContext {
+            id: "local".to_owned(),
+            filename: "".to_owned(),
+            width: c.width,
+            height: c.height,
+            codec_id: scrap::record::RecodeCodecID::VP9,
+        })
+        .map_or(Default::default(), |r| Arc::new(Mutex::new(Some(r))))
+    } else {
+        Default::default()
+    };
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let recorder: Arc<Mutex<Option<Recorder>>> = Default::default();
 
     while sp.ok() {
         #[cfg(windows)]
@@ -495,7 +511,8 @@ fn run(sp: GenericService) -> ResultType<()> {
                     }
                     scrap::Frame::RAW(data) => {
                         if (data.len() != 0) {
-                            let send_conn_ids = handle_one_frame(&sp, data, ms, &mut encoder)?;
+                            let send_conn_ids =
+                                handle_one_frame(&sp, data, ms, &mut encoder, recorder.clone())?;
                             frame_controller.set_send(now, send_conn_ids);
                         }
                     }
@@ -511,7 +528,8 @@ fn run(sp: GenericService) -> ResultType<()> {
             Ok(frame) => {
                 let time = now - start;
                 let ms = (time.as_secs() * 1000 + time.subsec_millis() as u64) as i64;
-                let send_conn_ids = handle_one_frame(&sp, &frame, ms, &mut encoder)?;
+                let send_conn_ids =
+                    handle_one_frame(&sp, &frame, ms, &mut encoder, recorder.clone())?;
                 frame_controller.set_send(now, send_conn_ids);
                 #[cfg(windows)]
                 {
@@ -612,6 +630,7 @@ fn handle_one_frame(
     frame: &[u8],
     ms: i64,
     encoder: &mut Encoder,
+    recorder: Arc<Mutex<Option<Recorder>>>,
 ) -> ResultType<HashSet<i32>> {
     sp.snapshot(|sps| {
         // so that new sub and old sub share the same encoder after switch
@@ -623,6 +642,12 @@ fn handle_one_frame(
 
     let mut send_conn_ids: HashSet<i32> = Default::default();
     if let Ok(msg) = encoder.encode_to_message(frame, ms) {
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        recorder
+            .lock()
+            .unwrap()
+            .as_mut()
+            .map(|r| r.write_message(&msg));
         send_conn_ids = sp.send_video_frame(msg);
     }
     Ok(send_conn_ids)

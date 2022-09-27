@@ -40,6 +40,7 @@ pub struct Client {
     pub audio: bool,
     pub file: bool,
     pub restart: bool,
+    pub recording: bool,
     #[serde(skip)]
     tx: UnboundedSender<Data>,
 }
@@ -94,6 +95,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         audio: bool,
         file: bool,
         restart: bool,
+        recording: bool,
         tx: mpsc::UnboundedSender<Data>,
     ) {
         let client = Client {
@@ -108,6 +110,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
             audio,
             file,
             restart,
+            recording,
             tx,
         };
         self.ui_handler.add_connection(&client);
@@ -250,11 +253,11 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
                                             }
                                             Ok(Some(data)) => {
                                                 match data {
-                                                    Data::Login{id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled, restart} => {
+                                                    Data::Login{id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled, restart, recording} => {
                                                         log::debug!("conn_id: {}", id);
                                                         conn_id = id;
                                                         tx_file.send(ClipboardFileData::Enable((id, file_transfer_enabled))).ok();
-                                                        cm.add_connection(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, tx.clone());
+                                                        cm.add_connection(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, tx.clone());
                                                     }
                                                     Data::Close => {
                                                         tx_file.send(ClipboardFileData::Enable((conn_id, false))).ok();
@@ -349,6 +352,7 @@ pub async fn start_listen<T: InvokeUiCM>(
                 audio,
                 file,
                 restart,
+                recording,
                 ..
             }) => {
                 current_id = id;
@@ -364,6 +368,7 @@ pub async fn start_listen<T: InvokeUiCM>(
                     audio,
                     file,
                     restart,
+                    recording,
                     tx.clone(),
                 );
             }

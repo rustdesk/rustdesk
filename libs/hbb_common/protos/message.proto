@@ -436,6 +436,7 @@ message PermissionInfo {
     Audio = 3;
     File = 4;
     Restart = 5;
+    Recording = 6;
   }
 
   Permission permission = 1;

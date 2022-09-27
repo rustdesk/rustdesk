@@ -203,6 +203,7 @@ class FfiModel with ChangeNotifier {
     if ((_display.width > _display.height) != oldOrientation) {
       gFFI.canvasModel.updateViewStyle();
     }
+    parent.target?.recordingModel.onSwitchDisplay();
     notifyListeners();
   }
 
@@ -972,6 +973,43 @@ class QualityMonitorModel with ChangeNotifier {
   }
 }
 
+class RecordingModel with ChangeNotifier {
+  WeakReference<FFI> parent;
+  RecordingModel(this.parent);
+  bool _start = false;
+  get start => _start;
+
+  onSwitchDisplay() {
+    if (!isDesktop || !_start) return;
+    var id = parent.target?.id;
+    int? width = parent.target?.canvasModel.getDisplayWidth();
+    int? height = parent.target?.canvasModel.getDisplayWidth();
+    if (id == null || width == null || height == null) return;
+    bind.sessionRecordScreen(id: id, start: true, width: width, height: height);
+  }
+
+  toggle() {
+    if (!isDesktop) return;
+    var id = parent.target?.id;
+    if (id == null) return;
+    _start = !_start;
+    notifyListeners();
+    if (_start) {
+      bind.sessionRefresh(id: id);
+    } else {
+      bind.sessionRecordScreen(id: id, start: false, width: 0, height: 0);
+    }
+  }
+
+  onClose() {
+    if (!isDesktop) return;
+    var id = parent.target?.id;
+    if (id == null) return;
+    _start = false;
+    bind.sessionRecordScreen(id: id, start: false, width: 0, height: 0);
+  }
+}
+
 /// Mouse button enum.
 enum MouseButtons { left, right, wheel }
 
@@ -1013,6 +1051,7 @@ class FFI {
   late final AbModel abModel; // global
   late final UserModel userModel; // global
   late final QualityMonitorModel qualityMonitorModel; // session
+  late final RecordingModel recordingModel; // recording
 
   FFI() {
     imageModel = ImageModel(WeakReference(this));
@@ -1025,6 +1064,7 @@ class FFI {
     abModel = AbModel(WeakReference(this));
     userModel = UserModel(WeakReference(this));
     qualityMonitorModel = QualityMonitorModel(WeakReference(this));
+    recordingModel = RecordingModel(WeakReference(this));
   }
 
   /// Send a mouse tap event(down and up).
@@ -1136,7 +1176,7 @@ class FFI {
             Map<String, dynamic> event = json.decode(message.field0);
             await cb(event);
           } catch (e) {
-            debugPrint('json.decode fail(): $e');
+            debugPrint('json.decode fail1(): $e, ${message.field0}');
           }
         } else if (message is Rgba) {
           imageModel.onRgba(message.field0, tabBarHeight);

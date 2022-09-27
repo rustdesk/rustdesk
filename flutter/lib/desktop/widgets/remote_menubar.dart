@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:get/get.dart';
+import 'package:provider/provider.dart';
 import 'package:rxdart/rxdart.dart' as rxdart;
 
 import '../../common.dart';
@@ -134,6 +135,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     if (!isWeb) {
       menubarItems.add(_buildChat(context));
     }
+    menubarItems.add(_buildRecording(context));
     menubarItems.add(_buildClose(context));
     return PopupMenuTheme(
         data: const PopupMenuThemeData(
@@ -349,6 +351,28 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           .expand((i) => i)
           .toList(),
     );
+  }
+
+  Widget _buildRecording(BuildContext context) {
+    return Consumer<FfiModel>(builder: ((context, value, child) {
+      if (value.permissions['recording'] != false) {
+        return Consumer<RecordingModel>(
+            builder: (context, value, child) => IconButton(
+                  tooltip: value.start
+                      ? translate('Stop session recording')
+                      : translate('Start session recording'),
+                  onPressed: () => value.toggle(),
+                  icon: Icon(
+                    value.start
+                        ? Icons.pause_circle_filled
+                        : Icons.videocam_outlined,
+                    color: _MenubarTheme.commonColor,
+                  ),
+                ));
+      } else {
+        return Offstage();
+      }
+    }));
   }
 
   Widget _buildClose(BuildContext context) {

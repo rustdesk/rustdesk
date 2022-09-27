@@ -12,6 +12,7 @@ var clipboard_enabled = true; // server side
 var audio_enabled = true; // server side
 var file_enabled = true; // server side
 var restart_enabled = true; // server side
+var recording_enabled = true; // server side
 var scroll_body = $(body);
 
 handler.setDisplay = function(x, y, w, h) {
@@ -20,6 +21,7 @@ handler.setDisplay = function(x, y, w, h) {
     display_origin_x = x;
     display_origin_y = y;
     adaptDisplay();
+    if (recording) handler.record_screen(true, w, h);
 }
 
 // in case toolbar not shown correclty
@@ -467,6 +469,7 @@ function self.closing() {
     var (x, y, w, h) = view.box(#rectw, #border, #screen);
     if (is_file_transfer) save_file_transfer_close_state();
     if (is_file_transfer || is_port_forward || size_adapted) handler.save_size(x, y, w, h);
+    if (recording) handler.record_screen(false, display_width, display_height);
 }
 
 var qualityMonitor;
@@ -519,6 +522,7 @@ handler.setPermission = function(name, enabled) {
     if (name == "file") file_enabled = enabled;
     if (name == "clipboard") clipboard_enabled = enabled;
     if (name == "restart") restart_enabled = enabled;
+    if (name == "recording") recording_enabled = enabled;
     input_blocked = false;
     header.update();
     });

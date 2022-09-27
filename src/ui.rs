@@ -21,20 +21,20 @@ use hbb_common::{
 use crate::common::get_app_name;
 use crate::ipc;
 use crate::ui_interface::{
-    check_mouse_time, closing, create_shortcut, current_is_wayland, fix_login_wayland,
-    forget_password, get_api_server, get_async_job_status, get_connect_status, get_error, get_fav,
-    get_icon, get_lan_peers, get_langs, get_license, get_local_option, get_mouse_time,
-    get_new_version, get_option, get_options, get_peer, get_peer_option, get_recent_sessions,
-    get_remote_id, get_size, get_socks, get_software_ext, get_software_store_path,
-    get_software_update_url, get_uuid, get_version, goto_install, has_hwcodec,
-    has_rendezvous_service, install_me, install_path, is_can_screen_recording, is_installed,
-    is_installed_daemon, is_installed_lower_version, is_login_wayland, is_ok_change_id,
-    is_process_trusted, is_rdp_service_open, is_share_rdp, is_xfce, modify_default_login,
-    new_remote, open_url, peer_has_password, permanent_password, post_request,
-    recent_sessions_updated, remove_peer, run_without_install, set_local_option, set_option,
-    set_options, set_peer_option, set_permanent_password, set_remote_id, set_share_rdp, set_socks,
-    show_run_without_install, store_fav, t, temporary_password, test_if_valid_server, update_me,
-    update_temporary_password, using_public_server,
+    check_mouse_time, closing, create_shortcut, current_is_wayland, default_video_save_directory,
+    fix_login_wayland, forget_password, get_api_server, get_async_job_status, get_connect_status,
+    get_error, get_fav, get_icon, get_lan_peers, get_langs, get_license, get_local_option,
+    get_mouse_time, get_new_version, get_option, get_options, get_peer, get_peer_option,
+    get_recent_sessions, get_remote_id, get_size, get_socks, get_software_ext,
+    get_software_store_path, get_software_update_url, get_uuid, get_version, goto_install,
+    has_hwcodec, has_rendezvous_service, install_me, install_path, is_can_screen_recording,
+    is_installed, is_installed_daemon, is_installed_lower_version, is_login_wayland,
+    is_ok_change_id, is_process_trusted, is_rdp_service_open, is_share_rdp, is_xfce,
+    modify_default_login, new_remote, open_url, peer_has_password, permanent_password,
+    post_request, recent_sessions_updated, remove_peer, run_without_install, set_local_option,
+    set_option, set_options, set_peer_option, set_permanent_password, set_remote_id, set_share_rdp,
+    set_socks, show_run_without_install, store_fav, t, temporary_password, test_if_valid_server,
+    update_me, update_temporary_password, using_public_server,
 };
 
 mod cm;
@@ -579,6 +579,10 @@ impl UI {
     fn get_langs(&self) -> String {
         get_langs()
     }
+
+    fn default_video_save_directory(&self) -> String {
+        default_video_save_directory()
+    }
 }
 
 impl sciter::EventHandler for UI {
@@ -661,6 +665,7 @@ impl sciter::EventHandler for UI {
         fn get_uuid();
         fn has_hwcodec();
         fn get_langs();
+        fn default_video_save_directory();
     }
 }
 

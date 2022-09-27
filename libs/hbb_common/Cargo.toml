@@ -30,6 +30,7 @@ filetime = "0.2"
 sodiumoxide = "0.2"
 regex = "1.4"
 tokio-socks = { git = "https://github.com/open-trade/tokio-socks" }
+chrono = "0.4"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 mac_address = "1.1"
