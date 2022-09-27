@@ -18,7 +18,7 @@ class DesktopScrollWrapper extends StatelessWidget {
           scrollDuration: kDefaultScrollDuration,
           scrollCurve: Curves.linearToEaseOut,
           mouseWheelTurnsThrottleTimeMs:
-              kDefaultMouseWhellThrottleDuration.inMilliseconds,
+              kDefaultMouseWheelThrottleDuration.inMilliseconds,
           scrollAmountMultiplier: kDefaultScrollAmountMultiplier),
       child: child,
     );
