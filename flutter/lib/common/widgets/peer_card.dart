@@ -169,6 +169,7 @@ class _PeerCardState extends State<_PeerCard>
                                 child: Text(
                               alias.isEmpty ? formatID(peer.id) : alias,
                               overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.titleSmall,
                             )),
                           ]).marginOnly(bottom: 2),
                           Align(
@@ -261,6 +262,7 @@ class _PeerCardState extends State<_PeerCard>
                             child: Text(
                           peer.alias.isEmpty ? formatID(peer.id) : peer.alias,
                           overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleSmall,
                         )),
                       ]).paddingSymmetric(vertical: 8)),
                       _actionMore(peer),

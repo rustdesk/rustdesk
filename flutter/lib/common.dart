@@ -133,6 +133,7 @@ class MyTheme {
     scaffoldBackgroundColor: Color(0xFFEEEEEE),
     textTheme: const TextTheme(
       titleLarge: TextStyle(fontSize: 19, color: Colors.black87),
+      titleSmall: TextStyle(fontSize: 14, color: Colors.black87),
       bodySmall: TextStyle(fontSize: 12, color: Colors.black54, height: 1.25),
       bodyMedium: TextStyle(fontSize: 14, color: Colors.black54, height: 1.25),
     ),
@@ -162,6 +163,7 @@ class MyTheme {
     scaffoldBackgroundColor: Color(0xFF141414),
     textTheme: const TextTheme(
         titleLarge: TextStyle(fontSize: 19),
+        titleSmall: TextStyle(fontSize: 14),
         bodySmall: TextStyle(fontSize: 12, height: 1.25),
         bodyMedium: TextStyle(fontSize: 14, height: 1.25)),
     cardColor: Color(0xFF252525),

@@ -73,10 +73,10 @@ class _ButtonState extends State<Button> {
                   ),
                   style: TextStyle(
                       fontSize: widget.textSize ?? 12.0,
-                      color: pressed.value || !widget.isOutline
-                          ? Theme.of(context).backgroundColor
-                          : widget.textColor ??
-                              Theme.of(context).textTheme.titleLarge?.color),
+                      color: widget.isOutline
+                          ? widget.textColor ??
+                              Theme.of(context).textTheme.titleLarge?.color
+                          : Colors.white),
                 ).marginSymmetric(horizontal: 12),
               )),
         ));

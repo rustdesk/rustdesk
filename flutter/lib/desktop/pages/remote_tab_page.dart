@@ -9,6 +9,7 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/remote_page.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 
 import '../../mobile/widgets/dialog.dart';
@@ -127,8 +128,8 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
                     icon,
                     Tooltip(
                       message: '$msgDirect\n$msgSecure',
-                      child: Image.asset(
-                        'assets/${connectionType.secure.value}${connectionType.direct.value}.png',
+                      child: SvgPicture.asset(
+                        'assets/${connectionType.secure.value}${connectionType.direct.value}.svg',
                         width: themeConf.iconSize,
                         height: themeConf.iconSize,
                       ).paddingOnly(right: 5),
