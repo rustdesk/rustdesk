@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 
+import '../common.dart';
 import 'model.dart';
 import 'platform_model.dart';
 
@@ -35,7 +36,7 @@ class UserModel extends ChangeNotifier {
           "id": await bind.mainGetMyId(),
           "uuid": await bind.mainGetUuid(),
         },
-        headers: await _getHeaders());
+        headers: await getHttpHeaders());
     await Future.wait([
       bind.mainSetLocalOption(key: 'access_token', value: ''),
       bind.mainSetLocalOption(key: 'user_info', value: ''),
@@ -44,10 +45,6 @@ class UserModel extends ChangeNotifier {
     parent.target?.abModel.clear();
     userName.value = "";
     notifyListeners();
-  }
-
-  Future<Map<String, String>>? _getHeaders() {
-    return parent.target?.getHttpHeaders();
   }
 
   Future<Map<String, dynamic>> login(String userName, String pass) async {

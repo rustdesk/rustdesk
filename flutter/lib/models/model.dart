@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -23,6 +22,7 @@ import '../common.dart';
 import '../common/shared_state.dart';
 import '../utils/image.dart' as img;
 import '../mobile/widgets/dialog.dart';
+import 'input_model.dart';
 import 'platform_model.dart';
 
 typedef HandleMsgBox = Function(Map<String, dynamic> evt, String id);
@@ -725,15 +725,9 @@ class CursorModel with ChangeNotifier {
     return h - thresh;
   }
 
-  touch(double x, double y, MouseButtons button) {
-    moveLocal(x, y);
-    parent.target?.moveMouse(_x, _y);
-    parent.target?.tap(button);
-  }
-
   move(double x, double y) {
     moveLocal(x, y);
-    parent.target?.moveMouse(_x, _y);
+    parent.target?.inputModel.moveMouse(_x, _y);
   }
 
   moveLocal(double x, double y) {
@@ -748,7 +742,7 @@ class CursorModel with ChangeNotifier {
   reset() {
     _x = _displayOriginX;
     _y = _displayOriginY;
-    parent.target?.moveMouse(_x, _y);
+    parent.target?.inputModel.moveMouse(_x, _y);
     parent.target?.canvasModel.clear(true);
     notifyListeners();
   }
@@ -759,7 +753,7 @@ class CursorModel with ChangeNotifier {
       final scale = parent.target?.canvasModel.scale ?? 1.0;
       _x += dx / scale;
       _y += dy / scale;
-      parent.target?.moveMouse(_x, _y);
+      parent.target?.inputModel.moveMouse(_x, _y);
       notifyListeners();
       return;
     }
@@ -824,7 +818,7 @@ class CursorModel with ChangeNotifier {
       parent.target?.canvasModel.panY(-dy);
     }
 
-    parent.target?.moveMouse(_x, _y);
+    parent.target?.inputModel.moveMouse(_x, _y);
     notifyListeners();
   }
 
@@ -894,7 +888,7 @@ class CursorModel with ChangeNotifier {
     _displayOriginY = y;
     _x = x + 1;
     _y = y + 1;
-    parent.target?.moveMouse(x, y);
+    parent.target?.inputModel.moveMouse(x, y);
     parent.target?.canvasModel.resetOffset();
     notifyListeners();
   }
@@ -905,7 +899,7 @@ class CursorModel with ChangeNotifier {
     _displayOriginY = y;
     _x = xCursor;
     _y = yCursor;
-    parent.target?.moveMouse(x, y);
+    parent.target?.inputModel.moveMouse(x, y);
     notifyListeners();
   }
 
@@ -1011,31 +1005,11 @@ class RecordingModel with ChangeNotifier {
   }
 }
 
-/// Mouse button enum.
-enum MouseButtons { left, right, wheel }
-
-extension ToString on MouseButtons {
-  String get value {
-    switch (this) {
-      case MouseButtons.left:
-        return 'left';
-      case MouseButtons.right:
-        return 'right';
-      case MouseButtons.wheel:
-        return 'wheel';
-    }
-  }
-}
-
 enum ConnType { defaultConn, fileTransfer, portForward, rdp }
 
 /// Flutter state manager and data communication with the Rust core.
 class FFI {
   var id = '';
-  var shift = false;
-  var ctrl = false;
-  var alt = false;
-  var command = false;
   var version = '';
   var connType = ConnType.defaultConn;
 
@@ -1053,6 +1027,7 @@ class FFI {
   late final UserModel userModel; // global
   late final QualityMonitorModel qualityMonitorModel; // session
   late final RecordingModel recordingModel; // recording
+  late final InputModel inputModel; // session
 
   FFI() {
     imageModel = ImageModel(WeakReference(this));
@@ -1066,89 +1041,11 @@ class FFI {
     userModel = UserModel(WeakReference(this));
     qualityMonitorModel = QualityMonitorModel(WeakReference(this));
     recordingModel = RecordingModel(WeakReference(this));
+    inputModel = InputModel(WeakReference(this));
   }
 
-  /// Send a mouse tap event(down and up).
-  tap(MouseButtons button) {
-    sendMouse('down', button);
-    sendMouse('up', button);
-  }
-
-  /// Send scroll event with scroll distance [y].
-  scroll(int y) {
-    bind.sessionSendMouse(
-        id: id,
-        msg: json
-            .encode(modify({'id': id, 'type': 'wheel', 'y': y.toString()})));
-  }
-
-  /// Reset key modifiers to false, including [shift], [ctrl], [alt] and [command].
-  resetModifiers() {
-    shift = ctrl = alt = command = false;
-  }
-
-  /// Modify the given modifier map [evt] based on current modifier key status.
-  Map<String, String> modify(Map<String, String> evt) {
-    if (ctrl) evt['ctrl'] = 'true';
-    if (shift) evt['shift'] = 'true';
-    if (alt) evt['alt'] = 'true';
-    if (command) evt['command'] = 'true';
-    return evt;
-  }
-
-  /// Send mouse press event.
-  sendMouse(String type, MouseButtons button) {
-    if (!ffiModel.keyboard()) return;
-    bind.sessionSendMouse(
-        id: id,
-        msg: json.encode(modify({'type': type, 'buttons': button.value})));
-  }
-
-  /// Send raw Key Event
-  inputRawKey(String name, int keyCode, int scanCode, bool down) {
-    bind.sessionHandleFlutterKeyEvent(
-        id: id,
-        name: name,
-        keycode: keyCode,
-        scancode: scanCode,
-        downOrUp: down);
-  }
-
-  enterOrLeave(bool enter) {
-    // Fix status
-    if (!enter) {
-      resetModifiers();
-    }
-    bind.sessionEnterOrLeave(id: id, enter: enter);
-  }
-
-  /// Send key stroke event.
-  /// [down] indicates the key's state(down or up).
-  /// [press] indicates a click event(down and up).
-  inputKey(String name, {bool? down, bool? press}) {
-    if (!ffiModel.keyboard()) return;
-    bind.sessionInputKey(
-        id: id,
-        name: name,
-        down: down ?? false,
-        press: press ?? true,
-        alt: alt,
-        ctrl: ctrl,
-        shift: shift,
-        command: command);
-  }
-
-  /// Send mouse movement event with distance in [x] and [y].
-  moveMouse(double x, double y) {
-    if (!ffiModel.keyboard()) return;
-    var x2 = x.toInt();
-    var y2 = y.toInt();
-    bind.sessionSendMouse(
-        id: id, msg: json.encode(modify({'x': '$x2', 'y': '$y2'})));
-  }
-
-  /// Connect with the given [id]. Only transfer file if [isFileTransfer], only port forward if [isPortForward].
-  connect(String id,
+  /// Start with the given [id]. Only transfer file if [isFileTransfer], only port forward if [isPortForward].
+  void start(String id,
       {bool isFileTransfer = false,
       bool isPortForward = false,
       double tabBarHeight = 0.0}) {
@@ -1192,7 +1089,7 @@ class FFI {
   }
 
   /// Login with [password], choose if the client should [remember] it.
-  login(String id, String password, bool remember) {
+  void login(String id, String password, bool remember) {
     bind.sessionLogin(id: id, password: password, remember: remember);
   }
 
@@ -1209,117 +1106,16 @@ class FFI {
     cursorModel.clear();
     ffiModel.clear();
     canvasModel.clear();
-    resetModifiers();
+    inputModel.resetModifiers();
     debugPrint('model $id closed');
   }
 
-  handleMouse(Map<String, dynamic> evt, {double tabBarHeight = 0.0}) {
-    var type = '';
-    var isMove = false;
-    switch (evt['type']) {
-      case 'mousedown':
-        type = 'down';
-        break;
-      case 'mouseup':
-        type = 'up';
-        break;
-      case 'mousemove':
-        isMove = true;
-        break;
-      default:
-        return;
-    }
-    evt['type'] = type;
-    double x = evt['x'];
-    double y = max(0.0, (evt['y'] as double) - tabBarHeight);
-    if (isMove) {
-      canvasModel.moveDesktopMouse(x, y);
-    }
-    final d = ffiModel.display;
-    if (canvasModel.scrollStyle == ScrollStyle.scrollbar) {
-      final imageWidth = d.width * canvasModel.scale;
-      final imageHeight = d.height * canvasModel.scale;
-      x += imageWidth * canvasModel.scrollX;
-      y += imageHeight * canvasModel.scrollY;
-
-      // boxed size is a center widget
-      if (canvasModel.size.width > imageWidth) {
-        x -= ((canvasModel.size.width - imageWidth) / 2);
-      }
-      if (canvasModel.size.height > imageHeight) {
-        y -= ((canvasModel.size.height - imageHeight) / 2);
-      }
-    } else {
-      x -= canvasModel.x;
-      y -= canvasModel.y;
-    }
-
-    x /= canvasModel.scale;
-    y /= canvasModel.scale;
-    x += d.x;
-    y += d.y;
-    if (type != '') {
-      x = 0;
-      y = 0;
-    }
-    // fix mouse out of bounds
-    x = min(max(0.0, x), d.width.toDouble());
-    y = min(max(0.0, y), d.height.toDouble());
-    evt['x'] = '${x.round()}';
-    evt['y'] = '${y.round()}';
-    var buttons = '';
-    switch (evt['buttons']) {
-      case 1:
-        buttons = 'left';
-        break;
-      case 2:
-        buttons = 'right';
-        break;
-      case 4:
-        buttons = 'wheel';
-        break;
-    }
-    evt['buttons'] = buttons;
-    bind.sessionSendMouse(id: id, msg: json.encode(evt));
-  }
-
-  listenToMouse(bool yesOrNo) {
-    if (yesOrNo) {
-      platformFFI.startDesktopWebListener();
-    } else {
-      platformFFI.stopDesktopWebListener();
-    }
-  }
-
-  setMethodCallHandler(FMethod callback) {
+  void setMethodCallHandler(FMethod callback) {
     platformFFI.setMethodCallHandler(callback);
   }
 
   Future<bool> invokeMethod(String method, [dynamic arguments]) async {
     return await platformFFI.invokeMethod(method, arguments);
-  }
-
-  Future<List<String>> getAudioInputs() async {
-    return await bind.mainGetSoundInputs();
-  }
-
-  Future<String> getDefaultAudioInput() async {
-    final input = await bind.mainGetOption(key: 'audio-input');
-    if (input.isEmpty && Platform.isWindows) {
-      return 'System Sound';
-    }
-    return input;
-  }
-
-  setDefaultAudioInput(String input) {
-    bind.mainSetOption(key: 'audio-input', value: input);
-  }
-
-  Future<Map<String, String>> getHttpHeaders() async {
-    return {
-      'Authorization':
-          'Bearer ${await bind.mainGetLocalOption(key: 'access_token')}'
-    };
   }
 }
 
@@ -1349,8 +1145,8 @@ class PeerInfo {
   List<Display> displays = [];
 }
 
-savePreference(String id, double xCursor, double yCursor, double xCanvas,
-    double yCanvas, double scale, int currentDisplay) async {
+Future<void> savePreference(String id, double xCursor, double yCursor,
+    double xCanvas, double yCanvas, double scale, int currentDisplay) async {
   SharedPreferences prefs = await SharedPreferences.getInstance();
   final p = <String, dynamic>{};
   p['xCursor'] = xCursor;
@@ -1371,12 +1167,12 @@ Future<Map<String, dynamic>?> getPreference(String id) async {
   return m;
 }
 
-removePreference(String id) async {
+void removePreference(String id) async {
   SharedPreferences prefs = await SharedPreferences.getInstance();
   prefs.remove('peer$id');
 }
 
-initializeCursorAndCanvas(FFI ffi) async {
+Future<void> initializeCursorAndCanvas(FFI ffi) async {
   var p = await getPreference(ffi.id);
   int currentDisplay = 0;
   if (p != null) {
@@ -1396,16 +1192,3 @@ initializeCursorAndCanvas(FFI ffi) async {
       ffi.ffiModel.display.x, ffi.ffiModel.display.y, xCursor, yCursor);
   ffi.canvasModel.update(xCanvas, yCanvas, scale);
 }
-
-/// Translate text based on the pre-defined dictionary.
-/// note: params [FFI?] can be used to replace global FFI implementation
-/// for example: during global initialization, gFFI not exists yet.
-// String translate(String name, {FFI? ffi}) {
-//   if (name.startsWith('Failed to') && name.contains(': ')) {
-//     return name.split(': ').map((x) => translate(x)).join(': ');
-//   }
-//   var a = 'translate';
-//   var b = '{"locale": "$localeName", "text": "$name"}';
-//
-//   return (ffi ?? gFFI).getByName(a, b);
-// }

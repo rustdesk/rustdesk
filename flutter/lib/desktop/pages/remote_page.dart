@@ -5,12 +5,13 @@ import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_hbb/models/input_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock/wakelock.dart';
 import 'package:flutter_custom_cursor/flutter_custom_cursor.dart';
 
+import '../../common/widgets/overlay.dart';
+import '../../common/widgets/remote_input.dart';
 import '../widgets/remote_menubar.dart';
 import '../../common.dart';
 import '../../mobile/widgets/dialog.dart';
@@ -49,12 +50,9 @@ class _RemotePageState extends State<RemotePage>
   Function(bool)? _onEnterOrLeaveImage4Menubar;
 
   late FFI _ffi;
-  late Keyboard _keyboard_input;
-  late Mouse _mouse_input;
 
   void _updateTabBarHeight() {
     _ffi.canvasModel.tabBarHeight = widget.tabBarHeight;
-    _mouse_input.tabBarHeight = widget.tabBarHeight;
   }
 
   void _initStates(String id) {
@@ -84,12 +82,10 @@ class _RemotePageState extends State<RemotePage>
     _initStates(widget.id);
 
     _ffi = FFI();
-    _keyboard_input = Keyboard(_ffi, widget.id);
-    _mouse_input = Mouse(_ffi, widget.id, widget.tabBarHeight);
 
     _updateTabBarHeight();
     Get.put(_ffi, tag: widget.id);
-    _ffi.connect(widget.id, tabBarHeight: super.widget.tabBarHeight);
+    _ffi.start(widget.id, tabBarHeight: super.widget.tabBarHeight);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
       _ffi.dialogManager
@@ -131,10 +127,6 @@ class _RemotePageState extends State<RemotePage>
     _removeStates(widget.id);
   }
 
-  void resetTool() {
-    _ffi.resetModifiers();
-  }
-
   Widget buildBody(BuildContext context) {
     return Scaffold(
         backgroundColor: Theme.of(context).backgroundColor,
@@ -145,7 +137,13 @@ class _RemotePageState extends State<RemotePage>
               _ffi.dialogManager.setOverlayState(Overlay.of(context));
               return Container(
                   color: Colors.black,
-                  child: getRawPointerAndKeyBody(getBodyForDesktop(context)));
+                  child: RawKeyFocusScope(
+                      focusNode: _rawKeyFocusNode,
+                      onFocusChange: (bool v) {
+                        _imageFocused = v;
+                      },
+                      inputModel: _ffi.inputModel,
+                      child: getBodyForDesktop(context)));
             })
           ],
         ));
@@ -169,20 +167,6 @@ class _RemotePageState extends State<RemotePage>
         ], child: buildBody(context)));
   }
 
-  Widget getRawPointerAndKeyBody(Widget child) {
-    return FocusScope(
-        autofocus: true,
-        child: Focus(
-            autofocus: true,
-            canRequestFocus: true,
-            focusNode: _rawKeyFocusNode,
-            onFocusChange: (bool v) {
-              _imageFocused = v;
-            },
-            onKey: _keyboard_input.handleRawKeyEvent,
-            child: child));
-  }
-
   void enterView(PointerEnterEvent evt) {
     if (!_imageFocused) {
       _rawKeyFocusNode.requestFocus();
@@ -195,7 +179,7 @@ class _RemotePageState extends State<RemotePage>
         //
       }
     }
-    _ffi.enterOrLeave(true);
+    _ffi.inputModel.enterOrLeave(true);
   }
 
   void leaveView(PointerExitEvent evt) {
@@ -207,18 +191,7 @@ class _RemotePageState extends State<RemotePage>
         //
       }
     }
-    _ffi.enterOrLeave(false);
-  }
-
-  Widget _buildImageListener(Widget child) {
-    return Listener(
-        onPointerHover: _mouse_input.onPointHoverImage,
-        onPointerDown: _mouse_input.onPointDownImage,
-        onPointerUp: _mouse_input.onPointUpImage,
-        onPointerMove: _mouse_input.onPointMoveImage,
-        onPointerSignal: _mouse_input.onPointerSignalImage,
-        child:
-            MouseRegion(onEnter: enterView, onExit: leaveView, child: child));
+    _ffi.inputModel.enterOrLeave(false);
   }
 
   Widget getBodyForDesktop(BuildContext context) {
@@ -236,7 +209,12 @@ class _RemotePageState extends State<RemotePage>
           cursorOverImage: _cursorOverImage,
           keyboardEnabled: _keyboardEnabled,
           remoteCursorMoved: _remoteCursorMoved,
-          listenerBuilder: _buildImageListener,
+          listenerBuilder: (child) => RawPointerMouseRegion(
+            onEnter: enterView,
+            onExit: leaveView,
+            inputModel: _ffi.inputModel,
+            child: child,
+          ),
         );
       }))
     ];
@@ -440,49 +418,4 @@ class ImagePainter extends CustomPainter {
   bool shouldRepaint(CustomPainter oldDelegate) {
     return oldDelegate != this;
   }
-}
-
-class QualityMonitor extends StatelessWidget {
-  static const textStyle = TextStyle(color: MyTheme.grayBg);
-  final QualityMonitorModel qualityMonitorModel;
-  QualityMonitor(this.qualityMonitorModel);
-
-  @override
-  Widget build(BuildContext context) => ChangeNotifierProvider.value(
-      value: qualityMonitorModel,
-      child: Consumer<QualityMonitorModel>(
-          builder: (context, qualityMonitorModel, child) => Positioned(
-              top: 10,
-              right: 10,
-              child: qualityMonitorModel.show
-                  ? Container(
-                      padding: const EdgeInsets.all(8),
-                      color: MyTheme.canvasColor.withAlpha(120),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "Speed: ${qualityMonitorModel.data.speed ?? ''}",
-                            style: textStyle,
-                          ),
-                          Text(
-                            "FPS: ${qualityMonitorModel.data.fps ?? ''}",
-                            style: textStyle,
-                          ),
-                          Text(
-                            "Delay: ${qualityMonitorModel.data.delay ?? ''} ms",
-                            style: textStyle,
-                          ),
-                          Text(
-                            "Target Bitrate: ${qualityMonitorModel.data.targetBitrate ?? ''}kb",
-                            style: textStyle,
-                          ),
-                          Text(
-                            "Codec: ${qualityMonitorModel.data.codecFormat ?? ''}",
-                            style: textStyle,
-                          ),
-                        ],
-                      ),
-                    )
-                  : const SizedBox.shrink())));
 }

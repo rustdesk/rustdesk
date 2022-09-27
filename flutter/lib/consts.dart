@@ -24,9 +24,9 @@ const Size kConnectionManagerWindowSize = Size(300, 400);
 /// [kDefaultScrollAmountMultiplier] indicates how many rows can be scrolled after a minimum scroll action of mouse
 const kDefaultScrollAmountMultiplier = 5.0;
 const kDefaultScrollDuration = Duration(milliseconds: 50);
-const kDefaultMouseWhellThrottleDuration = Duration(milliseconds: 50);
+const kDefaultMouseWheelThrottleDuration = Duration(milliseconds: 50);
 const kFullScreenEdgeSize = 0.0;
-const kWindowEdgeSize = 1.0;
+const kWindowEdgeSize = 5.0;
 
 const kInvalidValueStr = "InvalidValueStr";
 

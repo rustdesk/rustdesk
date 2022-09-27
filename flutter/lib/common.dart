@@ -19,6 +19,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'common/widgets/overlay.dart';
 import 'mobile/pages/file_manager_page.dart';
 import 'mobile/pages/remote_page.dart';
+import 'models/input_model.dart';
 import 'models/model.dart';
 import 'models/platform_model.dart';
 
@@ -488,12 +489,12 @@ class OverlayDialogManager {
         position: Offset(left, top),
         width: overlayW,
         height: overlayH,
-        onBackPressed: () => session.tap(MouseButtons.right),
-        onHomePressed: () => session.tap(MouseButtons.wheel),
+        onBackPressed: () => session.inputModel.tap(MouseButtons.right),
+        onHomePressed: () => session.inputModel.tap(MouseButtons.wheel),
         onRecentPressed: () async {
-          session.sendMouse('down', MouseButtons.wheel);
+          session.inputModel.sendMouse('down', MouseButtons.wheel);
           await Future.delayed(const Duration(milliseconds: 500));
-          session.sendMouse('up', MouseButtons.wheel);
+          session.inputModel.sendMouse('up', MouseButtons.wheel);
         },
         onHidePressed: () => hideMobileActionsOverlay(),
       );
@@ -818,8 +819,10 @@ class PermissionManager {
 }
 
 RadioListTile<T> getRadio<T>(
-    String name, T toValue, T curValue, void Function(T?) onChange) {
+    String name, T toValue, T curValue, void Function(T?) onChange,
+    {EdgeInsetsGeometry? contentPadding}) {
   return RadioListTile<T>(
+    contentPadding: contentPadding,
     controlAffinity: ListTileControlAffinity.trailing,
     title: Text(translate(name)),
     value: toValue,
@@ -1096,4 +1099,11 @@ void connect(BuildContext context, String id,
   if (!currentFocus.hasPrimaryFocus) {
     currentFocus.unfocus();
   }
+}
+
+Future<Map<String, String>> getHttpHeaders() async {
+  return {
+    'Authorization':
+        'Bearer ${await bind.mainGetLocalOption(key: 'access_token')}'
+  };
 }

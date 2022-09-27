@@ -50,10 +50,9 @@ class ChatModel with ChangeNotifier {
 
   bool get isShowChatPage => _isShowChatPage;
 
-  WeakReference<FFI> _ffi;
+  final WeakReference<FFI> parent;
 
-  /// Constructor
-  ChatModel(this._ffi);
+  ChatModel(this.parent);
 
   ChatUser get currentUser {
     final user = messages[currentID]?.chatUser;
@@ -182,7 +181,7 @@ class ChatModel with ChangeNotifier {
       _currentID = id;
       notifyListeners();
     } else {
-      final client = _ffi.target?.serverModel.clients
+      final client = parent.target?.serverModel.clients
           .firstWhere((client) => client.id == id);
       if (client == null) {
         return debugPrint(
@@ -208,23 +207,23 @@ class ChatModel with ChangeNotifier {
     if (!_isShowChatPage) {
       toggleCMChatPage(id);
     }
-    _ffi.target?.serverModel.jumpTo(id);
+    parent.target?.serverModel.jumpTo(id);
 
     late final chatUser;
     if (id == clientModeID) {
       chatUser = ChatUser(
-        firstName: _ffi.target?.ffiModel.pi.username,
+        firstName: parent.target?.ffiModel.pi.username,
         id: await bind.mainGetLastRemoteId(),
       );
     } else {
-      final client = _ffi.target?.serverModel.clients
+      final client = parent.target?.serverModel.clients
           .firstWhere((client) => client.id == id);
       if (client == null) {
         return debugPrint("Failed to receive msg,user doesn't exist");
       }
       if (isDesktop) {
         window_on_top(null);
-        var index = _ffi.target?.serverModel.clients
+        var index = parent.target?.serverModel.clients
             .indexWhere((client) => client.id == id);
         if (index != null && index >= 0) {
           gFFI.serverModel.tabController.jumpTo(index);
@@ -246,8 +245,8 @@ class ChatModel with ChangeNotifier {
     if (message.text.isNotEmpty) {
       _messages[_currentID]?.insert(message);
       if (_currentID == clientModeID) {
-        if (_ffi.target != null) {
-          bind.sessionSendChat(id: _ffi.target!.id, text: message.text);
+        if (parent.target != null) {
+          bind.sessionSendChat(id: parent.target!.id, text: message.text);
         }
       } else {
         bind.cmSendChat(connId: _currentID, msg: message.text);

@@ -1,55 +1,84 @@
+import 'dart:convert';
+import 'dart:math';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:get/get.dart';
 
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
+import '../common.dart';
 import '../consts.dart';
 import 'dart:ui' as ui;
 
-class Keyboard {
-  late FFI _ffi;
-  late String _id;
+/// Mouse button enum.
+enum MouseButtons { left, right, wheel }
+
+extension ToString on MouseButtons {
+  String get value {
+    switch (this) {
+      case MouseButtons.left:
+        return 'left';
+      case MouseButtons.right:
+        return 'right';
+      case MouseButtons.wheel:
+        return 'wheel';
+    }
+  }
+}
+
+class InputModel {
+  final WeakReference<FFI> parent;
   String keyboardMode = "legacy";
 
-  Keyboard(FFI ffi, String id) {
-    _ffi = ffi;
-    _id = id;
-  }
+  // keyboard
+  var shift = false;
+  var ctrl = false;
+  var alt = false;
+  var command = false;
+
+  // mouse
+  final isPhysicalMouse = false.obs;
+  int _lastMouseDownButtons = 0;
+
+  get id => parent.target?.id ?? "";
+
+  InputModel(this.parent);
 
   KeyEventResult handleRawKeyEvent(FocusNode data, RawKeyEvent e) {
-    bind.sessionGetKeyboardName(id: _id).then((result) {
+    bind.sessionGetKeyboardName(id: id).then((result) {
       keyboardMode = result.toString();
     });
 
     final key = e.logicalKey;
     if (e is RawKeyDownEvent) {
-      if (!e.repeat){
-        if (e.isAltPressed && !_ffi.alt) {
-          _ffi.alt = true;
-        } else if (e.isControlPressed && !_ffi.ctrl) {
-          _ffi.ctrl = true;
-        } else if (e.isShiftPressed && !_ffi.shift) {
-          _ffi.shift = true;
-        } else if (e.isMetaPressed && !_ffi.command) {
-          _ffi.command = true;
+      if (!e.repeat) {
+        if (e.isAltPressed && !alt) {
+          alt = true;
+        } else if (e.isControlPressed && !ctrl) {
+          ctrl = true;
+        } else if (e.isShiftPressed && !shift) {
+          shift = true;
+        } else if (e.isMetaPressed && !command) {
+          command = true;
         }
       }
     }
     if (e is RawKeyUpEvent) {
       if (key == LogicalKeyboardKey.altLeft ||
           key == LogicalKeyboardKey.altRight) {
-        _ffi.alt = false;
+        alt = false;
       } else if (key == LogicalKeyboardKey.controlLeft ||
           key == LogicalKeyboardKey.controlRight) {
-        _ffi.ctrl = false;
+        ctrl = false;
       } else if (key == LogicalKeyboardKey.shiftRight ||
           key == LogicalKeyboardKey.shiftLeft) {
-        _ffi.shift = false;
+        shift = false;
       } else if (key == LogicalKeyboardKey.metaLeft ||
           key == LogicalKeyboardKey.metaRight ||
           key == LogicalKeyboardKey.superKey) {
-        _ffi.command = false;
+        command = false;
       }
     }
 
@@ -91,12 +120,20 @@ class Keyboard {
     } else {
       down = false;
     }
+    inputRawKey(e.character ?? "", keyCode, scanCode, down);
+  }
 
-    _ffi.inputRawKey(e.character ?? "", keyCode, scanCode, down);
+  /// Send raw Key Event
+  void inputRawKey(String name, int keyCode, int scanCode, bool down) {
+    bind.sessionHandleFlutterKeyEvent(
+        id: id,
+        name: name,
+        keycode: keyCode,
+        scancode: scanCode,
+        downOrUp: down);
   }
 
   void legacyKeyboardMode(RawKeyEvent e) {
-    final key = e.logicalKey;
     if (e is RawKeyDownEvent) {
       if (e.repeat) {
         sendRawKey(e, press: true);
@@ -114,22 +151,23 @@ class Keyboard {
     final label = physicalKeyMap[e.physicalKey.usbHidUsage] ??
         logicalKeyMap[e.logicalKey.keyId] ??
         e.logicalKey.keyLabel;
-    _ffi.inputKey(label, down: down, press: press ?? false);
+    inputKey(label, down: down, press: press ?? false);
   }
-}
 
-class Mouse {
-  var _isPhysicalMouse = false;
-  int _lastMouseDownButtons = 0;
-
-  late FFI _ffi;
-  late String _id;
-  late double tabBarHeight;
-
-  Mouse(FFI ffi, String id, double tabBarHeight_) {
-    _ffi = ffi;
-    _id = id;
-    tabBarHeight = tabBarHeight_;
+  /// Send key stroke event.
+  /// [down] indicates the key's state(down or up).
+  /// [press] indicates a click event(down and up).
+  void inputKey(String name, {bool? down, bool? press}) {
+    if (!parent.target!.ffiModel.keyboard()) return;
+    bind.sessionInputKey(
+        id: id,
+        name: name,
+        down: down ?? false,
+        press: press ?? true,
+        alt: alt,
+        ctrl: ctrl,
+        shift: shift,
+        command: command);
   }
 
   Map<String, dynamic> getEvent(PointerEvent evt, String type) {
@@ -137,10 +175,10 @@ class Mouse {
     out['type'] = type;
     out['x'] = evt.position.dx;
     out['y'] = evt.position.dy;
-    if (_ffi.alt) out['alt'] = 'true';
-    if (_ffi.shift) out['shift'] = 'true';
-    if (_ffi.ctrl) out['ctrl'] = 'true';
-    if (_ffi.command) out['command'] = 'true';
+    if (alt) out['alt'] = 'true';
+    if (shift) out['shift'] = 'true';
+    if (ctrl) out['ctrl'] = 'true';
+    if (command) out['command'] = 'true';
     out['buttons'] = evt
         .buttons; // left button: 1, right button: 2, middle button: 4, 1 | 2 = 3 (left + right)
     if (evt.buttons != 0) {
@@ -151,38 +189,92 @@ class Mouse {
     return out;
   }
 
+  /// Send a mouse tap event(down and up).
+  void tap(MouseButtons button) {
+    sendMouse('down', button);
+    sendMouse('up', button);
+  }
+
+  /// Send scroll event with scroll distance [y].
+  void scroll(int y) {
+    bind.sessionSendMouse(
+        id: id,
+        msg: json
+            .encode(modify({'id': id, 'type': 'wheel', 'y': y.toString()})));
+  }
+
+  /// Reset key modifiers to false, including [shift], [ctrl], [alt] and [command].
+  void resetModifiers() {
+    shift = ctrl = alt = command = false;
+  }
+
+  /// Modify the given modifier map [evt] based on current modifier key status.
+  Map<String, String> modify(Map<String, String> evt) {
+    if (ctrl) evt['ctrl'] = 'true';
+    if (shift) evt['shift'] = 'true';
+    if (alt) evt['alt'] = 'true';
+    if (command) evt['command'] = 'true';
+    return evt;
+  }
+
+  /// Send mouse press event.
+  void sendMouse(String type, MouseButtons button) {
+    if (!parent.target!.ffiModel.keyboard()) return;
+    bind.sessionSendMouse(
+        id: id,
+        msg: json.encode(modify({'type': type, 'buttons': button.value})));
+  }
+
+  void enterOrLeave(bool enter) {
+    // Fix status
+    if (!enter) {
+      resetModifiers();
+    }
+    bind.sessionEnterOrLeave(id: id, enter: enter);
+  }
+
+  /// Send mouse movement event with distance in [x] and [y].
+  void moveMouse(double x, double y) {
+    if (!parent.target!.ffiModel.keyboard()) return;
+    var x2 = x.toInt();
+    var y2 = y.toInt();
+    bind.sessionSendMouse(
+        id: id, msg: json.encode(modify({'x': '$x2', 'y': '$y2'})));
+  }
+
   void onPointHoverImage(PointerHoverEvent e) {
     if (e.kind != ui.PointerDeviceKind.mouse) return;
-    if (!_isPhysicalMouse) {
-      _isPhysicalMouse = true;
+    if (!isPhysicalMouse.value) {
+      isPhysicalMouse.value = true;
     }
-    if (_isPhysicalMouse) {
-      _ffi.handleMouse(getEvent(e, 'mousemove'), tabBarHeight: tabBarHeight);
+    if (isPhysicalMouse.value) {
+      handleMouse(getEvent(e, 'mousemove'));
     }
   }
 
   void onPointDownImage(PointerDownEvent e) {
+    debugPrint("onPointDownImage");
     if (e.kind != ui.PointerDeviceKind.mouse) {
-      if (_isPhysicalMouse) {
-        _isPhysicalMouse = false;
+      if (isPhysicalMouse.value) {
+        isPhysicalMouse.value = false;
       }
     }
-    if (_isPhysicalMouse) {
-      _ffi.handleMouse(getEvent(e, 'mousedown'), tabBarHeight: tabBarHeight);
+    if (isPhysicalMouse.value) {
+      handleMouse(getEvent(e, 'mousedown'));
     }
   }
 
   void onPointUpImage(PointerUpEvent e) {
     if (e.kind != ui.PointerDeviceKind.mouse) return;
-    if (_isPhysicalMouse) {
-      _ffi.handleMouse(getEvent(e, 'mouseup'), tabBarHeight: tabBarHeight);
+    if (isPhysicalMouse.value) {
+      handleMouse(getEvent(e, 'mouseup'));
     }
   }
 
   void onPointMoveImage(PointerMoveEvent e) {
     if (e.kind != ui.PointerDeviceKind.mouse) return;
-    if (_isPhysicalMouse) {
-      _ffi.handleMouse(getEvent(e, 'mousemove'), tabBarHeight: tabBarHeight);
+    if (isPhysicalMouse.value) {
+      handleMouse(getEvent(e, 'mousemove'));
     }
   }
 
@@ -201,7 +293,93 @@ class Mouse {
         dy = 1;
       }
       bind.sessionSendMouse(
-          id: _id, msg: '{"type": "wheel", "x": "$dx", "y": "$dy"}');
+          id: id, msg: '{"type": "wheel", "x": "$dx", "y": "$dy"}');
+    }
+  }
+
+  void handleMouse(Map<String, dynamic> evt) {
+    var type = '';
+    var isMove = false;
+    switch (evt['type']) {
+      case 'mousedown':
+        type = 'down';
+        break;
+      case 'mouseup':
+        type = 'up';
+        break;
+      case 'mousemove':
+        isMove = true;
+        break;
+      default:
+        return;
+    }
+    evt['type'] = type;
+    double x = evt['x'];
+    double y = max(0.0, evt['y']);
+    if (isDesktop) {
+      final RxBool fullscreen = Get.find(tag: 'fullscreen');
+      final tabBarHeight = fullscreen.isTrue ? 0 : kDesktopRemoteTabBarHeight;
+      y = y - tabBarHeight;
+    }
+    final canvasModel = parent.target!.canvasModel;
+    final ffiModel = parent.target!.ffiModel;
+    if (isMove) {
+      canvasModel.moveDesktopMouse(x, y);
+    }
+    final d = ffiModel.display;
+    if (canvasModel.scrollStyle == ScrollStyle.scrollbar) {
+      final imageWidth = d.width * canvasModel.scale;
+      final imageHeight = d.height * canvasModel.scale;
+      x += imageWidth * canvasModel.scrollX;
+      y += imageHeight * canvasModel.scrollY;
+
+      // boxed size is a center widget
+      if (canvasModel.size.width > imageWidth) {
+        x -= ((canvasModel.size.width - imageWidth) / 2);
+      }
+      if (canvasModel.size.height > imageHeight) {
+        y -= ((canvasModel.size.height - imageHeight) / 2);
+      }
+    } else {
+      x -= canvasModel.x;
+      y -= canvasModel.y;
+    }
+
+    x /= canvasModel.scale;
+    y /= canvasModel.scale;
+    x += d.x;
+    y += d.y;
+    if (type != '') {
+      x = 0;
+      y = 0;
+    }
+    // fix mouse out of bounds
+    x = min(max(0.0, x), d.width.toDouble());
+    y = min(max(0.0, y), d.height.toDouble());
+    evt['x'] = '${x.round()}';
+    evt['y'] = '${y.round()}';
+    var buttons = '';
+    switch (evt['buttons']) {
+      case 1:
+        buttons = 'left';
+        break;
+      case 2:
+        buttons = 'right';
+        break;
+      case 4:
+        buttons = 'wheel';
+        break;
+    }
+    evt['buttons'] = buttons;
+    bind.sessionSendMouse(id: id, msg: json.encode(evt));
+  }
+
+  /// Web only
+  void listenToMouse(bool yesOrNo) {
+    if (yesOrNo) {
+      platformFFI.startDesktopWebListener();
+    } else {
+      platformFFI.stopDesktopWebListener();
     }
   }
 }
