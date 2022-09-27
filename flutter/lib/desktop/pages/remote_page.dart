@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 import 'package:wakelock/wakelock.dart';
 import 'package:flutter_custom_cursor/flutter_custom_cursor.dart';
 
+import '../../common/widgets/overlay.dart';
 import '../../common/widgets/remote_input.dart';
 import '../widgets/remote_menubar.dart';
 import '../../common.dart';
@@ -417,49 +418,4 @@ class ImagePainter extends CustomPainter {
   bool shouldRepaint(CustomPainter oldDelegate) {
     return oldDelegate != this;
   }
-}
-
-class QualityMonitor extends StatelessWidget {
-  static const textStyle = TextStyle(color: MyTheme.grayBg);
-  final QualityMonitorModel qualityMonitorModel;
-  QualityMonitor(this.qualityMonitorModel);
-
-  @override
-  Widget build(BuildContext context) => ChangeNotifierProvider.value(
-      value: qualityMonitorModel,
-      child: Consumer<QualityMonitorModel>(
-          builder: (context, qualityMonitorModel, child) => Positioned(
-              top: 10,
-              right: 10,
-              child: qualityMonitorModel.show
-                  ? Container(
-                      padding: const EdgeInsets.all(8),
-                      color: MyTheme.canvasColor.withAlpha(120),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "Speed: ${qualityMonitorModel.data.speed ?? ''}",
-                            style: textStyle,
-                          ),
-                          Text(
-                            "FPS: ${qualityMonitorModel.data.fps ?? ''}",
-                            style: textStyle,
-                          ),
-                          Text(
-                            "Delay: ${qualityMonitorModel.data.delay ?? ''} ms",
-                            style: textStyle,
-                          ),
-                          Text(
-                            "Target Bitrate: ${qualityMonitorModel.data.targetBitrate ?? ''}kb",
-                            style: textStyle,
-                          ),
-                          Text(
-                            "Codec: ${qualityMonitorModel.data.codecFormat ?? ''}",
-                            style: textStyle,
-                          ),
-                        ],
-                      ),
-                    )
-                  : const SizedBox.shrink())));
 }

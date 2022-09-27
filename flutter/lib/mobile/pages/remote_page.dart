@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' as ui;
 
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/mobile/widgets/gesture_help.dart';
@@ -12,6 +11,7 @@ import 'package:provider/provider.dart';
 import 'package:wakelock/wakelock.dart';
 
 import '../../common.dart';
+import '../../common/widgets/overlay.dart';
 import '../../common/widgets/remote_input.dart';
 import '../../models/input_model.dart';
 import '../../models/model.dart';
@@ -118,7 +118,7 @@ class _RemotePageState extends State<RemotePage> {
   }
 
   // handle mobile virtual keyboard
-  void handleInput(String newValue) {
+  void handleSoftKeyboardInput(String newValue) {
     var oldValue = _value;
     _value = newValue;
     if (isIOS) {
@@ -495,7 +495,7 @@ class _RemotePageState extends State<RemotePage> {
         child: Stack(children: [
           ImagePaint(),
           CursorPaint(),
-          QualityMonitor(),
+          QualityMonitor(gFFI.qualityMonitorModel),
           getHelpTools(),
           SizedBox(
             width: 0,
@@ -512,7 +512,7 @@ class _RemotePageState extends State<RemotePage> {
                     initialValue: _value,
                     // trick way to make backspace work always
                     keyboardType: TextInputType.multiline,
-                    onChanged: handleInput,
+                    onChanged: handleSoftKeyboardInput,
                   ),
           ),
         ]));
@@ -527,28 +527,6 @@ class _RemotePageState extends State<RemotePage> {
     }
     return Container(
         color: MyTheme.canvasColor, child: Stack(children: paints));
-  }
-
-  int lastMouseDownButtons = 0;
-
-  // 重复
-  Map<String, dynamic> getEvent(PointerEvent evt, String type) {
-    final Map<String, dynamic> out = {};
-    out['type'] = type;
-    out['x'] = evt.position.dx;
-    out['y'] = evt.position.dy;
-    if (inputModel.alt) out['alt'] = 'true';
-    if (inputModel.shift) out['shift'] = 'true';
-    if (inputModel.ctrl) out['ctrl'] = 'true';
-    if (inputModel.command) out['command'] = 'true';
-    out['buttons'] = evt
-        .buttons; // left button: 1, right button: 2, middle button: 4, 1 | 2 = 3 (left + right)
-    if (evt.buttons != 0) {
-      lastMouseDownButtons = evt.buttons;
-    } else {
-      out['buttons'] = lastMouseDownButtons;
-    }
-    return out;
   }
 
   void showActions(String id) async {
@@ -893,49 +871,6 @@ class ImagePainter extends CustomPainter {
   bool shouldRepaint(CustomPainter oldDelegate) {
     return oldDelegate != this;
   }
-}
-
-// TODO global widget
-class QualityMonitor extends StatelessWidget {
-  static final textColor = Colors.grey.shade200;
-  @override
-  Widget build(BuildContext context) => ChangeNotifierProvider.value(
-      value: gFFI.qualityMonitorModel,
-      child: Consumer<QualityMonitorModel>(
-          builder: (context, qualityMonitorModel, child) => Positioned(
-              top: 10,
-              right: 10,
-              child: qualityMonitorModel.show
-                  ? Container(
-                      padding: EdgeInsets.all(8),
-                      color: MyTheme.canvasColor.withAlpha(120),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "Speed: ${qualityMonitorModel.data.speed ?? ''}",
-                            style: TextStyle(color: textColor),
-                          ),
-                          Text(
-                            "FPS: ${qualityMonitorModel.data.fps ?? ''}",
-                            style: TextStyle(color: textColor),
-                          ),
-                          Text(
-                            "Delay: ${qualityMonitorModel.data.delay ?? ''} ms",
-                            style: TextStyle(color: textColor),
-                          ),
-                          Text(
-                            "Target Bitrate: ${qualityMonitorModel.data.targetBitrate ?? ''}kb",
-                            style: TextStyle(color: textColor),
-                          ),
-                          Text(
-                            "Codec: ${qualityMonitorModel.data.codecFormat ?? ''}",
-                            style: TextStyle(color: textColor),
-                          ),
-                        ],
-                      ),
-                    )
-                  : SizedBox.shrink())));
 }
 
 void showOptions(String id, OverlayDialogManager dialogManager) async {
