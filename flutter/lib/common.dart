@@ -817,8 +817,10 @@ class PermissionManager {
 }
 
 RadioListTile<T> getRadio<T>(
-    String name, T toValue, T curValue, void Function(T?) onChange) {
+    String name, T toValue, T curValue, void Function(T?) onChange,
+    {EdgeInsetsGeometry? contentPadding}) {
   return RadioListTile<T>(
+    contentPadding: contentPadding,
     controlAffinity: ListTileControlAffinity.trailing,
     title: Text(translate(name)),
     value: toValue,
