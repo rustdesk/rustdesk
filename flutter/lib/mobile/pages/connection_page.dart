@@ -66,15 +66,16 @@ class _ConnectionPageState extends State<ConnectionPage> {
   @override
   Widget build(BuildContext context) {
     Provider.of<FfiModel>(context);
-    return Column(
-        mainAxisAlignment: MainAxisAlignment.start,
-        mainAxisSize: MainAxisSize.max,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: <Widget>[
+    return CustomScrollView(
+      slivers: [
+        SliverList(
+            delegate: SliverChildListDelegate([
           _buildUpdateUI(),
           _buildRemoteIDTextField(),
-          Expanded(
-              child: PeerTabPage(
+        ])),
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: PeerTabPage(
             tabs: [
               translate('Recent Sessions'),
               translate('Favorites'),
@@ -87,8 +88,10 @@ class _ConnectionPageState extends State<ConnectionPage> {
               DiscoveredPeersView(),
               const AddressBook(),
             ],
-          )),
-        ]).marginOnly(top: 2, left: 10, right: 10);
+          ),
+        )
+      ],
+    ).marginOnly(top: 2, left: 10, right: 10);
   }
 
   /// Callback for the connect button.
