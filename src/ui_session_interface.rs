@@ -850,6 +850,7 @@ impl<T: InvokeUiSession> Session<T> {
                 key_event.set_chr(chr);
             }
             Key::ControlKey(key) => {
+                #[cfg(not(any(target_os = "android", target_os = "ios")))]
                 let key = if !get_key_state(enigo::Key::NumLock) {
                     match key {
                         ControlKey::Numpad0 => ControlKey::Insert,

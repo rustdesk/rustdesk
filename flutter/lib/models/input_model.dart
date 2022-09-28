@@ -110,7 +110,11 @@ class InputModel {
       RawKeyEventDataLinux newData = e.data as RawKeyEventDataLinux;
       scanCode = newData.scanCode;
       keyCode = newData.keyCode;
-    } else {
+    } else if (e.data is RawKeyEventDataAndroid){
+      RawKeyEventDataAndroid newData = e.data as RawKeyEventDataAndroid;
+      scanCode = newData.scanCode + 8;
+      keyCode = newData.keyCode;
+    }else {
       scanCode = -1;
       keyCode = -1;
     }
