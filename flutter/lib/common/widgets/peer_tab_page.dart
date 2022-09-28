@@ -18,7 +18,6 @@ class PeerTabPage extends StatefulWidget {
 
 class _PeerTabPageState extends State<PeerTabPage>
     with SingleTickerProviderStateMixin {
-  late final PageController _pageController = PageController();
   final RxInt _tabIndex = 0.obs;
 
   @override
@@ -28,7 +27,6 @@ class _PeerTabPageState extends State<PeerTabPage>
         if (value == '') return;
         final tab = int.parse(value);
         _tabIndex.value = tab;
-        _pageController.jumpToPage(tab);
       });
       await bind.mainGetLocalOption(key: 'peer-card-ui-type').then((value) {
         if (value == '') return;
@@ -45,7 +43,6 @@ class _PeerTabPageState extends State<PeerTabPage>
     _tabIndex.value = index;
     await bind.mainSetLocalOption(
         key: 'peer-tab-index', value: index.toString());
-    _pageController.jumpToPage(index);
     switch (index) {
       case 0:
         bind.mainLoadRecentPeers();
@@ -64,7 +61,6 @@ class _PeerTabPageState extends State<PeerTabPage>
 
   @override
   void dispose() {
-    _pageController.dispose();
     super.dispose();
   }
 
@@ -82,7 +78,7 @@ class _PeerTabPageState extends State<PeerTabPage>
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Expanded(child: _createTabBar(context)),
+                  Expanded(child: _createSwitchBar(context)),
                   const SizedBox(width: 10),
                   const PeerSearchBar(),
                   Offstage(
@@ -92,12 +88,12 @@ class _PeerTabPageState extends State<PeerTabPage>
                 ],
               )),
         ),
-        _createTabBarView(),
+        _createPeersView(),
       ],
     );
   }
 
-  Widget _createTabBar(BuildContext context) {
+  Widget _createSwitchBar(BuildContext context) {
     final textColor = Theme.of(context).textTheme.titleLarge?.color;
     return ListView(
         scrollDirection: Axis.horizontal,
@@ -131,17 +127,13 @@ class _PeerTabPageState extends State<PeerTabPage>
         }).toList());
   }
 
-  Widget _createTabBarView() {
+  Widget _createPeersView() {
     final verticalMargin = isDesktop ? 12.0 : 6.0;
     return Expanded(
-        child: PageView(
-                physics: isDesktop
-                    ? NeverScrollableScrollPhysics()
-                    : BouncingScrollPhysics(),
-                controller: _pageController,
-                children: super.widget.children,
-                onPageChanged: (to) => _tabIndex.value = to)
-            .marginSymmetric(vertical: verticalMargin));
+      child: Obx(() => widget
+              .children[_tabIndex.value]) //: (to) => _tabIndex.value = to)
+          .marginSymmetric(vertical: verticalMargin),
+    );
   }
 
   Widget _createPeerViewTypeSwitch(BuildContext context) {

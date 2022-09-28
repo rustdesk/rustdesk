@@ -20,6 +20,9 @@ const int kDesktopDefaultDisplayWidth = 1080;
 const int kDesktopDefaultDisplayHeight = 720;
 
 const Size kConnectionManagerWindowSize = Size(300, 400);
+// Tabbar transition duration, now we remove the duration
+const Duration kTabTransitionDuration = Duration.zero;
+const double kEmptyMarginTop = 50;
 
 /// [kDefaultScrollAmountMultiplier] indicates how many rows can be scrolled after a minimum scroll action of mouse
 const kDefaultScrollAmountMultiplier = 5.0;

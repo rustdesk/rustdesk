@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/widgets/address_book.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/desktop/widgets/scroll_wrapper.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
@@ -25,9 +26,13 @@ class ConnectionPage extends StatefulWidget {
 }
 
 /// State for the connection page.
-class _ConnectionPageState extends State<ConnectionPage> {
+class _ConnectionPageState extends State<ConnectionPage>
+    with SingleTickerProviderStateMixin {
   /// Controller for the id input bar.
   final _idController = IDTextEditingController();
+
+  /// Nested scroll controller
+  final _scrollController = ScrollController();
 
   Timer? _updateTimer;
 
@@ -51,15 +56,16 @@ class _ConnectionPageState extends State<ConnectionPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      child: Column(
-          mainAxisAlignment: MainAxisAlignment.start,
-          mainAxisSize: MainAxisSize.max,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Expanded(
-              child: Column(
-                children: [
+    return Column(
+      children: [
+        Expanded(
+          child: DesktopScrollWrapper(
+            scrollController: _scrollController,
+            child: CustomScrollView(
+              controller: _scrollController,
+              slivers: [
+                SliverList(
+                    delegate: SliverChildListDelegate([
                   Row(
                     children: [
                       _buildRemoteIDTextField(context),
@@ -67,8 +73,10 @@ class _ConnectionPageState extends State<ConnectionPage> {
                   ).marginOnly(top: 22),
                   SizedBox(height: 12),
                   Divider(),
-                  Expanded(
-                      child: PeerTabPage(
+                ])),
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: PeerTabPage(
                     tabs: [
                       translate('Recent Sessions'),
                       translate('Favorites'),
@@ -89,14 +97,16 @@ class _ConnectionPageState extends State<ConnectionPage> {
                         menuPadding: EdgeInsets.only(left: 12.0, right: 3.0),
                       ),
                     ],
-                  )),
-                ],
-              ).marginSymmetric(horizontal: 22),
-            ),
-            const Divider(),
-            SizedBox(child: Obx(() => buildStatus()))
-                .paddingOnly(bottom: 12, top: 6),
-          ]),
+                  ),
+                )
+              ],
+            ).marginSymmetric(horizontal: 12.0),
+          ),
+        ),
+        const Divider(),
+        SizedBox(child: Obx(() => buildStatus()))
+            .paddingOnly(bottom: 12, top: 6),
+      ],
     );
   }
 
