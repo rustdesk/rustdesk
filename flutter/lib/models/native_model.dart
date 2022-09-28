@@ -106,7 +106,12 @@ class PlatformFFI {
     debugPrint('initializing FFI $_appType');
     try {
       _translate = dylib.lookupFunction<F2, F2>('translate');
-      _dir = (await getApplicationDocumentsDirectory()).path;
+      try {
+        // SYSTEM user failed
+        _dir = (await getApplicationDocumentsDirectory()).path;
+      } catch (e) {
+        debugPrint('Failed to get documents directory: $e');
+      }
       _ffiBind = RustdeskImpl(dylib);
       _startListenEvent(_ffiBind); // global event
       try {
