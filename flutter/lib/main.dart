@@ -194,10 +194,8 @@ void runConnectionManagerScreen() async {
       getHiddenTitleBarWindowOptions(size: kConnectionManagerWindowSize);
   // ensure initial window size to be changed
   await windowManager.setSize(kConnectionManagerWindowSize);
-  await Future.wait([
-    windowManager.setAlignment(Alignment.topRight),
-    initEnv(kAppTypeMain)
-  ]);
+  await Future.wait(
+      [windowManager.setAlignment(Alignment.topRight), initEnv(kAppTypeMain)]);
   runApp(GetMaterialApp(
       debugShowCheckedModeBanner: false,
       theme: MyTheme.lightTheme,

@@ -7,6 +7,7 @@ import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/desktop/pages/connection_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_setting_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
+import 'package:flutter_hbb/desktop/widgets/scroll_wrapper.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
@@ -29,6 +30,8 @@ const borderColor = Color(0xFF2F65BA);
 
 class _DesktopHomePageState extends State<DesktopHomePage>
     with TrayListener, WindowListener, AutomaticKeepAliveClientMixin {
+  final _leftPaneScrollController = ScrollController();
+
   @override
   bool get wantKeepAlive => true;
   var updateUrl = '';
@@ -56,6 +59,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   Widget build(BuildContext context) {
     super.build(context);
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         buildLeftPane(context),
         const VerticalDivider(
@@ -69,19 +73,25 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     );
   }
 
-  buildLeftPane(BuildContext context) {
+  Widget buildLeftPane(BuildContext context) {
     return ChangeNotifierProvider.value(
       value: gFFI.serverModel,
       child: Container(
         width: 200,
         color: Theme.of(context).backgroundColor,
-        child: Column(
-          children: [
-            buildTip(context),
-            buildIDBoard(context),
-            buildPasswordBoard(context),
-            buildHelpCards(),
-          ],
+        child: DesktopScrollWrapper(
+          scrollController: _leftPaneScrollController,
+          child: SingleChildScrollView(
+            controller: _leftPaneScrollController,
+            child: Column(
+              children: [
+                buildTip(context),
+                buildIDBoard(context),
+                buildPasswordBoard(context),
+                buildHelpCards(),
+              ],
+            ),
+          ),
         ),
       ),
     );

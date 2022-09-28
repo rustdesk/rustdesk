@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/scroll_wrapper.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
@@ -25,12 +26,14 @@ class _PeersView extends StatefulWidget {
   final Peers peers;
   final OffstageFunc offstageFunc;
   final PeerCardBuilder peerCardBuilder;
+  final ScrollController? scrollController;
 
   const _PeersView(
       {required this.peers,
       required this.offstageFunc,
       required this.peerCardBuilder,
-      Key? key})
+      Key? key,
+      this.scrollController})
       : super(key: key);
 
   @override
@@ -42,7 +45,6 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
   static const int _maxQueryCount = 3;
   final space = isDesktop ? 12.0 : 8.0;
   final _curPeers = <String>{};
-  final _scrollController = ScrollController();
   var _lastChangeTime = DateTime.now();
   var _lastQueryPeers = <String>{};
   var _lastQueryTime = DateTime.now().subtract(const Duration(hours: 1));
@@ -93,9 +95,10 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
       create: (context) => widget.peers,
       child: Consumer<Peers>(
           builder: (context, peers, child) => peers.peers.isEmpty
-              ? Center(
-                  child: Text(translate("Empty")),
-                )
+              ? Container(
+                  margin: EdgeInsets.only(top: kEmptyMarginTop),
+                  alignment: Alignment.topCenter,
+                  child: Text(translate("Empty")))
               : _buildPeersView(peers)),
     );
   }
@@ -147,21 +150,7 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
       );
     }, peerSearchText);
 
-    if (isDesktop) {
-      return DesktopScrollWrapper(
-        scrollController: _scrollController,
-        child: SingleChildScrollView(
-            physics: NeverScrollableScrollPhysics(),
-            controller: _scrollController,
-            child: body),
-      );
-    } else {
-      return SingleChildScrollView(
-        physics: BouncingScrollPhysics(),
-        controller: _scrollController,
-        child: body,
-      );
-    }
+    return body;
   }
 
   // ignore: todo
@@ -224,7 +213,8 @@ abstract class BasePeersView extends StatelessWidget {
 }
 
 class RecentPeersView extends BasePeersView {
-  RecentPeersView({Key? key, EdgeInsets? menuPadding})
+  RecentPeersView(
+      {Key? key, EdgeInsets? menuPadding, ScrollController? scrollController})
       : super(
           key: key,
           name: 'recent peer',
@@ -246,7 +236,8 @@ class RecentPeersView extends BasePeersView {
 }
 
 class FavoritePeersView extends BasePeersView {
-  FavoritePeersView({Key? key, EdgeInsets? menuPadding})
+  FavoritePeersView(
+      {Key? key, EdgeInsets? menuPadding, ScrollController? scrollController})
       : super(
           key: key,
           name: 'favorite peer',
@@ -268,7 +259,8 @@ class FavoritePeersView extends BasePeersView {
 }
 
 class DiscoveredPeersView extends BasePeersView {
-  DiscoveredPeersView({Key? key, EdgeInsets? menuPadding})
+  DiscoveredPeersView(
+      {Key? key, EdgeInsets? menuPadding, ScrollController? scrollController})
       : super(
           key: key,
           name: 'discovered peer',
@@ -290,7 +282,8 @@ class DiscoveredPeersView extends BasePeersView {
 }
 
 class AddressBookPeersView extends BasePeersView {
-  AddressBookPeersView({Key? key, EdgeInsets? menuPadding})
+  AddressBookPeersView(
+      {Key? key, EdgeInsets? menuPadding, ScrollController? scrollController})
       : super(
           key: key,
           name: 'address book peer',
