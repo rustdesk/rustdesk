@@ -73,32 +73,47 @@ class _PeerCardState extends State<_PeerCard>
               _menuPos = RelativeRect.fromLTRB(x, y, x, y);
               _showPeerMenu(peer.id);
             },
-            child: ListTile(
-              contentPadding: const EdgeInsets.only(left: 12), //
-              subtitle: Text('${peer.username}@${peer.hostname}'),
-              title: Row(children: [
-                getOnline(4, peer.online),
-                Text(peer.alias.isEmpty ? formatID(peer.id) : peer.alias)
-              ]),
-              leading: Container(
-                  decoration: BoxDecoration(
-                    color: str2color('${peer.id}${peer.platform}', 0x7f),
-                    borderRadius: BorderRadius.circular(4),
+            child: Container(
+              padding: EdgeInsets.only(left: 12, top: 8, bottom: 8),
+              child: Row(
+                children: [
+                  Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: str2color('${peer.id}${peer.platform}', 0x7f),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      padding: const EdgeInsets.all(6),
+                      child: getPlatformImage(peer.platform)),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          getOnline(4, peer.online),
+                          Text(peer.alias.isEmpty
+                              ? formatID(peer.id)
+                              : peer.alias)
+                        ]),
+                        Text('${peer.username}@${peer.hostname}')
+                      ],
+                    ).paddingOnly(left: 8.0),
                   ),
-                  padding: const EdgeInsets.all(6),
-                  child: getPlatformImage(peer.platform)),
-              trailing: InkWell(
-                  child: const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: Icon(Icons.more_vert)),
-                  onTapDown: (e) {
-                    final x = e.globalPosition.dx;
-                    final y = e.globalPosition.dy;
-                    _menuPos = RelativeRect.fromLTRB(x, y, x, y);
-                  },
-                  onTap: () {
-                    _showPeerMenu(peer.id);
-                  }),
+                  InkWell(
+                      child: const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: Icon(Icons.more_vert)),
+                      onTapDown: (e) {
+                        final x = e.globalPosition.dx;
+                        final y = e.globalPosition.dy;
+                        _menuPos = RelativeRect.fromLTRB(x, y, x, y);
+                      },
+                      onTap: () {
+                        _showPeerMenu(peer.id);
+                      })
+                ],
+              ),
             )));
   }
 
