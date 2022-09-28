@@ -63,6 +63,7 @@ class _ConnectionPageState extends State<ConnectionPage>
             scrollController: _scrollController,
             child: CustomScrollView(
               controller: _scrollController,
+              physics: NeverScrollableScrollPhysics(),
               slivers: [
                 SliverList(
                     delegate: SliverChildListDelegate([
@@ -72,7 +73,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                     ],
                   ).marginOnly(top: 22),
                   SizedBox(height: 12),
-                  Divider(),
+                  Divider().paddingOnly(right: 12),
                 ])),
                 SliverFillRemaining(
                   hasScrollBody: false,
@@ -97,10 +98,10 @@ class _ConnectionPageState extends State<ConnectionPage>
                         menuPadding: EdgeInsets.only(left: 12.0, right: 3.0),
                       ),
                     ],
-                  ),
+                  ).paddingOnly(right: 12.0),
                 )
               ],
-            ).marginSymmetric(horizontal: 12.0),
+            ).paddingOnly(left: 12.0),
           ),
         ),
         const Divider(),
