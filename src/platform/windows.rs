@@ -14,11 +14,21 @@ use std::{
     time::{Duration, Instant},
 };
 use winapi::{
+    ctypes::c_void,
     shared::{minwindef::*, ntdef::NULL, windef::*},
     um::{
-        errhandlingapi::GetLastError, handleapi::CloseHandle, minwinbase::STILL_ACTIVE,
-        processthreadsapi::GetExitCodeProcess, shellapi::ShellExecuteA, winbase::*, wingdi::*,
-        winnt::HANDLE, winuser::*,
+        errhandlingapi::GetLastError,
+        handleapi::CloseHandle,
+        minwinbase::STILL_ACTIVE,
+        processthreadsapi::{GetCurrentProcess, GetExitCodeProcess, OpenProcess, OpenProcessToken},
+        securitybaseapi::GetTokenInformation,
+        shellapi::ShellExecuteA,
+        winbase::*,
+        wingdi::*,
+        winnt::{
+            TokenElevation, HANDLE, PROCESS_QUERY_LIMITED_INFORMATION, TOKEN_ELEVATION, TOKEN_QUERY,
+        },
+        winuser::*,
     },
 };
 use windows_service::{
@@ -1463,7 +1473,7 @@ pub fn run_as_system(arg: &str) -> ResultType<()> {
 }
 
 pub fn run_check_elevation(arg: &str) {
-    if !is_elevated::is_elevated() {
+    if let Ok(false) = is_elevated(None) {
         if let Ok(true) = elevate(arg) {
             std::process::exit(0);
         } else {
@@ -1478,5 +1488,59 @@ pub fn run_check_elevation(arg: &str) {
                 log::error!("Failed to run as system");
             }
         }
+    }
+}
+
+// https://github.com/mgostIH/process_list/blob/master/src/windows/mod.rs
+#[repr(transparent)]
+pub(self) struct RAIIHandle(pub HANDLE);
+
+impl Drop for RAIIHandle {
+    fn drop(&mut self) {
+        // This never gives problem except when running under a debugger.
+        unsafe { CloseHandle(self.0) };
+    }
+}
+
+pub fn is_elevated(process_id: Option<DWORD>) -> ResultType<bool> {
+    unsafe {
+        let handle: HANDLE = match process_id {
+            Some(process_id) => OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, process_id),
+            None => GetCurrentProcess(),
+        };
+        if handle == NULL {
+            bail!("Failed to open process, errno {}", GetLastError())
+        }
+        let _handle = RAIIHandle(handle);
+        let mut token: HANDLE = mem::zeroed();
+        if OpenProcessToken(handle, TOKEN_QUERY, &mut token) == FALSE {
+            bail!("Failed to open process token, errno {}", GetLastError())
+        }
+        let _token = RAIIHandle(token);
+        let mut token_elevation: TOKEN_ELEVATION = mem::zeroed();
+        let mut size: DWORD = 0;
+        if GetTokenInformation(
+            token,
+            TokenElevation,
+            (&mut token_elevation) as *mut _ as *mut c_void,
+            mem::size_of::<TOKEN_ELEVATION>() as _,
+            &mut size,
+        ) == FALSE
+        {
+            bail!("Failed to get token information, errno {}", GetLastError())
+        }
+
+        Ok(token_elevation.TokenIsElevated != 0)
+    }
+}
+
+pub fn is_foreground_window_elevated() -> ResultType<bool> {
+    unsafe {
+        let mut process_id: DWORD = 0;
+        GetWindowThreadProcessId(GetForegroundWindow(), &mut process_id);
+        if process_id == 0 {
+            bail!("Failed to get processId, errno {}", GetLastError())
+        }
+        is_elevated(Some(process_id))
     }
 }

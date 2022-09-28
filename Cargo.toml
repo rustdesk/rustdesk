@@ -91,7 +91,6 @@ winapi = { version = "0.3", features = ["winuser"] }
 winreg = "0.10"
 windows-service = "0.4"
 virtual_display = { path = "libs/virtual_display" }
-is_elevated = "0.1.2"
 impersonate_system = { git = "https://github.com/21pages/impersonate-system" }
 
 [target.'cfg(target_os = "macos")'.dependencies]

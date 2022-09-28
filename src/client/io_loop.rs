@@ -985,6 +985,15 @@ impl<T: InvokeUiSession> Remote<T> {
                                 .msgbox("custom-uac-nocancel", "Warning", "uac_warning");
                         }
                     }
+                    Some(misc::Union::ForegroundWindowElevated(elevated)) => {
+                        if elevated {
+                            self.handler.msgbox(
+                                "custom-elevated-foreground-nocancel",
+                                "Warning",
+                                "elevated_foreground_window_warning",
+                            );
+                        }
+                    }
                     _ => {}
                 },
                 Some(message::Union::TestDelay(t)) => {

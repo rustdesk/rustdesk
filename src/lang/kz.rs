@@ -362,5 +362,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Prompt", ""),
         ("elevation_prompt", ""),
         ("uac_warning", ""),
+        ("elevated_foreground_window_warning", ""),
     ].iter().cloned().collect();
 }
