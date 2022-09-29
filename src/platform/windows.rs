@@ -1472,20 +1472,48 @@ pub fn run_as_system(arg: &str) -> ResultType<()> {
     Ok(())
 }
 
-pub fn run_check_elevation(arg: &str) {
-    if let Ok(false) = is_elevated(None) {
-        if let Ok(true) = elevate(arg) {
-            std::process::exit(0);
-        } else {
-            // do nothing but prompt
-        }
+pub fn elevate_or_run_as_system(is_setup: bool, is_elevate: bool, is_run_as_system: bool) {
+    // avoid possible run recursively due to failed run, which hasn't happened yet.
+    let arg_elevate = if is_setup {
+        "--noinstall --elevate"
     } else {
+        "--elevate"
+    };
+    let arg_run_as_system = if is_setup {
+        "--noinstall --run-as-system"
+    } else {
+        "--run-as-system"
+    };
+    let rerun_as_system = || {
         if !is_root() {
-            if run_as_system(arg).is_ok() {
+            if run_as_system(arg_run_as_system).is_ok() {
                 std::process::exit(0);
             } else {
-                // to-do: should not happen
                 log::error!("Failed to run as system");
+            }
+        }
+    };
+
+    if is_elevate {
+        if !is_elevated(None).map_or(true, |b| b) {
+            log::error!("Failed to elevate");
+            return;
+        }
+        rerun_as_system();
+    } else if is_run_as_system {
+        if !is_root() {
+            log::error!("Failed to be system");
+        }
+    } else {
+        if let Ok(true) = is_elevated(None) {
+            // right click
+            rerun_as_system();
+        } else {
+            // left click || run without install
+            if let Ok(true) = elevate(arg_elevate) {
+                std::process::exit(0);
+            } else {
+                // do nothing but prompt
             }
         }
     }
