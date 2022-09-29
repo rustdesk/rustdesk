@@ -110,11 +110,11 @@ class InputModel {
       RawKeyEventDataLinux newData = e.data as RawKeyEventDataLinux;
       scanCode = newData.scanCode;
       keyCode = newData.keyCode;
-    } else if (e.data is RawKeyEventDataAndroid){
+    } else if (e.data is RawKeyEventDataAndroid) {
       RawKeyEventDataAndroid newData = e.data as RawKeyEventDataAndroid;
       scanCode = newData.scanCode + 8;
       keyCode = newData.keyCode;
-    }else {
+    } else {
       scanCode = -1;
       keyCode = -1;
     }
@@ -357,9 +357,6 @@ class InputModel {
       x = 0;
       y = 0;
     }
-    // fix mouse out of bounds
-    x = min(max(0.0, x), d.width.toDouble());
-    y = min(max(0.0, y), d.height.toDouble());
     evt['x'] = '${x.round()}';
     evt['y'] = '${y.round()}';
     var buttons = '';

@@ -314,7 +314,7 @@ class _RemotePageState extends State<RemotePage> {
                       icon: Icon(Icons.tv),
                       onPressed: () {
                         setState(() => _showEdit = false);
-                        showOptions(widget.id, gFFI.dialogManager);
+                        showOptions(context, widget.id, gFFI.dialogManager);
                       },
                     )
                   ] +
@@ -446,8 +446,9 @@ class _RemotePageState extends State<RemotePage> {
             gFFI.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
             inputModel.sendMouse('down', MouseButtons.left);
           } else {
-            final cursorX = gFFI.cursorModel.x;
-            final cursorY = gFFI.cursorModel.y;
+            final offset = gFFI.cursorModel.offset;
+            final cursorX = offset.dx;
+            final cursorY = offset.dy;
             final visible =
                 gFFI.cursorModel.getVisibleRect().inflate(1); // extend edges
             final size = MediaQueryData.fromWindow(ui.window).size;
@@ -873,7 +874,8 @@ class ImagePainter extends CustomPainter {
   }
 }
 
-void showOptions(String id, OverlayDialogManager dialogManager) async {
+void showOptions(
+    BuildContext context, String id, OverlayDialogManager dialogManager) async {
   String quality = await bind.sessionGetImageQuality(id: id) ?? 'balanced';
   if (quality == '') quality = 'balanced';
   String codec =
@@ -902,12 +904,16 @@ void showOptions(String id, OverlayDialogManager dialogManager) async {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                  border: Border.all(color: Colors.black87),
-                  color: i == cur ? Colors.black87 : Colors.white),
+                  border: Border.all(color: Theme.of(context).hintColor),
+                  borderRadius: BorderRadius.circular(2),
+                  color: i == cur
+                      ? Theme.of(context).toggleableActiveColor.withOpacity(0.6)
+                      : null),
               child: Center(
                   child: Text((i + 1).toString(),
                       style: TextStyle(
-                          color: i == cur ? Colors.white : Colors.black87))))));
+                          color: i == cur ? Colors.white : Colors.black87,
+                          fontWeight: FontWeight.bold))))));
     }
     displays.add(Padding(
         padding: const EdgeInsets.only(top: 8),
