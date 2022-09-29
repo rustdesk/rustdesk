@@ -118,7 +118,7 @@ class FfiModel with ChangeNotifier {
     } else {
       final icon =
           '${secure == true ? 'secure' : 'insecure'}${direct == true ? '' : '_relay'}';
-      return SvgPicture.asset('assets/$icon.png', width: 48, height: 48);
+      return SvgPicture.asset('assets/$icon.svg', width: 48, height: 48);
     }
   }
 
