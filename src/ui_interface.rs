@@ -765,7 +765,9 @@ pub fn is_release() -> bool {
 
 #[inline]
 pub fn is_root() -> bool {
-    crate::platform::is_root()
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return crate::platform::is_root();
+    false
 }
 
 #[inline]
