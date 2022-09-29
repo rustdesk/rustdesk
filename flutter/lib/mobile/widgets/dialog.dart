@@ -161,6 +161,20 @@ void enterPasswordDialog(String id, OverlayDialogManager dialogManager) async {
   var remember = await bind.sessionGetRemember(id: id) ?? false;
   dialogManager.dismissAll();
   dialogManager.show((setState, close) {
+    cancel() {
+      close();
+      closeConnection();
+    }
+
+    submit() {
+      var text = controller.text.trim();
+      if (text == '') return;
+      gFFI.login(id, text, remember);
+      close();
+      dialogManager.showLoading(translate('Logging in...'),
+          onCancel: closeConnection);
+    }
+
     return CustomAlertDialog(
       title: Text(translate('Password Required')),
       content: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -183,25 +197,17 @@ void enterPasswordDialog(String id, OverlayDialogManager dialogManager) async {
       actions: [
         TextButton(
           style: flatButtonStyle,
-          onPressed: () {
-            close();
-            closeConnection();
-          },
+          onPressed: cancel,
           child: Text(translate('Cancel')),
         ),
         TextButton(
           style: flatButtonStyle,
-          onPressed: () {
-            var text = controller.text.trim();
-            if (text == '') return;
-            gFFI.login(id, text, remember);
-            close();
-            dialogManager.showLoading(translate('Logging in...'),
-                onCancel: closeConnection);
-          },
+          onPressed: submit,
           child: Text(translate('OK')),
         ),
       ],
+      onSubmit: submit,
+      onCancel: cancel,
     );
   });
 }
