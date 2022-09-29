@@ -269,8 +269,10 @@ class FfiModel with ChangeNotifier {
       _touchMode = true;
       if (parent.target != null &&
           parent.target!.ffiModel.permissions['keyboard'] != false) {
-        Timer(const Duration(milliseconds: 100),
-            parent.target!.dialogManager.showMobileActionsOverlay);
+        Timer(
+            const Duration(milliseconds: 100),
+            () => parent.target!.dialogManager
+                .showMobileActionsOverlay(ffi: parent.target!));
       }
     } else {
       _touchMode =
