@@ -2538,6 +2538,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "impersonate_system"
+version = "0.1.0"
+source = "git+https://github.com/21pages/impersonate-system#af4a82050580217a434c2024e181a98de24823ec"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "include_dir"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4329,6 +4337,7 @@ dependencies = [
  "flutter_rust_bridge_codegen",
  "hbb_common",
  "hound",
+ "impersonate_system",
  "include_dir",
  "jni",
  "lazy_static",

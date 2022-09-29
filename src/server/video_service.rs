@@ -33,6 +33,7 @@ use std::{
     collections::HashSet,
     io::ErrorKind::WouldBlock,
     ops::{Deref, DerefMut},
+    sync::Once,
     time::{self, Duration, Instant},
 };
 #[cfg(windows)]
@@ -51,6 +52,8 @@ lazy_static::lazy_static! {
     static ref PRIVACY_MODE_CONN_ID: Mutex<i32> = Mutex::new(0);
     static ref IS_CAPTURER_MAGNIFIER_SUPPORTED: bool = is_capturer_mag_supported();
     pub static ref VIDEO_QOS: Arc<Mutex<VideoQoS>> = Default::default();
+    pub static ref IS_UAC_RUNNING: Arc<Mutex<bool>> = Default::default();
+    pub static ref IS_FOREGROUND_WINDOW_ELEVATED: Arc<Mutex<bool>> = Default::default();
 }
 
 fn is_capturer_mag_supported() -> bool {
@@ -451,6 +454,8 @@ fn run(sp: GenericService) -> ResultType<()> {
     };
     #[cfg(any(target_os = "android", target_os = "ios"))]
     let recorder: Arc<Mutex<Option<Recorder>>> = Default::default();
+    #[cfg(windows)]
+    start_uac_elevation_check();
 
     while sp.ok() {
         #[cfg(windows)]
@@ -831,4 +836,25 @@ pub(super) fn get_current_display_2(mut all: Vec<Display>) -> ResultType<(usize,
 
 fn get_current_display() -> ResultType<(usize, usize, Display)> {
     get_current_display_2(try_get_displays()?)
+}
+
+#[cfg(windows)]
+fn start_uac_elevation_check() {
+    static START: Once = Once::new();
+    START.call_once(|| {
+        if !crate::platform::is_installed()
+            && !crate::platform::is_root()
+            && !crate::platform::is_elevated(None).map_or(false, |b| b)
+        {
+            std::thread::spawn(|| loop {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                if let Ok(uac) = crate::ui::win_privacy::is_process_consent_running() {
+                    *IS_UAC_RUNNING.lock().unwrap() = uac;
+                }
+                if let Ok(elevated) = crate::platform::is_foreground_window_elevated() {
+                    *IS_FOREGROUND_WINDOW_ELEVATED.lock().unwrap() = elevated;
+                }
+            });
+        }
+    });
 }

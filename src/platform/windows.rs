@@ -14,11 +14,21 @@ use std::{
     time::{Duration, Instant},
 };
 use winapi::{
+    ctypes::c_void,
     shared::{minwindef::*, ntdef::NULL, windef::*},
     um::{
-        errhandlingapi::GetLastError, handleapi::CloseHandle, minwinbase::STILL_ACTIVE,
-        processthreadsapi::GetExitCodeProcess, shellapi::ShellExecuteA, winbase::*, wingdi::*,
-        winnt::HANDLE, winuser::*,
+        errhandlingapi::GetLastError,
+        handleapi::CloseHandle,
+        minwinbase::STILL_ACTIVE,
+        processthreadsapi::{GetCurrentProcess, GetExitCodeProcess, OpenProcess, OpenProcessToken},
+        securitybaseapi::GetTokenInformation,
+        shellapi::ShellExecuteA,
+        winbase::*,
+        wingdi::*,
+        winnt::{
+            TokenElevation, HANDLE, PROCESS_QUERY_LIMITED_INFORMATION, TOKEN_ELEVATION, TOKEN_QUERY,
+        },
+        winuser::*,
     },
 };
 use windows_service::{
@@ -1420,16 +1430,145 @@ pub fn get_user_token(session_id: u32, as_user: bool) -> HANDLE {
     }
 }
 
-pub fn check_super_user_permission() -> ResultType<bool> {
+pub fn run_uac(exe: &str, arg: &str) -> ResultType<bool> {
     unsafe {
+        let cstring;
         let ret = ShellExecuteA(
             NULL as _,
             CString::new("runas")?.as_ptr() as _,
-            CString::new("cmd")?.as_ptr() as _,
-            CString::new("/c /q")?.as_ptr() as _,
+            CString::new(exe)?.as_ptr() as _,
+            if arg.is_empty() {
+                NULL as _
+            } else {
+                cstring = CString::new(arg)?;
+                cstring.as_ptr() as _
+            },
             NULL as _,
             SW_SHOWNORMAL,
         );
         return Ok(ret as i32 > 32);
+    }
+}
+
+pub fn check_super_user_permission() -> ResultType<bool> {
+    run_uac("cmd", "/c /q")
+}
+
+pub fn elevate(arg: &str) -> ResultType<bool> {
+    run_uac(
+        std::env::current_exe()?
+            .to_string_lossy()
+            .to_string()
+            .as_str(),
+        arg,
+    )
+}
+
+pub fn run_as_system(arg: &str) -> ResultType<()> {
+    let exe = std::env::current_exe()?.to_string_lossy().to_string();
+    if impersonate_system::run_as_system(&exe, arg).is_err() {
+        bail!(format!("Failed to run {} as system", exe));
+    }
+    Ok(())
+}
+
+pub fn elevate_or_run_as_system(is_setup: bool, is_elevate: bool, is_run_as_system: bool) {
+    // avoid possible run recursively due to failed run, which hasn't happened yet.
+    let arg_elevate = if is_setup {
+        "--noinstall --elevate"
+    } else {
+        "--elevate"
+    };
+    let arg_run_as_system = if is_setup {
+        "--noinstall --run-as-system"
+    } else {
+        "--run-as-system"
+    };
+    let rerun_as_system = || {
+        if !is_root() {
+            if run_as_system(arg_run_as_system).is_ok() {
+                std::process::exit(0);
+            } else {
+                log::error!("Failed to run as system");
+            }
+        }
+    };
+
+    if is_elevate {
+        if !is_elevated(None).map_or(true, |b| b) {
+            log::error!("Failed to elevate");
+            return;
+        }
+        rerun_as_system();
+    } else if is_run_as_system {
+        if !is_root() {
+            log::error!("Failed to be system");
+        }
+    } else {
+        if let Ok(true) = is_elevated(None) {
+            // right click
+            rerun_as_system();
+        } else {
+            // left click || run without install
+            if let Ok(true) = elevate(arg_elevate) {
+                std::process::exit(0);
+            } else {
+                // do nothing but prompt
+            }
+        }
+    }
+}
+
+// https://github.com/mgostIH/process_list/blob/master/src/windows/mod.rs
+#[repr(transparent)]
+pub(self) struct RAIIHandle(pub HANDLE);
+
+impl Drop for RAIIHandle {
+    fn drop(&mut self) {
+        // This never gives problem except when running under a debugger.
+        unsafe { CloseHandle(self.0) };
+    }
+}
+
+pub fn is_elevated(process_id: Option<DWORD>) -> ResultType<bool> {
+    unsafe {
+        let handle: HANDLE = match process_id {
+            Some(process_id) => OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, process_id),
+            None => GetCurrentProcess(),
+        };
+        if handle == NULL {
+            bail!("Failed to open process, errno {}", GetLastError())
+        }
+        let _handle = RAIIHandle(handle);
+        let mut token: HANDLE = mem::zeroed();
+        if OpenProcessToken(handle, TOKEN_QUERY, &mut token) == FALSE {
+            bail!("Failed to open process token, errno {}", GetLastError())
+        }
+        let _token = RAIIHandle(token);
+        let mut token_elevation: TOKEN_ELEVATION = mem::zeroed();
+        let mut size: DWORD = 0;
+        if GetTokenInformation(
+            token,
+            TokenElevation,
+            (&mut token_elevation) as *mut _ as *mut c_void,
+            mem::size_of::<TOKEN_ELEVATION>() as _,
+            &mut size,
+        ) == FALSE
+        {
+            bail!("Failed to get token information, errno {}", GetLastError())
+        }
+
+        Ok(token_elevation.TokenIsElevated != 0)
+    }
+}
+
+pub fn is_foreground_window_elevated() -> ResultType<bool> {
+    unsafe {
+        let mut process_id: DWORD = 0;
+        GetWindowThreadProcessId(GetForegroundWindow(), &mut process_id);
+        if process_id == 0 {
+            bail!("Failed to get processId, errno {}", GetLastError())
+        }
+        is_elevated(Some(process_id))
     }
 }

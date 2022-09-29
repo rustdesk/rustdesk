@@ -229,6 +229,9 @@ impl Connection {
 
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         std::thread::spawn(move || Self::handle_input(rx_input, tx_cloned));
+        let mut second_timer = time::interval(Duration::from_secs(1));
+        let mut last_uac = false;
+        let mut last_foreground_window_elevated = false;
 
         loop {
             tokio::select! {
@@ -400,6 +403,26 @@ impl Connection {
                         break;
                     }
                 },
+                _ = second_timer.tick() => {
+                    let uac = crate::video_service::IS_UAC_RUNNING.lock().unwrap().clone();
+                    if last_uac != uac {
+                        last_uac = uac;
+                        let mut misc = Misc::new();
+                        misc.set_uac(uac);
+                        let mut msg = Message::new();
+                        msg.set_misc(misc);
+                        conn.inner.send(msg.into());
+                    }
+                    let foreground_window_elevated = crate::video_service::IS_FOREGROUND_WINDOW_ELEVATED.lock().unwrap().clone();
+                    if last_foreground_window_elevated != foreground_window_elevated {
+                        last_foreground_window_elevated = foreground_window_elevated;
+                        let mut misc = Misc::new();
+                        misc.set_foreground_window_elevated(foreground_window_elevated);
+                        let mut msg = Message::new();
+                        msg.set_misc(misc);
+                        conn.inner.send(msg.into());
+                    }
+                }
                 _ = test_delay_timer.tick() => {
                     if last_recv_time.elapsed() >= SEC30 {
                         conn.on_close("Timeout", true).await;

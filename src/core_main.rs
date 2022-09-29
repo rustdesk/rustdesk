@@ -8,12 +8,20 @@ pub fn core_main() -> Option<Vec<String>> {
     let mut args = Vec::new();
     let mut i = 0;
     let mut is_setup = false;
+    let mut _is_elevate = false;
+    let mut _is_run_as_system = false;
     for arg in std::env::args() {
         // to-do: how to pass to flutter?
         if i == 0 && crate::common::is_setup(&arg) {
             is_setup = true;
         } else if i > 0 {
-            args.push(arg);
+            if arg == "--elevate" {
+                _is_elevate = true;
+            } else if arg == "--run-as-system" {
+                _is_run_as_system = true;
+            } else {
+                args.push(arg);
+            }
         }
         i += 1;
     }
@@ -56,6 +64,11 @@ pub fn core_main() -> Option<Vec<String>> {
                 .start()
                 .ok();
         }
+    }
+    #[cfg(windows)]
+    #[cfg(not(debug_assertions))]
+    if !crate::platform::is_installed() && args.is_empty() {
+        crate::platform::elevate_or_run_as_system(is_setup, _is_elevate, _is_run_as_system);
     }
     if args.is_empty() {
         std::thread::spawn(move || crate::start_server(false));

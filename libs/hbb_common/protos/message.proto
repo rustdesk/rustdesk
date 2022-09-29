@@ -556,6 +556,8 @@ message Misc {
     bool video_received = 12;
     BackNotification back_notification = 13;
     bool restart_remote_device = 14;
+    bool uac = 15;
+    bool foreground_window_elevated = 16;
   }
 }
 

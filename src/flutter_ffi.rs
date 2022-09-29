@@ -800,6 +800,14 @@ pub fn main_has_hwcodec() -> SyncReturn<bool> {
     SyncReturn(has_hwcodec())
 }
 
+pub fn main_is_root() -> bool {
+    is_root()
+}
+
+pub fn main_is_release() -> bool {
+    is_release()
+}
+
 pub fn session_send_mouse(id: String, msg: String) {
     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(&msg) {
         let alt = m.get("alt").is_some();
