@@ -118,7 +118,7 @@ class FfiModel with ChangeNotifier {
     } else {
       final icon =
           '${secure == true ? 'secure' : 'insecure'}${direct == true ? '' : '_relay'}';
-      return SvgPicture.asset('assets/$icon.png', width: 48, height: 48);
+      return SvgPicture.asset('assets/$icon.svg', width: 48, height: 48);
     }
   }
 
@@ -268,9 +268,12 @@ class FfiModel with ChangeNotifier {
     if (isPeerAndroid) {
       _touchMode = true;
       if (parent.target != null &&
+          parent.target!.connType == ConnType.defaultConn &&
           parent.target!.ffiModel.permissions['keyboard'] != false) {
-        Timer(const Duration(milliseconds: 100),
-            parent.target!.dialogManager.showMobileActionsOverlay);
+        Timer(
+            const Duration(milliseconds: 100),
+            () => parent.target!.dialogManager
+                .showMobileActionsOverlay(ffi: parent.target!));
       }
     } else {
       _touchMode =

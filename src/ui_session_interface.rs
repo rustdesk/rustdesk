@@ -146,10 +146,9 @@ impl<T: InvokeUiSession> Session<T> {
             let decoder = scrap::codec::Decoder::video_codec_state(&self.id);
             let mut h264 = decoder.score_h264 > 0;
             let mut h265 = decoder.score_h265 > 0;
-            if let Some((encoding_264, encoding_265)) = self.lc.read().unwrap().supported_encoding {
-                h264 = h264 && encoding_264;
-                h265 = h265 && encoding_265;
-            }
+            let (encoding_264, encoding_265) = self.lc.read().unwrap().supported_encoding.unwrap_or_default();
+            h264 = h264 && encoding_264;
+            h265 = h265 && encoding_265;
             return (h264, h265);
         }
         (false, false)
@@ -1119,6 +1118,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
     }
 
     fn handle_peer_info(&mut self, mut pi: PeerInfo) {
+        log::debug!("handle_peer_info :{:?}", pi);
         pi.username = self.lc.read().unwrap().get_username(&pi);
         if pi.current_display as usize >= pi.displays.len() {
             pi.current_display = 0;

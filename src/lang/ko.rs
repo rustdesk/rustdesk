@@ -153,6 +153,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Action", "액션"),
         ("Add", "추가"),
         ("Local Port", "로컬 포트"),
+        ("Local Address", ""),
+        ("Change Local Port", ""),
         ("setup_server_tip", "빠른 접속을 위해, 당신의 서버를 설정하세요"),
         ("Too short, at least 6 characters.", "너무 짧습니다, 최소 6글자 이상 입력해주세요."),
         ("The confirmation is not identical.", "확인용 입력이 일치하지 않습니다."),

@@ -32,15 +32,14 @@ fn initialize(app_dir: &str) {
         );
         #[cfg(feature = "mediacodec")]
         scrap::mediacodec::check_mediacodec();
+        crate::common::test_rendezvous_server();
+        crate::common::test_nat_type();
+        crate::common::check_software_update();
     }
     #[cfg(target_os = "ios")]
     {
         use hbb_common::env_logger::*;
         init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "debug"));
-    }
-    #[cfg(target_os = "android")]
-    {
-        crate::common::check_software_update();
     }
 }
 

@@ -153,6 +153,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Action", "Akció"),
         ("Add", "Add"),
         ("Local Port", "Lokális Port"),
+        ("Local Address", ""),
+        ("Change Local Port", ""),
         ("setup_server_tip", "Egy gyorsabb kapcsolatért, kérlek hostolj egy saját szervert"),
         ("Too short, at least 6 characters.", "Túl rövid, legalább 6 karakter"),
         ("The confirmation is not identical.", "A megerősítés nem volt azonos"),

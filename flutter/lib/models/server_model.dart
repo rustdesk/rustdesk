@@ -13,7 +13,7 @@ import '../desktop/widgets/tabbar_widget.dart';
 import '../mobile/pages/server_page.dart';
 import 'model.dart';
 
-const KLoginDialogTag = "LOGIN";
+const kLoginDialogTag = "LOGIN";
 
 const kUseTemporaryPassword = "use-temporary-password";
 const kUsePermanentPassword = "use-permanent-password";
@@ -433,7 +433,7 @@ class ServerModel with ChangeNotifier {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(translate("Do you accept?")),
-            clientInfo(client),
+            ClientInfo(client),
             Text(
               translate("android_new_connection_tip"),
               style: Theme.of(globalKey.currentContext!).textTheme.bodyMedium,
@@ -578,7 +578,7 @@ class Client {
 }
 
 String getLoginDialogTag(int id) {
-  return KLoginDialogTag + id.toString();
+  return kLoginDialogTag + id.toString();
 }
 
 showInputWarnAlert(FFI ffi) {

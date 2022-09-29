@@ -153,6 +153,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Action", "操作"),
         ("Add", "新增"),
         ("Local Port", "本機連接埠"),
+        ("Local Address", "本機地址"),
+        ("Change Local Port", "修改本機連接埠"),
         ("setup_server_tip", "若您需要更快的連接速度，可以選擇自行建立伺服器"),
         ("Too short, at least 6 characters.", "過短，至少需 6 個字元。"),
         ("The confirmation is not identical.", "兩次輸入不相符"),
