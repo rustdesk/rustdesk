@@ -81,7 +81,9 @@ pub enum NetworkType {
 #[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
 pub struct Config {
     #[serde(default)]
-    pub id: String,
+    pub id: String, // use
+    #[serde(default)]
+    enc_id: String, // store
     #[serde(default)]
     password: String,
     #[serde(default)]
@@ -301,7 +303,7 @@ impl Config {
         config.password = password;
         store |= store1;
         let mut id_valid = false;
-        let (id, encrypted, store2) = decrypt_str_or_original(&config.id, PASSWORD_ENC_VERSION);
+        let (id, encrypted, store2) = decrypt_str_or_original(&config.enc_id, PASSWORD_ENC_VERSION);
         if encrypted {
             config.id = id;
             id_valid = true;
@@ -312,8 +314,13 @@ impl Config {
                 .unwrap_or(crate::get_exe_time())
                 < crate::get_exe_time()
             {
-                id_valid = true;
-                store = true;
+                if !config.id.is_empty()
+                    && config.enc_id.is_empty()
+                    && !decrypt_str_or_original(&config.id, PASSWORD_ENC_VERSION).1
+                {
+                    id_valid = true;
+                    store = true;
+                }
             }
         }
         if !id_valid {
@@ -336,7 +343,8 @@ impl Config {
     fn store(&self) {
         let mut config = self.clone();
         config.password = encrypt_str_or_original(&config.password, PASSWORD_ENC_VERSION);
-        config.id = encrypt_str_or_original(&config.id, PASSWORD_ENC_VERSION);
+        config.enc_id = encrypt_str_or_original(&config.id, PASSWORD_ENC_VERSION);
+        config.id = "".to_owned();
         Config::store_(&config, "");
     }
 
@@ -350,7 +358,7 @@ impl Config {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.id.is_empty() || self.key_pair.0.is_empty()
+        (self.id.is_empty() && self.enc_id.is_empty()) || self.key_pair.0.is_empty()
     }
 
     pub fn get_home() -> PathBuf {
