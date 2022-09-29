@@ -433,7 +433,7 @@ class ServerModel with ChangeNotifier {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(translate("Do you accept?")),
-            clientInfo(client),
+            ClientInfo(client),
             Text(
               translate("android_new_connection_tip"),
               style: Theme.of(globalKey.currentContext!).textTheme.bodyMedium,

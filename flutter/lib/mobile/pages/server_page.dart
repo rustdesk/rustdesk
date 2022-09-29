@@ -381,7 +381,7 @@ class ConnectionManager extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Expanded(child: clientInfo(client)),
+                        Expanded(child: ClientInfo(client)),
                         Expanded(
                             flex: -1,
                             child: client.isFileTransfer || !client.authorized
@@ -493,35 +493,42 @@ class PaddingCard extends StatelessWidget {
   }
 }
 
-Widget clientInfo(Client client) {
-  return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(
-          children: [
-            Expanded(
-                flex: -1,
-                child: Padding(
-                    padding: const EdgeInsets.only(right: 12),
-                    child: CircleAvatar(
-                        backgroundColor: MyTheme.border,
-                        child: Text(client.name[0])))),
-            Expanded(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                  Text(client.name,
-                      style: const TextStyle(
-                          color: MyTheme.idColor, fontSize: 18)),
-                  const SizedBox(width: 8),
-                  Text(client.peerId,
-                      style:
-                          const TextStyle(color: MyTheme.idColor, fontSize: 10))
-                ]))
-          ],
-        ),
-      ]));
+class ClientInfo extends StatelessWidget {
+  final Client client;
+  ClientInfo(this.client);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(
+            children: [
+              Expanded(
+                  flex: -1,
+                  child: Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: CircleAvatar(
+                          backgroundColor:
+                              str2color(client.name).withOpacity(0.7),
+                          child: Text(client.name[0])))),
+              Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                    Text(client.name,
+                        style: const TextStyle(
+                            color: MyTheme.idColor, fontSize: 18)),
+                    const SizedBox(width: 8),
+                    Text(client.peerId,
+                        style: const TextStyle(
+                            color: MyTheme.idColor, fontSize: 10))
+                  ]))
+            ],
+          ),
+        ]));
+  }
 }
 
 void androidChannelInit() {
