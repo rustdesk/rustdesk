@@ -13,7 +13,7 @@ import '../desktop/widgets/tabbar_widget.dart';
 import '../mobile/pages/server_page.dart';
 import 'model.dart';
 
-const KLoginDialogTag = "LOGIN";
+const kLoginDialogTag = "LOGIN";
 
 const kUseTemporaryPassword = "use-temporary-password";
 const kUsePermanentPassword = "use-permanent-password";
@@ -578,7 +578,7 @@ class Client {
 }
 
 String getLoginDialogTag(int id) {
-  return KLoginDialogTag + id.toString();
+  return kLoginDialogTag + id.toString();
 }
 
 showInputWarnAlert(FFI ffi) {

@@ -317,6 +317,7 @@ async fn test_nat_type_() -> ResultType<bool> {
             break;
         }
     }
+    Config::set_option("local-ip-addr".to_owned(), addr.ip().to_string());
     let ok = port1 > 0 && port2 > 0;
     if ok {
         let t = if port1 == port2 {

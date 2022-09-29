@@ -133,11 +133,12 @@ class MyTheme {
     backgroundColor: Color(0xFFFFFFFF),
     scaffoldBackgroundColor: Color(0xFFEEEEEE),
     textTheme: const TextTheme(
-      titleLarge: TextStyle(fontSize: 19, color: Colors.black87),
-      titleSmall: TextStyle(fontSize: 14, color: Colors.black87),
-      bodySmall: TextStyle(fontSize: 12, color: Colors.black87, height: 1.25),
-      bodyMedium: TextStyle(fontSize: 14, color: Colors.black87, height: 1.25),
-    ),
+        titleLarge: TextStyle(fontSize: 19, color: Colors.black87),
+        titleSmall: TextStyle(fontSize: 14, color: Colors.black87),
+        bodySmall: TextStyle(fontSize: 12, color: Colors.black87, height: 1.25),
+        bodyMedium:
+            TextStyle(fontSize: 14, color: Colors.black87, height: 1.25),
+        labelLarge: TextStyle(fontSize: 16.0, color: MyTheme.accent80)),
     hintColor: Color(0xFFAAAAAA),
     primarySwatch: Colors.blue,
     visualDensity: VisualDensity.adaptivePlatformDensity,
@@ -166,7 +167,9 @@ class MyTheme {
         titleLarge: TextStyle(fontSize: 19),
         titleSmall: TextStyle(fontSize: 14),
         bodySmall: TextStyle(fontSize: 12, height: 1.25),
-        bodyMedium: TextStyle(fontSize: 14, height: 1.25)),
+        bodyMedium: TextStyle(fontSize: 14, height: 1.25),
+        labelLarge: TextStyle(
+            fontSize: 16.0, fontWeight: FontWeight.bold, color: accent80)),
     cardColor: Color(0xFF252525),
     primarySwatch: Colors.blue,
     visualDensity: VisualDensity.adaptivePlatformDensity,

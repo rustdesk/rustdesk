@@ -36,6 +36,9 @@ var _ignoreBatteryOpt = false;
 var _enableAbr = false;
 var _denyLANDiscovery = false;
 var _onlyWhiteList = false;
+var _enableDirectIPAccess = false;
+var _localIP = "";
+var _directAccessPort = "";
 
 class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   String? username;
@@ -77,6 +80,26 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         _onlyWhiteList = onlyWhiteList;
       }
 
+      final enableDirectIPAccess = option2bool(
+          'direct-server', await bind.mainGetOption(key: 'direct-server'));
+      if (enableDirectIPAccess != _enableDirectIPAccess) {
+        update = true;
+        _enableDirectIPAccess = enableDirectIPAccess;
+      }
+
+      final localIP = await bind.mainGetOption(key: 'local-ip-addr');
+      if (localIP != _localIP) {
+        update = true;
+        _localIP = localIP;
+      }
+
+      final directAccessPort =
+          await bind.mainGetOption(key: 'direct-access-port');
+      if (directAccessPort != _directAccessPort) {
+        update = true;
+        _directAccessPort = directAccessPort;
+      }
+
       if (update) {
         setState(() {});
       }
@@ -113,20 +136,8 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     Provider.of<FfiModel>(context);
-    final enhancementsTiles = [
-      SettingsTile.switchTile(
-        title: Text('${translate('Adaptive Bitrate')} (beta)'),
-        initialValue: _enableAbr,
-        onToggle: (v) async {
-          await bind.mainSetOption(key: "enable-abr", value: v ? "" : "N");
-          final newValue = await bind.mainGetOption(key: "enable-abr") != "N";
-          setState(() {
-            _enableAbr = newValue;
-          });
-        },
-      )
-    ];
-    final shareScreenTiles = [
+    final List<AbstractSettingsTile> enhancementsTiles = [];
+    final List<AbstractSettingsTile> shareScreenTiles = [
       SettingsTile.switchTile(
         title: Text(translate('Deny LAN Discovery')),
         initialValue: _denyLANDiscovery,
@@ -143,7 +154,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
       ),
       SettingsTile.switchTile(
         title: Row(children: [
-          Text(translate('Use IP Whitelisting')),
+          Expanded(child: Text(translate('Use IP Whitelisting'))),
           Offstage(
                   offstage: !_onlyWhiteList,
                   child: const Icon(Icons.warning_amber_rounded,
@@ -164,6 +175,58 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
 
           changeWhiteList(callback: update);
         },
+      ),
+      SettingsTile.switchTile(
+        title: Text('${translate('Adaptive Bitrate')} (beta)'),
+        initialValue: _enableAbr,
+        onToggle: (v) async {
+          await bind.mainSetOption(key: "enable-abr", value: v ? "" : "N");
+          final newValue = await bind.mainGetOption(key: "enable-abr") != "N";
+          setState(() {
+            _enableAbr = newValue;
+          });
+        },
+      ),
+      SettingsTile.switchTile(
+        title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Text(translate("Direct IP Access")),
+                    Offstage(
+                        offstage: !_enableDirectIPAccess,
+                        child: Text(
+                          '${translate("Local Address")}: $_localIP${_directAccessPort.isEmpty ? "" : ":$_directAccessPort"}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        )),
+                  ])),
+              Offstage(
+                  offstage: !_enableDirectIPAccess,
+                  child: IconButton(
+                      padding: EdgeInsets.zero,
+                      icon: Icon(
+                        Icons.edit,
+                        size: 20,
+                      ),
+                      onPressed: () async {
+                        final port = await changeDirectAccessPort(
+                            _localIP, _directAccessPort);
+                        setState(() {
+                          _directAccessPort = port;
+                        });
+                      }))
+            ]),
+        initialValue: _enableDirectIPAccess,
+        onToggle: (_) async {
+          _enableDirectIPAccess = !_enableDirectIPAccess;
+          String value = bool2option('direct-server', _enableDirectIPAccess);
+          await bind.mainSetOption(key: 'direct-server', value: value);
+          setState(() {});
+        },
       )
     ];
     if (_hasIgnoreBattery) {
@@ -171,9 +234,13 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
           0,
           SettingsTile.switchTile(
               initialValue: _ignoreBatteryOpt,
-              title: Text(translate('Keep RustDesk background service')),
-              description:
-                  Text('* ${translate('Ignore Battery Optimizations')}'),
+              title: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(translate('Keep RustDesk background service')),
+                    Text('* ${translate('Ignore Battery Optimizations')}',
+                        style: Theme.of(context).textTheme.bodySmall),
+                  ]),
               onToggle: (v) async {
                 if (v) {
                   PermissionManager.request("ignore_battery_optimizations");
