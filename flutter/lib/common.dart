@@ -561,6 +561,7 @@ class CustomAlertDialog extends StatelessWidget {
       required this.content,
       this.actions,
       this.contentPadding,
+      this.contentBoxConstraints = const BoxConstraints(maxWidth: 500),
       this.onSubmit,
       this.onCancel})
       : super(key: key);
@@ -569,6 +570,7 @@ class CustomAlertDialog extends StatelessWidget {
   final Widget content;
   final List<Widget>? actions;
   final double? contentPadding;
+  final BoxConstraints contentBoxConstraints;
   final Function()? onSubmit;
   final Function()? onCancel;
 
@@ -600,7 +602,8 @@ class CustomAlertDialog extends StatelessWidget {
         title: title,
         contentPadding: EdgeInsets.symmetric(
             horizontal: contentPadding ?? 25, vertical: 10),
-        content: content,
+        content:
+            ConstrainedBox(constraints: contentBoxConstraints, child: content),
         actions: actions,
       ),
     );
@@ -645,9 +648,7 @@ void msgBox(
   }
   dialogManager.show((setState, close) => CustomAlertDialog(
         title: _msgBoxTitle(title),
-        content: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: 500),
-            child: Text(translate(text), style: const TextStyle(fontSize: 15))),
+        content: Text(translate(text), style: const TextStyle(fontSize: 15)),
         actions: buttons,
         onSubmit: hasOk ? submit : null,
         onCancel: hasCancel == true ? cancel : null,

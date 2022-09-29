@@ -570,6 +570,8 @@ class FileModel extends ChangeNotifier {
             Text(title)
           ],
         ),
+        contentBoxConstraints:
+            BoxConstraints(minHeight: 100, minWidth: 400, maxWidth: 400),
         content: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -627,6 +629,8 @@ class FileModel extends ChangeNotifier {
             Text(title)
           ],
         ),
+        contentBoxConstraints:
+            BoxConstraints(minHeight: 100, minWidth: 400, maxWidth: 400),
         content: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,

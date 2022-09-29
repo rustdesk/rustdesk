@@ -268,6 +268,7 @@ class FfiModel with ChangeNotifier {
     if (isPeerAndroid) {
       _touchMode = true;
       if (parent.target != null &&
+          parent.target!.connType == ConnType.defaultConn &&
           parent.target!.ffiModel.permissions['keyboard'] != false) {
         Timer(
             const Duration(milliseconds: 100),
