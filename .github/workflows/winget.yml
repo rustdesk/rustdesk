@@ -6,7 +6,8 @@ jobs:
   publish:
     runs-on: windows-latest # action can only be run on windows
     steps:
-      - uses: vedantmgoyal2009/winget-releaser@latest
+      - uses: vedantmgoyal2009/winget-releaser@v1
         with:
           identifier: RustDesk.RustDesk
+          version: ${{ github.event.release.tag_name }}
           token: ${{ secrets.WINGET_TOKEN }}
