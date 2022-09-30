@@ -288,17 +288,23 @@ class _ConnectionPageState extends State<ConnectionPage>
       children: [
         light,
         Text(translate('Ready'), style: textStyle),
-        Text(', ', style: textStyle),
-        svcIsUsingPublicServer.value
-            ? InkWell(
-                onTap: onUsePublicServerGuide,
-                child: Text(
-                  translate('setup_server_tip'),
-                  style: TextStyle(
-                      decoration: TextDecoration.underline, fontSize: fontSize),
-                ),
-              )
-            : Offstage()
+        Offstage(
+            offstage: !svcIsUsingPublicServer.value,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(', ', style: textStyle),
+                InkWell(
+                  onTap: onUsePublicServerGuide,
+                  child: Text(
+                    translate('setup_server_tip'),
+                    style: TextStyle(
+                        decoration: TextDecoration.underline,
+                        fontSize: fontSize),
+                  ),
+                )
+              ],
+            ))
       ],
     );
   }
