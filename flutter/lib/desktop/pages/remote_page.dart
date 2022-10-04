@@ -27,10 +27,12 @@ class RemotePage extends StatefulWidget {
     Key? key,
     required this.id,
     required this.tabBarHeight,
+    required this.windowBorderWidth,
   }) : super(key: key);
 
   final String id;
   final double tabBarHeight;
+  final double windowBorderWidth;
 
   @override
   State<RemotePage> createState() => _RemotePageState();
@@ -54,6 +56,7 @@ class _RemotePageState extends State<RemotePage>
 
   void _updateTabBarHeight() {
     _ffi.canvasModel.tabBarHeight = widget.tabBarHeight;
+    _ffi.canvasModel.windowBorderWidth = widget.windowBorderWidth;
   }
 
   void _initStates(String id) {
