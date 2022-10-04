@@ -29,7 +29,7 @@ const kDefaultScrollAmountMultiplier = 5.0;
 const kDefaultScrollDuration = Duration(milliseconds: 50);
 const kDefaultMouseWheelThrottleDuration = Duration(milliseconds: 50);
 const kFullScreenEdgeSize = 0.0;
-const kWindowEdgeSize = 5.0;
+const kWindowEdgeSize = 1.0;
 
 const kInvalidValueStr = "InvalidValueStr";
 
