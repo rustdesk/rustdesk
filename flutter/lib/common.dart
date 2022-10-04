@@ -1113,3 +1113,12 @@ Future<Map<String, String>> getHttpHeaders() async {
         'Bearer ${await bind.mainGetLocalOption(key: 'access_token')}'
   };
 }
+
+// Simple wrapper of built-in types for refrence use.
+class SimpleWrapper<T> {
+  T t;
+  SimpleWrapper(this.t);
+
+  T get value => t;
+  set value(T t) => this.t = t;
+}

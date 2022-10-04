@@ -20,6 +20,7 @@ import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
 
 bool _isCustomCursorInited = false;
+final SimpleWrapper<bool> _firstEnterImage = SimpleWrapper(false);
 
 class RemotePage extends StatefulWidget {
   const RemotePage({
@@ -102,6 +103,10 @@ class _RemotePageState extends State<RemotePage>
     if (!_isCustomCursorInited) {
       customCursorController.registerNeedUpdateCursorCallback(
           (String? lastKey, String? currentKey) async {
+        if (_firstEnterImage.value) {
+          _firstEnterImage.value = false;
+          return true;
+        }
         return lastKey == null || lastKey != currentKey;
       });
       _isCustomCursorInited = true;
@@ -172,6 +177,7 @@ class _RemotePageState extends State<RemotePage>
       _rawKeyFocusNode.requestFocus();
     }
     _cursorOverImage.value = true;
+    _firstEnterImage.value = true;
     if (_onEnterOrLeaveImage4Menubar != null) {
       try {
         _onEnterOrLeaveImage4Menubar!(true);
@@ -184,6 +190,7 @@ class _RemotePageState extends State<RemotePage>
 
   void leaveView(PointerExitEvent evt) {
     _cursorOverImage.value = false;
+    _firstEnterImage.value = false;
     if (_onEnterOrLeaveImage4Menubar != null) {
       try {
         _onEnterOrLeaveImage4Menubar!(false);
