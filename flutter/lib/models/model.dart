@@ -341,7 +341,7 @@ class ImageModel with ChangeNotifier {
 
   ImageModel(this.parent);
 
-  onRgba(Uint8List rgba, double tabBarHeight) {
+  onRgba(Uint8List rgba) {
     if (_waitForImage) {
       _waitForImage = false;
       parent.target?.dialogManager.dismissAll();
@@ -355,14 +355,14 @@ class ImageModel with ChangeNotifier {
       if (parent.target?.id != pid) return;
       try {
         // my throw exception, because the listener maybe already dispose
-        update(image, tabBarHeight);
+        update(image);
       } catch (e) {
         debugPrint('update image: $e');
       }
     });
   }
 
-  update(ui.Image? image, double tabBarHeight) async {
+  update(ui.Image? image) async {
     if (_image == null && image != null) {
       if (isWebDesktop || isDesktop) {
         await parent.target?.canvasModel.updateViewStyle();
@@ -370,7 +370,7 @@ class ImageModel with ChangeNotifier {
       } else {
         final size = MediaQueryData.fromWindow(ui.window).size;
         final canvasWidth = size.width;
-        final canvasHeight = size.height - tabBarHeight;
+        final canvasHeight = size.height;
         final xscale = canvasWidth / image.width;
         final yscale = canvasHeight / image.height;
         parent.target?.canvasModel.scale = min(xscale, yscale);
@@ -1052,9 +1052,7 @@ class FFI {
 
   /// Start with the given [id]. Only transfer file if [isFileTransfer], only port forward if [isPortForward].
   void start(String id,
-      {bool isFileTransfer = false,
-      bool isPortForward = false,
-      double tabBarHeight = 0.0}) {
+      {bool isFileTransfer = false, bool isPortForward = false}) {
     assert(!(isFileTransfer && isPortForward), 'more than one connect type');
     if (isFileTransfer) {
       connType = ConnType.fileTransfer;
@@ -1083,7 +1081,7 @@ class FFI {
             debugPrint('json.decode fail1(): $e, ${message.field0}');
           }
         } else if (message is Rgba) {
-          imageModel.onRgba(message.field0, tabBarHeight);
+          imageModel.onRgba(message.field0);
         }
       }
     }();
@@ -1108,7 +1106,7 @@ class FFI {
     }
     bind.sessionClose(id: id);
     id = '';
-    imageModel.update(null, 0.0);
+    imageModel.update(null);
     cursorModel.clear();
     ffiModel.clear();
     canvasModel.clear();
