@@ -42,11 +42,13 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           selectedIcon: selectedIcon,
           unselectedIcon: unselectedIcon,
           onTabCloseButton: () => handleTabCloseButton(peerId),
-          page: RemotePage(
-            key: ValueKey(peerId),
-            id: peerId,
-            tabBarHeight: fullscreen.isTrue ? 0 : kDesktopRemoteTabBarHeight,
-          )));
+          page: Obx(() => RemotePage(
+                key: ValueKey(peerId),
+                id: peerId,
+                tabBarHeight:
+                    fullscreen.isTrue ? 0 : kDesktopRemoteTabBarHeight,
+                windowBorderWidth: fullscreen.isTrue ? 0 : kWindowBorderWidth,
+              ))));
     }
   }
 
@@ -74,11 +76,13 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             selectedIcon: selectedIcon,
             unselectedIcon: unselectedIcon,
             onTabCloseButton: () => handleTabCloseButton(id),
-            page: RemotePage(
-              key: ValueKey(id),
-              id: id,
-              tabBarHeight: fullscreen.isTrue ? 0 : kDesktopRemoteTabBarHeight,
-            )));
+            page: Obx(() => RemotePage(
+                  key: ValueKey(id),
+                  id: id,
+                  tabBarHeight:
+                      fullscreen.isTrue ? 0 : kDesktopRemoteTabBarHeight,
+                  windowBorderWidth: fullscreen.isTrue ? 0 : kWindowBorderWidth,
+                ))));
       } else if (call.method == "onDestroy") {
         tabController.clear();
       }
@@ -90,7 +94,9 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     final RxBool fullscreen = Get.find(tag: 'fullscreen');
     final tabWidget = Container(
       decoration: BoxDecoration(
-          border: Border.all(color: MyTheme.color(context).border!)),
+          border: Border.all(
+              color: MyTheme.color(context).border!,
+              width: kWindowBorderWidth)),
       child: Scaffold(
           backgroundColor: Theme.of(context).backgroundColor,
           body: Obx(() => DesktopTab(

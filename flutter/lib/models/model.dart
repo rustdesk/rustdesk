@@ -298,7 +298,7 @@ class FfiModel with ChangeNotifier {
       if (_pi.currentDisplay < _pi.displays.length) {
         _display = _pi.displays[_pi.currentDisplay];
       }
-      if (displays.length > 0) {
+      if (displays.isNotEmpty) {
         parent.target?.dialogManager.showLoading(
             translate('Connected, waiting for image...'),
             onCancel: closeConnection);
@@ -472,6 +472,8 @@ class CanvasModel with ChangeNotifier {
   double _scale = 1.0;
   // the tabbar over the image
   double tabBarHeight = 0.0;
+  // the window border's width
+  double windowBorderWidth = 0.0;
   // remote id
   String id = '';
   // scroll offset x percent
@@ -559,7 +561,8 @@ class CanvasModel with ChangeNotifier {
 
   Size get size {
     final size = MediaQueryData.fromWindow(ui.window).size;
-    return Size(size.width, size.height - tabBarHeight);
+    return Size(size.width - windowBorderWidth * 2,
+        size.height - tabBarHeight - windowBorderWidth * 2);
   }
 
   moveDesktopMouse(double x, double y) {

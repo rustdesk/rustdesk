@@ -31,6 +31,7 @@ const kDefaultScrollDuration = Duration(milliseconds: 50);
 const kDefaultMouseWheelThrottleDuration = Duration(milliseconds: 50);
 const kFullScreenEdgeSize = 0.0;
 var kWindowEdgeSize = Platform.isWindows ? 1.0 : 5.0;
+const kWindowBorderWidth = 1.0;
 
 const kInvalidValueStr = "InvalidValueStr";
 
