@@ -9,15 +9,17 @@ import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock/wakelock.dart';
 import 'package:flutter_custom_cursor/flutter_custom_cursor.dart';
+import 'package:flutter_improved_scrolling/flutter_improved_scrolling.dart';
 
+import '../../consts.dart';
 import '../../common/widgets/overlay.dart';
 import '../../common/widgets/remote_input.dart';
-import '../widgets/remote_menubar.dart';
 import '../../common.dart';
 import '../../mobile/widgets/dialog.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
+import '../widgets/remote_menubar.dart';
 
 bool _isCustomCursorInited = false;
 final SimpleWrapper<bool> _firstEnterImage = SimpleWrapper(false);
@@ -89,7 +91,7 @@ class _RemotePageState extends State<RemotePage>
 
     _updateTabBarHeight();
     Get.put(_ffi, tag: widget.id);
-    _ffi.start(widget.id, tabBarHeight: super.widget.tabBarHeight);
+    _ffi.start(widget.id);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
       _ffi.dialogManager
@@ -341,30 +343,43 @@ class ImagePaint extends StatelessWidget {
   }
 
   Widget _buildCrossScrollbar(Widget child) {
-    final physicsVertical =
-        cursorOverImage.value ? const NeverScrollableScrollPhysics() : null;
-    final physicsHorizontal =
-        cursorOverImage.value ? const NeverScrollableScrollPhysics() : null;
-    return Scrollbar(
-        controller: _vertical,
-        thumbVisibility: false,
-        trackVisibility: false,
-        child: Scrollbar(
-          controller: _horizontal,
-          thumbVisibility: false,
-          trackVisibility: false,
-          notificationPredicate: (notif) => notif.depth == 1,
-          child: SingleChildScrollView(
-            controller: _vertical,
-            physics: physicsVertical,
-            child: SingleChildScrollView(
-              controller: _horizontal,
-              scrollDirection: Axis.horizontal,
-              physics: physicsHorizontal,
-              child: child,
-            ),
-          ),
-        ));
+    final scrollConfig = CustomMouseWheelScrollConfig(
+        scrollDuration: kDefaultScrollDuration,
+        scrollCurve: Curves.linearToEaseOut,
+        mouseWheelTurnsThrottleTimeMs:
+            kDefaultMouseWheelThrottleDuration.inMilliseconds,
+        scrollAmountMultiplier: kDefaultScrollAmountMultiplier);
+    return Obx(() => ImprovedScrolling(
+        scrollController: _vertical,
+        enableCustomMouseWheelScrolling: cursorOverImage.isFalse,
+        customMouseWheelScrollConfig: scrollConfig,
+        child: ImprovedScrolling(
+            scrollController: _horizontal,
+            enableCustomMouseWheelScrolling: cursorOverImage.isFalse,
+            customMouseWheelScrollConfig: scrollConfig,
+            child: Scrollbar(
+                controller: _vertical,
+                thumbVisibility: false,
+                trackVisibility: false,
+                child: Scrollbar(
+                    controller: _horizontal,
+                    thumbVisibility: false,
+                    trackVisibility: false,
+                    notificationPredicate: (notif) => notif.depth == 1,
+                    child: SingleChildScrollView(
+                      controller: _vertical,
+                      physics: cursorOverImage.isTrue
+                          ? const NeverScrollableScrollPhysics()
+                          : null,
+                      child: SingleChildScrollView(
+                        controller: _horizontal,
+                        scrollDirection: Axis.horizontal,
+                        physics: cursorOverImage.isTrue
+                            ? const NeverScrollableScrollPhysics()
+                            : null,
+                        child: child,
+                      ),
+                    ))))));
   }
 
   Widget _buildListener(Widget child) {
