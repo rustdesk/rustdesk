@@ -144,22 +144,21 @@ Description: A remote control software.
     file.close()
 
 def build_flutter_deb(version):
+    os.system('cargo build --features flutter --lib --release')
     os.chdir('flutter')
     os.system('dpkg-deb -R rustdesk.deb tmpdeb')
     os.system('flutter build linux --release')
-
     os.system('mkdir -p tmpdeb/usr/bin/')
     os.system('mkdir -p tmpdeb/usr/lib/rustdesk')
     os.system('mkdir -p tmpdeb/usr/share/rustdesk/files/systemd/')
     os.system('mkdir -p tmpdeb/usr/share/applications/')
     os.system('mkdir -p tmpdeb/usr/share/polkit-1/actions')
 
+    os.system('rm tmpdeb/usr/bin/rustdesk')
     os.system(
         'cp -r build/linux/x64/release/bundle/* tmpdeb/usr/lib/rustdesk/')
     os.system(
-        'pushd tmpdeb && ln -s /usr/lib/rustdesk/flutter_hbb usr/bin/rustdesk && popd')
-    os.system(
-        'cp build/linux/x64/release/liblibrustdesk.so tmpdeb/usr/lib/rustdesk/librustdesk.so')
+        'cp ../target/release/liblibrustdesk.so tmpdeb/usr/lib/rustdesk/librustdesk.so')
     os.system(
         'cp ../res/rustdesk.service tmpdeb/usr/share/rustdesk/files/systemd/')
     os.system(
@@ -243,7 +242,7 @@ def main():
         else:
             print('Not signed')
         os.system(f'cp -rf target/release/RustDesk.exe rustdesk-{version}-setdown.exe')
-    elif os.path.isfile('/usr/bin/pacman1'):
+    elif os.path.isfile('/usr/bin/pacman'):
         # pacman -S -needed base-devel
         os.system("sed -i 's/pkgver=.*/pkgver=%s/g' PKGBUILD" % version)
         if flutter:
