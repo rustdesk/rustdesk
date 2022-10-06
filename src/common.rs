@@ -236,7 +236,7 @@ pub fn resample_channels(
     .unwrap_or_default()
 }
 
-pub fn test_nat_type_ipv4() {
+pub fn test_nat_type() {
     std::thread::spawn(move || {
         loop_test_nat_type(
             || {
@@ -248,22 +248,6 @@ pub fn test_nat_type_ipv4() {
             },
             Config::get_nat_type,
             Config::set_nat_type,
-        )
-    });
-}
-
-pub fn test_nat_type_ipv6() {
-    std::thread::spawn(move || {
-        loop_test_nat_type(
-            || {
-                test_nat_type_(
-                    |ip| ip.is_ipv6(),
-                    SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), 0),
-                    Config::set_nat_type_ipv6,
-                )
-            },
-            Config::get_nat_type_ipv6,
-            Config::set_nat_type_ipv6,
         )
     });
 }

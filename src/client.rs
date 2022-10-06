@@ -437,6 +437,12 @@ impl Client {
                 connect_timeout = MIN;
             }
         }
+        if peer.is_ipv6() {
+            connect_timeout = CONNECT_TIMEOUT;
+            if direct_failures > 0 {
+                connect_timeout = punch_time_used * 6;
+            }
+        }
         log::info!("peer address: {}, timeout: {}", peer, connect_timeout);
         let start = std::time::Instant::now();
         // NOTICE: Socks5 is be used event in intranet. Which may be not a good way.

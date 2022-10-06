@@ -52,17 +52,12 @@ impl RendezvousMediator {
     }
 
     pub async fn start_all() {
-        let mut nat_tested_ipv4 = false;
-        let mut nat_tested_ipv6 = false;
+        let mut nat_tested = false;
         check_zombie();
         let server = new_server();
         if Config::get_nat_type() == NatType::UNKNOWN_NAT as i32 {
-            crate::test_nat_type_ipv4();
-            nat_tested_ipv4 = true;
-        }
-        if Config::get_nat_type_ipv6() == NatType::UNKNOWN_NAT as i32 {
-            crate::test_nat_type_ipv6();
-            nat_tested_ipv6 = true;
+            crate::test_nat_type();
+            nat_tested = true;
         }
         if !Config::get_option("stop-service").is_empty() {
             crate::test_rendezvous_server();
@@ -70,10 +65,6 @@ impl RendezvousMediator {
         let server_cloned = server.clone();
         tokio::spawn(async move {
             direct_server(server_cloned, Config::get_any_listen_addr_ipv4()).await;
-        });
-        let server_cloned = server.clone();
-        tokio::spawn(async move {
-            direct_server(server_cloned, Config::get_any_listen_addr_ipv6()).await;
         });
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if crate::platform::is_installed() {
@@ -84,13 +75,9 @@ impl RendezvousMediator {
         loop {
             Config::reset_online();
             if Config::get_option("stop-service").is_empty() {
-                if !nat_tested_ipv4 {
-                    crate::test_nat_type_ipv4();
-                    nat_tested_ipv4 = true;
-                }
-                if !nat_tested_ipv6 {
-                    crate::test_nat_type_ipv6();
-                    nat_tested_ipv6 = true;
+                if !nat_tested {
+                    crate::test_nat_type();
+                    nat_tested = true;
                 }
                 let mut futs = Vec::new();
                 let servers = Config::get_rendezvous_servers();
@@ -401,30 +388,35 @@ impl RendezvousMediator {
         local_addr: SocketAddr,
     ) -> ResultType<()> {
         let relay_server = self.get_relay_server(ph.relay_server);
-        if ph.nat_type.enum_value_or_default() == NatType::SYMMETRIC
-            || Config::get_nat_type() == NatType::SYMMETRIC as i32
-        {
-            let uuid = Uuid::new_v4().to_string();
-            return self
-                .create_relay(
-                    ph.socket_addr.into(),
-                    relay_server,
-                    local_addr,
-                    uuid,
-                    server,
-                    true,
-                    true,
-                )
-                .await;
-        }
         let peer_addr = AddrMangle::decode(&ph.socket_addr);
+        let is_peer_ipv4 = peer_addr.is_ipv4();
+        if is_peer_ipv4 {
+            if ph.nat_type.enum_value_or_default() == NatType::SYMMETRIC
+                || Config::get_nat_type() == NatType::SYMMETRIC as i32
+            {
+                let uuid = Uuid::new_v4().to_string();
+                return self
+                    .create_relay(
+                        ph.socket_addr.into(),
+                        relay_server,
+                        local_addr,
+                        uuid,
+                        server,
+                        true,
+                        true,
+                    )
+                    .await;
+            }
+        }
         log::debug!("Punch hole to {:?}", peer_addr);
         let mut socket = {
             let socket =
                 socket_client::connect_tcp(self.addr.to_owned(), local_addr, RENDEZVOUS_TIMEOUT)
                     .await?;
-            let local_addr = socket.local_addr();
-            allow_err!(socket_client::connect_tcp(peer_addr, local_addr, 300).await);
+            if is_peer_ipv4 {
+                let local_addr = socket.local_addr();
+                allow_err!(socket_client::connect_tcp(peer_addr, local_addr, 300).await);
+            }
             socket
         };
         let mut msg_out = Message::new();
