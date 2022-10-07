@@ -83,7 +83,6 @@ pub fn new() -> ServerPtr {
 }
 
 async fn accept_connection_(server: ServerPtr, socket: Stream, secure: bool) -> ResultType<()> {
-    // to-do: why not drop socket and fetch local_addr earlier
     let local_addr = socket.local_addr();
     drop(socket);
     // even we drop socket, below still may fail if not use reuse_addr,
