@@ -298,7 +298,7 @@ impl UI {
     }
 
     fn test_if_valid_server(&self, host: String) -> String {
-        test_if_valid_server(host, |x| x.is_ipv4())
+        test_if_valid_server(host, |x| x.is_ipv4() || x.is_ipv6())
     }
 
     fn get_sound_inputs(&self) -> Value {
