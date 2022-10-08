@@ -117,6 +117,7 @@ class AbModel {
   }
 
   void deleteTag(String tag) {
+    gFFI.abModel.selectedTags.remove(tag);
     tags.removeWhere((element) => element == tag);
     for (var peer in peers) {
       if (peer.tags.isEmpty) {
