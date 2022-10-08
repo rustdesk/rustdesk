@@ -113,8 +113,9 @@ class _AddressBookState extends State<AddressBook> {
         builder: (context, model, child) => Row(
               children: [
                 Card(
+                  margin: EdgeInsets.symmetric(horizontal: 4.0),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(12),
                       side: BorderSide(
                           color: Theme.of(context).scaffoldBackgroundColor)),
                   child: Container(
@@ -127,6 +128,7 @@ class _AddressBookState extends State<AddressBook> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
+                            // TODO same style as peer
                             Text(translate('Tags')),
                             InkWell(
                               child: PopupMenuButton(
@@ -155,7 +157,8 @@ class _AddressBookState extends State<AddressBook> {
                             width: double.infinity,
                             height: double.infinity,
                             decoration: BoxDecoration(
-                                border: Border.all(color: MyTheme.darkGray)),
+                                border: Border.all(color: MyTheme.darkGray),
+                                borderRadius: BorderRadius.circular(2)),
                             child: Obx(
                               () => Wrap(
                                 children: gFFI.abModel.tags
@@ -210,7 +213,7 @@ class _AddressBookState extends State<AddressBook> {
             decoration: BoxDecoration(
                 color: rxTags.contains(tagName) ? Colors.blue : null,
                 border: Border.all(color: MyTheme.darkGray),
-                borderRadius: BorderRadius.circular(10)),
+                borderRadius: BorderRadius.circular(6)),
             margin: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
             padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 8.0),
             child: Text(
