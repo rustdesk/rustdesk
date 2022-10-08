@@ -54,7 +54,7 @@ class _PeerTabPageState extends State<PeerTabPage>
         bind.mainDiscover();
         break;
       case 3:
-        gFFI.abModel.getAb();
+        gFFI.abModel.pullAb();
         break;
     }
   }

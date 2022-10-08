@@ -9,9 +9,9 @@ import 'package:http/http.dart' as http;
 
 import '../common.dart';
 
-class AbModel with ChangeNotifier {
-  var abLoading = false;
-  var abError = "";
+class AbModel {
+  var abLoading = false.obs;
+  var abError = "".obs;
   var tags = [].obs;
   var peers = List<Peer>.empty(growable: true).obs;
 
@@ -23,9 +23,8 @@ class AbModel with ChangeNotifier {
 
   FFI? get _ffi => parent.target;
 
-  Future<dynamic> getAb() async {
-    abLoading = true;
-    notifyListeners();
+  Future<dynamic> pullAb() async {
+    abLoading.value = true;
     // request
     final api = "${await bind.mainGetApiServer()}/api/ab/get";
     try {
@@ -43,17 +42,15 @@ class AbModel with ChangeNotifier {
             peers.add(Peer.fromJson(peer));
           }
         }
-        notifyListeners();
         return resp.body;
       } else {
         return "";
       }
     } catch (err) {
       err.printError();
-      abError = err.toString();
+      abError.value = err.toString();
     } finally {
-      abLoading = false;
-      notifyListeners();
+      abLoading.value = false;
     }
     return null;
   }
@@ -61,7 +58,6 @@ class AbModel with ChangeNotifier {
   void reset() {
     tags.clear();
     peers.clear();
-    notifyListeners();
   }
 
   void addId(String id) async {
@@ -69,7 +65,6 @@ class AbModel with ChangeNotifier {
       return;
     }
     peers.add(Peer.fromJson({"id": id}));
-    notifyListeners();
   }
 
   void addTag(String tag) async {
@@ -77,7 +72,6 @@ class AbModel with ChangeNotifier {
       return;
     }
     tags.add(tag);
-    notifyListeners();
   }
 
   void changeTagForPeer(String id, List<dynamic> tags) {
@@ -88,9 +82,8 @@ class AbModel with ChangeNotifier {
     it.first.tags = tags;
   }
 
-  Future<void> updateAb() async {
-    abLoading = true;
-    notifyListeners();
+  Future<void> pushAb() async {
+    abLoading.value = true;
     final api = "${await bind.mainGetApiServer()}/api/ab";
     var authHeaders = await getHttpHeaders();
     authHeaders['Content-Type'] = "application/json";
@@ -101,15 +94,14 @@ class AbModel with ChangeNotifier {
     try {
       final resp =
           await http.post(Uri.parse(api), headers: authHeaders, body: body);
-      abError = "";
-      await getAb();
+      abError.value = "";
+      await pullAb();
       debugPrint("resp: ${resp.body}");
     } catch (e) {
-      abError = e.toString();
+      abError.value = e.toString();
     } finally {
-      abLoading = false;
+      abLoading.value = false;
     }
-    notifyListeners();
   }
 
   bool idContainBy(String id) {
@@ -122,7 +114,6 @@ class AbModel with ChangeNotifier {
 
   void deletePeer(String id) {
     peers.removeWhere((element) => element.id == id);
-    notifyListeners();
   }
 
   void deleteTag(String tag) {
@@ -135,12 +126,10 @@ class AbModel with ChangeNotifier {
         ((peer.tags)).remove(tag);
       }
     }
-    notifyListeners();
   }
 
   void unsetSelectedTags() {
     selectedTags.clear();
-    notifyListeners();
   }
 
   List<dynamic> getPeerTags(String id) {
@@ -165,6 +154,5 @@ class AbModel with ChangeNotifier {
   void clear() {
     peers.clear();
     tags.clear();
-    notifyListeners();
   }
 }

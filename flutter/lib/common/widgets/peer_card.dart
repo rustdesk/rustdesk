@@ -615,10 +615,10 @@ abstract class BasePeerCard extends StatelessWidget {
         await bind.mainSetPeerOption(id: id, key: 'alias', value: name);
         if (isAddressBook) {
           gFFI.abModel.setPeerAlias(id, name);
-          await gFFI.abModel.updateAb();
+          await gFFI.abModel.pushAb();
         }
         if (isAddressBook) {
-          gFFI.abModel.getAb();
+          gFFI.abModel.pullAb();
         } else {
           bind.mainLoadRecentPeers();
           bind.mainLoadFavPeers();
@@ -791,7 +791,7 @@ class AddressBookPeerCard extends BasePeerCard {
       proc: () {
         () async {
           gFFI.abModel.deletePeer(id);
-          await gFFI.abModel.updateAb();
+          await gFFI.abModel.pushAb();
         }();
       },
       padding: super.menuPadding,
@@ -826,7 +826,7 @@ class AddressBookPeerCard extends BasePeerCard {
           isInProgress = true;
         });
         gFFI.abModel.changeTagForPeer(id, selectedTag);
-        await gFFI.abModel.updateAb();
+        await gFFI.abModel.pushAb();
         close();
       }
 
@@ -873,7 +873,7 @@ class AddressBookPeerCard extends BasePeerCard {
           title: Text(translate("Delete")),
           onTap: () {
             gFFI.abModel.deleteTag(tagName);
-            gFFI.abModel.updateAb();
+            gFFI.abModel.pushAb();
             Future.delayed(Duration.zero, () => Get.back());
           },
         )

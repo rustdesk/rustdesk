@@ -267,7 +267,6 @@ class _AppState extends State<App> {
         ChangeNotifierProvider.value(value: gFFI.imageModel),
         ChangeNotifierProvider.value(value: gFFI.cursorModel),
         ChangeNotifierProvider.value(value: gFFI.canvasModel),
-        ChangeNotifierProvider.value(value: gFFI.abModel),
         ChangeNotifierProvider.value(value: gFFI.userModel),
       ],
       child: GetMaterialApp(

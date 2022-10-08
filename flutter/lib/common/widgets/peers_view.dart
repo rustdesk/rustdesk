@@ -297,11 +297,4 @@ class AddressBookPeersView extends BasePeersView {
     }
     return true;
   }
-
-  @override
-  Widget build(BuildContext context) {
-    final widget = super.build(context);
-    // gFFI.abModel.updateAb();
-    return widget;
-  }
 }
