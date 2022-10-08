@@ -265,7 +265,10 @@ class DiscoveredPeersView extends BasePeersView {
 
 class AddressBookPeersView extends BasePeersView {
   AddressBookPeersView(
-      {Key? key, EdgeInsets? menuPadding, ScrollController? scrollController})
+      {Key? key,
+      EdgeInsets? menuPadding,
+      ScrollController? scrollController,
+      required List<Peer> initPeers})
       : super(
           key: key,
           name: 'address book peer',
@@ -277,15 +280,8 @@ class AddressBookPeersView extends BasePeersView {
                 peer: peer,
                 menuPadding: menuPadding,
               ))),
-          initPeers: _loadPeers(),
+          initPeers: initPeers,
         );
-
-  static List<Peer> _loadPeers() {
-    debugPrint("_loadPeers : ${gFFI.abModel.peers.toString()}");
-    return gFFI.abModel.peers.map((e) {
-      return Peer.fromJson(e);
-    }).toList();
-  }
 
   static bool _hitTag(List<dynamic> selectedTags, List<dynamic> idents) {
     if (selectedTags.isEmpty) {

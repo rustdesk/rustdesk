@@ -185,9 +185,10 @@ class _AddressBookState extends State<AddressBook> {
                 Expanded(
                   child: Align(
                       alignment: Alignment.topLeft,
-                      child: AddressBookPeersView(
-                        menuPadding: widget.menuPadding,
-                      )),
+                      child: Obx(() => AddressBookPeersView(
+                            menuPadding: widget.menuPadding,
+                            initPeers: gFFI.abModel.peers.value,
+                          ))),
                 )
               ],
             ));

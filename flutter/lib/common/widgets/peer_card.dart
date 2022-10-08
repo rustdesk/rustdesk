@@ -601,11 +601,11 @@ abstract class BasePeerCard extends StatelessWidget {
     var name = peer.alias;
     var controller = TextEditingController(text: name);
     if (isAddressBook) {
-      final peer = gFFI.abModel.peers.firstWhere((p) => id == p['id']);
+      final peer = gFFI.abModel.peers.firstWhereOrNull((p) => id == p.id);
       if (peer == null) {
         // this should not happen
       } else {
-        name = peer['alias'] ?? '';
+        name = peer.alias;
       }
     }
     gFFI.dialogManager.show((setState, close) {
@@ -614,7 +614,7 @@ abstract class BasePeerCard extends StatelessWidget {
         name = controller.text;
         await bind.mainSetPeerOption(id: id, key: 'alias', value: name);
         if (isAddressBook) {
-          gFFI.abModel.setPeerOption(id, 'alias', name);
+          gFFI.abModel.setPeerAlias(id, name);
           await gFFI.abModel.updateAb();
         }
         if (isAddressBook) {
