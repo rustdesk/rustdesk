@@ -70,6 +70,15 @@ button.button:hover, button.outline:hover {
   border-color: color(hover-border);
 }
 
+button.link {
+  background: none !important;
+  border: none;
+  padding: 0 !important;
+  color: color(button);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 input[type=text], input[type=password], input[type=number] {
     width: *;
     font-size: 1.5em;

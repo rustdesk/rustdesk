@@ -1,10 +1,3 @@
-use std::{
-    collections::HashMap,
-    net::SocketAddr,
-    ops::{Deref, Not},
-    sync::{mpsc, Arc, Mutex, RwLock},
-};
-
 pub use async_trait::async_trait;
 #[cfg(not(any(target_os = "android", target_os = "linux")))]
 use cpal::{
@@ -12,19 +5,25 @@ use cpal::{
     Device, Host, StreamConfig,
 };
 use magnum_opus::{Channels::*, Decoder as AudioDecoder};
-use scrap::{
-    codec::{Decoder, DecoderCfg},
-    VpxDecoderConfig, VpxVideoCodecId,
-};
-
 use sha2::{Digest, Sha256};
+use std::sync::atomic::Ordering;
+use std::{
+    collections::HashMap,
+    net::SocketAddr,
+    ops::{Deref, Not},
+    sync::{atomic::AtomicBool, mpsc, Arc, Mutex, RwLock},
+};
 use uuid::Uuid;
 
+pub use file_trait::FileManager;
 use hbb_common::{
     allow_err,
     anyhow::{anyhow, Context},
     bail,
-    config::{Config, PeerConfig, PeerInfoSerde, CONNECT_TIMEOUT, RELAY_PORT, RENDEZVOUS_TIMEOUT},
+    config::{
+        Config, PeerConfig, PeerInfoSerde, CONNECT_TIMEOUT, READ_TIMEOUT, RELAY_PORT,
+        RENDEZVOUS_TIMEOUT,
+    },
     log,
     message_proto::{option_message::BoolOption, *},
     protobuf::Message as _,
@@ -36,19 +35,47 @@ use hbb_common::{
     tokio::time::Duration,
     AddrMangle, ResultType, Stream,
 };
+pub use helper::LatencyController;
+pub use helper::*;
+use scrap::{
+    codec::{Decoder, DecoderCfg},
+    record::{Recorder, RecorderContext},
+    VpxDecoderConfig, VpxVideoCodecId,
+};
 
 pub use super::lang::*;
+
 pub mod file_trait;
-pub use file_trait::FileManager;
 pub mod helper;
-pub use helper::*;
+pub mod io_loop;
+
+pub static SERVER_KEYBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
+pub static SERVER_FILE_TRANSFER_ENABLED: AtomicBool = AtomicBool::new(true);
+pub static SERVER_CLIPBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
+pub const MILLI1: Duration = Duration::from_millis(1);
 pub const SEC30: Duration = Duration::from_secs(30);
 
+/// Client of the remote desktop.
 pub struct Client;
 
 #[cfg(not(any(target_os = "android", target_os = "linux")))]
 lazy_static::lazy_static! {
-static ref AUDIO_HOST: Host = cpal::default_host();
+    static ref AUDIO_HOST: Host = cpal::default_host();
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+lazy_static::lazy_static! {
+    static ref ENIGO: Arc<Mutex<enigo::Enigo>> = Arc::new(Mutex::new(enigo::Enigo::new()));
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn get_key_state(key: enigo::Key) -> bool {
+    use enigo::KeyboardControllable;
+    #[cfg(target_os = "macos")]
+    if key == enigo::Key::NumLock {
+        return true;
+    }
+    ENIGO.lock().unwrap().get_key_state(key)
 }
 
 cfg_if::cfg_if! {
@@ -111,13 +138,15 @@ impl Drop for OboePlayer {
 }
 
 impl Client {
+    /// Start a new connection.
     pub async fn start(
         peer: &str,
         key: &str,
         token: &str,
         conn_type: ConnType,
+        interface: impl Interface,
     ) -> ResultType<(Stream, bool)> {
-        match Self::_start(peer, key, token, conn_type).await {
+        match Self::_start(peer, key, token, conn_type, interface).await {
             Err(err) => {
                 let err_str = err.to_string();
                 if err_str.starts_with("Failed") {
@@ -130,11 +159,13 @@ impl Client {
         }
     }
 
+    /// Start a new connection.
     async fn _start(
         peer: &str,
         key: &str,
         token: &str,
         conn_type: ConnType,
+        interface: impl Interface,
     ) -> ResultType<(Stream, bool)> {
         // to-do: remember the port for each peer, so that we can retry easier
         let any_addr = Config::get_any_listen_addr();
@@ -181,7 +212,11 @@ impl Client {
             log::info!("#{} punch attempt with {}, id: {}", i, my_addr, peer);
             let mut msg_out = RendezvousMessage::new();
             use hbb_common::protobuf::Enum;
-            let nat_type = NatType::from_i32(my_nat_type).unwrap_or(NatType::UNKNOWN_NAT);
+            let nat_type = if interface.is_force_relay() {
+                NatType::SYMMETRIC
+            } else {
+                NatType::from_i32(my_nat_type).unwrap_or(NatType::UNKNOWN_NAT)
+            };
             msg_out.set_punch_hole_request(PunchHoleRequest {
                 id: peer.to_owned(),
                 token: token.to_owned(),
@@ -233,7 +268,15 @@ impl Client {
                             let mut conn =
                                 Self::create_relay(peer, rr.uuid, rr.relay_server, key, conn_type)
                                     .await?;
-                            Self::secure_connection(peer, signed_id_pk, key, &mut conn).await?;
+                            Self::secure_connection(
+                                peer,
+                                signed_id_pk,
+                                key,
+                                &mut conn,
+                                false,
+                                interface,
+                            )
+                            .await?;
                             return Ok((conn, false));
                         }
                         _ => {
@@ -274,10 +317,12 @@ impl Client {
             key,
             token,
             conn_type,
+            interface,
         )
         .await
     }
 
+    /// Connect to the peer.
     async fn connect(
         local_addr: SocketAddr,
         peer: SocketAddr,
@@ -292,6 +337,7 @@ impl Client {
         key: &str,
         token: &str,
         conn_type: ConnType,
+        interface: impl Interface,
     ) -> ResultType<(Stream, bool)> {
         let direct_failures = PeerConfig::load(peer_id).direct_failures;
         let mut connect_timeout = 0;
@@ -329,8 +375,8 @@ impl Client {
         let start = std::time::Instant::now();
         // NOTICE: Socks5 is be used event in intranet. Which may be not a good way.
         let mut conn = socket_client::connect_tcp(peer, local_addr, connect_timeout).await;
-        let direct = !conn.is_err();
-        if conn.is_err() {
+        let mut direct = !conn.is_err();
+        if interface.is_force_relay() || conn.is_err() {
             if !relay_server.is_empty() {
                 conn = Self::request_relay(
                     peer_id,
@@ -348,6 +394,7 @@ impl Client {
                         conn.err().unwrap()
                     );
                 }
+                direct = false;
             } else {
                 bail!("Failed to make direct connection to remote desktop");
             }
@@ -360,15 +407,18 @@ impl Client {
         }
         let mut conn = conn?;
         log::info!("{:?} used to establish connection", start.elapsed());
-        Self::secure_connection(peer_id, signed_id_pk, key, &mut conn).await?;
+        Self::secure_connection(peer_id, signed_id_pk, key, &mut conn, direct, interface).await?;
         Ok((conn, direct))
     }
 
+    /// Establish secure connection with the server.
     async fn secure_connection(
         peer_id: &str,
         signed_id_pk: Vec<u8>,
         key: &str,
         conn: &mut Stream,
+        direct: bool,
+        mut interface: impl Interface,
     ) -> ResultType<()> {
         let rs_pk = get_rs_pk(if key.is_empty() {
             hbb_common::config::RS_PUB_KEY
@@ -394,9 +444,15 @@ impl Client {
                 return Ok(());
             }
         };
-        match timeout(CONNECT_TIMEOUT, conn.next()).await? {
+        match timeout(READ_TIMEOUT, conn.next()).await? {
             Some(res) => {
-                let bytes = res?;
+                let bytes = match res {
+                    Ok(bytes) => bytes,
+                    Err(err) => {
+                        interface.set_force_relay(direct, false);
+                        bail!("{}", err);
+                    }
+                };
                 if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
                     if let Some(message::Union::SignedId(si)) = msg_in.union {
                         if let Ok((id, their_pk_b)) = decode_id_pk(&si.id, &sign_pk) {
@@ -441,6 +497,7 @@ impl Client {
         Ok(())
     }
 
+    /// Request a relay connection to the server.
     async fn request_relay(
         peer: &str,
         relay_server: String,
@@ -497,6 +554,7 @@ impl Client {
         Self::create_relay(peer, uuid, relay_server, key, conn_type).await
     }
 
+    /// Create a relay connection to the server.
     async fn create_relay(
         peer: &str,
         uuid: String,
@@ -524,6 +582,7 @@ impl Client {
     }
 }
 
+/// Audio handler for the [`Client`].
 #[derive(Default)]
 pub struct AudioHandler {
     audio_decoder: Option<(AudioDecoder, Vec<f32>)>,
@@ -541,6 +600,7 @@ pub struct AudioHandler {
 }
 
 impl AudioHandler {
+    /// Create a new audio handler.
     pub fn new(latency_controller: Arc<Mutex<LatencyController>>) -> Self {
         AudioHandler {
             latency_controller,
@@ -548,6 +608,7 @@ impl AudioHandler {
         }
     }
 
+    /// Start the audio playback.
     #[cfg(target_os = "linux")]
     fn start_audio(&mut self, format0: AudioFormat) -> ResultType<()> {
         use psimple::Simple;
@@ -577,6 +638,7 @@ impl AudioHandler {
         Ok(())
     }
 
+    /// Start the audio playback.
     #[cfg(target_os = "android")]
     fn start_audio(&mut self, format0: AudioFormat) -> ResultType<()> {
         self.oboe = Some(OboePlayer::new(
@@ -587,6 +649,7 @@ impl AudioHandler {
         Ok(())
     }
 
+    /// Start the audio playback.
     #[cfg(not(any(target_os = "android", target_os = "linux")))]
     fn start_audio(&mut self, format0: AudioFormat) -> ResultType<()> {
         let device = AUDIO_HOST
@@ -611,6 +674,7 @@ impl AudioHandler {
         Ok(())
     }
 
+    /// Handle audio format and create an audio decoder.
     pub fn handle_format(&mut self, f: AudioFormat) {
         match AudioDecoder::new(f.sample_rate, if f.channels > 1 { Stereo } else { Mono }) {
             Ok(d) => {
@@ -625,6 +689,7 @@ impl AudioHandler {
         }
     }
 
+    /// Handle audio frame and play it.
     pub fn handle_frame(&mut self, frame: AudioFrame) {
         if frame.timestamp != 0 {
             if self
@@ -692,6 +757,7 @@ impl AudioHandler {
         });
     }
 
+    /// Build audio output stream for current device.
     #[cfg(not(any(target_os = "android", target_os = "linux")))]
     fn build_output_stream<T: cpal::Sample>(
         &mut self,
@@ -727,13 +793,17 @@ impl AudioHandler {
     }
 }
 
+/// Video handler for the [`Client`].
 pub struct VideoHandler {
     decoder: Decoder,
     latency_controller: Arc<Mutex<LatencyController>>,
     pub rgb: Vec<u8>,
+    recorder: Arc<Mutex<Option<Recorder>>>,
+    record: bool,
 }
 
 impl VideoHandler {
+    /// Create a new video handler.
     pub fn new(latency_controller: Arc<Mutex<LatencyController>>) -> Self {
         VideoHandler {
             decoder: Decoder::new(DecoderCfg {
@@ -744,22 +814,37 @@ impl VideoHandler {
             }),
             latency_controller,
             rgb: Default::default(),
+            recorder: Default::default(),
+            record: false,
         }
     }
 
+    /// Handle a new video frame.
     pub fn handle_frame(&mut self, vf: VideoFrame) -> ResultType<bool> {
         if vf.timestamp != 0 {
+            // Update the lantency controller with the latest timestamp.
             self.latency_controller
                 .lock()
                 .unwrap()
                 .update_video(vf.timestamp);
         }
         match &vf.union {
-            Some(frame) => self.decoder.handle_video_frame(frame, &mut self.rgb),
+            Some(frame) => {
+                let res = self.decoder.handle_video_frame(frame, &mut self.rgb);
+                if self.record {
+                    self.recorder
+                        .lock()
+                        .unwrap()
+                        .as_mut()
+                        .map(|r| r.write_frame(frame));
+                }
+                res
+            }
             _ => Ok(false),
         }
     }
 
+    /// Reset the decoder.
     pub fn reset(&mut self) {
         self.decoder = Decoder::new(DecoderCfg {
             vpx: VpxDecoderConfig {
@@ -768,13 +853,31 @@ impl VideoHandler {
             },
         });
     }
+
+    /// Start or stop screen record.
+    pub fn record_screen(&mut self, start: bool, w: i32, h: i32, id: String) {
+        self.record = false;
+        if start {
+            self.recorder = Recorder::new(RecorderContext {
+                id,
+                filename: "".to_owned(),
+                width: w as _,
+                height: h as _,
+                codec_id: scrap::record::RecodeCodecID::VP9,
+            })
+            .map_or(Default::default(), |r| Arc::new(Mutex::new(Some(r))));
+        } else {
+            self.recorder = Default::default();
+        }
+        self.record = start;
+    }
 }
 
+/// Login config handler for [`Client`].
 #[derive(Default)]
 pub struct LoginConfigHandler {
     id: String,
-    pub is_file_transfer: bool,
-    is_port_forward: bool,
+    pub conn_type: ConnType,
     hash: Hash,
     password: Vec<u8>, // remember password for reconnect
     pub remember: bool,
@@ -786,6 +889,7 @@ pub struct LoginConfigHandler {
     session_id: u64,
     pub supported_encoding: Option<(bool, bool)>,
     pub restarting_remote_device: bool,
+    pub force_relay: bool,
 }
 
 impl Deref for LoginConfigHandler {
@@ -796,24 +900,37 @@ impl Deref for LoginConfigHandler {
     }
 }
 
+/// Load [`PeerConfig`] from id.
+///
+/// # Arguments
+///
+/// * `id` - id of peer
 #[inline]
 pub fn load_config(id: &str) -> PeerConfig {
     PeerConfig::load(id)
 }
 
 impl LoginConfigHandler {
-    pub fn initialize(&mut self, id: String, is_file_transfer: bool, is_port_forward: bool) {
+    /// Initialize the login config handler.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - id of peer
+    /// * `conn_type` - Connection type enum.
+    pub fn initialize(&mut self, id: String, conn_type: ConnType) {
         self.id = id;
-        self.is_file_transfer = is_file_transfer;
-        self.is_port_forward = is_port_forward;
+        self.conn_type = conn_type;
         let config = self.load_config();
         self.remember = !config.password.is_empty();
         self.config = config;
         self.session_id = rand::random();
         self.supported_encoding = None;
         self.restarting_remote_device = false;
+        self.force_relay = !self.get_option("force-always-relay").is_empty();
     }
 
+    /// Check if the client should auto login.
+    /// Return password if the client should auto login, otherwise return empty string.
     pub fn should_auto_login(&self) -> String {
         let l = self.lock_after_session_end;
         let a = !self.get_option("auto-login").is_empty();
@@ -825,27 +942,49 @@ impl LoginConfigHandler {
         }
     }
 
+    /// Load [`PeerConfig`].
     fn load_config(&self) -> PeerConfig {
         load_config(&self.id)
     }
 
+    /// Save a [`PeerConfig`] into the handler.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - [`PeerConfig`] to save.
     pub fn save_config(&mut self, config: PeerConfig) {
         config.store(&self.id);
         self.config = config;
     }
 
+    /// Set an option for handler's [`PeerConfig`].
+    ///
+    /// # Arguments
+    ///
+    /// * `k` - key of option
+    /// * `v` - value of option
     pub fn set_option(&mut self, k: String, v: String) {
         let mut config = self.load_config();
         config.options.insert(k, v);
         self.save_config(config);
     }
 
+    /// Save view style to the current config.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The view style to be saved.
     pub fn save_view_style(&mut self, value: String) {
         let mut config = self.load_config();
         config.view_style = value;
         self.save_config(config);
     }
 
+    /// Toggle an option in the handler.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the option to toggle.
     pub fn toggle_option(&mut self, name: String) -> Option<Message> {
         let mut option = OptionMessage::default();
         let mut config = self.load_config();
@@ -923,8 +1062,22 @@ impl LoginConfigHandler {
         Some(msg_out)
     }
 
+    /// Get [`PeerConfig`] of the current [`LoginConfigHandler`].
+    ///
+    /// # Arguments
+    pub fn get_config(&mut self) -> &mut PeerConfig {
+        &mut self.config
+    }
+
+    /// Get [`OptionMessage`] of the current [`LoginConfigHandler`].
+    /// Return `None` if there's no option, for example, when the session is only for file transfer.
+    ///
+    /// # Arguments
+    ///
+    /// * `ignore_default` - If `true`, ignore the default value of the option.
     fn get_option_message(&self, ignore_default: bool) -> Option<OptionMessage> {
-        if self.is_port_forward || self.is_file_transfer {
+        if self.conn_type.eq(&ConnType::FILE_TRANSFER) || self.conn_type.eq(&ConnType::PORT_FORWARD)
+        {
             return None;
         }
         let mut n = 0;
@@ -970,7 +1123,8 @@ impl LoginConfigHandler {
     }
 
     pub fn get_option_message_after_login(&self) -> Option<OptionMessage> {
-        if self.is_port_forward || self.is_file_transfer {
+        if self.conn_type.eq(&ConnType::FILE_TRANSFER) || self.conn_type.eq(&ConnType::PORT_FORWARD)
+        {
             return None;
         }
         let mut n = 0;
@@ -986,6 +1140,13 @@ impl LoginConfigHandler {
         }
     }
 
+    /// Parse the image quality option.
+    /// Return [`ImageQuality`] if the option is valid, otherwise return `None`.
+    ///
+    /// # Arguments
+    ///
+    /// * `q` - The image quality option.
+    /// * `ignore_default` - Ignore the default value.
     fn get_image_quality_enum(&self, q: &str, ignore_default: bool) -> Option<ImageQuality> {
         if q == "low" {
             Some(ImageQuality::Low)
@@ -1002,6 +1163,11 @@ impl LoginConfigHandler {
         }
     }
 
+    /// Get the status of a toggle option.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the toggle option.
     pub fn get_toggle_option(&self, name: &str) -> bool {
         if name == "show-remote-cursor" {
             self.config.show_remote_cursor
@@ -1030,6 +1196,7 @@ impl LoginConfigHandler {
         }
     }
 
+    /// Create a [`Message`] for refreshing video.
     pub fn refresh() -> Message {
         let mut misc = Misc::new();
         misc.set_refresh_video(true);
@@ -1038,6 +1205,12 @@ impl LoginConfigHandler {
         msg_out
     }
 
+    /// Create a [`Message`] for saving custom image quality.
+    ///
+    /// # Arguments
+    ///
+    /// * `bitrate` - The given bitrate.
+    /// * `quantizer` - The given quantizer.
     pub fn save_custom_image_quality(&mut self, image_quality: i32) -> Message {
         let mut misc = Misc::new();
         misc.set_option(OptionMessage {
@@ -1053,6 +1226,11 @@ impl LoginConfigHandler {
         msg_out
     }
 
+    /// Save the given image quality to the config.
+    /// Return a [`Message`] that contains image quality, or `None` if the image quality is not valid.
+    /// # Arguments
+    ///
+    /// * `value` - The image quality.
     pub fn save_image_quality(&mut self, value: String) -> Option<Message> {
         let mut res = None;
         if let Some(q) = self.get_image_quality_enum(&value, false) {
@@ -1079,6 +1257,8 @@ impl LoginConfigHandler {
         }
     }
 
+    /// Handle login error.
+    /// Return true if the password is wrong, return false if there's an actual error.
     pub fn handle_login_error(&mut self, err: &str, interface: &impl Interface) -> bool {
         if err == "Wrong Password" {
             self.password = Default::default();
@@ -1090,6 +1270,12 @@ impl LoginConfigHandler {
         }
     }
 
+    /// Get user name.
+    /// Return the name of the given peer. If the peer has no name, return the name in the config.
+    ///
+    /// # Arguments
+    ///
+    /// * `pi` - peer info.
     pub fn get_username(&self, pi: &PeerInfo) -> String {
         return if pi.username.is_empty() {
             self.info.username.clone()
@@ -1098,13 +1284,19 @@ impl LoginConfigHandler {
         };
     }
 
-    pub fn handle_peer_info(&mut self, username: String, pi: PeerInfo) {
+    /// Handle peer info.
+    ///
+    /// # Arguments
+    ///
+    /// * `username` - The name of the peer.
+    /// * `pi` - The peer info.
+    pub fn handle_peer_info(&mut self, pi: &PeerInfo) {
         if !pi.version.is_empty() {
             self.version = hbb_common::get_version_number(&pi.version);
         }
-        self.features = pi.features.into_option();
+        self.features = pi.features.clone().into_option();
         let serde = PeerInfoSerde {
-            username,
+            username: pi.username.clone(),
             hostname: pi.hostname.clone(),
             platform: pi.platform.clone(),
         };
@@ -1127,7 +1319,7 @@ impl LoginConfigHandler {
         self.conn_id = pi.conn_id;
         // no matter if change, for update file time
         self.save_config(config);
-        #[cfg(feature = "hwcodec")]
+        #[cfg(any(feature = "hwcodec", feature = "mediacodec"))]
         {
             self.supported_encoding = Some((pi.encoding.h264, pi.encoding.h265));
         }
@@ -1152,34 +1344,40 @@ impl LoginConfigHandler {
         serde_json::to_string::<HashMap<String, String>>(&x).unwrap_or_default()
     }
 
+    /// Create a [`Message`] for login.
     fn create_login_msg(&self, password: Vec<u8>) -> Message {
         #[cfg(any(target_os = "android", target_os = "ios"))]
-        let my_id = Config::get_id_or(crate::common::MOBILE_INFO1.lock().unwrap().clone());
+        let my_id = Config::get_id_or(crate::common::DEVICE_ID.lock().unwrap().clone());
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let my_id = Config::get_id();
         let mut lr = LoginRequest {
             username: self.id.clone(),
             password: password.into(),
             my_id,
-            my_name: crate::username(),
+            my_name: if cfg!(windows) {
+                crate::platform::get_active_username()
+            } else {
+                crate::username()
+            },
             option: self.get_option_message(true).into(),
             session_id: self.session_id,
             version: crate::VERSION.to_string(),
             ..Default::default()
         };
-        if self.is_file_transfer {
-            lr.set_file_transfer(FileTransfer {
+        match self.conn_type {
+            ConnType::FILE_TRANSFER => lr.set_file_transfer(FileTransfer {
                 dir: self.get_remote_dir(),
                 show_hidden: !self.get_option("remote_show_hidden").is_empty(),
                 ..Default::default()
-            });
-        } else if self.is_port_forward {
-            lr.set_port_forward(PortForward {
+            }),
+            ConnType::PORT_FORWARD => lr.set_port_forward(PortForward {
                 host: self.port_forward.0.clone(),
                 port: self.port_forward.1,
                 ..Default::default()
-            });
+            }),
+            _ => {}
         }
+
         let mut msg_out = Message::new();
         msg_out.set_login_request(lr);
         msg_out
@@ -1206,15 +1404,23 @@ impl LoginConfigHandler {
     }
 }
 
+/// Media data.
 pub enum MediaData {
     VideoFrame(VideoFrame),
     AudioFrame(AudioFrame),
     AudioFormat(AudioFormat),
     Reset,
+    RecordScreen(bool, i32, i32, String),
 }
 
 pub type MediaSender = mpsc::Sender<MediaData>;
 
+/// Start video and audio thread.
+/// Return two [`MediaSender`], they should be given to the media producer.
+///
+/// # Arguments
+///
+/// * `video_callback` - The callback for video frame. Being called when a video frame is ready.
 pub fn start_video_audio_threads<F>(video_callback: F) -> (MediaSender, MediaSender)
 where
     F: 'static + FnMut(&[u8]) + Send,
@@ -1225,11 +1431,9 @@ where
 
     let latency_controller = LatencyController::new();
     let latency_controller_cl = latency_controller.clone();
-    // Create video_handler out of the thread below to ensure that the handler exists before client start.
-    // It will take a few tenths of a second for the first time, and then tens of milliseconds.
-    let mut video_handler = VideoHandler::new(latency_controller);
 
     std::thread::spawn(move || {
+        let mut video_handler = VideoHandler::new(latency_controller);
         loop {
             if let Ok(data) = video_receiver.recv() {
                 match data {
@@ -1240,6 +1444,9 @@ where
                     }
                     MediaData::Reset => {
                         video_handler.reset();
+                    }
+                    MediaData::RecordScreen(start, w, h, id) => {
+                        video_handler.record_screen(start, w, h, id)
                     }
                     _ => {}
                 }
@@ -1271,6 +1478,12 @@ where
     return (video_sender, audio_sender);
 }
 
+/// Handle latency test.
+///
+/// # Arguments
+///
+/// * `t` - The latency test message.
+/// * `peer` - The peer.
 pub async fn handle_test_delay(t: TestDelay, peer: &mut Stream) {
     if !t.from_client {
         let mut msg_out = Message::new();
@@ -1279,9 +1492,21 @@ pub async fn handle_test_delay(t: TestDelay, peer: &mut Stream) {
     }
 }
 
-// mask = buttons << 3 | type
-// type, 1: down, 2: up, 3: wheel
-// buttons, 1: left, 2: right, 4: middle
+/// Send mouse data.
+///
+/// # Arguments
+///
+/// * `mask` - Mouse event.
+///     * mask = buttons << 3 | type
+///     * type, 1: down, 2: up, 3: wheel
+///     * buttons, 1: left, 2: right, 4: middle
+/// * `x` - X coordinate.
+/// * `y` - Y coordinate.
+/// * `alt` - Whether the alt key is pressed.
+/// * `ctrl` - Whether the ctrl key is pressed.
+/// * `shift` - Whether the shift key is pressed.
+/// * `command` - Whether the command key is pressed.
+/// * `interface` - The interface for sending data.
 #[inline]
 pub fn send_mouse(
     mask: i32,
@@ -1316,6 +1541,11 @@ pub fn send_mouse(
     interface.send(Data::Message(msg_out));
 }
 
+/// Avtivate OS by sending mouse movement.
+///
+/// # Arguments
+///
+/// * `interface` - The interface for sending data.
 fn activate_os(interface: &impl Interface) {
     send_mouse(0, 0, 0, false, false, false, false, interface);
     std::thread::sleep(Duration::from_millis(50));
@@ -1334,12 +1564,26 @@ fn activate_os(interface: &impl Interface) {
     */
 }
 
+/// Input the OS's password.
+///
+/// # Arguments
+///
+/// * `p` - The password.
+/// * `avtivate` - Whether to activate OS.
+/// * `interface` - The interface for sending data.
 pub fn input_os_password(p: String, activate: bool, interface: impl Interface) {
     std::thread::spawn(move || {
         _input_os_password(p, activate, interface);
     });
 }
 
+/// Input the OS's password.
+///
+/// # Arguments
+///
+/// * `p` - The password.
+/// * `avtivate` - Whether to activate OS.
+/// * `interface` - The interface for sending data.
 fn _input_os_password(p: String, activate: bool, interface: impl Interface) {
     if activate {
         activate_os(&interface);
@@ -1356,6 +1600,15 @@ fn _input_os_password(p: String, activate: bool, interface: impl Interface) {
     interface.send(Data::Message(msg_out));
 }
 
+/// Handle hash message sent by peer.
+/// Hash will be used for login.
+///
+/// # Arguments
+///
+/// * `lc` - Login config.
+/// * `hash` - Hash sent by peer.
+/// * `interface` - [`Interface`] for sending data.
+/// * `peer` - [`Stream`] for communicating with peer.
 pub async fn handle_hash(
     lc: Arc<RwLock<LoginConfigHandler>>,
     password_preset: &str,
@@ -1389,11 +1642,26 @@ pub async fn handle_hash(
     lc.write().unwrap().hash = hash;
 }
 
+/// Send login message to peer.
+///
+/// # Arguments
+///
+/// * `lc` - Login config.
+/// * `password` - Password.
+/// * `peer` - [`Stream`] for communicating with peer.
 async fn send_login(lc: Arc<RwLock<LoginConfigHandler>>, password: Vec<u8>, peer: &mut Stream) {
     let msg_out = lc.read().unwrap().create_login_msg(password);
     allow_err!(peer.send(&msg_out).await);
 }
 
+/// Handle login request made from ui.
+///
+/// # Arguments
+///
+/// * `lc` - Login config.
+/// * `password` - Password.
+/// * `remember` - Whether to remember password.
+/// * `peer` - [`Stream`] for communicating with peer.
 pub async fn handle_login_from_ui(
     lc: Arc<RwLock<LoginConfigHandler>>,
     password: String,
@@ -1412,24 +1680,35 @@ pub async fn handle_login_from_ui(
     send_login(lc.clone(), hasher2.finalize()[..].into(), peer).await;
 }
 
+/// Interface for client to send data and commands.
 #[async_trait]
 pub trait Interface: Send + Clone + 'static + Sized {
+    /// Send message data to remote peer.
     fn send(&self, data: Data);
     fn msgbox(&self, msgtype: &str, title: &str, text: &str);
     fn handle_login_error(&mut self, err: &str) -> bool;
     fn handle_peer_info(&mut self, pi: PeerInfo);
+    fn set_force_relay(&mut self, direct: bool, received: bool);
+    fn is_file_transfer(&self) -> bool;
+    fn is_port_forward(&self) -> bool;
+    fn is_rdp(&self) -> bool;
+    fn on_error(&self, err: &str) {
+        self.msgbox("error", "Error", err);
+    }
+    fn is_force_relay(&self) -> bool;
     async fn handle_hash(&mut self, pass: &str, hash: Hash, peer: &mut Stream);
     async fn handle_login_from_ui(&mut self, password: String, remember: bool, peer: &mut Stream);
     async fn handle_test_delay(&mut self, t: TestDelay, peer: &mut Stream);
 }
 
+/// Data used by the client interface.
 #[derive(Clone)]
 pub enum Data {
     Close,
     Login((String, bool)),
     Message(Message),
     SendFiles((i32, String, String, i32, bool, bool)),
-    RemoveDirAll((i32, String, bool)),
+    RemoveDirAll((i32, String, bool, bool)),
     ConfirmDeleteFiles((i32, i32)),
     SetNoConfirm(i32),
     RemoveDir((i32, String)),
@@ -1443,9 +1722,11 @@ pub enum Data {
     SetConfirmOverrideFile((i32, i32, bool, bool, bool)),
     AddJob((i32, String, String, i32, bool, bool)),
     ResumeJob((i32, bool)),
+    RecordScreen(bool, i32, i32, String),
 }
 
-#[derive(Clone)]
+/// Keycode for key events.
+#[derive(Clone, Debug)]
 pub enum Key {
     ControlKey(ControlKey),
     Chr(u32),
@@ -1575,18 +1856,27 @@ lazy_static::lazy_static! {
     ].iter().cloned().collect();
 }
 
+/// Check if the given message is an error and can be retried.
+///
+/// # Arguments
+///
+/// * `msgtype` - The message type.
+/// * `title` - The title of the message.
+/// * `text` - The text of the message.
 #[inline]
 pub fn check_if_retry(msgtype: &str, title: &str, text: &str) -> bool {
     msgtype == "error"
         && title == "Connection Error"
-        && !text.to_lowercase().contains("offline")
-        && !text.to_lowercase().contains("exist")
-        && !text.to_lowercase().contains("handshake")
-        && !text.to_lowercase().contains("failed")
-        && !text.to_lowercase().contains("resolve")
-        && !text.to_lowercase().contains("mismatch")
-        && !text.to_lowercase().contains("manually")
-        && !text.to_lowercase().contains("not allowed")
+        && (text.contains("10054")
+            || text.contains("104")
+            || (!text.to_lowercase().contains("offline")
+                && !text.to_lowercase().contains("exist")
+                && !text.to_lowercase().contains("handshake")
+                && !text.to_lowercase().contains("failed")
+                && !text.to_lowercase().contains("resolve")
+                && !text.to_lowercase().contains("mismatch")
+                && !text.to_lowercase().contains("manually")
+                && !text.to_lowercase().contains("not allowed")))
 }
 
 #[inline]
@@ -1618,4 +1908,8 @@ fn decode_id_pk(signed: &[u8], key: &sign::PublicKey) -> ResultType<(String, [u8
     } else {
         bail!("Wrong public length");
     }
+}
+
+pub fn disable_keyboard_listening() {
+    crate::ui_session_interface::KEYBOARD_HOOKED.store(false, Ordering::SeqCst);
 }

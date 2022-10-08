@@ -11,12 +11,12 @@ fn build_manifest() {
     use std::io::Write;
     if std::env::var("PROFILE").unwrap() == "release" {
         let mut res = winres::WindowsResource::new();
-        res.set_icon("icon.ico")
+        res.set_icon("res/icon.ico")
             .set_language(winapi::um::winnt::MAKELANGID(
                 winapi::um::winnt::LANG_ENGLISH,
                 winapi::um::winnt::SUBLANG_ENGLISH_US,
             ))
-            .set_manifest_file("manifest.xml");
+            .set_manifest_file("res/manifest.xml");
         match res.compile() {
             Err(e) => {
                 write!(std::io::stderr(), "{}", e).unwrap();
@@ -76,16 +76,24 @@ fn install_oboe() {
     //cc::Build::new().file("oboe.cc").include(include).compile("oboe_wrapper");
 }
 
+#[cfg(feature = "flutter")]
 fn gen_flutter_rust_bridge() {
+    let llvm_path = match std::env::var("LLVM_HOME") {
+        Ok(path) => Some(vec![path]),
+        Err(_) => None,
+    };
     // Tell Cargo that if the given file changes, to rerun this build script.
-    println!("cargo:rerun-if-changed=src/mobile_ffi.rs");
+    println!("cargo:rerun-if-changed=src/flutter_ffi.rs");
     // settings for fbr_codegen
     let opts = lib_flutter_rust_bridge_codegen::Opts {
         // Path of input Rust code
-        rust_input: "src/mobile_ffi.rs".to_string(),
+        rust_input: "src/flutter_ffi.rs".to_string(),
         // Path of output generated Dart code
         dart_output: "flutter/lib/generated_bridge.dart".to_string(),
+        // Path of output generated C header
+        c_output: Some(vec!["flutter/macos/Runner/bridge_generated.h".to_string()]),
         // for other options lets use default
+        llvm_path,
         ..Default::default()
     };
     // run fbr_codegen
@@ -96,11 +104,12 @@ fn main() {
     hbb_common::gen_version();
     install_oboe();
     // there is problem with cfg(target_os) in build.rs, so use our workaround
-    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
-    if target_os == "android" || target_os == "ios" {
-        gen_flutter_rust_bridge();
-        return;
-    }
+    // let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
+    // if target_os == "android" || target_os == "ios" {
+    #[cfg(feature = "flutter")]
+    gen_flutter_rust_bridge();
+    //     return;
+    // }
     #[cfg(all(windows, feature = "with_rc"))]
     build_rc_source();
     #[cfg(all(windows, feature = "inline"))]

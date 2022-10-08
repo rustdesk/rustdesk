@@ -1,15 +1,3 @@
-use crate::{
-    log,
-    password_security::{
-        decrypt_str_or_original, decrypt_vec_or_original, encrypt_str_or_original,
-        encrypt_vec_or_original,
-    },
-};
-use anyhow::Result;
-use directories_next::ProjectDirs;
-use rand::Rng;
-use serde_derive::{Deserialize, Serialize};
-use sodiumoxide::crypto::sign;
 use std::{
     collections::HashMap,
     fs,
@@ -19,8 +7,23 @@ use std::{
     time::SystemTime,
 };
 
+use anyhow::Result;
+use directories_next::ProjectDirs;
+use rand::Rng;
+use serde_derive::{Deserialize, Serialize};
+use sodiumoxide::crypto::sign;
+
+use crate::{
+    log,
+    password_security::{
+        decrypt_str_or_original, decrypt_vec_or_original, encrypt_str_or_original,
+        encrypt_vec_or_original,
+    },
+};
+
 pub const RENDEZVOUS_TIMEOUT: u64 = 12_000;
 pub const CONNECT_TIMEOUT: u64 = 18_000;
+pub const READ_TIMEOUT: u64 = 30_000;
 pub const REG_INTERVAL: i64 = 12_000;
 pub const COMPRESS_LEVEL: i32 = 3;
 const SERIAL: i32 = 3;
@@ -47,17 +50,12 @@ lazy_static::lazy_static! {
     pub static ref PROD_RENDEZVOUS_SERVER: Arc<RwLock<String>> = Default::default();
     pub static ref APP_NAME: Arc<RwLock<String>> = Arc::new(RwLock::new("RustDesk".to_owned()));
     static ref KEY_PAIR: Arc<Mutex<Option<(Vec<u8>, Vec<u8>)>>> = Default::default();
+    static ref HW_CODEC_CONFIG: Arc<RwLock<HwCodecConfig>> = Arc::new(RwLock::new(HwCodecConfig::load()));
 }
-#[cfg(target_os = "android")]
-lazy_static::lazy_static! {
-    pub static ref APP_DIR: Arc<RwLock<String>> = Arc::new(RwLock::new("/data/user/0/com.carriez.flutter_hbb/app_flutter".to_owned()));
-}
-#[cfg(target_os = "ios")]
+
+// #[cfg(any(target_os = "android", target_os = "ios"))]
 lazy_static::lazy_static! {
     pub static ref APP_DIR: Arc<RwLock<String>> = Default::default();
-}
-#[cfg(any(target_os = "android", target_os = "ios"))]
-lazy_static::lazy_static! {
     pub static ref APP_HOME_DIR: Arc<RwLock<String>> = Default::default();
 }
 const CHARS: &'static [char] = &[
@@ -83,7 +81,9 @@ pub enum NetworkType {
 #[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
 pub struct Config {
     #[serde(default)]
-    pub id: String,
+    pub id: String, // use
+    #[serde(default)]
+    enc_id: String, // store
     #[serde(default)]
     password: String,
     #[serde(default)]
@@ -303,7 +303,7 @@ impl Config {
         config.password = password;
         store |= store1;
         let mut id_valid = false;
-        let (id, encrypted, store2) = decrypt_str_or_original(&config.id, PASSWORD_ENC_VERSION);
+        let (id, encrypted, store2) = decrypt_str_or_original(&config.enc_id, PASSWORD_ENC_VERSION);
         if encrypted {
             config.id = id;
             id_valid = true;
@@ -314,8 +314,13 @@ impl Config {
                 .unwrap_or(crate::get_exe_time())
                 < crate::get_exe_time()
             {
-                id_valid = true;
-                store = true;
+                if !config.id.is_empty()
+                    && config.enc_id.is_empty()
+                    && !decrypt_str_or_original(&config.id, PASSWORD_ENC_VERSION).1
+                {
+                    id_valid = true;
+                    store = true;
+                }
             }
         }
         if !id_valid {
@@ -338,7 +343,8 @@ impl Config {
     fn store(&self) {
         let mut config = self.clone();
         config.password = encrypt_str_or_original(&config.password, PASSWORD_ENC_VERSION);
-        config.id = encrypt_str_or_original(&config.id, PASSWORD_ENC_VERSION);
+        config.enc_id = encrypt_str_or_original(&config.id, PASSWORD_ENC_VERSION);
+        config.id = "".to_owned();
         Config::store_(&config, "");
     }
 
@@ -352,7 +358,7 @@ impl Config {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.id.is_empty() || self.key_pair.0.is_empty()
+        (self.id.is_empty() && self.enc_id.is_empty()) || self.key_pair.0.is_empty()
     }
 
     pub fn get_home() -> PathBuf {
@@ -958,13 +964,18 @@ impl LocalConfig {
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct DiscoveryPeer {
+    #[serde(default)]
     pub id: String,
-    #[serde(with = "serde_with::rust::map_as_tuple_list")]
-    pub ip_mac: HashMap<String, String>,
+    #[serde(default)]
     pub username: String,
+    #[serde(default)]
     pub hostname: String,
+    #[serde(default)]
     pub platform: String,
+    #[serde(default)]
     pub online: bool,
+    #[serde(default)]
+    pub ip_mac: HashMap<String, String>,
 }
 
 impl DiscoveryPeer {
@@ -1025,6 +1036,16 @@ impl HwCodecConfig {
 
     pub fn remove() {
         std::fs::remove_file(Config::file_("_hwcodec")).ok();
+    }
+
+    /// refresh current global HW_CODEC_CONFIG, usually uesd after HwCodecConfig::remove()
+    pub fn refresh() {
+        *HW_CODEC_CONFIG.write().unwrap() = HwCodecConfig::load();
+        log::debug!("HW_CODEC_CONFIG refreshed successfully");
+    }
+
+    pub fn get() -> HwCodecConfig {
+        return HW_CODEC_CONFIG.read().unwrap().clone();
     }
 }
 

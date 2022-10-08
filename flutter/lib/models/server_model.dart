@@ -1,13 +1,19 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:wakelock/wakelock.dart';
+
 import '../common.dart';
-import '../pages/server_page.dart';
+import '../common/formatter/id_formatter.dart';
+import '../desktop/pages/server_page.dart' as Desktop;
+import '../desktop/widgets/tabbar_widget.dart';
+import '../mobile/pages/server_page.dart';
 import 'model.dart';
 
-const loginDialogTag = "LOGIN";
-final _emptyIdShow = translate("Generating ...");
+const kLoginDialogTag = "LOGIN";
 
 const kUseTemporaryPassword = "use-temporary-password";
 const kUsePermanentPassword = "use-permanent-password";
@@ -21,11 +27,15 @@ class ServerModel with ChangeNotifier {
   bool _fileOk = false;
   int _connectStatus = 0; // Rendezvous Server status
   String _verificationMethod = "";
+  String _temporaryPasswordLength = "";
 
-  final _serverId = TextEditingController(text: _emptyIdShow);
+  late String _emptyIdShow;
+  late final IDTextEditingController _serverId;
   final _serverPasswd = TextEditingController(text: "");
 
-  Map<int, Client> _clients = {};
+  final tabController = DesktopTabController(tabType: DesktopTabType.cm);
+
+  final List<Client> _clients = [];
 
   bool get isStart => _isStart;
 
@@ -39,57 +49,50 @@ class ServerModel with ChangeNotifier {
 
   int get connectStatus => _connectStatus;
 
-  String get verificationMethod => _verificationMethod;
+  String get verificationMethod {
+    final index = [
+      kUseTemporaryPassword,
+      kUsePermanentPassword,
+      kUseBothPasswords
+    ].indexOf(_verificationMethod);
+    if (index < 0) {
+      return kUseBothPasswords;
+    }
+    return _verificationMethod;
+  }
+
+  setVerificationMethod(String method) async {
+    await bind.mainSetOption(key: "verification-method", value: method);
+  }
+
+  String get temporaryPasswordLength {
+    final lengthIndex = ["6", "8", "10"].indexOf(_temporaryPasswordLength);
+    if (lengthIndex < 0) {
+      return "6";
+    }
+    return _temporaryPasswordLength;
+  }
+
+  setTemporaryPasswordLength(String length) async {
+    await bind.mainSetOption(key: "temporary-password-length", value: length);
+  }
 
   TextEditingController get serverId => _serverId;
 
   TextEditingController get serverPasswd => _serverPasswd;
 
-  Map<int, Client> get clients => _clients;
+  List<Client> get clients => _clients;
 
   final controller = ScrollController();
 
-  ServerModel() {
-    () async {
-      /**
-       * 1. check android permission
-       * 2. check config
-       * audio true by default (if permission on) (false default < Android 10)
-       * file true by default (if permission on)
-       */
-      await Future.delayed(Duration(seconds: 1));
+  WeakReference<FFI> parent;
 
-      // audio
-      if (androidVersion < 30 || !await PermissionManager.check("audio")) {
-        _audioOk = false;
-        FFI.setByName(
-            'option',
-            jsonEncode(Map()
-              ..["name"] = "enable-audio"
-              ..["value"] = "N"));
-      } else {
-        final audioOption = FFI.getByName('option', 'enable-audio');
-        _audioOk = audioOption.isEmpty;
-      }
+  ServerModel(this.parent) {
+    _emptyIdShow = translate("Generating ...");
+    _serverId = IDTextEditingController(text: _emptyIdShow);
 
-      // file
-      if (!await PermissionManager.check("file")) {
-        _fileOk = false;
-        FFI.setByName(
-            'option',
-            jsonEncode(Map()
-              ..["name"] = "enable-file-transfer"
-              ..["value"] = "N"));
-      } else {
-        final fileOption = FFI.getByName('option', 'enable-file-transfer');
-        _fileOk = fileOption.isEmpty;
-      }
-
-      notifyListeners();
-    }();
-
-    Timer.periodic(Duration(seconds: 1), (timer) {
-      var status = int.tryParse(FFI.getByName('connect_statue')) ?? 0;
+    Timer.periodic(Duration(seconds: 1), (timer) async {
+      var status = await bind.mainGetOnlineStatue();
       if (status > 0) {
         status = 1;
       }
@@ -97,9 +100,8 @@ class ServerModel with ChangeNotifier {
         _connectStatus = status;
         notifyListeners();
       }
-      final res =
-          FFI.getByName('check_clients_length', _clients.length.toString());
-      if (res.isNotEmpty) {
+      final res = await bind.cmCheckClientsLength(length: _clients.length);
+      if (res != null) {
         debugPrint("clients not match!");
         updateClientState(res);
       }
@@ -108,17 +110,55 @@ class ServerModel with ChangeNotifier {
     });
   }
 
-  updatePasswordModel() {
-    var update = false;
-    final temporaryPassword = FFI.getByName("temporary_password");
-    final verificationMethod = FFI.getByName("option", "verification-method");
-    if (_serverPasswd.text != temporaryPassword) {
-      _serverPasswd.text = temporaryPassword;
-      update = true;
+  /// 1. check android permission
+  /// 2. check config
+  /// audio true by default (if permission on) (false default < Android 10)
+  /// file true by default (if permission on)
+  checkAndroidPermission() async {
+    // audio
+    if (androidVersion < 30 || !await PermissionManager.check("audio")) {
+      _audioOk = false;
+      bind.mainSetOption(key: "enable-audio", value: "N");
+    } else {
+      final audioOption = await bind.mainGetOption(key: 'enable-audio');
+      _audioOk = audioOption.isEmpty;
     }
 
+    // file
+    if (!await PermissionManager.check("file")) {
+      _fileOk = false;
+      bind.mainSetOption(key: "enable-file-transfer", value: "N");
+    } else {
+      final fileOption = await bind.mainGetOption(key: 'enable-file-transfer');
+      _fileOk = fileOption.isEmpty;
+    }
+
+    notifyListeners();
+  }
+
+  updatePasswordModel() async {
+    var update = false;
+    final temporaryPassword = await bind.mainGetTemporaryPassword();
+    final verificationMethod =
+        await bind.mainGetOption(key: "verification-method");
+    final temporaryPasswordLength =
+        await bind.mainGetOption(key: "temporary-password-length");
+    final oldPwdText = _serverPasswd.text;
+    if (_serverPasswd.text != temporaryPassword) {
+      _serverPasswd.text = temporaryPassword;
+    }
+    if (verificationMethod == kUsePermanentPassword) {
+      _serverPasswd.text = '-';
+    }
+    if (oldPwdText != _serverPasswd.text) {
+      update = true;
+    }
     if (_verificationMethod != verificationMethod) {
       _verificationMethod = verificationMethod;
+      update = true;
+    }
+    if (_temporaryPasswordLength != temporaryPasswordLength) {
+      _temporaryPasswordLength = temporaryPasswordLength;
       update = true;
     }
     if (update) {
@@ -136,10 +176,7 @@ class ServerModel with ChangeNotifier {
     }
 
     _audioOk = !_audioOk;
-    Map<String, String> res = Map()
-      ..["name"] = "enable-audio"
-      ..["value"] = _audioOk ? '' : 'N';
-    FFI.setByName('option', jsonEncode(res));
+    bind.mainSetOption(key: "enable-audio", value: _audioOk ? '' : 'N');
     notifyListeners();
   }
 
@@ -153,97 +190,107 @@ class ServerModel with ChangeNotifier {
     }
 
     _fileOk = !_fileOk;
-    Map<String, String> res = Map()
-      ..["name"] = "enable-file-transfer"
-      ..["value"] = _fileOk ? '' : 'N';
-    FFI.setByName('option', jsonEncode(res));
+    bind.mainSetOption(key: "enable-file-transfer", value: _fileOk ? '' : 'N');
     notifyListeners();
   }
 
   toggleInput() {
     if (_inputOk) {
-      FFI.invokeMethod("stop_input");
+      parent.target?.invokeMethod("stop_input");
     } else {
-      showInputWarnAlert();
+      if (parent.target != null) {
+        showInputWarnAlert(parent.target!);
+      }
     }
   }
 
+  /// Toggle the screen sharing service.
   toggleService() async {
     if (_isStart) {
       final res =
-          await DialogManager.show<bool>((setState, close) => CustomAlertDialog(
-                title: Row(children: [
-                  Icon(Icons.warning_amber_sharp,
-                      color: Colors.redAccent, size: 28),
-                  SizedBox(width: 10),
-                  Text(translate("Warning")),
-                ]),
-                content: Text(translate("android_stop_service_tip")),
-                actions: [
-                  TextButton(
-                      onPressed: () => close(),
-                      child: Text(translate("Cancel"))),
-                  ElevatedButton(
-                      onPressed: () => close(true),
-                      child: Text(translate("OK"))),
-                ],
-              ));
+          await parent.target?.dialogManager.show<bool>((setState, close) {
+        submit() => close(true);
+        return CustomAlertDialog(
+          title: Row(children: [
+            const Icon(Icons.warning_amber_sharp,
+                color: Colors.redAccent, size: 28),
+            const SizedBox(width: 10),
+            Text(translate("Warning")),
+          ]),
+          content: Text(translate("android_stop_service_tip")),
+          actions: [
+            TextButton(onPressed: close, child: Text(translate("Cancel"))),
+            ElevatedButton(onPressed: submit, child: Text(translate("OK"))),
+          ],
+          onSubmit: submit,
+          onCancel: close,
+        );
+      });
       if (res == true) {
         stopService();
       }
     } else {
       final res =
-          await DialogManager.show<bool>((setState, close) => CustomAlertDialog(
-                title: Row(children: [
-                  Icon(Icons.warning_amber_sharp,
-                      color: Colors.redAccent, size: 28),
-                  SizedBox(width: 10),
-                  Text(translate("Warning")),
-                ]),
-                content: Text(translate("android_service_will_start_tip")),
-                actions: [
-                  TextButton(
-                      onPressed: () => close(),
-                      child: Text(translate("Cancel"))),
-                  ElevatedButton(
-                      onPressed: () => close(true),
-                      child: Text(translate("OK"))),
-                ],
-              ));
+          await parent.target?.dialogManager.show<bool>((setState, close) {
+        submit() => close(true);
+        return CustomAlertDialog(
+          title: Row(children: [
+            const Icon(Icons.warning_amber_sharp,
+                color: Colors.redAccent, size: 28),
+            const SizedBox(width: 10),
+            Text(translate("Warning")),
+          ]),
+          content: Text(translate("android_service_will_start_tip")),
+          actions: [
+            TextButton(onPressed: close, child: Text(translate("Cancel"))),
+            ElevatedButton(onPressed: submit, child: Text(translate("OK"))),
+          ],
+          onSubmit: submit,
+          onCancel: close,
+        );
+      });
       if (res == true) {
         startService();
       }
     }
   }
 
+  /// Start the screen sharing service.
   Future<Null> startService() async {
     _isStart = true;
     notifyListeners();
-    FFI.ffiModel.updateEventListener("");
-    await FFI.invokeMethod("init_service");
-    FFI.setByName("start_service");
+    parent.target?.ffiModel.updateEventListener("");
+    await parent.target?.invokeMethod("init_service");
+    await bind.mainStartService();
     _fetchID();
     updateClientState();
-    Wakelock.enable();
+    if (!Platform.isLinux) {
+      // current linux is not supported
+      Wakelock.enable();
+    }
   }
 
+  /// Stop the screen sharing service.
   Future<Null> stopService() async {
     _isStart = false;
-    FFI.serverModel.closeAll();
-    await FFI.invokeMethod("stop_service");
-    FFI.setByName("stop_service");
+    closeAll();
+    await parent.target?.invokeMethod("stop_service");
+    await bind.mainStopService();
     notifyListeners();
-    Wakelock.disable();
+    if (!Platform.isLinux) {
+      // current linux is not supported
+      Wakelock.disable();
+    }
   }
 
   Future<Null> initInput() async {
-    await FFI.invokeMethod("init_input");
+    await parent.target?.invokeMethod("init_input");
   }
 
   Future<bool> setPermanentPassword(String newPW) async {
-    FFI.setByName("permanent_password", newPW);
+    await bind.mainSetPermanentPassword(password: newPW);
     await Future.delayed(Duration(milliseconds: 500));
-    final pw = FFI.getByName("permanent_password", newPW);
+    final pw = await bind.mainGetPermanentPassword();
     if (newPW == pw) {
       return true;
     } else {
@@ -252,21 +299,21 @@ class ServerModel with ChangeNotifier {
   }
 
   _fetchID() async {
-    final old = _serverId.text;
+    final old = _serverId.id;
     var count = 0;
     const maxCount = 10;
     while (count < maxCount) {
       await Future.delayed(Duration(seconds: 1));
-      final id = FFI.getByName("server_id");
+      final id = await bind.mainGetMyId();
       if (id.isEmpty) {
         continue;
       } else {
-        _serverId.text = id;
+        _serverId.id = id;
       }
 
-      debugPrint("fetch id again at $count:id:${_serverId.text}");
+      debugPrint("fetch id again at $count:id:${_serverId.id}");
       count++;
-      if (_serverId.text != old) {
+      if (_serverId.id != old) {
         break;
       }
     }
@@ -284,10 +331,7 @@ class ServerModel with ChangeNotifier {
         break;
       case "input":
         if (_inputOk != value) {
-          Map<String, String> res = Map()
-            ..["name"] = "enable-keyboard"
-            ..["value"] = value ? '' : 'N';
-          FFI.setByName('option', jsonEncode(res));
+          bind.mainSetOption(key: "enable-keyboard", value: value ? '' : 'N');
         }
         _inputOk = value;
         break;
@@ -297,13 +341,23 @@ class ServerModel with ChangeNotifier {
     notifyListeners();
   }
 
-  updateClientState([String? json]) {
-    var res = json ?? FFI.getByName("clients_state");
+  // force
+  updateClientState([String? json]) async {
+    var res = await bind.cmGetClientsState();
     try {
       final List clientsJson = jsonDecode(res);
+      _clients.clear();
+      tabController.state.value.tabs.clear();
       for (var clientJson in clientsJson) {
         final client = Client.fromJson(clientJson);
-        _clients[client.id] = client;
+        _clients.add(client);
+        tabController.add(
+            TabInfo(
+                key: client.id.toString(),
+                label: client.name,
+                closable: false,
+                page: Desktop.buildConnectionCard(client)),
+            authorized: client.authorized);
       }
       notifyListeners();
     } catch (e) {
@@ -311,68 +365,93 @@ class ServerModel with ChangeNotifier {
     }
   }
 
-  void loginRequest(Map<String, dynamic> evt) {
+  void addConnection(Map<String, dynamic> evt) {
     try {
       final client = Client.fromJson(jsonDecode(evt["client"]));
-      if (_clients.containsKey(client.id)) {
-        return;
+      if (client.authorized) {
+        parent.target?.dialogManager.dismissByTag(getLoginDialogTag(client.id));
+        final index = _clients.indexWhere((c) => c.id == client.id);
+        if (index < 0) {
+          _clients.add(client);
+        } else {
+          _clients[index].authorized = true;
+        }
+        tabController.add(
+            TabInfo(
+                key: client.id.toString(),
+                label: client.name,
+                closable: false,
+                page: Desktop.buildConnectionCard(client)),
+            authorized: true);
+        scrollToBottom();
+        notifyListeners();
+      } else {
+        if (_clients.any((c) => c.id == client.id)) {
+          return;
+        }
+        _clients.add(client);
+        tabController.add(TabInfo(
+            key: client.id.toString(),
+            label: client.name,
+            closable: false,
+            page: Desktop.buildConnectionCard(client)));
+        scrollToBottom();
+        notifyListeners();
+        if (isAndroid) showLoginDialog(client);
       }
-      _clients[client.id] = client;
-      scrollToBottom();
-      notifyListeners();
-      showLoginDialog(client);
     } catch (e) {
       debugPrint("Failed to call loginRequest,error:$e");
     }
   }
 
   void showLoginDialog(Client client) {
-    DialogManager.show(
-        (setState, close) => CustomAlertDialog(
-              title: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(translate(client.isFileTransfer
-                        ? "File Connection"
-                        : "Screen Connection")),
-                    IconButton(
-                        onPressed: () {
-                          close();
-                        },
-                        icon: Icon(Icons.close))
-                  ]),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(translate("Do you accept?")),
-                  clientInfo(client),
-                  Text(
-                    translate("android_new_connection_tip"),
-                    style: TextStyle(color: Colors.black54),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                    child: Text(translate("Dismiss")),
-                    onPressed: () {
-                      sendLoginResponse(client, false);
-                      close();
-                    }),
-                ElevatedButton(
-                    child: Text(translate("Accept")),
-                    onPressed: () {
-                      sendLoginResponse(client, true);
-                      close();
-                    }),
-              ],
+    parent.target?.dialogManager.show((setState, close) {
+      cancel() {
+        sendLoginResponse(client, false);
+        close();
+      }
+
+      submit() {
+        sendLoginResponse(client, true);
+        close();
+      }
+
+      return CustomAlertDialog(
+        title:
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Text(translate(
+              client.isFileTransfer ? "File Connection" : "Screen Connection")),
+          IconButton(
+              onPressed: () {
+                close();
+              },
+              icon: const Icon(Icons.close))
+        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(translate("Do you accept?")),
+            ClientInfo(client),
+            Text(
+              translate("android_new_connection_tip"),
+              style: Theme.of(globalKey.currentContext!).textTheme.bodyMedium,
             ),
-        tag: getLoginDialogTag(client.id));
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: cancel, child: Text(translate("Dismiss"))),
+          ElevatedButton(onPressed: submit, child: Text(translate("Accept"))),
+        ],
+        onSubmit: submit,
+        onCancel: cancel,
+      );
+    }, tag: getLoginDialogTag(client.id));
   }
 
   scrollToBottom() {
+    if (isDesktop) return;
     Future.delayed(Duration(milliseconds: 200), () {
       controller.animateTo(controller.position.maxScrollExtent,
           duration: Duration(milliseconds: 200),
@@ -380,42 +459,59 @@ class ServerModel with ChangeNotifier {
     });
   }
 
-  void sendLoginResponse(Client client, bool res) {
-    final Map<String, dynamic> response = Map();
-    response["id"] = client.id;
-    response["res"] = res;
+  void sendLoginResponse(Client client, bool res) async {
     if (res) {
-      FFI.setByName("login_res", jsonEncode(response));
+      bind.cmLoginRes(connId: client.id, res: res);
       if (!client.isFileTransfer) {
-        FFI.invokeMethod("start_capture");
+        parent.target?.invokeMethod("start_capture");
       }
-      FFI.invokeMethod("cancel_notification", client.id);
-      _clients[client.id]?.authorized = true;
+      parent.target?.invokeMethod("cancel_notification", client.id);
+      client.authorized = true;
       notifyListeners();
     } else {
-      FFI.setByName("login_res", jsonEncode(response));
-      FFI.invokeMethod("cancel_notification", client.id);
-      _clients.remove(client.id);
+      bind.cmLoginRes(connId: client.id, res: res);
+      parent.target?.invokeMethod("cancel_notification", client.id);
+      final index = _clients.indexOf(client);
+      tabController.remove(index);
+      _clients.remove(client);
     }
   }
 
   void onClientAuthorized(Map<String, dynamic> evt) {
     try {
       final client = Client.fromJson(jsonDecode(evt['client']));
-      DialogManager.dismissByTag(getLoginDialogTag(client.id));
-      _clients[client.id] = client;
+      parent.target?.dialogManager.dismissByTag(getLoginDialogTag(client.id));
+      final index = _clients.indexWhere((c) => c.id == client.id);
+      if (index < 0) {
+        _clients.add(client);
+      } else {
+        _clients[index].authorized = true;
+      }
+      tabController.add(
+          TabInfo(
+              key: client.id.toString(),
+              label: client.name,
+              closable: false,
+              page: Desktop.buildConnectionCard(client)),
+          authorized: true);
       scrollToBottom();
       notifyListeners();
-    } catch (e) {}
+    } catch (e) {
+      debugPrint("onClientAuthorized:$e");
+    }
   }
 
   void onClientRemove(Map<String, dynamic> evt) {
     try {
       final id = int.parse(evt['id'] as String);
-      if (_clients.containsKey(id)) {
-        _clients.remove(id);
-        DialogManager.dismissByTag(getLoginDialogTag(id));
-        FFI.invokeMethod("cancel_notification", id);
+      if (_clients.any((c) => c.id == id)) {
+        final index = _clients.indexWhere((client) => client.id == id);
+        if (index >= 0) {
+          _clients.removeAt(index);
+          tabController.remove(index);
+        }
+        parent.target?.dialogManager.dismissByTag(getLoginDialogTag(id));
+        parent.target?.invokeMethod("cancel_notification", id);
       }
       notifyListeners();
     } catch (e) {
@@ -424,10 +520,16 @@ class ServerModel with ChangeNotifier {
   }
 
   closeAll() {
-    _clients.forEach((id, client) {
-      FFI.setByName("close_conn", id.toString());
+    _clients.forEach((client) {
+      bind.cmCloseConnection(connId: client.id);
     });
     _clients.clear();
+    tabController.state.value.tabs.clear();
+  }
+
+  void jumpTo(int id) {
+    final index = _clients.indexWhere((client) => client.id == id);
+    tabController.jumpTo(index);
   }
 }
 
@@ -440,8 +542,11 @@ class Client {
   bool keyboard = false;
   bool clipboard = false;
   bool audio = false;
+  bool file = false;
+  bool restart = false;
+  bool recording = false;
 
-  Client(this.authorized, this.isFileTransfer, this.name, this.peerId,
+  Client(this.id, this.authorized, this.isFileTransfer, this.name, this.peerId,
       this.keyboard, this.clipboard, this.audio);
 
   Client.fromJson(Map<String, dynamic> json) {
@@ -453,6 +558,9 @@ class Client {
     keyboard = json['keyboard'];
     clipboard = json['clipboard'];
     audio = json['audio'];
+    file = json['file'];
+    restart = json['restart'];
+    recording = json['recording'];
   }
 
   Map<String, dynamic> toJson() {
@@ -470,28 +578,33 @@ class Client {
 }
 
 String getLoginDialogTag(int id) {
-  return loginDialogTag + id.toString();
+  return kLoginDialogTag + id.toString();
 }
 
-showInputWarnAlert() {
-  DialogManager.show((setState, close) => CustomAlertDialog(
-        title: Text(translate("How to get Android input permission?")),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(translate("android_input_permission_tip1")),
-            SizedBox(height: 10),
-            Text(translate("android_input_permission_tip2")),
-          ],
-        ),
-        actions: [
-          TextButton(child: Text(translate("Cancel")), onPressed: close),
-          ElevatedButton(
-              child: Text(translate("Open System Setting")),
-              onPressed: () {
-                FFI.serverModel.initInput();
-                close();
-              }),
+showInputWarnAlert(FFI ffi) {
+  ffi.dialogManager.show((setState, close) {
+    submit() {
+      ffi.serverModel.initInput();
+      close();
+    }
+
+    return CustomAlertDialog(
+      title: Text(translate("How to get Android input permission?")),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(translate("android_input_permission_tip1")),
+          const SizedBox(height: 10),
+          Text(translate("android_input_permission_tip2")),
         ],
-      ));
+      ),
+      actions: [
+        TextButton(onPressed: close, child: Text(translate("Cancel"))),
+        ElevatedButton(
+            onPressed: submit, child: Text(translate("Open System Setting"))),
+      ],
+      onSubmit: submit,
+      onCancel: close,
+    );
+  });
 }

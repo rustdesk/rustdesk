@@ -1,3 +1,4 @@
+/build
 /target
 .vscode
 .idea
@@ -20,7 +21,20 @@ sciter.dll
 src/bridge_generated.rs
 *deb
 rustdesk
+*.cache
 # appimage
 appimage/AppDir
 appimage/*.AppImage
 appimage/appimage-build
+# flutter
+flutter/linux/build/**
+flutter/linux/cmake-build-debug/**
+# flatpak
+flatpak/.flatpak-builder/**
+flatpak/ccache/**
+flatpak/.flatpak-builder/build/**
+flatpak/.flatpak-builder/shared-modules/**
+flatpak/.flatpak-builder/shared-modules/*.tar.xz
+flatpak/.flatpak-builder/debian-binary
+# bridge file
+lib/generated_bridge.dart

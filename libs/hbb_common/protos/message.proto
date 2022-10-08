@@ -105,6 +105,13 @@ message MouseEvent {
   repeated ControlKey modifiers = 4;
 }
 
+enum KeyboardMode{
+  Legacy = 0;
+  Map = 1;
+  Translate = 2;
+  Auto = 3;
+}
+
 enum ControlKey {
   Unknown = 0;
   Alt = 1;
@@ -198,6 +205,7 @@ message KeyEvent {
     string seq = 6;
   }
   repeated ControlKey modifiers = 8;
+  KeyboardMode mode = 9;
 }
 
 message CursorData {
@@ -428,6 +436,7 @@ message PermissionInfo {
     Audio = 3;
     File = 4;
     Restart = 5;
+    Recording = 6;
   }
 
   Permission permission = 1;
@@ -547,6 +556,8 @@ message Misc {
     bool video_received = 12;
     BackNotification back_notification = 13;
     bool restart_remote_device = 14;
+    bool uac = 15;
+    bool foreground_window_elevated = 16;
   }
 }
 

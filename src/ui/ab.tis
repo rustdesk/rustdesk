@@ -245,7 +245,7 @@ class SearchBar: Reactor.Component {
     }
 
     event change $(input) (_, el) {
-        this.onChange(el.value.trim());
+        this.onChange(el.value.trim().toLowerCase());
     }
     
     function onChange(v) {
@@ -297,8 +297,13 @@ class SessionList: Reactor.Component {
         if (!p) return this.sessions;
         var tmp = [];
         this.sessions.map(function(s) {
-            var name = s[4] || s.alias || s[0] || s.id || "";
-            if (name.indexOf(p) >= 0) tmp.push(s);
+            var name = (s[4] || s.alias || "").toLowerCase();
+            var id = (s[0] || s.id || "").toLowerCase();
+            var user = (s[1] || "").toLowerCase();
+            var hostname = (s[2] || "").toLowerCase();
+            if (name.indexOf(p) >= 0 || id.indexOf(p) >= 0 || user.indexOf(p) >= 0 || hostname.indexOf(p) >= 0) {
+                tmp.push(s);
+            }
         });
         return tmp;
     }
@@ -316,7 +321,7 @@ class SessionList: Reactor.Component {
                     <li #connect>{translate('Connect')}</li>
                     <li #transfer>{translate('Transfer File')}</li>
                     <li #tunnel>{translate('TCP Tunneling')}</li>
-                    {false && !handler.using_public_server() && <li #force-always-relay><span>{svg_checkmark}</span>{translate('Always connect via relay')}</li>}
+                    <li #force-always-relay><span>{svg_checkmark}</span>{translate('Always connect via relay')}</li>
                     <li #rdp>RDP<EditRdpPort /></li>
                     <li #wol>{translate('WOL')}</li>
                     <div .separator />
@@ -396,7 +401,6 @@ class SessionList: Reactor.Component {
         if (el) {
           var force = handler.get_peer_option(id, "force-always-relay");
           el.attributes.toggleClass("selected", force == "Y");
-          el.attributes.toggleClass("line-through", force != "Y");
         }
         var conn = this.$(menu #connect);
         if (conn) {

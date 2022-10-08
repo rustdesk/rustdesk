@@ -38,6 +38,8 @@ pub use tokio_socks;
 pub use tokio_socks::IntoTargetAddr;
 pub use tokio_socks::TargetAddr;
 pub mod password_security;
+pub use chrono;
+pub use directories_next;
 
 #[cfg(feature = "quic")]
 pub type Stream = quic::Connection;
@@ -226,6 +228,14 @@ pub fn get_uuid() -> Vec<u8> {
         return id.into();
     }
     Config::get_key_pair().1
+}
+
+#[inline]
+pub fn get_time() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0) as _
 }
 
 #[cfg(test)]

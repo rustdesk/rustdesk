@@ -25,6 +25,7 @@ use hbb_common::tokio::sync::{
 };
 use scrap::{
     codec::{Encoder, EncoderCfg, HwEncoderConfig},
+    record::{Recorder, RecorderContext},
     vpxcodec::{VpxEncoderConfig, VpxVideoCodecId},
     Capturer, Display, TraitCapturer,
 };
@@ -32,6 +33,7 @@ use std::{
     collections::HashSet,
     io::ErrorKind::WouldBlock,
     ops::{Deref, DerefMut},
+    sync::Once,
     time::{self, Duration, Instant},
 };
 #[cfg(windows)]
@@ -50,6 +52,8 @@ lazy_static::lazy_static! {
     static ref PRIVACY_MODE_CONN_ID: Mutex<i32> = Mutex::new(0);
     static ref IS_CAPTURER_MAGNIFIER_SUPPORTED: bool = is_capturer_mag_supported();
     pub static ref VIDEO_QOS: Arc<Mutex<VideoQoS>> = Default::default();
+    pub static ref IS_UAC_RUNNING: Arc<Mutex<bool>> = Default::default();
+    pub static ref IS_FOREGROUND_WINDOW_ELEVATED: Arc<Mutex<bool>> = Default::default();
 }
 
 fn is_capturer_mag_supported() -> bool {
@@ -435,6 +439,23 @@ fn run(sp: GenericService) -> ResultType<()> {
     #[cfg(windows)]
     log::info!("gdi: {}", c.is_gdi());
     let codec_name = Encoder::current_hw_encoder_name();
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let recorder = if !Config::get_option("allow-auto-record-incoming").is_empty() {
+        Recorder::new(RecorderContext {
+            id: "local".to_owned(),
+            filename: "".to_owned(),
+            width: c.width,
+            height: c.height,
+            codec_id: scrap::record::RecodeCodecID::VP9,
+        })
+        .map_or(Default::default(), |r| Arc::new(Mutex::new(Some(r))))
+    } else {
+        Default::default()
+    };
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let recorder: Arc<Mutex<Option<Recorder>>> = Default::default();
+    #[cfg(windows)]
+    start_uac_elevation_check();
 
     while sp.ok() {
         #[cfg(windows)]
@@ -495,7 +516,8 @@ fn run(sp: GenericService) -> ResultType<()> {
                     }
                     scrap::Frame::RAW(data) => {
                         if (data.len() != 0) {
-                            let send_conn_ids = handle_one_frame(&sp, data, ms, &mut encoder)?;
+                            let send_conn_ids =
+                                handle_one_frame(&sp, data, ms, &mut encoder, recorder.clone())?;
                             frame_controller.set_send(now, send_conn_ids);
                         }
                     }
@@ -511,7 +533,8 @@ fn run(sp: GenericService) -> ResultType<()> {
             Ok(frame) => {
                 let time = now - start;
                 let ms = (time.as_secs() * 1000 + time.subsec_millis() as u64) as i64;
-                let send_conn_ids = handle_one_frame(&sp, &frame, ms, &mut encoder)?;
+                let send_conn_ids =
+                    handle_one_frame(&sp, &frame, ms, &mut encoder, recorder.clone())?;
                 frame_controller.set_send(now, send_conn_ids);
                 #[cfg(windows)]
                 {
@@ -601,7 +624,7 @@ fn create_msg(vp9s: Vec<EncodedVideoFrame>) -> Message {
         frames: vp9s.into(),
         ..Default::default()
     });
-    vf.timestamp = crate::common::get_time();
+    vf.timestamp = hbb_common::get_time();
     msg_out.set_video_frame(vf);
     msg_out
 }
@@ -612,6 +635,7 @@ fn handle_one_frame(
     frame: &[u8],
     ms: i64,
     encoder: &mut Encoder,
+    recorder: Arc<Mutex<Option<Recorder>>>,
 ) -> ResultType<HashSet<i32>> {
     sp.snapshot(|sps| {
         // so that new sub and old sub share the same encoder after switch
@@ -623,6 +647,12 @@ fn handle_one_frame(
 
     let mut send_conn_ids: HashSet<i32> = Default::default();
     if let Ok(msg) = encoder.encode_to_message(frame, ms) {
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        recorder
+            .lock()
+            .unwrap()
+            .as_mut()
+            .map(|r| r.write_message(&msg));
         send_conn_ids = sp.send_video_frame(msg);
     }
     Ok(send_conn_ids)
@@ -806,4 +836,25 @@ pub(super) fn get_current_display_2(mut all: Vec<Display>) -> ResultType<(usize,
 
 fn get_current_display() -> ResultType<(usize, usize, Display)> {
     get_current_display_2(try_get_displays()?)
+}
+
+#[cfg(windows)]
+fn start_uac_elevation_check() {
+    static START: Once = Once::new();
+    START.call_once(|| {
+        if !crate::platform::is_installed()
+            && !crate::platform::is_root()
+            && !crate::platform::is_elevated(None).map_or(false, |b| b)
+        {
+            std::thread::spawn(|| loop {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                if let Ok(uac) = crate::ui::win_privacy::is_process_consent_running() {
+                    *IS_UAC_RUNNING.lock().unwrap() = uac;
+                }
+                if let Ok(elevated) = crate::platform::is_foreground_window_elevated() {
+                    *IS_FOREGROUND_WINDOW_ELEVATED.lock().unwrap() = elevated;
+                }
+            });
+        }
+    });
 }

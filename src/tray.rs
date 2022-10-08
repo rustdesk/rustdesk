@@ -18,7 +18,7 @@ enum Events {
 pub fn start_tray(options: Arc<Mutex<HashMap<String, String>>>) {
     let event_loop = EventLoop::<Events>::with_user_event();
     let proxy = event_loop.create_proxy();
-    let icon = include_bytes!("./tray-icon.ico");
+    let icon = include_bytes!("../res/tray-icon.ico");
     let mut tray_icon = TrayIconBuilder::new()
         .sender_winit(proxy)
         .icon_from_buffer(icon)

@@ -1,5 +1,8 @@
+use std::sync::{Arc, Mutex};
+
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use arboard::Clipboard as ClipboardContext;
+
 use hbb_common::{
     allow_err,
     anyhow::bail,
@@ -7,13 +10,14 @@ use hbb_common::{
     config::{self, Config, COMPRESS_LEVEL, RENDEZVOUS_TIMEOUT},
     get_version_number, log,
     message_proto::*,
-    protobuf::Message as _,
     protobuf::Enum,
+    protobuf::Message as _,
     rendezvous_proto::*,
     sleep, socket_client, tokio, ResultType,
 };
+// #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 use hbb_common::{config::RENDEZVOUS_PORT, futures::future::join_all};
-use std::sync::{Arc, Mutex};
+
 #[cfg(target_os = "android")]
 use scrap::android::call_main_service_set_clip_text;
 
@@ -25,10 +29,9 @@ lazy_static::lazy_static! {
     pub static ref SOFTWARE_UPDATE_URL: Arc<Mutex<String>> = Default::default();
 }
 
-#[cfg(any(target_os = "android", target_os = "ios"))]
 lazy_static::lazy_static! {
-    pub static ref MOBILE_INFO1: Arc<Mutex<String>> = Default::default();
-    pub static ref MOBILE_INFO2: Arc<Mutex<String>> = Default::default();
+    pub static ref DEVICE_ID: Arc<Mutex<String>> = Default::default();
+    pub static ref DEVICE_NAME: Arc<Mutex<String>> = Default::default();
 }
 
 #[inline]
@@ -50,7 +53,7 @@ pub fn create_clipboard_msg(content: String) -> Message {
     let mut msg = Message::new();
     msg.set_clipboard(Clipboard {
         compress,
-        content:content.into(),
+        content: content.into(),
         ..Default::default()
     });
     msg
@@ -110,6 +113,19 @@ pub fn update_clipboard(clipboard: Clipboard, old: Option<&Arc<Mutex<String>>>) 
                 log::error!("Failed to create clipboard context: {}", err);
             }
         }
+    }
+}
+
+pub async fn send_opts_after_login(
+    config: &crate::client::LoginConfigHandler,
+    peer: &mut hbb_common::tcp::FramedStream,
+) {
+    if let Some(opts) = config.get_option_message_after_login() {
+        let mut misc = Misc::new();
+        misc.set_option(opts);
+        let mut msg_out = Message::new();
+        msg_out.set_misc(misc);
+        allow_err!(peer.send(&msg_out).await);
     }
 }
 
@@ -314,6 +330,7 @@ async fn test_nat_type_() -> ResultType<bool> {
             break;
         }
     }
+    Config::set_option("local-ip-addr".to_owned(), addr.ip().to_string());
     let ok = port1 > 0 && port2 > 0;
     if ok {
         let t = if port1 == port2 {
@@ -379,6 +396,7 @@ pub async fn get_nat_type(ms_timeout: u64) -> i32 {
     crate::ipc::get_nat_type(ms_timeout).await
 }
 
+// #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 #[tokio::main(flavor = "current_thread")]
 async fn test_rendezvous_server_() {
     let servers = Config::get_rendezvous_servers();
@@ -405,6 +423,7 @@ async fn test_rendezvous_server_() {
     join_all(futs).await;
 }
 
+// #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 pub fn test_rendezvous_server() {
     std::thread::spawn(test_rendezvous_server_);
 }
@@ -418,14 +437,6 @@ pub fn refresh_rendezvous_server() {
             test_rendezvous_server();
         }
     });
-}
-
-#[inline]
-pub fn get_time() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or(0) as _
 }
 
 pub fn run_me<T: AsRef<std::ffi::OsStr>>(args: Vec<T>) -> std::io::Result<std::process::Child> {
@@ -448,7 +459,7 @@ pub fn username() -> String {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     return whoami::username().trim_end_matches('\0').to_owned();
     #[cfg(any(target_os = "android", target_os = "ios"))]
-    return MOBILE_INFO2.lock().unwrap().clone();
+    return DEVICE_NAME.lock().unwrap().clone();
 }
 
 #[inline]
@@ -661,21 +672,13 @@ pub fn make_privacy_mode_msg(state: back_notification::PrivacyModeState) -> Mess
     msg_out
 }
 
-pub fn make_fd_to_json(fd: FileDirectory) -> String {
-    use serde_json::json;
-    let mut fd_json = serde_json::Map::new();
-    fd_json.insert("id".into(), json!(fd.id));
-    fd_json.insert("path".into(), json!(fd.path));
+#[cfg(not(target_os = "linux"))]
+lazy_static::lazy_static! {
+    pub static ref IS_X11: Mutex<bool> = Mutex::new(false);
 
-    let mut entries = vec![];
-    for entry in fd.entries {
-        let mut entry_map = serde_json::Map::new();
-        entry_map.insert("entry_type".into(), json!(entry.entry_type.value()));
-        entry_map.insert("name".into(), json!(entry.name));
-        entry_map.insert("size".into(), json!(entry.size));
-        entry_map.insert("modified_time".into(), json!(entry.modified_time));
-        entries.push(entry_map);
-    }
-    fd_json.insert("entries".into(), json!(entries));
-    serde_json::to_string(&fd_json).unwrap_or("".into())
+}
+
+#[cfg(target_os = "linux")]
+lazy_static::lazy_static! {
+    pub static ref IS_X11: Mutex<bool> = Mutex::new("x11" == hbb_common::platform::linux::get_display_server());
 }

@@ -307,12 +307,26 @@ pub fn check_zombie() {
     });
 }
 
+/// Start the host server that allows the remote peer to control the current machine.
+/// 
+/// # Arguments
+/// 
+/// * `is_server` - Whether the current client is definitely the server.
+/// If true, the server will be started.
+/// Otherwise, client will check if there's already a server and start one if not.
 #[cfg(any(target_os = "android", target_os = "ios"))]
 #[tokio::main]
 pub async fn start_server(is_server: bool) {
     crate::RendezvousMediator::start_all().await;
 }
 
+/// Start the host server that allows the remote peer to control the current machine.
+/// 
+/// # Arguments
+/// 
+/// * `is_server` - Whether the current client is definitely the server.
+/// If true, the server will be started.
+/// Otherwise, client will check if there's already a server and start one if not.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tokio::main]
 pub async fn start_server(is_server: bool) {

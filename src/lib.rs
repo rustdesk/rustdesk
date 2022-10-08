@@ -10,9 +10,9 @@ mod server;
 pub use self::server::*;
 mod client;
 #[cfg(not(any(target_os = "ios")))]
-mod rendezvous_mediator;
-#[cfg(not(any(target_os = "ios")))]
 mod lan;
+#[cfg(not(any(target_os = "ios")))]
+mod rendezvous_mediator;
 #[cfg(not(any(target_os = "ios")))]
 pub use self::rendezvous_mediator::*;
 /// cbindgen:ignore
@@ -23,15 +23,17 @@ pub mod ipc;
 pub mod ui;
 mod version;
 pub use version::*;
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 mod bridge_generated;
-#[cfg(any(target_os = "android", target_os = "ios"))]
-pub mod mobile;
-#[cfg(any(target_os = "android", target_os = "ios"))]
-pub mod mobile_ffi;
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+pub mod flutter;
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+pub mod flutter_ffi;
 use common::*;
 #[cfg(feature = "cli")]
 pub mod cli;
+#[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
+pub mod core_main;
 #[cfg(all(windows, feature = "hbbs"))]
 mod hbbs;
 mod lang;
@@ -41,6 +43,10 @@ mod license;
 mod port_forward;
 #[cfg(windows)]
 mod tray;
+
+mod ui_cm_interface;
+mod ui_interface;
+mod ui_session_interface;
 
 #[cfg(windows)]
 pub mod clipboard_file;

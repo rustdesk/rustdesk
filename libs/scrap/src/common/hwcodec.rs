@@ -4,10 +4,11 @@ use crate::{
 };
 use hbb_common::{
     anyhow::{anyhow, Context},
+    bytes::Bytes,
     config::HwCodecConfig,
-    lazy_static, log,
+    get_time, lazy_static, log,
     message_proto::{EncodedVideoFrame, EncodedVideoFrames, Message, VideoFrame},
-    ResultType, bytes::Bytes,
+    ResultType,
 };
 use hwcodec::{
     decode::{DecodeContext, DecodeFrame, Decoder},
@@ -27,7 +28,7 @@ const CFG_KEY_ENCODER: &str = "bestHwEncoders";
 const CFG_KEY_DECODER: &str = "bestHwDecoders";
 
 const DEFAULT_PIXFMT: AVPixelFormat = AVPixelFormat::AV_PIX_FMT_YUV420P;
-const DEFAULT_TIME_BASE: [i32; 2] = [1, 30];
+pub const DEFAULT_TIME_BASE: [i32; 2] = [1, 30];
 const DEFAULT_GOP: i32 = 60;
 const DEFAULT_HW_QUALITY: Quality = Quality_Default;
 const DEFAULT_RC: RateContorl = RC_DEFAULT;
@@ -93,6 +94,7 @@ impl EncoderApi for HwEncoder {
             frames.push(EncodedVideoFrame {
                 data: Bytes::from(frame.data),
                 pts: frame.pts as _,
+                key:frame.key == 1,
                 ..Default::default()
             });
         }
@@ -105,6 +107,7 @@ impl EncoderApi for HwEncoder {
                 DataFormat::H264 => vf.set_h264s(frames),
                 DataFormat::H265 => vf.set_h265s(frames),
             }
+            vf.timestamp = get_time();
             msg_out.set_video_frame(vf);
             Ok(msg_out)
         } else {
@@ -265,7 +268,7 @@ impl HwDecoderImage<'_> {
 }
 
 fn get_config(k: &str) -> ResultType<CodecInfos> {
-    let v = HwCodecConfig::load()
+    let v = HwCodecConfig::get()
         .options
         .get(k)
         .unwrap_or(&"".to_owned())
@@ -321,7 +324,8 @@ pub fn check_config_process(force_reset: bool) {
             std::process::Command::new(exe)
                 .arg("--check-hwcodec-config")
                 .status()
-                .ok()
+                .ok();
+            HwCodecConfig::refresh();
         });
     };
 }
