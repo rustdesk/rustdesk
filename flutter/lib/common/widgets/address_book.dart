@@ -1,4 +1,3 @@
-import 'package:contextmenu/contextmenu.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/widgets/peer_card.dart';
 import 'package:flutter_hbb/common/widgets/peers_view.dart';
@@ -178,18 +177,6 @@ class _AddressBookState extends State<AddressBook> {
   }
 
   void _showMenu(RelativeRect pos) {
-    MenuEntryButton<String> getEntry(String title, VoidCallback proc) {
-      return MenuEntryButton<String>(
-        childBuilder: (TextStyle? style) => Text(
-          title,
-          style: style,
-        ),
-        proc: proc,
-        padding: kDesktopMenuPadding,
-        dismissOnClicked: true,
-      );
-    }
-
     final items = [
       getEntry(translate("Add ID"), abAddId),
       getEntry(translate("Add Tag"), abAddTag),
@@ -355,20 +342,32 @@ class AddressBookTag extends StatelessWidget {
   final String name;
   final RxList<dynamic> tags;
   final Function()? onTap;
-  final bool useContextMenuArea;
+  final bool showActionMenu;
 
   const AddressBookTag(
       {Key? key,
       required this.name,
       required this.tags,
       this.onTap,
-      this.useContextMenuArea = true})
+      this.showActionMenu = true})
       : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final body = GestureDetector(
+    var pos = RelativeRect.fill;
+
+    void setPosition(TapDownDetails e) {
+      final x = e.globalPosition.dx;
+      final y = e.globalPosition.dy;
+      pos = RelativeRect.fromLTRB(x, y, x, y);
+    }
+
+    return GestureDetector(
       onTap: onTap,
+      onTapDown: showActionMenu ? setPosition : null,
+      onSecondaryTapDown: showActionMenu ? setPosition : null,
+      onSecondaryTap: showActionMenu ? () => _showMenu(context, pos) : null,
+      onLongPress: showActionMenu ? () => _showMenu(context, pos) : null,
       child: Obx(
         () => Container(
           decoration: BoxDecoration(
@@ -383,21 +382,42 @@ class AddressBookTag extends StatelessWidget {
         ),
       ),
     );
-    return useContextMenuArea
-        ? ContextMenuArea(
-            width: 100,
-            builder: (context) => [
-              ListTile(
-                title: Text(translate("Delete")),
-                onTap: () {
-                  gFFI.abModel.deleteTag(name);
-                  gFFI.abModel.pushAb();
-                  Future.delayed(Duration.zero, () => Get.back());
-                },
-              )
-            ],
-            child: body,
-          )
-        : body;
   }
+
+  void _showMenu(BuildContext context, RelativeRect pos) {
+    final items = [
+      getEntry(translate("Delete"), () {
+        gFFI.abModel.deleteTag(name);
+        gFFI.abModel.pushAb();
+        Future.delayed(Duration.zero, () => Get.back());
+      }),
+    ];
+
+    mod_menu.showMenu(
+      context: context,
+      position: pos,
+      items: items
+          .map((e) => e.build(
+              context,
+              MenuConfig(
+                  commonColor: CustomPopupMenuTheme.commonColor,
+                  height: CustomPopupMenuTheme.height,
+                  dividerHeight: CustomPopupMenuTheme.dividerHeight)))
+          .expand((i) => i)
+          .toList(),
+      elevation: 8,
+    );
+  }
+}
+
+MenuEntryButton<String> getEntry(String title, VoidCallback proc) {
+  return MenuEntryButton<String>(
+    childBuilder: (TextStyle? style) => Text(
+      title,
+      style: style,
+    ),
+    proc: proc,
+    padding: kDesktopMenuPadding,
+    dismissOnClicked: true,
+  );
 }

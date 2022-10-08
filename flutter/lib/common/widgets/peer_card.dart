@@ -830,7 +830,7 @@ class AddressBookPeerCard extends BasePeerCard {
                             selectedTag.add(e);
                           }
                         },
-                        useContextMenuArea: false))
+                        showActionMenu: false))
                     .toList(growable: false),
               ),
             ),
