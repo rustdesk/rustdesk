@@ -179,3 +179,25 @@ class RemoteCursorMovedState {
 
   static RxBool find(String id) => Get.find<RxBool>(tag: tag(id));
 }
+
+class RemoteCountState {
+  static String tag() => 'remote_count_';
+
+  static void init() {
+    final key = tag();
+    if (!Get.isRegistered(tag: key)) {
+      // Server side, default true
+      final RxInt state = 1.obs;
+      Get.put(state, tag: key);
+    }
+  }
+
+  static void delete() {
+    final key = tag();
+    if (Get.isRegistered(tag: key)) {
+      Get.delete(tag: key);
+    }
+  }
+
+  static RxInt find() => Get.find<RxInt>(tag: tag());
+}

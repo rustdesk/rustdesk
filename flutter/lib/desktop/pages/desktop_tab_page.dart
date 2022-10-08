@@ -9,6 +9,8 @@ import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:get/get.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../../common/shared_state.dart';
+
 class DesktopTabPage extends StatefulWidget {
   const DesktopTabPage({Key? key}) : super(key: key);
 
@@ -40,6 +42,7 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
   void initState() {
     super.initState();
     Get.put<DesktopTabController>(tabController);
+    RemoteCountState.init();
     tabController.add(TabInfo(
         key: kTabLabelHomePage,
         label: kTabLabelHomePage,
