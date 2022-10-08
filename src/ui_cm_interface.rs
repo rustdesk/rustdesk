@@ -31,6 +31,7 @@ use hbb_common::{
 pub struct Client {
     pub id: i32,
     pub authorized: bool,
+    pub disconnected: bool,
     pub is_file_transfer: bool,
     pub port_forward: String,
     pub name: String,
@@ -58,7 +59,7 @@ pub struct ConnectionManager<T: InvokeUiCM> {
 pub trait InvokeUiCM: Send + Clone + 'static + Sized {
     fn add_connection(&self, client: &Client);
 
-    fn remove_connection(&self, id: i32);
+    fn remove_connection(&self, id: i32, close: bool);
 
     fn new_message(&self, id: i32, text: String);
 
@@ -101,6 +102,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         let client = Client {
             id,
             authorized,
+            disconnected: false,
             is_file_transfer,
             port_forward,
             name: name.clone(),
@@ -113,12 +115,24 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
             recording,
             tx,
         };
+        CLIENTS
+            .write()
+            .unwrap()
+            .retain(|_, c| !(c.disconnected && c.peer_id == client.peer_id));
+        CLIENTS.write().unwrap().insert(id, client.clone());
         self.ui_handler.add_connection(&client);
-        CLIENTS.write().unwrap().insert(id, client);
     }
 
-    fn remove_connection(&self, id: i32) {
-        CLIENTS.write().unwrap().remove(&id);
+    fn remove_connection(&self, id: i32, close: bool) {
+        if close {
+            CLIENTS.write().unwrap().remove(&id);
+        } else {
+            CLIENTS
+                .write()
+                .unwrap()
+                .get_mut(&id)
+                .map(|c| c.disconnected = true);
+        }
 
         #[cfg(any(target_os = "android"))]
         if CLIENTS
@@ -136,7 +150,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
             }
         }
 
-        self.ui_handler.remove_connection(id);
+        self.ui_handler.remove_connection(id, close);
     }
 }
 
@@ -165,6 +179,11 @@ pub fn close(id: i32) {
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
         allow_err!(client.tx.send(Data::Close));
     };
+}
+
+#[inline]
+pub fn remove(id: i32) {
+    CLIENTS.write().unwrap().remove(&id);
 }
 
 // server mode send chat to peer
@@ -243,6 +262,7 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
                             let mut conn_id: i32 = 0;
                             let (tx, mut rx) = mpsc::unbounded_channel::<Data>();
                             let mut write_jobs: Vec<fs::TransferJob> = Vec::new();
+                            let mut close = true;
                             loop {
                                 tokio::select! {
                                     res = stream.next() => {
@@ -262,6 +282,12 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
                                                     Data::Close => {
                                                         tx_file.send(ClipboardFileData::Enable((conn_id, false))).ok();
                                                         log::info!("cm ipc connection closed from connection request");
+                                                        break;
+                                                    }
+                                                    Data::Disconnected => {
+                                                        close = false;
+                                                        tx_file.send(ClipboardFileData::Enable((conn_id, false))).ok();
+                                                        log::info!("cm ipc connection disconnect");
                                                         break;
                                                     }
                                                     Data::PrivacyModeState((id, _)) => {
@@ -312,7 +338,7 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
                                 }
                             }
                             if conn_id != conn_id_tmp {
-                                cm.remove_connection(conn_id);
+                                cm.remove_connection(conn_id, close);
                             }
                         });
                     }

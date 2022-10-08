@@ -362,5 +362,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable LAN Discovery", "Увімкнути пошук локальної мережі"),
         ("Deny LAN Discovery", "Заборонити виявлення локальної мережі"),
         ("Write a message", "Написати повідомлення"),
+        ("Prompt", ""),
+        ("elevation_prompt", ""),
+        ("uac_warning", ""),
+        ("elevated_foreground_window_warning", ""),
+        ("Disconnected", ""),
     ].iter().cloned().collect();
 }

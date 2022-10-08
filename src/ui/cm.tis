@@ -26,6 +26,7 @@ class Body: Reactor.Component
             me.sendMsg(msg);
         };
         var right_style = show_chat ? "" : "display: none";
+        var disconnected = c.disconnected;
        // below size:* is work around for Linux, it alreayd set in css, but not work, shit sciter
         return <div .content style="size:*">
             <div .left-panel>
@@ -36,12 +37,12 @@ class Body: Reactor.Component
                     <div>
                         <div .id style="font-weight: bold; font-size: 1.2em;">{c.name}</div>
                         <div .id>({c.peer_id})</div>
-                        <div style="margin-top: 1.2em">{translate('Connected')} {" "} <span #time>{getElaspsed(c.time)}</span></div>
+                        <div style="margin-top: 1.2em">{disconnected ? translate('Disconnected') : translate('Connected')} {" "} <span #time>{getElaspsed(c.time, c.now)}</span></div>
                     </div>
                 </div>
                 <div />
-                {c.is_file_transfer || c.port_forward ? "" : <div>{translate('Permissions')}</div>}
-                {c.is_file_transfer || c.port_forward ? "" : <div> <div .permissions>
+                {c.is_file_transfer || c.port_forward || disconnected ? "" : <div>{translate('Permissions')}</div>}
+                {c.is_file_transfer || c.port_forward || disconnected ? "" : <div> <div .permissions>
                     <div class={!c.keyboard ? "disabled" : ""} title={translate('Allow using keyboard and mouse')}><icon .keyboard /></div>
                     <div class={!c.clipboard ? "disabled" : ""} title={translate('Allow using clipboard')}><icon .clipboard /></div>
                     <div class={!c.audio ? "disabled" : ""} title={translate('Allow hearing sound')}><icon .audio /></div>
@@ -56,7 +57,8 @@ class Body: Reactor.Component
                 <div .buttons>
                      {auth ? "" : <button .button tabindex="-1" #accept>{translate('Accept')}</button>}
                      {auth ? "" : <button .button tabindex="-1" .outline #dismiss>{translate('Dismiss')}</button>}
-                     {auth ? <button .button tabindex="-1" #disconnect>{translate('Disconnect')}</button> : ""}
+                     {auth && !disconnected ? <button .button tabindex="-1" #disconnect>{translate('Disconnect')}</button> : ""}
+                     {auth && disconnected ? <button .button tabindex="-1" #close>{translate('Close')}</button> : ""}
                 </div>
                 {c.is_file_transfer || c.port_forward ? "" : <div .chaticon>{svg_chat}</div>}
             </div>
@@ -154,6 +156,25 @@ class Body: Reactor.Component
         checkClickTime(function() {
             handler.close(cid);
         });
+    }
+
+    event click $(button#close) {
+        var cid = this.cid;
+        if (this.cur >= 0 && this.cur < connections.length){
+            handler.remove_disconnected_connection(cid);
+            connections.splice(this.cur, 1);
+            if (connections.length > 0) {
+                if (this.cur > 0)
+                    this.cur -= 1; 
+                else
+                    this.cur = connections.length - 1;
+                header.update();
+                body.update();
+            } else {
+                handler.quit();
+            }
+        }
+        
     }
 }
 
@@ -299,15 +320,26 @@ handler.addConnection = function(id, is_file_transfer, port_forward, peer_id, na
         update();
         return;
     }
+    var idx = -1;
+    connections.map(function(c, i) {
+        if (c.disconnected && c.peer_id == peer_id) idx = i;
+    });
     if (!name) name = "NA";
-    connections.push({
+    conn = {
         id: id, is_file_transfer: is_file_transfer, peer_id: peer_id,
         port_forward: port_forward,
-        name: name, authorized: authorized, time: new Date(),
+        name: name, authorized: authorized, time: new Date(), now: new Date(),
         keyboard: keyboard, clipboard: clipboard, msgs: [], unreaded: 0,
-        audio: audio, file: file, restart: restart, recording: recording
-    });
-    body.cur = connections.length - 1;
+        audio: audio, file: file, restart: restart, recording: recording,
+        disconnected: false
+    };
+    if (idx < 0) {
+        connections.push(conn);
+        body.cur = connections.length - 1;
+    } else {
+        connections[idx] = conn;
+        body.cur = idx;
+    }
     bring_to_top();
     update();
     self.timer(1ms, adjustHeader);
@@ -318,15 +350,20 @@ handler.addConnection = function(id, is_file_transfer, port_forward, peer_id, na
     }
 }
 
-handler.removeConnection = function(id) {
+handler.removeConnection = function(id, close) {
     var i = -1;
     connections.map(function(c, idx) {
         if (c.id == id) i = idx;
     });
     if (i < 0) return;
-    connections.splice(i, 1);
+    if (close) {
+        connections.splice(i, 1);
+    } else {
+        var conn = connections[i];
+        conn.disconnected = true;
+    }
     if (connections.length > 0) {
-        if (body.cur >= i && body.cur > 0) body.cur -= 1;
+        if (body.cur >= i && body.cur > 0 && close) body.cur -= 1;
         update();
     }
 }
@@ -361,8 +398,7 @@ function self.ready() {
     view.move(sw - w, 0, w, h);
 }
 
-function getElaspsed(time) {
-    var now = new Date();
+function getElaspsed(time, now) {
     var seconds = Date.diff(time, now, #seconds);
     var hours = seconds / 3600;
     var days = hours / 24;
@@ -378,11 +414,15 @@ function getElaspsed(time) {
 
 function updateTime() {
     self.timer(1s, function() {
+        var now = new Date();
+        connections.map(function(c) {
+            if (!c.disconnected) c.now = now;
+        });
         var el = $(#time);
         if (el) {
             var c = connections[body.cur];
-            if (c) {
-                el.text = getElaspsed(c.time);
+            if (c && !c.disconnected) {
+                el.text = getElaspsed(c.time, c.now);
             }
         }
         updateTime();

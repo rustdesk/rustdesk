@@ -366,5 +366,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("elevation_prompt", "Monit o podwyższeniu uprawnień"),
         ("uac_warning", "Ostrzeżenie UAC"),
         ("elevated_foreground_window_warning", "Pierwszoplanowe okno ostrzeżenia o podwyższeniu uprawnień"),
+        ("Disconnected", ""),
     ].iter().cloned().collect();
 }
