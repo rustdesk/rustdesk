@@ -153,9 +153,10 @@ class _AddressBookState extends State<AddressBook> {
                     child: Obx(
                       () => Wrap(
                         children: gFFI.abModel.tags
-                            .map((e) => buildTag(e, gFFI.abModel.selectedTags,
-                                    onTap: () {
-                                  //
+                            .map((e) => AddressBookTag(
+                                name: e,
+                                tags: gFFI.abModel.selectedTags,
+                                onTap: () {
                                   if (gFFI.abModel.selectedTags.contains(e)) {
                                     gFFI.abModel.selectedTags.remove(e);
                                   } else {
@@ -180,41 +181,6 @@ class _AddressBookState extends State<AddressBook> {
                   ))),
         )
       ],
-    );
-  }
-
-  Widget buildTag(String tagName, RxList<dynamic> rxTags, {Function()? onTap}) {
-    return ContextMenuArea(
-      width: 100,
-      builder: (context) => [
-        ListTile(
-          title: Text(translate("Delete")),
-          onTap: () {
-            gFFI.abModel.deleteTag(tagName);
-            gFFI.abModel.pushAb();
-            Future.delayed(Duration.zero, () => Get.back());
-          },
-        )
-      ],
-      child: GestureDetector(
-        onTap: onTap,
-        child: Obx(
-          () => Container(
-            decoration: BoxDecoration(
-                color: rxTags.contains(tagName) ? Colors.blue : null,
-                border: Border.all(color: MyTheme.darkGray),
-                borderRadius: BorderRadius.circular(6)),
-            margin: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
-            padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 8.0),
-            child: Text(
-              tagName,
-              style: TextStyle(
-                  color:
-                      rxTags.contains(tagName) ? Colors.white : null), // TODO
-            ),
-          ),
-        ),
-      ),
     );
   }
 
@@ -366,54 +332,55 @@ class _AddressBookState extends State<AddressBook> {
       );
     });
   }
+}
 
-  void abEditTag(String id) {
-    var isInProgress = false;
+class AddressBookTag extends StatelessWidget {
+  final String name;
+  final RxList<dynamic> tags;
+  final Function()? onTap;
+  final bool useContextMenuArea;
 
-    final tags = List.of(gFFI.abModel.tags);
-    var selectedTag = gFFI.abModel.getPeerTags(id).obs;
+  const AddressBookTag(
+      {Key? key,
+      required this.name,
+      required this.tags,
+      this.onTap,
+      this.useContextMenuArea = true})
+      : super(key: key);
 
-    gFFI.dialogManager.show((setState, close) {
-      submit() async {
-        setState(() {
-          isInProgress = true;
-        });
-        gFFI.abModel.changeTagForPeer(id, selectedTag);
-        await gFFI.abModel.pushAb();
-        close();
-      }
-
-      return CustomAlertDialog(
-        title: Text(translate("Edit Tag")),
-        content: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-              child: Wrap(
-                children: tags
-                    .map((e) => buildTag(e, selectedTag, onTap: () {
-                          if (selectedTag.contains(e)) {
-                            selectedTag.remove(e);
-                          } else {
-                            selectedTag.add(e);
-                          }
-                        }))
-                    .toList(growable: false),
-              ),
-            ),
-            Offstage(
-                offstage: !isInProgress, child: const LinearProgressIndicator())
-          ],
+  @override
+  Widget build(BuildContext context) {
+    final body = GestureDetector(
+      onTap: onTap,
+      child: Obx(
+        () => Container(
+          decoration: BoxDecoration(
+              color: tags.contains(name) ? Colors.blue : null,
+              border: Border.all(color: MyTheme.darkGray),
+              borderRadius: BorderRadius.circular(6)),
+          margin: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+          padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 8.0),
+          child: Text(name,
+              style:
+                  TextStyle(color: tags.contains(name) ? Colors.white : null)),
         ),
-        actions: [
-          TextButton(onPressed: close, child: Text(translate("Cancel"))),
-          TextButton(onPressed: submit, child: Text(translate("OK"))),
-        ],
-        onSubmit: submit,
-        onCancel: close,
-      );
-    });
+      ),
+    );
+    return useContextMenuArea
+        ? ContextMenuArea(
+            width: 100,
+            builder: (context) => [
+              ListTile(
+                title: Text(translate("Delete")),
+                onTap: () {
+                  gFFI.abModel.deleteTag(name);
+                  gFFI.abModel.pushAb();
+                  Future.delayed(Duration.zero, () => Get.back());
+                },
+              )
+            ],
+            child: body,
+          )
+        : body;
   }
 }

@@ -1,6 +1,6 @@
-import 'package:contextmenu/contextmenu.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hbb/common/widgets/address_book.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:get/get.dart';
 
@@ -774,7 +774,9 @@ class AddressBookPeerCard extends BasePeerCard {
     if (await bind.mainPeerHasPassword(id: peer.id)) {
       menuItems.add(_unrememberPasswordAction(peer.id));
     }
-    menuItems.add(_editTagAction(peer.id));
+    if (gFFI.abModel.tags.isNotEmpty) {
+      menuItems.add(_editTagAction(peer.id));
+    }
     return menuItems;
   }
 
@@ -836,17 +838,20 @@ class AddressBookPeerCard extends BasePeerCard {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
               child: Wrap(
                 children: tags
-                    .map((e) => _buildTag(e, selectedTag, onTap: () {
+                    .map((e) => AddressBookTag(
+                        name: e,
+                        tags: selectedTag,
+                        onTap: () {
                           if (selectedTag.contains(e)) {
                             selectedTag.remove(e);
                           } else {
                             selectedTag.add(e);
                           }
-                        }))
+                        },
+                        useContextMenuArea: false))
                     .toList(growable: false),
               ),
             ),
@@ -862,41 +867,6 @@ class AddressBookPeerCard extends BasePeerCard {
         onCancel: close,
       );
     });
-  }
-
-  Widget _buildTag(String tagName, RxList<dynamic> rxTags,
-      {Function()? onTap}) {
-    return ContextMenuArea(
-      width: 100,
-      builder: (context) => [
-        ListTile(
-          title: Text(translate("Delete")),
-          onTap: () {
-            gFFI.abModel.deleteTag(tagName);
-            gFFI.abModel.pushAb();
-            Future.delayed(Duration.zero, () => Get.back());
-          },
-        )
-      ],
-      child: GestureDetector(
-        onTap: onTap,
-        child: Obx(
-          () => Container(
-            decoration: BoxDecoration(
-                color: rxTags.contains(tagName) ? Colors.blue : null,
-                border: Border.all(color: MyTheme.darkGray),
-                borderRadius: BorderRadius.circular(10)),
-            margin: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
-            padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 8.0),
-            child: Text(
-              tagName,
-              style: TextStyle(
-                  color: rxTags.contains(tagName) ? Colors.white : null),
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }
 
