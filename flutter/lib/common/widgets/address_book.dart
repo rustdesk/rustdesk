@@ -1,6 +1,10 @@
 import 'package:contextmenu/contextmenu.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/common/widgets/peer_card.dart';
 import 'package:flutter_hbb/common/widgets/peers_view.dart';
+import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
+import '../../consts.dart';
+import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
 import 'package:get/get.dart';
 
 import '../../common.dart';
@@ -102,6 +106,7 @@ class _AddressBookState extends State<AddressBook> {
   }
 
   Widget _buildAddressBook(BuildContext context) {
+    var pos = RelativeRect.fill;
     return Row(
       children: [
         Card(
@@ -120,27 +125,15 @@ class _AddressBookState extends State<AddressBook> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // TODO same style as peer
                     Text(translate('Tags')),
-                    InkWell(
-                      child: PopupMenuButton(
-                          itemBuilder: (context) => [
-                                PopupMenuItem(
-                                  value: 'add-id',
-                                  child: Text(translate("Add ID")),
-                                ),
-                                PopupMenuItem(
-                                  value: 'add-tag',
-                                  child: Text(translate("Add Tag")),
-                                ),
-                                PopupMenuItem(
-                                  value: 'unset-all-tag',
-                                  child: Text(translate("Unselect all tags")),
-                                ),
-                              ],
-                          onSelected: handleAbOp,
-                          child: const Icon(Icons.more_vert_outlined)),
-                    )
+                    GestureDetector(
+                        onTapDown: (e) {
+                          final x = e.globalPosition.dx;
+                          final y = e.globalPosition.dy;
+                          pos = RelativeRect.fromLTRB(x, y, x, y);
+                        },
+                        onTap: () => _showMenu(pos),
+                        child: ActionMore()),
                   ],
                 ),
                 Expanded(
@@ -184,15 +177,39 @@ class _AddressBookState extends State<AddressBook> {
     );
   }
 
-  /// tag operation
-  void handleAbOp(String value) {
-    if (value == 'add-id') {
-      abAddId();
-    } else if (value == 'add-tag') {
-      abAddTag();
-    } else if (value == 'unset-all-tag') {
-      gFFI.abModel.unsetSelectedTags();
+  void _showMenu(RelativeRect pos) {
+    MenuEntryButton<String> getEntry(String title, VoidCallback proc) {
+      return MenuEntryButton<String>(
+        childBuilder: (TextStyle? style) => Text(
+          title,
+          style: style,
+        ),
+        proc: proc,
+        padding: kDesktopMenuPadding,
+        dismissOnClicked: true,
+      );
     }
+
+    final items = [
+      getEntry(translate("Add ID"), abAddId),
+      getEntry(translate("Add Tag"), abAddTag),
+      getEntry(translate("Unselect all tags"), gFFI.abModel.unsetSelectedTags),
+    ];
+
+    mod_menu.showMenu(
+      context: context,
+      position: pos,
+      items: items
+          .map((e) => e.build(
+              context,
+              MenuConfig(
+                  commonColor: CustomPopupMenuTheme.commonColor,
+                  height: CustomPopupMenuTheme.height,
+                  dividerHeight: CustomPopupMenuTheme.dividerHeight)))
+          .expand((i) => i)
+          .toList(),
+      elevation: 8,
+    );
   }
 
   void abAddId() async {

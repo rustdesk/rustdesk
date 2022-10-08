@@ -86,16 +86,16 @@ class _ConnectionPageState extends State<ConnectionPage>
                     ],
                     children: [
                       RecentPeersView(
-                        menuPadding: EdgeInsets.only(left: 12.0, right: 3.0),
+                        menuPadding: kDesktopMenuPadding,
                       ),
                       FavoritePeersView(
-                        menuPadding: EdgeInsets.only(left: 12.0, right: 3.0),
+                        menuPadding: kDesktopMenuPadding,
                       ),
                       DiscoveredPeersView(
-                        menuPadding: EdgeInsets.only(left: 12.0, right: 3.0),
+                        menuPadding: kDesktopMenuPadding,
                       ),
                       const AddressBook(
-                        menuPadding: EdgeInsets.only(left: 12.0, right: 3.0),
+                        menuPadding: kDesktopMenuPadding,
                       ),
                     ],
                   ).paddingOnly(right: 12.0),

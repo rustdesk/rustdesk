@@ -12,7 +12,7 @@ import '../../models/platform_model.dart';
 import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
 import '../../desktop/widgets/popup_menu.dart';
 
-class _PopupMenuTheme {
+class CustomPopupMenuTheme {
   static const Color commonColor = MyTheme.accent;
   // kMinInteractiveDimension
   static const double height = 20.0;
@@ -46,9 +46,8 @@ class _PeerCard extends StatefulWidget {
 class _PeerCardState extends State<_PeerCard>
     with AutomaticKeepAliveClientMixin {
   var _menuPos = RelativeRect.fill;
-  final double _cardRadis = 16;
+  final double _cardRadius = 16;
   final double _borderWidth = 2;
-  final RxBool _iconMoreHover = false.obs;
 
   @override
   Widget build(BuildContext context) {
@@ -122,23 +121,23 @@ class _PeerCardState extends State<_PeerCard>
     var deco = Rx<BoxDecoration?>(BoxDecoration(
         border: Border.all(color: Colors.transparent, width: _borderWidth),
         borderRadius: peerCardUiType.value == PeerUiType.grid
-            ? BorderRadius.circular(_cardRadis)
+            ? BorderRadius.circular(_cardRadius)
             : null));
     return MouseRegion(
       onEnter: (evt) {
         deco.value = BoxDecoration(
             border: Border.all(
-                color: Theme.of(context).colorScheme.secondary,
+                color: Theme.of(context).colorScheme.primary,
                 width: _borderWidth),
             borderRadius: peerCardUiType.value == PeerUiType.grid
-                ? BorderRadius.circular(_cardRadis)
+                ? BorderRadius.circular(_cardRadius)
                 : null);
       },
       onExit: (evt) {
         deco.value = BoxDecoration(
             border: Border.all(color: Colors.transparent, width: _borderWidth),
             borderRadius: peerCardUiType.value == PeerUiType.grid
-                ? BorderRadius.circular(_cardRadis)
+                ? BorderRadius.circular(_cardRadius)
                 : null);
       },
       child: GestureDetector(
@@ -221,7 +220,7 @@ class _PeerCardState extends State<_PeerCard>
         () => Container(
           foregroundDecoration: deco.value,
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(_cardRadis - _borderWidth),
+            borderRadius: BorderRadius.circular(_cardRadius - _borderWidth),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
@@ -299,27 +298,7 @@ class _PeerCardState extends State<_PeerCard>
         _menuPos = RelativeRect.fromLTRB(x, y, x, y);
       },
       onPointerUp: (_) => _showPeerMenu(peer.id),
-      child: MouseRegion(
-          onEnter: (_) => _iconMoreHover.value = true,
-          onExit: (_) => _iconMoreHover.value = false,
-          child: CircleAvatar(
-              radius: 14,
-              backgroundColor: _iconMoreHover.value
-                  ? Theme.of(context).scaffoldBackgroundColor
-                  : Theme.of(context).backgroundColor,
-              // ? Theme.of(context).scaffoldBackgroundColor!
-              // : Theme.of(context).backgroundColor!,
-              child: Icon(Icons.more_vert,
-                  size: 18,
-                  color: _iconMoreHover.value
-                      ? Theme.of(context).textTheme.titleLarge?.color
-                      : Theme.of(context)
-                          .textTheme
-                          .titleLarge
-                          ?.color
-                          ?.withOpacity(0.5)))));
-  // ? MyTheme.color(context).text
-  // : MyTheme.color(context).lightText))));
+      child: ActionMore());
 
   /// Show the peer menu and handle user's choice.
   /// User might remove the peer or send a file to the peer.
@@ -358,9 +337,9 @@ abstract class BasePeerCard extends StatelessWidget {
           .map((e) => e.build(
               context,
               const MenuConfig(
-                  commonColor: _PopupMenuTheme.commonColor,
-                  height: _PopupMenuTheme.height,
-                  dividerHeight: _PopupMenuTheme.dividerHeight)))
+                  commonColor: CustomPopupMenuTheme.commonColor,
+                  height: CustomPopupMenuTheme.height,
+                  dividerHeight: CustomPopupMenuTheme.dividerHeight)))
           .expand((i) => i)
           .toList();
 
@@ -426,7 +405,7 @@ abstract class BasePeerCard extends StatelessWidget {
     return MenuEntryButton<String>(
       childBuilder: (TextStyle? style) => Container(
           alignment: AlignmentDirectional.center,
-          height: _PopupMenuTheme.height,
+          height: CustomPopupMenuTheme.height,
           child: Row(
             children: [
               Text(
@@ -875,7 +854,7 @@ void _rdpDialog(String id) async {
       text: await bind.mainGetPeerOption(id: id, key: 'rdp_port'));
   final userController = TextEditingController(
       text: await bind.mainGetPeerOption(id: id, key: 'rdp_username'));
-  final passwordContorller = TextEditingController(
+  final passwordController = TextEditingController(
       text: await bind.mainGetPeerOption(id: id, key: 'rdp_password'));
   RxBool secure = true.obs;
 
@@ -886,7 +865,7 @@ void _rdpDialog(String id) async {
       await bind.mainSetPeerOption(
           id: id, key: 'rdp_username', value: userController.text);
       await bind.mainSetPeerOption(
-          id: id, key: 'rdp_password', value: passwordContorller.text);
+          id: id, key: 'rdp_password', value: passwordController.text);
       close();
     }
 
@@ -970,7 +949,7 @@ void _rdpDialog(String id) async {
                                 icon: Icon(secure.value
                                     ? Icons.visibility_off
                                     : Icons.visibility))),
-                        controller: passwordContorller,
+                        controller: passwordController,
                       )),
                 ),
               ],
@@ -996,4 +975,29 @@ Widget getOnline(double rightPadding, bool online) {
           padding: EdgeInsets.fromLTRB(0, 4, rightPadding, 4),
           child: CircleAvatar(
               radius: 3, backgroundColor: online ? Colors.green : kColorWarn)));
+}
+
+class ActionMore extends StatelessWidget {
+  final RxBool _iconMoreHover = false.obs;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+        onEnter: (_) => _iconMoreHover.value = true,
+        onExit: (_) => _iconMoreHover.value = false,
+        child: Obx(() => CircleAvatar(
+            radius: 14,
+            backgroundColor: _iconMoreHover.value
+                ? Theme.of(context).scaffoldBackgroundColor
+                : Theme.of(context).backgroundColor,
+            child: Icon(Icons.more_vert,
+                size: 18,
+                color: _iconMoreHover.value
+                    ? Theme.of(context).textTheme.titleLarge?.color
+                    : Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.color
+                        ?.withOpacity(0.5)))));
+  }
 }
