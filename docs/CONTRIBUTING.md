@@ -27,7 +27,7 @@ efforts from contributors on the same issue.
 - Commits should be accompanied by a Developer Certificate of Origin
   (http://developercertificate.org) sign-off, which indicates that you (and
   your employer if applicable) agree to be bound by the terms of the
-  [project license](LICENSE). In git, this is the `-s` option to `git commit`
+  [project license](../LICENCE). In git, this is the `-s` option to `git commit`
 
 - If your patch is not getting reviewed or you need a specific person to review
   it, you can @-reply a reviewer asking for a review in the pull request or a

@@ -5,7 +5,7 @@
   <a href="#how-to-build-with-docker">Docker</a> •
   <a href="#file-structure">Structuur</a> •
   <a href="#snapshot">Snapshot</a><br>
-  [<a href="docs/README-CS.md">česky</a>] | [<a href="docs/README-ZH.md">中文</a>] | | [<a href="docs/README-HU.md">Magyar</a>] | [<a href="docs/README-ES.md">Español</a>] | [<a href="docs/README-FA.md">فارسی</a>] | [<a href="docs/README-FR.md">Français</a>] | [<a href="docs/README-DE.md">Deutsch</a>] | [<a href="docs/README-PL.md">Polski</a>] | [<a href="docs/README-ID.md">Indonesian</a>] | [<a href="docs/README-FI.md">Suomi</a>] | [<a href="docs/README-ML.md">മലയാളം</a>] | [<a href="docs/README-JP.md">日本語</a>] | [<a href="docs/README-NL.md">Nederlands</a>] | [<a href="docs/README-IT.md">Italiano</a>] | [<a href="docs/README-RU.md">Русский</a>] | [<a href="docs/README-PTBR.md">Português (Brasil)</a>] | [<a href="docs/README-EO.md">Esperanto</a>] | [<a href="docs/README-KR.md">한국어</a>] | [<a href="docs/README-AR.md">العربي</a>] | [<a href="docs/README-VN.md">Tiếng Việt</a>]<br>
+  [<a href="../README.md">English</a>] | [<a href="README-UA.md">Українська</a>] | [<a href="README-CS.md">česky</a>] | [<a href="README-ZH.md">中文</a>] | [<a href="README-HU.md">Magyar</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FA.md">فارسی</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-ID.md">Indonesian</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PTBR.md">Português (Brasil)</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">한국어</a>] | [<a href="README-AR.md">العربي</a>] | [<a href="README-VN.md">Tiếng Việt</a>]<br>
   <b>We hebben je hulp nodig om deze README te vertalen naar jouw moedertaal</b>
 </p>
 
@@ -15,7 +15,7 @@ Praat met ons: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twit
 
 Nog weer een applicatie voor toegang op afstand, geschreven in Rust. Werkt meteen, geen configuratie nodig. Je hebt volledig beheer over je data, zonder na te hoeven denken over veiligheid. Je kunt onze rendez-vous/relay-server gebruiken, [je eigen server opzetten](https://rustdesk.com/blog/id-relay-set), of [je eigen rendez-vous/relay-server schrijven](https://github.com/rustdesk/rustdesk-server-demo).
 
-RustDesk verwelkomt bijdragen van iedereen. Zie [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) om te lezen hoe je van start kunt gaan.
+RustDesk verwelkomt bijdragen van iedereen. Zie [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) om te lezen hoe je van start kunt gaan.
 
 [**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
 

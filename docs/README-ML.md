@@ -5,7 +5,7 @@
   <a href="#how-to-build-with-docker">Docker</a> •
   <a href="#file-structure">Structure</a> •
   <a href="#snapshot">Snapshot</a><br>
-  [<a href="docs/README-CS.md">česky</a>] | [<a href="docs/README-ZH.md">中文</a>] | | [<a href="docs/README-HU.md">Magyar</a>] | [<a href="docs/README-ES.md">Español</a>] | [<a href="docs/README-FA.md">فارسی</a>] | [<a href="docs/README-FR.md">Français</a>] | [<a href="docs/README-DE.md">Deutsch</a>] | [<a href="docs/README-PL.md">Polski</a>] | [<a href="docs/README-ID.md">Indonesian</a>] | [<a href="docs/README-FI.md">Suomi</a>] | [<a href="docs/README-ML.md">മലയാളം</a>] | [<a href="docs/README-JP.md">日本語</a>] | [<a href="docs/README-NL.md">Nederlands</a>] | [<a href="docs/README-IT.md">Italiano</a>] | [<a href="docs/README-RU.md">Русский</a>] | [<a href="docs/README-PTBR.md">Português (Brasil)</a>] | [<a href="docs/README-EO.md">Esperanto</a>] | [<a href="docs/README-KR.md">한국어</a>] | [<a href="docs/README-AR.md">العربي</a>] | [<a href="docs/README-VN.md">Tiếng Việt</a>]<br>
+  [<a href="../README.md">English</a>] | [<a href="README-UA.md">Українська</a>] | [<a href="README-CS.md">česky</a>] | [<a href="README-ZH.md">中文</a>] | [<a href="README-HU.md">Magyar</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FA.md">فارسی</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-ID.md">Indonesian</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PTBR.md">Português (Brasil)</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">한국어</a>] | [<a href="README-AR.md">العربي</a>] | [<a href="README-VN.md">Tiếng Việt</a>]<br>
   <b>ഈ README നിങ്ങളുടെ മാതൃഭാഷയിലേക്ക് വിവർത്തനം ചെയ്യാൻ ഞങ്ങൾക്ക് നിങ്ങളുടെ സഹായം ആവശ്യമാണ്</b>
 </p>
 
@@ -15,7 +15,7 @@
 
 റസ്റ്റിൽ എഴുതിയ മറ്റൊരു റിമോട്ട് ഡെസ്ക്ടോപ്പ് സോഫ്റ്റ്‌വെയർ. ബോക്‌സിന് പുറത്ത് പ്രവർത്തിക്കുന്നു, കോൺഫിഗറേഷൻ ആവശ്യമില്ല. സുരക്ഷയെക്കുറിച്ച് ആശങ്കകളൊന്നുമില്ലാതെ, നിങ്ങളുടെ ഡാറ്റയുടെ പൂർണ്ണ നിയന്ത്രണം നിങ്ങൾക്കുണ്ട്. നിങ്ങൾക്ക് ഞങ്ങളുടെ rendezvous/relay സെർവർ ഉപയോഗിക്കാം, [സ്വന്തമായി സജ്ജീകരിക്കുക](https://rustdesk.com/server), അല്ലെങ്കിൽ [നിങ്ങളുടെ സ്വന്തം rendezvous/relay സെർവർ എഴുതുക](https://github.com/rustdesk/rustdesk-server-demo).
 
-എല്ലാവരുടെയും സംഭാവനയെ RustDesk സ്വാഗതം ചെയ്യുന്നു. ആരംഭിക്കുന്നതിനുള്ള സഹായത്തിന് [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) കാണുക.
+എല്ലാവരുടെയും സംഭാവനയെ RustDesk സ്വാഗതം ചെയ്യുന്നു. ആരംഭിക്കുന്നതിനുള്ള സഹായത്തിന് [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) കാണുക.
 
 [**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
 

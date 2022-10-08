@@ -5,7 +5,7 @@
   <a href="#jak-kompilować-za-pomocą-dockera">Docker</a> •
   <a href="#struktura-plików">Struktura</a> •
   <a href="#migawkisnapshoty">Snapshot</a><br>
-  [<a href="docs/README-CS.md">česky</a>] | [<a href="docs/README-ZH.md">中文</a>] | | [<a href="docs/README-HU.md">Magyar</a>] | [<a href="docs/README-ES.md">Español</a>] | [<a href="docs/README-FA.md">فارسی</a>] | [<a href="docs/README-FR.md">Français</a>] | [<a href="docs/README-DE.md">Deutsch</a>] | [<a href="docs/README-PL.md">Polski</a>] | [<a href="docs/README-ID.md">Indonesian</a>] | [<a href="docs/README-FI.md">Suomi</a>] | [<a href="docs/README-ML.md">മലയാളം</a>] | [<a href="docs/README-JP.md">日本語</a>] | [<a href="docs/README-NL.md">Nederlands</a>] | [<a href="docs/README-IT.md">Italiano</a>] | [<a href="docs/README-RU.md">Русский</a>] | [<a href="docs/README-PTBR.md">Português (Brasil)</a>] | [<a href="docs/README-EO.md">Esperanto</a>] | [<a href="docs/README-KR.md">한국어</a>] | [<a href="docs/README-AR.md">العربي</a>] | [<a href="docs/README-VN.md">Tiếng Việt</a>]<br>
+  [<a href="../README.md">English</a>] | [<a href="README-UA.md">Українська</a>] | [<a href="README-CS.md">česky</a>] | [<a href="README-ZH.md">中文</a>] | [<a href="README-HU.md">Magyar</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FA.md">فارسی</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-ID.md">Indonesian</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PTBR.md">Português (Brasil)</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">한국어</a>] | [<a href="README-AR.md">العربي</a>] | [<a href="README-VN.md">Tiếng Việt</a>]<br>
   <b>Potrzebujemy twojej pomocy w tłumaczeniu README na twój ojczysty język</b>
 </p>
 
@@ -15,7 +15,7 @@ Porozmawiaj z nami na: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](http
 
 Kolejny program do zdalnego pulpitu, napisany w Rust. Działa od samego początku, nie wymaga konfiguracji. Masz pełną kontrolę nad swoimi danymi, bez obaw o bezpieczeństwo. Możesz skorzystać z naszego darmowego serwera publicznego , [skonfigurować własny](https://rustdesk.com/server), lub [napisać własny serwer rendezvous/relay server](https://github.com/rustdesk/rustdesk-server-demo).
 
-RustDesk zaprasza do współpracy każdego. Zobacz [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) pomoc w uruchomieniu programu.
+RustDesk zaprasza do współpracy każdego. Zobacz [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) pomoc w uruchomieniu programu.
 
 [**POBIERZ KOMPILACJE**](https://github.com/rustdesk/rustdesk/releases)
 
