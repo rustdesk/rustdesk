@@ -9,7 +9,6 @@ import 'package:get/get.dart';
 import '../../common.dart';
 import '../../desktop/pages/desktop_home_page.dart';
 import '../../mobile/pages/settings_page.dart';
-import '../../models/platform_model.dart';
 
 class AddressBook extends StatefulWidget {
   final EdgeInsets? menuPadding;
@@ -30,7 +29,7 @@ class _AddressBookState extends State<AddressBook> {
 
   @override
   Widget build(BuildContext context) => FutureBuilder<Widget>(
-      future: buildAddressBook(context),
+      future: buildBody(context),
       builder: (context, snapshot) {
         if (snapshot.hasData) {
           return snapshot.data!;
@@ -44,7 +43,7 @@ class _AddressBookState extends State<AddressBook> {
     if (isDesktop) {
       loginDialog().then((success) {
         if (success) {
-          setState(() {});
+          gFFI.abModel.pullAb();
         }
       });
     } else {
@@ -52,41 +51,30 @@ class _AddressBookState extends State<AddressBook> {
     }
   }
 
-  Future<Widget> buildAddressBook(BuildContext context) async {
-    final token = await bind.mainGetLocalOption(key: 'access_token');
-    if (token.trim().isEmpty) {
-      return Center(
-        child: InkWell(
-          onTap: handleLogin,
-          child: Text(
-            translate("Login"),
-            style: const TextStyle(decoration: TextDecoration.underline),
+  Future<Widget> buildBody(BuildContext context) async {
+    return Obx(() {
+      if (gFFI.userModel.userName.value.isEmpty) {
+        return Center(
+          child: InkWell(
+            onTap: handleLogin,
+            child: Text(
+              translate("Login"),
+              style: const TextStyle(decoration: TextDecoration.underline),
+            ),
           ),
-        ),
-      );
-    }
-    final model = gFFI.abModel;
-    return FutureBuilder(
-        future: model.pullAb(),
-        builder: (context, snapshot) {
-          if (snapshot.hasData) {
-            return _buildAddressBook(context);
-          } else if (snapshot.hasError) {
-            return _buildShowError(snapshot.error.toString());
-          } else {
-            return Obx(() {
-              if (model.abLoading.value) {
-                return const Center(
-                  child: CircularProgressIndicator(),
-                );
-              } else if (model.abError.isNotEmpty) {
-                return _buildShowError(model.abError.value);
-              } else {
-                return const Offstage();
-              }
-            });
-          }
-        });
+        );
+      } else {
+        if (gFFI.abModel.abLoading.value) {
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        }
+        if (gFFI.abModel.abError.isNotEmpty) {
+          return _buildShowError(gFFI.abModel.abError.value);
+        }
+        return _buildAddressBook(context);
+      }
+    });
   }
 
   Widget _buildShowError(String error) {

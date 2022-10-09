@@ -24,8 +24,9 @@ class AbModel {
   FFI? get _ffi => parent.target;
 
   Future<dynamic> pullAb() async {
+    if (_ffi!.userModel.userName.isEmpty) return;
     abLoading.value = true;
-    // request
+    abError.value = "";
     final api = "${await bind.mainGetApiServer()}/api/ab/get";
     try {
       final resp =
