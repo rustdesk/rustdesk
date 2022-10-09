@@ -73,7 +73,7 @@ dependencies:
     flutter_custom_cursor:
         git:
             url: https://github.com/Kingtous/rustdesk_flutter_custom_cursor
-            ref: 527821d676017387be024dffd61898ff79b14c41 
+            ref: 4a950fd3a5a228bf5381070a4c803919d5787c07 
     get: ^4.6.5
     visibility_detector: ^0.3.3
     contextmenu: ^3.0.0
