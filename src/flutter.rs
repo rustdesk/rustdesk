@@ -368,8 +368,11 @@ pub mod connection_manager {
             self.push_event("add_connection", vec![("client", &client_json)]);
         }
 
-        fn remove_connection(&self, id: i32) {
-            self.push_event("on_client_remove", vec![("id", &id.to_string())]);
+        fn remove_connection(&self, id: i32, close: bool) {
+            self.push_event(
+                "on_client_remove",
+                vec![("id", &id.to_string()), ("close", &close.to_string())],
+            );
         }
 
         fn new_message(&self, id: i32, text: String) {

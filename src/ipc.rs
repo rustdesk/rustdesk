@@ -186,6 +186,7 @@ pub enum Data {
     Theme(String),
     Language(String),
     Empty,
+    Disconnected,
 }
 
 #[tokio::main(flavor = "current_thread")]
