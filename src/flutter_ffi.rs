@@ -1041,6 +1041,22 @@ pub fn main_update_me() -> SyncReturn<bool> {
     SyncReturn(true)
 }
 
+pub fn install_show_run_without_install() -> SyncReturn<bool> {
+    SyncReturn(show_run_without_install())
+}
+
+pub fn install_run_without_install() {
+    run_without_install();
+}
+
+pub fn install_install_me(options: String, path: String) {
+    install_me(options, path, false, false);
+}
+
+pub fn install_install_path() -> SyncReturn<String> {
+    SyncReturn(install_path())
+}
+
 #[cfg(target_os = "android")]
 pub mod server_side {
     use jni::{

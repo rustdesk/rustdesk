@@ -4,6 +4,7 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/desktop/pages/server_page.dart';
+import 'package:flutter_hbb/desktop/pages/install_page.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_file_transfer_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_port_forward_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_remote_screen.dart';
@@ -64,6 +65,8 @@ Future<void> main(List<String> args) async {
     desktopType = DesktopType.cm;
     await windowManager.ensureInitialized();
     runConnectionManagerScreen();
+  } else if (args.contains('--install')) {
+    runInstallPage();
   } else {
     desktopType = DesktopType.main;
     await windowManager.ensureInitialized();
@@ -212,6 +215,30 @@ void runConnectionManagerScreen() async {
     windowManager.focus();
     windowManager.setOpacity(1);
     windowManager.setAlignment(Alignment.topRight); // ensure
+  });
+}
+
+void runInstallPage() async {
+  await windowManager.ensureInitialized();
+  await initEnv(kAppTypeMain);
+  runApp(GetMaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: MyTheme.lightTheme,
+      themeMode: ThemeMode.light,
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: supportedLocales,
+      home: const InstallPage(),
+      builder: _keepScaleBuilder()));
+  windowManager.waitUntilReadyToShow(
+      WindowOptions(size: Size(800, 600), center: true), () async {
+    windowManager.show();
+    windowManager.focus();
+    windowManager.setOpacity(1);
+    windowManager.setAlignment(Alignment.center); // ensure
   });
 }
 
