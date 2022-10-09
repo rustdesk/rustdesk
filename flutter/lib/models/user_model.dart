@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 
@@ -83,8 +82,7 @@ class UserModel {
   }
 
   Future<void> logOut() async {
-    // TODO show toast
-    debugPrint("start logout");
+    final tag = gFFI.dialogManager.showLoading(translate('Waiting'));
     final url = await bind.mainGetApiServer();
     final _ = await http.post(Uri.parse("$url/api/logout"),
         body: {
@@ -99,6 +97,7 @@ class UserModel {
     ]);
     parent.target?.abModel.clear();
     userName.value = "";
+    gFFI.dialogManager.dismissByTag(tag);
   }
 
   Future<Map<String, dynamic>> login(String userName, String pass) async {

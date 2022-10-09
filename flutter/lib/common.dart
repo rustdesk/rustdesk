@@ -383,22 +383,23 @@ class OverlayDialogManager {
           "[OverlayDialogManager] Failed to show dialog, _overlayState is null, call [setOverlayState] first");
     }
 
-    final _tag;
+    final String dialogTag;
     if (tag != null) {
-      _tag = tag;
+      dialogTag = tag;
     } else {
-      _tag = _tagCount.toString();
+      dialogTag = _tagCount.toString();
       _tagCount++;
     }
 
     final dialog = Dialog<T>();
-    _dialogs[_tag] = dialog;
+    _dialogs[dialogTag] = dialog;
 
-    final close = ([res]) {
-      _dialogs.remove(_tag);
+    close([res]) {
+      _dialogs.remove(dialogTag);
       dialog.complete(res);
-      BackButtonInterceptor.removeByName(_tag);
-    };
+      BackButtonInterceptor.removeByName(dialogTag);
+    }
+
     dialog.entry = OverlayEntry(builder: (_) {
       bool innerClicked = false;
       return Listener(
@@ -423,14 +424,16 @@ class OverlayDialogManager {
         close();
       }
       return true;
-    }, name: _tag);
+    }, name: dialogTag);
     return dialog.completer.future;
   }
 
-  void showLoading(String text,
+  String showLoading(String text,
       {bool clickMaskDismiss = false,
       bool showCancel = true,
       VoidCallback? onCancel}) {
+    final tag = _tagCount.toString();
+    _tagCount++;
     show((setState, close) {
       cancel() {
         dismissAll();
@@ -465,7 +468,8 @@ class OverlayDialogManager {
                 ])),
         onCancel: showCancel ? cancel : null,
       );
-    });
+    }, tag: tag);
+    return tag;
   }
 
   void resetMobileActionsOverlay({FFI? ffi}) {
