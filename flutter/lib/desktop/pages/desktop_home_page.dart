@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:flutter/material.dart' hide MenuItem;
 import 'package:flutter/services.dart';
@@ -16,6 +17,7 @@ import 'package:provider/provider.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:window_size/window_size.dart' as window_size;
 
 import '../widgets/button.dart';
 
@@ -427,6 +429,27 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           "call ${call.method} with args ${call.arguments} from window $fromWindowId");
       if (call.method == "main_window_on_top") {
         window_on_top(null);
+      } else if (call.method == "get_window_info") {
+        final screen = (await window_size.getWindowInfo()).screen;
+        if (screen == null) {
+          return "";
+        } else {
+          return jsonEncode({
+            'frame': {
+              'l': screen.frame.left,
+              't': screen.frame.top,
+              'r': screen.frame.right,
+              'b': screen.frame.bottom,
+            },
+            'visibleFrame': {
+              'l': screen.visibleFrame.left,
+              't': screen.visibleFrame.top,
+              'r': screen.visibleFrame.right,
+              'b': screen.visibleFrame.bottom,
+            },
+            'scaleFactor': screen.scaleFactor,
+          });
+        }
       }
     });
   }

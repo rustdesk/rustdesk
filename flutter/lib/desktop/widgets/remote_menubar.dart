@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,6 +10,7 @@ import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:rxdart/rxdart.dart' as rxdart;
 import 'package:desktop_multi_window/desktop_multi_window.dart';
+import 'package:window_size/window_size.dart' as window_size;
 
 import '../../common.dart';
 import '../../mobile/widgets/dialog.dart';
@@ -51,6 +53,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   final _rxHideReplay = rxdart.ReplaySubject<int>();
   final _pinMenubar = false.obs;
   bool _isCursorOverImage = false;
+  window_size.Screen? _screen;
 
   bool get isFullscreen => Get.find<RxBool>(tag: 'fullscreen').isTrue;
   void _setFullscreen(bool v) {
@@ -108,10 +111,32 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                 },
                 onPressed: () {
                   _show.value = !_show.value;
+                  if (_show.isTrue) {
+                    _updateScreen();
+                  }
                 },
                 child: Obx(() => Container(
                       color: _hideColor.value,
                     ).marginOnly(bottom: 8.0))))));
+  }
+
+  _updateScreen() async {
+    final v = await DesktopMultiWindow.invokeMethod(0, "get_window_info", "");
+    final String valueStr = v;
+    if (valueStr.isEmpty) {
+      _screen = null;
+    } else {
+      final screenMap = jsonDecode(valueStr);
+      _screen = window_size.Screen(
+          Rect.fromLTRB(screenMap['frame']['l'], screenMap['frame']['t'],
+              screenMap['frame']['r'], screenMap['frame']['b']),
+          Rect.fromLTRB(
+              screenMap['visibleFrame']['l'],
+              screenMap['visibleFrame']['t'],
+              screenMap['visibleFrame']['r'],
+              screenMap['visibleFrame']['b']),
+          screenMap['scaleFactor']);
+    }
   }
 
   Widget _buildMenubar(BuildContext context) {
@@ -594,10 +619,30 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   }
 
   bool _isWindowCanBeAdjusted(int remoteCount) {
+    if (remoteCount != 1) {
+      return false;
+    }
+    if (_screen == null) {
+      return false;
+    }
+    double scale = _screen!.scaleFactor;
+    double selfWidth = _screen!.frame.width;
+    double selfHeight = _screen!.frame.height;
     final RxBool fullscreen = Get.find(tag: 'fullscreen');
-    return remoteCount == 1 &&
-        fullscreen.isFalse &&
-        widget.ffi.canvasModel.scale > 1.0;
+    if (fullscreen.isFalse) {
+      selfWidth = _screen!.visibleFrame.width;
+      selfHeight = _screen!.visibleFrame.height;
+    }
+
+    final canvasModel = widget.ffi.canvasModel;
+    final displayWidth = canvasModel.getDisplayWidth();
+    final displayHeight = canvasModel.getDisplayHeight();
+    final requiredWidth = displayWidth +
+        (canvasModel.tabBarHeight + canvasModel.windowBorderWidth * 2);
+    final requiredHeight = displayHeight +
+        (canvasModel.tabBarHeight + canvasModel.windowBorderWidth * 2);
+    return selfWidth > (requiredWidth * scale) &&
+        selfHeight > (requiredHeight * scale);
   }
 
   List<MenuEntryBase<String>> _getDisplayMenu(
@@ -763,25 +808,59 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         0,
         MenuEntryButton<String>(
           childBuilder: (TextStyle? style) => Container(
-              alignment: AlignmentDirectional.center,
-              height: _MenubarTheme.height,
               child: Text(
-                translate('Adjust Window'),
-                style: style,
-              )),
+            translate('Adjust Window'),
+            style: style,
+          )),
           proc: () {
             () async {
-              final wndRect =
-                  await WindowController.fromWindowId(widget.windowId)
-                      .getFrame();
-              final canvasModel = widget.ffi.canvasModel;
-              final width =
-                  canvasModel.size.width + canvasModel.windowBorderWidth * 2;
-              final height = canvasModel.size.height +
-                  canvasModel.tabBarHeight +
-                  canvasModel.windowBorderWidth * 2;
-              await WindowController.fromWindowId(widget.windowId).setFrame(
-                  Rect.fromLTWH(wndRect.left, wndRect.top, width, height));
+              await _updateScreen();
+              if (_screen != null) {
+                double scale = _screen!.scaleFactor;
+                final wndRect =
+                    await WindowController.fromWindowId(widget.windowId)
+                        .getFrame();
+                final mediaSize = MediaQueryData.fromWindow(ui.window).size;
+                // On windows, wndRect is equal to GetWindowRect and mediaSize is equal to GetClientRect.
+                // https://stackoverflow.com/a/7561083
+                double magicWidth =
+                    wndRect.right - wndRect.left - mediaSize.width * scale;
+                double magicHeight =
+                    wndRect.bottom - wndRect.top - mediaSize.height * scale;
+
+                final canvasModel = widget.ffi.canvasModel;
+                final width = (canvasModel.getDisplayWidth() +
+                            canvasModel.windowBorderWidth * 2) *
+                        scale +
+                    magicWidth;
+                final height = (canvasModel.getDisplayHeight() +
+                            canvasModel.tabBarHeight +
+                            canvasModel.windowBorderWidth * 2) *
+                        scale +
+                    magicHeight;
+                double left = wndRect.left + (wndRect.width - width) / 2;
+                double top = wndRect.top + (wndRect.height - height) / 2;
+
+                Rect frameRect = _screen!.frame;
+                final RxBool fullscreen = Get.find(tag: 'fullscreen');
+                if (fullscreen.isFalse) {
+                  frameRect = _screen!.visibleFrame;
+                }
+                if (left < frameRect.left) {
+                  left = frameRect.left;
+                }
+                if (top < frameRect.top) {
+                  top = frameRect.top;
+                }
+                if ((left + width) > frameRect.right) {
+                  left = frameRect.right - width;
+                }
+                if ((top + height) > frameRect.bottom) {
+                  top = frameRect.bottom - height;
+                }
+                await WindowController.fromWindowId(widget.windowId)
+                    .setFrame(Rect.fromLTWH(left, top, width, height));
+              }
             }();
           },
           padding: padding,
