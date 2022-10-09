@@ -7,7 +7,8 @@
 #include "utils.h"
 // #include <bitsdojo_window_windows/bitsdojo_window_plugin.h>
 
-typedef bool (*FUNC_RUSTDESK_CORE_MAIN)(void);
+typedef char** (*FUNC_RUSTDESK_CORE_MAIN)(int*);
+typedef void (*FUNC_RUSTDESK_FREE_ARGS)( char**, int);
 
 // auto bdw = bitsdojo_window_configure(BDW_CUSTOM_FRAME | BDW_HIDE_ON_STARTUP);
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
@@ -26,11 +27,23 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     std::cout << "Failed to get rustdesk_core_main" << std::endl;
     return EXIT_FAILURE;
   }
-  if (!rustdesk_core_main())
+  FUNC_RUSTDESK_FREE_ARGS free_c_args =
+      (FUNC_RUSTDESK_FREE_ARGS)GetProcAddress(hInstance, "free_c_args");
+  if (!free_c_args)
+  {
+    std::cout << "Failed to get free_c_args" << std::endl;
+    return EXIT_FAILURE;
+  }
+
+  int args_len = 0;
+  char** c_args = rustdesk_core_main(&args_len);
+  if (!c_args)
   {
     std::cout << "Rustdesk core returns false, exiting without launching Flutter app" << std::endl;
     return EXIT_SUCCESS;
   }
+  std::vector<std::string> rust_args(c_args, c_args + args_len);
+  free_c_args(c_args, args_len);
 
   // Attach to console when present (e.g., 'flutter run') or create a
   // new console when running with a debugger.
@@ -48,6 +61,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   std::vector<std::string> command_line_arguments =
       GetCommandLineArguments();
 
+  command_line_arguments.insert(command_line_arguments.end(), rust_args.begin(), rust_args.end());
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 
   FlutterWindow window(project);
