@@ -1029,12 +1029,14 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
 _adjustRestoreMainWindowSize(double? width, double? height) async {
   const double minWidth = 600;
   const double minHeight = 100;
-  double maxWidth = ((isDesktop || isWebDesktop)
-      ? kDesktopMaxDisplayWidth
-      : kMobileMaxDisplayWidth) as double;
+  double maxWidth = (((isDesktop || isWebDesktop)
+          ? kDesktopMaxDisplayWidth
+          : kMobileMaxDisplayWidth))
+      .toDouble();
   double maxHeight = ((isDesktop || isWebDesktop)
-      ? kDesktopMaxDisplayHeight
-      : kMobileMaxDisplayHeight) as double;
+          ? kDesktopMaxDisplayHeight
+          : kMobileMaxDisplayHeight)
+      .toDouble();
 
   if (isDesktop || isWebDesktop) {
     final screen = (await window_size.getWindowInfo()).screen;
@@ -1044,12 +1046,12 @@ _adjustRestoreMainWindowSize(double? width, double? height) async {
     }
   }
 
-  final defaultWidth = ((isDesktop || isWebDesktop)
-      ? 1280
-      : kMobileDefaultDisplayWidth) as double;
-  final defaultHeight = ((isDesktop || isWebDesktop)
-      ? 720
-      : kMobileDefaultDisplayHeight) as double;
+  final defaultWidth =
+      ((isDesktop || isWebDesktop) ? 1280 : kMobileDefaultDisplayWidth)
+          .toDouble();
+  final defaultHeight =
+      ((isDesktop || isWebDesktop) ? 720 : kMobileDefaultDisplayHeight)
+          .toDouble();
   double restoreWidth = width ?? defaultWidth;
   double restoreHeight = height ?? defaultHeight;
 
@@ -1078,11 +1080,13 @@ _adjustRestoreMainWindowOffset(double? left, double? top) async {
     double frameLeft = 0;
     double frameTop = 0;
     double frameRight = ((isDesktop || isWebDesktop)
-        ? kDesktopMaxDisplayWidth
-        : kMobileMaxDisplayWidth) as double;
+            ? kDesktopMaxDisplayWidth
+            : kMobileMaxDisplayWidth)
+        .toDouble();
     double frameBottom = ((isDesktop || isWebDesktop)
-        ? kDesktopMaxDisplayHeight
-        : kMobileMaxDisplayHeight) as double;
+            ? kDesktopMaxDisplayHeight
+            : kMobileMaxDisplayHeight)
+        .toDouble();
 
     if (isDesktop || isWebDesktop) {
       final screen = (await window_size.getWindowInfo()).screen;

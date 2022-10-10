@@ -628,8 +628,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     double scale = _screen!.scaleFactor;
     double selfWidth = _screen!.frame.width;
     double selfHeight = _screen!.frame.height;
-    final RxBool fullscreen = Get.find(tag: 'fullscreen');
-    if (fullscreen.isFalse) {
+    if (isFullscreen) {
       selfWidth = _screen!.visibleFrame.width;
       selfHeight = _screen!.visibleFrame.height;
     }
@@ -816,6 +815,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             () async {
               await _updateScreen();
               if (_screen != null) {
+                _setFullscreen(false);
                 double scale = _screen!.scaleFactor;
                 final wndRect =
                     await WindowController.fromWindowId(widget.windowId)
