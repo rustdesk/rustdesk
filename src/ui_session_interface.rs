@@ -906,18 +906,7 @@ impl<T: InvokeUiSession> Session<T> {
                 key_event.set_control_key(key.clone());
             }
             Key::_Raw(raw) => {
-                if raw > 'z' as u32 || raw < 'a' as u32 {
-                    key_event.set_unicode(raw);
-                    // TODO
-                    // if down_or_up == 0 {
-                    //     // ignore up, avoiding trigger twice
-                    //     return;
-                    // }
-                    // down_or_up = 1; // if press, turn into down for avoiding trigger twice on server side
-                } else {
-                    // to make ctrl+c works on windows
-                    key_event.set_chr(raw);
-                }
+                key_event.set_chr(raw);
             }
         }
 
