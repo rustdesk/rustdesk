@@ -6,6 +6,7 @@ use crate::client::{
     load_config, send_mouse, start_video_audio_threads, FileManager, Key, LoginConfigHandler,
     QualityStatus, KEY_MAP, SERVER_KEYBOARD_ENABLED,
 };
+use crate::common::IS_X11;
 use crate::{client::Data, client::Interface};
 use async_trait::async_trait;
 use hbb_common::config::{Config, LocalConfig, PeerConfig};
@@ -909,14 +910,7 @@ impl<T: InvokeUiSession> Session<T> {
         }
 
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        let ctrl =
-            get_hotkey_state(RdevKey::ControlLeft) || get_hotkey_state(RdevKey::ControlRight);
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        let shift = get_hotkey_state(RdevKey::ShiftLeft) || get_hotkey_state(RdevKey::ShiftRight);
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        let command = get_hotkey_state(RdevKey::MetaLeft) || get_hotkey_state(RdevKey::MetaRight);
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        let alt = get_hotkey_state(RdevKey::Alt) || get_hotkey_state(RdevKey::AltGr);
+        let (alt, ctrl, shift, command) = get_all_hotkey_state(alt, ctrl, shift, command);
 
         self.legacy_modifiers(&mut key_event, alt, ctrl, shift, command);
         if v == 1 {
@@ -948,14 +942,7 @@ impl<T: InvokeUiSession> Session<T> {
         }
 
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        let ctrl =
-            get_hotkey_state(RdevKey::ControlLeft) || get_hotkey_state(RdevKey::ControlRight);
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        let shift = get_hotkey_state(RdevKey::ShiftLeft) || get_hotkey_state(RdevKey::ShiftRight);
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        let command = get_hotkey_state(RdevKey::MetaLeft) || get_hotkey_state(RdevKey::MetaRight);
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        let alt = get_hotkey_state(RdevKey::Alt) || get_hotkey_state(RdevKey::AltGr);
+        let (alt, ctrl, shift, command) = get_all_hotkey_state(alt, ctrl, shift, command);
 
         send_mouse(mask, x, y, alt, ctrl, shift, command, self);
         // on macos, ctrl + left button down = right button down, up won't emit, so we need to
@@ -1206,7 +1193,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
                 crate::platform::windows::add_recent_document(&path);
             }
         }
-        // rdev::grab and rdev::listen use the same api on macOS
+
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         self.start_keyboard_hook();
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -1253,10 +1240,6 @@ impl<T: InvokeUiSession> Interface for Session<T> {
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 impl<T: InvokeUiSession> Session<T> {
-    fn send_hotkey(&self, key: RdevKey, is_press: bool) {
-        log::info!("{:?} {:?}", key, is_press);
-    }
-
     fn handle_hot_key_event(&self, event: Event) {
         // keyboard long press
         match event.event_type {
@@ -1279,11 +1262,9 @@ impl<T: InvokeUiSession> Session<T> {
         // keyboard short press
         match event.event_type {
             EventType::KeyPress(key) => {
-                self.send_hotkey(key, true);
                 self.key_down_or_up(true, key, event);
             }
             EventType::KeyRelease(key) => {
-                self.send_hotkey(key, false);
                 self.key_down_or_up(false, key, event);
             }
             _ => {}
@@ -1291,6 +1272,10 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     fn start_hotkey_grab(&self) {
+        #[cfg(target_os = "linux")]
+        if !*IS_X11.lock().unwrap() {
+            return;
+        }
         if self.is_port_forward() || self.is_file_transfer() {
             return;
         }
@@ -1306,11 +1291,13 @@ impl<T: InvokeUiSession> Session<T> {
                     return Some(event);
                 };
                 match event.event_type {
-                    EventType::KeyPress(key) | EventType::KeyRelease(key) => {
+                    EventType::KeyPress(_key) | EventType::KeyRelease(_key) => {
                         #[cfg(any(target_os = "windows", target_os = "macos"))]
-                        if MUTEX_SPECIAL_KEYS.lock().unwrap().contains_key(&key) {
+                        if MUTEX_SPECIAL_KEYS.lock().unwrap().contains_key(&_key) {
                             me.handle_hot_key_event(event);
                             return None;
+                        } else {
+                            return Some(event);
                         }
 
                         #[cfg(target_os = "linux")]
@@ -1547,6 +1534,23 @@ async fn send_note(url: String, id: String, conn_id: i32, note: String) {
 
 fn get_hotkey_state(key: RdevKey) -> bool {
     *MUTEX_SPECIAL_KEYS.lock().unwrap().get(&key).unwrap()
+}
+
+fn get_all_hotkey_state(
+    alt: bool,
+    ctrl: bool,
+    shift: bool,
+    command: bool,
+) -> (bool, bool, bool, bool) {
+    let ctrl =
+        get_hotkey_state(RdevKey::ControlLeft) || get_hotkey_state(RdevKey::ControlRight) || ctrl;
+    let shift =
+        get_hotkey_state(RdevKey::ShiftLeft) || get_hotkey_state(RdevKey::ShiftRight) || shift;
+    let command =
+        get_hotkey_state(RdevKey::MetaLeft) || get_hotkey_state(RdevKey::MetaRight) || command;
+    let alt = get_hotkey_state(RdevKey::Alt) || get_hotkey_state(RdevKey::AltGr) || alt;
+
+    (alt, ctrl, shift, command)
 }
 
 pub fn global_get_keyboard_mode() -> String {
