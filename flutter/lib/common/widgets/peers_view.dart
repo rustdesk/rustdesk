@@ -83,8 +83,8 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider<Peers>(
-      create: (context) => widget.peers,
+    return ChangeNotifierProvider.value(
+      value: widget.peers,
       child: Consumer<Peers>(
           builder: (context, peers, child) => peers.peers.isEmpty
               ? Container(
@@ -273,28 +273,10 @@ class AddressBookPeersView extends BasePeersView {
           key: key,
           name: 'address book peer',
           loadEvent: 'load_address_book_peers',
-          peerCardBuilder: (Peer peer) => Obx(() => Offstage(
-              key: ValueKey("off${peer.id}"),
-              offstage: !_hitTag(gFFI.abModel.selectedTags, peer.tags),
-              child: AddressBookPeerCard(
-                peer: peer,
-                menuPadding: menuPadding,
-              ))),
+          peerCardBuilder: (Peer peer) => AddressBookPeerCard(
+            peer: peer,
+            menuPadding: menuPadding,
+          ),
           initPeers: initPeers,
         );
-
-  static bool _hitTag(List<dynamic> selectedTags, List<dynamic> idents) {
-    if (selectedTags.isEmpty) {
-      return true;
-    }
-    if (idents.isEmpty) {
-      return false;
-    }
-    for (final tag in selectedTags) {
-      if (!idents.contains(tag)) {
-        return false;
-      }
-    }
-    return true;
-  }
 }

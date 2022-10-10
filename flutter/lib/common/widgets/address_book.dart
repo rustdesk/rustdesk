@@ -9,6 +9,7 @@ import 'package:get/get.dart';
 import '../../common.dart';
 import '../../desktop/pages/desktop_home_page.dart';
 import '../../mobile/pages/settings_page.dart';
+import '../../models/peer_model.dart';
 
 class AddressBook extends StatefulWidget {
   final EdgeInsets? menuPadding;
@@ -205,10 +206,18 @@ class _AddressBookState extends State<AddressBook> {
     return Expanded(
       child: Align(
           alignment: Alignment.topLeft,
-          child: Obx(() => AddressBookPeersView(
-                menuPadding: widget.menuPadding,
-                initPeers: gFFI.abModel.peers.value,
-              ))),
+          child: Obx(() {
+            final List<Peer> initPeers = [];
+            for (var peer in gFFI.abModel.peers.value) {
+              if (_hitTag(gFFI.abModel.selectedTags.value, peer.tags)) {
+                initPeers.add(peer);
+              }
+            }
+            return AddressBookPeersView(
+              menuPadding: widget.menuPadding,
+              initPeers: initPeers,
+            );
+          })),
     );
   }
 
@@ -372,6 +381,21 @@ class _AddressBookState extends State<AddressBook> {
       );
     });
   }
+}
+
+bool _hitTag(List<dynamic> selectedTags, List<dynamic> idents) {
+  if (selectedTags.isEmpty) {
+    return true;
+  }
+  if (idents.isEmpty) {
+    return false;
+  }
+  for (final tag in selectedTags) {
+    if (!idents.contains(tag)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 class AddressBookTag extends StatelessWidget {
