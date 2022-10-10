@@ -936,23 +936,6 @@ Future<bool> matchPeer(String searchText, Peer peer) async {
   return alias.toLowerCase().contains(searchText);
 }
 
-Future<List<Peer>>? matchPeers(String searchText, List<Peer> peers) async {
-  searchText = searchText.trim();
-  if (searchText.isEmpty) {
-    return peers;
-  }
-  searchText = searchText.toLowerCase();
-  final matches =
-      await Future.wait(peers.map((peer) => matchPeer(searchText, peer)));
-  final filteredList = List<Peer>.empty(growable: true);
-  for (var i = 0; i < peers.length; i++) {
-    if (matches[i]) {
-      filteredList.add(peers[i]);
-    }
-  }
-  return filteredList;
-}
-
 /// Get the image for the current [platform].
 Widget getPlatformImage(String platform, {double size = 50}) {
   platform = platform.toLowerCase();
