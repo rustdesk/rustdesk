@@ -21,6 +21,8 @@ class AddressBook extends StatefulWidget {
 }
 
 class _AddressBookState extends State<AddressBook> {
+  var menuPos = RelativeRect.fill;
+
   @override
   void initState() {
     super.initState();
@@ -72,7 +74,9 @@ class _AddressBookState extends State<AddressBook> {
         if (gFFI.abModel.abError.isNotEmpty) {
           return _buildShowError(gFFI.abModel.abError.value);
         }
-        return _buildAddressBook(context);
+        return isDesktop
+            ? _buildAddressBookDesktop()
+            : _buildAddressBookMobile();
       }
     });
   }
@@ -92,8 +96,7 @@ class _AddressBookState extends State<AddressBook> {
     ));
   }
 
-  Widget _buildAddressBook(BuildContext context) {
-    var pos = RelativeRect.fill;
+  Widget _buildAddressBookDesktop() {
     return Row(
       children: [
         Card(
@@ -109,20 +112,7 @@ class _AddressBookState extends State<AddressBook> {
                 const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
             child: Column(
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(translate('Tags')),
-                    GestureDetector(
-                        onTapDown: (e) {
-                          final x = e.globalPosition.dx;
-                          final y = e.globalPosition.dy;
-                          pos = RelativeRect.fromLTRB(x, y, x, y);
-                        },
-                        onTap: () => _showMenu(pos),
-                        child: ActionMore()),
-                  ],
-                ),
+                _buildTagHeader(),
                 Expanded(
                   child: Container(
                     width: double.infinity,
@@ -130,37 +120,95 @@ class _AddressBookState extends State<AddressBook> {
                     decoration: BoxDecoration(
                         border: Border.all(color: MyTheme.darkGray),
                         borderRadius: BorderRadius.circular(2)),
-                    child: Obx(
-                      () => Wrap(
-                        children: gFFI.abModel.tags
-                            .map((e) => AddressBookTag(
-                                name: e,
-                                tags: gFFI.abModel.selectedTags,
-                                onTap: () {
-                                  if (gFFI.abModel.selectedTags.contains(e)) {
-                                    gFFI.abModel.selectedTags.remove(e);
-                                  } else {
-                                    gFFI.abModel.selectedTags.add(e);
-                                  }
-                                }))
-                            .toList(),
-                      ),
-                    ),
+                    child: _buildTags(),
                   ).marginSymmetric(vertical: 8.0),
                 )
               ],
             ),
           ),
         ).marginOnly(right: 8.0),
-        Expanded(
-          child: Align(
-              alignment: Alignment.topLeft,
-              child: Obx(() => AddressBookPeersView(
-                    menuPadding: widget.menuPadding,
-                    initPeers: gFFI.abModel.peers.value,
-                  ))),
-        )
+        _buildPeersViews()
       ],
+    );
+  }
+
+  Widget _buildAddressBookMobile() {
+    return Column(
+      children: [
+        Card(
+          margin: EdgeInsets.symmetric(horizontal: 1.0),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(6),
+              side:
+                  BorderSide(color: Theme.of(context).scaffoldBackgroundColor)),
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildTagHeader(),
+                Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                      border: Border.all(color: MyTheme.darkGray),
+                      borderRadius: BorderRadius.circular(4)),
+                  child: _buildTags(),
+                ).marginSymmetric(vertical: 8.0),
+              ],
+            ),
+          ),
+        ),
+        Divider(),
+        _buildPeersViews()
+      ],
+    );
+  }
+
+  Widget _buildTagHeader() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(translate('Tags')),
+        GestureDetector(
+            onTapDown: (e) {
+              final x = e.globalPosition.dx;
+              final y = e.globalPosition.dy;
+              menuPos = RelativeRect.fromLTRB(x, y, x, y);
+            },
+            onTap: () => _showMenu(menuPos),
+            child: ActionMore()),
+      ],
+    );
+  }
+
+  Widget _buildTags() {
+    return Obx(
+      () => Wrap(
+        children: gFFI.abModel.tags
+            .map((e) => AddressBookTag(
+                name: e,
+                tags: gFFI.abModel.selectedTags,
+                onTap: () {
+                  if (gFFI.abModel.selectedTags.contains(e)) {
+                    gFFI.abModel.selectedTags.remove(e);
+                  } else {
+                    gFFI.abModel.selectedTags.add(e);
+                  }
+                }))
+            .toList(),
+      ),
+    );
+  }
+
+  Widget _buildPeersViews() {
+    return Expanded(
+      child: Align(
+          alignment: Alignment.topLeft,
+          child: Obx(() => AddressBookPeersView(
+                menuPadding: widget.menuPadding,
+                initPeers: gFFI.abModel.peers.value,
+              ))),
     );
   }
 
