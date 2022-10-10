@@ -32,6 +32,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
   var connectionMap = RxList<Widget>.empty(growable: true);
 
   _ConnectionTabPageState(Map<String, dynamic> params) {
+    RemoteCountState.init();
     final RxBool fullscreen = Get.find(tag: 'fullscreen');
     final peerId = params['id'];
     if (peerId != null) {
@@ -45,10 +46,12 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           page: Obx(() => RemotePage(
                 key: ValueKey(peerId),
                 id: peerId,
+                windowId: windowId(),
                 tabBarHeight:
                     fullscreen.isTrue ? 0 : kDesktopRemoteTabBarHeight,
                 windowBorderWidth: fullscreen.isTrue ? 0 : kWindowBorderWidth,
               ))));
+      _update_remote_count();
     }
   }
 
@@ -79,6 +82,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             page: Obx(() => RemotePage(
                   key: ValueKey(id),
                   id: id,
+                  windowId: windowId(),
                   tabBarHeight:
                       fullscreen.isTrue ? 0 : kDesktopRemoteTabBarHeight,
                   windowBorderWidth: fullscreen.isTrue ? 0 : kWindowBorderWidth,
@@ -86,6 +90,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       } else if (call.method == "onDestroy") {
         tabController.clear();
       }
+      _update_remote_count();
     });
   }
 
@@ -161,6 +166,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       WindowController.fromWindowId(windowId()).hide();
     }
     ConnectionTypeState.delete(id);
+    _update_remote_count();
   }
 
   int windowId() {
@@ -178,7 +184,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
   }
 
   Future<bool> handleWindowCloseButton() async {
-    final connLength = tabController.state.value.tabs.length;
+    final connLength = tabController.length;
     if (connLength < 1) {
       return true;
     } else if (connLength == 1) {
@@ -189,8 +195,12 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       final res = await closeConfirmDialog();
       if (res) {
         tabController.clear();
+        _update_remote_count();
       }
       return res;
     }
   }
+
+  _update_remote_count() =>
+      RemoteCountState.find().value = tabController.length;
 }

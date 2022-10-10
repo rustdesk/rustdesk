@@ -28,11 +28,13 @@ class RemotePage extends StatefulWidget {
   const RemotePage({
     Key? key,
     required this.id,
+    required this.windowId,
     required this.tabBarHeight,
     required this.windowBorderWidth,
   }) : super(key: key);
 
   final String id;
+  final int windowId;
   final double tabBarHeight;
   final double windowBorderWidth;
 
@@ -239,6 +241,7 @@ class _RemotePageState extends State<RemotePage>
     paints.add(QualityMonitor(_ffi.qualityMonitorModel));
     paints.add(RemoteMenubar(
       id: widget.id,
+      windowId: widget.windowId,
       ffi: _ffi,
       onEnterOrLeaveImageSetter: (func) => _onEnterOrLeaveImage4Menubar = func,
       onEnterOrLeaveImageCleaner: () => _onEnterOrLeaveImage4Menubar = null,

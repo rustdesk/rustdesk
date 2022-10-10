@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui';
 
 import 'package:back_button_interceptor/back_button_interceptor.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -15,6 +16,7 @@ import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:window_size/window_size.dart' as window_size;
 
 import 'common/widgets/overlay.dart';
 import 'mobile/pages/file_manager_page.dart';
@@ -22,6 +24,8 @@ import 'mobile/pages/remote_page.dart';
 import 'models/input_model.dart';
 import 'models/model.dart';
 import 'models/platform_model.dart';
+
+import '../consts.dart';
 
 final globalKey = GlobalKey<NavigatorState>();
 final navigationBarKey = GlobalKey();
@@ -1022,6 +1026,89 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
   }
 }
 
+_adjustRestoreMainWindowSize(double? width, double? height) async {
+  const double minWidth = 600;
+  const double minHeight = 100;
+  double maxWidth = (((isDesktop || isWebDesktop)
+          ? kDesktopMaxDisplayWidth
+          : kMobileMaxDisplayWidth))
+      .toDouble();
+  double maxHeight = ((isDesktop || isWebDesktop)
+          ? kDesktopMaxDisplayHeight
+          : kMobileMaxDisplayHeight)
+      .toDouble();
+
+  if (isDesktop || isWebDesktop) {
+    final screen = (await window_size.getWindowInfo()).screen;
+    if (screen != null) {
+      maxWidth = screen.visibleFrame.width;
+      maxHeight = screen.visibleFrame.height;
+    }
+  }
+
+  final defaultWidth =
+      ((isDesktop || isWebDesktop) ? 1280 : kMobileDefaultDisplayWidth)
+          .toDouble();
+  final defaultHeight =
+      ((isDesktop || isWebDesktop) ? 720 : kMobileDefaultDisplayHeight)
+          .toDouble();
+  double restoreWidth = width ?? defaultWidth;
+  double restoreHeight = height ?? defaultHeight;
+
+  if (restoreWidth < minWidth) {
+    restoreWidth = minWidth;
+  }
+  if (restoreHeight < minHeight) {
+    restoreHeight = minHeight;
+  }
+  if (restoreWidth > maxWidth) {
+    restoreWidth = maxWidth;
+  }
+  if (restoreHeight > maxHeight) {
+    restoreWidth = maxHeight;
+  }
+  await windowManager.setSize(Size(restoreWidth, restoreHeight));
+}
+
+_adjustRestoreMainWindowOffset(double? left, double? top) async {
+  if (left == null || top == null) {
+    await windowManager.center();
+  } else {
+    double windowLeft = left;
+    double windowTop = top;
+
+    double frameLeft = 0;
+    double frameTop = 0;
+    double frameRight = ((isDesktop || isWebDesktop)
+            ? kDesktopMaxDisplayWidth
+            : kMobileMaxDisplayWidth)
+        .toDouble();
+    double frameBottom = ((isDesktop || isWebDesktop)
+            ? kDesktopMaxDisplayHeight
+            : kMobileMaxDisplayHeight)
+        .toDouble();
+
+    if (isDesktop || isWebDesktop) {
+      final screen = (await window_size.getWindowInfo()).screen;
+      if (screen != null) {
+        frameLeft = screen.visibleFrame.left;
+        frameTop = screen.visibleFrame.top;
+        frameRight = screen.visibleFrame.right;
+        frameBottom = screen.visibleFrame.bottom;
+      }
+    }
+
+    if (windowLeft < frameLeft ||
+        windowLeft > frameRight ||
+        windowTop < frameTop ||
+        windowTop > frameBottom) {
+      await windowManager.center();
+    } else {
+      await windowManager.setPosition(Offset(windowLeft, windowTop));
+    }
+  }
+}
+
 /// Save window position and size on exit
 /// Note that windowId must be provided if it's subwindow
 Future<bool> restoreWindowPosition(WindowType type, {int? windowId}) async {
@@ -1042,13 +1129,10 @@ Future<bool> restoreWindowPosition(WindowType type, {int? windowId}) async {
         debugPrint("window position saved, but cannot be parsed");
         return false;
       }
-      await windowManager.setSize(Size(lpos.width ?? 1280, lpos.height ?? 720));
-      if (lpos.offsetWidth == null || lpos.offsetHeight == null) {
-        await windowManager.center();
-      } else {
-        await windowManager
-            .setPosition(Offset(lpos.offsetWidth!, lpos.offsetHeight!));
-      }
+
+      await _adjustRestoreMainWindowSize(lpos.width, lpos.height);
+      await _adjustRestoreMainWindowOffset(lpos.offsetWidth, lpos.offsetHeight);
+
       return true;
     default:
       // TODO: implement subwindow
