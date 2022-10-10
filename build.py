@@ -158,8 +158,6 @@ def build_flutter_deb(version):
     os.system(
         'cp -r build/linux/x64/release/bundle/* tmpdeb/usr/lib/rustdesk/')
     os.system(
-        'cp ../target/release/liblibrustdesk.so tmpdeb/usr/lib/rustdesk/librustdesk.so')
-    os.system(
         'cp ../res/rustdesk.service tmpdeb/usr/share/rustdesk/files/systemd/')
     os.system(
         'cp ../res/rustdesk.service.user tmpdeb/usr/share/rustdesk/files/systemd/')
