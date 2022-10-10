@@ -387,22 +387,23 @@ class OverlayDialogManager {
           "[OverlayDialogManager] Failed to show dialog, _overlayState is null, call [setOverlayState] first");
     }
 
-    final _tag;
+    final String dialogTag;
     if (tag != null) {
-      _tag = tag;
+      dialogTag = tag;
     } else {
-      _tag = _tagCount.toString();
+      dialogTag = _tagCount.toString();
       _tagCount++;
     }
 
     final dialog = Dialog<T>();
-    _dialogs[_tag] = dialog;
+    _dialogs[dialogTag] = dialog;
 
-    final close = ([res]) {
-      _dialogs.remove(_tag);
+    close([res]) {
+      _dialogs.remove(dialogTag);
       dialog.complete(res);
-      BackButtonInterceptor.removeByName(_tag);
-    };
+      BackButtonInterceptor.removeByName(dialogTag);
+    }
+
     dialog.entry = OverlayEntry(builder: (_) {
       bool innerClicked = false;
       return Listener(
@@ -427,14 +428,16 @@ class OverlayDialogManager {
         close();
       }
       return true;
-    }, name: _tag);
+    }, name: dialogTag);
     return dialog.completer.future;
   }
 
-  void showLoading(String text,
+  String showLoading(String text,
       {bool clickMaskDismiss = false,
       bool showCancel = true,
       VoidCallback? onCancel}) {
+    final tag = _tagCount.toString();
+    _tagCount++;
     show((setState, close) {
       cancel() {
         dismissAll();
@@ -469,7 +472,8 @@ class OverlayDialogManager {
                 ])),
         onCancel: showCancel ? cancel : null,
       );
-    });
+    }, tag: tag);
+    return tag;
   }
 
   void resetMobileActionsOverlay({FFI? ffi}) {
@@ -934,23 +938,6 @@ Future<bool> matchPeer(String searchText, Peer peer) async {
     return false;
   }
   return alias.toLowerCase().contains(searchText);
-}
-
-Future<List<Peer>>? matchPeers(String searchText, List<Peer> peers) async {
-  searchText = searchText.trim();
-  if (searchText.isEmpty) {
-    return peers;
-  }
-  searchText = searchText.toLowerCase();
-  final matches =
-      await Future.wait(peers.map((peer) => matchPeer(searchText, peer)));
-  final filteredList = List<Peer>.empty(growable: true);
-  for (var i = 0; i < peers.length; i++) {
-    if (matches[i]) {
-      filteredList.add(peers[i]);
-    }
-  }
-  return filteredList;
 }
 
 /// Get the image for the current [platform].

@@ -13,6 +13,7 @@ import '../../models/peer_model.dart';
 import '../../models/platform_model.dart';
 import 'peer_card.dart';
 
+typedef PeerFilter = bool Function(Peer peer);
 typedef PeerCardBuilder = Widget Function(Peer peer);
 
 /// for peer search text, global obs value
@@ -22,10 +23,14 @@ final peerSearchTextController =
 
 class _PeersView extends StatefulWidget {
   final Peers peers;
+  final PeerFilter? peerFilter;
   final PeerCardBuilder peerCardBuilder;
 
   const _PeersView(
-      {required this.peers, required this.peerCardBuilder, Key? key})
+      {required this.peers,
+      required this.peerCardBuilder,
+      this.peerFilter,
+      Key? key})
       : super(key: key);
 
   @override
@@ -173,11 +178,33 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
       }
     }();
   }
+
+  Future<List<Peer>>? matchPeers(String searchText, List<Peer> peers) async {
+    if (widget.peerFilter != null) {
+      peers = peers.where((peer) => widget.peerFilter!(peer)).toList();
+    }
+
+    searchText = searchText.trim();
+    if (searchText.isEmpty) {
+      return peers;
+    }
+    searchText = searchText.toLowerCase();
+    final matches =
+        await Future.wait(peers.map((peer) => matchPeer(searchText, peer)));
+    final filteredList = List<Peer>.empty(growable: true);
+    for (var i = 0; i < peers.length; i++) {
+      if (matches[i]) {
+        filteredList.add(peers[i]);
+      }
+    }
+    return filteredList;
+  }
 }
 
 abstract class BasePeersView extends StatelessWidget {
   final String name;
   final String loadEvent;
+  final PeerFilter? peerFilter;
   final PeerCardBuilder peerCardBuilder;
   final List<Peer> initPeers;
 
@@ -185,6 +212,7 @@ abstract class BasePeersView extends StatelessWidget {
     Key? key,
     required this.name,
     required this.loadEvent,
+    this.peerFilter,
     required this.peerCardBuilder,
     required this.initPeers,
   }) : super(key: key);
@@ -193,6 +221,7 @@ abstract class BasePeersView extends StatelessWidget {
   Widget build(BuildContext context) {
     return _PeersView(
         peers: Peers(name: name, loadEvent: loadEvent, peers: initPeers),
+        peerFilter: peerFilter,
         peerCardBuilder: peerCardBuilder);
   }
 }
@@ -273,13 +302,12 @@ class AddressBookPeersView extends BasePeersView {
           key: key,
           name: 'address book peer',
           loadEvent: 'load_address_book_peers',
-          peerCardBuilder: (Peer peer) => Obx(() => Offstage(
-              key: ValueKey("off${peer.id}"),
-              offstage: !_hitTag(gFFI.abModel.selectedTags, peer.tags),
-              child: AddressBookPeerCard(
-                peer: peer,
-                menuPadding: menuPadding,
-              ))),
+          peerFilter: (Peer peer) =>
+              _hitTag(gFFI.abModel.selectedTags, peer.tags),
+          peerCardBuilder: (Peer peer) => AddressBookPeerCard(
+            peer: peer,
+            menuPadding: menuPadding,
+          ),
           initPeers: initPeers,
         );
 

@@ -3,7 +3,6 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'package:settings_ui/settings_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -41,8 +40,6 @@ var _localIP = "";
 var _directAccessPort = "";
 
 class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
-  String? username;
-
   @override
   void initState() {
     super.initState();
@@ -52,12 +49,6 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
       var update = false;
       if (_hasIgnoreBattery) {
         update = await updateIgnoreBatteryStatus();
-      }
-
-      final usernameRes = await getUsername();
-      if (usernameRes != username) {
-        update = true;
-        username = usernameRes;
       }
 
       final enableAbrRes = await bind.mainGetOption(key: "enable-abr") != "N";
@@ -273,15 +264,15 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
           title: Text(translate("Account")),
           tiles: [
             SettingsTile.navigation(
-              title: Text(username == null
+              title: Obx(() => Text(gFFI.userModel.userName.value.isEmpty
                   ? translate("Login")
-                  : '${translate("Logout")} ($username)'),
+                  : '${translate("Logout")} (${gFFI.userModel.userName.value})')),
               leading: Icon(Icons.person),
               onPressed: (context) {
-                if (username == null) {
+                if (gFFI.userModel.userName.value.isEmpty) {
                   showLogin(gFFI.dialogManager);
                 } else {
-                  logout(gFFI.dialogManager);
+                  gFFI.userModel.logOut();
                 }
               },
             ),
@@ -438,130 +429,6 @@ void showAbout(OverlayDialogManager dialogManager) {
   }, clickMaskDismiss: true, backDismiss: true);
 }
 
-Future<String> login(String name, String pass) async {
-/* js test CORS
-const data = { username: 'example', password: 'xx' };
-
-fetch('http://localhost:21114/api/login', {
-  method: 'POST', // or 'PUT'
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  body: JSON.stringify(data),
-})
-.then(response => response.json())
-.then(data => {
-  console.log('Success:', data);
-})
-.catch((error) => {
-  console.error('Error:', error);
-});
-*/
-  final url = getUrl();
-  final body = {
-    'username': name,
-    'password': pass,
-    'id': bind.mainGetMyId(),
-    'uuid': bind.mainGetUuid()
-  };
-  try {
-    final response = await http.post(Uri.parse('$url/api/login'),
-        headers: {"Content-Type": "application/json"}, body: json.encode(body));
-    return parseResp(response.body);
-  } catch (e) {
-    print(e);
-    return 'Failed to access $url';
-  }
-}
-
-String parseResp(String body) {
-  final data = json.decode(body);
-  final error = data['error'];
-  if (error != null) {
-    return error!;
-  }
-  final token = data['access_token'];
-  if (token != null) {
-    bind.mainSetOption(key: "access_token", value: token);
-  }
-  final info = data['user'];
-  if (info != null) {
-    final value = json.encode(info);
-    bind.mainSetOption(key: "user_info", value: value);
-    gFFI.ffiModel.updateUser();
-  }
-  return '';
-}
-
-void refreshCurrentUser() async {
-  final token = await bind.mainGetOption(key: "access_token");
-  if (token == '') return;
-  final url = getUrl();
-  final body = {'id': bind.mainGetMyId(), 'uuid': bind.mainGetUuid()};
-  try {
-    final response = await http.post(Uri.parse('$url/api/currentUser'),
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer $token"
-        },
-        body: json.encode(body));
-    final status = response.statusCode;
-    if (status == 401 || status == 400) {
-      resetToken();
-      return;
-    }
-    parseResp(response.body);
-  } catch (e) {
-    print('$e');
-  }
-}
-
-void logout(OverlayDialogManager dialogManager) async {
-  final token = await bind.mainGetOption(key: "access_token");
-  if (token == '') return;
-  final url = getUrl();
-  final body = {'id': bind.mainGetMyId(), 'uuid': bind.mainGetUuid()};
-  try {
-    await http.post(Uri.parse('$url/api/logout'),
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer $token"
-        },
-        body: json.encode(body));
-  } catch (e) {
-    showToast('Failed to access $url');
-  }
-  resetToken();
-}
-
-void resetToken() async {
-  await bind.mainSetOption(key: "access_token", value: "");
-  await bind.mainSetOption(key: "user_info", value: "");
-  gFFI.ffiModel.updateUser();
-}
-
-Future<String> getUrl() async {
-  var url = await bind.mainGetOption(key: "api-server");
-  if (url == '') {
-    url = await bind.mainGetOption(key: "custom-rendezvous-server");
-    if (url != '') {
-      if (url.contains(':')) {
-        final tmp = url.split(':');
-        if (tmp.length == 2) {
-          var port = int.parse(tmp[1]) - 2;
-          url = 'http://${tmp[0]}:$port';
-        }
-      } else {
-        url = 'http://$url:21114';
-      }
-    }
-  }
-  if (url == '') {
-    url = 'https://admin.rustdesk.com';
-  }
-  return url;
-}
-
 void showLogin(OverlayDialogManager dialogManager) {
   final passwordController = TextEditingController();
   final nameController = TextEditingController();
@@ -615,38 +482,23 @@ void showLogin(OverlayDialogManager dialogManager) {
                         setState(() {
                           loading = true;
                         });
-                        final e = await login(name, pass);
+                        final resp = await gFFI.userModel.login(name, pass);
                         setState(() {
                           loading = false;
-                          error = e;
                         });
-                        if (e == "") {
-                          close();
+                        if (resp.containsKey('error')) {
+                          error = resp['error'];
+                          return;
                         }
+                        gFFI.abModel.pullAb();
                       }
+                      close();
                     },
               child: Text(translate('OK')),
             ),
           ],
     );
   });
-}
-
-Future<String?> getUsername() async {
-  final token = await bind.mainGetOption(key: "access_token");
-  String? username;
-  if (token != "") {
-    final info = await bind.mainGetOption(key: "user_info");
-    if (info != "") {
-      try {
-        Map<String, dynamic> tmp = json.decode(info);
-        username = tmp["name"];
-      } catch (e) {
-        print('$e');
-      }
-    }
-  }
-  return username;
 }
 
 class ScanButton extends StatelessWidget {

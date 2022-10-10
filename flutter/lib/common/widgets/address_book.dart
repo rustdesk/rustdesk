@@ -9,7 +9,6 @@ import 'package:get/get.dart';
 import '../../common.dart';
 import '../../desktop/pages/desktop_home_page.dart';
 import '../../mobile/pages/settings_page.dart';
-import '../../models/platform_model.dart';
 
 class AddressBook extends StatefulWidget {
   final EdgeInsets? menuPadding;
@@ -22,6 +21,8 @@ class AddressBook extends StatefulWidget {
 }
 
 class _AddressBookState extends State<AddressBook> {
+  var menuPos = RelativeRect.fill;
+
   @override
   void initState() {
     super.initState();
@@ -30,7 +31,7 @@ class _AddressBookState extends State<AddressBook> {
 
   @override
   Widget build(BuildContext context) => FutureBuilder<Widget>(
-      future: buildAddressBook(context),
+      future: buildBody(context),
       builder: (context, snapshot) {
         if (snapshot.hasData) {
           return snapshot.data!;
@@ -44,7 +45,7 @@ class _AddressBookState extends State<AddressBook> {
     if (isDesktop) {
       loginDialog().then((success) {
         if (success) {
-          setState(() {});
+          gFFI.abModel.pullAb();
         }
       });
     } else {
@@ -52,41 +53,32 @@ class _AddressBookState extends State<AddressBook> {
     }
   }
 
-  Future<Widget> buildAddressBook(BuildContext context) async {
-    final token = await bind.mainGetLocalOption(key: 'access_token');
-    if (token.trim().isEmpty) {
-      return Center(
-        child: InkWell(
-          onTap: handleLogin,
-          child: Text(
-            translate("Login"),
-            style: const TextStyle(decoration: TextDecoration.underline),
+  Future<Widget> buildBody(BuildContext context) async {
+    return Obx(() {
+      if (gFFI.userModel.userName.value.isEmpty) {
+        return Center(
+          child: InkWell(
+            onTap: handleLogin,
+            child: Text(
+              translate("Login"),
+              style: const TextStyle(decoration: TextDecoration.underline),
+            ),
           ),
-        ),
-      );
-    }
-    final model = gFFI.abModel;
-    return FutureBuilder(
-        future: model.pullAb(),
-        builder: (context, snapshot) {
-          if (snapshot.hasData) {
-            return _buildAddressBook(context);
-          } else if (snapshot.hasError) {
-            return _buildShowError(snapshot.error.toString());
-          } else {
-            return Obx(() {
-              if (model.abLoading.value) {
-                return const Center(
-                  child: CircularProgressIndicator(),
-                );
-              } else if (model.abError.isNotEmpty) {
-                return _buildShowError(model.abError.value);
-              } else {
-                return const Offstage();
-              }
-            });
-          }
-        });
+        );
+      } else {
+        if (gFFI.abModel.abLoading.value) {
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        }
+        if (gFFI.abModel.abError.isNotEmpty) {
+          return _buildShowError(gFFI.abModel.abError.value);
+        }
+        return isDesktop
+            ? _buildAddressBookDesktop()
+            : _buildAddressBookMobile();
+      }
+    });
   }
 
   Widget _buildShowError(String error) {
@@ -104,8 +96,7 @@ class _AddressBookState extends State<AddressBook> {
     ));
   }
 
-  Widget _buildAddressBook(BuildContext context) {
-    var pos = RelativeRect.fill;
+  Widget _buildAddressBookDesktop() {
     return Row(
       children: [
         Card(
@@ -121,20 +112,7 @@ class _AddressBookState extends State<AddressBook> {
                 const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
             child: Column(
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(translate('Tags')),
-                    GestureDetector(
-                        onTapDown: (e) {
-                          final x = e.globalPosition.dx;
-                          final y = e.globalPosition.dy;
-                          pos = RelativeRect.fromLTRB(x, y, x, y);
-                        },
-                        onTap: () => _showMenu(pos),
-                        child: ActionMore()),
-                  ],
-                ),
+                _buildTagHeader(),
                 Expanded(
                   child: Container(
                     width: double.infinity,
@@ -142,37 +120,95 @@ class _AddressBookState extends State<AddressBook> {
                     decoration: BoxDecoration(
                         border: Border.all(color: MyTheme.darkGray),
                         borderRadius: BorderRadius.circular(2)),
-                    child: Obx(
-                      () => Wrap(
-                        children: gFFI.abModel.tags
-                            .map((e) => AddressBookTag(
-                                name: e,
-                                tags: gFFI.abModel.selectedTags,
-                                onTap: () {
-                                  if (gFFI.abModel.selectedTags.contains(e)) {
-                                    gFFI.abModel.selectedTags.remove(e);
-                                  } else {
-                                    gFFI.abModel.selectedTags.add(e);
-                                  }
-                                }))
-                            .toList(),
-                      ),
-                    ),
+                    child: _buildTags(),
                   ).marginSymmetric(vertical: 8.0),
                 )
               ],
             ),
           ),
         ).marginOnly(right: 8.0),
-        Expanded(
-          child: Align(
-              alignment: Alignment.topLeft,
-              child: Obx(() => AddressBookPeersView(
-                    menuPadding: widget.menuPadding,
-                    initPeers: gFFI.abModel.peers.value,
-                  ))),
-        )
+        _buildPeersViews()
       ],
+    );
+  }
+
+  Widget _buildAddressBookMobile() {
+    return Column(
+      children: [
+        Card(
+          margin: EdgeInsets.symmetric(horizontal: 1.0),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(6),
+              side:
+                  BorderSide(color: Theme.of(context).scaffoldBackgroundColor)),
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildTagHeader(),
+                Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                      border: Border.all(color: MyTheme.darkGray),
+                      borderRadius: BorderRadius.circular(4)),
+                  child: _buildTags(),
+                ).marginSymmetric(vertical: 8.0),
+              ],
+            ),
+          ),
+        ),
+        Divider(),
+        _buildPeersViews()
+      ],
+    );
+  }
+
+  Widget _buildTagHeader() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(translate('Tags')),
+        GestureDetector(
+            onTapDown: (e) {
+              final x = e.globalPosition.dx;
+              final y = e.globalPosition.dy;
+              menuPos = RelativeRect.fromLTRB(x, y, x, y);
+            },
+            onTap: () => _showMenu(menuPos),
+            child: ActionMore()),
+      ],
+    );
+  }
+
+  Widget _buildTags() {
+    return Obx(
+      () => Wrap(
+        children: gFFI.abModel.tags
+            .map((e) => AddressBookTag(
+                name: e,
+                tags: gFFI.abModel.selectedTags,
+                onTap: () {
+                  if (gFFI.abModel.selectedTags.contains(e)) {
+                    gFFI.abModel.selectedTags.remove(e);
+                  } else {
+                    gFFI.abModel.selectedTags.add(e);
+                  }
+                }))
+            .toList(),
+      ),
+    );
+  }
+
+  Widget _buildPeersViews() {
+    return Expanded(
+      child: Align(
+          alignment: Alignment.topLeft,
+          child: Obx(() => AddressBookPeersView(
+                menuPadding: widget.menuPadding,
+                initPeers: gFFI.abModel.peers.value,
+              ))),
     );
   }
 

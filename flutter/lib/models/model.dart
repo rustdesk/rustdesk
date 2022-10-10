@@ -82,10 +82,6 @@ class FfiModel with ChangeNotifier {
     notifyListeners();
   }
 
-  updateUser() {
-    notifyListeners();
-  }
-
   bool keyboard() => _permissions['keyboard'] != false;
 
   clear() {

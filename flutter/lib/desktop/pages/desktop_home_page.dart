@@ -523,7 +523,6 @@ Future<bool> loginDialog() async {
       close();
     }
 
-    // 登录dialog
     return CustomAlertDialog(
       title: Text(translate("Login")),
       content: ConstrainedBox(

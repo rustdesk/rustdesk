@@ -20,7 +20,6 @@ import 'common.dart';
 import 'consts.dart';
 import 'mobile/pages/home_page.dart';
 import 'mobile/pages/server_page.dart';
-import 'mobile/pages/settings_page.dart';
 import 'models/platform_model.dart';
 
 int? windowId;
@@ -82,7 +81,6 @@ Future<void> initEnv(String appType) async {
   // focus on multi-ffi on desktop first
   await initGlobalFFI();
   // await Firebase.initializeApp();
-  refreshCurrentUser();
   _registerEventHandler();
 }
 
@@ -267,7 +265,6 @@ class _AppState extends State<App> {
         ChangeNotifierProvider.value(value: gFFI.imageModel),
         ChangeNotifierProvider.value(value: gFFI.cursorModel),
         ChangeNotifierProvider.value(value: gFFI.canvasModel),
-        ChangeNotifierProvider.value(value: gFFI.userModel),
       ],
       child: GetMaterialApp(
         navigatorKey: globalKey,
