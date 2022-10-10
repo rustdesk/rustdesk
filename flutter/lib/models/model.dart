@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -848,7 +849,12 @@ class CursorModel with ChangeNotifier {
   }
 
   _updateCacheLinux(ui.Image image, int id, int w, int h) async {
-    final data = await image.toByteData(format: ui.ImageByteFormat.png);
+    ByteData? data;
+    if (Platform.isWindows) {
+      data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    } else {
+      data = await image.toByteData(format: ui.ImageByteFormat.png);
+    }
     _cacheLinux = CursorData(
       peerId: this.id,
       data: data?.buffer.asUint8List(),

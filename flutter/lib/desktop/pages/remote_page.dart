@@ -404,7 +404,9 @@ class ImagePaint extends StatelessWidget {
           controller: _horizontal,
           thumbVisibility: false,
           trackVisibility: false,
-          notificationPredicate: (notification) => notification.depth == 1,
+          notificationPredicate: layoutSize.height < size.height
+              ? (notification) => notification.depth == 1
+              : defaultScrollNotificationPredicate,
           child: widget,
         ),
       );
