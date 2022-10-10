@@ -80,13 +80,11 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn get_keyboard_mode(&self) -> String {
-        return std::env::var("KEYBOARD_MODE")
-            .unwrap_or(String::from("legacy"))
-            .to_lowercase();
+        global_get_keyboard_mode()
     }
 
     pub fn save_keyboard_mode(&self, value: String) {
-        std::env::set_var("KEYBOARD_MODE", value);
+        global_save_keyboard_mode(value);
     }
 
     pub fn save_view_style(&mut self, value: String) {
@@ -1549,4 +1547,14 @@ async fn send_note(url: String, id: String, conn_id: i32, note: String) {
 
 fn get_hotkey_state(key: RdevKey) -> bool {
     *MUTEX_SPECIAL_KEYS.lock().unwrap().get(&key).unwrap()
+}
+
+pub fn global_get_keyboard_mode() -> String {
+    return std::env::var("KEYBOARD_MODE")
+        .unwrap_or(String::from("map"))
+        .to_lowercase();
+}
+
+pub fn global_save_keyboard_mode(value: String) {
+    std::env::set_var("KEYBOARD_MODE", value);
 }
