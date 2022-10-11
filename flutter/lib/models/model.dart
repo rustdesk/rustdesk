@@ -14,6 +14,7 @@ import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/file_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/models/user_model.dart';
+import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tuple/tuple.dart';
 import 'package:flutter_custom_cursor/flutter_custom_cursor.dart';
@@ -176,6 +177,9 @@ class FfiModel with ChangeNotifier {
         updateBlockInputState(evt, peerId);
       } else if (name == 'update_privacy_mode') {
         updatePrivacyMode(evt, peerId);
+      } else if (name == 'new_connection') {
+        final remoteId = evt['peer_id'];
+        rustDeskWinManager.newRemoteDesktop(remoteId);
       }
     };
   }

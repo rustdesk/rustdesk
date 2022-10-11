@@ -1230,6 +1230,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "dbus-crossroads"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "554114296d012b33fdaf362a733db6dc5f73c4c9348b8b620ddd42e61b406e30"
+dependencies = [
+ "dbus",
+]
+
+[[package]]
 name = "dconf_rs"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4361,6 +4370,8 @@ dependencies = [
  "ctrlc",
  "dark-light",
  "dasp",
+ "dbus",
+ "dbus-crossroads",
  "default-net",
  "dispatch",
  "enigo",

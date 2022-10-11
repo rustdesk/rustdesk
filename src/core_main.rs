@@ -1,3 +1,5 @@
+use std::env::Args;
+
 use hbb_common::log;
 
 // shared by flutter and sciter main function
@@ -11,6 +13,7 @@ pub fn core_main() -> Option<Vec<String>> {
     let mut is_setup = false;
     let mut _is_elevate = false;
     let mut _is_run_as_system = false;
+    let mut _is_connect = false;
     for arg in std::env::args() {
         // to-do: how to pass to flutter?
         if i == 0 && crate::common::is_setup(&arg) {
@@ -20,14 +23,16 @@ pub fn core_main() -> Option<Vec<String>> {
                 _is_elevate = true;
             } else if arg == "--run-as-system" {
                 _is_run_as_system = true;
+            } else if arg == "--connect" {
+                _is_connect = true;
             } else {
                 args.push(arg);
             }
         }
         i += 1;
     }
-    if args.contains(&"--install".to_string()) {
-        is_setup = true;
+    if _is_connect {
+        return core_main_invoke_new_connection(std::env::args());
     }
     if is_setup {
         if args.is_empty() {
@@ -207,4 +212,37 @@ fn import_config(path: &str) {
             log::info!("config2 written");
         }
     }
+}
+
+/// invoke a new connection
+///
+/// [Note]
+/// this is for invoke new connection from dbus
+fn core_main_invoke_new_connection(mut args: Args) -> Option<Vec<String>> {
+    args
+        .position(|element| {
+            return element == "--connect";
+        })
+        .unwrap();
+    let peer_id = args.next().unwrap_or("".to_string());
+    if peer_id.is_empty() {
+        eprintln!("please provide a valid peer id");
+        return None;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        use crate::dbus::invoke_new_connection;
+
+        match invoke_new_connection(peer_id) {
+            Ok(()) => {
+                return None;
+            }
+            Err(err) => {
+                log::error!("{}", err.as_ref());
+                // return Some to invoke this new connection by self
+                return Some(Vec::new());
+            }
+        }
+    }
+    return None;
 }

@@ -166,6 +166,8 @@ def build_flutter_deb(version):
     os.system(
         'cp ../res/rustdesk.desktop tmpdeb/usr/share/applications/rustdesk.desktop')
     os.system(
+        'cp ../res/rustdesk-link.desktop tmpdeb/usr/share/applications/rustdesk-link.desktop')
+    os.system(
         'cp ../res/com.rustdesk.RustDesk.policy tmpdeb/usr/share/polkit-1/actions/')
     os.system("echo \"#!/bin/sh\" >> tmpdeb/usr/share/rustdesk/files/polkit && chmod a+x tmpdeb/usr/share/rustdesk/files/polkit")
 
@@ -333,6 +335,8 @@ def main():
                     'cp res/128x128@2x.png tmpdeb/usr/share/rustdesk/files/rustdesk.png')
                 os.system(
                     'cp res/rustdesk.desktop tmpdeb/usr/share/applications/rustdesk.desktop')
+                os.system(
+                    'cp res/rustdesk-link.desktop tmpdeb/usr/share/applications/rustdesk-link.desktop')
                 os.system('cp -a res/DEBIAN/* tmpdeb/DEBIAN/')
                 os.system('strip tmpdeb/usr/bin/rustdesk')
                 os.system('mkdir -p tmpdeb/usr/lib/rustdesk')

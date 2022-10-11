@@ -801,6 +801,17 @@ pub fn main_is_release() -> bool {
     is_release()
 }
 
+pub fn main_start_dbus_server() {
+    #[cfg(target_os = "linux")]
+    {
+        use crate::dbus::start_dbus_server;
+        // spawn new thread to start dbus server
+        std::thread::spawn(|| {
+            let _ = start_dbus_server();
+        });
+    }
+}
+
 pub fn session_send_mouse(id: String, msg: String) {
     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(&msg) {
         let alt = m.get("alt").is_some();

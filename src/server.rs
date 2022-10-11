@@ -30,6 +30,8 @@ mod clipboard_service;
 mod wayland;
 #[cfg(target_os = "linux")]
 pub mod uinput;
+#[cfg(target_os = "linux")]
+pub mod dbus;
 pub mod input_service;
 } else {
 mod clipboard_service {
