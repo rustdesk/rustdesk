@@ -452,6 +452,9 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         }
       }
     });
+    Future.delayed(Duration.zero, () {
+      checkArguments();
+    });
   }
 
   @override

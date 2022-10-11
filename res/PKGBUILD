@@ -30,5 +30,6 @@ package() {
   pushd ${pkgdir} && ln -s /usr/lib/rustdesk/rustdesk usr/bin/rustdesk && popd
   install -Dm 644 $HBB/res/rustdesk.service -t "${pkgdir}/usr/share/rustdesk/files"
   install -Dm 644 $HBB/res/rustdesk.desktop -t "${pkgdir}/usr/share/rustdesk/files"
+  install -Dm 644 $HBB/res/rustdesk-link.desktop -t "${pkgdir}/usr/share/rustdesk/files"
   install -Dm 644 $HBB/res/128x128@2x.png "${pkgdir}/usr/share/rustdesk/files/rustdesk.png"
 }

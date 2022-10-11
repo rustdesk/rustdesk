@@ -10,6 +10,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
+import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/models/peer_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
@@ -1126,6 +1127,19 @@ Future<bool> restoreWindowPosition(WindowType type, {int? windowId}) async {
       break;
   }
   return false;
+}
+
+void checkArguments() {
+  // check connect args
+  final connectIndex = bootArgs.indexOf("--connect");
+  if (connectIndex == -1) {
+    return;
+  }
+  String? peerId = bootArgs.length < connectIndex + 1 ? null: bootArgs[connectIndex + 1];
+  if (peerId != null) {
+    rustDeskWinManager.newRemoteDesktop(peerId);
+    bootArgs.removeAt(connectIndex); bootArgs.removeAt(connectIndex);
+  }
 }
 
 /// Connect to a peer with [id].

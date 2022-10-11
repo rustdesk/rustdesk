@@ -24,10 +24,12 @@ import 'mobile/pages/server_page.dart';
 import 'models/platform_model.dart';
 
 int? windowId;
+late List<String> bootArgs;
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   debugPrint("launch args: $args");
+  bootArgs = args;
 
   if (!isDesktop) {
     runMobileApp();
