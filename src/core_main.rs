@@ -6,6 +6,7 @@ pub fn core_main() -> Option<Vec<String>> {
     // though async logger more efficient, but it also causes more problems, disable it for now
     // let mut _async_logger_holder: Option<flexi_logger::LoggerHandle> = None;
     let mut args = Vec::new();
+    let mut flutter_args = Vec::new();
     let mut i = 0;
     let mut is_setup = false;
     let mut _is_elevate = false;
@@ -25,12 +26,17 @@ pub fn core_main() -> Option<Vec<String>> {
         }
         i += 1;
     }
+    if args.contains(&"--install".to_string()) {
+        is_setup = true;
+    }
     if is_setup {
         if args.is_empty() {
             args.push("--install".to_owned());
-        } else if args[0] == "--noinstall" {
-            args.clear();
+            flutter_args.push("--install".to_string());
         }
+    }
+    if args.contains(&"--noinstall".to_string()) {
+        args.clear();
     }
     if args.len() > 0 && args[0] == "--version" {
         println!("{}", crate::VERSION);
@@ -171,7 +177,10 @@ pub fn core_main() -> Option<Vec<String>> {
         }
     }
     //_async_logger_holder.map(|x| x.flush());
-    Some(args)
+    #[cfg(feature = "flutter")]
+    return Some(flutter_args);
+    #[cfg(not(feature = "flutter"))]
+    return Some(args);
 }
 
 fn import_config(path: &str) {

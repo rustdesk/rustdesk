@@ -1025,6 +1025,18 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{start_menu}\\\"
             app_name = crate::get_app_name(),
         );
     }
+    let mut flutter_copy = Default::default();
+    if options.contains("--flutter") {
+        flutter_copy = format!(
+            "XCOPY \"{}\" \"{}\" /Y /E /H /C /I /K /R /Z",
+            std::env::current_exe()?
+                .parent()
+                .unwrap()
+                .to_string_lossy()
+                .to_string(),
+            path
+        );
+    }
 
     let meta = std::fs::symlink_metadata(std::env::current_exe()?)?;
     let size = meta.len() / 1024;
@@ -1052,6 +1064,7 @@ if exist \"{tmp_path}\\{app_name} Tray.lnk\" del /f /q \"{tmp_path}\\{app_name} 
 {uninstall_str}
 chcp 65001
 md \"{path}\"
+{flutter_copy}
 copy /Y \"{src_exe}\" \"{exe}\"
 copy /Y \"{ORIGIN_PROCESS_EXE}\" \"{path}\\{broker_exe}\"
 \"{src_exe}\" --extract \"{path}\"
@@ -1114,6 +1127,7 @@ sc delete {app_name}
         } else {
             &dels
         },
+        flutter_copy = flutter_copy,
     );
     run_cmds(cmds, debug, "install")?;
     std::thread::sleep(std::time::Duration::from_millis(2000));

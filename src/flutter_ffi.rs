@@ -43,16 +43,6 @@ fn initialize(app_dir: &str) {
     }
 }
 
-/// FFI for rustdesk core's main entry.
-/// Return true if the app should continue running with UI(possibly Flutter), false if the app should exit.
-#[no_mangle]
-pub extern "C" fn rustdesk_core_main() -> bool {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    return crate::core_main::core_main().is_some();
-    #[cfg(any(target_os = "android", target_os = "ios"))]
-    false
-}
-
 pub enum EventToUI {
     Event(String),
     Rgba(ZeroCopyBuffer<Vec<u8>>),
@@ -1039,6 +1029,22 @@ pub fn main_get_new_version() -> SyncReturn<String> {
 pub fn main_update_me() -> SyncReturn<bool> {
     update_me("".to_owned());
     SyncReturn(true)
+}
+
+pub fn install_show_run_without_install() -> SyncReturn<bool> {
+    SyncReturn(show_run_without_install())
+}
+
+pub fn install_run_without_install() {
+    run_without_install();
+}
+
+pub fn install_install_me(options: String, path: String) {
+    install_me(options, path, false, false);
+}
+
+pub fn install_install_path() -> SyncReturn<String> {
+    SyncReturn(install_path())
 }
 
 #[cfg(target_os = "android")]
