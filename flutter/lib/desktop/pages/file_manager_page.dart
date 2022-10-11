@@ -95,7 +95,7 @@ class _FileManagerPageState extends State<FileManagerPage>
         _ffi.dialogManager.setOverlayState(Overlay.of(context));
         return ChangeNotifierProvider.value(
             value: _ffi.fileModel,
-            child: Consumer<FileModel>(builder: (_context, _model, _child) {
+            child: Consumer<FileModel>(builder: (context, model, child) {
               return WillPopScope(
                   onWillPop: () async {
                     if (model.selectMode) {
@@ -187,13 +187,9 @@ class _FileManagerPageState extends State<FileManagerPage>
                   controller: ScrollController(),
                   child: ObxValue<RxString>(
                     (searchText) {
-                      final filteredEntries = searchText.isEmpty
+                      final filteredEntries = searchText.isNotEmpty
                           ? entries.where((element) {
-                              if (searchText.isEmpty) {
-                                return true;
-                              } else {
-                                return element.name.contains(searchText.value);
-                              }
+                              return element.name.contains(searchText.value);
                             }).toList(growable: false)
                           : entries;
                       return DataTable(
@@ -273,22 +269,18 @@ class _FileManagerPageState extends State<FileManagerPage>
                                     }
                                   } else {
                                     // Perform file-related tasks.
-                                    final _selectedItems =
+                                    final selectedItems =
                                         getSelectedItem(isLocal);
-                                    if (_selectedItems.contains(entry)) {
-                                      _selectedItems.remove(entry);
+                                    if (selectedItems.contains(entry)) {
+                                      selectedItems.remove(entry);
                                     } else {
-                                      _selectedItems.add(isLocal, entry);
+                                      selectedItems.add(isLocal, entry);
                                     }
                                     setState(() {});
                                   }
                                 }),
                                 DataCell(Text(
-                                  entry
-                                          .lastModified()
-                                          .toString()
-                                          .replaceAll(".000", "") +
-                                      "   ",
+                                  "${entry.lastModified().toString().replaceAll(".000", "")}   ",
                                   style: TextStyle(
                                       fontSize: 12, color: MyTheme.darkGray),
                                 )),
@@ -415,10 +407,11 @@ class _FileManagerPageState extends State<FileManagerPage>
   }
 
   Widget headTools(bool isLocal) {
-    final _locationStatus =
+    final locationStatus =
         isLocal ? _locationStatusLocal : _locationStatusRemote;
-    final _locationFocus = isLocal ? _locationNodeLocal : _locationNodeRemote;
-    final _searchTextObs = isLocal ? _searchTextLocal : _searchTextRemote;
+    final locationFocus = isLocal ? _locationNodeLocal : _locationNodeRemote;
+    final searchTextObs = isLocal ? _searchTextLocal : _searchTextRemote;
+    final searchController = TextEditingController(text: searchTextObs.value);
     return Container(
         child: Column(
       children: [
@@ -476,13 +469,13 @@ class _FileManagerPageState extends State<FileManagerPage>
             Expanded(
                 child: GestureDetector(
               onTap: () {
-                _locationStatus.value =
-                    _locationStatus.value == LocationStatus.bread
+                locationStatus.value =
+                    locationStatus.value == LocationStatus.bread
                         ? LocationStatus.textField
                         : LocationStatus.bread;
                 Future.delayed(Duration.zero, () {
-                  if (_locationStatus.value == LocationStatus.textField) {
-                    _locationFocus.requestFocus();
+                  if (locationStatus.value == LocationStatus.textField) {
+                    locationFocus.requestFocus();
                   }
                 });
               },
@@ -493,7 +486,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                     children: [
                       Expanded(
                           child: Obx(() =>
-                              _locationStatus.value == LocationStatus.bread
+                              locationStatus.value == LocationStatus.bread
                                   ? buildBread(isLocal)
                                   : buildPathLocation(isLocal))),
                       DropdownButton<String>(
@@ -521,18 +514,28 @@ class _FileManagerPageState extends State<FileManagerPage>
                     child: ConstrainedBox(
                       constraints: BoxConstraints(minWidth: 200),
                       child: TextField(
-                        controller:
-                            TextEditingController(text: _searchTextObs.value),
+                        textAlignVertical: TextAlignVertical.center,
+                        controller: searchController,
                         autofocus: true,
-                        decoration:
-                            InputDecoration(prefixIcon: Icon(Icons.search)),
+                        decoration: InputDecoration(
+                          prefixIcon: Icon(Icons.search),
+                          suffix: IconButton(
+                            icon: Icon(Icons.clear),
+                            splashRadius: 20,
+                            onPressed: () {
+                              searchController.clear();
+                              searchTextObs.value = "";
+                              Get.back();
+                            },
+                          ),
+                        ),
                         onChanged: (searchText) =>
                             onSearchText(searchText, isLocal),
                       ),
                     ))
               ],
               splashRadius: 20,
-              child: const Icon(Icons.search),
+              icon: const Icon(Icons.search),
             ),
             IconButton(
                 onPressed: () {
@@ -690,9 +693,8 @@ class _FileManagerPageState extends State<FileManagerPage>
 
   breadCrumbScrollToEnd(bool isLocal) {
     Future.delayed(Duration(milliseconds: 200), () {
-      final _breadCrumbScroller = getBreadCrumbScrollController(isLocal);
-      _breadCrumbScroller.animateTo(
-          _breadCrumbScroller.position.maxScrollExtent,
+      final breadCrumbScroller = getBreadCrumbScrollController(isLocal);
+      breadCrumbScroller.animateTo(breadCrumbScroller.position.maxScrollExtent,
           duration: Duration(milliseconds: 200),
           curve: Curves.fastLinearToSlowEaseIn);
     });
@@ -734,7 +736,7 @@ class _FileManagerPageState extends State<FileManagerPage>
       return;
     }
     var items = SelectedItems();
-    details.files.forEach((file) {
+    for (var file in details.files) {
       final f = File(file.path);
       items.add(
           true,
@@ -743,7 +745,7 @@ class _FileManagerPageState extends State<FileManagerPage>
             ..name = file.name
             ..size =
                 FileSystemEntity.isDirectorySync(f.path) ? 0 : f.lengthSync());
-    });
+    }
     model.sendFiles(items, isRemote: false);
   }
 }
