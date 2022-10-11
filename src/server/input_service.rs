@@ -373,8 +373,8 @@ fn handle_mouse_(evt: &MouseEvent, conn: i32) {
     let mut to_release = Vec::new();
     if evt_type == 1 {
         fix_modifiers(&evt.modifiers[..], &mut en, 0);
-        // #[cfg(target_os = "macos")]
-        // en.reset_flag();
+        #[cfg(target_os = "macos")]
+        en.reset_flag();
         for ref ck in evt.modifiers.iter() {
             if let Some(key) = KEY_MAP.get(&ck.value()) {
                 #[cfg(target_os = "macos")]
@@ -705,9 +705,7 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
     #[cfg(windows)]
     let mut disable_numlock = false;
     #[cfg(target_os = "macos")]
-    //if !evt.down && crate::is_modifier(evt) {
     en.reset_flag();
-    //}
     // When long-pressed the command key, then press and release
     // the Tab key, there should be CGEventFlagCommand in the flag.
     #[cfg(target_os = "macos")]
