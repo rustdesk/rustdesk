@@ -376,29 +376,29 @@ class ServerModel with ChangeNotifier {
         } else {
           _clients[index].authorized = true;
         }
-        tabController.add(
-            TabInfo(
-                key: client.id.toString(),
-                label: client.name,
-                closable: false,
-                page: Desktop.buildConnectionCard(client)),
-            authorized: true);
-        scrollToBottom();
-        notifyListeners();
       } else {
         if (_clients.any((c) => c.id == client.id)) {
           return;
         }
         _clients.add(client);
-        tabController.add(TabInfo(
-            key: client.id.toString(),
-            label: client.name,
-            closable: false,
-            page: Desktop.buildConnectionCard(client)));
-        scrollToBottom();
-        notifyListeners();
-        if (isAndroid) showLoginDialog(client);
       }
+      tabController.add(
+          TabInfo(
+              key: client.id.toString(),
+              label: client.name,
+              closable: false,
+              page: Desktop.buildConnectionCard(client)),
+          authorized: client.authorized);
+      // remove disconnected
+      final index_disconnected = _clients
+          .indexWhere((c) => c.disconnected && c.peerId == client.peerId);
+      if (index_disconnected >= 0) {
+        _clients.removeAt(index_disconnected);
+        tabController.remove(index_disconnected);
+      }
+      scrollToBottom();
+      notifyListeners();
+      if (isAndroid && !client.authorized) showLoginDialog(client);
     } catch (e) {
       debugPrint("Failed to call loginRequest,error:$e");
     }
@@ -477,38 +477,19 @@ class ServerModel with ChangeNotifier {
     }
   }
 
-  void onClientAuthorized(Map<String, dynamic> evt) {
-    try {
-      final client = Client.fromJson(jsonDecode(evt['client']));
-      parent.target?.dialogManager.dismissByTag(getLoginDialogTag(client.id));
-      final index = _clients.indexWhere((c) => c.id == client.id);
-      if (index < 0) {
-        _clients.add(client);
-      } else {
-        _clients[index].authorized = true;
-      }
-      tabController.add(
-          TabInfo(
-              key: client.id.toString(),
-              label: client.name,
-              closable: false,
-              page: Desktop.buildConnectionCard(client)),
-          authorized: true);
-      scrollToBottom();
-      notifyListeners();
-    } catch (e) {
-      debugPrint("onClientAuthorized:$e");
-    }
-  }
-
   void onClientRemove(Map<String, dynamic> evt) {
     try {
       final id = int.parse(evt['id'] as String);
+      final close = (evt['close'] as String) == 'true';
       if (_clients.any((c) => c.id == id)) {
         final index = _clients.indexWhere((client) => client.id == id);
         if (index >= 0) {
-          _clients.removeAt(index);
-          tabController.remove(index);
+          if (close) {
+            _clients.removeAt(index);
+            tabController.remove(index);
+          } else {
+            _clients[index].disconnected = true;
+          }
         }
         parent.target?.dialogManager.dismissByTag(getLoginDialogTag(id));
         parent.target?.invokeMethod("cancel_notification", id);
@@ -545,6 +526,7 @@ class Client {
   bool file = false;
   bool restart = false;
   bool recording = false;
+  bool disconnected = false;
 
   Client(this.id, this.authorized, this.isFileTransfer, this.name, this.peerId,
       this.keyboard, this.clipboard, this.audio);
@@ -561,18 +543,20 @@ class Client {
     file = json['file'];
     restart = json['restart'];
     recording = json['recording'];
+    disconnected = json['disconnected'];
   }
 
   Map<String, dynamic> toJson() {
     final Map<String, dynamic> data = new Map<String, dynamic>();
-    data['id'] = this.id;
-    data['is_start'] = this.authorized;
-    data['is_file_transfer'] = this.isFileTransfer;
-    data['name'] = this.name;
-    data['peer_id'] = this.peerId;
-    data['keyboard'] = this.keyboard;
-    data['clipboard'] = this.clipboard;
-    data['audio'] = this.audio;
+    data['id'] = id;
+    data['is_start'] = authorized;
+    data['is_file_transfer'] = isFileTransfer;
+    data['name'] = name;
+    data['peer_id'] = peerId;
+    data['keyboard'] = keyboard;
+    data['clipboard'] = clipboard;
+    data['audio'] = audio;
+    data['disconnected'] = disconnected;
     return data;
   }
 }

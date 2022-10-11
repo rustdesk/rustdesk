@@ -38,8 +38,8 @@ impl InvokeUiCM for SciterHandler {
         );
     }
 
-    fn remove_connection(&self, id: i32) {
-        self.call("removeConnection", &make_args!(id));
+    fn remove_connection(&self, id: i32, close: bool) {
+        self.call("removeConnection", &make_args!(id, close));
         if crate::ui_cm_interface::get_clients_length().eq(&0) {
             crate::platform::quit_gui();
         }
@@ -109,6 +109,14 @@ impl SciterConnectionManager {
         crate::ui_cm_interface::close(id);
     }
 
+    fn remove_disconnected_connection(&self, id: i32) {
+        crate::ui_cm_interface::remove(id);
+    }
+
+    fn quit(&self) {
+        crate::platform::quit_gui();
+    }
+
     fn authorize(&self, id: i32) {
         crate::ui_cm_interface::authorize(id);
     }
@@ -133,6 +141,8 @@ impl sciter::EventHandler for SciterConnectionManager {
         fn get_click_time();
         fn get_icon();
         fn close(i32);
+        fn remove_disconnected_connection(i32);
+        fn quit();
         fn authorize(i32);
         fn switch_permission(i32, String, bool);
         fn send_msg(i32, String);

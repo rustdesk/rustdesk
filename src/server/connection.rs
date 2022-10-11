@@ -95,6 +95,8 @@ pub struct Connection {
     api_server: String,
     lr: LoginRequest,
     last_recv_time: Arc<Mutex<Instant>>,
+    chat_unanswered: bool,
+    close_manually: bool,
 }
 
 impl Subscriber for ConnInner {
@@ -184,6 +186,8 @@ impl Connection {
             api_server: "".to_owned(),
             lr: Default::default(),
             last_recv_time: Arc::new(Mutex::new(Instant::now())),
+            chat_unanswered: false,
+            close_manually: false,
         };
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         tokio::spawn(async move {
@@ -246,6 +250,7 @@ impl Connection {
                             }
                         }
                         ipc::Data::Close => {
+                            conn.close_manually = true;
                             let mut misc = Misc::new();
                             misc.set_close_reason("Closed manually by the peer".into());
                             let mut msg_out = Message::new();
@@ -264,6 +269,7 @@ impl Connection {
                             let mut msg_out = Message::new();
                             msg_out.set_misc(misc);
                             conn.send(msg_out).await;
+                            conn.chat_unanswered = false;
                         }
                         ipc::Data::SwitchPermission{name, enabled} => {
                             log::info!("Change permission {} -> {}", name, enabled);
@@ -1245,6 +1251,7 @@ impl Connection {
                     }
                     Some(misc::Union::ChatMessage(c)) => {
                         self.send_to_cm(ipc::Data::ChatMessage { text: c.text });
+                        self.chat_unanswered = true;
                     }
                     Some(misc::Union::Option(o)) => {
                         self.update_option(&o).await;
@@ -1445,7 +1452,15 @@ impl Connection {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             lock_screen().await;
         }
-        self.tx_to_cm.send(ipc::Data::Close).ok();
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        let data = if self.chat_unanswered && !self.close_manually {
+            ipc::Data::Disconnected
+        } else {
+            ipc::Data::Close
+        };
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        let data = ipc::Data::Close;
+        self.tx_to_cm.send(data).ok();
         self.port_forward_socket.take();
     }
 

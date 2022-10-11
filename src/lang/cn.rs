@@ -366,5 +366,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("elevation_prompt", "以当前用户权限运行软件，可能导致远端在访问本机时，没有足够的权限来操作部分窗口。"),
         ("uac_warning", "暂时无法访问远端设备，因为远端设备正在请求用户账户权限，请等待对方关闭UAC窗口。为避免这个问题，建议在远端设备上安装或者以管理员权限运行本软件。"),
         ("elevated_foreground_window_warning", "暂时无法使用鼠标键盘，因为远端桌面的当前窗口需要更高的权限才能操作, 可以请求对方最小化当前窗口。为避免这个问题，建议在远端设备上安装或者以管理员权限运行本软件。"),
+        ("Disconnected", "会话已结束"),
     ].iter().cloned().collect();
 }

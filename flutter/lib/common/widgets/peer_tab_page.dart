@@ -54,7 +54,8 @@ class _PeerTabPageState extends State<PeerTabPage>
         bind.mainDiscover();
         break;
       case 3:
-        gFFI.abModel.getAb();
+
+        /// AddressBook initState will refresh ab state
         break;
     }
   }

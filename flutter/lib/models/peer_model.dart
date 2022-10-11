@@ -7,8 +7,8 @@ class Peer {
   final String username;
   final String hostname;
   final String platform;
-  final String alias;
-  final List<dynamic> tags;
+  String alias;
+  List<dynamic> tags;
   bool online = false;
 
   Peer.fromJson(Map<String, dynamic> json)
@@ -18,6 +18,17 @@ class Peer {
         platform = json['platform'] ?? '',
         alias = json['alias'] ?? '',
         tags = json['tags'] ?? [];
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      "id": id,
+      "username": username,
+      "hostname": hostname,
+      "platform": platform,
+      "alias": alias,
+      "tags": tags,
+    };
+  }
 
   Peer({
     required this.id,

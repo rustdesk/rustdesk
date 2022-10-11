@@ -263,12 +263,13 @@ void showServerSettingsWithValue(String id, String relay, String key,
               if (id != id0) {
                 bind.mainSetOption(key: "custom-rendezvous-server", value: id);
               }
-              if (relay != relay0)
+              if (relay != relay0) {
                 bind.mainSetOption(key: "relay-server", value: relay);
+              }
               if (key != key0) bind.mainSetOption(key: "key", value: key);
-              if (api != api0)
+              if (api != api0) {
                 bind.mainSetOption(key: "api-server", value: api);
-              gFFI.ffiModel.updateUser();
+              }
               close();
             }
             setState(() {

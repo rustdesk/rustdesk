@@ -69,6 +69,8 @@ class DesktopTabController {
 
   DesktopTabController({required this.tabType});
 
+  int get length => state.value.tabs.length;
+
   void add(TabInfo tab, {bool authorized = false}) {
     if (!isDesktop) return;
     final index = state.value.tabs.indexWhere((e) => e.key == tab.key);

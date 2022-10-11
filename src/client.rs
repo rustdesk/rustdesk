@@ -48,7 +48,7 @@ pub use super::lang::*;
 pub mod file_trait;
 pub mod helper;
 pub mod io_loop;
-
+use crate::ui_session_interface::global_save_keyboard_mode;
 pub static SERVER_KEYBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
 pub static SERVER_FILE_TRANSFER_ENABLED: AtomicBool = AtomicBool::new(true);
 pub static SERVER_CLIPBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
@@ -1293,6 +1293,9 @@ impl LoginConfigHandler {
     pub fn handle_peer_info(&mut self, pi: &PeerInfo) {
         if !pi.version.is_empty() {
             self.version = hbb_common::get_version_number(&pi.version);
+        }
+        if hbb_common::get_version_number(&pi.version) < hbb_common::get_version_number("1.2.0") {
+            global_save_keyboard_mode("legacy".to_owned());
         }
         self.features = pi.features.clone().into_option();
         let serde = PeerInfoSerde {

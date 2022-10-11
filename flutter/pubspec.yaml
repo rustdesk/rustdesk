@@ -64,7 +64,7 @@ dependencies:
     desktop_multi_window:
         git:
             url: https://github.com/Kingtous/rustdesk_desktop_multi_window
-            ref: 74c10aa49fecc088992a9edef1f6da39f83df505
+            ref: 0019311e8aba4e84ffd44c57ba1834cc76924f2a
     freezed_annotation: ^2.0.3
     tray_manager:
         git:
@@ -73,7 +73,12 @@ dependencies:
     flutter_custom_cursor:
         git:
             url: https://github.com/Kingtous/rustdesk_flutter_custom_cursor
-            ref: 527821d676017387be024dffd61898ff79b14c41 
+            ref: dec2166e881c47d922e1edc484d10d2cd5c2103b
+    window_size:
+        git:
+            url: https://github.com/google/flutter-desktop-embedding.git
+            path: plugins/window_size
+            ref: a738913c8ce2c9f47515382d40827e794a334274
     get: ^4.6.5
     visibility_detector: ^0.3.3
     contextmenu: ^3.0.0

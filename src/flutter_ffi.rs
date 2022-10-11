@@ -779,6 +779,10 @@ pub fn cm_check_clients_length(length: usize) -> Option<String> {
     }
 }
 
+pub fn cm_get_clients_length() -> usize {
+    crate::ui_cm_interface::get_clients_length()
+}
+
 pub fn main_init(app_dir: String) {
     initialize(&app_dir);
 }
@@ -939,6 +943,10 @@ pub fn cm_login_res(conn_id: i32, res: bool) {
 
 pub fn cm_close_connection(conn_id: i32) {
     crate::ui_cm_interface::close(conn_id);
+}
+
+pub fn cm_remove_disconnected_connection(conn_id: i32) {
+    crate::ui_cm_interface::remove(conn_id);
 }
 
 pub fn cm_check_click_time(conn_id: i32) {

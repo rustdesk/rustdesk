@@ -158,40 +158,26 @@ class ConnectionManagerState extends State<ConnectionManager> {
       ),
     );
   }
-
-  Widget buildTab(Client client) {
-    return Tab(
-      child: Row(
-        children: [
-          SizedBox(
-              width: 80,
-              child: Text(
-                client.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-              )),
-        ],
-      ),
-    );
-  }
 }
 
 Widget buildConnectionCard(Client client) {
-  return Column(
-    mainAxisAlignment: MainAxisAlignment.start,
-    crossAxisAlignment: CrossAxisAlignment.start,
-    key: ValueKey(client.id),
-    children: [
-      _CmHeader(client: client),
-      client.isFileTransfer ? Offstage() : _PrivilegeBoard(client: client),
-      Expanded(
-          child: Align(
-        alignment: Alignment.bottomCenter,
-        child: _CmControlPanel(client: client),
-      ))
-    ],
-  ).paddingSymmetric(vertical: 8.0, horizontal: 8.0);
+  return Consumer<ServerModel>(
+      builder: (context, value, child) => Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            key: ValueKey(client.id),
+            children: [
+              _CmHeader(client: client),
+              client.isFileTransfer || client.disconnected
+                  ? Offstage()
+                  : _PrivilegeBoard(client: client),
+              Expanded(
+                  child: Align(
+                alignment: Alignment.bottomCenter,
+                child: _CmControlPanel(client: client),
+              ))
+            ],
+          ).paddingSymmetric(vertical: 8.0, horizontal: 8.0));
 }
 
 class _AppIcon extends StatelessWidget {
@@ -249,7 +235,7 @@ class _CmHeaderState extends State<_CmHeader>
   void initState() {
     super.initState();
     _timer = Timer.periodic(Duration(seconds: 1), (_) {
-      _time.value = _time.value + 1;
+      if (!client.disconnected) _time.value = _time.value + 1;
     });
   }
 
@@ -303,7 +289,10 @@ class _CmHeaderState extends State<_CmHeader>
               FittedBox(
                   child: Row(
                 children: [
-                  Text(translate("Connected")).marginOnly(right: 8.0),
+                  Text(client.disconnected
+                          ? translate("Disconnected")
+                          : translate("Connected"))
+                      .marginOnly(right: 8.0),
                   Obx(() => Text(
                       formatDurationToTime(Duration(seconds: _time.value))))
                 ],
@@ -311,15 +300,14 @@ class _CmHeaderState extends State<_CmHeader>
             ],
           ),
         ),
-        Consumer<ServerModel>(
-            builder: (_, model, child) => Offstage(
-                  offstage: !client.authorized || client.isFileTransfer,
-                  child: IconButton(
-                    onPressed: () => checkClickTime(client.id,
-                        () => gFFI.chatModel.toggleCMChatPage(client.id)),
-                    icon: Icon(Icons.message_outlined),
-                  ),
-                ))
+        Offstage(
+          offstage: !client.authorized || client.isFileTransfer,
+          child: IconButton(
+            onPressed: () => checkClickTime(
+                client.id, () => gFFI.chatModel.toggleCMChatPage(client.id)),
+            icon: Icon(Icons.message_outlined),
+          ),
+        )
       ],
     );
   }
@@ -435,11 +423,11 @@ class _CmControlPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ServerModel>(builder: (_, model, child) {
-      return client.authorized
-          ? buildAuthorized(context)
-          : buildUnAuthorized(context);
-    });
+    return client.authorized
+        ? client.disconnected
+            ? buildDisconnected(context)
+            : buildAuthorized(context)
+        : buildUnAuthorized(context);
   }
 
   buildAuthorized(BuildContext context) {
@@ -459,6 +447,31 @@ class _CmControlPanel extends StatelessWidget {
                 children: [
                   Text(
                     translate("Disconnect"),
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ],
+              )),
+        )
+      ],
+    );
+  }
+
+  buildDisconnected(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Ink(
+          width: 200,
+          height: 40,
+          decoration: BoxDecoration(
+              color: MyTheme.accent, borderRadius: BorderRadius.circular(10)),
+          child: InkWell(
+              onTap: () => handleClose(context),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    translate("Close"),
                     style: TextStyle(color: Colors.white),
                   ),
                 ],
@@ -526,6 +539,13 @@ class _CmControlPanel extends StatelessWidget {
   void handleAccept(BuildContext context) {
     final model = Provider.of<ServerModel>(context, listen: false);
     model.sendLoginResponse(client, true);
+  }
+
+  void handleClose(BuildContext context) async {
+    await bind.cmRemoveDisconnectedConnection(connId: client.id);
+    if (await bind.cmGetClientsLength() == 0) {
+      windowManager.close();
+    }
   }
 }
 

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,6 +9,8 @@ import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:rxdart/rxdart.dart' as rxdart;
+import 'package:desktop_multi_window/desktop_multi_window.dart';
+import 'package:window_size/window_size.dart' as window_size;
 
 import '../../common.dart';
 import '../../mobile/widgets/dialog.dart';
@@ -26,6 +29,7 @@ class _MenubarTheme {
 
 class RemoteMenubar extends StatefulWidget {
   final String id;
+  final int windowId;
   final FFI ffi;
   final Function(Function(bool)) onEnterOrLeaveImageSetter;
   final Function() onEnterOrLeaveImageCleaner;
@@ -33,6 +37,7 @@ class RemoteMenubar extends StatefulWidget {
   const RemoteMenubar({
     Key? key,
     required this.id,
+    required this.windowId,
     required this.ffi,
     required this.onEnterOrLeaveImageSetter,
     required this.onEnterOrLeaveImageCleaner,
@@ -48,6 +53,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   final _rxHideReplay = rxdart.ReplaySubject<int>();
   final _pinMenubar = false.obs;
   bool _isCursorOverImage = false;
+  window_size.Screen? _screen;
 
   bool get isFullscreen => Get.find<RxBool>(tag: 'fullscreen').isTrue;
   void _setFullscreen(bool v) {
@@ -105,10 +111,32 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                 },
                 onPressed: () {
                   _show.value = !_show.value;
+                  if (_show.isTrue) {
+                    _updateScreen();
+                  }
                 },
                 child: Obx(() => Container(
                       color: _hideColor.value,
                     ).marginOnly(bottom: 8.0))))));
+  }
+
+  _updateScreen() async {
+    final v = await DesktopMultiWindow.invokeMethod(0, "get_window_info", "");
+    final String valueStr = v;
+    if (valueStr.isEmpty) {
+      _screen = null;
+    } else {
+      final screenMap = jsonDecode(valueStr);
+      _screen = window_size.Screen(
+          Rect.fromLTRB(screenMap['frame']['l'], screenMap['frame']['t'],
+              screenMap['frame']['r'], screenMap['frame']['b']),
+          Rect.fromLTRB(
+              screenMap['visibleFrame']['l'],
+              screenMap['visibleFrame']['t'],
+              screenMap['visibleFrame']['r'],
+              screenMap['visibleFrame']['b']),
+          screenMap['scaleFactor']);
+    }
   }
 
   Widget _buildMenubar(BuildContext context) {
@@ -306,25 +334,29 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       return {'supportedHwcodec': supportedHwcodec};
     }(), builder: (context, snapshot) {
       if (snapshot.hasData) {
-        return mod_menu.PopupMenuButton(
-          padding: EdgeInsets.zero,
-          icon: const Icon(
-            Icons.tv,
-            color: _MenubarTheme.commonColor,
-          ),
-          tooltip: translate('Display Settings'),
-          position: mod_menu.PopupMenuPosition.under,
-          itemBuilder: (BuildContext context) => _getDisplayMenu(snapshot.data!)
-              .map((entry) => entry.build(
-                  context,
-                  const MenuConfig(
-                    commonColor: _MenubarTheme.commonColor,
-                    height: _MenubarTheme.height,
-                    dividerHeight: _MenubarTheme.dividerHeight,
-                  )))
-              .expand((i) => i)
-              .toList(),
-        );
+        return Obx(() {
+          final remoteCount = RemoteCountState.find().value;
+          return mod_menu.PopupMenuButton(
+            padding: EdgeInsets.zero,
+            icon: const Icon(
+              Icons.tv,
+              color: _MenubarTheme.commonColor,
+            ),
+            tooltip: translate('Display Settings'),
+            position: mod_menu.PopupMenuPosition.under,
+            itemBuilder: (BuildContext context) =>
+                _getDisplayMenu(snapshot.data!, remoteCount)
+                    .map((entry) => entry.build(
+                        context,
+                        const MenuConfig(
+                          commonColor: _MenubarTheme.commonColor,
+                          height: _MenubarTheme.height,
+                          dividerHeight: _MenubarTheme.dividerHeight,
+                        )))
+                    .expand((i) => i)
+                    .toList(),
+          );
+        });
       } else {
         return const Offstage();
       }
@@ -586,7 +618,34 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     return displayMenu;
   }
 
-  List<MenuEntryBase<String>> _getDisplayMenu(dynamic futureData) {
+  bool _isWindowCanBeAdjusted(int remoteCount) {
+    if (remoteCount != 1) {
+      return false;
+    }
+    if (_screen == null) {
+      return false;
+    }
+    double scale = _screen!.scaleFactor;
+    double selfWidth = _screen!.frame.width;
+    double selfHeight = _screen!.frame.height;
+    if (isFullscreen) {
+      selfWidth = _screen!.visibleFrame.width;
+      selfHeight = _screen!.visibleFrame.height;
+    }
+
+    final canvasModel = widget.ffi.canvasModel;
+    final displayWidth = canvasModel.getDisplayWidth();
+    final displayHeight = canvasModel.getDisplayHeight();
+    final requiredWidth = displayWidth +
+        (canvasModel.tabBarHeight + canvasModel.windowBorderWidth * 2);
+    final requiredHeight = displayHeight +
+        (canvasModel.tabBarHeight + canvasModel.windowBorderWidth * 2);
+    return selfWidth > (requiredWidth * scale) &&
+        selfHeight > (requiredHeight * scale);
+  }
+
+  List<MenuEntryBase<String>> _getDisplayMenu(
+      dynamic futureData, int remoteCount) {
     const EdgeInsets padding = EdgeInsets.only(left: 18.0, right: 8.0);
     final displayMenu = [
       MenuEntryRadios<String>(
@@ -738,6 +797,77 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       ),
       MenuEntryDivider<String>(),
     ];
+
+    if (_isWindowCanBeAdjusted(remoteCount)) {
+      displayMenu.insert(
+        0,
+        MenuEntryDivider<String>(),
+      );
+      displayMenu.insert(
+        0,
+        MenuEntryButton<String>(
+          childBuilder: (TextStyle? style) => Container(
+              child: Text(
+            translate('Adjust Window'),
+            style: style,
+          )),
+          proc: () {
+            () async {
+              await _updateScreen();
+              if (_screen != null) {
+                _setFullscreen(false);
+                double scale = _screen!.scaleFactor;
+                final wndRect =
+                    await WindowController.fromWindowId(widget.windowId)
+                        .getFrame();
+                final mediaSize = MediaQueryData.fromWindow(ui.window).size;
+                // On windows, wndRect is equal to GetWindowRect and mediaSize is equal to GetClientRect.
+                // https://stackoverflow.com/a/7561083
+                double magicWidth =
+                    wndRect.right - wndRect.left - mediaSize.width * scale;
+                double magicHeight =
+                    wndRect.bottom - wndRect.top - mediaSize.height * scale;
+
+                final canvasModel = widget.ffi.canvasModel;
+                final width = (canvasModel.getDisplayWidth() +
+                            canvasModel.windowBorderWidth * 2) *
+                        scale +
+                    magicWidth;
+                final height = (canvasModel.getDisplayHeight() +
+                            canvasModel.tabBarHeight +
+                            canvasModel.windowBorderWidth * 2) *
+                        scale +
+                    magicHeight;
+                double left = wndRect.left + (wndRect.width - width) / 2;
+                double top = wndRect.top + (wndRect.height - height) / 2;
+
+                Rect frameRect = _screen!.frame;
+                final RxBool fullscreen = Get.find(tag: 'fullscreen');
+                if (fullscreen.isFalse) {
+                  frameRect = _screen!.visibleFrame;
+                }
+                if (left < frameRect.left) {
+                  left = frameRect.left;
+                }
+                if (top < frameRect.top) {
+                  top = frameRect.top;
+                }
+                if ((left + width) > frameRect.right) {
+                  left = frameRect.right - width;
+                }
+                if ((top + height) > frameRect.bottom) {
+                  top = frameRect.bottom - height;
+                }
+                await WindowController.fromWindowId(widget.windowId)
+                    .setFrame(Rect.fromLTWH(left, top, width, height));
+              }
+            }();
+          },
+          padding: padding,
+          dismissOnClicked: true,
+        ),
+      );
+    }
 
     /// Show Codec Preference
     if (bind.mainHasHwcodec()) {

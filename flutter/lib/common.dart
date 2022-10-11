@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui';
 
 import 'package:back_button_interceptor/back_button_interceptor.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -15,6 +16,7 @@ import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:window_size/window_size.dart' as window_size;
 
 import 'common/widgets/overlay.dart';
 import 'mobile/pages/file_manager_page.dart';
@@ -22,6 +24,8 @@ import 'mobile/pages/remote_page.dart';
 import 'models/input_model.dart';
 import 'models/model.dart';
 import 'models/platform_model.dart';
+
+import '../consts.dart';
 
 final globalKey = GlobalKey<NavigatorState>();
 final navigationBarKey = GlobalKey();
@@ -383,22 +387,23 @@ class OverlayDialogManager {
           "[OverlayDialogManager] Failed to show dialog, _overlayState is null, call [setOverlayState] first");
     }
 
-    final _tag;
+    final String dialogTag;
     if (tag != null) {
-      _tag = tag;
+      dialogTag = tag;
     } else {
-      _tag = _tagCount.toString();
+      dialogTag = _tagCount.toString();
       _tagCount++;
     }
 
     final dialog = Dialog<T>();
-    _dialogs[_tag] = dialog;
+    _dialogs[dialogTag] = dialog;
 
-    final close = ([res]) {
-      _dialogs.remove(_tag);
+    close([res]) {
+      _dialogs.remove(dialogTag);
       dialog.complete(res);
-      BackButtonInterceptor.removeByName(_tag);
-    };
+      BackButtonInterceptor.removeByName(dialogTag);
+    }
+
     dialog.entry = OverlayEntry(builder: (_) {
       bool innerClicked = false;
       return Listener(
@@ -423,14 +428,16 @@ class OverlayDialogManager {
         close();
       }
       return true;
-    }, name: _tag);
+    }, name: dialogTag);
     return dialog.completer.future;
   }
 
-  void showLoading(String text,
+  String showLoading(String text,
       {bool clickMaskDismiss = false,
       bool showCancel = true,
       VoidCallback? onCancel}) {
+    final tag = _tagCount.toString();
+    _tagCount++;
     show((setState, close) {
       cancel() {
         dismissAll();
@@ -465,7 +472,8 @@ class OverlayDialogManager {
                 ])),
         onCancel: showCancel ? cancel : null,
       );
-    });
+    }, tag: tag);
+    return tag;
   }
 
   void resetMobileActionsOverlay({FFI? ffi}) {
@@ -932,23 +940,6 @@ Future<bool> matchPeer(String searchText, Peer peer) async {
   return alias.toLowerCase().contains(searchText);
 }
 
-Future<List<Peer>>? matchPeers(String searchText, List<Peer> peers) async {
-  searchText = searchText.trim();
-  if (searchText.isEmpty) {
-    return peers;
-  }
-  searchText = searchText.toLowerCase();
-  final matches =
-      await Future.wait(peers.map((peer) => matchPeer(searchText, peer)));
-  final filteredList = List<Peer>.empty(growable: true);
-  for (var i = 0; i < peers.length; i++) {
-    if (matches[i]) {
-      filteredList.add(peers[i]);
-    }
-  }
-  return filteredList;
-}
-
 /// Get the image for the current [platform].
 Widget getPlatformImage(String platform, {double size = 50}) {
   platform = platform.toLowerCase();
@@ -1022,6 +1013,89 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
   }
 }
 
+_adjustRestoreMainWindowSize(double? width, double? height) async {
+  const double minWidth = 600;
+  const double minHeight = 100;
+  double maxWidth = (((isDesktop || isWebDesktop)
+          ? kDesktopMaxDisplayWidth
+          : kMobileMaxDisplayWidth))
+      .toDouble();
+  double maxHeight = ((isDesktop || isWebDesktop)
+          ? kDesktopMaxDisplayHeight
+          : kMobileMaxDisplayHeight)
+      .toDouble();
+
+  if (isDesktop || isWebDesktop) {
+    final screen = (await window_size.getWindowInfo()).screen;
+    if (screen != null) {
+      maxWidth = screen.visibleFrame.width;
+      maxHeight = screen.visibleFrame.height;
+    }
+  }
+
+  final defaultWidth =
+      ((isDesktop || isWebDesktop) ? 1280 : kMobileDefaultDisplayWidth)
+          .toDouble();
+  final defaultHeight =
+      ((isDesktop || isWebDesktop) ? 720 : kMobileDefaultDisplayHeight)
+          .toDouble();
+  double restoreWidth = width ?? defaultWidth;
+  double restoreHeight = height ?? defaultHeight;
+
+  if (restoreWidth < minWidth) {
+    restoreWidth = minWidth;
+  }
+  if (restoreHeight < minHeight) {
+    restoreHeight = minHeight;
+  }
+  if (restoreWidth > maxWidth) {
+    restoreWidth = maxWidth;
+  }
+  if (restoreHeight > maxHeight) {
+    restoreWidth = maxHeight;
+  }
+  await windowManager.setSize(Size(restoreWidth, restoreHeight));
+}
+
+_adjustRestoreMainWindowOffset(double? left, double? top) async {
+  if (left == null || top == null) {
+    await windowManager.center();
+  } else {
+    double windowLeft = left;
+    double windowTop = top;
+
+    double frameLeft = 0;
+    double frameTop = 0;
+    double frameRight = ((isDesktop || isWebDesktop)
+            ? kDesktopMaxDisplayWidth
+            : kMobileMaxDisplayWidth)
+        .toDouble();
+    double frameBottom = ((isDesktop || isWebDesktop)
+            ? kDesktopMaxDisplayHeight
+            : kMobileMaxDisplayHeight)
+        .toDouble();
+
+    if (isDesktop || isWebDesktop) {
+      final screen = (await window_size.getWindowInfo()).screen;
+      if (screen != null) {
+        frameLeft = screen.visibleFrame.left;
+        frameTop = screen.visibleFrame.top;
+        frameRight = screen.visibleFrame.right;
+        frameBottom = screen.visibleFrame.bottom;
+      }
+    }
+
+    if (windowLeft < frameLeft ||
+        windowLeft > frameRight ||
+        windowTop < frameTop ||
+        windowTop > frameBottom) {
+      await windowManager.center();
+    } else {
+      await windowManager.setPosition(Offset(windowLeft, windowTop));
+    }
+  }
+}
+
 /// Save window position and size on exit
 /// Note that windowId must be provided if it's subwindow
 Future<bool> restoreWindowPosition(WindowType type, {int? windowId}) async {
@@ -1042,13 +1116,10 @@ Future<bool> restoreWindowPosition(WindowType type, {int? windowId}) async {
         debugPrint("window position saved, but cannot be parsed");
         return false;
       }
-      await windowManager.setSize(Size(lpos.width ?? 1280, lpos.height ?? 720));
-      if (lpos.offsetWidth == null || lpos.offsetHeight == null) {
-        await windowManager.center();
-      } else {
-        await windowManager
-            .setPosition(Offset(lpos.offsetWidth!, lpos.offsetHeight!));
-      }
+
+      await _adjustRestoreMainWindowSize(lpos.width, lpos.height);
+      await _adjustRestoreMainWindowOffset(lpos.offsetWidth, lpos.offsetHeight);
+
       return true;
     default:
       // TODO: implement subwindow

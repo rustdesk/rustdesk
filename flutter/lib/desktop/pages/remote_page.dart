@@ -28,11 +28,13 @@ class RemotePage extends StatefulWidget {
   const RemotePage({
     Key? key,
     required this.id,
+    required this.windowId,
     required this.tabBarHeight,
     required this.windowBorderWidth,
   }) : super(key: key);
 
   final String id;
+  final int windowId;
   final double tabBarHeight;
   final double windowBorderWidth;
 
@@ -239,6 +241,7 @@ class _RemotePageState extends State<RemotePage>
     paints.add(QualityMonitor(_ffi.qualityMonitorModel));
     paints.add(RemoteMenubar(
       id: widget.id,
+      windowId: widget.windowId,
       ffi: _ffi,
       onEnterOrLeaveImageSetter: (func) => _onEnterOrLeaveImage4Menubar = func,
       onEnterOrLeaveImageCleaner: () => _onEnterOrLeaveImage4Menubar = null,
@@ -286,30 +289,35 @@ class ImagePaint extends StatelessWidget {
         child: child));
 
     if (c.scrollStyle == ScrollStyle.scrollbar) {
+      final imageWidth = c.getDisplayWidth() * s;
+      final imageHeight = c.getDisplayHeight() * s;
       final imageWidget = SizedBox(
-          width: c.getDisplayWidth() * s,
-          height: c.getDisplayHeight() * s,
+          width: imageWidth,
+          height: imageHeight,
           child: CustomPaint(
             painter: ImagePainter(image: m.image, x: 0, y: 0, scale: s),
           ));
 
-      return Center(
-        child: NotificationListener<ScrollNotification>(
-          onNotification: (notification) {
-            final percentX = _horizontal.position.extentBefore /
-                (_horizontal.position.extentBefore +
-                    _horizontal.position.extentInside +
-                    _horizontal.position.extentAfter);
-            final percentY = _vertical.position.extentBefore /
-                (_vertical.position.extentBefore +
-                    _vertical.position.extentInside +
-                    _vertical.position.extentAfter);
-            c.setScrollPercent(percentX, percentY);
-            return false;
-          },
-          child: mouseRegion(
-              child: _buildCrossScrollbar(_buildListener(imageWidget))),
-        ),
+      return NotificationListener<ScrollNotification>(
+        onNotification: (notification) {
+          final percentX = _horizontal.hasClients
+              ? _horizontal.position.extentBefore /
+                  (_horizontal.position.extentBefore +
+                      _horizontal.position.extentInside +
+                      _horizontal.position.extentAfter)
+              : 0.0;
+          final percentY = _vertical.hasClients
+              ? _vertical.position.extentBefore /
+                  (_vertical.position.extentBefore +
+                      _vertical.position.extentInside +
+                      _vertical.position.extentAfter)
+              : 0.0;
+          c.setScrollPercent(percentX, percentY);
+          return false;
+        },
+        child: mouseRegion(
+            child: _buildCrossScrollbar(context, _buildListener(imageWidget),
+                Size(imageWidth, imageHeight))),
       );
     } else {
       final imageWidget = SizedBox(
@@ -342,44 +350,98 @@ class ImagePaint extends StatelessWidget {
     }
   }
 
-  Widget _buildCrossScrollbar(Widget child) {
+  Widget _buildCrossScrollbarFromLayout(
+      BuildContext context, Widget child, Size layoutSize, Size size) {
     final scrollConfig = CustomMouseWheelScrollConfig(
         scrollDuration: kDefaultScrollDuration,
         scrollCurve: Curves.linearToEaseOut,
         mouseWheelTurnsThrottleTimeMs:
             kDefaultMouseWheelThrottleDuration.inMilliseconds,
         scrollAmountMultiplier: kDefaultScrollAmountMultiplier);
-    return Obx(() => ImprovedScrolling(
+    var widget = child;
+    if (layoutSize.width < size.width) {
+      widget = ScrollConfiguration(
+        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+        child: SingleChildScrollView(
+          controller: _horizontal,
+          scrollDirection: Axis.horizontal,
+          physics: cursorOverImage.isTrue
+              ? const NeverScrollableScrollPhysics()
+              : null,
+          child: widget,
+        ),
+      );
+    } else {
+      widget = Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [widget],
+      );
+    }
+    if (layoutSize.height < size.height) {
+      widget = ScrollConfiguration(
+        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+        child: SingleChildScrollView(
+          controller: _vertical,
+          physics: cursorOverImage.isTrue
+              ? const NeverScrollableScrollPhysics()
+              : null,
+          child: widget,
+        ),
+      );
+    } else {
+      widget = Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [widget],
+      );
+    }
+    if (layoutSize.width < size.width) {
+      widget = ImprovedScrolling(
+        scrollController: _horizontal,
+        enableCustomMouseWheelScrolling: cursorOverImage.isFalse,
+        customMouseWheelScrollConfig: scrollConfig,
+        child: RawScrollbar(
+          thumbColor: Colors.grey,
+          controller: _horizontal,
+          thumbVisibility: false,
+          trackVisibility: false,
+          notificationPredicate: layoutSize.height < size.height
+              ? (notification) => notification.depth == 1
+              : defaultScrollNotificationPredicate,
+          child: widget,
+        ),
+      );
+    }
+    if (layoutSize.height < size.height) {
+      widget = ImprovedScrolling(
         scrollController: _vertical,
         enableCustomMouseWheelScrolling: cursorOverImage.isFalse,
         customMouseWheelScrollConfig: scrollConfig,
-        child: ImprovedScrolling(
-            scrollController: _horizontal,
-            enableCustomMouseWheelScrolling: cursorOverImage.isFalse,
-            customMouseWheelScrollConfig: scrollConfig,
-            child: Scrollbar(
-                controller: _vertical,
-                thumbVisibility: false,
-                trackVisibility: false,
-                child: Scrollbar(
-                    controller: _horizontal,
-                    thumbVisibility: false,
-                    trackVisibility: false,
-                    notificationPredicate: (notif) => notif.depth == 1,
-                    child: SingleChildScrollView(
-                      controller: _vertical,
-                      physics: cursorOverImage.isTrue
-                          ? const NeverScrollableScrollPhysics()
-                          : null,
-                      child: SingleChildScrollView(
-                        controller: _horizontal,
-                        scrollDirection: Axis.horizontal,
-                        physics: cursorOverImage.isTrue
-                            ? const NeverScrollableScrollPhysics()
-                            : null,
-                        child: child,
-                      ),
-                    ))))));
+        child: RawScrollbar(
+          thumbColor: Colors.grey,
+          controller: _vertical,
+          thumbVisibility: false,
+          trackVisibility: false,
+          child: widget,
+        ),
+      );
+    }
+
+    return widget;
+  }
+
+  Widget _buildCrossScrollbar(BuildContext context, Widget child, Size size) {
+    var layoutSize = MediaQuery.of(context).size;
+    layoutSize = Size(
+        layoutSize.width - kWindowBorderWidth * 2,
+        layoutSize.height -
+            kWindowBorderWidth * 2 -
+            kDesktopRemoteTabBarHeight);
+    bool overflow =
+        layoutSize.width < size.width || layoutSize.height < size.height;
+    return overflow
+        ? Obx(() =>
+            _buildCrossScrollbarFromLayout(context, child, layoutSize, size))
+        : _buildCrossScrollbarFromLayout(context, child, layoutSize, size);
   }
 
   Widget _buildListener(Widget child) {

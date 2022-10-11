@@ -20,6 +20,12 @@ const int kMobileDefaultDisplayHeight = 1280;
 const int kDesktopDefaultDisplayWidth = 1080;
 const int kDesktopDefaultDisplayHeight = 720;
 
+const int kMobileMaxDisplayWidth = 720;
+const int kMobileMaxDisplayHeight = 1280;
+
+const int kDesktopMaxDisplayWidth = 1920;
+const int kDesktopMaxDisplayHeight = 1080;
+
 const Size kConnectionManagerWindowSize = Size(300, 400);
 // Tabbar transition duration, now we remove the duration
 const Duration kTabTransitionDuration = Duration.zero;
@@ -32,6 +38,7 @@ const kDefaultMouseWheelThrottleDuration = Duration(milliseconds: 50);
 const kFullScreenEdgeSize = 0.0;
 var kWindowEdgeSize = Platform.isWindows ? 1.0 : 5.0;
 const kWindowBorderWidth = 1.0;
+const kDesktopMenuPadding = EdgeInsets.only(left: 12.0, right: 3.0);
 
 const kInvalidValueStr = "InvalidValueStr";
 

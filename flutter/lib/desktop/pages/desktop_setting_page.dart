@@ -761,20 +761,18 @@ class _AccountState extends State<_Account> {
   Widget accountAction() {
     return _futureBuilder(future: () async {
       return await gFFI.userModel.getUserName();
-    }(), hasData: (data) {
-      String username = data as String;
-      return _Button(
-          username.isEmpty ? 'Login' : 'Logout',
+    }(), hasData: (_) {
+      return Obx(() => _Button(
+          gFFI.userModel.userName.value.isEmpty ? 'Login' : 'Logout',
           () => {
-                username.isEmpty
+                gFFI.userModel.userName.value.isEmpty
                     ? loginDialog().then((success) {
                         if (success) {
-                          // refresh frame
-                          setState(() {});
+                          gFFI.abModel.pullAb();
                         }
                       })
                     : gFFI.userModel.logOut()
-              });
+              }));
     });
   }
 }

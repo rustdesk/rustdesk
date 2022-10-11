@@ -1,14 +1,14 @@
-import 'package:contextmenu/contextmenu.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/common/widgets/peer_card.dart';
 import 'package:flutter_hbb/common/widgets/peers_view.dart';
-import 'package:flutter_hbb/models/ab_model.dart';
+import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
+import '../../consts.dart';
+import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
 import 'package:get/get.dart';
-import 'package:provider/provider.dart';
 
 import '../../common.dart';
 import '../../desktop/pages/desktop_home_page.dart';
 import '../../mobile/pages/settings_page.dart';
-import '../../models/platform_model.dart';
 
 class AddressBook extends StatefulWidget {
   final EdgeInsets? menuPadding;
@@ -21,15 +21,17 @@ class AddressBook extends StatefulWidget {
 }
 
 class _AddressBookState extends State<AddressBook> {
+  var menuPos = RelativeRect.fill;
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => gFFI.abModel.getAb());
+    WidgetsBinding.instance.addPostFrameCallback((_) => gFFI.abModel.pullAb());
   }
 
   @override
   Widget build(BuildContext context) => FutureBuilder<Widget>(
-      future: buildAddressBook(context),
+      future: buildBody(context),
       builder: (context, snapshot) {
         if (snapshot.hasData) {
           return snapshot.data!;
@@ -43,7 +45,7 @@ class _AddressBookState extends State<AddressBook> {
     if (isDesktop) {
       loginDialog().then((success) {
         if (success) {
-          setState(() {});
+          gFFI.abModel.pullAb();
         }
       });
     } else {
@@ -51,189 +53,186 @@ class _AddressBookState extends State<AddressBook> {
     }
   }
 
-  Future<Widget> buildAddressBook(BuildContext context) async {
-    final token = await bind.mainGetLocalOption(key: 'access_token');
-    if (token.trim().isEmpty) {
-      return Center(
-        child: InkWell(
-          onTap: handleLogin,
-          child: Text(
-            translate("Login"),
-            style: const TextStyle(decoration: TextDecoration.underline),
+  Future<Widget> buildBody(BuildContext context) async {
+    return Obx(() {
+      if (gFFI.userModel.userName.value.isEmpty) {
+        return Center(
+          child: InkWell(
+            onTap: handleLogin,
+            child: Text(
+              translate("Login"),
+              style: const TextStyle(decoration: TextDecoration.underline),
+            ),
           ),
-        ),
-      );
-    }
-    final model = gFFI.abModel;
-    return FutureBuilder(
-        future: model.getAb(),
-        builder: (context, snapshot) {
-          if (snapshot.hasData) {
-            return _buildAddressBook(context);
-          } else if (snapshot.hasError) {
-            return Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(translate("${snapshot.error}")),
-                TextButton(
-                    onPressed: () {
-                      setState(() {});
-                    },
-                    child: Text(translate("Retry")))
-              ],
-            );
-          } else {
-            if (model.abLoading) {
-              return const Center(
-                child: CircularProgressIndicator(),
-              );
-            } else if (model.abError.isNotEmpty) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(translate(model.abError)),
-                    TextButton(
-                        onPressed: () {
-                          setState(() {});
-                        },
-                        child: Text(translate("Retry")))
-                  ],
-                ),
-              );
-            } else {
-              return const Offstage();
-            }
-          }
-        });
+        );
+      } else {
+        if (gFFI.abModel.abLoading.value) {
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        }
+        if (gFFI.abModel.abError.isNotEmpty) {
+          return _buildShowError(gFFI.abModel.abError.value);
+        }
+        return isDesktop
+            ? _buildAddressBookDesktop()
+            : _buildAddressBookMobile();
+      }
+    });
   }
 
-  Widget _buildAddressBook(BuildContext context) {
-    return Consumer<AbModel>(
-        builder: (context, model, child) => Row(
+  Widget _buildShowError(String error) {
+    return Center(
+        child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(translate(error)),
+        TextButton(
+            onPressed: () {
+              setState(() {});
+            },
+            child: Text(translate("Retry")))
+      ],
+    ));
+  }
+
+  Widget _buildAddressBookDesktop() {
+    return Row(
+      children: [
+        Card(
+          margin: EdgeInsets.symmetric(horizontal: 4.0),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side:
+                  BorderSide(color: Theme.of(context).scaffoldBackgroundColor)),
+          child: Container(
+            width: 200,
+            height: double.infinity,
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+            child: Column(
               children: [
-                Card(
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                      side: BorderSide(
-                          color: Theme.of(context).scaffoldBackgroundColor)),
-                  child: Container(
-                    width: 200,
-                    height: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12.0, vertical: 8.0),
-                    child: Column(
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(translate('Tags')),
-                            InkWell(
-                              child: PopupMenuButton(
-                                  itemBuilder: (context) => [
-                                        PopupMenuItem(
-                                          value: 'add-id',
-                                          child: Text(translate("Add ID")),
-                                        ),
-                                        PopupMenuItem(
-                                          value: 'add-tag',
-                                          child: Text(translate("Add Tag")),
-                                        ),
-                                        PopupMenuItem(
-                                          value: 'unset-all-tag',
-                                          child: Text(
-                                              translate("Unselect all tags")),
-                                        ),
-                                      ],
-                                  onSelected: handleAbOp,
-                                  child: const Icon(Icons.more_vert_outlined)),
-                            )
-                          ],
-                        ),
-                        Expanded(
-                          child: Container(
-                            width: double.infinity,
-                            height: double.infinity,
-                            decoration: BoxDecoration(
-                                border: Border.all(color: MyTheme.darkGray)),
-                            child: Obx(
-                              () => Wrap(
-                                children: gFFI.abModel.tags
-                                    .map((e) =>
-                                        buildTag(e, gFFI.abModel.selectedTags,
-                                            onTap: () {
-                                          //
-                                          if (gFFI.abModel.selectedTags
-                                              .contains(e)) {
-                                            gFFI.abModel.selectedTags.remove(e);
-                                          } else {
-                                            gFFI.abModel.selectedTags.add(e);
-                                          }
-                                        }))
-                                    .toList(),
-                              ),
-                            ),
-                          ).marginSymmetric(vertical: 8.0),
-                        )
-                      ],
-                    ),
-                  ),
-                ).marginOnly(right: 8.0),
+                _buildTagHeader(),
                 Expanded(
-                  child: Align(
-                      alignment: Alignment.topLeft,
-                      child: AddressBookPeersView(
-                        menuPadding: widget.menuPadding,
-                      )),
+                  child: Container(
+                    width: double.infinity,
+                    height: double.infinity,
+                    decoration: BoxDecoration(
+                        border: Border.all(color: MyTheme.darkGray),
+                        borderRadius: BorderRadius.circular(2)),
+                    child: _buildTags(),
+                  ).marginSymmetric(vertical: 8.0),
                 )
               ],
-            ));
+            ),
+          ),
+        ).marginOnly(right: 8.0),
+        _buildPeersViews()
+      ],
+    );
   }
 
-  Widget buildTag(String tagName, RxList<dynamic> rxTags, {Function()? onTap}) {
-    return ContextMenuArea(
-      width: 100,
-      builder: (context) => [
-        ListTile(
-          title: Text(translate("Delete")),
-          onTap: () {
-            gFFI.abModel.deleteTag(tagName);
-            gFFI.abModel.updateAb();
-            Future.delayed(Duration.zero, () => Get.back());
-          },
-        )
-      ],
-      child: GestureDetector(
-        onTap: onTap,
-        child: Obx(
-          () => Container(
-            decoration: BoxDecoration(
-                color: rxTags.contains(tagName) ? Colors.blue : null,
-                border: Border.all(color: MyTheme.darkGray),
-                borderRadius: BorderRadius.circular(10)),
-            margin: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
-            padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 8.0),
-            child: Text(
-              tagName,
-              style: TextStyle(
-                  color:
-                      rxTags.contains(tagName) ? Colors.white : null), // TODO
+  Widget _buildAddressBookMobile() {
+    return Column(
+      children: [
+        Card(
+          margin: EdgeInsets.symmetric(horizontal: 1.0),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(6),
+              side:
+                  BorderSide(color: Theme.of(context).scaffoldBackgroundColor)),
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildTagHeader(),
+                Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                      border: Border.all(color: MyTheme.darkGray),
+                      borderRadius: BorderRadius.circular(4)),
+                  child: _buildTags(),
+                ).marginSymmetric(vertical: 8.0),
+              ],
             ),
           ),
         ),
+        Divider(),
+        _buildPeersViews()
+      ],
+    );
+  }
+
+  Widget _buildTagHeader() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(translate('Tags')),
+        GestureDetector(
+            onTapDown: (e) {
+              final x = e.globalPosition.dx;
+              final y = e.globalPosition.dy;
+              menuPos = RelativeRect.fromLTRB(x, y, x, y);
+            },
+            onTap: () => _showMenu(menuPos),
+            child: ActionMore()),
+      ],
+    );
+  }
+
+  Widget _buildTags() {
+    return Obx(
+      () => Wrap(
+        children: gFFI.abModel.tags
+            .map((e) => AddressBookTag(
+                name: e,
+                tags: gFFI.abModel.selectedTags,
+                onTap: () {
+                  if (gFFI.abModel.selectedTags.contains(e)) {
+                    gFFI.abModel.selectedTags.remove(e);
+                  } else {
+                    gFFI.abModel.selectedTags.add(e);
+                  }
+                }))
+            .toList(),
       ),
     );
   }
 
-  /// tag operation
-  void handleAbOp(String value) {
-    if (value == 'add-id') {
-      abAddId();
-    } else if (value == 'add-tag') {
-      abAddTag();
-    } else if (value == 'unset-all-tag') {
-      gFFI.abModel.unsetSelectedTags();
-    }
+  Widget _buildPeersViews() {
+    return Expanded(
+      child: Align(
+          alignment: Alignment.topLeft,
+          child: Obx(() => AddressBookPeersView(
+                menuPadding: widget.menuPadding,
+                initPeers: gFFI.abModel.peers.value,
+              ))),
+    );
+  }
+
+  void _showMenu(RelativeRect pos) {
+    final items = [
+      getEntry(translate("Add ID"), abAddId),
+      getEntry(translate("Add Tag"), abAddTag),
+      getEntry(translate("Unselect all tags"), gFFI.abModel.unsetSelectedTags),
+    ];
+
+    mod_menu.showMenu(
+      context: context,
+      position: pos,
+      items: items
+          .map((e) => e.build(
+              context,
+              MenuConfig(
+                  commonColor: CustomPopupMenuTheme.commonColor,
+                  height: CustomPopupMenuTheme.height,
+                  dividerHeight: CustomPopupMenuTheme.dividerHeight)))
+          .expand((i) => i)
+          .toList(),
+      elevation: 8,
+    );
   }
 
   void abAddId() async {
@@ -260,7 +259,7 @@ class _AddressBookState extends State<AddressBook> {
             }
             gFFI.abModel.addId(newId);
           }
-          await gFFI.abModel.updateAb();
+          await gFFI.abModel.pushAb();
           this.setState(() {});
           // final currentPeers
         }
@@ -327,7 +326,7 @@ class _AddressBookState extends State<AddressBook> {
           for (final tag in tags) {
             gFFI.abModel.addTag(tag);
           }
-          await gFFI.abModel.updateAb();
+          await gFFI.abModel.pushAb();
           // final currentPeers
         }
         close();
@@ -373,54 +372,88 @@ class _AddressBookState extends State<AddressBook> {
       );
     });
   }
+}
 
-  void abEditTag(String id) {
-    var isInProgress = false;
+class AddressBookTag extends StatelessWidget {
+  final String name;
+  final RxList<dynamic> tags;
+  final Function()? onTap;
+  final bool showActionMenu;
 
-    final tags = List.of(gFFI.abModel.tags);
-    var selectedTag = gFFI.abModel.getPeerTags(id).obs;
+  const AddressBookTag(
+      {Key? key,
+      required this.name,
+      required this.tags,
+      this.onTap,
+      this.showActionMenu = true})
+      : super(key: key);
 
-    gFFI.dialogManager.show((setState, close) {
-      submit() async {
-        setState(() {
-          isInProgress = true;
-        });
-        gFFI.abModel.changeTagForPeer(id, selectedTag);
-        await gFFI.abModel.updateAb();
-        close();
-      }
+  @override
+  Widget build(BuildContext context) {
+    var pos = RelativeRect.fill;
 
-      return CustomAlertDialog(
-        title: Text(translate("Edit Tag")),
-        content: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-              child: Wrap(
-                children: tags
-                    .map((e) => buildTag(e, selectedTag, onTap: () {
-                          if (selectedTag.contains(e)) {
-                            selectedTag.remove(e);
-                          } else {
-                            selectedTag.add(e);
-                          }
-                        }))
-                    .toList(growable: false),
-              ),
-            ),
-            Offstage(
-                offstage: !isInProgress, child: const LinearProgressIndicator())
-          ],
+    void setPosition(TapDownDetails e) {
+      final x = e.globalPosition.dx;
+      final y = e.globalPosition.dy;
+      pos = RelativeRect.fromLTRB(x, y, x, y);
+    }
+
+    return GestureDetector(
+      onTap: onTap,
+      onTapDown: showActionMenu ? setPosition : null,
+      onSecondaryTapDown: showActionMenu ? setPosition : null,
+      onSecondaryTap: showActionMenu ? () => _showMenu(context, pos) : null,
+      onLongPress: showActionMenu ? () => _showMenu(context, pos) : null,
+      child: Obx(
+        () => Container(
+          decoration: BoxDecoration(
+              color: tags.contains(name) ? Colors.blue : null,
+              border: Border.all(color: MyTheme.darkGray),
+              borderRadius: BorderRadius.circular(6)),
+          margin: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+          padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 8.0),
+          child: Text(name,
+              style:
+                  TextStyle(color: tags.contains(name) ? Colors.white : null)),
         ),
-        actions: [
-          TextButton(onPressed: close, child: Text(translate("Cancel"))),
-          TextButton(onPressed: submit, child: Text(translate("OK"))),
-        ],
-        onSubmit: submit,
-        onCancel: close,
-      );
-    });
+      ),
+    );
   }
+
+  void _showMenu(BuildContext context, RelativeRect pos) {
+    final items = [
+      getEntry(translate("Delete"), () {
+        gFFI.abModel.deleteTag(name);
+        gFFI.abModel.pushAb();
+        Future.delayed(Duration.zero, () => Get.back());
+      }),
+    ];
+
+    mod_menu.showMenu(
+      context: context,
+      position: pos,
+      items: items
+          .map((e) => e.build(
+              context,
+              MenuConfig(
+                  commonColor: CustomPopupMenuTheme.commonColor,
+                  height: CustomPopupMenuTheme.height,
+                  dividerHeight: CustomPopupMenuTheme.dividerHeight)))
+          .expand((i) => i)
+          .toList(),
+      elevation: 8,
+    );
+  }
+}
+
+MenuEntryButton<String> getEntry(String title, VoidCallback proc) {
+  return MenuEntryButton<String>(
+    childBuilder: (TextStyle? style) => Text(
+      title,
+      style: style,
+    ),
+    proc: proc,
+    padding: kDesktopMenuPadding,
+    dismissOnClicked: true,
+  );
 }

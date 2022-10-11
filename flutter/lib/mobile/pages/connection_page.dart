@@ -206,20 +206,14 @@ class WebMenu extends StatefulWidget {
 }
 
 class _WebMenuState extends State<WebMenu> {
-  String? username;
   String url = "";
 
   @override
   void initState() {
     super.initState();
     () async {
-      final usernameRes = await getUsername();
-      final urlRes = await getUrl();
+      final urlRes = await bind.mainGetApiServer();
       var update = false;
-      if (usernameRes != username) {
-        username = usernameRes;
-        update = true;
-      }
       if (urlRes != url) {
         url = urlRes;
         update = true;
@@ -256,9 +250,9 @@ class _WebMenuState extends State<WebMenu> {
                   : [
                       PopupMenuItem(
                         value: "login",
-                        child: Text(username == null
+                        child: Text(gFFI.userModel.userName.value.isEmpty
                             ? translate("Login")
-                            : '${translate("Logout")} ($username)'),
+                            : '${translate("Logout")} (${gFFI.userModel.userName.value})'),
                       )
                     ]) +
               [
@@ -276,10 +270,10 @@ class _WebMenuState extends State<WebMenu> {
             showAbout(gFFI.dialogManager);
           }
           if (value == 'login') {
-            if (username == null) {
+            if (gFFI.userModel.userName.value.isEmpty) {
               showLogin(gFFI.dialogManager);
             } else {
-              logout(gFFI.dialogManager);
+              gFFI.userModel.logOut();
             }
           }
           if (value == 'scan') {
