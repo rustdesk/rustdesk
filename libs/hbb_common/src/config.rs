@@ -284,7 +284,7 @@ impl Config {
         log::debug!("Configuration path: {}", file.display());
         let cfg = load_path(file);
         if suffix.is_empty() {
-            log::debug!("{:?}", cfg);
+            log::trace!("{:?}", cfg);
         }
         cfg
     }
