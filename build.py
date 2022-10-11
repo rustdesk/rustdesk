@@ -189,7 +189,7 @@ def build_flutter_arch_manjaro():
     os.chdir('..')
     os.system('HBB=`pwd` FLUTTER=1 makepkg -f')
 
-def build_flutter_windows_portable():
+def build_flutter_windows(version):
     os.system("cargo build --lib --features flutter --release")
     os.chdir('flutter')
     os.system("flutter build windows --release")
@@ -203,6 +203,8 @@ def build_flutter_windows_portable():
     else:
         os.rename("./target/release/rustdesk-portable-packer.exe", "./rustdesk_portable.exe")
     print(f"output location: {os.path.abspath(os.curdir)}/rustdesk_portable.exe")
+    os.system(f"cp -rf ./rustdesk_portable.exe ./rustdesk-{version}-install.exe")
+    print(f"output location: {os.path.abspath(os.curdir)}/rustdesk-{version}-install.exe")
 
 def main():
     parser = make_parser()
@@ -227,8 +229,8 @@ def main():
         os.system('python3 res/inline-sciter.py')
     portable = args.portable
     if windows:
-        if portable:
-            build_flutter_windows_portable()
+        if flutter:
+            build_flutter_windows(version)
             return
         os.system('cargo build --release --features ' + features)
         # os.system('upx.exe target/release/rustdesk.exe')
@@ -239,7 +241,7 @@ def main():
                       'target\\release\\rustdesk.exe')
         else:
             print('Not signed')
-        os.system(f'cp -rf target/release/RustDesk.exe rustdesk-{version}-setdown.exe')
+        os.system(f'cp -rf target/release/RustDesk.exe rustdesk-{version}-win7-install.exe')
     elif os.path.isfile('/usr/bin/pacman'):
         # pacman -S -needed base-devel
         os.system("sed -i 's/pkgver=.*/pkgver=%s/g' PKGBUILD" % version)
