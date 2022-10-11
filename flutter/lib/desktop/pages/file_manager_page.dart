@@ -202,7 +202,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                         sortColumnIndex: sortIndex,
                         sortAscending: sortAscending,
                         columns: [
-                          DataColumn(label: Text(translate(" "))), // icon
+                          DataColumn(label: Text(" ")), // icon
                           DataColumn(
                               label: Text(
                                 translate("Name"),
@@ -402,10 +402,6 @@ class _FileManagerPageState extends State<FileManagerPage>
         ));
   }
 
-  goBack({bool? isLocal}) {
-    model.goToParentDirectory(isLocal: isLocal);
-  }
-
   Widget headTools(bool isLocal) {
     final locationStatus =
         isLocal ? _locationStatusLocal : _locationStatusRemote;
@@ -457,13 +453,19 @@ class _FileManagerPageState extends State<FileManagerPage>
                   splashRadius: 20,
                 ),
                 IconButton(
+                  icon: const Icon(Icons.arrow_back),
+                  splashRadius: 20,
+                  onPressed: () {
+                    model.goBack(isLocal: isLocal);
+                  },
+                ),
+                IconButton(
                   icon: const Icon(Icons.arrow_upward),
                   splashRadius: 20,
                   onPressed: () {
-                    goBack(isLocal: isLocal);
+                    model.goToParentDirectory(isLocal: isLocal);
                   },
                 ),
-                menu(isLocal: isLocal),
               ],
             ),
             Expanded(
@@ -508,6 +510,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                   )),
             )),
             PopupMenuButton(
+              tooltip: "",
               itemBuilder: (context) => [
                 PopupMenuItem(
                     enabled: false,
@@ -612,6 +615,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                       },
                       splashRadius: 20,
                       icon: const Icon(Icons.delete_forever_outlined)),
+                  menu(isLocal: isLocal),
                 ],
               ),
             ),
