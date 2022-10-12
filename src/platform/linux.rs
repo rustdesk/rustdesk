@@ -4,6 +4,7 @@ use hbb_common::{allow_err, bail, log};
 use libc::{c_char, c_int, c_void};
 use std::{
     cell::RefCell,
+    path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -514,6 +515,17 @@ fn _get_display_manager() -> String {
 
 pub fn get_active_username() -> String {
     get_value_of_seat0(2)
+}
+
+pub fn get_active_user_home() -> Option<PathBuf> {
+    let username = get_active_username();
+    if !username.is_empty() {
+        let home = PathBuf::from(format!("/home/{}", username));
+        if home.exists() {
+            return Some(home);
+        }
+    }
+    None
 }
 
 pub fn is_prelogin() -> bool {
