@@ -656,7 +656,8 @@ void msgBox(
   }
   dialogManager.show((setState, close) => CustomAlertDialog(
         title: _msgBoxTitle(title),
-        content: Text(translate(text), style: const TextStyle(fontSize: 15)),
+        content: SelectableText(translate(text),
+            style: const TextStyle(fontSize: 15)),
         actions: buttons,
         onSubmit: hasOk ? submit : null,
         onCancel: hasCancel == true ? cancel : null,
