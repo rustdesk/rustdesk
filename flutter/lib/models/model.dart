@@ -178,8 +178,14 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'update_privacy_mode') {
         updatePrivacyMode(evt, peerId);
       } else if (name == 'new_connection') {
-        final remoteId = evt['peer_id'];
-        rustDeskWinManager.newRemoteDesktop(remoteId);
+        var arg = evt['peer_id'].toString();
+        if (arg.startsWith(kUniLinksPrefix)) {
+          parseRustdeskUri(arg);
+        } else {
+          Future.delayed(Duration.zero, () {
+            rustDeskWinManager.newRemoteDesktop(arg);
+          });
+        }
       }
     };
   }

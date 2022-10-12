@@ -29,7 +29,7 @@ late List<String> bootArgs;
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   debugPrint("launch args: $args");
-  bootArgs = args;
+  bootArgs = List.from(args);
 
   if (!isDesktop) {
     runMobileApp();

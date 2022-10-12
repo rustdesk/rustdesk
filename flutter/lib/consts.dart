@@ -9,6 +9,9 @@ const String kAppTypeDesktopRemote = "remote";
 const String kAppTypeDesktopFileTransfer = "file transfer";
 const String kAppTypeDesktopPortForward = "port forward";
 
+const String kUniLinksPrefix = "rustdesk://";
+const String kActionNewConnection = "connection/new/";
+
 const String kTabLabelHomePage = "Home";
 const String kTabLabelSettingPage = "Settings";
 
