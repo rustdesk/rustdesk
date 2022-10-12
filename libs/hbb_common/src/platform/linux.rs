@@ -1,5 +1,31 @@
 use crate::ResultType;
 
+lazy_static::lazy_static! {
+    pub static ref DISTRO: Disto = Disto::new();
+}
+
+pub struct Disto {
+    pub name: String,
+    pub version_id: String,
+}
+
+impl Disto {
+    fn new() -> Self {
+        let name = run_cmds("awk -F'=' '/^NAME=/ {print $2}' /etc/os-release".to_owned())
+            .unwrap_or_default()
+            .trim()
+            .trim_matches('"')
+            .to_string();
+        let version_id =
+            run_cmds("awk -F'=' '/^VERSION_ID=/ {print $2}' /etc/os-release".to_owned())
+                .unwrap_or_default()
+                .trim()
+                .trim_matches('"')
+                .to_string();
+        Self { name, version_id }
+    }
+}
+
 pub fn get_display_server() -> String {
     let session = get_value_of_seat0(0);
     get_display_server_of_session(&session)
@@ -81,8 +107,9 @@ pub fn get_value_of_seat0(i: usize) -> String {
     }
 
     // loginctl has not given the expected output.  try something else.
-    if let Ok(sid) = std::env::var("XDG_SESSION_ID") { // could also execute "cat /proc/self/sessionid"
-         return sid.to_owned();
+    if let Ok(sid) = std::env::var("XDG_SESSION_ID") {
+        // could also execute "cat /proc/self/sessionid"
+        return sid.to_owned();
     }
 
     return "".to_owned();

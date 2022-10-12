@@ -1,10 +1,53 @@
 use super::*;
-use hbb_common::allow_err;
-use scrap::{Capturer, Display, Frame, TraitCapturer};
-use std::io::Result;
+use hbb_common::{allow_err, platform::linux::DISTRO};
+use scrap::{set_map_err, Capturer, Display, Frame, TraitCapturer};
+use std::io;
+
+pub const SCRAP_UBUNTU_HIGHER_REQUIRED: &str = "Wayland requires Ubuntu 21.04 or higher version.";
+pub const SCRAP_OTHER_VERSION_OR_X11_REQUIRED: &str =
+    "Wayland requires higher version of linux distro. Please try X11 desktop or change your OS.";
+pub const SCRAP_X11_REQUIRED: &str = "X11 is required";
+pub const SCRAP_X11_REF_URL: &str = "https://rustdesk.com/docs/en/manual/linux/#x11-required";
 
 lazy_static::lazy_static! {
     static ref CAP_DISPLAY_INFO: RwLock<u64> = RwLock::new(0);
+    static ref LOG_SCRAP_COUNT: Mutex<u32> = Mutex::new(0);
+    static ref GLOBAL_INIT_REG_HELPER: u8 = {
+        set_map_err(map_err_scrap);
+        0u8
+    };
+}
+
+pub fn map_err_scrap(err: String) -> io::Error {
+    if DISTRO.name.to_uppercase() == "Ubuntu".to_uppercase() {
+        if DISTRO.version_id < "21".to_owned() {
+            io::Error::new(io::ErrorKind::Other, SCRAP_UBUNTU_HIGHER_REQUIRED)
+        } else {
+            try_log(&err);
+            io::Error::new(io::ErrorKind::Other, err)
+        }
+    } else {
+        try_log(&err);
+        if err.contains("org.freedesktop.portal")
+            || err.contains("pipewire")
+            || err.contains("dbus")
+        {
+            io::Error::new(io::ErrorKind::Other, SCRAP_OTHER_VERSION_OR_X11_REQUIRED)
+        } else {
+            io::Error::new(io::ErrorKind::Other, SCRAP_X11_REQUIRED)
+        }
+    }
+}
+
+fn try_log(err: &String) {
+    let mut lock_count = LOG_SCRAP_COUNT.lock().unwrap();
+    if *lock_count >= 1000000 {
+        return;
+    }
+    if *lock_count % 10000 == 0 {
+        log::error!("Failed scrap {}", err);
+    }
+    *lock_count += 1;
 }
 
 struct CapturerPtr(*mut Capturer);
@@ -16,7 +59,7 @@ impl Clone for CapturerPtr {
 }
 
 impl TraitCapturer for CapturerPtr {
-    fn frame<'a>(&'a mut self, timeout: Duration) -> Result<Frame<'a>> {
+    fn frame<'a>(&'a mut self, timeout: Duration) -> io::Result<Frame<'a>> {
         unsafe { (*self.0).frame(timeout) }
     }
 
@@ -186,4 +229,15 @@ pub(super) fn get_capturer() -> ResultType<super::video_service::CapturerInfo> {
     } else {
         bail!("Failed to get capturer display info");
     }
+}
+
+pub fn common_get_error() -> String {
+    if DISTRO.name.to_uppercase() == "Ubuntu".to_uppercase() {
+        if DISTRO.version_id < "21".to_owned() {
+            return "".to_owned();
+        }
+    } else {
+        // to-do: check other distros
+    }
+    return "".to_owned();
 }

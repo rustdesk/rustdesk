@@ -1,11 +1,23 @@
 use crate::common::{x11::Frame, TraitCapturer};
 use crate::wayland::{capturable::*, *};
-use std::{io, time::Duration};
+use std::{io, sync::RwLock, time::Duration};
 
 pub struct Capturer(Display, Box<dyn Recorder>, bool, Vec<u8>);
 
+lazy_static::lazy_static! {
+    static ref MAP_ERR: RwLock<Option<fn(err: String)-> io::Error>> = Default::default();
+}
+
+pub fn set_map_err(f: fn(err: String) -> io::Error) {
+    *MAP_ERR.write().unwrap() = Some(f);
+}
+
 fn map_err<E: ToString>(err: E) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, err.to_string())
+    if let Some(f) = *MAP_ERR.read().unwrap() {
+        f(err.to_string())
+    } else {
+        io::Error::new(io::ErrorKind::Other, err.to_string())
+    }
 }
 
 impl Capturer {

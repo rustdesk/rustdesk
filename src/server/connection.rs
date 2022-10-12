@@ -745,7 +745,7 @@ impl Connection {
             try_activate_screen();
             match super::video_service::get_displays().await {
                 Err(err) => {
-                    res.set_error(format!("X11 error: {}", err));
+                    res.set_error(format!("Error: {}", err));
                 }
                 Ok((current, displays)) => {
                     pi.displays = displays.into();

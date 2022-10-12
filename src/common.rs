@@ -1,4 +1,7 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use arboard::Clipboard as ClipboardContext;
@@ -29,6 +32,36 @@ lazy_static::lazy_static! {
 lazy_static::lazy_static! {
     pub static ref DEVICE_ID: Arc<Mutex<String>> = Default::default();
     pub static ref DEVICE_NAME: Arc<Mutex<String>> = Default::default();
+}
+
+lazy_static::lazy_static! {
+    static ref GLOBAL_INIT_FUNCS: Mutex<HashMap<String, fn() -> bool>> = Default::default();
+    static ref GLOBAL_CLEAN_FUNCS: Mutex<HashMap<String, fn()>> = Default::default();
+}
+
+pub fn reg_global_init(key: String, f: fn() -> bool) {
+    GLOBAL_INIT_FUNCS.lock().unwrap().insert(key, f);
+}
+
+pub fn reg_global_clean(key: String, f: fn()) {
+    GLOBAL_CLEAN_FUNCS.lock().unwrap().insert(key, f);
+}
+
+pub fn global_init() -> bool {
+    for (k, f) in GLOBAL_INIT_FUNCS.lock().unwrap().iter() {
+        println!("Init {}", k);
+        if !f() {
+            return false;
+        }
+    }
+    true
+}
+
+pub fn global_clean() {
+    for (k, f) in GLOBAL_CLEAN_FUNCS.lock().unwrap().iter() {
+        println!("Clean {}", k);
+        f();
+    }
 }
 
 #[inline]
