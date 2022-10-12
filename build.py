@@ -144,7 +144,9 @@ Description: A remote control software.
     file.close()
 
 def build_flutter_deb(version):
-    os.system('cargo build --features flutter --lib --release')
+    os.system('cargo build --features default,flutter --lib --release')
+    # workaround ffigen
+    os.system('sed -i "s/ffi.NativeFunction<ffi.Bool Function(DartPort/ffi.NativeFunction<ffi.Uint8 Function(DartPort/g" flutter/lib/generated_bridge.dart')
     os.chdir('flutter')
     os.system('dpkg-deb -R rustdesk.deb tmpdeb')
     os.system('flutter build linux --release')
