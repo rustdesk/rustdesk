@@ -10,6 +10,7 @@ use std::io::prelude::*;
 use std::{
     ffi::{CString, OsString},
     fs, io, mem,
+    path::PathBuf,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
@@ -732,6 +733,18 @@ pub fn get_active_username() -> String {
         .unwrap_or("??".to_owned())
         .trim_end_matches('\0')
         .to_owned()
+}
+
+pub fn get_active_user_home() -> Option<PathBuf> {
+    let username = get_active_username();
+    if !username.is_empty() {
+        let drive = std::env::var("SystemDrive").unwrap_or("C:".to_owned());
+        let home = PathBuf::from(format!("{}\\Users\\{}", drive, username));
+        if home.exists() {
+            return Some(home);
+        }
+    }
+    None
 }
 
 pub fn is_prelogin() -> bool {

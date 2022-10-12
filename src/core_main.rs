@@ -34,6 +34,9 @@ pub fn core_main() -> Option<Vec<String>> {
     if _is_connect {
         return core_main_invoke_new_connection(std::env::args());
     }
+	if args.contains(&"--install".to_string()) {
+        is_setup = true;
+    }
     if is_setup {
         if args.is_empty() {
             args.push("--install".to_owned());

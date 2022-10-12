@@ -3,7 +3,7 @@ use hbb_common::anyhow::anyhow;
 use hbb_common::{
     bail, chrono,
     config::Config,
-    directories_next,
+    log,
     message_proto::{message, video_frame, EncodedVideoFrame, Message},
     ResultType,
 };
@@ -23,7 +23,7 @@ use webm::mux::{self, Segment, Track, VideoTrack, Writer};
 const MIN_SECS: u64 = 1;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum RecodeCodecID {
+pub enum RecordCodecID {
     VP9,
     H264,
     H265,
@@ -32,10 +32,11 @@ pub enum RecodeCodecID {
 #[derive(Debug, Clone)]
 pub struct RecorderContext {
     pub id: String,
+    pub default_dir: String,
     pub filename: String,
     pub width: usize,
     pub height: usize,
-    pub codec_id: RecodeCodecID,
+    pub codec_id: RecordCodecID,
 }
 
 impl RecorderContext {
@@ -46,29 +47,21 @@ impl RecorderContext {
                 std::fs::create_dir_all(&dir)?;
             }
         } else {
-            dir = Self::default_save_directory();
+            dir = self.default_dir.clone();
             if !dir.is_empty() && !PathBuf::from(&dir).exists() {
                 std::fs::create_dir_all(&dir)?;
             }
         }
         let file = self.id.clone()
             + &chrono::Local::now().format("_%Y%m%d%H%M%S").to_string()
-            + if self.codec_id == RecodeCodecID::VP9 {
+            + if self.codec_id == RecordCodecID::VP9 {
                 ".webm"
             } else {
                 ".mp4"
             };
         self.filename = PathBuf::from(&dir).join(file).to_string_lossy().to_string();
+        log::info!("video save to:{}", self.filename);
         Ok(())
-    }
-
-    pub fn default_save_directory() -> String {
-        if let Some(user) = directories_next::UserDirs::new() {
-            if let Some(video_dir) = user.video_dir() {
-                return video_dir.join("RustDesk").to_string_lossy().to_string();
-            }
-        }
-        "".to_owned()
     }
 }
 
@@ -105,7 +98,7 @@ impl Recorder {
     pub fn new(mut ctx: RecorderContext) -> ResultType<Self> {
         ctx.set_filename()?;
         let recorder = match ctx.codec_id {
-            RecodeCodecID::VP9 => Recorder {
+            RecordCodecID::VP9 => Recorder {
                 inner: Box::new(WebmRecorder::new(ctx.clone())?),
                 ctx,
             },
@@ -123,7 +116,7 @@ impl Recorder {
     fn change(&mut self, mut ctx: RecorderContext) -> ResultType<()> {
         ctx.set_filename()?;
         self.inner = match ctx.codec_id {
-            RecodeCodecID::VP9 => Box::new(WebmRecorder::new(ctx.clone())?),
+            RecordCodecID::VP9 => Box::new(WebmRecorder::new(ctx.clone())?),
             #[cfg(feature = "hwcodec")]
             _ => Box::new(HwRecorder::new(ctx.clone())?),
             #[cfg(not(feature = "hwcodec"))]
@@ -144,9 +137,9 @@ impl Recorder {
     pub fn write_frame(&mut self, frame: &video_frame::Union) -> ResultType<()> {
         match frame {
             video_frame::Union::Vp9s(vp9s) => {
-                if self.ctx.codec_id != RecodeCodecID::VP9 {
+                if self.ctx.codec_id != RecordCodecID::VP9 {
                     self.change(RecorderContext {
-                        codec_id: RecodeCodecID::VP9,
+                        codec_id: RecordCodecID::VP9,
                         ..self.ctx.clone()
                     })?;
                 }
@@ -154,25 +147,25 @@ impl Recorder {
             }
             #[cfg(feature = "hwcodec")]
             video_frame::Union::H264s(h264s) => {
-                if self.ctx.codec_id != RecodeCodecID::H264 {
+                if self.ctx.codec_id != RecordCodecID::H264 {
                     self.change(RecorderContext {
-                        codec_id: RecodeCodecID::H264,
+                        codec_id: RecordCodecID::H264,
                         ..self.ctx.clone()
                     })?;
                 }
-                if self.ctx.codec_id == RecodeCodecID::H264 {
+                if self.ctx.codec_id == RecordCodecID::H264 {
                     h264s.frames.iter().map(|f| self.write_video(f)).count();
                 }
             }
             #[cfg(feature = "hwcodec")]
             video_frame::Union::H265s(h265s) => {
-                if self.ctx.codec_id != RecodeCodecID::H265 {
+                if self.ctx.codec_id != RecordCodecID::H265 {
                     self.change(RecorderContext {
-                        codec_id: RecodeCodecID::H265,
+                        codec_id: RecordCodecID::H265,
                         ..self.ctx.clone()
                     })?;
                 }
-                if self.ctx.codec_id == RecodeCodecID::H265 {
+                if self.ctx.codec_id == RecordCodecID::H265 {
                     h265s.frames.iter().map(|f| self.write_video(f)).count();
                 }
             }
@@ -266,7 +259,7 @@ impl RecorderApi for HwRecorder {
             filename: ctx.filename.clone(),
             width: ctx.width,
             height: ctx.height,
-            is265: ctx.codec_id == RecodeCodecID::H265,
+            is265: ctx.codec_id == RecordCodecID::H265,
             framerate: crate::hwcodec::DEFAULT_TIME_BASE[1] as _,
         })
         .map_err(|_| anyhow!("Failed to create hardware muxer"))?;

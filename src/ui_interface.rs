@@ -10,6 +10,7 @@ use hbb_common::password_security;
 use hbb_common::{
     allow_err,
     config::{self, Config, LocalConfig, PeerConfig, RENDEZVOUS_PORT, RENDEZVOUS_TIMEOUT},
+    directories_next,
     futures::future::join_all,
     log,
     protobuf::Message as _,
@@ -19,8 +20,8 @@ use hbb_common::{
     tokio::{self, sync::mpsc, time},
 };
 
-use crate::common::SOFTWARE_UPDATE_URL;
 use crate::ipc;
+use crate::{common::SOFTWARE_UPDATE_URL, platform};
 
 type Message = RendezvousMessage;
 
@@ -731,7 +732,26 @@ pub fn get_langs() -> String {
 
 #[inline]
 pub fn default_video_save_directory() -> String {
-    scrap::record::RecorderContext::default_save_directory()
+    let appname = crate::get_app_name();
+    if let Some(user) = directories_next::UserDirs::new() {
+        if let Some(video_dir) = user.video_dir() {
+            return video_dir.join(appname).to_string_lossy().to_string();
+        }
+    }
+    if let Some(home) = platform::get_active_user_home() {
+        let name = if cfg!(target_os = "macos") {
+            "Movies"
+        } else {
+            "Videos"
+        };
+        return home.join(name).join(appname).to_string_lossy().to_string();
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            return dir.join("videos").to_string_lossy().to_string();
+        }
+    }
+    "".to_owned()
 }
 
 #[inline]

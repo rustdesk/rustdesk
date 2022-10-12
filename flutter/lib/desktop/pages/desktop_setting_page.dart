@@ -338,8 +338,8 @@ class _GeneralState extends State<_General> {
       } else {
         dir = defaultDirectory;
       }
-      final canlaunch = await canLaunchUrl(Uri.file(dir));
-      return {'dir': dir, 'canlaunch': canlaunch};
+      // canLaunchUrl blocked on windows portable, user SYSTEM
+      return {'dir': dir, 'canlaunch': true};
     }(), hasData: (data) {
       Map<String, dynamic> map = data as Map<String, dynamic>;
       String dir = map['dir']!;
@@ -703,7 +703,7 @@ class _Network extends StatefulWidget {
 class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
-  bool locked = true;
+  bool locked = bind.mainIsInstalled();
 
   @override
   Widget build(BuildContext context) {
