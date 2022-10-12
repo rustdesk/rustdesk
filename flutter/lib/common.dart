@@ -1135,10 +1135,36 @@ void checkArguments() {
   if (connectIndex == -1) {
     return;
   }
-  String? peerId = bootArgs.length < connectIndex + 1 ? null: bootArgs[connectIndex + 1];
-  if (peerId != null) {
-    rustDeskWinManager.newRemoteDesktop(peerId);
-    bootArgs.removeAt(connectIndex); bootArgs.removeAt(connectIndex);
+  String? arg =
+      bootArgs.length < connectIndex + 1 ? null : bootArgs[connectIndex + 1];
+  if (arg != null) {
+    if (arg.startsWith(kUniLinksPrefix)) {
+      parseRustdeskUri(arg);
+    } else {
+      // fallback to peer id
+      rustDeskWinManager.newRemoteDesktop(arg);
+      bootArgs.removeAt(connectIndex);
+      bootArgs.removeAt(connectIndex);
+    }
+  }
+}
+
+/// Parse `rustdesk://` unilinks
+/// 
+/// [Functions]
+/// 1. New Connection: rustdesk://connection/new/your_peer_id
+void parseRustdeskUri(String uriPath) {
+  final uri = Uri.tryParse(uriPath);
+  if (uri == null) {
+    print("uri is not valid: $uriPath");
+    return;
+  }
+  // new connection
+  if (uri.authority == "connection" && uri.path.startsWith("/new/")) {
+    final peerId = uri.path.substring("/new/".length);
+    Future.delayed(Duration.zero, () {
+      rustDeskWinManager.newRemoteDesktop(peerId);
+    });
   }
 }
 
