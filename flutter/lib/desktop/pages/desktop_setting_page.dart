@@ -1446,7 +1446,7 @@ void importServer() async {
       if (idServerMsg.isEmpty) {
         oldOptions['custom-rendezvous-server'] = idServer;
       } else {
-        print('ID Server invalid return');
+        debugPrint('ID Server invalid return');
         return false;
       }
     } else {
@@ -1459,7 +1459,7 @@ void importServer() async {
       if (relayServerMsg.isEmpty) {
         oldOptions['relay-server'] = relayServer;
       } else {
-        print('Relay Server invalid return');
+        debugPrint('Relay Server invalid return');
         return false;
       }
     } else {
@@ -1471,7 +1471,7 @@ void importServer() async {
         oldOptions['api-server'] = apiServer;
         return false;
       } else {
-        print('invalid_http');
+        debugPrint('invalid_http');
         return false;
       }
     } else {
@@ -1480,7 +1480,7 @@ void importServer() async {
     // ok
     oldOptions['key'] = key;
     await bind.mainSetOptions(json: jsonEncode(oldOptions));
-    print("set ID/Realy Server Ok");
+    debugPrint("set ID/Realy Server Ok");
     return true;
   }
 
@@ -1490,16 +1490,15 @@ void importServer() async {
     aNullableString = value?.text;
     mytext.text = aNullableString.toString();
     if (mytext.text.isNotEmpty) {
-      print('Clipboard is not empty');
+      debugPrint('Clipboard is not empty');
       try {
         Map<String, dynamic> config = jsonDecode(mytext.text);
-        print(config);
         if (config.containsKey('IdServer') &&
             config.containsKey('RelayServer')) {
-          print('IdServer:    ${config['IdServer']}');
-          print('RelayServer: ${config['RelayServer']}');
-          print('ApiServer:   ${config['ApiServer']}');
-          print('Key:         ${config['Key']}');
+          debugPrint('IdServer:    ${config['IdServer']}');
+          debugPrint('RelayServer: ${config['RelayServer']}');
+          debugPrint('ApiServer:   ${config['ApiServer']}');
+          debugPrint('Key:         ${config['Key']}');
           Future<bool> success = submit(config['IdServer'],
               config['RelayServer'], config['ApiServer'], config['Key']);
           success.then((value) {
@@ -1511,15 +1510,15 @@ void importServer() async {
             }
           });
         } else {
-          print('invalid config info');
+          debugPrint('invalid config info');
           importServerShow(translate("Invalid server configuration"));
         }
       } catch (e) {
-        print('invalid config info');
+        debugPrint('invalid config info');
         importServerShow(translate("Invalid server configuration"));
       }
     } else {
-      print('Clipboard is empty');
+      debugPrint('Clipboard is empty');
       importServerShow(translate("Clipboard is empty"));
     }
   });
