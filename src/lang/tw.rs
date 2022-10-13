@@ -371,5 +371,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("uac_warning", "暂时无法访问远端设备，因为远端设备正在请求用户账户权限，请等待对方关闭UAC窗口。为避免这个问题，建议在远端设备上安装或者以管理员权限运行本软件。"),
         ("elevated_foreground_window_warning", "暫時無法使用鼠標鍵盤，因為遠端桌面的當前窗口需要更高的權限才能操作, 可以請求對方最小化當前窗口。為避免這個問題，建議在遠端設備上安裝或者以管理員權限運行本軟件。"),
         ("Disconnected", "會話已結束"),
+        ("Other", "其他"),
+        ("Confirm before closing multiple tabs", "關閉多個分頁前跟我確認"),
     ].iter().cloned().collect();
 }
