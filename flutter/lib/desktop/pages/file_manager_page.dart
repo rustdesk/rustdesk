@@ -9,10 +9,13 @@ import 'package:flutter_hbb/models/file_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock/wakelock.dart';
+import '../../consts.dart';
+import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
 
 import '../../common.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
+import '../widgets/popup_menu.dart';
 
 /// status of location bar
 enum LocationStatus {
@@ -124,32 +127,47 @@ class _FileManagerPageState extends State<FileManagerPage>
   }
 
   Widget menu({bool isLocal = false}) {
-    return PopupMenuButton<String>(
-        icon: const Icon(Icons.more_vert),
-        splashRadius: 20,
-        itemBuilder: (context) {
-          return [
-            PopupMenuItem(
-              child: Row(
-                children: [
-                  Icon(
-                      model.getCurrentShowHidden(isLocal)
-                          ? Icons.check_box_outlined
-                          : Icons.check_box_outline_blank,
-                      color: Colors.black),
-                  SizedBox(width: 5),
-                  Text(translate("Show Hidden Files"))
-                ],
-              ),
-              value: "hidden",
-            )
-          ];
+    var menuPos = RelativeRect.fill;
+
+    final items = [
+      MenuEntrySwitch<String>(
+        switchType: SwitchType.scheckbox,
+        text: translate("Show Hidden Files"),
+        getter: () async {
+          return model.getCurrentShowHidden(isLocal);
         },
-        onSelected: (v) {
-          if (v == "hidden") {
-            model.toggleShowHidden(local: isLocal);
-          }
-        });
+        setter: (bool v) async {
+          model.toggleShowHidden(local: isLocal);
+        },
+        padding: kDesktopMenuPadding,
+        dismissOnClicked: true,
+      ),
+    ];
+
+    return Listener(
+        onPointerDown: (e) {
+          final x = e.position.dx;
+          final y = e.position.dy;
+          menuPos = RelativeRect.fromLTRB(x, y, x, y);
+        },
+        child: IconButton(
+          icon: const Icon(Icons.more_vert),
+          splashRadius: 20,
+          onPressed: () => mod_menu.showMenu(
+            context: context,
+            position: menuPos,
+            items: items
+                .map((e) => e.build(
+                    context,
+                    MenuConfig(
+                        commonColor: CustomPopupMenuTheme.commonColor,
+                        height: CustomPopupMenuTheme.height,
+                        dividerHeight: CustomPopupMenuTheme.dividerHeight)))
+                .expand((i) => i)
+                .toList(),
+            elevation: 8,
+          ),
+        ));
   }
 
   Widget body({bool isLocal = false}) {
@@ -252,9 +270,8 @@ class _FileManagerPageState extends State<FileManagerPage>
                                   getSelectedItem(isLocal).contains(entry),
                               cells: [
                                 DataCell(
-                                    ConstrainedBox(
-                                        constraints:
-                                            BoxConstraints(maxWidth: 180),
+                                    Container(
+                                        width: 180,
                                         child: Tooltip(
                                           message: entry.name,
                                           child: Row(children: [
@@ -724,9 +741,12 @@ class _FileManagerPageState extends State<FileManagerPage>
   breadCrumbScrollToEnd(bool isLocal) {
     Future.delayed(Duration(milliseconds: 200), () {
       final breadCrumbScroller = getBreadCrumbScrollController(isLocal);
-      breadCrumbScroller.animateTo(breadCrumbScroller.position.maxScrollExtent,
-          duration: Duration(milliseconds: 200),
-          curve: Curves.fastLinearToSlowEaseIn);
+      if (breadCrumbScroller.hasClients) {
+        breadCrumbScroller.animateTo(
+            breadCrumbScroller.position.maxScrollExtent,
+            duration: Duration(milliseconds: 200),
+            curve: Curves.fastLinearToSlowEaseIn);
+      }
     });
   }
 

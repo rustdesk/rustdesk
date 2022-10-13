@@ -12,13 +12,6 @@ import '../../models/platform_model.dart';
 import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
 import '../../desktop/widgets/popup_menu.dart';
 
-class CustomPopupMenuTheme {
-  static const Color commonColor = MyTheme.accent;
-  // kMinInteractiveDimension
-  static const double height = 20.0;
-  static const double dividerHeight = 3.0;
-}
-
 typedef PopupMenuEntryBuilder = Future<List<mod_menu.PopupMenuEntry<String>>>
     Function(BuildContext);
 
