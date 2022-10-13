@@ -14,7 +14,17 @@ import '../../common.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 
-enum LocationStatus { bread, textField }
+/// status of location bar
+enum LocationStatus {
+  /// normal bread crumb bar
+  bread,
+
+  /// show path text field
+  pathLocation,
+
+  /// show file search bar text field
+  fileSearchBar
+}
 
 class FileManagerPage extends StatefulWidget {
   const FileManagerPage({Key? key, required this.id}) : super(key: key);
@@ -40,7 +50,7 @@ class _FileManagerPageState extends State<FileManagerPage>
   final _breadCrumbScrollerLocal = ScrollController();
   final _breadCrumbScrollerRemote = ScrollController();
 
-  final _dropMaskVisible = false.obs;
+  final _dropMaskVisible = false.obs; // TODO impl drop mask
 
   ScrollController getBreadCrumbScrollController(bool isLocal) {
     return isLocal ? _breadCrumbScrollerLocal : _breadCrumbScrollerRemote;
@@ -84,6 +94,8 @@ class _FileManagerPageState extends State<FileManagerPage>
     Get.delete<FFI>(tag: 'ft_${widget.id}');
     _locationNodeLocal.removeListener(onLocalLocationFocusChanged);
     _locationNodeRemote.removeListener(onRemoteLocationFocusChanged);
+    _locationNodeLocal.dispose();
+    _locationNodeRemote.dispose();
     super.dispose();
   }
 
@@ -96,23 +108,16 @@ class _FileManagerPageState extends State<FileManagerPage>
         return ChangeNotifierProvider.value(
             value: _ffi.fileModel,
             child: Consumer<FileModel>(builder: (context, model, child) {
-              return WillPopScope(
-                  onWillPop: () async {
-                    if (model.selectMode) {
-                      model.toggleSelectMode();
-                    }
-                    return false;
-                  },
-                  child: Scaffold(
-                    backgroundColor: Theme.of(context).backgroundColor,
-                    body: Row(
-                      children: [
-                        Flexible(flex: 3, child: body(isLocal: true)),
-                        Flexible(flex: 3, child: body(isLocal: false)),
-                        Flexible(flex: 2, child: statusList())
-                      ],
-                    ),
-                  ));
+              return Scaffold(
+                backgroundColor: Theme.of(context).backgroundColor,
+                body: Row(
+                  children: [
+                    Flexible(flex: 3, child: body(isLocal: true)),
+                    Flexible(flex: 3, child: body(isLocal: false)),
+                    Flexible(flex: 2, child: statusList())
+                  ],
+                ),
+              );
             }));
       })
     ]);
@@ -406,8 +411,6 @@ class _FileManagerPageState extends State<FileManagerPage>
     final locationStatus =
         isLocal ? _locationStatusLocal : _locationStatusRemote;
     final locationFocus = isLocal ? _locationNodeLocal : _locationNodeRemote;
-    final searchTextObs = isLocal ? _searchTextLocal : _searchTextRemote;
-    final searchController = TextEditingController(text: searchTextObs.value);
     return Container(
         child: Column(
       children: [
@@ -473,73 +476,62 @@ class _FileManagerPageState extends State<FileManagerPage>
               onTap: () {
                 locationStatus.value =
                     locationStatus.value == LocationStatus.bread
-                        ? LocationStatus.textField
+                        ? LocationStatus.pathLocation
                         : LocationStatus.bread;
                 Future.delayed(Duration.zero, () {
-                  if (locationStatus.value == LocationStatus.textField) {
+                  if (locationStatus.value == LocationStatus.pathLocation) {
                     locationFocus.requestFocus();
                   }
                 });
               },
-              child: Container(
-                  decoration:
-                      BoxDecoration(border: Border.all(color: Colors.black12)),
+              child: Obx(() => Container(
+                  decoration: BoxDecoration(
+                      border: Border.all(
+                          color: locationStatus.value == LocationStatus.bread
+                              ? Colors.black12
+                              : Theme.of(context)
+                                  .colorScheme
+                                  .primary
+                                  .withOpacity(0.5))),
                   child: Row(
                     children: [
                       Expanded(
-                          child: Obx(() =>
-                              locationStatus.value == LocationStatus.bread
-                                  ? buildBread(isLocal)
-                                  : buildPathLocation(isLocal))),
-                      DropdownButton<String>(
-                          isDense: true,
-                          underline: Offstage(),
-                          items: [
-                            // TODO: favourite
-                            DropdownMenuItem(
-                              child: Text('/'),
-                              value: '/',
-                            )
-                          ],
-                          onChanged: (path) {
-                            if (path is String && path.isNotEmpty) {
-                              openDirectory(path, isLocal: isLocal);
-                            }
-                          })
+                          child: locationStatus.value == LocationStatus.bread
+                              ? buildBread(isLocal)
+                              : buildPathLocation(isLocal)),
                     ],
-                  )),
+                  ))),
             )),
-            PopupMenuButton(
-              tooltip: "",
-              itemBuilder: (context) => [
-                PopupMenuItem(
-                    enabled: false,
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(minWidth: 200),
-                      child: TextField(
-                        textAlignVertical: TextAlignVertical.center,
-                        controller: searchController,
-                        autofocus: true,
-                        decoration: InputDecoration(
-                          prefixIcon: Icon(Icons.search),
-                          suffix: IconButton(
-                            icon: Icon(Icons.clear),
-                            splashRadius: 20,
-                            onPressed: () {
-                              searchController.clear();
-                              searchTextObs.value = "";
-                              Get.back();
-                            },
-                          ),
-                        ),
-                        onChanged: (searchText) =>
-                            onSearchText(searchText, isLocal),
-                      ),
-                    ))
-              ],
-              splashRadius: 20,
-              icon: const Icon(Icons.search),
-            ),
+            Obx(() {
+              switch (locationStatus.value) {
+                case LocationStatus.bread:
+                  return IconButton(
+                      onPressed: () {
+                        locationStatus.value = LocationStatus.fileSearchBar;
+                        final focusNode =
+                            isLocal ? _locationNodeLocal : _locationNodeRemote;
+                        Future.delayed(
+                            Duration.zero, () => focusNode.requestFocus());
+                      },
+                      splashRadius: 20,
+                      icon: Icon(Icons.search));
+                case LocationStatus.pathLocation:
+                  return IconButton(
+                      color: Theme.of(context).disabledColor,
+                      onPressed: null,
+                      splashRadius: 20,
+                      icon: Icon(Icons.close));
+                case LocationStatus.fileSearchBar:
+                  return IconButton(
+                      color: Theme.of(context).disabledColor,
+                      onPressed: () {
+                        onSearchText("", isLocal);
+                        locationStatus.value = LocationStatus.bread;
+                      },
+                      splashRadius: 1,
+                      icon: Icon(Icons.close));
+              }
+            }),
             IconButton(
                 onPressed: () {
                   model.refresh(isLocal: isLocal);
@@ -649,7 +641,9 @@ class _FileManagerPageState extends State<FileManagerPage>
       // ignore
     } else {
       // lost focus, change to bread
-      _locationStatusLocal.value = LocationStatus.bread;
+      if (_locationStatusLocal.value != LocationStatus.fileSearchBar) {
+        _locationStatusLocal.value = LocationStatus.bread;
+      }
     }
   }
 
@@ -659,7 +653,9 @@ class _FileManagerPageState extends State<FileManagerPage>
       // ignore
     } else {
       // lost focus, change to bread
-      _locationStatusRemote.value = LocationStatus.bread;
+      if (_locationStatusRemote.value != LocationStatus.fileSearchBar) {
+        _locationStatusRemote.value = LocationStatus.bread;
+      }
     }
   }
 
@@ -671,14 +667,33 @@ class _FileManagerPageState extends State<FileManagerPage>
       }
       openDirectory(path, isLocal: isLocal);
     });
+    breadCrumbScrollToEnd(isLocal);
     return items.isEmpty
         ? Offstage()
-        : BreadCrumb(
-            items: items,
-            divider: Text("/").paddingSymmetric(horizontal: 4.0),
-            overflow: ScrollableOverflow(
-                controller: getBreadCrumbScrollController(isLocal)),
-          );
+        : Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Expanded(
+                child: BreadCrumb(
+              items: items,
+              divider: Text("/").paddingSymmetric(horizontal: 4.0),
+              overflow: ScrollableOverflow(
+                  controller: getBreadCrumbScrollController(isLocal)),
+            )),
+            DropdownButton<String>(
+                isDense: true,
+                underline: Offstage(),
+                items: [
+                  // TODO: favourite
+                  DropdownMenuItem(
+                    child: Text('/'),
+                    value: '/',
+                  )
+                ],
+                onChanged: (path) {
+                  if (path is String && path.isNotEmpty) {
+                    openDirectory(path, isLocal: isLocal);
+                  }
+                })
+          ]);
   }
 
   List<BreadCrumbItem> getPathBreadCrumbItems(
@@ -705,19 +720,37 @@ class _FileManagerPageState extends State<FileManagerPage>
   }
 
   Widget buildPathLocation(bool isLocal) {
-    return TextField(
-      focusNode: isLocal ? _locationNodeLocal : _locationNodeRemote,
-      decoration: InputDecoration(
-        border: InputBorder.none,
-        isDense: true,
-        prefix: Padding(padding: EdgeInsets.only(left: 4.0)),
-      ),
-      controller:
-          TextEditingController(text: model.getCurrentDir(isLocal).path),
-      onSubmitted: (path) {
-        openDirectory(path, isLocal: isLocal);
-      },
-    );
+    final searchTextObs = isLocal ? _searchTextLocal : _searchTextRemote;
+    final locationStatus =
+        isLocal ? _locationStatusLocal : _locationStatusRemote;
+    final focusNode = isLocal ? _locationNodeLocal : _locationNodeRemote;
+    return Row(children: [
+      Icon(
+        locationStatus.value == LocationStatus.pathLocation
+            ? Icons.folder
+            : Icons.search,
+        color: Theme.of(context).hintColor,
+      ).paddingSymmetric(horizontal: 2),
+      Expanded(
+          child: TextField(
+        focusNode: focusNode,
+        decoration: InputDecoration(
+            border: InputBorder.none,
+            isDense: true,
+            prefix: Padding(padding: EdgeInsets.only(left: 4.0))),
+        controller: locationStatus.value == LocationStatus.pathLocation
+            ? TextEditingController(text: model.getCurrentDir(isLocal).path)
+            : TextEditingController(text: searchTextObs.value)
+          ..selection =
+              TextSelection.collapsed(offset: searchTextObs.value.length),
+        onSubmitted: (path) {
+          openDirectory(path, isLocal: isLocal);
+        },
+        onChanged: locationStatus.value == LocationStatus.fileSearchBar
+            ? (searchText) => onSearchText(searchText, isLocal)
+            : null,
+      ))
+    ]);
   }
 
   onSearchText(String searchText, bool isLocal) {
