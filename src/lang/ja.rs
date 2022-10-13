@@ -371,5 +371,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("uac_warning", ""),
         ("elevated_foreground_window_warning", ""),
         ("Disconnected", ""),
+        ("Other", "他の"),
+        ("Confirm before closing multiple tabs", "同時に複数のタブを閉じる前に確認する"),
     ].iter().cloned().collect();
 }

@@ -12,7 +12,7 @@ import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 
-import '../../mobile/widgets/dialog.dart';
+import '../../models/platform_model.dart';
 
 class ConnectionTabPage extends StatefulWidget {
   final Map<String, dynamic> params;
@@ -42,7 +42,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           label: peerId,
           selectedIcon: selectedIcon,
           unselectedIcon: unselectedIcon,
-          onTabCloseButton: () => handleTabCloseButton(peerId),
+          onTabCloseButton: () => tabController.closeBy(peerId),
           page: Obx(() => RemotePage(
                 key: ValueKey(peerId),
                 id: peerId,
@@ -78,7 +78,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             label: id,
             selectedIcon: selectedIcon,
             unselectedIcon: unselectedIcon,
-            onTabCloseButton: () => handleTabCloseButton(id),
+            onTabCloseButton: () => tabController.closeBy(id),
             page: Obx(() => RemotePage(
                   key: ValueKey(id),
                   id: id,
@@ -173,29 +173,21 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     return widget.params["windowId"];
   }
 
-  void handleTabCloseButton(String peerId) {
-    final session = ffi(peerId);
-    if (session.ffiModel.pi.hostname.isNotEmpty) {
-      tabController.jumpBy(peerId);
-      clientClose(session.dialogManager);
-    } else {
-      tabController.closeBy(peerId);
-    }
-  }
-
   Future<bool> handleWindowCloseButton() async {
     final connLength = tabController.length;
-    if (connLength < 1) {
+    if (connLength <= 1) {
+      tabController.clear();
       return true;
-    } else if (connLength == 1) {
-      final currentConn = tabController.state.value.tabs[0];
-      handleTabCloseButton(currentConn.key);
-      return false;
     } else {
-      final res = await closeConfirmDialog();
+      final opt = "enable-confirm-closing-tabs";
+      final bool res;
+      if (!option2bool(opt, await bind.mainGetOption(key: opt))) {
+        res = true;
+      } else {
+        res = await closeConfirmDialog();
+      }
       if (res) {
         tabController.clear();
-        _update_remote_count();
       }
       return res;
     }

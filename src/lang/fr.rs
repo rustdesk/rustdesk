@@ -193,7 +193,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Reboot required", "Redémarrage pour prendre effet"),
         ("Unsupported display server ", "Le serveur d'affichage actuel n'est pas pris en charge"),
         ("x11 expected", "Veuillez passer à x11"),
-        ("Port", ""),
+        ("Port", "Port"),
         ("Settings", "Paramètres"),
         ("Username", " Nom d'utilisateur"),
         ("Invalid port", "Port invalide"),
@@ -274,7 +274,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_stop_service_tip", "La fermeture du service fermera automatiquement toutes les connexions établies."),
         ("android_version_audio_tip", "La version actuelle d'Android ne prend pas en charge la capture audio, veuillez passer à Android 10 ou supérieur."),
         ("android_start_service_tip", "Appuyez sur [Démarrer le service] ou sur l'autorisation OUVRIR [Capture d'écran] pour démarrer le service de partage d'écran."),
-        ("Account", ""),
+        ("Account", "Compte"),
         ("Overwrite", "Écraser"),
         ("This file exists, skip or overwrite this file?", "Ce fichier existe, ignorer ou écraser ce fichier ?"),
         ("Quit", "Quitter"),
@@ -371,5 +371,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("uac_warning", ""),
         ("elevated_foreground_window_warning", ""),
         ("Disconnected", ""),
+        ("Other", ""),
+        ("Confirm before closing multiple tabs", ""),
     ].iter().cloned().collect();
 }

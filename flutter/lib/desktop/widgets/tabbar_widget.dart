@@ -456,8 +456,15 @@ class WindowActionPanel extends StatelessWidget {
 }
 
 Future<bool> closeConfirmDialog() async {
+  var confirm = true;
   final res = await gFFI.dialogManager.show<bool>((setState, close) {
-    submit() => close(true);
+    submit() {
+      final opt = "enable-confirm-closing-tabs";
+      String value = bool2option(opt, confirm);
+      bind.mainSetOption(key: opt, value: value);
+      close(true);
+    }
+
     return CustomAlertDialog(
       title: Row(children: [
         const Icon(Icons.warning_amber_sharp,
@@ -465,7 +472,25 @@ Future<bool> closeConfirmDialog() async {
         const SizedBox(width: 10),
         Text(translate("Warning")),
       ]),
-      content: Text(translate("Disconnect all devices?")),
+      content: Column(
+          mainAxisAlignment: MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(translate("Disconnect all devices?")),
+            CheckboxListTile(
+              contentPadding: const EdgeInsets.all(0),
+              dense: true,
+              controlAffinity: ListTileControlAffinity.leading,
+              title: Text(
+                translate("Confirm before closing multiple tabs"),
+              ),
+              value: confirm,
+              onChanged: (v) {
+                if (v == null) return;
+                setState(() => confirm = v);
+              },
+            )
+          ]), // confirm checkbox
       actions: [
         TextButton(onPressed: close, child: Text(translate("Cancel"))),
         ElevatedButton(onPressed: submit, child: Text(translate("OK"))),

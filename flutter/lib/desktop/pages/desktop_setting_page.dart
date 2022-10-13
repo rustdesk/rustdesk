@@ -232,11 +232,11 @@ class _GeneralState extends State<_General> {
           controller: scrollController,
           children: [
             theme(),
-            abr(),
             hwcodec(),
             audio(context),
             record(context),
             _Card(title: 'Language', children: [language()]),
+            other()
           ],
         ).marginOnly(bottom: _kListViewBottomMargin));
   }
@@ -267,8 +267,10 @@ class _GeneralState extends State<_General> {
     ]);
   }
 
-  Widget abr() {
-    return _Card(title: 'Adaptive Bitrate', children: [
+  Widget other() {
+    return _Card(title: 'Other', children: [
+      _OptionCheckBox(context, 'Confirm before closing multiple tabs',
+          'enable-confirm-closing-tabs'),
       _OptionCheckBox(context, 'Adaptive Bitrate', 'enable-abr'),
     ]);
   }
