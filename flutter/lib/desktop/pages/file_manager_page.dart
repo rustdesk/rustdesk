@@ -158,13 +158,13 @@ class _FileManagerPageState extends State<FileManagerPage>
     final sortIndex = (SortBy style) {
       switch (style) {
         case SortBy.Name:
-          return 1;
+          return 0;
         case SortBy.Type:
           return 0;
         case SortBy.Modified:
-          return 2;
+          return 1;
         case SortBy.Size:
-          return 3;
+          return 2;
       }
     }(model.getSortStyle(isLocal));
     final sortAscending =
@@ -202,16 +202,16 @@ class _FileManagerPageState extends State<FileManagerPage>
                         showCheckboxColumn: true,
                         dataRowHeight: 25,
                         headingRowHeight: 30,
+                        horizontalMargin: 8,
                         columnSpacing: 8,
                         showBottomBorder: true,
                         sortColumnIndex: sortIndex,
                         sortAscending: sortAscending,
                         columns: [
-                          DataColumn(label: Text(" ")), // icon
                           DataColumn(
                               label: Text(
                                 translate("Name"),
-                              ),
+                              ).marginSymmetric(horizontal: 4),
                               onSort: (columnIndex, ascending) {
                                 model.changeSortStyle(SortBy.Name,
                                     isLocal: isLocal, ascending: ascending);
@@ -251,19 +251,28 @@ class _FileManagerPageState extends State<FileManagerPage>
                               selected:
                                   getSelectedItem(isLocal).contains(entry),
                               cells: [
-                                DataCell(Icon(
-                                    entry.isFile
-                                        ? Icons.feed_outlined
-                                        : Icons.folder,
-                                    size: 25)),
                                 DataCell(
                                     ConstrainedBox(
                                         constraints:
-                                            BoxConstraints(maxWidth: 100),
+                                            BoxConstraints(maxWidth: 180),
                                         child: Tooltip(
                                           message: entry.name,
-                                          child: Text(entry.name,
-                                              overflow: TextOverflow.ellipsis),
+                                          child: Row(children: [
+                                            Icon(
+                                              entry.isFile
+                                                  ? Icons.feed_outlined
+                                                  : Icons.folder,
+                                              size: 20,
+                                              color: Theme.of(context)
+                                                  .iconTheme
+                                                  .color
+                                                  ?.withOpacity(0.7),
+                                            ).marginSymmetric(horizontal: 2),
+                                            Expanded(
+                                                child: Text(entry.name,
+                                                    overflow:
+                                                        TextOverflow.ellipsis))
+                                          ]),
                                         )), onTap: () {
                                   if (entry.isDirectory) {
                                     openDirectory(entry.path, isLocal: isLocal);
@@ -284,15 +293,17 @@ class _FileManagerPageState extends State<FileManagerPage>
                                     setState(() {});
                                   }
                                 }),
-                                DataCell(Text(
+                                DataCell(FittedBox(
+                                    child: Text(
                                   "${entry.lastModified().toString().replaceAll(".000", "")}   ",
                                   style: TextStyle(
                                       fontSize: 12, color: MyTheme.darkGray),
-                                )),
+                                ))),
                                 DataCell(Text(
                                   sizeStr,
+                                  overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                      fontSize: 12, color: MyTheme.darkGray),
+                                      fontSize: 10, color: MyTheme.darkGray),
                                 )),
                               ]);
                         }).toList(growable: false),
@@ -724,6 +735,11 @@ class _FileManagerPageState extends State<FileManagerPage>
     final locationStatus =
         isLocal ? _locationStatusLocal : _locationStatusRemote;
     final focusNode = isLocal ? _locationNodeLocal : _locationNodeRemote;
+    final text = locationStatus.value == LocationStatus.pathLocation
+        ? model.getCurrentDir(isLocal).path
+        : searchTextObs.value;
+    final textController = TextEditingController(text: text)
+      ..selection = TextSelection.collapsed(offset: text.length);
     return Row(children: [
       Icon(
         locationStatus.value == LocationStatus.pathLocation
@@ -738,11 +754,7 @@ class _FileManagerPageState extends State<FileManagerPage>
             border: InputBorder.none,
             isDense: true,
             prefix: Padding(padding: EdgeInsets.only(left: 4.0))),
-        controller: locationStatus.value == LocationStatus.pathLocation
-            ? TextEditingController(text: model.getCurrentDir(isLocal).path)
-            : TextEditingController(text: searchTextObs.value)
-          ..selection =
-              TextSelection.collapsed(offset: searchTextObs.value.length),
+        controller: textController,
         onSubmitted: (path) {
           openDirectory(path, isLocal: isLocal);
         },
