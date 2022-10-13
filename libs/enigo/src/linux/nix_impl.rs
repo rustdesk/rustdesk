@@ -8,7 +8,7 @@ use tfc::{traits::*, Context as TFC_Context, Key as TFC_Key};
 pub struct Enigo {
     xdo: EnigoXdo,
     is_x11: bool,
-    tfc: TFC_Context,
+    tfc: Option<TFC_Context>,
     uinput_keyboard: Option<Box<dyn KeyboardControllable + Send>>,
     uinput_mouse: Option<Box<dyn MouseControllable + Send>>,
 }
@@ -35,46 +35,55 @@ impl Enigo {
     }
 
     fn tfc_key_down_or_up(&mut self, key: Key, down: bool, up: bool) -> bool {
-        if let Key::Layout(chr) = key {
-            if down {
-                if let Err(_) = self.tfc.unicode_char_down(chr) {
-                    return false;
+        match &mut self.tfc {
+            None => false,
+            Some(tfc) => {
+                if let Key::Layout(chr) = key {
+                    if down {
+                        if let Err(_) = tfc.unicode_char_down(chr) {
+                            return false;
+                        }
+                    }
+                    if up {
+                        if let Err(_) = tfc.unicode_char_up(chr) {
+                            return false;
+                        }
+                    }
+                    return true;
                 }
+                let key = match convert_to_tfc_key(key) {
+                    Some(key) => key,
+                    None => {
+                        return false;
+                    }
+                };
+
+                if down {
+                    if let Err(_) = tfc.key_down(key) {
+                        return false;
+                    }
+                };
+                if up {
+                    if let Err(_) = tfc.key_up(key) {
+                        return false;
+                    }
+                };
+                return true;
             }
-            if up {
-                if let Err(_) = self.tfc.unicode_char_up(chr) {
-                    return false;
-                }
-            }
-            return true;
         }
-
-        let key = match convert_to_tfc_key(key) {
-            Some(key) => key,
-            None => {
-                return false;
-            }
-        };
-
-        if down {
-            if let Err(_) = self.tfc.key_down(key) {
-                return false;
-            }
-        };
-        if up {
-            if let Err(_) = self.tfc.key_up(key) {
-                return false;
-            }
-        };
-        return true;
     }
 }
 
 impl Default for Enigo {
     fn default() -> Self {
+        let is_x11 = "x11" == hbb_common::platform::linux::get_display_server();
         Self {
-            is_x11: "x11" == hbb_common::platform::linux::get_display_server(),
-            tfc: TFC_Context::new().expect("kbd context error"),
+            is_x11,
+            tfc: if is_x11 {
+                Some(TFC_Context::new().expect("kbd context error"))
+            } else {
+                None
+            },
             uinput_keyboard: None,
             uinput_mouse: None,
             xdo: EnigoXdo::default(),
