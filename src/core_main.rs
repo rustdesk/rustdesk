@@ -13,28 +13,34 @@ pub fn core_main() -> Option<Vec<String>> {
     let mut is_setup = false;
     let mut _is_elevate = false;
     let mut _is_run_as_system = false;
-    let mut _is_connect = false;
+    let mut _is_flutter_connect = false;
     for arg in std::env::args() {
         // to-do: how to pass to flutter?
         if i == 0 && crate::common::is_setup(&arg) {
             is_setup = true;
         } else if i > 0 {
+            #[cfg(feature = "flutter")]
+            if arg == "--connect" {
+                _is_flutter_connect = true;
+            }
             if arg == "--elevate" {
                 _is_elevate = true;
             } else if arg == "--run-as-system" {
                 _is_run_as_system = true;
-            } else if arg == "--connect" {
-                _is_connect = true;
             } else {
                 args.push(arg);
             }
         }
         i += 1;
     }
-    if _is_connect {
+    if args.contains(&"--install".to_string()) {
+        is_setup = true;
+    }
+    #[cfg(feature = "flutter")]
+    if _is_flutter_connect {
         return core_main_invoke_new_connection(std::env::args());
     }
-	if args.contains(&"--install".to_string()) {
+    if args.contains(&"--install".to_string()) {
         is_setup = true;
     }
     if is_setup {
@@ -220,13 +226,13 @@ fn import_config(path: &str) {
 /// invoke a new connection
 ///
 /// [Note]
-/// this is for invoke new connection from dbus
+/// this is for invoke new connection from dbus.
+#[cfg(feature = "flutter")]
 fn core_main_invoke_new_connection(mut args: Args) -> Option<Vec<String>> {
-    args
-        .position(|element| {
-            return element == "--connect";
-        })
-        .unwrap();
+    args.position(|element| {
+        return element == "--connect";
+    })
+    .unwrap();
     let peer_id = args.next().unwrap_or("".to_string());
     if peer_id.is_empty() {
         eprintln!("please provide a valid peer id");
