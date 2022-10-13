@@ -666,7 +666,6 @@ impl Connection {
         #[allow(unused_mut)]
         let mut username = crate::platform::get_active_username();
         let mut res = LoginResponse::new();
-
         let mut pi = PeerInfo {
             username: username.clone(),
             conn_id: self.inner.id,

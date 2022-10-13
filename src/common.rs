@@ -34,34 +34,17 @@ lazy_static::lazy_static! {
     pub static ref DEVICE_NAME: Arc<Mutex<String>> = Default::default();
 }
 
-lazy_static::lazy_static! {
-    static ref GLOBAL_INIT_FUNCS: Mutex<HashMap<String, fn() -> bool>> = Default::default();
-    static ref GLOBAL_CLEAN_FUNCS: Mutex<HashMap<String, fn()>> = Default::default();
-}
-
-pub fn reg_global_init(key: String, f: fn() -> bool) {
-    GLOBAL_INIT_FUNCS.lock().unwrap().insert(key, f);
-}
-
-pub fn reg_global_clean(key: String, f: fn()) {
-    GLOBAL_CLEAN_FUNCS.lock().unwrap().insert(key, f);
-}
-
 pub fn global_init() -> bool {
-    for (k, f) in GLOBAL_INIT_FUNCS.lock().unwrap().iter() {
-        println!("Init {}", k);
-        if !f() {
-            return false;
+    #[cfg(target_os = "linux")]
+    {
+        if !scrap::is_x11() {
+            crate::server::wayland::set_wayland_scrap_map_err();
         }
     }
     true
 }
 
 pub fn global_clean() {
-    for (k, f) in GLOBAL_CLEAN_FUNCS.lock().unwrap().iter() {
-        println!("Clean {}", k);
-        f();
-    }
 }
 
 #[inline]

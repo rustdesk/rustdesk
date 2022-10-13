@@ -12,13 +12,22 @@ pub const SCRAP_X11_REF_URL: &str = "https://rustdesk.com/docs/en/manual/linux/#
 lazy_static::lazy_static! {
     static ref CAP_DISPLAY_INFO: RwLock<u64> = RwLock::new(0);
     static ref LOG_SCRAP_COUNT: Mutex<u32> = Mutex::new(0);
-    static ref GLOBAL_INIT_REG_HELPER: u8 = {
-        set_map_err(map_err_scrap);
-        0u8
-    };
 }
 
-pub fn map_err_scrap(err: String) -> io::Error {
+pub fn set_wayland_scrap_map_err() {
+    set_map_err(map_err_scrap);
+}
+
+fn map_err_scrap(err: String) -> io::Error {
+    // REMOVE ME ===================================== uncomment to handle error
+    // // to-do: Handle error better, do not restart server
+    // if err.starts_with("Did not receive a reply") {
+    //     log::error!("Fatal pipewire error, {}", &err);
+    //     std::process::exit(-1);
+    // }
+
+    log::error!("REMOVE ME ===================================== wayland scrap error {}", &err);
+
     if DISTRO.name.to_uppercase() == "Ubuntu".to_uppercase() {
         if DISTRO.version_id < "21".to_owned() {
             io::Error::new(io::ErrorKind::Other, SCRAP_UBUNTU_HIGHER_REQUIRED)
@@ -77,6 +86,11 @@ struct CapDisplayInfo {
     primary: usize,
     current: usize,
     capturer: CapturerPtr,
+}
+
+#[tokio::main(flavor = "current_thread")]
+pub(super) async fn ensure_inited() -> ResultType<()> {
+    check_init().await
 }
 
 async fn check_init() -> ResultType<()> {
@@ -202,6 +216,21 @@ pub(super) fn get_display_num() -> ResultType<usize> {
         }
     } else {
         bail!("Failed to get capturer display info");
+    }
+}
+
+pub(super) fn release_resouce() {
+    if scrap::is_x11() {
+        return;
+    }
+    let mut write_lock = CAP_DISPLAY_INFO.write().unwrap();
+    if *write_lock != 0 {
+        let cap_display_info: *mut CapDisplayInfo = *write_lock as _;
+        unsafe {
+            let box_capturer = Box::from_raw((*cap_display_info).capturer.0);
+            let box_cap_display_info = Box::from_raw(cap_display_info);
+            *write_lock = 0;
+        }
     }
 }
 

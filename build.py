@@ -342,6 +342,7 @@ def main():
                 os.system('cp -a res/DEBIAN/* tmpdeb/DEBIAN/')
                 os.system('strip tmpdeb/usr/bin/rustdesk')
                 os.system('mkdir -p tmpdeb/usr/lib/rustdesk')
+                os.system('mv tmpdeb/usr/bin/rustdesk tmpdeb/usr/lib/rustdesk/')
                 os.system('cp libsciter-gtk.so tmpdeb/usr/lib/rustdesk/')
                 md5_file('usr/share/rustdesk/files/systemd/rustdesk.service')
                 md5_file('usr/share/rustdesk/files/systemd/rustdesk.service.user')
