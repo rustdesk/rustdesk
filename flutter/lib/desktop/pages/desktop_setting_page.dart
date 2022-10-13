@@ -723,8 +723,10 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
               AbsorbPointer(
                 absorbing: locked,
                 child: Column(children: [
-                  _Card(title: 'Server', children: [
+                  _CardRow(title: 'Server', children: [
                     _Button('ID/Relay Server', changeServer, enabled: enabled),
+                    _Button('Import Server Conf', importServer,
+                        enabled: enabled),
                   ]),
                   _Card(title: 'Proxy', children: [
                     _Button('Socks5 Proxy', changeSocks5Proxy,
@@ -886,6 +888,38 @@ Widget _Card({required String title, required List<Widget> children}) {
               ).marginOnly(left: _kContentHMargin, top: 10, bottom: 10),
               ...children
                   .map((e) => e.marginOnly(top: 4, right: _kContentHMargin)),
+            ],
+          ).marginOnly(bottom: 10),
+        ).marginOnly(left: _kCardLeftMargin, top: 15),
+      ),
+    ],
+  );
+}
+
+Widget _CardRow({required String title, required List<Widget> children}) {
+  return Row(
+    children: [
+      SizedBox(
+        width: _kCardFixedWidth,
+        child: Card(
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Text(
+                    translate(title),
+                    textAlign: TextAlign.start,
+                    style: const TextStyle(
+                      fontSize: _kTitleFontSize,
+                    ),
+                  ),
+                  const Spacer(),
+                ],
+              ).marginOnly(left: _kContentHMargin, top: 10, bottom: 10),
+              Row(children: [
+                ...children
+                    .map((e) => e.marginOnly(top: 4, right: _kContentHMargin)),
+              ]),
             ],
           ).marginOnly(bottom: 10),
         ).marginOnly(left: _kCardLeftMargin, top: 15),
@@ -1374,6 +1408,119 @@ void changeServer() async {
       onSubmit: submit,
       onCancel: close,
     );
+  });
+}
+
+void importServer() async {
+  Future<void> importServerShow(String content) async {
+    gFFI.dialogManager.show((setState, close) {
+      return CustomAlertDialog(
+        title: Text(content),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 500),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(
+                height: 4.0,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: close, child: Text(translate("OK"))),
+        ],
+        onCancel: close,
+      );
+    });
+  }
+
+  Future<bool> submit(
+      String idServer, String relayServer, String apiServer, String key) async {
+    Map<String, dynamic> oldOptions = jsonDecode(await bind.mainGetOptions());
+    var idServerMsg = "";
+    var relayServerMsg = "";
+    if (idServer.isNotEmpty) {
+      idServerMsg =
+          translate(await bind.mainTestIfValidServer(server: idServer));
+      if (idServerMsg.isEmpty) {
+        oldOptions['custom-rendezvous-server'] = idServer;
+      } else {
+        debugPrint('ID Server invalid return');
+        return false;
+      }
+    } else {
+      oldOptions['custom-rendezvous-server'] = "";
+    }
+
+    if (relayServer.isNotEmpty) {
+      relayServerMsg =
+          translate(await bind.mainTestIfValidServer(server: relayServer));
+      if (relayServerMsg.isEmpty) {
+        oldOptions['relay-server'] = relayServer;
+      } else {
+        debugPrint('Relay Server invalid return');
+        return false;
+      }
+    } else {
+      oldOptions['relay-server'] = "";
+    }
+
+    if (apiServer.isNotEmpty) {
+      if (apiServer.startsWith('http://') || apiServer.startsWith("https://")) {
+        oldOptions['api-server'] = apiServer;
+        return false;
+      } else {
+        debugPrint('invalid_http');
+        return false;
+      }
+    } else {
+      oldOptions['api-server'] = "";
+    }
+    // ok
+    oldOptions['key'] = key;
+    await bind.mainSetOptions(json: jsonEncode(oldOptions));
+    debugPrint("set ID/Realy Server Ok");
+    return true;
+  }
+
+  Clipboard.getData(Clipboard.kTextPlain).then((value) {
+    TextEditingController mytext = TextEditingController();
+    String? aNullableString = "";
+    aNullableString = value?.text;
+    mytext.text = aNullableString.toString();
+    if (mytext.text.isNotEmpty) {
+      debugPrint('Clipboard is not empty');
+      try {
+        Map<String, dynamic> config = jsonDecode(mytext.text);
+        if (config.containsKey('IdServer') &&
+            config.containsKey('RelayServer')) {
+          debugPrint('IdServer:    ${config['IdServer']}');
+          debugPrint('RelayServer: ${config['RelayServer']}');
+          debugPrint('ApiServer:   ${config['ApiServer']}');
+          debugPrint('Key:         ${config['Key']}');
+          Future<bool> success = submit(config['IdServer'],
+              config['RelayServer'], config['ApiServer'], config['Key']);
+          success.then((value) {
+            if (value) {
+              importServerShow(
+                  translate('Import server configuration successfully'));
+            } else {
+              importServerShow(translate('Invalid server configuration'));
+            }
+          });
+        } else {
+          debugPrint('invalid config info');
+          importServerShow(translate("Invalid server configuration"));
+        }
+      } catch (e) {
+        debugPrint('invalid config info');
+        importServerShow(translate("Invalid server configuration"));
+      }
+    } else {
+      debugPrint('Clipboard is empty');
+      importServerShow(translate("Clipboard is empty"));
+    }
   });
 }
 
