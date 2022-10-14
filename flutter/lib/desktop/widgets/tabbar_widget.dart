@@ -350,7 +350,7 @@ class DesktopTab extends StatelessWidget {
   }
 }
 
-class WindowActionPanel extends StatelessWidget {
+class WindowActionPanel extends StatefulWidget {
   final bool mainTab;
   final DesktopTabType tabType;
   final Rx<DesktopTabState> state;
@@ -372,16 +372,78 @@ class WindowActionPanel extends StatelessWidget {
       : super(key: key);
 
   @override
+  State<StatefulWidget> createState() {
+    return WindowActionPanelState();
+  }
+}
+
+class WindowActionPanelState extends State<WindowActionPanel>
+    with MultiWindowListener, WindowListener {
+  bool isMaximized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    DesktopMultiWindow.addListener(this);
+    windowManager.addListener(this);
+
+    // TODO init window can't detect isMaximized
+    if (widget.mainTab) {
+      windowManager.isMaximized().then((maximized) {
+        debugPrint("init main maximized: $maximized");
+        if (isMaximized != maximized) {
+          WidgetsBinding.instance.addPostFrameCallback(
+              (_) => setState(() => isMaximized = maximized));
+        }
+      });
+    } else {
+      final wc = WindowController.fromWindowId(windowId!);
+      wc.isMaximized().then((maximized) {
+        debugPrint("init sun maximized: $maximized");
+        if (isMaximized != maximized) {
+          WidgetsBinding.instance.addPostFrameCallback(
+              (_) => setState(() => isMaximized = maximized));
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    DesktopMultiWindow.removeListener(this);
+    windowManager.removeListener(this);
+    super.dispose();
+  }
+
+  @override
+  void onWindowMaximize() {
+    // catch maximize from system
+    if (!isMaximized) {
+      setState(() => isMaximized = true);
+    }
+    super.onWindowMaximize();
+  }
+
+  @override
+  void onWindowUnmaximize() {
+    // catch unmaximize from system
+    if (isMaximized) {
+      setState(() => isMaximized = false);
+    }
+    super.onWindowUnmaximize();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Row(
       children: [
         Offstage(
-            offstage: !showMinimize,
+            offstage: !widget.showMinimize,
             child: ActionIcon(
               message: 'Minimize',
               icon: IconFont.min,
               onTap: () {
-                if (mainTab) {
+                if (widget.mainTab) {
                   windowManager.minimize();
                 } else {
                   WindowController.fromWindowId(windowId!).minimize();
@@ -389,56 +451,40 @@ class WindowActionPanel extends StatelessWidget {
               },
               isClose: false,
             )),
-        // TODO: drag makes window restore
         Offstage(
-            offstage: !showMaximize,
-            child: FutureBuilder(builder: (context, snapshot) {
-              RxBool isMaximized = false.obs;
-              if (mainTab) {
-                windowManager.isMaximized().then((maximized) {
-                  isMaximized.value = maximized;
-                });
-              } else {
-                final wc = WindowController.fromWindowId(windowId!);
-                wc.isMaximized().then((maximized) {
-                  isMaximized.value = maximized;
-                });
-              }
-              return Obx(
-                () => ActionIcon(
-                  message: isMaximized.value ? "Restore" : "Maximize",
-                  icon: isMaximized.value ? IconFont.restore : IconFont.max,
-                  onTap: () {
-                    if (mainTab) {
-                      if (isMaximized.value) {
-                        windowManager.unmaximize();
-                      } else {
-                        windowManager.maximize();
-                      }
-                    } else {
-                      // TODO: subwindow is maximized but first query result is not maximized.
-                      final wc = WindowController.fromWindowId(windowId!);
-                      if (isMaximized.value) {
-                        wc.unmaximize();
-                      } else {
-                        wc.maximize();
-                      }
-                    }
-                    isMaximized.value = !isMaximized.value;
-                  },
-                  isClose: false,
-                ),
-              );
-            })),
+            offstage: !widget.showMaximize,
+            child: ActionIcon(
+              message: isMaximized ? "Restore" : "Maximize",
+              icon: isMaximized ? IconFont.restore : IconFont.max,
+              onTap: () {
+                if (widget.mainTab) {
+                  if (isMaximized) {
+                    windowManager.unmaximize();
+                  } else {
+                    windowManager.maximize();
+                  }
+                } else {
+                  final wc = WindowController.fromWindowId(windowId!);
+                  if (isMaximized) {
+                    wc.unmaximize();
+                  } else {
+                    wc.maximize();
+                  }
+                }
+                // setState for sub window, wc.unmaximize/maximize() will not invoke onWindowMaximize/Unmaximize
+                setState(() => isMaximized = !isMaximized);
+              },
+              isClose: false,
+            )),
         Offstage(
-            offstage: !showClose,
+            offstage: !widget.showClose,
             child: ActionIcon(
               message: 'Close',
               icon: IconFont.close,
               onTap: () async {
-                final res = await onClose?.call() ?? true;
+                final res = await widget.onClose?.call() ?? true;
                 if (res) {
-                  if (mainTab) {
+                  if (widget.mainTab) {
                     windowManager.close();
                   } else {
                     // only hide for multi window, not close
