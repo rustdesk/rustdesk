@@ -61,19 +61,36 @@ class ChatPage extends StatelessWidget implements PageShape {
                           [],
                       inputOptions: InputOptions(
                           sendOnEnter: true,
-                          inputDecoration: defaultInputDecoration(
-                              hintText: "${translate('Write a message')}...",
-                              fillColor: Theme.of(context).backgroundColor),
-                          sendButtonBuilder: defaultSendButton(
-                              color: Theme.of(context)
-                                  .textTheme
-                                  .titleLarge!
-                                  .color!),
                           inputTextStyle: TextStyle(
+                              fontSize: 14,
                               color: Theme.of(context)
                                   .textTheme
                                   .titleLarge
-                                  ?.color)),
+                                  ?.color),
+                          inputDecoration: isDesktop
+                              ? InputDecoration(
+                                  isDense: true,
+                                  hintText:
+                                      "${translate('Write a message')}...",
+                                  filled: true,
+                                  fillColor: Theme.of(context).backgroundColor,
+                                  contentPadding: EdgeInsets.all(10),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                    borderSide: const BorderSide(
+                                      width: 0,
+                                      style: BorderStyle.none,
+                                    ),
+                                  ),
+                                )
+                              : defaultInputDecoration(
+                                  hintText:
+                                      "${translate('Write a message')}...",
+                                  fillColor: Theme.of(context).backgroundColor),
+                          sendButtonBuilder: defaultSendButton(
+                              padding: EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 0),
+                              color: Theme.of(context).colorScheme.primary)),
                       messageOptions: MessageOptions(
                           showOtherUsersAvatar: false,
                           showTime: true,

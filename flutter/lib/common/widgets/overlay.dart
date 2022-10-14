@@ -36,7 +36,7 @@ class DraggableChatWindow extends StatelessWidget {
                   appBar: CustomAppBar(
                     onPanUpdate: onPanUpdate,
                     appBar: isDesktop
-                        ? _buildDesktopAppBar()
+                        ? _buildDesktopAppBar(context)
                         : _buildMobileAppBar(context),
                   ),
                   body: ChatPage(chatModel: chatModel),
@@ -82,33 +82,33 @@ class DraggableChatWindow extends StatelessWidget {
     );
   }
 
-  Widget _buildDesktopAppBar() {
+  Widget _buildDesktopAppBar(BuildContext context) {
     return Container(
-      color: MyTheme.accent50,
-      height: 35,
+      decoration: BoxDecoration(
+          border: Border(
+              bottom: BorderSide(
+                  color: Theme.of(context).hintColor.withOpacity(0.4)))),
+      height: 38,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 15),
-              child: Text(
-                translate("Chat"),
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontFamily: 'WorkSans',
-                    fontWeight: FontWeight.bold),
-              )),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              ActionIcon(
+              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+              child: Row(children: [
+                Icon(Icons.chat_bubble_outline,
+                    size: 20, color: Theme.of(context).colorScheme.primary),
+                SizedBox(width: 6),
+                Text(translate("Chat"))
+              ])),
+          Padding(
+              padding: EdgeInsets.all(2),
+              child: ActionIcon(
                 message: 'Close',
                 icon: IconFont.close,
                 onTap: chatModel.hideChatWindowOverlay,
                 isClose: true,
-              )
-            ],
-          )
+                size: 32,
+              ))
         ],
       ),
     );

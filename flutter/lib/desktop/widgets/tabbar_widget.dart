@@ -799,13 +799,15 @@ class ActionIcon extends StatelessWidget {
   final IconData icon;
   final Function() onTap;
   final bool isClose;
-  const ActionIcon({
-    Key? key,
-    required this.message,
-    required this.icon,
-    required this.onTap,
-    required this.isClose,
-  }) : super(key: key);
+  final double? size;
+  const ActionIcon(
+      {Key? key,
+      required this.message,
+      required this.icon,
+      required this.onTap,
+      required this.isClose,
+      this.size})
+      : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -820,8 +822,8 @@ class ActionIcon extends StatelessWidget {
             onHover: (value) => hover.value = value,
             onTap: onTap,
             child: SizedBox(
-              height: _kTabBarHeight - 1,
-              width: _kTabBarHeight - 1,
+              height: size ?? (_kTabBarHeight - 1),
+              width: size ?? (_kTabBarHeight - 1),
               child: Icon(
                 icon,
                 color: hover.value && isClose
