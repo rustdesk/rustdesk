@@ -45,7 +45,6 @@ Future<void> main(List<String> args) async {
     int type = argument['type'] ?? -1;
     argument['windowId'] = windowId;
     WindowType wType = type.windowType;
-    restoreWindowPosition(wType, windowId: windowId);
     switch (wType) {
       case WindowType.RemoteDesktop:
         desktopType = DesktopType.remote;
@@ -118,6 +117,7 @@ void runMobileApp() async {
 
 void runRemoteScreen(Map<String, dynamic> argument) async {
   await initEnv(kAppTypeDesktopRemote);
+  await restoreWindowPosition(WindowType.RemoteDesktop, windowId: windowId);
   runApp(GetMaterialApp(
     navigatorKey: globalKey,
     debugShowCheckedModeBanner: false,
@@ -143,6 +143,7 @@ void runRemoteScreen(Map<String, dynamic> argument) async {
 
 void runFileTransferScreen(Map<String, dynamic> argument) async {
   await initEnv(kAppTypeDesktopFileTransfer);
+  await restoreWindowPosition(WindowType.FileTransfer, windowId: windowId);
   runApp(
     GetMaterialApp(
       navigatorKey: globalKey,
@@ -168,6 +169,7 @@ void runFileTransferScreen(Map<String, dynamic> argument) async {
 
 void runPortForwardScreen(Map<String, dynamic> argument) async {
   await initEnv(kAppTypeDesktopPortForward);
+  await restoreWindowPosition(WindowType.PortForward, windowId: windowId);
   runApp(
     GetMaterialApp(
       navigatorKey: globalKey,

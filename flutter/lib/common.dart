@@ -38,7 +38,6 @@ var isWeb = false;
 var isWebDesktop = false;
 var version = "";
 int androidVersion = 0;
-const windowPrefix = "wm_";
 DesktopType? desktopType;
 
 typedef F = String Function(String);
@@ -957,16 +956,18 @@ class LastWindowPosition {
   double? height;
   double? offsetWidth;
   double? offsetHeight;
+  bool? isMaximized;
 
-  LastWindowPosition(
-      this.width, this.height, this.offsetWidth, this.offsetHeight);
+  LastWindowPosition(this.width, this.height, this.offsetWidth,
+      this.offsetHeight, this.isMaximized);
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       "width": width,
       "height": height,
       "offsetWidth": offsetWidth,
-      "offsetHeight": offsetHeight
+      "offsetHeight": offsetHeight,
+      "isMaximized": isMaximized,
     };
   }
 
@@ -981,8 +982,8 @@ class LastWindowPosition {
     }
     try {
       final m = jsonDecode(content);
-      return LastWindowPosition(
-          m["width"], m["height"], m["offsetWidth"], m["offsetHeight"]);
+      return LastWindowPosition(m["width"], m["height"], m["offsetWidth"],
+          m["offsetHeight"], m["isMaximized"]);
     } catch (e) {
       debugPrint(e.toString());
       return null;
@@ -999,22 +1000,29 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
   }
   switch (type) {
     case WindowType.Main:
-      List resp = await Future.wait(
-          [windowManager.getPosition(), windowManager.getSize()]);
-      Offset position = resp[0];
-      Size sz = resp[1];
-      final pos =
-          LastWindowPosition(sz.width, sz.height, position.dx, position.dy);
+      final position = await windowManager.getPosition();
+      final sz = await windowManager.getSize();
+      final isMaximized = await windowManager.isMaximized();
+      final pos = LastWindowPosition(
+          sz.width, sz.height, position.dx, position.dy, isMaximized);
       await Get.find<SharedPreferences>()
-          .setString(windowPrefix + type.name, pos.toString());
+          .setString(kWindowPrefix + type.name, pos.toString());
       break;
     default:
-      // TODO: implement window
+      final wc = WindowController.fromWindowId(windowId!);
+      final frame = await wc.getFrame();
+      final position = frame.topLeft;
+      final sz = frame.size;
+      final isMaximized = await wc.isMaximized();
+      final pos = LastWindowPosition(
+          sz.width, sz.height, position.dx, position.dy, isMaximized);
+      await Get.find<SharedPreferences>()
+          .setString(kWindowPrefix + type.name, pos.toString());
       break;
   }
 }
 
-_adjustRestoreMainWindowSize(double? width, double? height) async {
+Future<Size> _adjustRestoreMainWindowSize(double? width, double? height) async {
   const double minWidth = 600;
   const double minHeight = 100;
   double maxWidth = (((isDesktop || isWebDesktop)
@@ -1055,10 +1063,12 @@ _adjustRestoreMainWindowSize(double? width, double? height) async {
   if (restoreHeight > maxHeight) {
     restoreWidth = maxHeight;
   }
-  await windowManager.setSize(Size(restoreWidth, restoreHeight));
+  return Size(restoreWidth, restoreHeight);
 }
 
-_adjustRestoreMainWindowOffset(double? left, double? top) async {
+/// return null means center
+Future<Offset?> _adjustRestoreMainWindowOffset(
+    double? left, double? top) async {
   if (left == null || top == null) {
     await windowManager.center();
   } else {
@@ -1090,40 +1100,68 @@ _adjustRestoreMainWindowOffset(double? left, double? top) async {
         windowLeft > frameRight ||
         windowTop < frameTop ||
         windowTop > frameBottom) {
-      await windowManager.center();
+      return null;
     } else {
-      await windowManager.setPosition(Offset(windowLeft, windowTop));
+      return Offset(windowLeft, windowTop);
     }
   }
+  return null;
 }
 
-/// Save window position and size on exit
+/// Restore window position and size on start
 /// Note that windowId must be provided if it's subwindow
 Future<bool> restoreWindowPosition(WindowType type, {int? windowId}) async {
   if (type != WindowType.Main && windowId == null) {
     debugPrint(
         "Error: windowId cannot be null when saving positions for sub window");
   }
+  final pos =
+      Get.find<SharedPreferences>().getString(kWindowPrefix + type.name);
+
+  if (pos == null) {
+    debugPrint("no window position saved, ignore restore");
+    return false;
+  }
+  var lpos = LastWindowPosition.loadFromString(pos);
+  if (lpos == null) {
+    debugPrint("window position saved, but cannot be parsed");
+    return false;
+  }
+
   switch (type) {
     case WindowType.Main:
-      var pos =
-          Get.find<SharedPreferences>().getString(windowPrefix + type.name);
-      if (pos == null) {
-        debugPrint("no window position saved, ignore restore");
-        return false;
+      if (lpos.isMaximized == true) {
+        await windowManager.maximize();
+      } else {
+        final size =
+            await _adjustRestoreMainWindowSize(lpos.width, lpos.height);
+        final offset = await _adjustRestoreMainWindowOffset(
+            lpos.offsetWidth, lpos.offsetHeight);
+        await windowManager.setSize(size);
+        if (offset == null) {
+          await windowManager.center();
+        } else {
+          await windowManager.setPosition(offset);
+        }
       }
-      var lpos = LastWindowPosition.loadFromString(pos);
-      if (lpos == null) {
-        debugPrint("window position saved, but cannot be parsed");
-        return false;
-      }
-
-      await _adjustRestoreMainWindowSize(lpos.width, lpos.height);
-      await _adjustRestoreMainWindowOffset(lpos.offsetWidth, lpos.offsetHeight);
-
       return true;
     default:
-      // TODO: implement subwindow
+      final wc = WindowController.fromWindowId(windowId!);
+      if (lpos.isMaximized == true) {
+        await wc.maximize();
+      } else {
+        final size =
+            await _adjustRestoreMainWindowSize(lpos.width, lpos.height);
+        final offset = await _adjustRestoreMainWindowOffset(
+            lpos.offsetWidth, lpos.offsetHeight);
+        if (offset == null) {
+          await wc.center();
+        } else {
+          final frame =
+              Rect.fromLTWH(offset.dx, offset.dy, size.width, size.height);
+          await wc.setFrame(frame);
+        }
+      }
       break;
   }
   return false;
@@ -1150,7 +1188,7 @@ void checkArguments() {
 }
 
 /// Parse `rustdesk://` unilinks
-/// 
+///
 /// [Functions]
 /// 1. New Connection: rustdesk://connection/new/your_peer_id
 void parseRustdeskUri(String uriPath) {

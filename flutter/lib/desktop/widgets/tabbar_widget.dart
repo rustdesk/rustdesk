@@ -387,10 +387,8 @@ class WindowActionPanelState extends State<WindowActionPanel>
     DesktopMultiWindow.addListener(this);
     windowManager.addListener(this);
 
-    // TODO init window can't detect isMaximized
     if (widget.mainTab) {
       windowManager.isMaximized().then((maximized) {
-        debugPrint("init main maximized: $maximized");
         if (isMaximized != maximized) {
           WidgetsBinding.instance.addPostFrameCallback(
               (_) => setState(() => isMaximized = maximized));
@@ -399,7 +397,6 @@ class WindowActionPanelState extends State<WindowActionPanel>
     } else {
       final wc = WindowController.fromWindowId(windowId!);
       wc.isMaximized().then((maximized) {
-        debugPrint("init sun maximized: $maximized");
         if (isMaximized != maximized) {
           WidgetsBinding.instance.addPostFrameCallback(
               (_) => setState(() => isMaximized = maximized));
@@ -431,6 +428,12 @@ class WindowActionPanelState extends State<WindowActionPanel>
       setState(() => isMaximized = false);
     }
     super.onWindowUnmaximize();
+  }
+
+  @override
+  void onWindowClose() {
+    debugPrint("onWindowClose : is Main : ${widget.mainTab}");
+    super.onWindowClose();
   }
 
   @override

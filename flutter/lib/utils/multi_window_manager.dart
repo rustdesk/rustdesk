@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hbb/common.dart';
 
 /// must keep the order
 enum WindowType { Main, RemoteDesktop, FileTransfer, PortForward, Unknown }
@@ -153,6 +154,7 @@ class RustDeskMultiWindowManager {
     int? wId = findWindowByType(type);
     if (wId != null) {
       debugPrint("closing multi window: ${type.toString()}");
+      saveWindowPosition(type, windowId: wId);
       try {
         final ids = await DesktopMultiWindow.getAllSubWindowIds();
         if (!ids.contains(wId)) {
