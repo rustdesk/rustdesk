@@ -1,22 +1,22 @@
 [package]
 name = "hbb_common"
 version = "0.1.0"
-authors = ["rustdesk<info@rustdesk.com>"]
+authors = ["open-trade <info@opentradesolutions.com>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-protobuf = { version = "3.0.0-pre", git = "https://github.com/stepancheg/rust-protobuf" }
-tokio = { version = "1.10", features = ["full"] }
-tokio-util = { version = "0.6", features = ["full"] }
+protobuf = { version = "3.1", features = ["with-bytes"] }
+tokio = { version = "1.20", features = ["full"] }
+tokio-util = { version = "0.7", features = ["full"] }
 futures = "0.3"
-bytes = "1.0"
+bytes = { version = "1.2", features = ["serde"] }
 log = "0.4"
 env_logger = "0.9"
 socket2 = { version = "0.3", features = ["reuseport"] }
 zstd = "0.9"
-quinn = {version = "0.6", optional = true }
+quinn = {version = "0.8", optional = true }
 anyhow = "1.0"
 futures-util = "0.3"
 directories-next = "2.0"
@@ -28,15 +28,19 @@ confy = { git = "https://github.com/open-trade/confy" }
 dirs-next = "2.0"
 filetime = "0.2"
 sodiumoxide = "0.2"
+regex = "1.4"
+tokio-socks = { git = "https://github.com/open-trade/tokio-socks" }
+chrono = "0.4"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 mac_address = "1.1"
+machine-uid = "0.2"
 
 [features]
-quic = ["quinn"]
+quic = []
 
 [build-dependencies]
-protobuf-codegen-pure = { version = "3.0.0-pre", git = "https://github.com/stepancheg/rust-protobuf" }
+protobuf-codegen = { version = "3.1" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi = { version = "0.3", features = ["winuser"] }

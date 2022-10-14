@@ -1,7 +1,7 @@
 var cursor_img = $(img#cursor);
-var last_key_time = 0;
 is_file_transfer = handler.is_file_transfer();
 var is_port_forward = handler.is_port_forward();
+var input_blocked = false;
 var display_width = 0;
 var display_height = 0;
 var display_origin_x = 0;
@@ -10,6 +10,9 @@ var display_scale = 1;
 var keyboard_enabled = true; // server side
 var clipboard_enabled = true; // server side
 var audio_enabled = true; // server side
+var file_enabled = true; // server side
+var restart_enabled = true; // server side
+var recording_enabled = true; // server side
 var scroll_body = $(body);
 
 handler.setDisplay = function(x, y, w, h) {
@@ -18,7 +21,11 @@ handler.setDisplay = function(x, y, w, h) {
     display_origin_x = x;
     display_origin_y = y;
     adaptDisplay();
+    if (recording) handler.record_screen(true, w, h);
 }
+
+// in case toolbar not shown correclty
+view.windowMinSize = (scaleIt(500), scaleIt(300));
 
 function adaptDisplay() {
     var w = display_width;
@@ -38,8 +45,8 @@ function adaptDisplay() {
                 view.windowState == View.WINDOW_SHOWN;
                 var (x, y) = view.box(#position, #border, #screen);
                 // extra for border
-                var extra = 2;
-                view.move(x, y, w + extra, h + hh + extra);
+                var extra = is_win ? 4 : 2;
+                view.move(x, y, (w + extra).toInteger(), (h + hh + extra).toInteger());
             }
         }
     }
@@ -62,9 +69,10 @@ function adaptDisplay() {
             }
         }
     }
+    refreshCursor();
     handler.style.set {
-        width: w + "px",
-        height: h + "px",
+        width: w / scaleFactor + "px",
+        height: h / scaleFactor + "px",
     };
 }
 
@@ -72,48 +80,17 @@ function adaptDisplay() {
 // https://sciter.com/docs/content/sciter/Event.htm
 
 var entered = false;
-
-var keymap = {};
-for (var (k, v) in Event) {
-    k = k + ""
-    if (k[0] == "V" && k[1] == "K") {
-        keymap[v] = k;
+if (!is_file_transfer && !is_port_forward) {
+    self.onKey = function(evt) {
+        if (!entered) return false;
+        // so that arrow key not move scrollbar
+        return true; 
     }
-}
-
-// VK_ENTER = VK_RETURN
-// somehow, handler.onKey and view.onKey not working
-function self.onKey(evt) {
-    last_key_time = getTime();
-    if (is_file_transfer || is_port_forward) return false;
-    if (!entered) return false;
-    if (!keyboard_enabled) return false;
-    switch (evt.type) {
-        case Event.KEY_DOWN:
-            handler.key_down_or_up(1, keymap[evt.keyCode] || "", evt.keyCode, evt.altKey,
-                evt.ctrlKey, evt.shiftKey, evt.commandKey, evt.extendedKey);
-            if (is_osx && evt.commandKey) {
-                handler.key_down_or_up(0, keymap[evt.keyCode] || "", evt.keyCode, evt.altKey,
-                    evt.ctrlKey, evt.shiftKey, evt.commandKey, evt.extendedKey);
-            }
-            break;
-        case Event.KEY_UP:
-            handler.key_down_or_up(0, keymap[evt.keyCode] || "", evt.keyCode, evt.altKey,
-                evt.ctrlKey, evt.shiftKey, evt.commandKey, evt.extendedKey);
-            break;
-        case Event.KEY_CHAR:
-            // the keypress event is fired when the element receives character value. Event.keyCode is a UNICODE code point of the character
-            handler.key_down_or_up(2, "", evt.keyCode, evt.altKey,
-                evt.ctrlKey, evt.shiftKey, evt.commandKey, evt.extendedKey);
-            break;
-        default:
-            return false;
-    }
-    return true;
 }
 
 var wait_window_toolbar = false;
 var last_mouse_mask;
+var is_left_down = false;
 var acc_wheel_delta_x = 0;
 var acc_wheel_delta_y = 0;
 var last_wheel_time = 0;
@@ -124,6 +101,7 @@ var acc_wheel_delta_y0 = 0;
 var total_wheel_time = 0;
 var wheeling = false;
 var dragging = false;
+var is_mouse_event_triggered = false;
 
 // https://stackoverflow.com/questions/5833399/calculating-scroll-inertia-momentum
 function resetWheel() {
@@ -165,6 +143,7 @@ function accWheel(v, is_x) {
 
 function handler.onMouse(evt)
 {
+    is_mouse_event_triggered = true;
     if (is_file_transfer || is_port_forward) return false;
     if (view.windowState == View.WINDOW_FULL_SCREEN && !dragging) {
         var dy = evt.y - scroll_body.scroll(#top);
@@ -173,10 +152,14 @@ function handler.onMouse(evt)
                 wait_window_toolbar = true;
                 self.timer(300ms, function() {
                     if (!wait_window_toolbar) return;
+                    var extra = 0;
+                    // workaround for stupid Sciter, without this, click
+                    // event not triggered on top part of buttons on toolbar
+                    if (is_osx) extra = 10; 
                     if (view.windowState == View.WINDOW_FULL_SCREEN) {
                         $(header).style.set {
                           display: "block",
-                          padding: (2 * workarea_offset) + "px 0 0 0",
+                          padding: (2 * workarea_offset + extra) + "px 0 0 0",
                         };
                     }
                     wait_window_toolbar = false;
@@ -214,7 +197,12 @@ function handler.onMouse(evt)
       case Event.MOUSE_MOVE:
         if (cursor_img.style#display != "none" && keyboard_enabled) {
             cursor_img.style#display = "none";
-            handler.style#cursor = '';
+        }
+        if (!keyboard_enabled && !useSystemCursor) {
+            updateCursor(true);
+        }
+        if (keyboard_enabled && useSystemCursor) {
+            updateCursor();
         }
         break;
       case Event.MOUSE_WHEEL:
@@ -280,10 +268,17 @@ function handler.onMouse(evt)
       case Event.MOUSE_ENTER:
         entered = true;
         stdout.println("enter");
+        handler.enter();
         return keyboard_enabled;
       case Event.MOUSE_LEAVE:
         entered = false;
         stdout.println("leave");
+        handler.leave();
+        if (is_left_down && handler.peer_platform() == "Android") {
+            is_left_down = false;
+            handler.send_mouse((1 << 3) | 2, 0, 0, evt.altKey,
+                evt.ctrlKey, evt.shiftKey, evt.commandKey);
+        }
         return keyboard_enabled;
       default:
         return false;
@@ -295,9 +290,6 @@ function handler.onMouse(evt)
         if (cur_x != x || cur_y != y) {
             return keyboard_enabled;
         }
-        // save bandwidth
-        x = 0;
-        y = 0;
     } else {
         cur_local_x = cur_x = x;
         cur_local_y = cur_y = y;
@@ -310,19 +302,27 @@ function handler.onMouse(evt)
     y = (y / display_scale).toInteger();
     // insert down between two up, osx has this behavior for triple click
     if (last_mouse_mask == 2 && mask == 2) {
-        handler.send_mouse((evt.buttons << 3) | 1, x + display_origin_x, y + display_origin_y, evt.altKey,
+        handler.send_mouse((evt.buttons << 3) | 1, 0, 0, evt.altKey,
                 evt.ctrlKey, evt.shiftKey, evt.commandKey);
     }
     last_mouse_mask = mask;
+    if (evt.buttons == 1) {
+        if (mask == 1) {
+            is_left_down = true;
+        } else if (mask == 2) {
+            is_left_down = false;
+        }
+    }
     // to-do: altKey, ctrlKey etc
     handler.send_mouse((evt.buttons << 3) | mask,
-                mask == 3 ? wheel_delta_x : x + display_origin_x,
-                mask == 3 ? wheel_delta_y : y + display_origin_y,
+                mask == 3 ? wheel_delta_x : (mask == 0 ? x + display_origin_x : 0),
+                mask == 3 ? wheel_delta_y : (mask == 0 ? y + display_origin_y : 0),
                 evt.altKey,
                 evt.ctrlKey, evt.shiftKey, evt.commandKey);
     return true;
 };
 
+var cur_id = -1;
 var cur_hotx = 0;
 var cur_hoty = 0;
 var cur_img = null;
@@ -333,20 +333,49 @@ var cur_local_y = 0;
 var cursors = {};
 var image_binded;
 
+function scaleCursorImage(img) {
+    var w = (img.width * display_scale).toInteger();
+    var h = (img.height * display_scale).toInteger();
+    cursor_img.style.set {
+        width: w + "px",
+        height: h + "px",
+    };
+    self.bindImage("in-memory:cursor", img);
+    if (display_scale == 1) return img;
+    function paint(gfx) {
+        gfx.drawImage(img, 0, 0, w, h);
+    }
+    return new Image(w, h, paint);
+}
+
+var useSystemCursor = true;
+function updateCursor(system=false) {
+    stdout.println("Update cursor, system: " + system);
+    useSystemCursor = system;
+    if (system) {
+        handler.style#cursor = undefined;
+    } else if (cur_img) {
+        handler.style.cursor(cur_img, (cur_hotx * display_scale).toInteger(), (cur_hoty * display_scale).toInteger());
+    }
+}
+
+function refreshCursor() {
+    if (cur_id != -1) {
+        handler.setCursorId(cur_id);
+    }
+}
+
 handler.setCursorData = function(id, hotx, hoty, width, height, colors) {
     cur_hotx = hotx;
     cur_hoty = hoty;
-    cursor_img.style.set {
-        width: width + "px",
-        height: height + "px",
-    };
     var img = Image.fromBytes(colors);
     if (img) {
         image_binded = true;
         cursors[id] = [img, hotx, hoty, width, height];
-        this.bindImage("in-memory:cursor", img);
-        if (cursor_img.style#display == 'none') {
-            self.timer(1ms, function() { handler.style.cursor(cur_img, cur_hotx, cur_hoty); });
+        cur_id = id;
+        img = scaleCursorImage(img);
+        if (!first_mouse_event_triggered || cursor_img.style#display == 'none') {
+            self.timer(1ms, updateCursor);
         }
         cur_img = img;
     }
@@ -355,17 +384,13 @@ handler.setCursorData = function(id, hotx, hoty, width, height, colors) {
 handler.setCursorId = function(id) {
     var img = cursors[id];
     if (img) {
+        cur_id = id;
         image_binded = true;
         cur_hotx = img[1];
         cur_hoty = img[2];
-        cursor_img.style.set {
-            width: img[3] + "px",
-            height: img[4] + "px",
-        };
-        img = img[0];
-        this.bindImage("in-memory:cursor", img);
-        if (cursor_img.style#display == 'none') {
-            self.timer(1ms, function() { handler.style.cursor(cur_img, cur_hotx, cur_hoty); });
+        img = scaleCursorImage(img[0]);
+        if (!first_mouse_event_triggered || cursor_img.style#display == 'none') {
+            self.timer(1ms, updateCursor);
         }
         cur_img = img;
     }
@@ -379,24 +404,23 @@ handler.setCursorPosition = function(x, y) {
     cur_y = y - display_origin_y;
     var x = cur_x - cur_hotx;
     var y = cur_y - cur_hoty;
-    x *= display_scale;
-    y *= display_scale;
+    x *= display_scale / scaleFactor;
+    y *= display_scale / scaleFactor;
     cursor_img.style.set {
         left: x + "px",
         top: y + "px",
     };
     if (cursor_img.style#display == 'none') {
-        handler.style#cursor = 'none';
         cursor_img.style#display = "block";
     }
 }
 
 function self.ready() {
-    var w = 960;
-    var h = 640;
+    var w = scaleIt(960);
+    var h = scaleIt(640);
     if (is_file_transfer || is_port_forward) {
         var r = handler.get_size();
-        if (r[0] > 0) {
+        if (isReasonableSize(r) && r[2] > 0) {
             view.move(r[0], r[1], r[2], r[3]);
         } else {
             centerize(w, h);
@@ -418,7 +442,7 @@ handler.adaptSize = function() {
     var (fx, fy, fw, fh) = view.screenBox(#frame, #rectw);
     if (is_osx) workarea_offset = sy;
     var r = handler.get_size();
-    if (r[2] > 0) {
+    if (isReasonableSize(r) && r[2] > 0) {
         if (r[2] >= fw && r[3] >= fh && !is_linux) {
             view.windowState = View.WINDOW_FULL_SCREEN;
             stdout.println("Initialize to full screen");
@@ -445,13 +469,63 @@ function self.closing() {
     var (x, y, w, h) = view.box(#rectw, #border, #screen);
     if (is_file_transfer) save_file_transfer_close_state();
     if (is_file_transfer || is_port_forward || size_adapted) handler.save_size(x, y, w, h);
+    if (recording) handler.record_screen(false, display_width, display_height);
+}
+
+var qualityMonitor;
+var qualityMonitorData = [];
+
+class QualityMonitor: Reactor.Component
+{
+    function this() {
+        qualityMonitor = this;
+        if (handler.get_toggle_option("show-quality-monitor")) {
+            $(#quality-monitor).style.set{ display: "block" };
+        }
+    }
+
+    function render() {
+        return <div >
+            <div>
+                Speed: {qualityMonitorData[0]}
+            </div>
+            <div>
+                FPS: {qualityMonitorData[1]}
+            </div>
+            <div>
+                Delay: {qualityMonitorData[2]} ms
+            </div>
+            <div>
+                Target Bitrate: {qualityMonitorData[3]}kb
+            </div>
+            <div>
+                Codec: {qualityMonitorData[4]}
+            </div>
+        </div>;
+    }
+}
+
+$(#quality-monitor).content(<QualityMonitor />);
+handler.updateQualityStatus = function(speed, fps, delay, bitrate, codec_format) {
+    speed ? qualityMonitorData[0] = speed:null;
+    fps ? qualityMonitorData[1] = fps:null;
+    delay ? qualityMonitorData[2] = delay:null;
+    bitrate ? qualityMonitorData[3] = bitrate:null;
+    codec_format ? qualityMonitorData[4] = codec_format:null;
+    qualityMonitor.update();
 }
 
 handler.setPermission = function(name, enabled) {
+    self.timer(60ms, function() {
     if (name == "keyboard") keyboard_enabled = enabled;
     if (name == "audio") audio_enabled = enabled;
+    if (name == "file") file_enabled = enabled;
     if (name == "clipboard") clipboard_enabled = enabled;
+    if (name == "restart") restart_enabled = enabled;
+    if (name == "recording") recording_enabled = enabled;
+    input_blocked = false;
     header.update();
+    });
 }
 
 handler.closeSuccess = function() {

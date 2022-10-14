@@ -1,6 +1,12 @@
-use crate::dxgi;
-use std::io::ErrorKind::{NotFound, TimedOut, WouldBlock};
-use std::{io, ops};
+use crate::{common::TraitCapturer, dxgi};
+use std::{
+    io::{
+        self,
+        ErrorKind::{NotFound, TimedOut, WouldBlock},
+    },
+    ops,
+    time::Duration,
+};
 
 pub struct Capturer {
     inner: dxgi::Capturer,
@@ -20,14 +26,6 @@ impl Capturer {
         })
     }
 
-    pub fn is_gdi(&self) -> bool {
-        self.inner.is_gdi()
-    }
-
-    pub fn set_gdi(&mut self) -> bool {
-        self.inner.set_gdi()
-    }
-
     pub fn cancel_gdi(&mut self) {
         self.inner.cancel_gdi()
     }
@@ -39,13 +37,27 @@ impl Capturer {
     pub fn height(&self) -> usize {
         self.height
     }
+}
 
-    pub fn frame<'a>(&'a mut self, timeout_ms: u32) -> io::Result<Frame<'a>> {
-        match self.inner.frame(timeout_ms) {
+impl TraitCapturer for Capturer {
+    fn set_use_yuv(&mut self, use_yuv: bool) {
+        self.inner.set_use_yuv(use_yuv);
+    }
+
+    fn frame<'a>(&'a mut self, timeout: Duration) -> io::Result<Frame<'a>> {
+        match self.inner.frame(timeout.as_millis() as _) {
             Ok(frame) => Ok(Frame(frame)),
             Err(ref error) if error.kind() == TimedOut => Err(WouldBlock.into()),
             Err(error) => Err(error),
         }
+    }
+
+    fn is_gdi(&self) -> bool {
+        self.inner.is_gdi()
+    }
+
+    fn set_gdi(&mut self) -> bool {
+        self.inner.set_gdi()
     }
 }
 
@@ -109,5 +121,50 @@ impl Display {
     pub fn is_primary(&self) -> bool {
         // https://docs.microsoft.com/en-us/windows/win32/api/wingdi/ns-wingdi-devmodea
         self.origin() == (0, 0)
+    }
+}
+
+pub struct CapturerMag {
+    inner: dxgi::mag::CapturerMag,
+    data: Vec<u8>,
+}
+
+impl CapturerMag {
+    pub fn is_supported() -> bool {
+        dxgi::mag::CapturerMag::is_supported()
+    }
+
+    pub fn new(origin: (i32, i32), width: usize, height: usize, use_yuv: bool) -> io::Result<Self> {
+        Ok(CapturerMag {
+            inner: dxgi::mag::CapturerMag::new(origin, width, height, use_yuv)?,
+            data: Vec::new(),
+        })
+    }
+
+    pub fn exclude(&mut self, cls: &str, name: &str) -> io::Result<bool> {
+        self.inner.exclude(cls, name)
+    }
+    // ((x, y), w, h)
+    pub fn get_rect(&self) -> ((i32, i32), usize, usize) {
+        self.inner.get_rect()
+    }
+}
+
+impl TraitCapturer for CapturerMag {
+    fn set_use_yuv(&mut self, use_yuv: bool) {
+        self.inner.set_use_yuv(use_yuv)
+    }
+
+    fn frame<'a>(&'a mut self, _timeout_ms: Duration) -> io::Result<Frame<'a>> {
+        self.inner.frame(&mut self.data)?;
+        Ok(Frame(&self.data))
+    }
+
+    fn is_gdi(&self) -> bool {
+        false
+    }
+
+    fn set_gdi(&mut self) -> bool {
+        false
     }
 }

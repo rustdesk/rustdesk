@@ -1,9 +1,8 @@
-use winapi;
-
 use self::winapi::ctypes::c_int;
-use self::winapi::shared::{minwindef::*, windef::*};
+use self::winapi::shared::{basetsd::ULONG_PTR, minwindef::*, windef::*};
 use self::winapi::um::winbase::*;
 use self::winapi::um::winuser::*;
+use winapi;
 
 use crate::win::keycodes::*;
 use crate::{Key, KeyboardControllable, MouseButton, MouseControllable};
@@ -16,6 +15,10 @@ extern "system" {
 /// The main struct for handling the event emitting
 #[derive(Default)]
 pub struct Enigo;
+static mut LAYOUT: HKL = std::ptr::null_mut();
+
+/// The dwExtraInfo value in keyboard and mouse structure that used in SendInput()
+pub const ENIGO_INPUT_EXTRA_VALUE: ULONG_PTR = 100;
 
 fn mouse_event(flags: u32, data: u32, dx: i32, dy: i32) -> DWORD {
     let mut input = INPUT {
@@ -27,7 +30,7 @@ fn mouse_event(flags: u32, data: u32, dx: i32, dy: i32) -> DWORD {
                 mouseData: data,
                 dwFlags: flags,
                 time: 0,
-                dwExtraInfo: 0,
+                dwExtraInfo: ENIGO_INPUT_EXTRA_VALUE,
             })
         },
     };
@@ -35,6 +38,18 @@ fn mouse_event(flags: u32, data: u32, dx: i32, dy: i32) -> DWORD {
 }
 
 fn keybd_event(flags: u32, vk: u16, scan: u16) -> DWORD {
+    let mut scan = scan;
+    unsafe {
+        // https://github.com/rustdesk/rustdesk/issues/366
+        if scan == 0 {
+            if LAYOUT.is_null() {
+                let current_window_thread_id =
+                    GetWindowThreadProcessId(GetForegroundWindow(), std::ptr::null_mut());
+                LAYOUT = GetKeyboardLayout(current_window_thread_id);
+            }
+            scan = MapVirtualKeyExW(vk as _, 0, LAYOUT) as _;
+        }
+    }
     let mut input = INPUT {
         type_: INPUT_KEYBOARD,
         u: unsafe {
@@ -43,7 +58,7 @@ fn keybd_event(flags: u32, vk: u16, scan: u16) -> DWORD {
                 wScan: scan,
                 dwFlags: flags,
                 time: 0,
-                dwExtraInfo: 0,
+                dwExtraInfo: ENIGO_INPUT_EXTRA_VALUE,
             })
         },
     };
@@ -182,7 +197,11 @@ impl KeyboardControllable for Enigo {
     }
 
     fn key_down(&mut self, key: Key) -> crate::ResultType {
-        let res = keybd_event(0, self.key_to_keycode(key), 0);
+        let code = self.key_to_keycode(key);
+        if code == 0 || code == 65535 {
+            return Err("".into());
+        }
+        let res = keybd_event(0, code, 0);
         if res == 0 {
             let err = get_error();
             if !err.is_empty() {
@@ -207,7 +226,8 @@ impl KeyboardControllable for Enigo {
 }
 
 impl Enigo {
-    /// Gets the (width, height) of the main display in screen coordinates (pixels).
+    /// Gets the (width, height) of the main display in screen coordinates
+    /// (pixels).
     ///
     /// # Example
     ///
@@ -253,6 +273,9 @@ impl Enigo {
     }
 
     fn key_to_keycode(&self, key: Key) -> u16 {
+        unsafe {
+            LAYOUT = std::ptr::null_mut();
+        }
         // do not use the codes from crate winapi they're
         // wrongly typed with i32 instead of i16 use the
         // ones provided by win/keycodes.rs that are prefixed
@@ -347,11 +370,19 @@ impl Enigo {
         // get the first char from the string ignore the rest
         // ensure its not a multybyte char
         if let Some(chr) = string.chars().nth(0) {
-            // NOTE VkKeyScanW uses the current keyboard layout
-            // to specify a layout use VkKeyScanExW and GetKeyboardLayout
+            // NOTE VkKeyScanW uses the current keyboard LAYOUT
+            // to specify a LAYOUT use VkKeyScanExW and GetKeyboardLayout
             // or load one with LoadKeyboardLayoutW
-            let keycode_and_shiftstate = unsafe { VkKeyScanW(chr as _) };
-            keycode_and_shiftstate as _
+            let current_window_thread_id =
+                unsafe { GetWindowThreadProcessId(GetForegroundWindow(), std::ptr::null_mut()) };
+            unsafe { LAYOUT = GetKeyboardLayout(current_window_thread_id) };
+            let keycode_and_shiftstate = unsafe { VkKeyScanExW(chr as _, LAYOUT) };
+            if keycode_and_shiftstate == (EVK_DECIMAL as i16) && chr == '.' {
+                // a workaround of italian keyboard shift + '.' issue
+                EVK_PERIOD as _
+            } else {
+                keycode_and_shiftstate as _
+            }
         } else {
             0
         }

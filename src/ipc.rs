@@ -1,21 +1,38 @@
-use hbb_common::{
-    allow_err, bail, bytes,
-    bytes_codec::BytesCodec,
-    config::{self, Config},
-    futures::StreamExt as _,
-    futures_util::sink::SinkExt,
-    log, timeout, tokio,
-    tokio::io::{AsyncRead, AsyncWrite},
-    tokio_util::codec::Framed,
-    ResultType,
-};
+use std::{collections::HashMap, sync::atomic::Ordering};
+#[cfg(not(windows))]
+use std::{fs::File, io::prelude::*};
+
+use bytes::Bytes;
 use parity_tokio_ipc::{
     Connection as Conn, ConnectionClient as ConnClient, Endpoint, Incoming, SecurityAttributes,
 };
 use serde_derive::{Deserialize, Serialize};
-use std::{collections::HashMap, net::SocketAddr};
-#[cfg(not(windows))]
-use std::{fs::File, io::prelude::*};
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub use clipboard::ClipbaordFile;
+use hbb_common::{
+    allow_err, bail, bytes,
+    bytes_codec::BytesCodec,
+    config::{self, Config, Config2},
+    futures::StreamExt as _,
+    futures_util::sink::SinkExt,
+    log, password_security as password, timeout, tokio,
+    tokio::io::{AsyncRead, AsyncWrite},
+    tokio_util::codec::Framed,
+    ResultType,
+};
+
+use crate::rendezvous_mediator::RendezvousMediator;
+
+// State with timestamp, because std::time::Instant cannot be serialized
+#[derive(Debug, Serialize, Deserialize, Copy, Clone)]
+#[serde(tag = "t", content = "c")]
+pub enum PrivacyModeState {
+    OffSucceeded,
+    OffFailed,
+    OffByPeer,
+    OffUnknown,
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "t", content = "c")]
@@ -41,7 +58,9 @@ pub enum FS {
     NewWrite {
         path: String,
         id: i32,
+        file_num: i32,
         files: Vec<(String, u64)>,
+        overwrite_detection: bool,
     },
     CancelWrite {
         id: i32,
@@ -49,12 +68,65 @@ pub enum FS {
     WriteBlock {
         id: i32,
         file_num: i32,
-        data: Vec<u8>,
+        data: Bytes,
         compressed: bool,
     },
     WriteDone {
         id: i32,
         file_num: i32,
+    },
+    WriteOffset {
+        id: i32,
+        file_num: i32,
+        offset_blk: u32,
+    },
+    CheckDigest {
+        id: i32,
+        file_num: i32,
+        file_size: u64,
+        last_modified: u64,
+        is_upload: bool,
+    },
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(tag = "t", content = "c")]
+pub enum DataKeyboard {
+    Sequence(String),
+    KeyDown(enigo::Key),
+    KeyUp(enigo::Key),
+    KeyClick(enigo::Key),
+    GetKeyState(enigo::Key),
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(tag = "t", content = "c")]
+pub enum DataKeyboardResponse {
+    GetKeyState(bool),
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(tag = "t", content = "c")]
+pub enum DataMouse {
+    MoveTo(i32, i32),
+    MoveRelative(i32, i32),
+    Down(enigo::MouseButton),
+    Up(enigo::MouseButton),
+    Click(enigo::MouseButton),
+    ScrollX(i32),
+    ScrollY(i32),
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(tag = "t", content = "c")]
+pub enum DataControl {
+    Resolution {
+        minx: i32,
+        maxx: i32,
+        miny: i32,
+        maxy: i32,
     },
 }
 
@@ -71,6 +143,10 @@ pub enum Data {
         keyboard: bool,
         clipboard: bool,
         audio: bool,
+        file: bool,
+        file_transfer_enabled: bool,
+        restart: bool,
+        recording: bool,
     },
     ChatMessage {
         text: String,
@@ -80,6 +156,8 @@ pub enum Data {
         enabled: bool,
     },
     SystemInfo(Option<String>),
+    ClickTime(i64),
+    MouseMoveTime(i64),
     Authorize,
     Close,
     SAS,
@@ -89,8 +167,26 @@ pub enum Data {
     NatType(Option<i32>),
     ConfirmedKey(Option<(Vec<u8>, Vec<u8>)>),
     RawMessage(Vec<u8>),
+    Socks(Option<config::Socks5Server>),
     FS(FS),
     Test,
+    SyncConfig(Option<(Config, Config2)>),
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    ClipbaordFile(ClipbaordFile),
+    ClipboardFileEnabled(bool),
+    PrivacyModeState((i32, PrivacyModeState)),
+    TestRendezvousServer,
+    #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
+    Keyboard(DataKeyboard),
+    #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
+    KeyboardResponse(DataKeyboardResponse),
+    #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
+    Mouse(DataMouse),
+    Control(DataControl),
+    Theme(String),
+    Language(String),
+    Empty,
+    Disconnected,
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -157,6 +253,30 @@ pub async fn new_listener(postfix: &str) -> ResultType<Incoming> {
     }
 }
 
+pub struct CheckIfRestart(String, Vec<String>, String);
+
+impl CheckIfRestart {
+    pub fn new() -> CheckIfRestart {
+        CheckIfRestart(
+            Config::get_option("stop-service"),
+            Config::get_rendezvous_servers(),
+            Config::get_option("audio-input"),
+        )
+    }
+}
+impl Drop for CheckIfRestart {
+    fn drop(&mut self) {
+        if self.0 != Config::get_option("stop-service")
+            || self.1 != Config::get_rendezvous_servers()
+        {
+            RendezvousMediator::restart();
+        }
+        if self.2 != Config::get_option("audio-input") {
+            crate::audio_service::restart();
+        }
+    }
+}
+
 async fn handle(data: Data, stream: &mut Connection) {
     match data {
         Data::SystemInfo(_) => {
@@ -168,8 +288,17 @@ async fn handle(data: Data, stream: &mut Connection) {
             );
             allow_err!(stream.send(&Data::SystemInfo(Some(info))).await);
         }
+        Data::ClickTime(_) => {
+            let t = crate::server::CLICK_TIME.load(Ordering::SeqCst);
+            allow_err!(stream.send(&Data::ClickTime(t)).await);
+        }
+        Data::MouseMoveTime(_) => {
+            let t = crate::server::MOUSE_MOVE_TIME.load(Ordering::SeqCst);
+            allow_err!(stream.send(&Data::MouseMoveTime(t)).await);
+        }
         Data::Close => {
             log::info!("Receive close message");
+            #[cfg(not(target_os = "android"))]
             crate::server::input_service::fix_key_down_timeout_at_exit();
             std::process::exit(0);
         }
@@ -192,17 +321,40 @@ async fn handle(data: Data, stream: &mut Connection) {
             };
             allow_err!(stream.send(&Data::ConfirmedKey(out)).await);
         }
+        Data::Socks(s) => match s {
+            None => {
+                allow_err!(stream.send(&Data::Socks(Config::get_socks())).await);
+            }
+            Some(data) => {
+                if data.proxy.is_empty() {
+                    Config::set_socks(None);
+                } else {
+                    Config::set_socks(Some(data));
+                }
+                crate::common::test_nat_type();
+                RendezvousMediator::restart();
+                log::info!("socks updated");
+            }
+        },
         Data::Config((name, value)) => match value {
             None => {
                 let value;
                 if name == "id" {
                     value = Some(Config::get_id());
-                } else if name == "password" {
-                    value = Some(Config::get_password());
+                } else if name == "temporary-password" {
+                    value = Some(password::temporary_password());
+                } else if name == "permanent-password" {
+                    value = Some(Config::get_permanent_password());
                 } else if name == "salt" {
                     value = Some(Config::get_salt());
                 } else if name == "rendezvous_server" {
-                    value = Some(Config::get_rendezvous_server().to_string());
+                    value = Some(format!(
+                        "{},{}",
+                        Config::get_rendezvous_server(),
+                        Config::get_rendezvous_servers().join(",")
+                    ));
+                } else if name == "rendezvous_servers" {
+                    value = Some(Config::get_rendezvous_servers().join(","));
                 } else {
                     value = None;
                 }
@@ -210,9 +362,12 @@ async fn handle(data: Data, stream: &mut Connection) {
             }
             Some(value) => {
                 if name == "id" {
+                    Config::set_key_confirmed(false);
                     Config::set_id(&value);
-                } else if name == "password" {
-                    Config::set_password(&value);
+                } else if name == "temporary-password" {
+                    password::update_temporary_password();
+                } else if name == "permanent-password" {
+                    Config::set_permanent_password(&value);
                 } else if name == "salt" {
                     Config::set_salt(&value);
                 } else {
@@ -227,12 +382,30 @@ async fn handle(data: Data, stream: &mut Connection) {
                 allow_err!(stream.send(&Data::Options(Some(v))).await);
             }
             Some(value) => {
+                let _chk = CheckIfRestart::new();
                 Config::set_options(value);
+                allow_err!(stream.send(&Data::Options(None)).await);
             }
         },
         Data::NatType(_) => {
             let t = Config::get_nat_type();
             allow_err!(stream.send(&Data::NatType(Some(t))).await);
+        }
+        Data::SyncConfig(Some((config, config2))) => {
+            let _chk = CheckIfRestart::new();
+            Config::set(config);
+            Config2::set(config2);
+            allow_err!(stream.send(&Data::SyncConfig(None)).await);
+        }
+        Data::SyncConfig(None) => {
+            allow_err!(
+                stream
+                    .send(&Data::SyncConfig(Some((Config::get(), Config2::get()))))
+                    .await
+            );
+        }
+        Data::TestRendezvousServer => {
+            crate::test_rendezvous_server();
         }
         _ => {}
     }
@@ -242,6 +415,83 @@ pub async fn connect(ms_timeout: u64, postfix: &str) -> ResultType<ConnectionTmp
     let path = Config::ipc_path(postfix);
     let client = timeout(ms_timeout, Endpoint::connect(&path)).await??;
     Ok(ConnectionTmpl::new(client))
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::main(flavor = "current_thread")]
+pub async fn start_pa() {
+    use crate::audio_service::AUDIO_DATA_SIZE_U8;
+
+    match new_listener("_pa").await {
+        Ok(mut incoming) => {
+            loop {
+                if let Some(result) = incoming.next().await {
+                    match result {
+                        Ok(stream) => {
+                            let mut stream = Connection::new(stream);
+                            let mut device: String = "".to_owned();
+                            if let Some(Ok(Some(Data::Config((_, Some(x)))))) =
+                                stream.next_timeout2(1000).await
+                            {
+                                device = x;
+                            }
+                            if !device.is_empty() {
+                                device = crate::platform::linux::get_pa_source_name(&device);
+                            }
+                            if device.is_empty() {
+                                device = crate::platform::linux::get_pa_monitor();
+                            }
+                            if device.is_empty() {
+                                continue;
+                            }
+                            let spec = pulse::sample::Spec {
+                                format: pulse::sample::Format::F32le,
+                                channels: 2,
+                                rate: crate::platform::PA_SAMPLE_RATE,
+                            };
+                            log::info!("pa monitor: {:?}", device);
+                            // systemctl --user status pulseaudio.service
+                            let mut buf: Vec<u8> = vec![0; AUDIO_DATA_SIZE_U8];
+                            match psimple::Simple::new(
+                                None,                             // Use the default server
+                                &crate::get_app_name(),           // Our application’s name
+                                pulse::stream::Direction::Record, // We want a record stream
+                                Some(&device),                    // Use the default device
+                                "record",                         // Description of our stream
+                                &spec,                            // Our sample format
+                                None,                             // Use default channel map
+                                None, // Use default buffering attributes
+                            ) {
+                                Ok(s) => loop {
+                                    if let Ok(_) = s.read(&mut buf) {
+                                        let out =
+                                            if buf.iter().filter(|x| **x != 0).next().is_none() {
+                                                vec![]
+                                            } else {
+                                                buf.clone()
+                                            };
+                                        if let Err(err) = stream.send_raw(out.into()).await {
+                                            log::error!("Failed to send audio data:{}", err);
+                                            break;
+                                        }
+                                    }
+                                },
+                                Err(err) => {
+                                    log::error!("Could not create simple pulse: {}", err);
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            log::error!("Couldn't get pa client: {:?}", err);
+                        }
+                    }
+                }
+            }
+        }
+        Err(err) => {
+            log::error!("Failed to start pa ipc server: {}", err);
+        }
+    }
 }
 
 #[inline]
@@ -259,10 +509,12 @@ async fn check_pid(postfix: &str) {
         file.read_to_string(&mut content).ok();
         let pid = content.parse::<i32>().unwrap_or(0);
         if pid > 0 {
-            if let Ok(p) = psutil::process::Process::new(pid as _) {
-                if let Ok(current) = psutil::process::Process::current() {
-                    if current.name().unwrap_or("".to_owned()) == p.name().unwrap_or("".to_owned())
-                    {
+            use sysinfo::{ProcessExt, System, SystemExt};
+            let mut sys = System::new();
+            sys.refresh_processes();
+            if let Some(p) = sys.process(pid.into()) {
+                if let Some(current) = sys.process((std::process::id() as i32).into()) {
+                    if current.name() == p.name() {
                         // double check with connect
                         if connect(1000, postfix).await.is_ok() {
                             return;
@@ -342,6 +594,20 @@ where
             }
         }
     }
+
+    pub async fn send_raw(&mut self, data: Bytes) -> ResultType<()> {
+        self.inner.send(data).await?;
+        Ok(())
+    }
+
+    pub async fn next_raw(&mut self) -> ResultType<bytes::BytesMut> {
+        match self.inner.next().await {
+            Some(Ok(res)) => Ok(res),
+            _ => {
+                bail!("reset by the peer");
+            }
+        }
+    }
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -360,16 +626,33 @@ async fn get_config_async(name: &str, ms_timeout: u64) -> ResultType<Option<Stri
     return Ok(None);
 }
 
-#[tokio::main(flavor = "current_thread")]
-async fn set_config(name: &str, value: String) -> ResultType<()> {
+pub async fn set_config_async(name: &str, value: String) -> ResultType<()> {
     let mut c = connect(1000, "").await?;
     c.send_config(name, value).await?;
     Ok(())
 }
 
-pub fn set_password(v: String) -> ResultType<()> {
-    Config::set_password(&v);
-    set_config("password", v)
+#[tokio::main(flavor = "current_thread")]
+pub async fn set_config(name: &str, value: String) -> ResultType<()> {
+    set_config_async(name, value).await
+}
+
+pub fn update_temporary_password() -> ResultType<()> {
+    set_config("temporary-password", "".to_owned())
+}
+
+pub fn get_permanent_password() -> String {
+    if let Ok(Some(v)) = get_config("permanent-password") {
+        Config::set_permanent_password(&v);
+        v
+    } else {
+        Config::get_permanent_password()
+    }
+}
+
+pub fn set_permanent_password(v: String) -> ResultType<()> {
+    Config::set_permanent_password(&v);
+    set_config("permanent-password", v)
 }
 
 pub fn get_id() -> String {
@@ -388,22 +671,18 @@ pub fn get_id() -> String {
     }
 }
 
-pub fn get_password() -> String {
-    if let Ok(Some(v)) = get_config("password") {
-        Config::set_password(&v);
-        v
-    } else {
-        Config::get_password()
-    }
-}
-
-pub async fn get_rendezvous_server(ms_timeout: u64) -> SocketAddr {
+pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>) {
     if let Ok(Some(v)) = get_config_async("rendezvous_server", ms_timeout).await {
-        if let Ok(v) = v.parse() {
-            return v;
-        }
+        let mut urls = v.split(",");
+        let a = urls.next().unwrap_or_default().to_owned();
+        let b: Vec<String> = urls.map(|x| x.to_owned()).collect();
+        (a, b)
+    } else {
+        (
+            Config::get_rendezvous_server(),
+            Config::get_rendezvous_servers(),
+        )
     }
-    return Config::get_rendezvous_server();
 }
 
 async fn get_options_(ms_timeout: u64) -> ResultType<HashMap<String, String>> {
@@ -417,13 +696,17 @@ async fn get_options_(ms_timeout: u64) -> ResultType<HashMap<String, String>> {
     }
 }
 
-#[tokio::main(flavor = "current_thread")]
-pub async fn get_options() -> HashMap<String, String> {
+pub async fn get_options_async() -> HashMap<String, String> {
     get_options_(1000).await.unwrap_or(Config::get_options())
 }
 
-pub fn get_option(key: &str) -> String {
-    if let Some(v) = get_options().get(key) {
+#[tokio::main(flavor = "current_thread")]
+pub async fn get_options() -> HashMap<String, String> {
+    get_options_async().await
+}
+
+pub async fn get_option_async(key: &str) -> String {
+    if let Some(v) = get_options_async().await.get(key) {
         v.clone()
     } else {
         "".to_owned()
@@ -442,11 +725,12 @@ pub fn set_option(key: &str, value: &str) {
 
 #[tokio::main(flavor = "current_thread")]
 pub async fn set_options(value: HashMap<String, String>) -> ResultType<()> {
-    Config::set_options(value.clone());
-    connect(1000, "")
-        .await?
-        .send(&Data::Options(Some(value)))
-        .await?;
+    if let Ok(mut c) = connect(1000, "").await {
+        c.send(&Data::Options(Some(value.clone()))).await?;
+        // do not put below before connect, because we need to check should_exit
+        c.next_timeout(1000).await.ok();
+    }
+    Config::set_options(value);
     Ok(())
 }
 
@@ -468,62 +752,51 @@ pub async fn get_nat_type(ms_timeout: u64) -> i32 {
         .unwrap_or(Config::get_nat_type())
 }
 
-/*
-static mut SHARED_MEMORY: *mut i64 = std::ptr::null_mut();
+pub async fn get_rendezvous_servers(ms_timeout: u64) -> Vec<String> {
+    if let Ok(Some(v)) = get_config_async("rendezvous_servers", ms_timeout).await {
+        return v.split(',').map(|x| x.to_owned()).collect();
+    }
+    return Config::get_rendezvous_servers();
+}
 
-pub fn initialize_shared_memory(create: bool) {
-    let mut shmem_flink = "shared-memory".to_owned();
-    if cfg!(windows) {
-        let df = "C:\\ProgramData";
-        let df = if std::path::Path::new(df).exists() {
-            df.to_owned()
-        } else {
-            std::env::var("TEMP").unwrap_or("C:\\Windows\\TEMP".to_owned())
-        };
-        let df = format!("{}\\{}", df, *hbb_common::config::APP_NAME.read().unwrap());
-        std::fs::create_dir(&df).ok();
-        shmem_flink = format!("{}\\{}", df, shmem_flink);
+#[inline]
+async fn get_socks_(ms_timeout: u64) -> ResultType<Option<config::Socks5Server>> {
+    let mut c = connect(ms_timeout, "").await?;
+    c.send(&Data::Socks(None)).await?;
+    if let Some(Data::Socks(value)) = c.next_timeout(ms_timeout).await? {
+        Config::set_socks(value.clone());
+        Ok(value)
     } else {
-        shmem_flink = Config::ipc_path("").replace("ipc", "") + &shmem_flink;
-    }
-    use shared_memory::*;
-    let shmem = if create {
-        match ShmemConf::new()
-            .force_create_flink()
-            .size(16)
-            .flink(&shmem_flink)
-            .create()
-        {
-            Err(ShmemError::LinkExists) => ShmemConf::new().flink(&shmem_flink).open(),
-            Ok(m) => Ok(m),
-            Err(e) => Err(e),
-        }
-    } else {
-        ShmemConf::new().flink(&shmem_flink).open()
-    };
-    if create {
-        set_all_perm(&shmem_flink);
-    }
-    match shmem {
-        Ok(shmem) => unsafe {
-            SHARED_MEMORY = shmem.as_ptr() as *mut i64;
-            std::mem::forget(shmem);
-        },
-        Err(err) => {
-            log::error!(
-                "Unable to create or open shmem flink {} : {}",
-                shmem_flink,
-                err
-            );
-        }
+        Ok(Config::get_socks())
     }
 }
 
-fn set_all_perm(p: &str) {
-    #[cfg(not(windows))]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(p, std::fs::Permissions::from_mode(0o0777)).ok();
-    }
+pub async fn get_socks_async(ms_timeout: u64) -> Option<config::Socks5Server> {
+    get_socks_(ms_timeout).await.unwrap_or(Config::get_socks())
 }
-*/
+
+#[tokio::main(flavor = "current_thread")]
+pub async fn get_socks() -> Option<config::Socks5Server> {
+    get_socks_async(1_000).await
+}
+
+#[tokio::main(flavor = "current_thread")]
+pub async fn set_socks(value: config::Socks5Server) -> ResultType<()> {
+    Config::set_socks(if value.proxy.is_empty() {
+        None
+    } else {
+        Some(value.clone())
+    });
+    connect(1_000, "")
+        .await?
+        .send(&Data::Socks(Some(value)))
+        .await?;
+    Ok(())
+}
+
+#[tokio::main(flavor = "current_thread")]
+pub async fn test_rendezvous_server() -> ResultType<()> {
+    let mut c = connect(1000, "").await?;
+    c.send(&Data::TestRendezvousServer).await?;
+    Ok(())
+}

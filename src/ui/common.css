@@ -4,10 +4,12 @@ html {
     var(gray-bg): #eee;
     var(bg): white;
     var(border): #ccc;
+    var(hover-border): #999;
     var(text): #222;
     var(placeholder): #aaa;
     var(lighter-text): #888;
     var(light-text): #666;
+    var(menu-hover): #D7E4F2;
     var(dark-red): #A72145;
     var(dark-yellow): #FBC732;
     var(dark-blue): #2E2459;
@@ -17,6 +19,18 @@ html {
     var(light-green): #D4EAB7;
     var(dark-green): #5CB85C;
     var(blood-red): #F82600;
+}
+
+html.darktheme {
+    var(bg): #252525;
+    var(gray-bg): #141414;
+    var(menu-hover): #2D3033;
+    var(border): #555;
+
+    var(text): white;
+    var(light-text): #999;
+    var(lighter-text): #777;
+    var(placeholder): #555;
 }
 
 body {
@@ -52,13 +66,27 @@ button.button:active, button.active {
     border-color: color(accent);
 }
 
+button.button:hover, button.outline:hover {
+  border-color: color(hover-border);
+}
+
+button.link {
+  background: none !important;
+  border: none;
+  padding: 0 !important;
+  color: color(button);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 input[type=text], input[type=password], input[type=number] {
     width: *;
     font-size: 1.5em;
     border-color: color(border);
     border-radius: 0;
-    color: black;
+    color: color(text);
     padding-left: 0.5em;
+    background: color(bg);
 }
 
 input:empty {
@@ -67,6 +95,15 @@ input:empty {
 
 input.outline-focus:focus {
     outline: color(button) solid 3px;
+}
+
+textarea {
+    background: color(bg);
+    color: color(text);
+}
+
+textarea:empty {
+    color: color(placeholder);
 }
 
 @set my-scrollbar
@@ -83,17 +120,16 @@ input.outline-focus:focus {
 }
 
 @mixin ELLIPSIS {
-    overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    overflow-x: hidden;
 }
 
 .ellipsis {
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  @ELLIPSIS;
 }
 
-div.password svg {
+div.password svg:not(.checkmark) {
     padding-left: 1em;
     size: 16px;
     color: #ddd;
@@ -156,9 +192,7 @@ header caption {
     top: 0;
     padding: 0 10px;
     width: 22px;
-    height: *;
     position: absolute;
-    margin: 0;
     color: black;
     border: none;
     background: none;
@@ -207,24 +241,24 @@ header caption {
 }
 }
 
-div.msgbox {
+div.chatbox {
   size: *;
 }
 
-div.msgbox div.send svg {
+div.chatbox div.send svg {
   size: 16px;
 }
 
-div.msgbox div.send span:active {
+div.chatbox div.send span:active {
   opacity: 0.5;
 }
 
-div.msgbox div.send span {
+div.chatbox div.send span {
   display: inline-block;
   padding: 6px;
 }
 
-div.msgbox .msgs {
+div.chatbox .msgs {
   border: none;
   size: *;
   border-bottom: color(border) 1px solid;
@@ -234,28 +268,26 @@ div.msgbox .msgs {
   padding: 1em;
 }
 
-div.msgbox div.send {
+div.chatbox div.send {
   flow: horizontal;
   height: 30px;
   padding: 5px;
 }
 
-div.msgbox div.send input {
+div.chatbox div.send input {
   height: 20px !important;
 }
 
-div.msgbox div.name {
+div.chatbox div.name {
   color: color(dark-green);
 }
 
-div.msgbox div.right-side div {
+div.chatbox div.right-side div {
   text-align: right;
 }
 
-div.msgbox div.text {
+div.chatbox div.text {
     margin-top: 0.5em;
-    word-wrap: break-word;
-    word-break: break-all;
 }
 
 @media platform != "OSX" {
@@ -287,6 +319,10 @@ progress {
     background: transparent;
 }
 
+menu {
+  background: color(bg);
+}
+
 menu div.separator {
   height: 1px;
   width: *;
@@ -296,6 +332,7 @@ menu div.separator {
 }
 
 menu li {
+  color: color(text);
   position: relative;
 }
 
@@ -303,7 +340,7 @@ menu li span {
   display: none;
 }
 
-menu li.selected span {
+menu li.selected span:nth-child(1) {
   display: inline-block;
   position: absolute;
   left: -10px;
@@ -319,7 +356,103 @@ menu li.selected span {
   opacity: 0.5;
 }
 
-menu li.line-through {
+menu li:hover {
+  background: color(menu-hover);
+  color: color(text);
+}
+
+menu li.line-through, menu li.line-through :hover {
   text-decoration-line: line-through;
-  color: grey;
+  color: red;
+}
+
+#tags {
+    border: color(border) 1px solid;
+    size: *;
+    padding: 0.5em;
+    overflow-y: scroll-indicator;
+    border-spacing: 0.5em;
+    flow: horizontal-flow;
+}
+
+#tags span {
+    display: inline-block;
+    border: color(border) 1px solid;
+    border-radius: 6px;
+    padding: 3px 0.5em;
+    word-wrap: normal;
+}
+
+#tags span.active {
+    background: color(button);
+    border-color: color(button);
+    color: white;
+}
+
+#tags span:hover {
+    border-color: color(hover-border);
+}
+
+div#msgbox .msgbox-icon svg {
+  size: 80px;
+  background: white;
+
+}
+
+div#msgbox .form {
+  border-spacing: 0.5em;
+}
+
+div#msgbox .caption {
+  @ELLIPSIS;
+  height: 2em;
+  line-height: 2em;
+  text-align: center;
+  color: color(bg);
+  font-weight: bold;
+}
+
+div#msgbox .form .text {
+  @ELLIPSIS;
+}
+
+div#msgbox button.button {
+  margin-left: 1.6em;
+}
+
+div#msgbox div.password {
+  position: relative;
+}
+
+div#msgbox div.password svg {
+  position: absolute;
+  right: 0.25em;
+  top: 0.25em;
+  padding: 0.5em;
+  color: color(text);
+}
+
+div#msgbox div.set-password > div {
+  flow: horizontal;
+}
+
+div#msgbox div.set-password > div > span {
+  width: 30%;
+  line-height: 2em;
+}
+
+div#msgbox div.set-password div.password {
+  width: *;
+}
+
+div#msgbox div.set-password div > input {
+  width: *;
+}
+
+div#msgbox div.set-password input {
+  font-size: 1em;
+}
+
+div#msgbox #error {
+  color: red;
 }

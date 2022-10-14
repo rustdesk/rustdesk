@@ -1,5 +1,6 @@
 use super::*;
 use std::{
+    collections::HashSet,
     thread::{self, JoinHandle},
     time,
 };
@@ -88,7 +89,12 @@ impl<T: Subscriber + From<ConnInner>> Service for ServiceTmpl<T> {
 
     fn join(&self) {
         self.0.write().unwrap().active = false;
-        self.0.write().unwrap().handle.take().map(JoinHandle::join);
+        let handle = self.0.write().unwrap().handle.take();
+        if let Some(handle) = handle {
+            if let Err(e) = handle.join() {
+                log::error!("Failed to join thread for service {}, {:?}", self.name(), e);
+            }
+        }
     }
 }
 
@@ -136,11 +142,41 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
         self.send_shared(Arc::new(msg));
     }
 
+    pub fn send_to(&self, msg: Message, id: i32) {
+        if let Some(s) = self.0.write().unwrap().subscribes.get_mut(&id) {
+            s.send(Arc::new(msg));
+        }
+    }
+
+    pub fn send_to_others(&self, msg: Message, id: i32) {
+        let msg = Arc::new(msg);
+        let mut lock = self.0.write().unwrap();
+        for (sid, s) in lock.subscribes.iter_mut() {
+            if *sid != id {
+                s.send(msg.clone());
+            }
+        }
+    }
+
     pub fn send_shared(&self, msg: Arc<Message>) {
         let mut lock = self.0.write().unwrap();
         for s in lock.subscribes.values_mut() {
             s.send(msg.clone());
         }
+    }
+
+    pub fn send_video_frame(&self, msg: Message) -> HashSet<i32> {
+        self.send_video_frame_shared(Arc::new(msg))
+    }
+
+    pub fn send_video_frame_shared(&self, msg: Arc<Message>) -> HashSet<i32> {
+        let mut conn_ids = HashSet::new();
+        let mut lock = self.0.write().unwrap();
+        for s in lock.subscribes.values_mut() {
+            s.send(msg.clone());
+            conn_ids.insert(s.id());
+        }
+        conn_ids
     }
 
     pub fn send_without(&self, msg: Message, sub: i32) {
@@ -163,6 +199,7 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
         let sp = self.clone();
         let thread = thread::spawn(move || {
             let mut state = S::default();
+            let mut may_reset = false;
             while sp.active() {
                 let now = time::Instant::now();
                 if sp.has_subscribes() {
@@ -172,8 +209,12 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
                         #[cfg(windows)]
                         crate::platform::windows::try_change_desktop();
                     }
-                } else {
+                    if !may_reset {
+                        may_reset = true;
+                    }
+                } else if may_reset {
                     state.reset();
+                    may_reset = false;
                 }
                 let elapsed = now.elapsed();
                 if elapsed < interval {

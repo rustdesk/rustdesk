@@ -1,4 +1,4 @@
-pub use self::codec::*;
+pub use self::vpxcodec::*;
 
 cfg_if! {
     if #[cfg(quartz)] {
@@ -11,6 +11,7 @@ cfg_if! {
         mod wayland;
         mod x11;
         pub use self::linux::*;
+        pub use self::x11::Frame;
             } else {
                 mod x11;
                 pub use self::x11::*;
@@ -19,14 +20,51 @@ cfg_if! {
     } else if #[cfg(dxgi)] {
         mod dxgi;
         pub use self::dxgi::*;
-    } else {
+    } else if #[cfg(target_os = "android")] {
+        mod android;
+        pub use self::android::*;
+    }else {
         //TODO: Fallback implementation.
     }
 }
 
 pub mod codec;
 mod convert;
+#[cfg(feature = "hwcodec")]
+pub mod hwcodec;
+#[cfg(feature = "mediacodec")]
+pub mod mediacodec;
+pub mod vpxcodec;
 pub use self::convert::*;
-pub const STRIDE_ALIGN: usize = 16; // commonly used in libvpx vpx_img_alloc caller
+pub const STRIDE_ALIGN: usize = 64; // commonly used in libvpx vpx_img_alloc caller
+pub const HW_STRIDE_ALIGN: usize = 0; // recommended by av_frame_get_buffer
 
+pub mod record;
 mod vpx;
+
+#[inline]
+pub fn would_block_if_equal(old: &mut Vec<u128>, b: &[u8]) -> std::io::Result<()> {
+    let b = unsafe { std::slice::from_raw_parts::<u128>(b.as_ptr() as _, b.len() / 16) };
+    if b == &old[..] {
+        return Err(std::io::ErrorKind::WouldBlock.into());
+    }
+    old.resize(b.len(), 0);
+    old.copy_from_slice(b);
+    Ok(())
+}
+
+pub trait TraitCapturer {
+    fn set_use_yuv(&mut self, use_yuv: bool);
+    fn frame<'a>(&'a mut self, timeout: std::time::Duration) -> std::io::Result<Frame<'a>>;
+
+    #[cfg(windows)]
+    fn is_gdi(&self) -> bool;
+    #[cfg(windows)]
+    fn set_gdi(&mut self) -> bool;
+}
+
+#[cfg(x11)]
+#[inline]
+pub fn is_x11() -> bool {
+    "x11" == hbb_common::platform::linux::get_display_server()
+}

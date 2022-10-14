@@ -13,7 +13,10 @@ class Body: Reactor.Component
     }
 
     function render() {
-        if (connections.length == 0) return <div />;
+        if (connections.length == 0)
+          return <div style="size:*; margin: * 0; text-align: center;">
+                Waiting for new connection ...
+                </div>;
         var c = connections[this.cur];
         this.connection = c;
         this.cid = c.id;
@@ -22,9 +25,10 @@ class Body: Reactor.Component
         var callback = function(msg) {
             me.sendMsg(msg);
         };
-        self.timer(1ms, adaptSize);
         var right_style = show_chat ? "" : "display: none";
-        return <div .content>
+        var disconnected = c.disconnected;
+       // below size:* is work around for Linux, it alreayd set in css, but not work, shit sciter
+        return <div .content style="size:*">
             <div .left-panel>
                 <div .icon-and-id>
                     <div .icon style={"background: " + string2RGB(c.name, 1)}>
@@ -33,22 +37,28 @@ class Body: Reactor.Component
                     <div>
                         <div .id style="font-weight: bold; font-size: 1.2em;">{c.name}</div>
                         <div .id>({c.peer_id})</div>
-                        <div style="margin-top: 1.2em">Connected <span #time>{getElaspsed(c.time)}</span></div>
+                        <div style="margin-top: 1.2em">{disconnected ? translate('Disconnected') : translate('Connected')} {" "} <span #time>{getElaspsed(c.time, c.now)}</span></div>
                     </div>
                 </div>
                 <div />
-                {c.is_file_transfer || c.port_forward ? "" : <div>Permissions</div>}
-                {c.is_file_transfer || c.port_forward ? "" : <div .permissions>
-                    <div class={!c.keyboard ? "disabled" : ""} title="Allow using keyboard and mouse"><icon .keyboard /></div>
-                    <div class={!c.clipboard ? "disabled" : ""} title="Allow using clipboard"><icon .clipboard /></div>
-                    <div class={!c.audio ? "disabled" : ""} title="Allow hearing sound"><icon .audio /></div>
-                </div>}
+                {c.is_file_transfer || c.port_forward || disconnected ? "" : <div>{translate('Permissions')}</div>}
+                {c.is_file_transfer || c.port_forward || disconnected ? "" : <div> <div .permissions>
+                    <div class={!c.keyboard ? "disabled" : ""} title={translate('Allow using keyboard and mouse')}><icon .keyboard /></div>
+                    <div class={!c.clipboard ? "disabled" : ""} title={translate('Allow using clipboard')}><icon .clipboard /></div>
+                    <div class={!c.audio ? "disabled" : ""} title={translate('Allow hearing sound')}><icon .audio /></div>
+                    <div class={!c.file ? "disabled" : ""} title={translate('Allow file copy and paste')}><icon .file /></div>
+                    <div class={!c.restart ? "disabled" : ""} title={translate('Allow remote restart')}><icon .restart /></div>
+                </div> <div .permissions style="margin-top:8px;" >
+                    <div class={!c.recording ? "disabled" : ""} title={translate('Allow recording session')}><icon .recording /></div>
+                </div></div>
+                }
                 {c.port_forward ? <div>Port Forwarding: {c.port_forward}</div> : ""}
                 <div style="size:*"/>
                 <div .buttons>
-                     {auth ? "" : <button .button tabindex="-1" #accept>Accept</button>}
-                     {auth ? "" : <button .button tabindex="-1" .outline #dismiss>Dismiss</button>}
-                     {auth ? <button .button tabindex="-1" #disconnect>Disconnect</button> : ""}
+                     {auth ? "" : <button .button tabindex="-1" #accept>{translate('Accept')}</button>}
+                     {auth ? "" : <button .button tabindex="-1" .outline #dismiss>{translate('Dismiss')}</button>}
+                     {auth && !disconnected ? <button .button tabindex="-1" #disconnect>{translate('Disconnect')}</button> : ""}
+                     {auth && disconnected ? <button .button tabindex="-1" #close>{translate('Close')}</button> : ""}
                 </div>
                 {c.is_file_transfer || c.port_forward ? "" : <div .chaticon>{svg_chat}</div>}
             </div>
@@ -95,12 +105,42 @@ class Body: Reactor.Component
         });
     }
 
+    event click $(icon.file) {
+        var { cid, connection } = this;
+        checkClickTime(function() {
+            connection.file = !connection.file;
+            body.update();
+            handler.switch_permission(cid, "file", connection.file);
+        });
+    }
+
+    event click $(icon.restart) {
+        var { cid, connection } = this;
+        checkClickTime(function() {
+            connection.restart = !connection.restart;
+            body.update();
+            handler.switch_permission(cid, "restart", connection.restart);
+        });
+    }
+
+    event click $(icon.recording) {
+        var { cid, connection } = this;
+        checkClickTime(function() {
+            connection.recording = !connection.recording;
+            body.update();
+            handler.switch_permission(cid, "recording", connection.recording);
+        });
+    }
+
     event click $(button#accept) {
         var { cid, connection } = this;
         checkClickTime(function() {
             connection.authorized = true;
             body.update();
             handler.authorize(cid);
+            self.timer(30ms, function() {
+                view.windowState = View.WINDOW_MINIMIZED;
+            });
         });
     }
 
@@ -116,6 +156,25 @@ class Body: Reactor.Component
         checkClickTime(function() {
             handler.close(cid);
         });
+    }
+
+    event click $(button#close) {
+        var cid = this.cid;
+        if (this.cur >= 0 && this.cur < connections.length){
+            handler.remove_disconnected_connection(cid);
+            connections.splice(this.cur, 1);
+            if (connections.length > 0) {
+                if (this.cur > 0)
+                    this.cur -= 1; 
+                else
+                    this.cur = connections.length - 1;
+                header.update();
+                body.update();
+            } else {
+                handler.quit();
+            }
+        }
+        
     }
 }
 
@@ -150,8 +209,8 @@ class Header: Reactor.Component
             {tabs}
             </div>
             <div .tab-arrows>
-                <span .left-arrow>&lt;</span>
-                <span .right-arrow>&gt;</span>
+                <span #left-arrow>&lt;</span>
+                <span #right-arrow>&gt;</span>
             </div>
         </div>;
     }
@@ -178,13 +237,13 @@ class Header: Reactor.Component
         this.update_cur(idx);
     }
 
-    event click $(span.left-arrow) {
+    event click $(span#left-arrow) {
         var cur = body.cur;
         if (cur == 0) return;
         this.update_cur(cur - 1);
     }
 
-    event click $(span.right-arrow) {
+    event click $(span#right-arrow) {
         var cur = body.cur;
         if (cur == connections.length - 1) return;
         this.update_cur(cur + 1);
@@ -202,25 +261,32 @@ if (is_osx) {
 event click $(div.chaticon) {
     checkClickTime(function() {
         show_chat = !show_chat;
-        adaptSize();
+        adaptSizeForChat();
+        if (show_chat) {
+            view.focus = $(.outline-focus);
+        }
     });
 }
 
 function checkClickTime(callback) {
-    callback();
+    var click_callback_time = getTime();
+    handler.check_click_time(body.cid);
+    self.timer(120ms, function() {
+        var d = click_callback_time - handler.get_click_time();
+        if (d > 120)
+            callback();
+    });
 }
 
-function adaptSize() {
+function adaptSizeForChat() {
     $(div.right-panel).style.set {
         display: show_chat ? "block" : "none",
     };
-    var el = $(div.chaticon);
-    if (el) el.attributes.toggleClass("active", show_chat);
     var (x, y, w, h) = view.box(#rectw, #border, #screen);
-    if (show_chat && w < 600) {
-        view.move(x - (600 - w), y, 600, h);
-    } else if (!show_chat && w > 450) {
-        view.move(x + (w - 300), y, 300, h);
+    if (show_chat && w < scaleIt(600)) {
+        view.move(x - (scaleIt(600) - w), y, scaleIt(600), h);
+    } else if (!show_chat && w > scaleIt(450)) {
+        view.move(x + (w - scaleIt(300)), y, scaleIt(300), h);
     }
 }
 
@@ -243,7 +309,8 @@ function bring_to_top(idx=-1) {
     }
 }
 
-handler.addConnection = function(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio) {
+handler.addConnection = function(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording) {
+    stdout.println("new connection #" + id + ": " + peer_id);
     var conn;
     connections.map(function(c) {
         if (c.id == id) conn = c;
@@ -253,15 +320,26 @@ handler.addConnection = function(id, is_file_transfer, port_forward, peer_id, na
         update();
         return;
     }
+    var idx = -1;
+    connections.map(function(c, i) {
+        if (c.disconnected && c.peer_id == peer_id) idx = i;
+    });
     if (!name) name = "NA";
-    connections.push({
+    conn = {
         id: id, is_file_transfer: is_file_transfer, peer_id: peer_id,
         port_forward: port_forward,
-        name: name, authorized: authorized, time: new Date(),
+        name: name, authorized: authorized, time: new Date(), now: new Date(),
         keyboard: keyboard, clipboard: clipboard, msgs: [], unreaded: 0,
-        audio: audio,
-    });
-    body.cur = connections.length - 1;
+        audio: audio, file: file, restart: restart, recording: recording,
+        disconnected: false
+    };
+    if (idx < 0) {
+        connections.push(conn);
+        body.cur = connections.length - 1;
+    } else {
+        connections[idx] = conn;
+        body.cur = idx;
+    }
     bring_to_top();
     update();
     self.timer(1ms, adjustHeader);
@@ -272,16 +350,20 @@ handler.addConnection = function(id, is_file_transfer, port_forward, peer_id, na
     }
 }
 
-handler.removeConnection = function(id) {
+handler.removeConnection = function(id, close) {
     var i = -1;
     connections.map(function(c, idx) {
         if (c.id == id) i = idx;
     });
-    connections.splice(i, 1);
-    if (connections.length == 0) {
-        handler.exit();
+    if (i < 0) return;
+    if (close) {
+        connections.splice(i, 1);
     } else {
-        if (body.cur >= i && body.cur > 0) body.cur -= 1;
+        var conn = connections[i];
+        conn.disconnected = true;
+    }
+    if (connections.length > 0) {
+        if (body.cur >= i && body.cur > 0 && close) body.cur -= 1;
         update();
     }
 }
@@ -295,14 +377,13 @@ handler.newMessage = function(id, text) {
     if (!conn) return;
     conn.msgs.push({name: conn.name, text: text, time: getNowStr()});
     bring_to_top(idx);
-    if (idx == body.cur) show_chat = true;
+    if (idx == body.cur) {
+        var shouldAdapt = !show_chat;
+        show_chat = true;
+        if (shouldAdapt) adaptSizeForChat();
+    }
     conn.unreaded += 1;
     update();
-}
-
-handler.awake = function() {
-    view.windowState = View.WINDOW_SHOWN;
-    view.focus = self;
 }
 
 view << event statechange {
@@ -312,13 +393,12 @@ view << event statechange {
 function self.ready() {
     adjustBorder();
     var (sw, sh) = view.screenBox(#workarea, #dimension);
-    var w = 300;
-    var h = 400;
+    var w = scaleIt(300);
+    var h = scaleIt(400);
     view.move(sw - w, 0, w, h);
 }
 
-function getElaspsed(time) {
-    var now = new Date();
+function getElaspsed(time, now) {
     var seconds = Date.diff(time, now, #seconds);
     var hours = seconds / 3600;
     var days = hours / 24;
@@ -334,11 +414,15 @@ function getElaspsed(time) {
 
 function updateTime() {
     self.timer(1s, function() {
+        var now = new Date();
+        connections.map(function(c) {
+            if (!c.disconnected) c.now = now;
+        });
         var el = $(#time);
         if (el) {
             var c = connections[body.cur];
-            if (c) {
-                el.text = getElaspsed(c.time);
+            if (c && !c.disconnected) {
+                el.text = getElaspsed(c.time, c.now);
             }
         }
         updateTime();
@@ -347,14 +431,17 @@ function updateTime() {
 
 updateTime();
 
+var tm0 = getTime();
+
 function self.closing() {
+    if (connections.length == 0 && getTime() - tm0 > 30000) return true;
     view.windowState = View.WINDOW_HIDDEN;
     return false;
 }
 
 
 function adjustHeader() {
-    var hw = $(header).box(#width);
+    var hw = $(header).box(#width) / scaleFactor;
     var tabswrapper = $(div.tabs-wrapper);
     var tabs = $(div.tabs);
     var arrows = $(div.tab-arrows);
@@ -362,7 +449,7 @@ function adjustHeader() {
     var n = connections.length;
     var wtab = 80;
     var max = hw - 98;
-    var need_width = n * wtab + 2; // include border of active tab
+    var need_width = n * wtab + scaleIt(2); // include border of active tab
     if (need_width < max) {
         arrows.style.set {
             display: "none",
@@ -392,7 +479,7 @@ function adjustHeader() {
 
 view.on("size", adjustHeader);
 
-// handler.addConnection(0, false, 0, "", "test1", true, false, false, false);
-// handler.addConnection(1, false, 0, "", "test2--------", true, false, false, false);
-// handler.addConnection(2, false, 0, "", "test3", true, false, false, false);
+// handler.addConnection(0, false, 0, "", "test1", true, false, false, true, true);
+// handler.addConnection(1, false, 0, "", "test2--------", true, false, false, false, false);
+// handler.addConnection(2, false, 0, "", "test3", true, false, false, false, false);
 // handler.newMessage(0, 'h');

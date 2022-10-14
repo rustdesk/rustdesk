@@ -6,7 +6,12 @@ fn main() {
     thread::sleep(Duration::from_secs(2));
     let mut enigo = Enigo::new();
 
-    enigo.key_down(Key::Layout('a'));
-    thread::sleep(Duration::from_secs(1));
-    enigo.key_up(Key::Layout('a'));
+    enigo.key_down(Key::Shift).ok();
+    enigo.key_down(Key::Layout('.')).ok();
+    enigo.key_up(Key::Layout('.'));
+    enigo.key_up(Key::Shift);
+    enigo.key_down(Key::Shift).ok();
+    enigo.key_down(Key::Layout('-')).ok();
+    enigo.key_up(Key::Layout('-'));
+    enigo.key_up(Key::Shift);
 }

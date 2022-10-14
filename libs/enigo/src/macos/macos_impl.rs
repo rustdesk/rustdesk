@@ -1,22 +1,76 @@
 use core_graphics;
-
 // TODO(dustin): use only the things i need
 
 use self::core_graphics::display::*;
 use self::core_graphics::event::*;
 use self::core_graphics::event_source::*;
+use std::collections::HashMap as Map;
+use std::ffi::c_void;
+use std::ffi::CStr;
+use std::os::raw::*;
+use std::ptr::null_mut;
 
 use crate::macos::keycodes::*;
 use crate::{Key, KeyboardControllable, MouseButton, MouseControllable};
 use objc::runtime::Class;
 
 struct MyCGEvent;
+type TISInputSourceRef = *mut c_void;
+type CFDataRef = *const c_void;
+type OptionBits = u32;
+type OSStatus = i32;
+type UniChar = u16;
+type UniCharCount = usize;
+type Boolean = c_uchar;
+type CFStringEncoding = u32;
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+struct __CFString([u8; 0]);
+type CFStringRef = *const __CFString;
+
+#[allow(non_upper_case_globals)]
+const kCFStringEncodingUTF8: u32 = 134_217_984;
+#[allow(non_upper_case_globals)]
+const kUCKeyActionDisplay: u16 = 3;
+#[allow(non_upper_case_globals)]
+const kUCKeyTranslateDeadKeysBit: OptionBits = 1 << 31;
+const BUF_LEN: usize = 4;
 
 #[allow(improper_ctypes)]
 #[allow(non_snake_case)]
 #[link(name = "ApplicationServices", kind = "framework")]
 extern "C" {
+    fn CFDataGetBytePtr(theData: CFDataRef) -> *const u8;
+    fn TISCopyCurrentKeyboardInputSource() -> TISInputSourceRef;
+    fn TISCopyCurrentKeyboardLayoutInputSource() -> TISInputSourceRef;
+    fn TISCopyCurrentASCIICapableKeyboardLayoutInputSource() -> TISInputSourceRef;
+    static kTISPropertyUnicodeKeyLayoutData: *mut c_void;
+    static kTISPropertyInputSourceID: *mut c_void;
+    fn UCKeyTranslate(
+        keyLayoutPtr: *const u8, //*const UCKeyboardLayout,
+        virtualKeyCode: u16,
+        keyAction: u16,
+        modifierKeyState: u32,
+        keyboardType: u32,
+        keyTranslateOptions: OptionBits,
+        deadKeyState: *mut u32,
+        maxStringLength: UniCharCount,
+        actualStringLength: *mut UniCharCount,
+        unicodeString: *mut [UniChar; BUF_LEN],
+    ) -> OSStatus;
+    fn LMGetKbdType() -> u8;
+    fn CFStringGetCString(
+        theString: CFStringRef,
+        buffer: *mut c_char,
+        bufferSize: CFIndex,
+        encoding: CFStringEncoding,
+    ) -> Boolean;
+
     fn CGEventPost(tapLocation: CGEventTapLocation, event: *mut MyCGEvent);
+    // Actually return CFDataRef which is const here, but for coding convienence, return *mut c_void
+    fn TISGetInputSourceProperty(source: TISInputSourceRef, property: *const c_void)
+        -> *mut c_void;
     // not present in servo/core-graphics
     fn CGEventCreateScrollWheelEvent(
         source: &CGEventSourceRef,
@@ -51,6 +105,7 @@ pub struct Enigo {
     last_click_time: Option<std::time::Instant>,
     multiple_click: i64,
     flags: CGEventFlags,
+    char_to_vkey_map: Map<String, Map<char, CGKeyCode>>,
 }
 
 impl Enigo {
@@ -102,6 +157,7 @@ impl Default for Enigo {
             multiple_click: 1,
             last_click_time: None,
             flags: CGEventFlags::CGEventFlagNull,
+            char_to_vkey_map: Default::default(),
         }
     }
 }
@@ -281,7 +337,7 @@ impl KeyboardControllable for Enigo {
 
     fn key_click(&mut self, key: Key) {
         let keycode = self.key_to_keycode(key);
-        if keycode == 0 {
+        if keycode == u16::MAX {
             return;
         }
 
@@ -297,9 +353,13 @@ impl KeyboardControllable for Enigo {
     }
 
     fn key_down(&mut self, key: Key) -> crate::ResultType {
+        let code = self.key_to_keycode(key);
+        if code == u16::MAX {
+            return Err("".into()); 
+        }
         if let Some(src) = self.event_source.as_ref() {
             if let Ok(event) =
-                CGEvent::new_keyboard_event(src.clone(), self.key_to_keycode(key), true)
+                CGEvent::new_keyboard_event(src.clone(), code, true)
             {
                 self.post(event);
             }
@@ -428,12 +488,47 @@ impl Enigo {
             Key::Layout(c) => self.map_key_board(c),
 
             Key::Super | Key::Command | Key::Windows | Key::Meta => kVK_Command,
-            _ => 0,
+            _ => u16::MAX,
         }
     }
 
     #[inline]
-    fn map_key_board(&self, ch: char) -> CGKeyCode {
+    fn map_key_board(&mut self, ch: char) -> CGKeyCode {
+        // no idea why below char not working with shift, https://github.com/rustdesk/rustdesk/issues/406#issuecomment-1145157327
+        // seems related to numpad char
+        if ch == '-' || ch == '=' || ch == '.' || ch == '/' || (ch >= '0' && ch <= '9') {
+            return self.map_key_board_en(ch);
+        }
+        let mut code = u16::MAX;
+        unsafe {
+            let (keyboard, layout) = get_layout();
+            if !keyboard.is_null() && !layout.is_null() {
+                let name_ref = TISGetInputSourceProperty(keyboard, kTISPropertyInputSourceID);
+                if !name_ref.is_null() {
+                    let name = get_string(name_ref as _);
+                    if let Some(name) = name {
+                        if let Some(m) = self.char_to_vkey_map.get(&name) {
+                            code = *m.get(&ch).unwrap_or(&u16::MAX);
+                        } else {
+                            let m = get_map(&name, layout);
+                            code = *m.get(&ch).unwrap_or(&u16::MAX);
+                            self.char_to_vkey_map.insert(name.clone(), m);
+                        }
+                    }
+                }
+            }
+            if !keyboard.is_null() {
+                CFRelease(keyboard);
+            }
+        }
+        if code != u16::MAX {
+            return code;
+        }
+        self.map_key_board_en(ch)
+    }
+
+    #[inline]
+    fn map_key_board_en(&mut self, ch: char) -> CGKeyCode {
         match ch {
             'a' => kVK_ANSI_A,
             'b' => kVK_ANSI_B,
@@ -482,9 +577,104 @@ impl Enigo {
             '.' => kVK_ANSI_Period,
             '/' => kVK_ANSI_Slash,
             '`' => kVK_ANSI_Grave,
-            _ => 0,
+            _ => u16::MAX,
         }
     }
 }
 
+#[inline]
+unsafe fn get_string(cf_string: CFStringRef) -> Option<String> {
+    if !cf_string.is_null() {
+        let mut buf: [i8; 255] = [0; 255];
+        let success = CFStringGetCString(
+            cf_string,
+            buf.as_mut_ptr(),
+            buf.len() as _,
+            kCFStringEncodingUTF8,
+        );
+        if success != 0 {
+            let name: &CStr = CStr::from_ptr(buf.as_ptr());
+            if let Ok(name) = name.to_str() {
+                return Some(name.to_string());
+            }
+        }
+    }
+    None
+}
+
+#[inline]
+unsafe fn get_layout() -> (TISInputSourceRef, *const u8) {
+    let mut keyboard = TISCopyCurrentKeyboardInputSource();
+    let mut layout = null_mut();
+    if !keyboard.is_null() {
+        layout = TISGetInputSourceProperty(keyboard, kTISPropertyUnicodeKeyLayoutData);
+    }
+    if layout.is_null() {
+        if !keyboard.is_null() {
+            CFRelease(keyboard);
+        }
+        // https://github.com/microsoft/vscode/issues/23833
+        keyboard = TISCopyCurrentKeyboardLayoutInputSource();
+        if !keyboard.is_null() {
+            layout = TISGetInputSourceProperty(keyboard, kTISPropertyUnicodeKeyLayoutData);
+        }
+    }
+    if layout.is_null() {
+        if !keyboard.is_null() {
+            CFRelease(keyboard);
+        }
+        keyboard = TISCopyCurrentASCIICapableKeyboardLayoutInputSource();
+        if !keyboard.is_null() {
+            layout = TISGetInputSourceProperty(keyboard, kTISPropertyUnicodeKeyLayoutData);
+        }
+    }
+    if layout.is_null() {
+        if !keyboard.is_null() {
+            CFRelease(keyboard);
+        }
+        return (null_mut(), null_mut());
+    }
+    let layout_ptr = CFDataGetBytePtr(layout as _);
+    if layout_ptr.is_null() {
+        if !keyboard.is_null() {
+            CFRelease(keyboard);
+        }
+        return (null_mut(), null_mut());
+    }
+    (keyboard, layout_ptr)
+}
+
+#[inline]
+fn get_map(name: &str, layout: *const u8) -> Map<char, CGKeyCode> {
+    log::info!("Create keyboard map for {}", name);
+    let mut keys_down: u32 = 0;
+    let mut map = Map::new();
+    for keycode in 0..128 {
+        let mut buff = [0_u16; BUF_LEN];
+        let kb_type = unsafe { LMGetKbdType() };
+        let mut length: UniCharCount = 0;
+        let _retval = unsafe {
+            UCKeyTranslate(
+                layout,
+                keycode,
+                kUCKeyActionDisplay as _,
+                0,
+                kb_type as _,
+                kUCKeyTranslateDeadKeysBit as _,
+                &mut keys_down,
+                BUF_LEN,
+                &mut length,
+                &mut buff,
+            )
+        };
+        if length > 0 {
+            if let Ok(str) = String::from_utf16(&buff[..length]) {
+                if let Some(chr) = str.chars().next() {
+                    map.insert(chr, keycode as _);
+                }
+            }
+        }
+    }
+    map
+}
 unsafe impl Send for Enigo {}

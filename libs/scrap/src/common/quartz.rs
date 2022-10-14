@@ -8,6 +8,7 @@ pub struct Capturer {
     frame: Arc<Mutex<Option<quartz::Frame>>>,
     use_yuv: bool,
     i420: Vec<u8>,
+    saved_raw_data: Vec<u128>, // for faster compare and copy
 }
 
 impl Capturer {
@@ -20,7 +21,7 @@ impl Capturer {
             display.width(),
             display.height(),
             if use_yuv {
-                quartz::PixelFormat::YCbCr420Full
+                quartz::PixelFormat::YCbCr420Video
             } else {
                 quartz::PixelFormat::Argb8888
             },
@@ -38,6 +39,7 @@ impl Capturer {
             frame,
             use_yuv,
             i420: Vec::new(),
+            saved_raw_data: Vec::new(),
         })
     }
 
@@ -48,8 +50,14 @@ impl Capturer {
     pub fn height(&self) -> usize {
         self.inner.height()
     }
+}
 
-    pub fn frame<'a>(&'a mut self, _timeout_ms: u32) -> io::Result<Frame<'a>> {
+impl crate::TraitCapturer for Capturer {
+    fn set_use_yuv(&mut self, use_yuv: bool) {
+        self.use_yuv = use_yuv;
+    }
+
+    fn frame<'a>(&'a mut self, _timeout_ms: std::time::Duration) -> io::Result<Frame<'a>> {
         match self.frame.try_lock() {
             Ok(mut handle) => {
                 let mut frame = None;
@@ -57,6 +65,7 @@ impl Capturer {
 
                 match frame {
                     Some(mut frame) => {
+                        crate::would_block_if_equal(&mut self.saved_raw_data, frame.inner())?;
                         if self.use_yuv {
                             frame.nv12_to_i420(self.width(), self.height(), &mut self.i420);
                         }

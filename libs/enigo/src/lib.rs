@@ -63,6 +63,8 @@ extern crate objc;
 mod win;
 #[cfg(target_os = "windows")]
 pub use win::Enigo;
+#[cfg(target_os = "windows")]
+pub use win::ENIGO_INPUT_EXTRA_VALUE;
 
 #[cfg(target_os = "macos")]
 mod macos;
@@ -247,7 +249,7 @@ pub trait MouseControllable {
 /// For alphabetical keys, use Key::Layout for a system independent key.
 /// If a key is missing, you can use the raw keycode with Key::Raw.
 #[cfg_attr(feature = "with_serde", derive(Serialize, Deserialize))]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Key {
     /// alt key on Linux and Windows (option key on macOS)
     Alt,
@@ -255,7 +257,7 @@ pub enum Key {
     Backspace,
     /// caps lock key
     CapsLock,
-    #[deprecated(since = "0.0.12", note = "now renamed to Meta")]
+    // #[deprecated(since = "0.0.12", note = "now renamed to Meta")]
     /// command key on macOS (super key on Linux, windows key on Windows)
     Command,
     /// control key
@@ -312,14 +314,14 @@ pub enum Key {
     Shift,
     /// space key
     Space,
-    #[deprecated(since = "0.0.12", note = "now renamed to Meta")]
+    // #[deprecated(since = "0.0.12", note = "now renamed to Meta")]
     /// super key on linux (command key on macOS, windows key on Windows)
     Super,
     /// tab key (tabulator)
     Tab,
     /// up arrow key
     UpArrow,
-    #[deprecated(since = "0.0.12", note = "now renamed to Meta")]
+    // #[deprecated(since = "0.0.12", note = "now renamed to Meta")]
     /// windows key on Windows (super key on Linux, command key on macOS)
     Windows,
     ///

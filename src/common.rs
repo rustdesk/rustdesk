@@ -1,20 +1,22 @@
-pub use arboard::Clipboard as ClipboardContext;
-use hbb_common::{
-    allow_err, bail,
-    compress::{compress as compress_func, decompress},
-    config::{Config, COMPRESS_LEVEL, RENDEZVOUS_TIMEOUT},
-    log,
-    message_proto::*,
-    protobuf::Message as _,
-    protobuf::ProtobufEnum,
-    rendezvous_proto::*,
-    sleep,
-    tcp::FramedStream,
-    tokio, ResultType,
-};
-#[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
-use hbb_common::{config::RENDEZVOUS_PORT, futures::future::join_all};
 use std::sync::{Arc, Mutex};
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub use arboard::Clipboard as ClipboardContext;
+
+use hbb_common::{
+    allow_err,
+    anyhow::bail,
+    compress::{compress as compress_func, decompress},
+    config::{self, Config, COMPRESS_LEVEL, RENDEZVOUS_TIMEOUT},
+    get_version_number, log,
+    message_proto::*,
+    protobuf::Enum,
+    protobuf::Message as _,
+    rendezvous_proto::*,
+    sleep, socket_client, tokio, ResultType,
+};
+// #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
+use hbb_common::{config::RENDEZVOUS_PORT, futures::future::join_all};
 
 pub const CLIPBOARD_NAME: &'static str = "clipboard";
 pub const CLIPBOARD_INTERVAL: u64 = 333;
@@ -24,27 +26,17 @@ lazy_static::lazy_static! {
     pub static ref SOFTWARE_UPDATE_URL: Arc<Mutex<String>> = Default::default();
 }
 
-#[cfg(any(target_os = "android", target_os = "ios"))]
 lazy_static::lazy_static! {
-    pub static ref MOBILE_INFO1: Arc<Mutex<String>> = Default::default();
-    pub static ref MOBILE_INFO2: Arc<Mutex<String>> = Default::default();
+    pub static ref DEVICE_ID: Arc<Mutex<String>> = Default::default();
+    pub static ref DEVICE_NAME: Arc<Mutex<String>> = Default::default();
 }
 
 #[inline]
 pub fn valid_for_numlock(evt: &KeyEvent) -> bool {
-    if let Some(key_event::Union::control_key(ck)) = evt.union {
+    if let Some(key_event::Union::ControlKey(ck)) = evt.union {
         let v = ck.value();
         (v >= ControlKey::Numpad0.value() && v <= ControlKey::Numpad9.value())
             || v == ControlKey::Decimal.value()
-    } else {
-        false
-    }
-}
-
-#[inline]
-pub fn valid_for_capslock(evt: &KeyEvent) -> bool {
-    if let Some(key_event::Union::chr(ch)) = evt.union {
-        ch >= 'a' as u32 && ch <= 'z' as u32
     } else {
         false
     }
@@ -58,12 +50,13 @@ pub fn create_clipboard_msg(content: String) -> Message {
     let mut msg = Message::new();
     msg.set_clipboard(Clipboard {
         compress,
-        content,
+        content: content.into(),
         ..Default::default()
     });
     msg
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn check_clipboard(
     ctx: &mut ClipboardContext,
     old: Option<&Arc<Mutex<String>>>,
@@ -83,13 +76,18 @@ pub fn check_clipboard(
     None
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn update_clipboard(clipboard: Clipboard, old: Option<&Arc<Mutex<String>>>) {
     let content = if clipboard.compress {
         decompress(&clipboard.content)
     } else {
-        clipboard.content
+        clipboard.content.into()
     };
     if let Ok(content) = String::from_utf8(content) {
+        if content.is_empty() {
+            // ctx.set_text may crash if content is empty
+            return;
+        }
         match ClipboardContext::new() {
             Ok(mut ctx) => {
                 let side = if old.is_none() { "host" } else { "client" };
@@ -102,6 +100,19 @@ pub fn update_clipboard(clipboard: Clipboard, old: Option<&Arc<Mutex<String>>>) 
                 log::error!("Failed to create clipboard context: {}", err);
             }
         }
+    }
+}
+
+pub async fn send_opts_after_login(
+    config: &crate::client::LoginConfigHandler,
+    peer: &mut hbb_common::tcp::FramedStream,
+) {
+    if let Some(opts) = config.get_option_message_after_login() {
+        let mut misc = Misc::new();
+        misc.set_option(opts);
+        let mut msg_out = Message::new();
+        msg_out.set_misc(misc);
+        allow_err!(peer.send(&msg_out).await);
     }
 }
 
@@ -218,6 +229,7 @@ pub fn resample_channels(
 }
 
 pub fn test_nat_type() {
+    let mut i = 0;
     std::thread::spawn(move || loop {
         match test_nat_type_() {
             Ok(true) => break,
@@ -229,22 +241,37 @@ pub fn test_nat_type() {
         if Config::get_nat_type() != 0 {
             break;
         }
-        std::thread::sleep(std::time::Duration::from_secs(12));
+        i = i * 2 + 1;
+        if i > 300 {
+            i = 300;
+        }
+        std::thread::sleep(std::time::Duration::from_secs(i));
     });
 }
 
 #[tokio::main(flavor = "current_thread")]
 async fn test_nat_type_() -> ResultType<bool> {
     log::info!("Testing nat ...");
-    let start = std::time::Instant::now();
-    let rendezvous_server = get_rendezvous_server(100).await;
-    let server1 = rendezvous_server;
-    let mut server2 = server1;
-    if server1.port() == 0 { // offline
-        // avoid overflow crash
-        bail!("Offline");
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let is_direct = crate::ipc::get_socks_async(1_000).await.is_none(); // sync socks BTW
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let is_direct = Config::get_socks().is_none(); // sync socks BTW
+    if !is_direct {
+        Config::set_nat_type(NatType::SYMMETRIC as _);
+        return Ok(true);
     }
-    server2.set_port(server1.port() - 1);
+    let start = std::time::Instant::now();
+    let (rendezvous_server, _, _) = get_rendezvous_server(1_000).await;
+    let server1 = rendezvous_server;
+    let tmp: Vec<&str> = server1.split(":").collect();
+    if tmp.len() != 2 {
+        bail!("Invalid server address: {}", server1);
+    }
+    let port: u16 = tmp[1].parse()?;
+    if port == 0 {
+        bail!("Invalid server address: {}", server1);
+    }
+    let server2 = format!("{}:{}", tmp[0], port - 1);
     let mut msg_out = RendezvousMessage::new();
     let serial = Config::get_serial();
     msg_out.set_test_nat_request(TestNatRequest {
@@ -253,19 +280,25 @@ async fn test_nat_type_() -> ResultType<bool> {
     });
     let mut port1 = 0;
     let mut port2 = 0;
+    let server1 = socket_client::get_target_addr(&server1)?;
+    let server2 = socket_client::get_target_addr(&server2)?;
     let mut addr = Config::get_any_listen_addr();
     for i in 0..2 {
-        let mut socket = FramedStream::new(
-            if i == 0 { &server1 } else { &server2 },
+        let mut socket = socket_client::connect_tcp(
+            if i == 0 {
+                server1.clone()
+            } else {
+                server2.clone()
+            },
             addr,
             RENDEZVOUS_TIMEOUT,
         )
         .await?;
-        addr = socket.get_ref().local_addr()?;
+        addr = socket.local_addr();
         socket.send(&msg_out).await?;
-        if let Some(Ok(bytes)) = socket.next_timeout(3000).await {
+        if let Some(Ok(bytes)) = socket.next_timeout(RENDEZVOUS_TIMEOUT).await {
             if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
-                if let Some(rendezvous_message::Union::test_nat_response(tnr)) = msg_in.union {
+                if let Some(rendezvous_message::Union::TestNatResponse(tnr)) = msg_in.union {
                     if i == 0 {
                         port1 = tnr.port;
                     } else {
@@ -284,6 +317,7 @@ async fn test_nat_type_() -> ResultType<bool> {
             break;
         }
     }
+    Config::set_option("local-ip-addr".to_owned(), addr.ip().to_string());
     let ok = port1 > 0 && port2 > 0;
     if ok {
         let t = if port1 == port2 {
@@ -297,37 +331,69 @@ async fn test_nat_type_() -> ResultType<bool> {
     Ok(ok)
 }
 
-#[cfg(any(target_os = "android", target_os = "ios"))]
-pub async fn get_rendezvous_server(_ms_timeout: u64) -> std::net::SocketAddr {
-    Config::get_rendezvous_server()
+pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>, bool) {
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let (mut a, mut b) = get_rendezvous_server_(ms_timeout);
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let (mut a, mut b) = get_rendezvous_server_(ms_timeout).await;
+    let mut b: Vec<String> = b
+        .drain(..)
+        .map(|x| {
+            if !x.contains(":") {
+                format!("{}:{}", x, config::RENDEZVOUS_PORT)
+            } else {
+                x
+            }
+        })
+        .collect();
+    let c = if b.contains(&a) {
+        b = b.drain(..).filter(|x| x != &a).collect();
+        true
+    } else {
+        a = b.pop().unwrap_or(a);
+        false
+    };
+    (a, b, c)
 }
 
+#[inline]
+#[cfg(any(target_os = "android", target_os = "ios"))]
+fn get_rendezvous_server_(_ms_timeout: u64) -> (String, Vec<String>) {
+    (
+        Config::get_rendezvous_server(),
+        Config::get_rendezvous_servers(),
+    )
+}
+
+#[inline]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub async fn get_rendezvous_server(ms_timeout: u64) -> std::net::SocketAddr {
+async fn get_rendezvous_server_(ms_timeout: u64) -> (String, Vec<String>) {
     crate::ipc::get_rendezvous_server(ms_timeout).await
 }
 
+#[inline]
 #[cfg(any(target_os = "android", target_os = "ios"))]
 pub async fn get_nat_type(_ms_timeout: u64) -> i32 {
     Config::get_nat_type()
 }
 
+#[inline]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub async fn get_nat_type(ms_timeout: u64) -> i32 {
     crate::ipc::get_nat_type(ms_timeout).await
 }
 
-#[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
+// #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 #[tokio::main(flavor = "current_thread")]
 async fn test_rendezvous_server_() {
     let servers = Config::get_rendezvous_servers();
-    hbb_common::config::ONLINE.lock().unwrap().clear();
+    Config::reset_online();
     let mut futs = Vec::new();
     for host in servers {
         futs.push(tokio::spawn(async move {
             let tm = std::time::Instant::now();
-            if FramedStream::new(
-                &crate::check_port(&host, RENDEZVOUS_PORT),
+            if socket_client::connect_tcp(
+                crate::check_port(&host, RENDEZVOUS_PORT),
                 Config::get_any_listen_addr(),
                 RENDEZVOUS_TIMEOUT,
             )
@@ -344,22 +410,35 @@ async fn test_rendezvous_server_() {
     join_all(futs).await;
 }
 
-#[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
+// #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 pub fn test_rendezvous_server() {
     std::thread::spawn(test_rendezvous_server_);
 }
 
-#[inline]
-pub fn get_time() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or(0) as _
+pub fn refresh_rendezvous_server() {
+    #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
+    test_rendezvous_server();
+    #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
+    std::thread::spawn(|| {
+        if crate::ipc::test_rendezvous_server().is_err() {
+            test_rendezvous_server();
+        }
+    });
 }
 
 pub fn run_me<T: AsRef<std::ffi::OsStr>>(args: Vec<T>) -> std::io::Result<std::process::Child> {
-    let cmd = std::env::current_exe()?;
-    return std::process::Command::new(cmd).args(&args).spawn();
+    #[cfg(not(feature = "appimage"))]
+    {
+        let cmd = std::env::current_exe()?;
+        return std::process::Command::new(cmd).args(&args).spawn();
+    }
+    #[cfg(feature = "appimage")]
+    {
+        let appdir = std::env::var("APPDIR").unwrap();
+        let appimage_cmd = std::path::Path::new(&appdir).join("AppRun");
+        log::info!("path: {:?}", appimage_cmd);
+        return std::process::Command::new(appimage_cmd).args(&args).spawn();
+    }
 }
 
 pub fn username() -> String {
@@ -367,7 +446,7 @@ pub fn username() -> String {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     return whoami::username().trim_end_matches('\0').to_owned();
     #[cfg(any(target_os = "android", target_os = "ios"))]
-    return MOBILE_INFO2.lock().unwrap().clone();
+    return DEVICE_NAME.lock().unwrap().clone();
 }
 
 #[inline]
@@ -383,7 +462,7 @@ pub const POSTFIX_SERVICE: &'static str = "_service";
 
 #[inline]
 pub fn is_control_key(evt: &KeyEvent, key: &ControlKey) -> bool {
-    if let Some(key_event::Union::control_key(ck)) = evt.union {
+    if let Some(key_event::Union::ControlKey(ck)) = evt.union {
         ck.value() == key.value()
     } else {
         false
@@ -392,7 +471,7 @@ pub fn is_control_key(evt: &KeyEvent, key: &ControlKey) -> bool {
 
 #[inline]
 pub fn is_modifier(evt: &KeyEvent) -> bool {
-    if let Some(key_event::Union::control_key(ck)) = evt.union {
+    if let Some(key_event::Union::ControlKey(ck)) = evt.union {
         let v = ck.value();
         v == ControlKey::Alt.value()
             || v == ControlKey::Shift.value()
@@ -407,34 +486,19 @@ pub fn is_modifier(evt: &KeyEvent) -> bool {
     }
 }
 
-pub fn test_if_valid_server(host: String) -> String {
-    let mut host = host;
-    if !host.contains(":") {
-        host = format!("{}:{}", host, 0);
-    }
-    match hbb_common::to_socket_addr(&host) {
-        Err(err) => err.to_string(),
-        Ok(_) => "".to_owned(),
-    }
-}
-
-pub fn get_version_number(v: &str) -> i64 {
-    let mut n = 0;
-    for x in v.split(".") {
-        n = n * 1000 + x.parse::<i64>().unwrap_or(0);
-    }
-    n
-}
-
 pub fn check_software_update() {
-    std::thread::spawn(move || allow_err!(_check_software_update()));
+    std::thread::spawn(move || allow_err!(check_software_update_()));
 }
 
 #[tokio::main(flavor = "current_thread")]
-async fn _check_software_update() -> hbb_common::ResultType<()> {
+async fn check_software_update_() -> hbb_common::ResultType<()> {
     sleep(3.).await;
-    let rendezvous_server = get_rendezvous_server(1_000).await;
-    let mut socket = hbb_common::udp::FramedSocket::new(Config::get_any_listen_addr()).await?;
+
+    let rendezvous_server =
+        socket_client::get_target_addr(&format!("rs-sg.rustdesk.com:{}", config::RENDEZVOUS_PORT))?;
+    let mut socket =
+        socket_client::new_udp(Config::get_any_listen_addr(), RENDEZVOUS_TIMEOUT).await?;
+
     let mut msg_out = RendezvousMessage::new();
     msg_out.set_software_update(SoftwareUpdate {
         url: crate::VERSION.to_owned(),
@@ -444,7 +508,7 @@ async fn _check_software_update() -> hbb_common::ResultType<()> {
     use hbb_common::protobuf::Message;
     if let Some(Ok((bytes, _))) = socket.next_timeout(30_000).await {
         if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
-            if let Some(rendezvous_message::Union::software_update(su)) = msg_in.union {
+            if let Some(rendezvous_message::Union::SoftwareUpdate(su)) = msg_in.union {
                 let version = hbb_common::get_version_from_url(&su.url);
                 if get_version_number(&version) > get_version_number(crate::VERSION) {
                     *SOFTWARE_UPDATE_URL.lock().unwrap() = su.url;
@@ -453,4 +517,155 @@ async fn _check_software_update() -> hbb_common::ResultType<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
+pub fn get_icon() -> String {
+    hbb_common::config::ICON.to_owned()
+}
+
+pub fn get_app_name() -> String {
+    hbb_common::config::APP_NAME.read().unwrap().clone()
+}
+
+#[cfg(target_os = "macos")]
+pub fn get_full_name() -> String {
+    format!(
+        "{}.{}",
+        hbb_common::config::ORG.read().unwrap(),
+        hbb_common::config::APP_NAME.read().unwrap(),
+    )
+}
+
+pub fn is_ip(id: &str) -> bool {
+    hbb_common::regex::Regex::new(r"^\d+\.\d+\.\d+\.\d+(:\d+)?$")
+        .unwrap()
+        .is_match(id)
+}
+
+pub fn is_setup(name: &str) -> bool {
+    name.to_lowercase().ends_with("install.exe") || name.to_lowercase().ends_with("安装.exe")
+}
+
+pub fn get_custom_rendezvous_server(custom: String) -> String {
+    if !custom.is_empty() {
+        return custom;
+    }
+    #[cfg(windows)]
+    if let Some(lic) = crate::platform::windows::get_license() {
+        if !lic.host.is_empty() {
+            return lic.host.clone();
+        }
+    }
+    if !config::PROD_RENDEZVOUS_SERVER.read().unwrap().is_empty() {
+        return config::PROD_RENDEZVOUS_SERVER.read().unwrap().clone();
+    }
+    "".to_owned()
+}
+
+pub fn get_api_server(api: String, custom: String) -> String {
+    if !api.is_empty() {
+        return api.to_owned();
+    }
+    #[cfg(windows)]
+    if let Some(lic) = crate::platform::windows::get_license() {
+        if !lic.api.is_empty() {
+            return lic.api.clone();
+        }
+    }
+    let s = get_custom_rendezvous_server(custom);
+    if !s.is_empty() {
+        if s.contains(':') {
+            let tmp: Vec<&str> = s.split(":").collect();
+            if tmp.len() == 2 {
+                let port: u16 = tmp[1].parse().unwrap_or(0);
+                if port > 2 {
+                    return format!("http://{}:{}", tmp[0], port - 2);
+                }
+            }
+        } else {
+            return format!("http://{}:{}", s, config::RENDEZVOUS_PORT - 2);
+        }
+    }
+    "https://admin.rustdesk.com".to_owned()
+}
+
+pub fn get_audit_server(api: String, custom: String) -> String {
+    let url = get_api_server(api, custom);
+    if url.is_empty() || url.contains("rustdesk.com") {
+        return "".to_owned();
+    }
+    format!("{}/api/audit", url)
+}
+
+pub async fn post_request(url: String, body: String, header: &str) -> ResultType<String> {
+    #[cfg(not(target_os = "linux"))]
+    {
+        let mut req = reqwest::Client::new().post(url);
+        if !header.is_empty() {
+            let tmp: Vec<&str> = header.split(": ").collect();
+            if tmp.len() == 2 {
+                req = req.header(tmp[0], tmp[1]);
+            }
+        }
+        req = req.header("Content-Type", "application/json");
+        let to = std::time::Duration::from_secs(12);
+        Ok(req.body(body).timeout(to).send().await?.text().await?)
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let mut data = vec![
+            "curl",
+            "-sS",
+            "-X",
+            "POST",
+            &url,
+            "-H",
+            "Content-Type: application/json",
+            "-d",
+            &body,
+            "--connect-timeout",
+            "12",
+        ];
+        if !header.is_empty() {
+            data.push("-H");
+            data.push(header);
+        }
+        let output = async_process::Command::new("curl")
+            .args(&data)
+            .output()
+            .await?;
+        let res = String::from_utf8_lossy(&output.stdout).to_string();
+        if !res.is_empty() {
+            return Ok(res);
+        }
+        bail!(String::from_utf8_lossy(&output.stderr).to_string());
+    }
+}
+
+#[tokio::main(flavor = "current_thread")]
+pub async fn post_request_sync(url: String, body: String, header: &str) -> ResultType<String> {
+    post_request(url, body, header).await
+}
+
+#[inline]
+pub fn make_privacy_mode_msg(state: back_notification::PrivacyModeState) -> Message {
+    let mut misc = Misc::new();
+    let mut back_notification = BackNotification::new();
+    back_notification.set_privacy_mode_state(state);
+    misc.set_back_notification(back_notification);
+    let mut msg_out = Message::new();
+    msg_out.set_misc(misc);
+    msg_out
+}
+
+#[cfg(not(target_os = "linux"))]
+lazy_static::lazy_static! {
+    pub static ref IS_X11: Mutex<bool> = Mutex::new(false);
+
+}
+
+#[cfg(target_os = "linux")]
+lazy_static::lazy_static! {
+    pub static ref IS_X11: Mutex<bool> = Mutex::new("x11" == hbb_common::platform::linux::get_display_server());
 }

@@ -11,7 +11,7 @@ fn main() {
     enigo.mouse_move_to(500, 200);
     thread::sleep(wait_time);
 
-    enigo.mouse_down(MouseButton::Left);
+    enigo.mouse_down(MouseButton::Left).ok();
     thread::sleep(wait_time);
 
     enigo.mouse_move_relative(100, 100);

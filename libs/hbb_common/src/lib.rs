@@ -1,20 +1,22 @@
 pub mod compress;
-#[path = "./protos/message.rs"]
-pub mod message_proto;
-#[path = "./protos/rendezvous.rs"]
-pub mod rendezvous_proto;
+pub mod platform;
+pub mod protos;
 pub use bytes;
+use config::Config;
 pub use futures;
 pub use protobuf;
+pub use protos::message as message_proto;
+pub use protos::rendezvous as rendezvous_proto;
 use std::{
     fs::File,
     io::{self, BufRead},
-    net::{Ipv4Addr, SocketAddr, SocketAddrV4, ToSocketAddrs},
+    net::{Ipv4Addr, SocketAddr, SocketAddrV4},
     path::Path,
     time::{self, SystemTime, UNIX_EPOCH},
 };
 pub use tokio;
 pub use tokio_util;
+pub mod socket_client;
 pub mod tcp;
 pub mod udp;
 pub use env_logger;
@@ -26,7 +28,18 @@ pub use anyhow::{self, bail};
 pub use futures_util;
 pub mod config;
 pub mod fs;
+pub use lazy_static;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub use mac_address;
+pub use rand;
+pub use regex;
 pub use sodiumoxide;
+pub use tokio_socks;
+pub use tokio_socks::IntoTargetAddr;
+pub use tokio_socks::TargetAddr;
+pub mod password_security;
+pub use chrono;
+pub use directories_next;
 
 #[cfg(feature = "quic")]
 pub type Stream = quic::Connection;
@@ -147,14 +160,6 @@ pub fn get_version_from_url(url: &str) -> String {
     "".to_owned()
 }
 
-pub fn to_socket_addr(host: &str) -> ResultType<SocketAddr> {
-    let addrs: Vec<SocketAddr> = host.to_socket_addrs()?.collect();
-    if addrs.is_empty() {
-        bail!("Failed to solve {}", host);
-    }
-    Ok(addrs[0])
-}
-
 pub fn gen_version() {
     let mut file = File::create("./src/version.rs").unwrap();
     for line in read_lines("Cargo.toml").unwrap() {
@@ -177,6 +182,60 @@ where
 {
     let file = File::open(filename)?;
     Ok(io::BufReader::new(file).lines())
+}
+
+pub fn is_valid_custom_id(id: &str) -> bool {
+    regex::Regex::new(r"^[a-zA-Z]\w{5,15}$")
+        .unwrap()
+        .is_match(id)
+}
+
+pub fn get_version_number(v: &str) -> i64 {
+    let mut n = 0;
+    for x in v.split(".") {
+        n = n * 1000 + x.parse::<i64>().unwrap_or(0);
+    }
+    n
+}
+
+pub fn get_modified_time(path: &std::path::Path) -> SystemTime {
+    std::fs::metadata(&path)
+        .map(|m| m.modified().unwrap_or(UNIX_EPOCH))
+        .unwrap_or(UNIX_EPOCH)
+}
+
+pub fn get_created_time(path: &std::path::Path) -> SystemTime {
+    std::fs::metadata(&path)
+        .map(|m| m.created().unwrap_or(UNIX_EPOCH))
+        .unwrap_or(UNIX_EPOCH)
+}
+
+pub fn get_exe_time() -> SystemTime {
+    std::env::current_exe().map_or(UNIX_EPOCH, |path| {
+        let m = get_modified_time(&path);
+        let c = get_created_time(&path);
+        if m > c {
+            m
+        } else {
+            c
+        }
+    })
+}
+
+pub fn get_uuid() -> Vec<u8> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    if let Ok(id) = machine_uid::get() {
+        return id.into();
+    }
+    Config::get_key_pair().1
+}
+
+#[inline]
+pub fn get_time() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0) as _
 }
 
 #[cfg(test)]

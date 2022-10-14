@@ -15,7 +15,16 @@ pub mod macos;
 pub mod linux;
 
 use hbb_common::{message_proto::CursorData, ResultType};
+#[cfg(not(target_os = "macos"))]
 const SERVICE_INTERVAL: u64 = 300;
+
+pub fn get_license_key() -> String {
+    #[cfg(windows)]
+    if let Some(lic) = windows::get_license() {
+        return lic.key;
+    }
+    Default::default()
+}
 
 pub fn is_xfce() -> bool {
     #[cfg(target_os = "linux")]
@@ -27,6 +36,16 @@ pub fn is_xfce() -> bool {
         return false;
     }
 }
+
+// Android
+#[cfg(target_os = "android")]
+pub fn get_active_username() -> String {
+    // TODO
+    "android".into()
+}
+
+#[cfg(target_os = "android")]
+pub const PA_SAMPLE_RATE: u32 = 48000;
 
 #[cfg(test)]
 mod tests {

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=RustDeskURL Scheme Handler
+NoDisplay=true
+MimeType=x-scheme-handler/rustdesk;
+TryExec=rustdesk
+Exec=rustdesk --connect "%u"
+Icon=rustdesk
+Terminal=false
+Type=Application
+StartupNotify=false
+Version=1.5

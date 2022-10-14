@@ -11,22 +11,33 @@ edition = "2018"
 
 [features]
 wayland = ["gstreamer", "gstreamer-app", "gstreamer-video", "dbus", "tracing"]
+mediacodec = ["ndk"]
 
 [dependencies]
 block = "0.1"
 cfg-if = "1.0"
 libc = "0.2"
 num_cpus = "1.13"
+lazy_static = "1.4"
+hbb_common = { path = "../hbb_common" }
+webm = "1.0"
 
 [dependencies.winapi]
 version = "0.3"
 default-features = true
-features = ["dxgi", "dxgi1_2", "dxgi1_5", "d3d11", "winuser"]
+features = ["dxgi", "dxgi1_2", "dxgi1_5", "d3d11", "winuser", "winerror", "errhandlingapi", "libloaderapi"]
 
-[dev-dependencies]
+[target.'cfg(target_os = "android")'.dependencies]
+android_logger = "0.10"
+jni = "0.19"
+lazy_static = "1.4"
+log = "0.4"
+serde_json = "1.0"
+ndk = { version = "0.7", features = ["media"], optional = true}
+
+[target.'cfg(not(target_os = "android"))'.dev-dependencies]
 repng = "0.2"
 docopt = "1.1"
-webm = "1.0"
 serde = {version="1.0", features=["derive"]}
 quest = "0.3"
 
@@ -40,3 +51,6 @@ tracing = { version = "0.1", optional = true }
 gstreamer = { version = "0.16", optional = true }
 gstreamer-app = { version = "0.16", features = ["v1_10"], optional = true }
 gstreamer-video = { version = "0.16", optional = true }
+
+[target.'cfg(any(target_os = "windows", target_os = "linux"))'.dependencies]
+hwcodec = { git = "https://github.com/21pages/hwcodec", optional = true }

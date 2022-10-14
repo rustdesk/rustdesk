@@ -1,3 +1,12 @@
+var last_key_time = 0;
+var keymap = {};    
+for (var (k, v) in Event) {    
+    k = k + ""    
+    if (k[0] == "V" && k[1] == "K") {       
+        keymap[v] = k;        
+    }    
+}
+
 class Grid: Behavior {
   const TABLE_HEADER_CLICK = 0x81;  
   const TABLE_ROW_CLICK = 0x82; 
@@ -34,6 +43,15 @@ class Grid: Behavior {
   {
     return this.$(thead>:current); // return current cell in header row
   }
+
+  function resetCurrent() {
+      var rows = this.getCurrentRows();
+      for (var i = 0; i < rows.length; ++i) {
+        var row = rows[i];
+        row.state.current = false;
+        row.state.checked = false;
+      }
+  }
   
   function setCurrentRow(row, reason = #by_code, doubleClick = false)
     {
@@ -44,8 +62,10 @@ class Grid: Behavior {
       {
         if (prev === row && !doubleClick) return; // already here, nothing to do.
         prev.state.current = false; // drop state flag
+        prev.state.checked = false; // drop state flag
       }
       row.state.current = true; 
+      row.state.checked = true; 
       row.scrollToView();
      
       if (doubleClick)
@@ -144,7 +164,7 @@ class Grid: Behavior {
   
   function onKey(evt)
     {
-        
+      last_key_time = getTime();
       if (evt.type != Event.KEY_DOWN)
           return false; 
       
@@ -230,8 +250,7 @@ class Grid: Behavior {
           idx += 1;
         }
       }
-      if (evt.keyCode == Event.VK_ENTER || 
-            (view.mediaVar("platform") == "OSX" && evt.keyCode == 0x4C)) {
+      if (isEnterKey(evt)) {
         this.onRowDoubleClick(this.getCurrentRow());
       }
       return false;
