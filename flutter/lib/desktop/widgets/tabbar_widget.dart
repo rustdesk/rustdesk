@@ -289,57 +289,48 @@ class DesktopTab extends StatelessWidget {
   Widget _buildBar() {
     return Row(
       children: [
-        Expanded(
-          child: Row(
-            children: [
-              Offstage(
-                  offstage: !Platform.isMacOS,
-                  child: const SizedBox(
-                    width: 78,
-                  )),
-              Row(children: [
-                Offstage(
-                    offstage: !showLogo,
-                    child: SvgPicture.asset(
-                      'assets/logo.svg',
-                      width: 16,
-                      height: 16,
-                    )),
-                Offstage(
-                    offstage: !showTitle,
-                    child: const Text(
-                      "RustDesk",
-                      style: TextStyle(fontSize: 13),
-                    ).marginOnly(left: 2))
-              ]).marginOnly(
-                left: 5,
-                right: 10,
-              ),
-              Expanded(
-                child: GestureDetector(
-                    onPanStart: (_) {
-                      if (isMainWindow) {
-                        windowManager.startDragging();
-                      } else {
-                        WindowController.fromWindowId(windowId!)
-                            .startDragging();
-                      }
-                    },
-                    child: _ListView(
-                      controller: controller,
-                      onTabClose: onTabClose,
-                      tabBuilder: tabBuilder,
-                      labelGetter: labelGetter,
-                    )),
-              ),
-            ],
-          ),
+        Row(
+          children: [
+            Offstage(
+                offstage: !Platform.isMacOS,
+                child: const SizedBox(
+                  width: 78,
+                )),
+            GestureDetector(
+                onDoubleTap: () =>
+                    showMaximize ? toggleMaximize(isMainWindow) : null,
+                onPanStart: (_) => startDragging(isMainWindow),
+                child: Row(children: [
+                  Offstage(
+                      offstage: !showLogo,
+                      child: SvgPicture.asset(
+                        'assets/logo.svg',
+                        width: 16,
+                        height: 16,
+                      )),
+                  Offstage(
+                      offstage: !showTitle,
+                      child: const Text(
+                        "RustDesk",
+                        style: TextStyle(fontSize: 13),
+                      ).marginOnly(left: 2))
+                ]).marginOnly(
+                  left: 5,
+                  right: 10,
+                )),
+            _ListView(
+              controller: controller,
+              onTabClose: onTabClose,
+              tabBuilder: tabBuilder,
+              labelGetter: labelGetter,
+            ),
+          ],
         ),
-        Offstage(offstage: tail == null, child: tail),
         WindowActionPanel(
-          mainTab: isMainWindow,
+          isMainWindow: isMainWindow,
           tabType: tabType,
           state: state,
+          tail: tail,
           showMinimize: showMinimize,
           showMaximize: showMaximize,
           showClose: showClose,
@@ -351,20 +342,22 @@ class DesktopTab extends StatelessWidget {
 }
 
 class WindowActionPanel extends StatefulWidget {
-  final bool mainTab;
+  final bool isMainWindow;
   final DesktopTabType tabType;
   final Rx<DesktopTabState> state;
 
   final bool showMinimize;
   final bool showMaximize;
   final bool showClose;
+  final Widget? tail;
   final Future<bool> Function()? onClose;
 
   const WindowActionPanel(
       {Key? key,
-      required this.mainTab,
+      required this.isMainWindow,
       required this.tabType,
       required this.state,
+      this.tail,
       this.showMinimize = true,
       this.showMaximize = true,
       this.showClose = true,
@@ -387,7 +380,7 @@ class WindowActionPanelState extends State<WindowActionPanel>
     DesktopMultiWindow.addListener(this);
     windowManager.addListener(this);
 
-    if (widget.mainTab) {
+    if (widget.isMainWindow) {
       windowManager.isMaximized().then((maximized) {
         if (isMaximized != maximized) {
           WidgetsBinding.instance.addPostFrameCallback(
@@ -431,22 +424,23 @@ class WindowActionPanelState extends State<WindowActionPanel>
   }
 
   @override
-  void onWindowClose() {
-    debugPrint("onWindowClose : is Main : ${widget.mainTab}");
-    super.onWindowClose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return Row(
+    return Expanded(
+        child: Row(
       children: [
+        Expanded(
+            child: GestureDetector(
+          onDoubleTap: widget.showMaximize ? _toggleMaximize : null,
+          onPanStart: (_) => startDragging(widget.isMainWindow),
+        )),
+        Offstage(offstage: widget.tail == null, child: widget.tail),
         Offstage(
             offstage: !widget.showMinimize,
             child: ActionIcon(
               message: 'Minimize',
               icon: IconFont.min,
               onTap: () {
-                if (widget.mainTab) {
+                if (widget.isMainWindow) {
                   windowManager.minimize();
                 } else {
                   WindowController.fromWindowId(windowId!).minimize();
@@ -459,24 +453,7 @@ class WindowActionPanelState extends State<WindowActionPanel>
             child: ActionIcon(
               message: isMaximized ? "Restore" : "Maximize",
               icon: isMaximized ? IconFont.restore : IconFont.max,
-              onTap: () {
-                if (widget.mainTab) {
-                  if (isMaximized) {
-                    windowManager.unmaximize();
-                  } else {
-                    windowManager.maximize();
-                  }
-                } else {
-                  final wc = WindowController.fromWindowId(windowId!);
-                  if (isMaximized) {
-                    wc.unmaximize();
-                  } else {
-                    wc.maximize();
-                  }
-                }
-                // setState for sub window, wc.unmaximize/maximize() will not invoke onWindowMaximize/Unmaximize
-                setState(() => isMaximized = !isMaximized);
-              },
+              onTap: _toggleMaximize,
               isClose: false,
             )),
         Offstage(
@@ -487,7 +464,7 @@ class WindowActionPanelState extends State<WindowActionPanel>
               onTap: () async {
                 final res = await widget.onClose?.call() ?? true;
                 if (res) {
-                  if (widget.mainTab) {
+                  if (widget.isMainWindow) {
                     windowManager.close();
                   } else {
                     // only hide for multi window, not close
@@ -500,7 +477,47 @@ class WindowActionPanelState extends State<WindowActionPanel>
               isClose: true,
             )),
       ],
-    );
+    ));
+  }
+
+  void _toggleMaximize() {
+    toggleMaximize(widget.isMainWindow).then((maximize) {
+      if (isMaximized != maximize) {
+        // setState for sub window, wc.unmaximize/maximize() will not invoke onWindowMaximize/Unmaximize
+        setState(() => isMaximized = !isMaximized);
+      }
+    });
+  }
+}
+
+void startDragging(bool isMainWindow) {
+  if (isMainWindow) {
+    windowManager.startDragging();
+  } else {
+    WindowController.fromWindowId(windowId!).startDragging();
+  }
+}
+
+/// return true -> window will be maximize
+/// return false -> window will be unmaximize
+Future<bool> toggleMaximize(bool isMainWindow) async {
+  if (isMainWindow) {
+    if (await windowManager.isMaximized()) {
+      windowManager.unmaximize();
+      return false;
+    } else {
+      windowManager.maximize();
+      return true;
+    }
+  } else {
+    final wc = WindowController.fromWindowId(windowId!);
+    if (await wc.isMaximized()) {
+      wc.unmaximize();
+      return false;
+    } else {
+      wc.maximize();
+      return true;
+    }
   }
 }
 
