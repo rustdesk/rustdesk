@@ -39,6 +39,12 @@ use std::{
 #[cfg(windows)]
 use virtual_display;
 
+pub const SCRAP_UBUNTU_HIGHER_REQUIRED: &str = "Wayland requires Ubuntu 21.04 or higher version.";
+pub const SCRAP_OTHER_VERSION_OR_X11_REQUIRED: &str =
+    "Wayland requires higher version of linux distro. Please try X11 desktop or change your OS.";
+pub const SCRAP_X11_REQUIRED: &str = "x11 expected";
+pub const SCRAP_X11_REF_URL: &str = "https://rustdesk.com/docs/en/manual/linux/#x11-required";
+
 pub const NAME: &'static str = "video";
 
 lazy_static::lazy_static! {
@@ -569,7 +575,7 @@ fn run(sp: GenericService) -> ResultType<()> {
                 {
                     if !scrap::is_x11() {
                         if would_block_count >= 100 {
-                            // For now, the user should choose and agree screen sharing agiain. 
+                            // For now, the user should choose and agree screen sharing agiain.
                             // to-do: Remember choice, attendless...
                             super::wayland::release_resouce();
                             bail!("Wayland capturer none 100 times, try restart captuere");
@@ -745,6 +751,14 @@ pub(super) fn get_displays_2(all: &Vec<Display>) -> (usize, Vec<DisplayInfo>) {
         *lock = primary
     }
     (*lock, displays)
+}
+
+pub fn is_inited_msg() -> Option<Message> {
+    #[cfg(target_os = "linux")]
+    if !scrap::is_x11() {
+        return super::wayland::is_inited();
+    }
+    None
 }
 
 pub async fn get_displays() -> ResultType<(usize, Vec<DisplayInfo>)> {

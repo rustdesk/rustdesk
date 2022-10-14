@@ -119,7 +119,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                     Err(err) => {
                                         log::error!("Connection closed: {}", err);
                                         self.handler.set_force_relay(direct, received);
-                                        self.handler.msgbox("error", "Connection Error", &err.to_string());
+                                        self.handler.msgbox("error", "Connection Error", &err.to_string(), "");
                                         break;
                                     }
                                     Ok(ref bytes) => {
@@ -134,10 +134,10 @@ impl<T: InvokeUiSession> Remote<T> {
                             } else {
                                 if self.handler.is_restarting_remote_device() {
                                     log::info!("Restart remote device");
-                                    self.handler.msgbox("restarting", "Restarting Remote Device", "remote_restarting_tip");
+                                    self.handler.msgbox("restarting", "Restarting Remote Device", "remote_restarting_tip", "");
                                 } else {
                                     log::info!("Reset by the peer");
-                                    self.handler.msgbox("error", "Connection Error", "Reset by the peer");
+                                    self.handler.msgbox("error", "Connection Error", "Reset by the peer", "");
                                 }
                                 break;
                             }
@@ -162,12 +162,12 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                         _ = self.timer.tick() => {
                             if last_recv_time.elapsed() >= SEC30 {
-                                self.handler.msgbox("error", "Connection Error", "Timeout");
+                                self.handler.msgbox("error", "Connection Error", "Timeout", "");
                                 break;
                             }
                             if !self.read_jobs.is_empty() {
                                 if let Err(err) = fs::handle_read_jobs(&mut self.read_jobs, &mut peer).await {
-                                    self.handler.msgbox("error", "Connection Error", &err.to_string());
+                                    self.handler.msgbox("error", "Connection Error", &err.to_string(), "");
                                     break;
                                 }
                                 self.update_jobs_status();
@@ -191,7 +191,7 @@ impl<T: InvokeUiSession> Remote<T> {
             }
             Err(err) => {
                 self.handler
-                    .msgbox("error", "Connection Error", &err.to_string());
+                    .msgbox("error", "Connection Error", &err.to_string(), "");
             }
         }
         if let Some(stop) = stop_clipboard {
@@ -971,7 +971,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                     }
                     Some(misc::Union::CloseReason(c)) => {
-                        self.handler.msgbox("error", "Connection Error", &c);
+                        self.handler.msgbox("error", "Connection Error", &c, "");
                         return false;
                     }
                     Some(misc::Union::BackNotification(notification)) => {
@@ -981,8 +981,12 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                     Some(misc::Union::Uac(uac)) => {
                         if uac {
-                            self.handler
-                                .msgbox("custom-uac-nocancel", "Warning", "uac_warning");
+                            self.handler.msgbox(
+                                "custom-uac-nocancel",
+                                "Warning",
+                                "uac_warning",
+                                "",
+                            );
                         }
                     }
                     Some(misc::Union::ForegroundWindowElevated(elevated)) => {
@@ -991,6 +995,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                 "custom-elevated-foreground-nocancel",
                                 "Warning",
                                 "elevated_foreground_window_warning",
+                                "",
                             );
                         }
                     }
@@ -1012,6 +1017,19 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                     _ => {}
                 },
+                Some(message::Union::MessageBox(msgbox)) => {
+                    let mut link = msgbox.link;
+                    if !link.starts_with("rustdesk://") {
+                        if let Some(v) = hbb_common::config::HELPER_URL.get(&link as &str) {
+                            link = v.to_string();
+                        } else {
+                            log::warn!("Message box ignore link {} for security", &link);
+                            link = "".to_string();
+                        }
+                    }
+                    self.handler
+                        .msgbox(&msgbox.msgtype, &msgbox.title, &msgbox.text, &link);
+                }
                 _ => {}
             }
         }
@@ -1053,7 +1071,7 @@ impl<T: InvokeUiSession> Remote<T> {
             }
             back_notification::BlockInputState::BlkOnFailed => {
                 self.handler
-                    .msgbox("custom-error", "Block user input", "Failed");
+                    .msgbox("custom-error", "Block user input", "Failed", "");
                 self.update_block_input_state(false);
             }
             back_notification::BlockInputState::BlkOffSucceeded => {
@@ -1061,7 +1079,7 @@ impl<T: InvokeUiSession> Remote<T> {
             }
             back_notification::BlockInputState::BlkOffFailed => {
                 self.handler
-                    .msgbox("custom-error", "Unblock user input", "Failed");
+                    .msgbox("custom-error", "Unblock user input", "Failed", "");
             }
             _ => {}
         }
@@ -1086,51 +1104,52 @@ impl<T: InvokeUiSession> Remote<T> {
                     "error",
                     "Connecting...",
                     "Someone turns on privacy mode, exit",
+                    "",
                 );
                 return false;
             }
             back_notification::PrivacyModeState::PrvNotSupported => {
                 self.handler
-                    .msgbox("custom-error", "Privacy mode", "Unsupported");
+                    .msgbox("custom-error", "Privacy mode", "Unsupported", "");
                 self.update_privacy_mode(false);
             }
             back_notification::PrivacyModeState::PrvOnSucceeded => {
                 self.handler
-                    .msgbox("custom-nocancel", "Privacy mode", "In privacy mode");
+                    .msgbox("custom-nocancel", "Privacy mode", "In privacy mode", "");
                 self.update_privacy_mode(true);
             }
             back_notification::PrivacyModeState::PrvOnFailedDenied => {
                 self.handler
-                    .msgbox("custom-error", "Privacy mode", "Peer denied");
+                    .msgbox("custom-error", "Privacy mode", "Peer denied", "");
                 self.update_privacy_mode(false);
             }
             back_notification::PrivacyModeState::PrvOnFailedPlugin => {
                 self.handler
-                    .msgbox("custom-error", "Privacy mode", "Please install plugins");
+                    .msgbox("custom-error", "Privacy mode", "Please install plugins", "");
                 self.update_privacy_mode(false);
             }
             back_notification::PrivacyModeState::PrvOnFailed => {
                 self.handler
-                    .msgbox("custom-error", "Privacy mode", "Failed");
+                    .msgbox("custom-error", "Privacy mode", "Failed", "");
                 self.update_privacy_mode(false);
             }
             back_notification::PrivacyModeState::PrvOffSucceeded => {
                 self.handler
-                    .msgbox("custom-nocancel", "Privacy mode", "Out privacy mode");
+                    .msgbox("custom-nocancel", "Privacy mode", "Out privacy mode", "");
                 self.update_privacy_mode(false);
             }
             back_notification::PrivacyModeState::PrvOffByPeer => {
                 self.handler
-                    .msgbox("custom-error", "Privacy mode", "Peer exit");
+                    .msgbox("custom-error", "Privacy mode", "Peer exit", "");
                 self.update_privacy_mode(false);
             }
             back_notification::PrivacyModeState::PrvOffFailed => {
                 self.handler
-                    .msgbox("custom-error", "Privacy mode", "Failed to turn off");
+                    .msgbox("custom-error", "Privacy mode", "Failed to turn off", "");
             }
             back_notification::PrivacyModeState::PrvOffUnknown => {
                 self.handler
-                    .msgbox("custom-error", "Privacy mode", "Turned off");
+                    .msgbox("custom-error", "Privacy mode", "Turned off", "");
                 // log::error!("Privacy mode is turned off with unknown reason");
                 self.update_privacy_mode(false);
             }

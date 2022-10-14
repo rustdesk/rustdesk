@@ -48,7 +48,10 @@ pub use super::lang::*;
 pub mod file_trait;
 pub mod helper;
 pub mod io_loop;
-use crate::ui_session_interface::global_save_keyboard_mode;
+use crate::{
+    server::video_service::{SCRAP_X11_REF_URL, SCRAP_X11_REQUIRED},
+    ui_session_interface::global_save_keyboard_mode,
+};
 pub static SERVER_KEYBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
 pub static SERVER_FILE_TRANSFER_ENABLED: AtomicBool = AtomicBool::new(true);
 pub static SERVER_CLIPBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
@@ -1263,10 +1266,14 @@ impl LoginConfigHandler {
     pub fn handle_login_error(&mut self, err: &str, interface: &impl Interface) -> bool {
         if err == "Wrong Password" {
             self.password = Default::default();
-            interface.msgbox("re-input-password", err, "Do you want to enter again?");
+            interface.msgbox("re-input-password", err, "Do you want to enter again?", "");
             true
         } else {
-            interface.msgbox("error", "Login Error", err);
+            if err.contains(SCRAP_X11_REQUIRED) {
+                interface.msgbox("error", "Login Error", err, SCRAP_X11_REF_URL);
+            } else {
+                interface.msgbox("error", "Login Error", err, "");
+            }
             false
         }
     }
@@ -1636,7 +1643,7 @@ pub async fn handle_hash(
     if password.is_empty() {
         // login without password, the remote side can click accept
         send_login(lc.clone(), Vec::new(), peer).await;
-        interface.msgbox("input-password", "Password Required", "");
+        interface.msgbox("input-password", "Password Required", "", "");
     } else {
         let mut hasher = Sha256::new();
         hasher.update(&password);
@@ -1689,7 +1696,7 @@ pub async fn handle_login_from_ui(
 pub trait Interface: Send + Clone + 'static + Sized {
     /// Send message data to remote peer.
     fn send(&self, data: Data);
-    fn msgbox(&self, msgtype: &str, title: &str, text: &str);
+    fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str);
     fn handle_login_error(&mut self, err: &str) -> bool;
     fn handle_peer_info(&mut self, pi: PeerInfo);
     fn set_force_relay(&mut self, direct: bool, received: bool);
@@ -1697,7 +1704,7 @@ pub trait Interface: Send + Clone + 'static + Sized {
     fn is_port_forward(&self) -> bool;
     fn is_rdp(&self) -> bool;
     fn on_error(&self, err: &str) {
-        self.msgbox("error", "Error", err);
+        self.msgbox("error", "Error", err, "");
     }
     fn is_force_relay(&self) -> bool;
     async fn handle_hash(&mut self, pass: &str, hash: Hash, peer: &mut Stream);

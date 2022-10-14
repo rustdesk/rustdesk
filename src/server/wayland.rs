@@ -3,11 +3,9 @@ use hbb_common::{allow_err, platform::linux::DISTRO};
 use scrap::{set_map_err, Capturer, Display, Frame, TraitCapturer};
 use std::io;
 
-pub const SCRAP_UBUNTU_HIGHER_REQUIRED: &str = "Wayland requires Ubuntu 21.04 or higher version.";
-pub const SCRAP_OTHER_VERSION_OR_X11_REQUIRED: &str =
-    "Wayland requires higher version of linux distro. Please try X11 desktop or change your OS.";
-pub const SCRAP_X11_REQUIRED: &str = "X11 is required";
-pub const SCRAP_X11_REF_URL: &str = "https://rustdesk.com/docs/en/manual/linux/#x11-required";
+use super::video_service::{
+    SCRAP_OTHER_VERSION_OR_X11_REQUIRED, SCRAP_UBUNTU_HIGHER_REQUIRED, SCRAP_X11_REQUIRED,
+};
 
 lazy_static::lazy_static! {
     static ref CAP_DISPLAY_INFO: RwLock<u64> = RwLock::new(0);
@@ -26,7 +24,10 @@ fn map_err_scrap(err: String) -> io::Error {
     //     std::process::exit(-1);
     // }
 
-    log::error!("REMOVE ME ===================================== wayland scrap error {}", &err);
+    log::error!(
+        "REMOVE ME ===================================== wayland scrap error {}",
+        &err
+    );
 
     if DISTRO.name.to_uppercase() == "Ubuntu".to_uppercase() {
         if DISTRO.version_id < "21".to_owned() {
@@ -91,6 +92,27 @@ struct CapDisplayInfo {
 #[tokio::main(flavor = "current_thread")]
 pub(super) async fn ensure_inited() -> ResultType<()> {
     check_init().await
+}
+
+pub(super) fn is_inited() -> Option<Message> {
+    if scrap::is_x11() {
+        None
+    } else {
+        if *CAP_DISPLAY_INFO.read().unwrap() == 0 {
+            let mut msg_out = Message::new();
+            let res = MessageBox {
+                msgtype: "nook-nocancel-hasclose".to_owned(),
+                title: "Wayland".to_owned(),
+                text: "Please Select the screen to be shared(Operate on the peer side).".to_owned(),
+                link: "".to_owned(),
+                ..Default::default()
+            };
+            msg_out.set_message_box(res);
+            Some(msg_out)
+        } else {
+            None
+        }
+    }
 }
 
 async fn check_init() -> ResultType<()> {

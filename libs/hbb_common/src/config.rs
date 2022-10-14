@@ -53,11 +53,19 @@ lazy_static::lazy_static! {
     static ref HW_CODEC_CONFIG: Arc<RwLock<HwCodecConfig>> = Arc::new(RwLock::new(HwCodecConfig::load()));
 }
 
-// #[cfg(any(target_os = "android", target_os = "ios"))]
 lazy_static::lazy_static! {
     pub static ref APP_DIR: Arc<RwLock<String>> = Default::default();
     pub static ref APP_HOME_DIR: Arc<RwLock<String>> = Default::default();
 }
+
+// #[cfg(any(target_os = "android", target_os = "ios"))]
+lazy_static::lazy_static! {
+    pub static ref HELPER_URL: HashMap<&'static str, &'static str> = HashMap::from([
+        ("rustdesk docs home", "https://rustdesk.com/docs/en/"),
+        ("rustdesk docs x11-required", "https://rustdesk.com/docs/en/manual/linux/#x11-required"),
+        ]);
+}
+
 const CHARS: &'static [char] = &[
     '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k',
     'm', 'n', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',

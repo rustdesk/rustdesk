@@ -75,13 +75,13 @@ pub async fn listen(
                         let interface = interface.clone();
                         tokio::spawn(async move {
                             if let Err(err) = run_forward(forward, stream).await {
-                               interface.msgbox("error", "Error", &err.to_string());
+                               interface.msgbox("error", "Error", &err.to_string(), "");
                             }
                             log::info!("connection from {:?} closed", addr);
                        });
                     }
                     Err(err) => {
-                        interface.msgbox("error", "Error", &err.to_string());
+                        interface.msgbox("error", "Error", &err.to_string(), "");
                     }
                     _ => {}
                 }

@@ -18,6 +18,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:window_size/window_size.dart' as window_size;
+import 'package:url_launcher/url_launcher.dart';
 
 import 'common/widgets/overlay.dart';
 import 'mobile/pages/file_manager_page.dart';
@@ -618,8 +619,8 @@ class CustomAlertDialog extends StatelessWidget {
   }
 }
 
-void msgBox(
-    String type, String title, String text, OverlayDialogManager dialogManager,
+void msgBox(String type, String title, String text, String link,
+    OverlayDialogManager dialogManager,
     {bool? hasCancel}) {
   dialogManager.dismissAll();
   List<Widget> buttons = [];
@@ -634,6 +635,12 @@ void msgBox(
 
   cancel() {
     dialogManager.dismissAll();
+  }
+
+  jumplink() {
+    if (link.startsWith('http')) {
+      launchUrl(Uri.parse(link));
+    }
   }
 
   if (type != "connecting" && type != "success" && !type.contains("nook")) {
@@ -653,6 +660,9 @@ void msgBox(
         msgBoxButton(translate('Close'), () {
           dialogManager.dismissAll();
         }));
+  }
+  if (link.isNotEmpty) {
+    buttons.insert(0, msgBoxButton(translate('JumpLink'), jumplink));
   }
   dialogManager.show((setState, close) => CustomAlertDialog(
         title: _msgBoxTitle(title),

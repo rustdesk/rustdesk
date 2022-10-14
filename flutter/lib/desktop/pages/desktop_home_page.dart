@@ -414,7 +414,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       final root = await bind.mainIsRoot();
       final release = await bind.mainIsRelease();
       if (Platform.isWindows && release && !installed && !root) {
-        msgBox('custom-elevation-nocancel', 'Prompt', 'elevation_prompt',
+        msgBox('custom-elevation-nocancel', 'Prompt', 'elevation_prompt', '',
             gFFI.dialogManager);
       }
     });

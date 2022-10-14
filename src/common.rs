@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    future::Future,
     sync::{Arc, Mutex},
 };
 
@@ -20,6 +21,8 @@ use hbb_common::{
 };
 // #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 use hbb_common::{config::RENDEZVOUS_PORT, futures::future::join_all};
+
+pub type NotifyMessageBox = fn(String, String, String, String) -> dyn Future<Output = ()>;
 
 pub const CLIPBOARD_NAME: &'static str = "clipboard";
 pub const CLIPBOARD_INTERVAL: u64 = 333;
@@ -44,8 +47,7 @@ pub fn global_init() -> bool {
     true
 }
 
-pub fn global_clean() {
-}
+pub fn global_clean() {}
 
 #[inline]
 pub fn valid_for_numlock(evt: &KeyEvent) -> bool {

@@ -377,5 +377,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Custom", ""),
         ("Full Access", ""),
         ("Screen Share", ""),
+        ("Wayland requires Ubuntu 21.04 or higher version.", "Wayland requiere Ubuntu 21.04 o una versión superior."),
+        ("Wayland requires higher version of linux distro. Please try X11 desktop or change your OS.", "Wayland requiere una versión superior de la distribución de Linux. Pruebe el escritorio X11 o cambie su sistema operativo."),
+        ("JumpLink", "View"),
+        ("Please Select the screen to be shared(Operate on the peer side).", "Seleccione la pantalla que se compartirá (Operar en el lado del compañero)."),
     ].iter().cloned().collect();
 }

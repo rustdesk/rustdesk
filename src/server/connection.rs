@@ -742,6 +742,10 @@ impl Connection {
             res.set_peer_info(pi);
         } else {
             try_activate_screen();
+            if let Some(msg_out) = super::video_service::is_inited_msg() {
+                self.send(msg_out).await;
+            }
+
             match super::video_service::get_displays().await {
                 Err(err) => {
                     res.set_error(format!("Error: {}", err));
