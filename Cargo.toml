@@ -110,6 +110,8 @@ rust-pulsectl = { git = "https://github.com/open-trade/pulsectl" }
 async-process = "1.3"
 mouce = { git="https://github.com/fufesou/mouce.git" }
 evdev = { git="https://github.com/fufesou/evdev" }
+dbus = "0.9"
+dbus-crossroads = "0.5"
 
 
 [target.'cfg(target_os = "android")'.dependencies]

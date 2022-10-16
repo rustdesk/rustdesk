@@ -407,7 +407,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                 setState(() {
                   client.recording = enabled;
                 });
-              }, translate('Allow reco)rding session'))
+              }, translate('Allow recording session'))
             ],
           )),
         ],

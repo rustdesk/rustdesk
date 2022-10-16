@@ -16,12 +16,15 @@ class FileModel extends ChangeNotifier {
   var _isLocal = false;
   var _selectMode = false;
 
-  var _localOption = DirectoryOption();
-  var _remoteOption = DirectoryOption();
+  final _localOption = DirectoryOption();
+  final _remoteOption = DirectoryOption();
+
+  List<String> localHistory = [];
+  List<String> remoteHistory = [];
 
   var _jobId = 0;
 
-  var _jobProgress = JobProgress(); // from rust update
+  final _jobProgress = JobProgress(); // from rust update
 
   /// JobTable <jobId, JobProgress>
   final _jobTable = List<JobProgress>.empty(growable: true).obs;
@@ -368,8 +371,11 @@ class FileModel extends ChangeNotifier {
     }
   }
 
-  openDirectory(String path, {bool? isLocal}) async {
+  openDirectory(String path, {bool? isLocal, bool isBack = false}) async {
     isLocal = isLocal ?? _isLocal;
+    if (!isBack) {
+      pushHistory(isLocal);
+    }
     final showHidden =
         isLocal ? _localOption.showHidden : _remoteOption.showHidden;
     final isWindows =
@@ -397,9 +403,32 @@ class FileModel extends ChangeNotifier {
     }
   }
 
+  void pushHistory(bool isLocal) {
+    final history = isLocal ? localHistory : remoteHistory;
+    final currPath = isLocal ? currentLocalDir.path : currentRemoteDir.path;
+    if (history.isNotEmpty && history.last == currPath) {
+      return;
+    }
+    history.add(currPath);
+  }
+
   goHome({bool? isLocal}) {
     isLocal = isLocal ?? _isLocal;
     openDirectory(getCurrentHome(isLocal), isLocal: isLocal);
+  }
+
+  goBack({bool? isLocal}) {
+    isLocal = isLocal ?? _isLocal;
+    final history = isLocal ? localHistory : remoteHistory;
+    if (history.isEmpty) return;
+    final path = history.removeAt(history.length - 1);
+    if (path.isEmpty) return;
+    final currPath = isLocal ? currentLocalDir.path : currentRemoteDir.path;
+    if (currPath == path) {
+      goBack(isLocal: isLocal);
+      return;
+    }
+    openDirectory(path, isLocal: isLocal, isBack: true);
   }
 
   goToParentDirectory({bool? isLocal}) {
@@ -685,6 +714,8 @@ class FileModel extends ChangeNotifier {
   }
 
   sendRemoveEmptyDir(String path, int fileNum, bool isLocal) {
+    final history = isLocal ? localHistory : remoteHistory;
+    history.removeWhere((element) => element.contains(path));
     bind.sessionRemoveAllEmptyDirs(
         id: '${parent.target?.id}',
         actId: _jobId,

@@ -113,6 +113,10 @@ class PlatformFFI {
         debugPrint('Failed to get documents directory: $e');
       }
       _ffiBind = RustdeskImpl(dylib);
+      if (Platform.isLinux) {
+        // start dbus service, no need to await
+        await _ffiBind.mainStartDbusServer();
+      }
       _startListenEvent(_ffiBind); // global event
       try {
         if (isAndroid) {

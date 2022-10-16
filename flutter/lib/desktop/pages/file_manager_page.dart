@@ -9,12 +9,25 @@ import 'package:flutter_hbb/models/file_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock/wakelock.dart';
+import '../../consts.dart';
+import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
 
 import '../../common.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
+import '../widgets/popup_menu.dart';
 
-enum LocationStatus { bread, textField }
+/// status of location bar
+enum LocationStatus {
+  /// normal bread crumb bar
+  bread,
+
+  /// show path text field
+  pathLocation,
+
+  /// show file search bar text field
+  fileSearchBar
+}
 
 class FileManagerPage extends StatefulWidget {
   const FileManagerPage({Key? key, required this.id}) : super(key: key);
@@ -40,7 +53,7 @@ class _FileManagerPageState extends State<FileManagerPage>
   final _breadCrumbScrollerLocal = ScrollController();
   final _breadCrumbScrollerRemote = ScrollController();
 
-  final _dropMaskVisible = false.obs;
+  final _dropMaskVisible = false.obs; // TODO impl drop mask
 
   ScrollController getBreadCrumbScrollController(bool isLocal) {
     return isLocal ? _breadCrumbScrollerLocal : _breadCrumbScrollerRemote;
@@ -84,6 +97,8 @@ class _FileManagerPageState extends State<FileManagerPage>
     Get.delete<FFI>(tag: 'ft_${widget.id}');
     _locationNodeLocal.removeListener(onLocalLocationFocusChanged);
     _locationNodeRemote.removeListener(onRemoteLocationFocusChanged);
+    _locationNodeLocal.dispose();
+    _locationNodeRemote.dispose();
     super.dispose();
   }
 
@@ -95,56 +110,64 @@ class _FileManagerPageState extends State<FileManagerPage>
         _ffi.dialogManager.setOverlayState(Overlay.of(context));
         return ChangeNotifierProvider.value(
             value: _ffi.fileModel,
-            child: Consumer<FileModel>(builder: (_context, _model, _child) {
-              return WillPopScope(
-                  onWillPop: () async {
-                    if (model.selectMode) {
-                      model.toggleSelectMode();
-                    }
-                    return false;
-                  },
-                  child: Scaffold(
-                    backgroundColor: Theme.of(context).backgroundColor,
-                    body: Row(
-                      children: [
-                        Flexible(flex: 3, child: body(isLocal: true)),
-                        Flexible(flex: 3, child: body(isLocal: false)),
-                        Flexible(flex: 2, child: statusList())
-                      ],
-                    ),
-                  ));
+            child: Consumer<FileModel>(builder: (context, model, child) {
+              return Scaffold(
+                backgroundColor: Theme.of(context).backgroundColor,
+                body: Row(
+                  children: [
+                    Flexible(flex: 3, child: body(isLocal: true)),
+                    Flexible(flex: 3, child: body(isLocal: false)),
+                    Flexible(flex: 2, child: statusList())
+                  ],
+                ),
+              );
             }));
       })
     ]);
   }
 
   Widget menu({bool isLocal = false}) {
-    return PopupMenuButton<String>(
-        icon: const Icon(Icons.more_vert),
-        splashRadius: 20,
-        itemBuilder: (context) {
-          return [
-            PopupMenuItem(
-              child: Row(
-                children: [
-                  Icon(
-                      model.getCurrentShowHidden(isLocal)
-                          ? Icons.check_box_outlined
-                          : Icons.check_box_outline_blank,
-                      color: Colors.black),
-                  SizedBox(width: 5),
-                  Text(translate("Show Hidden Files"))
-                ],
-              ),
-              value: "hidden",
-            )
-          ];
+    var menuPos = RelativeRect.fill;
+
+    final items = [
+      MenuEntrySwitch<String>(
+        switchType: SwitchType.scheckbox,
+        text: translate("Show Hidden Files"),
+        getter: () async {
+          return model.getCurrentShowHidden(isLocal);
         },
-        onSelected: (v) {
-          if (v == "hidden") {
-            model.toggleShowHidden(local: isLocal);
-          }
-        });
+        setter: (bool v) async {
+          model.toggleShowHidden(local: isLocal);
+        },
+        padding: kDesktopMenuPadding,
+        dismissOnClicked: true,
+      ),
+    ];
+
+    return Listener(
+        onPointerDown: (e) {
+          final x = e.position.dx;
+          final y = e.position.dy;
+          menuPos = RelativeRect.fromLTRB(x, y, x, y);
+        },
+        child: IconButton(
+          icon: const Icon(Icons.more_vert),
+          splashRadius: 20,
+          onPressed: () => mod_menu.showMenu(
+            context: context,
+            position: menuPos,
+            items: items
+                .map((e) => e.build(
+                    context,
+                    MenuConfig(
+                        commonColor: CustomPopupMenuTheme.commonColor,
+                        height: CustomPopupMenuTheme.height,
+                        dividerHeight: CustomPopupMenuTheme.dividerHeight)))
+                .expand((i) => i)
+                .toList(),
+            elevation: 8,
+          ),
+        ));
   }
 
   Widget body({bool isLocal = false}) {
@@ -153,13 +176,13 @@ class _FileManagerPageState extends State<FileManagerPage>
     final sortIndex = (SortBy style) {
       switch (style) {
         case SortBy.Name:
-          return 1;
+          return 0;
         case SortBy.Type:
           return 0;
         case SortBy.Modified:
-          return 2;
+          return 1;
         case SortBy.Size:
-          return 3;
+          return 2;
       }
     }(model.getSortStyle(isLocal));
     final sortAscending =
@@ -187,13 +210,9 @@ class _FileManagerPageState extends State<FileManagerPage>
                   controller: ScrollController(),
                   child: ObxValue<RxString>(
                     (searchText) {
-                      final filteredEntries = searchText.isEmpty
+                      final filteredEntries = searchText.isNotEmpty
                           ? entries.where((element) {
-                              if (searchText.isEmpty) {
-                                return true;
-                              } else {
-                                return element.name.contains(searchText.value);
-                              }
+                              return element.name.contains(searchText.value);
                             }).toList(growable: false)
                           : entries;
                       return DataTable(
@@ -201,16 +220,16 @@ class _FileManagerPageState extends State<FileManagerPage>
                         showCheckboxColumn: true,
                         dataRowHeight: 25,
                         headingRowHeight: 30,
+                        horizontalMargin: 8,
                         columnSpacing: 8,
                         showBottomBorder: true,
                         sortColumnIndex: sortIndex,
                         sortAscending: sortAscending,
                         columns: [
-                          DataColumn(label: Text(translate(" "))), // icon
                           DataColumn(
                               label: Text(
                                 translate("Name"),
-                              ),
+                              ).marginSymmetric(horizontal: 4),
                               onSort: (columnIndex, ascending) {
                                 model.changeSortStyle(SortBy.Name,
                                     isLocal: isLocal, ascending: ascending);
@@ -250,19 +269,27 @@ class _FileManagerPageState extends State<FileManagerPage>
                               selected:
                                   getSelectedItem(isLocal).contains(entry),
                               cells: [
-                                DataCell(Icon(
-                                    entry.isFile
-                                        ? Icons.feed_outlined
-                                        : Icons.folder,
-                                    size: 25)),
                                 DataCell(
-                                    ConstrainedBox(
-                                        constraints:
-                                            BoxConstraints(maxWidth: 100),
+                                    Container(
+                                        width: 180,
                                         child: Tooltip(
                                           message: entry.name,
-                                          child: Text(entry.name,
-                                              overflow: TextOverflow.ellipsis),
+                                          child: Row(children: [
+                                            Icon(
+                                              entry.isFile
+                                                  ? Icons.feed_outlined
+                                                  : Icons.folder,
+                                              size: 20,
+                                              color: Theme.of(context)
+                                                  .iconTheme
+                                                  .color
+                                                  ?.withOpacity(0.7),
+                                            ).marginSymmetric(horizontal: 2),
+                                            Expanded(
+                                                child: Text(entry.name,
+                                                    overflow:
+                                                        TextOverflow.ellipsis))
+                                          ]),
                                         )), onTap: () {
                                   if (entry.isDirectory) {
                                     openDirectory(entry.path, isLocal: isLocal);
@@ -273,29 +300,27 @@ class _FileManagerPageState extends State<FileManagerPage>
                                     }
                                   } else {
                                     // Perform file-related tasks.
-                                    final _selectedItems =
+                                    final selectedItems =
                                         getSelectedItem(isLocal);
-                                    if (_selectedItems.contains(entry)) {
-                                      _selectedItems.remove(entry);
+                                    if (selectedItems.contains(entry)) {
+                                      selectedItems.remove(entry);
                                     } else {
-                                      _selectedItems.add(isLocal, entry);
+                                      selectedItems.add(isLocal, entry);
                                     }
                                     setState(() {});
                                   }
                                 }),
-                                DataCell(Text(
-                                  entry
-                                          .lastModified()
-                                          .toString()
-                                          .replaceAll(".000", "") +
-                                      "   ",
+                                DataCell(FittedBox(
+                                    child: Text(
+                                  "${entry.lastModified().toString().replaceAll(".000", "")}   ",
                                   style: TextStyle(
                                       fontSize: 12, color: MyTheme.darkGray),
-                                )),
+                                ))),
                                 DataCell(Text(
                                   sizeStr,
+                                  overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                      fontSize: 12, color: MyTheme.darkGray),
+                                      fontSize: 10, color: MyTheme.darkGray),
                                 )),
                               ]);
                         }).toList(growable: false),
@@ -410,15 +435,10 @@ class _FileManagerPageState extends State<FileManagerPage>
         ));
   }
 
-  goBack({bool? isLocal}) {
-    model.goToParentDirectory(isLocal: isLocal);
-  }
-
   Widget headTools(bool isLocal) {
-    final _locationStatus =
+    final locationStatus =
         isLocal ? _locationStatusLocal : _locationStatusRemote;
-    final _locationFocus = isLocal ? _locationNodeLocal : _locationNodeRemote;
-    final _searchTextObs = isLocal ? _searchTextLocal : _searchTextRemote;
+    final locationFocus = isLocal ? _locationNodeLocal : _locationNodeRemote;
     return Container(
         child: Column(
       children: [
@@ -464,76 +484,82 @@ class _FileManagerPageState extends State<FileManagerPage>
                   splashRadius: 20,
                 ),
                 IconButton(
+                  icon: const Icon(Icons.arrow_back),
+                  splashRadius: 20,
+                  onPressed: () {
+                    model.goBack(isLocal: isLocal);
+                  },
+                ),
+                IconButton(
                   icon: const Icon(Icons.arrow_upward),
                   splashRadius: 20,
                   onPressed: () {
-                    goBack(isLocal: isLocal);
+                    model.goToParentDirectory(isLocal: isLocal);
                   },
                 ),
-                menu(isLocal: isLocal),
               ],
             ),
             Expanded(
                 child: GestureDetector(
               onTap: () {
-                _locationStatus.value =
-                    _locationStatus.value == LocationStatus.bread
-                        ? LocationStatus.textField
+                locationStatus.value =
+                    locationStatus.value == LocationStatus.bread
+                        ? LocationStatus.pathLocation
                         : LocationStatus.bread;
                 Future.delayed(Duration.zero, () {
-                  if (_locationStatus.value == LocationStatus.textField) {
-                    _locationFocus.requestFocus();
+                  if (locationStatus.value == LocationStatus.pathLocation) {
+                    locationFocus.requestFocus();
                   }
                 });
               },
-              child: Container(
-                  decoration:
-                      BoxDecoration(border: Border.all(color: Colors.black12)),
+              child: Obx(() => Container(
+                  decoration: BoxDecoration(
+                      border: Border.all(
+                          color: locationStatus.value == LocationStatus.bread
+                              ? Colors.black12
+                              : Theme.of(context)
+                                  .colorScheme
+                                  .primary
+                                  .withOpacity(0.5))),
                   child: Row(
                     children: [
                       Expanded(
-                          child: Obx(() =>
-                              _locationStatus.value == LocationStatus.bread
-                                  ? buildBread(isLocal)
-                                  : buildPathLocation(isLocal))),
-                      DropdownButton<String>(
-                          isDense: true,
-                          underline: Offstage(),
-                          items: [
-                            // TODO: favourite
-                            DropdownMenuItem(
-                              child: Text('/'),
-                              value: '/',
-                            )
-                          ],
-                          onChanged: (path) {
-                            if (path is String && path.isNotEmpty) {
-                              openDirectory(path, isLocal: isLocal);
-                            }
-                          })
+                          child: locationStatus.value == LocationStatus.bread
+                              ? buildBread(isLocal)
+                              : buildPathLocation(isLocal)),
                     ],
-                  )),
+                  ))),
             )),
-            PopupMenuButton(
-              itemBuilder: (context) => [
-                PopupMenuItem(
-                    enabled: false,
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(minWidth: 200),
-                      child: TextField(
-                        controller:
-                            TextEditingController(text: _searchTextObs.value),
-                        autofocus: true,
-                        decoration:
-                            InputDecoration(prefixIcon: Icon(Icons.search)),
-                        onChanged: (searchText) =>
-                            onSearchText(searchText, isLocal),
-                      ),
-                    ))
-              ],
-              splashRadius: 20,
-              child: const Icon(Icons.search),
-            ),
+            Obx(() {
+              switch (locationStatus.value) {
+                case LocationStatus.bread:
+                  return IconButton(
+                      onPressed: () {
+                        locationStatus.value = LocationStatus.fileSearchBar;
+                        final focusNode =
+                            isLocal ? _locationNodeLocal : _locationNodeRemote;
+                        Future.delayed(
+                            Duration.zero, () => focusNode.requestFocus());
+                      },
+                      splashRadius: 20,
+                      icon: Icon(Icons.search));
+                case LocationStatus.pathLocation:
+                  return IconButton(
+                      color: Theme.of(context).disabledColor,
+                      onPressed: null,
+                      splashRadius: 20,
+                      icon: Icon(Icons.close));
+                case LocationStatus.fileSearchBar:
+                  return IconButton(
+                      color: Theme.of(context).disabledColor,
+                      onPressed: () {
+                        onSearchText("", isLocal);
+                        locationStatus.value = LocationStatus.bread;
+                      },
+                      splashRadius: 1,
+                      icon: Icon(Icons.close));
+              }
+            }),
             IconButton(
                 onPressed: () {
                   model.refresh(isLocal: isLocal);
@@ -609,6 +635,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                       },
                       splashRadius: 20,
                       icon: const Icon(Icons.delete_forever_outlined)),
+                  menu(isLocal: isLocal),
                 ],
               ),
             ),
@@ -642,7 +669,9 @@ class _FileManagerPageState extends State<FileManagerPage>
       // ignore
     } else {
       // lost focus, change to bread
-      _locationStatusLocal.value = LocationStatus.bread;
+      if (_locationStatusLocal.value != LocationStatus.fileSearchBar) {
+        _locationStatusLocal.value = LocationStatus.bread;
+      }
     }
   }
 
@@ -652,7 +681,9 @@ class _FileManagerPageState extends State<FileManagerPage>
       // ignore
     } else {
       // lost focus, change to bread
-      _locationStatusRemote.value = LocationStatus.bread;
+      if (_locationStatusRemote.value != LocationStatus.fileSearchBar) {
+        _locationStatusRemote.value = LocationStatus.bread;
+      }
     }
   }
 
@@ -664,14 +695,33 @@ class _FileManagerPageState extends State<FileManagerPage>
       }
       openDirectory(path, isLocal: isLocal);
     });
+    breadCrumbScrollToEnd(isLocal);
     return items.isEmpty
         ? Offstage()
-        : BreadCrumb(
-            items: items,
-            divider: Text("/").paddingSymmetric(horizontal: 4.0),
-            overflow: ScrollableOverflow(
-                controller: getBreadCrumbScrollController(isLocal)),
-          );
+        : Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Expanded(
+                child: BreadCrumb(
+              items: items,
+              divider: Text("/").paddingSymmetric(horizontal: 4.0),
+              overflow: ScrollableOverflow(
+                  controller: getBreadCrumbScrollController(isLocal)),
+            )),
+            DropdownButton<String>(
+                isDense: true,
+                underline: Offstage(),
+                items: [
+                  // TODO: favourite
+                  DropdownMenuItem(
+                    child: Text('/'),
+                    value: '/',
+                  )
+                ],
+                onChanged: (path) {
+                  if (path is String && path.isNotEmpty) {
+                    openDirectory(path, isLocal: isLocal);
+                  }
+                })
+          ]);
   }
 
   List<BreadCrumbItem> getPathBreadCrumbItems(
@@ -690,28 +740,49 @@ class _FileManagerPageState extends State<FileManagerPage>
 
   breadCrumbScrollToEnd(bool isLocal) {
     Future.delayed(Duration(milliseconds: 200), () {
-      final _breadCrumbScroller = getBreadCrumbScrollController(isLocal);
-      _breadCrumbScroller.animateTo(
-          _breadCrumbScroller.position.maxScrollExtent,
-          duration: Duration(milliseconds: 200),
-          curve: Curves.fastLinearToSlowEaseIn);
+      final breadCrumbScroller = getBreadCrumbScrollController(isLocal);
+      if (breadCrumbScroller.hasClients) {
+        breadCrumbScroller.animateTo(
+            breadCrumbScroller.position.maxScrollExtent,
+            duration: Duration(milliseconds: 200),
+            curve: Curves.fastLinearToSlowEaseIn);
+      }
     });
   }
 
   Widget buildPathLocation(bool isLocal) {
-    return TextField(
-      focusNode: isLocal ? _locationNodeLocal : _locationNodeRemote,
-      decoration: InputDecoration(
-        border: InputBorder.none,
-        isDense: true,
-        prefix: Padding(padding: EdgeInsets.only(left: 4.0)),
-      ),
-      controller:
-          TextEditingController(text: model.getCurrentDir(isLocal).path),
-      onSubmitted: (path) {
-        openDirectory(path, isLocal: isLocal);
-      },
-    );
+    final searchTextObs = isLocal ? _searchTextLocal : _searchTextRemote;
+    final locationStatus =
+        isLocal ? _locationStatusLocal : _locationStatusRemote;
+    final focusNode = isLocal ? _locationNodeLocal : _locationNodeRemote;
+    final text = locationStatus.value == LocationStatus.pathLocation
+        ? model.getCurrentDir(isLocal).path
+        : searchTextObs.value;
+    final textController = TextEditingController(text: text)
+      ..selection = TextSelection.collapsed(offset: text.length);
+    return Row(children: [
+      Icon(
+        locationStatus.value == LocationStatus.pathLocation
+            ? Icons.folder
+            : Icons.search,
+        color: Theme.of(context).hintColor,
+      ).paddingSymmetric(horizontal: 2),
+      Expanded(
+          child: TextField(
+        focusNode: focusNode,
+        decoration: InputDecoration(
+            border: InputBorder.none,
+            isDense: true,
+            prefix: Padding(padding: EdgeInsets.only(left: 4.0))),
+        controller: textController,
+        onSubmitted: (path) {
+          openDirectory(path, isLocal: isLocal);
+        },
+        onChanged: locationStatus.value == LocationStatus.fileSearchBar
+            ? (searchText) => onSearchText(searchText, isLocal)
+            : null,
+      ))
+    ]);
   }
 
   onSearchText(String searchText, bool isLocal) {
@@ -734,7 +805,7 @@ class _FileManagerPageState extends State<FileManagerPage>
       return;
     }
     var items = SelectedItems();
-    details.files.forEach((file) {
+    for (var file in details.files) {
       final f = File(file.path);
       items.add(
           true,
@@ -743,7 +814,7 @@ class _FileManagerPageState extends State<FileManagerPage>
             ..name = file.name
             ..size =
                 FileSystemEntity.isDirectorySync(f.path) ? 0 : f.lengthSync());
-    });
+    }
     model.sendFiles(items, isRemote: false);
   }
 }

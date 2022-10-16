@@ -29,6 +29,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable TCP Tunneling", "Cho phép TCP Tunneling"),
         ("IP Whitelisting", "Cho phép IP"),
         ("ID/Relay Server", "Máy chủ ID/Relay"),
+        ("Import Server Conf", "Nhập cấu hình máy chủ"),
+        ("Import server configuration successfully", "Nhập cấu hình máy chủ thành công"),
+        ("Invalid server configuration", "Cấu hình máy chủ không hợp lệ"),
+        ("Clipboard is empty", "Khay nhớ tạm trống"),
         ("Stop service", "Dừng dịch vụ"),
         ("Change ID", "Thay đổi ID"),
         ("Website", "Trang web"),
@@ -367,5 +371,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("uac_warning", ""),
         ("elevated_foreground_window_warning", ""),
         ("Disconnected", ""),
+        ("Other", ""),
+        ("Confirm before closing multiple tabs", ""),
     ].iter().cloned().collect();
 }

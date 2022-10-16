@@ -29,6 +29,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable TCP Tunneling", "TCPトンネリングを有効化"),
         ("IP Whitelisting", "IPホワイトリスト"),
         ("ID/Relay Server", "認証・中継サーバー"),
+        ("Import Server Conf", "サーバー設定をインポート"),
+        ("Import server configuration successfully", "サーバー設定をインポートしました"),
+        ("Invalid server configuration", "無効なサーバー設定です"),
+        ("Clipboard is empty", "クリップボードは空です"),
         ("Stop service", "サービスを停止"),
         ("Change ID", "IDを変更"),
         ("Website", "公式サイト"),
@@ -367,5 +371,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("uac_warning", ""),
         ("elevated_foreground_window_warning", ""),
         ("Disconnected", ""),
+        ("Other", "他の"),
+        ("Confirm before closing multiple tabs", "同時に複数のタブを閉じる前に確認する"),
     ].iter().cloned().collect();
 }

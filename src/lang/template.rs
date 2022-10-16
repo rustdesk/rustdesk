@@ -29,6 +29,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable TCP Tunneling", ""),
         ("IP Whitelisting", ""),
         ("ID/Relay Server", ""),
+        ("Import server configuration successfully", ""),
+        ("Import Server Conf", ""),
+        ("Invalid server configuration", ""),
+        ("Clipboard is empty", ""),
         ("Stop service", ""),
         ("Change ID", ""),
         ("Website", ""),
@@ -367,5 +371,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("uac_warning", ""),
         ("elevated_foreground_window_warning", ""),
         ("Disconnected", ""),
+        ("Other", ""),
+        ("Confirm before closing multiple tabs", ""),
     ].iter().cloned().collect();
 }

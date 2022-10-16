@@ -3,14 +3,19 @@ import 'dart:io';
 
 const double kDesktopRemoteTabBarHeight = 28.0;
 
-/// [kAppTypeMain] used by 'Desktop Main Page' , 'Mobile (Client and Server)' , 'Desktop CM Page'
+/// [kAppTypeMain] used by 'Desktop Main Page' , 'Mobile (Client and Server)' , 'Desktop CM Page', "Install Page"
 const String kAppTypeMain = "main";
 const String kAppTypeDesktopRemote = "remote";
 const String kAppTypeDesktopFileTransfer = "file transfer";
 const String kAppTypeDesktopPortForward = "port forward";
 
+const String kUniLinksPrefix = "rustdesk://";
+const String kActionNewConnection = "connection/new/";
+
 const String kTabLabelHomePage = "Home";
 const String kTabLabelSettingPage = "Settings";
+
+const String kWindowPrefix = "wm_";
 
 const Color kColorWarn = Color.fromARGB(255, 245, 133, 59);
 

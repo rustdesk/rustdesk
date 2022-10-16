@@ -443,10 +443,11 @@ fn run(sp: GenericService) -> ResultType<()> {
     let recorder = if !Config::get_option("allow-auto-record-incoming").is_empty() {
         Recorder::new(RecorderContext {
             id: "local".to_owned(),
+            default_dir: crate::ui_interface::default_video_save_directory(),
             filename: "".to_owned(),
             width: c.width,
             height: c.height,
-            codec_id: scrap::record::RecodeCodecID::VP9,
+            codec_id: scrap::record::RecordCodecID::VP9,
         })
         .map_or(Default::default(), |r| Arc::new(Mutex::new(Some(r))))
     } else {

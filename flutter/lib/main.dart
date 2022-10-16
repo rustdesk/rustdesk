@@ -4,6 +4,7 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/desktop/pages/server_page.dart';
+import 'package:flutter_hbb/desktop/pages/install_page.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_file_transfer_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_port_forward_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_remote_screen.dart';
@@ -23,10 +24,12 @@ import 'mobile/pages/server_page.dart';
 import 'models/platform_model.dart';
 
 int? windowId;
+late List<String> bootArgs;
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   debugPrint("launch args: $args");
+  bootArgs = List.from(args);
 
   if (!isDesktop) {
     runMobileApp();
@@ -42,7 +45,6 @@ Future<void> main(List<String> args) async {
     int type = argument['type'] ?? -1;
     argument['windowId'] = windowId;
     WindowType wType = type.windowType;
-    restoreWindowPosition(wType, windowId: windowId);
     switch (wType) {
       case WindowType.RemoteDesktop:
         desktopType = DesktopType.remote;
@@ -64,6 +66,8 @@ Future<void> main(List<String> args) async {
     desktopType = DesktopType.cm;
     await windowManager.ensureInitialized();
     runConnectionManagerScreen();
+  } else if (args.contains('--install')) {
+    runInstallPage();
   } else {
     desktopType = DesktopType.main;
     await windowManager.ensureInitialized();
@@ -113,6 +117,7 @@ void runMobileApp() async {
 
 void runRemoteScreen(Map<String, dynamic> argument) async {
   await initEnv(kAppTypeDesktopRemote);
+  await restoreWindowPosition(WindowType.RemoteDesktop, windowId: windowId);
   runApp(GetMaterialApp(
     navigatorKey: globalKey,
     debugShowCheckedModeBanner: false,
@@ -138,6 +143,7 @@ void runRemoteScreen(Map<String, dynamic> argument) async {
 
 void runFileTransferScreen(Map<String, dynamic> argument) async {
   await initEnv(kAppTypeDesktopFileTransfer);
+  await restoreWindowPosition(WindowType.FileTransfer, windowId: windowId);
   runApp(
     GetMaterialApp(
       navigatorKey: globalKey,
@@ -163,6 +169,7 @@ void runFileTransferScreen(Map<String, dynamic> argument) async {
 
 void runPortForwardScreen(Map<String, dynamic> argument) async {
   await initEnv(kAppTypeDesktopPortForward);
+  await restoreWindowPosition(WindowType.PortForward, windowId: windowId);
   runApp(
     GetMaterialApp(
       navigatorKey: globalKey,
@@ -212,6 +219,30 @@ void runConnectionManagerScreen() async {
     windowManager.focus();
     windowManager.setOpacity(1);
     windowManager.setAlignment(Alignment.topRight); // ensure
+  });
+}
+
+void runInstallPage() async {
+  await windowManager.ensureInitialized();
+  await initEnv(kAppTypeMain);
+  runApp(GetMaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: MyTheme.lightTheme,
+      themeMode: ThemeMode.light,
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: supportedLocales,
+      home: const InstallPage(),
+      builder: _keepScaleBuilder()));
+  windowManager.waitUntilReadyToShow(
+      WindowOptions(size: Size(800, 600), center: true), () async {
+    windowManager.show();
+    windowManager.focus();
+    windowManager.setOpacity(1);
+    windowManager.setAlignment(Alignment.center); // ensure
   });
 }
 

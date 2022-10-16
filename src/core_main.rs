@@ -1,3 +1,5 @@
+use std::env::Args;
+
 use hbb_common::log;
 
 // shared by flutter and sciter main function
@@ -6,15 +8,21 @@ pub fn core_main() -> Option<Vec<String>> {
     // though async logger more efficient, but it also causes more problems, disable it for now
     // let mut _async_logger_holder: Option<flexi_logger::LoggerHandle> = None;
     let mut args = Vec::new();
+    let mut flutter_args = Vec::new();
     let mut i = 0;
     let mut is_setup = false;
     let mut _is_elevate = false;
     let mut _is_run_as_system = false;
+    let mut _is_flutter_connect = false;
     for arg in std::env::args() {
         // to-do: how to pass to flutter?
         if i == 0 && crate::common::is_setup(&arg) {
             is_setup = true;
         } else if i > 0 {
+            #[cfg(feature = "flutter")]
+            if arg == "--connect" {
+                _is_flutter_connect = true;
+            }
             if arg == "--elevate" {
                 _is_elevate = true;
             } else if arg == "--run-as-system" {
@@ -25,12 +33,24 @@ pub fn core_main() -> Option<Vec<String>> {
         }
         i += 1;
     }
+    if args.contains(&"--install".to_string()) {
+        is_setup = true;
+    }
+    #[cfg(feature = "flutter")]
+    if _is_flutter_connect {
+        return core_main_invoke_new_connection(std::env::args());
+    }
+    if args.contains(&"--install".to_string()) {
+        is_setup = true;
+    }
     if is_setup {
         if args.is_empty() {
             args.push("--install".to_owned());
-        } else if args[0] == "--noinstall" {
-            args.clear();
+            flutter_args.push("--install".to_string());
         }
+    }
+    if args.contains(&"--noinstall".to_string()) {
+        args.clear();
     }
     if args.len() > 0 && args[0] == "--version" {
         println!("{}", crate::VERSION);
@@ -171,7 +191,10 @@ pub fn core_main() -> Option<Vec<String>> {
         }
     }
     //_async_logger_holder.map(|x| x.flush());
-    Some(args)
+    #[cfg(feature = "flutter")]
+    return Some(flutter_args);
+    #[cfg(not(feature = "flutter"))]
+    return Some(args);
 }
 
 fn import_config(path: &str) {
@@ -198,4 +221,37 @@ fn import_config(path: &str) {
             log::info!("config2 written");
         }
     }
+}
+
+/// invoke a new connection
+///
+/// [Note]
+/// this is for invoke new connection from dbus.
+#[cfg(feature = "flutter")]
+fn core_main_invoke_new_connection(mut args: Args) -> Option<Vec<String>> {
+    args.position(|element| {
+        return element == "--connect";
+    })
+    .unwrap();
+    let peer_id = args.next().unwrap_or("".to_string());
+    if peer_id.is_empty() {
+        eprintln!("please provide a valid peer id");
+        return None;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        use crate::dbus::invoke_new_connection;
+
+        match invoke_new_connection(peer_id) {
+            Ok(()) => {
+                return None;
+            }
+            Err(err) => {
+                log::error!("{}", err.as_ref());
+                // return Some to invoke this new connection by self
+                return Some(Vec::new());
+            }
+        }
+    }
+    return None;
 }

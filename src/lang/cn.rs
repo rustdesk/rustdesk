@@ -29,6 +29,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable TCP Tunneling", "允许建立TCP隧道"),
         ("IP Whitelisting", "IP白名单"),
         ("ID/Relay Server", "ID/中继服务器"),
+        ("Import Server Conf", "导入服务器配置"),
+        ("Import server configuration successfully", "导入服务器配置信息成功"),
+        ("Invalid server configuration", "无效服务器配置，请修改后重新拷贝配置信息到剪贴板后点击此按钮"),
+        ("Clipboard is empty", "拷贝配置信息到剪贴板后点击此按钮，可以自动导入配置"),
         ("Stop service", "停止服务"),
         ("Change ID", "改变ID"),
         ("Website", "网站"),
@@ -367,5 +371,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("uac_warning", "暂时无法访问远端设备，因为远端设备正在请求用户账户权限，请等待对方关闭UAC窗口。为避免这个问题，建议在远端设备上安装或者以管理员权限运行本软件。"),
         ("elevated_foreground_window_warning", "暂时无法使用鼠标键盘，因为远端桌面的当前窗口需要更高的权限才能操作, 可以请求对方最小化当前窗口。为避免这个问题，建议在远端设备上安装或者以管理员权限运行本软件。"),
         ("Disconnected", "会话已结束"),
+        ("Other", "其他"),
+        ("Confirm before closing multiple tabs", "关闭多个标签页时向您确认"),
     ].iter().cloned().collect();
 }

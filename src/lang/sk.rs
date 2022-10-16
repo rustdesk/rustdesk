@@ -29,6 +29,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable TCP Tunneling", "Povoliť TCP tunelovanie"),
         ("IP Whitelisting", "Zoznam povolených IP adries"),
         ("ID/Relay Server", "ID/Prepojovací server"),
+        ("Import Server Conf", "Importovať konfiguráciu servera"),
+        ("Import server configuration successfully", "Konfigurácia servera bola úspešne importovaná"),
+        ("Invalid server configuration", "Neplatná konfigurácia servera"),
+        ("Clipboard is empty", "Schránka je prázdna"),
         ("Stop service", "Zastaviť službu"),
         ("Change ID", "Zmeniť ID"),
         ("Website", "Webová stránka"),
@@ -367,5 +371,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("uac_warning", ""),
         ("elevated_foreground_window_warning", ""),
         ("Disconnected", ""),
+        ("Other", ""),
+        ("Confirm before closing multiple tabs", ""),
     ].iter().cloned().collect();
 }
