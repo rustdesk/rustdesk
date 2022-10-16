@@ -364,6 +364,10 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   }
 
   Widget _buildKeyboard(BuildContext context) {
+    FfiModel ffiModel = Provider.of<FfiModel>(context);
+    if (ffiModel.permissions['keyboard'] == false) {
+      return Offstage();
+    }
     return mod_menu.PopupMenuButton(
       padding: EdgeInsets.zero,
       icon: const Icon(
@@ -517,7 +521,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         ));
       }
     }
-    if (gFFI.ffiModel.permissions["restart"] != false &&
+    if (perms["restart"] != false &&
         (pi.platform == "Linux" ||
             pi.platform == "Windows" ||
             pi.platform == "Mac OS")) {

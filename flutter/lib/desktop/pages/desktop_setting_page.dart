@@ -977,9 +977,11 @@ Widget _OptionCheckBox(BuildContext context, String label, String key,
               ],
             ),
           ).marginOnly(left: _kCheckBoxLeftMargin),
-          onTap: () {
-            onChanged(!ref.value);
-          },
+          onTap: enabled
+              ? () {
+                  onChanged(!ref.value);
+                }
+              : null,
         );
       });
 }
