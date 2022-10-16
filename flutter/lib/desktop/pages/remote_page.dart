@@ -280,10 +280,12 @@ class ImagePaint extends StatelessWidget {
     final s = c.scale;
 
     mouseRegion({child}) => Obx(() => MouseRegion(
-        cursor: (cursorOverImage.isTrue && keyboardEnabled.isTrue)
-            ? (remoteCursorMoved.isTrue
-                ? SystemMouseCursors.none
-                : _buildCustomCursorLinux(context, s))
+        cursor: cursorOverImage.isTrue
+            ? keyboardEnabled.isTrue
+                ? (remoteCursorMoved.isTrue
+                    ? SystemMouseCursors.none
+                    : _buildCustomCursorLinux(context, s))
+                : _buildDisabledCursor(context, s)
             : MouseCursor.defer,
         onHover: (evt) {},
         child: child));
@@ -346,6 +348,28 @@ class ImagePaint extends StatelessWidget {
         hoty: cacheLinux.hoty,
         imageWidth: (cacheLinux.width * scale).toInt(),
         imageHeight: (cacheLinux.height * scale).toInt(),
+      );
+    }
+  }
+
+  MouseCursor _buildDisabledCursor(BuildContext context, double scale) {
+    final cursor = Provider.of<CursorModel>(context);
+    final cacheLinux = cursor.cacheLinux;
+    if (cacheLinux == null) {
+      return MouseCursor.defer;
+    } else {
+      if (cursor.cachedForbidmemoryCursorData == null) {
+        cursor.updateForbiddenCursorBuffer();
+      }
+      final key = 'disabled_cursor_key';
+      cursor.addKeyLinux(key);
+      return FlutterCustomMemoryImageCursor(
+        pixbuf: cursor.cachedForbidmemoryCursorData,
+        key: key,
+        hotx: cacheLinux.hotx,
+        hoty: cacheLinux.hoty,
+        imageWidth: 32,
+        imageHeight: 32,
       );
     }
   }
