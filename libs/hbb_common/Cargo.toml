@@ -38,6 +38,7 @@ machine-uid = "0.2"
 
 [features]
 quic = []
+flatpak = []
 
 [build-dependencies]
 protobuf-codegen = { version = "3.1" }

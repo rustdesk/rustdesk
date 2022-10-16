@@ -6,9 +6,7 @@ pub fn get_display_server() -> String {
 }
 
 fn get_display_server_of_session(session: &str) -> String {
-    if let Ok(output) = std::process::Command::new("loginctl")
-        .args(vec!["show-session", "-p", "Type", session])
-        .output()
+    if let Ok(output) = run_loginctl(Some(vec!["show-session", "-p", "Type", session]))
     // Check session type of the session
     {
         let display_server = String::from_utf8_lossy(&output.stdout)
@@ -17,9 +15,7 @@ fn get_display_server_of_session(session: &str) -> String {
             .into();
         if display_server == "tty" {
             // If the type is tty...
-            if let Ok(output) = std::process::Command::new("loginctl")
-                .args(vec!["show-session", "-p", "TTY", session])
-                .output()
+            if let Ok(output) = run_loginctl(Some(vec!["show-session", "-p", "TTY", session]))
             // Get the tty number
             {
                 let tty: String = String::from_utf8_lossy(&output.stdout)
@@ -56,7 +52,7 @@ fn get_display_server_of_session(session: &str) -> String {
 }
 
 pub fn get_value_of_seat0(i: usize) -> String {
-    if let Ok(output) = std::process::Command::new("loginctl").output() {
+    if let Ok(output) = run_loginctl(None) {
         for line in String::from_utf8_lossy(&output.stdout).lines() {
             if line.contains("seat0") {
                 if let Some(sid) = line.split_whitespace().nth(0) {
@@ -71,7 +67,7 @@ pub fn get_value_of_seat0(i: usize) -> String {
     }
 
     // some case, there is no seat0 https://github.com/rustdesk/rustdesk/issues/73
-    if let Ok(output) = std::process::Command::new("loginctl").output() {
+    if let Ok(output) = run_loginctl(None) {
         for line in String::from_utf8_lossy(&output.stdout).lines() {
             if let Some(sid) = line.split_whitespace().nth(0) {
                 let d = get_display_server_of_session(sid);
@@ -93,9 +89,7 @@ pub fn get_value_of_seat0(i: usize) -> String {
 }
 
 fn is_active(sid: &str) -> bool {
-    if let Ok(output) = std::process::Command::new("loginctl")
-        .args(vec!["show-session", "-p", "State", sid])
-        .output()
+    if let Ok(output) = run_loginctl(Some(vec!["show-session", "-p", "State", sid]))
     {
         String::from_utf8_lossy(&output.stdout).contains("active")
     } else {
@@ -108,4 +102,24 @@ pub fn run_cmds(cmds: String) -> ResultType<String> {
         .args(vec!["-c", &cmds])
         .output()?;
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+#[cfg(not(feature = "flatpak"))]
+fn run_loginctl(args: Option<Vec<&str>>) -> std::io::Result<std::process::Output> {
+    let mut cmd = std::process::Command::new("loginctl");
+    if let Some(a) = args {
+        return cmd.args(a).output();
+    }
+    cmd.output()
+}
+
+#[cfg(feature = "flatpak")]
+fn run_loginctl(args: Option<Vec<&str>>) -> std::io::Result<std::process::Output> {
+    let mut l_args = String::from("loginctl");
+    if let Some(a) = args {
+        l_args = format!("{} {}", l_args, a.join(" "));
+    }
+    std::process::Command::new("flatpak-spawn")
+        .args(vec![String::from("--host"), l_args])
+        .output()
 }
