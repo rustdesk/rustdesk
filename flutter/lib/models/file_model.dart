@@ -3,7 +3,6 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
-import 'package:flutter_hbb/mobile/pages/file_manager_page.dart';
 import 'package:get/get.dart';
 import 'package:path/path.dart' as Path;
 
@@ -1120,6 +1119,51 @@ class DirectoryOption {
     home = "";
     showHidden = false;
     isWindows = false;
+  }
+}
+
+class SelectedItems {
+  bool? _isLocal;
+  final List<Entry> _items = [];
+
+  List<Entry> get items => _items;
+
+  int get length => _items.length;
+
+  bool? get isLocal => _isLocal;
+
+  add(bool isLocal, Entry e) {
+    _isLocal ??= isLocal;
+    if (_isLocal != null && _isLocal != isLocal) {
+      return;
+    }
+    if (!_items.contains(e)) {
+      _items.add(e);
+    }
+  }
+
+  bool contains(Entry e) {
+    return _items.contains(e);
+  }
+
+  remove(Entry e) {
+    _items.remove(e);
+    if (_items.length == 0) {
+      _isLocal = null;
+    }
+  }
+
+  bool isOtherPage(bool currentIsLocal) {
+    if (_isLocal == null) {
+      return false;
+    } else {
+      return _isLocal != currentIsLocal;
+    }
+  }
+
+  clear() {
+    _items.clear();
+    _isLocal = null;
   }
 }
 

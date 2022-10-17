@@ -6,7 +6,6 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_breadcrumb/flutter_breadcrumb.dart';
-import 'package:flutter_hbb/mobile/pages/file_manager_page.dart';
 import 'package:flutter_hbb/models/file_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
@@ -273,21 +272,8 @@ class _FileManagerPageState extends State<FileManagerPage>
             return DataRow(
                 key: ValueKey(entry.name),
                 onSelectChanged: (s) {
-                  final isCtrlDown = RawKeyboard.instance.keysPressed
-                      .contains(LogicalKeyboardKey.controlLeft);
-                  final items = getSelectedItem(isLocal);
-                  if (isCtrlDown) {
-                    if (s != null) {
-                      if (s) {
-                        items.add(isLocal, entry);
-                      } else {
-                        items.remove(entry);
-                      }
-                    }
-                  } else {
-                    items.clear();
-                    items.add(isLocal, entry);
-                  }
+                  _onSelectedChanged(getSelectedItem(isLocal), filteredEntries,
+                      entry, isLocal);
                   setState(() {});
                 },
                 selected: getSelectedItem(isLocal).contains(entry),
@@ -321,20 +307,8 @@ class _FileManagerPageState extends State<FileManagerPage>
                         items.clear();
                         return;
                       }
-
-                      final isCtrlDown = RawKeyboard.instance.keysPressed
-                          .contains(LogicalKeyboardKey.controlLeft);
-                      if (isCtrlDown) {
-                        if (items.contains(entry)) {
-                          items.remove(entry);
-                        } else {
-                          items.add(isLocal, entry);
-                        }
-                      } else {
-                        items.clear();
-                        items.add(isLocal, entry);
-                      }
-                      setState(() {});
+                      _onSelectedChanged(
+                          items, filteredEntries, entry, isLocal);
                     },
                   ),
                   DataCell(FittedBox(
@@ -360,6 +334,38 @@ class _FileManagerPageState extends State<FileManagerPage>
       },
       isLocal ? _searchTextLocal : _searchTextRemote,
     );
+  }
+
+  void _onSelectedChanged(SelectedItems selectedItems, List<Entry> entries,
+      Entry entry, bool isLocal) {
+    final isCtrlDown = RawKeyboard.instance.keysPressed
+        .contains(LogicalKeyboardKey.controlLeft);
+    final isShiftDown =
+        RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.shiftLeft);
+    if (isCtrlDown) {
+      if (selectedItems.contains(entry)) {
+        selectedItems.remove(entry);
+      } else {
+        selectedItems.add(isLocal, entry);
+      }
+    } else if (isShiftDown) {
+      final List<int> indexGroup = [];
+      for (var selected in selectedItems.items) {
+        indexGroup.add(entries.indexOf(selected));
+      }
+      indexGroup.add(entries.indexOf(entry));
+      indexGroup.removeWhere((e) => e == -1);
+      final maxIndex = indexGroup.reduce(max);
+      final minIndex = indexGroup.reduce(min);
+      selectedItems.clear();
+      entries
+          .getRange(minIndex, maxIndex + 1)
+          .forEach((e) => selectedItems.add(isLocal, e));
+    } else {
+      selectedItems.clear();
+      selectedItems.add(isLocal, entry);
+    }
+    setState(() {});
   }
 
   bool _checkDoubleClick(Entry entry) {
