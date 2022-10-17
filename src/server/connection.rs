@@ -1514,7 +1514,14 @@ async fn start_ipc(
         if crate::platform::is_root() {
             let mut res = Ok(None);
             for _ in 0..10 {
-                res = crate::platform::run_as_user("--cm");
+                #[cfg(not(target_os = "linux"))]
+                {
+                    res = crate::platform::run_as_user("--cm");
+                }
+                #[cfg(target_os = "linux")]
+                {
+                    res = crate::platform::run_as_user("--cm", None);
+                }
                 if res.is_ok() {
                     break;
                 }

@@ -219,15 +219,15 @@ fn stop_rustdesk_servers() {
 fn should_start_server(
     try_x11: bool,
     uid: &mut String,
+    cur_uid: String,
     cm0: &mut bool,
     last_restart: &mut std::time::Instant,
     server: &mut Option<std::process::Child>,
 ) -> bool {
     let cm = get_cm();
-    let tmp = get_active_userid();
     let mut start_new = false;
-    if tmp != *uid && !tmp.is_empty() {
-        *uid = tmp;
+    if cur_uid != *uid && !cur_uid.is_empty() {
+        *uid = cur_uid;
         if try_x11 {
             set_x11_env(&uid);
         }
@@ -267,7 +267,6 @@ fn should_start_server(
 
 pub fn start_os_service() {
     stop_rustdesk_servers();
-
     start_uinput_service();
 
     let running = Arc::new(AtomicBool::new(true));
@@ -284,13 +283,20 @@ pub fn start_os_service() {
     let mut cm0 = false;
     let mut last_restart = std::time::Instant::now();
     while running.load(Ordering::SeqCst) {
-        let username = get_active_username();
+        let (cur_uid, cur_user) = get_active_user_id_name();
         let is_wayland = current_is_wayland();
 
-        if username == "root" || !is_wayland {
+        if cur_user == "root" || !is_wayland {
             stop_server(&mut user_server);
             // try start subprocess "--server"
-            if should_start_server(true, &mut uid, &mut cm0, &mut last_restart, &mut server) {
+            if should_start_server(
+                true,
+                &mut uid,
+                cur_uid,
+                &mut cm0,
+                &mut last_restart,
+                &mut server,
+            ) {
                 match crate::run_me(vec!["--server"]) {
                     Ok(ps) => server = Some(ps),
                     Err(err) => {
@@ -298,8 +304,8 @@ pub fn start_os_service() {
                     }
                 }
             }
-        } else if username != "" {
-            if username != "gdm" {
+        } else if cur_user != "" {
+            if cur_user != "gdm" {
                 // try kill subprocess "--server"
                 stop_server(&mut server);
 
@@ -307,11 +313,12 @@ pub fn start_os_service() {
                 if should_start_server(
                     false,
                     &mut uid,
+                    cur_uid.clone(),
                     &mut cm0,
                     &mut last_restart,
                     &mut user_server,
                 ) {
-                    match run_as_user("--server") {
+                    match run_as_user("--server", Some((cur_uid, cur_user))) {
                         Ok(ps) => user_server = ps,
                         Err(err) => {
                             log::error!("Failed to start server: {}", err);
@@ -335,8 +342,13 @@ pub fn start_os_service() {
     log::info!("Exit");
 }
 
+pub fn get_active_user_id_name() -> (String, String) {
+    let vec_id_name = get_values_of_seat0([1, 2].to_vec());
+    (vec_id_name[0].clone(), vec_id_name[1].clone())
+}
+
 pub fn get_active_userid() -> String {
-    get_value_of_seat0(1)
+    get_values_of_seat0([1].to_vec())[0].clone()
 }
 
 fn get_cm() -> bool {
@@ -513,7 +525,7 @@ fn _get_display_manager() -> String {
 }
 
 pub fn get_active_username() -> String {
-    get_value_of_seat0(2)
+    get_values_of_seat0([2].to_vec())[0].clone()
 }
 
 pub fn get_active_user_home() -> Option<PathBuf> {
@@ -545,12 +557,17 @@ fn is_opensuse() -> bool {
     false
 }
 
-pub fn run_as_user(arg: &str) -> ResultType<Option<std::process::Child>> {
-    let uid = get_active_userid();
+pub fn run_as_user(
+    arg: &str,
+    user: Option<(String, String)>,
+) -> ResultType<Option<std::process::Child>> {
+    let (uid, username) = match user {
+        Some(id_name) => id_name,
+        None => get_active_user_id_name(),
+    };
     let cmd = std::env::current_exe()?;
     let xdg = &format!("XDG_RUNTIME_DIR=/run/user/{}", uid) as &str;
-    let username = &get_active_username();
-    let mut args = vec![xdg, "-u", username, cmd.to_str().unwrap_or(""), arg];
+    let mut args = vec![xdg, "-u", &username, cmd.to_str().unwrap_or(""), arg];
     // -E required for opensuse
     if is_opensuse() {
         args.insert(0, "-E");
