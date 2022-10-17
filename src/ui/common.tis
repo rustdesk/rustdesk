@@ -232,7 +232,7 @@ class ChatBox: Reactor.Component {
 
 /******************** start of msgbox ****************************************/
 var remember_password = false;
-function msgbox(type, title, content, link, callback=null, height=180, width=500, hasRetry=false, contentStyle="") {
+function msgbox(type, title, content, link="", callback=null, height=180, width=500, hasRetry=false, contentStyle="") {
     $(body).scrollTo(0, 0);
     if (!type) {
         closeMsgbox();

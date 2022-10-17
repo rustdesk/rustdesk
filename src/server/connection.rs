@@ -748,7 +748,7 @@ impl Connection {
 
             match super::video_service::get_displays().await {
                 Err(err) => {
-                    res.set_error(format!("Error: {}", err));
+                    res.set_error(format!("{}", err));
                 }
                 Ok((current, displays)) => {
                     pi.displays = displays.into();

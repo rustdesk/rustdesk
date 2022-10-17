@@ -1,5 +1,3 @@
-import * as env from "@env";
-
 function translate_text(text) {
     if (text.indexOf('Failed') == 0 && text.indexOf(': ') > 0) {
         var fds = text.split(': ');
@@ -162,9 +160,8 @@ class MsgboxComponent: Reactor.Component {
     }
 
     event click $(button#jumplink) {
-        stdout.println("REMOVE ME ================================= jump link" + this.link);
         if (this.link.indexOf("http") == 0) {
-            env.launch(this.link);
+            Sciter.launch(this.link);
         }
     }
     
