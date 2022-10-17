@@ -833,8 +833,10 @@ class _FileManagerPageState extends State<FileManagerPage>
 
   onSearchText(String searchText, bool isLocal) {
     if (isLocal) {
+      _localSelectedItems.clear();
       _searchTextLocal.value = searchText;
     } else {
+      _remoteSelectedItems.clear();
       _searchTextRemote.value = searchText;
     }
   }
