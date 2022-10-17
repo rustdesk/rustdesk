@@ -297,6 +297,10 @@ pub fn start_os_service() {
                 &mut last_restart,
                 &mut server,
             ) {
+                // to-do: stop_server(&mut user_server); may not stop child correctly
+                // stop_rustdesk_servers() is just a temp solution here.
+                stop_rustdesk_servers();
+                std::thread::sleep(std::time::Duration::from_millis(super::SERVICE_INTERVAL));
                 match crate::run_me(vec!["--server"]) {
                     Ok(ps) => server = Some(ps),
                     Err(err) => {
@@ -327,6 +331,7 @@ pub fn start_os_service() {
                 }
             }
         } else {
+            stop_rustdesk_servers();
             stop_server(&mut user_server);
             stop_server(&mut server);
         }
