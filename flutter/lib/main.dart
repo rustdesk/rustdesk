@@ -195,6 +195,7 @@ void runPortForwardScreen(Map<String, dynamic> argument) async {
 
 void runConnectionManagerScreen() async {
   await initEnv(kAppTypeMain);
+  await initEnv(kAppTypeMain);
   // initialize window
   WindowOptions windowOptions =
       getHiddenTitleBarWindowOptions(size: kConnectionManagerWindowSize);
