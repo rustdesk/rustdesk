@@ -162,8 +162,6 @@ def build_flutter_deb(version):
     os.system(
         'cp ../res/rustdesk.service tmpdeb/usr/share/rustdesk/files/systemd/')
     os.system(
-        'cp ../res/rustdesk.service.user tmpdeb/usr/share/rustdesk/files/systemd/')
-    os.system(
         'cp ../res/128x128@2x.png tmpdeb/usr/share/rustdesk/files/rustdesk.png')
     os.system(
         'cp ../res/rustdesk.desktop tmpdeb/usr/share/applications/rustdesk.desktop')
@@ -177,7 +175,6 @@ def build_flutter_deb(version):
     generate_control_file(version)
     os.system('cp -a ../res/DEBIAN/* tmpdeb/DEBIAN/')
     md5_file('usr/share/rustdesk/files/systemd/rustdesk.service')
-    md5_file('usr/share/rustdesk/files/systemd/rustdesk.service.user')
     os.system('dpkg-deb -b tmpdeb rustdesk.deb;')
 
     os.system('/bin/rm -rf tmpdeb/')
@@ -332,8 +329,6 @@ def main():
                 os.system(
                     'cp res/rustdesk.service tmpdeb/usr/share/rustdesk/files/systemd/')
                 os.system(
-                    'cp res/rustdesk.service.user tmpdeb/usr/share/rustdesk/files/systemd/')
-                os.system(
                     'cp res/128x128@2x.png tmpdeb/usr/share/rustdesk/files/rustdesk.png')
                 os.system(
                     'cp res/rustdesk.desktop tmpdeb/usr/share/applications/rustdesk.desktop')
@@ -345,7 +340,6 @@ def main():
                 os.system('mv tmpdeb/usr/bin/rustdesk tmpdeb/usr/lib/rustdesk/')
                 os.system('cp libsciter-gtk.so tmpdeb/usr/lib/rustdesk/')
                 md5_file('usr/share/rustdesk/files/systemd/rustdesk.service')
-                md5_file('usr/share/rustdesk/files/systemd/rustdesk.service.user')
                 md5_file('usr/lib/rustdesk/libsciter-gtk.so')
                 os.system('dpkg-deb -b tmpdeb rustdesk.deb; /bin/rm -rf tmpdeb/')
                 os.rename('rustdesk.deb', 'rustdesk-%s.deb' % version)
