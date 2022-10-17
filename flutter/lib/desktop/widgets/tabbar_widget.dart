@@ -191,6 +191,8 @@ class DesktopTab extends StatelessWidget {
 
   final DesktopTabController controller;
   Rx<DesktopTabState> get state => controller.state;
+  final isMaximized = false.obs;
+
   late final DesktopTabType tabType;
   late final bool isMainWindow;
 
@@ -297,8 +299,10 @@ class DesktopTab extends StatelessWidget {
                   width: 78,
                 )),
             GestureDetector(
-                onDoubleTap: () =>
-                    showMaximize ? toggleMaximize(isMainWindow) : null,
+                onDoubleTap: showMaximize
+                    ? () => toggleMaximize(isMainWindow)
+                        .then((value) => isMaximized.value = value)
+                    : null,
                 onPanStart: (_) => startDragging(isMainWindow),
                 child: Row(children: [
                   Offstage(
@@ -331,6 +335,7 @@ class DesktopTab extends StatelessWidget {
           tabType: tabType,
           state: state,
           tail: tail,
+          isMaximized: isMaximized,
           showMinimize: showMinimize,
           showMaximize: showMaximize,
           showClose: showClose,
@@ -345,6 +350,7 @@ class WindowActionPanel extends StatefulWidget {
   final bool isMainWindow;
   final DesktopTabType tabType;
   final Rx<DesktopTabState> state;
+  final RxBool isMaximized;
 
   final bool showMinimize;
   final bool showMaximize;
@@ -357,6 +363,7 @@ class WindowActionPanel extends StatefulWidget {
       required this.isMainWindow,
       required this.tabType,
       required this.state,
+      required this.isMaximized,
       this.tail,
       this.showMinimize = true,
       this.showMaximize = true,
@@ -372,30 +379,31 @@ class WindowActionPanel extends StatefulWidget {
 
 class WindowActionPanelState extends State<WindowActionPanel>
     with MultiWindowListener, WindowListener {
-  bool isMaximized = false;
-
   @override
   void initState() {
     super.initState();
     DesktopMultiWindow.addListener(this);
     windowManager.addListener(this);
 
-    if (widget.isMainWindow) {
-      windowManager.isMaximized().then((maximized) {
-        if (isMaximized != maximized) {
-          WidgetsBinding.instance.addPostFrameCallback(
-              (_) => setState(() => isMaximized = maximized));
-        }
-      });
-    } else {
-      final wc = WindowController.fromWindowId(windowId!);
-      wc.isMaximized().then((maximized) {
-        if (isMaximized != maximized) {
-          WidgetsBinding.instance.addPostFrameCallback(
-              (_) => setState(() => isMaximized = maximized));
-        }
-      });
-    }
+    Future.delayed(Duration(milliseconds: 500), () {
+      if (widget.isMainWindow) {
+        windowManager.isMaximized().then((maximized) {
+          if (widget.isMaximized.value != maximized) {
+            WidgetsBinding.instance.addPostFrameCallback(
+                (_) => setState(() => widget.isMaximized.value = maximized));
+          }
+        });
+      } else {
+        final wc = WindowController.fromWindowId(windowId!);
+        wc.isMaximized().then((maximized) {
+          debugPrint("isMaximized $maximized");
+          if (widget.isMaximized.value != maximized) {
+            WidgetsBinding.instance.addPostFrameCallback(
+                (_) => setState(() => widget.isMaximized.value = maximized));
+          }
+        });
+      }
+    });
   }
 
   @override
@@ -408,8 +416,8 @@ class WindowActionPanelState extends State<WindowActionPanel>
   @override
   void onWindowMaximize() {
     // catch maximize from system
-    if (!isMaximized) {
-      setState(() => isMaximized = true);
+    if (!widget.isMaximized.value) {
+      widget.isMaximized.value = true;
     }
     super.onWindowMaximize();
   }
@@ -417,8 +425,8 @@ class WindowActionPanelState extends State<WindowActionPanel>
   @override
   void onWindowUnmaximize() {
     // catch unmaximize from system
-    if (isMaximized) {
-      setState(() => isMaximized = false);
+    if (widget.isMaximized.value) {
+      widget.isMaximized.value = false;
     }
     super.onWindowUnmaximize();
   }
@@ -450,12 +458,14 @@ class WindowActionPanelState extends State<WindowActionPanel>
             )),
         Offstage(
             offstage: !widget.showMaximize,
-            child: ActionIcon(
-              message: isMaximized ? "Restore" : "Maximize",
-              icon: isMaximized ? IconFont.restore : IconFont.max,
-              onTap: _toggleMaximize,
-              isClose: false,
-            )),
+            child: Obx(() => ActionIcon(
+                  message: widget.isMaximized.value ? "Restore" : "Maximize",
+                  icon: widget.isMaximized.value
+                      ? IconFont.restore
+                      : IconFont.max,
+                  onTap: _toggleMaximize,
+                  isClose: false,
+                ))),
         Offstage(
             offstage: !widget.showClose,
             child: ActionIcon(
@@ -482,9 +492,9 @@ class WindowActionPanelState extends State<WindowActionPanel>
 
   void _toggleMaximize() {
     toggleMaximize(widget.isMainWindow).then((maximize) {
-      if (isMaximized != maximize) {
-        // setState for sub window, wc.unmaximize/maximize() will not invoke onWindowMaximize/Unmaximize
-        setState(() => isMaximized = !isMaximized);
+      if (widget.isMaximized.value != maximize) {
+        // update state for sub window, wc.unmaximize/maximize() will not invoke onWindowMaximize/Unmaximize
+        widget.isMaximized.value = maximize;
       }
     });
   }
