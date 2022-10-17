@@ -374,5 +374,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Other", "其他"),
         ("Confirm before closing multiple tabs", "关闭多个标签页时向您确认"),
         ("Keyboard Settings", "键盘设置"),
+        ("Custom", "自定义"),
+        ("Full Access", "完全访问"),
+        ("Screen Share", "仅共享屏幕"),
     ].iter().cloned().collect();
 }

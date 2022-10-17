@@ -374,5 +374,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Other", ""),
         ("Confirm before closing multiple tabs", ""),
         ("Keyboard Settings", ""),
+        ("Custom", ""),
+        ("Full Access", ""),
+        ("Screen Share", ""),
     ].iter().cloned().collect();
 }
