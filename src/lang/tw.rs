@@ -373,5 +373,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Disconnected", "會話已結束"),
         ("Other", "其他"),
         ("Confirm before closing multiple tabs", "關閉多個分頁前跟我確認"),
+        ("Keyboard Settings", "鍵盤設置"),
     ].iter().cloned().collect();
 }

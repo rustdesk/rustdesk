@@ -556,6 +556,9 @@ class Client {
     data['keyboard'] = keyboard;
     data['clipboard'] = clipboard;
     data['audio'] = audio;
+    data['file'] = file;
+    data['restart'] = restart;
+    data['recording'] = recording;
     data['disconnected'] = disconnected;
     return data;
   }

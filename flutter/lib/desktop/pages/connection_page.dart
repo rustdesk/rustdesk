@@ -36,6 +36,9 @@ class _ConnectionPageState extends State<ConnectionPage>
 
   Timer? _updateTimer;
 
+  final RxBool _idInputFocused = false.obs;
+  final FocusNode _idFocusNode = FocusNode();
+
   @override
   void initState() {
     super.initState();
@@ -121,10 +124,8 @@ class _ConnectionPageState extends State<ConnectionPage>
   /// UI for the remote ID TextField.
   /// Search for a peer and connect to it if the id exists.
   Widget _buildRemoteIDTextField(BuildContext context) {
-    RxBool inputFocused = false.obs;
-    FocusNode focusNode = FocusNode();
-    focusNode.addListener(() {
-      inputFocused.value = focusNode.hasFocus;
+    _idFocusNode.addListener(() {
+      _idInputFocused.value = _idFocusNode.hasFocus;
     });
     var w = Container(
       width: 320 + 20 * 2,
@@ -155,7 +156,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                       autocorrect: false,
                       enableSuggestions: false,
                       keyboardType: TextInputType.visiblePassword,
-                      focusNode: focusNode,
+                      focusNode: _idFocusNode,
                       style: const TextStyle(
                         fontFamily: 'WorkSans',
                         fontSize: 22,
@@ -165,7 +166,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                       cursorColor:
                           Theme.of(context).textTheme.titleLarge?.color,
                       decoration: InputDecoration(
-                          hintText: inputFocused.value
+                          hintText: _idInputFocused.value
                               ? null
                               : translate('Enter Remote ID'),
                           border: OutlineInputBorder(
