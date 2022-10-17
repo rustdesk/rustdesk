@@ -167,12 +167,12 @@ impl Connection {
             port_forward_address: "".to_owned(),
             tx_to_cm,
             authorized: false,
-            keyboard: Config::get_option("enable-keyboard").is_empty(),
-            clipboard: Config::get_option("enable-clipboard").is_empty(),
-            audio: Config::get_option("enable-audio").is_empty(),
-            file: Config::get_option("enable-file-transfer").is_empty(),
-            restart: Config::get_option("enable-remote-restart").is_empty(),
-            recording: Config::get_option("enable-record-session").is_empty(),
+            keyboard: Connection::permission("enable-keyboard"),
+            clipboard: Connection::permission("enable-clipboard"),
+            audio: Connection::permission("enable-audio"),
+            file: Connection::permission("enable-file-transfer"),
+            restart: Connection::permission("enable-remote-restart"),
+            recording: Connection::permission("enable-record-session"),
             last_test_delay: 0,
             lock_after_session_end: false,
             show_remote_cursor: false,
@@ -922,6 +922,20 @@ impl Connection {
         false
     }
 
+    pub fn permission(enable_prefix_option: &str) -> bool {
+        #[cfg(feature = "flutter")]
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        {
+            let access_mode = Config::get_option("access-mode");
+            if access_mode == "full" {
+                return true;
+            } else if access_mode == "view" {
+                return false;
+            }
+        }
+        return Config::get_option(enable_prefix_option).is_empty();
+    }
+
     async fn on_message(&mut self, msg: Message) -> bool {
         if let Some(message::Union::LoginRequest(lr)) = msg.union {
             self.lr = lr.clone();
@@ -950,7 +964,7 @@ impl Connection {
             }
             match lr.union {
                 Some(login_request::Union::FileTransfer(ft)) => {
-                    if !Config::get_option("enable-file-transfer").is_empty() {
+                    if !Connection::permission("enable-file-transfer") {
                         self.send_login_error("No permission of file transfer")
                             .await;
                         sleep(1.).await;
@@ -965,8 +979,8 @@ impl Connection {
                         pf.port = 3389;
                         is_rdp = true;
                     }
-                    if is_rdp && !Config::get_option("enable-rdp").is_empty()
-                        || !is_rdp && !Config::get_option("enable-tunnel").is_empty()
+                    if is_rdp && !Connection::permission("enable-rdp")
+                        || !is_rdp && !Connection::permission("enable-tunnel")
                     {
                         if is_rdp {
                             self.send_login_error("No permission of RDP").await;

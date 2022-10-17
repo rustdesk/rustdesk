@@ -260,6 +260,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                 bool checked = await bind.mainCheckSuperUserPermission();
                 if (checked) {
                   bind.mainSetOption(key: "stop-service", value: "");
+                  bind.mainSetOption(key: "access-mode", value: "");
                 }
               },
               child: Text(translate("Start Service"), style: textStyle))

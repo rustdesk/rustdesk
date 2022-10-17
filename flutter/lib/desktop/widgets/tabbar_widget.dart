@@ -249,10 +249,12 @@ class DesktopTab extends StatelessWidget {
     var block = false.obs;
     return Obx(() => MouseRegion(
           onEnter: (_) async {
-            if (!option2bool(
+            var access_mode = await bind.mainGetOption(key: 'access-mode');
+            var option = option2bool(
                 'allow-remote-config-modification',
                 await bind.mainGetOption(
-                    key: 'allow-remote-config-modification'))) {
+                    key: 'allow-remote-config-modification'));
+            if (access_mode == 'view' || (access_mode.isEmpty && !option)) {
               var time0 = DateTime.now().millisecondsSinceEpoch;
               await bind.mainCheckMouseTime();
               Timer(const Duration(milliseconds: 120), () async {

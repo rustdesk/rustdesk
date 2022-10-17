@@ -413,6 +413,13 @@ class _GeneralState extends State<_General> {
   }
 }
 
+enum _AccessMode {
+  custom,
+  full,
+  view,
+  deny,
+}
+
 class _Safety extends StatefulWidget {
   const _Safety({Key? key}) : super(key: key);
 
@@ -459,26 +466,113 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
 
   Widget permissions(context) {
     bool enabled = !locked;
-    return _Card(title: 'Permissions', children: [
-      _OptionCheckBox(context, 'Enable Keyboard/Mouse', 'enable-keyboard',
-          enabled: enabled),
-      _OptionCheckBox(context, 'Enable Clipboard', 'enable-clipboard',
-          enabled: enabled),
-      _OptionCheckBox(context, 'Enable File Transfer', 'enable-file-transfer',
-          enabled: enabled),
-      _OptionCheckBox(context, 'Enable Audio', 'enable-audio',
-          enabled: enabled),
-      _OptionCheckBox(context, 'Enable TCP Tunneling', 'enable-tunnel',
-          enabled: enabled),
-      _OptionCheckBox(context, 'Enable Remote Restart', 'enable-remote-restart',
-          enabled: enabled),
-      _OptionCheckBox(
-          context, 'Enable Recording Session', 'enable-record-session',
-          enabled: enabled),
-      _OptionCheckBox(context, 'Enable remote configuration modification',
-          'allow-remote-config-modification',
-          enabled: enabled),
-    ]);
+
+    return _futureBuilder(future: () async {
+      bool stopService = option2bool(
+          'stop-service', await bind.mainGetOption(key: 'stop-service'));
+      final accessMode = await bind.mainGetOption(key: 'access-mode');
+      return {'stopService': stopService, 'accessMode': accessMode};
+    }(), hasData: (data) {
+      var map = data! as Map<String, dynamic>;
+      bool stopService = map['stopService'] as bool;
+      String accessMode = map['accessMode'] as String;
+      _AccessMode mode;
+      if (stopService) {
+        mode = _AccessMode.deny;
+      } else {
+        if (accessMode == 'full') {
+          mode = _AccessMode.full;
+        } else if (accessMode == 'view') {
+          mode = _AccessMode.view;
+        } else {
+          mode = _AccessMode.custom;
+        }
+      }
+      String initialKey;
+      bool? fakeValue;
+      switch (mode) {
+        case _AccessMode.custom:
+          initialKey = '';
+          fakeValue = null;
+          break;
+        case _AccessMode.full:
+          initialKey = 'full';
+          fakeValue = true;
+          break;
+        case _AccessMode.view:
+          initialKey = 'view';
+          fakeValue = false;
+          break;
+        case _AccessMode.deny:
+          initialKey = 'deny';
+          fakeValue = false;
+          break;
+      }
+
+      return _Card(title: 'Permissions', children: [
+        _ComboBox(
+            keys: [
+              '',
+              'full',
+              'view',
+              'deny'
+            ],
+            values: [
+              translate('Custom'),
+              translate('Full Access'),
+              translate('Screen Share'),
+              translate('Deny remote access'),
+            ],
+            initialKey: initialKey,
+            onChanged: (mode) async {
+              String modeValue;
+              bool stopService;
+              if (mode == 'deny') {
+                modeValue = '';
+                stopService = true;
+              } else {
+                modeValue = mode;
+                stopService = false;
+              }
+              await bind.mainSetOption(key: 'access-mode', value: modeValue);
+              await bind.mainSetOption(
+                  key: 'stop-service',
+                  value: bool2option('stop-service', stopService));
+              setState(() {});
+            }).marginOnly(left: _kContentHMargin),
+        Offstage(
+          offstage: mode == _AccessMode.deny,
+          child: Column(
+            children: [
+              _OptionCheckBox(
+                  context, 'Enable Keyboard/Mouse', 'enable-keyboard',
+                  enabled: enabled, fakeValue: fakeValue),
+              _OptionCheckBox(context, 'Enable Clipboard', 'enable-clipboard',
+                  enabled: enabled, fakeValue: fakeValue),
+              _OptionCheckBox(
+                  context, 'Enable File Transfer', 'enable-file-transfer',
+                  enabled: enabled, fakeValue: fakeValue),
+              _OptionCheckBox(context, 'Enable Audio', 'enable-audio',
+                  enabled: enabled, fakeValue: fakeValue),
+              _OptionCheckBox(context, 'Enable TCP Tunneling', 'enable-tunnel',
+                  enabled: enabled, fakeValue: fakeValue),
+              _OptionCheckBox(
+                  context, 'Enable Remote Restart', 'enable-remote-restart',
+                  enabled: enabled, fakeValue: fakeValue),
+              _OptionCheckBox(
+                  context, 'Enable Recording Session', 'enable-record-session',
+                  enabled: enabled, fakeValue: fakeValue),
+              _OptionCheckBox(
+                  context,
+                  'Enable remote configuration modification',
+                  'allow-remote-config-modification',
+                  enabled: enabled,
+                  fakeValue: fakeValue),
+            ],
+          ),
+        )
+      ]);
+    });
   }
 
   Widget password(BuildContext context) {
@@ -566,12 +660,6 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
   Widget more(BuildContext context) {
     bool enabled = !locked;
     return _Card(title: 'Security', children: [
-      _OptionCheckBox(context, 'Deny remote access', 'stop-service',
-          checkedIcon: const Icon(
-            Icons.warning_amber_rounded,
-            color: kColorWarn,
-          ),
-          enabled: enabled),
       Offstage(
         offstage: !Platform.isWindows,
         child: _OptionCheckBox(context, 'Enable RDP', 'enable-rdp',
@@ -941,7 +1029,8 @@ Widget _OptionCheckBox(BuildContext context, String label, String key,
     {Function()? update,
     bool reverse = false,
     bool enabled = true,
-    Icon? checkedIcon}) {
+    Icon? checkedIcon,
+    bool? fakeValue}) {
   return _futureBuilder(
       future: bind.mainGetOption(key: key),
       hasData: (data) {
@@ -956,6 +1045,11 @@ Widget _OptionCheckBox(BuildContext context, String label, String key,
             bind.mainSetOption(key: key, value: value);
             update?.call();
           }
+        }
+
+        if (fakeValue != null) {
+          ref.value = fakeValue;
+          enabled = false;
         }
 
         return GestureDetector(
