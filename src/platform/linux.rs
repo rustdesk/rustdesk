@@ -322,6 +322,8 @@ pub fn start_os_service() {
                     &mut last_restart,
                     &mut user_server,
                 ) {
+                    stop_rustdesk_servers();
+                    std::thread::sleep(std::time::Duration::from_millis(super::SERVICE_INTERVAL));
                     match run_as_user("--server", Some((cur_uid, cur_user))) {
                         Ok(ps) => user_server = ps,
                         Err(err) => {
@@ -332,6 +334,7 @@ pub fn start_os_service() {
             }
         } else {
             stop_rustdesk_servers();
+            std::thread::sleep(std::time::Duration::from_millis(super::SERVICE_INTERVAL));
             stop_server(&mut user_server);
             stop_server(&mut server);
         }
