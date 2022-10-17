@@ -194,13 +194,10 @@ void runPortForwardScreen(Map<String, dynamic> argument) async {
 }
 
 void runConnectionManagerScreen() async {
+  await initEnv(kAppTypeMain);
   // initialize window
   WindowOptions windowOptions =
       getHiddenTitleBarWindowOptions(size: kConnectionManagerWindowSize);
-  // ensure initial window size to be changed
-  await windowManager.setSize(kConnectionManagerWindowSize);
-  await Future.wait(
-      [windowManager.setAlignment(Alignment.topRight), initEnv(kAppTypeMain)]);
   runApp(GetMaterialApp(
       debugShowCheckedModeBanner: false,
       theme: MyTheme.lightTheme,
@@ -215,10 +212,16 @@ void runConnectionManagerScreen() async {
       home: const DesktopServerPage(),
       builder: _keepScaleBuilder()));
   windowManager.waitUntilReadyToShow(windowOptions, () async {
-    windowManager.show();
-    windowManager.focus();
-    windowManager.setOpacity(1);
-    windowManager.setAlignment(Alignment.topRight); // ensure
+    await windowManager.show();
+    // ensure initial window size to be changed
+    await windowManager.setSize(kConnectionManagerWindowSize);
+    await Future.wait([
+      windowManager.setAlignment(Alignment.topRight),
+      windowManager.focus(),
+      windowManager.setOpacity(1)
+    ]);
+    // ensure
+    windowManager.setAlignment(Alignment.topRight); 
   });
 }
 
