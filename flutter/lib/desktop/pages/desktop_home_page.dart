@@ -37,6 +37,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   @override
   bool get wantKeepAlive => true;
   var updateUrl = '';
+  StreamSubscription? _uniLinksSubscription;
 
   @override
   void onWindowClose() async {
@@ -455,12 +456,14 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     Future.delayed(Duration.zero, () {
       checkArguments();
     });
+    _uniLinksSubscription = listenUniLinks();
   }
 
   @override
   void dispose() {
     trayManager.removeListener(this);
     windowManager.removeListener(this);
+    _uniLinksSubscription?.cancel();
     super.dispose();
   }
 }

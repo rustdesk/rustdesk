@@ -7,6 +7,8 @@
 #include "utils.h"
 // #include <bitsdojo_window_windows/bitsdojo_window_plugin.h>
 
+#include <uni_links_desktop/uni_links_desktop_plugin.h>
+
 typedef char** (*FUNC_RUSTDESK_CORE_MAIN)(int*);
 typedef void (*FUNC_RUSTDESK_FREE_ARGS)( char**, int);
 
@@ -14,6 +16,15 @@ typedef void (*FUNC_RUSTDESK_FREE_ARGS)( char**, int);
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command)
 {
+  // uni links dispatch
+  HWND hwnd = ::FindWindow(L"FLUTTER_RUNNER_WIN32_WINDOW", L"rustdesk");
+  if (hwnd != NULL) {
+    DispatchToUniLinksDesktop(hwnd);
+
+    ::ShowWindow(hwnd, SW_NORMAL);
+    ::SetForegroundWindow(hwnd);
+    return EXIT_FAILURE;
+  }
   HINSTANCE hInstance = LoadLibraryA("librustdesk.dll");
   if (!hInstance)
   {

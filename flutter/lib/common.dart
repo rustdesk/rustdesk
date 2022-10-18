@@ -15,6 +15,8 @@ import 'package:flutter_hbb/models/peer_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uni_links/uni_links.dart';
+import 'package:uni_links_desktop/uni_links_desktop.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:window_size/window_size.dart' as window_size;
@@ -1178,6 +1180,48 @@ Future<bool> restoreWindowPosition(WindowType type, {int? windowId}) async {
   return false;
 }
 
+/// Initialize uni links for macos/windows
+///
+/// [Availability]
+/// initUniLinks should only be used on macos/windows.
+/// we use dbus for linux currently.
+Future<void> initUniLinks() async {
+  if (!Platform.isWindows && !Platform.isMacOS) {
+    return;
+  }
+  if (Platform.isWindows) {
+    registerProtocol('rustdesk');
+  }
+  // check cold boot
+  try {
+    final initialLink = await getInitialLink();
+    // TODO: parse link
+    print("${initialLink}");
+  } on PlatformException {
+    // Handle exception by warning the user their action did not succeed
+    // return?
+  }
+}
+
+StreamSubscription listenUniLinks() {
+  if (Platform.isWindows || Platform.isMacOS) {
+    final sub = uriLinkStream.listen((Uri? uri) {
+      if (uri != null) {
+        callUniLinksUriHandler(uri);
+      } else {
+        print("uni listen error: uri is empty.");
+      }
+    }, onError: (err) {
+      print("uni links error: $err");
+    });
+    return sub;
+  } else {
+    // return empty stream subscription for uniform logic
+    final stream = Stream.empty();
+    return stream.listen((event) {/*ignore*/});
+  }
+}
+
 void checkArguments() {
   // check connect args
   final connectIndex = bootArgs.indexOf("--connect");
@@ -1208,6 +1252,11 @@ void parseRustdeskUri(String uriPath) {
     print("uri is not valid: $uriPath");
     return;
   }
+  callUniLinksUriHandler(uri);
+}
+
+/// uri handler
+void callUniLinksUriHandler(Uri uri) {
   // new connection
   if (uri.authority == "connection" && uri.path.startsWith("/new/")) {
     final peerId = uri.path.substring("/new/".length);
