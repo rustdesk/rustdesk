@@ -402,6 +402,10 @@ class FileModel extends ChangeNotifier {
     }
   }
 
+  Future<FileDirectory> fetchDirectory(path, isLocal, showHidden) async {
+    return await _fileFetcher.fetchDirectory(path, isLocal, showHidden);
+  }
+
   void pushHistory(bool isLocal) {
     final history = isLocal ? localHistory : remoteHistory;
     final currPath = isLocal ? currentLocalDir.path : currentRemoteDir.path;

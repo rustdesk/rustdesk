@@ -6,6 +6,7 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_breadcrumb/flutter_breadcrumb.dart';
+import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/file_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
@@ -455,7 +456,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                                   icon: const Icon(Icons.restart_alt_rounded)),
                             ),
                             IconButton(
-                              icon: const Icon(Icons.delete),
+                              icon: const Icon(Icons.delete_forever_outlined),
                               splashRadius: 20,
                               onPressed: () {
                                 model.jobTable.removeAt(index);
@@ -742,32 +743,98 @@ class _FileManagerPageState extends State<FileManagerPage>
       openDirectory(path, isLocal: isLocal);
     });
     breadCrumbScrollToEnd(isLocal);
+    final locationBarKey = GlobalKey(debugLabel: "locationBarKey");
+
     return items.isEmpty
         ? Offstage()
-        : Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Expanded(
-                child: BreadCrumb(
-              items: items,
-              divider: Text("/").paddingSymmetric(horizontal: 4.0),
-              overflow: ScrollableOverflow(
-                  controller: getBreadCrumbScrollController(isLocal)),
-            )),
-            DropdownButton<String>(
-                isDense: true,
-                underline: Offstage(),
-                items: [
-                  // TODO: favourite
-                  DropdownMenuItem(
-                    child: Text('/'),
-                    value: '/',
-                  )
-                ],
-                onChanged: (path) {
-                  if (path is String && path.isNotEmpty) {
-                    openDirectory(path, isLocal: isLocal);
-                  }
-                })
-          ]);
+        : Row(
+            key: locationBarKey,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+                Expanded(
+                    child: BreadCrumb(
+                  items: items,
+                  divider: Text("/",
+                          style: TextStyle(color: Theme.of(context).hintColor))
+                      .paddingSymmetric(horizontal: 2.0),
+                  overflow: ScrollableOverflow(
+                      controller: getBreadCrumbScrollController(isLocal)),
+                )),
+                ActionIcon(
+                  message: "",
+                  icon: Icons.arrow_drop_down,
+                  onTap: () async {
+                    final renderBox = locationBarKey.currentContext
+                        ?.findRenderObject() as RenderBox;
+                    locationBarKey.currentContext?.size;
+
+                    final size = renderBox.size;
+                    final offset = renderBox.localToGlobal(Offset.zero);
+
+                    final x = offset.dx;
+                    final y = offset.dy + size.height + 1;
+
+                    final peerPlatform = (await bind.sessionGetPlatform(
+                            id: _ffi.id, isRemote: !isLocal))
+                        .toLowerCase();
+                    final List<MenuEntryBase> menuItems;
+                    if (peerPlatform == "windows") {
+                      menuItems = [];
+                      final loadingTag =
+                          _ffi.dialogManager.showLoading("Waiting");
+                      try {
+                        final fd =
+                            await model.fetchDirectory("/", isLocal, false);
+                        for (var entry in fd.entries) {
+                          menuItems.add(MenuEntryButton(
+                              childBuilder: (TextStyle? style) => Text(
+                                    entry.name,
+                                    style: style,
+                                  ),
+                              proc: () {
+                                openDirectory(entry.name, isLocal: isLocal);
+                                Get.back();
+                              }));
+                          menuItems.add(MenuEntryDivider());
+                        }
+                      } finally {
+                        _ffi.dialogManager.dismissByTag(loadingTag);
+                      }
+                    } else {
+                      menuItems = [
+                        MenuEntryButton(
+                            childBuilder: (TextStyle? style) => Text(
+                                  '/',
+                                  style: style,
+                                ),
+                            proc: () {
+                              openDirectory('/', isLocal: isLocal);
+                              Get.back();
+                            }),
+                        MenuEntryDivider()
+                      ];
+                    }
+
+                    mod_menu.showMenu(
+                        context: context,
+                        position: RelativeRect.fromLTRB(x, y, x, y),
+                        elevation: 4,
+                        items: menuItems
+                            .map((e) => e.build(
+                                context,
+                                MenuConfig(
+                                    commonColor:
+                                        CustomPopupMenuTheme.commonColor,
+                                    height: CustomPopupMenuTheme.height,
+                                    dividerHeight:
+                                        CustomPopupMenuTheme.dividerHeight,
+                                    boxWidth: size.width)))
+                            .expand((i) => i)
+                            .toList());
+                  },
+                  iconSize: 20,
+                )
+              ]);
   }
 
   List<BreadCrumbItem> getPathBreadCrumbItems(
