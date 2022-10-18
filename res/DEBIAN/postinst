@@ -14,19 +14,10 @@ if [ "$1" = configure ]; then
 		fi
 		version=$(python3 -V 2>&1 | grep -Po '(?<=Python )(.+)')
 		parsedVersion=$(echo "${version//./}")
-    mkdir -p /usr/lib/systemd/system/
+        mkdir -p /usr/lib/systemd/system/
 		cp /usr/share/rustdesk/files/systemd/rustdesk.service /usr/lib/systemd/system/rustdesk.service
 		systemctl daemon-reload
 		systemctl enable rustdesk
 		systemctl start rustdesk
-
-		cp /usr/share/rustdesk/files/systemd/rustdesk.service.user /usr/lib/systemd/user/rustdesk.service
-		ubuntuVersion=$(grep -oP 'VERSION_ID="\K[\d]+' /etc/os-release | bc -l)
-		waylandSupportVersion=21
-		if [ "$ubuntuVersion" -ge "$waylandSupportVersion" ]
-		then
-			curUser=$(who | awk '{print $1}' | head -1)
-			systemctl --machine=${curUser}@.host --user daemon-reload
-		fi
 	fi
 fi

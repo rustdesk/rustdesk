@@ -190,7 +190,8 @@ pub async fn set_uinput() -> ResultType<()> {
     let mouse = super::uinput::client::UInputMouse::new().await?;
     log::info!("UInput mouse created");
 
-    let mut en = ENIGO.lock().unwrap();
+    let xxx = ENIGO.lock();
+    let mut en = xxx.unwrap();
     en.set_uinput_keyboard(Some(Box::new(keyboard)));
     en.set_uinput_mouse(Some(Box::new(mouse)));
     Ok(())

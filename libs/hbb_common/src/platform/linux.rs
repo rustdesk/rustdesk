@@ -1,7 +1,44 @@
 use crate::ResultType;
 
+lazy_static::lazy_static! {
+    pub static ref DISTRO: Disto = Disto::new();
+}
+
+pub struct Disto {
+    pub name: String,
+    pub version_id: String,
+}
+
+impl Disto {
+    fn new() -> Self {
+        let name = run_cmds("awk -F'=' '/^NAME=/ {print $2}' /etc/os-release".to_owned())
+            .unwrap_or_default()
+            .trim()
+            .trim_matches('"')
+            .to_string();
+        let version_id =
+            run_cmds("awk -F'=' '/^VERSION_ID=/ {print $2}' /etc/os-release".to_owned())
+                .unwrap_or_default()
+                .trim()
+                .trim_matches('"')
+                .to_string();
+        Self { name, version_id }
+    }
+}
+
 pub fn get_display_server() -> String {
-    let session = get_value_of_seat0(0);
+    let mut session = get_values_of_seat0([0].to_vec())[0].clone();
+    if session.is_empty() {
+        // loginctl has not given the expected output.  try something else.
+        if let Ok(sid) = std::env::var("XDG_SESSION_ID") {
+            // could also execute "cat /proc/self/sessionid"
+            session = sid.to_owned();
+        }
+        if session.is_empty() {
+            session = run_cmds("cat /proc/self/sessionid".to_owned()).unwrap_or_default();
+        }
+    }
+
     get_display_server_of_session(&session)
 }
 
@@ -51,15 +88,16 @@ fn get_display_server_of_session(session: &str) -> String {
     }
 }
 
-pub fn get_value_of_seat0(i: usize) -> String {
+pub fn get_values_of_seat0(indices: Vec<usize>) -> Vec<String> {
     if let Ok(output) = run_loginctl(None) {
         for line in String::from_utf8_lossy(&output.stdout).lines() {
             if line.contains("seat0") {
                 if let Some(sid) = line.split_whitespace().nth(0) {
                     if is_active(sid) {
-                        if let Some(uid) = line.split_whitespace().nth(i) {
-                            return uid.to_owned();
-                        }
+                        return indices
+                            .into_iter()
+                            .map(|idx| line.split_whitespace().nth(idx).unwrap_or("").to_owned())
+                            .collect::<Vec<String>>();
                     }
                 }
             }
@@ -72,20 +110,19 @@ pub fn get_value_of_seat0(i: usize) -> String {
             if let Some(sid) = line.split_whitespace().nth(0) {
                 let d = get_display_server_of_session(sid);
                 if is_active(sid) && d != "tty" {
-                    if let Some(uid) = line.split_whitespace().nth(i) {
-                        return uid.to_owned();
-                    }
+                    return indices
+                        .into_iter()
+                        .map(|idx| line.split_whitespace().nth(idx).unwrap_or("").to_owned())
+                        .collect::<Vec<String>>();
                 }
             }
         }
     }
 
-    // loginctl has not given the expected output.  try something else.
-    if let Ok(sid) = std::env::var("XDG_SESSION_ID") { // could also execute "cat /proc/self/sessionid"
-         return sid.to_owned();
-    }
-
-    return "".to_owned();
+    return indices
+        .iter()
+        .map(|_x| "".to_owned())
+        .collect::<Vec<String>>();
 }
 
 fn is_active(sid: &str) -> bool {

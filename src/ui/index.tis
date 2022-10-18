@@ -247,7 +247,7 @@ class Enhancements: Reactor.Component {
                         <div> <button #select_directory .link>{translate('Change')}</button> </div>
                     </div>
                 </div>
-                , function(res=null) {
+                , "", function(res=null) {
                 if (!res) return;
                 handler.set_option("enable-record-session", res.enable_record_session ? '' : 'N');
                 handler.set_option("allow-auto-record-incoming", res.auto_record_incoming ? 'Y' : '');
@@ -369,7 +369,7 @@ class MyIdMenu: Reactor.Component {
             <br />" + handler.get_license() + " \
             <p style='font-weight: bold'>Made with heart in this chaotic world!</p>\
             </div>\
-        </div>", function(el) {
+        </div>", "", function(el) {
             if (el && el.attributes) {
                 handler.open_url(el.attributes['url']);
             };
@@ -389,7 +389,7 @@ class MyIdMenu: Reactor.Component {
             <div>" + translate("whitelist_sep") + "</div> \
             <textarea .outline-focus spellcheck=\"false\" name=\"text\" novalue=\"0.0.0.0\" style=\"overflow: scroll-indicator; width:*; height: 140px; font-size: 1.2em; padding: 0.5em;\">" + old_value + "</textarea>\
             </div> \
-            ", function(res=null) {
+            ", "", function(res=null) {
                 if (!res) return;
                 var value = (res.text || "").trim();
                 if (value) {
@@ -417,7 +417,7 @@ class MyIdMenu: Reactor.Component {
             <div><span>" + translate("API Server") + ": </span><input|text name='api' value='" + old_api + "' /></div> \
             <div><span>" + translate("Key") + ": </span><input|text name='key' value='" + old_key + "' /></div> \
             </div> \
-            ", function(res=null) {
+            ", "", function(res=null) {
                 if (!res) return;
                 var id = (res.id || "").trim();
                 var relay = (res.relay || "").trim();
@@ -453,7 +453,7 @@ class MyIdMenu: Reactor.Component {
             <div><span>{translate("Username")}:</span><input|text name='username' value={old_username} /></div>
             <div><span>{translate("Password")}:</span><PasswordComponent value={old_password} /></div>
             </div>
-            , function(res=null) {
+            , "", function(res=null) {
                 if (!res) return;
                 var proxy = (res.proxy || "").trim();
                 var username = (res.username || "").trim();
@@ -474,7 +474,7 @@ class MyIdMenu: Reactor.Component {
             <div>" + translate('id_change_tip') + " </div> \
             <div><span style='width: 100px; display:inline-block'>ID: </span><input|text .outline-focus style='width: 250px' name='id' /></div> \
             </div> \
-            ", function(res=null, show_progress) {
+            ", "", function(res=null, show_progress) {
                 if (!res) return;
                 show_progress();
                 var id = (res.id || "").trim();
@@ -520,7 +520,7 @@ function editDirectAccessPort() {
                     <input|text name='port' novalue={21118} />;
     msgbox("custom-direct-access-port", translate('Direct IP Access Settings'), <div .form .set-password>
             <div><span style="width: 60px;">{translate('Port')}:</span>{port}</div>
-        </div>, function(res=null) {
+        </div>, "", function(res=null) {
         if (!res) return;
         var p = (res.port || '').trim();
         if (p) {
@@ -934,7 +934,7 @@ class PasswordArea: Reactor.Component {
             <div><span>" + translate('Password') + ":</span><input|password(password) .outline-focus " + value_field + " /></div> \
             <div><span>" + translate('Confirmation') + ":</span><input|password(confirmation) " + value_field + " /></div> \
         </div> \
-        ", function(res=null) {
+        ", "", function(res=null) {
             if (!res) return;
             var p0 = (res.password || "").trim();
             var p1 = (res.confirmation || "").trim();
@@ -1161,7 +1161,7 @@ function login() {
     msgbox("custom-login", translate('Login'), <div .form .set-password> 
             <div><span>{translate('Username')}:</span><input|text name="username" value={name0} .outline-focus /></div> 
             <div><span>{translate('Password')}:</span><PasswordComponent value={pass0} /></div> 
-        </div>, function(res=null, show_progress) {
+        </div>, "", function(res=null, show_progress) {
         if (!res) return;
         show_progress();
         var name = (res.username || '').trim();

@@ -535,7 +535,7 @@ class FolderView : Reactor.Component {
       msgbox("custom", translate("Create Folder"), "<div .form> \
             <div>" + translate("Please enter the folder name") + ":</div> \
             <div><input|text(name) .outline-focus /></div> \
-        </div>", function(res=null) {
+        </div>", "", function(res=null) {
           if (!res) return;
           if (!res.name) return;
           var name = res.name.trim();
@@ -716,7 +716,7 @@ function confirmDelete(id ,path, is_remote) {
   msgbox("custom-skip", "Confirm Delete", "<div .form> \
         <div>" + translate('Are you sure you want to delete this file?') + "</div> \
         <div.ellipsis style=\"font-weight: bold;\">" + path + "</div> \
-    </div>", function(res=null) {
+    </div>", "", function(res=null) {
       if (!res) {
         file_transfer.job_table.updateJobStatus(id, -1, "cancel");
         file_transfer.job_table.cancelDeletePolling();
@@ -746,7 +746,7 @@ handler.confirmDeleteFiles = function(id, i, name) {
         <div>" + translate('Are you sure you want to delete this file?') + "</div> \
         <div.ellipsis style=\"font-weight: bold;\" .text>" + file_path + "</div> \
         <div><button|checkbox(remember) {ts}>" + translate('Do this for all conflicts') + "</button></div> \
-    </div>", function(res=null) {
+    </div>", "", function(res=null) {
       if (!res) {
         jt.updateJobStatus(id, i - 1, "cancel");
         file_transfer.job_table.cancelDeletePolling();
@@ -778,7 +778,7 @@ handler.overrideFileConfirm = function(id, file_num, to, is_upload) {
         <div>" + translate('This file exists, skip or overwrite this file?') + "</div> \
         <div.ellipsis style=\"font-weight: bold;\" .text>" + to + "</div> \
         <div><button|checkbox(remember) {ts}>" + translate('Do this for all conflicts') + "</button></div> \
-    </div>", function(res=null) {
+    </div>", "", function(res=null) {
       if (!res) {
         jt.updateJobStatus(id, -1, "cancel");
         handler.cancel_job(id);

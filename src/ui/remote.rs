@@ -238,8 +238,8 @@ impl InvokeUiSession for SciterHandler {
         self.call("updatePi", &make_args!(pi_sciter));
     }
 
-    fn msgbox(&self, msgtype: &str, title: &str, text: &str, retry: bool) {
-        self.call2("msgbox_retry", &make_args!(msgtype, title, text, retry));
+    fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool) {
+        self.call2("msgbox_retry", &make_args!(msgtype, title, text, link, retry));
     }
 
     fn new_message(&self, msg: String) {

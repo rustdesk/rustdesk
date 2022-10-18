@@ -547,7 +547,7 @@ pub fn get_error() -> String {
     {
         let dtype = crate::platform::linux::get_display_server();
         if "wayland" == dtype {
-            return "".to_owned();
+            return crate::server::wayland::common_get_error();
         }
         if dtype != "x11" {
             return format!(

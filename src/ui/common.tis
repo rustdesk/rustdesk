@@ -232,7 +232,7 @@ class ChatBox: Reactor.Component {
 
 /******************** start of msgbox ****************************************/
 var remember_password = false;
-function msgbox(type, title, content, callback=null, height=180, width=500, hasRetry=false, contentStyle="") {
+function msgbox(type, title, content, link="", callback=null, height=180, width=500, hasRetry=false, contentStyle="") {
     $(body).scrollTo(0, 0);
     if (!type) {
         closeMsgbox();
@@ -264,21 +264,21 @@ function msgbox(type, title, content, callback=null, height=180, width=500, hasR
     } else if (type.indexOf("custom") < 0 && !is_port_forward && !callback) {
         callback = function() { view.close(); }
     }
-    $(#msgbox).content(<MsgboxComponent width={width} height={height} auto_login={auto_login} type={type} title={title} content={content} remember={remember} callback={callback} contentStyle={contentStyle} hasRetry={hasRetry} />);
+    $(#msgbox).content(<MsgboxComponent width={width} height={height} auto_login={auto_login} type={type} title={title} content={content} link={link} remember={remember} callback={callback} contentStyle={contentStyle} hasRetry={hasRetry} />);
 }
 
 function connecting() {
     handler.msgbox("connecting", "Connecting...", "Connection in progress. Please wait.");
 }
 
-handler.msgbox = function(type, title, text, hasRetry=false) {
+handler.msgbox = function(type, title, text, link = "", hasRetry=false) {
     // crash somehow (when input wrong password), even with small time, for example, 1ms
-    self.timer(60ms, function() { msgbox(type, title, text, null, 180, 500, hasRetry); });
+    self.timer(60ms, function() { msgbox(type, title, text, link, null, 180, 500, hasRetry); });
 }
 
 var reconnectTimeout = 1000;
-handler.msgbox_retry = function(type, title, text, hasRetry) {
-    handler.msgbox(type, title, text, hasRetry);
+handler.msgbox_retry = function(type, title, text, link, hasRetry) {
+    handler.msgbox(type, title, text, link, hasRetry);
     if (hasRetry) {
         self.timer(0, retryConnect);
         self.timer(reconnectTimeout, retryConnect);

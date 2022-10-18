@@ -1,4 +1,8 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    future::Future,
+    sync::{Arc, Mutex},
+};
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use arboard::Clipboard as ClipboardContext;
@@ -18,6 +22,8 @@ use hbb_common::{
 // #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 use hbb_common::{config::RENDEZVOUS_PORT, futures::future::join_all};
 
+pub type NotifyMessageBox = fn(String, String, String, String) -> dyn Future<Output = ()>;
+
 pub const CLIPBOARD_NAME: &'static str = "clipboard";
 pub const CLIPBOARD_INTERVAL: u64 = 333;
 
@@ -30,6 +36,18 @@ lazy_static::lazy_static! {
     pub static ref DEVICE_ID: Arc<Mutex<String>> = Default::default();
     pub static ref DEVICE_NAME: Arc<Mutex<String>> = Default::default();
 }
+
+pub fn global_init() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        if !scrap::is_x11() {
+            crate::server::wayland::set_wayland_scrap_map_err();
+        }
+    }
+    true
+}
+
+pub fn global_clean() {}
 
 #[inline]
 pub fn valid_for_numlock(evt: &KeyEvent) -> bool {

@@ -377,5 +377,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Custom", ""),
         ("Full Access", ""),
         ("Screen Share", ""),
+        ("Wayland requires Ubuntu 21.04 or higher version.", "A Waylandhoz Ubuntu 21.04 vagy újabb verzió szükséges."),
+        ("Wayland requires higher version of linux distro. Please try X11 desktop or change your OS.", "A Wayland a Linux disztró magasabb verzióját igényli. Próbálja ki az X11 desktopot, vagy változtassa meg az operációs rendszert."),
+        ("JumpLink", "View"),
+        ("Please Select the screen to be shared(Operate on the peer side).", "Kérjük, válassza ki a megosztani kívánt képernyőt (a társoldalon működjön)."),
     ].iter().cloned().collect();
 }

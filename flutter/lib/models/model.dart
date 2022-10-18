@@ -222,26 +222,27 @@ class FfiModel with ChangeNotifier {
   handleMsgBox(Map<String, dynamic> evt, String id) {
     if (parent.target == null) return;
     final dialogManager = parent.target!.dialogManager;
-    var type = evt['type'];
-    var title = evt['title'];
-    var text = evt['text'];
+    final type = evt['type'];
+    final title = evt['title'];
+    final text = evt['text'];
+    final link = evt['link'];
     if (type == 're-input-password') {
       wrongPasswordDialog(id, dialogManager);
     } else if (type == 'input-password') {
       enterPasswordDialog(id, dialogManager);
     } else if (type == 'restarting') {
-      showMsgBox(id, type, title, text, false, dialogManager, hasCancel: false);
+      showMsgBox(id, type, title, text, link, false, dialogManager, hasCancel: false);
     } else {
       var hasRetry = evt['hasRetry'] == 'true';
-      showMsgBox(id, type, title, text, hasRetry, dialogManager);
+      showMsgBox(id, type, title, text, link, hasRetry, dialogManager);
     }
   }
 
   /// Show a message box with [type], [title] and [text].
-  showMsgBox(String id, String type, String title, String text, bool hasRetry,
-      OverlayDialogManager dialogManager,
+  showMsgBox(String id, String type, String title, String text, String link,
+      bool hasRetry, OverlayDialogManager dialogManager,
       {bool? hasCancel}) {
-    msgBox(type, title, text, dialogManager, hasCancel: hasCancel);
+    msgBox(type, title, text, link, dialogManager, hasCancel: hasCancel);
     _timer?.cancel();
     if (hasRetry) {
       _timer = Timer(Duration(seconds: _reconnects), () {

@@ -12,6 +12,7 @@ cfg_if! {
         mod x11;
         pub use self::linux::*;
         pub use self::x11::Frame;
+        pub use self::wayland::set_map_err;
             } else {
                 mod x11;
                 pub use self::x11::*;

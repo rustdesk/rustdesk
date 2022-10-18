@@ -78,7 +78,7 @@ class EditOsPassword: Reactor.Component {
 
 function editOSPassword(login=false) {
     var p0 = handler.get_option('os-password');
-    msgbox("custom-os-password", 'OS Password', p0, function(res=null) {
+    msgbox("custom-os-password", 'OS Password', p0, "", function(res=null) {
         if (!res) return;
         var a0 = handler.get_option('auto-login') != '';
         var p = (res.password || '').trim();
@@ -320,7 +320,7 @@ class Header: Reactor.Component {
         var self = this;
         msgbox("custom", "Note", <div .form>
          <textarea .outline-focus spellcheck="false" name="text" novalue="input note here" style="overflow: scroll-indicator; width:*; height: 140px; font-size: 1.2em; padding: 0.5em;">{self.conn_note}</textarea>
-          </div>, function(res=null) {
+          </div>, "", function(res=null) {
             if (!res) return;
             if (!res.text) return;
             self.conn_note = res.text;
@@ -333,9 +333,15 @@ class Header: Reactor.Component {
     }
 
     event click $(#restart_remote_device) {
-        msgbox("restart-confirmation", translate("Restart Remote Device"), translate("Are you sure you want to restart") + " " + pi.username + "@" + pi.hostname + "(" + get_id() + ") ?", function(res=null) {
-            if (res != null) handler.restart_remote_device();
-        });
+        msgbox(
+            "restart-confirmation",
+            translate("Restart Remote Device"),
+            translate("Are you sure you want to restart") + " " + pi.username + "@" + pi.hostname + "(" + get_id() + ") ?",
+            "",
+            function(res=null) {
+                if (res != null) handler.restart_remote_device();
+            }
+        );
     }
 
     event click $(#lock-screen) {
@@ -400,7 +406,7 @@ function handle_custom_image_quality() {
     var bitrate = (tmp[0] || 50);
     msgbox("custom", "Custom Image Quality", "<div .form> \
           <div><input type=\"hslider\" style=\"width: 50%\" name=\"bitrate\" max=\"100\" min=\"10\" value=\"" + bitrate + "\"/ buddy=\"bitrate-buddy\"><b #bitrate-buddy>x</b>% Bitrate</div> \
-      </div>", function(res=null) {
+      </div>", "", function(res=null) {
         if (!res) return;
         if (!res.bitrate) return;
         handler.save_custom_image_quality(res.bitrate);
@@ -489,7 +495,7 @@ handler.updatePrivacyMode = updatePrivacyMode;
 function togglePrivacyMode(privacy_id) {
     var supported = handler.is_privacy_mode_supported();
     if (!supported) {
-        msgbox("nocancel", translate("Privacy mode"), translate("Unsupported"), function() { });
+        msgbox("nocancel", translate("Privacy mode"), translate("Unsupported"), "", function() { });
     } else {
         handler.toggle_option(privacy_id);
     }

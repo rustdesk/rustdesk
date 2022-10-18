@@ -666,7 +666,6 @@ impl Connection {
         #[allow(unused_mut)]
         let mut username = crate::platform::get_active_username();
         let mut res = LoginResponse::new();
-
         let mut pi = PeerInfo {
             username: username.clone(),
             conn_id: self.inner.id,
@@ -743,9 +742,13 @@ impl Connection {
             res.set_peer_info(pi);
         } else {
             try_activate_screen();
+            if let Some(msg_out) = super::video_service::is_inited_msg() {
+                self.send(msg_out).await;
+            }
+
             match super::video_service::get_displays().await {
                 Err(err) => {
-                    res.set_error(format!("X11 error: {}", err));
+                    res.set_error(format!("{}", err));
                 }
                 Ok((current, displays)) => {
                     pi.displays = displays.into();
@@ -1511,7 +1514,14 @@ async fn start_ipc(
         if crate::platform::is_root() {
             let mut res = Ok(None);
             for _ in 0..10 {
-                res = crate::platform::run_as_user("--cm");
+                #[cfg(not(target_os = "linux"))]
+                {
+                    res = crate::platform::run_as_user("--cm");
+                }
+                #[cfg(target_os = "linux")]
+                {
+                    res = crate::platform::run_as_user("--cm", None);
+                }
                 if res.is_ok() {
                     break;
                 }

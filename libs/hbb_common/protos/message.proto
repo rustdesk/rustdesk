@@ -506,6 +506,19 @@ message AudioFrame {
   int64 timestamp = 2;
 }
 
+// Notify peer to show message box.
+message MessageBox {
+  // Message type. Refer to flutter/lib/commom.dart/msgBox().
+  string msgtype = 1;
+  string title = 2;
+  // English
+  string text = 3;
+  // If not empty, msgbox provides a button to following the link.
+  // The link here can't be directly http url.
+  // It must be the key of http url configed in peer side or "rustdesk://*" (jump in app).
+  string link = 4;
+}
+
 message BackNotification {
   // no need to consider block input by someone else
   enum BlockInputState {
@@ -581,5 +594,6 @@ message Message {
     FileResponse file_response = 18;
     Misc misc = 19;
     Cliprdr cliprdr = 20;
+    MessageBox message_box = 21;
   }
 }

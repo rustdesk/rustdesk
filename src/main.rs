@@ -6,21 +6,32 @@ use librustdesk::*;
 
 #[cfg(any(target_os = "android", target_os = "ios"))]
 fn main() {
+    if !common::global_init() {
+        return;
+    }
     common::test_rendezvous_server();
     common::test_nat_type();
     #[cfg(target_os = "android")]
     crate::common::check_software_update();
+    common::global_clean();
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
 fn main() {
+    if !common::global_init() {
+        return;
+    }
     if let Some(args) = crate::core_main::core_main().as_mut() {
         ui::start(args);
     }
+    common::global_clean();
 }
 
 #[cfg(feature = "cli")]
 fn main() {
+    if !common::global_init() {
+        return;
+    }
     use hbb_common::log;
     use clap::App;
     let args = format!(
@@ -64,4 +75,5 @@ fn main() {
         let token = LocalConfig::get_option("access_token");
         cli::start_one_port_forward(options[0].clone(), port, remote_host, remote_port, key, token);
     }
+    common::global_clean();
 }

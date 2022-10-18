@@ -310,7 +310,7 @@ impl InvokeUiSession for FlutterHandler {
         );
     }
 
-    fn msgbox(&self, msgtype: &str, title: &str, text: &str, retry: bool) {
+    fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool) {
         let has_retry = if retry { "true" } else { "" };
         self.push_event(
             "msgbox",
@@ -318,6 +318,7 @@ impl InvokeUiSession for FlutterHandler {
                 ("type", msgtype),
                 ("title", title),
                 ("text", text),
+                ("link", link),
                 ("hasRetry", has_retry),
             ],
         );
