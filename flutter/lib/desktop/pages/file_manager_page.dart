@@ -286,8 +286,9 @@ class _FileManagerPageState extends State<FileManagerPage>
           rows: filteredEntries.map((entry) {
             final sizeStr =
                 entry.isFile ? readableFileSize(entry.size.toDouble()) : "";
-            final lastModifiedStr =
-                "${entry.lastModified().toString().replaceAll(".000", "")}   ";
+            final lastModifiedStr = entry.isDrive
+                ? " "
+                : "${entry.lastModified().toString().replaceAll(".000", "")}   ";
             return DataRow(
                 key: ValueKey(entry.name),
                 onSelectChanged: (s) {
@@ -810,9 +811,19 @@ class _FileManagerPageState extends State<FileManagerPage>
                     final peerPlatform = (await bind.sessionGetPlatform(
                             id: _ffi.id, isRemote: !isLocal))
                         .toLowerCase();
-                    final List<MenuEntryBase> menuItems;
+                    final List<MenuEntryBase> menuItems = [
+                      MenuEntryButton(
+                          childBuilder: (TextStyle? style) => Text(
+                                '/',
+                                style: style,
+                              ),
+                          proc: () {
+                            openDirectory('/', isLocal: isLocal);
+                          },
+                          dismissOnClicked: true),
+                      MenuEntryDivider()
+                    ];
                     if (peerPlatform == "windows") {
-                      menuItems = [];
                       var loadingTag = "";
                       if (!isLocal) {
                         loadingTag = _ffi.dialogManager.showLoading("Waiting");
@@ -837,19 +848,6 @@ class _FileManagerPageState extends State<FileManagerPage>
                           _ffi.dialogManager.dismissByTag(loadingTag);
                         }
                       }
-                    } else {
-                      menuItems = [
-                        MenuEntryButton(
-                            childBuilder: (TextStyle? style) => Text(
-                                  '/',
-                                  style: style,
-                                ),
-                            proc: () {
-                              openDirectory('/', isLocal: isLocal);
-                            },
-                            dismissOnClicked: true),
-                        MenuEntryDivider()
-                      ];
                     }
 
                     mod_menu.showMenu(

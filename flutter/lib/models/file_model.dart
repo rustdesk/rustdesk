@@ -1178,11 +1178,13 @@ class SelectedItems {
   }
 }
 
-// code from file_manager pkg after edit
+// edited from [https://github.com/DevsOnFlutter/file_manager/blob/c1bf7f0225b15bcb86eba602c60acd5c4da90dd8/lib/file_manager.dart#L22]
 List<Entry> _sortList(List<Entry> list, SortBy sortType, bool ascending) {
   if (sortType == SortBy.Name) {
     // making list of only folders.
-    final dirs = list.where((element) => element.isDirectory).toList();
+    final dirs = list
+        .where((element) => element.isDirectory || element.isDrive)
+        .toList();
     // sorting folder list by name.
     dirs.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
