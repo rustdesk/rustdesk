@@ -1195,11 +1195,12 @@ Future<void> initUniLinks() async {
   // check cold boot
   try {
     final initialLink = await getInitialLink();
-    // TODO: parse link
-    print("${initialLink}");
-  } on PlatformException {
-    // Handle exception by warning the user their action did not succeed
-    // return?
+    if (initialLink == null) {
+      return;
+    }
+    parseRustdeskUri(initialLink);
+  } catch (err) {
+    debugPrint("$err");
   }
 }
 
@@ -1257,6 +1258,7 @@ void parseRustdeskUri(String uriPath) {
 
 /// uri handler
 void callUniLinksUriHandler(Uri uri) {
+  debugPrint("uni links called: $uri");
   // new connection
   if (uri.authority == "connection" && uri.path.startsWith("/new/")) {
     final peerId = uri.path.substring("/new/".length);
