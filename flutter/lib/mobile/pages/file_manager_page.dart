@@ -69,8 +69,14 @@ class _FileManagerPageState extends State<FileManagerPage> {
                 title: ToggleSwitch(
                   initialLabelIndex: model.isLocal ? 0 : 1,
                   activeBgColor: [MyTheme.idColor],
-                  // inactiveBgColor: MyTheme.grayBg,
-                  inactiveFgColor: Colors.black54,
+                  inactiveBgColor:
+                      Theme.of(context).brightness == Brightness.light
+                          ? MyTheme.grayBg
+                          : null,
+                  inactiveFgColor:
+                      Theme.of(context).brightness == Brightness.light
+                          ? Colors.black54
+                          : null,
                   totalSwitches: 2,
                   minWidth: 100,
                   fontSize: 15,
@@ -92,7 +98,8 @@ class _FileManagerPageState extends State<FileManagerPage> {
                           PopupMenuItem(
                             child: Row(
                               children: [
-                                Icon(Icons.refresh, color: Colors.black),
+                                Icon(Icons.refresh,
+                                    color: Theme.of(context).iconTheme.color),
                                 SizedBox(width: 5),
                                 Text(translate("Refresh File"))
                               ],
@@ -102,7 +109,8 @@ class _FileManagerPageState extends State<FileManagerPage> {
                           PopupMenuItem(
                             child: Row(
                               children: [
-                                Icon(Icons.check, color: Colors.black),
+                                Icon(Icons.check,
+                                    color: Theme.of(context).iconTheme.color),
                                 SizedBox(width: 5),
                                 Text(translate("Multi Select"))
                               ],
@@ -113,7 +121,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
                             child: Row(
                               children: [
                                 Icon(Icons.folder_outlined,
-                                    color: Colors.black),
+                                    color: Theme.of(context).iconTheme.color),
                                 SizedBox(width: 5),
                                 Text(translate("Create Folder"))
                               ],
@@ -127,7 +135,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
                                     model.currentShowHidden
                                         ? Icons.check_box_outlined
                                         : Icons.check_box_outline_blank,
-                                    color: Colors.black),
+                                    color: Theme.of(context).iconTheme.color),
                                 SizedBox(width: 5),
                                 Text(translate("Show Hidden Files"))
                               ],
@@ -188,7 +196,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
             ));
       }));
 
-  bool needShowCheckBox() {
+  bool showCheckBox() {
     if (!model.selectMode) {
       return false;
     }
@@ -220,60 +228,63 @@ class _FileManagerPageState extends State<FileManagerPage> {
           return Card(
             child: ListTile(
               leading: Icon(
-                  entries[index].isFile ? Icons.feed_outlined : Icons.folder,
+                  entries[index].isFile
+                      ? Icons.feed_outlined
+                      : entries[index].isDrive
+                          ? Icons.computer
+                          : Icons.folder,
                   size: 40),
               title: Text(entries[index].name),
               selected: selected,
               subtitle: Text(
-                entries[index]
-                        .lastModified()
-                        .toString()
-                        .replaceAll(".000", "") +
-                    "   " +
-                    sizeStr,
+                entries[index].isDrive
+                    ? ""
+                    : "${entries[index].lastModified().toString().replaceAll(".000", "")}   $sizeStr",
                 style: TextStyle(fontSize: 12, color: MyTheme.darkGray),
               ),
-              trailing: needShowCheckBox()
-                  ? Checkbox(
-                      value: selected,
-                      onChanged: (v) {
-                        if (v == null) return;
-                        if (v && !selected) {
-                          _selectedItems.add(isLocal, entries[index]);
-                        } else if (!v && selected) {
-                          _selectedItems.remove(entries[index]);
-                        }
-                        setState(() {});
-                      })
-                  : PopupMenuButton<String>(
-                      icon: Icon(Icons.more_vert),
-                      itemBuilder: (context) {
-                        return [
-                          PopupMenuItem(
-                            child: Text(translate("Delete")),
-                            value: "delete",
-                          ),
-                          PopupMenuItem(
-                            child: Text(translate("Multi Select")),
-                            value: "multi_select",
-                          ),
-                          PopupMenuItem(
-                            child: Text(translate("Properties")),
-                            value: "properties",
-                            enabled: false,
-                          )
-                        ];
-                      },
-                      onSelected: (v) {
-                        if (v == "delete") {
-                          final items = SelectedItems();
-                          items.add(isLocal, entries[index]);
-                          model.removeAction(items);
-                        } else if (v == "multi_select") {
-                          _selectedItems.clear();
-                          model.toggleSelectMode();
-                        }
-                      }),
+              trailing: entries[index].isDrive
+                  ? null
+                  : showCheckBox()
+                      ? Checkbox(
+                          value: selected,
+                          onChanged: (v) {
+                            if (v == null) return;
+                            if (v && !selected) {
+                              _selectedItems.add(isLocal, entries[index]);
+                            } else if (!v && selected) {
+                              _selectedItems.remove(entries[index]);
+                            }
+                            setState(() {});
+                          })
+                      : PopupMenuButton<String>(
+                          icon: Icon(Icons.more_vert),
+                          itemBuilder: (context) {
+                            return [
+                              PopupMenuItem(
+                                child: Text(translate("Delete")),
+                                value: "delete",
+                              ),
+                              PopupMenuItem(
+                                child: Text(translate("Multi Select")),
+                                value: "multi_select",
+                              ),
+                              PopupMenuItem(
+                                child: Text(translate("Properties")),
+                                value: "properties",
+                                enabled: false,
+                              )
+                            ];
+                          },
+                          onSelected: (v) {
+                            if (v == "delete") {
+                              final items = SelectedItems();
+                              items.add(isLocal, entries[index]);
+                              model.removeAction(items);
+                            } else if (v == "multi_select") {
+                              _selectedItems.clear();
+                              model.toggleSelectMode();
+                            }
+                          }),
               onTap: () {
                 if (model.selectMode && !_selectedItems.isOtherPage(isLocal)) {
                   if (selected) {
@@ -284,21 +295,23 @@ class _FileManagerPageState extends State<FileManagerPage> {
                   setState(() {});
                   return;
                 }
-                if (entries[index].isDirectory) {
+                if (entries[index].isDirectory || entries[index].isDrive) {
                   model.openDirectory(entries[index].path);
                   breadCrumbScrollToEnd();
                 } else {
                   // Perform file-related tasks.
                 }
               },
-              onLongPress: () {
-                _selectedItems.clear();
-                model.toggleSelectMode();
-                if (model.selectMode) {
-                  _selectedItems.add(isLocal, entries[index]);
-                }
-                setState(() {});
-              },
+              onLongPress: entries[index].isDrive
+                  ? null
+                  : () {
+                      _selectedItems.clear();
+                      model.toggleSelectMode();
+                      if (model.selectMode) {
+                        _selectedItems.add(isLocal, entries[index]);
+                      }
+                      setState(() {});
+                    },
             ),
           );
         },

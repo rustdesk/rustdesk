@@ -1139,6 +1139,7 @@ class SelectedItems {
   bool? get isLocal => _isLocal;
 
   add(bool isLocal, Entry e) {
+    if (e.isDrive) return;
     _isLocal ??= isLocal;
     if (_isLocal != null && _isLocal != isLocal) {
       return;
