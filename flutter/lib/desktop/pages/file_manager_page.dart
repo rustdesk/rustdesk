@@ -229,13 +229,13 @@ class _FileManagerPageState extends State<FileManagerPage>
     final entries = fd.entries;
     final sortIndex = (SortBy style) {
       switch (style) {
-        case SortBy.Name:
+        case SortBy.name:
           return 0;
-        case SortBy.Type:
+        case SortBy.type:
           return 0;
-        case SortBy.Modified:
+        case SortBy.modified:
           return 1;
-        case SortBy.Size:
+        case SortBy.size:
           return 2;
       }
     }(model.getSortStyle(isLocal));
@@ -265,7 +265,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                   translate("Name"),
                 ).marginSymmetric(horizontal: 4),
                 onSort: (columnIndex, ascending) {
-                  model.changeSortStyle(SortBy.Name,
+                  model.changeSortStyle(SortBy.name,
                       isLocal: isLocal, ascending: ascending);
                 }),
             DataColumn(
@@ -273,13 +273,13 @@ class _FileManagerPageState extends State<FileManagerPage>
                   translate("Modified"),
                 ),
                 onSort: (columnIndex, ascending) {
-                  model.changeSortStyle(SortBy.Modified,
+                  model.changeSortStyle(SortBy.modified,
                       isLocal: isLocal, ascending: ascending);
                 }),
             DataColumn(
                 label: Text(translate("Size")),
                 onSort: (columnIndex, ascending) {
-                  model.changeSortStyle(SortBy.Size,
+                  model.changeSortStyle(SortBy.size,
                       isLocal: isLocal, ascending: ascending);
                 }),
           ],
