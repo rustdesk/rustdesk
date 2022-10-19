@@ -55,6 +55,9 @@ class _ConnectionPageState extends State<ConnectionPage>
     _updateTimer = Timer.periodic(Duration(seconds: 1), (timer) {
       updateStatus();
     });
+    _idFocusNode.addListener(() {
+      _idInputFocused.value = _idFocusNode.hasFocus;
+    });
   }
 
   @override
@@ -107,9 +110,8 @@ class _ConnectionPageState extends State<ConnectionPage>
             ).paddingOnly(left: 12.0),
           ),
         ),
-        const Divider(),
-        SizedBox(child: Obx(() => buildStatus()))
-            .paddingOnly(bottom: 12, top: 6),
+        const Divider(height: 1),
+        buildStatus()
       ],
     );
   }
@@ -124,9 +126,6 @@ class _ConnectionPageState extends State<ConnectionPage>
   /// UI for the remote ID TextField.
   /// Search for a peer and connect to it if the id exists.
   Widget _buildRemoteIDTextField(BuildContext context) {
-    _idFocusNode.addListener(() {
-      _idInputFocused.value = _idFocusNode.hasFocus;
-    });
     var w = Container(
       width: 320 + 20 * 2,
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 22),
@@ -235,79 +234,73 @@ class _ConnectionPageState extends State<ConnectionPage>
   var svcIsUsingPublicServer = true.obs;
 
   Widget buildStatus() {
-    final fontSize = 14.0;
-    final textStyle = TextStyle(fontSize: fontSize);
-    final light = Container(
-      height: 8,
-      width: 8,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        color: svcStopped.value || svcStatusCode.value == 0
-            ? kColorWarn
-            : (svcStatusCode.value == 1
-                ? Color.fromARGB(255, 50, 190, 166)
-                : Color.fromARGB(255, 224, 79, 95)),
-      ),
-    ).paddingSymmetric(horizontal: 12.0);
-    if (svcStopped.value) {
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          light,
-          Text(translate("Service is not running"), style: textStyle),
-          TextButton(
-              onPressed: () async {
-                bool checked = await bind.mainCheckSuperUserPermission();
-                if (checked) {
-                  bind.mainSetOption(key: "stop-service", value: "");
-                  bind.mainSetOption(key: "access-mode", value: "");
-                }
-              },
-              child: Text(translate("Start Service"), style: textStyle))
-        ],
-      );
-    } else {
-      if (svcStatusCode.value == 0) {
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            light,
-            Text(translate("connecting_status"), style: textStyle)
-          ],
-        );
-      } else if (svcStatusCode.value == -1) {
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            light,
-            Text(translate("not_ready_status"), style: textStyle)
-          ],
-        );
-      }
-    }
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        light,
-        Text(translate('Ready'), style: textStyle),
-        Offstage(
-            offstage: !svcIsUsingPublicServer.value,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Text(', ', style: textStyle),
-                InkWell(
-                  onTap: onUsePublicServerGuide,
-                  child: Text(
-                    translate('setup_server_tip'),
-                    style: TextStyle(
-                        decoration: TextDecoration.underline,
-                        fontSize: fontSize),
-                  ),
-                )
-              ],
-            ))
-      ],
+    final em = 14.0;
+    return ConstrainedBox(
+      constraints: BoxConstraints.tightFor(height: 3 * em),
+      child: Obx(() => Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                height: 8,
+                width: 8,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(4),
+                  color: svcStopped.value || svcStatusCode.value == 0
+                      ? kColorWarn
+                      : (svcStatusCode.value == 1
+                          ? Color.fromARGB(255, 50, 190, 166)
+                          : Color.fromARGB(255, 224, 79, 95)),
+                ),
+              ).marginSymmetric(horizontal: em),
+              Text(
+                  svcStopped.value
+                      ? translate("Service is not running")
+                      : svcStatusCode.value == 0
+                          ? translate("connecting_status")
+                          : svcStatusCode.value == -1
+                              ? translate("not_ready_status")
+                              : translate('Ready'),
+                  style: TextStyle(fontSize: em)),
+              // stop
+              Offstage(
+                offstage: !svcStopped.value,
+                child: GestureDetector(
+                        onTap: () async {
+                          bool checked =
+                              await bind.mainCheckSuperUserPermission();
+                          if (checked) {
+                            bind.mainSetOption(key: "stop-service", value: "");
+                            bind.mainSetOption(key: "access-mode", value: "");
+                          }
+                        },
+                        child: Text(translate("Start Service"),
+                            style: TextStyle(
+                                decoration: TextDecoration.underline,
+                                fontSize: em)))
+                    .marginOnly(left: em),
+              ),
+              // ready && public
+              Offstage(
+                offstage: !(!svcStopped.value &&
+                    svcStatusCode.value == 1 &&
+                    svcIsUsingPublicServer.value),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text(', ', style: TextStyle(fontSize: em)),
+                    InkWell(
+                      onTap: onUsePublicServerGuide,
+                      child: Text(
+                        translate('setup_server_tip'),
+                        style: TextStyle(
+                            decoration: TextDecoration.underline, fontSize: em),
+                      ),
+                    )
+                  ],
+                ),
+              )
+            ],
+          )),
     );
   }
 
