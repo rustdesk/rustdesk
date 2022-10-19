@@ -1316,16 +1316,25 @@ impl Connection {
                 if o.custom_image_quality > 0 {
                     image_quality = o.custom_image_quality;
                 } else {
-                    image_quality = ImageQuality::Balanced.value();
+                    image_quality = -1;
                 }
             } else {
                 image_quality = q.value();
             }
+            if image_quality > 0 {
+                video_service::VIDEO_QOS
+                    .lock()
+                    .unwrap()
+                    .update_image_quality(image_quality);
+            }
+        }
+        if o.custom_fps > 0 {
             video_service::VIDEO_QOS
                 .lock()
                 .unwrap()
-                .update_image_quality(image_quality);
+                .update_user_fps(o.custom_fps as _);
         }
+
         if let Ok(q) = o.lock_after_session_end.enum_value() {
             if q != BoolOption::NotSet {
                 self.lock_after_session_end = q == BoolOption::Yes;

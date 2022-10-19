@@ -134,6 +134,11 @@ impl<T: InvokeUiSession> Session<T> {
         }
     }
 
+    pub fn set_custom_fps(&mut self, custom_fps: i32) {
+        let msg = self.lc.write().unwrap().set_custom_fps(custom_fps);
+        self.send(Data::Message(msg));
+    }
+
     pub fn get_remember(&self) -> bool {
         self.lc.read().unwrap().remember
     }
@@ -1181,7 +1186,12 @@ impl<T: InvokeUiSession> Interface for Session<T> {
         if self.is_file_transfer() {
             self.close_success();
         } else if !self.is_port_forward() {
-            self.msgbox("success", "Successful", "Connected, waiting for image...", "");
+            self.msgbox(
+                "success",
+                "Successful",
+                "Connected, waiting for image...",
+                "",
+            );
         }
         #[cfg(windows)]
         {

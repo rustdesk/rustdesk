@@ -1092,7 +1092,12 @@ impl LoginConfigHandler {
             n += 1;
         } else if q == "custom" {
             let config = PeerConfig::load(&self.id);
-            msg.custom_image_quality = config.custom_image_quality[0] << 8;
+            let quality = if config.custom_image_quality.is_empty() {
+                50
+            } else {
+                config.custom_image_quality[0]
+            };
+            msg.custom_image_quality = quality << 8;
             n += 1;
         }
         if self.get_toggle_option("show-remote-cursor") {
@@ -1251,6 +1256,27 @@ impl LoginConfigHandler {
         config.image_quality = value;
         self.save_config(config);
         res
+    }
+
+    /// Create a [`Message`] for saving custom fps.
+    ///
+    /// # Arguments
+    ///
+    /// * `fps` - The given fps.
+    pub fn set_custom_fps(&mut self, fps: i32) -> Message {
+        let mut misc = Misc::new();
+        misc.set_option(OptionMessage {
+            custom_fps: fps,
+            ..Default::default()
+        });
+        let mut msg_out = Message::new();
+        msg_out.set_misc(misc);
+        let mut config = self.load_config();
+        config
+            .options
+            .insert("custom-fps".to_owned(), fps.to_string());
+        self.save_config(config);
+        msg_out
     }
 
     pub fn get_option(&self, k: &str) -> String {
