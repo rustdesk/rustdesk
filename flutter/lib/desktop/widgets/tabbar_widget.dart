@@ -811,14 +811,16 @@ class ActionIcon extends StatelessWidget {
   final IconData icon;
   final Function() onTap;
   final bool isClose;
-  final double? size;
+  final double iconSize;
+  final double boxSize;
   const ActionIcon(
       {Key? key,
       required this.message,
       required this.icon,
       required this.onTap,
-      required this.isClose,
-      this.size})
+      this.isClose = false,
+      this.iconSize = _kActionIconSize,
+      this.boxSize = _kTabBarHeight - 1})
       : super(key: key);
 
   @override
@@ -834,14 +836,14 @@ class ActionIcon extends StatelessWidget {
             onHover: (value) => hover.value = value,
             onTap: onTap,
             child: SizedBox(
-              height: size ?? (_kTabBarHeight - 1),
-              width: size ?? (_kTabBarHeight - 1),
+              height: boxSize,
+              width: boxSize,
               child: Icon(
                 icon,
                 color: hover.value && isClose
                     ? Colors.white
                     : MyTheme.tabbar(context).unSelectedIconColor,
-                size: _kActionIconSize,
+                size: iconSize,
               ),
             ),
           ),

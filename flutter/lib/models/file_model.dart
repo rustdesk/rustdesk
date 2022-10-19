@@ -402,6 +402,10 @@ class FileModel extends ChangeNotifier {
     }
   }
 
+  Future<FileDirectory> fetchDirectory(path, isLocal, showHidden) async {
+    return await _fileFetcher.fetchDirectory(path, isLocal, showHidden);
+  }
+
   void pushHistory(bool isLocal) {
     final history = isLocal ? localHistory : remoteHistory;
     final currPath = isLocal ? currentLocalDir.path : currentRemoteDir.path;
@@ -1027,7 +1031,9 @@ class Entry {
 
   bool get isFile => entryType > 3;
 
-  bool get isDirectory => entryType <= 3;
+  bool get isDirectory => entryType < 3;
+
+  bool get isDrive => entryType == 3;
 
   DateTime lastModified() {
     return DateTime.fromMillisecondsSinceEpoch(modifiedTime * 1000);
@@ -1133,6 +1139,7 @@ class SelectedItems {
   bool? get isLocal => _isLocal;
 
   add(bool isLocal, Entry e) {
+    if (e.isDrive) return;
     _isLocal ??= isLocal;
     if (_isLocal != null && _isLocal != isLocal) {
       return;
@@ -1165,13 +1172,20 @@ class SelectedItems {
     _items.clear();
     _isLocal = null;
   }
+
+  void selectAll(List<Entry> entries) {
+    _items.clear();
+    _items.addAll(entries);
+  }
 }
 
-// code from file_manager pkg after edit
+// edited from [https://github.com/DevsOnFlutter/file_manager/blob/c1bf7f0225b15bcb86eba602c60acd5c4da90dd8/lib/file_manager.dart#L22]
 List<Entry> _sortList(List<Entry> list, SortBy sortType, bool ascending) {
   if (sortType == SortBy.Name) {
     // making list of only folders.
-    final dirs = list.where((element) => element.isDirectory).toList();
+    final dirs = list
+        .where((element) => element.isDirectory || element.isDrive)
+        .toList();
     // sorting folder list by name.
     dirs.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 

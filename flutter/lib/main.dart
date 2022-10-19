@@ -221,7 +221,7 @@ void runConnectionManagerScreen() async {
       windowManager.setOpacity(1)
     ]);
     // ensure
-    windowManager.setAlignment(Alignment.topRight); 
+    windowManager.setAlignment(Alignment.topRight);
   });
 }
 
