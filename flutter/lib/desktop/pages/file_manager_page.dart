@@ -547,13 +547,6 @@ class _FileManagerPageState extends State<FileManagerPage>
             Row(
               children: [
                 IconButton(
-                  onPressed: () {
-                    model.goHome(isLocal: isLocal);
-                  },
-                  icon: const Icon(Icons.home_outlined),
-                  splashRadius: 20,
-                ),
-                IconButton(
                   icon: const Icon(Icons.arrow_back),
                   splashRadius: 20,
                   onPressed: () {
@@ -649,6 +642,13 @@ class _FileManagerPageState extends State<FileManagerPage>
                 mainAxisAlignment:
                     isLocal ? MainAxisAlignment.start : MainAxisAlignment.end,
                 children: [
+                  IconButton(
+                    onPressed: () {
+                      model.goHome(isLocal: isLocal);
+                    },
+                    icon: const Icon(Icons.home_outlined),
+                    splashRadius: 20,
+                  ),
                   IconButton(
                       onPressed: () {
                         final name = TextEditingController();
@@ -789,8 +789,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                     child: BreadCrumb(
                   items: items,
                   divider: Text("/",
-                          style: TextStyle(color: Theme.of(context).hintColor))
-                      .paddingSymmetric(horizontal: 2.0),
+                      style: TextStyle(color: Theme.of(context).hintColor)),
                   overflow: ScrollableOverflow(
                       controller: getBreadCrumbScrollController(isLocal)),
                 )),
@@ -833,15 +832,21 @@ class _FileManagerPageState extends State<FileManagerPage>
                             await model.fetchDirectory("/", isLocal, isLocal);
                         for (var entry in fd.entries) {
                           menuItems.add(MenuEntryButton(
-                              childBuilder: (TextStyle? style) => Text(
-                                    entry.name,
-                                    style: style,
-                                  ),
+                              childBuilder: (TextStyle? style) =>
+                                  Row(children: [
+                                    Icon(Icons.computer,
+                                        color: style?.color,
+                                        size: style?.fontSize),
+                                    SizedBox(width: 10),
+                                    Text(
+                                      entry.name,
+                                      style: style,
+                                    )
+                                  ]),
                               proc: () {
                                 openDirectory(entry.name, isLocal: isLocal);
                               },
                               dismissOnClicked: true));
-                          menuItems.add(MenuEntryDivider());
                         }
                       } finally {
                         if (!isLocal) {
@@ -849,7 +854,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                         }
                       }
                     }
-
+                    menuItems.add(MenuEntryDivider());
                     mod_menu.showMenu(
                         context: context,
                         position: RelativeRect.fromLTRB(x, y, x, y),
@@ -879,10 +884,11 @@ class _FileManagerPageState extends State<FileManagerPage>
     final breadCrumbList = List<BreadCrumbItem>.empty(growable: true);
     breadCrumbList.addAll(list.asMap().entries.map((e) => BreadCrumbItem(
         content: TextButton(
-            child: Text(e.value),
-            style:
-                ButtonStyle(minimumSize: MaterialStateProperty.all(Size(0, 0))),
-            onPressed: () => onPressed(list.sublist(0, e.key + 1))))));
+                child: Text(e.value),
+                style: ButtonStyle(
+                    minimumSize: MaterialStateProperty.all(Size(0, 0))),
+                onPressed: () => onPressed(list.sublist(0, e.key + 1)))
+            .marginSymmetric(horizontal: 4))));
     return breadCrumbList;
   }
 
