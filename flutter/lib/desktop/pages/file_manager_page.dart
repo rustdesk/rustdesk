@@ -48,6 +48,8 @@ class _FileManagerPageState extends State<FileManagerPage>
   final _locationStatusRemote = LocationStatus.bread.obs;
   final _locationNodeLocal = FocusNode(debugLabel: "locationNodeLocal");
   final _locationNodeRemote = FocusNode(debugLabel: "locationNodeRemote");
+  final _locationBarKeyLocal = GlobalKey(debugLabel: "locationBarKeyLocal");
+  final _locationBarKeyRemote = GlobalKey(debugLabel: "locationBarKeyRemote");
   final _searchTextLocal = "".obs;
   final _searchTextRemote = "".obs;
   final _breadCrumbScrollerLocal = ScrollController();
@@ -63,11 +65,15 @@ class _FileManagerPageState extends State<FileManagerPage>
     return isLocal ? _breadCrumbScrollerLocal : _breadCrumbScrollerRemote;
   }
 
+  GlobalKey getLocationBarKey(bool isLocal) {
+    return isLocal ? _locationBarKeyLocal : _locationBarKeyRemote;
+  }
+
   late FFI _ffi;
 
   FileModel get model => _ffi.fileModel;
 
-  SelectedItems getSelectedItem(bool isLocal) {
+  SelectedItems getSelectedItems(bool isLocal) {
     return isLocal ? _localSelectedItems : _remoteSelectedItems;
   }
 
@@ -133,7 +139,7 @@ class _FileManagerPageState extends State<FileManagerPage>
   Widget menu({bool isLocal = false}) {
     var menuPos = RelativeRect.fill;
 
-    final items = [
+    final List<MenuEntryBase<String>> items = [
       MenuEntrySwitch<String>(
         switchType: SwitchType.scheckbox,
         text: translate("Show Hidden Files"),
@@ -146,6 +152,18 @@ class _FileManagerPageState extends State<FileManagerPage>
         padding: kDesktopMenuPadding,
         dismissOnClicked: true,
       ),
+      MenuEntryButton(
+          childBuilder: (style) => Text(translate("Select All"), style: style),
+          proc: () => setState(() => getSelectedItems(isLocal)
+              .selectAll(model.getCurrentDir(isLocal).entries)),
+          padding: kDesktopMenuPadding,
+          dismissOnClicked: true),
+      MenuEntryButton(
+          childBuilder: (style) =>
+              Text(translate("Unselect All"), style: style),
+          proc: () => setState(() => getSelectedItems(isLocal).clear()),
+          padding: kDesktopMenuPadding,
+          dismissOnClicked: true)
     ];
 
     return Listener(
@@ -273,11 +291,10 @@ class _FileManagerPageState extends State<FileManagerPage>
             return DataRow(
                 key: ValueKey(entry.name),
                 onSelectChanged: (s) {
-                  _onSelectedChanged(getSelectedItem(isLocal), filteredEntries,
+                  _onSelectedChanged(getSelectedItems(isLocal), filteredEntries,
                       entry, isLocal);
-                  setState(() {});
                 },
-                selected: getSelectedItem(isLocal).contains(entry),
+                selected: getSelectedItems(isLocal).contains(entry),
                 cells: [
                   DataCell(
                     Container(
@@ -287,7 +304,11 @@ class _FileManagerPageState extends State<FileManagerPage>
                           message: entry.name,
                           child: Row(children: [
                             Icon(
-                              entry.isFile ? Icons.feed_outlined : Icons.folder,
+                              entry.isFile
+                                  ? Icons.feed_outlined
+                                  : entry.isDrive
+                                      ? Icons.computer
+                                      : Icons.folder,
                               size: 20,
                               color: Theme.of(context)
                                   .iconTheme
@@ -300,7 +321,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                           ]),
                         )),
                     onTap: () {
-                      final items = getSelectedItem(isLocal);
+                      final items = getSelectedItems(isLocal);
 
                       // handle double click
                       if (_checkDoubleClick(entry)) {
@@ -486,6 +507,7 @@ class _FileManagerPageState extends State<FileManagerPage>
     final locationStatus =
         isLocal ? _locationStatusLocal : _locationStatusRemote;
     final locationFocus = isLocal ? _locationNodeLocal : _locationNodeRemote;
+    final selectedItems = getSelectedItems(isLocal);
     return Container(
         child: Column(
       children: [
@@ -534,6 +556,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                   icon: const Icon(Icons.arrow_back),
                   splashRadius: 20,
                   onPressed: () {
+                    selectedItems.clear();
                     model.goBack(isLocal: isLocal);
                   },
                 ),
@@ -541,6 +564,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                   icon: const Icon(Icons.arrow_upward),
                   splashRadius: 20,
                   onPressed: () {
+                    selectedItems.clear();
                     model.goToParentDirectory(isLocal: isLocal);
                   },
                 ),
@@ -609,6 +633,7 @@ class _FileManagerPageState extends State<FileManagerPage>
             }),
             IconButton(
                 onPressed: () {
+                  breadCrumbScrollToEnd(isLocal);
                   model.refresh(isLocal: isLocal);
                 },
                 splashRadius: 20,
@@ -673,13 +698,13 @@ class _FileManagerPageState extends State<FileManagerPage>
                       splashRadius: 20,
                       icon: const Icon(Icons.create_new_folder_outlined)),
                   IconButton(
-                      onPressed: () async {
-                        final items = isLocal
-                            ? _localSelectedItems
-                            : _remoteSelectedItems;
-                        await (model.removeAction(items, isLocal: isLocal));
-                        items.clear();
-                      },
+                      onPressed: validItems(selectedItems)
+                          ? () async {
+                              await (model.removeAction(selectedItems,
+                                  isLocal: isLocal));
+                              selectedItems.clear();
+                            }
+                          : null,
                       splashRadius: 20,
                       icon: const Icon(Icons.delete_forever_outlined)),
                   menu(isLocal: isLocal),
@@ -687,11 +712,12 @@ class _FileManagerPageState extends State<FileManagerPage>
               ),
             ),
             TextButton.icon(
-                onPressed: () {
-                  final items = getSelectedItem(isLocal);
-                  model.sendFiles(items, isRemote: !isLocal);
-                  items.clear();
-                },
+                onPressed: validItems(selectedItems)
+                    ? () {
+                        model.sendFiles(selectedItems, isRemote: !isLocal);
+                        selectedItems.clear();
+                      }
+                    : null,
                 icon: Transform.rotate(
                   angle: isLocal ? 0 : pi,
                   child: const Icon(
@@ -705,6 +731,14 @@ class _FileManagerPageState extends State<FileManagerPage>
         ).marginOnly(top: 8.0)
       ],
     ));
+  }
+
+  bool validItems(SelectedItems items) {
+    if (items.length > 0) {
+      // exclude DirDrive type
+      return items.items.any((item) => !item.isDrive);
+    }
+    return false;
   }
 
   @override
@@ -742,8 +776,7 @@ class _FileManagerPageState extends State<FileManagerPage>
       }
       openDirectory(path, isLocal: isLocal);
     });
-    breadCrumbScrollToEnd(isLocal);
-    final locationBarKey = GlobalKey(debugLabel: "locationBarKey");
+    final locationBarKey = getLocationBarKey(isLocal);
 
     return items.isEmpty
         ? Offstage()
@@ -780,11 +813,13 @@ class _FileManagerPageState extends State<FileManagerPage>
                     final List<MenuEntryBase> menuItems;
                     if (peerPlatform == "windows") {
                       menuItems = [];
-                      final loadingTag =
-                          _ffi.dialogManager.showLoading("Waiting");
+                      var loadingTag = "";
+                      if (!isLocal) {
+                        loadingTag = _ffi.dialogManager.showLoading("Waiting");
+                      }
                       try {
                         final fd =
-                            await model.fetchDirectory("/", isLocal, false);
+                            await model.fetchDirectory("/", isLocal, isLocal);
                         for (var entry in fd.entries) {
                           menuItems.add(MenuEntryButton(
                               childBuilder: (TextStyle? style) => Text(
@@ -793,12 +828,14 @@ class _FileManagerPageState extends State<FileManagerPage>
                                   ),
                               proc: () {
                                 openDirectory(entry.name, isLocal: isLocal);
-                                Get.back();
-                              }));
+                              },
+                              dismissOnClicked: true));
                           menuItems.add(MenuEntryDivider());
                         }
                       } finally {
-                        _ffi.dialogManager.dismissByTag(loadingTag);
+                        if (!isLocal) {
+                          _ffi.dialogManager.dismissByTag(loadingTag);
+                        }
                       }
                     } else {
                       menuItems = [
@@ -809,8 +846,8 @@ class _FileManagerPageState extends State<FileManagerPage>
                                 ),
                             proc: () {
                               openDirectory('/', isLocal: isLocal);
-                              Get.back();
-                            }),
+                            },
+                            dismissOnClicked: true),
                         MenuEntryDivider()
                       ];
                     }

@@ -87,6 +87,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Delete", "删除"),
         ("Properties", "属性"),
         ("Multi Select", "多选"),
+        ("Select All", "全选"),
+        ("Unselect All", "取消全选"),
         ("Empty Directory", "空文件夹"),
         ("Not an empty directory", "这不是一个空文件夹"),
         ("Are you sure you want to delete this file?", "是否删除此文件?"),

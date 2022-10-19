@@ -1031,7 +1031,9 @@ class Entry {
 
   bool get isFile => entryType > 3;
 
-  bool get isDirectory => entryType <= 3;
+  bool get isDirectory => entryType < 3;
+
+  bool get isDrive => entryType == 3;
 
   DateTime lastModified() {
     return DateTime.fromMillisecondsSinceEpoch(modifiedTime * 1000);
@@ -1168,6 +1170,11 @@ class SelectedItems {
   clear() {
     _items.clear();
     _isLocal = null;
+  }
+
+  void selectAll(List<Entry> entries) {
+    _items.clear();
+    _items.addAll(entries);
   }
 }
 
