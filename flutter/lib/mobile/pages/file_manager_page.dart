@@ -46,7 +46,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
 
   @override
   Widget build(BuildContext context) => ChangeNotifierProvider.value(
-      value: gFFI.fileModel,
+      value: model,
       child: Consumer<FileModel>(builder: (_context, _model, _child) {
         return WillPopScope(
             onWillPop: () async {
@@ -107,6 +107,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
                             value: "refresh",
                           ),
                           PopupMenuItem(
+                            enabled: model.currentDir.path != "/",
                             child: Row(
                               children: [
                                 Icon(Icons.check,
@@ -118,6 +119,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
                             value: "select",
                           ),
                           PopupMenuItem(
+                            enabled: model.currentDir.path != "/",
                             child: Row(
                               children: [
                                 Icon(Icons.folder_outlined,
@@ -129,6 +131,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
                             value: "folder",
                           ),
                           PopupMenuItem(
+                            enabled: model.currentDir.path != "/",
                             child: Row(
                               children: [
                                 Icon(
