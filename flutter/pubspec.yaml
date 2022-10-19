@@ -64,7 +64,7 @@ dependencies:
     desktop_multi_window:
         git:
             url: https://github.com/Kingtous/rustdesk_desktop_multi_window
-            ref: f25487b8aacfcc9d22b86a84e97eda1a5c07ccaf
+            ref: 318ebd0a70cc5868911591c04f84bf1541f1bf4e
     freezed_annotation: ^2.0.3
     tray_manager:
         git:
@@ -95,6 +95,8 @@ dependencies:
         # git:
         #     url: https://github.com/Kingtous/flutter_improved_scrolling
         #     ref: 62f09545149f320616467c306c8c5f71714a18e6
+    uni_links: ^0.5.1
+    uni_links_desktop: ^0.1.3
 
 dev_dependencies:
     icons_launcher: ^2.0.4
