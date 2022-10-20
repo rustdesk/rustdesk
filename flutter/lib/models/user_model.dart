@@ -77,7 +77,9 @@ class UserModel {
       return "";
     }
     final m = jsonDecode(userInfo);
-    if (m != null) {
+    if (m == null) {
+      userName.value = '';
+    } else {
       userName.value = m['name'] ?? '';
     }
     return userName.value;

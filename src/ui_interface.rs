@@ -20,8 +20,7 @@ use hbb_common::{
     tokio::{self, sync::mpsc, time},
 };
 
-use crate::ipc;
-use crate::{common::SOFTWARE_UPDATE_URL, platform};
+use crate::{common::SOFTWARE_UPDATE_URL, hbbs_http::account, ipc, platform};
 
 type Message = RendezvousMessage;
 
@@ -841,6 +840,16 @@ pub(crate) fn check_connect_status(reconnect: bool) -> mpsc::UnboundedSender<ipc
     let (tx, rx) = mpsc::unbounded_channel::<ipc::Data>();
     std::thread::spawn(move || check_connect_status_(reconnect, rx));
     tx
+}
+
+#[tokio::main(flavor = "current_thread")]
+pub async fn account_auth(op: String) {
+    account::OidcSession::account_auth(op, get_id(), get_uuid()).await;
+}
+
+#[tokio::main(flavor = "current_thread")]
+pub async fn account_auth_result() -> String {
+    serde_json::to_string(&account::OidcSession::get_result().await).unwrap_or_default()
 }
 
 // notice: avoiding create ipc connecton repeatly,

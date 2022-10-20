@@ -1,6 +1,6 @@
 use super::HbbHttpResponse;
 use hbb_common::{config::Config, log, sleep, tokio, tokio::sync::RwLock, ResultType};
-use serde_derive::Deserialize;
+use serde_derive::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     sync::Arc,
@@ -16,6 +16,9 @@ lazy_static::lazy_static! {
 
 const QUERY_INTERVAL_SECS: f32 = 1.0;
 const QUERY_TIMEOUT_SECS: u64 = 60;
+const REQUESTING_ACCOUNT_AUTH: &str = "Requesting account auth";
+const WAITING_ACCOUNT_AUTH: &str = "Waiting account auth";
+const LOGIN_ACCOUNT_AUTH: &str = "Login account auth";
 
 #[derive(Deserialize, Clone)]
 pub struct OidcAuthUrl {
@@ -23,7 +26,7 @@ pub struct OidcAuthUrl {
     url: Url,
 }
 
-#[derive(Debug, Deserialize, Default, Clone)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct UserPayload {
     pub id: String,
     pub name: String,
@@ -34,34 +37,16 @@ pub struct UserPayload {
     pub is_admin: Option<bool>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthBody {
-    access_token: String,
-    token_type: String,
-    user: UserPayload,
-}
-
-#[derive(Copy, Clone)]
-pub enum OidcState {
-    // initial request
-    OidcRequest = 1,
-    // initial request failed
-    OidcRequestFailed = 2,
-    // request succeeded, loop querying
-    OidcQuerying = 11,
-    // loop querying failed
-    OidcQueryFailed = 12,
-    // query sucess before
-    OidcNotExists = 13,
-    // query timeout
-    OidcQueryTimeout = 14,
-    // already login
-    OidcLogin = 21,
+    pub access_token: String,
+    pub token_type: String,
+    pub user: UserPayload,
 }
 
 pub struct OidcSession {
     client: reqwest::Client,
-    state: OidcState,
+    state_msg: &'static str,
     failed_msg: String,
     code_url: Option<OidcAuthUrl>,
     auth_body: Option<AuthBody>,
@@ -70,11 +55,19 @@ pub struct OidcSession {
     query_timeout: Duration,
 }
 
+#[derive(Serialize)]
+pub struct AuthResult {
+    pub state_msg: String,
+    pub failed_msg: String,
+    pub url: Option<String>,
+    pub auth_body: Option<AuthBody>,
+}
+
 impl OidcSession {
     fn new() -> Self {
         Self {
             client: reqwest::Client::new(),
-            state: OidcState::OidcRequest,
+            state_msg: REQUESTING_ACCOUNT_AUTH,
             failed_msg: "".to_owned(),
             code_url: None,
             auth_body: None,
@@ -112,7 +105,7 @@ impl OidcSession {
     }
 
     fn reset(&mut self) {
-        self.state = OidcState::OidcRequest;
+        self.state_msg = REQUESTING_ACCOUNT_AUTH;
         self.failed_msg = "".to_owned();
         self.keep_querying = true;
         self.running = false;
@@ -136,21 +129,21 @@ impl OidcSession {
                 OIDC_SESSION
                     .write()
                     .await
-                    .set_state(OidcState::OidcRequestFailed, err);
+                    .set_state(REQUESTING_ACCOUNT_AUTH, err);
                 return;
             }
             Ok(_) => {
-                OIDC_SESSION.write().await.set_state(
-                    OidcState::OidcRequestFailed,
-                    "Invalid auth response".to_owned(),
-                );
+                OIDC_SESSION
+                    .write()
+                    .await
+                    .set_state(REQUESTING_ACCOUNT_AUTH, "Invalid auth response".to_owned());
                 return;
             }
             Err(err) => {
                 OIDC_SESSION
                     .write()
                     .await
-                    .set_state(OidcState::OidcRequestFailed, err.to_string());
+                    .set_state(REQUESTING_ACCOUNT_AUTH, err.to_string());
                 return;
             }
         };
@@ -158,7 +151,7 @@ impl OidcSession {
         OIDC_SESSION
             .write()
             .await
-            .set_state(OidcState::OidcQuerying, "".to_owned());
+            .set_state(WAITING_ACCOUNT_AUTH, "".to_owned());
         OIDC_SESSION.write().await.code_url = Some(code_url.clone());
 
         let begin = Instant::now();
@@ -169,7 +162,7 @@ impl OidcSession {
                     OIDC_SESSION
                         .write()
                         .await
-                        .set_state(OidcState::OidcLogin, "".to_owned());
+                        .set_state(LOGIN_ACCOUNT_AUTH, "".to_owned());
                     OIDC_SESSION.write().await.auth_body = Some(auth_body);
                     return;
                     // to-do, set access-token
@@ -181,7 +174,7 @@ impl OidcSession {
                         OIDC_SESSION
                             .write()
                             .await
-                            .set_state(OidcState::OidcQueryFailed, err);
+                            .set_state(WAITING_ACCOUNT_AUTH, err);
                         return;
                     }
                 }
@@ -200,14 +193,14 @@ impl OidcSession {
             OIDC_SESSION
                 .write()
                 .await
-                .set_state(OidcState::OidcQueryTimeout, "timeout".to_owned());
+                .set_state(WAITING_ACCOUNT_AUTH, "timeout".to_owned());
         }
 
         // no need to handle "keep_querying == false"
     }
 
-    fn set_state(&mut self, state: OidcState, failed_msg: String) {
-        self.state = state;
+    fn set_state(&mut self, state_msg: &'static str, failed_msg: String) {
+        self.state_msg = state_msg;
         self.failed_msg = failed_msg;
     }
 
@@ -228,15 +221,16 @@ impl OidcSession {
         });
     }
 
-    fn get_result_(&self) -> (u8, String, Option<AuthBody>) {
-        (
-            self.state as u8,
-            self.failed_msg.clone(),
-            self.auth_body.clone(),
-        )
+    fn get_result_(&self) -> AuthResult {
+        AuthResult {
+            state_msg: self.state_msg.to_string(),
+            failed_msg: self.failed_msg.clone(),
+            url: self.code_url.as_ref().map(|x| x.url.to_string()),
+            auth_body: self.auth_body.clone(),
+        }
     }
 
-    pub async fn get_result() -> (u8, String, Option<AuthBody>) {
+    pub async fn get_result() -> AuthResult {
         OIDC_SESSION.read().await.get_result_()
     }
 }

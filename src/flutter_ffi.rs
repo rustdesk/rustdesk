@@ -13,6 +13,8 @@ use hbb_common::{
     fs, log,
 };
 
+// use crate::hbbs_http::account::AuthResult;
+
 use crate::flutter::{self, SESSIONS};
 #[cfg(target_os = "android")]
 use crate::start_server;
@@ -1080,6 +1082,14 @@ pub fn install_install_me(options: String, path: String) {
 
 pub fn install_install_path() -> SyncReturn<String> {
     SyncReturn(install_path())
+}
+
+pub fn main_account_auth(op: String) {
+    account_auth(op);
+}
+
+pub fn main_account_auth_result() -> String {
+    account_auth_result()
 }
 
 #[cfg(target_os = "android")]

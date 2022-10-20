@@ -472,7 +472,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
 /// common login dialog for desktop
 /// call this directly
-Future<bool> loginDialog() async {
+Future<bool> loginDialog2() async {
   String userName = "";
   var userNameMsg = "";
   String pass = "";
