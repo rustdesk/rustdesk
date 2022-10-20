@@ -126,6 +126,20 @@ class ConnectionManagerState extends State<ConnectionManager> {
             controller: serverModel.tabController,
             maxLabelWidth: 100,
             tail: buildScrollJumper(),
+            selectedTabBackgroundColor:
+                Theme.of(context).hintColor.withOpacity(0.2),
+            tabBuilder: (key, icon, label, themeConf) {
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  icon,
+                  Tooltip(
+                      message: key,
+                      waitDuration: Duration(seconds: 1),
+                      child: label),
+                ],
+              );
+            },
             pageViewBuilder: (pageView) => Row(children: [
                   Expanded(child: pageView),
                   Consumer<ChatModel>(
