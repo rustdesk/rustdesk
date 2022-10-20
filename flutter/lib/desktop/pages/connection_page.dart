@@ -39,6 +39,10 @@ class _ConnectionPageState extends State<ConnectionPage>
   final RxBool _idInputFocused = false.obs;
   final FocusNode _idFocusNode = FocusNode();
 
+  var svcStopped = false.obs;
+  var svcStatusCode = 0.obs;
+  var svcIsUsingPublicServer = true.obs;
+
   @override
   void initState() {
     super.initState();
@@ -58,6 +62,15 @@ class _ConnectionPageState extends State<ConnectionPage>
     _idFocusNode.addListener(() {
       _idInputFocused.value = _idFocusNode.hasFocus;
     });
+    Get.put<RxBool>(svcStopped, tag: 'service-stop');
+  }
+
+  @override
+  void dispose() {
+    _idController.dispose();
+    _updateTimer?.cancel();
+    Get.delete<RxBool>(tag: 'service-stop');
+    super.dispose();
   }
 
   @override
@@ -221,17 +234,6 @@ class _ConnectionPageState extends State<ConnectionPage>
         child: Container(
             constraints: const BoxConstraints(maxWidth: 600), child: w));
   }
-
-  @override
-  void dispose() {
-    _idController.dispose();
-    _updateTimer?.cancel();
-    super.dispose();
-  }
-
-  var svcStopped = false.obs;
-  var svcStatusCode = 0.obs;
-  var svcIsUsingPublicServer = true.obs;
 
   Widget buildStatus() {
     final em = 14.0;
