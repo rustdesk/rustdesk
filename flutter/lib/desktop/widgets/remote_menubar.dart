@@ -742,59 +742,147 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             await bind.sessionSetImageQuality(id: widget.id, value: newValue);
           }
 
+          double qualityInitValue = 50;
+          double fpsInitValue = 30;
+          bool qualitySet = false;
+          bool fpsSet = false;
+          setCustomValues({double? quality, double? fps}) async {
+            if (quality != null) {
+              qualitySet = true;
+              await bind.sessionSetCustomImageQuality(
+                  id: widget.id, value: quality.toInt());
+            }
+            if (fps != null) {
+              fpsSet = true;
+              await bind.sessionSetCustomFps(id: widget.id, fps: fps.toInt());
+            }
+            if (!qualitySet) {
+              qualitySet = true;
+              await bind.sessionSetCustomImageQuality(
+                  id: widget.id, value: qualityInitValue.toInt());
+            }
+            if (!fpsSet) {
+              fpsSet = true;
+              await bind.sessionSetCustomFps(
+                  id: widget.id, fps: fpsInitValue.toInt());
+            }
+          }
+
           if (newValue == 'custom') {
-            final btnCancel = msgBoxButton(translate('Close'), () {
+            final btnClose = msgBoxButton(translate('Close'), () async {
+              await setCustomValues();
               widget.ffi.dialogManager.dismissAll();
             });
+
+            // quality
             final quality =
                 await bind.sessionGetCustomImageQuality(id: widget.id);
-            double initValue = quality != null && quality.isNotEmpty
+            qualityInitValue = quality != null && quality.isNotEmpty
                 ? quality[0].toDouble()
                 : 50.0;
-            const minValue = 10.0;
-            const maxValue = 100.0;
-            if (initValue < minValue) {
-              initValue = minValue;
+            const qualityMinValue = 10.0;
+            const qualityMaxValue = 100.0;
+            if (qualityInitValue < qualityMinValue) {
+              qualityInitValue = qualityMinValue;
             }
-            if (initValue > maxValue) {
-              initValue = maxValue;
+            if (qualityInitValue > qualityMaxValue) {
+              qualityInitValue = qualityMaxValue;
             }
-            final RxDouble sliderValue = RxDouble(initValue);
-            final rxReplay = rxdart.ReplaySubject<double>();
-            rxReplay
+            final RxDouble qualitySliderValue = RxDouble(qualityInitValue);
+            final qualityRxReplay = rxdart.ReplaySubject<double>();
+            qualityRxReplay
                 .throttleTime(const Duration(milliseconds: 1000),
                     trailing: true, leading: false)
                 .listen((double v) {
               () async {
-                await bind.sessionSetCustomImageQuality(
-                    id: widget.id, value: v.toInt());
+                await setCustomValues(quality: v);
               }();
             });
-            final slider = Obx(() {
-              return Slider(
-                value: sliderValue.value,
-                min: minValue,
-                max: maxValue,
-                divisions: 90,
-                onChanged: (double value) {
-                  sliderValue.value = value;
-                  rxReplay.add(value);
-                },
-              );
+            final qualitySlider = Obx(() => Row(
+                  children: [
+                    Slider(
+                      value: qualitySliderValue.value,
+                      min: qualityMinValue,
+                      max: qualityMaxValue,
+                      divisions: 90,
+                      onChanged: (double value) {
+                        qualitySliderValue.value = value;
+                        qualityRxReplay.add(value);
+                      },
+                    ),
+                    SizedBox(
+                        width: 90,
+                        child: Obx(() => Text(
+                              '${qualitySliderValue.value.round()}% Bitrate',
+                              style: const TextStyle(fontSize: 15),
+                            )))
+                  ],
+                ));
+            // fps
+            final fpsOption =
+                await bind.sessionGetOption(id: widget.id, arg: 'custom-fps');
+            fpsInitValue =
+                fpsOption == null ? 30 : double.tryParse(fpsOption) ?? 30;
+            if (fpsInitValue < 10 || fpsInitValue > 120) {
+              fpsInitValue = 30;
+            }
+            final RxDouble fpsSliderValue = RxDouble(fpsInitValue);
+            final fpsRxReplay = rxdart.ReplaySubject<double>();
+            fpsRxReplay
+                .throttleTime(const Duration(milliseconds: 1000),
+                    trailing: true, leading: false)
+                .listen((double v) {
+              () async {
+                await setCustomValues(fps: v);
+              }();
             });
-            final content = Row(
-              children: [
-                slider,
-                SizedBox(
-                    width: 90,
-                    child: Obx(() => Text(
-                          '${sliderValue.value.round()}% Bitrate',
+            bool? direct;
+            try {
+              direct = ConnectionTypeState.find(widget.id).direct.value ==
+                  ConnectionType.strDirect;
+            } catch (_) {}
+            final fpsSlider = Offstage(
+              offstage:
+                  (await bind.mainIsUsingPublicServer() && direct != true) ||
+                      (await bind.versionToNumber(
+                              v: widget.ffi.ffiModel.pi.version) <
+                          await bind.versionToNumber(v: '1.2.0')),
+              child: Row(
+                children: [
+                  Obx((() => Slider(
+                        value: fpsSliderValue.value,
+                        min: 10,
+                        max: 120,
+                        divisions: 22,
+                        onChanged: (double value) {
+                          fpsSliderValue.value = value;
+                          fpsRxReplay.add(value);
+                        },
+                      ))),
+                  SizedBox(
+                      width: 90,
+                      child: Obx(() {
+                        final fps = fpsSliderValue.value.round();
+                        String text;
+                        if (fps < 100) {
+                          text = '$fps     FPS';
+                        } else {
+                          text = '$fps  FPS';
+                        }
+                        return Text(
+                          text,
                           style: const TextStyle(fontSize: 15),
-                        )))
-              ],
+                        );
+                      }))
+                ],
+              ),
+            );
+
+            final content = Column(
+              children: [qualitySlider, fpsSlider],
             );
             msgBoxCommon(widget.ffi.dialogManager, 'Custom Image Quality',
-                content, [btnCancel]);
+                content, [btnClose]);
           }
         },
         padding: padding,

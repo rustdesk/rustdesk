@@ -186,6 +186,12 @@ pub fn session_set_custom_image_quality(id: String, value: i32) {
     }
 }
 
+pub fn session_set_custom_fps(id: String, fps: i32) {
+    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+        session.set_custom_fps(fps);
+    }
+}
+
 pub fn session_lock_screen(id: String) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
         session.lock_screen();
@@ -998,6 +1004,10 @@ fn handle_query_onlines(onlines: Vec<String>, offlines: Vec<String>) {
 
 pub fn query_onlines(ids: Vec<String>) {
     crate::rendezvous_mediator::query_online_states(ids, handle_query_onlines)
+}
+
+pub fn version_to_number(v: String) -> i64 {
+    hbb_common::get_version_number(&v)
 }
 
 pub fn main_is_installed() -> SyncReturn<bool> {
