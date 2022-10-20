@@ -8,6 +8,8 @@ on:
       - master
     tags:
       - '*'
+    paths-ignore:
+      - ".github/**"
 
 jobs:
   build:

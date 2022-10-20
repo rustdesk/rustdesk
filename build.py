@@ -225,9 +225,7 @@ def main():
     version = get_version()
     features = ",".join(get_features(args))
     flutter = args.flutter
-    if not flutter:
-        # not flutter, is sciter
-        os.system('python3 res/inline-sciter.py')
+    os.system('python3 res/inline-sciter.py')
     portable = args.portable
     if windows:
         if flutter:
