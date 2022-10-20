@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:desktop_drop/desktop_drop.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_breadcrumb/flutter_breadcrumb.dart';
@@ -229,13 +230,13 @@ class _FileManagerPageState extends State<FileManagerPage>
     final entries = fd.entries;
     final sortIndex = (SortBy style) {
       switch (style) {
-        case SortBy.Name:
+        case SortBy.name:
           return 0;
-        case SortBy.Type:
+        case SortBy.type:
           return 0;
-        case SortBy.Modified:
+        case SortBy.modified:
           return 1;
-        case SortBy.Size:
+        case SortBy.size:
           return 2;
       }
     }(model.getSortStyle(isLocal));
@@ -265,7 +266,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                   translate("Name"),
                 ).marginSymmetric(horizontal: 4),
                 onSort: (columnIndex, ascending) {
-                  model.changeSortStyle(SortBy.Name,
+                  model.changeSortStyle(SortBy.name,
                       isLocal: isLocal, ascending: ascending);
                 }),
             DataColumn(
@@ -273,13 +274,13 @@ class _FileManagerPageState extends State<FileManagerPage>
                   translate("Modified"),
                 ),
                 onSort: (columnIndex, ascending) {
-                  model.changeSortStyle(SortBy.Modified,
+                  model.changeSortStyle(SortBy.modified,
                       isLocal: isLocal, ascending: ascending);
                 }),
             DataColumn(
                 label: Text(translate("Size")),
                 onSort: (columnIndex, ascending) {
-                  model.changeSortStyle(SortBy.Size,
+                  model.changeSortStyle(SortBy.size,
                       isLocal: isLocal, ascending: ascending);
                 }),
           ],
@@ -304,18 +305,25 @@ class _FileManagerPageState extends State<FileManagerPage>
                           waitDuration: Duration(milliseconds: 500),
                           message: entry.name,
                           child: Row(children: [
-                            Icon(
-                              entry.isFile
-                                  ? Icons.feed_outlined
-                                  : entry.isDrive
-                                      ? Icons.computer
-                                      : Icons.folder,
-                              size: 20,
-                              color: Theme.of(context)
-                                  .iconTheme
-                                  .color
-                                  ?.withOpacity(0.7),
-                            ).marginSymmetric(horizontal: 2),
+                            entry.isDrive
+                                ? Image(
+                                        image: iconHardDrive,
+                                        fit: BoxFit.scaleDown,
+                                        color: Theme.of(context)
+                                            .iconTheme
+                                            .color
+                                            ?.withOpacity(0.7))
+                                    .paddingAll(4)
+                                : Icon(
+                                    entry.isFile
+                                        ? Icons.feed_outlined
+                                        : Icons.folder,
+                                    size: 20,
+                                    color: Theme.of(context)
+                                        .iconTheme
+                                        .color
+                                        ?.withOpacity(0.7),
+                                  ).marginSymmetric(horizontal: 2),
                             Expanded(
                                 child: Text(entry.name,
                                     overflow: TextOverflow.ellipsis))
@@ -547,13 +555,6 @@ class _FileManagerPageState extends State<FileManagerPage>
             Row(
               children: [
                 IconButton(
-                  onPressed: () {
-                    model.goHome(isLocal: isLocal);
-                  },
-                  icon: const Icon(Icons.home_outlined),
-                  splashRadius: 20,
-                ),
-                IconButton(
                   icon: const Icon(Icons.arrow_back),
                   splashRadius: 20,
                   onPressed: () {
@@ -649,6 +650,13 @@ class _FileManagerPageState extends State<FileManagerPage>
                 mainAxisAlignment:
                     isLocal ? MainAxisAlignment.start : MainAxisAlignment.end,
                 children: [
+                  IconButton(
+                    onPressed: () {
+                      model.goHome(isLocal: isLocal);
+                    },
+                    icon: const Icon(Icons.home_outlined),
+                    splashRadius: 20,
+                  ),
                   IconButton(
                       onPressed: () {
                         final name = TextEditingController();
@@ -786,14 +794,23 @@ class _FileManagerPageState extends State<FileManagerPage>
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
                 Expanded(
-                    child: BreadCrumb(
-                  items: items,
-                  divider: Text("/",
-                          style: TextStyle(color: Theme.of(context).hintColor))
-                      .paddingSymmetric(horizontal: 2.0),
-                  overflow: ScrollableOverflow(
-                      controller: getBreadCrumbScrollController(isLocal)),
-                )),
+                    child: Listener(
+                        // handle mouse wheel
+                        onPointerSignal: (e) {
+                          if (e is PointerScrollEvent) {
+                            final sc = getBreadCrumbScrollController(isLocal);
+                            sc.jumpTo(sc.offset + e.scrollDelta.dy / 4);
+                          }
+                        },
+                        child: BreadCrumb(
+                          items: items,
+                          divider: Text("/",
+                              style: TextStyle(
+                                  color: Theme.of(context).hintColor)),
+                          overflow: ScrollableOverflow(
+                              controller:
+                                  getBreadCrumbScrollController(isLocal)),
+                        ))),
                 ActionIcon(
                   message: "",
                   icon: Icons.arrow_drop_down,
@@ -833,15 +850,25 @@ class _FileManagerPageState extends State<FileManagerPage>
                             await model.fetchDirectory("/", isLocal, isLocal);
                         for (var entry in fd.entries) {
                           menuItems.add(MenuEntryButton(
-                              childBuilder: (TextStyle? style) => Text(
-                                    entry.name,
-                                    style: style,
-                                  ),
+                              childBuilder: (TextStyle? style) =>
+                                  Row(children: [
+                                    Image(
+                                        image: iconHardDrive,
+                                        fit: BoxFit.scaleDown,
+                                        color: Theme.of(context)
+                                            .iconTheme
+                                            .color
+                                            ?.withOpacity(0.7)),
+                                    SizedBox(width: 10),
+                                    Text(
+                                      entry.name,
+                                      style: style,
+                                    )
+                                  ]),
                               proc: () {
                                 openDirectory(entry.name, isLocal: isLocal);
                               },
                               dismissOnClicked: true));
-                          menuItems.add(MenuEntryDivider());
                         }
                       } finally {
                         if (!isLocal) {
@@ -849,7 +876,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                         }
                       }
                     }
-
+                    menuItems.add(MenuEntryDivider());
                     mod_menu.showMenu(
                         context: context,
                         position: RelativeRect.fromLTRB(x, y, x, y),
@@ -879,10 +906,11 @@ class _FileManagerPageState extends State<FileManagerPage>
     final breadCrumbList = List<BreadCrumbItem>.empty(growable: true);
     breadCrumbList.addAll(list.asMap().entries.map((e) => BreadCrumbItem(
         content: TextButton(
-            child: Text(e.value),
-            style:
-                ButtonStyle(minimumSize: MaterialStateProperty.all(Size(0, 0))),
-            onPressed: () => onPressed(list.sublist(0, e.key + 1))))));
+                child: Text(e.value),
+                style: ButtonStyle(
+                    minimumSize: MaterialStateProperty.all(Size(0, 0))),
+                onPressed: () => onPressed(list.sublist(0, e.key + 1)))
+            .marginSymmetric(horizontal: 4))));
     return breadCrumbList;
   }
 

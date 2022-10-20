@@ -124,6 +124,22 @@ class ConnectionManagerState extends State<ConnectionManager> {
             showMinimize: true,
             showClose: true,
             controller: serverModel.tabController,
+            maxLabelWidth: 100,
+            tail: buildScrollJumper(),
+            selectedTabBackgroundColor:
+                Theme.of(context).hintColor.withOpacity(0.2),
+            tabBuilder: (key, icon, label, themeConf) {
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  icon,
+                  Tooltip(
+                      message: key,
+                      waitDuration: Duration(seconds: 1),
+                      child: label),
+                ],
+              );
+            },
             pageViewBuilder: (pageView) => Row(children: [
                   Expanded(child: pageView),
                   Consumer<ChatModel>(
@@ -157,6 +173,21 @@ class ConnectionManagerState extends State<ConnectionManager> {
         ],
       ),
     );
+  }
+
+  Widget buildScrollJumper() {
+    final offstage = gFFI.serverModel.clients.length < 2;
+    final sc = gFFI.serverModel.tabController.state.value.scrollController;
+    return Offstage(
+        offstage: offstage,
+        child: Row(
+          children: [
+            ActionIcon(
+                icon: Icons.arrow_left, iconSize: 22, onTap: sc.backward),
+            ActionIcon(
+                icon: Icons.arrow_right, iconSize: 22, onTap: sc.forward),
+          ],
+        ));
   }
 }
 

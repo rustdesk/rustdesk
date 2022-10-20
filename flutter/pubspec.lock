@@ -243,8 +243,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: f25487b8aacfcc9d22b86a84e97eda1a5c07ccaf
-      resolved-ref: f25487b8aacfcc9d22b86a84e97eda1a5c07ccaf
+      ref: "318ebd0a70cc5868911591c04f84bf1541f1bf4e"
+      resolved-ref: "318ebd0a70cc5868911591c04f84bf1541f1bf4e"
       url: "https://github.com/Kingtous/rustdesk_desktop_multi_window"
     source: git
     version: "0.1.0"
@@ -688,7 +688,7 @@ packages:
     source: hosted
     version: "2.1.0"
   path:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: path
       url: "https://pub.dartlang.org"
@@ -1046,6 +1046,34 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "1.3.1"
+  uni_links:
+    dependency: "direct main"
+    description:
+      name: uni_links
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "0.5.1"
+  uni_links_desktop:
+    dependency: "direct main"
+    description:
+      name: uni_links_desktop
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "0.1.3"
+  uni_links_platform_interface:
+    dependency: transitive
+    description:
+      name: uni_links_platform_interface
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "1.0.0"
+  uni_links_web:
+    dependency: transitive
+    description:
+      name: uni_links_web
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "0.1.0"
   universal_io:
     dependency: transitive
     description:
@@ -1221,6 +1249,13 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "3.0.0"
+  win32_registry:
+    dependency: transitive
+    description:
+      name: win32_registry
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "1.0.2"
   window_manager:
     dependency: "direct main"
     description:
