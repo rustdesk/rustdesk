@@ -124,6 +124,7 @@ class ConnectionManagerState extends State<ConnectionManager> {
             showMinimize: true,
             showClose: true,
             controller: serverModel.tabController,
+            maxLabelWidth: 100,
             pageViewBuilder: (pageView) => Row(children: [
                   Expanded(child: pageView),
                   Consumer<ChatModel>(

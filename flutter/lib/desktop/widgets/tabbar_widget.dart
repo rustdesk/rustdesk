@@ -3,12 +3,14 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' hide TabBarTheme;
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
+import 'package:get/get_rx/src/rx_workers/utils/debouncer.dart';
 import 'package:scroll_pos/scroll_pos.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -132,7 +134,8 @@ class DesktopTabController {
         if (val.scrollController.hasClients &&
             val.scrollController.canScroll &&
             val.scrollController.itemCount > index) {
-          val.scrollController.scrollToItem(index, center: true, animate: true);
+          val.scrollController
+              .scrollToItem(index, center: false, animate: true);
         }
       }));
     });
@@ -188,10 +191,15 @@ class DesktopTab extends StatelessWidget {
   final Future<bool> Function()? onWindowCloseButton;
   final TabBuilder? tabBuilder;
   final LabelGetter? labelGetter;
+  final double? maxLabelWidth;
 
   final DesktopTabController controller;
   Rx<DesktopTabState> get state => controller.state;
   final isMaximized = false.obs;
+  final _scrollDebounce = Debouncer(delay: Duration(milliseconds: 50));
+
+  /// [_lastClickTime], help to handle double click
+  int _lastClickTime = DateTime.now().millisecondsSinceEpoch;
 
   late final DesktopTabType tabType;
   late final bool isMainWindow;
@@ -211,6 +219,7 @@ class DesktopTab extends StatelessWidget {
     this.onWindowCloseButton,
     this.tabBuilder,
     this.labelGetter,
+    this.maxLabelWidth,
   }) : super(key: key) {
     tabType = controller.tabType;
     isMainWindow =
@@ -292,46 +301,72 @@ class DesktopTab extends StatelessWidget {
 
   Widget _buildBar() {
     return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Row(
-          children: [
-            Offstage(
-                offstage: !Platform.isMacOS,
-                child: const SizedBox(
-                  width: 78,
-                )),
-            GestureDetector(
-                onDoubleTap: showMaximize
-                    ? () => toggleMaximize(isMainWindow)
-                        .then((value) => isMaximized.value = value)
+        Expanded(
+            child: GestureDetector(
+                // custom double tap handler
+                onTap: showMaximize
+                    ? () {
+                        final current = DateTime.now().millisecondsSinceEpoch;
+                        final elapsed = current - _lastClickTime;
+                        _lastClickTime = current;
+                        if (elapsed < kDesktopDoubleClickTimeMilli) {
+                          // onDoubleTap
+                          toggleMaximize(isMainWindow)
+                              .then((value) => isMaximized.value = value);
+                        }
+                      }
                     : null,
                 onPanStart: (_) => startDragging(isMainWindow),
-                child: Row(children: [
-                  Offstage(
-                      offstage: !showLogo,
-                      child: SvgPicture.asset(
-                        'assets/logo.svg',
-                        width: 16,
-                        height: 16,
-                      )),
-                  Offstage(
-                      offstage: !showTitle,
-                      child: const Text(
-                        "RustDesk",
-                        style: TextStyle(fontSize: 13),
-                      ).marginOnly(left: 2))
-                ]).marginOnly(
-                  left: 5,
-                  right: 10,
-                )),
-            _ListView(
-              controller: controller,
-              onTabClose: onTabClose,
-              tabBuilder: tabBuilder,
-              labelGetter: labelGetter,
-            ),
-          ],
-        ),
+                child: Row(
+                  children: [
+                    Offstage(
+                        offstage: !Platform.isMacOS,
+                        child: const SizedBox(
+                          width: 78,
+                        )),
+                    Row(children: [
+                      Offstage(
+                          offstage: !showLogo,
+                          child: SvgPicture.asset(
+                            'assets/logo.svg',
+                            width: 16,
+                            height: 16,
+                          )),
+                      Offstage(
+                          offstage: !showTitle,
+                          child: const Text(
+                            "RustDesk",
+                            style: TextStyle(fontSize: 13),
+                          ).marginOnly(left: 2))
+                    ]).marginOnly(
+                      left: 5,
+                      right: 10,
+                    ),
+                    Expanded(
+                        child: Listener(
+                            // handle mouse wheel
+                            onPointerSignal: (e) {
+                              if (e is PointerScrollEvent) {
+                                final sc =
+                                    controller.state.value.scrollController;
+                                if (!sc.canScroll) return;
+                                _scrollDebounce.call(() {
+                                  sc.animateTo(sc.offset + e.scrollDelta.dy,
+                                      duration: Duration(milliseconds: 200),
+                                      curve: Curves.ease);
+                                });
+                              }
+                            },
+                            child: _ListView(
+                                controller: controller,
+                                onTabClose: onTabClose,
+                                tabBuilder: tabBuilder,
+                                labelGetter: labelGetter,
+                                maxLabelWidth: maxLabelWidth))),
+                  ],
+                ))),
         WindowActionPanel(
           isMainWindow: isMainWindow,
           tabType: tabType,
@@ -435,14 +470,9 @@ class WindowActionPanelState extends State<WindowActionPanel>
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-        child: Row(
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        Expanded(
-            child: GestureDetector(
-          onDoubleTap: widget.showMaximize ? _toggleMaximize : null,
-          onPanStart: (_) => startDragging(widget.isMainWindow),
-        )),
         Offstage(offstage: widget.tail == null, child: widget.tail),
         Offstage(
             offstage: !widget.showMinimize,
@@ -489,7 +519,7 @@ class WindowActionPanelState extends State<WindowActionPanel>
               isClose: true,
             )),
       ],
-    ));
+    );
   }
 
   void _toggleMaximize() {
@@ -580,13 +610,13 @@ Future<bool> closeConfirmDialog() async {
   return res == true;
 }
 
-// ignore: must_be_immutable
 class _ListView extends StatelessWidget {
   final DesktopTabController controller;
   final Function(String key)? onTabClose;
 
   final TabBuilder? tabBuilder;
   final LabelGetter? labelGetter;
+  final double? maxLabelWidth;
 
   Rx<DesktopTabState> get state => controller.state;
 
@@ -594,7 +624,8 @@ class _ListView extends StatelessWidget {
       {required this.controller,
       required this.onTabClose,
       this.tabBuilder,
-      this.labelGetter});
+      this.labelGetter,
+      this.maxLabelWidth});
 
   /// Check whether to show ListView
   ///
@@ -645,6 +676,7 @@ class _ListView extends StatelessWidget {
                             themeConf,
                           );
                         },
+                  maxLabelWidth: maxLabelWidth,
                 );
               }).toList()));
   }
@@ -661,6 +693,7 @@ class _Tab extends StatefulWidget {
   final Function() onSelected;
   final Widget Function(Widget icon, Widget label, TabThemeConf themeConf)?
       tabBuilder;
+  final double? maxLabelWidth;
 
   const _Tab({
     Key? key,
@@ -673,6 +706,7 @@ class _Tab extends StatefulWidget {
     required this.selected,
     required this.onClose,
     required this.onSelected,
+    this.maxLabelWidth,
   }) : super(key: key);
 
   @override
@@ -697,14 +731,17 @@ class _TabState extends State<_Tab> with RestorationMixin {
               : MyTheme.tabbar(context).unSelectedTabIconColor,
         ).paddingOnly(right: 5));
     final labelWidget = Obx(() {
-      return Text(
-        translate(widget.label.value),
-        textAlign: TextAlign.center,
-        style: TextStyle(
-            color: isSelected
-                ? MyTheme.tabbar(context).selectedTextColor
-                : MyTheme.tabbar(context).unSelectedTextColor),
-      );
+      return ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: widget.maxLabelWidth ?? 200),
+          child: Text(
+            translate(widget.label.value),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                color: isSelected
+                    ? MyTheme.tabbar(context).selectedTextColor
+                    : MyTheme.tabbar(context).unSelectedTextColor),
+            overflow: TextOverflow.ellipsis,
+          ));
     });
 
     if (widget.tabBuilder == null) {
