@@ -9,7 +9,18 @@ import 'package:path/path.dart' as path;
 import 'model.dart';
 import 'platform_model.dart';
 
-enum SortBy { name, type, modified, size }
+enum SortBy {
+  name,
+  type,
+  modified,
+  size;
+
+  @override
+  String toString() {
+    final str = this.name.toString();
+    return "${str[0].toUpperCase()}${str.substring(1)}";
+  }
+}
 
 class FileModel extends ChangeNotifier {
   /// mobile, current selected page show on mobile screen

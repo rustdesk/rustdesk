@@ -230,21 +230,29 @@ class _FileManagerPageState extends State<FileManagerPage> {
               : "";
           return Card(
             child: ListTile(
-              leading: Icon(
-                  entries[index].isFile
-                      ? Icons.feed_outlined
-                      : entries[index].isDrive
-                          ? Icons.computer
+              leading: entries[index].isDrive
+                  ? Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Image(
+                          image: iconHardDrive,
+                          fit: BoxFit.scaleDown,
+                          color: Theme.of(context)
+                              .iconTheme
+                              .color
+                              ?.withOpacity(0.7)))
+                  : Icon(
+                      entries[index].isFile
+                          ? Icons.feed_outlined
                           : Icons.folder,
-                  size: 40),
+                      size: 40),
               title: Text(entries[index].name),
               selected: selected,
-              subtitle: Text(
-                entries[index].isDrive
-                    ? ""
-                    : "${entries[index].lastModified().toString().replaceAll(".000", "")}   $sizeStr",
-                style: TextStyle(fontSize: 12, color: MyTheme.darkGray),
-              ),
+              subtitle: entries[index].isDrive
+                  ? null
+                  : Text(
+                      "${entries[index].lastModified().toString().replaceAll(".000", "")}   $sizeStr",
+                      style: TextStyle(fontSize: 12, color: MyTheme.darkGray),
+                    ),
               trailing: entries[index].isDrive
                   ? null
                   : showCheckBox()
@@ -369,8 +377,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
                   itemBuilder: (context) {
                     return SortBy.values
                         .map((e) => PopupMenuItem(
-                              child:
-                                  Text(translate(e.toString().split(".").last)),
+                              child: Text(translate(e.toString())),
                               value: e,
                             ))
                         .toList();

@@ -304,18 +304,25 @@ class _FileManagerPageState extends State<FileManagerPage>
                           waitDuration: Duration(milliseconds: 500),
                           message: entry.name,
                           child: Row(children: [
-                            Icon(
-                              entry.isFile
-                                  ? Icons.feed_outlined
-                                  : entry.isDrive
-                                      ? Icons.computer
-                                      : Icons.folder,
-                              size: 20,
-                              color: Theme.of(context)
-                                  .iconTheme
-                                  .color
-                                  ?.withOpacity(0.7),
-                            ).marginSymmetric(horizontal: 2),
+                            entry.isDrive
+                                ? Image(
+                                        image: iconHardDrive,
+                                        fit: BoxFit.scaleDown,
+                                        color: Theme.of(context)
+                                            .iconTheme
+                                            .color
+                                            ?.withOpacity(0.7))
+                                    .paddingAll(4)
+                                : Icon(
+                                    entry.isFile
+                                        ? Icons.feed_outlined
+                                        : Icons.folder,
+                                    size: 20,
+                                    color: Theme.of(context)
+                                        .iconTheme
+                                        .color
+                                        ?.withOpacity(0.7),
+                                  ).marginSymmetric(horizontal: 2),
                             Expanded(
                                 child: Text(entry.name,
                                     overflow: TextOverflow.ellipsis))
@@ -834,9 +841,13 @@ class _FileManagerPageState extends State<FileManagerPage>
                           menuItems.add(MenuEntryButton(
                               childBuilder: (TextStyle? style) =>
                                   Row(children: [
-                                    Icon(Icons.computer,
-                                        color: style?.color,
-                                        size: style?.fontSize),
+                                    Image(
+                                        image: iconHardDrive,
+                                        fit: BoxFit.scaleDown,
+                                        color: Theme.of(context)
+                                            .iconTheme
+                                            .color
+                                            ?.withOpacity(0.7)),
                                     SizedBox(width: 10),
                                     Text(
                                       entry.name,
