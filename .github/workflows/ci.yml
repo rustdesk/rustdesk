@@ -12,6 +12,8 @@ on:
       - master
     tags:
       - '*'
+    paths-ignore:
+      - ".github/**"
 
 jobs:
   # ensure_cargo_fmt:
