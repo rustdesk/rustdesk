@@ -125,6 +125,7 @@ class ConnectionManagerState extends State<ConnectionManager> {
             showClose: true,
             controller: serverModel.tabController,
             maxLabelWidth: 100,
+            tail: buildScrollJumper(),
             pageViewBuilder: (pageView) => Row(children: [
                   Expanded(child: pageView),
                   Consumer<ChatModel>(
@@ -158,6 +159,21 @@ class ConnectionManagerState extends State<ConnectionManager> {
         ],
       ),
     );
+  }
+
+  Widget buildScrollJumper() {
+    final offstage = gFFI.serverModel.clients.length < 2;
+    final sc = gFFI.serverModel.tabController.state.value.scrollController;
+    return Offstage(
+        offstage: offstage,
+        child: Row(
+          children: [
+            ActionIcon(
+                icon: Icons.arrow_left, iconSize: 22, onTap: sc.backward),
+            ActionIcon(
+                icon: Icons.arrow_right, iconSize: 22, onTap: sc.forward),
+          ],
+        ));
   }
 }
 

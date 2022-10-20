@@ -844,7 +844,7 @@ class _CloseButton extends StatelessWidget {
 }
 
 class ActionIcon extends StatelessWidget {
-  final String message;
+  final String? message;
   final IconData icon;
   final Function() onTap;
   final bool isClose;
@@ -852,7 +852,7 @@ class ActionIcon extends StatelessWidget {
   final double boxSize;
   const ActionIcon(
       {Key? key,
-      required this.message,
+      this.message,
       required this.icon,
       required this.onTap,
       this.isClose = false,
@@ -864,7 +864,7 @@ class ActionIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     RxBool hover = false.obs;
     return Obx(() => Tooltip(
-          message: translate(message),
+          message: message != null ? translate(message!) : "",
           waitDuration: const Duration(seconds: 1),
           child: InkWell(
             hoverColor: isClose
