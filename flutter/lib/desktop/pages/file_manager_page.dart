@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:desktop_drop/desktop_drop.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_breadcrumb/flutter_breadcrumb.dart';
@@ -793,13 +794,23 @@ class _FileManagerPageState extends State<FileManagerPage>
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
                 Expanded(
-                    child: BreadCrumb(
-                  items: items,
-                  divider: Text("/",
-                      style: TextStyle(color: Theme.of(context).hintColor)),
-                  overflow: ScrollableOverflow(
-                      controller: getBreadCrumbScrollController(isLocal)),
-                )),
+                    child: Listener(
+                        // handle mouse wheel
+                        onPointerSignal: (e) {
+                          if (e is PointerScrollEvent) {
+                            final sc = getBreadCrumbScrollController(isLocal);
+                            sc.jumpTo(sc.offset + e.scrollDelta.dy / 4);
+                          }
+                        },
+                        child: BreadCrumb(
+                          items: items,
+                          divider: Text("/",
+                              style: TextStyle(
+                                  color: Theme.of(context).hintColor)),
+                          overflow: ScrollableOverflow(
+                              controller:
+                                  getBreadCrumbScrollController(isLocal)),
+                        ))),
                 ActionIcon(
                   message: "",
                   icon: Icons.arrow_drop_down,
