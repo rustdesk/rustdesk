@@ -43,6 +43,9 @@ var version = "";
 int androidVersion = 0;
 DesktopType? desktopType;
 
+/// * debug or test only, DO NOT enable in release build
+bool isTest = false;
+
 typedef F = String Function(String);
 typedef FMethod = String Function(String, dynamic);
 

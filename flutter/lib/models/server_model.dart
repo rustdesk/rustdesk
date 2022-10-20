@@ -92,6 +92,7 @@ class ServerModel with ChangeNotifier {
     _serverId = IDTextEditingController(text: _emptyIdShow);
 
     Timer.periodic(Duration(seconds: 1), (timer) async {
+      if (isTest) return timer.cancel();
       var status = await bind.mainGetOnlineStatue();
       if (status > 0) {
         status = 1;
@@ -343,6 +344,7 @@ class ServerModel with ChangeNotifier {
 
   // force
   updateClientState([String? json]) async {
+    if (isTest) return;
     var res = await bind.cmGetClientsState();
     try {
       final List clientsJson = jsonDecode(res);
