@@ -6,37 +6,19 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-for-windows:
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
       matrix:
         job:
-          # - { target: aarch64-unknown-linux-gnu   , os: ubuntu-20.04, use-cross: true }
-          # - { target: arm-unknown-linux-gnueabihf , os: ubuntu-20.04, use-cross: true }
-          # - { target: arm-unknown-linux-musleabihf, os: ubuntu-20.04, use-cross: true }
           # - { target: i686-pc-windows-msvc        , os: windows-2019                  }
-          # - { target: i686-unknown-linux-gnu      , os: ubuntu-20.04, use-cross: true }
-          # - { target: i686-unknown-linux-musl     , os: ubuntu-20.04, use-cross: true }
-          # - { target: x86_64-apple-darwin         , os: macos-10.15                   }
           # - { target: x86_64-pc-windows-gnu       , os: windows-2019                  }
-          - { target: x86_64-pc-windows-msvc      , os: windows-2019                  }
-          - { target: x86_64-unknown-linux-gnu    , os: ubuntu-20.04 }
-          # - { target: x86_64-unknown-linux-musl   , os: ubuntu-20.04, use-cross: true }
+          - { target: x86_64-pc-windows-msvc      , os: windows-2019 }
     steps:
       - name: Checkout source code
         uses: actions/checkout@v3
-
-      - name: Install prerequisites
-        shell: bash
-        if: startsWith(matrix.job.os, 'ubuntu')
-        run: |
-          case ${{ matrix.job.target }} in
-            x86_64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake libclang-dev ninja-build libayatana-appindicator3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev;;
-            # arm-unknown-linux-*) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
-            # aarch64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
-          esac
 
       - name: Install LLVM and Clang
         if: startsWith(matrix.job.os, 'windows')
@@ -60,20 +42,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v1
 
-      - name: Install flutter rust bridge deps for linux
-        if: startsWith(matrix.job.os, 'ubuntu')
-        run: |
-          dart pub global activate ffigen --version 5.0.1
-          # flutter_rust_bridge
-          if [[ ! -e $HOME/.cargo/bin/flutter_rust_bridge_codegen ]]; then                                                                                            ✔
-            pushd /tmp && git clone https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge --depth=1 && popd
-            pushd /tmp/flutter_rust_bridge/frb_codegen && cargo install --path . && popd
-          fi
-          pushd flutter && flutter pub get && popd
-          ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart
-
-      - name: Install flutter rust bridge deps for windows
-        if: startsWith(matrix.job.os, 'windows')
+      - name: Install flutter rust bridge deps
         run: |
           dart pub global activate ffigen --version 5.0.1
           $exists = Test-Path ~/.cargo/bin/flutter_rust_bridge_codegen.exe
@@ -93,20 +62,89 @@ jobs:
           setupOnly: true
           vcpkgGitCommitId: '6ca56aeb457f033d344a7106cb3f9f1abf8f4e98'
 
-      - name: Install vcpkg dependencies for linux
-        if: startsWith(matrix.job.os, 'ubuntu')
-        run: |
-          $VCPKG_ROOT/vcpkg install libvpx libyuv opus
-        shell: bash
-
-      - name: Install vcpkg dependencies for windows
-        if: startsWith(matrix.job.os, 'windows')
+      - name: Install vcpkg dependencies
         run: |
           $VCPKG_ROOT/vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
         shell: bash
 
+      - name: Build rustdesk
+        run: python3 .\build.py --portable
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: "nightly"
+          files: |
+            rustdesk-*.exe
+
+  build-for-linux:
+    name: ${{ matrix.job.target }} (${{ matrix.job.os }})
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          # - { target: aarch64-unknown-linux-gnu   , os: ubuntu-20.04, use-cross: true }
+          # - { target: arm-unknown-linux-gnueabihf , os: ubuntu-20.04, use-cross: true }
+          # - { target: arm-unknown-linux-musleabihf, os: ubuntu-20.04, use-cross: true }
+          # - { target: i686-unknown-linux-gnu      , os: ubuntu-20.04, use-cross: true }
+          # - { target: i686-unknown-linux-musl     , os: ubuntu-20.04, use-cross: true }
+          # - { target: x86_64-apple-darwin         , os: macos-10.15                   }
+          - { target: x86_64-unknown-linux-gnu    , os: ubuntu-20.04 }
+          # - { target: x86_64-unknown-linux-musl   , os: ubuntu-20.04, use-cross: true }
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v3
+
+      - name: Install prerequisites
+        run: |
+          case ${{ matrix.job.target }} in
+            x86_64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake libclang-dev ninja-build libayatana-appindicator3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev;;
+            # arm-unknown-linux-*) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
+            # aarch64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
+          esac
+
+      - name: Install flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          flutter-version: '3.0.5'
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.job.target }}
+          override: true
+          profile: minimal # minimal component installation (ie, no documentation)
+
+      - uses: Swatinem/rust-cache@v1
+
+      - name: Install flutter rust bridge deps
+        shell: bash
+        run: |
+          dart pub global activate ffigen --version 5.0.1
+          # flutter_rust_bridge
+          if [[ ! -e $HOME/.cargo/bin/flutter_rust_bridge_codegen ]]; then
+            pushd /tmp && git clone https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge --depth=1 && popd
+            pushd /tmp/flutter_rust_bridge/frb_codegen && cargo install --path . && popd
+          fi
+          pushd flutter && flutter pub get && popd
+          ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart
+
+      - name: Restore from cache and install vcpkg
+        uses: lukka/run-vcpkg@v7
+        with:
+          setupOnly: true
+          vcpkgGitCommitId: '6ca56aeb457f033d344a7106cb3f9f1abf8f4e98'
+
+      - name: Install vcpkg dependencies
+        run: |
+          $VCPKG_ROOT/vcpkg install libvpx libyuv opus
+        shell: bash
+
       - name: Install cargo bundle tools
-        if: startsWith(matrix.job.os, 'ubuntu')
         run: |
           cargo install cargo-bundle
 
@@ -120,32 +158,14 @@ jobs:
           cargo -V
           rustc -V
 
-      - name: Build rustdesk for linux
-        if: startsWith(matrix.job.os, 'ubuntu')
+      - name: Build rustdesk
         run: ./build.py --flutter
 
-      - name: Build rustdesk for windows
-        if: startsWith(matrix.job.os, 'windows')
-        run: python3 .\build.py --portable
-
-      - name: Update nightly release for linux
-        if: startsWith(matrix.job.os, 'ubuntu')
-        uses: "marvinpinto/action-automatic-releases@latest"
+      - name: Publish Release
+        uses: softprops/action-gh-release@v1
         with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: "nightly"
           prerelease: true
-          title: "Nightly Build"
+          tag_name: "nightly"
           files: |
             rustdesk-*.deb
 
-      - name: Update nightly release for windows
-        if: startsWith(matrix.job.os, 'windows')
-        uses: "marvinpinto/action-automatic-releases@latest"
-        with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: "nightly"
-          prerelease: true
-          title: "Nightly Build"
-          files: |
-            rustdesk-*.exe
