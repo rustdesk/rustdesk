@@ -204,7 +204,7 @@ def build_flutter_windows(version):
     else:
         os.rename("./target/release/rustdesk-portable-packer.exe", "./rustdesk_portable.exe")
     print(f"output location: {os.path.abspath(os.curdir)}/rustdesk_portable.exe")
-    os.system(f"cp -rf ./rustdesk_portable.exe ./rustdesk-{version}-install.exe")
+    os.rename("./rustdesk_portable.exe", f"./rustdesk-{version}-install.exe")
     print(f"output location: {os.path.abspath(os.curdir)}/rustdesk-{version}-install.exe")
 
 def main():

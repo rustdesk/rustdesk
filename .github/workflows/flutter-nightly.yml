@@ -6,6 +6,12 @@ on:
     - cron: "0 0 * * *"
   workflow_dispatch:
 
+env:
+  LLVM_VERSION: "10.0"
+  FLUTTER_VERSION: "3.0.5"
+  TAG_NAME: "nightly"
+  VCPKG_COMMIT_ID: '6ca56aeb457f033d344a7106cb3f9f1abf8f4e98'
+
 jobs:
   build-for-windows:
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
@@ -22,16 +28,15 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Install LLVM and Clang
-        if: startsWith(matrix.job.os, 'windows')
         uses: KyleMayes/install-llvm-action@v1
         with:
-          version: "13.0"
+          version: ${{ env.LLVM_VERSION }}
 
       - name: Install flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
-          flutter-version: '3.0.5'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -41,7 +46,9 @@ jobs:
           override: true
           profile: minimal # minimal component installation (ie, no documentation)
 
-      - uses: Swatinem/rust-cache@v1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: ${{ matrix.job.os }}
 
       - name: Install flutter rust bridge deps
         run: |
@@ -58,7 +65,7 @@ jobs:
         uses: lukka/run-vcpkg@v7
         with:
           setupOnly: true
-          vcpkgGitCommitId: '6ca56aeb457f033d344a7106cb3f9f1abf8f4e98'
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
 
       - name: Install vcpkg dependencies
         run: |
@@ -66,13 +73,20 @@ jobs:
         shell: bash
 
       - name: Build rustdesk
-        run: python3 .\build.py --portable --hwcodec
+        run: python3 .\build.py --portable --hwcodec --flutter
+
+      - name: Rename rustdesk
+        shell: bash
+        run: |
+          for name in rustdesk*??.exe; do
+              mv "$name" "${name%%.exe}-${{ matrix.job.target }}.exe"
+          done
 
       - name: Publish Release
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
-          tag_name: "nightly"
+          tag_name: ${{ env.TAG_NAME }}
           files: |
             rustdesk-*.exe
 
@@ -98,7 +112,7 @@ jobs:
       - name: Install prerequisites
         run: |
           case ${{ matrix.job.target }} in
-            x86_64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake libclang-dev ninja-build libayatana-appindicator3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libvdpau-dev libva-dev;;
+            x86_64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake libclang-dev ninja-build libayatana-appindicator3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libvdpau-dev libva-dev libclang-dev llvm-dev libclang-10-dev llvm-10-dev;;
             # arm-unknown-linux-*) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
             # aarch64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
           esac
@@ -107,7 +121,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
-          flutter-version: '3.0.5'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -117,7 +131,9 @@ jobs:
           override: true
           profile: minimal # minimal component installation (ie, no documentation)
 
-      - uses: Swatinem/rust-cache@v1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: ${{ matrix.job.os }}
 
       - name: Install flutter rust bridge deps
         shell: bash
@@ -133,7 +149,7 @@ jobs:
         uses: lukka/run-vcpkg@v7
         with:
           setupOnly: true
-          vcpkgGitCommitId: '6ca56aeb457f033d344a7106cb3f9f1abf8f4e98'
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
 
       - name: Install vcpkg dependencies
         run: |
@@ -142,7 +158,7 @@ jobs:
 
       - name: Install cargo bundle tools
         run: |
-          cargo install cargo-bundle
+          cargo install cargo-bundle --force
 
       - name: Show version information (Rust, cargo, GCC)
         shell: bash
@@ -157,11 +173,18 @@ jobs:
       - name: Build rustdesk
         run: ./build.py --flutter --hwcodec
 
+      - name: Rename rustdesk
+        shell: bash
+        run: |
+          for name in rustdesk*??.deb; do
+              mv "$name" "${name%%.deb}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb"
+          done
+
       - name: Publish Release
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
-          tag_name: "nightly"
+          tag_name: ${{ env.TAG_NAME }}
           files: |
-            rustdesk-*.deb
+            rustdesk*.deb
 
