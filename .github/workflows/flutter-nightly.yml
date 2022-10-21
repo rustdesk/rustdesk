@@ -2,7 +2,8 @@ name: Flutter Nightly Build
 
 on:
   schedule:
-    - cron: "* 0 * * *"
+    # schedule build every night
+    - cron: "0 0 * * *"
   workflow_dispatch:
 
 jobs:
@@ -46,13 +47,10 @@ jobs:
         run: |
           dart pub global activate ffigen --version 5.0.1
           $exists = Test-Path ~/.cargo/bin/flutter_rust_bridge_codegen.exe
-          If ( ! $exists -eq $True )
-          {
-            Push-Location ..
-            git clone https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge --depth=1
-            Push-Location flutter_rust_bridge/frb_codegen ; cargo install --path . ; Pop-Location
-            Pop-Location
-          }
+          Push-Location ..
+          git clone https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge --depth=1
+          Push-Location flutter_rust_bridge/frb_codegen ; cargo install --path . ; Pop-Location
+          Pop-Location
           Push-Location flutter ; flutter pub get ; Pop-Location
           ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart
 
@@ -126,10 +124,8 @@ jobs:
         run: |
           dart pub global activate ffigen --version 5.0.1
           # flutter_rust_bridge
-          if [[ ! -e $HOME/.cargo/bin/flutter_rust_bridge_codegen ]]; then
-            pushd /tmp && git clone https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge --depth=1 && popd
-            pushd /tmp/flutter_rust_bridge/frb_codegen && cargo install --path . && popd
-          fi
+          pushd /tmp && git clone https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge --depth=1 && popd
+          pushd /tmp/flutter_rust_bridge/frb_codegen && cargo install --path . && popd
           pushd flutter && flutter pub get && popd
           ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart
 
