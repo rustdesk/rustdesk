@@ -97,7 +97,7 @@ dependencies:
         #     ref: 62f09545149f320616467c306c8c5f71714a18e6
     uni_links: ^0.5.1
     uni_links_desktop: ^0.1.3
-    path: ^1.8.2
+    path: ^1.8.1
 
 dev_dependencies:
     icons_launcher: ^2.0.4
