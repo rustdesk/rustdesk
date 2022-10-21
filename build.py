@@ -25,23 +25,23 @@ def get_version():
 def parse_rc_features(feature):
     available_features = {
         'IddDriver': {
-            'zip_url': 'https://github.com/fufesou/RustDeskIddDriver/releases/download/v0.1/RustDeskIddDriver_x64.zip',
-            'checksum_url': 'https://github.com/fufesou/RustDeskIddDriver/releases/download/v0.1'
-                            '/RustDeskIddDriver_x64.zip.checksum_md5',
+            'zip_url': 'https://github.com/fufesou/RustDeskIddDriver/releases/download/v0.1/RustDeskIddDriver_x64_pic_en.zip',
+            'checksum_url': 'https://github.com/fufesou/RustDeskTempTopMostWindow/releases/download/v0.1/checksum_md5',
         },
         'PrivacyMode': {
             'zip_url': 'https://github.com/fufesou/RustDeskTempTopMostWindow/releases/download/v0.1'
-                       '/TempTopMostWindow_x64.zip',
-            'checksum_url': 'https://github.com/fufesou/RustDeskTempTopMostWindow/releases/download/v0.1'
-                            '/TempTopMostWindow_x64.zip.checksum_md5',
+                       '/TempTopMostWindow_x64_pic_en.zip',
+            'checksum_url': 'https://github.com/fufesou/RustDeskTempTopMostWindow/releases/download/v0.1/checksum_md5',
         }
     }
     apply_features = {}
     if not feature:
-        return apply_features
-    elif isinstance(feature, str) and feature.upper() == 'ALL':
+        feature = []
+    if isinstance(feature, str) and feature.upper() == 'ALL':
         return available_features
     elif isinstance(feature, list):
+        # force add PrivacyMode
+        feature.append('PrivacyMode')
         for feat in feature:
             if isinstance(feat, str) and feat.upper() == 'ALL':
                 return available_features
@@ -82,23 +82,35 @@ def make_parser():
 
 
 def download_extract_features(features, res_dir):
+    proxy = ''
+    def req(url):
+        if not proxy:
+            return url
+        else:
+            r = urllib.request.Request(url)
+            r.set_proxy(proxy, 'http')
+            r.set_proxy(proxy, 'https')
+            return r
+
     for (feat, feat_info) in features.items():
         print(f'{feat} download begin')
-        checksum_md5_response = urllib.request.urlopen(feat_info['checksum_url'])
-        checksum_md5 = checksum_md5_response.read().decode('utf-8').split()[0]
         download_filename = feat_info['zip_url'].split('/')[-1]
-        filename, _headers = urllib.request.urlretrieve(feat_info['zip_url'], download_filename)
-        md5 = hashlib.md5(open(filename, 'rb').read()).hexdigest()
-        if checksum_md5 != md5:
-            raise Exception(f'{feat} download failed')
-        print(f'{feat} download end. extract bein')
-        zip_file = zipfile.ZipFile(filename)
-        zip_list = zip_file.namelist()
-        for f in zip_list:
-            zip_file.extract(f, res_dir)
-        zip_file.close()
-        os.remove(download_filename)
-        print(f'{feat} extract end')
+        checksum_md5_response = urllib.request.urlopen(req(feat_info['checksum_url']))
+        for line in checksum_md5_response.read().decode('utf-8').splitlines():
+            if line.split()[1] == download_filename:
+                checksum_md5 = line.split()[0]
+                filename, _headers = urllib.request.urlretrieve(feat_info['zip_url'], download_filename)
+                md5 = hashlib.md5(open(filename, 'rb').read()).hexdigest()
+                if checksum_md5 != md5:
+                    raise Exception(f'{feat} download failed')
+                print(f'{feat} download end. extract bein')
+                zip_file = zipfile.ZipFile(filename)
+                zip_list = zip_file.namelist()
+                for f in zip_list:
+                    zip_file.extract(f, res_dir)
+                zip_file.close()
+                os.remove(download_filename)
+                print(f'{feat} extract end')
 
 
 def get_rc_features(args):
