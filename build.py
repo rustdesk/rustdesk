@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import pathlib
 import platform
 import zipfile
 import urllib.request
@@ -12,7 +13,7 @@ windows = platform.platform().startswith('Windows')
 osx = platform.platform().startswith('Darwin') or platform.platform().startswith("macOS")
 hbb_name = 'rustdesk' + ('.exe' if windows else '')
 exe_path = 'target/release/' + hbb_name
-
+flutter_win_target_dir = 'flutter/build/windows/runner/Release/'
 
 def get_version():
     with open("Cargo.toml") as fh:
@@ -114,17 +115,30 @@ def download_extract_features(features, res_dir):
 
 
 def get_rc_features(args):
+    flutter = args.flutter
     features = parse_rc_features(args.feature)
-    if features:
-        print(f'Build with features {list(features.keys())}')
-        res_dir = 'resources'
-        if os.path.isdir(res_dir) and not os.path.islink(res_dir):
-            shutil.rmtree(res_dir)
-        elif os.path.exists(res_dir):
-            raise Exception(f'Find file {res_dir}, not a directory')
-        os.makedirs(res_dir, exist_ok=True)
-        download_extract_features(features, res_dir)
-    return ['with_rc'] if features else []
+    if not features:
+        return []
+
+    print(f'Build with features {list(features.keys())}')
+    res_dir = 'resources'
+    if os.path.isdir(res_dir) and not os.path.islink(res_dir):
+        shutil.rmtree(res_dir)
+    elif os.path.exists(res_dir):
+        raise Exception(f'Find file {res_dir}, not a directory')
+    os.makedirs(res_dir, exist_ok=True)
+    download_extract_features(features, res_dir)
+    if flutter:
+        os.makedirs(flutter_win_target_dir, exist_ok=True)
+        for f in pathlib.Path(res_dir).iterdir():
+            print(f'{f}')
+            if f.is_file():
+                shutil.copy2(f, flutter_win_target_dir)
+            else:
+                shutil.copytree(f, f'{flutter_win_target_dir}{f.stem}')
+        return []
+    else:
+        return ['with_rc']
     
 
 def get_features(args):
@@ -203,28 +217,28 @@ def build_flutter_arch_manjaro():
     os.system('HBB=`pwd` FLUTTER=1 makepkg -f')
 
 def build_flutter_windows(version):
-    os.system("cargo build --lib --features flutter --release")
+    os.system('cargo build --lib --features flutter --release')
     os.chdir('flutter')
-    os.system("flutter build windows --release")
+    os.system('flutter build windows --release')
     os.chdir('..')
-    os.chdir("libs/portable")
-    os.system("pip3 install -r requirements.txt")
-    os.system("python3 .\\generate.py -f ..\\..\\flutter\\build\\windows\\runner\Release\ -o . -e ..\\..\\flutter\\build\\windows\\runner\\Release\\rustdesk.exe")
-    os.chdir("../..")
-    if os.path.exists("./rustdesk_portable.exe"):
-        os.replace("./target/release/rustdesk-portable-packer.exe", "./rustdesk_portable.exe")
+    os.chdir('libs/portable')
+    os.system('pip3 install -r requirements.txt')
+    os.system(f'python3 ./generate.py -f ../../{flutter_win_target_dir} -o . -e ../../{flutter_win_target_dir}/rustdesk.exe')
+    os.chdir('../..')
+    if os.path.exists('./rustdesk_portable.exe'):
+        os.replace('./target/release/rustdesk-portable-packer.exe', './rustdesk_portable.exe')
     else:
-        os.rename("./target/release/rustdesk-portable-packer.exe", "./rustdesk_portable.exe")
-    print(f"output location: {os.path.abspath(os.curdir)}/rustdesk_portable.exe")
-    os.rename("./rustdesk_portable.exe", f"./rustdesk-{version}-install.exe")
-    print(f"output location: {os.path.abspath(os.curdir)}/rustdesk-{version}-install.exe")
+        os.rename('./target/release/rustdesk-portable-packer.exe', './rustdesk_portable.exe')
+    print(f'output location: {os.path.abspath(os.curdir)}/rustdesk_portable.exe')
+    os.rename('./rustdesk_portable.exe', f'./rustdesk-{version}-install.exe')
+    print(f'output location: {os.path.abspath(os.curdir)}/rustdesk-{version}-install.exe')
 
 def main():
     parser = make_parser()
     args = parser.parse_args()
 
-    os.system("cp Cargo.toml Cargo.toml.bk")
-    os.system("cp src/main.rs src/main.rs.bk")
+    shutil.copy2('Cargo.toml', 'Cargo.toml.bk')
+    shutil.copy2('src/main.rs', 'src/main.rs.bk')
     if windows:
         txt = open('src/main.rs', encoding='utf8').read()
         with open('src/main.rs', 'wt', encoding='utf8') as fh:
@@ -235,7 +249,7 @@ def main():
     if os.path.isfile('/usr/bin/pacman'):
         os.system('git checkout src/ui/common.tis')
     version = get_version()
-    features = ",".join(get_features(args))
+    features = ','.join(get_features(args))
     flutter = args.flutter
     os.system('python3 res/inline-sciter.py')
     portable = args.portable
