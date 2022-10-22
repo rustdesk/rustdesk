@@ -282,23 +282,34 @@ class _ConnectionPageState extends State<ConnectionPage>
                     .marginOnly(left: em),
               ),
               // ready && public
-              Offstage(
-                offstage: !(!svcStopped.value &&
-                    svcStatusCode.value == 1 &&
-                    svcIsUsingPublicServer.value),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Text(', ', style: TextStyle(fontSize: em)),
-                    InkWell(
-                      onTap: onUsePublicServerGuide,
-                      child: Text(
-                        translate('setup_server_tip'),
-                        style: TextStyle(
-                            decoration: TextDecoration.underline, fontSize: em),
-                      ),
-                    )
-                  ],
+              Flexible(
+                child: Offstage(
+                  offstage: !(!svcStopped.value &&
+                      svcStatusCode.value == 1 &&
+                      svcIsUsingPublicServer.value),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text(', ', style: TextStyle(fontSize: em)),
+                      Flexible(
+                        child: InkWell(
+                          onTap: onUsePublicServerGuide,
+                          child: Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  translate('setup_server_tip'),
+                                  style: TextStyle(
+                                      decoration: TextDecoration.underline,
+                                      fontSize: em),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    ],
+                  ),
                 ),
               )
             ],
