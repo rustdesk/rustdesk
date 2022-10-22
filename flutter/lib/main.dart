@@ -121,7 +121,6 @@ void runMobileApp() async {
 
 void runRemoteScreen(Map<String, dynamic> argument) async {
   await initEnv(kAppTypeDesktopRemote);
-  await restoreWindowPosition(WindowType.RemoteDesktop, windowId: windowId);
   runApp(GetMaterialApp(
     navigatorKey: globalKey,
     debugShowCheckedModeBanner: false,
@@ -147,7 +146,6 @@ void runRemoteScreen(Map<String, dynamic> argument) async {
 
 void runFileTransferScreen(Map<String, dynamic> argument) async {
   await initEnv(kAppTypeDesktopFileTransfer);
-  await restoreWindowPosition(WindowType.FileTransfer, windowId: windowId);
   runApp(
     GetMaterialApp(
       navigatorKey: globalKey,
@@ -173,7 +171,6 @@ void runFileTransferScreen(Map<String, dynamic> argument) async {
 
 void runPortForwardScreen(Map<String, dynamic> argument) async {
   await initEnv(kAppTypeDesktopPortForward);
-  await restoreWindowPosition(WindowType.PortForward, windowId: windowId);
   runApp(
     GetMaterialApp(
       navigatorKey: globalKey,

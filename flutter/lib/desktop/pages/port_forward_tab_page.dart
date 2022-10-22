@@ -72,6 +72,9 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
         tabController.clear();
       }
     });
+    Future.delayed(Duration.zero, () {
+      restoreWindowPosition(WindowType.PortForward, windowId: windowId());
+    });
   }
 
   @override
