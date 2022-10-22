@@ -64,6 +64,9 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
         tabController.clear();
       }
     });
+    Future.delayed(Duration.zero, () {
+      restoreWindowPosition(WindowType.FileTransfer, windowId: windowId());
+    });
   }
 
   @override
