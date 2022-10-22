@@ -1478,7 +1478,13 @@ pub fn run_uac(exe: &str, arg: &str) -> ResultType<bool> {
 }
 
 pub fn check_super_user_permission() -> ResultType<bool> {
-    run_uac("cmd", "/c /q")
+    run_uac(
+        std::env::current_exe()?
+            .to_string_lossy()
+            .to_string()
+            .as_str(),
+        "--version",
+    )
 }
 
 pub fn elevate(arg: &str) -> ResultType<bool> {
