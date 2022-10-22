@@ -2,15 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:url_launcher/url_launcher_string.dart';
 
 import '../../common.dart';
-import '../widgets/button.dart';
 
 class _IconOP extends StatelessWidget {
   final String icon;
@@ -92,10 +89,12 @@ class ConfigOP {
 class WidgetOP extends StatefulWidget {
   final ConfigOP config;
   final RxString curOP;
+  final Function(String) cbLogin;
   const WidgetOP({
     Key? key,
     required this.config,
     required this.curOP,
+    required this.cbLogin,
   }) : super(key: key);
 
   @override
@@ -107,9 +106,8 @@ class WidgetOP extends StatefulWidget {
 class _WidgetOPState extends State<WidgetOP> {
   Timer? _updateTimer;
   String _stateMsg = '';
-  String _stateFailedMsg = '';
+  String _FailedMsg = '';
   String _url = '';
-  String _username = '';
 
   @override
   void initState() {
@@ -138,17 +136,28 @@ class _WidgetOPState extends State<WidgetOP> {
         return;
       }
       final String stateMsg = resultMap['state_msg'];
-      final String failedMsg = resultMap['failed_msg'];
-      // to-do: test null url
-      final String url = resultMap['url'];
-      if (_stateMsg != stateMsg) {
-        if (_url.isEmpty && url.isNotEmpty) {
+      String failedMsg = resultMap['failed_msg'];
+      final String? url = resultMap['url'];
+      final authBody = resultMap['auth_body'];
+      if (_stateMsg != stateMsg || _FailedMsg != failedMsg) {
+        if (_url.isEmpty && url != null && url.isNotEmpty) {
           launchUrl(Uri.parse(url));
           _url = url;
         }
+        if (authBody != null) {
+          _updateTimer?.cancel();
+          final String username = authBody['user']['name'];
+          widget.curOP.value = '';
+          widget.cbLogin(username);
+        }
+
         setState(() {
           _stateMsg = stateMsg;
-          _stateFailedMsg = failedMsg;
+          _FailedMsg = failedMsg;
+          if (failedMsg.isNotEmpty) {
+            widget.curOP.value = '';
+            _updateTimer?.cancel();
+          }
         });
       }
     });
@@ -156,74 +165,95 @@ class _WidgetOPState extends State<WidgetOP> {
 
   _resetState() {
     _stateMsg = '';
-    _stateFailedMsg = '';
+    _FailedMsg = '';
     _url = '';
-    _username = '';
   }
 
   @override
   Widget build(BuildContext context) {
-    return ConstrainedBox(
-        constraints: const BoxConstraints(minWidth: 500),
-        child: Column(
-          children: [
-            ButtonOP(
-              op: widget.config.op,
-              curOP: widget.curOP,
-              iconWidth: widget.config.iconWidth,
-              primaryColor: str2color(widget.config.op, 0x7f),
-              height: 40,
-              onTap: () {
-                widget.curOP.value = widget.config.op;
-                bind.mainAccountAuth(op: widget.config.op);
-                _beginQueryState();
-              },
-            ),
-            Obx(() => Offstage(
-                offstage: widget.curOP.value != widget.config.op,
-                child: Text(
-                  _stateMsg,
-                  style: TextStyle(fontSize: 12),
-                ))),
-            Obx(
-              () => Offstage(
-                offstage: widget.curOP.value != widget.config.op,
-                child: const SizedBox(
-                  height: 5.0,
-                ),
-              ),
-            ),
-            Obx(
-              () => Offstage(
-                offstage: widget.curOP.value != widget.config.op,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxHeight: 20),
-                  child: ElevatedButton(
-                    onPressed: () {
-                      widget.curOP.value = '';
-                      _updateTimer?.cancel();
-                      _resetState();
-                    },
-                    child: Text(
-                      translate('Cancel'),
-                      style: TextStyle(fontSize: 15),
+    return Column(
+      children: [
+        ButtonOP(
+          op: widget.config.op,
+          curOP: widget.curOP,
+          iconWidth: widget.config.iconWidth,
+          primaryColor: str2color(widget.config.op, 0x7f),
+          height: 40,
+          onTap: () async {
+            _resetState();
+            widget.curOP.value = widget.config.op;
+            await bind.mainAccountAuth(op: widget.config.op);
+            _beginQueryState();
+          },
+        ),
+        Obx(() {
+          if (widget.curOP.isNotEmpty &&
+              widget.curOP.value != widget.config.op) {
+            _FailedMsg = '';
+          }
+          return Offstage(
+              offstage:
+                  _FailedMsg.isEmpty && widget.curOP.value != widget.config.op,
+              child: Row(
+                children: [
+                  Text(
+                    _stateMsg,
+                    style: TextStyle(fontSize: 12),
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    _FailedMsg,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.red,
                     ),
                   ),
+                ],
+              ));
+        }),
+        Obx(
+          () => Offstage(
+            offstage: widget.curOP.value != widget.config.op,
+            child: const SizedBox(
+              height: 5.0,
+            ),
+          ),
+        ),
+        Obx(
+          () => Offstage(
+            offstage: widget.curOP.value != widget.config.op,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: 20),
+              child: ElevatedButton(
+                onPressed: () {
+                  widget.curOP.value = '';
+                  _updateTimer?.cancel();
+                  _resetState();
+                  bind.mainAccountAuthCancel();
+                },
+                child: Text(
+                  translate('Cancel'),
+                  style: TextStyle(fontSize: 15),
                 ),
               ),
             ),
-          ],
-        ));
+          ),
+        ),
+      ],
+    );
   }
 }
 
 class LoginWidgetOP extends StatelessWidget {
   final List<ConfigOP> ops;
-  final RxString curOP = ''.obs;
+  final RxString curOP;
+  final Function(String) cbLogin;
 
   LoginWidgetOP({
     Key? key,
     required this.ops,
+    required this.curOP,
+    required this.cbLogin,
   }) : super(key: key);
 
   @override
@@ -233,6 +263,7 @@ class LoginWidgetOP extends StatelessWidget {
               WidgetOP(
                 config: op,
                 curOP: curOP,
+                cbLogin: cbLogin,
               ),
               const Divider()
             ])
@@ -256,6 +287,7 @@ class LoginWidgetUserPass extends StatelessWidget {
   final String usernameMsg;
   final String passMsg;
   final bool isInProgress;
+  final RxString curOP;
   final Function(String, String) onLogin;
   const LoginWidgetUserPass({
     Key? key,
@@ -264,6 +296,7 @@ class LoginWidgetUserPass extends StatelessWidget {
     required this.usernameMsg,
     required this.passMsg,
     required this.isInProgress,
+    required this.curOP,
     required this.onLogin,
   }) : super(key: key);
 
@@ -271,86 +304,90 @@ class LoginWidgetUserPass extends StatelessWidget {
   Widget build(BuildContext context) {
     var userController = TextEditingController(text: username);
     var pwdController = TextEditingController(text: pass);
-    return ConstrainedBox(
-      constraints: const BoxConstraints(minWidth: 500),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(
-            height: 8.0,
-          ),
-          Row(
-            children: [
-              ConstrainedBox(
-                  constraints: const BoxConstraints(minWidth: 100),
-                  child: Text(
-                    '${translate("Username")}:',
-                    textAlign: TextAlign.start,
-                  ).marginOnly(bottom: 16.0)),
-              const SizedBox(
-                width: 24.0,
-              ),
-              Expanded(
-                child: TextField(
-                  decoration: InputDecoration(
-                      border: const OutlineInputBorder(),
-                      errorText: usernameMsg.isNotEmpty ? usernameMsg : null),
-                  controller: userController,
-                  focusNode: FocusNode()..requestFocus(),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(
-            height: 8.0,
-          ),
-          Row(
-            children: [
-              ConstrainedBox(
-                  constraints: const BoxConstraints(minWidth: 100),
-                  child: Text('${translate("Password")}:')
-                      .marginOnly(bottom: 16.0)),
-              const SizedBox(
-                width: 24.0,
-              ),
-              Expanded(
-                child: TextField(
-                  obscureText: true,
-                  decoration: InputDecoration(
-                      border: const OutlineInputBorder(),
-                      errorText: passMsg.isNotEmpty ? passMsg : null),
-                  controller: pwdController,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(
-            height: 4.0,
-          ),
-          Offstage(
-              offstage: !isInProgress, child: const LinearProgressIndicator()),
-          const SizedBox(
-            height: 12.0,
-          ),
-          Row(children: [
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(
+          height: 8.0,
+        ),
+        Row(
+          children: [
+            ConstrainedBox(
+                constraints: const BoxConstraints(minWidth: 100),
+                child: Text(
+                  '${translate("Username")}:',
+                  textAlign: TextAlign.start,
+                ).marginOnly(bottom: 16.0)),
+            const SizedBox(
+              width: 24.0,
+            ),
             Expanded(
-              child: Container(
-                height: 50,
-                padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
-                child: ElevatedButton(
-                  child: const Text(
-                    'Login',
-                    style: TextStyle(fontSize: 18),
-                  ),
-                  onPressed: () {
-                    onLogin(userController.text, pwdController.text);
-                  },
-                ),
+              child: TextField(
+                decoration: InputDecoration(
+                    border: const OutlineInputBorder(),
+                    errorText: usernameMsg.isNotEmpty ? usernameMsg : null),
+                controller: userController,
+                focusNode: FocusNode()..requestFocus(),
               ),
             ),
-          ]),
-        ],
-      ),
+          ],
+        ),
+        const SizedBox(
+          height: 8.0,
+        ),
+        Row(
+          children: [
+            ConstrainedBox(
+                constraints: const BoxConstraints(minWidth: 100),
+                child:
+                    Text('${translate("Password")}:').marginOnly(bottom: 16.0)),
+            const SizedBox(
+              width: 24.0,
+            ),
+            Expanded(
+              child: TextField(
+                obscureText: true,
+                decoration: InputDecoration(
+                    border: const OutlineInputBorder(),
+                    errorText: passMsg.isNotEmpty ? passMsg : null),
+                controller: pwdController,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(
+          height: 4.0,
+        ),
+        Offstage(
+            offstage: !isInProgress, child: const LinearProgressIndicator()),
+        const SizedBox(
+          height: 12.0,
+        ),
+        Row(children: [
+          Expanded(
+            child: Container(
+              height: 50,
+              padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
+              child: Obx(() => ElevatedButton(
+                    style: curOP.value.isEmpty || curOP.value == 'rustdesk'
+                        ? null
+                        : ElevatedButton.styleFrom(
+                            primary: Colors.grey,
+                          ),
+                    child: const Text(
+                      'Login',
+                      style: TextStyle(fontSize: 18),
+                    ),
+                    onPressed: curOP.value.isEmpty || curOP.value == 'rustdesk'
+                        ? () {
+                            onLogin(userController.text, pwdController.text);
+                          }
+                        : null,
+                  )),
+            ),
+          ),
+        ]),
+      ],
     );
   }
 }
@@ -364,6 +401,7 @@ Future<bool> loginDialog() async {
   var passMsg = '';
   var isInProgress = false;
   var completer = Completer<bool>();
+  final RxString curOP = ''.obs;
 
   gFFI.dialogManager.show((setState, close) {
     cancel() {
@@ -379,6 +417,7 @@ Future<bool> loginDialog() async {
         isInProgress = true;
       });
       cancel() {
+        curOP.value = '';
         if (isInProgress) {
           setState(() {
             isInProgress = false;
@@ -386,17 +425,16 @@ Future<bool> loginDialog() async {
         }
       }
 
+      curOP.value = 'rustdesk';
       username = username0;
       pass = pass0;
       if (username.isEmpty) {
         usernameMsg = translate('Username missed');
-        debugPrint('REMOVE ME ====================== username empty');
         cancel();
         return;
       }
       if (pass.isEmpty) {
         passMsg = translate('Password missed');
-        debugPrint('REMOVE ME ====================== password empty');
         cancel();
         return;
       }
@@ -404,7 +442,6 @@ Future<bool> loginDialog() async {
         final resp = await gFFI.userModel.login(username, pass);
         if (resp.containsKey('error')) {
           passMsg = resp['error'];
-          debugPrint('REMOVE ME ====================== password error');
           cancel();
           return;
         }
@@ -414,8 +451,6 @@ Future<bool> loginDialog() async {
         completer.complete(true);
       } catch (err) {
         debugPrint(err.toString());
-        debugPrint(
-            'REMOVE ME ====================== login error ${err.toString()}');
         cancel();
         return;
       }
@@ -438,6 +473,7 @@ Future<bool> loginDialog() async {
               usernameMsg: usernameMsg,
               passMsg: passMsg,
               isInProgress: isInProgress,
+              curOP: curOP,
               onLogin: onLogin,
             ),
             const SizedBox(
@@ -451,11 +487,19 @@ Future<bool> loginDialog() async {
             const SizedBox(
               height: 8.0,
             ),
-            LoginWidgetOP(ops: [
-              ConfigOP(op: 'Github', iconWidth: 24),
-              ConfigOP(op: 'Google', iconWidth: 24),
-              ConfigOP(op: 'Okta', iconWidth: 46),
-            ]),
+            LoginWidgetOP(
+              ops: [
+                ConfigOP(op: 'Github', iconWidth: 24),
+                ConfigOP(op: 'Google', iconWidth: 24),
+                ConfigOP(op: 'Okta', iconWidth: 46),
+              ],
+              curOP: curOP,
+              cbLogin: (String username) {
+                gFFI.userModel.userName.value = username;
+                completer.complete(true);
+                close();
+              },
+            ),
           ],
         ),
       ),

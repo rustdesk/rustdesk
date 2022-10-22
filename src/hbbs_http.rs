@@ -2,13 +2,14 @@ use hbb_common::{
     anyhow::{self, bail},
     tokio, ResultType,
 };
-use reqwest::Response;
+use reqwest::blocking::Response;
+use serde::de::DeserializeOwned;
 use serde_derive::Deserialize;
 use serde_json::{Map, Value};
-use serde::de::DeserializeOwned;
 
 pub mod account;
 
+#[derive(Debug)]
 pub enum HbbHttpResponse<T> {
     ErrorFormat,
     Error(String),
@@ -16,16 +17,11 @@ pub enum HbbHttpResponse<T> {
     Data(T),
 }
 
-#[tokio::main(flavor = "current_thread")]
-async fn resp_to_serde_map(resp: Response) -> reqwest::Result<Map<String, Value>> {
-    resp.json().await
-}
-
 impl<T: DeserializeOwned> TryFrom<Response> for HbbHttpResponse<T> {
     type Error = reqwest::Error;
 
     fn try_from(resp: Response) -> Result<Self, <Self as TryFrom<Response>>::Error> {
-        let map = resp_to_serde_map(resp)?;
+        let map = resp.json::<Map<String, Value>>()?;
         if let Some(error) = map.get("error") {
             if let Some(err) = error.as_str() {
                 Ok(Self::Error(err.to_owned()))

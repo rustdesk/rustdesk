@@ -1085,7 +1085,13 @@ pub fn install_install_path() -> SyncReturn<String> {
 }
 
 pub fn main_account_auth(op: String) {
-    account_auth(op);
+    let id = get_id();
+    let uuid = get_uuid();
+    account_auth(op, id, uuid);
+}
+
+pub fn main_account_auth_cancel() {
+    account_auth_cancel()
 }
 
 pub fn main_account_auth_result() -> String {

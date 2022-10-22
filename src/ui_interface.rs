@@ -842,14 +842,16 @@ pub(crate) fn check_connect_status(reconnect: bool) -> mpsc::UnboundedSender<ipc
     tx
 }
 
-#[tokio::main(flavor = "current_thread")]
-pub async fn account_auth(op: String) {
-    account::OidcSession::account_auth(op, get_id(), get_uuid()).await;
+pub fn account_auth(op: String, id: String, uuid: String) {
+    account::OidcSession::account_auth(op, id, uuid);
 }
 
-#[tokio::main(flavor = "current_thread")]
-pub async fn account_auth_result() -> String {
-    serde_json::to_string(&account::OidcSession::get_result().await).unwrap_or_default()
+pub fn account_auth_cancel() {
+    account::OidcSession::auth_cancel();
+}
+
+pub fn account_auth_result() -> String {
+    serde_json::to_string(&account::OidcSession::get_result()).unwrap_or_default()
 }
 
 // notice: avoiding create ipc connecton repeatly,
