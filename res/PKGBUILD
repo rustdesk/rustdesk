@@ -7,7 +7,7 @@ arch=('x86_64')
 url=""
 license=('AGPL-3.0')
 groups=()
-depends=('gtk3' 'xdotool' 'libxcb' 'libxfixes' 'alsa-lib' 'pipewire' 'ttf-arphic-uming' 'curl' 'libappindicator-gtk3')
+depends=('gtk3' 'xdotool' 'libxcb' 'libxfixes' 'alsa-lib' 'pipewire' 'ttf-arphic-uming' 'curl' 'libappindicator-gtk3' 'libva' 'libvdpau' 'libayatana-appindicator')
 makedepends=()
 checkdepends=()
 optdepends=()
@@ -24,7 +24,6 @@ md5sums=() #generate with 'makepkg -g'
 package() {
   if [[ ${FLUTTER} ]]; then
 	  mkdir -p "${pkgdir}/usr/lib/rustdesk" && cp -r ${HBB}/flutter/build/linux/x64/release/bundle/* -t "${pkgdir}/usr/lib/rustdesk"
-	  cp ${HBB}/flutter/build/linux/x64/release/liblibrustdesk.so  "${pkgdir}/usr/lib/rustdesk/librustdesk.so"
   fi
   mkdir -p "${pkgdir}/usr/bin"
   pushd ${pkgdir} && ln -s /usr/lib/rustdesk/rustdesk usr/bin/rustdesk && popd

@@ -78,8 +78,8 @@ jobs:
       - name: Rename rustdesk
         shell: bash
         run: |
-          for name in rustdesk*??.exe; do
-              mv "$name" "${name%%.exe}-${{ matrix.job.target }}.exe"
+          for name in rustdesk*??-install.exe; do
+              mv "$name" "${name%%-install.exe}-${{ matrix.job.target }}.exe"
           done
 
       - name: Publish Release
@@ -103,7 +103,7 @@ jobs:
           # - { target: i686-unknown-linux-gnu      , os: ubuntu-20.04, use-cross: true }
           # - { target: i686-unknown-linux-musl     , os: ubuntu-20.04, use-cross: true }
           # - { target: x86_64-apple-darwin         , os: macos-10.15                   }
-          - { target: x86_64-unknown-linux-gnu    , os: ubuntu-18.04 }
+          - { target: x86_64-unknown-linux-gnu    , os: ubuntu-18.04}
           # - { target: x86_64-unknown-linux-musl   , os: ubuntu-20.04, use-cross: true }
     steps:
       - name: Checkout source code
@@ -180,7 +180,7 @@ jobs:
               mv "$name" "${name%%.deb}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb"
           done
 
-      - name: Publish Release
+      - name: Publish debian package
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
@@ -188,3 +188,44 @@ jobs:
           files: |
             rustdesk*.deb
 
+      - name: Build archlinux package
+        uses: vufa/arch-makepkg-action@master
+        with:
+          packages: >
+            llvm
+            clang
+            libva
+            libvdpau
+            rust
+            gstreamer
+            unzip
+            git
+            cmake
+            gcc
+            curl
+            wget
+            yasm
+            nasm
+            zip
+            make
+            pkg-config
+            clang
+            gtk3
+            xdotool
+            libxcb
+            libxfixes
+            alsa-lib
+            pipewire
+            python
+            ttf-arphic-uming
+            libappindicator-gtk3
+          scripts: |
+            cd res && HBB=`pwd`/.. FLUTTER=1 makepkg -f
+
+      - name: Publish archlinux package
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            res/rustdesk*.zst
