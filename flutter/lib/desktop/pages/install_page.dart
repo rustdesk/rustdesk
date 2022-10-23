@@ -181,7 +181,7 @@ class _InstallPageState extends State<InstallPage> with WindowListener {
   void install() {
     btnEnabled.value = false;
     showProgress.value = true;
-    String args = '--flutter';
+    String args = '';
     if (startmenu.value) args += ' startmenu';
     if (desktopicon.value) args += ' desktopicon';
     bind.installInstallMe(options: args, path: controller.text);
