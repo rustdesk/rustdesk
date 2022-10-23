@@ -2,6 +2,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/widgets/address_book.dart';
@@ -9,6 +10,7 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/scroll_wrapper.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher_string.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../../common.dart';
 import '../../common/formatter/id_formatter.dart';
@@ -27,7 +29,7 @@ class ConnectionPage extends StatefulWidget {
 
 /// State for the connection page.
 class _ConnectionPageState extends State<ConnectionPage>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WindowListener {
   /// Controller for the id input bar.
   final _idController = IDTextEditingController();
 
@@ -42,6 +44,8 @@ class _ConnectionPageState extends State<ConnectionPage>
   var svcStopped = false.obs;
   var svcStatusCode = 0.obs;
   var svcIsUsingPublicServer = true.obs;
+
+  bool isWindowMinisized = false;
 
   @override
   void initState() {
@@ -63,6 +67,7 @@ class _ConnectionPageState extends State<ConnectionPage>
       _idInputFocused.value = _idFocusNode.hasFocus;
     });
     Get.put<RxBool>(svcStopped, tag: 'service-stop');
+    windowManager.addListener(this);
   }
 
   @override
@@ -70,7 +75,22 @@ class _ConnectionPageState extends State<ConnectionPage>
     _idController.dispose();
     _updateTimer?.cancel();
     Get.delete<RxBool>(tag: 'service-stop');
+    windowManager.removeListener(this);
     super.dispose();
+  }
+
+  @override
+  void onWindowEvent(String eventName) {
+    super.onWindowEvent(eventName);
+    if (eventName == 'minimize') {
+      isWindowMinisized = true;
+    } else if (eventName == 'maximize' || eventName == 'restore') {
+      if (isWindowMinisized && Platform.isWindows) {
+        // windows can't update when minisized.
+        Get.forceAppUpdate();
+      }
+      isWindowMinisized = false;
+    }
   }
 
   @override
@@ -282,23 +302,34 @@ class _ConnectionPageState extends State<ConnectionPage>
                     .marginOnly(left: em),
               ),
               // ready && public
-              Offstage(
-                offstage: !(!svcStopped.value &&
-                    svcStatusCode.value == 1 &&
-                    svcIsUsingPublicServer.value),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Text(', ', style: TextStyle(fontSize: em)),
-                    InkWell(
-                      onTap: onUsePublicServerGuide,
-                      child: Text(
-                        translate('setup_server_tip'),
-                        style: TextStyle(
-                            decoration: TextDecoration.underline, fontSize: em),
-                      ),
-                    )
-                  ],
+              Flexible(
+                child: Offstage(
+                  offstage: !(!svcStopped.value &&
+                      svcStatusCode.value == 1 &&
+                      svcIsUsingPublicServer.value),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text(', ', style: TextStyle(fontSize: em)),
+                      Flexible(
+                        child: InkWell(
+                          onTap: onUsePublicServerGuide,
+                          child: Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  translate('setup_server_tip'),
+                                  style: TextStyle(
+                                      decoration: TextDecoration.underline,
+                                      fontSize: em),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    ],
+                  ),
                 ),
               )
             ],

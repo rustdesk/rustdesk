@@ -321,6 +321,7 @@ class _GeneralState extends State<_General> {
         ...devices.map((device) => _Radio<String>(context,
                 value: device,
                 groupValue: currentDevice,
+                autoNewLine: false,
                 label: device, onChanged: (value) {
               setDevice(value);
               setState(() {});
@@ -812,11 +813,7 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
               AbsorbPointer(
                 absorbing: locked,
                 child: Column(children: [
-                  _CardRow(title: 'Server', children: [
-                    _Button('ID/Relay Server', changeServer, enabled: enabled),
-                    _Button('Import Server Conf', importServer,
-                        enabled: enabled),
-                  ]),
+                  server(enabled),
                   _Card(title: 'Proxy', children: [
                     _Button('Socks5 Proxy', changeSocks5Proxy,
                         enabled: enabled),
@@ -824,6 +821,156 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
                 ]),
               ),
             ]).marginOnly(bottom: _kListViewBottomMargin));
+  }
+
+  server(bool enabled) {
+    return _futureBuilder(future: () async {
+      return await bind.mainGetOptions();
+    }(), hasData: (data) {
+      // Setting page is not modal, oldOptions should only be used when getting options, never when setting.
+      Map<String, dynamic> oldOptions = jsonDecode(data! as String);
+      old(String key) {
+        return (oldOptions[key] ?? "").trim();
+      }
+
+      RxString idErrMsg = "".obs;
+      RxString relayErrMsg = "".obs;
+      RxString apiErrMsg = "".obs;
+      var idController =
+          TextEditingController(text: old('custom-rendezvous-server'));
+      var relayController = TextEditingController(text: old('relay-server'));
+      var apiController = TextEditingController(text: old('api-server'));
+      var keyController = TextEditingController(text: old('key'));
+
+      set(String idServer, String relayServer, String apiServer,
+          String key) async {
+        idServer = idServer.trim();
+        relayServer = relayServer.trim();
+        apiServer = apiServer.trim();
+        key = key.trim();
+        if (idServer.isNotEmpty) {
+          idErrMsg.value =
+              translate(await bind.mainTestIfValidServer(server: idServer));
+          if (idErrMsg.isNotEmpty) {
+            return false;
+          }
+        }
+        if (relayServer.isNotEmpty) {
+          relayErrMsg.value =
+              translate(await bind.mainTestIfValidServer(server: relayServer));
+          if (relayErrMsg.isNotEmpty) {
+            return false;
+          }
+        }
+        if (apiServer.isNotEmpty) {
+          if (!apiServer.startsWith('http://') ||
+              !apiServer.startsWith("https://")) {
+            apiErrMsg.value =
+                "${translate("API Server")}: ${translate("invalid_http")}";
+            return false;
+          }
+        }
+        // should set one by one
+        await bind.mainSetOption(
+            key: 'custom-rendezvous-server', value: idServer);
+        await bind.mainSetOption(key: 'relay-server', value: relayServer);
+        await bind.mainSetOption(key: 'api-server', value: apiServer);
+        await bind.mainSetOption(key: 'key', value: key);
+        return true;
+      }
+
+      submit() async {
+        bool result = await set(idController.text, relayController.text,
+            apiController.text, keyController.text);
+        if (result) {
+          setState(() {});
+          showToast(translate('Successful'));
+        } else {
+          showToast(translate('Failed'));
+        }
+      }
+
+      import() {
+        Clipboard.getData(Clipboard.kTextPlain).then((value) {
+          TextEditingController mytext = TextEditingController();
+          String? aNullableString = "";
+          aNullableString = value?.text;
+          mytext.text = aNullableString.toString();
+          if (mytext.text.isNotEmpty) {
+            try {
+              Map<String, dynamic> config = jsonDecode(mytext.text);
+              if (config.containsKey('IdServer')) {
+                String id = config['IdServer'] ?? '';
+                String relay = config['RelayServer'] ?? '';
+                String api = config['ApiServer'] ?? '';
+                String key = config['Key'] ?? '';
+                idController.text = id;
+                relayController.text = relay;
+                apiController.text = api;
+                keyController.text = key;
+                Future<bool> success = set(id, relay, api, key);
+                success.then((value) {
+                  if (value) {
+                    showToast(
+                        translate('Import server configuration successfully'));
+                  } else {
+                    showToast(translate('Invalid server configuration'));
+                  }
+                });
+              } else {
+                showToast(translate("Invalid server configuration"));
+              }
+            } catch (e) {
+              showToast(translate("Invalid server configuration"));
+            }
+          } else {
+            showToast(translate("Clipboard is empty"));
+          }
+        });
+      }
+
+      export() {
+        Map<String, String> config = {};
+        config['IdServer'] = idController.text.trim();
+        config['RelayServer'] = relayController.text.trim();
+        config['ApiServer'] = apiController.text.trim();
+        config['Key'] = keyController.text.trim();
+        Clipboard.setData(ClipboardData(text: jsonEncode(config)));
+        showToast(translate("Export server configuration successfully"));
+      }
+
+      bool secure = !enabled;
+      return _Card(title: 'ID/Relay Server', title_suffix: [
+        Tooltip(
+          message: translate('Import Server Config'),
+          child: IconButton(
+              icon: Icon(Icons.paste, color: Colors.grey),
+              onPressed: enabled ? import : null),
+        ),
+        Tooltip(
+            message: translate('Export Server Config'),
+            child: IconButton(
+                icon: Icon(Icons.copy, color: Colors.grey),
+                onPressed: enabled ? export : null)),
+      ], children: [
+        Column(
+          children: [
+            Obx(() => _LabeledTextField(context, 'ID Server', idController,
+                idErrMsg.value, enabled, secure)),
+            Obx(() => _LabeledTextField(context, 'Relay Server',
+                relayController, relayErrMsg.value, enabled, secure)),
+            Obx(() => _LabeledTextField(context, 'API Server', apiController,
+                apiErrMsg.value, enabled, secure)),
+            _LabeledTextField(
+                context, 'Key', keyController, "", enabled, secure),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [_Button('Apply', submit, enabled: enabled)],
+            ).marginOnly(top: 15),
+          ],
+        )
+      ]);
+    });
   }
 }
 
@@ -955,63 +1102,37 @@ class _AboutState extends State<_About> {
 //#region components
 
 // ignore: non_constant_identifier_names
-Widget _Card({required String title, required List<Widget> children}) {
+Widget _Card(
+    {required String title,
+    required List<Widget> children,
+    List<Widget>? title_suffix}) {
   return Row(
     children: [
-      SizedBox(
-        width: _kCardFixedWidth,
-        child: Card(
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Text(
-                    translate(title),
-                    textAlign: TextAlign.start,
-                    style: const TextStyle(
-                      fontSize: _kTitleFontSize,
-                    ),
-                  ),
-                  const Spacer(),
-                ],
-              ).marginOnly(left: _kContentHMargin, top: 10, bottom: 10),
-              ...children
-                  .map((e) => e.marginOnly(top: 4, right: _kContentHMargin)),
-            ],
-          ).marginOnly(bottom: 10),
-        ).marginOnly(left: _kCardLeftMargin, top: 15),
-      ),
-    ],
-  );
-}
-
-Widget _CardRow({required String title, required List<Widget> children}) {
-  return Row(
-    children: [
-      SizedBox(
-        width: _kCardFixedWidth,
-        child: Card(
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Text(
-                    translate(title),
-                    textAlign: TextAlign.start,
-                    style: const TextStyle(
-                      fontSize: _kTitleFontSize,
-                    ),
-                  ),
-                  const Spacer(),
-                ],
-              ).marginOnly(left: _kContentHMargin, top: 10, bottom: 10),
-              Row(children: [
+      Flexible(
+        child: SizedBox(
+          width: _kCardFixedWidth,
+          child: Card(
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                        child: Text(
+                      translate(title),
+                      textAlign: TextAlign.start,
+                      style: const TextStyle(
+                        fontSize: _kTitleFontSize,
+                      ),
+                    )),
+                    ...?title_suffix
+                  ],
+                ).marginOnly(left: _kContentHMargin, top: 10, bottom: 10),
                 ...children
                     .map((e) => e.marginOnly(top: 4, right: _kContentHMargin)),
-              ]),
-            ],
-          ).marginOnly(bottom: 10),
-        ).marginOnly(left: _kCardLeftMargin, top: 15),
+              ],
+            ).marginOnly(bottom: 10),
+          ).marginOnly(left: _kCardLeftMargin, top: 15),
+        ),
       ),
     ],
   );
@@ -1085,6 +1206,7 @@ Widget _Radio<T>(BuildContext context,
     required T groupValue,
     required String label,
     required Function(T value) onChanged,
+    bool autoNewLine = true,
     bool enabled = true}) {
   var onChange = enabled
       ? (T? value) {
@@ -1099,8 +1221,7 @@ Widget _Radio<T>(BuildContext context,
         Radio<T>(value: value, groupValue: groupValue, onChanged: onChange),
         Expanded(
           child: Text(translate(label),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  overflow: autoNewLine ? null : TextOverflow.ellipsis,
                   style: TextStyle(
                       fontSize: _kContentFontSize,
                       color: _disabledTextColor(context, enabled)))
@@ -1116,12 +1237,11 @@ Widget _Radio<T>(BuildContext context,
 Widget _Button(String label, Function() onPressed,
     {bool enabled = true, String? tip}) {
   var button = ElevatedButton(
-      onPressed: enabled ? onPressed : null,
-      child: Container(
-        child: Text(
-          translate(label),
-        ).marginSymmetric(horizontal: 15),
-      ));
+    onPressed: enabled ? onPressed : null,
+    child: Text(
+      translate(label),
+    ).marginSymmetric(horizontal: 15),
+  );
   StatefulWidget child;
   if (tip == null) {
     child = button;
@@ -1138,12 +1258,11 @@ Widget _SubButton(String label, Function() onPressed, [bool enabled = true]) {
   return Row(
     children: [
       ElevatedButton(
-          onPressed: enabled ? onPressed : null,
-          child: Container(
-            child: Text(
-              translate(label),
-            ).marginSymmetric(horizontal: 15),
-          )),
+        onPressed: enabled ? onPressed : null,
+        child: Text(
+          translate(label),
+        ).marginSymmetric(horizontal: 15),
+      ),
     ],
   ).marginOnly(left: _kContentHSubMargin);
 }
@@ -1215,32 +1334,70 @@ Widget _lock(
       offstage: !locked,
       child: Row(
         children: [
-          SizedBox(
-            width: _kCardFixedWidth,
-            child: Card(
-              child: ElevatedButton(
-                child: SizedBox(
-                    height: 25,
-                    child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(
-                            Icons.security_sharp,
-                            size: 20,
-                          ),
-                          Text(translate(label)).marginOnly(left: 5),
-                        ]).marginSymmetric(vertical: 2)),
-                onPressed: () async {
-                  bool checked = await bind.mainCheckSuperUserPermission();
-                  if (checked) {
-                    onUnlock();
-                  }
-                },
-              ).marginSymmetric(horizontal: 2, vertical: 4),
-            ).marginOnly(left: _kCardLeftMargin),
-          ).marginOnly(top: 10),
+          Flexible(
+            child: SizedBox(
+              width: _kCardFixedWidth,
+              child: Card(
+                child: ElevatedButton(
+                  child: SizedBox(
+                      height: 25,
+                      child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.security_sharp,
+                              size: 20,
+                            ),
+                            Text(translate(label)).marginOnly(left: 5),
+                          ]).marginSymmetric(vertical: 2)),
+                  onPressed: () async {
+                    bool checked = await bind.mainCheckSuperUserPermission();
+                    if (checked) {
+                      onUnlock();
+                    }
+                  },
+                ).marginSymmetric(horizontal: 2, vertical: 4),
+              ).marginOnly(left: _kCardLeftMargin),
+            ).marginOnly(top: 10),
+          ),
         ],
       ));
+}
+
+_LabeledTextField(
+    BuildContext context,
+    String lable,
+    TextEditingController controller,
+    String errorText,
+    bool enabled,
+    bool secure) {
+  return Row(
+    children: [
+      Spacer(flex: 1),
+      Expanded(
+        flex: 4,
+        child: Text(
+          '${translate(lable)}:',
+          textAlign: TextAlign.right,
+          style: TextStyle(color: _disabledTextColor(context, enabled)),
+        ),
+      ),
+      Spacer(flex: 1),
+      Expanded(
+        flex: 10,
+        child: TextField(
+            controller: controller,
+            enabled: enabled,
+            obscureText: secure,
+            decoration: InputDecoration(
+                errorText: errorText.isNotEmpty ? errorText : null),
+            style: TextStyle(
+              color: _disabledTextColor(context, enabled),
+            )),
+      ),
+      Spacer(flex: 1),
+    ],
+  );
 }
 
 // ignore: must_be_immutable
@@ -1311,315 +1468,6 @@ class _ComboBox extends StatelessWidget {
 //#endregion
 
 //#region dialogs
-
-void changeServer() async {
-  Map<String, dynamic> oldOptions = jsonDecode(await bind.mainGetOptions());
-  String idServer = oldOptions['custom-rendezvous-server'] ?? "";
-  var idServerMsg = "";
-  String relayServer = oldOptions['relay-server'] ?? "";
-  var relayServerMsg = "";
-  String apiServer = oldOptions['api-server'] ?? "";
-  var apiServerMsg = "";
-  var key = oldOptions['key'] ?? "";
-  var idController = TextEditingController(text: idServer);
-  var relayController = TextEditingController(text: relayServer);
-  var apiController = TextEditingController(text: apiServer);
-  var keyController = TextEditingController(text: key);
-
-  var isInProgress = false;
-
-  gFFI.dialogManager.show((setState, close) {
-    submit() async {
-      setState(() {
-        idServerMsg = "";
-        relayServerMsg = "";
-        apiServerMsg = "";
-        isInProgress = true;
-      });
-      cancel() {
-        setState(() {
-          isInProgress = false;
-        });
-      }
-
-      idServer = idController.text.trim();
-      relayServer = relayController.text.trim();
-      apiServer = apiController.text.trim().toLowerCase();
-      key = keyController.text.trim();
-
-      if (idServer.isNotEmpty) {
-        idServerMsg =
-            translate(await bind.mainTestIfValidServer(server: idServer));
-        if (idServerMsg.isEmpty) {
-          oldOptions['custom-rendezvous-server'] = idServer;
-        } else {
-          cancel();
-          return;
-        }
-      } else {
-        oldOptions['custom-rendezvous-server'] = "";
-      }
-
-      if (relayServer.isNotEmpty) {
-        relayServerMsg =
-            translate(await bind.mainTestIfValidServer(server: relayServer));
-        if (relayServerMsg.isEmpty) {
-          oldOptions['relay-server'] = relayServer;
-        } else {
-          cancel();
-          return;
-        }
-      } else {
-        oldOptions['relay-server'] = "";
-      }
-
-      if (apiServer.isNotEmpty) {
-        if (apiServer.startsWith('http://') ||
-            apiServer.startsWith("https://")) {
-          oldOptions['api-server'] = apiServer;
-          return;
-        } else {
-          apiServerMsg = translate("invalid_http");
-          cancel();
-          return;
-        }
-      } else {
-        oldOptions['api-server'] = "";
-      }
-      // ok
-      oldOptions['key'] = key;
-      await bind.mainSetOptions(json: jsonEncode(oldOptions));
-      close();
-    }
-
-    return CustomAlertDialog(
-      title: Text(translate("ID/Relay Server")),
-      content: ConstrainedBox(
-        constraints: const BoxConstraints(minWidth: 500),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(
-              height: 8.0,
-            ),
-            Row(
-              children: [
-                ConstrainedBox(
-                    constraints: const BoxConstraints(minWidth: 100),
-                    child: Text("${translate('ID Server')}:")
-                        .marginOnly(bottom: 16.0)),
-                const SizedBox(
-                  width: 24.0,
-                ),
-                Expanded(
-                  child: TextField(
-                    decoration: InputDecoration(
-                        border: const OutlineInputBorder(),
-                        errorText: idServerMsg.isNotEmpty ? idServerMsg : null),
-                    controller: idController,
-                    focusNode: FocusNode()..requestFocus(),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(
-              height: 8.0,
-            ),
-            Row(
-              children: [
-                ConstrainedBox(
-                    constraints: const BoxConstraints(minWidth: 100),
-                    child: Text("${translate('Relay Server')}:")
-                        .marginOnly(bottom: 16.0)),
-                const SizedBox(
-                  width: 24.0,
-                ),
-                Expanded(
-                  child: TextField(
-                    decoration: InputDecoration(
-                        border: const OutlineInputBorder(),
-                        errorText:
-                            relayServerMsg.isNotEmpty ? relayServerMsg : null),
-                    controller: relayController,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(
-              height: 8.0,
-            ),
-            Row(
-              children: [
-                ConstrainedBox(
-                    constraints: const BoxConstraints(minWidth: 100),
-                    child: Text("${translate('API Server')}:")
-                        .marginOnly(bottom: 16.0)),
-                const SizedBox(
-                  width: 24.0,
-                ),
-                Expanded(
-                  child: TextField(
-                    decoration: InputDecoration(
-                        border: const OutlineInputBorder(),
-                        errorText:
-                            apiServerMsg.isNotEmpty ? apiServerMsg : null),
-                    controller: apiController,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(
-              height: 8.0,
-            ),
-            Row(
-              children: [
-                ConstrainedBox(
-                    constraints: const BoxConstraints(minWidth: 100),
-                    child:
-                        Text("${translate('Key')}:").marginOnly(bottom: 16.0)),
-                const SizedBox(
-                  width: 24.0,
-                ),
-                Expanded(
-                  child: TextField(
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                    ),
-                    controller: keyController,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(
-              height: 4.0,
-            ),
-            Offstage(
-                offstage: !isInProgress, child: const LinearProgressIndicator())
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(onPressed: close, child: Text(translate("Cancel"))),
-        TextButton(onPressed: submit, child: Text(translate("OK"))),
-      ],
-      onSubmit: submit,
-      onCancel: close,
-    );
-  });
-}
-
-void importServer() async {
-  Future<void> importServerShow(String content) async {
-    gFFI.dialogManager.show((setState, close) {
-      return CustomAlertDialog(
-        title: Text(content),
-        content: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 500),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(
-                height: 4.0,
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: close, child: Text(translate("OK"))),
-        ],
-        onCancel: close,
-      );
-    });
-  }
-
-  Future<bool> submit(
-      String idServer, String relayServer, String apiServer, String key) async {
-    Map<String, dynamic> oldOptions = jsonDecode(await bind.mainGetOptions());
-    var idServerMsg = "";
-    var relayServerMsg = "";
-    if (idServer.isNotEmpty) {
-      idServerMsg =
-          translate(await bind.mainTestIfValidServer(server: idServer));
-      if (idServerMsg.isEmpty) {
-        oldOptions['custom-rendezvous-server'] = idServer;
-      } else {
-        debugPrint('ID Server invalid return');
-        return false;
-      }
-    } else {
-      oldOptions['custom-rendezvous-server'] = "";
-    }
-
-    if (relayServer.isNotEmpty) {
-      relayServerMsg =
-          translate(await bind.mainTestIfValidServer(server: relayServer));
-      if (relayServerMsg.isEmpty) {
-        oldOptions['relay-server'] = relayServer;
-      } else {
-        debugPrint('Relay Server invalid return');
-        return false;
-      }
-    } else {
-      oldOptions['relay-server'] = "";
-    }
-
-    if (apiServer.isNotEmpty) {
-      if (apiServer.startsWith('http://') || apiServer.startsWith("https://")) {
-        oldOptions['api-server'] = apiServer;
-        return false;
-      } else {
-        debugPrint('invalid_http');
-        return false;
-      }
-    } else {
-      oldOptions['api-server'] = "";
-    }
-    // ok
-    oldOptions['key'] = key;
-    await bind.mainSetOptions(json: jsonEncode(oldOptions));
-    debugPrint("set ID/Realy Server Ok");
-    return true;
-  }
-
-  Clipboard.getData(Clipboard.kTextPlain).then((value) {
-    TextEditingController mytext = TextEditingController();
-    String? aNullableString = "";
-    aNullableString = value?.text;
-    mytext.text = aNullableString.toString();
-    if (mytext.text.isNotEmpty) {
-      debugPrint('Clipboard is not empty');
-      try {
-        Map<String, dynamic> config = jsonDecode(mytext.text);
-        if (config.containsKey('IdServer') &&
-            config.containsKey('RelayServer')) {
-          debugPrint('IdServer:    ${config['IdServer']}');
-          debugPrint('RelayServer: ${config['RelayServer']}');
-          debugPrint('ApiServer:   ${config['ApiServer']}');
-          debugPrint('Key:         ${config['Key']}');
-          Future<bool> success = submit(config['IdServer'],
-              config['RelayServer'], config['ApiServer'], config['Key']);
-          success.then((value) {
-            if (value) {
-              importServerShow(
-                  translate('Import server configuration successfully'));
-            } else {
-              importServerShow(translate('Invalid server configuration'));
-            }
-          });
-        } else {
-          debugPrint('invalid config info');
-          importServerShow(translate("Invalid server configuration"));
-        }
-      } catch (e) {
-        debugPrint('invalid config info');
-        importServerShow(translate("Invalid server configuration"));
-      }
-    } else {
-      debugPrint('Clipboard is empty');
-      importServerShow(translate("Clipboard is empty"));
-    }
-  });
-}
 
 void changeSocks5Proxy() async {
   var socks = await bind.mainGetSocks();
