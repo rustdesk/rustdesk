@@ -47,16 +47,18 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   std::vector<std::string> rust_args(c_args, c_args + args_len);
   free_c_args(c_args, args_len);
 
-   // uni links dispatch
-  HWND hwnd = ::FindWindow(L"FLUTTER_RUNNER_WIN32_WINDOW", L"rustdesk");
-  if (hwnd != NULL) {
-    DispatchToUniLinksDesktop(hwnd);
+  // uni links dispatch
+  // only do uni links when dispatch a rustdesk links
+  if (!rust_args.empty() && rust_args.front().compare("rustdesk://") == 0) {
+     HWND hwnd = ::FindWindow(L"FLUTTER_RUNNER_WIN32_WINDOW", L"rustdesk");
+    if (hwnd != NULL) {
+      DispatchToUniLinksDesktop(hwnd);
 
-    ::ShowWindow(hwnd, SW_NORMAL);
-    ::SetForegroundWindow(hwnd);
-    return EXIT_FAILURE;
+      ::ShowWindow(hwnd, SW_NORMAL);
+      ::SetForegroundWindow(hwnd);
+      return EXIT_FAILURE;
+    }
   }
-
   // Attach to console when present (e.g., 'flutter run') or create a
   // new console when running with a debugger.
   if (!::AttachConsole(ATTACH_PARENT_PROCESS) && ::IsDebuggerPresent())
