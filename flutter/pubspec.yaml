@@ -98,6 +98,7 @@ dependencies:
     uni_links: ^0.5.1
     uni_links_desktop: ^0.1.3
     path: ^1.8.1
+    auto_size_text: ^3.0.0
 
 dev_dependencies:
     icons_launcher: ^2.0.4
