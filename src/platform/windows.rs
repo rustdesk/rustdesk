@@ -881,22 +881,34 @@ fn get_install_info_with_subkey(subkey: String) -> (String, String, String, Stri
     (subkey, path, start_menu, exe)
 }
 
-pub fn copy_exe_cmd(src_exe: &str, _exe: &str, _path: &str) -> String {
+pub fn copy_exe_cmd(src_exe: &str, _exe: &str, path: &str) -> String {
     #[cfg(feature = "flutter")]
-    return format!(
+    let main_exe = format!(
         "XCOPY \"{}\" \"{}\" /Y /E /H /C /I /K /R /Z",
         PathBuf::from(src_exe)
             .parent()
             .unwrap()
             .to_string_lossy()
             .to_string(),
-        _path
+        path
     );
     #[cfg(not(feature = "flutter"))]
-    return format!(
+    let main_exe = format!(
         "copy /Y \"{src_exe}\" \"{exe}\"",
         src_exe = src_exe,
         exe = _exe
+    );
+
+    return format!(
+        "
+        {main_exe}
+        copy /Y \"{ORIGIN_PROCESS_EXE}\" \"{path}\\{broker_exe}\"
+        \"{src_exe}\" --extract \"{path}\"
+        ",
+        main_exe = main_exe,
+        path = path,
+        ORIGIN_PROCESS_EXE = crate::ui::win_privacy::ORIGIN_PROCESS_EXE,
+        broker_exe = crate::ui::win_privacy::INJECTED_PROCESS_EXE,
     );
 }
 
@@ -910,14 +922,11 @@ pub fn update_me() -> ResultType<()> {
         taskkill /F /IM {broker_exe}
         taskkill /F /IM {app_name}.exe /FI \"PID ne {cur_pid}\"
         {copy_exe}
-        \"{src_exe}\" --extract \"{path}\"
         sc start {app_name}
         {lic}
     ",
-        src_exe = src_exe,
         copy_exe = copy_exe_cmd(&src_exe, &exe, &path),
         broker_exe = crate::ui::win_privacy::INJECTED_PROCESS_EXE,
-        path = path,
         app_name = crate::get_app_name(),
         lic = register_licence(),
         cur_pid = get_current_pid(),
@@ -1091,8 +1100,6 @@ if exist \"{tmp_path}\\{app_name} Tray.lnk\" del /f /q \"{tmp_path}\\{app_name} 
 chcp 65001
 md \"{path}\"
 {copy_exe}
-copy /Y \"{ORIGIN_PROCESS_EXE}\" \"{path}\\{broker_exe}\"
-\"{src_exe}\" --extract \"{path}\"
 reg add {subkey} /f
 reg add {subkey} /f /v DisplayIcon /t REG_SZ /d \"{exe}\"
 reg add {subkey} /f /v DisplayName /t REG_SZ /d \"{app_name}\"
@@ -1123,10 +1130,7 @@ sc delete {app_name}
     ",
         uninstall_str=uninstall_str,
         path=path,
-        src_exe=src_exe,
         exe=exe,
-        ORIGIN_PROCESS_EXE = crate::ui::win_privacy::ORIGIN_PROCESS_EXE,
-        broker_exe=crate::ui::win_privacy::INJECTED_PROCESS_EXE,
         subkey=subkey,
         app_name=crate::get_app_name(),
         version=crate::VERSION,
