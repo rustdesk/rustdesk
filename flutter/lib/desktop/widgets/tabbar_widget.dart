@@ -171,6 +171,7 @@ class DesktopTabController {
 
 class TabThemeConf {
   double iconSize;
+
   TabThemeConf({required this.iconSize});
 }
 
@@ -199,6 +200,7 @@ class DesktopTab extends StatelessWidget {
   final Color? unSelectedTabBackgroundColor;
 
   final DesktopTabController controller;
+
   Rx<DesktopTabState> get state => controller.state;
   final isMaximized = false.obs;
   final _scrollDebounce = Debouncer(delay: Duration(milliseconds: 50));
@@ -606,7 +608,8 @@ Future<bool> closeConfirmDialog() async {
                 setState(() => confirm = v);
               },
             )
-          ]), // confirm checkbox
+          ]),
+      // confirm checkbox
       actions: [
         TextButton(onPressed: close, child: Text(translate("Cancel"))),
         ElevatedButton(onPressed: submit, child: Text(translate("OK"))),
@@ -864,13 +867,14 @@ class _CloseButton extends StatelessWidget {
   }
 }
 
-class ActionIcon extends StatelessWidget {
+class ActionIcon extends StatefulWidget {
   final String? message;
   final IconData icon;
   final Function() onTap;
   final bool isClose;
   final double iconSize;
   final double boxSize;
+
   const ActionIcon(
       {Key? key,
       this.message,
@@ -882,30 +886,44 @@ class ActionIcon extends StatelessWidget {
       : super(key: key);
 
   @override
+  State<ActionIcon> createState() => _ActionIconState();
+}
+
+class _ActionIconState extends State<ActionIcon> {
+  var hover = false.obs;
+
+  @override
+  void initState() {
+    super.initState();
+    hover.value = false;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    RxBool hover = false.obs;
-    return Obx(() => Tooltip(
-          message: message != null ? translate(message!) : "",
-          waitDuration: const Duration(seconds: 1),
-          child: InkWell(
-            hoverColor: isClose
-                ? const Color.fromARGB(255, 196, 43, 28)
-                : MyTheme.tabbar(context).hoverColor,
-            onHover: (value) => hover.value = value,
-            onTap: onTap,
-            child: SizedBox(
-              height: boxSize,
-              width: boxSize,
-              child: Icon(
-                icon,
-                color: hover.value && isClose
-                    ? Colors.white
-                    : MyTheme.tabbar(context).unSelectedIconColor,
-                size: iconSize,
-              ),
+    return Tooltip(
+      message: widget.message != null ? translate(widget.message!) : "",
+      waitDuration: const Duration(seconds: 1),
+      child: Obx(
+        () => InkWell(
+          hoverColor: widget.isClose
+              ? const Color.fromARGB(255, 196, 43, 28)
+              : MyTheme.tabbar(context).hoverColor,
+          onHover: (value) => hover.value = value,
+          onTap: widget.onTap,
+          child: SizedBox(
+            height: widget.boxSize,
+            width: widget.boxSize,
+            child: Icon(
+              widget.icon,
+              color: hover.value && widget.isClose
+                  ? Colors.white
+                  : MyTheme.tabbar(context).unSelectedIconColor,
+              size: widget.iconSize,
             ),
           ),
-        ));
+        ),
+      ),
+    );
   }
 }
 
