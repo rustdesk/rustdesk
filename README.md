@@ -21,9 +21,9 @@ RustDesk welcomes contribution from everyone. See [`docs/CONTRIBUTING.md`](docs/
 
 [**How does RustDesk work?**](https://github.com/rustdesk/rustdesk/wiki/How-does-RustDesk-work%3F)
 
-[**NIGHTLY BUILD**](https://github.com/rustdesk/rustdesk/releases)
+[**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
 
-https://github.com/rustdesk/rustdesk/releases/tag/nightly
+[**NIGHTLY BUILD**](https://github.com/rustdesk/rustdesk/releases/tag/nightly)
 
 [<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png"
     alt="Get it on F-Droid"
