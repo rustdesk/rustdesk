@@ -377,7 +377,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                         fontSize: 13),
                   ).marginOnly(bottom: 20),
                   Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    Button(
+                    FixedWidthButton(
+                      width: 150,
                       padding: 8,
                       isOutline: true,
                       text: translate(btnText),
