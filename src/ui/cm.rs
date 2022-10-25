@@ -2,11 +2,6 @@
 use crate::ipc::start_pa;
 use crate::ui_cm_interface::{start_ipc, ConnectionManager, InvokeUiCM};
 
-#[cfg(windows)]
-use clipboard::{
-    create_cliprdr_context, empty_clipboard, get_rx_clip_client, server_clip_file, set_conn_enabled,
-};
-
 use hbb_common::{allow_err, log};
 use sciter::{make_args, Element, Value, HELEMENT};
 use std::sync::Mutex;

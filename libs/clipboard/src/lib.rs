@@ -68,7 +68,7 @@ lazy_static::lazy_static! {
 }
 
 #[inline]
-pub async fn get_rx_cliprdr_client<'a>(
+pub fn get_rx_cliprdr_client<'a>(
     peer_id: &str,
 ) -> (i32, Arc<TokioMutex<UnboundedReceiver<ClipbaordFile>>>) {
     let mut lock = VEC_MSG_CHANNEL.write().unwrap();
@@ -92,7 +92,7 @@ pub async fn get_rx_cliprdr_client<'a>(
 }
 
 #[inline]
-pub async fn get_rx_cliprdr_server<'a>(
+pub fn get_rx_cliprdr_server<'a>(
     conn_id: i32,
 ) -> Arc<TokioMutex<UnboundedReceiver<ClipbaordFile>>> {
     let mut lock = VEC_MSG_CHANNEL.write().unwrap();

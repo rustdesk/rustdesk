@@ -22,7 +22,7 @@ pub(super) const APP_TYPE_DESKTOP_FILE_TRANSFER: &str = "file transfer";
 pub(super) const APP_TYPE_DESKTOP_PORT_FORWARD: &str = "port forward";
 
 lazy_static::lazy_static! {
-    pub static ref SESSIONS: RwLock<HashMap<String,Session<FlutterHandler>>> = Default::default();
+    pub static ref SESSIONS: RwLock<HashMap<String, Session<FlutterHandler>>> = Default::default();
     pub static ref GLOBAL_EVENT_STREAM: RwLock<HashMap<String, StreamSink<String>>> = Default::default(); // rust to dart event channel
 }
 
