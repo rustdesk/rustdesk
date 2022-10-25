@@ -515,7 +515,7 @@ class FileModel extends ChangeNotifier {
       items.items.forEach((from) async {
         _jobId++;
         await bind.sessionSendFiles(
-            id: await bind.mainGetLastRemoteId(),
+            id: '${parent.target?.id}',
             actId: _jobId,
             path: from.path,
             to: PathUtil.join(toPath, from.name, isWindows),
