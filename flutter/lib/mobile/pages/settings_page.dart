@@ -36,6 +36,8 @@ var _enableAbr = false;
 var _denyLANDiscovery = false;
 var _onlyWhiteList = false;
 var _enableDirectIPAccess = false;
+var _enableRecordSession = false;
+var _autoRecordIncomingSession = false;
 var _localIP = "";
 var _directAccessPort = "";
 
@@ -76,6 +78,21 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
       if (enableDirectIPAccess != _enableDirectIPAccess) {
         update = true;
         _enableDirectIPAccess = enableDirectIPAccess;
+      }
+
+      final enableRecordSession = option2bool('enable-record-session',
+          await bind.mainGetOption(key: 'enable-record-session'));
+      if (enableRecordSession != _enableRecordSession) {
+        update = true;
+        _enableRecordSession = enableRecordSession;
+      }
+
+      final autoRecordIncomingSession = option2bool(
+          'allow-auto-record-incoming',
+          await bind.mainGetOption(key: 'allow-auto-record-incoming'));
+      if (autoRecordIncomingSession != _autoRecordIncomingSession) {
+        update = true;
+        _autoRecordIncomingSession = autoRecordIncomingSession;
       }
 
       final localIP = await bind.mainGetOption(key: 'local-ip-addr');
@@ -175,6 +192,19 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
           final newValue = await bind.mainGetOption(key: "enable-abr") != "N";
           setState(() {
             _enableAbr = newValue;
+          });
+        },
+      ),
+      SettingsTile.switchTile(
+        title: Text(translate('Enable Recording Session')),
+        initialValue: _enableRecordSession,
+        onToggle: (v) async {
+          await bind.mainSetOption(
+              key: "enable-record-session", value: v ? "" : "N");
+          final newValue =
+              await bind.mainGetOption(key: "enable-record-session") != "N";
+          setState(() {
+            _enableRecordSession = newValue;
           });
         },
       ),
@@ -299,6 +329,33 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             },
           )
         ]),
+        SettingsSection(
+          title: Text(translate("Recording")),
+          tiles: [
+            SettingsTile.switchTile(
+              title: Text(translate('Automatically record incoming sessions')),
+              leading: Icon(Icons.videocam),
+              description: FutureBuilder(
+                  builder: (ctx, data) => Offstage(
+                      offstage: !data.hasData,
+                      child: Text("${translate("Directory")}: ${data.data}")),
+                  future: bind.mainDefaultVideoSaveDirectory()),
+              initialValue: _autoRecordIncomingSession,
+              onToggle: (v) async {
+                await bind.mainSetOption(
+                    key: "allow-auto-record-incoming",
+                    value: bool2option("allow-auto-record-incoming", v));
+                final newValue = option2bool(
+                    'allow-auto-record-incoming',
+                    await bind.mainGetOption(
+                        key: 'allow-auto-record-incoming'));
+                setState(() {
+                  _autoRecordIncomingSession = newValue;
+                });
+              },
+            ),
+          ],
+        ),
         SettingsSection(
           title: Text(translate("Share Screen")),
           tiles: shareScreenTiles,
