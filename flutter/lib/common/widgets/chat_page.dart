@@ -4,7 +4,7 @@ import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:provider/provider.dart';
 
-import 'home_page.dart';
+import '../../mobile/pages/home_page.dart';
 
 class ChatPage extends StatelessWidget implements PageShape {
   late final ChatModel chatModel;
@@ -94,6 +94,8 @@ class ChatPage extends StatelessWidget implements PageShape {
                       messageOptions: MessageOptions(
                           showOtherUsersAvatar: false,
                           showTime: true,
+                          currentUserTextColor: Colors.white,
+                          textColor: Colors.white,
                           maxWidth: constraints.maxWidth * 0.7,
                           messageDecorationBuilder: (_, __, ___) =>
                               defaultMessageDecoration(

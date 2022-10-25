@@ -3,9 +3,9 @@ import 'package:flutter_hbb/common.dart';
 import 'package:provider/provider.dart';
 
 import '../../desktop/widgets/tabbar_widget.dart';
-import '../../mobile/pages/chat_page.dart';
 import '../../models/chat_model.dart';
 import '../../models/model.dart';
+import 'chat_page.dart';
 
 class DraggableChatWindow extends StatelessWidget {
   const DraggableChatWindow(

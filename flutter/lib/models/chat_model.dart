@@ -108,6 +108,7 @@ class ChatModel with ChangeNotifier {
                   hideChatWindowOverlay();
                 }
               },
+              backgroundColor: Theme.of(context).colorScheme.primary,
               child: Icon(Icons.message)));
     });
     overlayState.insert(overlay);

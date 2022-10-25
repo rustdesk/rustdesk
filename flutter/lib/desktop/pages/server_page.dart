@@ -5,7 +5,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
-import 'package:flutter_hbb/mobile/pages/chat_page.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
@@ -13,6 +12,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../common.dart';
+import '../../common/widgets/chat_page.dart';
 import '../../models/platform_model.dart';
 import '../../models/server_model.dart';
 
