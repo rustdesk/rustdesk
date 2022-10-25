@@ -582,12 +582,34 @@ class _RemotePageState extends State<RemotePage> {
             value: 'block-input'));
       }
     }
-    if (gFFI.ffiModel.permissions["restart"] != false &&
+    if (perms["restart"] != false &&
         (pi.platform == "Linux" ||
             pi.platform == "Windows" ||
             pi.platform == "Mac OS")) {
       more.add(PopupMenuItem<String>(
           child: Text(translate('Restart Remote Device')), value: 'restart'));
+    }
+    // Currently only support VP9
+    if (gFFI.recordingModel.start ||
+        (perms["recording"] != false &&
+            gFFI.qualityMonitorModel.data.codecFormat == "VP9")) {
+      more.add(PopupMenuItem<String>(
+          child: Row(
+            children: [
+              Text(translate(gFFI.recordingModel.start
+                  ? 'Stop session recording'
+                  : 'Start session recording')),
+              Padding(
+                padding: EdgeInsets.only(left: 12),
+                child: Icon(
+                    gFFI.recordingModel.start
+                        ? Icons.pause_circle_filled
+                        : Icons.videocam_outlined,
+                    color: MyTheme.accent),
+              )
+            ],
+          ),
+          value: 'record'));
     }
     () async {
       var value = await showMenu(
@@ -630,6 +652,8 @@ class _RemotePageState extends State<RemotePage> {
         gFFI.cursorModel.reset();
       } else if (value == 'restart') {
         showRestartRemoteDevice(pi, widget.id, gFFI.dialogManager);
+      } else if (value == 'record') {
+        gFFI.recordingModel.toggle();
       }
     }();
   }

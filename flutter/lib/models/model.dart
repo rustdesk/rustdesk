@@ -231,7 +231,8 @@ class FfiModel with ChangeNotifier {
     } else if (type == 'input-password') {
       enterPasswordDialog(id, dialogManager);
     } else if (type == 'restarting') {
-      showMsgBox(id, type, title, text, link, false, dialogManager, hasCancel: false);
+      showMsgBox(id, type, title, text, link, false, dialogManager,
+          hasCancel: false);
     } else {
       var hasRetry = evt['hasRetry'] == 'true';
       showMsgBox(id, type, title, text, link, hasRetry, dialogManager);
@@ -1003,16 +1004,16 @@ class RecordingModel with ChangeNotifier {
   get start => _start;
 
   onSwitchDisplay() {
-    if (!isDesktop || !_start) return;
+    if (isIOS || !_start) return;
     var id = parent.target?.id;
     int? width = parent.target?.canvasModel.getDisplayWidth();
-    int? height = parent.target?.canvasModel.getDisplayWidth();
+    int? height = parent.target?.canvasModel.getDisplayHeight();
     if (id == null || width == null || height == null) return;
     bind.sessionRecordScreen(id: id, start: true, width: width, height: height);
   }
 
   toggle() {
-    if (!isDesktop) return;
+    if (isIOS) return;
     var id = parent.target?.id;
     if (id == null) return;
     _start = !_start;
@@ -1025,7 +1026,7 @@ class RecordingModel with ChangeNotifier {
   }
 
   onClose() {
-    if (!isDesktop) return;
+    if (isIOS) return;
     var id = parent.target?.id;
     if (id == null) return;
     _start = false;
