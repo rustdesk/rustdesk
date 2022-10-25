@@ -193,6 +193,7 @@ struct _CliprdrDataObject
 	ULONG m_nStreams;
 	IStream **m_pStream;
 	void *m_pData;
+	DWORD m_processID;
 	UINT32 m_connID;
 };
 typedef struct _CliprdrDataObject CliprdrDataObject;
@@ -246,7 +247,7 @@ BOOL wf_cliprdr_init(wfClipboard *clipboard, CliprdrClientContext *cliprdr);
 BOOL wf_cliprdr_uninit(wfClipboard *clipboard, CliprdrClientContext *cliprdr);
 BOOL wf_do_empty_cliprdr(wfClipboard *clipboard);
 
-static BOOL wf_create_file_obj(UINT32 connID, wfClipboard *cliprdrrdr, IDataObject **ppDataObject);
+static BOOL wf_create_file_obj(UINT32 *connID, wfClipboard *clipboard, IDataObject **ppDataObject);
 static void wf_destroy_file_obj(IDataObject *instance);
 static UINT32 get_remote_format_id(wfClipboard *clipboard, UINT32 local_format);
 static UINT cliprdr_send_data_request(UINT32 connID, wfClipboard *clipboard, UINT32 format);
@@ -673,6 +674,12 @@ static HRESULT STDMETHODCALLTYPE CliprdrDataObject_GetData(IDataObject *This, FO
 	if (!pFormatEtc || !pMedium || !instance)
 		return E_INVALIDARG;
 
+	// Not the same process id
+	if (instance->m_processID != GetCurrentProcessId())
+	{
+		return E_INVALIDARG;
+	}
+
 	clipboard = (wfClipboard *)instance->m_pData;
 	if (!clipboard->context->CheckEnabled(instance->m_connID))
 	{
@@ -892,6 +899,7 @@ static CliprdrDataObject *CliprdrDataObject_New(UINT32 connID, FORMATETC *fmtetc
 	instance->m_pData = data;
 	instance->m_nStreams = 0;
 	instance->m_pStream = NULL;
+	instance->m_processID = GetCurrentProcessId();
 	instance->m_connID = connID;
 
 	if (count > 0)
@@ -966,7 +974,7 @@ static BOOL wf_create_file_obj(UINT32 *connID, wfClipboard *clipboard, IDataObje
 	stgmeds[1].tymed = TYMED_ISTREAM;
 	stgmeds[1].pstm = NULL;
 	stgmeds[1].pUnkForRelease = NULL;
-	*ppDataObject = (IDataObject *)CliprdrDataObject_New(*connID, fmtetc, stgmeds, 2, clipboard);
+	*ppDataObject = (IDataObject *)CliprdrDataObject_New(*connID, *(connID + 1), fmtetc, stgmeds, 2, clipboard);
 	return (*ppDataObject) ? TRUE : FALSE;
 }
 
@@ -1669,7 +1677,8 @@ static LRESULT CALLBACK cliprdr_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM 
 		DEBUG_CLIPRDR("info: WM_RENDERFORMAT");
 
 		// https://docs.microsoft.com/en-us/windows/win32/dataxchg/wm-renderformat?redirectedfrom=MSDN
-		if (cliprdr_send_data_request(0, 0, clipboard, (UINT32)wParam) != 0)
+		// to-do: ensure usage of 0
+		if (cliprdr_send_data_request(0, clipboard, (UINT32)wParam) != 0)
 		{
 			DEBUG_CLIPRDR("error: cliprdr_send_data_request failed.");
 			break;
