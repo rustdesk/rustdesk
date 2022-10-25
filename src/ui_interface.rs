@@ -733,11 +733,21 @@ pub fn get_langs() -> String {
 #[inline]
 pub fn default_video_save_directory() -> String {
     let appname = crate::get_app_name();
+
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    if let Ok(home) = config::APP_HOME_DIR.read() {
+        let mut path = home.to_owned();
+        path.push_str("/RustDesk/ScreenRecord");
+        return path;
+    }
+
     if let Some(user) = directories_next::UserDirs::new() {
         if let Some(video_dir) = user.video_dir() {
             return video_dir.join(appname).to_string_lossy().to_string();
         }
     }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if let Some(home) = platform::get_active_user_home() {
         let name = if cfg!(target_os = "macos") {
             "Movies"
@@ -746,6 +756,7 @@ pub fn default_video_save_directory() -> String {
         };
         return home.join(name).join(appname).to_string_lossy().to_string();
     }
+
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             return dir.join("videos").to_string_lossy().to_string();

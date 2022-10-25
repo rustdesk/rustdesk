@@ -413,7 +413,7 @@ pub async fn start_listen<T: InvokeUiCM>(
             _ => {}
         }
     }
-    cm.remove_connection(current_id);
+    cm.remove_connection(current_id, true);
 }
 
 async fn handle_fs(fs: ipc::FS, write_jobs: &mut Vec<fs::TransferJob>, tx: &UnboundedSender<Data>) {

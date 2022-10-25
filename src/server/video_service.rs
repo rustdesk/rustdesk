@@ -449,7 +449,7 @@ fn run(sp: GenericService) -> ResultType<()> {
     #[cfg(windows)]
     log::info!("gdi: {}", c.is_gdi());
     let codec_name = Encoder::current_hw_encoder_name();
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(target_os = "ios"))]
     let recorder = if !Config::get_option("allow-auto-record-incoming").is_empty() {
         Recorder::new(RecorderContext {
             id: "local".to_owned(),
@@ -463,7 +463,7 @@ fn run(sp: GenericService) -> ResultType<()> {
     } else {
         Default::default()
     };
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(target_os = "ios")]
     let recorder: Arc<Mutex<Option<Recorder>>> = Default::default();
     #[cfg(windows)]
     start_uac_elevation_check();
@@ -674,7 +674,7 @@ fn handle_one_frame(
 
     let mut send_conn_ids: HashSet<i32> = Default::default();
     if let Ok(msg) = encoder.encode_to_message(frame, ms) {
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(not(target_os = "ios"))]
         recorder
             .lock()
             .unwrap()
