@@ -3,6 +3,15 @@ use hbb_common::message_proto::*;
 
 pub fn clip_2_msg(clip: ClipbaordFile) -> Message {
     match clip {
+        ClipbaordFile::MonitorReady => Message {
+            union: Some(message::Union::Cliprdr(Cliprdr {
+                union: Some(cliprdr::Union::Ready(CliprdrMonitorReady {
+                    ..Default::default()
+                })),
+                ..Default::default()
+            })),
+            ..Default::default()
+        },
         ClipbaordFile::FormatList { format_list } => {
             let mut formats: Vec<CliprdrFormat> = Vec::new();
             for v in format_list.iter() {
@@ -116,6 +125,7 @@ pub fn clip_2_msg(clip: ClipbaordFile) -> Message {
 
 pub fn msg_2_clip(msg: Cliprdr) -> Option<ClipbaordFile> {
     match msg.union {
+        Some(cliprdr::Union::Ready(_)) => Some(ClipbaordFile::MonitorReady),
         Some(cliprdr::Union::FormatList(data)) => {
             let mut format_list: Vec<(i32, String)> = Vec::new();
             for v in data.formats.iter() {

@@ -20,6 +20,7 @@ pub mod cliprdr;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "t", content = "c")]
 pub enum ClipbaordFile {
+    MonitorReady,
     FormatList {
         format_list: Vec<(i32, String)>,
     },
@@ -152,6 +153,12 @@ pub fn server_clip_file(
     msg: ClipbaordFile,
 ) -> u32 {
     match msg {
+        ClipbaordFile::MonitorReady => {
+            log::debug!("server_monitor_ready called");
+            let ret = server_monitor_ready(context, conn_id);
+            log::debug!("server_monitor_ready called, return {}", ret);
+            ret
+        }
         ClipbaordFile::FormatList { format_list } => {
             log::debug!("server_format_list called");
             let ret = server_format_list(context, conn_id, format_list);
@@ -223,6 +230,19 @@ pub fn server_clip_file(
             log::debug!("server_file_contents_response called, return {}", ret);
             ret
         }
+    }
+}
+
+pub fn server_monitor_ready(context: &mut Box<CliprdrClientContext>, conn_id: i32) -> u32 {
+    unsafe {
+        let monitor_ready = CLIPRDR_MONITOR_READY {
+            connID: conn_id as UINT32,
+            msgType: 0 as UINT16,
+            msgFlags: 0 as UINT16,
+            dataLen: 0 as UINT32,
+        };
+        let ret = ((**context).MonitorReady.unwrap())(&mut (**context), &monitor_ready);
+        ret as u32
     }
 }
 
@@ -441,7 +461,7 @@ extern "C" fn client_format_list(
 ) -> UINT {
     log::debug!("client_format_list called");
 
-    // let conn_id;
+    let conn_id;
     let mut format_list: Vec<(i32, String)> = Vec::new();
     unsafe {
         let mut i = 0u32;
@@ -463,15 +483,19 @@ extern "C" fn client_format_list(
             // log::debug!("format list item {}: format id: {}, format name: {}", i, format_data.formatId, &format_name);
             i += 1;
         }
-        // conn_id = (*clip_format_list).connID as i32;
+        conn_id = (*clip_format_list).connID as i32;
     }
     let data = ClipbaordFile::FormatList { format_list };
     // no need to handle result here
-    VEC_MSG_CHANNEL
-        .read()
-        .unwrap()
-        .iter()
-        .for_each(|msg_channel| allow_err!(msg_channel.sender.send(data.clone())));
+    if conn_id == 0 {
+        VEC_MSG_CHANNEL
+            .read()
+            .unwrap()
+            .iter()
+            .for_each(|msg_channel| allow_err!(msg_channel.sender.send(data.clone())));
+    } else {
+        send_data(conn_id, data);
+    }
 
     0
 }

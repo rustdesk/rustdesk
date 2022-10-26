@@ -1348,7 +1348,7 @@ static BOOL cliprdr_GetUpdatedClipboardFormats(wfClipboard *clipboard, PUINT lpu
 	return TRUE;
 }
 
-static UINT cliprdr_send_format_list(wfClipboard *clipboard)
+static UINT cliprdr_send_format_list(wfClipboard *clipboard, UINT32 connID)
 {
 	UINT rc;
 	int count = 0;
@@ -1423,7 +1423,7 @@ static UINT cliprdr_send_format_list(wfClipboard *clipboard)
 		}
 	}
 
-	formatList.connID = 0;
+	formatList.connID = connID;
 	formatList.numFormats = numFormats;
 	formatList.formats = formats;
 	formatList.msgType = CB_FORMAT_LIST;
@@ -1653,7 +1653,7 @@ static LRESULT CALLBACK cliprdr_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM 
 					clipboard->hmem = NULL;
 				}
 
-				cliprdr_send_format_list(clipboard);
+				cliprdr_send_format_list(clipboard, 0);
 			}
 		}
 
@@ -1704,7 +1704,7 @@ static LRESULT CALLBACK cliprdr_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM 
 			if ((GetClipboardOwner() != clipboard->hwnd) &&
 				(S_FALSE == OleIsCurrentClipboard(clipboard->data_obj)))
 			{
-				cliprdr_send_format_list(clipboard);
+				cliprdr_send_format_list(clipboard, 0);
 			}
 
 			SendMessage(clipboard->hWndNextViewer, Msg, wParam, lParam);
@@ -2137,8 +2137,13 @@ static UINT wf_cliprdr_send_client_capabilities(wfClipboard *clipboard)
 	CLIPRDR_CAPABILITIES capabilities;
 	CLIPRDR_GENERAL_CAPABILITY_SET generalCapabilitySet;
 
-	if (!clipboard || !clipboard->context || !clipboard->context->ClientCapabilities)
+	if (!clipboard || !clipboard->context)
 		return ERROR_INTERNAL_ERROR;
+
+	// Ignore ClientCapabilities for now
+	if (!clipboard->context->ClientCapabilities) {
+		return CHANNEL_RC_OK;
+	}
 
 	capabilities.connID = 0;
 	capabilities.cCapabilitiesSets = 1;
@@ -2171,7 +2176,7 @@ static UINT wf_cliprdr_monitor_ready(CliprdrClientContext *context,
 	if (rc != CHANNEL_RC_OK)
 		return rc;
 
-	return cliprdr_send_format_list(clipboard);
+	return cliprdr_send_format_list(clipboard, monitorReady->connID);
 }
 
 /**

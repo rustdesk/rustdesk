@@ -22,6 +22,7 @@ pub(super) const APP_TYPE_DESKTOP_FILE_TRANSFER: &str = "file transfer";
 pub(super) const APP_TYPE_DESKTOP_PORT_FORWARD: &str = "port forward";
 
 lazy_static::lazy_static! {
+    static ref CUR_SESSION_ID: RwLock<String> = Default::default();
     pub static ref SESSIONS: RwLock<HashMap<String, Session<FlutterHandler>>> = Default::default();
     pub static ref GLOBAL_EVENT_STREAM: RwLock<HashMap<String, StreamSink<String>>> = Default::default(); // rust to dart event channel
 }
@@ -563,4 +564,14 @@ pub fn make_fd_flutter(id: i32, entries: &Vec<FileEntry>, only_count: bool) -> S
     }
     m.insert("total_size".into(), json!(n as f64));
     serde_json::to_string(&m).unwrap_or("".into())
+}
+
+pub fn get_cur_session_id() -> String {
+    *CUR_SESSION_ID.read().unwrap()
+}
+
+pub fn set_cur_session_id(id: String) {
+    if get_cur_session_id() != id {
+        *CUR_SESSION_ID.write().unwrap() = id;
+    }
 }
