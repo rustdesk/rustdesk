@@ -220,7 +220,7 @@ pub fn get_clients_length() -> usize {
 #[derive(Debug)]
 pub enum ClipboardFileData {
     #[cfg(windows)]
-    Clip(ipc::ClipbaordFile),
+    Clip((i32, ipc::ClipbaordFile)),
     Enable((i32, bool)),
 }
 
@@ -267,30 +267,10 @@ async fn cm_ipc_task_wait_login<T: InvokeUiCM>(
     (stream, cm, ret)
 }
 
-#[cfg(windows)]
-fn create_cliprdr_context_(enabled: bool) -> Option<Box<clipboard::cliprdr::CliprdrClientContext>> {
-    if enabled {
-        match clipboard::create_cliprdr_context(true, false) {
-            Ok(context) => {
-                log::info!("clipboard context for file transfer created.");
-                Some(context)
-            }
-            Err(err) => {
-                log::error!(
-                    "Create clipboard context for file transfer: {}",
-                    err.to_string()
-                );
-                None
-            }
-        }
-    } else {
-        None
-    }
-}
-
 async fn cm_ipc_task_loop<T: InvokeUiCM>(
     mut stream: Connection,
     cm: ConnectionManager<T>,
+    tx_file: mpsc::UnboundedSender<ClipboardFileData>,
     tx: mpsc::UnboundedSender<Data>,
     mut rx: mpsc::UnboundedReceiver<Data>,
     mut conn_id: i32,
@@ -303,13 +283,13 @@ async fn cm_ipc_task_loop<T: InvokeUiCM>(
     let mut write_jobs: Vec<fs::TransferJob> = Vec::new();
     let mut close = true;
 
-    let (tx_file, _rx_file) = mpsc::unbounded_channel::<ClipboardFileData>();
-    #[cfg(windows)]
-    std::thread::spawn(move || {
-        start_clipboard_file(conn_id, _rx_file);
-    });
     #[cfg(windows)]
     allow_err!(tx_file.send(ClipboardFileData::Enable((conn_id, file_transfer_enabled))));
+
+    #[cfg(windows)]
+    let rx_clip_client1 = clipboard::get_rx_cliprdr_server(conn_id);
+    #[cfg(windows)]
+    let mut rx_clip_client = rx_clip_client1.lock().await;
 
     loop {
         tokio::select! {
@@ -347,7 +327,7 @@ async fn cm_ipc_task_loop<T: InvokeUiCM>(
                             }
                             #[cfg(windows)]
                             Data::ClipbaordFile(_clip) => {
-                                allow_err!(tx_file.send(ClipboardFileData::Clip(_clip)));
+                                allow_err!(tx_file.send(ClipboardFileData::Clip((conn_id, _clip))));
                             }
                             #[cfg(windows)]
                             Data::ClipboardFileEnabled(enabled) => {
@@ -373,6 +353,14 @@ async fn cm_ipc_task_loop<T: InvokeUiCM>(
                     break;
                 }
             }
+            clip_file = rx_clip_client.recv() => match clip_file {
+                Some(clip) => {
+                    allow_err!(tx.send(Data::ClipbaordFile(clip)));
+                }
+                None => {
+                    //
+                }
+            },
         }
     }
     if conn_id != conn_id_tmp {
@@ -380,11 +368,15 @@ async fn cm_ipc_task_loop<T: InvokeUiCM>(
     }
 }
 
-async fn cm_ipc_task<T: InvokeUiCM>(stream: Connection, cm: ConnectionManager<T>) {
+async fn cm_ipc_task<T: InvokeUiCM>(
+    stream: Connection,
+    cm: ConnectionManager<T>,
+    tx_file: mpsc::UnboundedSender<ClipboardFileData>,
+) {
     let (tx, rx) = mpsc::unbounded_channel::<Data>();
     let (stream, cm, wait_res) = cm_ipc_task_wait_login(stream, cm, tx.clone()).await;
     if let Some((conn_id, file_transfer_enabled)) = wait_res {
-        cm_ipc_task_loop(stream, cm, tx, rx, conn_id, file_transfer_enabled).await;
+        cm_ipc_task_loop(stream, cm, tx_file, tx, rx, conn_id, file_transfer_enabled).await;
     }
 }
 
@@ -393,6 +385,9 @@ async fn cm_ipc_task<T: InvokeUiCM>(stream: Connection, cm: ConnectionManager<T>
 pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
     #[cfg(windows)]
     let cm_clip = cm.clone();
+
+    let (tx_file, _rx_file) = mpsc::unbounded_channel::<ClipboardFileData>();
+    std::thread::spawn(move || start_clipboard_file(_rx_file));
 
     #[cfg(windows)]
     std::thread::spawn(move || {
@@ -415,7 +410,11 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
                 match result {
                     Ok(stream) => {
                         log::debug!("Got new connection");
-                        tokio::spawn(cm_ipc_task(Connection::new(stream), cm.clone()));
+                        tokio::spawn(cm_ipc_task(
+                            Connection::new(stream),
+                            cm.clone(),
+                            tx_file.clone(),
+                        ));
                     }
                     Err(err) => {
                         log::error!("Couldn't get cm client: {:?}", err);
@@ -718,29 +717,13 @@ fn send_raw(msg: Message, tx: &UnboundedSender<Data>) {
 
 #[cfg(windows)]
 #[tokio::main(flavor = "current_thread")]
-pub async fn start_clipboard_file(
-    conn_id: i32,
-    mut rx: mpsc::UnboundedReceiver<ClipboardFileData>,
-) {
+pub async fn start_clipboard_file(mut rx: mpsc::UnboundedReceiver<ClipboardFileData>) {
     let mut cliprdr_context = None;
-    let rx_clip_client1 = clipboard::get_rx_cliprdr_server(conn_id);
-    let mut rx_clip_client = rx_clip_client1.lock().await;
 
     loop {
         tokio::select! {
-            clip_file = rx_clip_client.recv() => match clip_file {
-                Some(clip) => {
-                    cmd_inner_send(
-                        conn_id,
-                        Data::ClipbaordFile(clip)
-                    );
-                }
-                None => {
-                    //
-                }
-            },
             server_msg = rx.recv() => match server_msg {
-                Some(ClipboardFileData::Clip(clip)) => {
+                Some(ClipboardFileData::Clip((conn_id, clip))) => {
                     if let Some(ctx) = cliprdr_context.as_mut() {
                         clipboard::server_clip_file(ctx, conn_id, clip);
                     }
@@ -772,20 +755,6 @@ pub async fn start_clipboard_file(
                     break
                 }
             }
-        }
-    }
-}
-
-#[cfg(windows)]
-fn cmd_inner_send(id: i32, data: Data) {
-    let lock = CLIENTS.read().unwrap();
-    if id != 0 {
-        if let Some(s) = lock.get(&id) {
-            allow_err!(s.tx.send(data));
-        }
-    } else {
-        for s in lock.values() {
-            allow_err!(s.tx.send(data.clone()));
         }
     }
 }

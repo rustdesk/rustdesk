@@ -22,12 +22,21 @@ use hbb_common::tokio::{
     sync::mpsc,
     time::{self, Duration, Instant, Interval},
 };
-use hbb_common::{allow_err, message_proto::*, sleep};
+use hbb_common::{
+    allow_err,
+    message_proto::{self, *},
+    sleep,
+};
 use hbb_common::{fs, log, Stream};
 use std::collections::HashMap;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+
+lazy_static::lazy_static! {
+    #[cfg(windows)]
+    static ref CLIPBOARD_FILE_CONTEXT: Mutex<u64> = Mutex::new(0);
+}
 
 pub struct Remote<T: InvokeUiSession> {
     handler: Session<T>,
@@ -43,12 +52,40 @@ pub struct Remote<T: InvokeUiSession> {
     last_update_jobs_status: (Instant, HashMap<i32, u64>),
     first_frame: bool,
     #[cfg(windows)]
-    clipboard_file_context: Option<Box<clipboard::cliprdr::CliprdrClientContext>>,
-    #[cfg(windows)]
     client_conn_id: i32, // used for clipboard
     data_count: Arc<AtomicUsize>,
     frame_count: Arc<AtomicUsize>,
     video_format: CodecFormat,
+}
+
+#[cfg(windows)]
+fn check_clipboard_file_context(enable_file_transfer: bool) {
+    let enabled = SERVER_FILE_TRANSFER_ENABLED.load(Ordering::SeqCst) && enable_file_transfer;
+    let mut lock = CLIPBOARD_FILE_CONTEXT.lock().unwrap();
+    if enabled {
+        if *lock == 0 {
+            match clipboard::create_cliprdr_context(true, false) {
+                Ok(context) => {
+                    log::info!("clipboard context for file transfer created.");
+                    *lock = Box::into_raw(context) as _;
+                }
+                Err(err) => {
+                    log::error!(
+                        "Create clipboard context for file transfer: {}",
+                        err.to_string()
+                    );
+                }
+            }
+        }
+    } else {
+        if *lock != 0 {
+            unsafe {
+                let _ = Box::from_raw(*lock as *mut clipboard::cliprdr::CliprdrClientContext);
+            }
+            log::info!("clipboard context for file transfer destroyed.");
+            *lock = 0;
+        }
+    }
 }
 
 impl<T: InvokeUiSession> Remote<T> {
@@ -73,8 +110,6 @@ impl<T: InvokeUiSession> Remote<T> {
             timer: time::interval(SEC30),
             last_update_jobs_status: (Instant::now(), Default::default()),
             first_frame: false,
-            #[cfg(windows)]
-            clipboard_file_context: None,
             #[cfg(windows)]
             client_conn_id: 0,
             data_count: Arc::new(AtomicUsize::new(0)),
@@ -789,13 +824,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 }
                 #[cfg(windows)]
                 Some(message::Union::Cliprdr(clip)) => {
-                    if !self.handler.lc.read().unwrap().disable_clipboard {
-                        if let Some(context) = &mut self.clipboard_file_context {
-                            if let Some(clip) = crate::clipboard_file::msg_2_clip(clip) {
-                                clipboard::server_clip_file(context, self.client_conn_id, clip);
-                            }
-                        }
-                    }
+                    self.handle_cliprdr_msg(clip);
                 }
                 Some(message::Union::FileResponse(fr)) => {
                     match fr.union {
@@ -1169,30 +1198,25 @@ impl<T: InvokeUiSession> Remote<T> {
         true
     }
 
-    fn check_clipboard_file_context(&mut self) {
+    fn check_clipboard_file_context(&self) {
         #[cfg(windows)]
         {
-            let enabled = SERVER_FILE_TRANSFER_ENABLED.load(Ordering::SeqCst)
-                && self.handler.lc.read().unwrap().enable_file_transfer;
-            if enabled == self.clipboard_file_context.is_none() {
-                self.clipboard_file_context = if enabled {
-                    match clipboard::create_cliprdr_context(true, false) {
-                        Ok(context) => {
-                            log::info!("clipboard context for file transfer created.");
-                            Some(context)
-                        }
-                        Err(err) => {
-                            log::error!(
-                                "Create clipboard context for file transfer: {}",
-                                err.to_string()
-                            );
-                            None
-                        }
+            check_clipboard_file_context(self.handler.lc.read().unwrap().enable_file_transfer);
+        }
+    }
+
+    fn handle_cliprdr_msg(&self, clip: message_proto::Cliprdr) {
+        if !self.handler.lc.read().unwrap().disable_clipboard {
+            let mut lock = CLIPBOARD_FILE_CONTEXT.lock().unwrap();
+            if *lock != 0 {
+                unsafe {
+                    let mut context =
+                        Box::from_raw(*lock as *mut clipboard::cliprdr::CliprdrClientContext);
+                    if let Some(clip) = crate::clipboard_file::msg_2_clip(clip) {
+                        clipboard::server_clip_file(&mut context, self.client_conn_id, clip);
                     }
-                } else {
-                    log::info!("clipboard context for file transfer destroyed.");
-                    None
-                };
+                    *lock = Box::into_raw(context) as _;
+                }
             }
         }
     }
