@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:wakelock/wakelock.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../common.dart';
 import '../common/formatter/id_formatter.dart';
@@ -36,6 +37,8 @@ class ServerModel with ChangeNotifier {
   final tabController = DesktopTabController(tabType: DesktopTabType.cm);
 
   final List<Client> _clients = [];
+
+  Timer? cmHiddenTimer;
 
   bool get isStart => _isStart;
 
@@ -353,13 +356,7 @@ class ServerModel with ChangeNotifier {
       for (var clientJson in clientsJson) {
         final client = Client.fromJson(clientJson);
         _clients.add(client);
-        tabController.add(
-            TabInfo(
-                key: client.id.toString(),
-                label: client.name,
-                closable: false,
-                page: Desktop.buildConnectionCard(client)),
-            authorized: client.authorized);
+        _addTab(client);
       }
       notifyListeners();
     } catch (e) {
@@ -384,13 +381,7 @@ class ServerModel with ChangeNotifier {
         }
         _clients.add(client);
       }
-      tabController.add(
-          TabInfo(
-              key: client.id.toString(),
-              label: client.name,
-              closable: false,
-              page: Desktop.buildConnectionCard(client)),
-          authorized: client.authorized);
+      _addTab(client);
       // remove disconnected
       final index_disconnected = _clients
           .indexWhere((c) => c.disconnected && c.peerId == client.peerId);
@@ -403,6 +394,23 @@ class ServerModel with ChangeNotifier {
       if (isAndroid && !client.authorized) showLoginDialog(client);
     } catch (e) {
       debugPrint("Failed to call loginRequest,error:$e");
+    }
+  }
+
+  void _addTab(Client client) {
+    tabController.add(TabInfo(
+        key: client.id.toString(),
+        label: client.name,
+        closable: false,
+        page: Desktop.buildConnectionCard(client)));
+    Future.delayed(Duration.zero, () async {
+      window_on_top(null);
+    });
+    if (client.authorized) {
+      cmHiddenTimer = Timer(const Duration(seconds: 3), () {
+        windowManager.minimize();
+        cmHiddenTimer = null;
+      });
     }
   }
 

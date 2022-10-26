@@ -73,7 +73,7 @@ class DesktopTabController {
 
   int get length => state.value.tabs.length;
 
-  void add(TabInfo tab, {bool authorized = false}) {
+  void add(TabInfo tab) {
     if (!isDesktop) return;
     final index = state.value.tabs.indexWhere((e) => e.key == tab.key);
     int toIndex;
@@ -86,16 +86,6 @@ class DesktopTabController {
       state.value.scrollController.itemCount = state.value.tabs.length;
       toIndex = state.value.tabs.length - 1;
       assert(toIndex >= 0);
-    }
-    if (tabType == DesktopTabType.cm) {
-      Future.delayed(Duration.zero, () async {
-        window_on_top(null);
-      });
-      if (authorized) {
-        Future.delayed(const Duration(seconds: 3), () {
-          windowManager.minimize();
-        });
-      }
     }
     try {
       jumpTo(toIndex);

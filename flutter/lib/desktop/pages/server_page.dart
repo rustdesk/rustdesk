@@ -107,6 +107,13 @@ class ConnectionManagerState extends State<ConnectionManager> {
   @override
   Widget build(BuildContext context) {
     final serverModel = Provider.of<ServerModel>(context);
+    final pointerHandler = serverModel.cmHiddenTimer != null
+        ? (PointerEvent e) {
+            serverModel.cmHiddenTimer!.cancel();
+            serverModel.cmHiddenTimer = null;
+            debugPrint("CM hidden timer has been canceled");
+          }
+        : null;
     return serverModel.clients.isEmpty
         ? Column(
             children: [
@@ -118,35 +125,38 @@ class ConnectionManagerState extends State<ConnectionManager> {
               ),
             ],
           )
-        : DesktopTab(
-            showTitle: false,
-            showMaximize: false,
-            showMinimize: true,
-            showClose: true,
-            controller: serverModel.tabController,
-            maxLabelWidth: 100,
-            tail: buildScrollJumper(),
-            selectedTabBackgroundColor:
-                Theme.of(context).hintColor.withOpacity(0.2),
-            tabBuilder: (key, icon, label, themeConf) {
-              return Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  icon,
-                  Tooltip(
-                      message: key,
-                      waitDuration: Duration(seconds: 1),
-                      child: label),
-                ],
-              );
-            },
-            pageViewBuilder: (pageView) => Row(children: [
-                  Expanded(child: pageView),
-                  Consumer<ChatModel>(
-                      builder: (_, model, child) => model.isShowChatPage
-                          ? Expanded(child: Scaffold(body: ChatPage()))
-                          : Offstage())
-                ]));
+        : Listener(
+            onPointerDown: pointerHandler,
+            onPointerMove: pointerHandler,
+            child: DesktopTab(
+                showTitle: false,
+                showMaximize: false,
+                showMinimize: true,
+                showClose: true,
+                controller: serverModel.tabController,
+                maxLabelWidth: 100,
+                tail: buildScrollJumper(),
+                selectedTabBackgroundColor:
+                    Theme.of(context).hintColor.withOpacity(0.2),
+                tabBuilder: (key, icon, label, themeConf) {
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      icon,
+                      Tooltip(
+                          message: key,
+                          waitDuration: Duration(seconds: 1),
+                          child: label),
+                    ],
+                  );
+                },
+                pageViewBuilder: (pageView) => Row(children: [
+                      Expanded(child: pageView),
+                      Consumer<ChatModel>(
+                          builder: (_, model, child) => model.isShowChatPage
+                              ? Expanded(child: Scaffold(body: ChatPage()))
+                              : Offstage())
+                    ])));
   }
 
   Widget buildTitleBar() {
