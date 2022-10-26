@@ -334,10 +334,10 @@ class _CmHeaderState extends State<_CmHeader>
         Offstage(
           offstage: !client.authorized || client.isFileTransfer,
           child: IconButton(
-            onPressed: () => checkClickTime(
-                client.id, () => gFFI.chatModel.toggleCMChatPage(client.id)),
-            icon: Icon(Icons.message_outlined),
-          ),
+              onPressed: () => checkClickTime(
+                  client.id, () => gFFI.chatModel.toggleCMChatPage(client.id)),
+              icon: Icon(Icons.message_outlined),
+              splashRadius: kDesktopIconButtonSplashRadius),
         )
       ],
     );

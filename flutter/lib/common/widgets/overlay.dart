@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:provider/provider.dart';
 
+import '../../consts.dart';
 import '../../desktop/widgets/tabbar_widget.dart';
 import '../../models/chat_model.dart';
 import '../../models/model.dart';
@@ -173,17 +174,17 @@ class DraggableMobileActions extends StatelessWidget {
                         IconButton(
                             color: Colors.white,
                             onPressed: onBackPressed,
-                            splashRadius: 20,
+                            splashRadius: kDesktopIconButtonSplashRadius,
                             icon: const Icon(Icons.arrow_back)),
                         IconButton(
                             color: Colors.white,
                             onPressed: onHomePressed,
-                            splashRadius: 20,
+                            splashRadius: kDesktopIconButtonSplashRadius,
                             icon: const Icon(Icons.home)),
                         IconButton(
                             color: Colors.white,
                             onPressed: onRecentPressed,
-                            splashRadius: 20,
+                            splashRadius: kDesktopIconButtonSplashRadius,
                             icon: const Icon(Icons.more_horiz)),
                         const VerticalDivider(
                           width: 0,
@@ -194,7 +195,7 @@ class DraggableMobileActions extends StatelessWidget {
                         IconButton(
                             color: Colors.white,
                             onPressed: onHidePressed,
-                            splashRadius: 20,
+                            splashRadius: kDesktopIconButtonSplashRadius,
                             icon: const Icon(Icons.keyboard_arrow_down)),
                       ],
                     ),
