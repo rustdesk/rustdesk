@@ -514,17 +514,17 @@ impl UI {
     }
 
     fn get_lan_peers(&self) -> String {
-        let peers = get_lan_peers()
-            .into_iter()
-            .map(|mut peer| {
-                (
-                    peer.remove("id").unwrap_or_default(),
-                    peer.remove("username").unwrap_or_default(),
-                    peer.remove("hostname").unwrap_or_default(),
-                    peer.remove("platform").unwrap_or_default(),
-                )
-            })
-            .collect::<Vec<(String, String, String, String)>>();
+        // let peers = get_lan_peers()
+        //     .into_iter()
+        //     .map(|mut peer| {
+        //         (
+        //             peer.remove("id").unwrap_or_default(),
+        //             peer.remove("username").unwrap_or_default(),
+        //             peer.remove("hostname").unwrap_or_default(),
+        //             peer.remove("platform").unwrap_or_default(),
+        //         )
+        //     })
+        //     .collect::<Vec<(String, String, String, String)>>();
         serde_json::to_string(&get_lan_peers()).unwrap_or_default()
     }
 

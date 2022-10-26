@@ -1,19 +1,24 @@
-use std::ops::{Deref, DerefMut};
+#[cfg(windows)]
+use std::sync::Arc;
 use std::{
     collections::HashMap,
     iter::FromIterator,
+    ops::{Deref, DerefMut},
     sync::{
         atomic::{AtomicI64, Ordering},
-        Arc, RwLock,
+        RwLock,
     },
 };
 
+#[cfg(windows)]
 use clipboard::empty_clipboard;
+#[cfg(windows)]
 use hbb_common::chrono::Duration;
 use serde_derive::Serialize;
 
-use crate::ipc::Data;
-use crate::ipc::{self, new_listener, Connection};
+use crate::ipc::{self, new_listener, Connection, Data};
+#[cfg(windows)]
+use hbb_common::tokio::sync::Mutex as TokioMutex;
 use hbb_common::{
     allow_err,
     config::Config,
@@ -24,10 +29,7 @@ use hbb_common::{
     protobuf::Message as _,
     tokio::{
         self,
-        sync::{
-            mpsc::{self, unbounded_channel, UnboundedSender},
-            Mutex as TokioMutex,
-        },
+        sync::mpsc::{self, unbounded_channel, UnboundedSender},
         task::spawn_blocking,
     },
 };
@@ -269,6 +271,10 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
             rx_clip1 = Arc::new(TokioMutex::new(rx_clip2));
             rx_clip = rx_clip1.lock().await;
         }
+        #[cfg(not(windows))]
+        {
+            (_tx_clip, rx_clip) = unbounded_channel::<i32>();
+        }
 
         loop {
             tokio::select! {
@@ -280,13 +286,13 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                         }
                         Ok(Some(data)) => {
                             match data {
-                                Data::Login{id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled, restart, recording} => {
+                                Data::Login{id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled: _file_transfer_enabled, restart, recording} => {
                                     log::debug!("conn_id: {}", id);
                                     self.cm.add_connection(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, self.tx.clone());
                                     self.conn_id = id;
                                     #[cfg(windows)]
                                     {
-                                        self.file_transfer_enabled = file_transfer_enabled;
+                                        self.file_transfer_enabled = _file_transfer_enabled;
                                     }
                                     break;
                                 }
@@ -301,7 +307,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                     log::info!("cm ipc connection disconnect");
                                     break;
                                 }
-                                Data::PrivacyModeState((id, _)) => {
+                                Data::PrivacyModeState(_) => {
                                     self.conn_id = conn_id_tmp;
                                     allow_err!(self.tx.send(data));
                                 }
@@ -343,9 +349,9 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                     }
                 }
                 clip_file = rx_clip.recv() => match clip_file {
-                    Some(clip) => {
+                    Some(_clip) => {
                         #[cfg(windows)]
-                        allow_err!(self.tx.send(Data::ClipbaordFile(clip)));
+                        allow_err!(self.tx.send(Data::ClipbaordFile(_clip)));
                     }
                     None => {
                         //
@@ -389,6 +395,7 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
     let cm_clip = cm.clone();
 
     let (tx_file, _rx_file) = mpsc::unbounded_channel::<ClipboardFileData>();
+    #[cfg(windows)]
     std::thread::spawn(move || start_clipboard_file(_rx_file));
 
     #[cfg(windows)]

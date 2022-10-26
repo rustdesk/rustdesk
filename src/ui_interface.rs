@@ -76,11 +76,11 @@ pub fn goto_install() {
 }
 
 #[inline]
-pub fn install_me(_options: String, _path: String, silent: bool, debug: bool) {
+pub fn install_me(_options: String, _path: String, _silent: bool, _debug: bool) {
     #[cfg(windows)]
     std::thread::spawn(move || {
         allow_err!(crate::platform::windows::install_me(
-            &_options, _path, silent, debug
+            &_options, _path, _silent, _debug
         ));
         std::process::exit(0);
     });

@@ -33,8 +33,8 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
+#[cfg(windows)]
 lazy_static::lazy_static! {
-    #[cfg(windows)]
     static ref CLIPBOARD_FILE_CONTEXT: Mutex<u64> = Mutex::new(0);
 }
 
@@ -1206,6 +1206,7 @@ impl<T: InvokeUiSession> Remote<T> {
         }
     }
 
+    #[cfg(windows)]
     fn handle_cliprdr_msg(&self, clip: message_proto::Cliprdr) {
         if !self.handler.lc.read().unwrap().disable_clipboard {
             let mut lock = CLIPBOARD_FILE_CONTEXT.lock().unwrap();
