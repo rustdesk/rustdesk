@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:get/get.dart';
 import 'package:wakelock/wakelock.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -402,6 +403,15 @@ class ServerModel with ChangeNotifier {
         key: client.id.toString(),
         label: client.name,
         closable: false,
+        onTap: () {
+          if (client.hasUnreadChatMessage.value) {
+            client.hasUnreadChatMessage.value = false;
+            final chatModel = parent.target!.chatModel;
+            if (!chatModel.isShowChatPage) {
+              chatModel.toggleCMChatPage(client.id);
+            }
+          }
+        },
         page: Desktop.buildConnectionCard(client)));
     Future.delayed(Duration.zero, () async {
       window_on_top(null);
@@ -538,6 +548,8 @@ class Client {
   bool recording = false;
   bool disconnected = false;
 
+  RxBool hasUnreadChatMessage = false.obs;
+
   Client(this.id, this.authorized, this.isFileTransfer, this.name, this.peerId,
       this.keyboard, this.clipboard, this.audio);
 
@@ -557,7 +569,7 @@ class Client {
   }
 
   Map<String, dynamic> toJson() {
-    final Map<String, dynamic> data = new Map<String, dynamic>();
+    final Map<String, dynamic> data = <String, dynamic>{};
     data['id'] = id;
     data['is_start'] = authorized;
     data['is_file_transfer'] = isFileTransfer;

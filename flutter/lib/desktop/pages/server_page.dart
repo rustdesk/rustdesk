@@ -139,14 +139,20 @@ class ConnectionManagerState extends State<ConnectionManager> {
                 selectedTabBackgroundColor:
                     Theme.of(context).hintColor.withOpacity(0.2),
                 tabBuilder: (key, icon, label, themeConf) {
+                  final client = serverModel.clients.firstWhereOrNull(
+                      (client) => client.id.toString() == key);
                   return Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      icon,
                       Tooltip(
                           message: key,
                           waitDuration: Duration(seconds: 1),
                           child: label),
+                      Obx(() => Offstage(
+                          offstage:
+                              !(client?.hasUnreadChatMessage.value ?? false),
+                          child:
+                              Icon(Icons.circle, color: Colors.red, size: 10)))
                     ],
                   );
                 },

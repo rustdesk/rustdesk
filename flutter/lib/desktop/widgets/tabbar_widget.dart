@@ -29,6 +29,7 @@ class TabInfo {
   final IconData? unselectedIcon;
   final bool closable;
   final VoidCallback? onTabCloseButton;
+  final VoidCallback? onTap;
   final Widget page;
 
   TabInfo(
@@ -38,6 +39,7 @@ class TabInfo {
       this.unselectedIcon,
       this.closable = true,
       this.onTabCloseButton,
+      this.onTap,
       required this.page});
 }
 
@@ -55,6 +57,8 @@ class DesktopTabState {
       ScrollPosController(itemCount: 0);
   final PageController pageController = PageController();
   int selected = 0;
+
+  TabInfo get selectedTabInfo => tabs[selected];
 
   DesktopTabState() {
     scrollController.itemCount = tabs.length;
@@ -173,7 +177,6 @@ typedef LabelGetter = Rx<String> Function(String key);
 int _lastClickTime = DateTime.now().millisecondsSinceEpoch;
 
 class DesktopTab extends StatelessWidget {
-  final Function(String)? onTabClose;
   final bool showTabBar;
   final bool showLogo;
   final bool showTitle;
@@ -201,7 +204,6 @@ class DesktopTab extends StatelessWidget {
   DesktopTab({
     Key? key,
     required this.controller,
-    this.onTabClose,
     this.showTabBar = true,
     this.showLogo = true,
     this.showTitle = true,
@@ -357,7 +359,6 @@ class DesktopTab extends StatelessWidget {
                             },
                             child: _ListView(
                                 controller: controller,
-                                onTabClose: onTabClose,
                                 tabBuilder: tabBuilder,
                                 labelGetter: labelGetter,
                                 maxLabelWidth: maxLabelWidth,
@@ -613,7 +614,6 @@ Future<bool> closeConfirmDialog() async {
 
 class _ListView extends StatelessWidget {
   final DesktopTabController controller;
-  final Function(String key)? onTabClose;
 
   final TabBuilder? tabBuilder;
   final LabelGetter? labelGetter;
@@ -625,7 +625,6 @@ class _ListView extends StatelessWidget {
 
   const _ListView(
       {required this.controller,
-      required this.onTabClose,
       this.tabBuilder,
       this.labelGetter,
       this.maxLabelWidth,
@@ -654,7 +653,9 @@ class _ListView extends StatelessWidget {
                 final index = e.key;
                 final tab = e.value;
                 return _Tab(
+                  key: ValueKey(tab.key),
                   index: index,
+                  tabInfoKey: tab.key,
                   label: labelGetter == null
                       ? Rx<String>(tab.label)
                       : labelGetter!(tab.label),
@@ -669,18 +670,11 @@ class _ListView extends StatelessWidget {
                       controller.remove(index);
                     }
                   },
-                  onSelected: () => controller.jumpTo(index),
-                  tabBuilder: tabBuilder == null
-                      ? null
-                      : (String key, Widget icon, Widget labelWidget,
-                          TabThemeConf themeConf) {
-                          return tabBuilder!(
-                            tab.label,
-                            icon,
-                            labelWidget,
-                            themeConf,
-                          );
-                        },
+                  onTap: () {
+                    controller.jumpTo(index);
+                    tab.onTap?.call();
+                  },
+                  tabBuilder: tabBuilder,
                   maxLabelWidth: maxLabelWidth,
                   selectedTabBackgroundColor: selectedTabBackgroundColor,
                   unSelectedTabBackgroundColor: unSelectedTabBackgroundColor,
@@ -691,13 +685,14 @@ class _ListView extends StatelessWidget {
 
 class _Tab extends StatefulWidget {
   final int index;
+  final String tabInfoKey;
   final Rx<String> label;
   final IconData? selectedIcon;
   final IconData? unselectedIcon;
   final bool closable;
   final int selected;
   final Function() onClose;
-  final Function() onSelected;
+  final Function() onTap;
   final TabBuilder? tabBuilder;
   final double? maxLabelWidth;
   final Color? selectedTabBackgroundColor;
@@ -706,6 +701,7 @@ class _Tab extends StatefulWidget {
   const _Tab({
     Key? key,
     required this.index,
+    required this.tabInfoKey,
     required this.label,
     this.selectedIcon,
     this.unselectedIcon,
@@ -713,7 +709,7 @@ class _Tab extends StatefulWidget {
     required this.closable,
     required this.selected,
     required this.onClose,
-    required this.onSelected,
+    required this.onTap,
     this.maxLabelWidth,
     this.selectedTabBackgroundColor,
     this.unSelectedTabBackgroundColor,
@@ -763,7 +759,7 @@ class _TabState extends State<_Tab> with RestorationMixin {
         ],
       );
     } else {
-      return widget.tabBuilder!(widget.label.value, icon, labelWidget,
+      return widget.tabBuilder!(widget.tabInfoKey, icon, labelWidget,
           TabThemeConf(iconSize: _kIconSize));
     }
   }
@@ -780,7 +776,7 @@ class _TabState extends State<_Tab> with RestorationMixin {
           hover.value = value;
           restoreHover.value = value;
         },
-        onTap: () => widget.onSelected(),
+        onTap: () => widget.onTap(),
         child: Container(
             color: isSelected
                 ? widget.selectedTabBackgroundColor

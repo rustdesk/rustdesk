@@ -61,6 +61,7 @@ class ChatPage extends StatelessWidget implements PageShape {
                           [],
                       inputOptions: InputOptions(
                           sendOnEnter: true,
+                          focusNode: chatModel.inputNode,
                           inputTextStyle: TextStyle(
                               fontSize: 14,
                               color: Theme.of(context)
