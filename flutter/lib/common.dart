@@ -9,6 +9,7 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/models/peer_model.dart';
@@ -1337,4 +1338,31 @@ class SimpleWrapper<T> {
 
   T get value => t;
   set value(T t) => this.t = t;
+}
+
+/// call this to reload current window.
+///
+/// [Note]
+/// Must have [RefreshWrapper] on the top of widget tree.
+void reloadCurrentWindow() {
+  if (Get.context != null) {
+    // reload self window
+    RefreshWrapper.of(Get.context!)?.rebuild();
+  } else {
+    debugPrint(
+        "reload current window failed, global BuildContext does not exist");
+  }
+}
+
+/// call this to reload all windows, including main + all sub windows.
+Future<void> reloadAllWindows() async {
+  reloadCurrentWindow();
+  try {
+    final ids = await DesktopMultiWindow.getAllSubWindowIds();
+    for (final id in ids) {
+      DesktopMultiWindow.invokeMethod(id, kWindowActionRebuild);
+    }
+  } on AssertionError {
+    // ignore
+  }
 }

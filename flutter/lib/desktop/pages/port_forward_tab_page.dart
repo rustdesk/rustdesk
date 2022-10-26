@@ -70,6 +70,8 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
             page: PortForwardPage(id: id, isRDP: isRDP)));
       } else if (call.method == "onDestroy") {
         tabController.clear();
+      } else if (call.method == kWindowActionRebuild) {
+        reloadCurrentWindow();
       }
     });
     Future.delayed(Duration.zero, () {

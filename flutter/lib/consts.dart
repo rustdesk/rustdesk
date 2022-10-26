@@ -9,6 +9,8 @@ const String kAppTypeDesktopRemote = "remote";
 const String kAppTypeDesktopFileTransfer = "file transfer";
 const String kAppTypeDesktopPortForward = "port forward";
 
+const String kWindowActionRebuild = "rebuild";
+
 const String kUniLinksPrefix = "rustdesk://";
 const String kActionNewConnection = "connection/new/";
 

@@ -1,6 +1,7 @@
 #include "win32_window.h"
 
 #include <flutter_windows.h>
+#include <shobjidl_core.h>
 
 #include "resource.h"
 
@@ -104,7 +105,7 @@ Win32Window::~Win32Window() {
 
 bool Win32Window::CreateAndShow(const std::wstring& title,
                                 const Point& origin,
-                                const Size& size) {
+                                const Size& size, bool showOnTaskBar) {
   Destroy();
 
   const wchar_t* window_class =
@@ -115,7 +116,7 @@ bool Win32Window::CreateAndShow(const std::wstring& title,
   HMONITOR monitor = MonitorFromPoint(target_point, MONITOR_DEFAULTTONEAREST);
   UINT dpi = FlutterDesktopGetDpiForMonitor(monitor);
   double scale_factor = dpi / 96.0;
-
+  
   HWND window = CreateWindow(
       window_class, title.c_str(), WS_OVERLAPPEDWINDOW,
       Scale(origin.x, scale_factor), Scale(origin.y, scale_factor),
@@ -124,6 +125,19 @@ bool Win32Window::CreateAndShow(const std::wstring& title,
 
   if (!window) {
     return false;
+  }
+
+  if (!showOnTaskBar) {
+    // hide from taskbar
+    HRESULT hr;
+    ITaskbarList* pTaskbarList;
+    hr = CoCreateInstance(CLSID_TaskbarList, NULL, CLSCTX_INPROC_SERVER,IID_ITaskbarList,(void**)&pTaskbarList);
+    if (FAILED(hr)) {
+        return false;
+    }
+    hr = pTaskbarList->HrInit();
+    hr = pTaskbarList->DeleteTab(window);
+    hr = pTaskbarList->Release();
   }
 
   return OnCreate();

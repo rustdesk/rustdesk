@@ -47,7 +47,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
 
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
       print(
-          "call ${call.method} with args ${call.arguments} from window ${fromWindowId} to ${windowId()}");
+          "[FileTransfer] call ${call.method} with args ${call.arguments} from window ${fromWindowId} to ${windowId()}");
       // for simplify, just replace connectionId
       if (call.method == "new_file_transfer") {
         final args = jsonDecode(call.arguments);
@@ -62,6 +62,8 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
             page: FileManagerPage(key: ValueKey(id), id: id)));
       } else if (call.method == "onDestroy") {
         tabController.clear();
+      } else if (call.method == kWindowActionRebuild) {
+        reloadCurrentWindow();
       }
     });
     Future.delayed(Duration.zero, () {
