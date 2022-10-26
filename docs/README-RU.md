@@ -13,11 +13,11 @@
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Еще одно программное обеспечение для удаленного рабочего стола, написанное на Rust. Работает из коробки, не требует настройки. Вы полностью контролируете свои данные, не беспокоясь о безопасности. Вы можете использовать наш сервер ретрансляции, [настроить свой собственный](https://rustdesk.com/server), или [написать свой собственный сервер ретрансляции](https://github.com/rustdesk/rustdesk-server-demo).
+Еще одно программное обеспечение для удаленного рабочего стола, написанное на Rust. Работает из коробки, не требует настройки. Вы полностью контролируете свои данные, не беспокоясь о безопасности. Вы можете использовать наш сервер ретрансляции, [настроить свой собственный](https://rustdesk.com/server), или [написать свой](https://github.com/rustdesk/rustdesk-server-demo).
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
-RustDesk приветствует вклад каждого. Смотрите [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) для помощи в начале работы.
+RustDesk приветствует вклад каждого. Ознакомьтесь с [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) в начале работы для понимания.
 
 [**Как работает RustDesk?**](https://github.com/rustdesk/rustdesk/wiki/How-does-RustDesk-work%3F)
 
@@ -27,14 +27,14 @@ RustDesk приветствует вклад каждого. Смотрите [`
 
 ## Бесплатные общедоступные серверы
 
-Ниже приведены серверы, для бесплатного использования, они могут меняться со временем. Если вы не находитесь рядом с одним из них, ваша сеть может работать медленно.
-| Местонахождение | Поставщик | Технические характеристики |
+Ниже приведены бесплатные публичные сервера, используемые по умолчанию. Имейте ввиду, они могут меняться со временем. Также стоит отметить, что скорость работы сети зависит от вашего местоположения и расстояния до серверов. Подключение происходит к ближайшему доступному.
+| Расположение | Поставщик | Технические характеристики |
 | --------- | ------------- | ------------------ |
 | Сеул | AWS lightsail | 1 VCPU / 0.5GB RAM |
 | Сингапур | Vultr | 1 VCPU / 1GB RAM |
 | Даллас | Vultr | 1 VCPU / 1GB RAM |
-| Germany | Hetzner | 2 VCPU / 4GB RAM |
-| Germany | Codext | 4 VCPU / 8GB RAM |
+| Германия | Hetzner | 2 VCPU / 4GB RAM |
+| Германия | Codext | 4 VCPU / 8GB RAM |
 
 ## Зависимости
 
@@ -160,7 +160,7 @@ target/release/rustdesk
 - **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: свяжитесь с [rustdesk-server](https://github.com/rustdesk/rustdesk-server), дождитесь удаленного прямого (обход TCP NAT) или ретранслируемого соединения
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: специфичный для платформы код
 
-## Снимки
+## Скриншоты
 
 ![image](https://user-images.githubusercontent.com/71636191/113112362-ae4deb80-923b-11eb-957d-ff88daad4f06.png)
 
