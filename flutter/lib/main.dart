@@ -9,6 +9,7 @@ import 'package:flutter_hbb/desktop/pages/install_page.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_file_transfer_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_port_forward_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_remote_screen.dart';
+import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
@@ -121,40 +122,17 @@ void runMobileApp() async {
 
 void runRemoteScreen(Map<String, dynamic> argument) async {
   await initEnv(kAppTypeDesktopRemote);
-  runApp(GetMaterialApp(
-    navigatorKey: globalKey,
-    debugShowCheckedModeBanner: false,
-    title: 'RustDesk - Remote Desktop',
-    theme: MyTheme.lightTheme,
-    darkTheme: MyTheme.darkTheme,
-    themeMode: MyTheme.currentThemeMode(),
-    home: DesktopRemoteScreen(
-      params: argument,
-    ),
-    localizationsDelegates: const [
-      GlobalMaterialLocalizations.delegate,
-      GlobalWidgetsLocalizations.delegate,
-      GlobalCupertinoLocalizations.delegate,
-    ],
-    supportedLocales: supportedLocales,
-    navigatorObservers: const [
-      // FirebaseAnalyticsObserver(analytics: analytics),
-    ],
-    builder: _keepScaleBuilder(),
-  ));
-}
-
-void runFileTransferScreen(Map<String, dynamic> argument) async {
-  await initEnv(kAppTypeDesktopFileTransfer);
-  runApp(
-    GetMaterialApp(
+  runApp(RefreshWrapper(
+    builder: (context) => GetMaterialApp(
       navigatorKey: globalKey,
       debugShowCheckedModeBanner: false,
-      title: 'RustDesk - File Transfer',
+      title: 'RustDesk - Remote Desktop',
       theme: MyTheme.lightTheme,
       darkTheme: MyTheme.darkTheme,
       themeMode: MyTheme.currentThemeMode(),
-      home: DesktopFileTransferScreen(params: argument),
+      home: DesktopRemoteScreen(
+        params: argument,
+      ),
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
@@ -165,6 +143,33 @@ void runFileTransferScreen(Map<String, dynamic> argument) async {
         // FirebaseAnalyticsObserver(analytics: analytics),
       ],
       builder: _keepScaleBuilder(),
+    ),
+  ));
+}
+
+void runFileTransferScreen(Map<String, dynamic> argument) async {
+  await initEnv(kAppTypeDesktopFileTransfer);
+  runApp(
+    RefreshWrapper(
+      builder: (context) => GetMaterialApp(
+        navigatorKey: globalKey,
+        debugShowCheckedModeBanner: false,
+        title: 'RustDesk - File Transfer',
+        theme: MyTheme.lightTheme,
+        darkTheme: MyTheme.darkTheme,
+        themeMode: MyTheme.currentThemeMode(),
+        home: DesktopFileTransferScreen(params: argument),
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: supportedLocales,
+        navigatorObservers: const [
+          // FirebaseAnalyticsObserver(analytics: analytics),
+        ],
+        builder: _keepScaleBuilder(),
+      ),
     ),
   );
 }
@@ -172,25 +177,27 @@ void runFileTransferScreen(Map<String, dynamic> argument) async {
 void runPortForwardScreen(Map<String, dynamic> argument) async {
   await initEnv(kAppTypeDesktopPortForward);
   runApp(
-    GetMaterialApp(
-      navigatorKey: globalKey,
-      debugShowCheckedModeBanner: false,
-      title: 'RustDesk - Port Forward',
-      theme: MyTheme.lightTheme,
-      darkTheme: MyTheme.darkTheme,
-      themeMode: MyTheme.currentThemeMode(),
-      home: DesktopPortForwardScreen(params: argument),
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: supportedLocales,
-      navigatorObservers: const [
-        // FirebaseAnalyticsObserver(analytics: analytics),
-      ],
-      builder: _keepScaleBuilder(),
-    ),
+    RefreshWrapper(builder: (context) {
+      return GetMaterialApp(
+        navigatorKey: globalKey,
+        debugShowCheckedModeBanner: false,
+        title: 'RustDesk - Port Forward',
+        theme: MyTheme.lightTheme,
+        darkTheme: MyTheme.darkTheme,
+        themeMode: MyTheme.currentThemeMode(),
+        home: DesktopPortForwardScreen(params: argument),
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: supportedLocales,
+        navigatorObservers: const [
+          // FirebaseAnalyticsObserver(analytics: analytics),
+        ],
+        builder: _keepScaleBuilder(),
+      );
+    }),
   );
 }
 
@@ -199,19 +206,21 @@ void runConnectionManagerScreen() async {
   // initialize window
   WindowOptions windowOptions =
       getHiddenTitleBarWindowOptions(size: kConnectionManagerWindowSize);
-  runApp(GetMaterialApp(
-      debugShowCheckedModeBanner: false,
-      theme: MyTheme.lightTheme,
-      darkTheme: MyTheme.darkTheme,
-      themeMode: MyTheme.currentThemeMode(),
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: supportedLocales,
-      home: const DesktopServerPage(),
-      builder: _keepScaleBuilder()));
+  runApp(RefreshWrapper(builder: (context) {
+    return GetMaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: MyTheme.lightTheme,
+        darkTheme: MyTheme.darkTheme,
+        themeMode: MyTheme.currentThemeMode(),
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: supportedLocales,
+        home: const DesktopServerPage(),
+        builder: _keepScaleBuilder());
+  }));
   windowManager.waitUntilReadyToShow(windowOptions, () async {
     await windowManager.show();
     // ensure initial window size to be changed
@@ -229,18 +238,20 @@ void runConnectionManagerScreen() async {
 void runInstallPage() async {
   await windowManager.ensureInitialized();
   await initEnv(kAppTypeMain);
-  runApp(GetMaterialApp(
-      debugShowCheckedModeBanner: false,
-      theme: MyTheme.lightTheme,
-      themeMode: ThemeMode.light,
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: supportedLocales,
-      home: const InstallPage(),
-      builder: _keepScaleBuilder()));
+  runApp(RefreshWrapper(
+    builder: (context) => GetMaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: MyTheme.lightTheme,
+        themeMode: ThemeMode.light,
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: supportedLocales,
+        home: const InstallPage(),
+        builder: _keepScaleBuilder()),
+  ));
   windowManager.waitUntilReadyToShow(
       WindowOptions(size: Size(800, 600), center: true), () async {
     windowManager.show();
@@ -292,48 +303,50 @@ class _AppState extends State<App> {
   @override
   Widget build(BuildContext context) {
     // final analytics = FirebaseAnalytics.instance;
-    return MultiProvider(
-      providers: [
-        // global configuration
-        // use session related FFI when in remote control or file transfer page
-        ChangeNotifierProvider.value(value: gFFI.ffiModel),
-        ChangeNotifierProvider.value(value: gFFI.imageModel),
-        ChangeNotifierProvider.value(value: gFFI.cursorModel),
-        ChangeNotifierProvider.value(value: gFFI.canvasModel),
-      ],
-      child: GetMaterialApp(
-        navigatorKey: globalKey,
-        debugShowCheckedModeBanner: false,
-        title: 'RustDesk',
-        theme: MyTheme.lightTheme,
-        darkTheme: MyTheme.darkTheme,
-        themeMode: MyTheme.currentThemeMode(),
-        home: isDesktop
-            ? const DesktopTabPage()
-            : !isAndroid
-                ? WebHomePage()
-                : HomePage(),
-        navigatorObservers: const [
-          // FirebaseAnalyticsObserver(analytics: analytics),
+    return RefreshWrapper(builder: (context) {
+      return MultiProvider(
+        providers: [
+          // global configuration
+          // use session related FFI when in remote control or file transfer page
+          ChangeNotifierProvider.value(value: gFFI.ffiModel),
+          ChangeNotifierProvider.value(value: gFFI.imageModel),
+          ChangeNotifierProvider.value(value: gFFI.cursorModel),
+          ChangeNotifierProvider.value(value: gFFI.canvasModel),
         ],
-        localizationsDelegates: const [
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        supportedLocales: supportedLocales,
-        builder: isAndroid
-            ? (context, child) => AccessibilityListener(
-                  child: MediaQuery(
-                    data: MediaQuery.of(context).copyWith(
-                      textScaleFactor: 1.0,
+        child: GetMaterialApp(
+          navigatorKey: globalKey,
+          debugShowCheckedModeBanner: false,
+          title: 'RustDesk',
+          theme: MyTheme.lightTheme,
+          darkTheme: MyTheme.darkTheme,
+          themeMode: MyTheme.currentThemeMode(),
+          home: isDesktop
+              ? const DesktopTabPage()
+              : !isAndroid
+                  ? WebHomePage()
+                  : HomePage(),
+          navigatorObservers: const [
+            // FirebaseAnalyticsObserver(analytics: analytics),
+          ],
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: supportedLocales,
+          builder: isAndroid
+              ? (context, child) => AccessibilityListener(
+                    child: MediaQuery(
+                      data: MediaQuery.of(context).copyWith(
+                        textScaleFactor: 1.0,
+                      ),
+                      child: child ?? Container(),
                     ),
-                    child: child ?? Container(),
-                  ),
-                )
-            : _keepScaleBuilder(),
-      ),
-    );
+                  )
+              : _keepScaleBuilder(),
+        ),
+      );
+    });
   }
 }
 
@@ -357,7 +370,7 @@ _registerEventHandler() {
       }
     });
     platformFFI.registerEventHandler('language', 'language', (_) async {
-      Get.forceAppUpdate();
+      reloadAllWindows();
     });
   }
 }

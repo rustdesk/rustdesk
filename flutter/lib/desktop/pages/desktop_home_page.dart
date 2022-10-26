@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart' hide MenuItem;
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/connection_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_setting_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
@@ -452,6 +453,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
             'scaleFactor': screen.scaleFactor,
           });
         }
+      } else if (call.method == kWindowActionRebuild) {
+        reloadCurrentWindow();
       }
     });
     Future.delayed(Duration.zero, () {

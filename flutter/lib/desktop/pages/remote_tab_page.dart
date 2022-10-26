@@ -89,6 +89,8 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
                 ))));
       } else if (call.method == "onDestroy") {
         tabController.clear();
+      } else if (call.method == kWindowActionRebuild) {
+        reloadCurrentWindow();
       }
       _update_remote_count();
     });

@@ -406,7 +406,7 @@ class _GeneralState extends State<_General> {
         initialKey: currentKey,
         onChanged: (key) async {
           await bind.mainSetLocalOption(key: "lang", value: key);
-          Get.forceAppUpdate();
+          reloadAllWindows();
           bind.mainChangeLanguage(lang: key);
         },
       ).marginOnly(left: _kContentHMargin);
