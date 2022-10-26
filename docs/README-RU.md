@@ -17,7 +17,7 @@
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
-RustDesk приветствует вклад каждого. Ознакомьтесь с [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) в начале работы для понимания.
+RustDesk приветствует вклад каждого. Ознакомьтесь с [`docs/CONTRIBUTING-RU.md`](CONTRIBUTING-RU.md) в начале работы для понимания.
 
 [**Как работает RustDesk?**](https://github.com/rustdesk/rustdesk/wiki/How-does-RustDesk-work%3F)
 
