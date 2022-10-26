@@ -62,9 +62,17 @@ struct MsgChannel {
     receiver: Arc<TokioMutex<UnboundedReceiver<ClipbaordFile>>>,
 }
 
+#[derive(PartialEq)]
+pub enum ProcessSide {
+    UnknownSide,
+    ClientSide,
+    ServerSide,
+}
+
 lazy_static::lazy_static! {
     static ref VEC_MSG_CHANNEL: RwLock<Vec<MsgChannel>> = Default::default();
     static ref CLIP_CONN_ENABLED: Mutex<ConnEnabled> = Mutex::new(ConnEnabled::default());
+    static ref PROCESS_SIDE: RwLock<ProcessSide> = RwLock::new(ProcessSide::UnknownSide);
 }
 
 #[inline]
@@ -249,6 +257,8 @@ pub fn server_format_list(
         let format_list = CLIPRDR_FORMAT_LIST {
             connID: conn_id as UINT32,
             msgType: 0 as UINT16,
+            msgFlags: 0 as UINT16,
+            dataLen: 0 as UINT32,
             numFormats: num_formats,
             formats: formats.as_mut_ptr(),
         };
@@ -390,7 +400,10 @@ pub fn server_file_contents_response(
 pub fn create_cliprdr_context(
     enable_files: bool,
     enable_others: bool,
+    process_side: ProcessSide,
 ) -> ResultType<Box<CliprdrClientContext>> {
+    *PROCESS_SIDE.write().unwrap() = process_side;
+
     Ok(CliprdrClientContext::create(
         enable_files,
         enable_others,
@@ -405,8 +418,11 @@ pub fn create_cliprdr_context(
 }
 
 extern "C" fn check_enabled(conn_id: UINT32) -> BOOL {
-    let lock = CLIP_CONN_ENABLED.lock().unwrap();
+    if *PROCESS_SIDE.read().unwrap() == ProcessSide::ClientSide {
+        return TRUE;
+    }
 
+    let lock = CLIP_CONN_ENABLED.lock().unwrap();
     let mut connd_enabled = false;
     if conn_id != 0 {
         if let Some(true) = lock.conn_enabled.get(&(conn_id as i32)) {

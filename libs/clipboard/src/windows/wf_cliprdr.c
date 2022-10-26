@@ -135,14 +135,14 @@ typedef struct _FORMAT_IDS FORMAT_IDS;
 
 #define TAG "windows"
 
-#ifdef WITH_DEBUG_CLIPRDR
-#define DEBUG_CLIPRDR(...) printf(TAG, __VA_ARGS__)
-#else
-#define DEBUG_CLIPRDR(...) \
-	do                     \
-	{                      \
-	} while (0)
-#endif
+// #ifdef WITH_DEBUG_CLIPRDR
+#define DEBUG_CLIPRDR(fmt, ...) fprintf(stderr, "DEBUG %s[%d] %s() " fmt "\n",  __FILE__, __LINE__, __func__, ##__VA_ARGS__);fflush(stderr)
+// #else
+// #define DEBUG_CLIPRDR(fmt, ...) \
+// 	do                     \
+// 	{                      \
+// 	} while (0)
+// #endif
 
 typedef BOOL(WINAPI *fnAddClipboardFormatListener)(HWND hwnd);
 typedef BOOL(WINAPI *fnRemoveClipboardFormatListener)(HWND hwnd);
@@ -974,7 +974,7 @@ static BOOL wf_create_file_obj(UINT32 *connID, wfClipboard *clipboard, IDataObje
 	stgmeds[1].tymed = TYMED_ISTREAM;
 	stgmeds[1].pstm = NULL;
 	stgmeds[1].pUnkForRelease = NULL;
-	*ppDataObject = (IDataObject *)CliprdrDataObject_New(*connID, *(connID + 1), fmtetc, stgmeds, 2, clipboard);
+	*ppDataObject = (IDataObject *)CliprdrDataObject_New(*connID, fmtetc, stgmeds, 2, clipboard);
 	return (*ppDataObject) ? TRUE : FALSE;
 }
 

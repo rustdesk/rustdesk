@@ -64,7 +64,8 @@ fn check_clipboard_file_context(enable_file_transfer: bool) {
     let mut lock = CLIPBOARD_FILE_CONTEXT.lock().unwrap();
     if enabled {
         if *lock == 0 {
-            match clipboard::create_cliprdr_context(true, false) {
+            match clipboard::create_cliprdr_context(true, false, clipboard::ProcessSide::ClientSide)
+            {
                 Ok(context) => {
                     log::info!("clipboard context for file transfer created.");
                     *lock = Box::into_raw(context) as _;

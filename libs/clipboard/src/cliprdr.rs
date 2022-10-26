@@ -239,6 +239,8 @@ pub type CLIPRDR_FORMAT = _CLIPRDR_FORMAT;
 pub struct _CLIPRDR_FORMAT_LIST {
     pub connID: UINT32,
     pub msgType: UINT16,
+    pub msgFlags: UINT16,
+    pub dataLen: UINT32,
     pub numFormats: UINT32,
     pub formats: *mut CLIPRDR_FORMAT,
 }

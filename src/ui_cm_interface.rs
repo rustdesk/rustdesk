@@ -730,7 +730,7 @@ pub async fn start_clipboard_file(mut rx: mpsc::UnboundedReceiver<ClipboardFileD
                 }
                 Some(ClipboardFileData::Enable((id, enabled))) => {
                     if enabled && cliprdr_context.is_none() {
-                        cliprdr_context = Some(match clipboard::create_cliprdr_context(true, false) {
+                        cliprdr_context = Some(match clipboard::create_cliprdr_context(true, false, clipboard::ProcessSide::ServerSide) {
                             Ok(context) => {
                                 log::info!("clipboard context for file transfer created.");
                                 context
