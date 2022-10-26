@@ -53,11 +53,8 @@ fn check_connect_status(
 ) {
     let status = Arc::new(Mutex::new((0, false, 0, "".to_owned())));
     let options = Arc::new(Mutex::new(Config::get_options()));
-    let cloned = status.clone();
-    let cloned_options = options.clone();
     let (tx, rx) = mpsc::unbounded_channel::<ipc::Data>();
     let password = Arc::new(Mutex::new(String::default()));
-    let cloned_password = password.clone();
     std::thread::spawn(move || crate::ui_interface::check_connect_status_(reconnect, rx));
     (status, options, tx, password)
 }

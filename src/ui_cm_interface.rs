@@ -11,9 +11,7 @@ use std::{
 };
 
 #[cfg(windows)]
-use clipboard::empty_clipboard;
-#[cfg(windows)]
-use hbb_common::chrono::Duration;
+use clipboard::{cliprdr::CliprdrClientContext, empty_clipboard, ContextSend};
 use serde_derive::Serialize;
 
 use crate::ipc::{self, new_listener, Connection, Data};
@@ -56,7 +54,6 @@ pub struct Client {
 struct IpcTaskRunner<T: InvokeUiCM> {
     stream: Connection,
     cm: ConnectionManager<T>,
-    tx_file: mpsc::UnboundedSender<ClipboardFileData>,
     tx: mpsc::UnboundedSender<Data>,
     rx: mpsc::UnboundedReceiver<Data>,
     conn_id: i32,
@@ -233,14 +230,31 @@ pub fn get_clients_length() -> usize {
     clients.len()
 }
 
-#[derive(Debug)]
-pub enum ClipboardFileData {
-    #[cfg(windows)]
-    Clip((i32, ipc::ClipbaordFile)),
-    Enable((i32, bool)),
-}
-
 impl<T: InvokeUiCM> IpcTaskRunner<T> {
+    #[cfg(windows)]
+    async fn enable_cliprdr_file_context(&mut self, conn_id: i32, enabled: bool) {
+        if conn_id == 0 {
+            return;
+        }
+
+        let pre_enabled = ContextSend::is_enabled();
+        ContextSend::enable(enabled);
+        if !pre_enabled && ContextSend::is_enabled() {
+            allow_err!(
+                self.stream
+                    .send(&Data::ClipbaordFile(clipboard::ClipbaordFile::MonitorReady))
+                    .await
+            );
+        }
+        clipboard::set_conn_enabled(conn_id, enabled);
+        if !enabled {
+            ContextSend::proc(|context: &mut Box<CliprdrClientContext>| -> u32 {
+                clipboard::empty_clipboard(context, conn_id);
+                0
+            });
+        }
+    }
+
     async fn run(&mut self) {
         use hbb_common::config::LocalConfig;
 
@@ -251,10 +265,8 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
 
         #[cfg(windows)]
         if self.conn_id > 0 {
-            allow_err!(self.tx_file.send(ClipboardFileData::Enable((
-                self.conn_id,
-                self.file_transfer_enabled
-            ))));
+            self.enable_cliprdr_file_context(self.conn_id, self.file_transfer_enabled)
+                .await;
         }
 
         #[cfg(windows)]
@@ -297,13 +309,15 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                     break;
                                 }
                                 Data::Close => {
-                                    allow_err!(self.tx_file.send(ClipboardFileData::Enable((self.conn_id, false))));
+                                    #[cfg(windows)]
+                                    self.enable_cliprdr_file_context(self.conn_id, false).await;
                                     log::info!("cm ipc connection closed from connection request");
                                     break;
                                 }
                                 Data::Disconnected => {
                                     close = false;
-                                    allow_err!(self.tx_file.send(ClipboardFileData::Enable((self.conn_id, false))));
+                                    #[cfg(windows)]
+                                    self.enable_cliprdr_file_context(self.conn_id, false).await;
                                     log::info!("cm ipc connection disconnect");
                                     break;
                                 }
@@ -320,13 +334,20 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                 Data::FS(fs) => {
                                     handle_fs(fs, &mut write_jobs, &self.tx).await;
                                 }
-                                #[cfg(windows)]
                                 Data::ClipbaordFile(_clip) => {
-                                    allow_err!(self.tx_file.send(ClipboardFileData::Clip((self.conn_id, _clip))));
+                                    #[cfg(windows)]
+                                    {
+                                        let conn_id = self.conn_id;
+
+                                        ContextSend::proc(|context: &mut Box<CliprdrClientContext>| -> u32 {
+                                            clipboard::server_clip_file(context, conn_id, _clip)
+                                        });
+                                    }
                                 }
                                 #[cfg(windows)]
-                                Data::ClipboardFileEnabled(enabled) => {
-                                    allow_err!(self.tx_file.send(ClipboardFileData::Enable((self.conn_id, enabled))));
+                                Data::ClipboardFileEnabled(_enabled) => {
+                                    #[cfg(windows)]
+                                    self.enable_cliprdr_file_context(self.conn_id, _enabled).await;
                                 }
                                 Data::Theme(dark) => {
                                     self.cm.change_theme(dark);
@@ -364,16 +385,11 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
         }
     }
 
-    async fn ipc_task(
-        stream: Connection,
-        cm: ConnectionManager<T>,
-        tx_file: mpsc::UnboundedSender<ClipboardFileData>,
-    ) {
+    async fn ipc_task(stream: Connection, cm: ConnectionManager<T>) {
         let (tx, rx) = mpsc::unbounded_channel::<Data>();
         let mut task_runner = Self {
             stream,
             cm,
-            tx_file,
             tx,
             rx,
             conn_id: 0,
@@ -391,13 +407,6 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tokio::main(flavor = "current_thread")]
 pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
-    #[cfg(windows)]
-    let cm_clip = cm.clone();
-
-    let (tx_file, _rx_file) = mpsc::unbounded_channel::<ClipboardFileData>();
-    #[cfg(windows)]
-    std::thread::spawn(move || start_clipboard_file(_rx_file));
-
     #[cfg(windows)]
     std::thread::spawn(move || {
         log::info!("try create privacy mode window");
@@ -422,7 +431,6 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
                         tokio::spawn(IpcTaskRunner::<T>::ipc_task(
                             Connection::new(stream),
                             cm.clone(),
-                            tx_file.clone(),
                         ));
                     }
                     Err(err) => {
@@ -721,49 +729,5 @@ fn send_raw(msg: Message, tx: &UnboundedSender<Data>) {
             allow_err!(tx.send(Data::RawMessage(bytes)));
         }
         err => allow_err!(err),
-    }
-}
-
-#[cfg(windows)]
-#[tokio::main(flavor = "current_thread")]
-pub async fn start_clipboard_file(mut rx: mpsc::UnboundedReceiver<ClipboardFileData>) {
-    let mut cliprdr_context = None;
-
-    loop {
-        tokio::select! {
-            server_msg = rx.recv() => match server_msg {
-                Some(ClipboardFileData::Clip((conn_id, clip))) => {
-                    if let Some(ctx) = cliprdr_context.as_mut() {
-                        clipboard::server_clip_file(ctx, conn_id, clip);
-                    }
-                }
-                Some(ClipboardFileData::Enable((id, enabled))) => {
-                    if enabled && cliprdr_context.is_none() {
-                        cliprdr_context = Some(match clipboard::create_cliprdr_context(true, false, clipboard::ProcessSide::ServerSide) {
-                            Ok(context) => {
-                                log::info!("clipboard context for file transfer created.");
-                                context
-                            }
-                            Err(err) => {
-                                log::error!(
-                                    "Create clipboard context for file transfer: {}",
-                                    err.to_string()
-                                );
-                                return;
-                            }
-                        });
-                    }
-                    clipboard::set_conn_enabled(id, enabled);
-                    if !enabled {
-                        if let Some(ctx) = cliprdr_context.as_mut() {
-                            clipboard::empty_clipboard(ctx, id);
-                        }
-                    }
-                }
-                None => {
-                    break
-                }
-            }
-        }
     }
 }
