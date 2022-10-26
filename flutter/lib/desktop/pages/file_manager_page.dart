@@ -175,7 +175,7 @@ class _FileManagerPageState extends State<FileManagerPage>
         },
         child: IconButton(
           icon: const Icon(Icons.more_vert),
-          splashRadius: 20,
+          splashRadius: kDesktopIconButtonSplashRadius,
           onPressed: () => mod_menu.showMenu(
             context: context,
             position: menuPos,
@@ -482,12 +482,12 @@ class _FileManagerPageState extends State<FileManagerPage>
                                   onPressed: () {
                                     model.resumeJob(item.id);
                                   },
-                                  splashRadius: 20,
+                                  splashRadius: kDesktopIconButtonSplashRadius,
                                   icon: const Icon(Icons.restart_alt_rounded)),
                             ),
                             IconButton(
                               icon: const Icon(Icons.delete_forever_outlined),
-                              splashRadius: 20,
+                              splashRadius: kDesktopIconButtonSplashRadius,
                               onPressed: () {
                                 model.jobTable.removeAt(index);
                                 model.cancelJob(item.id);
@@ -556,7 +556,7 @@ class _FileManagerPageState extends State<FileManagerPage>
               children: [
                 IconButton(
                   icon: const Icon(Icons.arrow_back),
-                  splashRadius: 20,
+                  splashRadius: kDesktopIconButtonSplashRadius,
                   onPressed: () {
                     selectedItems.clear();
                     model.goBack(isLocal: isLocal);
@@ -564,7 +564,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                 ),
                 IconButton(
                   icon: const Icon(Icons.arrow_upward),
-                  splashRadius: 20,
+                  splashRadius: kDesktopIconButtonSplashRadius,
                   onPressed: () {
                     selectedItems.clear();
                     model.goToParentDirectory(isLocal: isLocal);
@@ -614,13 +614,13 @@ class _FileManagerPageState extends State<FileManagerPage>
                         Future.delayed(
                             Duration.zero, () => focusNode.requestFocus());
                       },
-                      splashRadius: 20,
+                      splashRadius: kDesktopIconButtonSplashRadius,
                       icon: Icon(Icons.search));
                 case LocationStatus.pathLocation:
                   return IconButton(
                       color: Theme.of(context).disabledColor,
                       onPressed: null,
-                      splashRadius: 20,
+                      splashRadius: kDesktopIconButtonSplashRadius,
                       icon: Icon(Icons.close));
                 case LocationStatus.fileSearchBar:
                   return IconButton(
@@ -638,7 +638,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                   breadCrumbScrollToEnd(isLocal);
                   model.refresh(isLocal: isLocal);
                 },
-                splashRadius: 20,
+                splashRadius: kDesktopIconButtonSplashRadius,
                 icon: const Icon(Icons.refresh)),
           ],
         ),
@@ -655,7 +655,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                       model.goHome(isLocal: isLocal);
                     },
                     icon: const Icon(Icons.home_outlined),
-                    splashRadius: 20,
+                    splashRadius: kDesktopIconButtonSplashRadius,
                   ),
                   IconButton(
                       onPressed: () {
@@ -704,7 +704,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                           );
                         });
                       },
-                      splashRadius: 20,
+                      splashRadius: kDesktopIconButtonSplashRadius,
                       icon: const Icon(Icons.create_new_folder_outlined)),
                   IconButton(
                       onPressed: validItems(selectedItems)
@@ -714,7 +714,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                               selectedItems.clear();
                             }
                           : null,
-                      splashRadius: 20,
+                      splashRadius: kDesktopIconButtonSplashRadius,
                       icon: const Icon(Icons.delete_forever_outlined)),
                   menu(isLocal: isLocal),
                 ],

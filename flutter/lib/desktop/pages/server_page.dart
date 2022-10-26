@@ -5,7 +5,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
-import 'package:flutter_hbb/mobile/pages/chat_page.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
@@ -13,6 +12,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../common.dart';
+import '../../common/widgets/chat_page.dart';
 import '../../models/platform_model.dart';
 import '../../models/server_model.dart';
 
@@ -107,6 +107,13 @@ class ConnectionManagerState extends State<ConnectionManager> {
   @override
   Widget build(BuildContext context) {
     final serverModel = Provider.of<ServerModel>(context);
+    final pointerHandler = serverModel.cmHiddenTimer != null
+        ? (PointerEvent e) {
+            serverModel.cmHiddenTimer!.cancel();
+            serverModel.cmHiddenTimer = null;
+            debugPrint("CM hidden timer has been canceled");
+          }
+        : null;
     return serverModel.clients.isEmpty
         ? Column(
             children: [
@@ -118,35 +125,44 @@ class ConnectionManagerState extends State<ConnectionManager> {
               ),
             ],
           )
-        : DesktopTab(
-            showTitle: false,
-            showMaximize: false,
-            showMinimize: true,
-            showClose: true,
-            controller: serverModel.tabController,
-            maxLabelWidth: 100,
-            tail: buildScrollJumper(),
-            selectedTabBackgroundColor:
-                Theme.of(context).hintColor.withOpacity(0.2),
-            tabBuilder: (key, icon, label, themeConf) {
-              return Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  icon,
-                  Tooltip(
-                      message: key,
-                      waitDuration: Duration(seconds: 1),
-                      child: label),
-                ],
-              );
-            },
-            pageViewBuilder: (pageView) => Row(children: [
-                  Expanded(child: pageView),
-                  Consumer<ChatModel>(
-                      builder: (_, model, child) => model.isShowChatPage
-                          ? Expanded(child: Scaffold(body: ChatPage()))
-                          : Offstage())
-                ]));
+        : Listener(
+            onPointerDown: pointerHandler,
+            onPointerMove: pointerHandler,
+            child: DesktopTab(
+                showTitle: false,
+                showMaximize: false,
+                showMinimize: true,
+                showClose: true,
+                controller: serverModel.tabController,
+                maxLabelWidth: 100,
+                tail: buildScrollJumper(),
+                selectedTabBackgroundColor:
+                    Theme.of(context).hintColor.withOpacity(0.2),
+                tabBuilder: (key, icon, label, themeConf) {
+                  final client = serverModel.clients.firstWhereOrNull(
+                      (client) => client.id.toString() == key);
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Tooltip(
+                          message: key,
+                          waitDuration: Duration(seconds: 1),
+                          child: label),
+                      Obx(() => Offstage(
+                          offstage:
+                              !(client?.hasUnreadChatMessage.value ?? false),
+                          child:
+                              Icon(Icons.circle, color: Colors.red, size: 10)))
+                    ],
+                  );
+                },
+                pageViewBuilder: (pageView) => Row(children: [
+                      Expanded(child: pageView),
+                      Consumer<ChatModel>(
+                          builder: (_, model, child) => model.isShowChatPage
+                              ? Expanded(child: Scaffold(body: ChatPage()))
+                              : Offstage())
+                    ])));
   }
 
   Widget buildTitleBar() {
@@ -334,10 +350,10 @@ class _CmHeaderState extends State<_CmHeader>
         Offstage(
           offstage: !client.authorized || client.isFileTransfer,
           child: IconButton(
-            onPressed: () => checkClickTime(
-                client.id, () => gFFI.chatModel.toggleCMChatPage(client.id)),
-            icon: Icon(Icons.message_outlined),
-          ),
+              onPressed: () => checkClickTime(
+                  client.id, () => gFFI.chatModel.toggleCMChatPage(client.id)),
+              icon: Icon(Icons.message_outlined),
+              splashRadius: kDesktopIconButtonSplashRadius),
         )
       ],
     );

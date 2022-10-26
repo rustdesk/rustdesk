@@ -26,13 +26,11 @@ void main(List<String> args) async {
   await initEnv(kAppTypeMain);
   for (var client in testClients) {
     gFFI.serverModel.clients.add(client);
-    gFFI.serverModel.tabController.add(
-        TabInfo(
-            key: client.id.toString(),
-            label: client.name,
-            closable: false,
-            page: buildConnectionCard(client)),
-        authorized: client.authorized);
+    gFFI.serverModel.tabController.add(TabInfo(
+        key: client.id.toString(),
+        label: client.name,
+        closable: false,
+        page: buildConnectionCard(client)));
   }
 
   runApp(GetMaterialApp(

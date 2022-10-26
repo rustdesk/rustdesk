@@ -14,11 +14,11 @@ class MessageBody {
   MessageBody(this.chatUser, this.chatMessages);
 
   void insert(ChatMessage cm) {
-    this.chatMessages.insert(0, cm);
+    chatMessages.insert(0, cm);
   }
 
   void clear() {
-    this.chatMessages.clear();
+    chatMessages.clear();
   }
 }
 
@@ -53,6 +53,8 @@ class ChatModel with ChangeNotifier {
   final WeakReference<FFI> parent;
 
   ChatModel(this.parent);
+
+  FocusNode inputNode = FocusNode();
 
   ChatUser get currentUser {
     final user = messages[currentID]?.chatUser;
@@ -108,6 +110,7 @@ class ChatModel with ChangeNotifier {
                   hideChatWindowOverlay();
                 }
               },
+              backgroundColor: Theme.of(context).colorScheme.primary,
               child: Icon(Icons.message)));
     });
     overlayState.insert(overlay);
@@ -198,6 +201,11 @@ class ChatModel with ChangeNotifier {
   }
 
   receive(int id, String text) async {
+    final session = parent.target;
+    if (session == null) {
+      debugPrint("Failed to receive msg, session state is null");
+      return;
+    }
     if (text.isEmpty) return;
     // mobile: first message show overlay icon
     if (chatIconOverlayEntry == null) {
@@ -207,27 +215,32 @@ class ChatModel with ChangeNotifier {
     if (!_isShowChatPage) {
       toggleCMChatPage(id);
     }
-    parent.target?.serverModel.jumpTo(id);
 
-    late final chatUser;
+    int toId = currentID;
+
+    late final ChatUser chatUser;
     if (id == clientModeID) {
       chatUser = ChatUser(
-        firstName: parent.target?.ffiModel.pi.username,
-        id: await bind.mainGetLastRemoteId(),
+        firstName: session.ffiModel.pi.username,
+        id: session.id,
       );
+      toId = id;
     } else {
-      final client = parent.target?.serverModel.clients
-          .firstWhere((client) => client.id == id);
-      if (client == null) {
-        return debugPrint("Failed to receive msg,user doesn't exist");
-      }
+      final client =
+          session.serverModel.clients.firstWhere((client) => client.id == id);
       if (isDesktop) {
         window_on_top(null);
-        var index = parent.target?.serverModel.clients
-            .indexWhere((client) => client.id == id);
-        if (index != null && index >= 0) {
-          gFFI.serverModel.tabController.jumpTo(index);
+        // disable auto jumpTo other tab when hasFocus, and mark unread message
+        final currentSelectedTab =
+            session.serverModel.tabController.state.value.selectedTabInfo;
+        if (currentSelectedTab.key != id.toString() && inputNode.hasFocus) {
+          client.hasUnreadChatMessage.value = true;
+        } else {
+          parent.target?.serverModel.jumpTo(id);
+          toId = id;
         }
+      } else {
+        toId = id;
       }
       chatUser = ChatUser(id: client.peerId, firstName: client.name);
     }
@@ -237,7 +250,7 @@ class ChatModel with ChangeNotifier {
     }
     _messages[id]!.insert(
         ChatMessage(text: text, user: chatUser, createdAt: DateTime.now()));
-    _currentID = id;
+    _currentID = toId;
     notifyListeners();
   }
 
