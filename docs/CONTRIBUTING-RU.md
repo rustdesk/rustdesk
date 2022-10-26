@@ -40,9 +40,9 @@ RustDesk приветствует вклад каждого.
 
 Для получения конкретных инструкций `git` см. [GitHub workflow 101](https://github.com/servo/servo/wiki/Github-workflow).
 
-## Нормы поведения
+## Кодекс поведения участников и вкладчиков
 
-https://github.com/rustdesk/rustdesk/blob/master/docs/CODE_OF_CONDUCT-RU.md
+Нормы поведения внутри сообщества подробно описаны [здесь](CODE_OF_CONDUCT-RU.md).
 
 ## Общение
 
