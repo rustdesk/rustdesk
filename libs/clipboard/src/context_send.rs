@@ -2,7 +2,6 @@ use crate::cliprdr::*;
 use hbb_common::log;
 use std::sync::Mutex;
 
-#[cfg(windows)]
 lazy_static::lazy_static! {
     static ref CONTEXT_SEND: ContextSend = ContextSend{addr: Mutex::new(0)};
 }
