@@ -14,12 +14,6 @@ use sciter::{
     Value,
 };
 
-#[cfg(windows)]
-use clipboard::{
-    cliprdr::CliprdrClientContext, create_cliprdr_context as create_clipboard_file_context,
-    get_rx_clip_client, server_clip_file,
-};
-
 use hbb_common::{
     allow_err, fs::TransferJobMeta, log, message_proto::*, rendezvous_proto::ConnType,
 };

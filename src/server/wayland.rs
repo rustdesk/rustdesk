@@ -249,8 +249,8 @@ pub(super) fn release_resouce() {
     if *write_lock != 0 {
         let cap_display_info: *mut CapDisplayInfo = *write_lock as _;
         unsafe {
-            let box_capturer = Box::from_raw((*cap_display_info).capturer.0);
-            let box_cap_display_info = Box::from_raw(cap_display_info);
+            let _box_capturer = Box::from_raw((*cap_display_info).capturer.0);
+            let _box_cap_display_info = Box::from_raw(cap_display_info);
             *write_lock = 0;
         }
     }

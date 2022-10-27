@@ -1052,6 +1052,10 @@ pub fn main_update_me() -> SyncReturn<bool> {
     SyncReturn(true)
 }
 
+pub fn set_cur_session_id(id: String) {
+    super::flutter::set_cur_session_id(id)
+}
+
 pub fn install_show_run_without_install() -> SyncReturn<bool> {
     SyncReturn(show_run_without_install())
 }

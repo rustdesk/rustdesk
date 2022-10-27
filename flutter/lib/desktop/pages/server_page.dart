@@ -30,7 +30,7 @@ class _DesktopServerPageState extends State<DesktopServerPage>
   void initState() {
     gFFI.ffiModel.updateEventListener("");
     windowManager.addListener(this);
-    tabController.onRemove = (_, id) => onRemoveId(id);
+    tabController.onRemoved = (_, id) => onRemoveId(id);
     super.initState();
   }
 
@@ -99,7 +99,7 @@ class ConnectionManagerState extends State<ConnectionManager> {
   @override
   void initState() {
     gFFI.serverModel.updateClientState();
-    gFFI.serverModel.tabController.onSelected = (index) =>
+    gFFI.serverModel.tabController.onSelected = (index, _) =>
         gFFI.chatModel.changeCurrentID(gFFI.serverModel.clients[index].id);
     super.initState();
   }

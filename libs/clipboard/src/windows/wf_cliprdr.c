@@ -135,14 +135,14 @@ typedef struct _FORMAT_IDS FORMAT_IDS;
 
 #define TAG "windows"
 
-#ifdef WITH_DEBUG_CLIPRDR
-#define DEBUG_CLIPRDR(...) printf(TAG, __VA_ARGS__)
-#else
-#define DEBUG_CLIPRDR(...) \
-	do                     \
-	{                      \
-	} while (0)
-#endif
+// #ifdef WITH_DEBUG_CLIPRDR
+#define DEBUG_CLIPRDR(fmt, ...) fprintf(stderr, "DEBUG %s[%d] %s() " fmt "\n",  __FILE__, __LINE__, __func__, ##__VA_ARGS__);fflush(stderr)
+// #else
+// #define DEBUG_CLIPRDR(fmt, ...) \
+// 	do                     \
+// 	{                      \
+// 	} while (0)
+// #endif
 
 typedef BOOL(WINAPI *fnAddClipboardFormatListener)(HWND hwnd);
 typedef BOOL(WINAPI *fnRemoveClipboardFormatListener)(HWND hwnd);
@@ -193,6 +193,7 @@ struct _CliprdrDataObject
 	ULONG m_nStreams;
 	IStream **m_pStream;
 	void *m_pData;
+	DWORD m_processID;
 	UINT32 m_connID;
 };
 typedef struct _CliprdrDataObject CliprdrDataObject;
@@ -246,7 +247,7 @@ BOOL wf_cliprdr_init(wfClipboard *clipboard, CliprdrClientContext *cliprdr);
 BOOL wf_cliprdr_uninit(wfClipboard *clipboard, CliprdrClientContext *cliprdr);
 BOOL wf_do_empty_cliprdr(wfClipboard *clipboard);
 
-static BOOL wf_create_file_obj(UINT32 connID, wfClipboard *cliprdrrdr, IDataObject **ppDataObject);
+static BOOL wf_create_file_obj(UINT32 *connID, wfClipboard *clipboard, IDataObject **ppDataObject);
 static void wf_destroy_file_obj(IDataObject *instance);
 static UINT32 get_remote_format_id(wfClipboard *clipboard, UINT32 local_format);
 static UINT cliprdr_send_data_request(UINT32 connID, wfClipboard *clipboard, UINT32 format);
@@ -673,6 +674,12 @@ static HRESULT STDMETHODCALLTYPE CliprdrDataObject_GetData(IDataObject *This, FO
 	if (!pFormatEtc || !pMedium || !instance)
 		return E_INVALIDARG;
 
+	// Not the same process id
+	if (instance->m_processID != GetCurrentProcessId())
+	{
+		return E_INVALIDARG;
+	}
+
 	clipboard = (wfClipboard *)instance->m_pData;
 	if (!clipboard->context->CheckEnabled(instance->m_connID))
 	{
@@ -892,6 +899,7 @@ static CliprdrDataObject *CliprdrDataObject_New(UINT32 connID, FORMATETC *fmtetc
 	instance->m_pData = data;
 	instance->m_nStreams = 0;
 	instance->m_pStream = NULL;
+	instance->m_processID = GetCurrentProcessId();
 	instance->m_connID = connID;
 
 	if (count > 0)
@@ -1340,7 +1348,7 @@ static BOOL cliprdr_GetUpdatedClipboardFormats(wfClipboard *clipboard, PUINT lpu
 	return TRUE;
 }
 
-static UINT cliprdr_send_format_list(wfClipboard *clipboard)
+static UINT cliprdr_send_format_list(wfClipboard *clipboard, UINT32 connID)
 {
 	UINT rc;
 	int count = 0;
@@ -1415,7 +1423,7 @@ static UINT cliprdr_send_format_list(wfClipboard *clipboard)
 		}
 	}
 
-	formatList.connID = 0;
+	formatList.connID = connID;
 	formatList.numFormats = numFormats;
 	formatList.formats = formats;
 	formatList.msgType = CB_FORMAT_LIST;
@@ -1645,7 +1653,7 @@ static LRESULT CALLBACK cliprdr_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM 
 					clipboard->hmem = NULL;
 				}
 
-				cliprdr_send_format_list(clipboard);
+				cliprdr_send_format_list(clipboard, 0);
 			}
 		}
 
@@ -1669,7 +1677,8 @@ static LRESULT CALLBACK cliprdr_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM 
 		DEBUG_CLIPRDR("info: WM_RENDERFORMAT");
 
 		// https://docs.microsoft.com/en-us/windows/win32/dataxchg/wm-renderformat?redirectedfrom=MSDN
-		if (cliprdr_send_data_request(0, 0, clipboard, (UINT32)wParam) != 0)
+		// to-do: ensure usage of 0
+		if (cliprdr_send_data_request(0, clipboard, (UINT32)wParam) != 0)
 		{
 			DEBUG_CLIPRDR("error: cliprdr_send_data_request failed.");
 			break;
@@ -1695,7 +1704,7 @@ static LRESULT CALLBACK cliprdr_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM 
 			if ((GetClipboardOwner() != clipboard->hwnd) &&
 				(S_FALSE == OleIsCurrentClipboard(clipboard->data_obj)))
 			{
-				cliprdr_send_format_list(clipboard);
+				cliprdr_send_format_list(clipboard, 0);
 			}
 
 			SendMessage(clipboard->hWndNextViewer, Msg, wParam, lParam);
@@ -2128,8 +2137,13 @@ static UINT wf_cliprdr_send_client_capabilities(wfClipboard *clipboard)
 	CLIPRDR_CAPABILITIES capabilities;
 	CLIPRDR_GENERAL_CAPABILITY_SET generalCapabilitySet;
 
-	if (!clipboard || !clipboard->context || !clipboard->context->ClientCapabilities)
+	if (!clipboard || !clipboard->context)
 		return ERROR_INTERNAL_ERROR;
+
+	// Ignore ClientCapabilities for now
+	if (!clipboard->context->ClientCapabilities) {
+		return CHANNEL_RC_OK;
+	}
 
 	capabilities.connID = 0;
 	capabilities.cCapabilitiesSets = 1;
@@ -2162,7 +2176,7 @@ static UINT wf_cliprdr_monitor_ready(CliprdrClientContext *context,
 	if (rc != CHANNEL_RC_OK)
 		return rc;
 
-	return cliprdr_send_format_list(clipboard);
+	return cliprdr_send_format_list(clipboard, monitorReady->connID);
 }
 
 /**

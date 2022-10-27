@@ -24,8 +24,9 @@ class ConnectionTabPage extends StatefulWidget {
 }
 
 class _ConnectionTabPageState extends State<ConnectionTabPage> {
-  final tabController =
-      Get.put(DesktopTabController(tabType: DesktopTabType.remoteScreen));
+  final tabController = Get.put(DesktopTabController(
+      tabType: DesktopTabType.remoteScreen,
+      onSelected: (_, id) => bind.setCurSessionId(id: id)));
   static const IconData selectedIcon = Icons.desktop_windows_sharp;
   static const IconData unselectedIcon = Icons.desktop_windows_outlined;
 
@@ -59,11 +60,11 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
   void initState() {
     super.initState();
 
-    tabController.onRemove = (_, id) => onRemoveId(id);
+    tabController.onRemoved = (_, id) => onRemoveId(id);
 
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
       print(
-          "call ${call.method} with args ${call.arguments} from window ${fromWindowId}");
+          "call ${call.method} with args ${call.arguments} from window $fromWindowId");
 
       final RxBool fullscreen = Get.find(tag: 'fullscreen');
       // for simplify, just replace connectionId

@@ -1,17 +1,22 @@
-use std::ops::{Deref, DerefMut};
+#[cfg(windows)]
+use std::sync::Arc;
 use std::{
     collections::HashMap,
     iter::FromIterator,
+    ops::{Deref, DerefMut},
     sync::{
         atomic::{AtomicI64, Ordering},
         RwLock,
     },
 };
 
+#[cfg(windows)]
+use clipboard::{cliprdr::CliprdrClientContext, empty_clipboard, ContextSend};
 use serde_derive::Serialize;
 
-use crate::ipc::Data;
-use crate::ipc::{self, new_listener, Connection};
+use crate::ipc::{self, new_listener, Connection, Data};
+#[cfg(windows)]
+use hbb_common::tokio::sync::Mutex as TokioMutex;
 use hbb_common::{
     allow_err,
     config::Config,
@@ -22,7 +27,7 @@ use hbb_common::{
     protobuf::Message as _,
     tokio::{
         self,
-        sync::mpsc::{self, UnboundedSender},
+        sync::mpsc::{self, unbounded_channel, UnboundedSender},
         task::spawn_blocking,
     },
 };
@@ -46,8 +51,19 @@ pub struct Client {
     tx: UnboundedSender<Data>,
 }
 
+struct IpcTaskRunner<T: InvokeUiCM> {
+    stream: Connection,
+    cm: ConnectionManager<T>,
+    tx: mpsc::UnboundedSender<Data>,
+    rx: mpsc::UnboundedReceiver<Data>,
+    close: bool,
+    conn_id: i32,
+    #[cfg(windows)]
+    file_transfer_enabled: bool,
+}
+
 lazy_static::lazy_static! {
-    static ref CLIENTS: RwLock<HashMap<i32,Client>> = Default::default();
+    static ref CLIENTS: RwLock<HashMap<i32, Client>> = Default::default();
     static ref CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 }
 
@@ -215,23 +231,185 @@ pub fn get_clients_length() -> usize {
     clients.len()
 }
 
-pub enum ClipboardFileData {
+impl<T: InvokeUiCM> IpcTaskRunner<T> {
     #[cfg(windows)]
-    Clip((i32, ipc::ClipbaordFile)),
-    Enable((i32, bool)),
+    async fn enable_cliprdr_file_context(&mut self, conn_id: i32, enabled: bool) {
+        if conn_id == 0 {
+            return;
+        }
+
+        let pre_enabled = ContextSend::is_enabled();
+        ContextSend::enable(enabled);
+        if !pre_enabled && ContextSend::is_enabled() {
+            allow_err!(
+                self.stream
+                    .send(&Data::ClipbaordFile(clipboard::ClipbaordFile::MonitorReady))
+                    .await
+            );
+        }
+        clipboard::set_conn_enabled(conn_id, enabled);
+        if !enabled {
+            ContextSend::proc(|context: &mut Box<CliprdrClientContext>| -> u32 {
+                clipboard::empty_clipboard(context, conn_id);
+                0
+            });
+        }
+    }
+
+    async fn run(&mut self) {
+        use hbb_common::config::LocalConfig;
+
+        // for tmp use, without real conn id
+        let mut write_jobs: Vec<fs::TransferJob> = Vec::new();
+
+        #[cfg(windows)]
+        if self.conn_id > 0 {
+            self.enable_cliprdr_file_context(self.conn_id, self.file_transfer_enabled)
+                .await;
+        }
+
+        #[cfg(windows)]
+        let rx_clip1;
+        let mut rx_clip;
+        let _tx_clip;
+        #[cfg(windows)]
+        if self.conn_id > 0 {
+            rx_clip1 = clipboard::get_rx_cliprdr_server(self.conn_id);
+            rx_clip = rx_clip1.lock().await;
+        } else {
+            let rx_clip2;
+            (_tx_clip, rx_clip2) = unbounded_channel::<clipboard::ClipbaordFile>();
+            rx_clip1 = Arc::new(TokioMutex::new(rx_clip2));
+            rx_clip = rx_clip1.lock().await;
+        }
+        #[cfg(not(windows))]
+        {
+            (_tx_clip, rx_clip) = unbounded_channel::<i32>();
+        }
+
+        loop {
+            tokio::select! {
+                res = self.stream.next() => {
+                    match res {
+                        Err(err) => {
+                            log::info!("cm ipc connection closed: {}", err);
+                            break;
+                        }
+                        Ok(Some(data)) => {
+                            match data {
+                                Data::Login{id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled: _file_transfer_enabled, restart, recording} => {
+                                    log::debug!("conn_id: {}", id);
+                                    self.cm.add_connection(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, self.tx.clone());
+                                    self.conn_id = id;
+                                    #[cfg(windows)]
+                                    {
+                                        self.file_transfer_enabled = _file_transfer_enabled;
+                                    }
+                                    break;
+                                }
+                                Data::Close => {
+                                    #[cfg(windows)]
+                                    self.enable_cliprdr_file_context(self.conn_id, false).await;
+                                    log::info!("cm ipc connection closed from connection request");
+                                    break;
+                                }
+                                Data::Disconnected => {
+                                    self.close = false;
+                                    #[cfg(windows)]
+                                    self.enable_cliprdr_file_context(self.conn_id, false).await;
+                                    log::info!("cm ipc connection disconnect");
+                                    break;
+                                }
+                                Data::PrivacyModeState((_id, _)) => {
+                                    #[cfg(windows)]
+                                    cm_inner_send(_id, data);
+                                }
+                                Data::ClickTime(ms) => {
+                                    CLICK_TIME.store(ms, Ordering::SeqCst);
+                                }
+                                Data::ChatMessage { text } => {
+                                    self.cm.new_message(self.conn_id, text);
+                                }
+                                Data::FS(fs) => {
+                                    handle_fs(fs, &mut write_jobs, &self.tx).await;
+                                }
+                                Data::ClipbaordFile(_clip) => {
+                                    #[cfg(windows)]
+                                    {
+                                        let conn_id = self.conn_id;
+                                        ContextSend::proc(|context: &mut Box<CliprdrClientContext>| -> u32 {
+                                            clipboard::server_clip_file(context, conn_id, _clip)
+                                        });
+                                    }
+                                }
+                                #[cfg(windows)]
+                                Data::ClipboardFileEnabled(_enabled) => {
+                                    #[cfg(windows)]
+                                    self.enable_cliprdr_file_context(self.conn_id, _enabled).await;
+                                }
+                                Data::Theme(dark) => {
+                                    self.cm.change_theme(dark);
+                                }
+                                Data::Language(lang) => {
+                                    LocalConfig::set_option("lang".to_owned(), lang);
+                                    self.cm.change_language();
+                                }
+                                _ => {
+
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                Some(data) = self.rx.recv() => {
+                    if self.stream.send(&data).await.is_err() {
+                        break;
+                    }
+                }
+                clip_file = rx_clip.recv() => match clip_file {
+                    Some(_clip) => {
+                        #[cfg(windows)]
+                        allow_err!(self.tx.send(Data::ClipbaordFile(_clip)));
+                    }
+                    None => {
+                        //
+                    }
+                },
+            }
+        }
+    }
+
+    async fn ipc_task(stream: Connection, cm: ConnectionManager<T>) {
+        log::debug!("ipc task begin");
+        let (tx, rx) = mpsc::unbounded_channel::<Data>();
+        let mut task_runner = Self {
+            stream,
+            cm,
+            tx,
+            rx,
+            close: true,
+            conn_id: 0,
+            #[cfg(windows)]
+            file_transfer_enabled: false,
+        };
+
+        task_runner.run().await;
+        if task_runner.conn_id > 0 {
+            task_runner.run().await;
+        }
+        if task_runner.conn_id > 0 {
+            task_runner
+                .cm
+                .remove_connection(task_runner.conn_id, task_runner.close);
+        }
+        log::debug!("ipc task end");
+    }
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tokio::main(flavor = "current_thread")]
 pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
-    use hbb_common::config::LocalConfig;
-
-    let (tx_file, _rx_file) = mpsc::unbounded_channel::<ClipboardFileData>();
-    #[cfg(windows)]
-    let cm_clip = cm.clone();
-    #[cfg(windows)]
-    std::thread::spawn(move || start_clipboard_file(cm_clip, _rx_file));
-
     #[cfg(windows)]
     std::thread::spawn(move || {
         log::info!("try create privacy mode window");
@@ -253,94 +431,10 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
                 match result {
                     Ok(stream) => {
                         log::debug!("Got new connection");
-                        let mut stream = Connection::new(stream);
-                        let cm = cm.clone();
-                        let tx_file = tx_file.clone();
-                        tokio::spawn(async move {
-                            // for tmp use, without real conn id
-                            let conn_id_tmp = -1;
-                            let mut conn_id: i32 = 0;
-                            let (tx, mut rx) = mpsc::unbounded_channel::<Data>();
-                            let mut write_jobs: Vec<fs::TransferJob> = Vec::new();
-                            let mut close = true;
-                            loop {
-                                tokio::select! {
-                                    res = stream.next() => {
-                                        match res {
-                                            Err(err) => {
-                                                log::info!("cm ipc connection closed: {}", err);
-                                                break;
-                                            }
-                                            Ok(Some(data)) => {
-                                                match data {
-                                                    Data::Login{id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled, restart, recording} => {
-                                                        log::debug!("conn_id: {}", id);
-                                                        conn_id = id;
-                                                        tx_file.send(ClipboardFileData::Enable((id, file_transfer_enabled))).ok();
-                                                        cm.add_connection(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, tx.clone());
-                                                    }
-                                                    Data::Close => {
-                                                        tx_file.send(ClipboardFileData::Enable((conn_id, false))).ok();
-                                                        log::info!("cm ipc connection closed from connection request");
-                                                        break;
-                                                    }
-                                                    Data::Disconnected => {
-                                                        close = false;
-                                                        tx_file.send(ClipboardFileData::Enable((conn_id, false))).ok();
-                                                        log::info!("cm ipc connection disconnect");
-                                                        break;
-                                                    }
-                                                    Data::PrivacyModeState((id, _)) => {
-                                                        conn_id = conn_id_tmp;
-                                                        allow_err!(tx.send(data));
-                                                    }
-                                                    Data::ClickTime(ms) => {
-                                                        CLICK_TIME.store(ms, Ordering::SeqCst);
-                                                    }
-                                                    Data::ChatMessage { text } => {
-                                                        cm.new_message(conn_id, text);
-                                                    }
-                                                    Data::FS(fs) => {
-                                                        handle_fs(fs, &mut write_jobs, &tx).await;
-                                                    }
-                                                    #[cfg(windows)]
-                                                    Data::ClipbaordFile(_clip) => {
-                                                        tx_file
-                                                            .send(ClipboardFileData::Clip((conn_id, _clip)))
-                                                            .ok();
-                                                    }
-                                                    #[cfg(windows)]
-                                                    Data::ClipboardFileEnabled(enabled) => {
-                                                        tx_file
-                                                            .send(ClipboardFileData::Enable((conn_id, enabled)))
-                                                            .ok();
-                                                    }
-                                                    Data::Theme(dark) => {
-                                                        cm.change_theme(dark);
-                                                    }
-                                                    Data::Language(lang) => {
-                                                        LocalConfig::set_option("lang".to_owned(), lang);
-                                                        cm.change_language();
-                                                    }
-                                                    _ => {
-
-                                                    }
-                                                }
-                                            }
-                                            _ => {}
-                                        }
-                                    }
-                                    Some(data) = rx.recv() => {
-                                        if stream.send(&data).await.is_err() {
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                            if conn_id != conn_id_tmp {
-                                cm.remove_connection(conn_id, close);
-                            }
-                        });
+                        tokio::spawn(IpcTaskRunner::<T>::ipc_task(
+                            Connection::new(stream),
+                            cm.clone(),
+                        ));
                     }
                     Err(err) => {
                         log::error!("Couldn't get cm client: {:?}", err);
@@ -642,66 +736,7 @@ fn send_raw(msg: Message, tx: &UnboundedSender<Data>) {
 }
 
 #[cfg(windows)]
-#[tokio::main(flavor = "current_thread")]
-pub async fn start_clipboard_file<T: InvokeUiCM>(
-    cm: ConnectionManager<T>,
-    mut rx: mpsc::UnboundedReceiver<ClipboardFileData>,
-) {
-    let mut cliprdr_context = None;
-    let mut rx_clip_client = clipboard::get_rx_clip_client().lock().await;
-
-    loop {
-        tokio::select! {
-            clip_file = rx_clip_client.recv() => match clip_file {
-                Some((conn_id, clip)) => {
-                    cmd_inner_send(
-                        conn_id,
-                        Data::ClipbaordFile(clip)
-                    );
-                }
-                None => {
-                    //
-                }
-            },
-            server_msg = rx.recv() => match server_msg {
-                Some(ClipboardFileData::Clip((conn_id, clip))) => {
-                    if let Some(ctx) = cliprdr_context.as_mut() {
-                        clipboard::server_clip_file(ctx, conn_id, clip);
-                    }
-                }
-                Some(ClipboardFileData::Enable((id, enabled))) => {
-                    if enabled && cliprdr_context.is_none() {
-                        cliprdr_context = Some(match clipboard::create_cliprdr_context(true, false) {
-                            Ok(context) => {
-                                log::info!("clipboard context for file transfer created.");
-                                context
-                            }
-                            Err(err) => {
-                                log::error!(
-                                    "Create clipboard context for file transfer: {}",
-                                    err.to_string()
-                                );
-                                return;
-                            }
-                        });
-                    }
-                    clipboard::set_conn_enabled(id, enabled);
-                    if !enabled {
-                        if let Some(ctx) = cliprdr_context.as_mut() {
-                            clipboard::empty_clipboard(ctx, id);
-                        }
-                    }
-                }
-                None => {
-                    break
-                }
-            }
-        }
-    }
-}
-
-#[cfg(windows)]
-fn cmd_inner_send(id: i32, data: Data) {
+fn cm_inner_send(id: i32, data: Data) {
     let lock = CLIENTS.read().unwrap();
     if id != 0 {
         if let Some(s) = lock.get(&id) {

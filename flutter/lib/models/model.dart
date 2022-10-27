@@ -28,7 +28,7 @@ import 'input_model.dart';
 import 'platform_model.dart';
 
 typedef HandleMsgBox = Function(Map<String, dynamic> evt, String id);
-bool _waitForImage = false;
+final _waitForImage = <String, bool>{};
 
 class FfiModel with ChangeNotifier {
   PeerInfo _pi = PeerInfo();
@@ -92,7 +92,6 @@ class FfiModel with ChangeNotifier {
   clear() {
     _pi = PeerInfo();
     _display = Display();
-    _waitForImage = false;
     _secure = null;
     _direct = null;
     _inputBlocked = false;
@@ -314,7 +313,7 @@ class FfiModel with ChangeNotifier {
         parent.target?.dialogManager.showLoading(
             translate('Connected, waiting for image...'),
             onCancel: closeConnection);
-        _waitForImage = true;
+        _waitForImage[peerId] = true;
         _reconnects = 1;
       }
     }
@@ -354,8 +353,8 @@ class ImageModel with ChangeNotifier {
   ImageModel(this.parent);
 
   onRgba(Uint8List rgba) {
-    if (_waitForImage) {
-      _waitForImage = false;
+    if (_waitForImage[id]!) {
+      _waitForImage[id] = false;
       parent.target?.dialogManager.dismissAll();
     }
     final pid = parent.target?.id;
