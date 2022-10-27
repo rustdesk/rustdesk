@@ -339,15 +339,15 @@ class ImagePaint extends StatelessWidget {
     if (cacheLinux == null) {
       return MouseCursor.defer;
     } else {
-      final key = cacheLinux.key(scale);
+      final key = cacheLinux.updateGetKey(scale);
       cursor.addKeyLinux(key);
       return FlutterCustomMemoryImageCursor(
         pixbuf: cacheLinux.data,
         key: key,
         hotx: cacheLinux.hotx,
         hoty: cacheLinux.hoty,
-        imageWidth: (cacheLinux.width * scale).toInt(),
-        imageHeight: (cacheLinux.height * scale).toInt(),
+        imageWidth: (cacheLinux.width * cacheLinux.scale).toInt(),
+        imageHeight: (cacheLinux.height * cacheLinux.scale).toInt(),
       );
     }
   }

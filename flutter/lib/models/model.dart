@@ -17,6 +17,7 @@ import 'package:flutter_hbb/models/user_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tuple/tuple.dart';
+import 'package:image/image.dart' as img2;
 import 'package:flutter_custom_cursor/flutter_custom_cursor.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -665,7 +666,9 @@ class CanvasModel with ChangeNotifier {
 class CursorData {
   final String peerId;
   final int id;
-  final Uint8List? data;
+  final img2.Image? image;
+  double scale;
+  Uint8List? data;
   final double hotx;
   final double hoty;
   final int width;
@@ -674,6 +677,8 @@ class CursorData {
   CursorData({
     required this.peerId,
     required this.id,
+    required this.image,
+    required this.scale,
     required this.data,
     required this.hotx,
     required this.hoty,
@@ -683,8 +688,34 @@ class CursorData {
 
   int _doubleToInt(double v) => (v * 10e6).round().toInt();
 
-  String key(double scale) =>
-      '${peerId}_${id}_${_doubleToInt(width * scale)}_${_doubleToInt(height * scale)}';
+  double _checkUpdateScale(double scale) {
+    // Update data if scale changed.
+    if (Platform.isWindows) {
+      final tgtWidth = (width * scale).toInt();
+      final tgtHeight = (width * scale).toInt();
+      if (tgtWidth < kMinCursorSize || tgtHeight < kMinCursorSize) {
+        double sw = kMinCursorSize.toDouble() / width;
+        double sh = kMinCursorSize.toDouble() / height;
+        scale = sw < sh ? sh : sw;
+      }
+      if (_doubleToInt(this.scale) != _doubleToInt(scale)) {
+        data = img2
+            .copyResize(
+              image!,
+              width: (width * scale).toInt(),
+              height: (height * scale).toInt(),
+            )
+            .getBytes();
+      }
+    }
+    this.scale = scale;
+    return scale;
+  }
+
+  String updateGetKey(double scale) {
+    scale = _checkUpdateScale(scale);
+    return '${peerId}_${id}_${_doubleToInt(width * scale)}_${_doubleToInt(height * scale)}';
+  }
 }
 
 class CursorModel with ChangeNotifier {
@@ -864,15 +895,21 @@ class CursorModel with ChangeNotifier {
 
   _updateCacheLinux(ui.Image image, int id, int w, int h) async {
     ByteData? data;
+    img2.Image? image2;
     if (Platform.isWindows) {
       data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      if (data != null) {
+        image2 = img2.Image.fromBytes(w, h, data.buffer.asUint8List());
+      }
     } else {
       data = await image.toByteData(format: ui.ImageByteFormat.png);
     }
     _cacheLinux = CursorData(
       peerId: this.id,
-      data: data?.buffer.asUint8List(),
       id: id,
+      image: image2,
+      scale: 1.0,
+      data: data?.buffer.asUint8List(),
       hotx: _hotx,
       hoty: _hoty,
       width: w,

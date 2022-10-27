@@ -41,6 +41,9 @@ const Duration kTabTransitionDuration = Duration.zero;
 const double kEmptyMarginTop = 50;
 const double kDesktopIconButtonSplashRadius = 20;
 
+/// [kMinCursorSize] indicates min cursor (w, h)
+const int kMinCursorSize = 24;
+
 /// [kDefaultScrollAmountMultiplier] indicates how many rows can be scrolled after a minimum scroll action of mouse
 const kDefaultScrollAmountMultiplier = 5.0;
 const kDefaultScrollDuration = Duration(milliseconds: 50);
