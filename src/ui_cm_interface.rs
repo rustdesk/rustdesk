@@ -56,6 +56,7 @@ struct IpcTaskRunner<T: InvokeUiCM> {
     cm: ConnectionManager<T>,
     tx: mpsc::UnboundedSender<Data>,
     rx: mpsc::UnboundedReceiver<Data>,
+    close: bool,
     conn_id: i32,
     #[cfg(windows)]
     file_transfer_enabled: bool,
@@ -260,7 +261,6 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
 
         // for tmp use, without real conn id
         let mut write_jobs: Vec<fs::TransferJob> = Vec::new();
-        let mut close = true;
 
         #[cfg(windows)]
         if self.conn_id > 0 {
@@ -314,7 +314,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                     break;
                                 }
                                 Data::Disconnected => {
-                                    close = false;
+                                    self.close = false;
                                     #[cfg(windows)]
                                     self.enable_cliprdr_file_context(self.conn_id, false).await;
                                     log::info!("cm ipc connection disconnect");
@@ -387,6 +387,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
             cm,
             tx,
             rx,
+            close: true,
             conn_id: 0,
             #[cfg(windows)]
             file_transfer_enabled: false,
@@ -397,7 +398,9 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
             task_runner.run().await;
         }
         if task_runner.conn_id > 0 {
-            task_runner.cm.remove_connection(task_runner.conn_id, close);
+            task_runner
+                .cm
+                .remove_connection(task_runner.conn_id, task_runner.close);
         }
         log::debug!("ipc task end");
     }
