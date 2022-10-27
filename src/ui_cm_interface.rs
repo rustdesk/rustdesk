@@ -320,8 +320,9 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                     log::info!("cm ipc connection disconnect");
                                     break;
                                 }
-                                Data::PrivacyModeState((id, _)) => {
-                                    cm_inner_send(id, data);
+                                Data::PrivacyModeState((_id, _)) => {
+                                    #[cfg(windows)]
+                                    cm_inner_send(_id, data);
                                 }
                                 Data::ClickTime(ms) => {
                                     CLICK_TIME.store(ms, Ordering::SeqCst);
