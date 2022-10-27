@@ -1178,6 +1178,16 @@ impl<T: InvokeUiSession> Remote<T> {
     #[cfg(windows)]
     fn handle_cliprdr_msg(&self, clip: message_proto::Cliprdr) {
         if !self.handler.lc.read().unwrap().disable_clipboard {
+            #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+            if let Some(message_proto::cliprdr::Union::FormatList(_)) = &clip.union {
+                if self.client_conn_id
+                    != clipboard::get_client_conn_id(&crate::flutter::get_cur_session_id())
+                        .unwrap_or(0)
+                {
+                    return;
+                }
+            }
+
             if let Some(clip) = crate::clipboard_file::msg_2_clip(clip) {
                 ContextSend::proc(|context: &mut Box<CliprdrClientContext>| -> u32 {
                     clipboard::server_clip_file(context, self.client_conn_id, clip)

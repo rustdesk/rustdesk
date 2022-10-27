@@ -59,11 +59,12 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
   void initState() {
     super.initState();
 
-    tabController.onRemove = (_, id) => onRemoveId(id);
+    tabController.onRemoved = (_, id) => onRemoveId(id);
+    tabController.onSelected = (_, id) => onSelectId(id);
 
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
       print(
-          "call ${call.method} with args ${call.arguments} from window ${fromWindowId}");
+          "call ${call.method} with args ${call.arguments} from window $fromWindowId");
 
       final RxBool fullscreen = Get.find(tag: 'fullscreen');
       // for simplify, just replace connectionId
@@ -172,6 +173,10 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     }
     ConnectionTypeState.delete(id);
     _update_remote_count();
+  }
+
+  void onSelectId(String id) {
+    bind.setCurSessionId(id: id);
   }
 
   int windowId() {

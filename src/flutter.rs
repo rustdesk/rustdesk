@@ -567,7 +567,7 @@ pub fn make_fd_flutter(id: i32, entries: &Vec<FileEntry>, only_count: bool) -> S
 }
 
 pub fn get_cur_session_id() -> String {
-    *CUR_SESSION_ID.read().unwrap()
+    CUR_SESSION_ID.read().unwrap().clone()
 }
 
 pub fn set_cur_session_id(id: String) {

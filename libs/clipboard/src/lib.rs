@@ -78,8 +78,16 @@ lazy_static::lazy_static! {
     static ref PROCESS_SIDE: RwLock<ProcessSide> = RwLock::new(ProcessSide::UnknownSide);
 }
 
-#[inline]
-pub fn get_rx_cliprdr_client<'a>(
+pub fn get_client_conn_id(peer_id: &str) -> Option<i32> {
+    VEC_MSG_CHANNEL
+        .read()
+        .unwrap()
+        .iter()
+        .find(|x| x.peer_id == peer_id.to_owned())
+        .map(|x| x.conn_id)
+}
+
+pub fn get_rx_cliprdr_client(
     peer_id: &str,
 ) -> (i32, Arc<TokioMutex<UnboundedReceiver<ClipbaordFile>>>) {
     let mut lock = VEC_MSG_CHANNEL.write().unwrap();
@@ -102,10 +110,7 @@ pub fn get_rx_cliprdr_client<'a>(
     }
 }
 
-#[inline]
-pub fn get_rx_cliprdr_server<'a>(
-    conn_id: i32,
-) -> Arc<TokioMutex<UnboundedReceiver<ClipbaordFile>>> {
+pub fn get_rx_cliprdr_server(conn_id: i32) -> Arc<TokioMutex<UnboundedReceiver<ClipbaordFile>>> {
     let mut lock = VEC_MSG_CHANNEL.write().unwrap();
     match lock.iter().find(|x| x.conn_id == conn_id) {
         Some(msg_channel) => msg_channel.receiver.clone(),

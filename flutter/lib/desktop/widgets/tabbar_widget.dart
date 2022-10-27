@@ -70,10 +70,11 @@ class DesktopTabController {
   final DesktopTabType tabType;
 
   /// index, key
-  Function(int, String)? onRemove;
-  Function(int)? onSelected;
+  Function(int, String)? onRemoved;
+  Function(int, String)? onSelected;
 
-  DesktopTabController({required this.tabType});
+  DesktopTabController(
+      {required this.tabType, this.onRemoved, this.onSelected});
 
   int get length => state.value.tabs.length;
 
@@ -114,7 +115,7 @@ class DesktopTabController {
     state.value.tabs.removeAt(index);
     state.value.scrollController.itemCount = state.value.tabs.length;
     jumpTo(toIndex);
-    onRemove?.call(index, key);
+    onRemoved?.call(index, key);
   }
 
   void jumpTo(int index) {
@@ -134,7 +135,8 @@ class DesktopTabController {
       }));
     });
     if (state.value.tabs.length > index) {
-      onSelected?.call(index);
+      final key = state.value.tabs[index].key;
+      onSelected?.call(index, key);
     }
   }
 
@@ -146,7 +148,7 @@ class DesktopTabController {
 
   void closeBy(String? key) {
     if (!isDesktop) return;
-    assert(onRemove != null);
+    assert(onRemoved != null);
     if (key == null) {
       if (state.value.selected < state.value.tabs.length) {
         remove(state.value.selected);

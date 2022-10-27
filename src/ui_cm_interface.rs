@@ -259,7 +259,6 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
         use hbb_common::config::LocalConfig;
 
         // for tmp use, without real conn id
-        let conn_id_tmp = -1;
         let mut write_jobs: Vec<fs::TransferJob> = Vec::new();
         let mut close = true;
 
@@ -321,9 +320,8 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                     log::info!("cm ipc connection disconnect");
                                     break;
                                 }
-                                Data::PrivacyModeState(_) => {
-                                    self.conn_id = conn_id_tmp;
-                                    allow_err!(self.tx.send(data));
+                                Data::PrivacyModeState((id, _)) => {
+                                    cm_inner_send(id, data);
                                 }
                                 Data::ClickTime(ms) => {
                                     CLICK_TIME.store(ms, Ordering::SeqCst);
@@ -338,7 +336,6 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                     #[cfg(windows)]
                                     {
                                         let conn_id = self.conn_id;
-
                                         ContextSend::proc(|context: &mut Box<CliprdrClientContext>| -> u32 {
                                             clipboard::server_clip_file(context, conn_id, _clip)
                                         });
@@ -380,12 +377,10 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                 },
             }
         }
-        if self.conn_id != 0 && self.conn_id != conn_id_tmp {
-            self.cm.remove_connection(self.conn_id, close);
-        }
     }
 
     async fn ipc_task(stream: Connection, cm: ConnectionManager<T>) {
+        log::debug!("ipc task begin");
         let (tx, rx) = mpsc::unbounded_channel::<Data>();
         let mut task_runner = Self {
             stream,
@@ -401,6 +396,10 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
         if task_runner.conn_id > 0 {
             task_runner.run().await;
         }
+        if task_runner.conn_id > 0 {
+            task_runner.cm.remove_connection(task_runner.conn_id, close);
+        }
+        log::debug!("ipc task end");
     }
 }
 
@@ -729,5 +728,19 @@ fn send_raw(msg: Message, tx: &UnboundedSender<Data>) {
             allow_err!(tx.send(Data::RawMessage(bytes)));
         }
         err => allow_err!(err),
+    }
+}
+
+#[cfg(windows)]
+fn cm_inner_send(id: i32, data: Data) {
+    let lock = CLIENTS.read().unwrap();
+    if id != 0 {
+        if let Some(s) = lock.get(&id) {
+            allow_err!(s.tx.send(data));
+        }
+    } else {
+        for s in lock.values() {
+            allow_err!(s.tx.send(data.clone()));
+        }
     }
 }
