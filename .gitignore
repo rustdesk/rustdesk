@@ -38,3 +38,4 @@ flatpak/.flatpak-builder/shared-modules/*.tar.xz
 flatpak/.flatpak-builder/debian-binary
 # bridge file
 lib/generated_bridge.dart
+build.rs
