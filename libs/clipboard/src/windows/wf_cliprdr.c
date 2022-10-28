@@ -135,14 +135,14 @@ typedef struct _FORMAT_IDS FORMAT_IDS;
 
 #define TAG "windows"
 
-// #ifdef WITH_DEBUG_CLIPRDR
+#ifdef WITH_DEBUG_CLIPRDR
 #define DEBUG_CLIPRDR(fmt, ...) fprintf(stderr, "DEBUG %s[%d] %s() " fmt "\n",  __FILE__, __LINE__, __func__, ##__VA_ARGS__);fflush(stderr)
-// #else
-// #define DEBUG_CLIPRDR(fmt, ...) \
-// 	do                     \
-// 	{                      \
-// 	} while (0)
-// #endif
+#else
+#define DEBUG_CLIPRDR(fmt, ...) \
+	do                     \
+	{                      \
+	} while (0)
+#endif
 
 typedef BOOL(WINAPI *fnAddClipboardFormatListener)(HWND hwnd);
 typedef BOOL(WINAPI *fnRemoveClipboardFormatListener)(HWND hwnd);
