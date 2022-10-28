@@ -653,7 +653,6 @@ fn map_keyboard_mode(evt: &KeyEvent) {
 
         let code = evt.chr();
         let key = rdev::get_win_key(code, 0);
-        //let key = rdev::windows::keycodes::key_from_code(code);
         match key {
             RdevKey::Home |
             RdevKey::UpArrow |
