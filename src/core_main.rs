@@ -2,6 +2,13 @@ use std::{env::Args, collections::HashMap};
 
 use hbb_common::log;
 
+struct SetOption {
+    name: String,
+    allowed_values: Vec<String>,
+    remove_on_value: String,
+    value_as_upper: bool
+}
+
 // shared by flutter and sciter main function
 pub fn core_main() -> Option<Vec<String>> {
     // https://docs.rs/flexi_logger/latest/flexi_logger/error_info/index.html#write
@@ -189,7 +196,7 @@ pub fn core_main() -> Option<Vec<String>> {
             #[cfg(feature = "flutter")]
             crate::flutter::connection_manager::start_listen_ipc_thread();
         }
-        else if(args[0] == "--info") {
+        else if args[0] == "--info" {
             let id : String = crate::ipc::get_id();
             let options: HashMap<String, String> = crate::ipc::get_options();
 
@@ -199,23 +206,33 @@ pub fn core_main() -> Option<Vec<String>> {
             let mut id_server: String = String::from("None");
             let mut relay_server: String = String::from("None");
 
-            if(id_server_option != None) {
+            if id_server_option != None {
                 id_server = id_server_option.unwrap().to_string();
             }
 
-            if(relay_server_option != None) {
+            if relay_server_option != None {
                 relay_server = relay_server_option.unwrap().to_string();
             }
 
+            //Print the information to StdOut (Might not work on windows)
             println!("RustDesk ID: {id}");
             println!("ID Server: {id_server}");
             println!("Relay Server: {relay_server}");
+            
+            //Print the information in the log also.
+            log::info!("----INFO----");
+            log::info!("RustDesk ID: {id}");
+            log::info!("ID Server: {id_server}");
+            log::info!("Relay Server: {relay_server}");
+            log::info!("------------");
+
             return None;
         }
-        else if(args[0] == "--id-server") {
-            if(args.len() == 2) {
+        else if args[0] == "--id-server" {
+            if args.len() == 2 {
                 let mut id_server: String = args[1].to_owned();
-                if(id_server.to_lowercase() == "none") {
+
+                if "none".eq(&id_server.to_lowercase()) {
                     id_server = String::from("");
                 }
 
@@ -226,10 +243,11 @@ pub fn core_main() -> Option<Vec<String>> {
             }
             return None;
         }
-        else if(args[0] == "--relay-server") {
-            if(args.len() == 2) {
+        else if args[0] == "--relay-server"  {
+            if args.len() == 2 {
                 let mut relay_server: String = args[1].to_owned();
-                if(relay_server.to_lowercase() == "none") {
+                
+                if "none".eq(&relay_server.to_lowercase()) {
                     relay_server = String::from("");
                 }
 
@@ -238,6 +256,147 @@ pub fn core_main() -> Option<Vec<String>> {
                 crate::ipc::set_option("relay-server", relay_server);
                 log::info!("Relay server changed to {relay_server}");
             }
+            return None;
+        }
+        else if args[0] == "--set-option" {
+            if args.len() == 3 {
+
+                let none_value = String::from("NONE");
+                let yes_value: String = String::from("Y");
+                let no_value: String = String::from("N");
+
+                let empty_vec: Vec<String> = [].to_vec();
+                let bool_vec: Vec<String> = [yes_value.clone(), no_value.clone()].to_vec();
+
+                
+                let available_options = [
+                    SetOption { name: String::from("rendezvous_server"), allowed_values: empty_vec.clone(), remove_on_value: none_value.clone(), value_as_upper: false },
+                    SetOption { name: String::from("custom-rendezvous-server"), allowed_values: empty_vec.clone(), remove_on_value: none_value.clone(), value_as_upper: false },
+                    SetOption { name: String::from("relay-server"), allowed_values: empty_vec.clone(), remove_on_value: none_value.clone(), value_as_upper: false },
+                    SetOption { name: String::from("video-save-directory"), allowed_values: empty_vec.clone(), remove_on_value: none_value.clone(), value_as_upper: false },
+                    SetOption { name: String::from("audio-input"), allowed_values: empty_vec.clone(), remove_on_value: none_value.clone(), value_as_upper: false },
+                    
+                    SetOption { name: String::from("allow-darktheme"), allowed_values: bool_vec.clone(), remove_on_value: no_value.clone(), value_as_upper: true },
+                    SetOption { name: String::from("enable-clipboard"), allowed_values: bool_vec.clone(), remove_on_value: yes_value.clone(), value_as_upper: true },
+                    SetOption { name: String::from("enable-lan-discovery"), allowed_values: bool_vec.clone(), remove_on_value: yes_value.clone(), value_as_upper: true },
+                    SetOption { name: String::from("direct-server"), allowed_values: bool_vec.clone(), remove_on_value: no_value.clone(), value_as_upper: true },
+                    SetOption { name: String::from("allow-auto-record-incoming"), allowed_values: bool_vec.clone(), remove_on_value: no_value.clone(), value_as_upper: true },
+                    SetOption { name: String::from("enable-record-session"), allowed_values: bool_vec.clone(), remove_on_value: yes_value.clone(), value_as_upper: true },
+                    SetOption { name: String::from("enable-remote-restart"), allowed_values: bool_vec.clone(), remove_on_value: yes_value.clone(), value_as_upper: true },
+                    SetOption { name: String::from("allow-remote-config-modification"), allowed_values: bool_vec.clone(), remove_on_value: no_value.clone(), value_as_upper: true },
+                    SetOption { name: String::from("enable-tunnel"), allowed_values: bool_vec.clone(), remove_on_value: yes_value.clone(), value_as_upper: true },
+                    SetOption { name: String::from("enable-keyboard"), allowed_values: bool_vec.clone(), remove_on_value: yes_value.clone(), value_as_upper: true },
+                    SetOption { name: String::from("enable-audio"), allowed_values: bool_vec.clone(), remove_on_value: yes_value.clone(), value_as_upper: true },
+                    SetOption { name: String::from("enable-file-transfer"), allowed_values: bool_vec.clone(), remove_on_value: yes_value.clone(), value_as_upper: true },
+                    
+                    SetOption { name: String::from("temporary-password-length"), allowed_values: [String::from("6"), String::from("8"), String::from("10")].to_vec(), remove_on_value: yes_value.clone(), value_as_upper: false },
+                    SetOption { name: String::from("verification-method"), allowed_values: [String::from("use-permanent-password"), String::from("use-temporary-password"), String::from("use-both-passwords")].to_vec(), remove_on_value: none_value.clone(), value_as_upper: false }
+                ];
+
+                let special_options: [String; 5] = [String::from("whitelist"), String::from("socks"), String::from("socks-proxy"), String::from("socks-username"), String::from("socks-password")];
+
+                let option_orig: String = args[1].to_owned();
+                let option: String = option_orig.to_lowercase();
+
+                let option_str: &str = option.as_str();
+
+                let value : String = args[2].to_owned();
+
+                if special_options.contains(&option) {
+                    if option == String::from("whitelist") {
+                        if value.is_empty() || value == none_value {
+                            crate::ipc::set_option(option_str, "");
+                        } else {
+                            let ips = value.split(",");
+                            for ip in ips {
+
+                                let res = ip.parse::<std::net::IpAddr>();
+                                if res.is_err() {
+                                    log::warn!("{ip} is not a valid IP-address (Option: whitelist)");
+                                        return None;
+                                }
+                            }
+
+                            crate::ipc::set_option(option_str, value.as_str());
+                        }
+                        log::info!("Option: {option} = {value}.");
+                        return None;
+                    } else if option == String::from("socks") || option == String::from("socks-proxy") || option == String::from("socks-username") || option == String::from("socks-password") {
+
+                        let socks_res = crate::ipc::get_socks();
+                        
+                        let mut socks;
+
+                        if socks_res.is_none() {
+                            socks = hbb_common::config::Socks5Server::default();
+                        } else {
+                            socks = socks_res.unwrap();
+                        }
+                        
+                        if value.is_empty() || value == none_value {
+                            socks.proxy = String::from("");
+                            socks.username = String::from("");
+                            socks.password = String::from("");
+                        } else if option == String::from("socks") {
+                            let parts = value.split(";;").collect::<Vec<&str>>();
+
+                            if parts.len() != 3 {
+                                log::warn!("Failed to update Socket5 configuration: Unexpected format. Format: PROXY;;USERNAME;;PASSWORD");
+                                return None;
+                            } else {
+                                socks.proxy = parts.get(0).unwrap().to_string();
+                                socks.username = parts.get(1).unwrap().to_string();
+                                socks.password = parts.get(2).unwrap().to_string();
+                            }
+                        } else if option == String::from("socks-proxy") {
+                            socks.proxy = value;
+                        } else if option == String::from("socks-username") {
+                            socks.username = value;
+                        } else if option == String::from("socks-password") {
+                            socks.password = value;
+                        }
+
+                        let res = crate::ipc::set_socks(socks);
+                        if res.is_err() {
+                            log::warn!("Failed to update Socket5 configuration.");
+                            return None;
+                        }
+
+                        log::info!("Socks5 parameters updated.");
+                        return None;
+                    }
+                }
+
+                for o in available_options
+                {
+                    if o.name == option {
+                        if o.allowed_values.is_empty() || o.allowed_values.contains(&value.to_lowercase()) || o.allowed_values.contains(&value.to_uppercase()) {
+                            if value.is_empty() || value == none_value || o.remove_on_value.to_lowercase() == value.to_lowercase() {
+                                crate::ipc::set_option(option_str, "");
+                            } else {
+
+                                if o.value_as_upper {
+                                    crate::ipc::set_option(option_str, value.to_uppercase().as_str());
+                                } else {
+                                    crate::ipc::set_option(option_str, value.as_str());
+                                }
+
+                            }
+                            
+                            log::info!("Option: {option} = {value}.");
+                        } else {
+                            log::warn!("Value {value} is not allowed in option {option}");
+                        }
+
+                        return None;
+                    }
+                }
+            } else if args.len() == 2 {
+                log::warn!("No value specified");
+            } else {
+                log::warn!("No option specified");
+            }
+            
             return None;
         }
     }

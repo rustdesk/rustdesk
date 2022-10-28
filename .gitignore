@@ -39,3 +39,5 @@ flatpak/.flatpak-builder/debian-binary
 # bridge file
 lib/generated_bridge.dart
 build.rs
+/resources
+rc.rs
