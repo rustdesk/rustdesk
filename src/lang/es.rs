@@ -175,7 +175,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Allow hearing sound", "Permitir escuchar sonido"),
         ("Allow file copy and paste", "Permitir copiar y pegar archivos"),
         ("Connected", "Conectado"),
-        ("Direct and encrypted connection", "Conexión directa y encriptada"),
+        ("Direct and encrypted connection", "Conexión directa y cifrada"),
         ("Relayed and encrypted connection", "Conexión retransmitida y cifrada"),
         ("Direct and unencrypted connection", "Conexión directa y sin cifrar"),
         ("Relayed and unencrypted connection", "Conexión retransmitida y sin cifrar"),
