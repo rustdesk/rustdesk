@@ -40,9 +40,7 @@ pub fn core_main() -> Option<Vec<String>> {
         }
         i += 1;
     }
-    if args.contains(&"--install".to_string()) {
-        is_setup = true;
-    }
+
     #[cfg(feature = "flutter")]
     if _is_flutter_connect {
         return core_main_invoke_new_connection(std::env::args());
@@ -51,9 +49,13 @@ pub fn core_main() -> Option<Vec<String>> {
         is_setup = true;
     }
     if is_setup {
-        if args.is_empty() {
-            args.push("--install".to_owned());
+
+        if !flutter_args.contains(&"--install".to_string()) {
             flutter_args.push("--install".to_string());
+        }
+
+        if !args.contains(&"--install".to_string()) {
+            args.push("--install".to_string());
         }
     }
     if args.contains(&"--noinstall".to_string()) {
@@ -144,18 +146,42 @@ pub fn core_main() -> Option<Vec<String>> {
                 return None;
             }
         }
-        if args[0] == "--remove" {
-            if args.len() == 2 {
+
+        return parse_args(args, flutter_args);
+    }
+    //_async_logger_holder.map(|x| x.flush());
+    #[cfg(feature = "flutter")]
+    return Some(flutter_args);
+    #[cfg(not(feature = "flutter"))]
+    return Some(args);
+}
+
+fn parse_args(args: Vec<String>, flutter_args: Vec<String>) -> Option<Vec<String>>
+{
+    let mut inter = args.clone().into_iter();
+
+    let mut unhandled_commands: Vec<String> = [].to_vec();
+
+    let mut any_changes: bool = false;
+
+    let mut item : Option<String> = inter.next();
+    while !item.is_none() {
+        let field: String = item.to_owned().unwrap();
+
+        if field == "--remove" {
+            let filename: Option<String> = inter.next();
+
+            if !filename.is_none() {
                 // sleep a while so that process of removed exe exit
                 std::thread::sleep(std::time::Duration::from_secs(1));
-                std::fs::remove_file(&args[1]).ok();
+                std::fs::remove_file(filename.unwrap()).ok();
                 return None;
             }
-        } else if args[0] == "--service" {
+        } else if field == "--service" {
             log::info!("start --service");
             crate::start_os_service();
             return None;
-        } else if args[0] == "--server" {
+        } else if field == "--server" {
             log::info!("start --server");
             #[cfg(not(target_os = "macos"))]
             {
@@ -167,10 +193,13 @@ pub fn core_main() -> Option<Vec<String>> {
                 std::thread::spawn(move || crate::start_server(true));
                 // to-do: for flutter, starting tray not ready yet, or we can reuse sciter's tray implementation.
             }
-        } else if args[0] == "--import-config" {
-            if args.len() == 2 {
+        } else if field == "-import-config" {
+            let filename: Option<String> = inter.next();
+
+            if !filename.is_none() {
                 let filepath;
-                let path = std::path::Path::new(&args[1]);
+                let path_file = &filename.unwrap().to_owned();
+                let path = std::path::Path::new(path_file);
                 if !path.is_absolute() {
                     let mut cur = std::env::current_dir().unwrap();
                     cur.push(path);
@@ -179,95 +208,43 @@ pub fn core_main() -> Option<Vec<String>> {
                     filepath = path.to_str().unwrap().to_string();
                 }
                 import_config(&filepath);
+                any_changes = true;
             }
-            return None;
-        } else if args[0] == "--password" {
-            if args.len() == 2 {
-                crate::ipc::set_permanent_password(args[1].to_owned()).unwrap();
+        } else if field == "--password" {
+            let new_pass: Option<String> = inter.next();
+            if !new_pass.is_none() {
+                let p: String = new_pass.unwrap().to_owned();
+                match crate::ipc::set_permanent_password(p) {
+                    Ok(_) => { any_changes = true; },
+                    Err(e) => log::warn!("Failed to set password: {e}")
+                }
+            } else {
+                log::warn!("Error changing password: no new password specified.");
             }
-            return None;
-        } else if args[0] == "--check-hwcodec-config" {
+        } else if field == "--check-hwcodec-config" {
             #[cfg(feature = "hwcodec")]
-            scrap::hwcodec::check_config();
-            return None;
-        } else if args[0] == "--cm" {
+            {
+                scrap::hwcodec::check_config();
+                return None;
+            }
+            continue;
+        } else if field == "--cm" {
             // call connection manager to establish connections
             // meanwhile, return true to call flutter window to show control panel
             #[cfg(feature = "flutter")]
             crate::flutter::connection_manager::start_listen_ipc_thread();
-        }
-        else if args[0] == "--info" {
-            let id : String = crate::ipc::get_id();
-            let options: HashMap<String, String> = crate::ipc::get_options();
+        } else if field.starts_with("--set-") {
 
-            let id_server_option: Option<&String> = options.get("custom-rendezvous-server");
-            let relay_server_option: Option<&String> = options.get("relay-server");
+            let real_field: String = field[6..].to_string();
+            let value_opt: Option<String> = inter.next();
 
-            let mut id_server: String = String::from("None");
-            let mut relay_server: String = String::from("None");
-
-            if id_server_option != None {
-                id_server = id_server_option.unwrap().to_string();
-            }
-
-            if relay_server_option != None {
-                relay_server = relay_server_option.unwrap().to_string();
-            }
-
-            //Print the information to StdOut (Might not work on windows)
-            println!("RustDesk ID: {id}");
-            println!("ID Server: {id_server}");
-            println!("Relay Server: {relay_server}");
-            
-            //Print the information in the log also.
-            log::info!("----INFO----");
-            log::info!("RustDesk ID: {id}");
-            log::info!("ID Server: {id_server}");
-            log::info!("Relay Server: {relay_server}");
-            log::info!("------------");
-
-            return None;
-        }
-        else if args[0] == "--id-server" {
-            if args.len() == 2 {
-                let mut id_server: String = args[1].to_owned();
-
-                if "none".eq(&id_server.to_lowercase()) {
-                    id_server = String::from("");
-                }
-
-                let id_server: &str = id_server.as_str();
-                
-                crate::ipc::set_option("custom-rendezvous-server", id_server);
-                log::info!("ID server changed to {id_server}");
-            }
-            return None;
-        }
-        else if args[0] == "--relay-server"  {
-            if args.len() == 2 {
-                let mut relay_server: String = args[1].to_owned();
-                
-                if "none".eq(&relay_server.to_lowercase()) {
-                    relay_server = String::from("");
-                }
-
-                let relay_server: &str = relay_server.as_str();
-                
-                crate::ipc::set_option("relay-server", relay_server);
-                log::info!("Relay server changed to {relay_server}");
-            }
-            return None;
-        }
-        else if args[0] == "--set-option" {
-            if args.len() == 3 {
-
-                let none_value = String::from("NONE");
+            if !value_opt.is_none() && !real_field.is_empty() {
+                let none_value: String = String::from("NONE");
                 let yes_value: String = String::from("Y");
                 let no_value: String = String::from("N");
 
                 let empty_vec: Vec<String> = [].to_vec();
                 let bool_vec: Vec<String> = [yes_value.clone(), no_value.clone()].to_vec();
-
                 
                 let available_options = [
                     SetOption { name: String::from("rendezvous_server"), allowed_values: empty_vec.clone(), remove_on_value: none_value.clone(), value_as_upper: false },
@@ -295,32 +272,40 @@ pub fn core_main() -> Option<Vec<String>> {
 
                 let special_options: [String; 5] = [String::from("whitelist"), String::from("socks"), String::from("socks-proxy"), String::from("socks-username"), String::from("socks-password")];
 
-                let option_orig: String = args[1].to_owned();
+                let option_orig: String = real_field.to_owned();
                 let option: String = option_orig.to_lowercase();
 
                 let option_str: &str = option.as_str();
 
-                let value : String = args[2].to_owned();
+                let value : String = value_opt.unwrap().to_owned();
 
                 if special_options.contains(&option) {
                     if option == String::from("whitelist") {
                         if value.is_empty() || value == none_value {
                             crate::ipc::set_option(option_str, "");
+                            any_changes = true;
                         } else {
+                            let mut all_valid: bool = true;
                             let ips = value.split(",");
                             for ip in ips {
 
                                 let res = ip.parse::<std::net::IpAddr>();
                                 if res.is_err() {
                                     log::warn!("{ip} is not a valid IP-address (Option: whitelist)");
-                                        return None;
+                                    all_valid = false;
+                                    break;
                                 }
                             }
 
-                            crate::ipc::set_option(option_str, value.as_str());
+                            if all_valid {
+                                crate::ipc::set_option(option_str, value.as_str());
+                                any_changes = true;
+                            }
+
                         }
                         log::info!("Option: {option} = {value}.");
-                        return None;
+                        item = inter.next();
+                        continue;
                     } else if option == String::from("socks") || option == String::from("socks-proxy") || option == String::from("socks-username") || option == String::from("socks-password") {
 
                         let socks_res = crate::ipc::get_socks();
@@ -359,13 +344,18 @@ pub fn core_main() -> Option<Vec<String>> {
                         let res = crate::ipc::set_socks(socks);
                         if res.is_err() {
                             log::warn!("Failed to update Socket5 configuration.");
-                            return None;
+                            item = inter.next();
+                            continue;
                         }
 
+                        any_changes = true;
                         log::info!("Socks5 parameters updated.");
-                        return None;
+                        item = inter.next();
+                        continue;
                     }
                 }
+
+                let mut handled: bool = false;
 
                 for o in available_options
                 {
@@ -373,38 +363,58 @@ pub fn core_main() -> Option<Vec<String>> {
                         if o.allowed_values.is_empty() || o.allowed_values.contains(&value.to_lowercase()) || o.allowed_values.contains(&value.to_uppercase()) {
                             if value.is_empty() || value == none_value || o.remove_on_value.to_lowercase() == value.to_lowercase() {
                                 crate::ipc::set_option(option_str, "");
+                            } else if o.value_as_upper {
+                                crate::ipc::set_option(option_str, value.to_uppercase().as_str());
                             } else {
-
-                                if o.value_as_upper {
-                                    crate::ipc::set_option(option_str, value.to_uppercase().as_str());
-                                } else {
-                                    crate::ipc::set_option(option_str, value.as_str());
-                                }
-
+                                crate::ipc::set_option(option_str, value.as_str());
                             }
                             
+                            any_changes = true;
                             log::info!("Option: {option} = {value}.");
                         } else {
                             log::warn!("Value {value} is not allowed in option {option}");
                         }
-
-                        return None;
+                        handled = true;
+                        break;
                     }
                 }
-            } else if args.len() == 2 {
-                log::warn!("No value specified");
-            } else {
+
+                if !handled {
+                    log::warn!("Option {option} is not configurable through --set-*.");
+                }
+
+            } else if real_field.is_empty() {
                 log::warn!("No option specified");
+            } else {
+                log::warn!("No value specified");
             }
-            
-            return None;
+        } else if field == "--exit" {
+            return None; //Use --exit if you only want to set the password using --password for example.. Stops the program from running any further!
+        } else {
+            unhandled_commands.push(field.clone());
         }
+
+        item = inter.next();
     }
-    //_async_logger_holder.map(|x| x.flush());
+
+    if any_changes {
+
+        let h = hbb_common::config::Config::file().to_owned();
+        let tmp_config = h.to_owned().with_file_name("_RustDesk.toml");
+        let tmp_config2 = h.with_file_name("_RustDesk2.toml");
+
+        let config: hbb_common::config::Config = hbb_common::config::load_path(hbb_common::config::Config::file());
+        let config2: hbb_common::config::Config2 = hbb_common::config::load_path(hbb_common::config::Config2::file());
+
+        let _ = hbb_common::config::store_path( tmp_config, config);
+        let _ = hbb_common::config::store_path( tmp_config2, config2);
+        log::info!("Storing new configuration in temporary files.");
+    }
+
     #[cfg(feature = "flutter")]
     return Some(flutter_args);
     #[cfg(not(feature = "flutter"))]
-    return Some(args);
+    return Some(unhandled_commands);
 }
 
 fn import_config(path: &str) {

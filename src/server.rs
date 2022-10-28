@@ -359,6 +359,7 @@ pub async fn start_server(is_server: bool) {
         #[cfg(target_os = "macos")]
         tokio::spawn(async { sync_and_watch_config_dir().await });
         crate::RendezvousMediator::start_all().await;
+        
     } else {
         match crate::ipc::connect(1000, "").await {
             Ok(mut conn) => {
@@ -366,12 +367,15 @@ pub async fn start_server(is_server: bool) {
                     if let Ok(Some(data)) = conn.next_timeout(1000).await {
                         match data {
                             Data::SyncConfig(Some((config, config2))) => {
-                                if Config::set(config) {
+                                if Config::set(config.to_owned()) {
                                     log::info!("config synced");
                                 }
-                                if Config2::set(config2) {
+
+                                if Config2::set(config2.to_owned()) {
                                     log::info!("config2 synced");
                                 }
+
+                                sync_temp_configs(config, config2, conn).await;                            
                             }
                             _ => {}
                         }
@@ -384,6 +388,60 @@ pub async fn start_server(is_server: bool) {
             }
         }
     }
+}
+
+async fn sync_temp_configs(mut config: Config, mut config2: Config2, mut conn: crate::ipc::ConnectionTmpl<tokio::net::windows::named_pipe::NamedPipeClient>) {
+    let h = hbb_common::config::Config::file().to_owned();
+
+    let tmp_config = h.to_owned().with_file_name("_RustDesk.toml");
+    let tmp_config2 = h.with_file_name("_RustDesk2.toml");
+
+    let mut del1: bool = false;
+    let mut del2: bool = false;
+
+    if tmp_config.exists() {
+        let x_config: hbb_common::config::Config = hbb_common::config::load_path(tmp_config.to_owned());
+        if config == x_config || hbb_common::config::Config::set(x_config.to_owned()) {
+            config = x_config;
+            del1 = true;
+        }
+    }
+
+    if tmp_config2.exists() {
+        let x_config: hbb_common::config::Config2 = hbb_common::config::load_path(tmp_config2.to_owned());
+        if config2 == x_config || hbb_common::config::Config2::set(x_config.to_owned()) {
+            config2 = x_config;
+            del2 = true;
+        }
+    }
+
+    if del1 || del2 {
+        log::info!("Overwriting configuration from temporary storage.");
+        if conn.send(&Data::SyncConfig(Some((config.to_owned(), config2.to_owned())))).await.is_ok() {
+            if del1 {
+                let _ = std::fs::remove_file(tmp_config);
+            }
+            if del2 {
+                let _ = std::fs::remove_file(tmp_config2);
+            }
+        }
+    }
+
+    
+    /*let tmp_config = h2.with_file_name("_RustDesk2.toml");
+    if tmp_config.exists() {
+        log::info!("Temp config exists!");
+        let x_config: hbb_common::config::Config2 = hbb_common::config::load_path(tmp_config.to_owned());
+
+        if hbb_common::config::Config2::set(x_config.to_owned()) {
+            log::info!("Overwriting config2 with set parameters.");
+            if conn.send(&Data::SyncConfig(Some((config, x_config)))).await.is_ok() {
+                let _ = std::fs::remove_file(tmp_config);
+            }
+        }
+    }*/
+
+
 }
 
 #[cfg(target_os = "macos")]
