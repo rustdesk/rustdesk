@@ -647,6 +647,27 @@ fn map_keyboard_mode(evt: &KeyEvent) {
     // map mode(1): Send keycode according to the peer platform.
     let (click_capslock, click_numlock) = sync_status(evt);
 
+    #[cfg(windows)]
+    {
+    	crate::platform::windows::try_change_desktop();
+
+        let code = evt.chr();
+        let key = rdev::get_win_key(code, 0);
+        //let key = rdev::windows::keycodes::key_from_code(code);
+        match key {
+            RdevKey::Home |
+            RdevKey::UpArrow |
+            RdevKey::PageUp |
+            RdevKey::LeftArrow |
+            RdevKey::RightArrow |
+            RdevKey::End |
+            RdevKey::DownArrow |
+            RdevKey::PageDown |
+            RdevKey::Insert | 
+            RdevKey::Delete => { rdev_key_click(RdevKey::NumLock); },
+            _ => {},
+        }
+    }
     // Wayland
     #[cfg(target_os = "linux")]
     if !*IS_X11.lock().unwrap() {
