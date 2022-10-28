@@ -1,4 +1,4 @@
-use std::env::Args;
+use std::{env::Args, collections::HashMap};
 
 use hbb_common::log;
 
@@ -188,6 +188,57 @@ pub fn core_main() -> Option<Vec<String>> {
             // meanwhile, return true to call flutter window to show control panel
             #[cfg(feature = "flutter")]
             crate::flutter::connection_manager::start_listen_ipc_thread();
+        }
+        else if(args[0] == "--info") {
+            let id : String = crate::ipc::get_id();
+            let options: HashMap<String, String> = crate::ipc::get_options();
+
+            let id_server_option: Option<&String> = options.get("custom-rendezvous-server");
+            let relay_server_option: Option<&String> = options.get("relay-server");
+
+            let mut id_server: String = String::from("None");
+            let mut relay_server: String = String::from("None");
+
+            if(id_server_option != None) {
+                id_server = id_server_option.unwrap().to_string();
+            }
+
+            if(relay_server_option != None) {
+                relay_server = relay_server_option.unwrap().to_string();
+            }
+
+            println!("RustDesk ID: {id}");
+            println!("ID Server: {id_server}");
+            println!("Relay Server: {relay_server}");
+            return None;
+        }
+        else if(args[0] == "--id-server") {
+            if(args.len() == 2) {
+                let mut id_server: String = args[1].to_owned();
+                if(id_server.to_lowercase() == "none") {
+                    id_server = String::from("");
+                }
+
+                let id_server: &str = id_server.as_str();
+                
+                crate::ipc::set_option("custom-rendezvous-server", id_server);
+                log::info!("ID server changed to {id_server}");
+            }
+            return None;
+        }
+        else if(args[0] == "--relay-server") {
+            if(args.len() == 2) {
+                let mut relay_server: String = args[1].to_owned();
+                if(relay_server.to_lowercase() == "none") {
+                    relay_server = String::from("");
+                }
+
+                let relay_server: &str = relay_server.as_str();
+                
+                crate::ipc::set_option("relay-server", relay_server);
+                log::info!("Relay server changed to {relay_server}");
+            }
+            return None;
         }
     }
     //_async_logger_holder.map(|x| x.flush());
