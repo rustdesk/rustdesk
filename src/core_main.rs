@@ -135,6 +135,9 @@ pub fn core_main() -> Option<Vec<String>> {
                 #[cfg(feature = "with_rc")]
                 hbb_common::allow_err!(crate::rc::extract_resources(&args[1]));
                 return None;
+            } else if args[0] == "--tray" {
+                crate::tray::start_tray(crate::ui_interface::OPTIONS.clone());
+                return None;
             }
         }
         if args[0] == "--remove" {

@@ -89,11 +89,6 @@ pub fn start(args: &mut [String]) {
     unsafe {
         winapi::um::shellscalingapi::SetProcessDpiAwareness(2);
     }
-    #[cfg(windows)]
-    if args.len() > 0 && args[0] == "--tray" {
-        crate::tray::start_tray(crate::ui_interface::OPTIONS.clone());
-        return;
-    }
     use sciter::SCRIPT_RUNTIME_FEATURES::*;
     allow_err!(sciter::set_options(sciter::RuntimeOptions::ScriptFeatures(
         ALLOW_FILE_IO as u8 | ALLOW_SOCKET_IO as u8 | ALLOW_EVAL as u8 | ALLOW_SYSINFO as u8
