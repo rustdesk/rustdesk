@@ -644,7 +644,6 @@ fn sync_status(evt: &KeyEvent) -> (bool, bool) {
     let click_numlock = {
         let code = evt.chr();
         let key = rdev::get_win_key(code, 0);
-        //let key = rdev::windows::keycodes::key_from_code(code);
         match key {
             RdevKey::Home |
             RdevKey::UpArrow |
