@@ -106,18 +106,24 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             width: 100,
             height: 13,
             child: TextButton(
-                onHover: (bool v) {
-                  _hideColor.value = v ? Colors.white60 : Colors.white24;
-                },
-                onPressed: () {
-                  _show.value = !_show.value;
-                  if (_show.isTrue) {
-                    _updateScreen();
-                  }
-                },
-                child: Obx(() => Container(
+              onHover: (bool v) {
+                _hideColor.value = v ? Colors.white60 : Colors.white24;
+              },
+              onPressed: () {
+                _show.value = !_show.value;
+                _hideColor.value = Colors.white24;
+                if (_show.isTrue) {
+                  _updateScreen();
+                }
+              },
+              child: Obx(() => Container(
+                    decoration: BoxDecoration(
                       color: _hideColor.value,
-                    ).marginOnly(bottom: 8.0))))));
+                      border: Border.all(color: MyTheme.border),
+                      borderRadius: BorderRadius.all(Radius.circular(5.0)),
+                    ),
+                  ).marginOnly(bottom: 8.0)),
+            ))));
   }
 
   _updateScreen() async {
@@ -170,7 +176,11 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             textStyle: TextStyle(color: _MenubarTheme.commonColor)),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Container(
-              color: Colors.white,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border.all(color: MyTheme.border),
+                borderRadius: BorderRadius.all(Radius.circular(10.0)),
+              ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: menubarItems,
