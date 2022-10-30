@@ -21,7 +21,10 @@ use winapi::{
         errhandlingapi::GetLastError,
         handleapi::CloseHandle,
         minwinbase::STILL_ACTIVE,
-        processthreadsapi::{GetCurrentProcess, GetExitCodeProcess, OpenProcess, OpenProcessToken},
+        processthreadsapi::{
+            GetCurrentProcess, GetCurrentProcessId, GetExitCodeProcess, OpenProcess,
+            OpenProcessToken,
+        },
         securitybaseapi::GetTokenInformation,
         shellapi::ShellExecuteA,
         winbase::*,
@@ -905,7 +908,7 @@ pub fn update_me() -> ResultType<()> {
         chcp 65001
         sc stop {app_name}
         taskkill /F /IM {broker_exe}
-        taskkill /F /IM {app_name}.exe
+        taskkill /F /IM {app_name}.exe /FI \"PID ne {cur_pid}\"
         {copy_exe}
         \"{src_exe}\" --extract \"{path}\"
         sc start {app_name}
@@ -917,6 +920,7 @@ pub fn update_me() -> ResultType<()> {
         path = path,
         app_name = crate::get_app_name(),
         lic = register_licence(),
+        cur_pid = get_current_pid(),
     );
     std::thread::sleep(std::time::Duration::from_millis(1000));
     run_cmds(cmds, false, "update")?;
@@ -1178,13 +1182,14 @@ fn get_before_uninstall() -> String {
     sc stop {app_name}
     sc delete {app_name}
     taskkill /F /IM {broker_exe}
-    taskkill /F /IM {app_name}.exe
+    taskkill /F /IM {app_name}.exe /FI \"PID ne {cur_pid}\"
     reg delete HKEY_CLASSES_ROOT\\.{ext} /f
     netsh advfirewall firewall delete rule name=\"{app_name} Service\"
     ",
         app_name = app_name,
         broker_exe = crate::ui::win_privacy::INJECTED_PROCESS_EXE,
-        ext = ext
+        ext = ext,
+        cur_pid = get_current_pid(),
     )
 }
 
@@ -1612,4 +1617,8 @@ pub fn is_foreground_window_elevated() -> ResultType<bool> {
         }
         is_elevated(Some(process_id))
     }
+}
+
+fn get_current_pid() -> u32 {
+    unsafe { GetCurrentProcessId() }
 }
