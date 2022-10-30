@@ -412,15 +412,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   @override
   void initState() {
     super.initState();
-    Timer(const Duration(seconds: 1), () async {
-      final installed = bind.mainIsInstalled();
-      final root = await bind.mainIsRoot();
-      final release = await bind.mainIsRelease();
-      if (Platform.isWindows && release && !installed && !root) {
-        msgBox('custom-elevation-nocancel', 'Prompt', 'elevation_prompt', '',
-            gFFI.dialogManager);
-      }
-    });
     Timer(const Duration(seconds: 5), () async {
       updateUrl = await bind.mainGetSoftwareUpdateUrl();
       if (updateUrl.isNotEmpty) setState(() {});

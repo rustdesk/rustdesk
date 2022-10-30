@@ -1242,9 +1242,3 @@ function refreshCurrentUser() {
 function getHttpHeaders() {
     return "Authorization: Bearer " + handler.get_local_option("access_token");
 }
-
-$(body).timer(1000, function check_elevation(){
-    if (is_win && handler.is_release() && !handler.is_installed() && !handler.is_root()) {
-        msgbox("custom-elevation-nocancel", "Prompt", "elevation_prompt");
-    }
-});

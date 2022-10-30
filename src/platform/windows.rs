@@ -21,7 +21,10 @@ use winapi::{
         errhandlingapi::GetLastError,
         handleapi::CloseHandle,
         minwinbase::STILL_ACTIVE,
-        processthreadsapi::{GetCurrentProcess, GetExitCodeProcess, OpenProcess, OpenProcessToken},
+        processthreadsapi::{
+            GetCurrentProcess, GetCurrentProcessId, GetExitCodeProcess, OpenProcess,
+            OpenProcessToken,
+        },
         securitybaseapi::GetTokenInformation,
         shellapi::ShellExecuteA,
         winbase::*,
@@ -878,22 +881,34 @@ fn get_install_info_with_subkey(subkey: String) -> (String, String, String, Stri
     (subkey, path, start_menu, exe)
 }
 
-pub fn copy_exe_cmd(src_exe: &str, _exe: &str, _path: &str) -> String {
+pub fn copy_exe_cmd(src_exe: &str, _exe: &str, path: &str) -> String {
     #[cfg(feature = "flutter")]
-    return format!(
+    let main_exe = format!(
         "XCOPY \"{}\" \"{}\" /Y /E /H /C /I /K /R /Z",
         PathBuf::from(src_exe)
             .parent()
             .unwrap()
             .to_string_lossy()
             .to_string(),
-        _path
+        path
     );
     #[cfg(not(feature = "flutter"))]
-    return format!(
+    let main_exe = format!(
         "copy /Y \"{src_exe}\" \"{exe}\"",
         src_exe = src_exe,
         exe = _exe
+    );
+
+    return format!(
+        "
+        {main_exe}
+        copy /Y \"{ORIGIN_PROCESS_EXE}\" \"{path}\\{broker_exe}\"
+        \"{src_exe}\" --extract \"{path}\"
+        ",
+        main_exe = main_exe,
+        path = path,
+        ORIGIN_PROCESS_EXE = crate::ui::win_privacy::ORIGIN_PROCESS_EXE,
+        broker_exe = crate::ui::win_privacy::INJECTED_PROCESS_EXE,
     );
 }
 
@@ -905,18 +920,16 @@ pub fn update_me() -> ResultType<()> {
         chcp 65001
         sc stop {app_name}
         taskkill /F /IM {broker_exe}
-        taskkill /F /IM {app_name}.exe
+        taskkill /F /IM {app_name}.exe /FI \"PID ne {cur_pid}\"
         {copy_exe}
-        \"{src_exe}\" --extract \"{path}\"
         sc start {app_name}
         {lic}
     ",
-        src_exe = src_exe,
         copy_exe = copy_exe_cmd(&src_exe, &exe, &path),
         broker_exe = crate::ui::win_privacy::INJECTED_PROCESS_EXE,
-        path = path,
         app_name = crate::get_app_name(),
         lic = register_licence(),
+        cur_pid = get_current_pid(),
     );
     std::thread::sleep(std::time::Duration::from_millis(1000));
     run_cmds(cmds, false, "update")?;
@@ -1087,8 +1100,6 @@ if exist \"{tmp_path}\\{app_name} Tray.lnk\" del /f /q \"{tmp_path}\\{app_name} 
 chcp 65001
 md \"{path}\"
 {copy_exe}
-copy /Y \"{ORIGIN_PROCESS_EXE}\" \"{path}\\{broker_exe}\"
-\"{src_exe}\" --extract \"{path}\"
 reg add {subkey} /f
 reg add {subkey} /f /v DisplayIcon /t REG_SZ /d \"{exe}\"
 reg add {subkey} /f /v DisplayName /t REG_SZ /d \"{app_name}\"
@@ -1119,10 +1130,7 @@ sc delete {app_name}
     ",
         uninstall_str=uninstall_str,
         path=path,
-        src_exe=src_exe,
         exe=exe,
-        ORIGIN_PROCESS_EXE = crate::ui::win_privacy::ORIGIN_PROCESS_EXE,
-        broker_exe=crate::ui::win_privacy::INJECTED_PROCESS_EXE,
         subkey=subkey,
         app_name=crate::get_app_name(),
         version=crate::VERSION,
@@ -1178,13 +1186,14 @@ fn get_before_uninstall() -> String {
     sc stop {app_name}
     sc delete {app_name}
     taskkill /F /IM {broker_exe}
-    taskkill /F /IM {app_name}.exe
+    taskkill /F /IM {app_name}.exe /FI \"PID ne {cur_pid}\"
     reg delete HKEY_CLASSES_ROOT\\.{ext} /f
     netsh advfirewall firewall delete rule name=\"{app_name} Service\"
     ",
         app_name = app_name,
         broker_exe = crate::ui::win_privacy::INJECTED_PROCESS_EXE,
-        ext = ext
+        ext = ext,
+        cur_pid = get_current_pid(),
     )
 }
 
@@ -1612,4 +1621,8 @@ pub fn is_foreground_window_elevated() -> ResultType<bool> {
         }
         is_elevated(Some(process_id))
     }
+}
+
+fn get_current_pid() -> u32 {
+    unsafe { GetCurrentProcessId() }
 }
