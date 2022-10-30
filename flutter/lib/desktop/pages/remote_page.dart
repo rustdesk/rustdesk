@@ -284,7 +284,7 @@ class ImagePaint extends StatelessWidget {
             ? keyboardEnabled.isTrue
                 ? (remoteCursorMoved.isTrue
                     ? SystemMouseCursors.none
-                    : _buildCustomCursorLinux(context, s))
+                    : _buildCustomCursor(context, s))
                 : _buildDisabledCursor(context, s)
             : MouseCursor.defer,
         onHover: (evt) {},
@@ -333,31 +333,31 @@ class ImagePaint extends StatelessWidget {
     }
   }
 
-  MouseCursor _buildCustomCursorLinux(BuildContext context, double scale) {
+  MouseCursor _buildCustomCursor(BuildContext context, double scale) {
     final cursor = Provider.of<CursorModel>(context);
-    final cacheLinux = cursor.cacheLinux;
-    if (cacheLinux == null) {
+    final cache = cursor.cache ?? cursor.defaultCache;
+    if (cache == null) {
       return MouseCursor.defer;
     } else {
-      final key = cacheLinux.updateGetKey(scale);
+      final key = cache.updateGetKey(scale);
       cursor.addKey(key);
       return FlutterCustomMemoryImageCursor(
-        pixbuf: cacheLinux.data,
+        pixbuf: cache.data,
         key: key,
-        // hotx: cacheLinux.hotx,
-        // hoty: cacheLinux.hoty,
+        // hotx: cache.hotx,
+        // hoty: cache.hoty,
         hotx: 0,
         hoty: 0,
-        imageWidth: (cacheLinux.width * cacheLinux.scale).toInt(),
-        imageHeight: (cacheLinux.height * cacheLinux.scale).toInt(),
+        imageWidth: (cache.width * cache.scale).toInt(),
+        imageHeight: (cache.height * cache.scale).toInt(),
       );
     }
   }
 
   MouseCursor _buildDisabledCursor(BuildContext context, double scale) {
     final cursor = Provider.of<CursorModel>(context);
-    final cacheLinux = cursor.cacheLinux;
-    if (cacheLinux == null) {
+    final cache = cursor.cache;
+    if (cache == null) {
       return MouseCursor.defer;
     } else {
       if (cursor.cachedForbidmemoryCursorData == null) {
@@ -368,8 +368,8 @@ class ImagePaint extends StatelessWidget {
       return FlutterCustomMemoryImageCursor(
         pixbuf: cursor.cachedForbidmemoryCursorData,
         key: key,
-        hotx: cacheLinux.hotx,
-        hoty: cacheLinux.hoty,
+        hotx: 0,
+        hoty: 0,
         imageWidth: 32,
         imageHeight: 32,
       );

@@ -724,6 +724,8 @@ class CursorModel with ChangeNotifier {
   ui.Image? _image;
   final _images = <int, Tuple3<ui.Image, double, double>>{};
   CursorData? _cache;
+  final _defaultCacheId = -1;
+  CursorData? _defaultCache;
   final _cacheMap = <int, CursorData>{};
   final _cacheKeys = <String>{};
   double _x = -10000;
@@ -736,7 +738,8 @@ class CursorModel with ChangeNotifier {
   WeakReference<FFI> parent;
 
   ui.Image? get image => _image;
-  CursorData? get cacheLinux => _cache;
+  CursorData? get cache => _cache;
+  CursorData? get defaultCache => _getDefaultCache();
 
   double get x => _x - _displayOriginX;
 
@@ -752,6 +755,29 @@ class CursorModel with ChangeNotifier {
 
   Set<String> get cachedKeys => _cacheKeys;
   addKey(String key) => _cacheKeys.add(key);
+
+  CursorData? _getDefaultCache() {
+    if (_defaultCache == null) {
+      if (Platform.isWindows) {
+        Uint8List data = defaultCursorImage!.getBytes(format: img2.Format.bgra);
+        _hotx = defaultCursorImage!.width / 2;
+        _hoty = defaultCursorImage!.height / 2;
+
+        _defaultCache = CursorData(
+          peerId: id,
+          id: _defaultCacheId,
+          image: defaultCursorImage?.clone(),
+          scale: 1.0,
+          data: data,
+          hotx: _hotx,
+          hoty: _hoty,
+          width: defaultCursorImage!.width,
+          height: defaultCursorImage!.height,
+        );
+      }
+    }
+    return _defaultCache;
+  }
 
   // remote physical display coordinate
   Rect getVisibleRect() {
