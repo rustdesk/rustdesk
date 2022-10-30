@@ -669,8 +669,8 @@ class CursorData {
   final img2.Image? image;
   double scale;
   Uint8List? data;
-  final double hotx;
-  final double hoty;
+  double hotx;
+  double hoty;
   final int width;
   final int height;
 
@@ -705,7 +705,9 @@ class CursorData {
               width: (width * scale).toInt(),
               height: (height * scale).toInt(),
             )
-            .getBytes();
+            .getBytes(format: img2.Format.bgra);
+        hotx = (width * scale) / 2;
+        hoty = (height * scale) / 2;
       }
     }
     this.scale = scale;
@@ -721,9 +723,9 @@ class CursorData {
 class CursorModel with ChangeNotifier {
   ui.Image? _image;
   final _images = <int, Tuple3<ui.Image, double, double>>{};
-  CursorData? _cacheLinux;
-  final _cacheMapLinux = <int, CursorData>{};
-  final _cacheKeysLinux = <String>{};
+  CursorData? _cache;
+  final _cacheMap = <int, CursorData>{};
+  final _cacheKeys = <String>{};
   double _x = -10000;
   double _y = -10000;
   double _hotx = 0;
@@ -734,7 +736,7 @@ class CursorModel with ChangeNotifier {
   WeakReference<FFI> parent;
 
   ui.Image? get image => _image;
-  CursorData? get cacheLinux => _cacheLinux;
+  CursorData? get cacheLinux => _cache;
 
   double get x => _x - _displayOriginX;
 
@@ -748,8 +750,8 @@ class CursorModel with ChangeNotifier {
 
   CursorModel(this.parent);
 
-  Set<String> get cachedKeysLinux => _cacheKeysLinux;
-  addKeyLinux(String key) => _cacheKeysLinux.add(key);
+  Set<String> get cachedKeys => _cacheKeys;
+  addKey(String key) => _cacheKeys.add(key);
 
   // remote physical display coordinate
   Rect getVisibleRect() {
@@ -919,7 +921,7 @@ class CursorModel with ChangeNotifier {
       }
     }
 
-    _cacheLinux = CursorData(
+    _cache = CursorData(
       peerId: this.id,
       id: id,
       image: image2,
@@ -930,12 +932,12 @@ class CursorModel with ChangeNotifier {
       width: w,
       height: h,
     );
-    _cacheMapLinux[id] = _cacheLinux!;
+    _cacheMap[id] = _cache!;
   }
 
   updateCursorId(Map<String, dynamic> evt) async {
     final id = int.parse(evt['id']);
-    _cacheLinux = _cacheMapLinux[id];
+    _cache = _cacheMap[id];
     final tmp = _images[id];
     if (tmp != null) {
       _image = tmp.item1;
@@ -983,15 +985,15 @@ class CursorModel with ChangeNotifier {
     _image = null;
     _images.clear();
 
-    _clearCacheLinux();
-    _cacheLinux = null;
-    _cacheMapLinux.clear();
+    _clearCache();
+    _cache = null;
+    _cacheMap.clear();
   }
 
-  _clearCacheLinux() {
-    final cachedKeys = {...cachedKeysLinux};
-    for (var key in cachedKeys) {
-      customCursorController.freeCache(key);
+  _clearCache() {
+    final keys = {...cachedKeys};
+    for (var k in keys) {
+      customCursorController.freeCache(k);
     }
   }
 
@@ -1002,7 +1004,7 @@ class CursorModel with ChangeNotifier {
   }
 
   img2.Image? defaultCursorImage = img2.decodePng(base64Decode(
-      'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARzQklUCAgICHwIZIgAAAPCSURBVFiF7ZZBbBVVFIa/c+8w01daaKHYSkUQsQSbSIm4ELRqYlyoUQHbVcUmYmIg7EQSE5MmxI0LN4YuTBCDicYiDYSExiAxJrpoiDGURK2ChZYioNjS1/de583cOS5eiQJ99BU0uui/vDPn/N+Ze/PfgVnN6j+W3Grh9iMapMPRlI2MCZiX72whg4j+qwAvfa5zTTZcL4YnUX0ApAZJPEXSRvlFha9szLE9m1Jn/3GA9oO5RxF2ojwBlBd5TYGfFOm0Euz94HlJ3zZAR4eaM2smXkHZBdROumSShEGX8BtIZAxVVnSJCHdMljkVPpHQ7fiwteLCbQG0H8q9qsq7AhVAOBHJ0aFRc7B/WE7/Pu7lUJJUGXMaFrrapYvj5qpANxlhSQFUPtMk/9q+jfMu3xLAy4dyzaJ0AbWqMnopLbt7+vzDZAkRDPZv9XkSDPrQqvzKlfW6wzP6IICIvDMeBm/ubxU3lYcpZr61SytE2Unhs4eX0rK7p9fvJkeEh73GHMDH4GGP/+D3nzzjve0SfgRQ1S1z/Yl1xXyKAuT8cD3wOEAmL1/09PmHAW4wvl4e9sQpO/DrmLwP5IAFIrShOmVdUQAVngLKVckMj5pDZAmnNb8qwXzzc9AbOU4AKDS3dWfrSgbYfkQDVBsBnHKu/7ycRorD3iCL5EbIZvLyXWEa6o3IspIB0uFoCpFFAC6Ri5fHvUzJ01+VQ7ORDAOqkBJrFpUMYCNjILEFAGIcM45YCs4xoAIiLvFKBgiYl1cKKeYZqsvK8WcMYRHfUA0YhEhFrpQM0NlCRuA0gGf1rnsXuNoZAwR4FWWFc4QyYo2cKxkAERXha0CNsGh5bfLYjMzzJE1L3T3BHF07udKXDoPB0gEAE3EUoR+gqtxtbFrlVhEzZZpdI4d680k1LI7bDNQBTiyf7m+V3IwA9mxKnUWkE3DWUH9/ffx643K3ghhXdDtinFdB2TNNYXvK16cBFL4MJTxYzMfebJh1G3Z9H9n4bmC1NdxZOz9pWljjrlzIehfjLCERCY4EUCze6hXuvkcaoq2VZdoi4AEDBt320XOVp4p5TH8bdo3Xqe+9J+iLkxNNRDEnx0P5NpeX84kSB3OonutrY8rXteavK3kgUdm2b0NZz836lxQum7vHFlrrv6GqW4AF1z3W6/okCMdE9a29L5T3Tte75HRr6VJb6U08nFg2ozQDixVSACLEKH8g9IlwIDThgY+frRoppe+Mf0o7OtQMrsnWqcqyREyNamJFZUxVhnJxMFTstM9qVv9b/QkV/YOrhHDdtAAAAABJRU5ErkJggg=='));
+      'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARzQklUCAgICHwIZIgAAAFmSURBVFiF7dWxSlxREMbx34QFDRowYBchZSxSCWlMCOwD5FGEFHap06UI7KPsAyyEEIQFqxRaCqYTsqCJFsKkuAeRXb17wrqV918dztw55zszc2fo6Oh47MR/e3zO1/iAHWmznHKGQwx9ip/LEbCfazbsoY8j/JLOhcC6sCW9wsjEwJf483AC9nPNc1+lFRwI13d+l3rYFS799rFGxJMqARv2pBXh+72XQ7gWvklPS7TmMl9Ak/M+DqrENvxAv/guKKApuKPWl0/TROK4+LbSqzhuB+OZ3fRSeFPWY+Fkyn56Y29hfgTSpnQ+s98cvorVey66uPlNFxKwZOYLCGfCs5n9NMYVrsp6mvXSoFqpqYFDvMBkStgJJe93dZOwVXxbqUnBENulydSReqUrDhcX0PT2EXarBYS3GNXMhboinBgIl9K71kg0L3+PvyYGdVpruT2MwrF0iotiXfIwus0Dj+OOjo6Of+e7ab74RkpgAAAAAElFTkSuQmCC'));
 }
 
 class QualityMonitorData {

@@ -340,12 +340,14 @@ class ImagePaint extends StatelessWidget {
       return MouseCursor.defer;
     } else {
       final key = cacheLinux.updateGetKey(scale);
-      cursor.addKeyLinux(key);
+      cursor.addKey(key);
       return FlutterCustomMemoryImageCursor(
         pixbuf: cacheLinux.data,
         key: key,
-        hotx: cacheLinux.hotx,
-        hoty: cacheLinux.hoty,
+        // hotx: cacheLinux.hotx,
+        // hoty: cacheLinux.hoty,
+        hotx: 0,
+        hoty: 0,
         imageWidth: (cacheLinux.width * cacheLinux.scale).toInt(),
         imageHeight: (cacheLinux.height * cacheLinux.scale).toInt(),
       );
@@ -362,7 +364,7 @@ class ImagePaint extends StatelessWidget {
         cursor.updateForbiddenCursorBuffer();
       }
       final key = 'disabled_cursor_key';
-      cursor.addKeyLinux(key);
+      cursor.addKey(key);
       return FlutterCustomMemoryImageCursor(
         pixbuf: cursor.cachedForbidmemoryCursorData,
         key: key,
