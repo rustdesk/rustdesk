@@ -1948,5 +1948,5 @@ fn decode_id_pk(signed: &[u8], key: &sign::PublicKey) -> ResultType<(String, [u8
 }
 
 pub fn disable_keyboard_listening() {
-    crate::ui_session_interface::KEYBOARD_HOOKED.store(false, Ordering::SeqCst);
+    crate::ui_session_interface::KEYBOARD_HOOKED.store(true, Ordering::SeqCst);
 }

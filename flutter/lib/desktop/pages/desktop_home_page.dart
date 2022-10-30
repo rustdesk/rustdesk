@@ -428,6 +428,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   @override
   void initState() {
     super.initState();
+    bind.mainStartGrabKeyboard();
     Timer(const Duration(seconds: 5), () async {
       updateUrl = await bind.mainGetSoftwareUpdateUrl();
       if (updateUrl.isNotEmpty) setState(() {});

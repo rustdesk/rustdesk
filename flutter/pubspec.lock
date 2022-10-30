@@ -250,8 +250,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "541f05f766c3f72984ff40b70dd3c7d061f2ce61"
-      resolved-ref: "541f05f766c3f72984ff40b70dd3c7d061f2ce61"
+      ref: bf278fc8a8ff787e46fa3ab97674373bfaa20f23
+      resolved-ref: bf278fc8a8ff787e46fa3ab97674373bfaa20f23
       url: "https://github.com/Kingtous/rustdesk_desktop_multi_window"
     source: git
     version: "0.1.0"
