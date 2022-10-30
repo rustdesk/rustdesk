@@ -27,6 +27,7 @@ pub fn start_tray(options: Arc<Mutex<HashMap<String, String>>>) {
         .build()
         .unwrap();
     let old_state = Arc::new(Mutex::new(0));
+    let _ = crate::ui_interface::SENDER.lock().unwrap();
     event_loop.run(move |event, _, control_flow| {
         if options.lock().unwrap().get("ipc-closed").is_some() {
             *control_flow = ControlFlow::Exit;
@@ -46,7 +47,7 @@ pub fn start_tray(options: Arc<Mutex<HashMap<String, String>>>) {
             let mut m = MenuBuilder::new();
             if stopped == 2 {
                 m = m.item(
-                    &crate::client::translate("Start service".to_owned()),
+                    &crate::client::translate("Start Service".to_owned()),
                     Events::StartService,
                 );
             } else {
