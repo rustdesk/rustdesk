@@ -9,7 +9,7 @@ use hbb_common::{
 };
 use std::io::prelude::*;
 use std::{
-    ffi::{CString, OsString},
+    ffi::OsString,
     fs, io, mem,
     path::PathBuf,
     sync::{Arc, Mutex},
@@ -27,7 +27,7 @@ use winapi::{
             OpenProcessToken,
         },
         securitybaseapi::GetTokenInformation,
-        shellapi::ShellExecuteA,
+        shellapi::ShellExecuteW,
         winbase::*,
         wingdi::*,
         winnt::{
@@ -1481,17 +1481,19 @@ pub fn get_user_token(session_id: u32, as_user: bool) -> HANDLE {
 }
 
 pub fn run_uac(exe: &str, arg: &str) -> ResultType<bool> {
+    let wop = wide_string("runas");
+    let wexe = wide_string(exe);
+    let warg;
     unsafe {
-        let cstring;
-        let ret = ShellExecuteA(
+        let ret = ShellExecuteW(
             NULL as _,
-            CString::new("runas")?.as_ptr() as _,
-            CString::new(exe)?.as_ptr() as _,
+            wop.as_ptr() as _,
+            wexe.as_ptr() as _,
             if arg.is_empty() {
                 NULL as _
             } else {
-                cstring = CString::new(arg)?;
-                cstring.as_ptr() as _
+                warg = wide_string(arg);
+                warg.as_ptr() as _
             },
             NULL as _,
             SW_SHOWNORMAL,
@@ -1529,7 +1531,7 @@ pub fn run_as_system(arg: &str) -> ResultType<()> {
 }
 
 pub fn elevate_or_run_as_system(is_setup: bool, is_elevate: bool, is_run_as_system: bool) {
-    // avoid possible run recursively due to failed run, which hasn't happened yet.
+    // avoid possible run recursively due to failed run.
     let arg_elevate = if is_setup {
         "--noinstall --elevate"
     } else {
@@ -1540,37 +1542,37 @@ pub fn elevate_or_run_as_system(is_setup: bool, is_elevate: bool, is_run_as_syst
     } else {
         "--run-as-system"
     };
-    let rerun_as_system = || {
-        if !is_root() {
-            if run_as_system(arg_run_as_system).is_ok() {
-                std::process::exit(0);
-            } else {
-                log::error!("Failed to run as system");
-            }
-        }
-    };
 
-    if is_elevate {
-        if !is_elevated(None).map_or(true, |b| b) {
-            log::error!("Failed to elevate");
-            return;
-        }
-        rerun_as_system();
-    } else if is_run_as_system {
-        if !is_root() {
-            log::error!("Failed to be system");
-        }
+    if is_root() {
+        log::debug!("portable run as system user");
     } else {
-        if let Ok(true) = is_elevated(None) {
-            // right click
-            rerun_as_system();
-        } else {
-            // left click || run without install
-            if let Ok(true) = elevate(arg_elevate) {
-                std::process::exit(0);
-            } else {
-                // do nothing but prompt
+        match is_elevated(None) {
+            Ok(elevated) => {
+                if elevated {
+                    if !is_run_as_system {
+                        if run_as_system(arg_run_as_system).is_ok() {
+                            std::process::exit(0);
+                        } else {
+                            unsafe {
+                                log::error!("Failed to run as system, errno={}", GetLastError());
+                            }
+                        }
+                    }
+                } else {
+                    if !is_elevate {
+                        if let Ok(true) = elevate(arg_elevate) {
+                            std::process::exit(0);
+                        } else {
+                            unsafe {
+                                log::error!("Failed to elevate, errno={}", GetLastError());
+                            }
+                        }
+                    }
+                }
             }
+            Err(_) => unsafe {
+                log::error!("Failed to get elevation status, errno={}", GetLastError());
+            },
         }
     }
 }
@@ -1635,4 +1637,12 @@ fn get_current_pid() -> u32 {
 
 pub fn get_double_click_time() -> u32 {
     unsafe { GetDoubleClickTime() }
+}
+
+fn wide_string(s: &str) -> Vec<u16> {
+    use std::os::windows::prelude::OsStrExt;
+    std::ffi::OsStr::new(s)
+        .encode_wide()
+        .chain(Some(0).into_iter())
+        .collect()
 }
