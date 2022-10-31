@@ -21,19 +21,21 @@ static mut LAYOUT: HKL = std::ptr::null_mut();
 pub const ENIGO_INPUT_EXTRA_VALUE: ULONG_PTR = 100;
 
 fn mouse_event(flags: u32, data: u32, dx: i32, dy: i32) -> DWORD {
-    let mut input = INPUT {
-        type_: INPUT_MOUSE,
-        u: unsafe {
-            transmute(MOUSEINPUT {
-                dx,
-                dy,
-                mouseData: data,
-                dwFlags: flags,
-                time: 0,
-                dwExtraInfo: ENIGO_INPUT_EXTRA_VALUE,
-            })
-        },
-    };
+    let mut input: INPUT = unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
+    input.type_ = INPUT_MOUSE;
+    unsafe {
+        let dst_ptr = (&mut input.u as *mut _) as *mut u8;
+        let m = MOUSEINPUT {
+            dx,
+            dy,
+            mouseData: data,
+            dwFlags: flags,
+            time: 0,
+            dwExtraInfo: ENIGO_INPUT_EXTRA_VALUE,
+        };
+        let src_ptr = (&m as *const _) as *const u8;
+        std::ptr::copy_nonoverlapping(src_ptr, dst_ptr, std::mem::size_of::<MOUSEINPUT>());
+    }
     unsafe { SendInput(1, &mut input as LPINPUT, size_of::<INPUT>() as c_int) }
 }
 
