@@ -1,4 +1,5 @@
 use super::{CursorData, ResultType};
+use crate::common::PORTABLE_APPNAME_RUNTIME_ENV_KEY;
 use crate::ipc;
 use crate::license::*;
 use hbb_common::{
@@ -1333,7 +1334,12 @@ fn get_reg_of(subkey: &str, name: &str) -> String {
 }
 
 fn get_license_from_exe_name() -> ResultType<License> {
-    let exe = std::env::current_exe()?.to_str().unwrap_or("").to_owned();
+    let mut exe = std::env::current_exe()?.to_str().unwrap_or("").to_owned();
+    // if defined portable appname entry, replace original executable name with it.
+    if let Ok(portable_exe) = std::env::var(PORTABLE_APPNAME_RUNTIME_ENV_KEY) {
+        exe = portable_exe;
+        log::debug!("update portable executable name to {}", exe);
+    }
     get_license_from_string(&exe)
 }
 
