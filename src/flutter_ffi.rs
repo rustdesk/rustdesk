@@ -7,13 +7,14 @@ use std::{
 use flutter_rust_bridge::{StreamSink, SyncReturn, ZeroCopyBuffer};
 use serde_json::json;
 
+use hbb_common::ResultType;
 use hbb_common::{
     config::{self, LocalConfig, PeerConfig, ONLINE},
     fs, log,
 };
-use hbb_common::{message_proto::Hash, ResultType};
 
 use crate::flutter::{self, SESSIONS};
+#[cfg(target_os = "android")]
 use crate::start_server;
 use crate::ui_interface::{self, *};
 use crate::{
@@ -362,7 +363,7 @@ pub fn session_create_dir(id: String, act_id: i32, path: String, is_remote: bool
     }
 }
 
-pub fn session_read_local_dir_sync(id: String, path: String, show_hidden: bool) -> String {
+pub fn session_read_local_dir_sync(_id: String, path: String, show_hidden: bool) -> String {
     if let Ok(fd) = fs::read_dir(&fs::get_path(&path), show_hidden) {
         return make_fd_to_json(fd.id, path, &fd.entries);
     }

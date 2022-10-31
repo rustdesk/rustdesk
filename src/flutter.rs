@@ -418,6 +418,7 @@ pub fn session_start_(id: &str, event_stream: StreamSink<EventToUI>) -> ResultTy
 pub mod connection_manager {
     use std::collections::HashMap;
 
+    #[cfg(any(target_os = "android"))]
     use hbb_common::log;
     #[cfg(any(target_os = "android"))]
     use scrap::android::call_main_service_set_by_name;
