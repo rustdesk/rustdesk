@@ -34,7 +34,7 @@ fn mouse_event(flags: u32, data: u32, dx: i32, dy: i32) -> DWORD {
             dwExtraInfo: ENIGO_INPUT_EXTRA_VALUE,
         };
         let src_ptr = (&m as *const _) as *const u8;
-        std::ptr::copy_nonoverlapping(src_ptr, dst_ptr, std::mem::size_of::<MOUSEINPUT>());
+        std::ptr::copy_nonoverlapping(src_ptr, dst_ptr, size_of::<MOUSEINPUT>());
     }
     unsafe { SendInput(1, &mut input as LPINPUT, size_of::<INPUT>() as c_int) }
 }
@@ -52,18 +52,20 @@ fn keybd_event(flags: u32, vk: u16, scan: u16) -> DWORD {
             scan = MapVirtualKeyExW(vk as _, 0, LAYOUT) as _;
         }
     }
-    let mut input = INPUT {
-        type_: INPUT_KEYBOARD,
-        u: unsafe {
-            transmute_copy(&KEYBDINPUT {
-                wVk: vk,
-                wScan: scan,
-                dwFlags: flags,
-                time: 0,
-                dwExtraInfo: ENIGO_INPUT_EXTRA_VALUE,
-            })
-        },
-    };
+    let mut input: INPUT = unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
+    input.type_ = INPUT_KEYBOARD;
+    unsafe {
+        let dst_ptr = (&mut input.u as *mut _) as *mut u8;
+        let k = KEYBDINPUT {
+            wVk: vk,
+            wScan: scan,
+            dwFlags: flags,
+            time: 0,
+            dwExtraInfo: ENIGO_INPUT_EXTRA_VALUE,
+        };
+        let src_ptr = (&k as *const _) as *const u8;
+        std::ptr::copy_nonoverlapping(src_ptr, dst_ptr, size_of::<KEYBDINPUT>());
+    }
     unsafe { SendInput(1, &mut input as LPINPUT, size_of::<INPUT>() as c_int) }
 }
 
