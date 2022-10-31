@@ -725,7 +725,7 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
     // disable numlock if press home etc when numlock is on,
     // because we will get numpad value (7,8,9 etc) if not
     #[cfg(windows)]
-    let mut disable_numlock = false;
+    let mut _disable_numlock = false;
     #[cfg(target_os = "macos")]
     en.reset_flag();
     // When long-pressed the command key, then press and release
@@ -775,8 +775,8 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
             if let Some(key) = KEY_MAP.get(&ck.value()) {
                 #[cfg(windows)]
                 if let Some(_) = NUMPAD_KEY_MAP.get(&ck.value()) {
-                    disable_numlock = en.get_key_state(Key::NumLock);
-                    if disable_numlock {
+                    _disable_numlock = en.get_key_state(Key::NumLock);
+                    if _disable_numlock {
                         en.key_down(Key::NumLock).ok();
                         en.key_up(Key::NumLock);
                     }
