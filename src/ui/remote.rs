@@ -18,8 +18,6 @@ use hbb_common::{
     allow_err, fs::TransferJobMeta, log, message_proto::*, rendezvous_proto::ConnType,
 };
 
-#[cfg(windows)]
-use crate::clipboard_file::*;
 use crate::{
     client::*,
     ui_interface::has_hwcodec,

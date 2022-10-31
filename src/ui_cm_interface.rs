@@ -11,7 +11,7 @@ use std::{
 };
 
 #[cfg(windows)]
-use clipboard::{cliprdr::CliprdrClientContext, empty_clipboard, ContextSend};
+use clipboard::{cliprdr::CliprdrClientContext, empty_clipboard, set_conn_enabled, ContextSend};
 use serde_derive::Serialize;
 
 use crate::ipc::{self, new_listener, Connection, Data};
@@ -247,10 +247,10 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                     .await
             );
         }
-        clipboard::set_conn_enabled(conn_id, enabled);
+        set_conn_enabled(conn_id, enabled);
         if !enabled {
             ContextSend::proc(|context: &mut Box<CliprdrClientContext>| -> u32 {
-                clipboard::empty_clipboard(context, conn_id);
+                empty_clipboard(context, conn_id);
                 0
             });
         }
