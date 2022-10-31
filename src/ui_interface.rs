@@ -141,6 +141,11 @@ pub fn has_rendezvous_service() -> bool {
 pub fn get_license() -> String {
     #[cfg(windows)]
     if let Some(lic) = crate::platform::windows::get_license() {
+        #[cfg(feature = "flutter")]
+        {
+            return format!("Key: {}\nHost: {}\nApi: {}", lic.key, lic.host, lic.api);
+        }
+        // default license format is html formed (sciter)
         return format!(
             "<br /> Key: {} <br /> Host: {} Api: {}",
             lic.key, lic.host, lic.api
