@@ -83,7 +83,11 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
     );
     return Platform.isMacOS
         ? tabWidget
-        : DragToResizeArea(
-            resizeEdgeSize: stateGlobal.resizeEdgeSize, child: tabWidget);
+        : Obx(
+            () => DragToResizeArea(
+              resizeEdgeSize: stateGlobal.resizeEdgeSize.value,
+              child: tabWidget,
+            ),
+          );
   }
 }

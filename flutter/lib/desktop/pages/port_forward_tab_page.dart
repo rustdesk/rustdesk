@@ -5,6 +5,7 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/desktop/pages/port_forward_page.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
@@ -97,7 +98,11 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
     );
     return Platform.isMacOS
         ? tabWidget
-        : SubWindowDragToResizeArea(child: tabWidget);
+        : SubWindowDragToResizeArea(
+            child: tabWidget,
+            resizeEdgeSize: stateGlobal.resizeEdgeSize.value,
+            windowId: stateGlobal.windowId,
+          );
   }
 
   void onRemoveId(String id) {
