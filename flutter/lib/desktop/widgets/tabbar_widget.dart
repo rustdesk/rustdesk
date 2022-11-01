@@ -176,7 +176,8 @@ typedef TabBuilder = Widget Function(
 typedef LabelGetter = Rx<String> Function(String key);
 
 /// [_lastClickTime], help to handle double click
-int _lastClickTime = DateTime.now().millisecondsSinceEpoch;
+int _lastClickTime =
+    DateTime.now().millisecondsSinceEpoch - kDesktopDoubleClickTimeMilli - 1000;
 
 class DesktopTab extends StatelessWidget {
   final bool showTabBar;
