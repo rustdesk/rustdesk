@@ -80,14 +80,17 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             selectedIcon: selectedIcon,
             unselectedIcon: unselectedIcon,
             onTabCloseButton: () => tabController.closeBy(id),
-            page: Obx(() => RemotePage(
-                  key: ValueKey(id),
-                  id: id,
-                  windowId: windowId(),
-                  tabBarHeight:
-                      fullscreen.isTrue ? 0 : kDesktopRemoteTabBarHeight,
-                  windowBorderWidth: fullscreen.isTrue ? 0 : kWindowBorderWidth,
-                ))));
+            page: ObxValue<RxBool>(
+              (fullscreen) => RemotePage(
+                id: id,
+                windowId: windowId(),
+                tabBarHeight:
+                    fullscreen.isTrue ? 0 : kDesktopRemoteTabBarHeight,
+                windowBorderWidth: fullscreen.isTrue ? 0 : kWindowBorderWidth,
+              ),
+              fullscreen,
+              key: ValueKey(id),
+            )));
       } else if (call.method == "onDestroy") {
         tabController.clear();
       } else if (call.method == kWindowActionRebuild) {
