@@ -28,15 +28,9 @@ class RemotePage extends StatefulWidget {
   const RemotePage({
     Key? key,
     required this.id,
-    required this.windowId,
-    required this.tabBarHeight,
-    required this.windowBorderWidth,
   }) : super(key: key);
 
   final String id;
-  final int windowId;
-  final double tabBarHeight;
-  final double windowBorderWidth;
 
   @override
   State<RemotePage> createState() => _RemotePageState();
@@ -57,11 +51,6 @@ class _RemotePageState extends State<RemotePage>
   Function(bool)? _onEnterOrLeaveImage4Menubar;
 
   late FFI _ffi;
-
-  void _updateTabBarHeight() {
-    _ffi.canvasModel.tabBarHeight = widget.tabBarHeight;
-    _ffi.canvasModel.windowBorderWidth = widget.windowBorderWidth;
-  }
 
   void _initStates(String id) {
     PrivacyModeState.init(id);
@@ -91,7 +80,6 @@ class _RemotePageState extends State<RemotePage>
 
     _ffi = FFI();
 
-    _updateTabBarHeight();
     Get.put(_ffi, tag: widget.id);
     _ffi.start(widget.id);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -164,7 +152,6 @@ class _RemotePageState extends State<RemotePage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    _updateTabBarHeight();
     return WillPopScope(
         onWillPop: () async {
           clientClose(_ffi.dialogManager);
@@ -241,7 +228,6 @@ class _RemotePageState extends State<RemotePage>
     paints.add(QualityMonitor(_ffi.qualityMonitorModel));
     paints.add(RemoteMenubar(
       id: widget.id,
-      windowId: widget.windowId,
       ffi: _ffi,
       onEnterOrLeaveImageSetter: (func) => _onEnterOrLeaveImage4Menubar = func,
       onEnterOrLeaveImageCleaner: () => _onEnterOrLeaveImage4Menubar = null,
@@ -284,7 +270,7 @@ class ImagePaint extends StatelessWidget {
             ? keyboardEnabled.isTrue
                 ? (remoteCursorMoved.isTrue
                     ? SystemMouseCursors.none
-                    : _buildCustomCursorLinux(context, s))
+                    : _buildCustomCursor(context, s))
                 : _buildDisabledCursor(context, s)
             : MouseCursor.defer,
         onHover: (evt) {},
@@ -333,41 +319,43 @@ class ImagePaint extends StatelessWidget {
     }
   }
 
-  MouseCursor _buildCustomCursorLinux(BuildContext context, double scale) {
+  MouseCursor _buildCustomCursor(BuildContext context, double scale) {
     final cursor = Provider.of<CursorModel>(context);
-    final cacheLinux = cursor.cacheLinux;
-    if (cacheLinux == null) {
+    final cache = cursor.cache ?? cursor.defaultCache;
+    if (cache == null) {
       return MouseCursor.defer;
     } else {
-      final key = cacheLinux.key(scale);
-      cursor.addKeyLinux(key);
+      final key = cache.updateGetKey(scale);
+      cursor.addKey(key);
       return FlutterCustomMemoryImageCursor(
-        pixbuf: cacheLinux.data,
+        pixbuf: cache.data,
         key: key,
-        hotx: cacheLinux.hotx,
-        hoty: cacheLinux.hoty,
-        imageWidth: (cacheLinux.width * scale).toInt(),
-        imageHeight: (cacheLinux.height * scale).toInt(),
+        // hotx: cache.hotx,
+        // hoty: cache.hoty,
+        hotx: 0,
+        hoty: 0,
+        imageWidth: (cache.width * cache.scale).toInt(),
+        imageHeight: (cache.height * cache.scale).toInt(),
       );
     }
   }
 
   MouseCursor _buildDisabledCursor(BuildContext context, double scale) {
     final cursor = Provider.of<CursorModel>(context);
-    final cacheLinux = cursor.cacheLinux;
-    if (cacheLinux == null) {
+    final cache = cursor.cache;
+    if (cache == null) {
       return MouseCursor.defer;
     } else {
       if (cursor.cachedForbidmemoryCursorData == null) {
         cursor.updateForbiddenCursorBuffer();
       }
       final key = 'disabled_cursor_key';
-      cursor.addKeyLinux(key);
+      cursor.addKey(key);
       return FlutterCustomMemoryImageCursor(
         pixbuf: cursor.cachedForbidmemoryCursorData,
         key: key,
-        hotx: cacheLinux.hotx,
-        hoty: cacheLinux.hoty,
+        hotx: 0,
+        hoty: 0,
         imageWidth: 32,
         imageHeight: 32,
       );

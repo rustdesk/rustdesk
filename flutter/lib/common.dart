@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
-import 'dart:ui';
 
 import 'package:back_button_interceptor/back_button_interceptor.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -1210,23 +1209,21 @@ Future<void> initUniLinks() async {
   }
 }
 
-StreamSubscription listenUniLinks() {
-  if (Platform.isWindows || Platform.isMacOS) {
-    final sub = uriLinkStream.listen((Uri? uri) {
-      if (uri != null) {
-        callUniLinksUriHandler(uri);
-      } else {
-        print("uni listen error: uri is empty.");
-      }
-    }, onError: (err) {
-      print("uni links error: $err");
-    });
-    return sub;
-  } else {
-    // return empty stream subscription for uniform logic
-    final stream = Stream.empty();
-    return stream.listen((event) {/*ignore*/});
+StreamSubscription? listenUniLinks() {
+  if (!(Platform.isWindows || Platform.isMacOS)) {
+    return null;
   }
+
+  final sub = uriLinkStream.listen((Uri? uri) {
+    if (uri != null) {
+      callUniLinksUriHandler(uri);
+    } else {
+      print("uni listen error: uri is empty.");
+    }
+  }, onError: (err) {
+    print("uni links error: $err");
+  });
+  return sub;
 }
 
 void checkArguments() {

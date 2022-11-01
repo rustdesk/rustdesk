@@ -5,6 +5,7 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/desktop/pages/port_forward_page.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
@@ -50,7 +51,7 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
 
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
       debugPrint(
-          "call ${call.method} with args ${call.arguments} from window ${fromWindowId}");
+          "call ${call.method} with args ${call.arguments} from window $fromWindowId");
       // for simplify, just replace connectionId
       if (call.method == "new_port_forward") {
         final args = jsonDecode(call.arguments);
@@ -98,9 +99,9 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
     return Platform.isMacOS
         ? tabWidget
         : SubWindowDragToResizeArea(
-            resizeEdgeSize: kWindowEdgeSize,
-            windowId: windowId(),
             child: tabWidget,
+            resizeEdgeSize: stateGlobal.resizeEdgeSize.value,
+            windowId: stateGlobal.windowId,
           );
   }
 

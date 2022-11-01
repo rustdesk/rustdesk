@@ -154,7 +154,7 @@ class RustDeskMultiWindowManager {
     int? wId = findWindowByType(type);
     if (wId != null) {
       debugPrint("closing multi window: ${type.toString()}");
-      saveWindowPosition(type, windowId: wId);
+      await saveWindowPosition(type, windowId: wId);
       try {
         final ids = await DesktopMultiWindow.getAllSubWindowIds();
         if (!ids.contains(wId)) {

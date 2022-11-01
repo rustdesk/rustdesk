@@ -9,6 +9,7 @@ import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
 import 'package:get/get_rx/src/rx_workers/utils/debouncer.dart';
 import 'package:scroll_pos/scroll_pos.dart';
@@ -176,10 +177,10 @@ typedef TabBuilder = Widget Function(
 typedef LabelGetter = Rx<String> Function(String key);
 
 /// [_lastClickTime], help to handle double click
-int _lastClickTime = DateTime.now().millisecondsSinceEpoch;
+int _lastClickTime =
+    DateTime.now().millisecondsSinceEpoch - kDesktopDoubleClickTimeMilli - 1000;
 
 class DesktopTab extends StatelessWidget {
-  final bool showTabBar;
   final bool showLogo;
   final bool showTitle;
   final bool showMinimize;
@@ -206,7 +207,6 @@ class DesktopTab extends StatelessWidget {
   DesktopTab({
     Key? key,
     required this.controller,
-    this.showTabBar = true,
     this.showLogo = true,
     this.showTitle = true,
     this.showMinimize = true,
@@ -229,8 +229,8 @@ class DesktopTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(children: [
-      Offstage(
-          offstage: !showTabBar,
+      Obx(() => Offstage(
+          offstage: !stateGlobal.showTabBar.isTrue,
           child: SizedBox(
             height: _kTabBarHeight,
             child: Column(
@@ -245,7 +245,7 @@ class DesktopTab extends StatelessWidget {
                 ),
               ],
             ),
-          )),
+          ))),
       Expanded(
           child: pageViewBuilder != null
               ? pageViewBuilder!(_buildPageView())

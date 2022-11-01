@@ -15,7 +15,7 @@ use hbb_common::{
     protobuf::Message as _,
     rendezvous_proto::*,
     tcp::FramedStream,
-    tokio::{self, sync::mpsc, time},
+    tokio::{self, sync::mpsc},
 };
 
 use crate::common::get_app_name;

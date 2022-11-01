@@ -3,7 +3,7 @@ Version:    1.1.9
 Release:    0
 Summary:    RPM package
 License:    GPL-3.0
-Requires:   gtk3 libxcb1 xdotool libXfixes3 pulseaudio-utils alsa-utils arphic-uming-fonts curl libXtst6 
+Requires:   gtk3 libxcb1 xdotool libXfixes3 pipewire alsa-utils curl libXtst6 libayatana-appindicator3-1 libvdpau1 libva2
 
 %description
 The best open-source remote desktop client software, written in Rust. 

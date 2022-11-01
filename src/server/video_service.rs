@@ -468,6 +468,7 @@ fn run(sp: GenericService) -> ResultType<()> {
     #[cfg(windows)]
     start_uac_elevation_check();
 
+    #[cfg(target_os = "linux")]
     let mut would_block_count = 0u32;
 
     while sp.ok() {
@@ -570,9 +571,9 @@ fn run(sp: GenericService) -> ResultType<()> {
                     try_gdi += 1;
                 }
 
-                would_block_count += 1;
                 #[cfg(target_os = "linux")]
                 {
+                    would_block_count += 1;
                     if !scrap::is_x11() {
                         if would_block_count >= 100 {
                             // For now, the user should choose and agree screen sharing agiain.
@@ -600,7 +601,10 @@ fn run(sp: GenericService) -> ResultType<()> {
                 return Err(err.into());
             }
             _ => {
-                would_block_count = 0;
+                #[cfg(target_os = "linux")]
+                {
+                    would_block_count = 0;
+                }
             }
         }
 
