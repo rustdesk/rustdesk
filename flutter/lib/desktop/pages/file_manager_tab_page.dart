@@ -5,6 +5,7 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/desktop/pages/file_manager_page.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
@@ -47,7 +48,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
 
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
       print(
-          "[FileTransfer] call ${call.method} with args ${call.arguments} from window ${fromWindowId} to ${windowId()}");
+          "[FileTransfer] call ${call.method} with args ${call.arguments} from window $fromWindowId to ${windowId()}");
       // for simplify, just replace connectionId
       if (call.method == "new_file_transfer") {
         final args = jsonDecode(call.arguments);
@@ -87,9 +88,9 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
     return Platform.isMacOS
         ? tabWidget
         : SubWindowDragToResizeArea(
-            resizeEdgeSize: kWindowEdgeSize,
-            windowId: windowId(),
             child: tabWidget,
+            resizeEdgeSize: stateGlobal.resizeEdgeSize.value,
+            windowId: stateGlobal.windowId,
           );
   }
 
