@@ -17,7 +17,7 @@ flutter_win_target_dir = 'flutter/build/windows/runner/Release/'
 
 
 def get_version():
-    with open("Cargo.toml") as fh:
+    with open("Cargo.toml", encoding="utf-8") as fh:
         for line in fh:
             if line.startswith("version"):
                 return line.replace("version", "").replace("=", "").replace('"', '').strip()
