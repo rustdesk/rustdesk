@@ -795,7 +795,7 @@ const PEERS: &str = "peers";
 
 impl PeerConfig {
     pub fn load(id: &str) -> PeerConfig {
-        let _ = CONFIG.read().unwrap(); // for lock
+        let _lock = CONFIG.read().unwrap();
         match confy::load_path(&Self::path(id)) {
             Ok(config) => {
                 let mut config: PeerConfig = config;
@@ -827,7 +827,7 @@ impl PeerConfig {
     }
 
     pub fn store(&self, id: &str) {
-        let _ = CONFIG.read().unwrap(); // for lock
+        let _lock = CONFIG.read().unwrap();
         let mut config = self.clone();
         config.password = encrypt_vec_or_original(&config.password, PASSWORD_ENC_VERSION);
         config
@@ -999,7 +999,7 @@ pub struct LanPeers {
 
 impl LanPeers {
     pub fn load() -> LanPeers {
-        let _ = CONFIG.read().unwrap(); // for lock
+        let _lock = CONFIG.read().unwrap();
         match confy::load_path(&Config::file_("_lan_peers")) {
             Ok(peers) => peers,
             Err(err) => {
