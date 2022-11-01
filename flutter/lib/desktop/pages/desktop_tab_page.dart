@@ -6,6 +6,7 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_setting_page.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
+import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -62,8 +63,6 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
 
   @override
   Widget build(BuildContext context) {
-    RxBool fullscreen = false.obs;
-    Get.put(fullscreen, tag: 'fullscreen');
     final tabWidget = Container(
       child: Overlay(initialEntries: [
         OverlayEntry(builder: (context) {
@@ -84,9 +83,7 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
     );
     return Platform.isMacOS
         ? tabWidget
-        : Obx(() => DragToResizeArea(
-            resizeEdgeSize:
-                fullscreen.value ? kFullScreenEdgeSize : kWindowEdgeSize,
-            child: tabWidget));
+        : DragToResizeArea(
+            resizeEdgeSize: stateGlobal.resizeEdgeSize, child: tabWidget);
   }
 }

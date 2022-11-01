@@ -47,7 +47,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
 
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
       print(
-          "[FileTransfer] call ${call.method} with args ${call.arguments} from window ${fromWindowId} to ${windowId()}");
+          "[FileTransfer] call ${call.method} with args ${call.arguments} from window $fromWindowId to ${windowId()}");
       // for simplify, just replace connectionId
       if (call.method == "new_file_transfer") {
         final args = jsonDecode(call.arguments);
@@ -86,11 +86,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
     );
     return Platform.isMacOS
         ? tabWidget
-        : SubWindowDragToResizeArea(
-            resizeEdgeSize: kWindowEdgeSize,
-            windowId: windowId(),
-            child: tabWidget,
-          );
+        : SubWindowDragToResizeArea(child: tabWidget);
   }
 
   void onRemoveId(String id) {

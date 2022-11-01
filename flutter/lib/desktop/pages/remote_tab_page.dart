@@ -34,24 +34,20 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
 
   _ConnectionTabPageState(Map<String, dynamic> params) {
     RemoteCountState.init();
-    final RxBool fullscreen = Get.find(tag: 'fullscreen');
     final peerId = params['id'];
     if (peerId != null) {
       ConnectionTypeState.init(peerId);
       tabController.add(TabInfo(
-          key: peerId,
-          label: peerId,
-          selectedIcon: selectedIcon,
-          unselectedIcon: unselectedIcon,
-          onTabCloseButton: () => tabController.closeBy(peerId),
-          page: Obx(() => RemotePage(
-                key: ValueKey(peerId),
-                id: peerId,
-                windowId: windowId(),
-                tabBarHeight:
-                    fullscreen.isTrue ? 0 : kDesktopRemoteTabBarHeight,
-                windowBorderWidth: fullscreen.isTrue ? 0 : kWindowBorderWidth,
-              ))));
+        key: peerId,
+        label: peerId,
+        selectedIcon: selectedIcon,
+        unselectedIcon: unselectedIcon,
+        onTabCloseButton: () => tabController.closeBy(peerId),
+        page: RemotePage(
+          key: ValueKey(peerId),
+          id: peerId,
+        ),
+      ));
       _update_remote_count();
     }
   }
@@ -66,7 +62,6 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       print(
           "call ${call.method} with args ${call.arguments} from window $fromWindowId");
 
-      final RxBool fullscreen = Get.find(tag: 'fullscreen');
       // for simplify, just replace connectionId
       if (call.method == "new_remote_desktop") {
         final args = jsonDecode(call.arguments);
@@ -75,22 +70,13 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         window_on_top(windowId());
         ConnectionTypeState.init(id);
         tabController.add(TabInfo(
-            key: id,
-            label: id,
-            selectedIcon: selectedIcon,
-            unselectedIcon: unselectedIcon,
-            onTabCloseButton: () => tabController.closeBy(id),
-            page: ObxValue<RxBool>(
-              (fullscreen) => RemotePage(
-                id: id,
-                windowId: windowId(),
-                tabBarHeight:
-                    fullscreen.isTrue ? 0 : kDesktopRemoteTabBarHeight,
-                windowBorderWidth: fullscreen.isTrue ? 0 : kWindowBorderWidth,
-              ),
-              fullscreen,
-              key: ValueKey(id),
-            )));
+          key: id,
+          label: id,
+          selectedIcon: selectedIcon,
+          unselectedIcon: unselectedIcon,
+          onTabCloseButton: () => tabController.closeBy(id),
+          page: RemotePage(key: ValueKey(id), id: id),
+        ));
       } else if (call.method == "onDestroy") {
         tabController.clear();
       } else if (call.method == kWindowActionRebuild) {
@@ -105,7 +91,6 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
 
   @override
   Widget build(BuildContext context) {
-    final RxBool fullscreen = Get.find(tag: 'fullscreen');
     final tabWidget = Container(
       decoration: BoxDecoration(
           border: Border.all(
@@ -113,61 +98,52 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
               width: kWindowBorderWidth)),
       child: Scaffold(
           backgroundColor: Theme.of(context).backgroundColor,
-          body: Obx(() => DesktopTab(
-                controller: tabController,
-                showTabBar: fullscreen.isFalse,
-                onWindowCloseButton: handleWindowCloseButton,
-                tail: const AddButton().paddingOnly(left: 10),
-                pageViewBuilder: (pageView) {
-                  WindowController.fromWindowId(windowId())
-                      .setFullscreen(fullscreen.isTrue);
-                  return pageView;
-                },
-                tabBuilder: (key, icon, label, themeConf) => Obx(() {
-                  final connectionType = ConnectionTypeState.find(key);
-                  if (!connectionType.isValid()) {
-                    return Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        icon,
-                        label,
-                      ],
-                    );
-                  } else {
-                    final msgDirect = translate(
-                        connectionType.direct.value == ConnectionType.strDirect
-                            ? 'Direct Connection'
-                            : 'Relay Connection');
-                    final msgSecure = translate(
-                        connectionType.secure.value == ConnectionType.strSecure
-                            ? 'Secure Connection'
-                            : 'Insecure Connection');
-                    return Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        icon,
-                        Tooltip(
-                          message: '$msgDirect\n$msgSecure',
-                          child: SvgPicture.asset(
-                            'assets/${connectionType.secure.value}${connectionType.direct.value}.svg',
-                            width: themeConf.iconSize,
-                            height: themeConf.iconSize,
-                          ).paddingOnly(right: 5),
-                        ),
-                        label,
-                      ],
-                    );
-                  }
-                }),
-              ))),
+          body: DesktopTab(
+            controller: tabController,
+            onWindowCloseButton: handleWindowCloseButton,
+            tail: const AddButton().paddingOnly(left: 10),
+            pageViewBuilder: (pageView) => pageView,
+            tabBuilder: (key, icon, label, themeConf) => Obx(() {
+              final connectionType = ConnectionTypeState.find(key);
+              if (!connectionType.isValid()) {
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    icon,
+                    label,
+                  ],
+                );
+              } else {
+                final msgDirect = translate(
+                    connectionType.direct.value == ConnectionType.strDirect
+                        ? 'Direct Connection'
+                        : 'Relay Connection');
+                final msgSecure = translate(
+                    connectionType.secure.value == ConnectionType.strSecure
+                        ? 'Secure Connection'
+                        : 'Insecure Connection');
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    icon,
+                    Tooltip(
+                      message: '$msgDirect\n$msgSecure',
+                      child: SvgPicture.asset(
+                        'assets/${connectionType.secure.value}${connectionType.direct.value}.svg',
+                        width: themeConf.iconSize,
+                        height: themeConf.iconSize,
+                      ).paddingOnly(right: 5),
+                    ),
+                    label,
+                  ],
+                );
+              }
+            }),
+          )),
     );
     return Platform.isMacOS
         ? tabWidget
-        : Obx(() => SubWindowDragToResizeArea(
-            resizeEdgeSize:
-                fullscreen.value ? kFullScreenEdgeSize : kWindowEdgeSize,
-            windowId: windowId(),
-            child: tabWidget));
+        : SubWindowDragToResizeArea(child: tabWidget);
   }
 
   void onRemoveId(String id) {

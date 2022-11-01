@@ -6,6 +6,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
+import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:rxdart/rxdart.dart' as rxdart;
@@ -29,7 +30,6 @@ class _MenubarTheme {
 
 class RemoteMenubar extends StatefulWidget {
   final String id;
-  final int windowId;
   final FFI ffi;
   final Function(Function(bool)) onEnterOrLeaveImageSetter;
   final Function() onEnterOrLeaveImageCleaner;
@@ -37,7 +37,6 @@ class RemoteMenubar extends StatefulWidget {
   const RemoteMenubar({
     Key? key,
     required this.id,
-    required this.windowId,
     required this.ffi,
     required this.onEnterOrLeaveImageSetter,
     required this.onEnterOrLeaveImageCleaner,
@@ -55,9 +54,12 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   bool _isCursorOverImage = false;
   window_size.Screen? _screen;
 
-  bool get isFullscreen => Get.find<RxBool>(tag: 'fullscreen').isTrue;
+  int get windowId => stateGlobal.windowId;
+
+  bool get isFullscreen => stateGlobal.fullscreen;
   void _setFullscreen(bool v) {
-    Get.find<RxBool>(tag: 'fullscreen').value = v;
+    stateGlobal.setFullscreen(v);
+    setState(() {});
   }
 
   @override
@@ -213,7 +215,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       onPressed: () {
         _setFullscreen(!isFullscreen);
       },
-      icon: Obx(() => isFullscreen
+      icon: isFullscreen
           ? const Icon(
               Icons.fullscreen_exit,
               color: _MenubarTheme.commonColor,
@@ -221,7 +223,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           : const Icon(
               Icons.fullscreen,
               color: _MenubarTheme.commonColor,
-            )),
+            ),
     );
   }
 
@@ -920,8 +922,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                 _setFullscreen(false);
                 double scale = _screen!.scaleFactor;
                 final wndRect =
-                    await WindowController.fromWindowId(widget.windowId)
-                        .getFrame();
+                    await WindowController.fromWindowId(windowId).getFrame();
                 final mediaSize = MediaQueryData.fromWindow(ui.window).size;
                 // On windows, wndRect is equal to GetWindowRect and mediaSize is equal to GetClientRect.
                 // https://stackoverflow.com/a/7561083
@@ -944,8 +945,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                 double top = wndRect.top + (wndRect.height - height) / 2;
 
                 Rect frameRect = _screen!.frame;
-                final RxBool fullscreen = Get.find(tag: 'fullscreen');
-                if (fullscreen.isFalse) {
+                if (!isFullscreen) {
                   frameRect = _screen!.visibleFrame;
                 }
                 if (left < frameRect.left) {
@@ -960,7 +960,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                 if ((top + height) > frameRect.bottom) {
                   top = frameRect.bottom - height;
                 }
-                await WindowController.fromWindowId(widget.windowId)
+                await WindowController.fromWindowId(windowId)
                     .setFrame(Rect.fromLTWH(left, top, width, height));
               }
             }();

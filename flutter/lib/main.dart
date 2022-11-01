@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/desktop/pages/server_page.dart';
 import 'package:flutter_hbb/desktop/pages/install_page.dart';
@@ -15,7 +16,6 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:uni_links_desktop/uni_links_desktop.dart';
 import 'package:window_manager/window_manager.dart';
 
 // import 'package:window_manager/window_manager.dart';
@@ -41,11 +41,14 @@ Future<void> main(List<String> args) async {
   // main window
   if (args.isNotEmpty && args.first == 'multi_window') {
     windowId = int.parse(args[1]);
+    stateGlobal.setWindowId(windowId!);
     WindowController.fromWindowId(windowId!).showTitleBar(false);
     final argument = args[2].isEmpty
         ? <String, dynamic>{}
         : jsonDecode(args[2]) as Map<String, dynamic>;
     int type = argument['type'] ?? -1;
+    // to-do: No need to parse window id ?
+    // Because stateGlobal.windowId is a global value.
     argument['windowId'] = windowId;
     WindowType wType = type.windowType;
     switch (wType) {

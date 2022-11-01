@@ -50,7 +50,7 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
 
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
       debugPrint(
-          "call ${call.method} with args ${call.arguments} from window ${fromWindowId}");
+          "call ${call.method} with args ${call.arguments} from window $fromWindowId");
       // for simplify, just replace connectionId
       if (call.method == "new_port_forward") {
         final args = jsonDecode(call.arguments);
@@ -97,11 +97,7 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
     );
     return Platform.isMacOS
         ? tabWidget
-        : SubWindowDragToResizeArea(
-            resizeEdgeSize: kWindowEdgeSize,
-            windowId: windowId(),
-            child: tabWidget,
-          );
+        : SubWindowDragToResizeArea(child: tabWidget);
   }
 
   void onRemoveId(String id) {

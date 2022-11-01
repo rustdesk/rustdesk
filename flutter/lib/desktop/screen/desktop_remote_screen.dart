@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/desktop/pages/remote_tab_page.dart';
 import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
-import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 
 /// multi-tab desktop remote screen
@@ -13,8 +12,6 @@ class DesktopRemoteScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    RxBool fullscreen = false.obs;
-    Get.put(fullscreen, tag: 'fullscreen');
     return MultiProvider(
         providers: [
           ChangeNotifierProvider.value(value: gFFI.ffiModel),
