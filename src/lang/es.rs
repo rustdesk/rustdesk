@@ -339,7 +339,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Dark Theme", "Tema Oscuro"),
         ("Dark", "Oscuro"),
         ("Light", "Claro"),
-        ("Follow System", ""),
+        ("Follow System", "Tema del sistema"),
         ("Enable hardware codec", "Habilitar códec por hardware"),
         ("Unlock Security Settings", "Desbloquear ajustes de seguridad"),
         ("Enable Audio", "Habilitar Audio"),
@@ -383,7 +383,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Screen Share", "Compartir pantalla"),
         ("Wayland requires Ubuntu 21.04 or higher version.", "Wayland requiere Ubuntu 21.04 o una versión superior."),
         ("Wayland requires higher version of linux distro. Please try X11 desktop or change your OS.", "Wayland requiere una versión superior de la distribución de Linux. Pruebe el escritorio X11 o cambie su sistema operativo."),
-        ("JumpLink", "View"),
+        ("JumpLink", "Ver"),
         ("Please Select the screen to be shared(Operate on the peer side).", "Seleccione la pantalla que se compartirá (Operar en el lado del compañero)."),
     ].iter().cloned().collect();
 }
