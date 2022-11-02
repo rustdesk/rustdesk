@@ -1632,3 +1632,7 @@ pub fn is_foreground_window_elevated() -> ResultType<bool> {
 fn get_current_pid() -> u32 {
     unsafe { GetCurrentProcessId() }
 }
+
+pub fn get_double_click_time() -> u32 {
+    unsafe { GetDoubleClickTime() }
+}

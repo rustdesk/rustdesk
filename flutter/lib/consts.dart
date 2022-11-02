@@ -33,8 +33,6 @@ const int kMobileMaxDisplayHeight = 1280;
 const int kDesktopMaxDisplayWidth = 1920;
 const int kDesktopMaxDisplayHeight = 1080;
 
-const int kDesktopDoubleClickTimeMilli = 200;
-
 const Size kConnectionManagerWindowSize = Size(300, 400);
 // Tabbar transition duration, now we remove the duration
 const Duration kTabTransitionDuration = Duration.zero;

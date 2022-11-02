@@ -684,3 +684,10 @@ pub fn check_super_user_permission() -> ResultType<bool> {
     let status = std::process::Command::new("pkexec").arg(arg).status()?;
     Ok(status.success() && status.code() == Some(0))
 }
+
+pub fn get_double_click_time() -> u32 {
+    // to-do
+    // GtkSettings *settings = gtk_settings_get_default ();
+    // g_object_get (settings, "gtk-double-click-time", &double_click_time, NULL);
+    500 as _
+}
