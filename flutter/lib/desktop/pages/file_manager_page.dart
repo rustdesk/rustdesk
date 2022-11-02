@@ -805,9 +805,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                         },
                         child: BreadCrumb(
                           items: items,
-                          divider: Text("/",
-                              style: TextStyle(
-                                  color: Theme.of(context).hintColor)),
+                          divider: Icon(Icons.chevron_right),
                           overflow: ScrollableOverflow(
                               controller:
                                   getBreadCrumbScrollController(isLocal)),
