@@ -13,6 +13,7 @@ import 'package:flutter_hbb/desktop/widgets/scroll_wrapper.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
+import 'package:flutter_hbb/utils/tray_manager.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:tray_manager/tray_manager.dart';
@@ -396,13 +397,28 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   }
 
   @override
+  void onTrayIconMouseDown() {
+    windowManager.show();
+  }
+
+  @override
+  void onTrayIconRightMouseDown() {
+    // linux does not support popup menu manually.
+    // linux will handle popup action ifself.
+    if (Platform.isMacOS || Platform.isWindows) {
+      trayManager.popUpContextMenu();
+    }
+  }
+
+  @override
   void onTrayMenuItemClick(MenuItem menuItem) {
-    debugPrint('click ${menuItem.key}');
     switch (menuItem.key) {
-      case "quit":
-        exit(0);
-      case "show":
-        // windowManager.show();
+      case kTrayItemQuitKey:
+        windowManager.close();
+        break;
+      case kTrayItemShowKey:
+        windowManager.show();
+        windowManager.focus();
         break;
       default:
         break;
@@ -416,6 +432,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       updateUrl = await bind.mainGetSoftwareUpdateUrl();
       if (updateUrl.isNotEmpty) setState(() {});
     });
+    initTray();
     trayManager.addListener(this);
     windowManager.addListener(this);
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
@@ -456,6 +473,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
   @override
   void dispose() {
+    destoryTray();
     trayManager.removeListener(this);
     windowManager.removeListener(this);
     _uniLinksSubscription?.cancel();
