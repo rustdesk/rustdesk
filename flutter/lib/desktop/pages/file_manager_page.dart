@@ -824,22 +824,22 @@ class _FileManagerPageState extends State<FileManagerPage>
                     final x = offset.dx;
                     final y = offset.dy + size.height + 1;
 
-                    final peerPlatform = (await bind.sessionGetPlatform(
-                            id: _ffi.id, isRemote: !isLocal))
-                        .toLowerCase();
+                    final isPeerWindows = isWindows(isLocal);
                     final List<MenuEntryBase> menuItems = [
                       MenuEntryButton(
-                          childBuilder: (TextStyle? style) => Text(
-                                '/',
-                                style: style,
-                              ),
+                          childBuilder: (TextStyle? style) => isPeerWindows
+                              ? buildWindowsThisPC(style)
+                              : Text(
+                                  '/',
+                                  style: style,
+                                ),
                           proc: () {
                             openDirectory('/', isLocal: isLocal);
                           },
                           dismissOnClicked: true),
                       MenuEntryDivider()
                     ];
-                    if (peerPlatform == "windows") {
+                    if (isPeerWindows) {
                       var loadingTag = "";
                       if (!isLocal) {
                         loadingTag = _ffi.dialogManager.showLoading("Waiting");
@@ -865,7 +865,8 @@ class _FileManagerPageState extends State<FileManagerPage>
                                     )
                                   ]),
                               proc: () {
-                                openDirectory(entry.name, isLocal: isLocal);
+                                openDirectory('${entry.name}\\',
+                                    isLocal: isLocal);
                               },
                               dismissOnClicked: true));
                         }
@@ -898,19 +899,46 @@ class _FileManagerPageState extends State<FileManagerPage>
               ]);
   }
 
+  Widget buildWindowsThisPC([TextStyle? textStyle]) {
+    final color = Theme.of(context).iconTheme.color?.withOpacity(0.7);
+    return Row(children: [
+      Icon(Icons.computer, size: 20, color: color),
+      SizedBox(width: 10),
+      Text(translate('This PC'), style: textStyle)
+    ]);
+  }
+
   List<BreadCrumbItem> getPathBreadCrumbItems(
       bool isLocal, void Function(List<String>) onPressed) {
     final path = model.getCurrentDir(isLocal).path;
-    final list = PathUtil.split(path, model.getCurrentIsWindows(isLocal));
     final breadCrumbList = List<BreadCrumbItem>.empty(growable: true);
-    breadCrumbList.addAll(list.asMap().entries.map((e) => BreadCrumbItem(
-        content: TextButton(
-                child: Text(e.value),
-                style: ButtonStyle(
-                    minimumSize: MaterialStateProperty.all(Size(0, 0))),
-                onPressed: () => onPressed(list.sublist(0, e.key + 1)))
-            .marginSymmetric(horizontal: 4))));
+    if (isWindows(isLocal) && path == '/') {
+      breadCrumbList.add(BreadCrumbItem(
+          content: TextButton(
+                  child: buildWindowsThisPC(),
+                  style: ButtonStyle(
+                      minimumSize: MaterialStateProperty.all(Size(0, 0))),
+                  onPressed: () => onPressed(['/']))
+              .marginSymmetric(horizontal: 4)));
+    } else {
+      final list = PathUtil.split(path, model.getCurrentIsWindows(isLocal));
+      breadCrumbList.addAll(list.asMap().entries.map((e) => BreadCrumbItem(
+          content: TextButton(
+                  child: Text(e.value),
+                  style: ButtonStyle(
+                      minimumSize: MaterialStateProperty.all(Size(0, 0))),
+                  onPressed: () => onPressed(list.sublist(0, e.key + 1)))
+              .marginSymmetric(horizontal: 4))));
+    }
     return breadCrumbList;
+  }
+
+  bool isWindows(bool isLocal) {
+    if (isLocal) {
+      return Platform.isWindows;
+    } else {
+      return _ffi.ffiModel.pi.platform.toLowerCase() == "windows";
+    }
   }
 
   breadCrumbScrollToEnd(bool isLocal) {

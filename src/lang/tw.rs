@@ -32,7 +32,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Import Server Config", "匯入伺服器設定"),
         ("Export Server Config", "導出服務器配置"),
         ("Import server configuration successfully", "匯入伺服器設定成功"),
-        ("Export server configuration successfully", ""),
         ("Export server configuration successfully", "導出服務器配置信息成功"),
         ("Invalid server configuration", "無效的伺服器設定"),
         ("Clipboard is empty", "剪貼簿是空的"),
@@ -386,5 +385,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wayland requires higher version of linux distro. Please try X11 desktop or change your OS.", "Wayland 需要更高版本的 linux 發行版。 請嘗試 X11 桌面或更改您的操作系統。"),
         ("JumpLink", "查看"),
         ("Please Select the screen to be shared(Operate on the peer side).", "請選擇要分享的畫面（在對端操作）。"),
+        ("Show RustDesk", ""),
+        ("This PC", ""),
     ].iter().cloned().collect();
 }

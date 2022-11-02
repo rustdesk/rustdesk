@@ -278,7 +278,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_stop_service_tip", "Cerrar el servicio cerrará automáticamente todas las conexiones establecidas."),
         ("android_version_audio_tip", "La versión actual de Android no admite la captura de audio, actualice a Android 10 o posterior."),
         ("android_start_service_tip", "Toque el permiso [Iniciar servicio] o ABRIR [Captura de pantalla] para iniciar el servicio de uso compartido de pantalla."),
-        ("Account", ""),
+        ("Account", "Cuenta"),
         ("Overwrite", "Sobrescribir"),
         ("This file exists, skip or overwrite this file?", "Este archivo existe, ¿omitir o sobrescribir este archivo?"),
         ("Quit", "Salir"),
@@ -385,5 +385,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wayland requires higher version of linux distro. Please try X11 desktop or change your OS.", "Wayland requiere una versión superior de la distribución de Linux. Pruebe el escritorio X11 o cambie su sistema operativo."),
         ("JumpLink", "Ver"),
         ("Please Select the screen to be shared(Operate on the peer side).", "Seleccione la pantalla que se compartirá (Operar en el lado del par)."),
+        ("Show RustDesk", ""),
+        ("This PC", ""),
     ].iter().cloned().collect();
 }
