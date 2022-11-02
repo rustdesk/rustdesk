@@ -53,7 +53,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
               if (model.selectMode) {
                 model.toggleSelectMode();
               } else {
-                goBack();
+                model.goBack();
               }
               return false;
             },
@@ -330,10 +330,6 @@ class _FileManagerPageState extends State<FileManagerPage> {
     ]);
   }
 
-  goBack() {
-    model.goToParentDirectory();
-  }
-
   breadCrumbScrollToEnd() {
     Future.delayed(Duration(milliseconds: 200), () {
       _breadCrumbScroller.animateTo(
@@ -369,8 +365,12 @@ class _FileManagerPageState extends State<FileManagerPage> {
           Row(
             children: [
               IconButton(
+                icon: Icon(Icons.arrow_back),
+                onPressed: model.goBack,
+              ),
+              IconButton(
                 icon: Icon(Icons.arrow_upward),
-                onPressed: goBack,
+                onPressed: model.goToParentDirectory,
               ),
               PopupMenuButton<SortBy>(
                   icon: Icon(Icons.sort),
