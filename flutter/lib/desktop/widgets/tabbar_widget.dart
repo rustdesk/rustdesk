@@ -509,14 +509,15 @@ class WindowActionPanelState extends State<WindowActionPanel>
               onTap: () async {
                 final res = await widget.onClose?.call() ?? true;
                 if (res) {
-                  if (widget.isMainWindow) {
-                    windowManager.close();
-                  } else {
-                    // only hide for multi window, not close
-                    Future.delayed(Duration.zero, () {
-                      WindowController.fromWindowId(windowId!).hide();
-                    });
-                  }
+                  // hide for all window
+                  // note: the main window can be restored by tray icon
+                  Future.delayed(Duration.zero, () async {
+                    if (widget.isMainWindow) {
+                      await windowManager.hide();
+                    } else {
+                      await WindowController.fromWindowId(windowId!).hide();
+                    }
+                  });
                 }
               },
               isClose: true,
