@@ -386,5 +386,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("JumpLink", "查看"),
         ("Please Select the screen to be shared(Operate on the peer side).", "请选择要分享的画面（对端操作）。"),
         ("Show RustDesk", "显示rustdesk"),
+        ("This PC", "此电脑"),
     ].iter().cloned().collect();
 }

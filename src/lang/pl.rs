@@ -116,7 +116,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Good image quality", "Dobra jakość obrazu"),
         ("Balanced", "Zrównoważony"),
         ("Optimize reaction time", "Zoptymalizuj czas reakcji"),
-        ("Custom", ""),
+        ("Custom", "Własne"),
         ("Show remote cursor", "Pokazuj zdalny kursor"),
         ("Show quality monitor", "Pokazuj jakość monitora"),
         ("Disable clipboard", "Wyłącz schowek"),
@@ -385,5 +385,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wayland requires higher version of linux distro. Please try X11 desktop or change your OS.", "Wayland wymaga wyższej wersji dystrybucji Linuksa. Wypróbuj pulpit X11 lub zmień system operacyjny."),
         ("JumpLink", "View"),
         ("Please Select the screen to be shared(Operate on the peer side).", "Wybierz ekran do udostępnienia (działaj po stronie równorzędnej)."),
+        ("Show RustDesk", ""),
+        ("This PC", ""),
     ].iter().cloned().collect();
 }
