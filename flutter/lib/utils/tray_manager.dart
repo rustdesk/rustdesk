@@ -16,15 +16,15 @@ Future<void> initTray({List<MenuItem>? extra_item}) async {
   if (extra_item != null) {
     items.insertAll(0, extra_item);
   }
-  await Future.wait([
-    trayManager
-        .setIcon(Platform.isWindows ? "assets/logo.ico" : "assets/logo.png"),
-    trayManager.setContextMenu(Menu(items: items)),
-    trayManager.setTitle("rustdesk")
-  ]);
   if (Platform.isMacOS || Platform.isWindows) {
     await trayManager.setToolTip("rustdesk");
   }
+  if (Platform.isMacOS || Platform.isLinux) {
+    await trayManager.setTitle("rustdesk");
+  }
+  await trayManager
+      .setIcon(Platform.isWindows ? "assets/logo.ico" : "assets/logo.png");
+  await trayManager.setContextMenu(Menu(items: items));
 }
 
 Future<void> destoryTray() async {

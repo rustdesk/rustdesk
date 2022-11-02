@@ -399,7 +399,15 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   @override
   void onTrayIconMouseDown() {
     windowManager.show();
-    windowManager.focus();
+  }
+
+  @override
+  void onTrayIconRightMouseDown() {
+    // linux does not support popup menu manually.
+    // linux will handle popup action ifself.
+    if (Platform.isMacOS || Platform.isWindows) {
+      trayManager.popUpContextMenu();
+    }
   }
 
   @override

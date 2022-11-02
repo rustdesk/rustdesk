@@ -511,11 +511,11 @@ class WindowActionPanelState extends State<WindowActionPanel>
                 if (res) {
                   // hide for all window
                   // note: the main window can be restored by tray icon
-                  Future.delayed(Duration.zero, () {
+                  Future.delayed(Duration.zero, () async {
                     if (widget.isMainWindow) {
-                      windowManager.hide();
+                      await windowManager.hide();
                     } else {
-                      WindowController.fromWindowId(windowId!).hide();
+                      await WindowController.fromWindowId(windowId!).hide();
                     }
                   });
                 }
