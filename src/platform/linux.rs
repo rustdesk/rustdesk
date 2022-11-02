@@ -685,9 +685,32 @@ pub fn check_super_user_permission() -> ResultType<bool> {
     Ok(status.success() && status.code() == Some(0))
 }
 
+type GtkSettingsPtr = *mut c_void;
+type GObjectPtr = *mut c_void;
+#[link(name = "gtk-3")]
+extern "C" {
+    // fn gtk_init(argc: *mut c_int, argv: *mut *mut c_char);
+    fn gtk_settings_get_default() -> GtkSettingsPtr;
+}
+
+#[link(name = "gobject-2.0")]
+extern "C" {
+    fn g_object_get(object: GObjectPtr, first_property_name: *const c_char, ...);
+}
+
 pub fn get_double_click_time() -> u32 {
-    // to-do
     // GtkSettings *settings = gtk_settings_get_default ();
     // g_object_get (settings, "gtk-double-click-time", &double_click_time, NULL);
-    500 as _
+    unsafe {
+        let mut double_click_time = 0u32;
+        let property = std::ffi::CString::new("gtk-double-click-time").unwrap();
+        let setings = gtk_settings_get_default();
+        g_object_get(
+            setings,
+            property.as_ptr(),
+            &mut double_click_time as *mut u32,
+            0 as *const libc::c_void,
+        );
+        double_click_time
+    }
 }

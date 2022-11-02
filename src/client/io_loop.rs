@@ -28,7 +28,7 @@ use hbb_common::tokio::{
 };
 use hbb_common::{
     allow_err,
-    message_proto::{self, *},
+    message_proto::*,
     sleep,
 };
 use hbb_common::{fs, log, Stream};
@@ -1185,10 +1185,10 @@ impl<T: InvokeUiSession> Remote<T> {
     }
 
     #[cfg(windows)]
-    fn handle_cliprdr_msg(&self, clip: message_proto::Cliprdr) {
+    fn handle_cliprdr_msg(&self, clip: hbb_common::message_proto::Cliprdr) {
         if !self.handler.lc.read().unwrap().disable_clipboard {
             #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
-            if let Some(message_proto::cliprdr::Union::FormatList(_)) = &clip.union {
+            if let Some(hbb_common::message_proto::cliprdr::Union::FormatList(_)) = &clip.union {
                 if self.client_conn_id
                     != clipboard::get_client_conn_id(&crate::flutter::get_cur_session_id())
                         .unwrap_or(0)
