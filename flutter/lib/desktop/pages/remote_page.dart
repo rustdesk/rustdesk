@@ -443,11 +443,14 @@ class ImagePaint extends StatelessWidget {
 
   Widget _buildCrossScrollbar(BuildContext context, Widget child, Size size) {
     var layoutSize = MediaQuery.of(context).size;
+    // If minimized, w or h may be negative here.
+    final w = layoutSize.width - kWindowBorderWidth * 2;
+    final h =
+        layoutSize.height - kWindowBorderWidth * 2 - kDesktopRemoteTabBarHeight;
     layoutSize = Size(
-        layoutSize.width - kWindowBorderWidth * 2,
-        layoutSize.height -
-            kWindowBorderWidth * 2 -
-            kDesktopRemoteTabBarHeight);
+      w < 0 ? 0 : w,
+      h < 0 ? 0 : h,
+    );
     bool overflow =
         layoutSize.width < size.width || layoutSize.height < size.height;
     return overflow
