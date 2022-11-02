@@ -804,8 +804,8 @@ pub fn main_is_root() -> bool {
     is_root()
 }
 
-pub fn main_is_release() -> bool {
-    is_release()
+pub fn get_double_click_time() -> SyncReturn<i32> {
+    SyncReturn(crate::platform::get_double_click_time() as _)
 }
 
 pub fn main_start_dbus_server() {

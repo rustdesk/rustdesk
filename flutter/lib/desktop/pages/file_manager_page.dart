@@ -57,7 +57,8 @@ class _FileManagerPageState extends State<FileManagerPage>
   final _breadCrumbScrollerRemote = ScrollController();
 
   /// [_lastClickTime], [_lastClickEntry] help to handle double click
-  int _lastClickTime = DateTime.now().millisecondsSinceEpoch;
+  int _lastClickTime =
+      DateTime.now().millisecondsSinceEpoch - bind.getDoubleClickTime() - 1000;
   Entry? _lastClickEntry;
 
   final _dropMaskVisible = false.obs; // TODO impl drop mask
@@ -404,7 +405,7 @@ class _FileManagerPageState extends State<FileManagerPage>
     final elapsed = current - _lastClickTime;
     _lastClickTime = current;
     if (_lastClickEntry == entry) {
-      if (elapsed < kDesktopDoubleClickTimeMilli) {
+      if (elapsed < bind.getDoubleClickTime()) {
         return true;
       }
     } else {

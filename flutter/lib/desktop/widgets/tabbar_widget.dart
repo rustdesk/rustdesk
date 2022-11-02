@@ -178,7 +178,7 @@ typedef LabelGetter = Rx<String> Function(String key);
 
 /// [_lastClickTime], help to handle double click
 int _lastClickTime =
-    DateTime.now().millisecondsSinceEpoch - kDesktopDoubleClickTimeMilli - 1000;
+    DateTime.now().millisecondsSinceEpoch - bind.getDoubleClickTime() - 1000;
 
 class DesktopTab extends StatelessWidget {
   final bool showLogo;
@@ -311,7 +311,7 @@ class DesktopTab extends StatelessWidget {
                         final current = DateTime.now().millisecondsSinceEpoch;
                         final elapsed = current - _lastClickTime;
                         _lastClickTime = current;
-                        if (elapsed < kDesktopDoubleClickTimeMilli) {
+                        if (elapsed < bind.getDoubleClickTime()) {
                           // onDoubleTap
                           toggleMaximize(isMainWindow)
                               .then((value) => isMaximized.value = value);
