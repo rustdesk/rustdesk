@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:math';
+import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
@@ -11,7 +12,6 @@ import '../../models/platform_model.dart';
 import '../common.dart';
 import '../consts.dart';
 import './state_model.dart';
-import 'dart:ui' as ui;
 
 /// Mouse button enum.
 enum MouseButtons { left, right, wheel }
