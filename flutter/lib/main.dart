@@ -101,8 +101,6 @@ void runMainApp(bool startService) async {
   await bind.mainCheckConnectStatus();
   if (startService) {
     // await windowManager.ensureInitialized();
-    // disable tray
-    // initTray();
     gFFI.serverModel.startService();
   }
   runApp(App());
