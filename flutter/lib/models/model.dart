@@ -577,8 +577,10 @@ class CanvasModel with ChangeNotifier {
 
   Size get size {
     final size = MediaQueryData.fromWindow(ui.window).size;
-    return Size(size.width - windowBorderWidth * 2,
-        size.height - tabBarHeight - windowBorderWidth * 2);
+    // If minimized, w or h may be negative here.
+    double w = size.width - windowBorderWidth * 2;
+    double h = size.height - tabBarHeight - windowBorderWidth * 2;
+    return Size(w < 0 ? 0 : w, h < 0 ? 0 : h);
   }
 
   moveDesktopMouse(double x, double y) {
