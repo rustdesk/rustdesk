@@ -300,9 +300,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Ignore Battery Optimizations", "Ignorar optimizacioens de bateria"),
         ("android_open_battery_optimizations_tip", ""),
         ("Connection not allowed", "Conexión no disponible"),
-        ("Legacy mode", ""),
-        ("Map mode", ""),
-        ("Translate mode", ""),
+        ("Legacy mode", "Modo heredado"),
+        ("Map mode", "Modo mapa"),
+        ("Translate mode", "Modo traducido"),
         ("Use temporary password", "Usar contraseña temporal"),
         ("Use permanent password", "Usar contraseña permamente"),
         ("Use both passwords", "Usar ambas comtraseñas"),
@@ -384,6 +384,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wayland requires Ubuntu 21.04 or higher version.", "Wayland requiere Ubuntu 21.04 o una versión superior."),
         ("Wayland requires higher version of linux distro. Please try X11 desktop or change your OS.", "Wayland requiere una versión superior de la distribución de Linux. Pruebe el escritorio X11 o cambie su sistema operativo."),
         ("JumpLink", "Ver"),
-        ("Please Select the screen to be shared(Operate on the peer side).", "Seleccione la pantalla que se compartirá (Operar en el lado del compañero)."),
+        ("Please Select the screen to be shared(Operate on the peer side).", "Seleccione la pantalla que se compartirá (Operar en el lado del par)."),
     ].iter().cloned().collect();
 }
