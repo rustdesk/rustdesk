@@ -2,13 +2,16 @@ use crate::client::{
     Client, CodecFormat, MediaData, MediaSender, QualityStatus, MILLI1, SEC30,
     SERVER_CLIPBOARD_ENABLED, SERVER_FILE_TRANSFER_ENABLED, SERVER_KEYBOARD_ENABLED,
 };
-use crate::common;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::common::{check_clipboard, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL};
+use crate::{audio_service, common, ConnInner, CLIENT_SERVER};
 
 #[cfg(windows)]
 use clipboard::{cliprdr::CliprdrClientContext, ContextSend};
+use hbb_common::futures::channel::mpsc::unbounded;
+use hbb_common::tokio::sync::mpsc::error::TryRecvError;
 
+use crate::server::Service;
 use crate::ui_session_interface::{InvokeUiSession, Session};
 use crate::{client::Data, client::Interface};
 
@@ -251,6 +254,55 @@ impl<T: InvokeUiSession> Remote<T> {
         } else {
             self.handler.job_done(id, file_num);
         }
+    }
+
+    // Start a local audio recorder, records audio and send to remote
+    fn start_client_audio(
+        &mut self,
+        audio_sender: MediaSender,
+    ) -> Option<std::sync::mpsc::Sender<()>> {
+        if self.handler.is_file_transfer() || self.handler.is_port_forward() {
+            return None;
+        }
+        // Create a channel to receive error or closed message
+        let (tx, rx) = std::sync::mpsc::channel();
+        let (tx_audio_data, mut rx_audio_data) = hbb_common::tokio::sync::mpsc::unbounded_channel();
+        // Create a stand-alone inner, add subscribe to audio service
+        let client_conn_inner = ConnInner::new(
+            CLIENT_SERVER.write().unwrap().get_new_id(),
+            Some(tx_audio_data),
+            None,
+        );
+        CLIENT_SERVER
+            .write()
+            .unwrap()
+            .subscribe(audio_service::NAME, client_conn_inner, true);
+        std::thread::spawn(move || {
+            loop {
+                // check if client is closed
+                match rx.try_recv() {
+                    Ok(_) | Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                        log::debug!("Exit local audio service of client");
+                        break;
+                    }
+                    _ => {}
+                }
+                match rx_audio_data.try_recv() {
+                    Ok((instant, msg)) => match msg.union {
+                        Some(_) => todo!(),
+                        None => todo!(),
+                    },
+                    Err(err) => {
+                        if err == TryRecvError::Empty {
+                            // ignore
+                        } else {
+                            log::debug!("Failed to record local audio channel: {}", err);
+                        }
+                    }
+                }
+            }
+        });
+        Some(tx)
     }
 
     fn start_clipboard(&mut self) -> Option<std::sync::mpsc::Sender<()>> {

@@ -108,6 +108,12 @@ pub struct Connection {
     from_switch: bool,
 }
 
+impl ConnInner {
+    pub fn new(id: i32, tx: Option<Sender>, tx_video: Option<Sender>) -> Self {
+        Self { id, tx, tx_video }
+    }
+}
+
 impl Subscriber for ConnInner {
     #[inline]
     fn id(&self) -> i32 {
