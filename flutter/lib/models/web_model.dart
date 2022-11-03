@@ -25,7 +25,7 @@ class PlatformFFI {
 
   static get localeName => window.navigator.language;
 
-  static Future<Null> init(String _appType) async {
+  static Future<void> init(String _appType) async {
     isWeb = true;
     isWebDesktop = !context.callMethod('isMobile');
     context.callMethod('init');
@@ -57,13 +57,13 @@ class PlatformFFI {
   }
 
   static void stopDesktopWebListener() {
-    mouseListeners.forEach((l) {
-      l.cancel();
-    });
+    for (var ml in mouseListeners) {
+      ml.cancel();
+    }
     mouseListeners.clear();
-    keyListeners.forEach((l) {
-      l.cancel();
-    });
+    for (var kl in keyListeners) {
+      kl.cancel();
+    }
     keyListeners.clear();
   }
 

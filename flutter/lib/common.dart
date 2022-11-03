@@ -86,7 +86,7 @@ class IconFont {
   static const IconData add = IconData(0xe664, fontFamily: _family1);
   static const IconData menu = IconData(0xe628, fontFamily: _family1);
   static const IconData search = IconData(0xe6a4, fontFamily: _family2);
-  static const IconData round_close = IconData(0xe6ed, fontFamily: _family2);
+  static const IconData roundClose = IconData(0xe6ed, fontFamily: _family2);
 }
 
 class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
@@ -1330,11 +1330,8 @@ Future<Map<String, String>> getHttpHeaders() async {
 
 // Simple wrapper of built-in types for refrence use.
 class SimpleWrapper<T> {
-  T t;
-  SimpleWrapper(this.t);
-
-  T get value => t;
-  set value(T t) => this.t = t;
+  T value;
+  SimpleWrapper(this.value);
 }
 
 /// call this to reload current window.

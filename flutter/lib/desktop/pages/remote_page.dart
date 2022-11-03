@@ -25,15 +25,24 @@ bool _isCustomCursorInited = false;
 final SimpleWrapper<bool> _firstEnterImage = SimpleWrapper(false);
 
 class RemotePage extends StatefulWidget {
-  const RemotePage({
+  RemotePage({
     Key? key,
     required this.id,
   }) : super(key: key);
 
   final String id;
+  final SimpleWrapper<State<RemotePage>?> _lastState = SimpleWrapper(null);
+
+  FFI get ffi => (_lastState.value! as _RemotePageState)._ffi;
+  RxBool get showMenubar =>
+      (_lastState.value! as _RemotePageState)._showMenubar;
 
   @override
-  State<RemotePage> createState() => _RemotePageState();
+  State<RemotePage> createState() {
+    final state = _RemotePageState();
+    _lastState.value = state;
+    return state;
+  }
 }
 
 class _RemotePageState extends State<RemotePage>
@@ -41,6 +50,7 @@ class _RemotePageState extends State<RemotePage>
   Timer? _timer;
   String keyboardMode = "legacy";
   final _cursorOverImage = false.obs;
+  final _showMenubar = false.obs;
   late RxBool _showRemoteCursor;
   late RxBool _remoteCursorMoved;
   late RxBool _keyboardEnabled;
@@ -229,6 +239,7 @@ class _RemotePageState extends State<RemotePage>
     paints.add(RemoteMenubar(
       id: widget.id,
       ffi: _ffi,
+      show: _showMenubar,
       onEnterOrLeaveImageSetter: (func) => _onEnterOrLeaveImage4Menubar = func,
       onEnterOrLeaveImageCleaner: () => _onEnterOrLeaveImage4Menubar = null,
     ));
