@@ -38,8 +38,8 @@ class ChatModel with ChangeNotifier {
     firstName: "Me",
   );
 
-  late final Map<int, MessageBody> _messages = Map()
-    ..[clientModeID] = MessageBody(me, []);
+  late final Map<int, MessageBody> _messages = {}..[clientModeID] =
+      MessageBody(me, []);
 
   var _currentID = clientModeID;
   late bool _isShowChatPage = false;

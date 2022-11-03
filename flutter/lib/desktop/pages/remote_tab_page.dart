@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
@@ -9,11 +10,22 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/desktop/pages/remote_page.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
+import 'package:flutter_hbb/desktop/widgets/material_mod_popup_menu.dart'
+    as mod_menu;
+import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
+import 'package:bot_toast/bot_toast.dart';
 
 import '../../models/platform_model.dart';
+
+class _MenuTheme {
+  static const Color commonColor = MyTheme.accent;
+  // kMinInteractiveDimension
+  static const double height = 20.0;
+  static const double dividerHeight = 12.0;
+}
 
 class ConnectionTabPage extends StatefulWidget {
   final Map<String, dynamic> params;
@@ -123,7 +135,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
                     connectionType.secure.value == ConnectionType.strSecure
                         ? 'Secure Connection'
                         : 'Insecure Connection');
-                return Row(
+                final tab = Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     icon,
@@ -138,6 +150,23 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
                     label,
                   ],
                 );
+
+                return Listener(
+                  onPointerDown: (e) {
+                    if (e.kind != ui.PointerDeviceKind.mouse) {
+                      return;
+                    }
+                    if (e.buttons == 2) {
+                      showRightMenu(
+                        (CancelFunc cancelFunc) {
+                          return _tabMenuBuilder(key, cancelFunc);
+                        },
+                        target: e.position,
+                      );
+                    }
+                  },
+                  child: tab,
+                );
               }
             }),
           )),
@@ -149,6 +178,146 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             resizeEdgeSize: stateGlobal.resizeEdgeSize.value,
             windowId: stateGlobal.windowId,
           );
+  }
+
+  // to-do: some dup code to ../widgets/remote_menubar
+  Widget _tabMenuBuilder(String key, CancelFunc cancelFunc) {
+    final List<MenuEntryBase<String>> menu = [];
+    const EdgeInsets padding = EdgeInsets.only(left: 8.0, right: 5.0);
+    final remotePage = tabController.state.value.tabs
+        .firstWhere((tab) => tab.key == key)
+        .page as RemotePage;
+    final ffi = remotePage.ffi;
+    final pi = ffi.ffiModel.pi;
+    final perms = ffi.ffiModel.permissions;
+    final showMenuBar = remotePage.showMenubar;
+    menu.addAll([
+      MenuEntryButton<String>(
+        childBuilder: (TextStyle? style) => Text(
+          translate('Close'),
+          style: style,
+        ),
+        proc: () {
+          tabController.closeBy(key);
+          cancelFunc();
+        },
+        padding: padding,
+      ),
+      MenuEntryButton<String>(
+        childBuilder: (TextStyle? style) => Obx(() => Text(
+              translate(showMenuBar.isTrue ? 'Hide Menubar' : 'Show Menubar'),
+              style: style,
+            )),
+        proc: () {
+          showMenuBar.value = !showMenuBar.value;
+          cancelFunc();
+        },
+        padding: padding,
+      ),
+      MenuEntryDivider<String>(),
+      MenuEntryRadios<String>(
+        text: translate('Ratio'),
+        optionsGetter: () => [
+          MenuEntryRadioOption(
+            text: translate('Scale original'),
+            value: 'original',
+            dismissOnClicked: true,
+          ),
+          MenuEntryRadioOption(
+            text: translate('Scale adaptive'),
+            value: 'adaptive',
+            dismissOnClicked: true,
+          ),
+        ],
+        curOptionGetter: () async {
+          return await bind.sessionGetOption(id: key, arg: 'view-style') ??
+              'adaptive';
+        },
+        optionSetter: (String oldValue, String newValue) async {
+          await bind.sessionPeerOption(
+              id: key, name: "view-style", value: newValue);
+          ffi.canvasModel.updateViewStyle();
+          cancelFunc();
+        },
+        padding: padding,
+      ),
+      MenuEntryDivider<String>(),
+      MenuEntryRadios<String>(
+        text: translate('Scroll Style'),
+        optionsGetter: () => [
+          MenuEntryRadioOption(
+            text: translate('ScrollAuto'),
+            value: 'scrollauto',
+            dismissOnClicked: true,
+          ),
+          MenuEntryRadioOption(
+            text: translate('Scrollbar'),
+            value: 'scrollbar',
+            dismissOnClicked: true,
+          ),
+        ],
+        curOptionGetter: () async {
+          return await bind.sessionGetOption(id: key, arg: 'scroll-style') ??
+              '';
+        },
+        optionSetter: (String oldValue, String newValue) async {
+          await bind.sessionPeerOption(
+              id: key, name: "scroll-style", value: newValue);
+          ffi.canvasModel.updateScrollStyle();
+          cancelFunc();
+        },
+        padding: padding,
+        dismissOnClicked: true,
+      ),
+      MenuEntryDivider<String>(),
+      () {
+        final state = ShowRemoteCursorState.find(key);
+        return MenuEntrySwitch2<String>(
+          switchType: SwitchType.scheckbox,
+          text: translate('Show remote cursor'),
+          getter: () {
+            return state;
+          },
+          setter: (bool v) async {
+            state.value = v;
+            await bind.sessionToggleOption(
+                id: key, value: 'show-remote-cursor');
+            cancelFunc();
+          },
+          padding: padding,
+        );
+      }()
+    ]);
+
+    if (perms['keyboard'] != false) {
+      if (pi.platform == 'Linux' || pi.sasEnabled) {
+        menu.add(MenuEntryButton<String>(
+          childBuilder: (TextStyle? style) => Text(
+            '${translate("Insert")} Ctrl + Alt + Del',
+            style: style,
+          ),
+          proc: () {
+            bind.sessionCtrlAltDel(id: key);
+            cancelFunc();
+          },
+          padding: padding,
+          dismissOnClicked: true,
+        ));
+      }
+    }
+
+    return mod_menu.PopupMenu<String>(
+      items: menu
+          .map((entry) => entry.build(
+              context,
+              const MenuConfig(
+                commonColor: _MenuTheme.commonColor,
+                height: _MenuTheme.height,
+                dividerHeight: _MenuTheme.dividerHeight,
+              )))
+          .expand((i) => i)
+          .toList(),
+    );
   }
 
   void onRemoveId(String id) {

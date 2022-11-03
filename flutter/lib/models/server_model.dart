@@ -10,7 +10,7 @@ import 'package:window_manager/window_manager.dart';
 
 import '../common.dart';
 import '../common/formatter/id_formatter.dart';
-import '../desktop/pages/server_page.dart' as Desktop;
+import '../desktop/pages/server_page.dart' as desktop;
 import '../desktop/widgets/tabbar_widget.dart';
 import '../mobile/pages/server_page.dart';
 import 'model.dart';
@@ -261,7 +261,7 @@ class ServerModel with ChangeNotifier {
   }
 
   /// Start the screen sharing service.
-  Future<Null> startService() async {
+  Future<void> startService() async {
     _isStart = true;
     notifyListeners();
     parent.target?.ffiModel.updateEventListener("");
@@ -276,7 +276,7 @@ class ServerModel with ChangeNotifier {
   }
 
   /// Stop the screen sharing service.
-  Future<Null> stopService() async {
+  Future<void> stopService() async {
     _isStart = false;
     closeAll();
     await parent.target?.invokeMethod("stop_service");
@@ -288,7 +288,7 @@ class ServerModel with ChangeNotifier {
     }
   }
 
-  Future<Null> initInput() async {
+  Future<void> initInput() async {
     await parent.target?.invokeMethod("init_input");
   }
 
@@ -412,7 +412,7 @@ class ServerModel with ChangeNotifier {
             }
           }
         },
-        page: Desktop.buildConnectionCard(client)));
+        page: desktop.buildConnectionCard(client)));
     Future.delayed(Duration.zero, () async {
       window_on_top(null);
     });
@@ -521,9 +521,9 @@ class ServerModel with ChangeNotifier {
   }
 
   closeAll() {
-    _clients.forEach((client) {
+    for (var client in _clients) {
       bind.cmCloseConnection(connId: client.id);
-    });
+    }
     _clients.clear();
     tabController.state.value.tabs.clear();
   }

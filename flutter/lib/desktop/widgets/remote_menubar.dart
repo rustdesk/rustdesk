@@ -31,6 +31,7 @@ class _MenubarTheme {
 class RemoteMenubar extends StatefulWidget {
   final String id;
   final FFI ffi;
+  final RxBool show;
   final Function(Function(bool)) onEnterOrLeaveImageSetter;
   final Function() onEnterOrLeaveImageCleaner;
 
@@ -38,6 +39,7 @@ class RemoteMenubar extends StatefulWidget {
     Key? key,
     required this.id,
     required this.ffi,
+    required this.show,
     required this.onEnterOrLeaveImageSetter,
     required this.onEnterOrLeaveImageCleaner,
   }) : super(key: key);
@@ -47,7 +49,6 @@ class RemoteMenubar extends StatefulWidget {
 }
 
 class _RemoteMenubarState extends State<RemoteMenubar> {
-  final RxBool _show = false.obs;
   final Rx<Color> _hideColor = Colors.white12.obs;
   final _rxHideReplay = rxdart.ReplaySubject<int>();
   final _pinMenubar = false.obs;
@@ -61,6 +62,8 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     stateGlobal.setFullscreen(v);
     setState(() {});
   }
+
+  RxBool get show => widget.show;
 
   @override
   initState() {
@@ -79,8 +82,8 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         .throttleTime(const Duration(milliseconds: 5000),
             trailing: true, leading: false)
         .listen((int v) {
-      if (_pinMenubar.isFalse && _show.isTrue && _isCursorOverImage) {
-        _show.value = false;
+      if (_pinMenubar.isFalse && show.isTrue && _isCursorOverImage) {
+        show.value = false;
       }
     });
   }
@@ -97,13 +100,13 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     return Align(
       alignment: Alignment.topCenter,
       child: Obx(
-          () => _show.value ? _buildMenubar(context) : _buildShowHide(context)),
+          () => show.value ? _buildMenubar(context) : _buildShowHide(context)),
     );
   }
 
   Widget _buildShowHide(BuildContext context) {
     return Obx(() => Tooltip(
-        message: translate(_show.value ? "Hide Menubar" : "Show Menubar"),
+        message: translate(show.value ? 'Hide Menubar' : 'Show Menubar'),
         child: SizedBox(
             width: 100,
             height: 13,
@@ -112,9 +115,9 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                 _hideColor.value = v ? Colors.white60 : Colors.white24;
               },
               onPressed: () {
-                _show.value = !_show.value;
+                show.value = !show.value;
                 _hideColor.value = Colors.white24;
-                if (_show.isTrue) {
+                if (show.isTrue) {
                   _updateScreen();
                 }
               },
@@ -517,7 +520,6 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       );
     }
     displayMenu.add(MenuEntryDivider());
-
     if (perms['keyboard'] != false) {
       if (pi.platform == 'Linux' || pi.sasEnabled) {
         displayMenu.add(MenuEntryButton<String>(
