@@ -2559,7 +2559,7 @@ dependencies = [
 [[package]]
 name = "impersonate_system"
 version = "0.1.0"
-source = "git+https://github.com/21pages/impersonate-system#c48f37a8fd17413b2a4ba655c3873bdc5c8d25aa"
+source = "git+https://github.com/21pages/impersonate-system#84b401893d5b6628c8b33b295328d13fbbe2674b"
 dependencies = [
  "cc",
 ]
