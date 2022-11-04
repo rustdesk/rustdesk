@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock/wakelock.dart';
+import 'package:window_manager/window_manager.dart';
 import 'package:flutter_custom_cursor/flutter_custom_cursor.dart';
 import 'package:flutter_improved_scrolling/flutter_improved_scrolling.dart';
 
@@ -46,7 +47,7 @@ class RemotePage extends StatefulWidget {
 }
 
 class _RemotePageState extends State<RemotePage>
-    with AutomaticKeepAliveClientMixin {
+    with AutomaticKeepAliveClientMixin, WindowListener {
   Timer? _timer;
   String keyboardMode = "legacy";
   final _cursorOverImage = false.obs;
@@ -246,6 +247,21 @@ class _RemotePageState extends State<RemotePage>
     return Stack(
       children: paints,
     );
+  }
+
+  @override
+  void onWindowMinimize() {
+    _ffi.chatModel.setWindowMinimized(true);
+  }
+
+  @override
+  void onWindowMaximize() {
+    _ffi.chatModel.setWindowMinimized(false);
+  }
+
+  @override
+  void onWindowRestore() {
+    _ffi.chatModel.setWindowMinimized(false);
   }
 
   @override

@@ -32,6 +32,8 @@ class ChatModel with ChangeNotifier {
   OverlayState? _overlayState;
   OverlayEntry? chatIconOverlayEntry;
   OverlayEntry? chatWindowOverlayEntry;
+  bool _showOnWindowRestore = false;
+  bool _isWindowMinimized = false;
 
   final ChatUser me = ChatUser(
     id: "",
@@ -63,6 +65,14 @@ class ChatModel with ChangeNotifier {
       return me;
     } else {
       return user;
+    }
+  }
+
+  setWindowMinimized(bool v) {
+    _isWindowMinimized = v;
+    if (!_isWindowMinimized && _showOnWindowRestore) {
+      showChatIconOverlay();
+      _showOnWindowRestore = false;
     }
   }
 
@@ -101,6 +111,7 @@ class ChatModel with ChangeNotifier {
             initPositionYInTop: false,
             initPositionYMarginBorder: 100,
             borderTopContainTopBar: true,
+            appBarHeight: 0,
           ),
           child: FloatingActionButton(
               onPressed: () {
@@ -209,7 +220,11 @@ class ChatModel with ChangeNotifier {
     if (text.isEmpty) return;
     // mobile: first message show overlay icon
     if (chatIconOverlayEntry == null) {
-      showChatIconOverlay();
+      if (_isWindowMinimized) {
+        showChatIconOverlay();
+      } else {
+        _showOnWindowRestore = true;
+      }
     }
     // desktop: show chat page
     if (!_isShowChatPage) {
