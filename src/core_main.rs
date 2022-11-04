@@ -148,7 +148,7 @@ pub fn core_main() -> Option<Vec<String>> {
             return None;
         } else if args[0] == "--server" {
             log::info!("start --server");
-            #[cfg(not(target_os = "macos"))]
+            #[cfg(target_os = "windows")]
             {
                 crate::start_server(true);
                 return None;
@@ -157,6 +157,13 @@ pub fn core_main() -> Option<Vec<String>> {
             {
                 std::thread::spawn(move || crate::start_server(true));
                 // to-do: for flutter, starting tray not ready yet, or we can reuse sciter's tray implementation.
+            }
+            #[cfg(all(target_os = "linux"))]
+            {
+                let handler = std::thread::spawn(move || crate::start_server(true));
+                crate::tray::start_tray(crate::ui_interface::OPTIONS.clone());
+                // revent server exit when encountering errors from tray
+                handler.join();
             }
         } else if args[0] == "--import-config" {
             if args.len() == 2 {

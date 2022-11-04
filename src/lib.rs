@@ -41,7 +41,7 @@ mod lang;
 mod license;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod port_forward;
-#[cfg(windows)]
+
 mod tray;
 
 mod ui_cm_interface;

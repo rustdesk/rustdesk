@@ -432,7 +432,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       updateUrl = await bind.mainGetSoftwareUpdateUrl();
       if (updateUrl.isNotEmpty) setState(() {});
     });
-    initTray();
+    // disable this tray because we use tray function provided by rust now
+    // initTray();
     trayManager.addListener(this);
     windowManager.addListener(this);
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
