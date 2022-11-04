@@ -57,6 +57,7 @@ struct IpcTaskRunner<T: InvokeUiCM> {
     tx: mpsc::UnboundedSender<Data>,
     rx: mpsc::UnboundedReceiver<Data>,
     close: bool,
+    running: bool,
     conn_id: i32,
     #[cfg(windows)]
     file_transfer_enabled: bool,
@@ -218,6 +219,7 @@ pub fn switch_permission(id: i32, name: String, enabled: bool) {
     };
 }
 
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[inline]
 pub fn get_clients_state() -> String {
     let clients = CLIENTS.read().unwrap();
@@ -287,6 +289,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
             (_tx_clip, rx_clip) = unbounded_channel::<i32>();
         }
 
+        self.running = false;
         loop {
             tokio::select! {
                 res = self.stream.next() => {
@@ -305,6 +308,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                     {
                                         self.file_transfer_enabled = _file_transfer_enabled;
                                     }
+                                    self.running = true;
                                     break;
                                 }
                                 Data::Close => {
@@ -389,13 +393,13 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
             tx,
             rx,
             close: true,
+            running: true,
             conn_id: 0,
             #[cfg(windows)]
             file_transfer_enabled: false,
         };
 
-        task_runner.run().await;
-        if task_runner.conn_id > 0 {
+        while task_runner.running {
             task_runner.run().await;
         }
         if task_runner.conn_id > 0 {
