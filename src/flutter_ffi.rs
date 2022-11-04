@@ -21,7 +21,8 @@ use crate::{
     client::file_trait::FileManager,
     flutter::{make_fd_to_json, session_add, session_start_},
 };
-
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::ui_session_interface::CUR_SESSION;
 fn initialize(app_dir: &str) {
     *config::APP_DIR.write().unwrap() = app_dir.to_owned();
     #[cfg(target_os = "android")]
@@ -224,10 +225,13 @@ pub fn session_handle_flutter_key_event(
 }
 
 pub fn session_enter_or_leave(id: String, enter: bool) {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
         if enter {
+            *CUR_SESSION.lock().unwrap() = Some(session.clone());
             session.enter();
         } else {
+            *CUR_SESSION.lock().unwrap() = None;
             session.leave();
         }
     }
@@ -1013,6 +1017,11 @@ pub fn version_to_number(v: String) -> i64 {
 
 pub fn main_is_installed() -> SyncReturn<bool> {
     SyncReturn(is_installed())
+}
+
+pub fn main_start_grab_keyboard(){
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    crate::ui_session_interface::global_grab_keyboard();
 }
 
 pub fn main_is_installed_lower_version() -> SyncReturn<bool> {

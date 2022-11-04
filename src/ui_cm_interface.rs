@@ -339,6 +339,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                 Data::FS(fs) => {
                                     handle_fs(fs, &mut write_jobs, &self.tx).await;
                                 }
+                                #[cfg(windows)]
                                 Data::ClipbaordFile(_clip) => {
                                     #[cfg(windows)]
                                     {

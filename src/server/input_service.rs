@@ -429,6 +429,13 @@ fn handle_mouse_(evt: &MouseEvent, conn: i32) {
                 x = -x;
                 y = -y;
             }
+
+            // fix shift + scroll(down/up)
+            #[cfg(target_os = "macos")]
+            if evt.modifiers.contains(&EnumOrUnknown::new(ControlKey::Shift)){
+                x = y;
+                y = 0;
+            }
             if x != 0 {
                 en.mouse_scroll_x(x);
             }
@@ -621,6 +628,7 @@ fn rdev_key_click(key: RdevKey) {
 }
 
 fn sync_status(evt: &KeyEvent) -> (bool, bool) {
+    /* todo! Shift+delete */
     let mut en = ENIGO.lock().unwrap();
 
     // remote caps status
