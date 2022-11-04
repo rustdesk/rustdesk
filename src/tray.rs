@@ -1,11 +1,15 @@
 use hbb_common::log::{debug, error, info};
-use lazy_static::lazy_static;
 #[cfg(target_os = "linux")]
 use libappindicator::AppIndicator;
 use std::env::temp_dir;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex, RwLock},
+};
+use trayicon::{MenuBuilder, TrayIconBuilder};
+use winit::{
+    event::Event,
+    event_loop::{ControlFlow, EventLoop},
 };
 
 #[derive(Clone, Eq, PartialEq, Debug)]
