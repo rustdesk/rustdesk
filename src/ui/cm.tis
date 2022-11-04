@@ -318,9 +318,6 @@ handler.addConnection = function(id, is_file_transfer, port_forward, peer_id, na
     if (conn) {
         conn.authorized = authorized;
         update();
-        self.timer(30ms, function() {
-            view.windowState = View.WINDOW_MINIMIZED;
-        });
         return;
     }
     var idx = -1;
@@ -346,6 +343,11 @@ handler.addConnection = function(id, is_file_transfer, port_forward, peer_id, na
     bring_to_top();
     update();
     self.timer(1ms, adjustHeader);
+    if (authorized) {
+        self.timer(3s, function() {
+            view.windowState = View.WINDOW_MINIMIZED;
+        });
+    }
 }
 
 handler.removeConnection = function(id, close) {
