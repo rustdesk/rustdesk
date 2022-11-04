@@ -407,9 +407,7 @@ class ServerModel with ChangeNotifier {
           if (client.hasUnreadChatMessage.value) {
             client.hasUnreadChatMessage.value = false;
             final chatModel = parent.target!.chatModel;
-            if (!chatModel.isShowChatPage) {
-              chatModel.toggleCMChatPage(client.id);
-            }
+            chatModel.showChatPage(client.id);
           }
         },
         page: desktop.buildConnectionCard(client)));

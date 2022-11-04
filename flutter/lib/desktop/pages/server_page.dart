@@ -101,6 +101,7 @@ class ConnectionManagerState extends State<ConnectionManager> {
     gFFI.serverModel.updateClientState();
     gFFI.serverModel.tabController.onSelected = (index, _) =>
         gFFI.chatModel.changeCurrentID(gFFI.serverModel.clients[index].id);
+    gFFI.chatModel.isConnManager = true;
     super.initState();
   }
 
@@ -159,7 +160,7 @@ class ConnectionManagerState extends State<ConnectionManager> {
                 pageViewBuilder: (pageView) => Row(children: [
                       Expanded(child: pageView),
                       Consumer<ChatModel>(
-                          builder: (_, model, child) => model.isShowChatPage
+                          builder: (_, model, child) => model.isShowCMChatPage
                               ? Expanded(child: Scaffold(body: ChatPage()))
                               : Offstage())
                     ])));
