@@ -44,6 +44,7 @@ jobs:
           toolchain: "1.62"
           target: ${{ matrix.job.target }}
           override: true
+          components: rustfmt
           profile: minimal # minimal component installation (ie, no documentation)
 
       - uses: Swatinem/rust-cache@v2
