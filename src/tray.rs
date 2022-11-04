@@ -6,7 +6,9 @@ use std::{
     collections::HashMap,
     sync::{Arc, Mutex, RwLock},
 };
+#[cfg(target_os = "windows")]
 use trayicon::{MenuBuilder, TrayIconBuilder};
+#[cfg(target_os = "windows")]
 use winit::{
     event::Event,
     event_loop::{ControlFlow, EventLoop},
