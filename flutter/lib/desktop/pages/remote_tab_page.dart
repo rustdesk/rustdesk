@@ -242,34 +242,6 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         padding: padding,
       ),
       MenuEntryDivider<String>(),
-      MenuEntryRadios<String>(
-        text: translate('Scroll Style'),
-        optionsGetter: () => [
-          MenuEntryRadioOption(
-            text: translate('ScrollAuto'),
-            value: 'scrollauto',
-            dismissOnClicked: true,
-          ),
-          MenuEntryRadioOption(
-            text: translate('Scrollbar'),
-            value: 'scrollbar',
-            dismissOnClicked: true,
-          ),
-        ],
-        curOptionGetter: () async {
-          return await bind.sessionGetOption(id: key, arg: 'scroll-style') ??
-              '';
-        },
-        optionSetter: (String oldValue, String newValue) async {
-          await bind.sessionPeerOption(
-              id: key, name: "scroll-style", value: newValue);
-          ffi.canvasModel.updateScrollStyle();
-          cancelFunc();
-        },
-        padding: padding,
-        dismissOnClicked: true,
-      ),
-      MenuEntryDivider<String>(),
       () {
         final state = ShowRemoteCursorState.find(key);
         return MenuEntrySwitch2<String>(
@@ -290,6 +262,35 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     ]);
 
     if (perms['keyboard'] != false) {
+      if (perms['clipboard'] != false) {
+        menu.add(MenuEntrySwitch<String>(
+          switchType: SwitchType.scheckbox,
+          text: translate('Disable clipboard'),
+          getter: () async {
+            return bind.sessionGetToggleOptionSync(
+                id: key, arg: 'disable-clipboard');
+          },
+          setter: (bool v) async {
+            await bind.sessionToggleOption(id: key, value: 'disable-clipboard');
+            cancelFunc();
+          },
+          padding: padding,
+        ));
+      }
+
+      menu.add(MenuEntryButton<String>(
+        childBuilder: (TextStyle? style) => Text(
+          translate('Insert Lock'),
+          style: style,
+        ),
+        proc: () {
+          bind.sessionLockScreen(id: key);
+          cancelFunc();
+        },
+        padding: padding,
+        dismissOnClicked: true,
+      ));
+
       if (pi.platform == 'Linux' || pi.sasEnabled) {
         menu.add(MenuEntryButton<String>(
           childBuilder: (TextStyle? style) => Text(
