@@ -91,7 +91,6 @@ pub fn start_tray(options: Arc<Mutex<HashMap<String, String>>>) {
     // init gtk context
     if let Err(err) = gtk::init() {
         error!("Error when starting the tray: {}", err);
-        gtk::main_quit();
         return;
     }
     if let Some(mut appindicator) = get_default_app_indicator() {
@@ -116,7 +115,7 @@ pub fn start_tray(options: Arc<Mutex<HashMap<String, String>>>) {
         info!("Setting tray event loop");
         gtk::main();
     } else {
-        eprintln!("tray process exit now");
+        error!("Tray process exit now");
     }
 }
 
