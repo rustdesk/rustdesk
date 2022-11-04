@@ -57,6 +57,8 @@ struct IpcTaskRunner<T: InvokeUiCM> {
     tx: mpsc::UnboundedSender<Data>,
     rx: mpsc::UnboundedReceiver<Data>,
     close: bool,
+    running: bool,
+    authorized: bool,
     conn_id: i32,
     #[cfg(windows)]
     file_transfer_enabled: bool,
@@ -218,6 +220,7 @@ pub fn switch_permission(id: i32, name: String, enabled: bool) {
     };
 }
 
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[inline]
 pub fn get_clients_state() -> String {
     let clients = CLIENTS.read().unwrap();
@@ -273,7 +276,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
         let mut rx_clip;
         let _tx_clip;
         #[cfg(windows)]
-        if self.conn_id > 0 {
+        if self.conn_id > 0 && self.authorized {
             rx_clip1 = clipboard::get_rx_cliprdr_server(self.conn_id);
             rx_clip = rx_clip1.lock().await;
         } else {
@@ -287,6 +290,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
             (_tx_clip, rx_clip) = unbounded_channel::<i32>();
         }
 
+        self.running = false;
         loop {
             tokio::select! {
                 res = self.stream.next() => {
@@ -300,11 +304,13 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                 Data::Login{id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled: _file_transfer_enabled, restart, recording} => {
                                     log::debug!("conn_id: {}", id);
                                     self.cm.add_connection(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, self.tx.clone());
+                                    self.authorized = authorized;
                                     self.conn_id = id;
                                     #[cfg(windows)]
                                     {
                                         self.file_transfer_enabled = _file_transfer_enabled;
                                     }
+                                    self.running = true;
                                     break;
                                 }
                                 Data::Close => {
@@ -389,13 +395,14 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
             tx,
             rx,
             close: true,
+            running: true,
+            authorized: false,
             conn_id: 0,
             #[cfg(windows)]
             file_transfer_enabled: false,
         };
 
-        task_runner.run().await;
-        if task_runner.conn_id > 0 {
+        while task_runner.running {
             task_runner.run().await;
         }
         if task_runner.conn_id > 0 {
