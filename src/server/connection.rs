@@ -1533,6 +1533,10 @@ impl Connection {
                         }
                         _ => {}
                     },
+                    Some(misc::Union::AudioFormat(format)) => {
+                        // TODO: implement audio format handler
+                        println!("recv audio format");
+                    }
                     #[cfg(feature = "flutter")]
                     Some(misc::Union::SwitchSidesRequest(s)) => {
                         if let Ok(uuid) = uuid::Uuid::from_slice(&s.uuid.to_vec()[..]) {
@@ -1550,6 +1554,10 @@ impl Connection {
                     }
                     _ => {}
                 },
+                Some(message::Union::AudioFrame(audio_frame)) => {
+                    // TODO: implement audio frame handler
+                    println!("recv audio frame");
+                }
                 _ => {}
             }
         }

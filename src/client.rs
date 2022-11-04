@@ -1543,7 +1543,6 @@ where
     F: 'static + FnMut(&[u8]) + Send,
 {
     let (video_sender, video_receiver) = mpsc::channel::<MediaData>();
-    let (audio_sender, audio_receiver) = mpsc::channel::<MediaData>();
     let mut video_callback = video_callback;
 
     let latency_controller = LatencyController::new();
@@ -1573,8 +1572,19 @@ where
         }
         log::info!("Video decoder loop exits");
     });
+    let audio_sender = start_audio_thread(Some(latency_controller_cl));
+    return (video_sender, audio_sender);
+}
+
+/// Start an audio thread
+/// Return a audio [`MediaSender`]
+pub fn start_audio_thread(
+    latency_controller: Option<Arc<Mutex<LatencyController>>>,
+) -> MediaSender {
+    let latency_controller = latency_controller.unwrap_or(LatencyController::new());
+    let (audio_sender, audio_receiver) = mpsc::channel::<MediaData>();
     std::thread::spawn(move || {
-        let mut audio_handler = AudioHandler::new(latency_controller_cl);
+        let mut audio_handler = AudioHandler::new(latency_controller);
         loop {
             if let Ok(data) = audio_receiver.recv() {
                 match data {
@@ -1592,7 +1602,7 @@ where
         }
         log::info!("Audio decoder loop exits");
     });
-    return (video_sender, audio_sender);
+    audio_sender
 }
 
 /// Handle latency test.

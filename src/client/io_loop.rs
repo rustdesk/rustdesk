@@ -32,6 +32,7 @@ use hbb_common::tokio::{
 };
 use hbb_common::{allow_err, message_proto::*, sleep};
 use hbb_common::{fs, log, Stream};
+use std::borrow::Borrow;
 use std::collections::HashMap;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -89,6 +90,7 @@ impl<T: InvokeUiSession> Remote<T> {
 
     pub async fn io_loop(&mut self, key: &str, token: &str) {
         let stop_clipboard = self.start_clipboard();
+        let stop_client_audio = self.start_client_audio();
         let mut last_recv_time = Instant::now();
         let mut received = false;
         let conn_type = if self.handler.is_file_transfer() {
@@ -96,6 +98,7 @@ impl<T: InvokeUiSession> Remote<T> {
         } else {
             ConnType::default()
         };
+
         match Client::start(
             &self.handler.id,
             key,
@@ -224,6 +227,9 @@ impl<T: InvokeUiSession> Remote<T> {
         if let Some(stop) = stop_clipboard {
             stop.send(()).ok();
         }
+        if let Some(stop) = stop_client_audio {
+            stop.send(()).ok();
+        }
         SERVER_KEYBOARD_ENABLED.store(false, Ordering::SeqCst);
         SERVER_CLIPBOARD_ENABLED.store(false, Ordering::SeqCst);
         SERVER_FILE_TRANSFER_ENABLED.store(false, Ordering::SeqCst);
@@ -257,10 +263,7 @@ impl<T: InvokeUiSession> Remote<T> {
     }
 
     // Start a local audio recorder, records audio and send to remote
-    fn start_client_audio(
-        &mut self,
-        audio_sender: MediaSender,
-    ) -> Option<std::sync::mpsc::Sender<()>> {
+    fn start_client_audio(&mut self) -> Option<std::sync::mpsc::Sender<()>> {
         if self.handler.is_file_transfer() || self.handler.is_port_forward() {
             return None;
         }
@@ -268,29 +271,47 @@ impl<T: InvokeUiSession> Remote<T> {
         let (tx, rx) = std::sync::mpsc::channel();
         let (tx_audio_data, mut rx_audio_data) = hbb_common::tokio::sync::mpsc::unbounded_channel();
         // Create a stand-alone inner, add subscribe to audio service
-        let client_conn_inner = ConnInner::new(
-            CLIENT_SERVER.write().unwrap().get_new_id(),
-            Some(tx_audio_data),
-            None,
+        let conn_id = CLIENT_SERVER.write().unwrap().get_new_id();
+        let client_conn_inner = ConnInner::new(conn_id.clone(), Some(tx_audio_data), None);
+        // now we subscribe
+        CLIENT_SERVER.write().unwrap().subscribe(
+            audio_service::NAME,
+            client_conn_inner.clone(),
+            true,
         );
-        CLIENT_SERVER
-            .write()
-            .unwrap()
-            .subscribe(audio_service::NAME, client_conn_inner, true);
+        let tx_audio = self.sender.clone();
         std::thread::spawn(move || {
             loop {
                 // check if client is closed
                 match rx.try_recv() {
                     Ok(_) | Err(std::sync::mpsc::TryRecvError::Disconnected) => {
                         log::debug!("Exit local audio service of client");
+                        // unsubscribe
+                        CLIENT_SERVER.write().unwrap().subscribe(
+                            audio_service::NAME,
+                            client_conn_inner,
+                            false,
+                        );
                         break;
                     }
                     _ => {}
                 }
                 match rx_audio_data.try_recv() {
-                    Ok((instant, msg)) => match msg.union {
-                        Some(_) => todo!(),
-                        None => todo!(),
+                    Ok((instant, msg)) => match &msg.union {
+                        Some(message::Union::AudioFrame(frame)) => {
+                            let mut msg = Message::new();
+                            msg.set_audio_frame(frame.clone());
+                            tx_audio.send(Data::Message(msg)).ok();
+                            log::debug!("send audio frame {}", frame.timestamp);
+                        }
+                        Some(message::Union::Misc(misc)) => {
+                            let mut msg = Message::new();
+                            msg.set_misc(misc.clone());
+                            tx_audio.send(Data::Message(msg)).ok();
+                            log::debug!("send audio misc {:?}", misc.audio_format());
+                        }
+                        _ => {}
+                        None => {}
                     },
                     Err(err) => {
                         if err == TryRecvError::Empty {

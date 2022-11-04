@@ -1244,6 +1244,9 @@ pub fn main_current_is_wayland() -> SyncReturn<bool> {
 
 pub fn main_is_login_wayland() -> SyncReturn<bool> {
     SyncReturn(is_login_wayland())
+pub fn main_start_pa() {
+    #[cfg(target_os = "linux")]
+    std::thread::spawn(crate::ipc::start_pa);
 }
 
 pub fn main_hide_docker() -> SyncReturn<bool> {
