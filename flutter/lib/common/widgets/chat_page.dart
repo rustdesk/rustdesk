@@ -54,6 +54,7 @@ class ChatPage extends StatelessWidget implements PageShape {
                     return DashChat(
                       onSend: (chatMsg) {
                         chatModel.send(chatMsg);
+                        chatModel.inputNode.requestFocus();
                       },
                       currentUser: chatModel.me,
                       messages: chatModel
