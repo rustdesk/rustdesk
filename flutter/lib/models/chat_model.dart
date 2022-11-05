@@ -102,7 +102,6 @@ class ChatModel with ChangeNotifier {
             initPositionYInTop: false,
             initPositionYMarginBorder: 100,
             borderTopContainTopBar: true,
-            appBarHeight: 0,
           ),
           child: FloatingActionButton(
               onPressed: () {
