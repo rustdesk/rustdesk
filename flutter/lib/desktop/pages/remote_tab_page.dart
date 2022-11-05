@@ -73,7 +73,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
 
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
       print(
-          "call ${call.method} with args ${call.arguments} from window $fromWindowId");
+          "[Remote Page] call ${call.method} with args ${call.arguments} from window $fromWindowId");
 
       // for simplify, just replace connectionId
       if (call.method == "new_remote_desktop") {
@@ -324,6 +324,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
   void onRemoveId(String id) {
     if (tabController.state.value.tabs.isEmpty) {
       WindowController.fromWindowId(windowId()).hide();
+      rustDeskWinManager.call(WindowType.Main, kWindowEventHide, {"id": windowId()});
     }
     ConnectionTypeState.delete(id);
     _update_remote_count();

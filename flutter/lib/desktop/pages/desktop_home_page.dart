@@ -44,20 +44,9 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   @override
   void onWindowClose() async {
     super.onWindowClose();
-    // close all sub windows
-    if (await windowManager.isPreventClose()) {
-      try {
-        await Future.wait([
-          saveWindowPosition(WindowType.Main),
-          rustDeskWinManager.closeAllSubWindows()
-        ]);
-      } catch (err) {
-        debugPrint("$err");
-      } finally {
-        await windowManager.setPreventClose(false);
-        await windowManager.close();
-      }
-    }
+    // hide window on close
+    await windowManager.hide();
+    rustDeskWinManager.unregisterActiveWindow(0);
   }
 
   @override
@@ -437,9 +426,11 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     // initTray();
     trayManager.addListener(this);
     windowManager.addListener(this);
+    rustDeskWinManager.registerActiveWindowListener(onActiveWindowChanged);
+    rustDeskWinManager.registerActiveWindow(0);
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
       debugPrint(
-          "call ${call.method} with args ${call.arguments} from window $fromWindowId");
+          "[Main] call ${call.method} with args ${call.arguments} from window $fromWindowId");
       if (call.method == "main_window_on_top") {
         window_on_top(null);
       } else if (call.method == "get_window_info") {
@@ -465,6 +456,10 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         }
       } else if (call.method == kWindowActionRebuild) {
         reloadCurrentWindow();
+      } else if (call.method == kWindowEventShow) {
+        rustDeskWinManager.registerActiveWindow(call.arguments["id"]);
+      } else if (call.method == kWindowEventHide) {
+        rustDeskWinManager.unregisterActiveWindow(call.arguments["id"]);
       }
     });
     Future.delayed(Duration.zero, () {
@@ -475,7 +470,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
   @override
   void dispose() {
-    destoryTray();
+    // destoryTray();
+    rustDeskWinManager.unregisterActiveWindowListener(onActiveWindowChanged);
     trayManager.removeListener(this);
     windowManager.removeListener(this);
     _uniLinksSubscription?.cancel();

@@ -33,6 +33,8 @@ class RustDeskMultiWindowManager {
 
   static final instance = RustDeskMultiWindowManager._();
 
+  final List<int> _activeWindows = List.empty(growable: true);
+  final List<VoidCallback> _windowActiveCallbacks = List.empty(growable: true);
   int? _remoteDesktopWindowId;
   int? _fileTransferWindowId;
   int? _portForwardWindowId;
@@ -57,6 +59,7 @@ class RustDeskMultiWindowManager {
         ..center()
         ..setTitle("rustdesk - remote desktop")
         ..show();
+      registerActiveWindow(remoteDesktopController.windowId);
       _remoteDesktopWindowId = remoteDesktopController.windowId;
     } else {
       return call(WindowType.RemoteDesktop, "new_remote_desktop", msg);
@@ -82,6 +85,7 @@ class RustDeskMultiWindowManager {
         ..center()
         ..setTitle("rustdesk - file transfer")
         ..show();
+      registerActiveWindow(fileTransferController.windowId);
       _fileTransferWindowId = fileTransferController.windowId;
     } else {
       return call(WindowType.FileTransfer, "new_file_transfer", msg);
@@ -107,6 +111,7 @@ class RustDeskMultiWindowManager {
         ..center()
         ..setTitle("rustdesk - port forward")
         ..show();
+      registerActiveWindow(portForwardController.windowId);
       _portForwardWindowId = portForwardController.windowId;
     } else {
       return call(WindowType.PortForward, "new_port_forward", msg);
@@ -166,6 +171,56 @@ class RustDeskMultiWindowManager {
         return;
       }
     }
+  }
+
+  Future<List<int>> getAllSubWindowIds() async {
+    try {
+      final windows = await DesktopMultiWindow.getAllSubWindowIds();
+      return windows;
+    } catch (err) {
+      if (err is AssertionError) {
+        return [];
+      } else {
+        rethrow;
+      }
+    }
+  }
+
+  List<int> getActiveWindows() {
+    return _activeWindows;
+  }
+
+  void _notifyActiveWindow() {
+    for (final callback in _windowActiveCallbacks) {
+      callback.call();
+    }
+  }
+
+  void registerActiveWindow(int windowId) {
+    if (_activeWindows.contains(windowId)) {
+      // ignore
+    } else {
+      _activeWindows.add(windowId);
+      _notifyActiveWindow();
+    }
+    
+  }
+
+  void unregisterActiveWindow(int windowId) {
+    if (!_activeWindows.contains(windowId)) {
+      // ignore
+    } else {
+      _activeWindows.remove(windowId);
+      _notifyActiveWindow();
+    }
+  }
+
+  void registerActiveWindowListener(VoidCallback callback) {
+    _windowActiveCallbacks.add(callback);
+  }
+
+  void unregisterActiveWindowListener(VoidCallback callback) {
+    _windowActiveCallbacks.remove(callback);
   }
 }
 
