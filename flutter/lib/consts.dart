@@ -10,6 +10,8 @@ const String kAppTypeDesktopFileTransfer = "file transfer";
 const String kAppTypeDesktopPortForward = "port forward";
 
 const String kWindowActionRebuild = "rebuild";
+const String kWindowEventHide = "hide";
+const String kWindowEventShow = "show";
 
 const String kUniLinksPrefix = "rustdesk://";
 const String kActionNewConnection = "connection/new/";
@@ -18,6 +20,9 @@ const String kTabLabelHomePage = "Home";
 const String kTabLabelSettingPage = "Settings";
 
 const String kWindowPrefix = "wm_";
+
+// the executable name of the portable version 
+const String kEnvPortableExecutable = "RUSTDESK_APPNAME";
 
 const Color kColorWarn = Color.fromARGB(255, 245, 133, 59);
 

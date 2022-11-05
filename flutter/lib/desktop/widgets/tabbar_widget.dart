@@ -541,8 +541,11 @@ class WindowActionPanelState extends State<WindowActionPanel>
                   Future.delayed(Duration.zero, () async {
                     if (widget.isMainWindow) {
                       await windowManager.hide();
+                      rustDeskWinManager.unregisterActiveWindow(0);
                     } else {
                       await WindowController.fromWindowId(windowId!).hide();
+                      rustDeskWinManager.call(
+                          WindowType.Main, kWindowEventHide, {"id": windowId!});
                     }
                   });
                 }

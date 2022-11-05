@@ -322,10 +322,12 @@ void window_on_top(int? id) {
     windowManager.restore();
     windowManager.show();
     windowManager.focus();
+    rustDeskWinManager.registerActiveWindow(0);
   } else {
     WindowController.fromWindowId(id)
       ..focus()
       ..show();
+    rustDeskWinManager.call(WindowType.Main, kWindowEventShow, {"id": id});
   }
 }
 
@@ -1358,5 +1360,36 @@ Future<void> reloadAllWindows() async {
     }
   } on AssertionError {
     // ignore
+  }
+}
+
+/// Indicate the flutter app is running in portable mode.
+///
+/// [Note]
+/// Portable build is only avaliable on Windows.
+bool isRunningInPortableMode() {
+  if (!Platform.isWindows) {
+    return false;
+  }
+  return bool.hasEnvironment(kEnvPortableExecutable);
+}
+
+/// Window status callback
+void onActiveWindowChanged() async {
+  print(
+      "[MultiWindowHandler] active window changed: ${rustDeskWinManager.getActiveWindows()}");
+  if (rustDeskWinManager.getActiveWindows().isEmpty) {
+    // close all sub windows
+    try {
+      await Future.wait([
+        saveWindowPosition(WindowType.Main),
+        rustDeskWinManager.closeAllSubWindows()
+      ]);
+    } catch (err) {
+      debugPrint("$err");
+    } finally {
+      await windowManager.setPreventClose(false);
+      await windowManager.close();
+    }
   }
 }
