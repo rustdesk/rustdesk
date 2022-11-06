@@ -33,21 +33,13 @@ class DesktopHomePage extends StatefulWidget {
 const borderColor = Color(0xFF2F65BA);
 
 class _DesktopHomePageState extends State<DesktopHomePage>
-    with TrayListener, WindowListener, AutomaticKeepAliveClientMixin {
+    with TrayListener, AutomaticKeepAliveClientMixin {
   final _leftPaneScrollController = ScrollController();
 
   @override
   bool get wantKeepAlive => true;
   var updateUrl = '';
   StreamSubscription? _uniLinksSubscription;
-
-  @override
-  void onWindowClose() async {
-    super.onWindowClose();
-    // hide window on close
-    await windowManager.hide();
-    rustDeskWinManager.unregisterActiveWindow(0);
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -425,7 +417,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     // disable this tray because we use tray function provided by rust now
     // initTray();
     trayManager.addListener(this);
-    windowManager.addListener(this);
     rustDeskWinManager.registerActiveWindowListener(onActiveWindowChanged);
     rustDeskWinManager.registerActiveWindow(0);
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
@@ -471,9 +462,9 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   @override
   void dispose() {
     // destoryTray();
-    rustDeskWinManager.unregisterActiveWindowListener(onActiveWindowChanged);
+    // fix: disable unregister to prevent from receiving events from other windows
+    // rustDeskWinManager.unregisterActiveWindowListener(onActiveWindowChanged);
     trayManager.removeListener(this);
-    windowManager.removeListener(this);
     _uniLinksSubscription?.cancel();
     super.dispose();
   }

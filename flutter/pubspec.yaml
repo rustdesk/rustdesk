@@ -64,7 +64,7 @@ dependencies:
     desktop_multi_window:
         git:
             url: https://github.com/Kingtous/rustdesk_desktop_multi_window
-            ref: 39a8a5b8aed059a89a1694ed2dffe69e31da2ac1
+            ref: 8d9db30df28eddfdb11ded4aaba6f0fe96547960
     freezed_annotation: ^2.0.3
     tray_manager:
         git:
