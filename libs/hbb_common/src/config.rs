@@ -73,7 +73,6 @@ const CHARS: &'static [char] = &[
 
 pub const RENDEZVOUS_SERVERS: &'static [&'static str] = &[
     "47.93.187.202",
-    "desk.hbytw.de",
 ];
 pub const RS_PUB_KEY: &'static str = "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=";
 pub const RENDEZVOUS_PORT: i32 = 21116;
