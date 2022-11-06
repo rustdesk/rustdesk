@@ -290,7 +290,7 @@ class _AppState extends State<App> {
         child: GetMaterialApp(
           navigatorKey: globalKey,
           debugShowCheckedModeBanner: false,
-          title: 'YounkerDesk',
+          title: 'Younker Desk',
           theme: MyTheme.lightTheme,
           darkTheme: MyTheme.darkTheme,
           themeMode: MyTheme.currentThemeMode(),
