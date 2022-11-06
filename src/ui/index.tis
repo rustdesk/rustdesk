@@ -53,10 +53,7 @@ class ConnectStatus: Reactor.Component {
     event click $(#start-service) () {
         handler.set_option("stop-service", "");
     }
-
-    //event click $(#setup-server) () {
-        //handler.open_url("https://rustdesk.com/blog/id-relay-set/");
-    //}
+    
 }
 
 function createNewConnect(id, type) {
