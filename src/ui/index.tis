@@ -364,7 +364,7 @@ class MyIdMenu: Reactor.Component {
             <div .link .custom-event url='https://hbytw.de'>Website</div> \
             <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em;'>Copyright &copy; 2022 hbytw.de\
             <br />" + handler.get_license() + " \
-            <p style='font-weight: bold'>made in weige!</p>\
+            <p style='font-weight: bold'>made in wei ge!</p>\
             </div>\
         </div>", "", function(el) {
             if (el && el.attributes) {
