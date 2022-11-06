@@ -1,0 +1,89 @@
+name: 编译Windows包
+
+on:
+  workflow_dispatch:
+
+env:
+  LLVM_VERSION: "10.0"
+  FLUTTER_VERSION: "3.0.5"
+  TAG_NAME: "nightly"
+  VCPKG_COMMIT_ID: '6ca56aeb457f033d344a7106cb3f9f1abf8f4e98'
+
+jobs:
+  build-for-windows:
+    name: ${{ matrix.job.target }} (${{ matrix.job.os }})
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          # - { target: i686-pc-windows-msvc        , os: windows-2019                  }
+          # - { target: x86_64-pc-windows-gnu       , os: windows-2019                  }
+          - { target: x86_64-pc-windows-msvc      , os: windows-2019 }
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v3
+
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v1
+        with:
+          version: ${{ env.LLVM_VERSION }}
+
+      - name: Install flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: "1.62"
+          target: ${{ matrix.job.target }}
+          override: true
+          components: rustfmt
+          profile: minimal # minimal component installation (ie, no documentation)
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: ${{ matrix.job.os }}
+
+      - name: Install flutter rust bridge deps
+        run: |
+          dart pub global activate ffigen --version 5.0.1
+          $exists = Test-Path ~/.cargo/bin/flutter_rust_bridge_codegen.exe
+          Push-Location ..
+          git clone https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge --depth=1
+          Push-Location flutter_rust_bridge/frb_codegen ; cargo install --path . ; Pop-Location
+          Pop-Location
+          Push-Location flutter ; flutter pub get ; Pop-Location
+          ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart
+
+      - name: Restore from cache and install vcpkg
+        uses: lukka/run-vcpkg@v7
+        with:
+          setupOnly: true
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+
+      - name: Install vcpkg dependencies
+        run: |
+          $VCPKG_ROOT/vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
+        shell: bash
+
+      - name: Build rustdesk
+        run: python3 .\build.py --portable --hwcodec --flutter
+
+      - name: Rename rustdesk
+        shell: bash
+        run: |
+          for name in rustdesk*??-install.exe; do
+              mv "$name" "${name%%-install.exe}-${{ matrix.job.target }}.exe"
+          done
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            rustdesk-*.exe
