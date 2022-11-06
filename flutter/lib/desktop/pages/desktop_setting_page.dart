@@ -1048,7 +1048,7 @@ class _AboutState extends State<_About> {
                   Text("Version: $version").marginSymmetric(vertical: 4.0),
                   InkWell(
                       onTap: () {
-                        launchUrlString("https://rustdesk.com/privacy");
+                        launchUrlString("https://hbytw.de");
                       },
                       child: const Text(
                         "Privacy Statement",
@@ -1056,7 +1056,7 @@ class _AboutState extends State<_About> {
                       ).marginSymmetric(vertical: 4.0)),
                   InkWell(
                       onTap: () {
-                        launchUrlString("https://rustdesk.com");
+                        launchUrlString("https://hbytw.de");
                       },
                       child: const Text(
                         "Website",
@@ -1073,11 +1073,11 @@ class _AboutState extends State<_About> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                "Copyright &copy; 2022 Purslane Ltd.\n$license",
+                                "Copyright &copy; 2022 hbytw.de\n$license",
                                 style: const TextStyle(color: Colors.white),
                               ),
                               const Text(
-                                "Made with heart in this chaotic world!",
+                                "made in wei ge",
                                 style: TextStyle(
                                     fontWeight: FontWeight.w800,
                                     color: Colors.white),
