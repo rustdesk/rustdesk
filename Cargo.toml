@@ -126,9 +126,9 @@ flutter_rust_bridge = { git = "https://github.com/SoLongAndThanksForAllThePizza/
 members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/simple_rc", "libs/portable"]
 
 [package.metadata.winres]
-LegalCopyright = "Copyright © 2022 Purslane, Inc."
+LegalCopyright = "Copyright © 2022 YounKer, Inc."
 # this FileDescription overrides package.description
-FileDescription = "RustDesk"
+FileDescription = "YounKer Desk"
 
 [target.'cfg(target_os="windows")'.build-dependencies]
 winres = "0.1"
@@ -144,7 +144,7 @@ flutter_rust_bridge_codegen = { git = "https://github.com/SoLongAndThanksForAllT
 hound = "3.5"
 
 [package.metadata.bundle]
-name = "RustDesk"
+name = "YounKer Desk"
 identifier = "com.carriez.rustdesk"
 icon = ["res/32x32.png", "res/128x128.png", "res/128x128@2x.png"]
 deb_depends = ["libgtk-3-0", "libxcb-randr0", "libxdo3", "libxfixes3", "libxcb-shape0", "libxcb-xfixes0", "libasound2", "libsystemd0", "pipewire", "curl", "libayatana-appindicator3-1", "libvdpau1", "libva2"]
