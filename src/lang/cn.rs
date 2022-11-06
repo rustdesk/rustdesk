@@ -46,7 +46,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Adaptive Bitrate", "自适应码率"),
         ("ID Server", "ID服务器"),
         ("Relay Server", "中继服务器"),
-        ("API Server", "API服务器"),
+        ("API Server", "API服务器(可以不填写)"),
         ("invalid_http", "必须以http://或者https://开头"),
         ("Invalid IP", "无效IP"),
         ("id_change_tip", "只可以使用字母a-z, A-Z, 0-9, _ (下划线)。首字母必须是a-z, A-Z。长度在6与16之间。"),
