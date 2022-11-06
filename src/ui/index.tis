@@ -47,7 +47,7 @@ class ConnectStatus: Reactor.Component {
             return translate('connecting_status');
         }
         if (!handler.using_public_server()) return translate('Ready');
-        return <span>{translate("Ready")},</span>;
+        return <span>{translate("Ready")}, <span .link #setup-server>{translate("setup_server_tip")}</span></span>;
     }
 
     event click $(#start-service) () {
@@ -55,7 +55,7 @@ class ConnectStatus: Reactor.Component {
     }
 
     event click $(#setup-server) () {
-        handler.open_url("https://www.hbytw.de/");
+        handler.open_url("https://rustdesk.com/blog/id-relay-set/");
     }
 }
 
@@ -363,10 +363,11 @@ class MyIdMenu: Reactor.Component {
         var name = handler.get_app_name();
         msgbox("custom-nocancel-nook-hasclose", "About " + name, "<div style='line-height: 2em'> \
             <div>Version: " + handler.get_version() + " \
-            <div .link .custom-event url='https://hbytw.de'>Website</div> \
-            <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em;'>Copyright &copy; 2022 hbytw.de\
+            <div .link .custom-event url='https://rustdesk.com/privacy'>Privacy Statement</div> \
+            <div .link .custom-event url='https://rustdesk.com'>Website</div> \
+            <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em;'>Copyright &copy; 2022 Purslane Ltd.\
             <br />" + handler.get_license() + " \
-            <p style='font-weight: bold'>伟哥出品，必属精品!</p>\
+            <p style='font-weight: bold'>Made with heart in this chaotic world!</p>\
             </div>\
         </div>", "", function(el) {
             if (el && el.attributes) {
@@ -657,10 +658,10 @@ class UpdateMe: Reactor.Component {
     }
 
     event click $(#install-me) {
-        handler.open_url("https://hbytw.de");
+        handler.open_url("https://rustdesk.com");
         return;
         if (!is_win) {
-            handler.open_url("https://hbytw.de");
+            handler.open_url("https://rustdesk.com");
             return;
         }
         var url = software_update_url + '.' + handler.get_software_ext();
