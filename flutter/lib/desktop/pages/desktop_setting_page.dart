@@ -1038,7 +1038,7 @@ class _AboutState extends State<_About> {
           child: SingleChildScrollView(
             controller: scrollController,
             physics: NeverScrollableScrollPhysics(),
-            child: _Card(title: "About YtwDesk", children: [
+            child: _Card(title: "About YounkerDesk", children: [
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1048,7 +1048,7 @@ class _AboutState extends State<_About> {
                   Text("Version: $version").marginSymmetric(vertical: 4.0),
                   InkWell(
                       onTap: () {
-                        launchUrlString("https://hbytw.de");
+                        launchUrlString("https://yuanhetech.com");
                       },
                       child: const Text(
                         "Privacy Statement",
@@ -1056,7 +1056,7 @@ class _AboutState extends State<_About> {
                       ).marginSymmetric(vertical: 4.0)),
                   InkWell(
                       onTap: () {
-                        launchUrlString("https://hbytw.de");
+                        launchUrlString("https://yuanhetech.com");
                       },
                       child: const Text(
                         "Website",
@@ -1073,7 +1073,7 @@ class _AboutState extends State<_About> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                "Copyright &copy; 2022 hbytw.de\n$license",
+                                "Copyright &copy; 2022 Younker Ltd.\n$license",
                                 style: const TextStyle(color: Colors.white),
                               ),
                               const Text(
