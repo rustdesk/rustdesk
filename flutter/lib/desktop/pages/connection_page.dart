@@ -338,7 +338,7 @@ class _ConnectionPageState extends State<ConnectionPage>
   }
 
   void onUsePublicServerGuide() {
-    const url = "https://www.hbytw.de/";
+    const url = "https://www.yuanhetech.com/";
     canLaunchUrlString(url).then((can) {
       if (can) {
         launchUrlString(url);
