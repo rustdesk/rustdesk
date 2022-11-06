@@ -429,18 +429,39 @@ fn handle_mouse_(evt: &MouseEvent, conn: i32) {
                 x = -x;
                 y = -y;
             }
-
-            // fix shift + scroll(down/up)
             #[cfg(target_os = "macos")]
-            if evt.modifiers.contains(&EnumOrUnknown::new(ControlKey::Shift)){
-                x = y;
-                y = 0;
+            {
+                // TODO: support track pad on win.
+                let is_track_pad = evt
+                    .modifiers
+                    .contains(&EnumOrUnknown::new(ControlKey::Scroll));
+
+                // fix shift + scroll(down/up)
+                if !is_track_pad
+                    && evt
+                        .modifiers
+                        .contains(&EnumOrUnknown::new(ControlKey::Shift))
+                {
+                    x = y;
+                    y = 0;
+                }
+
+                if x != 0 {
+                    en.mouse_scroll_x(x, is_track_pad);
+                }
+                if y != 0 {
+                    en.mouse_scroll_y(y, is_track_pad);
+                }
             }
-            if x != 0 {
-                en.mouse_scroll_x(x);
-            }
-            if y != 0 {
-                en.mouse_scroll_y(y);
+
+            #[cfg(not(target_os = "macos"))]
+            {
+                if x != 0 {
+                    en.mouse_scroll_x(x);
+                }
+                if y != 0 {
+                    en.mouse_scroll_y(y);
+                }
             }
         }
         _ => {}

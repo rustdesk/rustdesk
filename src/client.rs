@@ -1529,6 +1529,25 @@ pub async fn handle_test_delay(t: TestDelay, peer: &mut Stream) {
     }
 }
 
+#[inline]
+#[cfg(target_os = "macos")]
+fn check_scroll_on_mac(mask: i32, x: i32, y: i32) -> bool {
+    if mask & 3 != 3 {
+        return false;
+    }
+    let btn = mask >> 3;
+    if y == -1 {
+        btn != 0xff88 && btn != -0x780000
+    } else if y == 1 {
+        btn != 0x78 && btn != 0x780000
+    } else if x != 0 {
+        // No mouse support horizontal scrolling.
+        true
+    } else {
+        false
+    }
+}
+
 /// Send mouse data.
 ///
 /// # Arguments
@@ -1573,6 +1592,10 @@ pub fn send_mouse(
     }
     if command {
         mouse_event.modifiers.push(ControlKey::Meta.into());
+    }
+    #[cfg(target_os = "macos")]
+    if check_scroll_on_mac(mask, x, y) {
+        mouse_event.modifiers.push(ControlKey::Scroll.into());
     }
     msg_out.set_mouse_event(mouse_event);
     interface.send(Data::Message(msg_out));
