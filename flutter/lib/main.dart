@@ -140,6 +140,8 @@ void runMultiWindow(
   String title,
 ) async {
   await initEnv(appType);
+  // set prevent close to true, we handle close event manually
+  WindowController.fromWindowId(windowId!).setPreventClose(true);
   late Widget widget;
   switch (appType) {
     case kAppTypeDesktopRemote:

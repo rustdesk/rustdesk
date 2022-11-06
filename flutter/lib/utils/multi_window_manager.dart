@@ -166,6 +166,7 @@ class RustDeskMultiWindowManager {
           // no such window already
           return;
         }
+        await WindowController.fromWindowId(wId).setPreventClose(false);
         await WindowController.fromWindowId(wId).close();
       } on Error {
         return;
@@ -206,6 +207,12 @@ class RustDeskMultiWindowManager {
     
   }
 
+  /// Remove active window which has [`windowId`]
+  /// 
+  /// [Avaliability]
+  /// This function should only be called from main window.
+  /// For other windows, please post a unregister(hide) event to main window handler:
+  /// `rustDeskWinManager.call(WindowType.Main, kWindowEventHide, {"id": windowId!});`
   void unregisterActiveWindow(int windowId) {
     if (!_activeWindows.contains(windowId)) {
       // ignore
