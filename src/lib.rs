@@ -48,6 +48,8 @@ mod ui_cm_interface;
 mod ui_interface;
 mod ui_session_interface;
 
+mod hbbs_http;
+
 #[cfg(windows)]
 pub mod clipboard_file;
 

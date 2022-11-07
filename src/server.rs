@@ -1,4 +1,5 @@
 use crate::ipc::Data;
+use bytes::Bytes;
 pub use connection::*;
 use hbb_common::{
     allow_err,
@@ -20,7 +21,6 @@ use std::{
     sync::{Arc, Mutex, RwLock, Weak},
     time::Duration,
 };
-use bytes::Bytes;
 
 pub mod audio_service;
 cfg_if::cfg_if! {
@@ -140,7 +140,8 @@ pub async fn create_tcp_connection(
                 .write_to_bytes()
                 .unwrap_or_default(),
                 &sk,
-            ).into(),
+            )
+            .into(),
             ..Default::default()
         });
         timeout(CONNECT_TIMEOUT, stream.send(&msg_out)).await??;
@@ -310,9 +311,9 @@ pub fn check_zombie() {
 }
 
 /// Start the host server that allows the remote peer to control the current machine.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `is_server` - Whether the current client is definitely the server.
 /// If true, the server will be started.
 /// Otherwise, client will check if there's already a server and start one if not.
@@ -323,9 +324,9 @@ pub async fn start_server(is_server: bool) {
 }
 
 /// Start the host server that allows the remote peer to control the current machine.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `is_server` - Whether the current client is definitely the server.
 /// If true, the server will be started.
 /// Otherwise, client will check if there's already a server and start one if not.

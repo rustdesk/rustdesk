@@ -4419,6 +4419,7 @@ dependencies = [
  "system_shutdown",
  "tray-item",
  "trayicon",
+ "url",
  "uuid",
  "virtual_display",
  "whoami",
@@ -5492,6 +5493,7 @@ dependencies = [
  "idna",
  "matches",
  "percent-encoding",
+ "serde 1.0.144",
 ]
 
 [[package]]
