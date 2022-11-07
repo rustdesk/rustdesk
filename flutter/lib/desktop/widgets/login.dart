@@ -9,6 +9,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../common.dart';
 
+final kMidButtonPadding = const EdgeInsets.fromLTRB(15, 0, 15, 0);
+
 class _IconOP extends StatelessWidget {
   final String icon;
   final double iconWidth;
@@ -51,7 +53,7 @@ class ButtonOP extends StatelessWidget {
       Expanded(
         child: Container(
           height: height,
-          padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
+          padding: kMidButtonPadding,
           child: Obx(() => ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   primary: curOP.value.isEmpty || curOP.value == op
@@ -61,8 +63,7 @@ class ButtonOP extends StatelessWidget {
                 onPressed:
                     curOP.value.isEmpty || curOP.value == op ? onTap : null,
                 child: Stack(children: [
-                  // to-do: translate
-                  Center(child: Text('Continue with $op')),
+                  Center(child: Text('${translate("Continue with")} $op')),
                   Align(
                     alignment: Alignment.centerLeft,
                     child: SizedBox(
@@ -178,7 +179,7 @@ class _WidgetOPState extends State<WidgetOP> {
           curOP: widget.curOP,
           iconWidth: widget.config.iconWidth,
           primaryColor: str2color(widget.config.op, 0x7f),
-          height: 40,
+          height: 36,
           onTap: () async {
             _resetState();
             widget.curOP.value = widget.config.op;
@@ -265,7 +266,10 @@ class LoginWidgetOP extends StatelessWidget {
                 curOP: curOP,
                 cbLogin: cbLogin,
               ),
-              const Divider()
+              const Divider(
+                indent: 5,
+                endIndent: 5,
+              )
             ])
         .expand((i) => i)
         .toList();
@@ -310,50 +314,56 @@ class LoginWidgetUserPass extends StatelessWidget {
         const SizedBox(
           height: 8.0,
         ),
-        Row(
-          children: [
-            ConstrainedBox(
-                constraints: const BoxConstraints(minWidth: 100),
-                child: Text(
-                  '${translate("Username")}:',
-                  textAlign: TextAlign.start,
-                ).marginOnly(bottom: 16.0)),
-            const SizedBox(
-              width: 24.0,
-            ),
-            Expanded(
-              child: TextField(
-                decoration: InputDecoration(
-                    border: const OutlineInputBorder(),
-                    errorText: usernameMsg.isNotEmpty ? usernameMsg : null),
-                controller: userController,
-                focusNode: FocusNode()..requestFocus(),
+        Container(
+          padding: kMidButtonPadding,
+          child: Row(
+            children: [
+              ConstrainedBox(
+                  constraints: const BoxConstraints(minWidth: 100),
+                  child: Text(
+                    '${translate("Username")}:',
+                    textAlign: TextAlign.start,
+                  ).marginOnly(bottom: 16.0)),
+              const SizedBox(
+                width: 24.0,
               ),
-            ),
-          ],
+              Expanded(
+                child: TextField(
+                  decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      errorText: usernameMsg.isNotEmpty ? usernameMsg : null),
+                  controller: userController,
+                  focusNode: FocusNode()..requestFocus(),
+                ),
+              ),
+            ],
+          ),
         ),
         const SizedBox(
           height: 8.0,
         ),
-        Row(
-          children: [
-            ConstrainedBox(
-                constraints: const BoxConstraints(minWidth: 100),
-                child:
-                    Text('${translate("Password")}:').marginOnly(bottom: 16.0)),
-            const SizedBox(
-              width: 24.0,
-            ),
-            Expanded(
-              child: TextField(
-                obscureText: true,
-                decoration: InputDecoration(
-                    border: const OutlineInputBorder(),
-                    errorText: passMsg.isNotEmpty ? passMsg : null),
-                controller: pwdController,
+        Container(
+          padding: kMidButtonPadding,
+          child: Row(
+            children: [
+              ConstrainedBox(
+                  constraints: const BoxConstraints(minWidth: 100),
+                  child: Text('${translate("Password")}:')
+                      .marginOnly(bottom: 16.0)),
+              const SizedBox(
+                width: 24.0,
               ),
-            ),
-          ],
+              Expanded(
+                child: TextField(
+                  obscureText: true,
+                  decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      errorText: passMsg.isNotEmpty ? passMsg : null),
+                  controller: pwdController,
+                ),
+              ),
+            ],
+          ),
         ),
         const SizedBox(
           height: 4.0,
@@ -366,17 +376,17 @@ class LoginWidgetUserPass extends StatelessWidget {
         Row(children: [
           Expanded(
             child: Container(
-              height: 50,
-              padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
+              height: 38,
+              padding: kMidButtonPadding,
               child: Obx(() => ElevatedButton(
                     style: curOP.value.isEmpty || curOP.value == 'rustdesk'
                         ? null
                         : ElevatedButton.styleFrom(
                             primary: Colors.grey,
                           ),
-                    child: const Text(
-                      'Login',
-                      style: TextStyle(fontSize: 18),
+                    child: Text(
+                      translate('Login'),
+                      style: TextStyle(fontSize: 16),
                     ),
                     onPressed: curOP.value.isEmpty || curOP.value == 'rustdesk'
                         ? () {
@@ -479,9 +489,9 @@ Future<bool> loginDialog() async {
             const SizedBox(
               height: 8.0,
             ),
-            const Center(
+            Center(
                 child: Text(
-              'or',
+              translate('or'),
               style: TextStyle(fontSize: 16),
             )),
             const SizedBox(
@@ -489,9 +499,9 @@ Future<bool> loginDialog() async {
             ),
             LoginWidgetOP(
               ops: [
-                ConfigOP(op: 'Github', iconWidth: 24),
-                ConfigOP(op: 'Google', iconWidth: 24),
-                ConfigOP(op: 'Okta', iconWidth: 46),
+                ConfigOP(op: 'Github', iconWidth: 20),
+                ConfigOP(op: 'Google', iconWidth: 20),
+                ConfigOP(op: 'Okta', iconWidth: 38),
               ],
               curOP: curOP,
               cbLogin: (String username) {
@@ -503,9 +513,7 @@ Future<bool> loginDialog() async {
           ],
         ),
       ),
-      actions: [
-        TextButton(onPressed: cancel, child: Text(translate('Cancel'))),
-      ],
+      actions: [msgBoxButton(translate('Close'), cancel)],
       onCancel: cancel,
     );
   });

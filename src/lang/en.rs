@@ -35,5 +35,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("elevated_foreground_window_warning", "Temporarily unable to use the mouse and keyboard, because the current window of the remote desktop requires higher privilege to operate, you can request the remote user to minimize the current window. To avoid this problem, it is recommended to install the software on the remote device or run it with administrator privileges."),
         ("JumpLink", "View"),
         ("Stop service", "Stop Service"),
+        ("or", ""),
+        ("Continue with", ""),
         ].iter().cloned().collect();
 }
