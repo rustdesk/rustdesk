@@ -308,9 +308,15 @@ class InputModel {
     double y = max(0.0, evt['y']);
     final cursorModel = parent.target!.cursorModel;
 
+    if (cursorModel.is_peer_control_protected) {
+      last_mouse_pos = ui.Offset(x, y);
+      return;
+    }
+
     if (!cursorModel.got_mouse_control) {
-      bool self_get_control = (x - last_mouse_pos.dx).abs() > 12 ||
-          (y - last_mouse_pos.dy).abs() > 12;
+      bool self_get_control =
+          (x - last_mouse_pos.dx).abs() > kMouseControlDistance ||
+              (y - last_mouse_pos.dy).abs() > kMouseControlDistance;
       if (self_get_control) {
         cursorModel.got_mouse_control = true;
       } else {
