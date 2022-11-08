@@ -188,7 +188,13 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            rustdesk*.deb
+            rustdesk-${{ matrix.job.target }}-${{ matrix.job.os }}.deb
+      
+      - name: Upload Artifcat
+        uses: actions/upload-artifact@master
+        with:
+          name: rustdesk-${{ matrix.job.target }}-${{ matrix.job.os }}.deb
+          path: rustdesk-${{ matrix.job.target }}-${{ matrix.job.os }}.deb
 
       - name: Build archlinux package
         uses: vufa/arch-makepkg-action@master
@@ -233,8 +239,9 @@ jobs:
             res/rustdesk*.zst
 
   build-flatpak:
+    name: Build Flatpak
     needs: [build-for-linux]
-    runs-on: ubuntu-18.04
+    runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -257,9 +264,14 @@ jobs:
           sudo apt install -y flatpak flatpak-builder cmake g++ gcc git curl wget nasm yasm libgtk-3-dev
 
       - name: Download Binary
+        uses: actions/download-artifact@master
+        with:
+          name: rustdesk-${{ matrix.job.target }}-${{ matrix.job.os }}.deb
+          path: .
+        
+      - name: Rename Binary  
         run: |
-          wget https://github.com/rustdesk/rustdesk/releases/download/nightly/rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb
-          mv rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb rustdesk-${{ env.VERSION }}.deb
+          mv rustdesk-${{ matrix.job.target }}-${{ matrix.job.os }}.deb rustdesk-${{ env.VERSION }}.deb
       
       - name: Install Flatpak deps
         run: |
