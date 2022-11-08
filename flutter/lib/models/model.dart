@@ -740,6 +740,7 @@ class CursorModel with ChangeNotifier {
   double _hoty = 0;
   double _displayOriginX = 0;
   double _displayOriginY = 0;
+  bool got_mouse_control = true;
   String id = '';
   WeakReference<FFI> parent;
 
@@ -748,13 +749,11 @@ class CursorModel with ChangeNotifier {
   CursorData? get defaultCache => _getDefaultCache();
 
   double get x => _x - _displayOriginX;
-
   double get y => _y - _displayOriginY;
 
   Offset get offset => Offset(_x, _y);
 
   double get hotx => _hotx;
-
   double get hoty => _hoty;
 
   CursorModel(this.parent);
@@ -981,6 +980,7 @@ class CursorModel with ChangeNotifier {
 
   /// Update the cursor position.
   updateCursorPosition(Map<String, dynamic> evt, String id) async {
+    got_mouse_control = false;
     _x = double.parse(evt['x']);
     _y = double.parse(evt['y']);
     try {
