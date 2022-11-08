@@ -740,6 +740,9 @@ class CursorModel with ChangeNotifier {
   double _hoty = 0;
   double _displayOriginX = 0;
   double _displayOriginY = 0;
+  bool got_mouse_control = true;
+  DateTime _last_peer_mouse = DateTime.now()
+      .subtract(Duration(milliseconds: 2 * kMouseControlTimeoutMSec));
   String id = '';
   WeakReference<FFI> parent;
 
@@ -748,14 +751,16 @@ class CursorModel with ChangeNotifier {
   CursorData? get defaultCache => _getDefaultCache();
 
   double get x => _x - _displayOriginX;
-
   double get y => _y - _displayOriginY;
 
   Offset get offset => Offset(_x, _y);
 
   double get hotx => _hotx;
-
   double get hoty => _hoty;
+
+  bool get is_peer_control_protected =>
+      DateTime.now().difference(_last_peer_mouse).inMilliseconds <
+      kMouseControlTimeoutMSec;
 
   CursorModel(this.parent);
 
@@ -918,7 +923,7 @@ class CursorModel with ChangeNotifier {
     if (parent.target?.id != pid) return;
     _image = image;
     _images[id] = Tuple3(image, _hotx, _hoty);
-    await _updateCacheLinux(image, id, width, height);
+    await _updateCache(image, id, width, height);
     try {
       // my throw exception, because the listener maybe already dispose
       notifyListeners();
@@ -927,7 +932,7 @@ class CursorModel with ChangeNotifier {
     }
   }
 
-  _updateCacheLinux(ui.Image image, int id, int w, int h) async {
+  _updateCache(ui.Image image, int id, int w, int h) async {
     Uint8List? data;
     img2.Image? image2;
     if (Platform.isWindows) {
@@ -981,6 +986,8 @@ class CursorModel with ChangeNotifier {
 
   /// Update the cursor position.
   updateCursorPosition(Map<String, dynamic> evt, String id) async {
+    got_mouse_control = false;
+    _last_peer_mouse = DateTime.now();
     _x = double.parse(evt['x']);
     _y = double.parse(evt['y']);
     try {

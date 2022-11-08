@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../consts.dart';
 import '../common.dart';
 import '../common/widgets/overlay.dart';
 import 'model.dart';
@@ -183,8 +184,11 @@ class ChatModel with ChangeNotifier {
     if (_isShowCMChatPage) {
       _isShowCMChatPage = !_isShowCMChatPage;
       notifyListeners();
-      await windowManager.setSizeAlignment(Size(300, 400), Alignment.topRight);
+      await windowManager.show();
+      await windowManager.setSizeAlignment(
+          kConnectionManagerWindowSize, Alignment.topRight);
     } else {
+      await windowManager.show();
       await windowManager.setSizeAlignment(Size(600, 400), Alignment.topRight);
       _isShowCMChatPage = !_isShowCMChatPage;
       notifyListeners();
