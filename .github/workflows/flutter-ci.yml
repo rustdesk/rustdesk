@@ -38,7 +38,7 @@ jobs:
         shell: bash
         run: |
           case ${{ matrix.job.target }} in
-            x86_64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake libclang-dev ninja-build libayatana-appindicator3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev;;
+            x86_64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake libclang-dev ninja-build libappindicator3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev;;
             # arm-unknown-linux-*) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
             # aarch64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
           esac

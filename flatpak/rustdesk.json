@@ -1,0 +1,33 @@
+{
+  "app-id": "org.rustdesk.rustdesk",
+  "runtime": "org.freedesktop.Platform",
+  "runtime-version": "21.08",
+  "sdk": "org.freedesktop.Sdk",
+  "command": "rustdesk",
+  "modules": [
+    "shared-modules/libappindicator/libappindicator-gtk3-12.10.json",
+    {
+      "name": "rustdesk",
+      "buildsystem": "simple",
+      "build-commands": [
+        "bsdtar -zxvf rustdesk-1.2.0.deb",
+        "tar -xvf ./data.tar.xz",
+        "cp -r ./usr  /app/",
+        "mkdir -p /app/bin && ln -s /app/usr/lib/rustdesk/rustdesk /app/bin/rustdesk"
+      ],
+      "sources": [
+        {
+          "type": "file",
+          "path": "../rustdesk-1.2.0.deb"
+        }
+      ]
+    }
+  ],
+  "finish-args": [
+    "--share=ipc",
+    "--socket=x11",
+    "--socket=wayland",
+    "--share=network",
+    "--filesystem=xdg-documents"
+  ]
+}

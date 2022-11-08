@@ -147,7 +147,7 @@ hound = "3.5"
 name = "RustDesk"
 identifier = "com.carriez.rustdesk"
 icon = ["res/32x32.png", "res/128x128.png", "res/128x128@2x.png"]
-deb_depends = ["libgtk-3-0", "libxcb-randr0", "libxdo3", "libxfixes3", "libxcb-shape0", "libxcb-xfixes0", "libasound2", "libsystemd0", "pipewire", "curl", "libayatana-appindicator3-1", "libvdpau1", "libva2"]
+deb_depends = ["libgtk-3-0", "libxcb-randr0", "libxdo3", "libxfixes3", "libxcb-shape0", "libxcb-xfixes0", "libasound2", "libsystemd0", "pipewire", "curl", "libappindicator3-1", "libvdpau1", "libva2"]
 osx_minimum_system_version = "10.14"
 resources = ["res/mac-tray-light.png","res/mac-tray-dark.png"]
 
