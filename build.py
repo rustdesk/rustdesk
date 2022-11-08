@@ -81,6 +81,11 @@ def make_parser():
         action='store_true',
         help='Build windows portable'
     )
+    parser.add_argument(
+        '--flatpak',
+        action='store_true',
+        help='Build rustdesk libs with the flatpak feature enabled'
+    )
     return parser
 
 
@@ -188,6 +193,8 @@ def get_features(args):
         features.append('hwcodec')
     if args.flutter:
         features.append('flutter')
+    if args.flatpak:
+        features.append('flatpak')
     print("features:", features)
     return features
 

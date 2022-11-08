@@ -6,6 +6,7 @@
   "command": "rustdesk",
   "modules": [
     "shared-modules/libappindicator/libappindicator-gtk3-12.10.json",
+    "xdotool.json",
     {
       "name": "rustdesk",
       "buildsystem": "simple",
@@ -26,8 +27,12 @@
   "finish-args": [
     "--share=ipc",
     "--socket=x11",
+    "--socket=fallback-x11",
     "--socket=wayland",
     "--share=network",
-    "--filesystem=xdg-documents"
+    "--filesystem=home",
+    "--device=dri",
+    "--socket=pulseaudio",
+    "--talk-name=org.freedesktop.Flatpak"
   ]
 }

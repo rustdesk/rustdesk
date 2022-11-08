@@ -93,7 +93,7 @@ jobs:
             rustdesk-*.exe
 
   build-for-linux:
-    name: ${{ matrix.job.target }} (${{ matrix.job.os }})
+    name: ${{ matrix.job.target }} (${{ matrix.job.os }},${{ matrix.job.extra-build-args }})
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
@@ -105,7 +105,8 @@ jobs:
           # - { target: i686-unknown-linux-gnu      , os: ubuntu-20.04, use-cross: true }
           # - { target: i686-unknown-linux-musl     , os: ubuntu-20.04, use-cross: true }
           # - { target: x86_64-apple-darwin         , os: macos-10.15                   }
-          - { target: x86_64-unknown-linux-gnu    , os: ubuntu-18.04}
+          - { target: x86_64-unknown-linux-gnu    , os: ubuntu-18.04, extra-build-args: ""}
+          - { target: x86_64-unknown-linux-gnu    , os: ubuntu-18.04, extra-build-args: "--flatpak"}
           # - { target: x86_64-unknown-linux-musl   , os: ubuntu-20.04, use-cross: true }
     steps:
       - name: Checkout source code
@@ -160,7 +161,7 @@ jobs:
 
       - name: Install cargo bundle tools
         run: |
-          cargo install cargo-bundle --force
+          cargo install cargo-bundle
 
       - name: Show version information (Rust, cargo, GCC)
         shell: bash
@@ -173,7 +174,7 @@ jobs:
           rustc -V
 
       - name: Build rustdesk
-        run: ./build.py --flutter --hwcodec
+        run: ./build.py --flutter --hwcodec ${{ matrix.job.extra-build-args }}
 
       - name: Rename rustdesk
         shell: bash
@@ -188,15 +189,17 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            rustdesk-${{ matrix.job.target }}-${{ matrix.job.os }}.deb
+            rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb
       
       - name: Upload Artifcat
         uses: actions/upload-artifact@master
+        if: ${{ contains(matrix.job.extra-build-args, 'flatpak') }}
         with:
-          name: rustdesk-${{ matrix.job.target }}-${{ matrix.job.os }}.deb
-          path: rustdesk-${{ matrix.job.target }}-${{ matrix.job.os }}.deb
+          name: rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb
+          path: rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb
 
       - name: Build archlinux package
+        if: ${{ matrix.job.extra-build-args == '' }}
         uses: vufa/arch-makepkg-action@master
         with:
           packages: >
@@ -231,12 +234,27 @@ jobs:
             cd res && HBB=`pwd`/.. FLUTTER=1 makepkg -f
 
       - name: Publish archlinux package
+        if: ${{ matrix.job.extra-build-args == '' }}
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
             res/rustdesk*.zst
+
+      # - name: build RPM package
+      #   id: rpm
+      #   uses: Kingtous/rustdesk-rpmbuild@master
+      #   with:
+      #     spec_file: "res/rpm-flutter.spec"
+
+      # - name: Publish fedora28/centos8 package
+      #   uses: softprops/action-gh-release@v1
+      #   with:
+      #     prerelease: true
+      #     tag_name: ${{ env.TAG_NAME }}
+      #     files: |
+      #       ${{ steps.rpm.outputs.rpm_dir_path }}/*
 
   build-flatpak:
     name: Build Flatpak
@@ -252,7 +270,7 @@ jobs:
           # - { target: i686-unknown-linux-gnu      , os: ubuntu-20.04, use-cross: true }
           # - { target: i686-unknown-linux-musl     , os: ubuntu-20.04, use-cross: true }
           # - { target: x86_64-apple-darwin         , os: macos-10.15                   }
-          - { target: x86_64-unknown-linux-gnu    , os: ubuntu-18.04, arch: "x86_64"}
+          - { target: x86_64-unknown-linux-gnu    , os: ubuntu-18.04, arch: x86_64}
           # - { target: x86_64-unknown-linux-musl   , os: ubuntu-20.04, use-cross: true }
     steps:
       - name: Checkout source code
@@ -266,12 +284,12 @@ jobs:
       - name: Download Binary
         uses: actions/download-artifact@master
         with:
-          name: rustdesk-${{ matrix.job.target }}-${{ matrix.job.os }}.deb
+          name: rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb
           path: .
         
       - name: Rename Binary  
         run: |
-          mv rustdesk-${{ matrix.job.target }}-${{ matrix.job.os }}.deb rustdesk-${{ env.VERSION }}.deb
+          mv rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb rustdesk-${{ env.VERSION }}.deb
       
       - name: Install Flatpak deps
         run: |
