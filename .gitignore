@@ -36,5 +36,6 @@ flatpak/.flatpak-builder/build/**
 flatpak/.flatpak-builder/shared-modules/**
 flatpak/.flatpak-builder/shared-modules/*.tar.xz
 flatpak/.flatpak-builder/debian-binary
+flatpak/build/**
 # bridge file
 lib/generated_bridge.dart
