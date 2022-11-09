@@ -1,12 +1,8 @@
-use hbb_common::{
-    anyhow::{self, bail},
-    tokio, ResultType,
-};
 use reqwest::blocking::Response;
 use serde::de::DeserializeOwned;
-use serde_derive::Deserialize;
 use serde_json::{Map, Value};
 
+#[cfg(feature = "flutter")]
 pub mod account;
 
 #[derive(Debug)]
