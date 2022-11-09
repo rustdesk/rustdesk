@@ -500,19 +500,15 @@ class WindowActionPanelState extends State<WindowActionPanel>
 
   @override
   void onWindowClose() async {
-    print("onWindowClose");
     // hide window on close
     if (widget.isMainWindow) {
       await windowManager.hide();
       rustDeskWinManager.unregisterActiveWindow(0);
     } else {
       widget.onClose?.call();
-      final frame = await WindowController.fromWindowId(windowId!).getFrame();
       await WindowController.fromWindowId(windowId!).hide();
       rustDeskWinManager
           .call(WindowType.Main, kWindowEventHide, {"id": windowId!});
-      final frame2 = await WindowController.fromWindowId(windowId!).getFrame();
-      print("${frame} ---hide--> ${frame2}");
     }
     super.onWindowClose();
   }

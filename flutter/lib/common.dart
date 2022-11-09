@@ -1037,7 +1037,7 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
       final isMaximized = await wc.isMaximized();
       final pos = LastWindowPosition(
           sz.width, sz.height, position.dx, position.dy, isMaximized);
-      print("saving frame: ${windowId}: ${pos.width}/${pos.height}, offset:${pos.offsetWidth}/${pos.offsetHeight}");
+      debugPrint("saving frame: ${windowId}: ${pos.width}/${pos.height}, offset:${pos.offsetWidth}/${pos.offsetHeight}");
       await Get.find<SharedPreferences>()
           .setString(kWindowPrefix + type.name, pos.toString());
       break;
@@ -1175,7 +1175,7 @@ Future<bool> restoreWindowPosition(WindowType type, {int? windowId}) async {
             await _adjustRestoreMainWindowSize(lpos.width, lpos.height);
         final offset = await _adjustRestoreMainWindowOffset(
             lpos.offsetWidth, lpos.offsetHeight);
-        print("restore lpos: ${size.width}/${size.height}, offset:${offset?.dx}/${offset?.dy}");
+        debugPrint("restore lpos: ${size.width}/${size.height}, offset:${offset?.dx}/${offset?.dy}");
         if (offset == null) {
           await wc.center();
         } else {
