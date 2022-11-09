@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:back_button_interceptor/back_button_interceptor.dart';
@@ -1036,6 +1037,7 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
       final isMaximized = await wc.isMaximized();
       final pos = LastWindowPosition(
           sz.width, sz.height, position.dx, position.dy, isMaximized);
+      print("saving frame: ${windowId}: ${pos.width}/${pos.height}, offset:${pos.offsetWidth}/${pos.offsetHeight}");
       await Get.find<SharedPreferences>()
           .setString(kWindowPrefix + type.name, pos.toString());
       break;
@@ -1081,7 +1083,7 @@ Future<Size> _adjustRestoreMainWindowSize(double? width, double? height) async {
     restoreWidth = maxWidth;
   }
   if (restoreHeight > maxHeight) {
-    restoreWidth = maxHeight;
+    restoreHeight = maxHeight;
   }
   return Size(restoreWidth, restoreHeight);
 }
@@ -1092,11 +1094,11 @@ Future<Offset?> _adjustRestoreMainWindowOffset(
   if (left == null || top == null) {
     await windowManager.center();
   } else {
-    double windowLeft = left;
-    double windowTop = top;
+    double windowLeft = max(0.0, left);
+    double windowTop = max(0.0, top);
 
-    double frameLeft = 0;
-    double frameTop = 0;
+    double frameLeft = double.infinity;
+    double frameTop = double.infinity;
     double frameRight = ((isDesktop || isWebDesktop)
             ? kDesktopMaxDisplayWidth
             : kMobileMaxDisplayWidth)
@@ -1107,12 +1109,11 @@ Future<Offset?> _adjustRestoreMainWindowOffset(
         .toDouble();
 
     if (isDesktop || isWebDesktop) {
-      final screen = (await window_size.getWindowInfo()).screen;
-      if (screen != null) {
-        frameLeft = screen.visibleFrame.left;
-        frameTop = screen.visibleFrame.top;
-        frameRight = screen.visibleFrame.right;
-        frameBottom = screen.visibleFrame.bottom;
+      for(final screen in await window_size.getScreenList()) {
+        frameLeft = min(screen.visibleFrame.left, frameLeft);
+        frameTop = min(screen.visibleFrame.top, frameTop);
+        frameRight = max(screen.visibleFrame.right, frameRight);
+        frameBottom = max(screen.visibleFrame.bottom, frameBottom);
       }
     }
 
@@ -1174,6 +1175,7 @@ Future<bool> restoreWindowPosition(WindowType type, {int? windowId}) async {
             await _adjustRestoreMainWindowSize(lpos.width, lpos.height);
         final offset = await _adjustRestoreMainWindowOffset(
             lpos.offsetWidth, lpos.offsetHeight);
+        print("restore lpos: ${size.width}/${size.height}, offset:${offset?.dx}/${offset?.dy}");
         if (offset == null) {
           await wc.center();
         } else {

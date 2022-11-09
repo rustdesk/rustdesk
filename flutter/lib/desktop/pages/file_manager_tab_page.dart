@@ -96,8 +96,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
 
   void onRemoveId(String id) {
     if (tabController.state.value.tabs.isEmpty) {
-      WindowController.fromWindowId(windowId()).hide();
-      rustDeskWinManager.call(WindowType.Main, kWindowEventHide, {"id": windowId()});
+      WindowController.fromWindowId(windowId()).close();
     }
   }
 
