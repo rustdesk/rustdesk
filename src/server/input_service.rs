@@ -379,7 +379,7 @@ fn is_mouse_active_by_conn(conn: i32) -> bool {
         return true;
     }
 
-    let last_input = *LATEST_INPUT_CURSOR.lock().unwrap();
+    let mut last_input = LATEST_INPUT_CURSOR.lock().unwrap();
     // last conn input may be protected
     if last_input.conn != conn {
         return false;
@@ -388,8 +388,13 @@ fn is_mouse_active_by_conn(conn: i32) -> bool {
     // check if input is in valid range
     match crate::get_cursor_pos() {
         Some((x, y)) => {
-            (last_input.x - x).abs() < MOUSE_ACTIVE_DISTANCE
-                && (last_input.y - y).abs() < MOUSE_ACTIVE_DISTANCE
+            let is_same_input = (last_input.x - x).abs() < MOUSE_ACTIVE_DISTANCE
+                && (last_input.y - y).abs() < MOUSE_ACTIVE_DISTANCE;
+            if !is_same_input {
+                last_input.x = -MOUSE_ACTIVE_DISTANCE * 2;
+                last_input.y = -MOUSE_ACTIVE_DISTANCE * 2;
+            }
+            is_same_input
         }
         None => true,
     }
