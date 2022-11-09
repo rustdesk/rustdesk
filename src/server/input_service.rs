@@ -39,10 +39,12 @@ impl super::service::Reset for StatePos {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone, Copy)]
 struct Input {
     conn: i32,
     time: i64,
+    x: i32,
+    y: i32,
 }
 
 const KEY_CHAR_START: u64 = 9999;
@@ -181,7 +183,6 @@ lazy_static::lazy_static! {
     };
     static ref KEYS_DOWN: Arc<Mutex<HashMap<u64, Instant>>> = Default::default();
     static ref LATEST_INPUT_CURSOR: Arc<Mutex<Input>> = Default::default();
-    static ref LATEST_INPUT_CURSOR_POS: Arc<Mutex<HashMap<i32, (i32, i32)>>> = Default::default();
     static ref LATEST_CURSOR_POS: Arc<Mutex<(Instant, (i32, i32))>> = Arc::new(Mutex::new((Instant::now().sub(MOUSE_MOVE_PROTECTION_TIMEOUT), (0, 0))));
 }
 static EXITING: AtomicBool = AtomicBool::new(false);
@@ -373,17 +374,23 @@ fn fix_modifiers(modifiers: &[EnumOrUnknown<ControlKey>], en: &mut Enigo, ck: i3
 }
 
 fn is_mouse_active_by_conn(conn: i32) -> bool {
+    // out of time protection
     if LATEST_CURSOR_POS.lock().unwrap().0.elapsed() > MOUSE_MOVE_PROTECTION_TIMEOUT {
         return true;
     }
 
-    match LATEST_INPUT_CURSOR_POS.lock().unwrap().get(&conn) {
-        Some((x, y)) => match crate::get_cursor_pos() {
-            Some((x2, y2)) => {
-                (x - x2).abs() < MOUSE_ACTIVE_DISTANCE && (y - y2).abs() < MOUSE_ACTIVE_DISTANCE
-            }
-            None => true,
-        },
+    let last_input = *LATEST_INPUT_CURSOR.lock().unwrap();
+    // last conn input may be protected
+    if last_input.conn != conn {
+        return false;
+    }
+
+    // check if input is in valid range
+    match crate::get_cursor_pos() {
+        Some((x, y)) => {
+            (last_input.x - x).abs() < MOUSE_ACTIVE_DISTANCE
+                && (last_input.y - y).abs() < MOUSE_ACTIVE_DISTANCE
+        }
         None => true,
     }
 }
@@ -403,12 +410,12 @@ fn handle_mouse_(evt: &MouseEvent, conn: i32) {
     let evt_type = evt.mask & 0x7;
     if evt_type == 0 {
         let time = get_time();
-        *LATEST_INPUT_CURSOR.lock().unwrap() = Input { time, conn };
-
-        LATEST_INPUT_CURSOR_POS
-            .lock()
-            .unwrap()
-            .insert(conn, (evt.x, evt.y));
+        *LATEST_INPUT_CURSOR.lock().unwrap() = Input {
+            time,
+            conn,
+            x: evt.x,
+            y: evt.y,
+        };
     }
     let mut en = ENIGO.lock().unwrap();
     #[cfg(not(target_os = "macos"))]
