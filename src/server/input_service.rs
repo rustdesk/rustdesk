@@ -373,7 +373,7 @@ fn fix_modifiers(modifiers: &[EnumOrUnknown<ControlKey>], en: &mut Enigo, ck: i3
     }
 }
 
-fn is_mouse_active_by_conn(conn: i32) -> bool {
+fn active_mouse_(conn: i32) -> bool {
     // out of time protection
     if LATEST_CURSOR_POS.lock().unwrap().0.elapsed() > MOUSE_MOVE_PROTECTION_TIMEOUT {
         return true;
@@ -388,13 +388,13 @@ fn is_mouse_active_by_conn(conn: i32) -> bool {
     // check if input is in valid range
     match crate::get_cursor_pos() {
         Some((x, y)) => {
-            let is_same_input = (last_input.x - x).abs() < MOUSE_ACTIVE_DISTANCE
+            let can_active = (last_input.x - x).abs() < MOUSE_ACTIVE_DISTANCE
                 && (last_input.y - y).abs() < MOUSE_ACTIVE_DISTANCE;
-            if !is_same_input {
+            if !can_active {
                 last_input.x = -MOUSE_ACTIVE_DISTANCE * 2;
                 last_input.y = -MOUSE_ACTIVE_DISTANCE * 2;
             }
-            is_same_input
+            can_active
         }
         None => true,
     }
@@ -405,7 +405,7 @@ fn handle_mouse_(evt: &MouseEvent, conn: i32) {
         return;
     }
 
-    if !is_mouse_active_by_conn(conn) {
+    if !active_mouse_(conn) {
         return;
     }
 
