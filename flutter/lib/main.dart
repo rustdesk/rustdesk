@@ -168,6 +168,20 @@ void runMultiWindow(
     widget,
     MyTheme.currentThemeMode(),
   );
+  switch (appType) {
+    case kAppTypeDesktopRemote:
+    await restoreWindowPosition(WindowType.RemoteDesktop, windowId: windowId!);
+      break;
+    case kAppTypeDesktopFileTransfer:
+    await restoreWindowPosition(WindowType.FileTransfer, windowId: windowId!);
+      break;
+    case kAppTypeDesktopPortForward:
+    await restoreWindowPosition(WindowType.PortForward, windowId: windowId!);
+      break;
+    default:
+      // no such appType
+      exit(0);
+  }
 }
 
 void runConnectionManagerScreen() async {
