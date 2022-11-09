@@ -1,4 +1,5 @@
 use super::*;
+#[cfg(target_os = "linux")]
 use crate::common::IS_X11;
 #[cfg(target_os = "macos")]
 use dispatch::Queue;
@@ -7,6 +8,7 @@ use hbb_common::{config::COMPRESS_LEVEL, get_time, protobuf::EnumOrUnknown};
 use rdev::{simulate, EventType, Key as RdevKey};
 use std::{
     convert::TryFrom,
+    ops::Sub,
     sync::atomic::{AtomicBool, Ordering},
     time::Instant,
 };
@@ -100,8 +102,16 @@ pub fn new_pos() -> GenericService {
     sp
 }
 
+fn update_last_cursor_pos(x: i32, y: i32) {
+    let mut lock = LATEST_CURSOR_POS.lock().unwrap();
+    if lock.1 .0 != x || lock.1 .1 != y {
+        (lock.0, lock.1) = (Instant::now(), (x, y))
+    }
+}
+
 fn run_pos(sp: GenericService, state: &mut StatePos) -> ResultType<()> {
     if let Some((x, y)) = crate::get_cursor_pos() {
+        update_last_cursor_pos(x, y);
         if state.cursor_pos.0 != x || state.cursor_pos.1 != y {
             state.cursor_pos = (x, y);
             let mut msg_out = Message::new();
@@ -112,7 +122,7 @@ fn run_pos(sp: GenericService, state: &mut StatePos) -> ResultType<()> {
             });
             let exclude = {
                 let now = get_time();
-                let lock = LATEST_INPUT.lock().unwrap();
+                let lock = LATEST_INPUT_CURSOR.lock().unwrap();
                 if now - lock.time < 300 {
                     lock.conn
                 } else {
@@ -170,9 +180,14 @@ lazy_static::lazy_static! {
         Arc::new(Mutex::new(Enigo::new()))
     };
     static ref KEYS_DOWN: Arc<Mutex<HashMap<u64, Instant>>> = Default::default();
-    static ref LATEST_INPUT: Arc<Mutex<Input>> = Default::default();
+    static ref LATEST_INPUT_CURSOR: Arc<Mutex<Input>> = Default::default();
+    static ref LATEST_INPUT_CURSOR_POS: Arc<Mutex<HashMap<i32, (i32, i32)>>> = Default::default();
+    static ref LATEST_CURSOR_POS: Arc<Mutex<(Instant, (i32, i32))>> = Arc::new(Mutex::new((Instant::now().sub(MOUSE_MOVE_PROTECTION_TIMEOUT), (0, 0))));
 }
 static EXITING: AtomicBool = AtomicBool::new(false);
+
+const MOUSE_MOVE_PROTECTION_TIMEOUT: Duration = Duration::from_millis(1_000);
+const MOUSE_ACTIVE_DISTANCE: i32 = 5;
 
 // mac key input must be run in main thread, otherwise crash on >= osx 10.15
 #[cfg(target_os = "macos")]
@@ -357,17 +372,43 @@ fn fix_modifiers(modifiers: &[EnumOrUnknown<ControlKey>], en: &mut Enigo, ck: i3
     }
 }
 
+fn is_mouse_active_by_conn(conn: i32) -> bool {
+    if LATEST_CURSOR_POS.lock().unwrap().0.elapsed() > MOUSE_MOVE_PROTECTION_TIMEOUT {
+        return true;
+    }
+
+    match LATEST_INPUT_CURSOR_POS.lock().unwrap().get(&conn) {
+        Some((x, y)) => match crate::get_cursor_pos() {
+            Some((x2, y2)) => {
+                (x - x2).abs() < MOUSE_ACTIVE_DISTANCE && (y - y2).abs() < MOUSE_ACTIVE_DISTANCE
+            }
+            None => true,
+        },
+        None => true,
+    }
+}
+
 fn handle_mouse_(evt: &MouseEvent, conn: i32) {
     if EXITING.load(Ordering::SeqCst) {
         return;
     }
+
+    if !is_mouse_active_by_conn(conn) {
+        return;
+    }
+
     #[cfg(windows)]
     crate::platform::windows::try_change_desktop();
     let buttons = evt.mask >> 3;
     let evt_type = evt.mask & 0x7;
     if evt_type == 0 {
         let time = get_time();
-        *LATEST_INPUT.lock().unwrap() = Input { time, conn };
+        *LATEST_INPUT_CURSOR.lock().unwrap() = Input { time, conn };
+
+        LATEST_INPUT_CURSOR_POS
+            .lock()
+            .unwrap()
+            .insert(conn, (evt.x, evt.y));
     }
     let mut en = ENIGO.lock().unwrap();
     #[cfg(not(target_os = "macos"))]
@@ -432,7 +473,10 @@ fn handle_mouse_(evt: &MouseEvent, conn: i32) {
 
             // fix shift + scroll(down/up)
             #[cfg(target_os = "macos")]
-            if evt.modifiers.contains(&EnumOrUnknown::new(ControlKey::Shift)){
+            if evt
+                .modifiers
+                .contains(&EnumOrUnknown::new(ControlKey::Shift))
+            {
                 x = y;
                 y = 0;
             }
@@ -653,19 +697,19 @@ fn sync_status(evt: &KeyEvent) -> (bool, bool) {
         let code = evt.chr();
         let key = rdev::get_win_key(code, 0);
         match key {
-            RdevKey::Home |
-            RdevKey::UpArrow |
-            RdevKey::PageUp |
-            RdevKey::LeftArrow |
-            RdevKey::RightArrow |
-            RdevKey::End |
-            RdevKey::DownArrow |
-            RdevKey::PageDown |
-            RdevKey::Insert | 
-            RdevKey::Delete => en.get_key_state(enigo::Key::NumLock),
+            RdevKey::Home
+            | RdevKey::UpArrow
+            | RdevKey::PageUp
+            | RdevKey::LeftArrow
+            | RdevKey::RightArrow
+            | RdevKey::End
+            | RdevKey::DownArrow
+            | RdevKey::PageDown
+            | RdevKey::Insert
+            | RdevKey::Delete => en.get_key_state(enigo::Key::NumLock),
             _ => click_numlock,
         }
-    };   
+    };
     return (click_capslock, click_numlock);
 }
 

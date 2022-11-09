@@ -20,7 +20,9 @@ use hbb_common::{
     tokio::{self, sync::mpsc, time},
 };
 
-use crate::{common::SOFTWARE_UPDATE_URL, hbbs_http::account, ipc, platform};
+use crate::{common::SOFTWARE_UPDATE_URL, ipc, platform};
+#[cfg(feature = "flutter")]
+use crate::hbbs_http::account;
 
 type Message = RendezvousMessage;
 
@@ -844,14 +846,17 @@ pub(crate) fn check_connect_status(reconnect: bool) -> mpsc::UnboundedSender<ipc
     tx
 }
 
+#[cfg(feature = "flutter")]
 pub fn account_auth(op: String, id: String, uuid: String) {
     account::OidcSession::account_auth(op, id, uuid);
 }
 
+#[cfg(feature = "flutter")]
 pub fn account_auth_cancel() {
     account::OidcSession::auth_cancel();
 }
 
+#[cfg(feature = "flutter")]
 pub fn account_auth_result() -> String {
     serde_json::to_string(&account::OidcSession::get_result()).unwrap_or_default()
 }
