@@ -264,6 +264,17 @@ impl Server {
         self.connections.remove(&conn.id());
     }
 
+    pub fn close_connections(&mut self) {
+        let conn_inners: Vec<_> = self.connections.values_mut().collect();
+        for c in conn_inners {
+            let mut misc = Misc::new();
+            misc.set_stop_service(true);
+            let mut msg = Message::new();
+            msg.set_misc(misc);
+            c.send(Arc::new(msg));
+        }
+    }
+
     fn add_service(&mut self, service: Box<dyn Service>) {
         let name = service.name();
         self.services.insert(name, service);

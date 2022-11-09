@@ -288,7 +288,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                 offstage: !svcStopped.value,
                 child: GestureDetector(
                         onTap: () async {
-                          bool checked =
+                          bool checked = !bind.mainIsInstalled() ||
                               await bind.mainCheckSuperUserPermission();
                           if (checked) {
                             bind.mainSetOption(key: "stop-service", value: "");

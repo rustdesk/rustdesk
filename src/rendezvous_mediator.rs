@@ -90,6 +90,8 @@ impl RendezvousMediator {
                     }));
                 }
                 join_all(futs).await;
+            } else {
+                server.write().unwrap().close_connections();
             }
             sleep(1.).await;
         }

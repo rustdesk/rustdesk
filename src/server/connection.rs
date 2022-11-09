@@ -250,14 +250,7 @@ impl Connection {
                             }
                         }
                         ipc::Data::Close => {
-                            conn.close_manually = true;
-                            let mut misc = Misc::new();
-                            misc.set_close_reason("Closed manually by the peer".into());
-                            let mut msg_out = Message::new();
-                            msg_out.set_misc(misc);
-                            conn.send(msg_out).await;
-                            conn.on_close("Close requested from connection manager", false).await;
-                            SESSIONS.lock().unwrap().remove(&conn.lr.my_id);
+                            conn.on_close_manually("connection manager").await;
                             break;
                         }
                         ipc::Data::ChatMessage{text} => {
@@ -403,6 +396,18 @@ impl Connection {
                             }
                             _ => {}
                         }
+                    }
+                    match &msg.union {
+                        Some(message::Union::Misc(m)) => {
+                            match &m.union {
+                                Some(misc::Union::StopService(_)) => {
+                                    conn.on_close_manually("stop service").await;
+                                    break;
+                                }
+                                _ => {},
+                            }
+                        }
+                        _ => {}
                     }
                     if let Err(err) = conn.stream.send(msg).await {
                         conn.on_close(&err.to_string(), false).await;
@@ -1488,6 +1493,18 @@ impl Connection {
         let data = ipc::Data::Close;
         self.tx_to_cm.send(data).ok();
         self.port_forward_socket.take();
+    }
+
+    async fn on_close_manually(&mut self, close_from: &str) {
+        self.close_manually = true;
+        let mut misc = Misc::new();
+        misc.set_close_reason("Closed manually by the peer".into());
+        let mut msg_out = Message::new();
+        msg_out.set_misc(misc);
+        self.send(msg_out).await;
+        self.on_close(&format!("Close requested from {}", close_from), false)
+            .await;
+        SESSIONS.lock().unwrap().remove(&self.lr.my_id);
     }
 
     fn read_dir(&mut self, dir: &str, include_hidden: bool) {
