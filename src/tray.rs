@@ -1,10 +1,13 @@
-use hbb_common::log::{debug, error, info};
+use hbb_common::log::debug;
+#[cfg(target_os = "linux")]
+use hbb_common::log::{error, info};
 #[cfg(target_os = "linux")]
 use libappindicator::AppIndicator;
+#[cfg(target_os = "linux")]
 use std::env::temp_dir;
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, Mutex},
 };
 #[cfg(target_os = "windows")]
 use trayicon::{MenuBuilder, TrayIconBuilder};

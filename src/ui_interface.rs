@@ -20,8 +20,9 @@ use hbb_common::{
     tokio::{self, sync::mpsc, time},
 };
 
-use crate::ipc;
-use crate::{common::SOFTWARE_UPDATE_URL, platform};
+use crate::{common::SOFTWARE_UPDATE_URL, ipc, platform};
+#[cfg(feature = "flutter")]
+use crate::hbbs_http::account;
 
 type Message = RendezvousMessage;
 
@@ -808,6 +809,8 @@ pub fn is_root() -> bool {
 
 #[inline]
 pub fn check_super_user_permission() -> bool {
+    #[cfg(feature = "flatpak")]
+    return true;
     #[cfg(any(windows, target_os = "linux"))]
     return crate::platform::check_super_user_permission().unwrap_or(false);
     #[cfg(not(any(windows, target_os = "linux")))]
@@ -841,6 +844,21 @@ pub(crate) fn check_connect_status(reconnect: bool) -> mpsc::UnboundedSender<ipc
     let (tx, rx) = mpsc::unbounded_channel::<ipc::Data>();
     std::thread::spawn(move || check_connect_status_(reconnect, rx));
     tx
+}
+
+#[cfg(feature = "flutter")]
+pub fn account_auth(op: String, id: String, uuid: String) {
+    account::OidcSession::account_auth(op, id, uuid);
+}
+
+#[cfg(feature = "flutter")]
+pub fn account_auth_cancel() {
+    account::OidcSession::auth_cancel();
+}
+
+#[cfg(feature = "flutter")]
+pub fn account_auth_result() -> String {
+    serde_json::to_string(&account::OidcSession::get_result()).unwrap_or_default()
 }
 
 // notice: avoiding create ipc connecton repeatly,

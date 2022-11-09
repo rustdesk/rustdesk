@@ -134,6 +134,7 @@ class ConnectionManagerState extends State<ConnectionManager> {
                 showMaximize: false,
                 showMinimize: true,
                 showClose: true,
+                onWindowCloseButton: handleWindowCloseButton,
                 controller: serverModel.tabController,
                 maxLabelWidth: 100,
                 tail: buildScrollJumper(),
@@ -205,6 +206,27 @@ class ConnectionManagerState extends State<ConnectionManager> {
                 icon: Icons.arrow_right, iconSize: 22, onTap: sc.forward),
           ],
         ));
+  }
+
+  Future<bool> handleWindowCloseButton() async {
+    var tabController = gFFI.serverModel.tabController;
+    final connLength = tabController.length;
+    if (connLength <= 1) {
+      windowManager.close();
+      return true;
+    } else {
+      final opt = "enable-confirm-closing-tabs";
+      final bool res;
+      if (!option2bool(opt, await bind.mainGetOption(key: opt))) {
+        res = true;
+      } else {
+        res = await closeConfirmDialog();
+      }
+      if (res) {
+        windowManager.close();
+      }
+      return res;
+    }
   }
 }
 

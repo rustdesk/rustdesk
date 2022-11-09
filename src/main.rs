@@ -32,8 +32,8 @@ fn main() {
     if !common::global_init() {
         return;
     }
-    use hbb_common::log;
     use clap::App;
+    use hbb_common::log;
     let args = format!(
         "-p, --port-forward=[PORT-FORWARD-OPTIONS] 'Format: remote-id:local-port:remote-port[:remote-host]'
         -k, --key=[KEY] ''
@@ -45,7 +45,7 @@ fn main() {
         .about("RustDesk command line tool")
         .args_from_usage(&args)
         .get_matches();
-    use hbb_common::{env_logger::*, config::LocalConfig};
+    use hbb_common::{config::LocalConfig, env_logger::*};
     init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "info"));
     if let Some(p) = matches.value_of("port-forward") {
         let options: Vec<String> = p.split(":").map(|x| x.to_owned()).collect();
@@ -73,7 +73,14 @@ fn main() {
         }
         let key = matches.value_of("key").unwrap_or("").to_owned();
         let token = LocalConfig::get_option("access_token");
-        cli::start_one_port_forward(options[0].clone(), port, remote_host, remote_port, key, token);
+        cli::start_one_port_forward(
+            options[0].clone(),
+            port,
+            remote_host,
+            remote_port,
+            key,
+            token,
+        );
     }
     common::global_clean();
 }

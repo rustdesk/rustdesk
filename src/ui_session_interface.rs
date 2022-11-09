@@ -22,7 +22,6 @@ use std::collections::{HashMap, HashSet};
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
-use std::time::Duration;
 
 /// IS_IN KEYBOARD_HOOKED sciter only
 pub static IS_IN: AtomicBool = AtomicBool::new(false);
@@ -1323,7 +1322,7 @@ impl<T: InvokeUiSession> Session<T> {
         #[cfg(any(target_os = "windows", target_os = "macos"))]
         std::thread::spawn(move || {
             let func = move |event: Event| match event.event_type {
-                EventType::KeyPress(key) | EventType::KeyRelease(key) => {
+                EventType::KeyPress(..) | EventType::KeyRelease(..) => {
                     // grab all keys
                     if !IS_IN.load(Ordering::SeqCst)
                         || !SERVER_KEYBOARD_ENABLED.load(Ordering::SeqCst)

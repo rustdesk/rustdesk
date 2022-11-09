@@ -11,6 +11,7 @@ env:
   FLUTTER_VERSION: "3.0.5"
   TAG_NAME: "nightly"
   VCPKG_COMMIT_ID: '6ca56aeb457f033d344a7106cb3f9f1abf8f4e98'
+  VERSION: "1.2.0"
 
 jobs:
   build-for-windows:
@@ -92,7 +93,7 @@ jobs:
             rustdesk-*.exe
 
   build-for-linux:
-    name: ${{ matrix.job.target }} (${{ matrix.job.os }})
+    name: ${{ matrix.job.target }} (${{ matrix.job.os }},${{ matrix.job.extra-build-args }})
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
@@ -104,7 +105,8 @@ jobs:
           # - { target: i686-unknown-linux-gnu      , os: ubuntu-20.04, use-cross: true }
           # - { target: i686-unknown-linux-musl     , os: ubuntu-20.04, use-cross: true }
           # - { target: x86_64-apple-darwin         , os: macos-10.15                   }
-          - { target: x86_64-unknown-linux-gnu    , os: ubuntu-18.04}
+          - { target: x86_64-unknown-linux-gnu    , os: ubuntu-18.04, extra-build-args: ""}
+          - { target: x86_64-unknown-linux-gnu    , os: ubuntu-18.04, extra-build-args: "--flatpak"}
           # - { target: x86_64-unknown-linux-musl   , os: ubuntu-20.04, use-cross: true }
     steps:
       - name: Checkout source code
@@ -113,7 +115,7 @@ jobs:
       - name: Install prerequisites
         run: |
           case ${{ matrix.job.target }} in
-            x86_64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake libclang-dev ninja-build libayatana-appindicator3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libvdpau-dev libva-dev libclang-dev llvm-dev libclang-10-dev llvm-10-dev;;
+            x86_64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake libclang-dev ninja-build libappindicator3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libvdpau-dev libva-dev libclang-dev llvm-dev libclang-10-dev llvm-10-dev;;
             # arm-unknown-linux-*) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
             # aarch64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
           esac
@@ -159,7 +161,7 @@ jobs:
 
       - name: Install cargo bundle tools
         run: |
-          cargo install cargo-bundle --force
+          cargo install cargo-bundle
 
       - name: Show version information (Rust, cargo, GCC)
         shell: bash
@@ -172,7 +174,7 @@ jobs:
           rustc -V
 
       - name: Build rustdesk
-        run: ./build.py --flutter --hwcodec
+        run: ./build.py --flutter --hwcodec ${{ matrix.job.extra-build-args }}
 
       - name: Rename rustdesk
         shell: bash
@@ -187,9 +189,17 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            rustdesk*.deb
+            rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb
+      
+      - name: Upload Artifcat
+        uses: actions/upload-artifact@master
+        if: ${{ contains(matrix.job.extra-build-args, 'flatpak') }}
+        with:
+          name: rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb
+          path: rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb
 
       - name: Build archlinux package
+        if: ${{ matrix.job.extra-build-args == '' }}
         uses: vufa/arch-makepkg-action@master
         with:
           packages: >
@@ -220,14 +230,85 @@ jobs:
             python
             ttf-arphic-uming
             libappindicator-gtk3
-            libayatana-appindicator
           scripts: |
             cd res && HBB=`pwd`/.. FLUTTER=1 makepkg -f
 
       - name: Publish archlinux package
+        if: ${{ matrix.job.extra-build-args == '' }}
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
             res/rustdesk*.zst
+
+      # - name: build RPM package
+      #   id: rpm
+      #   uses: Kingtous/rustdesk-rpmbuild@master
+      #   with:
+      #     spec_file: "res/rpm-flutter.spec"
+
+      # - name: Publish fedora28/centos8 package
+      #   uses: softprops/action-gh-release@v1
+      #   with:
+      #     prerelease: true
+      #     tag_name: ${{ env.TAG_NAME }}
+      #     files: |
+      #       ${{ steps.rpm.outputs.rpm_dir_path }}/*
+
+  build-flatpak:
+    name: Build Flatpak
+    needs: [build-for-linux]
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          # - { target: aarch64-unknown-linux-gnu   , os: ubuntu-20.04, use-cross: true }
+          # - { target: arm-unknown-linux-gnueabihf , os: ubuntu-20.04, use-cross: true }
+          # - { target: arm-unknown-linux-musleabihf, os: ubuntu-20.04, use-cross: true }
+          # - { target: i686-unknown-linux-gnu      , os: ubuntu-20.04, use-cross: true }
+          # - { target: i686-unknown-linux-musl     , os: ubuntu-20.04, use-cross: true }
+          # - { target: x86_64-apple-darwin         , os: macos-10.15                   }
+          - { target: x86_64-unknown-linux-gnu    , os: ubuntu-18.04, arch: x86_64}
+          # - { target: x86_64-unknown-linux-musl   , os: ubuntu-20.04, use-cross: true }
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y flatpak flatpak-builder cmake g++ gcc git curl wget nasm yasm libgtk-3-dev
+
+      - name: Download Binary
+        uses: actions/download-artifact@master
+        with:
+          name: rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb
+          path: .
+        
+      - name: Rename Binary  
+        run: |
+          mv rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb rustdesk-${{ env.VERSION }}.deb
+      
+      - name: Install Flatpak deps
+        run: |
+          flatpak --user remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          flatpak --user install -y flathub org.freedesktop.Platform/${{ matrix.job.arch }}/21.08
+          flatpak --user install -y flathub org.freedesktop.Sdk/${{ matrix.job.arch }}/21.08
+
+      - name: Make Flatpak package
+        run: |
+          pushd flatpak
+          git clone https://github.com/flathub/shared-modules.git --depth=1
+          flatpak-builder --user --force-clean --repo=repo ./build ./rustdesk.json
+          flatpak build-bundle ./repo rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}.flatpak org.rustdesk.rustdesk
+
+      - name: Publish flatpak package
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            flatpak/rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}.flatpak
+

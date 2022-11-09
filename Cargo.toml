@@ -64,9 +64,9 @@ wol-rs = "0.9.1"
 flutter_rust_bridge = { git = "https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge", optional = true }
 errno = "0.2.8"
 rdev = { git = "https://github.com/asur4s/rdev" }
+url = { version = "2.1", features = ["serde"] }
 
-[target.'cfg(not(target_os = "linux"))'.dependencies]
-reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features=false }
+reqwest = { version = "0.11", features = ["blocking", "json", "rustls-tls"], default-features=false }
 
 [target.'cfg(not(any(target_os = "android", target_os = "linux")))'.dependencies]
 cpal = "0.13.5"
@@ -147,7 +147,7 @@ hound = "3.5"
 name = "RustDesk"
 identifier = "com.carriez.rustdesk"
 icon = ["res/32x32.png", "res/128x128.png", "res/128x128@2x.png"]
-deb_depends = ["libgtk-3-0", "libxcb-randr0", "libxdo3", "libxfixes3", "libxcb-shape0", "libxcb-xfixes0", "libasound2", "libsystemd0", "pipewire", "curl", "libayatana-appindicator3-1", "libvdpau1", "libva2"]
+deb_depends = ["libgtk-3-0", "libxcb-randr0", "libxdo3", "libxfixes3", "libxcb-shape0", "libxcb-xfixes0", "libasound2", "libsystemd0", "curl", "libappindicator3-1", "libvdpau1", "libva2"]
 osx_minimum_system_version = "10.14"
 resources = ["res/mac-tray-light.png","res/mac-tray-dark.png"]
 

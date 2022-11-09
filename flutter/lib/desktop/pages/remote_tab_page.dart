@@ -97,9 +97,6 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       }
       _update_remote_count();
     });
-    Future.delayed(Duration.zero, () {
-      restoreWindowPosition(WindowType.RemoteDesktop, windowId: windowId());
-    });
   }
 
   @override
@@ -321,10 +318,9 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     );
   }
 
-  void onRemoveId(String id) {
+  void onRemoveId(String id) async {
     if (tabController.state.value.tabs.isEmpty) {
-      WindowController.fromWindowId(windowId()).hide();
-      rustDeskWinManager.call(WindowType.Main, kWindowEventHide, {"id": windowId()});
+      await WindowController.fromWindowId(windowId()).close();
     }
     ConnectionTypeState.delete(id);
     _update_remote_count();

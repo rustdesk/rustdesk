@@ -21,7 +21,7 @@ const String kTabLabelSettingPage = "Settings";
 
 const String kWindowPrefix = "wm_";
 
-// the executable name of the portable version 
+// the executable name of the portable version
 const String kEnvPortableExecutable = "RUSTDESK_APPNAME";
 
 const Color kColorWarn = Color.fromARGB(255, 245, 133, 59);
@@ -59,6 +59,12 @@ const kDesktopMenuPadding = EdgeInsets.only(left: 12.0, right: 3.0);
 const kInvalidValueStr = "InvalidValueStr";
 
 const kMobilePageConstraints = BoxConstraints(maxWidth: 600);
+
+/// [kMouseControlDistance] indicates the distance that self-side move to get control of mouse.
+const kMouseControlDistance = 12;
+
+/// [kMouseControlTimeoutMSec] indicates the timeout (in milliseconds) that self-side can get control of mouse.
+const kMouseControlTimeoutMSec = 1000;
 
 /// flutter/packages/flutter/lib/src/services/keyboard_key.dart -> _keyLabels
 /// see [LogicalKeyboardKey.keyLabel]
