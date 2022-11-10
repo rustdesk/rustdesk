@@ -38,6 +38,14 @@ jobs:
         with:
           channel: 'stable'
           flutter-version: ${{ env.FLUTTER_VERSION }}
+      
+      - name: Replace engine with rustdesk custom flutter engine
+        shell: bash
+        run: |
+          flutter doctor -v
+          wget https://github.com/Kingtous/engine/releases/download/v3.0.5-rustdesk/windows-x64-release-flutter.zip
+          unzip windows-x64-release-flutter.zip -d engine
+          mv engine/*  C:/hostedtoolcache/windows/flutter/stable-3.0.5-x64/bin/cache/artifacts/engine/windows-x64-release/
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
