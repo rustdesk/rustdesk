@@ -51,24 +51,29 @@ fn execute(path: PathBuf, args: Vec<String>) {
         .expect(&format!("failed to execute {:?}", exe_name));
 }
 
-fn is_setup(name: &str) -> bool {
-    name.to_lowercase().ends_with("install.exe") || name.to_lowercase().ends_with("安装.exe")
-}
-
 fn main() {
-    let is_setup = is_setup(
-        &std::env::current_exe()
-            .unwrap()
-            .to_string_lossy()
-            .to_string(),
-    );
-    let reader = BinaryReader::default();
-    if let Some(exe) = setup(reader, None, is_setup) {
-        let args = if is_setup {
-            vec!["--install".to_owned()]
+    let mut args = Vec::new();
+    let mut arg_exe = Default::default();
+    let mut i = 0;
+    for arg in std::env::args() {
+        if i == 0 {
+            arg_exe = arg.clone();
         } else {
-            vec![]
-        };
+            args.push(arg);
+        }
+        i += 1;
+    }
+    let click_setup = args.is_empty() && arg_exe.to_lowercase().ends_with("install.exe");
+
+    let reader = BinaryReader::default();
+    if let Some(exe) = setup(
+        reader,
+        None,
+        click_setup || args.contains(&"--silent-install".to_owned()),
+    ) {
+        if click_setup {
+            args = vec!["--install".to_owned()]
+        }
         execute(exe, args);
     }
 }

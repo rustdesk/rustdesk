@@ -26,7 +26,7 @@ pub type NotifyMessageBox = fn(String, String, String, String) -> dyn Future<Out
 pub const CLIPBOARD_NAME: &'static str = "clipboard";
 pub const CLIPBOARD_INTERVAL: u64 = 333;
 
-// the executable name of the portable version 
+// the executable name of the portable version
 pub const PORTABLE_APPNAME_RUNTIME_ENV_KEY: &str = "RUSTDESK_APPNAME";
 
 lazy_static::lazy_static! {
@@ -564,7 +564,7 @@ pub fn is_ip(id: &str) -> bool {
 }
 
 pub fn is_setup(name: &str) -> bool {
-    name.to_lowercase().ends_with("install.exe") || name.to_lowercase().ends_with("安装.exe")
+    name.to_lowercase().ends_with("install.exe")
 }
 
 pub fn get_custom_rendezvous_server(custom: String) -> String {
