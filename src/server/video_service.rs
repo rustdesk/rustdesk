@@ -19,6 +19,8 @@
 // https://slhck.info/video/2017/03/01/rate-control.html
 
 use super::{video_qos::VideoQoS, *};
+#[cfg(windows)]
+use crate::portable_service::client::{PortableServiceStatus, PORTABLE_SERVICE_STATUS};
 use hbb_common::tokio::sync::{
     mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
     Mutex as TokioMutex,
@@ -49,7 +51,7 @@ pub const SCRAP_X11_REF_URL: &str = "https://rustdesk.com/docs/en/manual/linux/#
 pub const NAME: &'static str = "video";
 
 lazy_static::lazy_static! {
-    static ref CURRENT_DISPLAY: Arc<Mutex<usize>> = Arc::new(Mutex::new(usize::MAX));
+    pub static ref CURRENT_DISPLAY: Arc<Mutex<usize>> = Arc::new(Mutex::new(usize::MAX));
     static ref LAST_ACTIVE: Arc<Mutex<Instant>> = Arc::new(Mutex::new(Instant::now()));
     static ref SWITCH: Arc<Mutex<bool>> = Default::default();
     static ref FRAME_FETCHED_NOTIFIER: (UnboundedSender<(i32, Option<Instant>)>, Arc<TokioMutex<UnboundedReceiver<(i32, Option<Instant>)>>>) = {
@@ -188,6 +190,7 @@ fn create_capturer(
     privacy_mode_id: i32,
     display: Display,
     use_yuv: bool,
+    current: usize,
 ) -> ResultType<Box<dyn TraitCapturer>> {
     #[cfg(not(windows))]
     let c: Option<Box<dyn TraitCapturer>> = None;
@@ -244,17 +247,18 @@ fn create_capturer(
         }
     }
 
-    let c = match c {
-        Some(c1) => c1,
+    match c {
+        Some(c1) => return Ok(c1),
         None => {
-            let c1 =
-                Capturer::new(display, use_yuv).with_context(|| "Failed to create capturer")?;
             log::debug!("Create capturer dxgi|gdi");
-            Box::new(c1)
+            #[cfg(windows)]
+            return crate::portable_service::client::create_capturer(current, display, use_yuv);
+            #[cfg(not(windows))]
+            return Ok(Box::new(
+                Capturer::new(display, use_yuv).with_context(|| "Failed to create capturer")?,
+            ));
         }
     };
-
-    Ok(c)
 }
 
 #[cfg(windows)]
@@ -277,8 +281,8 @@ fn ensure_close_virtual_device() -> ResultType<()> {
 pub fn test_create_capturer(privacy_mode_id: i32, timeout_millis: u64) -> bool {
     let test_begin = Instant::now();
     while test_begin.elapsed().as_millis() < timeout_millis as _ {
-        if let Ok((_, _, display)) = get_current_display() {
-            if let Ok(_) = create_capturer(privacy_mode_id, display, true) {
+        if let Ok((_, current, display)) = get_current_display() {
+            if let Ok(_) = create_capturer(privacy_mode_id, display, true, current) {
                 return true;
             }
         }
@@ -369,7 +373,7 @@ fn get_capturer(use_yuv: bool) -> ResultType<CapturerInfo> {
     } else {
         log::info!("In privacy mode, the peer side cannot watch the screen");
     }
-    let capturer = create_capturer(captuerer_privacy_mode_id, display, use_yuv)?;
+    let capturer = create_capturer(captuerer_privacy_mode_id, display, use_yuv, current)?;
     Ok(CapturerInfo {
         origin,
         width,
@@ -468,6 +472,11 @@ fn run(sp: GenericService) -> ResultType<()> {
     let recorder: Arc<Mutex<Option<Recorder>>> = Default::default();
     #[cfg(windows)]
     start_uac_elevation_check();
+    #[cfg(windows)]
+    let portable_service_status = crate::portable_service::client::PORTABLE_SERVICE_STATUS
+        .lock()
+        .unwrap()
+        .clone();
 
     #[cfg(target_os = "linux")]
     let mut would_block_count = 0u32;
@@ -498,10 +507,17 @@ fn run(sp: GenericService) -> ResultType<()> {
         if codec_name != Encoder::current_hw_encoder_name() {
             bail!("SWITCH");
         }
+        #[cfg(windows)]
+        if portable_service_status != PORTABLE_SERVICE_STATUS.lock().unwrap().clone() {
+            bail!("SWITCH");
+        }
         check_privacy_mode_changed(&sp, c.privacy_mode_id)?;
         #[cfg(windows)]
         {
-            if crate::platform::windows::desktop_changed() {
+            if crate::platform::windows::desktop_changed()
+                && PORTABLE_SERVICE_STATUS.lock().unwrap().clone()
+                    == PortableServiceStatus::NotStarted
+            {
                 bail!("Desktop changed");
             }
         }
@@ -874,7 +890,7 @@ pub(super) fn get_current_display_2(mut all: Vec<Display>) -> ResultType<(usize,
     return Ok((n, current, all.remove(current)));
 }
 
-fn get_current_display() -> ResultType<(usize, usize, Display)> {
+pub fn get_current_display() -> ResultType<(usize, usize, Display)> {
     get_current_display_2(try_get_displays()?)
 }
 

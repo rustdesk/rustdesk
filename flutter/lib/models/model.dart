@@ -192,6 +192,9 @@ class FfiModel with ChangeNotifier {
         }
       } else if (name == 'alias') {
         handleAliasChanged(evt);
+      } else if (name == 'show_elevation') {
+        final show = evt['show'].toString() == 'true';
+        parent.target?.serverModel.setShowElevation(show);
       }
     };
   }

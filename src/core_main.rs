@@ -80,6 +80,11 @@ pub fn core_main() -> Option<Vec<String>> {
                 .ok();
         }
     }
+    #[cfg(windows)]
+    if !crate::platform::is_installed() && (_is_elevate || _is_run_as_system) {
+        crate::platform::elevate_or_run_as_system(click_setup, _is_elevate, _is_run_as_system);
+        return None;
+    }
     if args.is_empty() {
         std::thread::spawn(move || crate::start_server(false));
     } else {
@@ -127,6 +132,13 @@ pub fn core_main() -> Option<Vec<String>> {
                 return None;
             } else if args[0] == "--tray" {
                 crate::tray::start_tray();
+                return None;
+            } else if args[0] == "--portable-service" {
+                crate::platform::elevate_or_run_as_system(
+                    click_setup,
+                    _is_elevate,
+                    _is_run_as_system,
+                );
                 return None;
             }
         }

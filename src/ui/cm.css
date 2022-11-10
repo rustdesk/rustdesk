@@ -68,7 +68,7 @@ div.permissions {
 }
 
 div.permissions > div {
-    size: 48px;
+    size: 42px;
     background: color(accent);
 }
 

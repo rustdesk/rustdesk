@@ -132,6 +132,19 @@ pub enum DataControl {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "t", content = "c")]
+pub enum DataPortableService {
+    Ping,
+    Pong,
+    ConnCount(Option<usize>),
+    Mouse(Vec<u8>),
+    Key(Vec<u8>),
+    RequestStart,
+    WillClose,
+    CmShowElevation(bool),
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(tag = "t", content = "c")]
 pub enum Data {
     Login {
         id: i32,
@@ -187,6 +200,7 @@ pub enum Data {
     Language(String),
     Empty,
     Disconnected,
+    DataPortableService(DataPortableService),
 }
 
 #[tokio::main(flavor = "current_thread")]

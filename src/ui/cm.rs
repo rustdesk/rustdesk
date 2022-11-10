@@ -51,6 +51,10 @@ impl InvokeUiCM for SciterHandler {
     fn change_language(&self) {
         // TODO
     }
+
+    fn show_elevation(&self, show: bool) {
+        self.call("showElevation", &make_args!(show));
+    }
 }
 
 impl SciterHandler {
@@ -123,6 +127,14 @@ impl SciterConnectionManager {
     fn t(&self, name: String) -> String {
         crate::client::translate(name)
     }
+
+    fn can_elevate(&self) -> bool {
+        crate::ui_cm_interface::can_elevate()
+    }
+
+    fn elevate_portable(&self, id: i32) {
+        crate::ui_cm_interface::elevate_portable(id);
+    }
 }
 
 impl sciter::EventHandler for SciterConnectionManager {
@@ -141,5 +153,7 @@ impl sciter::EventHandler for SciterConnectionManager {
         fn authorize(i32);
         fn switch_permission(i32, String, bool);
         fn send_msg(i32, String);
+        fn can_elevate();
+        fn elevate_portable(i32);
     }
 }

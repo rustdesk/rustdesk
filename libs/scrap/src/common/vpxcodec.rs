@@ -4,7 +4,7 @@
 
 use hbb_common::anyhow::{anyhow, Context};
 use hbb_common::message_proto::{EncodedVideoFrame, EncodedVideoFrames, Message, VideoFrame};
-use hbb_common::{ResultType, get_time};
+use hbb_common::{get_time, ResultType};
 
 use crate::codec::EncoderApi;
 use crate::STRIDE_ALIGN;
@@ -233,7 +233,9 @@ impl EncoderApi for VpxEncoder {
 
 impl VpxEncoder {
     pub fn encode(&mut self, pts: i64, data: &[u8], stride_align: usize) -> Result<EncodeFrames> {
-        assert!(2 * data.len() >= 3 * self.width * self.height);
+        if 2 * data.len() < 3 * self.width * self.height {
+            return Err(Error::FailedCall("len not enough".to_string()));
+        }
 
         let mut image = Default::default();
         call_vpx_ptr!(vpx_img_wrap(

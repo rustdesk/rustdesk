@@ -389,5 +389,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("This PC", ""),
         ("or", ""),
         ("Continue with", ""),
+        ("Elevate", ""),
     ].iter().cloned().collect();
 }

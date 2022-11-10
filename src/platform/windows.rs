@@ -63,7 +63,7 @@ pub fn get_cursor() -> ResultType<Option<u64>> {
     unsafe {
         let mut ci: CURSORINFO = mem::MaybeUninit::uninit().assume_init();
         ci.cbSize = std::mem::size_of::<CURSORINFO>() as _;
-        if GetCursorInfo(&mut ci) == FALSE {
+        if crate::portable_service::client::get_cursor_info(&mut ci) == FALSE {
             return Err(io::Error::last_os_error().into());
         }
         if ci.flags & CURSOR_SHOWING == 0 {
@@ -1542,9 +1542,11 @@ pub fn elevate_or_run_as_system(is_setup: bool, is_elevate: bool, is_run_as_syst
     } else {
         "--run-as-system"
     };
-
     if is_root() {
-        log::debug!("portable run as system user");
+        if is_run_as_system {
+            log::info!("run portable service");
+            crate::portable_service::server::run_portable_service();
+        }
     } else {
         match is_elevated(None) {
             Ok(elevated) => {

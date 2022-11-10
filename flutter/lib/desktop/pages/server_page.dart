@@ -501,11 +501,46 @@ class _CmControlPanel extends StatelessWidget {
   }
 
   buildAuthorized(BuildContext context) {
+    final bool canElevate = bind.cmCanElevate();
+    final model = Provider.of<ServerModel>(context);
+    final offstage = !(canElevate && model.showElevation);
+    final width = offstage ? 200.0 : 100.0;
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
+        Offstage(
+          offstage: offstage,
+          child: Ink(
+            width: width,
+            height: 40,
+            decoration: BoxDecoration(
+                color: Colors.green[700],
+                borderRadius: BorderRadius.circular(10)),
+            child: InkWell(
+                onTap: () =>
+                    checkClickTime(client.id, () => handleElevate(context)),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.security_sharp,
+                      color: Colors.white,
+                    ),
+                    Text(
+                      translate("Elevate"),
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ],
+                )),
+          ),
+        ),
+        Offstage(
+            offstage: offstage,
+            child: SizedBox(
+              width: 30,
+            )),
         Ink(
-          width: 200,
+          width: width,
           height: 40,
           decoration: BoxDecoration(
               color: Colors.redAccent, borderRadius: BorderRadius.circular(10)),
@@ -552,11 +587,50 @@ class _CmControlPanel extends StatelessWidget {
   }
 
   buildUnAuthorized(BuildContext context) {
+    final bool canElevate = bind.cmCanElevate();
+    final model = Provider.of<ServerModel>(context);
+    final offstage = !(canElevate && model.showElevation);
+    final width = offstage ? 100.0 : 85.0;
+    final spacerWidth = offstage ? 30.0 : 5.0;
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
+        Offstage(
+          offstage: offstage,
+          child: Ink(
+            height: 40,
+            width: width,
+            decoration: BoxDecoration(
+                color: Colors.green[700],
+                borderRadius: BorderRadius.circular(10)),
+            child: InkWell(
+                onTap: () => checkClickTime(client.id, () {
+                      handleAccept(context);
+                      handleElevate(context);
+                      windowManager.minimize();
+                    }),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.security_sharp,
+                      color: Colors.white,
+                    ),
+                    Text(
+                      translate("Accept"),
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ],
+                )),
+          ),
+        ),
+        Offstage(
+            offstage: offstage,
+            child: SizedBox(
+              width: spacerWidth,
+            )),
         Ink(
-          width: 100,
+          width: width,
           height: 40,
           decoration: BoxDecoration(
               color: MyTheme.accent, borderRadius: BorderRadius.circular(10)),
@@ -576,10 +650,10 @@ class _CmControlPanel extends StatelessWidget {
               )),
         ),
         SizedBox(
-          width: 30,
+          width: spacerWidth,
         ),
         Ink(
-          width: 100,
+          width: width,
           height: 40,
           decoration: BoxDecoration(
               color: Colors.transparent,
@@ -609,6 +683,12 @@ class _CmControlPanel extends StatelessWidget {
   void handleAccept(BuildContext context) {
     final model = Provider.of<ServerModel>(context, listen: false);
     model.sendLoginResponse(client, true);
+  }
+
+  void handleElevate(BuildContext context) {
+    final model = Provider.of<ServerModel>(context, listen: false);
+    model.setShowElevation(false);
+    bind.cmElevatePortable(connId: client.id);
   }
 
   void handleClose(BuildContext context) async {

@@ -85,6 +85,8 @@ pub trait InvokeUiCM: Send + Clone + 'static + Sized {
     fn change_theme(&self, dark: String);
 
     fn change_language(&self);
+
+    fn show_elevation(&self, show: bool);
 }
 
 impl<T: InvokeUiCM> Deref for ConnectionManager<T> {
@@ -170,6 +172,10 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         }
 
         self.ui_handler.remove_connection(id, close);
+    }
+
+    fn show_elevation(&self, show: bool) {
+        self.ui_handler.show_elevation(show);
     }
 }
 
@@ -361,6 +367,9 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                 Data::Language(lang) => {
                                     LocalConfig::set_option("lang".to_owned(), lang);
                                     self.cm.change_language();
+                                }
+                                Data::DataPortableService(ipc::DataPortableService::CmShowElevation(show)) => {
+                                    self.cm.show_elevation(show);
                                 }
                                 _ => {
 
@@ -754,6 +763,31 @@ fn cm_inner_send(id: i32, data: Data) {
     } else {
         for s in lock.values() {
             allow_err!(s.tx.send(data.clone()));
+        }
+    }
+}
+
+pub fn can_elevate() -> bool {
+    #[cfg(windows)]
+    {
+        use crate::portable_service::client::{
+            PortableServiceStatus::NotStarted, PORTABLE_SERVICE_STATUS,
+        };
+        return !crate::platform::is_installed()
+            && PORTABLE_SERVICE_STATUS.lock().unwrap().clone() == NotStarted;
+    }
+    #[cfg(not(windows))]
+    return false;
+}
+
+pub fn elevate_portable(id: i32) {
+    #[cfg(windows)]
+    {
+        let lock = CLIENTS.read().unwrap();
+        if let Some(s) = lock.get(&id) {
+            allow_err!(s.tx.send(ipc::Data::DataPortableService(
+                ipc::DataPortableService::RequestStart
+            )));
         }
     }
 }

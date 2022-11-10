@@ -49,6 +49,8 @@ pub const NAME_POS: &'static str = "";
 }
 
 mod connection;
+#[cfg(windows)]
+pub mod portable_service;
 mod service;
 mod video_qos;
 pub mod video_service;
@@ -60,6 +62,7 @@ type ConnMap = HashMap<i32, ConnInner>;
 
 lazy_static::lazy_static! {
     pub static ref CHILD_PROCESS: Childs = Default::default();
+    pub static ref CONN_COUNT: Arc<Mutex<usize>> = Default::default();
 }
 
 pub struct Server {
@@ -259,6 +262,7 @@ impl Server {
             }
         }
         self.connections.insert(conn.id(), conn);
+        *CONN_COUNT.lock().unwrap() = self.connections.len();
     }
 
     pub fn remove_connection(&mut self, conn: &ConnInner) {
@@ -266,6 +270,7 @@ impl Server {
             s.on_unsubscribe(conn.id());
         }
         self.connections.remove(&conn.id());
+        *CONN_COUNT.lock().unwrap() = self.connections.len();
     }
 
     pub fn close_connections(&mut self) {

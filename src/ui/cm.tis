@@ -3,6 +3,7 @@ view.windowFrame = is_osx ? #extended : #solid;
 var body;
 var connections = [];
 var show_chat = false;
+var show_elevation = true;
 
 class Body: Reactor.Component
 {
@@ -27,6 +28,7 @@ class Body: Reactor.Component
         };
         var right_style = show_chat ? "" : "display: none";
         var disconnected = c.disconnected;
+        var show_elevation_btn = handler.can_elevate() && show_elevation;
        // below size:* is work around for Linux, it alreayd set in css, but not work, shit sciter
         return <div .content style="size:*">
             <div .left-panel>
@@ -55,10 +57,12 @@ class Body: Reactor.Component
                 {c.port_forward ? <div>Port Forwarding: {c.port_forward}</div> : ""}
                 <div style="size:*"/>
                 <div .buttons>
-                     {auth ? "" : <button .button tabindex="-1" #accept>{translate('Accept')}</button>}
-                     {auth ? "" : <button .button tabindex="-1" .outline #dismiss>{translate('Dismiss')}</button>}
-                     {auth && !disconnected ? <button .button tabindex="-1" #disconnect>{translate('Disconnect')}</button> : ""}
-                     {auth && disconnected ? <button .button tabindex="-1" #close>{translate('Close')}</button> : ""}
+                    {!auth && show_elevation_btn ? <button .button tabindex="-1" #elevate_accept style="width:50;background-color:green;">{translate('Elevate')}</button> : "" }
+                    {auth ? "" : <button .button tabindex="-1" style={!auth && show_elevation_btn ? "width:50;" : ""} #accept>{translate('Accept')}</button>}
+                    {auth ? "" : <button .button tabindex="-1" style={!auth && show_elevation_btn ? "width:50;" : ""} .outline #dismiss>{translate('Dismiss')}</button>}
+                    {auth && !disconnected && show_elevation_btn ? <button .button tabindex="-1" #elevate style="width:50;background-color:green;">{translate('Elevate')}</button> : "" }
+                    {auth && !disconnected ? <button .button tabindex="-1" #disconnect style={auth && show_elevation_btn ? "width:50;" : ""} >{translate('Disconnect')}</button> : ""}
+                    {auth && disconnected ? <button .button tabindex="-1" #close>{translate('Close')}</button> : ""}
                 </div>
                 {c.is_file_transfer || c.port_forward ? "" : <div .chaticon>{svg_chat}</div>}
             </div>
@@ -138,6 +142,32 @@ class Body: Reactor.Component
             connection.authorized = true;
             body.update();
             handler.authorize(cid);
+            self.timer(30ms, function() {
+                view.windowState = View.WINDOW_MINIMIZED;
+            });
+        });
+    }
+
+    event click $(button#elevate_accept) {
+        var { cid, connection } = this;
+        checkClickTime(function() {
+            connection.authorized = true;
+            show_elevation = false;
+            body.update();
+            handler.elevate_portable(cid);
+            handler.authorize(cid);
+            self.timer(30ms, function() {
+                view.windowState = View.WINDOW_MINIMIZED;
+            });
+        });
+    }
+
+    event click $(button#elevate) {
+        var { cid, connection } = this;
+        checkClickTime(function() {
+            show_elevation = false;
+            body.update();
+            handler.elevate_portable(cid);
             self.timer(30ms, function() {
                 view.windowState = View.WINDOW_MINIMIZED;
             });
@@ -384,6 +414,13 @@ handler.newMessage = function(id, text) {
     }
     conn.unreaded += 1;
     update();
+}
+
+handler.showElevation = function(show) {
+    if (show != show_elevation) {
+        show_elevation = show;
+        update();
+    }
 }
 
 view << event statechange {

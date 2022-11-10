@@ -92,6 +92,8 @@ winreg = "0.10"
 windows-service = "0.4"
 virtual_display = { path = "libs/virtual_display" }
 impersonate_system = { git = "https://github.com/21pages/impersonate-system" }
+shared_memory = "0.12.4"
+shutdown_hooks = "0.1.0"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2"
