@@ -45,7 +45,7 @@ const double kEmptyMarginTop = 50;
 const double kDesktopIconButtonSplashRadius = 20;
 
 /// [kMinCursorSize] indicates min cursor (w, h)
-const int kMinCursorSize = 24;
+const int kMinCursorSize = 12;
 
 /// [kDefaultScrollAmountMultiplier] indicates how many rows can be scrolled after a minimum scroll action of mouse
 const kDefaultScrollAmountMultiplier = 5.0;
