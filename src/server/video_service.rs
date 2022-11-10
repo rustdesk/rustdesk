@@ -33,9 +33,10 @@ use std::{
     collections::HashSet,
     io::ErrorKind::WouldBlock,
     ops::{Deref, DerefMut},
-    sync::Once,
     time::{self, Duration, Instant},
 };
+#[cfg(windows)]
+use std::sync::Once;
 #[cfg(windows)]
 use virtual_display;
 

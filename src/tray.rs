@@ -1,14 +1,12 @@
-use hbb_common::log::debug;
+use super::ui_interface::get_option_opt;
 #[cfg(target_os = "linux")]
-use hbb_common::log::{error, info};
+use hbb_common::log::{debug, error, info};
 #[cfg(target_os = "linux")]
 use libappindicator::AppIndicator;
 #[cfg(target_os = "linux")]
 use std::env::temp_dir;
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+#[cfg(target_os = "windows")]
+use std::sync::{Arc, Mutex};
 #[cfg(target_os = "windows")]
 use trayicon::{MenuBuilder, TrayIconBuilder};
 #[cfg(target_os = "windows")]
@@ -17,6 +15,7 @@ use winit::{
     event_loop::{ControlFlow, EventLoop},
 };
 
+#[cfg(target_os = "windows")]
 #[derive(Clone, Eq, PartialEq, Debug)]
 enum Events {
     DoubleClickTrayIcon,
@@ -25,7 +24,7 @@ enum Events {
 }
 
 #[cfg(target_os = "windows")]
-pub fn start_tray(options: Arc<Mutex<HashMap<String, String>>>) {
+pub fn start_tray() {
     let event_loop = EventLoop::<Events>::with_user_event();
     let proxy = event_loop.create_proxy();
     let icon = include_bytes!("../res/tray-icon.ico");
@@ -39,23 +38,19 @@ pub fn start_tray(options: Arc<Mutex<HashMap<String, String>>>) {
     let old_state = Arc::new(Mutex::new(0));
     let _sender = crate::ui_interface::SENDER.lock().unwrap();
     event_loop.run(move |event, _, control_flow| {
-        if options.lock().unwrap().get("ipc-closed").is_some() {
+        if get_option_opt("ipc-closed").is_some() {
             *control_flow = ControlFlow::Exit;
             return;
         } else {
             *control_flow = ControlFlow::Wait;
         }
-        let stopped = if let Some(v) = options.lock().unwrap().get("stop-service") {
-            !v.is_empty()
-        } else {
-            false
-        };
-        let stopped = if stopped { 2 } else { 1 };
+        let stopped = is_service_stoped();
+        let state = if stopped { 2 } else { 1 };
         let old = *old_state.lock().unwrap();
-        if stopped != old {
+        if state != old {
             hbb_common::log::info!("State changed");
             let mut m = MenuBuilder::new();
-            if stopped == 2 {
+            if state == 2 {
                 m = m.item(
                     &crate::client::translate("Start Service".to_owned()),
                     Events::StartService,
@@ -67,7 +62,7 @@ pub fn start_tray(options: Arc<Mutex<HashMap<String, String>>>) {
                 );
             }
             tray_icon.set_menu(&m).ok();
-            *old_state.lock().unwrap() = stopped;
+            *old_state.lock().unwrap() = state;
         }
 
         match event {
@@ -92,10 +87,9 @@ pub fn start_tray(options: Arc<Mutex<HashMap<String, String>>>) {
 /// [Block]
 /// This function will block current execution, show the tray icon and handle events.
 #[cfg(target_os = "linux")]
-pub fn start_tray(options: Arc<Mutex<HashMap<String, String>>>) {
-    use std::time::Duration;
-
+pub fn start_tray() {
     use gtk::traits::{GtkMenuItemExt, MenuShellExt, WidgetExt};
+
     info!("configuring tray");
     // init gtk context
     if let Err(err) = gtk::init() {
@@ -104,17 +98,17 @@ pub fn start_tray(options: Arc<Mutex<HashMap<String, String>>>) {
     }
     if let Some(mut appindicator) = get_default_app_indicator() {
         let mut menu = gtk::Menu::new();
-        let running = get_service_status(options.clone());
+        let stoped = is_service_stoped();
         // start/stop service
-        let label = if !running {
+        let label = if stoped {
             crate::client::translate("Start Service".to_owned())
         } else {
             crate::client::translate("Stop service".to_owned())
         };
         let menu_item_service = gtk::MenuItem::with_label(label.as_str());
         menu_item_service.connect_activate(move |item| {
-            let lock = crate::ui_interface::SENDER.lock().unwrap();
-            update_tray_service_item(options.clone(), item);
+            let _lock = crate::ui_interface::SENDER.lock().unwrap();
+            update_tray_service_item(item);
         });
         menu.append(&menu_item_service);
         // show tray item
@@ -129,19 +123,17 @@ pub fn start_tray(options: Arc<Mutex<HashMap<String, String>>>) {
 }
 
 #[cfg(target_os = "linux")]
-fn update_tray_service_item(options: Arc<Mutex<HashMap<String, String>>>, item: &gtk::MenuItem) {
-    use gtk::{
-        traits::{GtkMenuItemExt, ListBoxRowExt},
-        MenuItem,
-    };
-    if get_service_status(options.clone()) {
-        debug!("Now try to stop service");
-        item.set_label(&crate::client::translate("Start Service".to_owned()));
-        crate::ipc::set_option("stop-service", "Y");
-    } else {
+fn update_tray_service_item(item: &gtk::MenuItem) {
+    use gtk::traits::GtkMenuItemExt;
+
+    if is_service_stoped() {
         debug!("Now try to start service");
         item.set_label(&crate::client::translate("Stop service".to_owned()));
         crate::ipc::set_option("stop-service", "");
+    } else {
+        debug!("Now try to stop service");
+        item.set_label(&crate::client::translate("Start Service".to_owned()));
+        crate::ipc::set_option("stop-service", "Y");
     }
 }
 
@@ -171,14 +163,13 @@ fn get_default_app_indicator() -> Option<AppIndicator> {
     Some(appindicator)
 }
 
-/// Get service status
-/// Return [`true`] if service is running, [`false`] otherwise.
+/// Check if service is stoped.
+/// Return [`true`] if service is stoped, [`false`] otherwise.
 #[inline]
-fn get_service_status(options: Arc<Mutex<HashMap<String, String>>>) -> bool {
-    if let Some(v) = options.lock().unwrap().get("stop-service") {
-        debug!("service stopped: {}", v);
-        v.is_empty()
+fn is_service_stoped() -> bool {
+    if let Some(v) = get_option_opt("stop-service") {
+        v == "Y"
     } else {
-        true
+        false
     }
 }

@@ -122,7 +122,7 @@ pub fn core_main() -> Option<Vec<String>> {
                 hbb_common::allow_err!(crate::rc::extract_resources(&args[1]));
                 return None;
             } else if args[0] == "--tray" {
-                crate::tray::start_tray(crate::ui_interface::OPTIONS.clone());
+                crate::tray::start_tray();
                 return None;
             }
         }
@@ -149,12 +149,12 @@ pub fn core_main() -> Option<Vec<String>> {
                 std::thread::spawn(move || crate::start_server(true));
                 // to-do: for flutter, starting tray not ready yet, or we can reuse sciter's tray implementation.
             }
-            #[cfg(all(target_os = "linux"))]
+            #[cfg(target_os = "linux")]
             {
                 let handler = std::thread::spawn(move || crate::start_server(true));
-                crate::tray::start_tray(crate::ui_interface::OPTIONS.clone());
+                crate::tray::start_tray();
                 // revent server exit when encountering errors from tray
-                handler.join();
+                hbb_common::allow_err!(handler.join());
             }
         } else if args[0] == "--import-config" {
             if args.len() == 2 {
@@ -249,5 +249,6 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
             }
         }
     }
+    #[cfg(not(target_os = "linux"))]
     return None;
 }

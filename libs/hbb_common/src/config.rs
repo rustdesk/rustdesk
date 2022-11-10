@@ -167,9 +167,12 @@ pub struct PeerConfig {
     #[serde(default)]
     pub show_quality_monitor: bool,
 
-    // the other scalar value must before this
+    // The other scalar value must before this
     #[serde(default)]
     pub options: HashMap<String, String>,
+    // Various data for flutter ui
+    #[serde(default)]
+    pub ui_flutter: HashMap<String, String>,
     #[serde(default)]
     pub info: PeerInfoSerde,
     #[serde(default)]
@@ -897,6 +900,9 @@ pub struct LocalConfig {
     pub fav: Vec<String>,
     #[serde(default)]
     options: HashMap<String, String>,
+    // Various data for flutter ui
+    #[serde(default)]
+    ui_flutter: HashMap<String, String>,
 }
 
 impl LocalConfig {
@@ -964,6 +970,27 @@ impl LocalConfig {
                 config.options.remove(&k);
             } else {
                 config.options.insert(k, v);
+            }
+            config.store();
+        }
+    }
+
+    pub fn get_flutter_config(k: &str) -> String {
+        if let Some(v) = LOCAL_CONFIG.read().unwrap().ui_flutter.get(k) {
+            v.clone()
+        } else {
+            "".to_owned()
+        }
+    }
+
+    pub fn set_flutter_config(k: String, v: String) {
+        let mut config = LOCAL_CONFIG.write().unwrap();
+        let v2 = if v.is_empty() { None } else { Some(&v) };
+        if v2 != config.ui_flutter.get(&k) {
+            if v2.is_none() {
+                config.ui_flutter.remove(&k);
+            } else {
+                config.ui_flutter.insert(k, v);
             }
             config.store();
         }
