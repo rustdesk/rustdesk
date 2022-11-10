@@ -1,5 +1,3 @@
-use std::env::Args;
-
 use hbb_common::log;
 
 // shared by flutter and sciter main function
@@ -10,14 +8,14 @@ pub fn core_main() -> Option<Vec<String>> {
     let mut args = Vec::new();
     let mut flutter_args = Vec::new();
     let mut i = 0;
-    let mut is_setup = false;
     let mut _is_elevate = false;
     let mut _is_run_as_system = false;
     let mut _is_flutter_connect = false;
+    let mut arg_exe = Default::default();
     for arg in std::env::args() {
         // to-do: how to pass to flutter?
-        if i == 0 && crate::common::is_setup(&arg) {
-            is_setup = true;
+        if i == 0 {
+            arg_exe = arg;
         } else if i > 0 {
             #[cfg(feature = "flutter")]
             if arg == "--connect" {
@@ -33,21 +31,14 @@ pub fn core_main() -> Option<Vec<String>> {
         }
         i += 1;
     }
-    if args.contains(&"--install".to_string()) {
-        is_setup = true;
-    }
     #[cfg(feature = "flutter")]
     if _is_flutter_connect {
         return core_main_invoke_new_connection(std::env::args());
     }
-    if args.contains(&"--install".to_string()) {
-        is_setup = true;
-    }
-    if is_setup {
-        if args.is_empty() {
-            args.push("--install".to_owned());
-            flutter_args.push("--install".to_string());
-        }
+    let click_setup = cfg!(windows) && args.is_empty() && crate::common::is_setup(&arg_exe);
+    if click_setup {
+        args.push("--install".to_owned());
+        flutter_args.push("--install".to_string());
     }
     if args.contains(&"--noinstall".to_string()) {
         args.clear();
@@ -233,7 +224,7 @@ fn import_config(path: &str) {
 /// [Note]
 /// this is for invoke new connection from dbus.
 #[cfg(feature = "flutter")]
-fn core_main_invoke_new_connection(mut args: Args) -> Option<Vec<String>> {
+fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<String>> {
     args.position(|element| {
         return element == "--connect";
     })
