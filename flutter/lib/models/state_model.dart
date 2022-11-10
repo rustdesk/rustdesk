@@ -8,6 +8,7 @@ class StateGlobal {
   bool _fullscreen = false;
   final RxBool _showTabBar = true.obs;
   final RxDouble _resizeEdgeSize = 8.0.obs;
+  final RxBool showRemoteMenuBar = false.obs;
 
   int get windowId => _windowId;
   bool get fullscreen => _fullscreen;

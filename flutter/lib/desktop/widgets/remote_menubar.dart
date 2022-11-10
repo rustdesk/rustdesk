@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:rxdart/rxdart.dart' as rxdart;
@@ -21,6 +22,69 @@ import '../../common/shared_state.dart';
 import './popup_menu.dart';
 import './material_mod_popup_menu.dart' as mod_menu;
 
+class MenubarState {
+  final kStoreKey = "remoteMenubarState";
+  late RxBool show;
+  late RxBool _pin;
+
+  MenubarState() {
+    final s = Get.find<SharedPreferences>().getString(kStoreKey);
+    if (s == null) {
+      _initSet(false, false);
+    }
+    try {
+      final m = jsonDecode(s!);
+      if (m == null) {
+        _initSet(false, false);
+      } else {
+        _initSet(m['pin'] ?? false, m['pin'] ?? false);
+      }
+    } catch (e) {
+      debugPrint('Failed to decode menubar state ${e.toString()}');
+      _initSet(false, false);
+    }
+  }
+
+  _initSet(bool s, bool p) {
+    show = RxBool(s);
+    _pin = RxBool(p);
+  }
+
+  bool get pin => _pin.value;
+
+  switchShow() async {
+    show.value = !show.value;
+  }
+
+  setShow(bool v) async {
+    if (show.value != v) {
+      show.value = v;
+    }
+  }
+
+  switchPin() async {
+    _pin.value = !_pin.value;
+    // Save everytime changed, as this func will not be called frequently
+    await save();
+  }
+
+  setPin(bool v) async {
+    if (_pin.value != v) {
+      _pin.value = v;
+      // Save everytime changed, as this func will not be called frequently
+      await save();
+    }
+  }
+
+  save() async {
+    final success = await Get.find<SharedPreferences>()
+        .setString(kStoreKey, jsonEncode({'pin': _pin.value}.toString()));
+    if (!success) {
+      debugPrint('Failed to save remote menu bar state');
+    }
+  }
+}
+
 class _MenubarTheme {
   static const Color commonColor = MyTheme.accent;
   // kMinInteractiveDimension
@@ -31,7 +95,7 @@ class _MenubarTheme {
 class RemoteMenubar extends StatefulWidget {
   final String id;
   final FFI ffi;
-  final RxBool show;
+  final MenubarState state;
   final Function(Function(bool)) onEnterOrLeaveImageSetter;
   final Function() onEnterOrLeaveImageCleaner;
 
@@ -39,7 +103,7 @@ class RemoteMenubar extends StatefulWidget {
     Key? key,
     required this.id,
     required this.ffi,
-    required this.show,
+    required this.state,
     required this.onEnterOrLeaveImageSetter,
     required this.onEnterOrLeaveImageCleaner,
   }) : super(key: key);
@@ -51,7 +115,6 @@ class RemoteMenubar extends StatefulWidget {
 class _RemoteMenubarState extends State<RemoteMenubar> {
   final Rx<Color> _hideColor = Colors.white12.obs;
   final _rxHideReplay = rxdart.ReplaySubject<int>();
-  final _pinMenubar = false.obs;
   bool _isCursorOverImage = false;
   window_size.Screen? _screen;
 
@@ -63,7 +126,8 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     setState(() {});
   }
 
-  RxBool get show => widget.show;
+  RxBool get show => widget.state.show;
+  bool get pin => widget.state.pin;
 
   @override
   initState() {
@@ -82,7 +146,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         .throttleTime(const Duration(milliseconds: 5000),
             trailing: true, leading: false)
         .listen((int v) {
-      if (_pinMenubar.isFalse && show.isTrue && _isCursorOverImage) {
+      if (!pin && show.isTrue && _isCursorOverImage) {
         show.value = false;
       }
     });
@@ -196,18 +260,15 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
 
   Widget _buildPinMenubar(BuildContext context) {
     return Obx(() => IconButton(
-          tooltip:
-              translate(_pinMenubar.isTrue ? 'Unpin menubar' : 'Pin menubar'),
+          tooltip: translate(pin ? 'Unpin menubar' : 'Pin menubar'),
           onPressed: () {
-            _pinMenubar.value = !_pinMenubar.value;
+            widget.state.switchPin();
           },
           icon: Obx(() => Transform.rotate(
-              angle: _pinMenubar.isTrue ? math.pi / 4 : 0,
+              angle: pin ? math.pi / 4 : 0,
               child: Icon(
                 Icons.push_pin,
-                color: _pinMenubar.isTrue
-                    ? _MenubarTheme.commonColor
-                    : Colors.grey,
+                color: pin ? _MenubarTheme.commonColor : Colors.grey,
               ))),
         ));
   }
