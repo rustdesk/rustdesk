@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    ffi::{OsStr, OsString},
     fs,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     path::{Path, PathBuf},
@@ -848,7 +849,7 @@ impl PeerConfig {
     }
 
     fn path(id: &str) -> PathBuf {
-        let path: PathBuf = [PEERS, id].iter().collect();
+        let path: PathBuf = [PEERS, id.replace(":", "_").as_str()].iter().collect();
         Config::with_extension(Config::path(path))
     }
 
@@ -870,7 +871,22 @@ impl PeerConfig {
                             .file_stem()
                             .map(|p| p.to_str().unwrap_or(""))
                             .unwrap_or("")
+                            .replace("_", ":")
                             .to_owned();
+
+                        //rename PeerConfig files if they contain ":"
+                        //to stay backward compatible with *nix
+                        let current_filename = p
+                            .file_name()
+                            .unwrap_or(OsStr::new(""))
+                            .to_str()
+                            .unwrap_or("");
+                        if current_filename.contains(":") {
+                            if let Some(path) = p.parent() {
+                                fs::rename(p, path.join(current_filename.replace(":", "_"))).ok();
+                            }
+                        }
+
                         let c = PeerConfig::load(&id);
                         if c.info.platform.is_empty() {
                             fs::remove_file(&p).ok();
