@@ -19,12 +19,12 @@ use crate::flutter::{self, SESSIONS};
 #[cfg(target_os = "android")]
 use crate::start_server;
 use crate::ui_interface::{self, *};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::ui_session_interface::CUR_SESSION;
 use crate::{
     client::file_trait::FileManager,
     flutter::{make_fd_to_json, session_add, session_start_},
 };
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::ui_session_interface::CUR_SESSION;
 fn initialize(app_dir: &str) {
     *config::APP_DIR.write().unwrap() = app_dir.to_owned();
     #[cfg(target_os = "android")]
@@ -160,6 +160,28 @@ pub fn session_toggle_option(id: String, value: String) {
     if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
         session.toggle_option(value);
     }
+}
+
+pub fn session_get_flutter_config(id: String, k: String) -> Option<String> {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        Some(session.get_flutter_config(k))
+    } else {
+        None
+    }
+}
+
+pub fn session_set_flutter_config(id: String, k: String, v: String) {
+    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+        session.set_flutter_config(k, v);
+    }
+}
+
+pub fn get_local_flutter_config(k: String) -> SyncReturn<String> {
+    SyncReturn(ui_interface::get_local_flutter_config(k))
+}
+
+pub fn set_local_flutter_config(k: String, v: String) {
+    ui_interface::set_local_flutter_config(k, v);
 }
 
 pub fn session_get_image_quality(id: String) -> Option<String> {
@@ -537,8 +559,8 @@ pub fn main_post_request(url: String, body: String, header: String) {
     post_request(url, body, header)
 }
 
-pub fn main_get_local_option(key: String) -> String {
-    get_local_option(key)
+pub fn main_get_local_option(key: String) -> SyncReturn<String> {
+    SyncReturn(get_local_option(key))
 }
 
 pub fn main_set_local_option(key: String, value: String) {
@@ -1021,7 +1043,7 @@ pub fn main_is_installed() -> SyncReturn<bool> {
     SyncReturn(is_installed())
 }
 
-pub fn main_start_grab_keyboard(){
+pub fn main_start_grab_keyboard() {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     crate::ui_session_interface::global_grab_keyboard();
 }

@@ -122,7 +122,7 @@ pub fn core_main() -> Option<Vec<String>> {
                 hbb_common::allow_err!(crate::rc::extract_resources(&args[1]));
                 return None;
             } else if args[0] == "--tray" {
-                crate::tray::start_tray(crate::ui_interface::OPTIONS.clone());
+                crate::tray::start_tray();
                 return None;
             }
         }

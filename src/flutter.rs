@@ -227,6 +227,7 @@ impl InvokeUiSession for FlutterHandler {
         id: i32,
         entries: &Vec<FileEntry>,
         path: String,
+        #[allow(unused_variables)]
         is_local: bool,
         only_count: bool,
     ) {

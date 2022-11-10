@@ -98,6 +98,14 @@ impl<T: InvokeUiSession> Session<T> {
         self.lc.write().unwrap().save_view_style(value);
     }
 
+    pub fn set_flutter_config(&mut self, k: String, v: String) {
+        self.lc.write().unwrap().set_ui_flutter(k, v);
+    }
+
+    pub fn get_flutter_config(&self, k: String) -> String {
+        self.lc.write().unwrap().get_ui_flutter(&k)
+    }
+
     pub fn toggle_option(&mut self, name: String) {
         let msg = self.lc.write().unwrap().toggle_option(name.clone());
         if name == "enable-file-transfer" {
@@ -1590,7 +1598,7 @@ pub fn global_grab_keyboard() {
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     std::thread::spawn(move || {
         let func = move |event: Event| match event.event_type {
-            EventType::KeyPress(key) | EventType::KeyRelease(key) => {
+            EventType::KeyPress(..) | EventType::KeyRelease(..) => {
                 // grab all keys
                 if !IS_IN.load(Ordering::SeqCst) {
                     return Some(event);

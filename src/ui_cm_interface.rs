@@ -2,13 +2,14 @@
 use std::sync::Arc;
 use std::{
     collections::HashMap,
-    iter::FromIterator,
     ops::{Deref, DerefMut},
     sync::{
         atomic::{AtomicI64, Ordering},
         RwLock,
     },
 };
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+use std::iter::FromIterator;
 
 #[cfg(windows)]
 use clipboard::{cliprdr::CliprdrClientContext, empty_clipboard, set_conn_enabled, ContextSend};

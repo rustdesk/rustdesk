@@ -1,14 +1,13 @@
-use hbb_common::log::debug;
+use super::ui_interface::get_option_opt;
 #[cfg(target_os = "linux")]
-use hbb_common::log::{error, info};
+use hbb_common::log::{debug, error, info};
 #[cfg(target_os = "linux")]
 use libappindicator::AppIndicator;
 #[cfg(target_os = "linux")]
+use std::collections::HashMap;
+#[cfg(target_os = "linux")]
 use std::env::temp_dir;
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 #[cfg(target_os = "windows")]
 use trayicon::{MenuBuilder, TrayIconBuilder};
 #[cfg(target_os = "windows")]
@@ -25,7 +24,7 @@ enum Events {
 }
 
 #[cfg(target_os = "windows")]
-pub fn start_tray(options: Arc<Mutex<HashMap<String, String>>>) {
+pub fn start_tray() {
     let event_loop = EventLoop::<Events>::with_user_event();
     let proxy = event_loop.create_proxy();
     let icon = include_bytes!("../res/tray-icon.ico");
@@ -39,13 +38,13 @@ pub fn start_tray(options: Arc<Mutex<HashMap<String, String>>>) {
     let old_state = Arc::new(Mutex::new(0));
     let _sender = crate::ui_interface::SENDER.lock().unwrap();
     event_loop.run(move |event, _, control_flow| {
-        if options.lock().unwrap().get("ipc-closed").is_some() {
+        if get_option_opt("ipc-closed").is_some() {
             *control_flow = ControlFlow::Exit;
             return;
         } else {
             *control_flow = ControlFlow::Wait;
         }
-        let stopped = if let Some(v) = options.lock().unwrap().get("stop-service") {
+        let stopped = if let Some(v) = get_option_opt("stop-service") {
             !v.is_empty()
         } else {
             false
@@ -173,6 +172,7 @@ fn get_default_app_indicator() -> Option<AppIndicator> {
 
 /// Get service status
 /// Return [`true`] if service is running, [`false`] otherwise.
+#[cfg(target_os = "linux")]
 #[inline]
 fn get_service_status(options: Arc<Mutex<HashMap<String, String>>>) -> bool {
     if let Some(v) = options.lock().unwrap().get("stop-service") {

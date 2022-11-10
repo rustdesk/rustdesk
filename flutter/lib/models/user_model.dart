@@ -19,7 +19,7 @@ class UserModel {
 
   void refreshCurrentUser() async {
     await getUserName();
-    final token = await bind.mainGetLocalOption(key: 'access_token');
+    final token = bind.mainGetLocalOption(key: 'access_token');
     if (token == '') return;
     final url = await bind.mainGetApiServer();
     final body = {
@@ -73,7 +73,7 @@ class UserModel {
     if (userName.isNotEmpty) {
       return userName.value;
     }
-    final userInfo = await bind.mainGetLocalOption(key: 'user_info');
+    final userInfo = bind.mainGetLocalOption(key: 'user_info');
     if (userInfo.trim().isEmpty) {
       return '';
     }

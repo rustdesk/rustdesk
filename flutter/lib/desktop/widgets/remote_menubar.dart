@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:rxdart/rxdart.dart' as rxdart;
@@ -28,12 +27,14 @@ class MenubarState {
   late RxBool _pin;
 
   MenubarState() {
-    final s = Get.find<SharedPreferences>().getString(kStoreKey);
-    if (s == null) {
+    final s = bind.getLocalFlutterConfig(k: kStoreKey);
+    if (s.isEmpty) {
       _initSet(false, false);
+      return;
     }
+
     try {
-      final m = jsonDecode(s!);
+      final m = jsonDecode(s);
       if (m == null) {
         _initSet(false, false);
       } else {
@@ -77,11 +78,8 @@ class MenubarState {
   }
 
   save() async {
-    final success = await Get.find<SharedPreferences>()
-        .setString(kStoreKey, jsonEncode({'pin': _pin.value}.toString()));
-    if (!success) {
-      debugPrint('Failed to save remote menu bar state');
-    }
+    bind.setLocalFlutterConfig(
+        k: kStoreKey, v: jsonEncode({'pin': _pin.value}));
   }
 }
 

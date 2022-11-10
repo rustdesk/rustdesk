@@ -22,27 +22,26 @@ class _PeerTabPageState extends State<PeerTabPage>
 
   @override
   void initState() {
-    () async {
-      await bind.mainGetLocalOption(key: 'peer-tab-index').then((value) {
-        if (value == '') return;
-        final tab = int.parse(value);
-        _tabIndex.value = tab;
-      });
-      await bind.mainGetLocalOption(key: 'peer-card-ui-type').then((value) {
-        if (value == '') return;
-        final tab = int.parse(value);
-        peerCardUiType.value =
-            tab == PeerUiType.list.index ? PeerUiType.list : PeerUiType.grid;
-      });
-    }();
+    setPeer();
     super.initState();
+  }
+
+  setPeer() {
+    final index = bind.getLocalFlutterConfig(k: 'peer-tab-index');
+    if (index == '') return;
+    _tabIndex.value = int.parse(index);
+
+    final uiType = bind.getLocalFlutterConfig(k: 'peer-card-ui-type');
+    if (uiType == '') return;
+    peerCardUiType.value = int.parse(uiType) == PeerUiType.list.index
+        ? PeerUiType.list
+        : PeerUiType.grid;
   }
 
   // hard code for now
   Future<void> _handleTabSelection(int index) async {
     _tabIndex.value = index;
-    await bind.mainSetLocalOption(
-        key: 'peer-tab-index', value: index.toString());
+    await bind.setLocalFlutterConfig(k: 'peer-tab-index', v: index.toString());
     switch (index) {
       case 0:
         bind.mainLoadRecentPeers();
@@ -148,9 +147,8 @@ class _PeerTabPageState extends State<PeerTabPage>
                   decoration: peerCardUiType.value == type ? activeDeco : null,
                   child: InkWell(
                       onTap: () async {
-                        await bind.mainSetLocalOption(
-                            key: 'peer-card-ui-type',
-                            value: type.index.toString());
+                        await bind.setLocalFlutterConfig(
+                            k: 'peer-card-ui-type', v: type.index.toString());
                         peerCardUiType.value = type;
                       },
                       child: Icon(

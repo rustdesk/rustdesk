@@ -33,7 +33,8 @@ pub mod win_privacy;
 
 type Message = RendezvousMessage;
 
-pub type Childs = Arc<Mutex<(bool, HashMap<(String, String), Child>)>>;
+pub type Children = Arc<Mutex<(bool, HashMap<(String, String), Child>)>>;
+#[allow(dead_code)]
 type Status = (i32, bool, i64, String);
 
 lazy_static::lazy_static! {
@@ -43,6 +44,7 @@ lazy_static::lazy_static! {
 
 struct UIHostHandler;
 
+// to-do: dead code?
 fn check_connect_status(
     reconnect: bool,
 ) -> (
@@ -111,8 +113,8 @@ pub fn start(args: &mut [String]) {
         args[1] = id;
     }
     if args.is_empty() {
-        let child: Childs = Default::default();
-        std::thread::spawn(move || check_zombie(child));
+        let children: Children = Default::default();
+        std::thread::spawn(move || check_zombie(children));
         crate::common::check_software_update();
         frame.event_handler(UI {});
         frame.sciter_handler(UIHostHandler {});
@@ -662,10 +664,10 @@ impl sciter::host::HostHandler for UIHostHandler {
     }
 }
 
-pub fn check_zombie(childs: Childs) {
+pub fn check_zombie(children: Children) {
     let mut deads = Vec::new();
     loop {
-        let mut lock = childs.lock().unwrap();
+        let mut lock = children.lock().unwrap();
         let mut n = 0;
         for (id, c) in lock.1.iter_mut() {
             if let Ok(Some(_)) = c.try_wait() {

@@ -225,11 +225,7 @@ impl VideoQoS {
     }
 
     pub fn check_abr_config(&mut self) -> bool {
-        self.enable_abr = if let Some(v) = Config2::get().options.get("enable-abr") {
-            v != "N"
-        } else {
-            true // default is true
-        };
+        self.enable_abr = "N" != Config::get_option("enable-abr");
         self.enable_abr
     }
 

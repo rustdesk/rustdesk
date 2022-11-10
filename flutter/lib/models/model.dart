@@ -16,7 +16,6 @@ import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/models/user_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tuple/tuple.dart';
 import 'package:image/image.dart' as img2;
 import 'package:flutter_custom_cursor/flutter_custom_cursor.dart';
@@ -1219,7 +1218,7 @@ class FFI {
   Future<void> close() async {
     chatModel.close();
     if (imageModel.image != null && !isWebDesktop) {
-      await savePreference(id, cursorModel.x, cursorModel.y, canvasModel.x,
+      await setCanvasConfig(id, cursorModel.x, cursorModel.y, canvasModel.x,
           canvasModel.y, canvasModel.scale, ffiModel.pi.currentDisplay);
     }
     bind.sessionClose(id: id);
@@ -1267,9 +1266,10 @@ class PeerInfo {
   List<Display> displays = [];
 }
 
-Future<void> savePreference(String id, double xCursor, double yCursor,
+const canvasKey = 'canvas';
+
+Future<void> setCanvasConfig(String id, double xCursor, double yCursor,
     double xCanvas, double yCanvas, double scale, int currentDisplay) async {
-  SharedPreferences prefs = await SharedPreferences.getInstance();
   final p = <String, dynamic>{};
   p['xCursor'] = xCursor;
   p['yCursor'] = yCursor;
@@ -1277,25 +1277,27 @@ Future<void> savePreference(String id, double xCursor, double yCursor,
   p['yCanvas'] = yCanvas;
   p['scale'] = scale;
   p['currentDisplay'] = currentDisplay;
-  prefs.setString('peer$id', json.encode(p));
+  await bind.sessionSetFlutterConfig(id: id, k: canvasKey, v: jsonEncode(p));
 }
 
-Future<Map<String, dynamic>?> getPreference(String id) async {
+Future<Map<String, dynamic>?> getCanvasConfig(String id) async {
   if (!isWebDesktop) return null;
-  SharedPreferences prefs = await SharedPreferences.getInstance();
-  var p = prefs.getString('peer$id');
-  if (p == null) return null;
-  Map<String, dynamic> m = json.decode(p);
-  return m;
+  var p = await bind.sessionGetFlutterConfig(id: id, k: canvasKey);
+  if (p == null || p.isEmpty) return null;
+  try {
+    Map<String, dynamic> m = json.decode(p);
+    return m;
+  } catch (e) {
+    return null;
+  }
 }
 
 void removePreference(String id) async {
-  SharedPreferences prefs = await SharedPreferences.getInstance();
-  prefs.remove('peer$id');
+  await bind.sessionSetFlutterConfig(id: id, k: canvasKey, v: '');
 }
 
 Future<void> initializeCursorAndCanvas(FFI ffi) async {
-  var p = await getPreference(ffi.id);
+  var p = await getCanvasConfig(ffi.id);
   int currentDisplay = 0;
   if (p != null) {
     currentDisplay = p['currentDisplay'];

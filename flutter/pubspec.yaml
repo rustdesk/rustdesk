@@ -40,7 +40,6 @@ dependencies:
     #firebase_analytics: ^9.1.5
     package_info_plus: ^1.4.2
     url_launcher: ^6.0.9
-    shared_preferences: ^2.0.6
     toggle_switch: ^1.4.0
     dash_chat_2: ^0.0.14
     draggable_float_widget: ^0.0.2
