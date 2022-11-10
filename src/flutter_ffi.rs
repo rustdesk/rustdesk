@@ -440,7 +440,7 @@ pub fn session_resume_job(id: String, act_id: i32, is_remote: bool) {
 pub fn main_get_sound_inputs() -> Vec<String> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     return get_sound_inputs();
-    #[cfg(any(target_os = "android", target_os = "linux"))]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     vec![String::from("")]
 }
 

@@ -54,6 +54,7 @@ pub extern "C" fn rustdesk_core_main(args_len: *mut c_int) -> *mut *mut c_char {
 }
 
 // https://gist.github.com/iskakaushik/1c5b8aa75c77479c33c4320913eebef6
+#[cfg(windows)]
 fn rust_args_to_c_args(args: Vec<String>, outlen: *mut c_int) -> *mut *mut c_char {
     let mut v = vec![];
 

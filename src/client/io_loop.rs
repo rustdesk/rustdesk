@@ -23,9 +23,10 @@ use hbb_common::rendezvous_proto::ConnType;
 use hbb_common::tokio::{
     self,
     sync::mpsc,
-    sync::Mutex as TokioMutex,
     time::{self, Duration, Instant, Interval},
 };
+#[cfg(windows)]
+use hbb_common::tokio::sync::Mutex as TokioMutex;
 use hbb_common::{
     allow_err,
     message_proto::*,

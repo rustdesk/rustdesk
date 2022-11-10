@@ -190,11 +190,13 @@ pub fn set_local_option(key: String, value: String) {
     LocalConfig::set_option(key, value);
 }
 
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[inline]
 pub fn get_local_flutter_config(key: String) -> String {
     LocalConfig::get_flutter_config(&key)
 }
 
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[inline]
 pub fn set_local_flutter_config(key: String, value: String) {
     LocalConfig::set_flutter_config(key, value);
