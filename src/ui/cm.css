@@ -112,20 +112,44 @@ icon.recording {
     background: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAANpJREFUWEftltENAiEMhtsJ1NcynG6gI+gGugEOR591gppeQoIYSDBILxEeydH/57u2FMF4obE+TAOTwLoIhBDOAHBExG2n6rgR0akW640AM0sn4SWMiDycc7s8JjN7Ijro/k8NqAAR5RoeAPZxv2ggP9hCJiWZxtGbq3hqbJiBVHy4gVx8qAER8Yi4JFy6huVAKXemgb8icI+1b5KEitq0DOO/Nm1EEX1TK27p/bVvv36MOhl4EtHHbFF7jq8AoG1z08OAiFycczrkFNe6RrIet26NMQlMAuYEXiayryF/QQktAAAAAElFTkSuQmCC');
 }
 
-div.buttons {
-    width: *;
-    border-spacing: 0.5em;
-    text-align: center;
+div.outer_buttons {
+    flow:vertical;
+    border-spacing:8;
 }
 
-div.buttons button {
-    width: 80px;
-    height: 40px;
-    margin: 0.5em;
+div.inner_buttons {
+    flow:horizontal;
+    border-spacing:8;
+}
+
+button.control {
+    width: *;
+}
+
+button.elevate {
+    background:green;
+}
+
+button.elevate:active {
+    background: rgb(2, 104, 2);
+    border-color: color(hover-border);
+}
+
+button.elevate>span {
+    flow:horizontal;
+    width: *;
+}
+
+button.elevate>span>span {
+    margin-left:*; 
+    margin-right:*;
+}
+
+button.elevate>span>span>span {
+    vertical-align: middle;
 }
 
 button#disconnect {
-    width: 160px;
     background: color(blood-red);
     border: none;
 }
