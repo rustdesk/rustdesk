@@ -770,11 +770,11 @@ fn cm_inner_send(id: i32, data: Data) {
 pub fn can_elevate() -> bool {
     #[cfg(windows)]
     {
-        use crate::portable_service::client::{
-            PortableServiceStatus::NotStarted, PORTABLE_SERVICE_STATUS,
-        };
         return !crate::platform::is_installed()
-            && PORTABLE_SERVICE_STATUS.lock().unwrap().clone() == NotStarted;
+            && !crate::portable_service::client::PORTABLE_SERVICE_RUNNING
+                .lock()
+                .unwrap()
+                .clone();
     }
     #[cfg(not(windows))]
     return false;

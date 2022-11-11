@@ -20,7 +20,7 @@
 
 use super::{video_qos::VideoQoS, *};
 #[cfg(windows)]
-use crate::portable_service::client::{PortableServiceStatus, PORTABLE_SERVICE_STATUS};
+use crate::portable_service::client::PORTABLE_SERVICE_RUNNING;
 use hbb_common::tokio::sync::{
     mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
     Mutex as TokioMutex,
@@ -191,6 +191,7 @@ fn create_capturer(
     display: Display,
     use_yuv: bool,
     current: usize,
+    _portable_service_running: bool,
 ) -> ResultType<Box<dyn TraitCapturer>> {
     #[cfg(not(windows))]
     let c: Option<Box<dyn TraitCapturer>> = None;
@@ -252,7 +253,12 @@ fn create_capturer(
         None => {
             log::debug!("Create capturer dxgi|gdi");
             #[cfg(windows)]
-            return crate::portable_service::client::create_capturer(current, display, use_yuv);
+            return crate::portable_service::client::create_capturer(
+                current,
+                display,
+                use_yuv,
+                _portable_service_running,
+            );
             #[cfg(not(windows))]
             return Ok(Box::new(
                 Capturer::new(display, use_yuv).with_context(|| "Failed to create capturer")?,
@@ -282,7 +288,7 @@ pub fn test_create_capturer(privacy_mode_id: i32, timeout_millis: u64) -> bool {
     let test_begin = Instant::now();
     while test_begin.elapsed().as_millis() < timeout_millis as _ {
         if let Ok((_, current, display)) = get_current_display() {
-            if let Ok(_) = create_capturer(privacy_mode_id, display, true, current) {
+            if let Ok(_) = create_capturer(privacy_mode_id, display, true, current, false) {
                 return true;
             }
         }
@@ -331,7 +337,7 @@ impl DerefMut for CapturerInfo {
     }
 }
 
-fn get_capturer(use_yuv: bool) -> ResultType<CapturerInfo> {
+fn get_capturer(use_yuv: bool, portable_service_running: bool) -> ResultType<CapturerInfo> {
     #[cfg(target_os = "linux")]
     {
         if !scrap::is_x11() {
@@ -373,7 +379,13 @@ fn get_capturer(use_yuv: bool) -> ResultType<CapturerInfo> {
     } else {
         log::info!("In privacy mode, the peer side cannot watch the screen");
     }
-    let capturer = create_capturer(captuerer_privacy_mode_id, display, use_yuv, current)?;
+    let capturer = create_capturer(
+        captuerer_privacy_mode_id,
+        display,
+        use_yuv,
+        current,
+        portable_service_running,
+    )?;
     Ok(CapturerInfo {
         origin,
         width,
@@ -393,8 +405,12 @@ fn run(sp: GenericService) -> ResultType<()> {
     // ensure_inited() is needed because release_resouce() may be called.
     #[cfg(target_os = "linux")]
     super::wayland::ensure_inited()?;
+    #[cfg(windows)]
+    let last_portable_service_running = PORTABLE_SERVICE_RUNNING.lock().unwrap().clone();
+    #[cfg(not(windows))]
+    let last_portable_service_running = false;
 
-    let mut c = get_capturer(true)?;
+    let mut c = get_capturer(true, last_portable_service_running)?;
 
     let mut video_qos = VIDEO_QOS.lock().unwrap();
     video_qos.set_size(c.width as _, c.height as _);
@@ -472,11 +488,6 @@ fn run(sp: GenericService) -> ResultType<()> {
     let recorder: Arc<Mutex<Option<Recorder>>> = Default::default();
     #[cfg(windows)]
     start_uac_elevation_check();
-    #[cfg(windows)]
-    let portable_service_status = crate::portable_service::client::PORTABLE_SERVICE_STATUS
-        .lock()
-        .unwrap()
-        .clone();
 
     #[cfg(target_os = "linux")]
     let mut would_block_count = 0u32;
@@ -508,15 +519,14 @@ fn run(sp: GenericService) -> ResultType<()> {
             bail!("SWITCH");
         }
         #[cfg(windows)]
-        if portable_service_status != PORTABLE_SERVICE_STATUS.lock().unwrap().clone() {
+        if last_portable_service_running != PORTABLE_SERVICE_RUNNING.lock().unwrap().clone() {
             bail!("SWITCH");
         }
         check_privacy_mode_changed(&sp, c.privacy_mode_id)?;
         #[cfg(windows)]
         {
             if crate::platform::windows::desktop_changed()
-                && PORTABLE_SERVICE_STATUS.lock().unwrap().clone()
-                    == PortableServiceStatus::NotStarted
+                && !PORTABLE_SERVICE_RUNNING.lock().unwrap().clone()
             {
                 bail!("Desktop changed");
             }

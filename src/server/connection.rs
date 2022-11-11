@@ -429,31 +429,31 @@ impl Connection {
                 _ = second_timer.tick() => {
                     #[cfg(windows)]
                     {
-                        use crate::portable_service::client::{PORTABLE_SERVICE_STATUS, PortableServiceStatus::*};
-                        let uac = crate::video_service::IS_UAC_RUNNING.lock().unwrap().clone();
-                        if last_uac != uac {
-                            last_uac = uac;
-                            if PORTABLE_SERVICE_STATUS.lock().unwrap().clone()  == NotStarted {
-                                let mut misc = Misc::new();
-                                misc.set_uac(uac);
-                                let mut msg = Message::new();
-                                msg.set_misc(misc);
-                                conn.inner.send(msg.into());
-                            }
-                        }
-                        let foreground_window_elevated = crate::video_service::IS_FOREGROUND_WINDOW_ELEVATED.lock().unwrap().clone();
-                        if last_foreground_window_elevated != foreground_window_elevated {
-                            last_foreground_window_elevated = foreground_window_elevated;
-                            if PORTABLE_SERVICE_STATUS.lock().unwrap().clone()  == NotStarted {
-                                let mut misc = Misc::new();
-                                misc.set_foreground_window_elevated(foreground_window_elevated);
-                                let mut msg = Message::new();
-                                msg.set_misc(misc);
-                                conn.inner.send(msg.into());
-                            }
-                        }
                         if !is_installed {
-                            let show_elevation = PORTABLE_SERVICE_STATUS.lock().unwrap().clone() == NotStarted;
+                            let portable_service_running = crate::portable_service::client::PORTABLE_SERVICE_RUNNING.lock().unwrap().clone();
+                            let uac = crate::video_service::IS_UAC_RUNNING.lock().unwrap().clone();
+                            if last_uac != uac {
+                                last_uac = uac;
+                                if !portable_service_running {
+                                    let mut misc = Misc::new();
+                                    misc.set_uac(uac);
+                                    let mut msg = Message::new();
+                                    msg.set_misc(misc);
+                                    conn.inner.send(msg.into());
+                                }
+                            }
+                            let foreground_window_elevated = crate::video_service::IS_FOREGROUND_WINDOW_ELEVATED.lock().unwrap().clone();
+                            if last_foreground_window_elevated != foreground_window_elevated {
+                                last_foreground_window_elevated = foreground_window_elevated;
+                                if !portable_service_running {
+                                    let mut misc = Misc::new();
+                                    misc.set_foreground_window_elevated(foreground_window_elevated);
+                                    let mut msg = Message::new();
+                                    msg.set_misc(misc);
+                                    conn.inner.send(msg.into());
+                                }
+                            }
+                            let show_elevation = !portable_service_running;
                             conn.send_to_cm(ipc::Data::DataPortableService(ipc::DataPortableService::CmShowElevation(show_elevation)));
 
                         }
