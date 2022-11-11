@@ -49,8 +49,14 @@ impl super::service::Reset for StatePos {
 }
 
 impl StatePos {
+    #[inline]
     fn is_valid(&self) -> bool {
-        self.cursor_pos.0 != INVALID_CURSOR_POS && self.cursor_pos.1 != INVALID_CURSOR_POS
+        self.cursor_pos.0 != INVALID_CURSOR_POS
+    }
+
+    #[inline]
+    fn is_moved(&self, x: i32, y: i32) -> bool {
+        self.is_valid() && (self.cursor_pos.0 != x || self.cursor_pos.1 != y)
     }
 }
 
@@ -129,25 +135,23 @@ fn update_last_cursor_pos(x: i32, y: i32) {
 fn run_pos(sp: GenericService, state: &mut StatePos) -> ResultType<()> {
     if let Some((x, y)) = crate::get_cursor_pos() {
         update_last_cursor_pos(x, y);
-        if state.is_valid() {
-            if state.cursor_pos.0 != x || state.cursor_pos.1 != y {
-                let mut msg_out = Message::new();
-                msg_out.set_cursor_position(CursorPosition {
-                    x,
-                    y,
-                    ..Default::default()
-                });
-                let exclude = {
-                    let now = get_time();
-                    let lock = LATEST_INPUT_CURSOR.lock().unwrap();
-                    if now - lock.time < 300 {
-                        lock.conn
-                    } else {
-                        0
-                    }
-                };
-                sp.send_without(msg_out, exclude);
-            }
+        if state.is_moved(x, y) {
+            let mut msg_out = Message::new();
+            msg_out.set_cursor_position(CursorPosition {
+                x,
+                y,
+                ..Default::default()
+            });
+            let exclude = {
+                let now = get_time();
+                let lock = LATEST_INPUT_CURSOR.lock().unwrap();
+                if now - lock.time < 300 {
+                    lock.conn
+                } else {
+                    0
+                }
+            };
+            sp.send_without(msg_out, exclude);
         }
         state.cursor_pos = (x, y);
     }
