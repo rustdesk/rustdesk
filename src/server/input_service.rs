@@ -13,6 +13,8 @@ use std::{
     time::Instant,
 };
 
+const INVALID_CURSOR_POS: i32 = i32::MIN;
+
 #[derive(Default)]
 struct StateCursor {
     hcursor: u64,
@@ -28,14 +30,33 @@ impl super::service::Reset for StateCursor {
     }
 }
 
-#[derive(Default)]
 struct StatePos {
     cursor_pos: (i32, i32),
 }
 
+impl Default for StatePos {
+    fn default() -> Self {
+        Self {
+            cursor_pos: (INVALID_CURSOR_POS, INVALID_CURSOR_POS),
+        }
+    }
+}
+
 impl super::service::Reset for StatePos {
     fn reset(&mut self) {
-        self.cursor_pos = (0, 0);
+        self.cursor_pos = (INVALID_CURSOR_POS, INVALID_CURSOR_POS);
+    }
+}
+
+impl StatePos {
+    #[inline]
+    fn is_valid(&self) -> bool {
+        self.cursor_pos.0 != INVALID_CURSOR_POS
+    }
+
+    #[inline]
+    fn is_moved(&self, x: i32, y: i32) -> bool {
+        self.is_valid() && (self.cursor_pos.0 != x || self.cursor_pos.1 != y)
     }
 }
 
@@ -114,8 +135,7 @@ fn update_last_cursor_pos(x: i32, y: i32) {
 fn run_pos(sp: GenericService, state: &mut StatePos) -> ResultType<()> {
     if let Some((x, y)) = crate::get_cursor_pos() {
         update_last_cursor_pos(x, y);
-        if state.cursor_pos.0 != x || state.cursor_pos.1 != y {
-            state.cursor_pos = (x, y);
+        if state.is_moved(x, y) {
             let mut msg_out = Message::new();
             msg_out.set_cursor_position(CursorPosition {
                 x,
@@ -133,6 +153,7 @@ fn run_pos(sp: GenericService, state: &mut StatePos) -> ResultType<()> {
             };
             sp.send_without(msg_out, exclude);
         }
+        state.cursor_pos = (x, y);
     }
 
     sp.snapshot(|sps| {
