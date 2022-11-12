@@ -305,7 +305,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Translate mode", "Modo traducido"),
         ("Use temporary password", "Usar contraseña temporal"),
         ("Use permanent password", "Usar contraseña permamente"),
-        ("Use both passwords", "Usar ambas comtraseñas"),
+        ("Use both passwords", "Usar ambas contraseñas"),
         ("Set permanent password", "Establecer contraseña permamente"),
         ("Set temporary password length", "Establecer largo de contraseña temporal"),
         ("Enable Remote Restart", "Activar reinicio remoto"),
