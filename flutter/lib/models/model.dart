@@ -15,6 +15,7 @@ import 'package:flutter_hbb/models/file_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/models/user_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
+import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:tuple/tuple.dart';
 import 'package:image/image.dart' as img2;
@@ -189,6 +190,8 @@ class FfiModel with ChangeNotifier {
             rustDeskWinManager.newRemoteDesktop(arg);
           });
         }
+      } else if (name == 'alias') {
+        handleAliasChanged(evt);
       }
     };
   }
@@ -196,6 +199,13 @@ class FfiModel with ChangeNotifier {
   /// Bind the event listener to receive events from the Rust core.
   updateEventListener(String peerId) {
     platformFFI.setEventCallback(startEventListener(peerId));
+  }
+
+  handleAliasChanged(Map<String, dynamic> evt) {
+    final rxAlias = PeerStringOption.find(evt['id'], 'alias');
+    if (rxAlias.value != evt['alias']) {
+      rxAlias.value = evt['alias'];
+    }
   }
 
   handleSwitchDisplay(Map<String, dynamic> evt) {
@@ -927,7 +937,7 @@ class CursorModel with ChangeNotifier {
       // my throw exception, because the listener maybe already dispose
       notifyListeners();
     } catch (e) {
-      debugPrint('notify cursor: $e');
+      debugPrint('WARNING: updateCursorId $id, without notifyListeners(). $e');
     }
   }
 
@@ -980,6 +990,9 @@ class CursorModel with ChangeNotifier {
       _hotx = tmp.item2;
       _hoty = tmp.item3;
       notifyListeners();
+    } else {
+      debugPrint(
+          'WARNING: updateCursorId $id, cache is ${_cache == null ? "null" : "not null"}. without notifyListeners()');
     }
   }
 

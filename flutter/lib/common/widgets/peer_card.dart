@@ -584,7 +584,7 @@ abstract class BasePeerCard extends StatelessWidget {
       submit() async {
         isInProgress.value = true;
         name = controller.text;
-        await bind.mainSetPeerOption(id: id, key: 'alias', value: name);
+        await bind.mainSetPeerAlias(id: id, alias: name);
         if (isAddressBook) {
           gFFI.abModel.setPeerAlias(id, name);
           await gFFI.abModel.pushAb();
