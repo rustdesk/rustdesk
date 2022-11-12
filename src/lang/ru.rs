@@ -387,7 +387,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Please Select the screen to be shared(Operate on the peer side).", "Пожалуйста, выберите экран для совместного использования (работайте на одноранговой стороне)."),
         ("Show RustDesk", "Показать RustDesk"),
         ("This PC", "Этот компьютер"),
-        ("or", ""),
-        ("Continue with", ""),
+        ("or", "или"),
+        ("Continue with", "Продолжить с"),
     ].iter().cloned().collect();
 }
