@@ -1530,7 +1530,7 @@ pub async fn handle_test_delay(t: TestDelay, peer: &mut Stream) {
 }
 
 #[inline]
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(feature = "flutter")))]
 fn check_scroll_on_mac(mask: i32, x: i32, y: i32) -> bool {
     if mask & 3 != 3 {
         return false;
@@ -1593,7 +1593,7 @@ pub fn send_mouse(
     if command {
         mouse_event.modifiers.push(ControlKey::Meta.into());
     }
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", not(feature = "flutter")))]
     if check_scroll_on_mac(mask, x, y) {
         mouse_event.modifiers.push(ControlKey::Scroll.into());
     }
