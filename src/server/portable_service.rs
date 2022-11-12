@@ -469,17 +469,20 @@ pub mod client {
         where
             Self: Sized,
         {
-            Self::set_para(CapturerPara {
-                current_display,
-                use_yuv,
-                timeout_ms: 33,
-            });
+            let mut option = SHMEM.lock().unwrap();
+            let shmem = option.as_mut().unwrap();
+            Self::set_para(
+                shmem,
+                CapturerPara {
+                    current_display,
+                    use_yuv,
+                    timeout_ms: 33,
+                },
+            );
             CapturerPortable {}
         }
 
-        fn set_para(para: CapturerPara) {
-            let mut option = SHMEM.lock().unwrap();
-            let shmem = option.as_mut().unwrap();
+        fn set_para(shmem: &mut SharedMemory, para: CapturerPara) {
             let para_ptr = &para as *const CapturerPara as *const u8;
             let para_data;
             unsafe {
@@ -497,11 +500,14 @@ pub mod client {
                 let para_ptr = shmem.as_ptr().add(ADDR_CAPTURER_PARA);
                 let para = para_ptr as *const CapturerPara;
                 if use_yuv != (*para).use_yuv {
-                    Self::set_para(CapturerPara {
-                        current_display: (*para).current_display,
-                        use_yuv,
-                        timeout_ms: (*para).timeout_ms,
-                    });
+                    Self::set_para(
+                        shmem,
+                        CapturerPara {
+                            current_display: (*para).current_display,
+                            use_yuv,
+                            timeout_ms: (*para).timeout_ms,
+                        },
+                    );
                 }
             }
         }
@@ -514,11 +520,14 @@ pub mod client {
                 let para_ptr = base.add(ADDR_CAPTURER_PARA);
                 let para = para_ptr as *const CapturerPara;
                 if timeout.as_millis() != (*para).timeout_ms as _ {
-                    Self::set_para(CapturerPara {
-                        current_display: (*para).current_display,
-                        use_yuv: (*para).use_yuv,
-                        timeout_ms: timeout.as_millis() as _,
-                    });
+                    Self::set_para(
+                        shmem,
+                        CapturerPara {
+                            current_display: (*para).current_display,
+                            use_yuv: (*para).use_yuv,
+                            timeout_ms: timeout.as_millis() as _,
+                        },
+                    );
                 }
                 if utils::counter_ready(base.add(ADDR_CAPTURE_FRAME_COUNTER)) {
                     let frame_len_ptr = base.add(ADDR_CAPTURE_FRAME_SIZE);
