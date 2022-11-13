@@ -340,10 +340,8 @@ class ImagePaint extends StatelessWidget {
       return FlutterCustomMemoryImageCursor(
         pixbuf: cache.data,
         key: key,
-        // hotx: cache.hotx,
-        // hoty: cache.hoty,
-        hotx: 0,
-        hoty: 0,
+        hotx: cache.hotx,
+        hoty: cache.hoty,
         imageWidth: (cache.width * cache.scale).toInt(),
         imageHeight: (cache.height * cache.scale).toInt(),
       );
@@ -488,11 +486,19 @@ class CursorPaint extends StatelessWidget {
     final m = Provider.of<CursorModel>(context);
     final c = Provider.of<CanvasModel>(context);
     // final adjust = m.adjustForKeyboard();
+    double hotx = m.hotx;
+    double hoty = m.hoty;
+    if (m.image == null) {
+      if (m.defaultCache != null) {
+        hotx = m.defaultCache!.hotx;
+        hoty = m.defaultCache!.hoty;
+      }
+    }
     return CustomPaint(
       painter: ImagePainter(
-          image: m.image,
-          x: m.x - m.hotx + c.x / c.scale,
-          y: m.y - m.hoty + c.y / c.scale,
+          image: m.image ?? m.defaultImage,
+          x: m.x - hotx + c.x / c.scale,
+          y: m.y - hoty + c.y / c.scale,
           scale: c.scale),
     );
   }
