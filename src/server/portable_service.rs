@@ -261,7 +261,13 @@ pub mod server {
                 let para = para_ptr as *const CapturerPara;
                 let current_display = (*para).current_display;
                 let use_yuv = (*para).use_yuv;
+                let use_yuv_set = (*para).use_yuv_set;
                 let timeout_ms = (*para).timeout_ms;
+                if !use_yuv_set {
+                    c = None;
+                    std::thread::sleep(spf);
+                    continue;
+                }
                 if c.is_none() {
                     *crate::video_service::CURRENT_DISPLAY.lock().unwrap() = current_display;
                     let (_, _current, display) = get_current_display().unwrap();
@@ -476,6 +482,7 @@ pub mod client {
                 CapturerPara {
                     current_display,
                     use_yuv,
+                    use_yuv_set: false,
                     timeout_ms: 33,
                 },
             );
@@ -499,16 +506,15 @@ pub mod client {
             unsafe {
                 let para_ptr = shmem.as_ptr().add(ADDR_CAPTURER_PARA);
                 let para = para_ptr as *const CapturerPara;
-                if use_yuv != (*para).use_yuv {
-                    Self::set_para(
-                        shmem,
-                        CapturerPara {
-                            current_display: (*para).current_display,
-                            use_yuv,
-                            timeout_ms: (*para).timeout_ms,
-                        },
-                    );
-                }
+                Self::set_para(
+                    shmem,
+                    CapturerPara {
+                        current_display: (*para).current_display,
+                        use_yuv,
+                        use_yuv_set: true,
+                        timeout_ms: (*para).timeout_ms,
+                    },
+                );
             }
         }
 
@@ -525,6 +531,7 @@ pub mod client {
                         CapturerPara {
                             current_display: (*para).current_display,
                             use_yuv: (*para).use_yuv,
+                            use_yuv_set: (*para).use_yuv_set,
                             timeout_ms: timeout.as_millis() as _,
                         },
                     );
@@ -732,5 +739,6 @@ pub mod client {
 struct CapturerPara {
     current_display: usize,
     use_yuv: bool,
+    use_yuv_set: bool,
     timeout_ms: i32,
 }
