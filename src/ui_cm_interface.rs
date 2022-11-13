@@ -15,7 +15,7 @@ use std::iter::FromIterator;
 use clipboard::{cliprdr::CliprdrClientContext, empty_clipboard, set_conn_enabled, ContextSend};
 use serde_derive::Serialize;
 
-use crate::ipc::{self, new_listener, Connection, Data};
+use crate::ipc::{self, Connection, Data};
 #[cfg(windows)]
 use hbb_common::tokio::sync::Mutex as TokioMutex;
 use hbb_common::{
@@ -434,7 +434,7 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
         allow_err!(crate::ui::win_privacy::start());
     });
 
-    match new_listener("_cm").await {
+    match ipc::new_listener("_cm").await {
         Ok(mut incoming) => {
             while let Some(result) = incoming.next().await {
                 match result {

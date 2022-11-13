@@ -530,7 +530,7 @@ fn run(sp: GenericService) -> ResultType<()> {
                         frame_controller.set_send(now, send_conn_ids);
                     }
                     scrap::Frame::RAW(data) => {
-                        if (data.len() != 0) {
+                        if data.len() != 0 {
                             let send_conn_ids =
                                 handle_one_frame(&sp, data, ms, &mut encoder, recorder.clone())?;
                             frame_controller.set_send(now, send_conn_ids);

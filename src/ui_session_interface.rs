@@ -1,10 +1,10 @@
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::client::get_key_state;
+use crate::client::{get_key_state, SERVER_KEYBOARD_ENABLED};
 use crate::client::io_loop::Remote;
 use crate::client::{
     check_if_retry, handle_hash, handle_login_from_ui, handle_test_delay, input_os_password,
     load_config, send_mouse, start_video_audio_threads, FileManager, Key, LoginConfigHandler,
-    QualityStatus, KEY_MAP, SERVER_KEYBOARD_ENABLED,
+    QualityStatus, KEY_MAP,
 };
 #[cfg(target_os = "linux")]
 use crate::common::IS_X11;
@@ -16,8 +16,8 @@ use hbb_common::tokio::{self, sync::mpsc};
 use hbb_common::{allow_err, message_proto::*};
 use hbb_common::{fs, get_version_number, log, Stream};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use rdev::Keyboard as RdevKeyboard;
-use rdev::{Event, EventType, EventType::*, Key as RdevKey, KeyboardState};
+use rdev::{Keyboard as RdevKeyboard, KeyboardState};
+use rdev::{Event, EventType, EventType::*, Key as RdevKey};
 use std::collections::{HashMap, HashSet};
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -30,6 +30,7 @@ pub static HOTKEY_HOOKED: AtomicBool = AtomicBool::new(false);
 #[cfg(windows)]
 static mut IS_ALT_GR: bool = false;
 #[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::flutter::FlutterHandler;
 
 lazy_static::lazy_static! {
@@ -1570,6 +1571,7 @@ fn get_all_hotkey_state(
 }
 
 #[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn send_key_event_to_session(event: rdev::Event) {
     if let Some(handler) = CUR_SESSION.lock().unwrap().as_ref() {
         handler.handle_hotkey_event(event);

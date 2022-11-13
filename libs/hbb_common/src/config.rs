@@ -8,7 +8,6 @@ use std::{
 };
 
 use anyhow::Result;
-use directories_next::ProjectDirs;
 use rand::Rng;
 use serde_derive::{Deserialize, Serialize};
 use sodiumoxide::crypto::sign;
@@ -375,12 +374,15 @@ impl Config {
     pub fn get_home() -> PathBuf {
         #[cfg(any(target_os = "android", target_os = "ios"))]
         return Self::path(APP_HOME_DIR.read().unwrap().as_str());
-        if let Some(path) = dirs_next::home_dir() {
-            patch(path)
-        } else if let Ok(path) = std::env::current_dir() {
-            path
-        } else {
-            std::env::temp_dir()
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        {
+            if let Some(path) = dirs_next::home_dir() {
+                patch(path)
+            } else if let Ok(path) = std::env::current_dir() {
+                path
+            } else {
+                std::env::temp_dir()
+            }
         }
     }
 
@@ -391,17 +393,20 @@ impl Config {
             path.push(p);
             return path;
         }
-        #[cfg(not(target_os = "macos"))]
-        let org = "";
-        #[cfg(target_os = "macos")]
-        let org = ORG.read().unwrap().clone();
-        // /var/root for root
-        if let Some(project) = ProjectDirs::from("", &org, &*APP_NAME.read().unwrap()) {
-            let mut path = patch(project.config_dir().to_path_buf());
-            path.push(p);
-            return path;
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        {
+            #[cfg(not(target_os = "macos"))]
+            let org = "";
+            #[cfg(target_os = "macos")]
+            let org = ORG.read().unwrap().clone();
+            // /var/root for root
+            if let Some(project) = directories_next::ProjectDirs::from("", &org, &*APP_NAME.read().unwrap()) {
+                let mut path = patch(project.config_dir().to_path_buf());
+                path.push(p);
+                return path;
+            }
+            return "".into();
         }
-        return "".into();
     }
 
     #[allow(unreachable_code)]
@@ -580,16 +585,19 @@ impl Config {
                     .to_string(),
             );
         }
-        let mut id = 0u32;
+
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        if let Ok(Some(ma)) = mac_address::get_mac_address() {
-            for x in &ma.bytes()[2..] {
-                id = (id << 8) | (*x as u32);
+        {
+            let mut id = 0u32;
+            if let Ok(Some(ma)) = mac_address::get_mac_address() {
+                for x in &ma.bytes()[2..] {
+                    id = (id << 8) | (*x as u32);
+                }
+                id = id & 0x1FFFFFFF;
+                Some(id.to_string())
+            } else {
+                None
             }
-            id = id & 0x1FFFFFFF;
-            Some(id.to_string())
-        } else {
-            None
         }
     }
 
