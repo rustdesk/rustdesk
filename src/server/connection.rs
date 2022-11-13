@@ -27,9 +27,11 @@ use scrap::android::call_main_service_mouse_input;
 use serde_json::{json, value::Value};
 use sha2::{Digest, Sha256};
 use std::sync::{
-    atomic::{AtomicI64, Ordering},
+    atomic::AtomicI64,
     mpsc as std_mpsc,
 };
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use std::sync::atomic::Ordering;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use system_shutdown;
 

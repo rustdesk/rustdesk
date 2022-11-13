@@ -5,7 +5,7 @@ use hbb_common::{
     allow_err,
     anyhow::{anyhow, Context},
     bail,
-    config::{Config, Config2, CONNECT_TIMEOUT, RELAY_PORT},
+    config::{Config, CONNECT_TIMEOUT, RELAY_PORT},
     log,
     message_proto::*,
     protobuf::{Enum, Message as _},
@@ -14,7 +14,11 @@ use hbb_common::{
     sodiumoxide::crypto::{box_, secretbox, sign},
     timeout, tokio, ResultType, Stream,
 };
-use service::{GenericService, Service, ServiceTmpl, Subscriber};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use hbb_common::config::Config2;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use service::ServiceTmpl;
+use service::{GenericService, Service, Subscriber};
 use std::{
     collections::HashMap,
     net::SocketAddr,

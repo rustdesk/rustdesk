@@ -16,8 +16,6 @@ use hbb_common::{
 // use crate::hbbs_http::account::AuthResult;
 
 use crate::flutter::{self, SESSIONS};
-#[cfg(target_os = "android")]
-use crate::start_server;
 use crate::ui_interface::{self, *};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::ui_session_interface::CUR_SESSION;
@@ -838,7 +836,12 @@ pub fn main_is_root() -> bool {
 }
 
 pub fn get_double_click_time() -> SyncReturn<i32> {
-    SyncReturn(crate::platform::get_double_click_time() as _)
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        return SyncReturn(crate::platform::get_double_click_time() as _);
+    }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    SyncReturn(500i32)
 }
 
 pub fn main_start_dbus_server() {
@@ -1133,7 +1136,7 @@ pub mod server_side {
         JNIEnv,
     };
 
-    use hbb_common::{config::Config, log};
+    use hbb_common::log;
 
     use crate::start_server;
 
