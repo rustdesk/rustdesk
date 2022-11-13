@@ -476,7 +476,12 @@ pub mod client {
         unsafe {
             libc::memset(shmem.as_ptr() as _, 0, shmem.len() as _);
         }
-        if crate::common::run_me(vec!["--portable-service"]).is_err() {
+        if crate::platform::run_background(
+            &std::env::current_exe()?.to_string_lossy().to_string(),
+            "--portable-service",
+        )
+        .is_err()
+        {
             *SHMEM.lock().unwrap() = None;
             bail!("Failed to run portable service process");
         }
