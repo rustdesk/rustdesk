@@ -172,11 +172,28 @@ mod utils {
         }
     }
 
-    pub fn increase_counter(ptr: *mut u8) {
+    pub fn counter_equal(counter: *const u8) -> bool {
         unsafe {
-            let i = ptr_to_i32(ptr);
-            let v = i32_to_vec(i + 1);
-            std::ptr::copy_nonoverlapping(v.as_ptr(), ptr, size_of::<i32>());
+            let wptr = counter;
+            let rptr = counter.add(size_of::<i32>());
+            let iw = ptr_to_i32(wptr);
+            let ir = ptr_to_i32(rptr);
+            iw == ir
+        }
+    }
+
+    pub fn increase_counter(counter: *mut u8) {
+        unsafe {
+            let wptr = counter;
+            let rptr = counter.add(size_of::<i32>());
+            let iw = ptr_to_i32(counter);
+            let ir = ptr_to_i32(counter);
+            let v = i32_to_vec(iw + 1);
+            std::ptr::copy_nonoverlapping(v.as_ptr(), wptr, size_of::<i32>());
+            if ir == iw + 1 {
+                let v = i32_to_vec(iw);
+                std::ptr::copy_nonoverlapping(v.as_ptr(), rptr, size_of::<i32>());
+            }
         }
     }
 
@@ -212,7 +229,7 @@ pub mod server {
         }));
         for th in threads.drain(..) {
             th.join().unwrap();
-            log::info!("all thread joined");
+            log::info!("thread joined");
         }
     }
 
@@ -251,11 +268,11 @@ pub mod server {
         let mut last_use_yuv = false;
         let mut last_timeout_ms: i32 = 33;
         let mut spf = Duration::from_millis(last_timeout_ms as _);
+        let mut first_frame_captured = false;
         loop {
             if EXIT.lock().unwrap().clone() {
                 break;
             }
-            let start = Instant::now();
             unsafe {
                 let para_ptr = shmem.as_ptr().add(ADDR_CAPTURER_PARA);
                 let para = para_ptr as *const CapturerPara;
@@ -276,6 +293,7 @@ pub mod server {
                             c = {
                                 last_current_display = current_display;
                                 last_use_yuv = use_yuv;
+                                first_frame_captured = false;
                                 // dxgi failed at loadFrame on my PC.
                                 // to-do: try dxgi on another PC.
                                 v.set_gdi();
@@ -308,6 +326,12 @@ pub mod server {
                         spf = Duration::from_millis(timeout_ms as _);
                     }
                 }
+                if first_frame_captured {
+                    if !utils::counter_equal(shmem.as_ptr().add(ADDR_CAPTURE_FRAME_COUNTER)) {
+                        std::thread::sleep(spf);
+                        continue;
+                    }
+                }
                 match c.as_mut().unwrap().frame(spf) {
                     Ok(f) => {
                         let len = f.0.len();
@@ -316,6 +340,7 @@ pub mod server {
                         shmem.write(ADDR_CAPTURE_FRAME, f.0);
                         shmem.write(ADDR_CAPTURE_WOULDBLOCK, &utils::i32_to_vec(TRUE));
                         utils::increase_counter(shmem.as_ptr().add(ADDR_CAPTURE_FRAME_COUNTER));
+                        first_frame_captured = true;
                     }
                     Err(e) => {
                         if e.kind() != std::io::ErrorKind::WouldBlock {
@@ -329,10 +354,6 @@ pub mod server {
                         }
                     }
                 }
-            }
-            let elapsed = start.elapsed();
-            if elapsed < spf {
-                std::thread::sleep(spf - elapsed);
             }
         }
     }
