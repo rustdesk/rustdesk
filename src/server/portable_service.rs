@@ -47,6 +47,7 @@ const ADDR_CAPTURE_FRAME: usize =
 const IPC_PROFIX: &str = "_portable_service";
 pub const SHMEM_NAME: &str = "_portable_service";
 const MAX_NACK: usize = 3;
+const MAX_DXGI_FAIL_TIME: usize = 5;
 
 pub struct SharedMemory {
     inner: Shmem,
@@ -269,6 +270,7 @@ pub mod server {
         let mut last_timeout_ms: i32 = 33;
         let mut spf = Duration::from_millis(last_timeout_ms as _);
         let mut first_frame_captured = false;
+        let mut dxgi_failed_times = 0;
         loop {
             if EXIT.lock().unwrap().clone() {
                 break;
@@ -294,9 +296,10 @@ pub mod server {
                                 last_current_display = current_display;
                                 last_use_yuv = use_yuv;
                                 first_frame_captured = false;
-                                // dxgi failed at loadFrame on my PC.
-                                // to-do: try dxgi on another PC.
-                                v.set_gdi();
+                                if dxgi_failed_times > MAX_DXGI_FAIL_TIME {
+                                    dxgi_failed_times = 0;
+                                    v.set_gdi();
+                                }
                                 Some(v)
                             }
                         }
@@ -341,14 +344,26 @@ pub mod server {
                         shmem.write(ADDR_CAPTURE_WOULDBLOCK, &utils::i32_to_vec(TRUE));
                         utils::increase_counter(shmem.as_ptr().add(ADDR_CAPTURE_FRAME_COUNTER));
                         first_frame_captured = true;
+                        dxgi_failed_times = 0;
                     }
                     Err(e) => {
                         if e.kind() != std::io::ErrorKind::WouldBlock {
-                            log::error!("capture frame failed:{:?}", e);
-                            crate::platform::try_change_desktop();
-                            c = None;
-                            shmem.write(ADDR_CAPTURE_WOULDBLOCK, &utils::i32_to_vec(FALSE));
-                            continue;
+                            // DXGI_ERROR_INVALID_CALL after each success on Microsoft GPU driver
+                            // log::error!("capture frame failed:{:?}", e);
+                            if crate::platform::windows::desktop_changed() {
+                                crate::platform::try_change_desktop();
+                                c = None;
+                                std::thread::sleep(spf);
+                                continue;
+                            }
+                            if !c.as_ref().unwrap().is_gdi() {
+                                dxgi_failed_times += 1;
+                            }
+                            if dxgi_failed_times > MAX_DXGI_FAIL_TIME {
+                                c = None;
+                                shmem.write(ADDR_CAPTURE_WOULDBLOCK, &utils::i32_to_vec(FALSE));
+                                std::thread::sleep(spf);
+                            }
                         } else {
                             shmem.write(ADDR_CAPTURE_WOULDBLOCK, &utils::i32_to_vec(TRUE));
                         }
@@ -512,6 +527,7 @@ pub mod client {
                     timeout_ms: 33,
                 },
             );
+            shmem.write(ADDR_CAPTURE_WOULDBLOCK, &utils::i32_to_vec(TRUE));
             CapturerPortable {}
         }
 
@@ -586,6 +602,7 @@ pub mod client {
             }
         }
 
+        // control by itself
         fn is_gdi(&self) -> bool {
             true
         }
