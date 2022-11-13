@@ -201,3 +201,25 @@ class RemoteCountState {
 
   static RxInt find() => Get.find<RxInt>(tag: tag());
 }
+
+class PeerStringOption {
+  static String tag(String id, String opt) => 'peer_{$opt}_$id';
+
+  static void init(String id, String opt, String Function() init_getter) {
+    final key = tag(id, opt);
+    if (!Get.isRegistered(tag: key)) {
+      final RxString value = RxString(init_getter());
+      Get.put(value, tag: key);
+    }
+  }
+
+  static void delete(String id, String opt) {
+    final key = tag(id, opt);
+    if (Get.isRegistered(tag: key)) {
+      Get.delete(tag: key);
+    }
+  }
+
+  static RxString find(String id, String opt) =>
+      Get.find<RxString>(tag: tag(id, opt));
+}

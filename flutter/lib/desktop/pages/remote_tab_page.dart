@@ -128,6 +128,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             onWindowCloseButton: handleWindowCloseButton,
             tail: const AddButton().paddingOnly(left: 10),
             pageViewBuilder: (pageView) => pageView,
+            labelGetter: DesktopTab.labelGetterAlias,
             tabBuilder: (key, icon, label, themeConf) => Obx(() {
               final connectionType = ConnectionTypeState.find(key);
               if (!connectionType.isValid()) {

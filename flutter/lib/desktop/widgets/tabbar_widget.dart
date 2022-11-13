@@ -9,6 +9,7 @@ import 'package:flutter/material.dart' hide TabBarTheme;
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/main.dart';
+import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
@@ -250,6 +251,15 @@ class DesktopTab extends StatelessWidget {
     tabType = controller.tabType;
     isMainWindow =
         tabType == DesktopTabType.main || tabType == DesktopTabType.cm;
+  }
+
+  static RxString labelGetterAlias(String peerId) {
+    final opt = 'alias';
+    PeerStringOption.init(peerId, opt, () {
+      final alias = bind.mainGetPeerOptionSync(id: peerId, key: opt);
+      return alias.isEmpty ? peerId : alias;
+    });
+    return PeerStringOption.find(peerId, opt);
   }
 
   @override
