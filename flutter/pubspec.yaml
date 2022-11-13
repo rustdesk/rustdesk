@@ -72,7 +72,7 @@ dependencies:
     flutter_custom_cursor:
         git:
             url: https://github.com/Kingtous/rustdesk_flutter_custom_cursor
-            ref: dec2166e881c47d922e1edc484d10d2cd5c2103b
+            ref: ac3c1bf816197863cdcfa42d008962ff644132b0
     window_size:
         git:
             url: https://github.com/google/flutter-desktop-embedding.git
