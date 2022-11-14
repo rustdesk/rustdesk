@@ -721,11 +721,14 @@ class CursorData {
               height: (height * scale).toInt(),
             )
             .getBytes(format: img2.Format.bgra);
-        hotx = (width * scale) / 2;
-        hoty = (height * scale) / 2;
       }
     }
     this.scale = scale;
+    if (hotx > 0 && hoty > 0) {
+      // default cursor data
+      hotx = (width * scale) / 2;
+      hoty = (height * scale) / 2;
+    }
     return scale;
   }
 
@@ -737,6 +740,7 @@ class CursorData {
 
 class CursorModel with ChangeNotifier {
   ui.Image? _image;
+  ui.Image? _defaultImage;
   final _images = <int, Tuple3<ui.Image, double, double>>{};
   CursorData? _cache;
   final _defaultCacheId = -1;
@@ -749,13 +753,14 @@ class CursorModel with ChangeNotifier {
   double _hoty = 0;
   double _displayOriginX = 0;
   double _displayOriginY = 0;
-  bool got_mouse_control = true;
-  DateTime _last_peer_mouse = DateTime.now()
+  bool gotMouseControl = true;
+  DateTime _lastPeerMouse = DateTime.now()
       .subtract(Duration(milliseconds: 2 * kMouseControlTimeoutMSec));
   String id = '';
   WeakReference<FFI> parent;
 
   ui.Image? get image => _image;
+  ui.Image? get defaultImage => _defaultImage;
   CursorData? get cache => _cache;
   CursorData? get defaultCache => _getDefaultCache();
 
@@ -767,34 +772,52 @@ class CursorModel with ChangeNotifier {
   double get hotx => _hotx;
   double get hoty => _hoty;
 
-  bool get is_peer_control_protected =>
-      DateTime.now().difference(_last_peer_mouse).inMilliseconds <
+  bool get isPeerControlProtected =>
+      DateTime.now().difference(_lastPeerMouse).inMilliseconds <
       kMouseControlTimeoutMSec;
 
-  CursorModel(this.parent);
+  CursorModel(this.parent) {
+    _getDefaultImage();
+    _getDefaultCache();
+  }
 
   Set<String> get cachedKeys => _cacheKeys;
   addKey(String key) => _cacheKeys.add(key);
 
+  Future<ui.Image?> _getDefaultImage() async {
+    if (_defaultImage == null) {
+      final defaultImg = defaultCursorImage!;
+      // This function is called only one time, no need to care about the performance.
+      Uint8List data = defaultImg.getBytes(format: img2.Format.rgba);
+      _defaultImage = await img.decodeImageFromPixels(
+          data, defaultImg.width, defaultImg.height, ui.PixelFormat.rgba8888);
+    }
+    return _defaultImage;
+  }
+
   CursorData? _getDefaultCache() {
     if (_defaultCache == null) {
+      Uint8List data;
+      double scale = 1.0;
+      double hotx = (defaultCursorImage!.width * scale) / 2;
+      double hoty = (defaultCursorImage!.height * scale) / 2;
       if (Platform.isWindows) {
-        Uint8List data = defaultCursorImage!.getBytes(format: img2.Format.bgra);
-        _hotx = defaultCursorImage!.width / 2;
-        _hoty = defaultCursorImage!.height / 2;
-
-        _defaultCache = CursorData(
-          peerId: id,
-          id: _defaultCacheId,
-          image: defaultCursorImage?.clone(),
-          scale: 1.0,
-          data: data,
-          hotx: _hotx,
-          hoty: _hoty,
-          width: defaultCursorImage!.width,
-          height: defaultCursorImage!.height,
-        );
+        data = defaultCursorImage!.getBytes(format: img2.Format.bgra);
+      } else {
+        data = Uint8List.fromList(img2.encodePng(defaultCursorImage!));
       }
+
+      _defaultCache = CursorData(
+        peerId: id,
+        id: _defaultCacheId,
+        image: defaultCursorImage?.clone(),
+        scale: scale,
+        data: data,
+        hotx: hotx,
+        hoty: hoty,
+        width: defaultCursorImage!.width,
+        height: defaultCursorImage!.height,
+      );
     }
     return _defaultCache;
   }
@@ -926,13 +949,15 @@ class CursorModel with ChangeNotifier {
     var height = int.parse(evt['height']);
     List<dynamic> colors = json.decode(evt['colors']);
     final rgba = Uint8List.fromList(colors.map((s) => s as int).toList());
-    var pid = parent.target?.id;
     final image = await img.decodeImageFromPixels(
         rgba, width, height, ui.PixelFormat.rgba8888);
-    if (parent.target?.id != pid) return;
     _image = image;
-    _images[id] = Tuple3(image, _hotx, _hoty);
-    await _updateCache(image, id, width, height);
+    if (await _updateCache(image, id, width, height)) {
+      _images[id] = Tuple3(image, _hotx, _hoty);
+    } else {
+      _hotx = 0;
+      _hoty = 0;
+    }
     try {
       // my throw exception, because the listener maybe already dispose
       notifyListeners();
@@ -941,44 +966,33 @@ class CursorModel with ChangeNotifier {
     }
   }
 
-  _updateCache(ui.Image image, int id, int w, int h) async {
-    Uint8List? data;
-    img2.Image? image2;
+  Future<bool> _updateCache(ui.Image image, int id, int w, int h) async {
+    ui.ImageByteFormat imgFormat = ui.ImageByteFormat.png;
     if (Platform.isWindows) {
-      ByteData? data2 =
-          await image.toByteData(format: ui.ImageByteFormat.rawRgba);
-      if (data2 != null) {
-        data = data2.buffer.asUint8List();
-        image2 = img2.Image.fromBytes(w, h, data);
-      } else {
-        data = defaultCursorImage?.getBytes(format: img2.Format.bgra);
-        image2 = defaultCursorImage?.clone();
-        _hotx = defaultCursorImage!.width / 2;
-        _hoty = defaultCursorImage!.height / 2;
-      }
-    } else {
-      ByteData? data2 = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (data2 != null) {
-        data = data2.buffer.asUint8List();
-      } else {
-        data = Uint8List.fromList(img2.encodePng(defaultCursorImage!));
-        _hotx = defaultCursorImage!.width / 2;
-        _hoty = defaultCursorImage!.height / 2;
-      }
+      imgFormat = ui.ImageByteFormat.rawRgba;
     }
 
+    ByteData? imgBytes = await image.toByteData(format: imgFormat);
+    if (imgBytes == null) {
+      return false;
+    }
+
+    Uint8List? data = imgBytes.buffer.asUint8List();
     _cache = CursorData(
       peerId: this.id,
       id: id,
-      image: image2,
+      image: Platform.isWindows ? img2.Image.fromBytes(w, h, data) : null,
       scale: 1.0,
       data: data,
-      hotx: _hotx,
-      hoty: _hoty,
+      hotx: 0,
+      hoty: 0,
+      // hotx: _hotx,
+      // hoty: _hoty,
       width: w,
       height: h,
     );
     _cacheMap[id] = _cache!;
+    return true;
   }
 
   updateCursorId(Map<String, dynamic> evt) async {
@@ -998,8 +1012,8 @@ class CursorModel with ChangeNotifier {
 
   /// Update the cursor position.
   updateCursorPosition(Map<String, dynamic> evt, String id) async {
-    got_mouse_control = false;
-    _last_peer_mouse = DateTime.now();
+    gotMouseControl = false;
+    _lastPeerMouse = DateTime.now();
     _x = double.parse(evt['x']);
     _y = double.parse(evt['y']);
     try {

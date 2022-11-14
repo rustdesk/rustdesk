@@ -126,7 +126,7 @@ pub fn new_pos() -> GenericService {
 }
 
 fn update_last_cursor_pos(x: i32, y: i32) {
-    let mut lock = LATEST_CURSOR_POS.lock().unwrap();
+    let mut lock = LATEST_SYS_CURSOR_POS.lock().unwrap();
     if lock.1 .0 != x || lock.1 .1 != y {
         (lock.0, lock.1) = (Instant::now(), (x, y))
     }
@@ -144,7 +144,7 @@ fn run_pos(sp: GenericService, state: &mut StatePos) -> ResultType<()> {
             });
             let exclude = {
                 let now = get_time();
-                let lock = LATEST_INPUT_CURSOR.lock().unwrap();
+                let lock = LATEST_PEER_INPUT_CURSOR.lock().unwrap();
                 if now - lock.time < 300 {
                     lock.conn
                 } else {
@@ -203,12 +203,13 @@ lazy_static::lazy_static! {
         Arc::new(Mutex::new(Enigo::new()))
     };
     static ref KEYS_DOWN: Arc<Mutex<HashMap<u64, Instant>>> = Default::default();
-    static ref LATEST_INPUT_CURSOR: Arc<Mutex<Input>> = Default::default();
-    static ref LATEST_CURSOR_POS: Arc<Mutex<(Instant, (i32, i32))>> = Arc::new(Mutex::new((Instant::now().sub(MOUSE_MOVE_PROTECTION_TIMEOUT), (0, 0))));
+    static ref LATEST_PEER_INPUT_CURSOR: Arc<Mutex<Input>> = Default::default();
+    static ref LATEST_SYS_CURSOR_POS: Arc<Mutex<(Instant, (i32, i32))>> = Arc::new(Mutex::new((Instant::now().sub(MOUSE_MOVE_PROTECTION_TIMEOUT), (0, 0))));
 }
 static EXITING: AtomicBool = AtomicBool::new(false);
 
 const MOUSE_MOVE_PROTECTION_TIMEOUT: Duration = Duration::from_millis(1_000);
+// Actual diff of (x,y) is (1,1) here. But 5 may be tolerant.
 const MOUSE_ACTIVE_DISTANCE: i32 = 5;
 
 // mac key input must be run in main thread, otherwise crash on >= osx 10.15
@@ -396,24 +397,42 @@ fn fix_modifiers(modifiers: &[EnumOrUnknown<ControlKey>], en: &mut Enigo, ck: i3
 
 fn active_mouse_(conn: i32) -> bool {
     // out of time protection
-    if LATEST_CURSOR_POS.lock().unwrap().0.elapsed() > MOUSE_MOVE_PROTECTION_TIMEOUT {
+    if LATEST_SYS_CURSOR_POS.lock().unwrap().0.elapsed() > MOUSE_MOVE_PROTECTION_TIMEOUT {
         return true;
     }
 
-    let mut last_input = LATEST_INPUT_CURSOR.lock().unwrap();
     // last conn input may be protected
-    if last_input.conn != conn {
+    if LATEST_PEER_INPUT_CURSOR.lock().unwrap().conn != conn {
         return false;
     }
 
-    // check if input is in valid range
+    let in_actived_dist = |a: i32, b: i32| -> bool { (a - b).abs() < MOUSE_ACTIVE_DISTANCE };
+
+    // Check if input is in valid range
     match crate::get_cursor_pos() {
         Some((x, y)) => {
-            let can_active = (last_input.x - x).abs() < MOUSE_ACTIVE_DISTANCE
-                && (last_input.y - y).abs() < MOUSE_ACTIVE_DISTANCE;
+            let (last_in_x, last_in_y) = {
+                let lock = LATEST_PEER_INPUT_CURSOR.lock().unwrap();
+                (lock.x, lock.y)
+            };
+            let mut can_active =
+                in_actived_dist(last_in_x, x) && in_actived_dist(last_in_y, y);
+            // The cursor may not have been moved to last input position if system is busy now.
+            // While this is not a common case, we check it again after some time later.
             if !can_active {
-                last_input.x = -MOUSE_ACTIVE_DISTANCE * 2;
-                last_input.y = -MOUSE_ACTIVE_DISTANCE * 2;
+                // 10 micros may be enough for system to move cursor.
+                // We do not care about the situation which system is too slow(more than 10 micros is required).
+                std::thread::sleep(std::time::Duration::from_micros(10));
+                // Sleep here can also somehow suppress delay accumulation.
+                if let Some((x2, y2)) = crate::get_cursor_pos() {
+                    can_active =
+                        in_actived_dist(last_in_x, x2) && in_actived_dist(last_in_y, y2);
+                }
+            }
+            if !can_active {
+                let mut lock = LATEST_PEER_INPUT_CURSOR.lock().unwrap();
+                lock.x = INVALID_CURSOR_POS / 2;
+                lock.y = INVALID_CURSOR_POS / 2;
             }
             can_active
         }
@@ -434,15 +453,6 @@ fn handle_mouse_(evt: &MouseEvent, conn: i32) {
     crate::platform::windows::try_change_desktop();
     let buttons = evt.mask >> 3;
     let evt_type = evt.mask & 0x7;
-    if evt_type == 0 {
-        let time = get_time();
-        *LATEST_INPUT_CURSOR.lock().unwrap() = Input {
-            time,
-            conn,
-            x: evt.x,
-            y: evt.y,
-        };
-    }
     let mut en = ENIGO.lock().unwrap();
     #[cfg(not(target_os = "macos"))]
     let mut to_release = Vec::new();
@@ -467,6 +477,14 @@ fn handle_mouse_(evt: &MouseEvent, conn: i32) {
     }
     match evt_type {
         0 => {
+            let time = get_time();
+            *LATEST_PEER_INPUT_CURSOR.lock().unwrap() = Input {
+                time,
+                conn,
+                x: evt.x,
+                y: evt.y,
+            };
+
             en.mouse_move_to(evt.x, evt.y);
         }
         1 => match buttons {
