@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/widgets/address_book.dart';
@@ -446,6 +448,22 @@ abstract class BasePeerCard extends StatelessWidget {
     );
   }
 
+  /// Only avaliable on Windows.
+  @protected
+  MenuEntryBase<String> _createShortCutAction(String id) {
+    return MenuEntryButton<String>(
+      childBuilder: (TextStyle? style) => Text(
+        translate('Create Desktop Shortcut'),
+        style: style,
+      ),
+      proc: () {
+        bind.mainCreateShortcut(id: id);
+      },
+      padding: menuPadding,
+      dismissOnClicked: true,
+    );
+  }
+
   @protected
   Future<MenuEntryBase<String>> _forceAlwaysRelayAction(String id) async {
     const option = 'force-always-relay';
@@ -649,6 +667,9 @@ class RecentPeerCard extends BasePeerCard {
       menuItems.add(_rdpAction(context, peer.id));
     }
     menuItems.add(_wolAction(peer.id));
+    if (Platform.isWindows) {
+      menuItems.add(_createShortCutAction(peer.id));
+    }
     menuItems.add(MenuEntryDivider());
     menuItems.add(_renameAction(peer.id, false));
     menuItems.add(_removeAction(peer.id, () async {
@@ -681,6 +702,9 @@ class FavoritePeerCard extends BasePeerCard {
       menuItems.add(_rdpAction(context, peer.id));
     }
     menuItems.add(_wolAction(peer.id));
+    if (Platform.isWindows) {
+      menuItems.add(_createShortCutAction(peer.id));
+    }
     menuItems.add(MenuEntryDivider());
     menuItems.add(_renameAction(peer.id, false));
     menuItems.add(_removeAction(peer.id, () async {
@@ -715,6 +739,9 @@ class DiscoveredPeerCard extends BasePeerCard {
       menuItems.add(_rdpAction(context, peer.id));
     }
     menuItems.add(_wolAction(peer.id));
+    if (Platform.isWindows) {
+      menuItems.add(_createShortCutAction(peer.id));
+    }
     menuItems.add(MenuEntryDivider());
     menuItems.add(_removeAction(peer.id, () async {}));
     return menuItems;
@@ -740,6 +767,9 @@ class AddressBookPeerCard extends BasePeerCard {
       menuItems.add(_rdpAction(context, peer.id));
     }
     menuItems.add(_wolAction(peer.id));
+    if (Platform.isWindows) {
+      menuItems.add(_createShortCutAction(peer.id));
+    }
     menuItems.add(MenuEntryDivider());
     menuItems.add(_renameAction(peer.id, false));
     menuItems.add(_removeAction(peer.id, () async {}));
