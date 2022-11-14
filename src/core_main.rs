@@ -1,7 +1,7 @@
 use hbb_common::log;
 
 /// shared by flutter and sciter main function
-/// 
+///
 /// [Note]
 /// If it returns [`None`], then the process will terminate, and flutter gui will not be started.
 /// If it returns [`Some`], then the process will continue, and flutter gui will be started.
@@ -255,6 +255,19 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
             }
         }
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(windows)]
+    {
+        use winapi::um::winuser::WM_USER;
+        let uni_links = format!("rustdesk://connection/new/{}", peer_id);
+        let res = crate::platform::send_message_to_hnwd(
+            "FLUTTER_RUNNER_WIN32_WINDOW",
+            "RustDesk",
+            (WM_USER + 2) as _, // refered from unilinks desktop pub
+            uni_links.as_str(),
+            true
+        );
+        return if res { None } else { Some(Vec::new()) };
+    }
+    #[cfg(target_os = "macos")]
     return Some(Vec::new());
 }

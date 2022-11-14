@@ -1646,3 +1646,39 @@ fn wide_string(s: &str) -> Vec<u16> {
         .chain(Some(0).into_iter())
         .collect()
 }
+
+/// send message to currently shown window
+pub fn send_message_to_hnwd(
+    class_name: &str,
+    window_name: &str,
+    dw_data: usize,
+    data: &str,
+    show_window: bool,
+) -> bool {
+    unsafe {
+        let class_name_utf16 = wide_string(class_name);
+        let window_name_utf16 = wide_string(window_name);
+        let window = FindWindowW(class_name_utf16.as_ptr(), window_name_utf16.as_ptr());
+        if window.is_null() {
+            log::warn!("no such window {}:{}", class_name, window_name);
+            return false;
+        }
+        let mut data_struct = COPYDATASTRUCT::default();
+        data_struct.dwData = dw_data;
+        let mut data_zero: String = data.chars().chain(Some('\0').into_iter()).collect();
+        println!("send {:?}", data_zero);
+        data_struct.cbData = data_zero.len() as _;
+        data_struct.lpData = data_zero.as_mut_ptr() as _;
+        SendMessageW(
+            window,
+            WM_COPYDATA,
+            0,
+            &data_struct as *const COPYDATASTRUCT as _,
+        );
+        if show_window {
+            ShowWindow(window, SW_NORMAL);
+            SetForegroundWindow(window);
+        }
+    }
+    return true;
+}
