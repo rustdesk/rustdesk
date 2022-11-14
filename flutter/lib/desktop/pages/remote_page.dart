@@ -251,14 +251,12 @@ class _RemotePageState extends State<RemotePage>
   bool get wantKeepAlive => true;
 }
 
-class ImagePaint extends StatelessWidget {
+class ImagePaint extends StatefulWidget {
   final String id;
   final Rx<bool> cursorOverImage;
   final Rx<bool> keyboardEnabled;
   final Rx<bool> remoteCursorMoved;
   final Widget Function(Widget)? listenerBuilder;
-  final ScrollController _horizontal = ScrollController();
-  final ScrollController _vertical = ScrollController();
 
   ImagePaint(
       {Key? key,
@@ -270,6 +268,21 @@ class ImagePaint extends StatelessWidget {
       : super(key: key);
 
   @override
+  State<StatefulWidget> createState() => _ImagePaintState();
+}
+
+class _ImagePaintState extends State<ImagePaint> {
+  bool _lastRemoteCursorMoved = false;
+  final ScrollController _horizontal = ScrollController();
+  final ScrollController _vertical = ScrollController();
+
+  String get id => widget.id;
+  Rx<bool> get cursorOverImage => widget.cursorOverImage;
+  Rx<bool> get keyboardEnabled => widget.keyboardEnabled;
+  Rx<bool> get remoteCursorMoved => widget.remoteCursorMoved;
+  Widget Function(Widget)? get listenerBuilder => widget.listenerBuilder;
+
+  @override
   Widget build(BuildContext context) {
     final m = Provider.of<ImageModel>(context);
     var c = Provider.of<CanvasModel>(context);
@@ -278,9 +291,18 @@ class ImagePaint extends StatelessWidget {
     mouseRegion({child}) => Obx(() => MouseRegion(
         cursor: cursorOverImage.isTrue
             ? keyboardEnabled.isTrue
-                ? (remoteCursorMoved.isTrue
-                    ? SystemMouseCursors.none
-                    : _buildCustomCursor(context, s))
+                ? (() {
+                    if (remoteCursorMoved.isTrue) {
+                      _lastRemoteCursorMoved = true;
+                      return SystemMouseCursors.none;
+                    } else {
+                      if (_lastRemoteCursorMoved) {
+                        _lastRemoteCursorMoved = false;
+                        _firstEnterImage.value = true;
+                      }
+                      return _buildCustomCursor(context, s);
+                    }
+                  }())
                 : _buildDisabledCursor(context, s)
             : MouseCursor.defer,
         onHover: (evt) {},
