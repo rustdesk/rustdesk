@@ -408,7 +408,7 @@ fn active_mouse_(conn: i32) -> bool {
 
     let in_actived_dist = |a: i32, b: i32| -> bool { (a - b).abs() < MOUSE_ACTIVE_DISTANCE };
 
-    // check if input is in valid range
+    // Check if input is in valid range
     match crate::get_cursor_pos() {
         Some((x, y)) => {
             let (last_in_x, last_in_y) = {
@@ -417,10 +417,13 @@ fn active_mouse_(conn: i32) -> bool {
             };
             let mut can_active =
                 in_actived_dist(last_in_x, x) && in_actived_dist(last_in_y, y);
+            // The cursor may not have been moved to last input position if system is busy now.
+            // While this is not a common case, we check it again after some time later.
             if !can_active {
-                // Try agin
-                // No need to care about sleep here. It's not a common case.
+                // 10 micros may be enough for system to move cursor.
+                // We do not care about the situation which system is too slow(more than 10 micros is required).
                 std::thread::sleep(std::time::Duration::from_micros(10));
+                // Sleep here can also somehow suppress delay accumulation.
                 if let Some((x2, y2)) = crate::get_cursor_pos() {
                     can_active =
                         in_actived_dist(last_in_x, x2) && in_actived_dist(last_in_y, y2);
