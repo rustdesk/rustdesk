@@ -42,7 +42,7 @@ class InputModel {
   // mouse
   final isPhysicalMouse = false.obs;
   int _lastMouseDownButtons = 0;
-  Offset last_mouse_pos = Offset.zero;
+  Offset lastMousePos = Offset.zero;
 
   get id => parent.target?.id ?? "";
 
@@ -308,23 +308,23 @@ class InputModel {
     double y = max(0.0, evt['y']);
     final cursorModel = parent.target!.cursorModel;
 
-    if (cursorModel.is_peer_control_protected) {
-      last_mouse_pos = ui.Offset(x, y);
+    if (cursorModel.isPeerControlProtected) {
+      lastMousePos = ui.Offset(x, y);
       return;
     }
 
-    if (!cursorModel.got_mouse_control) {
-      bool self_get_control =
-          (x - last_mouse_pos.dx).abs() > kMouseControlDistance ||
-              (y - last_mouse_pos.dy).abs() > kMouseControlDistance;
-      if (self_get_control) {
-        cursorModel.got_mouse_control = true;
+    if (!cursorModel.gotMouseControl) {
+      bool selfGetControl =
+          (x - lastMousePos.dx).abs() > kMouseControlDistance ||
+              (y - lastMousePos.dy).abs() > kMouseControlDistance;
+      if (selfGetControl) {
+        cursorModel.gotMouseControl = true;
       } else {
-        last_mouse_pos = ui.Offset(x, y);
+        lastMousePos = ui.Offset(x, y);
         return;
       }
     }
-    last_mouse_pos = ui.Offset(x, y);
+    lastMousePos = ui.Offset(x, y);
 
     var type = '';
     var isMove = false;

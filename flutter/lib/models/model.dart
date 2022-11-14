@@ -753,8 +753,8 @@ class CursorModel with ChangeNotifier {
   double _hoty = 0;
   double _displayOriginX = 0;
   double _displayOriginY = 0;
-  bool got_mouse_control = true;
-  DateTime _last_peer_mouse = DateTime.now()
+  bool gotMouseControl = true;
+  DateTime _lastPeerMouse = DateTime.now()
       .subtract(Duration(milliseconds: 2 * kMouseControlTimeoutMSec));
   String id = '';
   WeakReference<FFI> parent;
@@ -772,8 +772,8 @@ class CursorModel with ChangeNotifier {
   double get hotx => _hotx;
   double get hoty => _hoty;
 
-  bool get is_peer_control_protected =>
-      DateTime.now().difference(_last_peer_mouse).inMilliseconds <
+  bool get isPeerControlProtected =>
+      DateTime.now().difference(_lastPeerMouse).inMilliseconds <
       kMouseControlTimeoutMSec;
 
   CursorModel(this.parent) {
@@ -806,7 +806,7 @@ class CursorModel with ChangeNotifier {
       } else {
         data = Uint8List.fromList(img2.encodePng(defaultCursorImage!));
       }
-      
+
       _defaultCache = CursorData(
         peerId: id,
         id: _defaultCacheId,
@@ -1012,8 +1012,8 @@ class CursorModel with ChangeNotifier {
 
   /// Update the cursor position.
   updateCursorPosition(Map<String, dynamic> evt, String id) async {
-    got_mouse_control = false;
-    _last_peer_mouse = DateTime.now();
+    gotMouseControl = false;
+    _lastPeerMouse = DateTime.now();
     _x = double.parse(evt['x']);
     _y = double.parse(evt['y']);
     try {

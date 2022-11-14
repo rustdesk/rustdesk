@@ -209,6 +209,7 @@ lazy_static::lazy_static! {
 static EXITING: AtomicBool = AtomicBool::new(false);
 
 const MOUSE_MOVE_PROTECTION_TIMEOUT: Duration = Duration::from_millis(1_000);
+// Actual diff of (x,y) is (1,1) here. But 5 may be tolerant.
 const MOUSE_ACTIVE_DISTANCE: i32 = 5;
 
 // mac key input must be run in main thread, otherwise crash on >= osx 10.15
@@ -406,14 +407,25 @@ fn active_mouse_(conn: i32) -> bool {
         return false;
     }
 
+    let in_actived_dist = |a: i32, b: i32| -> bool { (a - b).abs() < MOUSE_ACTIVE_DISTANCE };
+
     // check if input is in valid range
     match crate::get_cursor_pos() {
         Some((x, y)) => {
-            let can_active = (last_input.x - x).abs() < MOUSE_ACTIVE_DISTANCE
-                && (last_input.y - y).abs() < MOUSE_ACTIVE_DISTANCE;
+            let mut can_active =
+                in_actived_dist(last_input.x, x) && in_actived_dist(last_input.y, y);
             if !can_active {
-                last_input.x = -MOUSE_ACTIVE_DISTANCE * 2;
-                last_input.y = -MOUSE_ACTIVE_DISTANCE * 2;
+                // Try agin
+                // No need to care about sleep here. It's not a common case.
+                std::thread::sleep(std::time::Duration::from_micros(10));
+                if let Some((x2, y2)) = crate::get_cursor_pos() {
+                    can_active =
+                        in_actived_dist(last_input.x, x2) && in_actived_dist(last_input.y, y2);
+                }
+            }
+            if !can_active {
+                last_input.x = INVALID_CURSOR_POS / 2;
+                last_input.y = INVALID_CURSOR_POS / 2;
             }
             can_active
         }
