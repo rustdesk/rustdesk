@@ -1,6 +1,10 @@
 use hbb_common::log;
 
-// shared by flutter and sciter main function
+/// shared by flutter and sciter main function
+///
+/// [Note]
+/// If it returns [`None`], then the process will terminate, and flutter gui will not be started.
+/// If it returns [`Some`], then the process will continue, and flutter gui will be started.
 pub fn core_main() -> Option<Vec<String>> {
     // https://docs.rs/flexi_logger/latest/flexi_logger/error_info/index.html#write
     // though async logger more efficient, but it also causes more problems, disable it for now
@@ -223,6 +227,8 @@ fn import_config(path: &str) {
 ///
 /// [Note]
 /// this is for invoke new connection from dbus.
+/// If it returns [`None`], then the process will terminate, and flutter gui will not be started.
+/// If it returns [`Some`], then the process will continue, and flutter gui will be started.
 #[cfg(feature = "flutter")]
 fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<String>> {
     args.position(|element| {
@@ -249,6 +255,19 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
             }
         }
     }
-    #[cfg(not(target_os = "linux"))]
-    return None;
+    #[cfg(windows)]
+    {
+        use winapi::um::winuser::WM_USER;
+        let uni_links = format!("rustdesk://connection/new/{}", peer_id);
+        let res = crate::platform::send_message_to_hnwd(
+            "FLUTTER_RUNNER_WIN32_WINDOW",
+            "RustDesk",
+            (WM_USER + 2) as _, // refered from unilinks desktop pub
+            uni_links.as_str(),
+            true
+        );
+        return if res { None } else { Some(Vec::new()) };
+    }
+    #[cfg(target_os = "macos")]
+    return Some(Vec::new());
 }
