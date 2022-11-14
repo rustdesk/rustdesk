@@ -490,8 +490,8 @@ class CursorPaint extends StatelessWidget {
     double hoty = m.hoty;
     if (m.image == null) {
       if (m.defaultCache != null) {
-        hotx = m.defaultCache!.hotx;
-        hoty = m.defaultCache!.hoty;
+        hotx = m.defaultImage!.width / 2;
+        hoty = m.defaultImage!.height / 2;
       }
     }
     return CustomPaint(

@@ -721,14 +721,14 @@ class CursorData {
               height: (height * scale).toInt(),
             )
             .getBytes(format: img2.Format.bgra);
-        if (hotx > 0 && hoty > 0) {
-          // default cursor data
-          hotx = (width * scale) / 2;
-          hoty = (height * scale) / 2;
-        }
       }
     }
     this.scale = scale;
+    if (hotx > 0 && hoty > 0) {
+      // default cursor data
+      hotx = (width * scale) / 2;
+      hoty = (height * scale) / 2;
+    }
     return scale;
   }
 
@@ -798,20 +798,23 @@ class CursorModel with ChangeNotifier {
   CursorData? _getDefaultCache() {
     if (_defaultCache == null) {
       Uint8List data;
+      double scale = 1.0;
+      double hotx = (defaultCursorImage!.width * scale) / 2;
+      double hoty = (defaultCursorImage!.height * scale) / 2;
       if (Platform.isWindows) {
         data = defaultCursorImage!.getBytes(format: img2.Format.bgra);
       } else {
         data = Uint8List.fromList(img2.encodePng(defaultCursorImage!));
       }
-      double scale = 1.0;
+      
       _defaultCache = CursorData(
         peerId: id,
         id: _defaultCacheId,
         image: defaultCursorImage?.clone(),
         scale: scale,
         data: data,
-        hotx: (defaultCursorImage!.width * scale) / 2,
-        hoty: (defaultCursorImage!.height * scale) / 2,
+        hotx: hotx,
+        hoty: hoty,
         width: defaultCursorImage!.width,
         height: defaultCursorImage!.height,
       );
