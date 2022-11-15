@@ -734,7 +734,7 @@ class CursorData {
               image!,
               width: (width * scale).toInt(),
               height: (height * scale).toInt(),
-              interpolation: img2.Interpolation.cubic,
+              interpolation: img2.Interpolation.linear,
             )
             .getBytes(format: img2.Format.bgra);
       }
