@@ -163,7 +163,7 @@ class _RemotePageState extends State<RemotePage>
     super.build(context);
     return WillPopScope(
         onWillPop: () async {
-          clientClose(_ffi.dialogManager);
+          clientClose(widget.id, _ffi.dialogManager);
           return false;
         },
         child: MultiProvider(providers: [

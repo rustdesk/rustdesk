@@ -228,8 +228,7 @@ impl InvokeUiSession for FlutterHandler {
         id: i32,
         entries: &Vec<FileEntry>,
         path: String,
-        #[allow(unused_variables)]
-        is_local: bool,
+        #[allow(unused_variables)] is_local: bool,
         only_count: bool,
     ) {
         // TODO opt
@@ -325,6 +324,10 @@ impl InvokeUiSession for FlutterHandler {
                 ("hasRetry", has_retry),
             ],
         );
+    }
+
+    fn cancel_msgbox(&self, tag: &str) {
+        self.push_event("cancel_msgbox", vec![("tag", tag)]);
     }
 
     fn new_message(&self, msg: String) {

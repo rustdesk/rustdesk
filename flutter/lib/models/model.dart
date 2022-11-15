@@ -195,6 +195,8 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'show_elevation') {
         final show = evt['show'].toString() == 'true';
         parent.target?.serverModel.setShowElevation(show);
+      } else if (name == 'cancel_msgbox') {
+        cancelMsgBox(evt, peerId);
       }
     };
   }
@@ -231,6 +233,13 @@ class FfiModel with ChangeNotifier {
     notifyListeners();
   }
 
+  cancelMsgBox(Map<String, dynamic> evt, String id) {
+    if (parent.target == null) return;
+    final dialogManager = parent.target!.dialogManager;
+    final tag = '$id-${evt['tag']}';
+    dialogManager.dismissByTag(tag);
+  }
+
   /// Handle the message box event based on [evt] and [id].
   handleMsgBox(Map<String, dynamic> evt, String id) {
     if (parent.target == null) return;
@@ -256,7 +265,7 @@ class FfiModel with ChangeNotifier {
   showMsgBox(String id, String type, String title, String text, String link,
       bool hasRetry, OverlayDialogManager dialogManager,
       {bool? hasCancel}) {
-    msgBox(type, title, text, link, dialogManager, hasCancel: hasCancel);
+    msgBox(id, type, title, text, link, dialogManager, hasCancel: hasCancel);
     _timer?.cancel();
     if (hasRetry) {
       _timer = Timer(Duration(seconds: _reconnects), () {

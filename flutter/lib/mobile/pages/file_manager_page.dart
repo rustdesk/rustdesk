@@ -63,7 +63,8 @@ class _FileManagerPageState extends State<FileManagerPage> {
                 leading: Row(children: [
                   IconButton(
                       icon: Icon(Icons.close),
-                      onPressed: () => clientClose(gFFI.dialogManager)),
+                      onPressed: () =>
+                          clientClose(widget.id, gFFI.dialogManager)),
                 ]),
                 centerTitle: true,
                 title: ToggleSwitch(

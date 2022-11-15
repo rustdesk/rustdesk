@@ -223,7 +223,7 @@ class _RemotePageState extends State<RemotePage> {
 
     return WillPopScope(
       onWillPop: () async {
-        clientClose(gFFI.dialogManager);
+        clientClose(widget.id, gFFI.dialogManager);
         return false;
       },
       child: getRawPointerAndKeyBody(Scaffold(
@@ -304,7 +304,7 @@ class _RemotePageState extends State<RemotePage> {
                       color: Colors.white,
                       icon: Icon(Icons.clear),
                       onPressed: () {
-                        clientClose(gFFI.dialogManager);
+                        clientClose(widget.id, gFFI.dialogManager);
                       },
                     )
                   ] +

@@ -627,7 +627,7 @@ class CustomAlertDialog extends StatelessWidget {
   }
 }
 
-void msgBox(String type, String title, String text, String link,
+void msgBox(String id, String type, String title, String text, String link,
     OverlayDialogManager dialogManager,
     {bool? hasCancel}) {
   dialogManager.dismissAll();
@@ -672,14 +672,17 @@ void msgBox(String type, String title, String text, String link,
   if (link.isNotEmpty) {
     buttons.insert(0, msgBoxButton(translate('JumpLink'), jumplink));
   }
-  dialogManager.show((setState, close) => CustomAlertDialog(
-        title: _msgBoxTitle(title),
-        content: SelectableText(translate(text),
-            style: const TextStyle(fontSize: 15)),
-        actions: buttons,
-        onSubmit: hasOk ? submit : null,
-        onCancel: hasCancel == true ? cancel : null,
-      ));
+  dialogManager.show(
+    (setState, close) => CustomAlertDialog(
+      title: _msgBoxTitle(title),
+      content:
+          SelectableText(translate(text), style: const TextStyle(fontSize: 15)),
+      actions: buttons,
+      onSubmit: hasOk ? submit : null,
+      onCancel: hasCancel == true ? cancel : null,
+    ),
+    tag: '$id-$type-$title-$text-$link',
+  );
 }
 
 Widget msgBoxButton(String text, void Function() onPressed) {

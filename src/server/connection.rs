@@ -26,12 +26,9 @@ use hbb_common::{
 use scrap::android::call_main_service_mouse_input;
 use serde_json::{json, value::Value};
 use sha2::{Digest, Sha256};
-use std::sync::{
-    atomic::AtomicI64,
-    mpsc as std_mpsc,
-};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use std::sync::atomic::Ordering;
+use std::sync::{atomic::AtomicI64, mpsc as std_mpsc};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use system_shutdown;
 
@@ -434,7 +431,7 @@ impl Connection {
                             let uac = crate::video_service::IS_UAC_RUNNING.lock().unwrap().clone();
                             if last_uac != uac {
                                 last_uac = uac;
-                                if !portable_service_running {
+                                if !uac || !portable_service_running{
                                     let mut misc = Misc::new();
                                     misc.set_uac(uac);
                                     let mut msg = Message::new();
@@ -445,7 +442,7 @@ impl Connection {
                             let foreground_window_elevated = crate::video_service::IS_FOREGROUND_WINDOW_ELEVATED.lock().unwrap().clone();
                             if last_foreground_window_elevated != foreground_window_elevated {
                                 last_foreground_window_elevated = foreground_window_elevated;
-                                if !portable_service_running {
+                                if !foreground_window_elevated || !portable_service_running {
                                     let mut misc = Misc::new();
                                     misc.set_foreground_window_elevated(foreground_window_elevated);
                                     let mut msg = Message::new();
