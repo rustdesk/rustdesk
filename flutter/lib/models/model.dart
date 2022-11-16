@@ -593,7 +593,7 @@ class CanvasModel with ChangeNotifier {
     return parent.target?.ffiModel.display.height ?? defaultHeight;
   }
 
-  double get windowBorderWidth => stateGlobal.windowBorderWidth;
+  double get windowBorderWidth => stateGlobal.windowBorderWidth.value;
   double get tabBarHeight => stateGlobal.tabBarHeight;
 
   Size get size {

@@ -116,12 +116,14 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
 
   @override
   Widget build(BuildContext context) {
-    final tabWidget = Container(
-      decoration: BoxDecoration(
+    final tabWidget = Obx(
+      () => Container(
+        decoration: BoxDecoration(
           border: Border.all(
               color: MyTheme.color(context).border!,
-              width: kWindowBorderWidth)),
-      child: Scaffold(
+              width: stateGlobal.windowBorderWidth.value),
+        ),
+        child: Scaffold(
           backgroundColor: Theme.of(context).backgroundColor,
           body: DesktopTab(
             controller: tabController,
@@ -182,7 +184,9 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
                 );
               }
             }),
-          )),
+          ),
+        ),
+      ),
     );
     return Platform.isMacOS
         ? tabWidget
