@@ -1609,7 +1609,8 @@ async fn start_ipc(
                             file_num,
                             data,
                             compressed}) = data {
-                                stream.send(&Data::FS(ipc::FS::WriteBlock{id, file_num, data, compressed})).await?;
+                                stream.send(&Data::FS(ipc::FS::WriteBlock{id, file_num, data: Bytes::new(), compressed})).await?;
+                                stream.send_raw(data).await?;
                         } else {
                             stream.send(&data).await?;
                         }

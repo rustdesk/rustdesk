@@ -1,3 +1,5 @@
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+use std::iter::FromIterator;
 #[cfg(windows)]
 use std::sync::Arc;
 use std::{
@@ -8,8 +10,6 @@ use std::{
         RwLock,
     },
 };
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
-use std::iter::FromIterator;
 
 #[cfg(windows)]
 use clipboard::{cliprdr::CliprdrClientContext, empty_clipboard, set_conn_enabled, ContextSend};
@@ -337,8 +337,15 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                 Data::ChatMessage { text } => {
                                     self.cm.new_message(self.conn_id, text);
                                 }
-                                Data::FS(fs) => {
-                                    handle_fs(fs, &mut write_jobs, &self.tx).await;
+                                Data::FS(mut fs) => {
+                                    if let ipc::FS::WriteBlock { id, file_num, data: _, compressed } = fs {
+                                        if let Ok(bytes) = self.stream.next_raw().await {
+                                            fs = ipc::FS::WriteBlock{id, file_num, data:bytes.into(), compressed};
+                                            handle_fs(fs, &mut write_jobs, &self.tx).await;
+                                        }
+                                    } else {
+                                        handle_fs(fs, &mut write_jobs, &self.tx).await;
+                                    }
                                 }
                                 #[cfg(windows)]
                                 Data::ClipbaordFile(_clip) => {
@@ -588,16 +595,13 @@ async fn handle_fs(fs: ipc::FS, write_jobs: &mut Vec<fs::TransferJob>, tx: &Unbo
         } => {
             if let Some(job) = fs::get_job(id, write_jobs) {
                 if let Err(err) = job
-                    .write(
-                        FileTransferBlock {
-                            id,
-                            file_num,
-                            data,
-                            compressed,
-                            ..Default::default()
-                        },
-                        None,
-                    )
+                    .write(FileTransferBlock {
+                        id,
+                        file_num,
+                        data,
+                        compressed,
+                        ..Default::default()
+                    })
                     .await
                 {
                     send_raw(fs::new_error(id, err, file_num), &tx);

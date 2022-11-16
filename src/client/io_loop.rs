@@ -925,7 +925,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                 block.file_num
                             );
                             if let Some(job) = fs::get_job(block.id, &mut self.write_jobs) {
-                                if let Err(_err) = job.write(block, None).await {
+                                if let Err(_err) = job.write(block).await {
                                     // to-do: add "skip" for writing job
                                 }
                                 self.update_jobs_status();
