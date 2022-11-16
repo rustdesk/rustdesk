@@ -919,11 +919,6 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                         }
                         Some(file_response::Union::Block(block)) => {
-                            log::info!(
-                                "file response block, file id:{}, file num: {}",
-                                block.id,
-                                block.file_num
-                            );
                             if let Some(job) = fs::get_job(block.id, &mut self.write_jobs) {
                                 if let Err(_err) = job.write(block).await {
                                     // to-do: add "skip" for writing job
