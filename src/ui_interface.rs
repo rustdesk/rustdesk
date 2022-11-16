@@ -10,8 +10,7 @@ use hbb_common::password_security;
 use hbb_common::{
     allow_err,
     config::{self, Config, LocalConfig, PeerConfig},
-    directories_next, log,
-    sleep,
+    directories_next, log, sleep,
     tokio::{self, sync::mpsc, time},
 };
 
@@ -376,7 +375,7 @@ pub fn is_installed() -> bool {
 
 #[cfg(any(target_os = "android", target_os = "ios"))]
 #[inline]
-pub fn is_installed() -> bool {  
+pub fn is_installed() -> bool {
     false
 }
 

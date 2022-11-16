@@ -231,7 +231,14 @@ impl InvokeUiSession for SciterHandler {
     }
 
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool) {
-        self.call2("msgbox_retry", &make_args!(msgtype, title, text, link, retry));
+        self.call2(
+            "msgbox_retry",
+            &make_args!(msgtype, title, text, link, retry),
+        );
+    }
+
+    fn cancel_msgbox(&self, tag: &str) {
+        self.call("cancel_msgbox", &make_args!(tag));
     }
 
     fn new_message(&self, msg: String) {

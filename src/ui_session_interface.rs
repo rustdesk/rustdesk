@@ -1,11 +1,11 @@
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::client::{get_key_state, SERVER_KEYBOARD_ENABLED};
 use crate::client::io_loop::Remote;
 use crate::client::{
     check_if_retry, handle_hash, handle_login_from_ui, handle_test_delay, input_os_password,
     load_config, send_mouse, start_video_audio_threads, FileManager, Key, LoginConfigHandler,
     QualityStatus, KEY_MAP,
 };
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::client::{get_key_state, SERVER_KEYBOARD_ENABLED};
 #[cfg(target_os = "linux")]
 use crate::common::IS_X11;
 use crate::{client::Data, client::Interface};
@@ -15,9 +15,9 @@ use hbb_common::rendezvous_proto::ConnType;
 use hbb_common::tokio::{self, sync::mpsc};
 use hbb_common::{allow_err, message_proto::*};
 use hbb_common::{fs, get_version_number, log, Stream};
+use rdev::{Event, EventType, EventType::*, Key as RdevKey};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use rdev::{Keyboard as RdevKeyboard, KeyboardState};
-use rdev::{Event, EventType, EventType::*, Key as RdevKey};
 use std::collections::{HashMap, HashSet};
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -1120,6 +1120,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool);
     #[cfg(any(target_os = "android", target_os = "ios"))]
     fn clipboard(&self, content: String);
+    fn cancel_msgbox(&self, tag: &str);
 }
 
 impl<T: InvokeUiSession> Deref for Session<T> {

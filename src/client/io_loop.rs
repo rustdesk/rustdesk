@@ -20,18 +20,14 @@ use hbb_common::fs::{
 use hbb_common::message_proto::permission_info::Permission;
 use hbb_common::protobuf::Message as _;
 use hbb_common::rendezvous_proto::ConnType;
+#[cfg(windows)]
+use hbb_common::tokio::sync::Mutex as TokioMutex;
 use hbb_common::tokio::{
     self,
     sync::mpsc,
     time::{self, Duration, Instant, Interval},
 };
-#[cfg(windows)]
-use hbb_common::tokio::sync::Mutex as TokioMutex;
-use hbb_common::{
-    allow_err,
-    message_proto::*,
-    sleep,
-};
+use hbb_common::{allow_err, message_proto::*, sleep};
 use hbb_common::{fs, log, Stream};
 use std::collections::HashMap;
 
@@ -998,23 +994,31 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                     }
                     Some(misc::Union::Uac(uac)) => {
+                        let msgtype = "custom-uac-nocancel";
+                        let title = "Prompt";
+                        let text = "Please wait for confirmation of UAC...";
+                        let link = "";
                         if uac {
-                            self.handler.msgbox(
-                                "custom-uac-nocancel",
-                                "Warning",
-                                "uac_warning",
-                                "",
-                            );
+                            self.handler.msgbox(msgtype, title, text, link);
+                        } else {
+                            self.handler
+                                .cancel_msgbox(
+                                    &format!("{}-{}-{}-{}", msgtype, title, text, link,),
+                                );
                         }
                     }
                     Some(misc::Union::ForegroundWindowElevated(elevated)) => {
+                        let msgtype = "custom-elevated-foreground-nocancel";
+                        let title = "Prompt";
+                        let text = "elevated_foreground_window_tip";
+                        let link = "";
                         if elevated {
-                            self.handler.msgbox(
-                                "custom-elevated-foreground-nocancel",
-                                "Warning",
-                                "elevated_foreground_window_warning",
-                                "",
-                            );
+                            self.handler.msgbox(msgtype, title, text, link);
+                        } else {
+                            self.handler
+                                .cancel_msgbox(
+                                    &format!("{}-{}-{}-{}", msgtype, title, text, link,),
+                                );
                         }
                     }
                     _ => {}

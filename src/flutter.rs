@@ -228,8 +228,7 @@ impl InvokeUiSession for FlutterHandler {
         id: i32,
         entries: &Vec<FileEntry>,
         path: String,
-        #[allow(unused_variables)]
-        is_local: bool,
+        #[allow(unused_variables)] is_local: bool,
         only_count: bool,
     ) {
         // TODO opt
@@ -327,6 +326,10 @@ impl InvokeUiSession for FlutterHandler {
         );
     }
 
+    fn cancel_msgbox(&self, tag: &str) {
+        self.push_event("cancel_msgbox", vec![("tag", tag)]);
+    }
+
     fn new_message(&self, msg: String) {
         self.push_event("chat_client_mode", vec![("text", &msg)]);
     }
@@ -406,7 +409,7 @@ pub fn session_start_(id: &str, event_stream: StreamSink<EventToUI>) -> ResultTy
         *session.event_stream.write().unwrap() = Some(event_stream);
         let session = session.clone();
         std::thread::spawn(move || {
-            // if flutter : disable keyboard listen 
+            // if flutter : disable keyboard listen
             crate::client::disable_keyboard_listening();
             io_loop(session);
         });
@@ -468,6 +471,10 @@ pub mod connection_manager {
 
         fn change_language(&self) {
             self.push_event("language", vec![]);
+        }
+
+        fn show_elevation(&self, show: bool) {
+            self.push_event("show_elevation", vec![("show", &show.to_string())]);
         }
     }
 

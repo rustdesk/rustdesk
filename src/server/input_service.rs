@@ -280,14 +280,30 @@ fn get_modifier_state(key: Key, en: &mut Enigo) -> bool {
 }
 
 pub fn handle_mouse(evt: &MouseEvent, conn: i32) {
+    if !active_mouse_(conn) {
+        return;
+    }
+    let evt_type = evt.mask & 0x7;
+    if evt_type == 0 {
+        let time = get_time();
+        *LATEST_PEER_INPUT_CURSOR.lock().unwrap() = Input {
+            time,
+            conn,
+            x: evt.x,
+            y: evt.y,
+        };
+    }
     #[cfg(target_os = "macos")]
     if !*IS_SERVER {
         // having GUI, run main GUI thread, otherwise crash
         let evt = evt.clone();
-        QUEUE.exec_async(move || handle_mouse_(&evt, conn));
+        QUEUE.exec_async(move || handle_mouse_(&evt));
         return;
     }
-    handle_mouse_(evt, conn);
+    #[cfg(windows)]
+    crate::portable_service::client::handle_mouse(evt);
+    #[cfg(not(windows))]
+    handle_mouse_(evt);
 }
 
 pub fn fix_key_down_timeout_loop() {
@@ -415,8 +431,7 @@ fn active_mouse_(conn: i32) -> bool {
                 let lock = LATEST_PEER_INPUT_CURSOR.lock().unwrap();
                 (lock.x, lock.y)
             };
-            let mut can_active =
-                in_actived_dist(last_in_x, x) && in_actived_dist(last_in_y, y);
+            let mut can_active = in_actived_dist(last_in_x, x) && in_actived_dist(last_in_y, y);
             // The cursor may not have been moved to last input position if system is busy now.
             // While this is not a common case, we check it again after some time later.
             if !can_active {
@@ -425,8 +440,7 @@ fn active_mouse_(conn: i32) -> bool {
                 std::thread::sleep(std::time::Duration::from_micros(10));
                 // Sleep here can also somehow suppress delay accumulation.
                 if let Some((x2, y2)) = crate::get_cursor_pos() {
-                    can_active =
-                        in_actived_dist(last_in_x, x2) && in_actived_dist(last_in_y, y2);
+                    can_active = in_actived_dist(last_in_x, x2) && in_actived_dist(last_in_y, y2);
                 }
             }
             if !can_active {
@@ -440,12 +454,8 @@ fn active_mouse_(conn: i32) -> bool {
     }
 }
 
-fn handle_mouse_(evt: &MouseEvent, conn: i32) {
+pub fn handle_mouse_(evt: &MouseEvent) {
     if EXITING.load(Ordering::SeqCst) {
-        return;
-    }
-
-    if !active_mouse_(conn) {
         return;
     }
 
@@ -477,14 +487,6 @@ fn handle_mouse_(evt: &MouseEvent, conn: i32) {
     }
     match evt_type {
         0 => {
-            let time = get_time();
-            *LATEST_PEER_INPUT_CURSOR.lock().unwrap() = Input {
-                time,
-                conn,
-                x: evt.x,
-                y: evt.y,
-            };
-
             en.mouse_move_to(evt.x, evt.y);
         }
         1 => match buttons {
@@ -698,6 +700,9 @@ pub fn handle_key(evt: &KeyEvent) {
         QUEUE.exec_async(move || handle_key_(&evt));
         return;
     }
+    #[cfg(windows)]
+    crate::portable_service::client::handle_key(evt);
+    #[cfg(not(windows))]
     handle_key_(evt);
 }
 
@@ -949,7 +954,7 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
     }
 }
 
-fn handle_key_(evt: &KeyEvent) {
+pub fn handle_key_(evt: &KeyEvent) {
     if EXITING.load(Ordering::SeqCst) {
         return;
     }

@@ -371,9 +371,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Deny LAN Discovery", "Felfedezés tiltása"),
         ("Write a message", "Üzenet írása"),
         ("Prompt", ""),
-        ("elevation_prompt", "A szoftver jogosultságnövelés nélküli futtatása problémákat okozhat, ha távoli felhasználók bizonyos ablakokat működtetnek."),
-        ("uac_warning", "Kérjük, várja meg, amíg a távoli felhasználó elfogadja az UAC párbeszédpanelt. A probléma elkerülése érdekében javasoljuk, hogy telepítse a szoftvert a távoli eszközre, vagy futtassa rendszergazdai jogosultságokkal."),
-        ("elevated_foreground_window_warning", "Átmenetileg nem tudja használni az egeret és a billentyűzetet, mert a távoli asztal aktuális ablakának működéséhez magasabb jogosultság szükséges, ezért kérheti a távoli felhasználót, hogy minimalizálja az aktuális ablakot. A probléma elkerülése érdekében javasoljuk, hogy telepítse a szoftvert a távoli eszközre, vagy futtassa rendszergazdai jogosultságokkal."),
+        ("Please wait for confirmation of UAC...", ""),
+        ("elevated_foreground_window_tip", ""),
         ("Disconnected", "Szétkapcsolva"),
         ("Other", "Egyéb"),
         ("Confirm before closing multiple tabs", "Biztos, hogy bezárja az összes lapot?"),
@@ -389,5 +388,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("This PC", "Ez a számítógép"),
         ("or", "vagy"),
         ("Continue with", "Folytatás a következővel"),
+        ("Elevate", ""),
     ].iter().cloned().collect();
 }

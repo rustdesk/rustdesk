@@ -371,9 +371,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Deny LAN Discovery", "Tolak Penemuan LAN"),
         ("Write a message", "Menulis pesan"),
         ("Prompt", ""),
-        ("elevation_prompt", ""),
-        ("uac_warning", ""),
-        ("elevated_foreground_window_warning", ""),
+        ("Please wait for confirmation of UAC...", ""),
+        ("elevated_foreground_window_tip", ""),
         ("Disconnected", "Terputus"),
         ("Other", "Lainnya"),
         ("Confirm before closing multiple tabs", "Konfirmasi sebelum menutup banyak tab"),
@@ -389,5 +388,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("This PC", ""),
         ("or", ""),
         ("Continue with", ""),
+        ("Elevate", ""),
     ].iter().cloned().collect();
 }

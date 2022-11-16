@@ -489,7 +489,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     return IconButton(
       tooltip: translate('Close'),
       onPressed: () {
-        clientClose(widget.ffi.dialogManager);
+        clientClose(widget.id, widget.ffi.dialogManager);
       },
       icon: const Icon(
         Icons.close,

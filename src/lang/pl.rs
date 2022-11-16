@@ -371,9 +371,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Deny LAN Discovery", "Zablokuj Wykrywanie LAN"),
         ("Write a message", "Napisz wiadomość"),
         ("Prompt", "Monit"),
-        ("elevation_prompt", "Monit o podwyższeniu uprawnień"),
-        ("uac_warning", "Ostrzeżenie UAC"),
-        ("elevated_foreground_window_warning", "Pierwszoplanowe okno ostrzeżenia o podwyższeniu uprawnień"),
+        ("Please wait for confirmation of UAC...", ""),
+        ("elevated_foreground_window_tip", ""),
         ("Disconnected", "Rozłączone"),
         ("Other", "Inne"),
         ("Confirm before closing multiple tabs", "Potwierdź przed zamknięciem wielu kart"),
@@ -389,5 +388,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("This PC", "Ten komputer"),
         ("or", "albo"),
         ("Continue with", "Kontynuuj z"),
+        ("Elevate", ""),
     ].iter().cloned().collect();
 }

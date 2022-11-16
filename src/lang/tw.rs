@@ -371,9 +371,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Deny LAN Discovery", "拒絕局域網發現"),
         ("Write a message", "輸入聊天消息"),
         ("Prompt", "提示"),
-        ("elevation_prompt", "以當前用戶權限運行軟件，可能導致遠端在訪問本機時，沒有足夠的權限來操作部分窗口。"),
-        ("uac_warning", "暂时无法访问远端设备，因为远端设备正在请求用户账户权限，请等待对方关闭UAC窗口。为避免这个问题，建议在远端设备上安装或者以管理员权限运行本软件。"),
-        ("elevated_foreground_window_warning", "暫時無法使用鼠標鍵盤，因為遠端桌面的當前窗口需要更高的權限才能操作, 可以請求對方最小化當前窗口。為避免這個問題，建議在遠端設備上安裝或者以管理員權限運行本軟件。"),
+        ("Please wait for confirmation of UAC...", "請等待對方確認UAC"),
+        ("elevated_foreground_window_tip", "遠端桌面的當前窗口需要更高的權限才能操作, 暫時無法使用鼠標鍵盤, 可以請求對方最小化當前窗口, 或者在連接管理窗口點擊提升。為避免這個問題，建議在遠端設備上安裝本軟件。"),
         ("Disconnected", "會話已結束"),
         ("Other", "其他"),
         ("Confirm before closing multiple tabs", "關閉多個分頁前跟我確認"),
@@ -389,5 +388,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("This PC", ""),
         ("or", ""),
         ("Continue with", ""),
+        ("Elevate", "提權"),
     ].iter().cloned().collect();
 }
