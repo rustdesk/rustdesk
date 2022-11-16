@@ -52,7 +52,7 @@ lazy_static::lazy_static! {
             ("kz", "Қазақ"),
             ("ua", "Українська"),
             ("fa", "فارسی"),
-            ("ca", "català"),
+            ("ca", "Català"),
         ]);
 }
 
