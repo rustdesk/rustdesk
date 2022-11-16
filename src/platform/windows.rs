@@ -1712,3 +1712,17 @@ pub fn send_message_to_hnwd(
     }
     return true;
 }
+
+pub mod keyboard {
+    use crate::common::GrabState;
+    use hbb_common::{allow_err, log, message_proto::*};
+    use rdev::{Event, EventType, Key};
+    use std::sync::mpsc;
+    
+    
+    use crate::keyboard;
+
+    
+
+    
+}
