@@ -718,35 +718,44 @@ class CursorData {
 
   int _doubleToInt(double v) => (v * 10e6).round().toInt();
 
-  double _checkUpdateScale(double scale) {
-    // Update data if scale changed.
-    if (Platform.isWindows) {
-      final tgtWidth = (width * scale).toInt();
-      final tgtHeight = (width * scale).toInt();
-      if (tgtWidth < kMinCursorSize || tgtHeight < kMinCursorSize) {
-        double sw = kMinCursorSize.toDouble() / width;
-        double sh = kMinCursorSize.toDouble() / height;
-        scale = sw < sh ? sh : sw;
+  double _checkUpdateScale(double scale, bool shouldScale) {
+    double oldScale = this.scale;
+    if (!shouldScale) {
+      scale = 1.0;
+    } else {
+      // Update data if scale changed.
+      if (Platform.isWindows) {
+        final tgtWidth = (width * scale).toInt();
+        final tgtHeight = (width * scale).toInt();
+        if (tgtWidth < kMinCursorSize || tgtHeight < kMinCursorSize) {
+          double sw = kMinCursorSize.toDouble() / width;
+          double sh = kMinCursorSize.toDouble() / height;
+          scale = sw < sh ? sh : sw;
+        }
       }
-      if (_doubleToInt(this.scale) != _doubleToInt(scale)) {
+    }
+
+    if (Platform.isWindows) {
+      if (_doubleToInt(oldScale) != _doubleToInt(scale)) {
         data = img2
             .copyResize(
               image!,
               width: (width * scale).toInt(),
               height: (height * scale).toInt(),
-              interpolation: img2.Interpolation.linear,
+              interpolation: img2.Interpolation.average,
             )
             .getBytes(format: img2.Format.bgra);
       }
     }
+
     this.scale = scale;
     hotx = hotxOrigin * scale;
     hoty = hotyOrigin * scale;
     return scale;
   }
 
-  String updateGetKey(double scale) {
-    scale = _checkUpdateScale(scale);
+  String updateGetKey(double scale, bool shouldScale) {
+    scale = _checkUpdateScale(scale, shouldScale);
     return '${peerId}_${id}_${_doubleToInt(width * scale)}_${_doubleToInt(height * scale)}';
   }
 }
