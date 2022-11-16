@@ -422,8 +422,6 @@ pub fn session_start_(id: &str, event_stream: StreamSink<EventToUI>) -> ResultTy
         *session.event_stream.write().unwrap() = Some(event_stream);
         let session = session.clone();
         std::thread::spawn(move || {
-            // if flutter : disable keyboard listen
-            crate::client::disable_keyboard_listening();
             io_loop(session);
         });
         Ok(())

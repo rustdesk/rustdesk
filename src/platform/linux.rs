@@ -715,3 +715,23 @@ pub fn get_double_click_time() -> u32 {
         double_click_time
     }
 }
+
+pub mod keyboard {
+    use crate::common::GrabState;
+    use hbb_common::{allow_err, log, message_proto::*};
+    use rdev::{Event, EventType, Key};
+    use std::sync::mpsc;
+    use std::thread;
+
+    
+
+    pub fn _legacy_keyboard_mode(event: &Event, key_event: &KeyEvent) {
+        log::info!("{:?}", event);
+    }
+
+    pub fn _client_map_keyboard_mode(event: &Event, key_event: &KeyEvent) {
+
+    }
+
+    pub fn _translate_keyboard_mode(event: &Event, key_event: &KeyEvent) {}
+}

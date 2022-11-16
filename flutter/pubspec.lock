@@ -63,14 +63,7 @@ packages:
       name: back_button_interceptor
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "6.0.2"
-  bot_toast:
-    dependency: "direct main"
-    description:
-      name: bot_toast
-      url: "https://pub.dartlang.org"
-    source: hosted
-    version: "4.0.3"
+    version: "6.0.1"
   build:
     dependency: transitive
     description:
@@ -264,8 +257,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "82f9eab81cb2c7bfb938def7a1b399a6279bbc75"
-      resolved-ref: "82f9eab81cb2c7bfb938def7a1b399a6279bbc75"
+      ref: bf278fc8a8ff787e46fa3ab97674373bfaa20f23
+      resolved-ref: bf278fc8a8ff787e46fa3ab97674373bfaa20f23
       url: "https://github.com/Kingtous/rustdesk_desktop_multi_window"
     source: git
     version: "0.1.0"
@@ -390,8 +383,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "74b1b314142b6775c1243067a3503ac568ebc74b"
-      resolved-ref: "74b1b314142b6775c1243067a3503ac568ebc74b"
+      ref: dec2166e881c47d922e1edc484d10d2cd5c2103b
+      resolved-ref: dec2166e881c47d922e1edc484d10d2cd5c2103b
       url: "https://github.com/Kingtous/rustdesk_flutter_custom_cursor"
     source: git
     version: "0.0.1"
@@ -1015,7 +1008,7 @@ packages:
       name: uni_links_desktop
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "0.1.4"
+    version: "0.1.3"
   uni_links_platform_interface:
     dependency: transitive
     description:

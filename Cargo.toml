@@ -63,7 +63,7 @@ default-net = "0.11.0"
 wol-rs = "0.9.1"
 flutter_rust_bridge = { git = "https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge", optional = true }
 errno = "0.2.8"
-rdev = { git = "https://github.com/asur4s/rdev" }
+rdev = { path = "../rdev" }
 url = { version = "2.1", features = ["serde"] }
 
 reqwest = { version = "0.11", features = ["blocking", "json", "rustls-tls"], default-features=false }

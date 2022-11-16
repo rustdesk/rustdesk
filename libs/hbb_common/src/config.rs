@@ -203,6 +203,8 @@ pub struct PeerConfig {
     pub enable_file_transfer: bool,
     #[serde(default)]
     pub show_quality_monitor: bool,
+    #[serde(default)]
+    pub keyboard_mode: String,
 
     // The other scalar value must before this
     #[serde(default, deserialize_with = "PeerConfig::deserialize_options")]

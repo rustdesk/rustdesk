@@ -1533,7 +1533,7 @@ dependencies = [
  "log",
  "objc",
  "pkg-config",
- "rdev",
+ "rdev 0.5.0-2 (git+https://github.com/asur4s/rdev)",
  "serde 1.0.147",
  "serde_derive",
  "tfc",
@@ -4229,7 +4229,27 @@ dependencies = [
 [[package]]
 name = "rdev"
 version = "0.5.0-2"
-source = "git+https://github.com/asur4s/rdev#4051761e7ccf434a443b8e9592c23160c9cace56"
+dependencies = [
+ "cocoa",
+ "core-foundation 0.9.3",
+ "core-foundation-sys 0.8.3",
+ "core-graphics 0.22.3",
+ "enum-map",
+ "epoll",
+ "inotify",
+ "lazy_static",
+ "libc",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
+ "widestring 1.0.2",
+ "winapi 0.3.9",
+ "x11 2.20.0",
+]
+
+[[package]]
+name = "rdev"
+version = "0.5.0-2"
+source = "git+https://github.com/asur4s/rdev#fdcee04f10ea0ef00d36aa612eabb9605ae9f2fc"
 dependencies = [
  "cocoa",
  "core-foundation 0.9.3",
@@ -4518,7 +4538,7 @@ dependencies = [
  "num_cpus",
  "objc",
  "parity-tokio-ipc",
- "rdev",
+ "rdev 0.5.0-2",
  "repng",
  "reqwest",
  "rpassword 7.1.0",
