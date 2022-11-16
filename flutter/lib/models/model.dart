@@ -696,6 +696,8 @@ class CursorData {
   final img2.Image? image;
   double scale;
   Uint8List? data;
+  final double hotxOrigin;
+  final double hotyOrigin;
   double hotx;
   double hoty;
   final int width;
@@ -707,45 +709,53 @@ class CursorData {
     required this.image,
     required this.scale,
     required this.data,
-    required this.hotx,
-    required this.hoty,
+    required this.hotxOrigin,
+    required this.hotyOrigin,
     required this.width,
     required this.height,
-  });
+  })  : hotx = hotxOrigin * scale,
+        hoty = hotxOrigin * scale;
 
   int _doubleToInt(double v) => (v * 10e6).round().toInt();
 
-  double _checkUpdateScale(double scale) {
-    // Update data if scale changed.
-    if (Platform.isWindows) {
-      final tgtWidth = (width * scale).toInt();
-      final tgtHeight = (width * scale).toInt();
-      if (tgtWidth < kMinCursorSize || tgtHeight < kMinCursorSize) {
-        double sw = kMinCursorSize.toDouble() / width;
-        double sh = kMinCursorSize.toDouble() / height;
-        scale = sw < sh ? sh : sw;
+  double _checkUpdateScale(double scale, bool shouldScale) {
+    double oldScale = this.scale;
+    if (!shouldScale) {
+      scale = 1.0;
+    } else {
+      // Update data if scale changed.
+      if (Platform.isWindows) {
+        final tgtWidth = (width * scale).toInt();
+        final tgtHeight = (width * scale).toInt();
+        if (tgtWidth < kMinCursorSize || tgtHeight < kMinCursorSize) {
+          double sw = kMinCursorSize.toDouble() / width;
+          double sh = kMinCursorSize.toDouble() / height;
+          scale = sw < sh ? sh : sw;
+        }
       }
-      if (_doubleToInt(this.scale) != _doubleToInt(scale)) {
+    }
+
+    if (Platform.isWindows) {
+      if (_doubleToInt(oldScale) != _doubleToInt(scale)) {
         data = img2
             .copyResize(
               image!,
               width: (width * scale).toInt(),
               height: (height * scale).toInt(),
+              interpolation: img2.Interpolation.average,
             )
             .getBytes(format: img2.Format.bgra);
       }
     }
+
     this.scale = scale;
-    if (hotx > 0 && hoty > 0) {
-      // default cursor data
-      hotx = (width * scale) / 2;
-      hoty = (height * scale) / 2;
-    }
+    hotx = hotxOrigin * scale;
+    hoty = hotyOrigin * scale;
     return scale;
   }
 
-  String updateGetKey(double scale) {
-    scale = _checkUpdateScale(scale);
+  String updateGetKey(double scale, bool shouldScale) {
+    scale = _checkUpdateScale(scale, shouldScale);
     return '${peerId}_${id}_${_doubleToInt(width * scale)}_${_doubleToInt(height * scale)}';
   }
 }
@@ -811,8 +821,6 @@ class CursorModel with ChangeNotifier {
     if (_defaultCache == null) {
       Uint8List data;
       double scale = 1.0;
-      double hotx = (defaultCursorImage!.width * scale) / 2;
-      double hoty = (defaultCursorImage!.height * scale) / 2;
       if (Platform.isWindows) {
         data = defaultCursorImage!.getBytes(format: img2.Format.bgra);
       } else {
@@ -825,8 +833,8 @@ class CursorModel with ChangeNotifier {
         image: defaultCursorImage?.clone(),
         scale: scale,
         data: data,
-        hotx: hotx,
-        hoty: hoty,
+        hotxOrigin: defaultCursorImage!.width / 2,
+        hotyOrigin: defaultCursorImage!.height / 2,
         width: defaultCursorImage!.width,
         height: defaultCursorImage!.height,
       );
@@ -996,10 +1004,8 @@ class CursorModel with ChangeNotifier {
       image: Platform.isWindows ? img2.Image.fromBytes(w, h, data) : null,
       scale: 1.0,
       data: data,
-      hotx: 0,
-      hoty: 0,
-      // hotx: _hotx,
-      // hoty: _hoty,
+      hotxOrigin: _hotx,
+      hotyOrigin: _hoty,
       width: w,
       height: h,
     );
