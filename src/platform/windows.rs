@@ -1553,6 +1553,13 @@ pub fn run_as_system(arg: &str) -> ResultType<()> {
 
 pub fn elevate_or_run_as_system(is_setup: bool, is_elevate: bool, is_run_as_system: bool) {
     // avoid possible run recursively due to failed run.
+    log::info!(
+        "elevate:{}->{:?}, run_as_system:{}->{}",
+        is_elevate,
+        is_elevated(None),
+        is_run_as_system,
+        crate::username(),
+    );
     let arg_elevate = if is_setup {
         "--noinstall --elevate"
     } else {

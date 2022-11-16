@@ -81,6 +81,13 @@ pub fn core_main() -> Option<Vec<String>> {
         }
     }
     #[cfg(windows)]
+    #[cfg(feature = "quick_start")]
+    if !crate::platform::is_installed() && args.is_empty() && !_is_elevate && !_is_run_as_system {
+        if let Err(e) = crate::portable_service::client::start_portable_service() {
+            log::error!("Failed to start portable service:{:?}", e);
+        }
+    }
+    #[cfg(windows)]
     if !crate::platform::is_installed() && (_is_elevate || _is_run_as_system) {
         crate::platform::elevate_or_run_as_system(click_setup, _is_elevate, _is_run_as_system);
         return None;
@@ -276,7 +283,7 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
             "RustDesk",
             (WM_USER + 2) as _, // refered from unilinks desktop pub
             uni_links.as_str(),
-            true
+            true,
         );
         return if res { None } else { Some(Vec::new()) };
     }

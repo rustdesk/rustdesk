@@ -406,8 +406,9 @@ pub mod server {
                                     Pong => {
                                         nack = 0;
                                     }
-                                    ConnCount(Some(n)) => {
-                                        if n == 0 {
+                                    ConnCount(Some(_n)) => {
+                                        #[cfg(not(feature = "quick_start"))]
+                                        if _n == 0 {
                                             log::info!("Connnection count equals 0, exit");
                                             stream.send(&Data::DataPortableService(WillClose)).await.ok();
                                             break;
@@ -435,6 +436,7 @@ pub mod server {
                                 break;
                             }
                             stream.send(&Data::DataPortableService(Ping)).await.ok();
+                            #[cfg(not(feature = "quick_start"))]
                             stream.send(&Data::DataPortableService(ConnCount(None))).await.ok();
                         }
                     }
@@ -462,6 +464,7 @@ pub mod client {
     }
 
     pub(crate) fn start_portable_service() -> ResultType<()> {
+        log::info!("start portable service");
         if PORTABLE_SERVICE_RUNNING.lock().unwrap().clone() {
             bail!("already running");
         }
