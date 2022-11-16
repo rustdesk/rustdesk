@@ -16,7 +16,7 @@ use std::{
     mem::size_of,
     ops::{Deref, DerefMut},
     sync::{Arc, Mutex},
-    time::{Duration, Instant},
+    time::Duration,
 };
 use winapi::{
     shared::minwindef::{BOOL, FALSE, TRUE},

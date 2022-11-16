@@ -280,13 +280,6 @@ fn get_modifier_state(key: Key, en: &mut Enigo) -> bool {
 }
 
 pub fn handle_mouse(evt: &MouseEvent, conn: i32) {
-    #[cfg(target_os = "macos")]
-    if !*IS_SERVER {
-        // having GUI, run main GUI thread, otherwise crash
-        let evt = evt.clone();
-        QUEUE.exec_async(move || handle_mouse_(&evt, conn));
-        return;
-    }
     if !active_mouse_(conn) {
         return;
     }
@@ -299,6 +292,13 @@ pub fn handle_mouse(evt: &MouseEvent, conn: i32) {
             x: evt.x,
             y: evt.y,
         };
+    }
+    #[cfg(target_os = "macos")]
+    if !*IS_SERVER {
+        // having GUI, run main GUI thread, otherwise crash
+        let evt = evt.clone();
+        QUEUE.exec_async(move || handle_mouse_(&evt));
+        return;
     }
     #[cfg(windows)]
     crate::portable_service::client::handle_mouse(evt);

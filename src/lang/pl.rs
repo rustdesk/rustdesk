@@ -387,7 +387,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show RustDesk", "Pokaż RustDesk"),
         ("This PC", "Ten komputer"),
         ("or", "albo"),
-        ("Continue with", "Kontynuuj z"),""),
+        ("Continue with", "Kontynuuj z"),
         ("Elevate", ""),
     ].iter().cloned().collect();
 }
