@@ -262,6 +262,7 @@ jobs:
         if: ${{ matrix.job.extra-build-args == '' }}
         run: |
           sudo apt install -y rpm
+          HBB=`pwd` rpmbuild ./res/rpm-flutter.spec -bb
           pushd ~/rpmbuild/RPMS/${{ steps.build-target-triple.outputs._0 }}
           for name in rustdesk*??.rpm; do
               mv "$name" "${name%%.rpm}-fedora28-centos8.rpm" 
@@ -274,7 +275,7 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            ~/rpmbuild/RPMS/${{ steps.build-target-triple.outputs._0 }}/*
+            /home/runner/rpmbuild/RPMS/${{ steps.build-target-triple.outputs._0 }}/*.rpm
 
   build-flatpak:
     name: Build Flatpak
