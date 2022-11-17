@@ -1075,7 +1075,7 @@ class _AboutState extends State<_About> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Copyright &copy; 2022 Purslane Ltd.\n$license',
+                                'Copyright © 2022 Purslane Ltd.\n$license',
                                 style: const TextStyle(color: Colors.white),
                               ),
                               const Text(
