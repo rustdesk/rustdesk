@@ -120,6 +120,13 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v3
 
+      - name: Get build target triple
+        uses: jungwinter/split@v2
+        id: build-target-triple
+        with:
+          separator: '-'
+          msg: ${{ matrix.job.target }}
+
       - name: Install prerequisites
         run: |
           case ${{ matrix.job.target }} in
@@ -250,19 +257,24 @@ jobs:
           files: |
             res/rustdesk*.zst
 
-      # - name: build RPM package
-      #   id: rpm
-      #   uses: Kingtous/rustdesk-rpmbuild@master
-      #   with:
-      #     spec_file: "res/rpm-flutter.spec"
+      - name: Make RPM package
+        shell: bash
+        if: ${{ matrix.job.extra-build-args == '' }}
+        run: |
+          sudo apt install -y rpm
+          pushd ~/rpmbuild/RPMS/${{ steps.build-target-triple.outputs._0 }}
+          for name in rustdesk*??.rpm; do
+              mv "$name" "${name%%.rpm}-fedora28-centos8.rpm" 
+          done
 
-      # - name: Publish fedora28/centos8 package
-      #   uses: softprops/action-gh-release@v1
-      #   with:
-      #     prerelease: true
-      #     tag_name: ${{ env.TAG_NAME }}
-      #     files: |
-      #       ${{ steps.rpm.outputs.rpm_dir_path }}/*
+      - name: Publish fedora28/centos8 package
+        if: ${{ matrix.job.extra-build-args == '' }}
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            ~/rpmbuild/RPMS/${{ steps.build-target-triple.outputs._0 }}/*
 
   build-flatpak:
     name: Build Flatpak
