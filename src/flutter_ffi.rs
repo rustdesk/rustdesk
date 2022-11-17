@@ -170,7 +170,7 @@ pub fn session_get_flutter_config(id: String, k: String) -> Option<String> {
 
 pub fn session_set_flutter_config(id: String, k: String, v: String) {
     if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
-        session.set_flutter_config(k, v);
+        session.save_flutter_config(k, v);
     }
 }
 
@@ -180,6 +180,34 @@ pub fn get_local_flutter_config(k: String) -> SyncReturn<String> {
 
 pub fn set_local_flutter_config(k: String, v: String) {
     ui_interface::set_local_flutter_config(k, v);
+}
+
+pub fn session_get_view_style(id: String) -> Option<String> {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        Some(session.get_view_style())
+    } else {
+        None
+    }
+}
+
+pub fn session_set_view_style(id: String, value: String) {
+    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+        session.save_view_style(value);
+    }
+}
+
+pub fn session_get_scroll_style(id: String) -> Option<String> {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        Some(session.get_scroll_style())
+    } else {
+        None
+    }
+}
+
+pub fn session_set_scroll_style(id: String, value: String) {
+    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+        session.save_scroll_style(value);
+    }
 }
 
 pub fn session_get_image_quality(id: String) -> Option<String> {

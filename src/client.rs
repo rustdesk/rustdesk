@@ -974,6 +974,8 @@ impl LoginConfigHandler {
         self.save_config(config);
     }
 
+    //to-do: too many dup code below.
+
     /// Save view style to the current config.
     ///
     /// # Arguments
@@ -985,13 +987,24 @@ impl LoginConfigHandler {
         self.save_config(config);
     }
 
+    /// Save scroll style to the current config.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The view style to be saved.
+    pub fn save_scroll_style(&mut self, value: String) {
+        let mut config = self.load_config();
+        config.scroll_style = value;
+        self.save_config(config);
+    }
+
     /// Set a ui config of flutter for handler's [`PeerConfig`].
     ///
     /// # Arguments
     ///
     /// * `k` - key of option
     /// * `v` - value of option
-    pub fn set_ui_flutter(&mut self, k: String, v: String) {
+    pub fn save_ui_flutter(&mut self, k: String, v: String) {
         let mut config = self.load_config();
         config.ui_flutter.insert(k, v);
         self.save_config(config);
@@ -1126,6 +1139,9 @@ impl LoginConfigHandler {
             };
             msg.custom_image_quality = quality << 8;
             n += 1;
+        }
+        if let Some(custom_fps) = self.options.get("custom-fps") {
+            msg.custom_fps = custom_fps.parse().unwrap_or(30);
         }
         if self.get_toggle_option("show-remote-cursor") {
             msg.show_remote_cursor = BoolOption::Yes.into();
