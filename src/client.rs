@@ -1140,6 +1140,9 @@ impl LoginConfigHandler {
             msg.custom_image_quality = quality << 8;
             n += 1;
         }
+        if let Some(custom_fps) = self.options.get("custom-fps") {
+            msg.custom_fps = custom_fps.parse().unwrap_or(30);
+        }
         if self.get_toggle_option("show-remote-cursor") {
             msg.show_remote_cursor = BoolOption::Yes.into();
             n += 1;
