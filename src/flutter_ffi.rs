@@ -1025,6 +1025,10 @@ pub fn main_get_icon() -> String {
     return String::new();
 }
 
+pub fn main_get_build_date() -> String {
+    crate::BUILD_DATE.to_string()
+}
+
 #[no_mangle]
 unsafe extern "C" fn translate(name: *const c_char, locale: *const c_char) -> *const c_char {
     let name = CStr::from_ptr(name);
