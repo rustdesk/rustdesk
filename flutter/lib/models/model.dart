@@ -413,7 +413,7 @@ class ImageModel with ChangeNotifier {
         await initializeCursorAndCanvas(parent.target!);
       }
       if (parent.target?.ffiModel.isPeerAndroid ?? false) {
-        bind.sessionPeerOption(id: id, name: 'view-style', value: 'adaptive');
+        bind.sessionSetViewStyle(id: id, value: 'adaptive');
         parent.target?.canvasModel.updateViewStyle();
       }
     }
@@ -535,7 +535,7 @@ class CanvasModel with ChangeNotifier {
   double get scrollY => _scrollY;
 
   updateViewStyle() async {
-    final style = await bind.sessionGetOption(id: id, arg: 'view-style');
+    final style = await bind.sessionGetViewStyle(id: id);
     if (style == null) {
       return;
     }
@@ -561,7 +561,7 @@ class CanvasModel with ChangeNotifier {
   }
 
   updateScrollStyle() async {
-    final style = await bind.sessionGetOption(id: id, arg: 'scroll-style');
+    final style = await bind.sessionGetScrollStyle(id: id);
     if (style == 'scrollbar') {
       _scrollStyle = ScrollStyle.scrollbar;
       _scrollX = 0.0;

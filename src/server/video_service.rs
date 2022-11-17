@@ -25,20 +25,22 @@ use hbb_common::tokio::sync::{
     mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
     Mutex as TokioMutex,
 };
+#[cfg(not(windows))]
+use scrap::Capturer;
 use scrap::{
     codec::{Encoder, EncoderCfg, HwEncoderConfig},
     record::{Recorder, RecorderContext},
     vpxcodec::{VpxEncoderConfig, VpxVideoCodecId},
-    Capturer, Display, TraitCapturer,
+    Display, TraitCapturer,
 };
+#[cfg(windows)]
+use std::sync::Once;
 use std::{
     collections::HashSet,
     io::ErrorKind::WouldBlock,
     ops::{Deref, DerefMut},
     time::{self, Duration, Instant},
 };
-#[cfg(windows)]
-use std::sync::Once;
 #[cfg(windows)]
 use virtual_display;
 

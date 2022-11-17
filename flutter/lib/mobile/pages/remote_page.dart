@@ -474,7 +474,7 @@ class _RemotePageState extends State<RemotePage> {
         },
         onTwoFingerScaleEnd: (d) {
           _scale = 1;
-          bind.sessionPeerOption(id: widget.id, name: "view-style", value: "");
+          bind.sessionSetViewStyle(id: widget.id, value: "");
         },
         onThreeFingerVerticalDragUpdate: gFFI.ffiModel.isPeerAndroid
             ? null
@@ -1001,7 +1001,7 @@ void showOptions(
       setState(() {
         viewStyle = value;
         bind
-            .sessionPeerOption(id: id, name: "view-style", value: value)
+            .sessionSetViewStyle(id: id, value: value)
             .then((_) => gFFI.canvasModel.updateViewStyle());
       });
     }
