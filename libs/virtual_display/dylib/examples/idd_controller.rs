@@ -1,5 +1,5 @@
 #[cfg(windows)]
-use virtual_display::win10::{idd, DRIVER_INSTALL_PATH};
+use dylib_virtual_display::win10::{idd, DRIVER_INSTALL_PATH};
 
 #[cfg(windows)]
 use std::{

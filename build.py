@@ -317,11 +317,6 @@ def main():
     os.system('python3 res/inline-sciter.py')
     portable = args.portable
     if windows:
-        # build virtual display dynamic library
-        os.chdir('libs/virtual_display/dylib')
-        os.system('cargo build --release')
-        os.chdir('../../..')
-
         if flutter:
             build_flutter_windows(version, features)
             return

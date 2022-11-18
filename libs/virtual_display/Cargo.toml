@@ -9,4 +9,3 @@ edition = "2021"
 lazy_static = "1.4"
 libloading = "0.7"
 hbb_common = { path = "../hbb_common" }
-dylib_virtual_display = { path = "./dylib" }

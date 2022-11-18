@@ -12,6 +12,12 @@ lazy_static::lazy_static! {
 }
 
 #[no_mangle]
+#[cfg(windows)]
+pub fn get_dirver_install_path() -> &'static str {
+    win10::DRIVER_INSTALL_PATH
+}
+
+#[no_mangle]
 pub fn download_driver() -> ResultType<()> {
     #[cfg(windows)]
     let _download_url = win10::DRIVER_DOWNLOAD_URL;
