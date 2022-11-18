@@ -1,201 +1,89 @@
 #[cfg(windows)]
-pub mod win10;
+pub use dylib_virtual_display::win10;
 
-use hbb_common::{bail, lazy_static, ResultType};
-use std::{path::Path, sync::Mutex};
+use hbb_common::{bail, ResultType};
+use std::sync::{Arc, Mutex};
+
+const LIB_NAME_VIRTUAL_DISPLAY: &str = "virtual_display";
 
 lazy_static::lazy_static! {
-    // If device is uninstalled though "Device Manager" Window.
-    // Rustdesk is unable to handle device any more...
-    static ref H_SW_DEVICE: Mutex<u64> = Mutex::new(0);
-    static ref MONITOR_PLUGIN: Mutex<Vec<u32>> = Mutex::new(Vec::new());
+    static ref LIB_VIRTUAL_DISPLAY: Arc<Mutex<Result<libloading::Library, libloading::Error>>> = {
+        #[cfg(target_os = "windows")]
+        let libname = format!("{}.dll", LIB_NAME_VIRTUAL_DISPLAY);
+        #[cfg(target_os = "linux")]
+        let libname = format!("lib{}.so", LIB_NAME_VIRTUAL_DISPLAY);
+        #[cfg(target_os = "macos")]
+        let libname = format!("lib{}.dylib", LIB_NAME_VIRTUAL_DISPLAY);
+        Arc::new(Mutex::new(unsafe { libloading::Library::new(libname) }))
+    };
 }
 
-#[no_mangle]
-pub fn download_driver() -> ResultType<()> {
-    #[cfg(windows)]
-    let _download_url = win10::DRIVER_DOWNLOAD_URL;
-    #[cfg(target_os = "linux")]
-    let _download_url = "";
-
-    // process download and report progress
-
-    Ok(())
-}
-
-#[no_mangle]
-pub fn install_update_driver(_reboot_required: &mut bool) -> ResultType<()> {
-    #[cfg(windows)]
-    let install_path = win10::DRIVER_INSTALL_PATH;
-    #[cfg(not(windows))]
-    let install_path = "";
-
-    let abs_path = Path::new(install_path).canonicalize()?;
-    if !abs_path.exists() {
-        bail!("{} not exists", install_path)
-    }
-
-    #[cfg(windows)]
-    unsafe {
-        {
-            // Device must be created before install driver.
-            // https://github.com/fufesou/RustDeskIddDriver/issues/1
-            if let Err(e) = create_device() {
-                bail!("{}", e);
-            }
-
-            let full_install_path: Vec<u16> = abs_path
-                .to_string_lossy()
-                .as_ref()
-                .encode_utf16()
-                .chain(Some(0).into_iter())
-                .collect();
-
-            let mut reboot_required_tmp = win10::idd::FALSE;
-            if win10::idd::InstallUpdate(full_install_path.as_ptr() as _, &mut reboot_required_tmp)
-                == win10::idd::FALSE
-            {
-                bail!("{}", win10::get_last_msg()?);
-            }
-            *_reboot_required = reboot_required_tmp == win10::idd::TRUE;
-        }
-    }
-
-    Ok(())
-}
-
-#[no_mangle]
-pub fn uninstall_driver(_reboot_required: &mut bool) -> ResultType<()> {
-    #[cfg(windows)]
-    let install_path = win10::DRIVER_INSTALL_PATH;
-    #[cfg(not(windows))]
-    let install_path = "";
-
-    let abs_path = Path::new(install_path).canonicalize()?;
-    if !abs_path.exists() {
-        bail!("{} not exists", install_path)
-    }
-
-    #[cfg(windows)]
-    unsafe {
-        {
-            let full_install_path: Vec<u16> = abs_path
-                .to_string_lossy()
-                .as_ref()
-                .encode_utf16()
-                .chain(Some(0).into_iter())
-                .collect();
-
-            let mut reboot_required_tmp = win10::idd::FALSE;
-            if win10::idd::Uninstall(full_install_path.as_ptr() as _, &mut reboot_required_tmp)
-                == win10::idd::FALSE
-            {
-                bail!("{}", win10::get_last_msg()?);
-            }
-            *_reboot_required = reboot_required_tmp == win10::idd::TRUE;
-        }
-    }
-
-    Ok(())
-}
-
-#[no_mangle]
 pub fn is_device_created() -> bool {
-    #[cfg(windows)]
-    return *H_SW_DEVICE.lock().unwrap() != 0;
-    #[cfg(not(windows))]
-    return false;
+    match &*LIB_VIRTUAL_DISPLAY.lock().unwrap() {
+        Ok(lib) => unsafe {
+            match lib.get::<libloading::Symbol<fn() -> bool>>(b"is_device_created") {
+                Ok(func) => func(),
+                Err(..) => false,
+            }
+        },
+        Err(..) => false,
+    }
 }
 
-#[no_mangle]
-pub fn create_device() -> ResultType<()> {
-    if is_device_created() {
-        return Ok(());
-    }
-    #[cfg(windows)]
-    unsafe {
-        let mut lock_device = H_SW_DEVICE.lock().unwrap();
-        let mut h_sw_device = *lock_device as win10::idd::HSWDEVICE;
-        if win10::idd::DeviceCreate(&mut h_sw_device) == win10::idd::FALSE {
-            bail!("{}", win10::get_last_msg()?);
-        } else {
-            *lock_device = h_sw_device as u64;
-        }
-    }
-    Ok(())
-}
-
-#[no_mangle]
 pub fn close_device() {
-    #[cfg(windows)]
-    unsafe {
-        win10::idd::DeviceClose(*H_SW_DEVICE.lock().unwrap() as win10::idd::HSWDEVICE);
-        *H_SW_DEVICE.lock().unwrap() = 0;
-        MONITOR_PLUGIN.lock().unwrap().clear();
+    match &*LIB_VIRTUAL_DISPLAY.lock().unwrap() {
+        Ok(lib) => unsafe {
+            match lib.get::<libloading::Symbol<fn()>>(b"close_device") {
+                Ok(func) => func(),
+                Err(..) => {}
+            }
+        },
+        Err(..) => {}
     }
 }
 
-#[no_mangle]
-pub fn plug_in_monitor() -> ResultType<()> {
-    #[cfg(windows)]
-    unsafe {
-        let monitor_index = 0 as u32;
-        let mut plug_in_monitors = MONITOR_PLUGIN.lock().unwrap();
-        for i in 0..plug_in_monitors.len() {
-            if let Some(d) = plug_in_monitors.get(i) {
-                if *d == monitor_index {
-                    return Ok(());
-                }
-            };
+macro_rules! def_func_result {
+    ($func:ident, $name: tt) => {
+        pub fn $func() -> ResultType<()> {
+            match &*LIB_VIRTUAL_DISPLAY.lock().unwrap() {
+                Ok(lib) => unsafe {
+                    match lib.get::<libloading::Symbol<fn() -> ResultType<()>>>($name.as_bytes()) {
+                        Ok(func) => func(),
+                        Err(..) => bail!("Failed to load func {}", $name),
+                    }
+                },
+                Err(e) => bail!("Failed to load library {}, {}", LIB_NAME_VIRTUAL_DISPLAY, e),
+            }
         }
-        if win10::idd::MonitorPlugIn(monitor_index, 0, 30) == win10::idd::FALSE {
-            bail!("{}", win10::get_last_msg()?);
-        }
-        (*plug_in_monitors).push(monitor_index);
-    }
-    Ok(())
+    };
 }
 
-#[no_mangle]
-pub fn plug_out_monitor() -> ResultType<()> {
-    #[cfg(windows)]
-    unsafe {
-        let monitor_index = 0 as u32;
-        if win10::idd::MonitorPlugOut(monitor_index) == win10::idd::FALSE {
-            bail!("{}", win10::get_last_msg()?);
-        }
-        let mut plug_in_monitors = MONITOR_PLUGIN.lock().unwrap();
-        for i in 0..plug_in_monitors.len() {
-            if let Some(d) = plug_in_monitors.get(i) {
-                if *d == monitor_index {
-                    plug_in_monitors.remove(i);
-                    break;
-                }
-            };
-        }
+pub fn install_update_driver(reboot_required: &mut bool) -> ResultType<()> {
+    match &*LIB_VIRTUAL_DISPLAY.lock().unwrap() {
+        Ok(lib) => unsafe {
+            match lib.get::<libloading::Symbol<fn(&mut bool) -> ResultType<()>>>(b"install_update_driver") {
+                Ok(func) => func(reboot_required),
+                Err(..) => bail!("Failed to load func install_update_driver"),
+            }
+        },
+        Err(e) => bail!("Failed to load library {}, {}", LIB_NAME_VIRTUAL_DISPLAY, e),
     }
-    Ok(())
 }
 
-#[no_mangle]
-pub fn update_monitor_modes() -> ResultType<()> {
-    #[cfg(windows)]
-    unsafe {
-        let monitor_index = 0 as u32;
-        let mut modes = vec![win10::idd::MonitorMode {
-            width: 1920,
-            height: 1080,
-            sync: 60,
-        }];
-        if win10::idd::FALSE
-            == win10::idd::MonitorModesUpdate(
-                monitor_index as win10::idd::UINT,
-                modes.len() as win10::idd::UINT,
-                modes.as_mut_ptr(),
-            )
-        {
-            bail!("{}", win10::get_last_msg()?);
-        }
+pub fn uninstall_driver(reboot_required: &mut bool) -> ResultType<()> {
+    match &*LIB_VIRTUAL_DISPLAY.lock().unwrap() {
+        Ok(lib) => unsafe {
+            match lib.get::<libloading::Symbol<fn(&mut bool) -> ResultType<()>>>(b"uninstall_driver") {
+                Ok(func) => func(reboot_required),
+                Err(..) => bail!("Failed to load func uninstall_driver"),
+            }
+        },
+        Err(e) => bail!("Failed to load library {}, {}", LIB_NAME_VIRTUAL_DISPLAY, e),
     }
-    Ok(())
 }
+
+def_func_result!(download_driver, "download_driver");
+def_func_result!(create_device, "create_device");
+def_func_result!(plug_in_monitor, "plug_in_monitor");
+def_func_result!(plug_out_monitor, "plug_out_monitor");
+def_func_result!(update_monitor_modes, "update_monitor_modes");

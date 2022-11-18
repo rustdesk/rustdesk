@@ -280,8 +280,8 @@ def build_flutter_windows(version, features):
         exit(-1)
     os.chdir('flutter')
     os.system('flutter build windows --release')
-    shutil.copy2('target/release/deps/virtual_display.dll', flutter_win_target_dir)
     os.chdir('..')
+    shutil.copy2('target/release/deps/dylib_virtual_display.dll', flutter_win_target_dir)
     os.chdir('libs/portable')
     os.system('pip3 install -r requirements.txt')
     os.system(
@@ -318,9 +318,9 @@ def main():
     portable = args.portable
     if windows:
         # build virtual display dynamic library
-        os.chdir('libs/virtual_display')
+        os.chdir('libs/virtual_display/dylib')
         os.system('cargo build --release')
-        os.chdir('../..')
+        os.chdir('../../..')
 
         if flutter:
             build_flutter_windows(version, features)

@@ -53,8 +53,6 @@ mod connection;
 pub mod portable_service;
 mod service;
 mod video_qos;
-#[cfg(windows)]
-mod virtual_display;
 pub mod video_service;
 
 use hbb_common::tcp::new_listener;
