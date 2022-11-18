@@ -1187,7 +1187,7 @@ impl<T: InvokeUiSession> Remote<T> {
     #[cfg(windows)]
     fn handle_cliprdr_msg(&self, clip: hbb_common::message_proto::Cliprdr) {
         if !self.handler.lc.read().unwrap().disable_clipboard {
-            #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+            #[cfg(feature = "flutter")]
             if let Some(hbb_common::message_proto::cliprdr::Union::FormatList(_)) = &clip.union {
                 if self.client_conn_id
                     != clipboard::get_client_conn_id(&crate::flutter::get_cur_session_id())
