@@ -487,7 +487,7 @@ pub mod client {
                 crate::portable_service::SHMEM_NAME,
                 shmem_size,
             )?);
-            shutdown_hooks::add_shutdown_hook(drop_shmem);
+            shutdown_hooks::add_shutdown_hook(drop_portable_service_shared_memory);
         }
         let mut option = SHMEM.lock().unwrap();
         let shmem = option.as_mut().unwrap();
@@ -507,7 +507,7 @@ pub mod client {
         Ok(())
     }
 
-    extern "C" fn drop_shmem() {
+    pub extern "C" fn drop_portable_service_shared_memory() {
         log::info!("drop shared memory");
         *SHMEM.lock().unwrap() = None;
     }
