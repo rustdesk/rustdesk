@@ -864,7 +864,7 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
           }
         }
         if (apiServer.isNotEmpty) {
-          if (!apiServer.startsWith('http://') ||
+          if (!apiServer.startsWith('http://') &&
               !apiServer.startsWith('https://')) {
             apiErrMsg.value =
                 '${translate("API Server")}: ${translate("invalid_http")}';
