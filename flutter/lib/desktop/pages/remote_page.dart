@@ -561,11 +561,11 @@ class ImagePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (image == null) return;
     if (x.isNaN || y.isNaN) return;
-    canvas.scale(scale, scale);
     // https://github.com/flutter/flutter/issues/76187#issuecomment-784628161
     // https://api.flutter-io.cn/flutter/dart-ui/FilterQuality.html
     var paint = Paint();
     if ((scale - 1.0).abs() > 0.001) {
+      canvas.scale(scale, scale);
       paint.filterQuality = FilterQuality.medium;
       if (scale > 10.00000) {
         paint.filterQuality = FilterQuality.high;
