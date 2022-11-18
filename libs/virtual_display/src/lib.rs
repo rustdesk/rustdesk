@@ -11,6 +11,7 @@ lazy_static::lazy_static! {
     static ref MONITOR_PLUGIN: Mutex<Vec<u32>> = Mutex::new(Vec::new());
 }
 
+#[no_mangle]
 pub fn download_driver() -> ResultType<()> {
     #[cfg(windows)]
     let _download_url = win10::DRIVER_DOWNLOAD_URL;
@@ -22,6 +23,7 @@ pub fn download_driver() -> ResultType<()> {
     Ok(())
 }
 
+#[no_mangle]
 pub fn install_update_driver(_reboot_required: &mut bool) -> ResultType<()> {
     #[cfg(windows)]
     let install_path = win10::DRIVER_INSTALL_PATH;
@@ -62,6 +64,7 @@ pub fn install_update_driver(_reboot_required: &mut bool) -> ResultType<()> {
     Ok(())
 }
 
+#[no_mangle]
 pub fn uninstall_driver(_reboot_required: &mut bool) -> ResultType<()> {
     #[cfg(windows)]
     let install_path = win10::DRIVER_INSTALL_PATH;
@@ -96,6 +99,7 @@ pub fn uninstall_driver(_reboot_required: &mut bool) -> ResultType<()> {
     Ok(())
 }
 
+#[no_mangle]
 pub fn is_device_created() -> bool {
     #[cfg(windows)]
     return *H_SW_DEVICE.lock().unwrap() != 0;
@@ -103,6 +107,7 @@ pub fn is_device_created() -> bool {
     return false;
 }
 
+#[no_mangle]
 pub fn create_device() -> ResultType<()> {
     if is_device_created() {
         return Ok(());
@@ -120,6 +125,7 @@ pub fn create_device() -> ResultType<()> {
     Ok(())
 }
 
+#[no_mangle]
 pub fn close_device() {
     #[cfg(windows)]
     unsafe {
@@ -129,6 +135,7 @@ pub fn close_device() {
     }
 }
 
+#[no_mangle]
 pub fn plug_in_monitor() -> ResultType<()> {
     #[cfg(windows)]
     unsafe {
@@ -149,6 +156,7 @@ pub fn plug_in_monitor() -> ResultType<()> {
     Ok(())
 }
 
+#[no_mangle]
 pub fn plug_out_monitor() -> ResultType<()> {
     #[cfg(windows)]
     unsafe {
@@ -169,6 +177,7 @@ pub fn plug_out_monitor() -> ResultType<()> {
     Ok(())
 }
 
+#[no_mangle]
 pub fn update_monitor_modes() -> ResultType<()> {
     #[cfg(windows)]
     unsafe {

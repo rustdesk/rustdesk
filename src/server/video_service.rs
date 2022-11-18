@@ -42,7 +42,7 @@ use std::{
     time::{self, Duration, Instant},
 };
 #[cfg(windows)]
-use virtual_display;
+use super::virtual_display;
 
 pub const SCRAP_UBUNTU_HIGHER_REQUIRED: &str = "Wayland requires Ubuntu 21.04 or higher version.";
 pub const SCRAP_OTHER_VERSION_OR_X11_REQUIRED: &str =
