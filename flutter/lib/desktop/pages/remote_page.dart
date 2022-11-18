@@ -321,12 +321,10 @@ class _ImagePaintState extends State<ImagePaint> {
     if (c.scrollStyle == ScrollStyle.scrollbar) {
       final imageWidth = c.getDisplayWidth() * s;
       final imageHeight = c.getDisplayHeight() * s;
-      final imageWidget = SizedBox(
-          width: imageWidth,
-          height: imageHeight,
-          child: CustomPaint(
-            painter: ImagePainter(image: m.image, x: 0, y: 0, scale: s),
-          ));
+      final imageWidget = CustomPaint(
+        size: Size(imageWidth, imageHeight),
+        painter: ImagePainter(image: m.image, x: 0, y: 0, scale: s),
+      );
 
       return NotificationListener<ScrollNotification>(
         onNotification: (notification) {
@@ -350,13 +348,10 @@ class _ImagePaintState extends State<ImagePaint> {
                 Size(imageWidth, imageHeight))),
       );
     } else {
-      final imageWidget = SizedBox(
-          width: c.size.width,
-          height: c.size.height,
-          child: CustomPaint(
-            painter:
-                ImagePainter(image: m.image, x: c.x / s, y: c.y / s, scale: s),
-          ));
+      final imageWidget = CustomPaint(
+        size: Size(c.size.width, c.size.height),
+        painter: ImagePainter(image: m.image, x: c.x / s, y: c.y / s, scale: s),
+      );
       return mouseRegion(child: _buildListener(imageWidget));
     }
   }

@@ -28,14 +28,16 @@ class _PeerTabPageState extends State<PeerTabPage>
 
   setPeer() {
     final index = bind.getLocalFlutterConfig(k: 'peer-tab-index');
-    if (index == '') return;
-    _tabIndex.value = int.parse(index);
+    if (index != '') {
+      _tabIndex.value = int.parse(index);
+    }
 
     final uiType = bind.getLocalFlutterConfig(k: 'peer-card-ui-type');
-    if (uiType == '') return;
-    peerCardUiType.value = int.parse(uiType) == PeerUiType.list.index
-        ? PeerUiType.list
-        : PeerUiType.grid;
+    if (uiType != '') {
+      peerCardUiType.value = int.parse(uiType) == PeerUiType.list.index
+          ? PeerUiType.list
+          : PeerUiType.grid;
+    }
   }
 
   // hard code for now
