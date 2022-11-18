@@ -2,7 +2,7 @@ use crate::client::io_loop::Remote;
 use crate::client::{
     check_if_retry, handle_hash, handle_login_from_ui, handle_test_delay, input_os_password,
     load_config, send_mouse, start_video_audio_threads, FileManager, Key, LoginConfigHandler,
-    QualityStatus, KEY_MAP,
+    QualityStatus, KEY_MAP, 
 };
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::client::{get_key_state, SERVER_KEYBOARD_ENABLED};
@@ -1359,7 +1359,7 @@ impl<T: InvokeUiSession> Session<T> {
         });
     }
 
-    #[allow(dead_code)]
+    #[allow(dead_code)]    
     fn start_keyboard_hook(&self) {
         // only run in sciter
         if self.is_port_forward() || self.is_file_transfer() {
@@ -1394,8 +1394,8 @@ impl<T: InvokeUiSession> Session<T> {
                 me.key_down_or_up(down, key, evt);
             };
             /* todo!: Shift + a -> AA in sciter
-             * rdev::listen and rdev::grab both send a
-             */
+            * rdev::listen and rdev::grab both send a
+            */
             if let Err(error) = rdev::listen(func) {
                 log::error!("rdev: {:?}", error);
             }

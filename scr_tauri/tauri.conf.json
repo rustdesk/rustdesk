@@ -1,0 +1,53 @@
+{
+  "build": {
+    "beforeBuildCommand": "yarn run build",
+    "devPath": "http://localhost:3000",
+    "distDir": "../build"
+  },
+  "package": {
+    "productName": "rustdesk_tauri",
+    "version": "0.1.0"
+  },
+  "tauri": {
+    "allowlist": {
+      "all": true
+    },
+    "bundle": {
+      "active": true,
+      "targets": "all",
+      "identifier": "com.tauri.dev.foo-app",
+      "icon": [],
+      "resources": [],
+      "externalBin": [],
+      "copyright": "",
+      "category": "DeveloperTool",
+      "shortDescription": "",
+      "longDescription": "",
+      "deb": {
+        "depends": []
+      },
+      "macOS": {
+        "entitlements": null,
+        "exceptionDomain": "",
+        "frameworks": [],
+        "providerShortName": null,
+        "signingIdentity": null
+      },
+      "windows": {
+        "certificateThumbprint": null,
+        "digestAlgorithm": "sha256",
+        "timestampUrl": ""
+      }
+    },
+    "updater": {
+      "active": false
+    },
+    "windows": [],
+    "systemTray": {
+      "iconPath": "icons/icon.png"
+    },
+    "security": {
+      "csp": null
+    }
+  }
+}

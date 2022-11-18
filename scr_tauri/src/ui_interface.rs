@@ -18,9 +18,11 @@ use hbb_common::{
 use hbb_common::{
     config::{RENDEZVOUS_PORT, RENDEZVOUS_TIMEOUT},
     futures::future::join_all,
+    log,
     protobuf::Message as _,
     rendezvous_proto::*,
     tcp::FramedStream,
+    tokio::{self, sync::mpsc, time},
 };
 
 #[cfg(feature = "flutter")]
@@ -67,21 +69,25 @@ pub fn get_id() -> String {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn get_remote_id() -> String {
     LocalConfig::get_remote_id()
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn set_remote_id(id: String) {
     LocalConfig::set_remote_id(&id);
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn goto_install() {
     allow_err!(crate::run_me(vec!["--install"]));
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn install_me(_options: String, _path: String, _silent: bool, _debug: bool) {
     #[cfg(windows)]
     std::thread::spawn(move || {
@@ -93,6 +99,7 @@ pub fn install_me(_options: String, _path: String, _silent: bool, _debug: bool) 
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn update_me(_path: String) {
     #[cfg(target_os = "linux")]
     {
@@ -120,12 +127,14 @@ pub fn update_me(_path: String) {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn run_without_install() {
     crate::run_me(vec!["--noinstall"]).ok();
     std::process::exit(0);
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn show_run_without_install() -> bool {
     let mut it = std::env::args();
     if let Some(tmp) = it.next() {
@@ -137,6 +146,7 @@ pub fn show_run_without_install() -> bool {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn has_rendezvous_service() -> bool {
     #[cfg(all(windows, feature = "hbbs"))]
     return crate::platform::is_win_server() && crate::platform::windows::get_license().is_some();
@@ -144,6 +154,7 @@ pub fn has_rendezvous_service() -> bool {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn get_license() -> String {
     #[cfg(windows)]
     if let Some(lic) = crate::platform::windows::get_license() {
@@ -160,16 +171,19 @@ pub fn get_license() -> String {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn get_option_opt(key: &str) -> Option<String> {
     OPTIONS.lock().unwrap().get(key).map(|x| x.clone())
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn get_option(key: String) -> String {
     get_option_(&key)
 }
 
 #[inline]
+#[tauri::command(async)]
 fn get_option_(key: &str) -> String {
     let map = OPTIONS.lock().unwrap();
     if let Some(v) = map.get(key) {
@@ -180,11 +194,13 @@ fn get_option_(key: &str) -> String {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn get_local_option(key: String) -> String {
     LocalConfig::get_option(&key)
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn set_local_option(key: String, value: String) {
     LocalConfig::set_option(key, value);
 }
@@ -207,6 +223,7 @@ pub fn peer_has_password(id: String) -> bool {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn forget_password(id: String) {
     let mut c = PeerConfig::load(&id);
     c.password.clear();
@@ -214,12 +231,14 @@ pub fn forget_password(id: String) {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn get_peer_option(id: String, name: String) -> String {
     let c = PeerConfig::load(&id);
     c.options.get(&name).unwrap_or(&"".to_owned()).to_owned()
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn set_peer_option(id: String, name: String, value: String) {
     let mut c = PeerConfig::load(&id);
     if value.is_empty() {
@@ -231,11 +250,13 @@ pub fn set_peer_option(id: String, name: String, value: String) {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn using_public_server() -> bool {
     crate::get_custom_rendezvous_server(get_option_("custom-rendezvous-server")).is_empty()
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn get_options() -> String {
     let options = OPTIONS.lock().unwrap();
     let mut m = serde_json::Map::new();
@@ -246,6 +267,7 @@ pub fn get_options() -> String {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn test_if_valid_server(host: String) -> String {
     hbb_common::socket_client::test_if_valid_server(&host)
 }
@@ -299,6 +321,7 @@ pub fn get_sound_inputs() -> Vec<String> {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn set_options(m: HashMap<String, String>) {
     *OPTIONS.lock().unwrap() = m.clone();
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -308,6 +331,7 @@ pub fn set_options(m: HashMap<String, String>) {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn set_option(key: String, value: String) {
     let mut options = OPTIONS.lock().unwrap();
     #[cfg(target_os = "macos")]
@@ -329,6 +353,7 @@ pub fn set_option(key: String, value: String) {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn install_path() -> String {
     #[cfg(windows)]
     return crate::platform::windows::get_install_info().1;
@@ -337,6 +362,7 @@ pub fn install_path() -> String {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn get_socks() -> Vec<String> {
     #[cfg(any(target_os = "android", target_os = "ios"))]
     return Vec::new();
@@ -357,6 +383,7 @@ pub fn get_socks() -> Vec<String> {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn set_socks(proxy: String, username: String, password: String) {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     ipc::set_socks(config::Socks5Server {
@@ -369,9 +396,10 @@ pub fn set_socks(proxy: String, username: String, password: String) {
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[inline]
+#[tauri::command(async)]
 pub fn is_installed() -> bool {
     crate::platform::is_installed()
-}
+    }
 
 #[cfg(any(target_os = "android", target_os = "ios"))]
 #[inline]
@@ -380,6 +408,7 @@ pub fn is_installed() -> bool {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn is_rdp_service_open() -> bool {
     #[cfg(windows)]
     return is_installed() && crate::platform::windows::is_rdp_service_open();
@@ -388,6 +417,7 @@ pub fn is_rdp_service_open() -> bool {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn is_share_rdp() -> bool {
     #[cfg(windows)]
     return crate::platform::windows::is_share_rdp();
@@ -396,12 +426,14 @@ pub fn is_share_rdp() -> bool {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn set_share_rdp(_enable: bool) {
     #[cfg(windows)]
     crate::platform::windows::set_share_rdp(_enable);
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn is_installed_lower_version() -> bool {
     #[cfg(not(windows))]
     return false;
@@ -415,6 +447,7 @@ pub fn is_installed_lower_version() -> bool {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn closing(x: i32, y: i32, w: i32, h: i32) {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     crate::server::input_service::fix_key_down_timeout_at_exit();
@@ -422,6 +455,7 @@ pub fn closing(x: i32, y: i32, w: i32, h: i32) {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn get_size() -> Vec<i32> {
     let s = LocalConfig::get_size();
     let mut v = Vec::new();
@@ -433,6 +467,7 @@ pub fn get_size() -> Vec<i32> {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn get_mouse_time() -> f64 {
     let ui_status = UI_STATUS.lock().unwrap();
     let res = ui_status.2 as f64;
@@ -440,6 +475,7 @@ pub fn get_mouse_time() -> f64 {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn check_mouse_time() {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
@@ -449,6 +485,7 @@ pub fn check_mouse_time() {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn get_connect_status() -> Status {
     let ui_statue = UI_STATUS.lock().unwrap();
     let res = ui_statue.clone();
@@ -456,6 +493,7 @@ pub fn get_connect_status() -> Status {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn temporary_password() -> String {
     #[cfg(any(target_os = "android", target_os = "ios"))]
     return password_security::temporary_password();
@@ -464,6 +502,7 @@ pub fn temporary_password() -> String {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn update_temporary_password() {
     #[cfg(any(target_os = "android", target_os = "ios"))]
     password_security::update_temporary_password();
@@ -472,6 +511,7 @@ pub fn update_temporary_password() {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn permanent_password() -> String {
     #[cfg(any(target_os = "android", target_os = "ios"))]
     return Config::get_permanent_password();
@@ -480,6 +520,7 @@ pub fn permanent_password() -> String {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn set_permanent_password(password: String) {
     #[cfg(any(target_os = "android", target_os = "ios"))]
     Config::set_permanent_password(&password);
@@ -488,37 +529,44 @@ pub fn set_permanent_password(password: String) {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn get_peer(id: String) -> PeerConfig {
     PeerConfig::load(&id)
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn get_fav() -> Vec<String> {
     LocalConfig::get_fav()
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn store_fav(fav: Vec<String>) {
     LocalConfig::set_fav(fav);
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn get_recent_sessions() -> Vec<(String, SystemTime, PeerConfig)> {
     PeerConfig::peers()
 }
 
 #[inline]
+#[tauri::command(async)]
 #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
 pub fn get_icon() -> String {
     crate::get_icon()
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn remove_peer(id: String) {
     PeerConfig::remove(&id);
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn new_remote(id: String, remote_type: String) {
     let mut lock = CHILDREN.lock().unwrap();
     let args = vec![format!("--{}", remote_type), id.clone()];
@@ -548,6 +596,7 @@ pub fn new_remote(id: String, remote_type: String) {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn is_process_trusted(_prompt: bool) -> bool {
     #[cfg(target_os = "macos")]
     return crate::platform::macos::is_process_trusted(_prompt);
@@ -556,6 +605,7 @@ pub fn is_process_trusted(_prompt: bool) -> bool {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn is_can_screen_recording(_prompt: bool) -> bool {
     #[cfg(target_os = "macos")]
     return crate::platform::macos::is_can_screen_recording(_prompt);
@@ -564,6 +614,7 @@ pub fn is_can_screen_recording(_prompt: bool) -> bool {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn is_installed_daemon(_prompt: bool) -> bool {
     #[cfg(target_os = "macos")]
     return crate::platform::macos::is_installed_daemon(_prompt);
@@ -572,6 +623,7 @@ pub fn is_installed_daemon(_prompt: bool) -> bool {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn get_error() -> String {
     #[cfg(not(any(feature = "cli")))]
     #[cfg(target_os = "linux")]
@@ -593,6 +645,7 @@ pub fn get_error() -> String {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn is_login_wayland() -> bool {
     #[cfg(target_os = "linux")]
     return crate::platform::linux::is_login_wayland();
@@ -601,12 +654,14 @@ pub fn is_login_wayland() -> bool {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn fix_login_wayland() {
     #[cfg(target_os = "linux")]
     crate::platform::linux::fix_login_wayland();
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn current_is_wayland() -> bool {
     #[cfg(target_os = "linux")]
     return crate::platform::linux::current_is_wayland();
@@ -615,6 +670,7 @@ pub fn current_is_wayland() -> bool {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn modify_default_login() -> String {
     #[cfg(target_os = "linux")]
     return crate::platform::linux::modify_default_login();
@@ -623,16 +679,19 @@ pub fn modify_default_login() -> String {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn get_software_update_url() -> String {
     SOFTWARE_UPDATE_URL.lock().unwrap().clone()
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn get_new_version() -> String {
     hbb_common::get_version_from_url(&*SOFTWARE_UPDATE_URL.lock().unwrap())
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn get_version() -> String {
     crate::VERSION.to_owned()
 }
@@ -644,6 +703,7 @@ pub fn get_app_name() -> String {
 }
 
 #[inline]
+#[tauri::command(async)]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn get_software_ext() -> String {
     #[cfg(windows)]
@@ -656,6 +716,7 @@ pub fn get_software_ext() -> String {
 }
 
 #[inline]
+#[tauri::command(async)]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn get_software_store_path() -> String {
     let mut p = std::env::temp_dir();
@@ -671,6 +732,7 @@ pub fn get_software_store_path() -> String {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn create_shortcut(_id: String) {
     #[cfg(windows)]
     crate::platform::windows::create_shortcut(&_id).ok();
@@ -685,6 +747,7 @@ pub fn discover() {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn get_lan_peers() -> Vec<HashMap<&'static str, String>> {
     config::LanPeers::load()
         .peers
@@ -701,6 +764,7 @@ pub fn get_lan_peers() -> Vec<HashMap<&'static str, String>> {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn get_uuid() -> String {
     base64::encode(hbb_common::get_uuid())
 }
@@ -732,6 +796,7 @@ pub fn change_id(id: String) {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn post_request(url: String, body: String, header: String) {
     *ASYNC_JOB_STATUS.lock().unwrap() = " ".to_owned();
     std::thread::spawn(move || {
@@ -743,28 +808,33 @@ pub fn post_request(url: String, body: String, header: String) {
 }
 
 #[inline]
+#[tauri::command(async)]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn is_ok_change_id() -> bool {
     machine_uid::get().is_ok()
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn get_async_job_status() -> String {
     ASYNC_JOB_STATUS.lock().unwrap().clone()
 }
 
 #[inline]
+#[tauri::command(async)]
 #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
 pub fn t(name: String) -> String {
     crate::client::translate(name)
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn get_langs() -> String {
     crate::lang::LANGS.to_string()
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn default_video_save_directory() -> String {
     let appname = crate::get_app_name();
 
@@ -800,11 +870,13 @@ pub fn default_video_save_directory() -> String {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn is_xfce() -> bool {
     crate::platform::is_xfce()
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn get_api_server() -> String {
     crate::get_api_server(
         get_option_("api-server"),
@@ -813,6 +885,7 @@ pub fn get_api_server() -> String {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn has_hwcodec() -> bool {
     #[cfg(not(any(feature = "hwcodec", feature = "mediacodec")))]
     return false;
@@ -821,6 +894,7 @@ pub fn has_hwcodec() -> bool {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn is_release() -> bool {
     #[cfg(not(debug_assertions))]
     return true;
@@ -830,6 +904,7 @@ pub fn is_release() -> bool {
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[inline]
+#[tauri::command(async)]
 pub fn is_root() -> bool {
     crate::platform::is_root()
 }

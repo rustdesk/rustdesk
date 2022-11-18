@@ -1,11 +1,12 @@
 [package]
-name = "rustdesk"
+name = "rustdesk_tauri"
 version = "1.2.0"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
 description = "A remote control software."
-default-run = "rustdesk"
+default-run = "rustdesk_tauri"
+
 
 [lib]
 name = "librustdesk"
@@ -16,6 +17,9 @@ name = "naming"
 path = "src/naming.rs"
 
 [features]
+# this feature is used for production builds where `devPath` points to the filesystem
+# DO NOT remove this
+custom-protocol = [ "tauri/custom-protocol" ]
 inline = []
 hbbs = []
 cli = []
@@ -26,9 +30,11 @@ use_samplerate = ["samplerate"]
 use_rubato = ["rubato"]
 use_dasp = ["dasp"]
 flutter = ["flutter_rust_bridge"]
-default = ["use_dasp"]
 hwcodec = ["scrap/hwcodec"]
 mediacodec = ["scrap/mediacodec"]
+# by default Tauri runs in production mode
+# when `tauri dev` runs it is executed with `cargo run --no-default-features` if `devPath` is an URL
+default = [ "custom-protocol", "use_dasp" ]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -37,7 +43,7 @@ whoami = "1.2"
 scrap = { path = "libs/scrap", features = ["wayland"] }
 hbb_common = { path = "libs/hbb_common" }
 serde_derive = "1.0"
-serde = "1.0"
+serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 cfg-if = "1.0"
 lazy_static = "1.4"
@@ -69,6 +75,18 @@ url = { version = "2.1", features = ["serde"] }
 reqwest = { version = "0.11", features = ["blocking", "json", "rustls-tls"], default-features=false }
 chrono = "0.4.23"
 
+
+tauri = { git = "https://github.com/tauri-apps/tauri.git", features = ["api-all", "icon-ico", "icon-png", "system-tray"] }
+heck = "0.4.0"
+dirs = "4.0.0"
+bincode = "1.3.3"
+rayon = "1.5.1"
+retry = "1.3.1"
+dashmap = { version = "5.1.0", features = ["serde", "rayon"] }
+thiserror = "1.0.37"
+raw-window-handle = "0.5.0"
+dotenv = "0.15.0"
+
 [target.'cfg(not(any(target_os = "android", target_os = "linux")))'.dependencies]
 cpal = "0.13.5"
 
@@ -95,6 +113,14 @@ virtual_display = { path = "libs/virtual_display" }
 impersonate_system = { git = "https://github.com/21pages/impersonate-system" }
 shared_memory = "0.12.4"
 shutdown_hooks = "0.1.0"
+
+[target.'cfg(target_os = "windows")'.dependencies.windows]
+version = "0.33.0"
+features = [
+  "alloc",
+  "Win32_Foundation",
+  "Win32_Graphics_Dwm",
+]
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2"
@@ -137,7 +163,9 @@ FileDescription = "RustDesk"
 winres = "0.1"
 winapi = { version = "0.3", features = [ "winnt" ] }
 
+
 [build-dependencies]
+tauri-build = { version = "1.1.1", features = [] }
 cc = "1.0"
 hbb_common = { path = "libs/hbb_common" }
 simple_rc = { path = "libs/simple_rc", optional = true }

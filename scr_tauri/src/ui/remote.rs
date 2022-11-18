@@ -17,6 +17,7 @@ use sciter::{
 use hbb_common::{
     allow_err, fs::TransferJobMeta, log, message_proto::*, rendezvous_proto::ConnType,
 };
+use serde::{Serialize, Deserialize};
 
 use crate::{
     client::*,
@@ -47,12 +48,12 @@ impl SciterHandler {
         }
     }
 
-    #[inline]
-    fn call2(&self, func: &str, args: &[Value]) {
-        if let Some(ref e) = self.element.lock().unwrap().as_ref() {
-            allow_err!(e.call_method(func, &super::value_crash_workaround(args)[..]));
-        }
-    }
+    // #[inline]
+    // fn call2(&self, func: &str, args: &[Value]) {
+    //     if let Some(ref e) = self.element.lock().unwrap().as_ref() {
+    //         allow_err!(e.call_method(func, &super::value_crash_workaround(args)[..]));
+    //     }
+    // }
 }
 
 impl InvokeUiSession for SciterHandler {
@@ -97,26 +98,29 @@ impl InvokeUiSession for SciterHandler {
     }
 
     fn set_permission(&self, name: &str, value: bool) {
-        self.call2("setPermission", &make_args!(name, value));
+        // TODO:
+        // self.call2("setPermission", &make_args!(name, value));
     }
 
     fn close_success(&self) {
-        self.call2("closeSuccess", &make_args!());
+        // TODO:
+        // self.call2("closeSuccess", &make_args!());
     }
 
     fn update_quality_status(&self, status: QualityStatus) {
-        self.call2(
-            "updateQualityStatus",
-            &make_args!(
-                status.speed.map_or(Value::null(), |it| it.into()),
-                status.fps.map_or(Value::null(), |it| it.into()),
-                status.delay.map_or(Value::null(), |it| it.into()),
-                status.target_bitrate.map_or(Value::null(), |it| it.into()),
-                status
-                    .codec_format
-                    .map_or(Value::null(), |it| it.to_string().into())
-            ),
-        );
+        // TODO:
+        // self.call2(
+        //     "updateQualityStatus",
+        //     &make_args!(
+        //         status.speed.map_or(Value::null(), |it| it.into()),
+        //         status.fps.map_or(Value::null(), |it| it.into()),
+        //         status.delay.map_or(Value::null(), |it| it.into()),
+        //         status.target_bitrate.map_or(Value::null(), |it| it.into()),
+        //         status
+        //             .codec_format
+        //             .map_or(Value::null(), |it| it.to_string().into())
+        //     ),
+        // );
     }
 
     fn set_cursor_id(&self, id: String) {
@@ -231,12 +235,10 @@ impl InvokeUiSession for SciterHandler {
     }
 
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool) {
-        self.call2(
-            "msgbox_retry",
-            &make_args!(msgtype, title, text, link, retry),
-        );
+        // TODO:
+        // self.call2("msgbox_retry", &make_args!(msgtype, title, text, link, retry));
     }
-
+    
     fn cancel_msgbox(&self, tag: &str) {
         self.call("cancel_msgbox", &make_args!(tag));
     }
@@ -254,22 +256,22 @@ impl InvokeUiSession for SciterHandler {
     }
 }
 
-pub struct SciterSession(Session<SciterHandler>);
+pub struct TauriSession(Session<SciterHandler>);
 
-impl Deref for SciterSession {
+impl Deref for TauriSession {
     type Target = Session<SciterHandler>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl DerefMut for SciterSession {
+impl DerefMut for TauriSession {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-impl sciter::EventHandler for SciterSession {
+impl sciter::EventHandler for  TauriSession {
     fn get_subscription(&mut self) -> Option<EVENT_GROUPS> {
         Some(EVENT_GROUPS::HANDLE_BEHAVIOR_EVENT)
     }
@@ -334,82 +336,15 @@ impl sciter::EventHandler for SciterSession {
         };
         return true;
     }
-
-    sciter::dispatch_script_call! {
-        fn get_audit_server();
-        fn send_note(String);
-        fn is_xfce();
-        fn get_id();
-        fn get_default_pi();
-        fn get_option(String);
-        fn t(String);
-        fn set_option(String, String);
-        fn input_os_password(String, bool);
-        fn save_close_state(String, String);
-        fn is_file_transfer();
-        fn is_port_forward();
-        fn is_rdp();
-        fn login(String, bool);
-        fn new_rdp();
-        fn send_mouse(i32, i32, i32, bool, bool, bool, bool);
-        fn enter();
-        fn leave();
-        fn ctrl_alt_del();
-        fn transfer_file();
-        fn tunnel();
-        fn lock_screen();
-        fn reconnect();
-        fn get_chatbox();
-        fn get_icon();
-        fn get_home_dir();
-        fn read_dir(String, bool);
-        fn remove_dir(i32, String, bool);
-        fn create_dir(i32, String, bool);
-        fn remove_file(i32, String, i32, bool);
-        fn read_remote_dir(String, bool);
-        fn send_chat(String);
-        fn switch_display(i32);
-        fn remove_dir_all(i32, String, bool, bool);
-        fn confirm_delete_files(i32, i32);
-        fn set_no_confirm(i32);
-        fn cancel_job(i32);
-        fn send_files(i32, String, String, i32, bool, bool);
-        fn add_job(i32, String, String, i32, bool, bool);
-        fn resume_job(i32, bool);
-        fn get_platform(bool);
-        fn get_path_sep(bool);
-        fn get_icon_path(i32, String);
-        fn get_char(String, i32);
-        fn get_size();
-        fn get_port_forwards();
-        fn remove_port_forward(i32);
-        fn get_args();
-        fn add_port_forward(i32, String, i32);
-        fn save_size(i32, i32, i32, i32);
-        fn get_view_style();
-        fn get_image_quality();
-        fn get_custom_image_quality();
-        fn save_view_style(String);
-        fn save_image_quality(String);
-        fn save_custom_image_quality(i32);
-        fn refresh_video();
-        fn record_screen(bool, i32, i32);
-        fn get_toggle_option(String);
-        fn is_privacy_mode_supported();
-        fn toggle_option(String);
-        fn get_remember();
-        fn peer_platform();
-        fn set_write_override(i32, i32, bool, bool, bool);
-        fn get_keyboard_mode();
-        fn save_keyboard_mode(String);
-        fn has_hwcodec();
-        fn supported_hwcodec();
-        fn change_prefer_codec();
-        fn restart_remote_device();
-    }
 }
 
-impl SciterSession {
+#[derive(Clone, Serialize, Deserialize)]
+pub enum PortForwards {
+    String(String),
+    Number(i32),
+}
+
+impl TauriSession {
     pub fn new(cmd: String, id: String, password: String, args: Vec<String>) -> Self {
         let session: Session<SciterHandler> = Session {
             id: id.clone(),
@@ -441,7 +376,7 @@ impl SciterSession {
         v
     }
 
-    fn has_hwcodec(&self) -> bool {
+    pub fn has_hwcodec(&self) -> bool {
         has_hwcodec()
     }
 
@@ -461,7 +396,7 @@ impl SciterSession {
         v
     }
 
-    fn save_size(&mut self, x: i32, y: i32, w: i32, h: i32) {
+    pub fn save_size(&mut self, x: i32, y: i32, w: i32, h: i32) {
         let size = (x, y, w, h);
         let mut config = self.load_config();
         if self.is_file_transfer() {
@@ -500,28 +435,24 @@ impl SciterSession {
         log::info!("size saved");
     }
 
-    fn get_port_forwards(&mut self) -> Value {
+    pub fn get_port_forwards(&mut self) -> Vec<Vec<PortForwards>> {
         let port_forwards = self.lc.read().unwrap().port_forwards.clone();
-        let mut v = Value::array(0);
+        let mut v = Vec::new();
         for (port, remote_host, remote_port) in port_forwards {
-            let mut v2 = Value::array(0);
-            v2.push(port);
-            v2.push(remote_host);
-            v2.push(remote_port);
+            let mut v2: Vec<PortForwards> = Vec::new();
+            v2.push(PortForwards::Number(port));
+            v2.push(PortForwards::String(remote_host));
+            v2.push(PortForwards::Number(remote_port));
             v.push(v2);
         }
         v
     }
 
-    fn get_args(&mut self) -> Value {
-        let mut v = Value::array(0);
-        for x in self.args.iter() {
-            v.push(x);
-        }
-        v
+    pub fn get_args(&mut self) -> Vec<String> {
+        self.args.clone()
     }
 
-    fn get_size(&mut self) -> Value {
+    pub fn get_size(&mut self) -> Vec<i32> {
         let s = if self.is_file_transfer() {
             self.lc.read().unwrap().size_ft
         } else if self.is_port_forward() {
@@ -529,7 +460,7 @@ impl SciterSession {
         } else {
             self.lc.read().unwrap().size
         };
-        let mut v = Value::array(0);
+        let mut v = Vec::new();
         v.push(s.0);
         v.push(s.1);
         v.push(s.2);
@@ -537,16 +468,11 @@ impl SciterSession {
         v
     }
 
-    fn get_default_pi(&mut self) -> Value {
-        let mut pi = Value::map();
-        let info = self.lc.read().unwrap().info.clone();
-        pi.set_item("username", info.username.clone());
-        pi.set_item("hostname", info.hostname.clone());
-        pi.set_item("platform", info.platform.clone());
-        pi
+    pub fn get_default_pi(&mut self) -> hbb_common::config::PeerInfoSerde {
+        self.lc.read().unwrap().info.clone()
     }
 
-    fn save_close_state(&mut self, k: String, v: String) {
+    pub fn save_close_state(&mut self, k: String, v: String) {
         self.close_state.insert(k, v);
     }
 
@@ -655,7 +581,7 @@ impl SciterSession {
         Some(key_event)
     }
 
-    fn get_char(&mut self, name: String, code: i32) -> String {
+    pub fn get_char(&mut self, name: String, code: i32) -> String {
         if let Some(key_event) = self.get_key_event(1, &name, code) {
             match key_event.union {
                 Some(key_event::Union::Chr(chr)) => {
@@ -669,7 +595,7 @@ impl SciterSession {
         "".to_owned()
     }
 
-    fn transfer_file(&mut self) {
+    pub fn transfer_file(&mut self) {
         let id = self.get_id();
         let args = vec!["--file-transfer", &id, &self.password];
         if let Err(err) = crate::run_me(args) {
@@ -677,13 +603,14 @@ impl SciterSession {
         }
     }
 
-    fn tunnel(&mut self) {
+    pub fn tunnel(&mut self) {
         let id = self.get_id();
         let args = vec!["--port-forward", &id, &self.password];
         if let Err(err) = crate::run_me(args) {
             log::error!("Failed to spawn IP tunneling: {}", err);
         }
     }
+
 }
 
 pub fn make_fd(id: i32, entries: &Vec<FileEntry>, only_count: bool) -> Value {

@@ -1,47 +1,32 @@
 #[cfg(target_os = "linux")]
 use crate::ipc::start_pa;
 use crate::ui_cm_interface::{start_ipc, ConnectionManager, InvokeUiCM};
+use tauri::Manager;
 
 use hbb_common::{allow_err, log};
 use sciter::{make_args, Element, Value, HELEMENT};
 use std::sync::Mutex;
 use std::{ops::Deref, sync::Arc};
 
-#[derive(Clone, Default)]
-pub struct SciterHandler {
-    pub element: Arc<Mutex<Option<Element>>>,
-}
+use serde::{Deserialize, Serialize};
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
+pub struct TauriHandler;
 
-impl InvokeUiCM for SciterHandler {
-    fn add_connection(&self, client: &crate::ui_cm_interface::Client) {
-        self.call(
-            "addConnection",
-            &make_args!(
-                client.id,
-                client.is_file_transfer,
-                client.port_forward.clone(),
-                client.peer_id.clone(),
-                client.name.clone(),
-                client.authorized,
-                client.keyboard,
-                client.clipboard,
-                client.audio,
-                client.file,
-                client.restart,
-                client.recording
-            ),
-        );
+impl InvokeUiCM for TauriHandler {
+    fn add_connection(&self, app: &tauri::AppHandle, client: &crate::ui_cm_interface::Client) {
+        log::info!("add_connection {}", serde_json::to_string(&client).unwrap());
+        self.call(app, "addConnection", &[serde_json::to_string(&client).unwrap()]);
     }
 
     fn remove_connection(&self, id: i32, close: bool) {
-        self.call("removeConnection", &make_args!(id, close));
+        // self.call("removeConnection", &make_args!(id, close));
         if crate::ui_cm_interface::get_clients_length().eq(&0) {
             crate::platform::quit_gui();
         }
     }
 
     fn new_message(&self, id: i32, text: String) {
-        self.call("newMessage", &make_args!(id, text));
+        // self.call("newMessage", &make_args!(id, text));
     }
 
     fn change_theme(&self, _dark: String) {
@@ -53,39 +38,41 @@ impl InvokeUiCM for SciterHandler {
     }
 
     fn show_elevation(&self, show: bool) {
-        self.call("showElevation", &make_args!(show));
+        // self.call("showElevation", &make_args!(show));
     }
 }
 
-impl SciterHandler {
+impl TauriHandler {
     #[inline]
-    fn call(&self, func: &str, args: &[Value]) {
-        if let Some(e) = self.element.lock().unwrap().as_ref() {
-            allow_err!(e.call_method(func, &super::value_crash_workaround(args)[..]));
-        }
+    fn call(&self, app: &tauri::AppHandle, func: &str, args: &[String]) {
+        // if let Some(e) = self.element.lock().unwrap().as_ref() {
+        //     allow_err!(e.call_method(func, &super::value_crash_workaround(args)[..]));
+        // }
+        app.emit_all(func, args).unwrap();
     }
 }
 
-pub struct SciterConnectionManager(ConnectionManager<SciterHandler>);
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TauriConnectionManager(ConnectionManager<TauriHandler>);
 
-impl Deref for SciterConnectionManager {
-    type Target = ConnectionManager<SciterHandler>;
+impl Deref for TauriConnectionManager {
+    type Target = ConnectionManager<TauriHandler>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl SciterConnectionManager {
-    pub fn new() -> Self {
+impl TauriConnectionManager {
+    pub fn new(app: tauri::AppHandle) -> Self {
         #[cfg(target_os = "linux")]
         std::thread::spawn(start_pa);
         let cm = ConnectionManager {
-            ui_handler: SciterHandler::default(),
+            ui_handler: TauriHandler::default(),
         };
         let cloned = cm.clone();
-        std::thread::spawn(move || start_ipc(cloned));
-        SciterConnectionManager(cm)
+        std::thread::spawn(move || start_ipc(app.clone(), cloned));
+        TauriConnectionManager(cm)
     }
 
     fn get_icon(&mut self) -> String {
@@ -137,10 +124,11 @@ impl SciterConnectionManager {
     }
 }
 
-impl sciter::EventHandler for SciterConnectionManager {
-    fn attached(&mut self, root: HELEMENT) {
-        *self.ui_handler.element.lock().unwrap() = Some(Element::from(root));
-    }
+impl sciter::EventHandler for TauriConnectionManager {
+    // fn attached(&mut self, root: HELEMENT) {
+    //     // TODO:
+    //     // *self.ui_handler.element.lock().unwrap() = Some(Element::from(root));
+    // }
 
     sciter::dispatch_script_call! {
         fn t(String);
