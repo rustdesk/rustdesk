@@ -406,8 +406,9 @@ pub mod server {
                                     Pong => {
                                         nack = 0;
                                     }
-                                    ConnCount(Some(n)) => {
-                                        if n == 0 {
+                                    ConnCount(Some(_n)) => {
+                                        #[cfg(not(feature = "quick_start"))]
+                                        if _n == 0 {
                                             log::info!("Connnection count equals 0, exit");
                                             stream.send(&Data::DataPortableService(WillClose)).await.ok();
                                             break;
@@ -435,6 +436,7 @@ pub mod server {
                                 break;
                             }
                             stream.send(&Data::DataPortableService(Ping)).await.ok();
+                            #[cfg(not(feature = "quick_start"))]
                             stream.send(&Data::DataPortableService(ConnCount(None))).await.ok();
                         }
                     }
@@ -462,6 +464,7 @@ pub mod client {
     }
 
     pub(crate) fn start_portable_service() -> ResultType<()> {
+        log::info!("start portable service");
         if PORTABLE_SERVICE_RUNNING.lock().unwrap().clone() {
             bail!("already running");
         }
@@ -484,7 +487,7 @@ pub mod client {
                 crate::portable_service::SHMEM_NAME,
                 shmem_size,
             )?);
-            shutdown_hooks::add_shutdown_hook(drop_shmem);
+            shutdown_hooks::add_shutdown_hook(drop_portable_service_shared_memory);
         }
         let mut option = SHMEM.lock().unwrap();
         let shmem = option.as_mut().unwrap();
@@ -504,7 +507,7 @@ pub mod client {
         Ok(())
     }
 
-    extern "C" fn drop_shmem() {
+    pub extern "C" fn drop_portable_service_shared_memory() {
         log::info!("drop shared memory");
         *SHMEM.lock().unwrap() = None;
     }

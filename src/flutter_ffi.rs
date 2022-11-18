@@ -619,7 +619,11 @@ pub fn main_set_peer_option_sync(id: String, key: String, value: String) -> Sync
 }
 
 pub fn main_set_peer_alias(id: String, alias: String) {
-    main_broadcast_message(&HashMap::from([("name", "alias"), ("id", &id), ("alias", &alias)]));
+    main_broadcast_message(&HashMap::from([
+        ("name", "alias"),
+        ("id", &id),
+        ("alias", &alias),
+    ]));
     set_peer_option(id, "alias".to_owned(), alias)
 }
 
@@ -1171,6 +1175,11 @@ pub fn main_account_auth_cancel() {
 
 pub fn main_account_auth_result() -> String {
     account_auth_result()
+}
+
+pub fn main_on_main_window_close() {
+    #[cfg(windows)]
+    crate::portable_service::client::drop_portable_service_shared_memory();
 }
 
 #[cfg(target_os = "android")]
