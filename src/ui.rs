@@ -63,12 +63,7 @@ fn check_connect_status(
 
 pub fn start(args: &mut [String]) {
     #[cfg(target_os = "macos")]
-    if args.len() == 1 && args[0] == "--server" {
-        macos::make_tray();
-        return;
-    } else {
-        macos::show_dock();
-    }
+    macos::show_dock();
     #[cfg(all(target_os = "linux", feature = "inline"))]
     {
         #[cfg(feature = "appimage")]

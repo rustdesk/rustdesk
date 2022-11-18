@@ -173,3 +173,35 @@ fn is_service_stoped() -> bool {
         false
     }
 }
+
+#[cfg(target_os = "macos")]
+pub fn make_tray() {
+    use tray_item::TrayItem;
+    let mode = dark_light::detect();
+    let mut icon_path = "";
+    match mode {
+        dark_light::Mode::Dark => {
+            icon_path = "mac-tray-light.png";
+        },
+        dark_light::Mode::Light => {
+            icon_path = "mac-tray-dark.png";
+        },
+    }
+    if let Ok(mut tray) = TrayItem::new(&crate::get_app_name(), icon_path) {
+        tray.add_label(&format!(
+            "{} {}",
+            crate::get_app_name(),
+            crate::lang::translate("Service is running".to_owned())
+        ))
+        .ok();
+
+        let inner = tray.inner_mut();
+        inner.add_quit_item(&crate::lang::translate("Quit".to_owned()));
+        inner.display();
+    } else {
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(3));
+        }
+    }
+}
+

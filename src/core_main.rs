@@ -163,7 +163,8 @@ pub fn core_main() -> Option<Vec<String>> {
             #[cfg(target_os = "macos")]
             {
                 std::thread::spawn(move || crate::start_server(true));
-                // to-do: for flutter, starting tray not ready yet, or we can reuse sciter's tray implementation.
+                crate::tray::make_tray();
+                return None;
             }
             #[cfg(target_os = "linux")]
             {
