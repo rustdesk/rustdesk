@@ -352,7 +352,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Apply", "Applica"),
         ("Disconnect all devices?", "Disconnettere tutti i dispositivi?"),
         ("Clear", "Ripulisci"),
-        ("Audio Input Device", "Dispositivo di inpit audio"),
+        ("Audio Input Device", "Dispositivo di input audio"),
         ("Deny remote access", "Nega accesso remoto"),
         ("Use IP Whitelisting", "Utilizza la whitelist di IP"),
         ("Network", "Rete"),
