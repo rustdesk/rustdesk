@@ -188,8 +188,14 @@ pub fn core_main() -> Option<Vec<String>> {
             #[cfg(target_os = "linux")]
             {
                 let handler = std::thread::spawn(move || crate::start_server(true));
-                crate::tray::start_tray();
-                // revent server exit when encountering errors from tray
+                // Show the tray in linux only when current user is a normal user
+                // [Note]
+                // As for GNOME, the tray cannot be shown in user's status bar.
+                // As for KDE, the tray can be shown without user's theme.
+                if !crate::platform::is_root() {
+                    crate::tray::start_tray();
+                }
+                // prevent server exit when encountering errors from tray
                 hbb_common::allow_err!(handler.join());
             }
         } else if args[0] == "--import-config" {

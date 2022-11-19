@@ -150,6 +150,13 @@ fn get_default_app_indicator() -> Option<AppIndicator> {
     match std::fs::File::create(icon_path.clone()) {
         Ok(mut f) => {
             f.write_all(icon).unwrap();
+            // set .png icon file to be writable
+            // this ensures successful file rewrite when switching between x11 and wayland.
+            let mut perm = f.metadata().unwrap().permissions();
+            if perm.readonly() {
+                perm.set_readonly(false);
+                f.set_permissions(perm).unwrap();
+            }
         }
         Err(err) => {
             error!("Error when writing icon to {:?}: {}", icon_path, err);
