@@ -82,11 +82,6 @@ def make_parser():
         help='Build windows portable'
     )
     parser.add_argument(
-        '--quick_start',
-        action='store_true',
-        help='Windows quick start portable'
-    )
-    parser.add_argument(
         '--flatpak',
         action='store_true',
         help='Build rustdesk libs with the flatpak feature enabled'
@@ -194,8 +189,6 @@ def get_features(args):
     features = ['inline']
     if windows:
         features.extend(get_rc_features(args))
-        if args.quick_start:
-            features.append('quick_start')
     if args.hwcodec:
         features.append('hwcodec')
     if args.flutter:

@@ -15,7 +15,7 @@ env:
 
 jobs:
   build-for-windows:
-    name: ${{ matrix.job.target }} (${{ matrix.job.os }}) ${{ matrix.job.suffix }}
+    name: ${{ matrix.job.target }} (${{ matrix.job.os }})
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
@@ -23,8 +23,7 @@ jobs:
         job:
           # - { target: i686-pc-windows-msvc        , os: windows-2019                  }
           # - { target: x86_64-pc-windows-gnu       , os: windows-2019                  }
-          - { target: x86_64-pc-windows-msvc      , os: windows-2019, suffix: ""   , extra-build-args: ""             }
-          - { target: x86_64-pc-windows-msvc      , os: windows-2019, suffix: "-qs", extra-build-args: "--quick_start" }
+          - { target: x86_64-pc-windows-msvc      , os: windows-2019 }
     steps:
       - name: Checkout source code
         uses: actions/checkout@v3
@@ -84,13 +83,13 @@ jobs:
         shell: bash
 
       - name: Build rustdesk
-        run: python3 .\build.py --portable --hwcodec --flutter ${{ matrix.job.extra-build-args }}
+        run: python3 .\build.py --portable --hwcodec --flutter
 
       - name: Rename rustdesk
         shell: bash
         run: |
           for name in rustdesk*??-install.exe; do
-              mv "$name" "${name%%-install.exe}-${{ matrix.job.target }}${{ matrix.job.suffix }}.exe"
+              mv "$name" "${name%%-install.exe}-${{ matrix.job.target }}.exe"
           done
 
       - name: Publish Release
