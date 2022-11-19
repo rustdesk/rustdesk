@@ -29,7 +29,7 @@ flatpak = []
 use_samplerate = ["samplerate"]
 use_rubato = ["rubato"]
 use_dasp = ["dasp"]
-flutter = ["flutter_rust_bridge"]
+flutter = []
 hwcodec = ["scrap/hwcodec"]
 mediacodec = ["scrap/mediacodec"]
 # by default Tauri runs in production mode
@@ -39,12 +39,13 @@ default = [ "custom-protocol", "use_dasp" ]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-whoami = "1.2"
-scrap = { path = "libs/scrap", features = ["wayland"] }
-hbb_common = { path = "libs/hbb_common" }
 serde_derive = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+# Debug
+whoami = "1.2"
+scrap = { path = "libs/scrap", features = ["wayland"] }
+hbb_common = { path = "libs/hbb_common" }
 cfg-if = "1.0"
 lazy_static = "1.4"
 sha2 = "0.10"
@@ -67,7 +68,6 @@ num_cpus = "1.13"
 bytes = { version = "1.2", features = ["serde"] }
 default-net = "0.11.0"
 wol-rs = "0.9.1"
-flutter_rust_bridge = { git = "https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge", optional = true }
 errno = "0.2.8"
 rdev = { git = "https://github.com/asur4s/rdev" }
 url = { version = "2.1", features = ["serde"] }
@@ -86,6 +86,15 @@ dashmap = { version = "5.1.0", features = ["serde", "rayon"] }
 thiserror = "1.0.37"
 raw-window-handle = "0.5.0"
 dotenv = "0.15.0"
+
+[build-dependencies]
+tauri-build = { version = "1.1.1", features = [] }
+cc = "1.0"
+hbb_common = { path = "libs/hbb_common" }
+simple_rc = { path = "libs/simple_rc", optional = true }
+
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features=false }
 
 [target.'cfg(not(any(target_os = "android", target_os = "linux")))'.dependencies]
 cpal = "0.13.5"
@@ -144,15 +153,10 @@ dbus-crossroads = "0.5"
 gtk = "0.15"
 libappindicator = "0.7"
 
-[target.'cfg(target_os = "android")'.dependencies]
-android_logger = "0.11"
-jni = "0.19"
-
-[target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
-flutter_rust_bridge = { git = "https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge" }
 
 [workspace]
 members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/simple_rc", "libs/portable"]
+
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2022 Purslane, Inc."
@@ -162,14 +166,6 @@ FileDescription = "RustDesk"
 [target.'cfg(target_os="windows")'.build-dependencies]
 winres = "0.1"
 winapi = { version = "0.3", features = [ "winnt" ] }
-
-
-[build-dependencies]
-tauri-build = { version = "1.1.1", features = [] }
-cc = "1.0"
-hbb_common = { path = "libs/hbb_common" }
-simple_rc = { path = "libs/simple_rc", optional = true }
-flutter_rust_bridge_codegen = { git = "https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge" }
 
 [dev-dependencies]
 hound = "3.5"

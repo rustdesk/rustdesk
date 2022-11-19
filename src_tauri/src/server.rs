@@ -375,7 +375,7 @@ pub async fn start_server(is_server: bool) {
             }
         });
         #[cfg(windows)]
-        crate::platform::windows::bootstrap();
+        crate::platform::windows_lib::bootstrap();
         input_service::fix_key_down_timeout_loop();
         #[cfg(target_os = "macos")]
         tokio::spawn(async { sync_and_watch_config_dir().await });

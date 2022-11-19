@@ -248,7 +248,7 @@ pub fn is_left_up(evt: &MouseEvent) -> bool {
 
 #[cfg(windows)]
 pub fn mouse_move_relative(x: i32, y: i32) {
-    crate::platform::windows::try_change_desktop();
+    crate::platform::windows_lib::try_change_desktop();
     let mut en = ENIGO.lock().unwrap();
     en.mouse_move_relative(x, y);
 }
@@ -460,7 +460,7 @@ pub fn handle_mouse_(evt: &MouseEvent) {
     }
 
     #[cfg(windows)]
-    crate::platform::windows::try_change_desktop();
+    crate::platform::windows_lib::try_change_desktop();
     let buttons = evt.mask >> 3;
     let evt_type = evt.mask & 0x7;
     let mut en = ENIGO.lock().unwrap();
@@ -772,7 +772,7 @@ fn sync_status(evt: &KeyEvent) -> (bool, bool) {
 fn map_keyboard_mode(evt: &KeyEvent) {
     // map mode(1): Send keycode according to the peer platform.
     #[cfg(windows)]
-    crate::platform::windows::try_change_desktop();
+    crate::platform::windows_lib::try_change_desktop();
 
     let (click_capslock, click_numlock) = sync_status(evt);
 
@@ -822,7 +822,7 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
     let (click_capslock, click_numlock) = sync_status(evt);
 
     #[cfg(windows)]
-    crate::platform::windows::try_change_desktop();
+    crate::platform::windows_lib::try_change_desktop();
     let mut en = ENIGO.lock().unwrap();
     if click_capslock {
         en.key_click(Key::CapsLock);

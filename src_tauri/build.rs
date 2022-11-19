@@ -56,6 +56,7 @@ fn install_oboe() {
     }
     let target = format!("{}-android", target_arch);
     let vcpkg_root = std::env::var("VCPKG_ROOT").unwrap();
+
     let mut path: std::path::PathBuf = vcpkg_root.into();
     path.push("installed");
     path.push(target);

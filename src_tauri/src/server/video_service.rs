@@ -527,7 +527,7 @@ fn run(sp: GenericService) -> ResultType<()> {
         check_privacy_mode_changed(&sp, c.privacy_mode_id)?;
         #[cfg(windows)]
         {
-            if crate::platform::windows::desktop_changed()
+            if crate::platform::windows_lib::desktop_changed()
                 && !PORTABLE_SERVICE_RUNNING.lock().unwrap().clone()
             {
                 bail!("Desktop changed");

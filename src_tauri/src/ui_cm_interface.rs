@@ -450,7 +450,7 @@ pub async fn start_ipc<T: InvokeUiCM>(app: tauri::AppHandle, cm: ConnectionManag
         log::info!("try create privacy mode window");
         #[cfg(windows)]
         {
-            if let Err(e) = crate::platform::windows::check_update_broker_process() {
+            if let Err(e) = crate::platform::windows_lib::check_update_broker_process() {
                 log::warn!(
                     "Failed to check update broker process. Privacy mode may not work properly. {}",
                     e

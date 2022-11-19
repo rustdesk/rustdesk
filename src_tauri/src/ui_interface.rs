@@ -91,7 +91,7 @@ pub fn goto_install() {
 pub fn install_me(_options: String, _path: String, _silent: bool, _debug: bool) {
     #[cfg(windows)]
     std::thread::spawn(move || {
-        allow_err!(crate::platform::windows::install_me(
+        allow_err!(crate::platform::windows_lib::install_me(
             &_options, _path, _silent, _debug
         ));
         std::process::exit(0);
@@ -149,7 +149,7 @@ pub fn show_run_without_install() -> bool {
 #[tauri::command(async)]
 pub fn has_rendezvous_service() -> bool {
     #[cfg(all(windows, feature = "hbbs"))]
-    return crate::platform::is_win_server() && crate::platform::windows::get_license().is_some();
+    return crate::platform::is_win_server() && crate::platform::windows_lib::get_license().is_some();
     return false;
 }
 
@@ -157,7 +157,7 @@ pub fn has_rendezvous_service() -> bool {
 #[tauri::command(async)]
 pub fn get_license() -> String {
     #[cfg(windows)]
-    if let Some(lic) = crate::platform::windows::get_license() {
+    if let Some(lic) = crate::platform::windows_lib::get_license() {
         #[cfg(feature = "flutter")]
         return format!("Key: {}\nHost: {}\nApi: {}", lic.key, lic.host, lic.api);
         // default license format is html formed (sciter)
@@ -356,7 +356,7 @@ pub fn set_option(key: String, value: String) {
 #[tauri::command(async)]
 pub fn install_path() -> String {
     #[cfg(windows)]
-    return crate::platform::windows::get_install_info().1;
+    return crate::platform::windows_lib::get_install_info().1;
     #[cfg(not(windows))]
     return "".to_owned();
 }
@@ -411,7 +411,7 @@ pub fn is_installed() -> bool {
 #[tauri::command(async)]
 pub fn is_rdp_service_open() -> bool {
     #[cfg(windows)]
-    return is_installed() && crate::platform::windows::is_rdp_service_open();
+    return is_installed() && crate::platform::windows_lib::is_rdp_service_open();
     #[cfg(not(windows))]
     return false;
 }
@@ -420,7 +420,7 @@ pub fn is_rdp_service_open() -> bool {
 #[tauri::command(async)]
 pub fn is_share_rdp() -> bool {
     #[cfg(windows)]
-    return crate::platform::windows::is_share_rdp();
+    return crate::platform::windows_lib::is_share_rdp();
     #[cfg(not(windows))]
     return false;
 }
@@ -429,7 +429,7 @@ pub fn is_share_rdp() -> bool {
 #[tauri::command(async)]
 pub fn set_share_rdp(_enable: bool) {
     #[cfg(windows)]
-    crate::platform::windows::set_share_rdp(_enable);
+    crate::platform::windows_lib::set_share_rdp(_enable);
 }
 
 #[inline]
@@ -439,7 +439,7 @@ pub fn is_installed_lower_version() -> bool {
     return false;
     #[cfg(windows)]
     {
-        let installed_version = crate::platform::windows::get_installed_version();
+        let installed_version = crate::platform::windows_lib::get_installed_version();
         let a = hbb_common::get_version_number(crate::VERSION);
         let b = hbb_common::get_version_number(&installed_version);
         return a > b;
@@ -735,7 +735,7 @@ pub fn get_software_store_path() -> String {
 #[tauri::command(async)]
 pub fn create_shortcut(_id: String) {
     #[cfg(windows)]
-    crate::platform::windows::create_shortcut(&_id).ok();
+    crate::platform::windows_lib::create_shortcut(&_id).ok();
 }
 
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]

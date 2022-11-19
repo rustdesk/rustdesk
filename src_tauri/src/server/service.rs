@@ -207,7 +207,7 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
                         log::error!("Error of {} service: {}", sp.name(), err);
                         thread::sleep(time::Duration::from_millis(MAX_ERROR_TIMEOUT));
                         #[cfg(windows)]
-                        crate::platform::windows::try_change_desktop();
+                        crate::platform::windows_lib::try_change_desktop();
                     }
                     if !may_reset {
                         may_reset = true;
@@ -249,7 +249,7 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
                         }
                         thread::sleep(time::Duration::from_millis(error_timeout));
                         #[cfg(windows)]
-                        crate::platform::windows::try_change_desktop();
+                        crate::platform::windows_lib::try_change_desktop();
                     } else {
                         log::debug!("Exit {} service inner loop", sp.name());
                     }
