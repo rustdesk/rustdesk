@@ -15,7 +15,7 @@ use hbb_common::{
     protobuf::Message as _,
     rendezvous_proto::*,
     tcp::FramedStream,
-    tokio::{self, sync::mpsc},
+    tokio,
 };
 
 use crate::common::get_app_name;
@@ -43,23 +43,6 @@ lazy_static::lazy_static! {
 }
 
 struct UIHostHandler;
-
-// to-do: dead code?
-fn check_connect_status(
-    reconnect: bool,
-) -> (
-    Arc<Mutex<Status>>,
-    Arc<Mutex<HashMap<String, String>>>,
-    mpsc::UnboundedSender<ipc::Data>,
-    Arc<Mutex<String>>,
-) {
-    let status = Arc::new(Mutex::new((0, false, 0, "".to_owned())));
-    let options = Arc::new(Mutex::new(Config::get_options()));
-    let (tx, rx) = mpsc::unbounded_channel::<ipc::Data>();
-    let password = Arc::new(Mutex::new(String::default()));
-    std::thread::spawn(move || crate::ui_interface::check_connect_status_(reconnect, rx));
-    (status, options, tx, password)
-}
 
 pub fn start(args: &mut [String]) {
     #[cfg(target_os = "macos")]

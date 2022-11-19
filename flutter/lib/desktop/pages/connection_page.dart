@@ -90,10 +90,13 @@ class _ConnectionPageState extends State<ConnectionPage>
         Get.forceAppUpdate();
       }
       isWindowMinisized = false;
-    } else if (eventName == 'close') {
-      // called more then one time
-      bind.mainOnMainWindowClose();
     }
+  }
+
+  @override
+  void onWindowClose() {
+    super.onWindowClose();
+    bind.mainOnMainWindowClose();
   }
 
   @override

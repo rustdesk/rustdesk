@@ -14,6 +14,7 @@ pub fn core_main() -> Option<Vec<String>> {
     let mut i = 0;
     let mut _is_elevate = false;
     let mut _is_run_as_system = false;
+    let mut _is_quick_support = false;
     let mut _is_flutter_connect = false;
     let mut arg_exe = Default::default();
     for arg in std::env::args() {
@@ -29,6 +30,8 @@ pub fn core_main() -> Option<Vec<String>> {
                 _is_elevate = true;
             } else if arg == "--run-as-system" {
                 _is_run_as_system = true;
+            } else if arg == "--quick_support" {
+                _is_quick_support = true;
             } else {
                 args.push(arg);
             }
@@ -40,6 +43,11 @@ pub fn core_main() -> Option<Vec<String>> {
         return core_main_invoke_new_connection(std::env::args());
     }
     let click_setup = cfg!(windows) && args.is_empty() && crate::common::is_setup(&arg_exe);
+    #[cfg(not(feature = "flutter"))]
+    {
+        _is_quick_support =
+            cfg!(windows) && args.is_empty() && arg_exe.to_lowercase().ends_with("qs.exe");
+    }
     if click_setup {
         args.push("--install".to_owned());
         flutter_args.push("--install".to_string());
@@ -81,8 +89,12 @@ pub fn core_main() -> Option<Vec<String>> {
         }
     }
     #[cfg(windows)]
-    #[cfg(feature = "quick_start")]
-    if !crate::platform::is_installed() && args.is_empty() && !_is_elevate && !_is_run_as_system {
+    if !crate::platform::is_installed()
+        && args.is_empty()
+        && _is_quick_support
+        && !_is_elevate
+        && !_is_run_as_system
+    {
         if let Err(e) = crate::portable_service::client::start_portable_service() {
             log::error!("Failed to start portable service:{:?}", e);
         }

@@ -237,11 +237,10 @@ pub mod server {
     fn run_exit_check() {
         loop {
             if EXIT.lock().unwrap().clone() {
-                std::thread::sleep(Duration::from_secs(1));
-                log::info!("exit from seperate check thread");
+                std::thread::sleep(Duration::from_millis(50));
                 std::process::exit(0);
             }
-            std::thread::sleep(Duration::from_secs(1));
+            std::thread::sleep(Duration::from_millis(50));
         }
     }
 
@@ -406,9 +405,8 @@ pub mod server {
                                     Pong => {
                                         nack = 0;
                                     }
-                                    ConnCount(Some(_n)) => {
-                                        #[cfg(not(feature = "quick_start"))]
-                                        if _n == 0 {
+                                    ConnCount(Some(n)) => {
+                                        if n == 0 {
                                             log::info!("Connnection count equals 0, exit");
                                             stream.send(&Data::DataPortableService(WillClose)).await.ok();
                                             break;
@@ -436,7 +434,6 @@ pub mod server {
                                 break;
                             }
                             stream.send(&Data::DataPortableService(Ping)).await.ok();
-                            #[cfg(not(feature = "quick_start"))]
                             stream.send(&Data::DataPortableService(ConnCount(None))).await.ok();
                         }
                     }
@@ -626,6 +623,17 @@ pub mod client {
         use DataPortableService::*;
         let rx = Arc::new(tokio::sync::Mutex::new(rx));
         let postfix = IPC_PROFIX;
+        #[cfg(feature = "flutter")]
+        let quick_support = {
+            let args: Vec<_> = std::env::args().collect();
+            args.contains(&"--quick_support".to_string())
+        };
+        #[cfg(not(feature = "flutter"))]
+        let quick_support = std::env::current_exe()
+            .unwrap_or("".into())
+            .to_string_lossy()
+            .to_lowercase()
+            .ends_with("qs.exe");
 
         match new_listener(postfix).await {
             Ok(mut incoming) => loop {
@@ -663,8 +671,10 @@ pub mod client {
                                                                 *PORTABLE_SERVICE_RUNNING.lock().unwrap() = true;
                                                             },
                                                             ConnCount(None) => {
-                                                                let cnt = crate::server::CONN_COUNT.lock().unwrap().clone();
-                                                                stream.send(&Data::DataPortableService(ConnCount(Some(cnt)))).await.ok();
+                                                                if !quick_support {
+                                                                    let cnt = crate::server::CONN_COUNT.lock().unwrap().clone();
+                                                                    stream.send(&Data::DataPortableService(ConnCount(Some(cnt)))).await.ok();
+                                                                }
                                                             },
                                                             WillClose => {
                                                                 log::info!("portable service will close");
