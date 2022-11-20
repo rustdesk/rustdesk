@@ -6,37 +6,8 @@
 	objectVersion = 53;
 	objects = {
 
-/* Begin PBXBuildFile section */
-		CA6061C6409F12977AAB839F /* Cargo.toml in Sources */ = {isa = PBXBuildFile; fileRef = CA603C4309E13EF4668187A5 /* Cargo.toml */; settings = {COMPILER_FLAGS = "--lib"; }; };
-		CA6061C6409FC858B7409EE3 /* Cargo.toml in Sources */ = {isa = PBXBuildFile; fileRef = CA603C4309E13EF4668187A5 /* Cargo.toml */; settings = {COMPILER_FLAGS = "--bin naming"; }; };
-		CA6061C6409FC9FA710A2219 /* Cargo.toml in Sources */ = {isa = PBXBuildFile; fileRef = CA603C4309E13EF4668187A5 /* Cargo.toml */; settings = {COMPILER_FLAGS = "--bin rustdesk"; }; };
-		CA6061C6409FD6691E4C3FF1 /* Cargo.toml in Sources */ = {isa = PBXBuildFile; fileRef = CA603C4309E13EF4668187A5 /* Cargo.toml */; settings = {COMPILER_FLAGS = "--lib"; }; };
-/* End PBXBuildFile section */
-
-/* Begin PBXBuildRule section */
-		CA603C4309E1AC6C1400ACA8 /* PBXBuildRule */ = {
-			isa = PBXBuildRule;
-			compilerSpec = com.apple.compilers.proxy.script;
-			dependencyFile = "$(DERIVED_FILE_DIR)/$(CARGO_XCODE_TARGET_ARCH)-$(EXECUTABLE_NAME).d";
-			filePatterns = "*/Cargo.toml";
-			fileType = pattern.proxy;
-			inputFiles = (
-			);
-			isEditable = 0;
-			name = "Cargo project build";
-			outputFiles = (
-				"$(OBJECT_FILE_DIR)/$(CARGO_XCODE_TARGET_ARCH)-$(EXECUTABLE_NAME)",
-			);
-			script = "# generated with cargo-xcode 1.4.1\n\nset -eu; export PATH=$PATH:~/.cargo/bin:/usr/local/bin;\nif [ \"${IS_MACCATALYST-NO}\" = YES ]; then\n    CARGO_XCODE_TARGET_TRIPLE=\"${CARGO_XCODE_TARGET_ARCH}-apple-ios-macabi\"\nelse\n    CARGO_XCODE_TARGET_TRIPLE=\"${CARGO_XCODE_TARGET_ARCH}-apple-${CARGO_XCODE_TARGET_OS}\"\nfi\nif [ \"$CARGO_XCODE_TARGET_OS\" != \"darwin\" ]; then\n    PATH=\"${PATH/\\/Contents\\/Developer\\/Toolchains\\/XcodeDefault.xctoolchain\\/usr\\/bin:/xcode-provided-ld-cant-link-lSystem-for-the-host-build-script:}\"\nfi\nPATH=\"$PATH:/opt/homebrew/bin\" # Rust projects often depend on extra tools like nasm, which Xcode lacks\nif [ \"$CARGO_XCODE_BUILD_MODE\" == release ]; then\n    OTHER_INPUT_FILE_FLAGS=\"${OTHER_INPUT_FILE_FLAGS} --release\"\nfi\nif command -v rustup &> /dev/null; then\n    if ! rustup target list --installed | egrep -q \"${CARGO_XCODE_TARGET_TRIPLE}\"; then\n        echo \"warning: this build requires rustup toolchain for $CARGO_XCODE_TARGET_TRIPLE, but it isn't installed\"\n        rustup target add \"${CARGO_XCODE_TARGET_TRIPLE}\" || echo >&2 \"warning: can't install $CARGO_XCODE_TARGET_TRIPLE\"\n    fi\nfi\nif [ \"$ACTION\" = clean ]; then\n ( set -x; cargo clean --manifest-path=\"$SCRIPT_INPUT_FILE\" ${OTHER_INPUT_FILE_FLAGS} --target=\"${CARGO_XCODE_TARGET_TRIPLE}\"; );\nelse\n ( set -x; cargo build --manifest-path=\"$SCRIPT_INPUT_FILE\" --features=\"${CARGO_XCODE_FEATURES:-}\" ${OTHER_INPUT_FILE_FLAGS} --target=\"${CARGO_XCODE_TARGET_TRIPLE}\"; );\nfi\n# it's too hard to explain Cargo's actual exe path to Xcode build graph, so hardlink to a known-good path instead\nBUILT_SRC=\"${CARGO_TARGET_DIR}/${CARGO_XCODE_TARGET_TRIPLE}/${CARGO_XCODE_BUILD_MODE}/${CARGO_XCODE_CARGO_FILE_NAME}\"\nln -f -- \"$BUILT_SRC\" \"$SCRIPT_OUTPUT_FILE_0\"\n\n# xcode generates dep file, but for its own path, so append our rename to it\nDEP_FILE_SRC=\"${CARGO_TARGET_DIR}/${CARGO_XCODE_TARGET_TRIPLE}/${CARGO_XCODE_BUILD_MODE}/${CARGO_XCODE_CARGO_DEP_FILE_NAME}\"\nif [ -f \"$DEP_FILE_SRC\" ]; then\n    DEP_FILE_DST=\"${DERIVED_FILE_DIR}/${CARGO_XCODE_TARGET_ARCH}-${EXECUTABLE_NAME}.d\"\n    cp -f \"$DEP_FILE_SRC\" \"$DEP_FILE_DST\"\n    echo >> \"$DEP_FILE_DST\" \"$SCRIPT_OUTPUT_FILE_0: $BUILT_SRC\"\nfi\n\n# lipo script needs to know all the platform-specific files that have been built\n# archs is in the file name, so that paths don't stay around after archs change\n# must match input for LipoScript\nFILE_LIST=\"${DERIVED_FILE_DIR}/${ARCHS}-${EXECUTABLE_NAME}.xcfilelist\"\ntouch \"$FILE_LIST\"\nif ! egrep -q \"$SCRIPT_OUTPUT_FILE_0\" \"$FILE_LIST\" ; then\n    echo >> \"$FILE_LIST\" \"$SCRIPT_OUTPUT_FILE_0\"\nfi\n";
-		};
-/* End PBXBuildRule section */
-
 /* Begin PBXFileReference section */
 		ADDEDBA66A6E1 /* libresolv.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libresolv.tbd; path = usr/lib/libresolv.tbd; sourceTree = SDKROOT; };
-		CA604C7415FB2A3731F5016A /* liblibrustdesk_static.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = liblibrustdesk_static.a; sourceTree = BUILT_PRODUCTS_DIR; };
-		CA6071B5A0F5A7A3EF2297AA /* librustdesk.dylib */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.dylib"; includeInIndex = 0; path = librustdesk.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
-		CA60D3BC5386B357B2AB834F /* rustdesk */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = rustdesk; sourceTree = BUILT_PRODUCTS_DIR; };
-		CA60D3BC5386D3D7DBD96893 /* naming */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = naming; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -51,10 +22,6 @@
 		CA603C4309E122869D176AE5 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				CA6071B5A0F5A7A3EF2297AA /* librustdesk.dylib */,
-				CA604C7415FB2A3731F5016A /* liblibrustdesk_static.a */,
-				CA60D3BC5386D3D7DBD96893 /* naming */,
-				CA60D3BC5386B357B2AB834F /* rustdesk */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -70,7 +37,6 @@
 		CA603C4309E1D65BC3C892A8 = {
 			isa = PBXGroup;
 			children = (
-				CA603C4309E13EF4668187A5 /* Cargo.toml */,
 				CA603C4309E122869D176AE5 /* Products */,
 				CA603C4309E198AF0B5890DB /* Frameworks */,
 			);
@@ -78,100 +44,11 @@
 		};
 /* End PBXGroup section */
 
-/* Begin PBXNativeTarget section */
-		CA604C7415FB12977AAB839F /* librustdesk-staticlib */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = CA6028B9540B12977AAB839F /* Build configuration list for PBXNativeTarget "librustdesk-staticlib" */;
-			buildPhases = (
-				CA6033723F8212977AAB839F /* Sources */,
-				CA603C4309E1AF6EBB7F357C /* Universal Binary lipo */,
-			);
-			buildRules = (
-				CA603C4309E1AC6C1400ACA8 /* PBXBuildRule */,
-			);
-			dependencies = (
-			);
-			name = "librustdesk-staticlib";
-			productName = liblibrustdesk_static.a;
-			productReference = CA604C7415FB2A3731F5016A /* liblibrustdesk_static.a */;
-			productType = "com.apple.product-type.library.static";
-		};
-		CA6071B5A0F5D6691E4C3FF1 /* librustdesk-cdylib */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = CA6028B9540BD6691E4C3FF1 /* Build configuration list for PBXNativeTarget "librustdesk-cdylib" */;
-			buildPhases = (
-				CA6033723F82D6691E4C3FF1 /* Sources */,
-				CA603C4309E1AF6EBB7F357C /* Universal Binary lipo */,
-			);
-			buildRules = (
-				CA603C4309E1AC6C1400ACA8 /* PBXBuildRule */,
-			);
-			dependencies = (
-			);
-			name = "librustdesk-cdylib";
-			productName = librustdesk.dylib;
-			productReference = CA6071B5A0F5A7A3EF2297AA /* librustdesk.dylib */;
-			productType = "com.apple.product-type.library.dynamic";
-		};
-		CA60D3BC5386C858B7409EE3 /* naming-bin */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = CA6028B9540BC858B7409EE3 /* Build configuration list for PBXNativeTarget "naming-bin" */;
-			buildPhases = (
-				CA6033723F82C858B7409EE3 /* Sources */,
-				CA603C4309E1AF6EBB7F357C /* Universal Binary lipo */,
-			);
-			buildRules = (
-				CA603C4309E1AC6C1400ACA8 /* PBXBuildRule */,
-			);
-			dependencies = (
-			);
-			name = "naming-bin";
-			productName = naming;
-			productReference = CA60D3BC5386D3D7DBD96893 /* naming */;
-			productType = "com.apple.product-type.tool";
-		};
-		CA60D3BC5386C9FA710A2219 /* rustdesk-bin */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = CA6028B9540BC9FA710A2219 /* Build configuration list for PBXNativeTarget "rustdesk-bin" */;
-			buildPhases = (
-				CA6033723F82C9FA710A2219 /* Sources */,
-				CA603C4309E1AF6EBB7F357C /* Universal Binary lipo */,
-			);
-			buildRules = (
-				CA603C4309E1AC6C1400ACA8 /* PBXBuildRule */,
-			);
-			dependencies = (
-			);
-			name = "rustdesk-bin";
-			productName = rustdesk;
-			productReference = CA60D3BC5386B357B2AB834F /* rustdesk */;
-			productType = "com.apple.product-type.tool";
-		};
-/* End PBXNativeTarget section */
-
 /* Begin PBXProject section */
 		CA603C4309E1E04653AD465F /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
 				LastUpgradeCheck = 1300;
-				TargetAttributes = {
-					CA604C7415FB12977AAB839F = {
-						CreatedOnToolsVersion = 9.2;
-						ProvisioningStyle = Automatic;
-					};
-					CA6071B5A0F5D6691E4C3FF1 = {
-						CreatedOnToolsVersion = 9.2;
-						ProvisioningStyle = Automatic;
-					};
-					CA60D3BC5386C858B7409EE3 = {
-						CreatedOnToolsVersion = 9.2;
-						ProvisioningStyle = Automatic;
-					};
-					CA60D3BC5386C9FA710A2219 = {
-						CreatedOnToolsVersion = 9.2;
-						ProvisioningStyle = Automatic;
-					};
-				};
 			};
 			buildConfigurationList = CA603C4309E180E02D6C7F57 /* Build configuration list for PBXProject "rustdesk" */;
 			compatibilityVersion = "Xcode 11.4";
@@ -186,161 +63,11 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				CA6071B5A0F5D6691E4C3FF1 /* librustdesk-cdylib */,
-				CA604C7415FB12977AAB839F /* librustdesk-staticlib */,
-				CA60D3BC5386C858B7409EE3 /* naming-bin */,
-				CA60D3BC5386C9FA710A2219 /* rustdesk-bin */,
 			);
 		};
 /* End PBXProject section */
 
-/* Begin PBXShellScriptBuildPhase section */
-		CA603C4309E1AF6EBB7F357C /* Universal Binary lipo */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-				"$(DERIVED_FILE_DIR)/$(ARCHS)-$(EXECUTABLE_NAME).xcfilelist",
-			);
-			name = "Universal Binary lipo";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-				"$(TARGET_BUILD_DIR)/$(EXECUTABLE_PATH)",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "# generated with cargo-xcode 1.4.1\nset -eux; cat \"$DERIVED_FILE_DIR/$ARCHS-$EXECUTABLE_NAME.xcfilelist\" | tr '\\n' '\\0' | xargs -0 lipo -create -output \"$TARGET_BUILD_DIR/$EXECUTABLE_PATH\"";
-		};
-/* End PBXShellScriptBuildPhase section */
-
-/* Begin PBXSourcesBuildPhase section */
-		CA6033723F8212977AAB839F /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				CA6061C6409F12977AAB839F /* Cargo.toml in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		CA6033723F82C858B7409EE3 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				CA6061C6409FC858B7409EE3 /* Cargo.toml in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		CA6033723F82C9FA710A2219 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				CA6061C6409FC9FA710A2219 /* Cargo.toml in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		CA6033723F82D6691E4C3FF1 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				CA6061C6409FD6691E4C3FF1 /* Cargo.toml in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXSourcesBuildPhase section */
-
 /* Begin XCBuildConfiguration section */
-		CA604B55B26012977AAB839F /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CARGO_XCODE_CARGO_DEP_FILE_NAME = liblibrustdesk.d;
-				CARGO_XCODE_CARGO_FILE_NAME = liblibrustdesk.a;
-				INSTALL_GROUP = "";
-				INSTALL_MODE_FLAG = "";
-				INSTALL_OWNER = "";
-				PRODUCT_NAME = librustdesk_static;
-				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "macosx iphonesimulator iphoneos appletvsimulator appletvos";
-			};
-			name = Debug;
-		};
-		CA604B55B260C858B7409EE3 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CARGO_XCODE_CARGO_DEP_FILE_NAME = naming.d;
-				CARGO_XCODE_CARGO_FILE_NAME = naming;
-				PRODUCT_NAME = naming;
-				SUPPORTED_PLATFORMS = macosx;
-			};
-			name = Debug;
-		};
-		CA604B55B260C9FA710A2219 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CARGO_XCODE_CARGO_DEP_FILE_NAME = rustdesk.d;
-				CARGO_XCODE_CARGO_FILE_NAME = rustdesk;
-				PRODUCT_NAME = rustdesk;
-				SUPPORTED_PLATFORMS = macosx;
-			};
-			name = Debug;
-		};
-		CA604B55B260D6691E4C3FF1 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CARGO_XCODE_CARGO_DEP_FILE_NAME = liblibrustdesk.d;
-				CARGO_XCODE_CARGO_FILE_NAME = liblibrustdesk.dylib;
-				PRODUCT_NAME = librustdesk;
-				SUPPORTED_PLATFORMS = macosx;
-			};
-			name = Debug;
-		};
-		CA60583BB9CE12977AAB839F /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CARGO_XCODE_CARGO_DEP_FILE_NAME = liblibrustdesk.d;
-				CARGO_XCODE_CARGO_FILE_NAME = liblibrustdesk.a;
-				INSTALL_GROUP = "";
-				INSTALL_MODE_FLAG = "";
-				INSTALL_OWNER = "";
-				PRODUCT_NAME = librustdesk_static;
-				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "macosx iphonesimulator iphoneos appletvsimulator appletvos";
-			};
-			name = Release;
-		};
-		CA60583BB9CEC858B7409EE3 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CARGO_XCODE_CARGO_DEP_FILE_NAME = naming.d;
-				CARGO_XCODE_CARGO_FILE_NAME = naming;
-				PRODUCT_NAME = naming;
-				SUPPORTED_PLATFORMS = macosx;
-			};
-			name = Release;
-		};
-		CA60583BB9CEC9FA710A2219 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CARGO_XCODE_CARGO_DEP_FILE_NAME = rustdesk.d;
-				CARGO_XCODE_CARGO_FILE_NAME = rustdesk;
-				PRODUCT_NAME = rustdesk;
-				SUPPORTED_PLATFORMS = macosx;
-			};
-			name = Release;
-		};
-		CA60583BB9CED6691E4C3FF1 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CARGO_XCODE_CARGO_DEP_FILE_NAME = liblibrustdesk.d;
-				CARGO_XCODE_CARGO_FILE_NAME = liblibrustdesk.dylib;
-				PRODUCT_NAME = librustdesk;
-				SUPPORTED_PLATFORMS = macosx;
-			};
-			name = Release;
-		};
 		CA608F3F78EE228BE02872F8 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -387,42 +114,6 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		CA6028B9540B12977AAB839F /* Build configuration list for PBXNativeTarget "librustdesk-staticlib" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				CA60583BB9CE12977AAB839F /* Release */,
-				CA604B55B26012977AAB839F /* Debug */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		CA6028B9540BC858B7409EE3 /* Build configuration list for PBXNativeTarget "naming-bin" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				CA60583BB9CEC858B7409EE3 /* Release */,
-				CA604B55B260C858B7409EE3 /* Debug */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		CA6028B9540BC9FA710A2219 /* Build configuration list for PBXNativeTarget "rustdesk-bin" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				CA60583BB9CEC9FA710A2219 /* Release */,
-				CA604B55B260C9FA710A2219 /* Debug */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		CA6028B9540BD6691E4C3FF1 /* Build configuration list for PBXNativeTarget "librustdesk-cdylib" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				CA60583BB9CED6691E4C3FF1 /* Release */,
-				CA604B55B260D6691E4C3FF1 /* Debug */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
 		CA603C4309E180E02D6C7F57 /* Build configuration list for PBXProject "rustdesk" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

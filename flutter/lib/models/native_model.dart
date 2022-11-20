@@ -96,9 +96,7 @@ class PlatformFFI {
             ? DynamicLibrary.open('librustdesk.so')
             : Platform.isWindows
                 ? DynamicLibrary.open('librustdesk.dll')
-                : Platform.isMacOS
-                    ? DynamicLibrary.open('librustdesk.dylib')
-                    : DynamicLibrary.process();
+                : DynamicLibrary.process();
     debugPrint('initializing FFI $_appType');
     try {
       _translate = dylib.lookupFunction<F2, F2>('translate');
