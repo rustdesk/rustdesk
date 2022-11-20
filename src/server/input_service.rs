@@ -513,7 +513,7 @@ pub fn handle_mouse_(evt: &MouseEvent) {
             }
             _ => {}
         },
-        3 => {
+        3 | 4 => {
             #[allow(unused_mut)]
             let mut x = evt.x;
             #[allow(unused_mut)]

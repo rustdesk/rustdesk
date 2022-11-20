@@ -1572,9 +1572,14 @@ pub async fn handle_test_delay(t: TestDelay, peer: &mut Stream) {
     }
 }
 
+/// Whether is track pad scrolling.
 #[inline]
-#[cfg(all(target_os = "macos", not(feature = "flutter")))]
+#[cfg(all(target_os = "macos"))]
 fn check_scroll_on_mac(mask: i32, x: i32, y: i32) -> bool {
+    // flutter version we set mask type bit to 4 when track pad scrolling.
+    if mask & 7 == 4 {
+        return true;
+    }
     if mask & 3 != 3 {
         return false;
     }
@@ -1597,7 +1602,7 @@ fn check_scroll_on_mac(mask: i32, x: i32, y: i32) -> bool {
 ///
 /// * `mask` - Mouse event.
 ///     * mask = buttons << 3 | type
-///     * type, 1: down, 2: up, 3: wheel
+///     * type, 1: down, 2: up, 3: wheel, 4: trackpad
 ///     * buttons, 1: left, 2: right, 4: middle
 /// * `x` - X coordinate.
 /// * `y` - Y coordinate.
@@ -1636,7 +1641,7 @@ pub fn send_mouse(
     if command {
         mouse_event.modifiers.push(ControlKey::Meta.into());
     }
-    #[cfg(all(target_os = "macos", not(feature = "flutter")))]
+    #[cfg(all(target_os = "macos"))]
     if check_scroll_on_mac(mask, x, y) {
         mouse_event.modifiers.push(ControlKey::Scroll.into());
     }
