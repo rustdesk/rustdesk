@@ -112,13 +112,6 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v3
       
-      - name: Get build target triple
-        uses: jungwinter/split@v2
-        id: build-target-triple
-        with:
-          separator: '-'
-          msg: ${{ matrix.job.target }}
-      
       - name: Install build runtime
         run: |
           brew install llvm create-dmg
