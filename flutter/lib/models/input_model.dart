@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:ui' as ui;
@@ -38,6 +39,10 @@ class InputModel {
   var ctrl = false;
   var alt = false;
   var command = false;
+
+  // trackpad
+  var trackpadScrollDistance = Offset.zero;
+  Timer? _flingTimer;
 
   // mouse
   final isPhysicalMouse = false.obs;
@@ -236,6 +241,7 @@ class InputModel {
     if (!enter) {
       resetModifiers();
     }
+    _flingTimer?.cancel();
     bind.sessionEnterOrLeave(id: id, enter: enter);
   }
 
@@ -256,6 +262,57 @@ class InputModel {
     if (isPhysicalMouse.value) {
       handleMouse(getEvent(e, 'mousemove'));
     }
+  }
+
+  int _signOrZero(num x) {
+    if (x == 0) {
+      return 0;
+    } else {
+      return x > 0 ? 1 : -1;
+    }
+  }
+
+  void onPointerPanZoomStart(PointerPanZoomStartEvent e) {}
+
+  // https://docs.flutter.dev/release/breaking-changes/trackpad-gestures
+  // TODO(support zoom in/out)
+  void onPointerPanZoomUpdate(PointerPanZoomUpdateEvent e) {
+    var delta = e.panDelta;
+    trackpadScrollDistance += delta;
+    bind.sessionSendMouse(
+        id: id,
+        msg:
+            '{"type": "trackpad", "x": "${delta.dx.toInt()}", "y": "${delta.dy.toInt()}"}');
+  }
+
+  // Simple simulation for fling.
+  void _scheduleFling(var x, y, dx, dy) {
+    if (dx <= 0 && dy <= 0) {
+      return;
+    }
+    _flingTimer = Timer(Duration(milliseconds: 10), () {
+      bind.sessionSendMouse(
+          id: id, msg: '{"type": "trackpad", "x": "$x", "y": "$y"}');
+      dx--;
+      dy--;
+      if (dx == 0) {
+        x = 0;
+      }
+      if (dy == 0) {
+        y = 0;
+      }
+      _scheduleFling(x, y, dx, dy);
+    });
+  }
+
+  void onPointerPanZoomEnd(PointerPanZoomEndEvent e) {
+    var x = _signOrZero(trackpadScrollDistance.dx);
+    var y = _signOrZero(trackpadScrollDistance.dy);
+    var dx = trackpadScrollDistance.dx.abs() ~/ 40;
+    var dy = trackpadScrollDistance.dy.abs() ~/ 40;
+    _scheduleFling(x, y, dx, dy);
+
+    trackpadScrollDistance = Offset.zero;
   }
 
   void onPointDownImage(PointerDownEvent e) {

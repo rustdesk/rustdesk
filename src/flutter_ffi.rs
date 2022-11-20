@@ -156,6 +156,7 @@ pub fn session_reconnect(id: String) {
 
 pub fn session_toggle_option(id: String, value: String) {
     if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+        log::warn!("toggle option {}", value);
         session.toggle_option(value);
     }
 }
@@ -907,6 +908,7 @@ pub fn session_send_mouse(id: String, msg: String) {
                 "down" => 1,
                 "up" => 2,
                 "wheel" => 3,
+                "trackpad" => 4,
                 _ => 0,
             };
         }
