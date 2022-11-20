@@ -263,6 +263,14 @@ def build_flutter_deb(version, features):
     os.chdir("..")
 
 
+def build_flutter_dmg(version, features):
+    os.system(f'cargo build --features {features} --lib --release')
+    ffi_bindgen_function_refactor()
+    os.chdir('flutter')
+    os.system('flutter build macos --release')
+    # TODO: pass
+
+
 def build_flutter_arch_manjaro(version, features):
     os.system(f'cargo build --features {features} --lib --release')
     ffi_bindgen_function_refactor()
@@ -372,7 +380,7 @@ def main():
         os.system('cargo bundle --release --features ' + features)
         if flutter:
             if osx:
-                # todo: OSX build
+                build_flutter_dmg(version, features)
                 pass
             else:
                 os.system(

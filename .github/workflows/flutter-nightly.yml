@@ -100,6 +100,86 @@ jobs:
           files: |
             rustdesk-*.exe
 
+  builf-for-macOS:
+    name: ${{ matrix.job.target }} (${{ matrix.job.os }},${{ matrix.job.extra-build-args }})
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { target: x86_64-apple-darwin         , os: macos-10.15, extra-build-args: ""}
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v3
+      
+      - name: Get build target triple
+        uses: jungwinter/split@v2
+        id: build-target-triple
+        with:
+          separator: '-'
+          msg: ${{ matrix.job.target }}
+      
+      - name: Install build runtime
+        run: |
+          brew install llvm create-dmg
+
+      - name: Install flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.job.target }}
+          override: true
+          profile: minimal # minimal component installation (ie, no documentation)
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: ${{ matrix.job.os }}
+
+      - name: Install flutter rust bridge deps
+        shell: bash
+        run: |
+          dart pub global activate ffigen --version 5.0.1
+          # flutter_rust_bridge
+          pushd /tmp && git clone https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge --depth=1 && popd
+          pushd /tmp/flutter_rust_bridge/frb_codegen && cargo install --path . && popd
+          pushd flutter && flutter pub get && popd
+          ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart
+      
+      - name: Restore from cache and install vcpkg
+        uses: lukka/run-vcpkg@v7
+        with:
+          setupOnly: true
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+
+      - name: Install vcpkg dependencies
+        run: |
+          $VCPKG_ROOT/vcpkg install libvpx libyuv opus
+        shell: bash
+
+      - name: Install cargo bundle tools
+        run: |
+          cargo install cargo-bundle
+
+      - name: Show version information (Rust, cargo, Clang)
+        shell: bash
+        run: |
+          clang --version || true
+          rustup -V
+          rustup toolchain list
+          rustup default
+          cargo -V
+          rustc -V
+
+      - name: Build rustdesk
+        run: ./build.py --flutter --hwcodec ${{ matrix.job.extra-build-args }}
+      
+
   build-for-linux:
     name: ${{ matrix.job.target }} (${{ matrix.job.os }},${{ matrix.job.extra-build-args }})
     runs-on: ${{ matrix.job.os }}
