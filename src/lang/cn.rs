@@ -390,5 +390,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue with", "使用"),
         ("Elevate", "提权"),
         ("Zoom cursor", "缩放鼠标"),
+        ("Accept sessions via password", "只允许密码访问"),
+        ("Accept sessions via click", "只允许点击访问"),
+        ("Accept sessions via both", "允许密码或点击访问"),
+        ("Please wait for the remote side to accept your session request...", "请等待对方接受你的连接..."),
     ].iter().cloned().collect();
 }

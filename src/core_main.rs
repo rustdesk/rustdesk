@@ -226,6 +226,7 @@ pub fn core_main() -> Option<Vec<String>> {
             // meanwhile, return true to call flutter window to show control panel
             #[cfg(feature = "flutter")]
             crate::flutter::connection_manager::start_listen_ipc_thread();
+            crate::ui_interface::start_option_status_sync();
         }
     }
     //_async_logger_holder.map(|x| x.flush());

@@ -1337,6 +1337,15 @@ impl LoginConfigHandler {
             self.password = Default::default();
             interface.msgbox("re-input-password", err, "Do you want to enter again?", "");
             true
+        } else if err == "No Password Access" {
+            self.password = Default::default();
+            interface.msgbox(
+                "wait-remote-accept-nook",
+                "Prompt",
+                "Please wait for the remote side to accept your session request...",
+                "",
+            );
+            true
         } else {
             if err.contains(SCRAP_X11_REQUIRED) {
                 interface.msgbox("error", "Login Error", err, SCRAP_X11_REF_URL);
@@ -1434,11 +1443,7 @@ impl LoginConfigHandler {
             username: self.id.clone(),
             password: password.into(),
             my_id,
-            my_name: if cfg!(windows) {
-                crate::platform::get_active_username()
-            } else {
-                crate::username()
-            },
+            my_name: crate::username(),
             option: self.get_option_message(true).into(),
             session_id: self.session_id,
             version: crate::VERSION.to_string(),

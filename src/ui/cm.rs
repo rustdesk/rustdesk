@@ -135,6 +135,10 @@ impl SciterConnectionManager {
     fn elevate_portable(&self, id: i32) {
         crate::ui_cm_interface::elevate_portable(id);
     }
+
+    fn get_option(&self, key: String) -> String {
+        crate::ui_interface::get_option(key)
+    }
 }
 
 impl sciter::EventHandler for SciterConnectionManager {
@@ -155,5 +159,6 @@ impl sciter::EventHandler for SciterConnectionManager {
         fn send_msg(i32, String);
         fn can_elevate();
         fn elevate_portable(i32);
+        fn get_option(String);
     }
 }

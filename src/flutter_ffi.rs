@@ -562,7 +562,7 @@ pub fn main_get_connect_status() -> String {
 
 pub fn main_check_connect_status() {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    check_mouse_time(); // avoid multi calls
+    start_option_status_sync(); // avoid multi calls
 }
 
 pub fn main_is_using_public_server() -> bool {

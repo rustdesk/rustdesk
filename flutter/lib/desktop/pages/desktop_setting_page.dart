@@ -580,20 +580,21 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     return ChangeNotifierProvider.value(
         value: gFFI.serverModel,
         child: Consumer<ServerModel>(builder: ((context, model, child) {
-          List<String> keys = [
+          List<String> passwordKeys = [
             kUseTemporaryPassword,
             kUsePermanentPassword,
             kUseBothPasswords,
           ];
-          List<String> values = [
+          List<String> passwordValues = [
             translate('Use temporary password'),
             translate('Use permanent password'),
             translate('Use both passwords'),
           ];
           bool tmpEnabled = model.verificationMethod != kUsePermanentPassword;
           bool permEnabled = model.verificationMethod != kUseTemporaryPassword;
-          String currentValue = values[keys.indexOf(model.verificationMethod)];
-          List<Widget> radios = values
+          String currentValue =
+              passwordValues[passwordKeys.indexOf(model.verificationMethod)];
+          List<Widget> radios = passwordValues
               .map((value) => _Radio<String>(
                     context,
                     value: value,
@@ -601,8 +602,8 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                     label: value,
                     onChanged: ((value) {
                       () async {
-                        await model
-                            .setVerificationMethod(keys[values.indexOf(value)]);
+                        await model.setVerificationMethod(
+                            passwordKeys[passwordValues.indexOf(value)]);
                         await model.updatePasswordModel();
                       }();
                     }),
@@ -640,20 +641,51 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                   ))
               .toList();
 
+          final modeKeys = ['password', 'click', ''];
+          final modeValues = [
+            translate('Accept sessions via password'),
+            translate('Accept sessions via click'),
+            translate('Accept sessions via both'),
+          ];
+          var modeInitialKey = model.approveMode;
+          if (!modeKeys.contains(modeInitialKey)) modeInitialKey = '';
+          final usePassword = model.approveMode != 'click';
+
           return _Card(title: 'Password', children: [
-            radios[0],
-            _SubLabeledWidget(
-                'Temporary Password Length',
-                Row(
-                  children: [
-                    ...lengthRadios,
-                  ],
-                ),
-                enabled: tmpEnabled && !locked),
-            radios[1],
-            _SubButton('Set permanent password', setPasswordDialog,
-                permEnabled && !locked),
-            radios[2],
+            _ComboBox(
+              keys: modeKeys,
+              values: modeValues,
+              initialKey: modeInitialKey,
+              onChanged: (key) => model.setApproveMode(key),
+            ).marginOnly(left: _kContentHMargin),
+            Offstage(
+              offstage: !usePassword,
+              child: radios[0],
+            ),
+            Offstage(
+              offstage: !usePassword,
+              child: _SubLabeledWidget(
+                  'Temporary Password Length',
+                  Row(
+                    children: [
+                      ...lengthRadios,
+                    ],
+                  ),
+                  enabled: tmpEnabled && !locked),
+            ),
+            Offstage(
+              offstage: !usePassword,
+              child: radios[1],
+            ),
+            Offstage(
+              offstage: !usePassword,
+              child: _SubButton('Set permanent password', setPasswordDialog,
+                  permEnabled && !locked),
+            ),
+            Offstage(
+              offstage: !usePassword,
+              child: radios[2],
+            ),
           ]);
         })));
   }

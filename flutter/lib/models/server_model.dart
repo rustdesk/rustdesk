@@ -31,6 +31,7 @@ class ServerModel with ChangeNotifier {
   int _connectStatus = 0; // Rendezvous Server status
   String _verificationMethod = "";
   String _temporaryPasswordLength = "";
+  String _approveMode = "";
 
   late String _emptyIdShow;
   late final IDTextEditingController _serverId;
@@ -68,6 +69,8 @@ class ServerModel with ChangeNotifier {
     return _verificationMethod;
   }
 
+  String get approveMode => _approveMode;
+
   setVerificationMethod(String method) async {
     await bind.mainSetOption(key: "verification-method", value: method);
   }
@@ -84,6 +87,10 @@ class ServerModel with ChangeNotifier {
     await bind.mainSetOption(key: "temporary-password-length", value: length);
   }
 
+  setApproveMode(String mode) async {
+    await bind.mainSetOption(key: 'approve-mode', value: mode);
+  }
+
   TextEditingController get serverId => _serverId;
 
   TextEditingController get serverPasswd => _serverPasswd;
@@ -98,8 +105,7 @@ class ServerModel with ChangeNotifier {
     _emptyIdShow = translate("Generating ...");
     _serverId = IDTextEditingController(text: _emptyIdShow);
 
-    Timer.periodic(Duration(seconds: 1), (timer) async {
-      if (isTest) return timer.cancel();
+    timerCallback() async {
       var status = await bind.mainGetOnlineStatue();
       if (status > 0) {
         status = 1;
@@ -115,7 +121,14 @@ class ServerModel with ChangeNotifier {
       }
 
       updatePasswordModel();
-    });
+    }
+
+    if (!isTest) {
+      Future.delayed(Duration.zero, timerCallback);
+      Timer.periodic(Duration(milliseconds: 500), (timer) async {
+        await timerCallback();
+      });
+    }
   }
 
   /// 1. check android permission
@@ -151,11 +164,17 @@ class ServerModel with ChangeNotifier {
         await bind.mainGetOption(key: "verification-method");
     final temporaryPasswordLength =
         await bind.mainGetOption(key: "temporary-password-length");
+    final approveMode = await bind.mainGetOption(key: 'approve-mode');
+    if (_approveMode != approveMode) {
+      _approveMode = approveMode;
+      update = true;
+    }
     final oldPwdText = _serverPasswd.text;
     if (_serverPasswd.text != temporaryPassword) {
       _serverPasswd.text = temporaryPassword;
     }
-    if (verificationMethod == kUsePermanentPassword) {
+    if (verificationMethod == kUsePermanentPassword ||
+        _approveMode == 'click') {
       _serverPasswd.text = '-';
     }
     if (oldPwdText != _serverPasswd.text) {

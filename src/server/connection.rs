@@ -1046,6 +1046,14 @@ impl Connection {
             }
             if !crate::is_ip(&lr.username) && lr.username != Config::get_id() {
                 self.send_login_error("Offline").await;
+            } else if Config::get_option("approve-mode") == "click" {
+                self.try_start_cm(lr.my_id, lr.my_name, false);
+                if hbb_common::get_version_number(&lr.version)
+                    >= hbb_common::get_version_number("1.2.0")
+                {
+                    self.send_login_error("No Password Access").await;
+                }
+                return true;
             } else if self.is_of_recent_session() {
                 self.try_start_cm(lr.my_id, lr.my_name, true);
                 self.send_logon_response().await;

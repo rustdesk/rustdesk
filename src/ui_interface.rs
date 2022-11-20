@@ -874,7 +874,12 @@ pub fn check_zombie(children: Children) {
     }
 }
 
-pub(crate) fn check_connect_status(reconnect: bool) -> mpsc::UnboundedSender<ipc::Data> {
+pub fn start_option_status_sync() {
+    let _sender = SENDER.lock().unwrap();
+}
+
+// not call directly
+fn check_connect_status(reconnect: bool) -> mpsc::UnboundedSender<ipc::Data> {
     let (tx, rx) = mpsc::unbounded_channel::<ipc::Data>();
     std::thread::spawn(move || check_connect_status_(reconnect, rx));
     tx
@@ -898,7 +903,7 @@ pub fn account_auth_result() -> String {
 // notice: avoiding create ipc connecton repeatly,
 // because windows named pipe has serious memory leak issue.
 #[tokio::main(flavor = "current_thread")]
-pub(crate) async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc::Data>) {
+async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc::Data>) {
     let mut key_confirmed = false;
     let mut rx = rx;
     let mut mouse_time = 0;
