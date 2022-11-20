@@ -54,6 +54,7 @@ pub extern "C" fn rustdesk_core_main(args_len: *mut c_int) -> *mut *mut c_char {
 }
 
 // https://gist.github.com/iskakaushik/1c5b8aa75c77479c33c4320913eebef6
+#[cfg(windows)]
 fn rust_args_to_c_args(args: Vec<String>, outlen: *mut c_int) -> *mut *mut c_char {
     let mut v = vec![];
 
@@ -227,7 +228,7 @@ impl InvokeUiSession for FlutterHandler {
         id: i32,
         entries: &Vec<FileEntry>,
         path: String,
-        is_local: bool,
+        #[allow(unused_variables)] is_local: bool,
         only_count: bool,
     ) {
         // TODO opt
@@ -325,6 +326,10 @@ impl InvokeUiSession for FlutterHandler {
         );
     }
 
+    fn cancel_msgbox(&self, tag: &str) {
+        self.push_event("cancel_msgbox", vec![("tag", tag)]);
+    }
+
     fn new_message(&self, msg: String) {
         self.push_event("chat_client_mode", vec![("text", &msg)]);
     }
@@ -404,7 +409,7 @@ pub fn session_start_(id: &str, event_stream: StreamSink<EventToUI>) -> ResultTy
         *session.event_stream.write().unwrap() = Some(event_stream);
         let session = session.clone();
         std::thread::spawn(move || {
-            // if flutter : disable keyboard listen 
+            // if flutter : disable keyboard listen
             crate::client::disable_keyboard_listening();
             io_loop(session);
         });
@@ -466,6 +471,10 @@ pub mod connection_manager {
 
         fn change_language(&self) {
             self.push_event("language", vec![]);
+        }
+
+        fn show_elevation(&self, show: bool) {
+            self.push_event("show_elevation", vec![("show", &show.to_string())]);
         }
     }
 

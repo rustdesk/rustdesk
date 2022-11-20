@@ -38,6 +38,14 @@ jobs:
         with:
           channel: 'stable'
           flutter-version: ${{ env.FLUTTER_VERSION }}
+      
+      - name: Replace engine with rustdesk custom flutter engine
+        run: |
+          flutter doctor -v
+          flutter precache --windows
+          Invoke-WebRequest -Uri https://github.com/Kingtous/engine/releases/download/v3.0.5-rustdesk/windows-x64-release-flutter.zip -OutFile windows-x64-release-flutter.zip
+          Expand-Archive windows-x64-release-flutter.zip -DestinationPath engine
+          mv -Force engine/*  C:/hostedtoolcache/windows/flutter/stable-3.0.5-x64/bin/cache/artifacts/engine/windows-x64-release/
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -111,6 +119,13 @@ jobs:
     steps:
       - name: Checkout source code
         uses: actions/checkout@v3
+
+      - name: Get build target triple
+        uses: jungwinter/split@v2
+        id: build-target-triple
+        with:
+          separator: '-'
+          msg: ${{ matrix.job.target }}
 
       - name: Install prerequisites
         run: |
@@ -242,19 +257,25 @@ jobs:
           files: |
             res/rustdesk*.zst
 
-      # - name: build RPM package
-      #   id: rpm
-      #   uses: Kingtous/rustdesk-rpmbuild@master
-      #   with:
-      #     spec_file: "res/rpm-flutter.spec"
+      - name: Make RPM package
+        shell: bash
+        if: ${{ matrix.job.extra-build-args == '' }}
+        run: |
+          sudo apt install -y rpm
+          HBB=`pwd` rpmbuild ./res/rpm-flutter.spec -bb
+          pushd ~/rpmbuild/RPMS/${{ steps.build-target-triple.outputs._0 }}
+          for name in rustdesk*??.rpm; do
+              mv "$name" "${name%%.rpm}-fedora28-centos8.rpm" 
+          done
 
-      # - name: Publish fedora28/centos8 package
-      #   uses: softprops/action-gh-release@v1
-      #   with:
-      #     prerelease: true
-      #     tag_name: ${{ env.TAG_NAME }}
-      #     files: |
-      #       ${{ steps.rpm.outputs.rpm_dir_path }}/*
+      - name: Publish fedora28/centos8 package
+        if: ${{ matrix.job.extra-build-args == '' }}
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            /home/runner/rpmbuild/RPMS/${{ steps.build-target-triple.outputs._0 }}/*.rpm
 
   build-flatpak:
     name: Build Flatpak

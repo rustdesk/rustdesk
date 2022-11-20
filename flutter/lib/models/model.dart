@@ -15,8 +15,8 @@ import 'package:flutter_hbb/models/file_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/models/user_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
+import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tuple/tuple.dart';
 import 'package:image/image.dart' as img2;
 import 'package:flutter_custom_cursor/flutter_custom_cursor.dart';
@@ -190,6 +190,13 @@ class FfiModel with ChangeNotifier {
             rustDeskWinManager.newRemoteDesktop(arg);
           });
         }
+      } else if (name == 'alias') {
+        handleAliasChanged(evt);
+      } else if (name == 'show_elevation') {
+        final show = evt['show'].toString() == 'true';
+        parent.target?.serverModel.setShowElevation(show);
+      } else if (name == 'cancel_msgbox') {
+        cancelMsgBox(evt, peerId);
       }
     };
   }
@@ -197,6 +204,13 @@ class FfiModel with ChangeNotifier {
   /// Bind the event listener to receive events from the Rust core.
   updateEventListener(String peerId) {
     platformFFI.setEventCallback(startEventListener(peerId));
+  }
+
+  handleAliasChanged(Map<String, dynamic> evt) {
+    final rxAlias = PeerStringOption.find(evt['id'], 'alias');
+    if (rxAlias.value != evt['alias']) {
+      rxAlias.value = evt['alias'];
+    }
   }
 
   handleSwitchDisplay(Map<String, dynamic> evt) {
@@ -217,6 +231,13 @@ class FfiModel with ChangeNotifier {
     }
     parent.target?.recordingModel.onSwitchDisplay();
     notifyListeners();
+  }
+
+  cancelMsgBox(Map<String, dynamic> evt, String id) {
+    if (parent.target == null) return;
+    final dialogManager = parent.target!.dialogManager;
+    final tag = '$id-${evt['tag']}';
+    dialogManager.dismissByTag(tag);
   }
 
   /// Handle the message box event based on [evt] and [id].
@@ -244,7 +265,7 @@ class FfiModel with ChangeNotifier {
   showMsgBox(String id, String type, String title, String text, String link,
       bool hasRetry, OverlayDialogManager dialogManager,
       {bool? hasCancel}) {
-    msgBox(type, title, text, link, dialogManager, hasCancel: hasCancel);
+    msgBox(id, type, title, text, link, dialogManager, hasCancel: hasCancel);
     _timer?.cancel();
     if (hasRetry) {
       _timer = Timer(Duration(seconds: _reconnects), () {
@@ -392,7 +413,7 @@ class ImageModel with ChangeNotifier {
         await initializeCursorAndCanvas(parent.target!);
       }
       if (parent.target?.ffiModel.isPeerAndroid ?? false) {
-        bind.sessionPeerOption(id: id, name: 'view-style', value: 'adaptive');
+        bind.sessionSetViewStyle(id: id, value: 'adaptive');
         parent.target?.canvasModel.updateViewStyle();
       }
     }
@@ -514,7 +535,7 @@ class CanvasModel with ChangeNotifier {
   double get scrollY => _scrollY;
 
   updateViewStyle() async {
-    final style = await bind.sessionGetOption(id: id, arg: 'view-style');
+    final style = await bind.sessionGetViewStyle(id: id);
     if (style == null) {
       return;
     }
@@ -540,7 +561,7 @@ class CanvasModel with ChangeNotifier {
   }
 
   updateScrollStyle() async {
-    final style = await bind.sessionGetOption(id: id, arg: 'scroll-style');
+    final style = await bind.sessionGetScrollStyle(id: id);
     if (style == 'scrollbar') {
       _scrollStyle = ScrollStyle.scrollbar;
       _scrollX = 0.0;
@@ -572,7 +593,7 @@ class CanvasModel with ChangeNotifier {
     return parent.target?.ffiModel.display.height ?? defaultHeight;
   }
 
-  double get windowBorderWidth => stateGlobal.windowBorderWidth;
+  double get windowBorderWidth => stateGlobal.windowBorderWidth.value;
   double get tabBarHeight => stateGlobal.tabBarHeight;
 
   Size get size {
@@ -675,6 +696,8 @@ class CursorData {
   final img2.Image? image;
   double scale;
   Uint8List? data;
+  final double hotxOrigin;
+  final double hotyOrigin;
   double hotx;
   double hoty;
   final int width;
@@ -686,48 +709,60 @@ class CursorData {
     required this.image,
     required this.scale,
     required this.data,
-    required this.hotx,
-    required this.hoty,
+    required this.hotxOrigin,
+    required this.hotyOrigin,
     required this.width,
     required this.height,
-  });
+  })  : hotx = hotxOrigin * scale,
+        hoty = hotxOrigin * scale;
 
   int _doubleToInt(double v) => (v * 10e6).round().toInt();
 
-  double _checkUpdateScale(double scale) {
-    // Update data if scale changed.
-    if (Platform.isWindows) {
-      final tgtWidth = (width * scale).toInt();
-      final tgtHeight = (width * scale).toInt();
-      if (tgtWidth < kMinCursorSize || tgtHeight < kMinCursorSize) {
-        double sw = kMinCursorSize.toDouble() / width;
-        double sh = kMinCursorSize.toDouble() / height;
-        scale = sw < sh ? sh : sw;
+  double _checkUpdateScale(double scale, bool shouldScale) {
+    double oldScale = this.scale;
+    if (!shouldScale) {
+      scale = 1.0;
+    } else {
+      // Update data if scale changed.
+      if (Platform.isWindows) {
+        final tgtWidth = (width * scale).toInt();
+        final tgtHeight = (width * scale).toInt();
+        if (tgtWidth < kMinCursorSize || tgtHeight < kMinCursorSize) {
+          double sw = kMinCursorSize.toDouble() / width;
+          double sh = kMinCursorSize.toDouble() / height;
+          scale = sw < sh ? sh : sw;
+        }
       }
-      if (_doubleToInt(this.scale) != _doubleToInt(scale)) {
+    }
+
+    if (Platform.isWindows) {
+      if (_doubleToInt(oldScale) != _doubleToInt(scale)) {
         data = img2
             .copyResize(
               image!,
               width: (width * scale).toInt(),
               height: (height * scale).toInt(),
+              interpolation: img2.Interpolation.average,
             )
             .getBytes(format: img2.Format.bgra);
-        hotx = (width * scale) / 2;
-        hoty = (height * scale) / 2;
       }
     }
+
     this.scale = scale;
+    hotx = hotxOrigin * scale;
+    hoty = hotyOrigin * scale;
     return scale;
   }
 
-  String updateGetKey(double scale) {
-    scale = _checkUpdateScale(scale);
+  String updateGetKey(double scale, bool shouldScale) {
+    scale = _checkUpdateScale(scale, shouldScale);
     return '${peerId}_${id}_${_doubleToInt(width * scale)}_${_doubleToInt(height * scale)}';
   }
 }
 
 class CursorModel with ChangeNotifier {
   ui.Image? _image;
+  ui.Image? _defaultImage;
   final _images = <int, Tuple3<ui.Image, double, double>>{};
   CursorData? _cache;
   final _defaultCacheId = -1;
@@ -740,13 +775,14 @@ class CursorModel with ChangeNotifier {
   double _hoty = 0;
   double _displayOriginX = 0;
   double _displayOriginY = 0;
-  bool got_mouse_control = true;
-  DateTime _last_peer_mouse = DateTime.now()
+  bool gotMouseControl = true;
+  DateTime _lastPeerMouse = DateTime.now()
       .subtract(Duration(milliseconds: 2 * kMouseControlTimeoutMSec));
   String id = '';
   WeakReference<FFI> parent;
 
   ui.Image? get image => _image;
+  ui.Image? get defaultImage => _defaultImage;
   CursorData? get cache => _cache;
   CursorData? get defaultCache => _getDefaultCache();
 
@@ -758,34 +794,50 @@ class CursorModel with ChangeNotifier {
   double get hotx => _hotx;
   double get hoty => _hoty;
 
-  bool get is_peer_control_protected =>
-      DateTime.now().difference(_last_peer_mouse).inMilliseconds <
+  bool get isPeerControlProtected =>
+      DateTime.now().difference(_lastPeerMouse).inMilliseconds <
       kMouseControlTimeoutMSec;
 
-  CursorModel(this.parent);
+  CursorModel(this.parent) {
+    _getDefaultImage();
+    _getDefaultCache();
+  }
 
   Set<String> get cachedKeys => _cacheKeys;
   addKey(String key) => _cacheKeys.add(key);
 
+  Future<ui.Image?> _getDefaultImage() async {
+    if (_defaultImage == null) {
+      final defaultImg = defaultCursorImage!;
+      // This function is called only one time, no need to care about the performance.
+      Uint8List data = defaultImg.getBytes(format: img2.Format.rgba);
+      _defaultImage = await img.decodeImageFromPixels(
+          data, defaultImg.width, defaultImg.height, ui.PixelFormat.rgba8888);
+    }
+    return _defaultImage;
+  }
+
   CursorData? _getDefaultCache() {
     if (_defaultCache == null) {
+      Uint8List data;
+      double scale = 1.0;
       if (Platform.isWindows) {
-        Uint8List data = defaultCursorImage!.getBytes(format: img2.Format.bgra);
-        _hotx = defaultCursorImage!.width / 2;
-        _hoty = defaultCursorImage!.height / 2;
-
-        _defaultCache = CursorData(
-          peerId: id,
-          id: _defaultCacheId,
-          image: defaultCursorImage?.clone(),
-          scale: 1.0,
-          data: data,
-          hotx: _hotx,
-          hoty: _hoty,
-          width: defaultCursorImage!.width,
-          height: defaultCursorImage!.height,
-        );
+        data = defaultCursorImage!.getBytes(format: img2.Format.bgra);
+      } else {
+        data = Uint8List.fromList(img2.encodePng(defaultCursorImage!));
       }
+
+      _defaultCache = CursorData(
+        peerId: id,
+        id: _defaultCacheId,
+        image: defaultCursorImage?.clone(),
+        scale: scale,
+        data: data,
+        hotxOrigin: defaultCursorImage!.width / 2,
+        hotyOrigin: defaultCursorImage!.height / 2,
+        width: defaultCursorImage!.width,
+        height: defaultCursorImage!.height,
+      );
     }
     return _defaultCache;
   }
@@ -917,59 +969,48 @@ class CursorModel with ChangeNotifier {
     var height = int.parse(evt['height']);
     List<dynamic> colors = json.decode(evt['colors']);
     final rgba = Uint8List.fromList(colors.map((s) => s as int).toList());
-    var pid = parent.target?.id;
     final image = await img.decodeImageFromPixels(
         rgba, width, height, ui.PixelFormat.rgba8888);
-    if (parent.target?.id != pid) return;
     _image = image;
-    _images[id] = Tuple3(image, _hotx, _hoty);
-    await _updateCache(image, id, width, height);
+    if (await _updateCache(image, id, width, height)) {
+      _images[id] = Tuple3(image, _hotx, _hoty);
+    } else {
+      _hotx = 0;
+      _hoty = 0;
+    }
     try {
       // my throw exception, because the listener maybe already dispose
       notifyListeners();
     } catch (e) {
-      debugPrint('notify cursor: $e');
+      debugPrint('WARNING: updateCursorId $id, without notifyListeners(). $e');
     }
   }
 
-  _updateCache(ui.Image image, int id, int w, int h) async {
-    Uint8List? data;
-    img2.Image? image2;
+  Future<bool> _updateCache(ui.Image image, int id, int w, int h) async {
+    ui.ImageByteFormat imgFormat = ui.ImageByteFormat.png;
     if (Platform.isWindows) {
-      ByteData? data2 =
-          await image.toByteData(format: ui.ImageByteFormat.rawRgba);
-      if (data2 != null) {
-        data = data2.buffer.asUint8List();
-        image2 = img2.Image.fromBytes(w, h, data);
-      } else {
-        data = defaultCursorImage?.getBytes(format: img2.Format.bgra);
-        image2 = defaultCursorImage?.clone();
-        _hotx = defaultCursorImage!.width / 2;
-        _hoty = defaultCursorImage!.height / 2;
-      }
-    } else {
-      ByteData? data2 = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (data2 != null) {
-        data = data2.buffer.asUint8List();
-      } else {
-        data = Uint8List.fromList(img2.encodePng(defaultCursorImage!));
-        _hotx = defaultCursorImage!.width / 2;
-        _hoty = defaultCursorImage!.height / 2;
-      }
+      imgFormat = ui.ImageByteFormat.rawRgba;
     }
 
+    ByteData? imgBytes = await image.toByteData(format: imgFormat);
+    if (imgBytes == null) {
+      return false;
+    }
+
+    Uint8List? data = imgBytes.buffer.asUint8List();
     _cache = CursorData(
       peerId: this.id,
       id: id,
-      image: image2,
+      image: Platform.isWindows ? img2.Image.fromBytes(w, h, data) : null,
       scale: 1.0,
       data: data,
-      hotx: _hotx,
-      hoty: _hoty,
+      hotxOrigin: _hotx,
+      hotyOrigin: _hoty,
       width: w,
       height: h,
     );
     _cacheMap[id] = _cache!;
+    return true;
   }
 
   updateCursorId(Map<String, dynamic> evt) async {
@@ -981,13 +1022,16 @@ class CursorModel with ChangeNotifier {
       _hotx = tmp.item2;
       _hoty = tmp.item3;
       notifyListeners();
+    } else {
+      debugPrint(
+          'WARNING: updateCursorId $id, cache is ${_cache == null ? "null" : "not null"}. without notifyListeners()');
     }
   }
 
   /// Update the cursor position.
   updateCursorPosition(Map<String, dynamic> evt, String id) async {
-    got_mouse_control = false;
-    _last_peer_mouse = DateTime.now();
+    gotMouseControl = false;
+    _lastPeerMouse = DateTime.now();
     _x = double.parse(evt['x']);
     _y = double.parse(evt['y']);
     try {
@@ -1219,7 +1263,7 @@ class FFI {
   Future<void> close() async {
     chatModel.close();
     if (imageModel.image != null && !isWebDesktop) {
-      await savePreference(id, cursorModel.x, cursorModel.y, canvasModel.x,
+      await setCanvasConfig(id, cursorModel.x, cursorModel.y, canvasModel.x,
           canvasModel.y, canvasModel.scale, ffiModel.pi.currentDisplay);
     }
     bind.sessionClose(id: id);
@@ -1267,9 +1311,10 @@ class PeerInfo {
   List<Display> displays = [];
 }
 
-Future<void> savePreference(String id, double xCursor, double yCursor,
+const canvasKey = 'canvas';
+
+Future<void> setCanvasConfig(String id, double xCursor, double yCursor,
     double xCanvas, double yCanvas, double scale, int currentDisplay) async {
-  SharedPreferences prefs = await SharedPreferences.getInstance();
   final p = <String, dynamic>{};
   p['xCursor'] = xCursor;
   p['yCursor'] = yCursor;
@@ -1277,25 +1322,27 @@ Future<void> savePreference(String id, double xCursor, double yCursor,
   p['yCanvas'] = yCanvas;
   p['scale'] = scale;
   p['currentDisplay'] = currentDisplay;
-  prefs.setString('peer$id', json.encode(p));
+  await bind.sessionSetFlutterConfig(id: id, k: canvasKey, v: jsonEncode(p));
 }
 
-Future<Map<String, dynamic>?> getPreference(String id) async {
+Future<Map<String, dynamic>?> getCanvasConfig(String id) async {
   if (!isWebDesktop) return null;
-  SharedPreferences prefs = await SharedPreferences.getInstance();
-  var p = prefs.getString('peer$id');
-  if (p == null) return null;
-  Map<String, dynamic> m = json.decode(p);
-  return m;
+  var p = await bind.sessionGetFlutterConfig(id: id, k: canvasKey);
+  if (p == null || p.isEmpty) return null;
+  try {
+    Map<String, dynamic> m = json.decode(p);
+    return m;
+  } catch (e) {
+    return null;
+  }
 }
 
 void removePreference(String id) async {
-  SharedPreferences prefs = await SharedPreferences.getInstance();
-  prefs.remove('peer$id');
+  await bind.sessionSetFlutterConfig(id: id, k: canvasKey, v: '');
 }
 
 Future<void> initializeCursorAndCanvas(FFI ffi) async {
-  var p = await getPreference(ffi.id);
+  var p = await getCanvasConfig(ffi.id);
   int currentDisplay = 0;
   if (p != null) {
     currentDisplay = p['currentDisplay'];

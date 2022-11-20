@@ -1,8 +1,8 @@
 use super::*;
 use std::time::Duration;
-const FPS: u8 = 30;
-const MIN_FPS: u8 = 10;
-const MAX_FPS: u8 = 120;
+pub const FPS: u8 = 30;
+pub const MIN_FPS: u8 = 10;
+pub const MAX_FPS: u8 = 120;
 trait Percent {
     fn as_percent(&self) -> u32;
 }
@@ -225,11 +225,7 @@ impl VideoQoS {
     }
 
     pub fn check_abr_config(&mut self) -> bool {
-        self.enable_abr = if let Some(v) = Config2::get().options.get("enable-abr") {
-            v != "N"
-        } else {
-            true // default is true
-        };
+        self.enable_abr = "N" != Config::get_option("enable-abr");
         self.enable_abr
     }
 

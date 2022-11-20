@@ -161,19 +161,23 @@ pub fn get_version_from_url(url: &str) -> String {
 }
 
 pub fn gen_version() {
+    use std::io::prelude::*;
     let mut file = File::create("./src/version.rs").unwrap();
     for line in read_lines("Cargo.toml").unwrap() {
         if let Ok(line) = line {
             let ab: Vec<&str> = line.split("=").map(|x| x.trim()).collect();
             if ab.len() == 2 && ab[0] == "version" {
-                use std::io::prelude::*;
-                file.write_all(format!("pub const VERSION: &str = {};", ab[1]).as_bytes())
+                file.write_all(format!("pub const VERSION: &str = {};\n", ab[1]).as_bytes())
                     .ok();
-                file.sync_all().ok();
                 break;
             }
         }
     }
+    // generate build date
+    let build_date = format!("{}", chrono::Local::now().format("%Y-%m-%d %H:%M"));
+    file.write_all(format!("pub const BUILD_DATE: &str = \"{}\";", build_date).as_bytes())
+        .ok();
+    file.sync_all().ok();
 }
 
 fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>

@@ -1,8 +1,9 @@
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+use std::iter::FromIterator;
 #[cfg(windows)]
 use std::sync::Arc;
 use std::{
     collections::HashMap,
-    iter::FromIterator,
     ops::{Deref, DerefMut},
     sync::{
         atomic::{AtomicI64, Ordering},
@@ -14,7 +15,7 @@ use std::{
 use clipboard::{cliprdr::CliprdrClientContext, empty_clipboard, set_conn_enabled, ContextSend};
 use serde_derive::Serialize;
 
-use crate::ipc::{self, new_listener, Connection, Data};
+use crate::ipc::{self, Connection, Data};
 #[cfg(windows)]
 use hbb_common::tokio::sync::Mutex as TokioMutex;
 use hbb_common::{
@@ -84,6 +85,8 @@ pub trait InvokeUiCM: Send + Clone + 'static + Sized {
     fn change_theme(&self, dark: String);
 
     fn change_language(&self);
+
+    fn show_elevation(&self, show: bool);
 }
 
 impl<T: InvokeUiCM> Deref for ConnectionManager<T> {
@@ -169,6 +172,10 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         }
 
         self.ui_handler.remove_connection(id, close);
+    }
+
+    fn show_elevation(&self, show: bool) {
+        self.ui_handler.show_elevation(show);
     }
 }
 
@@ -336,8 +343,15 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                 Data::ChatMessage { text } => {
                                     self.cm.new_message(self.conn_id, text);
                                 }
-                                Data::FS(fs) => {
-                                    handle_fs(fs, &mut write_jobs, &self.tx).await;
+                                Data::FS(mut fs) => {
+                                    if let ipc::FS::WriteBlock { id, file_num, data: _, compressed } = fs {
+                                        if let Ok(bytes) = self.stream.next_raw().await {
+                                            fs = ipc::FS::WriteBlock{id, file_num, data:bytes.into(), compressed};
+                                            handle_fs(fs, &mut write_jobs, &self.tx).await;
+                                        }
+                                    } else {
+                                        handle_fs(fs, &mut write_jobs, &self.tx).await;
+                                    }
                                 }
                                 #[cfg(windows)]
                                 Data::ClipbaordFile(_clip) => {
@@ -360,6 +374,9 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                 Data::Language(lang) => {
                                     LocalConfig::set_option("lang".to_owned(), lang);
                                     self.cm.change_language();
+                                }
+                                Data::DataPortableService(ipc::DataPortableService::CmShowElevation(show)) => {
+                                    self.cm.show_elevation(show);
                                 }
                                 _ => {
 
@@ -433,7 +450,7 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
         allow_err!(crate::ui::win_privacy::start());
     });
 
-    match new_listener("_cm").await {
+    match ipc::new_listener("_cm").await {
         Ok(mut incoming) => {
             while let Some(result) = incoming.next().await {
                 match result {
@@ -587,16 +604,13 @@ async fn handle_fs(fs: ipc::FS, write_jobs: &mut Vec<fs::TransferJob>, tx: &Unbo
         } => {
             if let Some(job) = fs::get_job(id, write_jobs) {
                 if let Err(err) = job
-                    .write(
-                        FileTransferBlock {
-                            id,
-                            file_num,
-                            data,
-                            compressed,
-                            ..Default::default()
-                        },
-                        None,
-                    )
+                    .write(FileTransferBlock {
+                        id,
+                        file_num,
+                        data,
+                        compressed,
+                        ..Default::default()
+                    })
                     .await
                 {
                     send_raw(fs::new_error(id, err, file_num), &tx);
@@ -753,6 +767,31 @@ fn cm_inner_send(id: i32, data: Data) {
     } else {
         for s in lock.values() {
             allow_err!(s.tx.send(data.clone()));
+        }
+    }
+}
+
+pub fn can_elevate() -> bool {
+    #[cfg(windows)]
+    {
+        return !crate::platform::is_installed()
+            && !crate::portable_service::client::PORTABLE_SERVICE_RUNNING
+                .lock()
+                .unwrap()
+                .clone();
+    }
+    #[cfg(not(windows))]
+    return false;
+}
+
+pub fn elevate_portable(id: i32) {
+    #[cfg(windows)]
+    {
+        let lock = CLIENTS.read().unwrap();
+        if let Some(s) = lock.get(&id) {
+            allow_err!(s.tx.send(ipc::Data::DataPortableService(
+                ipc::DataPortableService::RequestStart
+            )));
         }
     }
 }

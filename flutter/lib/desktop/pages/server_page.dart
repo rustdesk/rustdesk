@@ -76,7 +76,6 @@ class _DesktopServerPageState extends State<DesktopServerPage>
                             mainAxisAlignment: MainAxisAlignment.start,
                             children: [
                               Expanded(child: ConnectionManager()),
-                              SizedBox.fromSize(size: Size(0, 15.0)),
                             ],
                           ),
                         ),
@@ -486,6 +485,8 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
   }
 }
 
+const double bigMargin = 15;
+
 class _CmControlPanel extends StatelessWidget {
   final Client client;
 
@@ -501,108 +502,141 @@ class _CmControlPanel extends StatelessWidget {
   }
 
   buildAuthorized(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+    final bool canElevate = bind.cmCanElevate();
+    final model = Provider.of<ServerModel>(context);
+    final showElevation = canElevate && model.showElevation;
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        Ink(
-          width: 200,
-          height: 40,
-          decoration: BoxDecoration(
-              color: Colors.redAccent, borderRadius: BorderRadius.circular(10)),
-          child: InkWell(
-              onTap: () =>
-                  checkClickTime(client.id, () => handleDisconnect(context)),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    translate("Disconnect"),
-                    style: TextStyle(color: Colors.white),
-                  ),
-                ],
-              )),
+        Offstage(
+          offstage: !showElevation,
+          child: buildButton(context, color: Colors.green[700], onClick: () {
+            handleElevate(context);
+            windowManager.minimize();
+          },
+              icon: Icon(
+                Icons.security_sharp,
+                color: Colors.white,
+              ),
+              text: 'Elevate',
+              textColor: Colors.white),
+        ),
+        Row(
+          children: [
+            Expanded(
+                child: buildButton(context,
+                    color: Colors.redAccent,
+                    onClick: handleDisconnect,
+                    text: 'Disconnect',
+                    textColor: Colors.white)),
+          ],
         )
       ],
-    );
+    )
+        .marginOnly(bottom: showElevation ? 0 : bigMargin)
+        .marginSymmetric(horizontal: showElevation ? 0 : bigMargin);
   }
 
   buildDisconnected(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Ink(
-          width: 200,
-          height: 40,
-          decoration: BoxDecoration(
-              color: MyTheme.accent, borderRadius: BorderRadius.circular(10)),
-          child: InkWell(
-              onTap: () => handleClose(context),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    translate("Close"),
-                    style: TextStyle(color: Colors.white),
-                  ),
-                ],
-              )),
-        )
+        Expanded(
+            child: buildButton(context,
+                color: MyTheme.accent,
+                onClick: handleClose,
+                text: 'Close',
+                textColor: Colors.white)),
       ],
-    );
+    ).marginOnly(bottom: 15).marginSymmetric(horizontal: bigMargin);
   }
 
   buildUnAuthorized(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+    final bool canElevate = bind.cmCanElevate();
+    final model = Provider.of<ServerModel>(context);
+    final showElevation = canElevate && model.showElevation;
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        Ink(
-          width: 100,
-          height: 40,
-          decoration: BoxDecoration(
-              color: MyTheme.accent, borderRadius: BorderRadius.circular(10)),
-          child: InkWell(
-              onTap: () => checkClickTime(client.id, () {
-                    handleAccept(context);
-                    windowManager.minimize();
-                  }),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    translate("Accept"),
-                    style: TextStyle(color: Colors.white),
-                  ),
-                ],
-              )),
+        Offstage(
+          offstage: !showElevation,
+          child: buildButton(context, color: Colors.green[700], onClick: () {
+            handleAccept(context);
+            handleElevate(context);
+            windowManager.minimize();
+          },
+              text: 'Accept',
+              icon: Icon(
+                Icons.security_sharp,
+                color: Colors.white,
+              ),
+              textColor: Colors.white),
         ),
-        SizedBox(
-          width: 30,
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Expanded(
+                child: buildButton(context, color: MyTheme.accent, onClick: () {
+              handleAccept(context);
+              windowManager.minimize();
+            }, text: 'Accept', textColor: Colors.white)),
+            Expanded(
+                child: buildButton(context,
+                    color: Colors.transparent,
+                    border: Border.all(color: Colors.grey),
+                    onClick: handleDisconnect,
+                    text: 'Cancel',
+                    textColor: null)),
+          ],
         ),
-        Ink(
-          width: 100,
-          height: 40,
-          decoration: BoxDecoration(
-              color: Colors.transparent,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.grey)),
-          child: InkWell(
-              onTap: () =>
-                  checkClickTime(client.id, () => handleDisconnect(context)),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    translate("Cancel"),
-                    style: TextStyle(),
-                  ),
-                ],
-              )),
-        )
       ],
-    );
+    )
+        .marginOnly(bottom: showElevation ? 0 : bigMargin)
+        .marginSymmetric(horizontal: showElevation ? 0 : bigMargin);
   }
 
-  void handleDisconnect(BuildContext context) {
+  buildButton(
+    BuildContext context, {
+    required Color? color,
+    required Function() onClick,
+    Icon? icon,
+    BoxBorder? border,
+    required String text,
+    required Color? textColor,
+  }) {
+    Widget textWidget;
+    if (icon != null) {
+      textWidget = Text(
+        translate(text),
+        style: TextStyle(color: textColor),
+        textAlign: TextAlign.center,
+      );
+    } else {
+      textWidget = Expanded(
+        child: Text(
+          translate(text),
+          style: TextStyle(color: textColor),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+    return Container(
+      height: 35,
+      decoration: BoxDecoration(
+          color: color, borderRadius: BorderRadius.circular(4), border: border),
+      child: InkWell(
+          onTap: () => checkClickTime(client.id, onClick),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Offstage(offstage: icon == null, child: icon),
+              textWidget,
+            ],
+          )),
+    ).marginAll(4);
+  }
+
+  void handleDisconnect() {
     bind.cmCloseConnection(connId: client.id);
   }
 
@@ -611,7 +645,13 @@ class _CmControlPanel extends StatelessWidget {
     model.sendLoginResponse(client, true);
   }
 
-  void handleClose(BuildContext context) async {
+  void handleElevate(BuildContext context) {
+    final model = Provider.of<ServerModel>(context, listen: false);
+    model.setShowElevation(false);
+    bind.cmElevatePortable(connId: client.id);
+  }
+
+  void handleClose() async {
     await bind.cmRemoveDisconnectedConnection(connId: client.id);
     if (await bind.cmGetClientsLength() == 0) {
       windowManager.close();

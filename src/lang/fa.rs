@@ -371,9 +371,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Deny LAN Discovery", "غیر فعالسازی جستجو در شبکه"),
         ("Write a message", "یک پیام بنویسید"),
         ("Prompt", ""),
-        ("elevation_prompt", "اجرای نرم‌افزار بدون افزایش امتیاز می‌تواند باعث ایجاد مشکلاتی در هنگام کار کردن کاربران راه دور با ویندوزهای خاص شود"),
-        ("uac_warning", "به دلیل درخواست دسترسی سطح بالا، به طور موقت از دسترسی رد شد. منتظر بمانید تا کاربر راه دور گفتگوی UAC را بپذیرد. برای جلوگیری از این مشکل، توصیه می شود نرم افزار را روی دستگاه از راه دور نصب کنید یا آن را با دسترسی مدیر اجرا کنید."),
-        ("elevated_foreground_window_warning", "به طور موقت استفاده از ماوس و صفحه کلید امکان پذیر نیست زیرا پنجره دسکتاپ از راه دور فعلی برای کار کردن به دسترسی های بالاتر نیاز دارد، می توانید از کاربر راه دور بخواهید که پنجره فعلی را به حداقل برساند. برای جلوگیری از این مشکل، توصیه می شود نرم افزار را روی یک دستگاه راه دور نصب کنید یا آن را با دسترسی مدیر اجرا کنید"),
+        ("Please wait for confirmation of UAC...", ""),
+        ("elevated_foreground_window_tip", ""),
         ("Disconnected", "قطع ارتباط"),
         ("Other", "دیگر"),
         ("Confirm before closing multiple tabs", "بستن چندین برگه را تأیید کنید"),
@@ -389,5 +388,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("This PC", "This PC"),
         ("or", "یا"),
         ("Continue with", "ادامه با"),
+        ("Zoom cursor", ""),
     ].iter().cloned().collect();
 }

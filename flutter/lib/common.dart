@@ -15,7 +15,6 @@ import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/models/peer_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uni_links/uni_links.dart';
 import 'package:uni_links_desktop/uni_links_desktop.dart';
 import 'package:window_manager/window_manager.dart';
@@ -205,18 +204,17 @@ class MyTheme {
   );
 
   static ThemeMode getThemeModePreference() {
-    return themeModeFromString(
-        Get.find<SharedPreferences>().getString("themeMode") ?? "");
+    return themeModeFromString(bind.mainGetLocalOption(key: kCommConfKeyTheme));
   }
 
   static void changeDarkMode(ThemeMode mode) {
     final preference = getThemeModePreference();
     if (preference != mode) {
       if (mode == ThemeMode.system) {
-        Get.find<SharedPreferences>().setString("themeMode", "");
+        bind.mainSetLocalOption(key: kCommConfKeyTheme, value: '');
       } else {
-        Get.find<SharedPreferences>()
-            .setString("themeMode", mode.toShortString());
+        bind.mainSetLocalOption(
+            key: kCommConfKeyTheme, value: mode.toShortString());
       }
       Get.changeThemeMode(mode);
       if (desktopType == DesktopType.main) {
@@ -629,7 +627,7 @@ class CustomAlertDialog extends StatelessWidget {
   }
 }
 
-void msgBox(String type, String title, String text, String link,
+void msgBox(String id, String type, String title, String text, String link,
     OverlayDialogManager dialogManager,
     {bool? hasCancel}) {
   dialogManager.dismissAll();
@@ -674,14 +672,17 @@ void msgBox(String type, String title, String text, String link,
   if (link.isNotEmpty) {
     buttons.insert(0, msgBoxButton(translate('JumpLink'), jumplink));
   }
-  dialogManager.show((setState, close) => CustomAlertDialog(
-        title: _msgBoxTitle(title),
-        content: SelectableText(translate(text),
-            style: const TextStyle(fontSize: 15)),
-        actions: buttons,
-        onSubmit: hasOk ? submit : null,
-        onCancel: hasCancel == true ? cancel : null,
-      ));
+  dialogManager.show(
+    (setState, close) => CustomAlertDialog(
+      title: _msgBoxTitle(title),
+      content:
+          SelectableText(translate(text), style: const TextStyle(fontSize: 15)),
+      actions: buttons,
+      onSubmit: hasOk ? submit : null,
+      onCancel: hasCancel == true ? cancel : null,
+    ),
+    tag: '$id-$type-$title-$text-$link',
+  );
 }
 
 Widget msgBoxButton(String text, void Function() onPressed) {
@@ -1026,8 +1027,8 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
       final isMaximized = await windowManager.isMaximized();
       final pos = LastWindowPosition(
           sz.width, sz.height, position.dx, position.dy, isMaximized);
-      await Get.find<SharedPreferences>()
-          .setString(kWindowPrefix + type.name, pos.toString());
+      await bind.setLocalFlutterConfig(
+          k: kWindowPrefix + type.name, v: pos.toString());
       break;
     default:
       final wc = WindowController.fromWindowId(windowId!);
@@ -1037,9 +1038,10 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
       final isMaximized = await wc.isMaximized();
       final pos = LastWindowPosition(
           sz.width, sz.height, position.dx, position.dy, isMaximized);
-      debugPrint("saving frame: ${windowId}: ${pos.width}/${pos.height}, offset:${pos.offsetWidth}/${pos.offsetHeight}");
-      await Get.find<SharedPreferences>()
-          .setString(kWindowPrefix + type.name, pos.toString());
+      debugPrint(
+          "saving frame: $windowId: ${pos.width}/${pos.height}, offset:${pos.offsetWidth}/${pos.offsetHeight}");
+      await bind.setLocalFlutterConfig(
+          k: kWindowPrefix + type.name, v: pos.toString());
       break;
   }
 }
@@ -1109,7 +1111,7 @@ Future<Offset?> _adjustRestoreMainWindowOffset(
         .toDouble();
 
     if (isDesktop || isWebDesktop) {
-      for(final screen in await window_size.getScreenList()) {
+      for (final screen in await window_size.getScreenList()) {
         frameLeft = min(screen.visibleFrame.left, frameLeft);
         frameTop = min(screen.visibleFrame.top, frameTop);
         frameRight = max(screen.visibleFrame.right, frameRight);
@@ -1136,13 +1138,7 @@ Future<bool> restoreWindowPosition(WindowType type, {int? windowId}) async {
     debugPrint(
         "Error: windowId cannot be null when saving positions for sub window");
   }
-  final pos =
-      Get.find<SharedPreferences>().getString(kWindowPrefix + type.name);
-
-  if (pos == null) {
-    debugPrint("no window position saved, ignore restore");
-    return false;
-  }
+  final pos = bind.getLocalFlutterConfig(k: kWindowPrefix + type.name);
   var lpos = LastWindowPosition.loadFromString(pos);
   if (lpos == null) {
     debugPrint("window position saved, but cannot be parsed");
@@ -1175,7 +1171,8 @@ Future<bool> restoreWindowPosition(WindowType type, {int? windowId}) async {
             await _adjustRestoreMainWindowSize(lpos.width, lpos.height);
         final offset = await _adjustRestoreMainWindowOffset(
             lpos.offsetWidth, lpos.offsetHeight);
-        debugPrint("restore lpos: ${size.width}/${size.height}, offset:${offset?.dx}/${offset?.dy}");
+        debugPrint(
+            "restore lpos: ${size.width}/${size.height}, offset:${offset?.dx}/${offset?.dy}");
         if (offset == null) {
           await wc.center();
         } else {
@@ -1327,8 +1324,7 @@ void connect(BuildContext context, String id,
 
 Future<Map<String, String>> getHttpHeaders() async {
   return {
-    'Authorization':
-        'Bearer ${await bind.mainGetLocalOption(key: 'access_token')}'
+    'Authorization': 'Bearer ${bind.mainGetLocalOption(key: 'access_token')}'
   };
 }
 

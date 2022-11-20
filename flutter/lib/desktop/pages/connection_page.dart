@@ -94,6 +94,12 @@ class _ConnectionPageState extends State<ConnectionPage>
   }
 
   @override
+  void onWindowClose() {
+    super.onWindowClose();
+    bind.mainOnMainWindowClose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Column(
       children: [

@@ -13,7 +13,7 @@ fn build_c_impl() {
 
     if build.get_compiler().is_like_msvc() {
         build.define("WIN32", "");
-        build.flag("-Zi");
+        build.flag("-Z7");
         build.flag("-GR-");
         // build.flag("-std:c++11");
     } else {
@@ -24,7 +24,7 @@ fn build_c_impl() {
     }
 
     #[cfg(target_os = "windows")]
-    build.compile("xxx");
+    build.compile("win_virtual_display");
 
     #[cfg(target_os = "windows")]
     println!("cargo:rerun-if-changed=src/win10/IddController.c");

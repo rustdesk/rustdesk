@@ -6,6 +6,7 @@ use cpal::{
 };
 use magnum_opus::{Channels::*, Decoder as AudioDecoder};
 use sha2::{Digest, Sha256};
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 use std::sync::atomic::Ordering;
 use std::{
     collections::HashMap,
@@ -973,6 +974,8 @@ impl LoginConfigHandler {
         self.save_config(config);
     }
 
+    //to-do: too many dup code below.
+
     /// Save view style to the current config.
     ///
     /// # Arguments
@@ -982,6 +985,43 @@ impl LoginConfigHandler {
         let mut config = self.load_config();
         config.view_style = value;
         self.save_config(config);
+    }
+
+    /// Save scroll style to the current config.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The view style to be saved.
+    pub fn save_scroll_style(&mut self, value: String) {
+        let mut config = self.load_config();
+        config.scroll_style = value;
+        self.save_config(config);
+    }
+
+    /// Set a ui config of flutter for handler's [`PeerConfig`].
+    ///
+    /// # Arguments
+    ///
+    /// * `k` - key of option
+    /// * `v` - value of option
+    pub fn save_ui_flutter(&mut self, k: String, v: String) {
+        let mut config = self.load_config();
+        config.ui_flutter.insert(k, v);
+        self.save_config(config);
+    }
+
+    /// Get a ui config of flutter for handler's [`PeerConfig`].
+    /// Return String if the option is found, otherwise return "".
+    ///
+    /// # Arguments
+    ///
+    /// * `k` - key of option
+    pub fn get_ui_flutter(&self, k: &str) -> String {
+        if let Some(v) = self.config.ui_flutter.get(k) {
+            v.clone()
+        } else {
+            "".to_owned()
+        }
     }
 
     /// Toggle an option in the handler.
@@ -1099,6 +1139,9 @@ impl LoginConfigHandler {
             };
             msg.custom_image_quality = quality << 8;
             n += 1;
+        }
+        if let Some(custom_fps) = self.options.get("custom-fps") {
+            msg.custom_fps = custom_fps.parse().unwrap_or(30);
         }
         if self.get_toggle_option("show-remote-cursor") {
             msg.show_remote_cursor = BoolOption::Yes.into();
@@ -1970,6 +2013,7 @@ fn decode_id_pk(signed: &[u8], key: &sign::PublicKey) -> ResultType<(String, [u8
     }
 }
 
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 pub fn disable_keyboard_listening() {
     crate::ui_session_interface::KEYBOARD_HOOKED.store(true, Ordering::SeqCst);
 }

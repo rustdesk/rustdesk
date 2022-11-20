@@ -1,7 +1,7 @@
 use super::HbbHttpResponse;
 use hbb_common::{
     config::{Config, LocalConfig},
-    log, sleep, tokio, ResultType,
+    log, ResultType,
 };
 use reqwest::blocking::Client;
 use serde_derive::{Deserialize, Serialize};

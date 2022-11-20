@@ -27,6 +27,7 @@ class ServerModel with ChangeNotifier {
   bool _inputOk = false;
   bool _audioOk = false;
   bool _fileOk = false;
+  bool _showElevation = true;
   int _connectStatus = 0; // Rendezvous Server status
   String _verificationMethod = "";
   String _temporaryPasswordLength = "";
@@ -50,6 +51,8 @@ class ServerModel with ChangeNotifier {
   bool get audioOk => _audioOk;
 
   bool get fileOk => _fileOk;
+
+  bool get showElevation => _showElevation;
 
   int get connectStatus => _connectStatus;
 
@@ -529,6 +532,13 @@ class ServerModel with ChangeNotifier {
   void jumpTo(int id) {
     final index = _clients.indexWhere((client) => client.id == id);
     tabController.jumpTo(index);
+  }
+
+  void setShowElevation(bool show) {
+    if (_showElevation != show) {
+      _showElevation = show;
+      notifyListeners();
+    }
   }
 }
 

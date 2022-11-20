@@ -26,10 +26,9 @@ use hbb_common::{
 use scrap::android::call_main_service_mouse_input;
 use serde_json::{json, value::Value};
 use sha2::{Digest, Sha256};
-use std::sync::{
-    atomic::{AtomicI64, Ordering},
-    mpsc as std_mpsc,
-};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use std::sync::atomic::Ordering;
+use std::sync::{atomic::AtomicI64, mpsc as std_mpsc};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use system_shutdown;
 
@@ -234,8 +233,12 @@ impl Connection {
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         std::thread::spawn(move || Self::handle_input(rx_input, tx_cloned));
         let mut second_timer = time::interval(Duration::from_secs(1));
+        #[cfg(windows)]
         let mut last_uac = false;
+        #[cfg(windows)]
         let mut last_foreground_window_elevated = false;
+        #[cfg(windows)]
+        let is_installed = crate::platform::is_installed();
 
         loop {
             tokio::select! {
@@ -339,6 +342,12 @@ impl Connection {
                             };
                             conn.send(msg_out).await;
                         }
+                        #[cfg(windows)]
+                        ipc::Data::DataPortableService(ipc::DataPortableService::RequestStart) => {
+                            if let Err(e) = crate::portable_service::client::start_portable_service() {
+                                log::error!("Failed to start portable service from cm:{:?}", e);
+                            }
+                        }
                         _ => {}
                     }
                 },
@@ -415,23 +424,36 @@ impl Connection {
                     }
                 },
                 _ = second_timer.tick() => {
-                    let uac = crate::video_service::IS_UAC_RUNNING.lock().unwrap().clone();
-                    if last_uac != uac {
-                        last_uac = uac;
-                        let mut misc = Misc::new();
-                        misc.set_uac(uac);
-                        let mut msg = Message::new();
-                        msg.set_misc(misc);
-                        conn.inner.send(msg.into());
-                    }
-                    let foreground_window_elevated = crate::video_service::IS_FOREGROUND_WINDOW_ELEVATED.lock().unwrap().clone();
-                    if last_foreground_window_elevated != foreground_window_elevated {
-                        last_foreground_window_elevated = foreground_window_elevated;
-                        let mut misc = Misc::new();
-                        misc.set_foreground_window_elevated(foreground_window_elevated);
-                        let mut msg = Message::new();
-                        msg.set_misc(misc);
-                        conn.inner.send(msg.into());
+                    #[cfg(windows)]
+                    {
+                        if !is_installed {
+                            let portable_service_running = crate::portable_service::client::PORTABLE_SERVICE_RUNNING.lock().unwrap().clone();
+                            let uac = crate::video_service::IS_UAC_RUNNING.lock().unwrap().clone();
+                            if last_uac != uac {
+                                last_uac = uac;
+                                if !uac || !portable_service_running{
+                                    let mut misc = Misc::new();
+                                    misc.set_uac(uac);
+                                    let mut msg = Message::new();
+                                    msg.set_misc(misc);
+                                    conn.inner.send(msg.into());
+                                }
+                            }
+                            let foreground_window_elevated = crate::video_service::IS_FOREGROUND_WINDOW_ELEVATED.lock().unwrap().clone();
+                            if last_foreground_window_elevated != foreground_window_elevated {
+                                last_foreground_window_elevated = foreground_window_elevated;
+                                if !foreground_window_elevated || !portable_service_running {
+                                    let mut misc = Misc::new();
+                                    misc.set_foreground_window_elevated(foreground_window_elevated);
+                                    let mut msg = Message::new();
+                                    msg.set_misc(misc);
+                                    conn.inner.send(msg.into());
+                                }
+                            }
+                            let show_elevation = !portable_service_running;
+                            conn.send_to_cm(ipc::Data::DataPortableService(ipc::DataPortableService::CmShowElevation(show_elevation)));
+
+                        }
                     }
                 }
                 _ = test_delay_timer.tick() => {

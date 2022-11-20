@@ -45,7 +45,7 @@ const double kEmptyMarginTop = 50;
 const double kDesktopIconButtonSplashRadius = 20;
 
 /// [kMinCursorSize] indicates min cursor (w, h)
-const int kMinCursorSize = 24;
+const int kMinCursorSize = 12;
 
 /// [kDefaultScrollAmountMultiplier] indicates how many rows can be scrolled after a minimum scroll action of mouse
 const kDefaultScrollAmountMultiplier = 5.0;
@@ -56,7 +56,11 @@ var kWindowEdgeSize = Platform.isWindows ? 1.0 : 5.0;
 const kWindowBorderWidth = 1.0;
 const kDesktopMenuPadding = EdgeInsets.only(left: 12.0, right: 3.0);
 
-const kInvalidValueStr = "InvalidValueStr";
+const kInvalidValueStr = 'InvalidValueStr';
+
+// Config key shared by flutter and other ui.
+const kCommConfKeyTheme = 'theme';
+const kCommConfKeyLang = 'lang';
 
 const kMobilePageConstraints = BoxConstraints(maxWidth: 600);
 
