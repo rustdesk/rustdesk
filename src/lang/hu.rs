@@ -303,11 +303,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Legacy mode", ""),
         ("Map mode", ""),
         ("Translate mode", "Fordító mód"),
-        ("Use temporary password", "Ideiglenes jelszó használata"),
         ("Use permanent password", "Állandó jelszó használata"),
         ("Use both passwords", "Mindkét jelszó használata"),
         ("Set permanent password", "Állandó jelszó beállítása"),
-        ("Set temporary password length", "Ideiglenes jelszó hosszának beállítása"),
         ("Enable Remote Restart", "Távoli újraindítás engedélyezése"),
         ("Allow remote restart", "Távoli újraindítás engedélyezése"),
         ("Restart Remote Device", "Távoli eszköz újraindítása"),
@@ -343,7 +341,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable hardware codec", "Hardveres kodek engedélyezése"),
         ("Unlock Security Settings", "Biztonsági beállítások feloldása"),
         ("Enable Audio", "Hang engedélyezése"),
-        ("Temporary Password Length", "Ideiglenes jelszó hossza"),
         ("Unlock Network Settings", "Hálózati beállítások feloldása"),
         ("Server", "Szerver"),
         ("Direct IP Access", "Közvetlen IP hozzáférés"),
@@ -394,5 +391,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Accept sessions via click", ""),
         ("Accept sessions via both", ""),
         ("Please wait for the remote side to accept your session request...", ""),
+        ("One-time Password", ""),
+        ("Use one-time password", ""),
+        ("One-time password length", ""),
     ].iter().cloned().collect();
 }

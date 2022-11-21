@@ -303,11 +303,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Legacy mode", ""),
         ("Map mode", ""),
         ("Translate mode", ""),
-        ("Use temporary password", "使い捨てのパスワードを使用"),
         ("Use permanent password", "固定のパスワードを使用"),
         ("Use both passwords", "どちらのパスワードも使用"),
         ("Set permanent password", "固定のパスワードを設定"),
-        ("Set temporary password length", "使い捨てのパスワードの長さを設定"),
         ("Enable Remote Restart", "リモートからの再起動を有効化"),
         ("Allow remote restart", "リモートからの再起動を許可"),
         ("Restart Remote Device", "リモートの端末を再起動"),
@@ -343,7 +341,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable hardware codec", ""),
         ("Unlock Security Settings", ""),
         ("Enable Audio", ""),
-        ("Temporary Password Length", ""),
         ("Unlock Network Settings", ""),
         ("Server", ""),
         ("Direct IP Access", ""),
@@ -394,5 +391,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Accept sessions via click", ""),
         ("Accept sessions via both", ""),
         ("Please wait for the remote side to accept your session request...", ""),
+        ("One-time Password", ""),
+        ("Use one-time password", ""),
+        ("One-time password length", ""),
     ].iter().cloned().collect();
 }

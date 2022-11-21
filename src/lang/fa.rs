@@ -303,11 +303,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Legacy mode", "پشتیبانی موارد قدیمی"),
         ("Map mode", "حالت نقشه"),
         ("Translate mode", "حالت ترجمه"),
-        ("Use temporary password", "از رمز عبور موقت استفاده کنید"),
         ("Use permanent password", "از رمز عبور دائمی استفاده کنید"),
         ("Use both passwords", "از هر دو رمز عبور استفاده کنید"),
         ("Set permanent password", "یک رمز عبور دائمی تنظیم کنید"),
-        ("Set temporary password length", "تنظیم طول رمز عبور موقت"),
         ("Enable Remote Restart", "فعال کردن راه‌اندازی مجدد از راه دور"),
         ("Allow remote restart", "اجازه راه اندازی مجدد از راه دور"),
         ("Restart Remote Device", "راه‌اندازی مجدد دستگاه از راه دور"),
@@ -343,7 +341,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable hardware codec", "از کدک سخت افزاری استفاده کنید"),
         ("Unlock Security Settings", "تنظیمات امنیتی را باز کنید"),
         ("Enable Audio", "صدا را روشن کنید"),
-        ("Temporary Password Length", "طول رمز عبور موقت"),
         ("Unlock Network Settings", "باز کردن قفل تنظیمات شبکه"),
         ("Server", "سرور"),
         ("Direct IP Access", "دسترسی مستقیم به IP"),
@@ -393,5 +390,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Accept sessions via click", ""),
         ("Accept sessions via both", ""),
         ("Please wait for the remote side to accept your session request...", ""),
+        ("One-time Password", ""),
+        ("Use one-time password", ""),
+        ("One-time password length", ""),
     ].iter().cloned().collect();
 }
