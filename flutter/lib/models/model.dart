@@ -255,6 +255,9 @@ class FfiModel with ChangeNotifier {
     } else if (type == 'restarting') {
       showMsgBox(id, type, title, text, link, false, dialogManager,
           hasCancel: false);
+    } else if (type == 'wait-remote-accept-nook') {
+      msgBoxCommon(dialogManager, title, Text(translate(text)),
+          [msgBoxButton("Cancel", closeConnection)]);
     } else {
       var hasRetry = evt['hasRetry'] == 'true';
       showMsgBox(id, type, title, text, link, hasRetry, dialogManager);

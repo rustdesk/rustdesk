@@ -84,7 +84,6 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       if (call.method == "new_remote_desktop") {
         final args = jsonDecode(call.arguments);
         final id = args['id'];
-        ConnectionTypeState.init(id);
         window_on_top(windowId());
         ConnectionTypeState.init(id);
         tabController.add(TabInfo(

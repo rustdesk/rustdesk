@@ -555,11 +555,12 @@ class _CmControlPanel extends StatelessWidget {
     final bool canElevate = bind.cmCanElevate();
     final model = Provider.of<ServerModel>(context);
     final showElevation = canElevate && model.showElevation;
+    final showAccept = model.approveMode != 'password';
     return Column(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
         Offstage(
-          offstage: !showElevation,
+          offstage: !showElevation || !showAccept,
           child: buildButton(context, color: Colors.green[700], onClick: () {
             handleAccept(context);
             handleElevate(context);
@@ -575,11 +576,17 @@ class _CmControlPanel extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Expanded(
-                child: buildButton(context, color: MyTheme.accent, onClick: () {
-              handleAccept(context);
-              windowManager.minimize();
-            }, text: 'Accept', textColor: Colors.white)),
+            if (showAccept)
+              Expanded(
+                child: Column(
+                  children: [
+                    buildButton(context, color: MyTheme.accent, onClick: () {
+                      handleAccept(context);
+                      windowManager.minimize();
+                    }, text: 'Accept', textColor: Colors.white),
+                  ],
+                ),
+              ),
             Expanded(
                 child: buildButton(context,
                     color: Colors.transparent,
@@ -621,7 +628,7 @@ class _CmControlPanel extends StatelessWidget {
       );
     }
     return Container(
-      height: 35,
+      height: 30,
       decoration: BoxDecoration(
           color: color, borderRadius: BorderRadius.circular(4), border: border),
       child: InkWell(

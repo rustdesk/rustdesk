@@ -264,6 +264,13 @@ function msgbox(type, title, content, link="", callback=null, height=180, width=
         };
     } else if (type.indexOf("custom") < 0 && !is_port_forward && !callback) {
         callback = function() { view.close(); }
+    } else if (type == 'wait-remote-accept-nook') {
+        callback = function (res) {
+            if (!res) {
+                view.close();
+                return;
+            }
+        };
     }
     last_msgbox_tag = type + "-" + title + "-" + content + "-" + link;
     $(#msgbox).content(<MsgboxComponent width={width} height={height} auto_login={auto_login} type={type} title={title} content={content} link={link} remember={remember} callback={callback} contentStyle={contentStyle} hasRetry={hasRetry} />);
