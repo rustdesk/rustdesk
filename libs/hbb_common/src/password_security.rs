@@ -13,6 +13,13 @@ enum VerificationMethod {
     UseBothPasswords,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ApproveMode {
+    Both,
+    Password,
+    Click,
+}
+
 // Should only be called in server
 pub fn update_temporary_password() {
     *TEMPORARY_PASSWORD.write().unwrap() = Config::get_auto_password(temporary_password_length());
@@ -56,6 +63,17 @@ pub fn permanent_enabled() -> bool {
 pub fn has_valid_password() -> bool {
     temporary_enabled() && !temporary_password().is_empty()
         || permanent_enabled() && !Config::get_permanent_password().is_empty()
+}
+
+pub fn approve_mode() -> ApproveMode {
+    let mode = Config::get_option("approve-mode");
+    if mode == "password" {
+        ApproveMode::Password
+    } else if mode == "click" {
+        ApproveMode::Click
+    } else {
+        ApproveMode::Both
+    }
 }
 
 const VERSION_LEN: usize = 2;

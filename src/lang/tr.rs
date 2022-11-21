@@ -303,11 +303,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Legacy mode", "Eski mod"),
         ("Map mode", "Haritalama modu"),
         ("Translate mode", "Çeviri modu"),
-        ("Use temporary password", "Geçici şifre kullan"),
         ("Use permanent password", "Kalıcı şifre kullan"),
         ("Use both passwords", "İki şifreyide kullan"),
         ("Set permanent password", "Kalıcı şifre oluştur"),
-        ("Set temporary password length", "Geçici şifre oluştur"),
         ("Enable Remote Restart", "Uzaktan yeniden başlatmayı aktif et"),
         ("Allow remote restart", "Uzaktan yeniden başlatmaya izin ver"),
         ("Restart Remote Device", "Uzaktaki cihazı yeniden başlat"),
@@ -343,7 +341,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable hardware codec", "Donanımsal codec aktif et"),
         ("Unlock Security Settings", "Güvenlik Ayarlarını Aç"),
         ("Enable Audio", "Sesi Aktif Et"),
-        ("Temporary Password Length", "Geçici Şifre Uzunluğu"),
         ("Unlock Network Settings", "Ağ Ayarlarını Aç"),
         ("Server", "Sunucu"),
         ("Direct IP Access", "Direk IP Erişimi"),
@@ -394,5 +391,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Accept sessions via click", ""),
         ("Accept sessions via both", ""),
         ("Please wait for the remote side to accept your session request...", ""),
+        ("One-time Password", ""),
+        ("Use one-time password", ""),
+        ("One-time password length", ""),
     ].iter().cloned().collect();
 }

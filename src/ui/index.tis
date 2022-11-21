@@ -850,7 +850,7 @@ class TemporaryPasswordLengthMenu: Reactor.Component {
         var me = this;
         var method = handler.get_option('verification-method');
         self.timer(1ms, function() { me.toggleMenuState() });
-        return <li disabled={ method == 'use-permanent-password' ? "true" : "false" }>{translate("Set temporary password length")}
+        return <li disabled={ method == 'use-permanent-password' ? "true" : "false" }>{translate("One-time password length")}
             <menu #temporary-password-length>
                 <li #temporary-password-length-6><span>{svg_checkmark}</span>6</li>
                 <li #temporary-password-length-8><span>{svg_checkmark}</span>8</li>
@@ -891,7 +891,7 @@ class PasswordArea: Reactor.Component {
         self.timer(1ms, function() { me.toggleMenuState() });
         return 
         <div .your-desktop>
-            <div>{translate('Password')}</div>
+            <div>{translate('One-time Password')}</div>
             <div .password style="flow:horizontal">
                 {this.renderPop()}
                 <PasswordEyeArea />
@@ -909,7 +909,7 @@ class PasswordArea: Reactor.Component {
             <li #approve-mode-click><span>{svg_checkmark}</span>{translate('Accept sessions via click')}</li>
             <li #approve-mode-both><span>{svg_checkmark}</span>{translate('Accept sessions via both')}</li>
             { !show_password ? '' : <div .separator /> }
-            { !show_password ? '' : <li #use-temporary-password><span>{svg_checkmark}</span>{translate('Use temporary password')}</li> }
+            { !show_password ? '' : <li #use-temporary-password><span>{svg_checkmark}</span>{translate('Use one-time password')}</li> }
             { !show_password ? '' : <li #use-permanent-password><span>{svg_checkmark}</span>{translate('Use permanent password')}</li> }
             { !show_password ? '' : <li #use-both-passwords><span>{svg_checkmark}</span>{translate('Use both passwords')}</li> }
             { !show_password ? '' : <div .separator /> }

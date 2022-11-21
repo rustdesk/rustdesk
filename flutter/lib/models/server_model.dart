@@ -35,7 +35,8 @@ class ServerModel with ChangeNotifier {
 
   late String _emptyIdShow;
   late final IDTextEditingController _serverId;
-  final _serverPasswd = TextEditingController(text: "");
+  final _serverPasswd =
+      TextEditingController(text: translate("Generating ..."));
 
   final tabController = DesktopTabController(tabType: DesktopTabType.cm);
 
@@ -170,7 +171,8 @@ class ServerModel with ChangeNotifier {
       update = true;
     }
     final oldPwdText = _serverPasswd.text;
-    if (_serverPasswd.text != temporaryPassword) {
+    if (_serverPasswd.text != temporaryPassword &&
+        temporaryPassword.isNotEmpty) {
       _serverPasswd.text = temporaryPassword;
     }
     if (verificationMethod == kUsePermanentPassword ||

@@ -586,7 +586,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
             kUseBothPasswords,
           ];
           List<String> passwordValues = [
-            translate('Use temporary password'),
+            translate('Use one-time password'),
             translate('Use permanent password'),
             translate('Use both passwords'),
           ];
@@ -665,7 +665,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
             Offstage(
               offstage: !usePassword,
               child: _SubLabeledWidget(
-                  'Temporary Password Length',
+                  'One-time password length',
                   Row(
                     children: [
                       ...lengthRadios,

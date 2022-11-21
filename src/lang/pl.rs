@@ -303,11 +303,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Legacy mode", "Tryb kompatybilności wstecznej (legacy)"),
         ("Map mode", "Tryb mapowania"),
         ("Translate mode", "Tryb translacji"),
-        ("Use temporary password", "Użyj tymczasowego hasła"),
         ("Use permanent password", "Użyj hasła permanentnego"),
         ("Use both passwords", "Użyj obu haseł"),
         ("Set permanent password", "Ustaw hasło permanentne"),
-        ("Set temporary password length", "Ustaw długość hasła tymczasowego"),
         ("Enable Remote Restart", "Włącz Zdalne Restartowanie"),
         ("Allow remote restart", "Zezwól na zdalne restartowanie"),
         ("Restart Remote Device", "Zrestartuj Zdalne Urządzenie"),
@@ -343,7 +341,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable hardware codec", "Włącz wsparcie sprzętowe dla kodeków"),
         ("Unlock Security Settings", "Odblokuj Ustawienia Zabezpieczeń"),
         ("Enable Audio", "Włącz Dźwięk"),
-        ("Temporary Password Length", "Długość hasła tymaczowego"),
         ("Unlock Network Settings", "Odblokuj ustawienia Sieciowe"),
         ("Server", "Serwer"),
         ("Direct IP Access", "Bezpośredni Adres IP"),
@@ -394,5 +391,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Accept sessions via click", ""),
         ("Accept sessions via both", ""),
         ("Please wait for the remote side to accept your session request...", ""),
+        ("One-time Password", ""),
+        ("Use one-time password", ""),
+        ("One-time password length", ""),
     ].iter().cloned().collect();
 }

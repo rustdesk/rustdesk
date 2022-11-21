@@ -14,7 +14,8 @@ use hbb_common::{
     futures::{SinkExt, StreamExt},
     get_time, get_version_number,
     message_proto::{option_message::BoolOption, permission_info::Permission},
-    password_security as password, sleep, timeout,
+    password_security::{self as password, ApproveMode},
+    sleep, timeout,
     tokio::{
         net::TcpStream,
         sync::mpsc,
@@ -1046,7 +1047,9 @@ impl Connection {
             }
             if !crate::is_ip(&lr.username) && lr.username != Config::get_id() {
                 self.send_login_error("Offline").await;
-            } else if Config::get_option("approve-mode") == "click" {
+            } else if password::approve_mode() == ApproveMode::Click
+                || password::approve_mode() == ApproveMode::Both && !password::has_valid_password()
+            {
                 self.try_start_cm(lr.my_id, lr.my_name, false);
                 if hbb_common::get_version_number(&lr.version)
                     >= hbb_common::get_version_number("1.2.0")
@@ -1054,6 +1057,11 @@ impl Connection {
                     self.send_login_error("No Password Access").await;
                 }
                 return true;
+            } else if password::approve_mode() == ApproveMode::Password
+                && !password::has_valid_password()
+            {
+                self.send_login_error("Connection not allowed").await;
+                return false;
             } else if self.is_of_recent_session() {
                 self.try_start_cm(lr.my_id, lr.my_name, true);
                 self.send_logon_response().await;
@@ -1063,10 +1071,6 @@ impl Connection {
             } else if lr.password.is_empty() {
                 self.try_start_cm(lr.my_id, lr.my_name, false);
             } else {
-                if !password::has_valid_password() {
-                    self.send_login_error("Connection not allowed").await;
-                    return false;
-                }
                 let mut failure = LOGIN_FAILURES
                     .lock()
                     .unwrap()
