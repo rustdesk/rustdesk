@@ -41,7 +41,10 @@ class Body: Reactor.Component
                     <div>
                         <div .id style="font-weight: bold; font-size: 1.2em;">{c.name}</div>
                         <div .id>({c.peer_id})</div>
-                        <div style="margin-top: 1.2em">{disconnected ? translate('Disconnected') : translate('Connected')} {" "} <span #time>{getElaspsed(c.time, c.now)}</span></div>
+                        <div style="margin-top: 1.2em">{auth
+                            ? <span>{disconnected ? translate('Disconnected') : translate('Connected')}{" "}<span #time>{getElaspsed(c.time, c.now)}</span></span> 
+                            : <span>{translate('Request access to your device')}{"..."}</span>}
+                        </div>
                     </div>
                 </div>
                 <div />
@@ -472,12 +475,13 @@ function updateTime() {
     self.timer(1s, function() {
         var now = new Date();
         connections.map(function(c) {
+            if (!c.authorized) c.time = now;
             if (!c.disconnected) c.now = now;
         });
         var el = $(#time);
         if (el) {
             var c = connections[body.cur];
-            if (c && !c.disconnected) {
+            if (c && c.authorized && !c.disconnected) {
                 el.text = getElaspsed(c.time, c.now);
             }
         }

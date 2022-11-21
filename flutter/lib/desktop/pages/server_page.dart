@@ -304,7 +304,9 @@ class _CmHeaderState extends State<_CmHeader>
   void initState() {
     super.initState();
     _timer = Timer.periodic(Duration(seconds: 1), (_) {
-      if (!client.disconnected) _time.value = _time.value + 1;
+      if (client.authorized && !client.disconnected) {
+        _time.value = _time.value + 1;
+      }
     });
   }
 
@@ -358,12 +360,15 @@ class _CmHeaderState extends State<_CmHeader>
               FittedBox(
                   child: Row(
                 children: [
-                  Text(client.disconnected
-                          ? translate("Disconnected")
-                          : translate("Connected"))
+                  Text(client.authorized
+                          ? client.disconnected
+                              ? translate("Disconnected")
+                              : translate("Connected")
+                          : "${translate("Request access to your device")}...")
                       .marginOnly(right: 8.0),
-                  Obx(() => Text(
-                      formatDurationToTime(Duration(seconds: _time.value))))
+                  if (client.authorized)
+                    Obx(() => Text(
+                        formatDurationToTime(Duration(seconds: _time.value))))
                 ],
               ))
             ],

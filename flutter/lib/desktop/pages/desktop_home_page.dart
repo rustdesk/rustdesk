@@ -486,7 +486,7 @@ void setPasswordDialog() async {
         errMsg1 = "";
       });
       final pass = p0.text.trim();
-      if (pass.length < 6) {
+      if (pass.length < 6 && pass.isNotEmpty) {
         setState(() {
           errMsg0 = translate("Too short, at least 6 characters.");
         });
