@@ -15,6 +15,7 @@ osx = platform.platform().startswith(
 hbb_name = 'rustdesk' + ('.exe' if windows else '')
 exe_path = 'target/release/' + hbb_name
 flutter_win_target_dir = 'flutter/build/windows/runner/Release/'
+skip_cargo = False
 
 
 def get_version():
@@ -86,6 +87,11 @@ def make_parser():
         '--flatpak',
         action='store_true',
         help='Build rustdesk libs with the flatpak feature enabled'
+    )
+    parser.add_argument(
+        '--skip-cargo',
+        action='store_true',
+        help='Skip cargo build process, only flutter version + Linux supported currently'
     )
     return parser
 
@@ -227,8 +233,9 @@ def ffi_bindgen_function_refactor():
 
 
 def build_flutter_deb(version, features):
-    os.system(f'cargo build --features {features} --lib --release')
-    ffi_bindgen_function_refactor()
+    if not skip_cargo:
+        os.system(f'cargo build --features {features} --lib --release')
+        ffi_bindgen_function_refactor()
     os.chdir('flutter')
     os.system('flutter build linux --release')
     os.system('mkdir -p tmpdeb/usr/bin/')
@@ -236,7 +243,6 @@ def build_flutter_deb(version, features):
     os.system('mkdir -p tmpdeb/usr/share/rustdesk/files/systemd/')
     os.system('mkdir -p tmpdeb/usr/share/applications/')
     os.system('mkdir -p tmpdeb/usr/share/polkit-1/actions')
-
     os.system('rm tmpdeb/usr/bin/rustdesk')
     os.system(
         'cp -r build/linux/x64/release/bundle/* tmpdeb/usr/lib/rustdesk/')
@@ -266,7 +272,8 @@ def build_flutter_deb(version, features):
 
 
 def build_flutter_dmg(version, features):
-    os.system(f'cargo build --features {features} --lib --release')
+    if not skip_cargo:
+        os.system(f'cargo build --features {features} --lib --release')
     # copy dylib
     os.system(
         "cp target/release/liblibrustdesk.dylib target/release/librustdesk.dylib")
@@ -282,7 +289,8 @@ def build_flutter_dmg(version, features):
 
 
 def build_flutter_arch_manjaro(version, features):
-    os.system(f'cargo build --features {features} --lib --release')
+    if not skip_cargo:
+        os.system(f'cargo build --features {features} --lib --release')
     ffi_bindgen_function_refactor()
     os.chdir('flutter')
     os.system('flutter build linux --release')
@@ -292,10 +300,11 @@ def build_flutter_arch_manjaro(version, features):
 
 
 def build_flutter_windows(version, features):
-    os.system(f'cargo build --features {features} --lib --release')
-    if not os.path.exists("target/release/librustdesk.dll"):
-        print("cargo build failed, please check rust source code.")
-        exit(-1)
+    if not skip_cargo:
+        os.system(f'cargo build --features {features} --lib --release')
+        if not os.path.exists("target/release/librustdesk.dll"):
+            print("cargo build failed, please check rust source code.")
+            exit(-1)
     os.chdir('flutter')
     os.system('flutter build windows --release')
     os.chdir('..')
@@ -320,6 +329,7 @@ def build_flutter_windows(version, features):
 
 
 def main():
+    global skip_cargo
     parser = make_parser()
     args = parser.parse_args()
 
@@ -339,6 +349,9 @@ def main():
     flutter = args.flutter
     if not flutter:
         os.system('python3 res/inline-sciter.py')
+    print(args.skip_cargo)
+    if args.skip_cargo:
+        skip_cargo = True
     portable = args.portable
     if windows:
         # build virtual display dynamic library
@@ -401,8 +414,8 @@ def main():
                 build_flutter_dmg(version, features)
                 pass
             else:
-                os.system(
-                    'mv target/release/bundle/deb/rustdesk*.deb ./flutter/rustdesk.deb')
+                # os.system(
+                #     'mv target/release/bundle/deb/rustdesk*.deb ./flutter/rustdesk.deb')
                 build_flutter_deb(version, features)
         else:
             os.system('cargo bundle --release --features ' + features)
