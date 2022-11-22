@@ -306,7 +306,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Use permanent password", "Usar contraseña permamente"),
         ("Use both passwords", "Usar ambas contraseñas"),
         ("Set permanent password", "Establecer contraseña permamente"),
-        ("Enable Remote Restart", "Activar reinicio remoto"),
+        ("Enable Remote Restart", "Habilitar reinicio remoto"),
         ("Allow remote restart", "Permitir reinicio remoto"),
         ("Restart Remote Device", "Reiniciar dispositivo"),
         ("Are you sure you want to restart", "Esta Seguro que desea reiniciar?"),
