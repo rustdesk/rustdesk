@@ -632,10 +632,7 @@ impl Connection {
                 .is_none()
             && whitelist
                 .iter()
-                .filter(|x| match IpCidr::from_str(x) {
-                    Ok(cidr) => cidr.contains(addr.ip()),
-                    Err(_) => false,
-                })
+                .filter(|x| IpCidr::from_str(x).map_or(false, |y| y.contains(addr.ip())))
                 .next()
                 .is_none()
         {
