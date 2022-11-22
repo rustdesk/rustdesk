@@ -356,9 +356,8 @@ class _ImagePaintState extends State<ImagePaint> {
     }
   }
 
-  MouseCursor _buildCustomCursor(BuildContext context, double scale) {
-    final cursor = Provider.of<CursorModel>(context);
-    final cache = cursor.cache ?? cursor.defaultCache;
+  MouseCursor _buildCursorOfCache(
+      CursorModel cursor, double scale, CursorData? cache) {
     if (cache == null) {
       return MouseCursor.defer;
     } else {
@@ -375,26 +374,16 @@ class _ImagePaintState extends State<ImagePaint> {
     }
   }
 
+  MouseCursor _buildCustomCursor(BuildContext context, double scale) {
+    final cursor = Provider.of<CursorModel>(context);
+    final cache = cursor.cache ?? preDefaultCursor.cache;
+    return _buildCursorOfCache(cursor, scale, cache);
+  }
+
   MouseCursor _buildDisabledCursor(BuildContext context, double scale) {
     final cursor = Provider.of<CursorModel>(context);
-    final cache = cursor.cache;
-    if (cache == null) {
-      return MouseCursor.defer;
-    } else {
-      if (cursor.cachedForbidmemoryCursorData == null) {
-        cursor.updateForbiddenCursorBuffer();
-      }
-      final key = 'disabled_cursor_key';
-      cursor.addKey(key);
-      return FlutterCustomMemoryImageCursor(
-        pixbuf: cursor.cachedForbidmemoryCursorData,
-        key: key,
-        hotx: 0,
-        hoty: 0,
-        imageWidth: 32,
-        imageHeight: 32,
-      );
-    }
+    final cache = preForbiddenCursor.cache;
+    return _buildCursorOfCache(cursor, scale, cache);
   }
 
   Widget _buildCrossScrollbarFromLayout(
@@ -521,22 +510,22 @@ class CursorPaint extends StatelessWidget {
     double hotx = m.hotx;
     double hoty = m.hoty;
     if (m.image == null) {
-      if (m.defaultCache != null) {
-        hotx = m.defaultImage!.width / 2;
-        hoty = m.defaultImage!.height / 2;
+      if (preDefaultCursor.image != null) {
+        hotx = preDefaultCursor.image!.width / 2;
+        hoty = preDefaultCursor.image!.height / 2;
       }
     }
     return zoomCursor.isTrue
         ? CustomPaint(
             painter: ImagePainter(
-                image: m.image ?? m.defaultImage,
+                image: m.image ?? preDefaultCursor.image,
                 x: m.x - hotx + c.x / c.scale,
                 y: m.y - hoty + c.y / c.scale,
                 scale: c.scale),
           )
         : CustomPaint(
             painter: ImagePainter(
-                image: m.image ?? m.defaultImage,
+                image: m.image ?? preDefaultCursor.image,
                 x: (m.x - hotx) * c.scale + c.x,
                 y: (m.y - hoty) * c.scale + c.y,
                 scale: 1.0),

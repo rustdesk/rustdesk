@@ -763,13 +763,78 @@ class CursorData {
   }
 }
 
+const _forbiddenCursorPng =
+    'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAAXNSR0IB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAkZQTFRFAAAA2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4GWAwCAAAAAAAA2B4GAAAAMTExAAAAAAAA2B4G2B4G2B4GAAAAmZmZkZGRAQEBAAAA2B4G2B4G2B4G////oKCgAwMDag8D2B4G2B4G2B4Gra2tBgYGbg8D2B4G2B4Gubm5CQkJTwsCVgwC2B4GxcXFDg4OAAAAAAAA2B4G2B4Gz8/PFBQUAAAAAAAA2B4G2B4G2B4G2B4G2B4G2B4G2B4GDgIA2NjYGxsbAAAAAAAA2B4GFwMB4eHhIyMjAAAAAAAA2B4G6OjoLCwsAAAAAAAA2B4G2B4G2B4G2B4G2B4GCQEA4ODgv7+/iYmJY2NjAgICAAAA9PT0Ojo6AAAAAAAAAAAA+/v7SkpKhYWFr6+vAAAAAAAA8/PzOTk5ERER9fX1KCgoAAAAgYGBKioqAAAAAAAApqamlpaWAAAAAAAAAAAAAAAAAAAAAAAALi4u/v7+GRkZAAAAAAAAAAAAAAAAAAAAfn5+AAAAAAAAV1dXkJCQAAAAAAAAAQEBAAAAAAAAAAAA7Hz6BAAAAMJ0Uk5TAAIWEwEynNz6//fVkCAatP2fDUHs6cDD8d0mPfT5fiEskiIR584A0gejr3AZ+P4plfALf5ZiTL85a4ziD6697fzN3UYE4v/4TwrNHuT///tdRKZh///+1U/ZBv///yjb///eAVL//50Cocv//6oFBbPvpGZCbfT//7cIhv///8INM///zBEcWYSZmO7//////1P////ts/////8vBv//////gv//R/z///QQz9sevP///2waXhNO/+fc//8mev/5gAe2r90MAAAByUlEQVR4nGNggANGJmYWBpyAlY2dg5OTi5uHF6s0H78AJxRwCAphyguLgKRExcQlQLSkFLq8tAwnp6ycPNABjAqKQKNElVDllVU4OVVhVquJA81Q10BRoAkUUYbJa4Edoo0sr6PLqaePLG/AyWlohKTAmJPTBFnelAFoixmSAnNOTgsUeQZLTk4rJAXWnJw2EHlbiDyDPCenHZICe04HFrh+RydnBgYWPU5uJAWinJwucPNd3dw9GDw5Ob2QFHBzcnrD7ffx9fMPCOTkDEINhmC4+3x8Q0LDwlEDIoKTMzIKKg9SEBIdE8sZh6SAJZ6Tkx0qD1YQkpCYlIwclCng0AXLQxSEpKalZyCryATKZwkhKQjJzsnNQ1KQXwBUUVhUXBJYWgZREFJeUVmFpMKlWg+anmqgCkJq6+obkG1pLEBTENLU3NKKrIKhrb2js8u4G6Kgpze0r3/CRAZMAHbkpJDJU6ZMmTqtFbuC6TNmhsyaMnsOFlmwgrnzpsxfELJwEXZ5Bp/FS3yWLlsesmLlKuwKVk9Ys5Zh3foN0zduwq5g85atDAzbpqSGbN9RhV0FGOzctWH3lD14FOzdt3H/gQw8Cg4u2gQPAwBYDXXdIH+wqAAAAABJRU5ErkJggg==';
+const _defaultCursorPng =
+    'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARzQklUCAgICHwIZIgAAAFmSURBVFiF7dWxSlxREMbx34QFDRowYBchZSxSCWlMCOwD5FGEFHap06UI7KPsAyyEEIQFqxRaCqYTsqCJFsKkuAeRXb17wrqV918dztw55zszc2fo6Oh47MR/e3zO1/iAHWmznHKGQwx9ip/LEbCfazbsoY8j/JLOhcC6sCW9wsjEwJf483AC9nPNc1+lFRwI13d+l3rYFS799rFGxJMqARv2pBXh+72XQ7gWvklPS7TmMl9Ak/M+DqrENvxAv/guKKApuKPWl0/TROK4+LbSqzhuB+OZ3fRSeFPWY+Fkyn56Y29hfgTSpnQ+s98cvorVey66uPlNFxKwZOYLCGfCs5n9NMYVrsp6mvXSoFqpqYFDvMBkStgJJe93dZOwVXxbqUnBENulydSReqUrDhcX0PT2EXarBYS3GNXMhboinBgIl9K71kg0L3+PvyYGdVpruT2MwrF0iotiXfIwus0Dj+OOjo6Of+e7ab74RkpgAAAAAElFTkSuQmCC';
+
+final preForbiddenCursor = PredefinedCursor(
+  png: _forbiddenCursorPng,
+  id: -2,
+);
+final preDefaultCursor = PredefinedCursor(
+  png: _defaultCursorPng,
+  id: -1,
+  hotxGetter: (double w) => w / 2,
+  hotyGetter: (double h) => h / 2,
+);
+
+class PredefinedCursor {
+  ui.Image? _image;
+  img2.Image? _image2;
+  CursorData? _cache;
+  String png;
+  int id;
+  double Function(double)? hotxGetter;
+  double Function(double)? hotyGetter;
+
+  PredefinedCursor(
+      {required this.png, required this.id, this.hotxGetter, this.hotyGetter}) {
+    init();
+  }
+
+  ui.Image? get image => _image;
+  CursorData? get cache => _cache;
+
+  init() {
+    _image2 = img2.decodePng(base64Decode(png));
+    if (_image2 != null) {
+      () async {
+        final defaultImg = _image2!;
+        // This function is called only one time, no need to care about the performance.
+        Uint8List data = defaultImg.getBytes(format: img2.Format.rgba);
+        _image = await img.decodeImageFromPixels(
+            data, defaultImg.width, defaultImg.height, ui.PixelFormat.rgba8888);
+
+        double scale = 1.0;
+        if (Platform.isWindows) {
+          data = _image2!.getBytes(format: img2.Format.bgra);
+        } else {
+          data = Uint8List.fromList(img2.encodePng(_image2!));
+        }
+
+        _cache = CursorData(
+          peerId: '',
+          id: id,
+          image: _image2?.clone(),
+          scale: scale,
+          data: data,
+          hotxOrigin:
+              hotxGetter != null ? hotxGetter!(_image2!.width.toDouble()) : 0,
+          hotyOrigin:
+              hotyGetter != null ? hotyGetter!(_image2!.height.toDouble()) : 0,
+          width: _image2!.width,
+          height: _image2!.height,
+        );
+      }();
+    }
+  }
+}
+
 class CursorModel with ChangeNotifier {
   ui.Image? _image;
-  ui.Image? _defaultImage;
   final _images = <int, Tuple3<ui.Image, double, double>>{};
   CursorData? _cache;
-  final _defaultCacheId = -1;
-  CursorData? _defaultCache;
   final _cacheMap = <int, CursorData>{};
   final _cacheKeys = <String>{};
   double _x = -10000;
@@ -785,9 +850,7 @@ class CursorModel with ChangeNotifier {
   WeakReference<FFI> parent;
 
   ui.Image? get image => _image;
-  ui.Image? get defaultImage => _defaultImage;
   CursorData? get cache => _cache;
-  CursorData? get defaultCache => _getDefaultCache();
 
   double get x => _x - _displayOriginX;
   double get y => _y - _displayOriginY;
@@ -801,49 +864,10 @@ class CursorModel with ChangeNotifier {
       DateTime.now().difference(_lastPeerMouse).inMilliseconds <
       kMouseControlTimeoutMSec;
 
-  CursorModel(this.parent) {
-    _getDefaultImage();
-    _getDefaultCache();
-  }
+  CursorModel(this.parent);
 
   Set<String> get cachedKeys => _cacheKeys;
   addKey(String key) => _cacheKeys.add(key);
-
-  Future<ui.Image?> _getDefaultImage() async {
-    if (_defaultImage == null) {
-      final defaultImg = defaultCursorImage!;
-      // This function is called only one time, no need to care about the performance.
-      Uint8List data = defaultImg.getBytes(format: img2.Format.rgba);
-      _defaultImage = await img.decodeImageFromPixels(
-          data, defaultImg.width, defaultImg.height, ui.PixelFormat.rgba8888);
-    }
-    return _defaultImage;
-  }
-
-  CursorData? _getDefaultCache() {
-    if (_defaultCache == null) {
-      Uint8List data;
-      double scale = 1.0;
-      if (Platform.isWindows) {
-        data = defaultCursorImage!.getBytes(format: img2.Format.bgra);
-      } else {
-        data = Uint8List.fromList(img2.encodePng(defaultCursorImage!));
-      }
-
-      _defaultCache = CursorData(
-        peerId: id,
-        id: _defaultCacheId,
-        image: defaultCursorImage?.clone(),
-        scale: scale,
-        data: data,
-        hotxOrigin: defaultCursorImage!.width / 2,
-        hotyOrigin: defaultCursorImage!.height / 2,
-        width: defaultCursorImage!.width,
-        height: defaultCursorImage!.height,
-      );
-    }
-    return _defaultCache;
-  }
 
   // remote physical display coordinate
   Rect getVisibleRect() {
@@ -1085,15 +1109,6 @@ class CursorModel with ChangeNotifier {
       customCursorController.freeCache(k);
     }
   }
-
-  Uint8List? cachedForbidmemoryCursorData;
-  void updateForbiddenCursorBuffer() {
-    cachedForbidmemoryCursorData ??= base64Decode(
-        'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAAXNSR0IB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAkZQTFRFAAAA2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4GWAwCAAAAAAAA2B4GAAAAMTExAAAAAAAA2B4G2B4G2B4GAAAAmZmZkZGRAQEBAAAA2B4G2B4G2B4G////oKCgAwMDag8D2B4G2B4G2B4Gra2tBgYGbg8D2B4G2B4Gubm5CQkJTwsCVgwC2B4GxcXFDg4OAAAAAAAA2B4G2B4Gz8/PFBQUAAAAAAAA2B4G2B4G2B4G2B4G2B4G2B4G2B4GDgIA2NjYGxsbAAAAAAAA2B4GFwMB4eHhIyMjAAAAAAAA2B4G6OjoLCwsAAAAAAAA2B4G2B4G2B4G2B4G2B4GCQEA4ODgv7+/iYmJY2NjAgICAAAA9PT0Ojo6AAAAAAAAAAAA+/v7SkpKhYWFr6+vAAAAAAAA8/PzOTk5ERER9fX1KCgoAAAAgYGBKioqAAAAAAAApqamlpaWAAAAAAAAAAAAAAAAAAAAAAAALi4u/v7+GRkZAAAAAAAAAAAAAAAAAAAAfn5+AAAAAAAAV1dXkJCQAAAAAAAAAQEBAAAAAAAAAAAA7Hz6BAAAAMJ0Uk5TAAIWEwEynNz6//fVkCAatP2fDUHs6cDD8d0mPfT5fiEskiIR584A0gejr3AZ+P4plfALf5ZiTL85a4ziD6697fzN3UYE4v/4TwrNHuT///tdRKZh///+1U/ZBv///yjb///eAVL//50Cocv//6oFBbPvpGZCbfT//7cIhv///8INM///zBEcWYSZmO7//////1P////ts/////8vBv//////gv//R/z///QQz9sevP///2waXhNO/+fc//8mev/5gAe2r90MAAAByUlEQVR4nGNggANGJmYWBpyAlY2dg5OTi5uHF6s0H78AJxRwCAphyguLgKRExcQlQLSkFLq8tAwnp6ycPNABjAqKQKNElVDllVU4OVVhVquJA81Q10BRoAkUUYbJa4Edoo0sr6PLqaePLG/AyWlohKTAmJPTBFnelAFoixmSAnNOTgsUeQZLTk4rJAXWnJw2EHlbiDyDPCenHZICe04HFrh+RydnBgYWPU5uJAWinJwucPNd3dw9GDw5Ob2QFHBzcnrD7ffx9fMPCOTkDEINhmC4+3x8Q0LDwlEDIoKTMzIKKg9SEBIdE8sZh6SAJZ6Tkx0qD1YQkpCYlIwclCng0AXLQxSEpKalZyCryATKZwkhKQjJzsnNQ1KQXwBUUVhUXBJYWgZREFJeUVmFpMKlWg+anmqgCkJq6+obkG1pLEBTENLU3NKKrIKhrb2js8u4G6Kgpze0r3/CRAZMAHbkpJDJU6ZMmTqtFbuC6TNmhsyaMnsOFlmwgrnzpsxfELJwEXZ5Bp/FS3yWLlsesmLlKuwKVk9Ys5Zh3foN0zduwq5g85atDAzbpqSGbN9RhV0FGOzctWH3lD14FOzdt3H/gQw8Cg4u2gQPAwBYDXXdIH+wqAAAAABJRU5ErkJggg==');
-  }
-
-  img2.Image? defaultCursorImage = img2.decodePng(base64Decode(
-      'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARzQklUCAgICHwIZIgAAAFmSURBVFiF7dWxSlxREMbx34QFDRowYBchZSxSCWlMCOwD5FGEFHap06UI7KPsAyyEEIQFqxRaCqYTsqCJFsKkuAeRXb17wrqV918dztw55zszc2fo6Oh47MR/e3zO1/iAHWmznHKGQwx9ip/LEbCfazbsoY8j/JLOhcC6sCW9wsjEwJf483AC9nPNc1+lFRwI13d+l3rYFS799rFGxJMqARv2pBXh+72XQ7gWvklPS7TmMl9Ak/M+DqrENvxAv/guKKApuKPWl0/TROK4+LbSqzhuB+OZ3fRSeFPWY+Fkyn56Y29hfgTSpnQ+s98cvorVey66uPlNFxKwZOYLCGfCs5n9NMYVrsp6mvXSoFqpqYFDvMBkStgJJe93dZOwVXxbqUnBENulydSReqUrDhcX0PT2EXarBYS3GNXMhboinBgIl9K71kg0L3+PvyYGdVpruT2MwrF0iotiXfIwus0Dj+OOjo6Of+e7ab74RkpgAAAAAElFTkSuQmCC'));
 }
 
 class QualityMonitorData {
