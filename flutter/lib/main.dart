@@ -42,7 +42,9 @@ Future<void> main(List<String> args) async {
   if (args.isNotEmpty && args.first == 'multi_window') {
     windowId = int.parse(args[1]);
     stateGlobal.setWindowId(windowId!);
-    WindowController.fromWindowId(windowId!).showTitleBar(false);
+    if (!Platform.isMacOS) {
+      WindowController.fromWindowId(windowId!).showTitleBar(false);
+    }
     final argument = args[2].isEmpty
         ? <String, dynamic>{}
         : jsonDecode(args[2]) as Map<String, dynamic>;
@@ -168,13 +170,14 @@ void runMultiWindow(
   );
   switch (appType) {
     case kAppTypeDesktopRemote:
-    await restoreWindowPosition(WindowType.RemoteDesktop, windowId: windowId!);
+      await restoreWindowPosition(WindowType.RemoteDesktop,
+          windowId: windowId!);
       break;
     case kAppTypeDesktopFileTransfer:
-    await restoreWindowPosition(WindowType.FileTransfer, windowId: windowId!);
+      await restoreWindowPosition(WindowType.FileTransfer, windowId: windowId!);
       break;
     case kAppTypeDesktopPortForward:
-    await restoreWindowPosition(WindowType.PortForward, windowId: windowId!);
+      await restoreWindowPosition(WindowType.PortForward, windowId: windowId!);
       break;
     default:
       // no such appType
