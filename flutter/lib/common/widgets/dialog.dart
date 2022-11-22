@@ -133,7 +133,7 @@ void changeWhiteList({Function()? callback}) async {
                 final ips =
                     newWhiteListField.trim().split(RegExp(r"[\s,;\n]+"));
                 // test ip
-                final ipMatch = RegExp(r"^\d+\.\d+\.\d+\.\d+$");
+                final ipMatch = RegExp(r"^\d+\.\d+\.\d+\.\d+(\/\d+)?$");
                 for (final ip in ips) {
                   if (!ipMatch.hasMatch(ip)) {
                     msg = "${translate("Invalid IP")} $ip";

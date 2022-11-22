@@ -7,6 +7,7 @@ use crate::video_service;
 #[cfg(any(target_os = "android", target_os = "ios"))]
 use crate::{common::DEVICE_NAME, flutter::connection_manager::start_channel};
 use crate::{ipc, VERSION};
+use cidr_utils::cidr::IpCidr;
 use hbb_common::{
     config::Config,
     fs,
@@ -631,7 +632,10 @@ impl Connection {
                 .is_none()
             && whitelist
                 .iter()
-                .filter(|x| x.parse() == Ok(addr.ip()))
+                .filter(|x| match IpCidr::from_str(x) {
+                    Ok(cidr) => cidr.contains(addr.ip()),
+                    Err(_) => false,
+                })
                 .next()
                 .is_none()
         {

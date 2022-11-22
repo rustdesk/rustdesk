@@ -395,7 +395,7 @@ class MyIdMenu: Reactor.Component {
                 if (value) {
                     var values = value.split(/[\s,;\n]+/g);
                     for (var ip in values) {
-                        if (!ip.match(/^\d+\.\d+\.\d+\.\d+$/)) {
+                        if (!ip.match(/^\d+\.\d+\.\d+\.\d+(\/\d+)?$/)) {
                             return translate("Invalid IP") + ": " + ip;
                         }
                     }
