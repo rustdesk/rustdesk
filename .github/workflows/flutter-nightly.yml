@@ -103,7 +103,7 @@ jobs:
             rustdesk-*.exe
 
   build-for-macOS:
-    name: ${{ matrix.job.target }} (${{ matrix.job.os }},${{ matrix.job.extra-build-args }})
+    name: ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-args }}]
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
@@ -460,7 +460,7 @@ jobs:
           path: ./target/release/liblibrustdesk.so
 
       - uses: Kingtous/run-on-arch-action@amd64-support
-        name: Run vcpkg install on ${{ matrix.job.arch }}
+        name: Build rustdesk binary for ${{ matrix.job.arch }}
         id: vcpkg
         with:
           arch: ${{ matrix.job.arch }}
