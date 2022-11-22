@@ -70,8 +70,7 @@ class _RemotePageState extends State<RemotePage>
     ShowRemoteCursorState.init(id);
     RemoteCursorMovedState.init(id);
     final optZoomCursor = 'zoom-cursor';
-    PeerBoolOption.init(id, optZoomCursor,
-        () => bind.sessionGetToggleOptionSync(id: id, arg: optZoomCursor));
+    PeerBoolOption.init(id, optZoomCursor, () => false);
     _zoomCursor = PeerBoolOption.find(id, optZoomCursor);
     _showRemoteCursor = ShowRemoteCursorState.find(id);
     _keyboardEnabled = KeyboardEnabledState.find(id);
@@ -91,9 +90,7 @@ class _RemotePageState extends State<RemotePage>
   void initState() {
     super.initState();
     _initStates(widget.id);
-
     _ffi = FFI();
-
     Get.put(_ffi, tag: widget.id);
     _ffi.start(widget.id);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -107,8 +104,11 @@ class _RemotePageState extends State<RemotePage>
     _rawKeyFocusNode.requestFocus();
     _ffi.ffiModel.updateEventListener(widget.id);
     _ffi.qualityMonitorModel.checkShowQualityMonitor(widget.id);
+    // Session option should be set after models.dart/FFI.start
     _showRemoteCursor.value = bind.sessionGetToggleOptionSync(
         id: widget.id, arg: 'show-remote-cursor');
+    _zoomCursor.value =
+        bind.sessionGetToggleOptionSync(id: widget.id, arg: 'zoom-cursor');
     if (!_isCustomCursorInited) {
       customCursorController.registerNeedUpdateCursorCallback(
           (String? lastKey, String? currentKey) async {
