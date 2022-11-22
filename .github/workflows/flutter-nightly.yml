@@ -453,11 +453,17 @@ jobs:
           sudo apt install -y git curl wget nasm yasm libgtk-3-dev
           mkdir -p ./target/release/
 
-      - name: Restore rust lib files
+      - name: Restore the rustdesk lib file
         uses: actions/download-artifact@master
         with:
           name: librustdesk-${{ matrix.job.arch }}-${{ matrix.job.extra-build-features }}.so
-          path: ./target/release/liblibrustdesk.so
+          path: ./target/release/
+
+      - name: Rename the rustdesk lib file
+        shell: bash
+        run: |
+          pushd ./target/release
+          mv librustdesk-${{ matrix.job.arch }}-${{ matrix.job.extra-build-features }}.so librustdesk.so
 
       - uses: Kingtous/run-on-arch-action@amd64-support
         name: Build rustdesk binary for ${{ matrix.job.arch }}
