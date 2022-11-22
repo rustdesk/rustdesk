@@ -459,12 +459,6 @@ jobs:
           name: librustdesk-${{ matrix.job.arch }}-${{ matrix.job.extra-build-features }}.so
           path: ./target/release/
 
-      - name: Rename the rustdesk lib file
-        shell: bash
-        run: |
-          pushd ./target/release
-          mv librustdesk-${{ matrix.job.arch }}-${{ matrix.job.extra-build-features }}.so librustdesk.so
-
       - uses: Kingtous/run-on-arch-action@amd64-support
         name: Build rustdesk binary for ${{ matrix.job.arch }}
         id: vcpkg
