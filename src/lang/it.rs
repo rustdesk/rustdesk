@@ -394,6 +394,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("One-time Password", "Password monouso"),
         ("Use one-time password", "Usa password monouso"),
         ("One-time password length", "Lunghezza password monouso"),
-        ("Request access to your device", ""),
+        ("Request access to your device", "Richiedi l'accesso al tuo dispositivo"),
     ].iter().cloned().collect();
 }
