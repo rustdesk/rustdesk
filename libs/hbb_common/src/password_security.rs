@@ -76,6 +76,12 @@ pub fn approve_mode() -> ApproveMode {
     }
 }
 
+pub fn hide_cm() -> bool {
+    approve_mode() == ApproveMode::Password
+        && verification_method() == VerificationMethod::OnlyUsePermanentPassword
+        && !Config::get_option("allow-hide-cm").is_empty()
+}
+
 const VERSION_LEN: usize = 2;
 
 pub fn encrypt_str_or_original(s: &str, version: &str) -> String {

@@ -192,7 +192,7 @@ fn create_capturer(
     privacy_mode_id: i32,
     display: Display,
     use_yuv: bool,
-    current: usize,
+    _current: usize,
     _portable_service_running: bool,
 ) -> ResultType<Box<dyn TraitCapturer>> {
     #[cfg(not(windows))]
@@ -256,7 +256,7 @@ fn create_capturer(
             log::debug!("Create capturer dxgi|gdi");
             #[cfg(windows)]
             return crate::portable_service::client::create_capturer(
-                current,
+                _current,
                 display,
                 use_yuv,
                 _portable_service_running,
