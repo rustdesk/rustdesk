@@ -395,5 +395,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Use one-time password", "Użyj hasła jednorazowego"),
         ("One-time password length", "Długość hasła jednorazowego"),
         ("Request access to your device", "Żądanie dostępu do Twojego urządzenia"),
+        ("Hide connection management window", ""),
+        ("hide_cm_tip", ""),
     ].iter().cloned().collect();
 }

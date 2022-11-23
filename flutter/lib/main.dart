@@ -85,7 +85,7 @@ Future<void> main(List<String> args) async {
     debugPrint("--cm started");
     desktopType = DesktopType.cm;
     await windowManager.ensureInitialized();
-    runConnectionManagerScreen();
+    runConnectionManagerScreen(args.contains('--hide'));
   } else if (args.contains('--install')) {
     runInstallPage();
   } else {
@@ -185,22 +185,38 @@ void runMultiWindow(
   }
 }
 
-void runConnectionManagerScreen() async {
+void runConnectionManagerScreen(bool hide) async {
   await initEnv(kAppTypeMain);
-  // initialize window
-  WindowOptions windowOptions =
-      getHiddenTitleBarWindowOptions(size: kConnectionManagerWindowSize);
   _runApp(
     '',
     const DesktopServerPage(),
     MyTheme.currentThemeMode(),
   );
+  if (hide) {
+    hideCmWindow();
+  } else {
+    showCmWindow();
+  }
+}
+
+void showCmWindow() {
+  WindowOptions windowOptions =
+      getHiddenTitleBarWindowOptions(size: kConnectionManagerWindowSize);
   windowManager.waitUntilReadyToShow(windowOptions, () async {
     await windowManager.show();
     await Future.wait([windowManager.focus(), windowManager.setOpacity(1)]);
     // ensure initial window size to be changed
     await windowManager.setSizeAlignment(
         kConnectionManagerWindowSize, Alignment.topRight);
+  });
+}
+
+void hideCmWindow() {
+  WindowOptions windowOptions =
+      getHiddenTitleBarWindowOptions(size: kConnectionManagerWindowSize);
+  windowManager.setOpacity(0);
+  windowManager.waitUntilReadyToShow(windowOptions, () async {
+    await windowManager.hide();
   });
 }
 
