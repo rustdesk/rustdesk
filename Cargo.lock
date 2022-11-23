@@ -634,6 +634,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "cidr-utils"
+version = "0.5.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "355d5b5df67e58b523953d0c1a8d3d2c05f5af51f1332b0199b9c92263614ed0"
+dependencies = [
+ "debug-helper",
+ "num-bigint",
+ "num-traits 0.2.15",
+ "once_cell",
+ "regex",
+]
+
+[[package]]
 name = "clang-sys"
 version = "1.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1243,6 +1256,12 @@ name = "dconf_rs"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7046468a81e6a002061c01e6a7c83139daf91b11c30e66795b13217c2d885c8b"
+
+[[package]]
+name = "debug-helper"
+version = "0.3.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f578e8e2c440e7297e008bb5486a3a8a194775224bbc23729b0dbdfaeebf162e"
 
 [[package]]
 name = "default-net"
@@ -3292,6 +3311,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "num-bigint"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f93ab6289c7b344a8a9f60f88d80aa20032336fe78da341afc91c8a2341fc75f"
+dependencies = [
+ "autocfg 1.1.0",
+ "num-integer",
+ "num-traits 0.2.15",
+]
+
+[[package]]
 name = "num-complex"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4375,6 +4405,7 @@ dependencies = [
  "cc",
  "cfg-if 1.0.0",
  "chrono",
+ "cidr-utils",
  "clap 3.2.17",
  "clipboard",
  "cocoa",
