@@ -229,22 +229,22 @@ jobs:
           shell: /bin/bash
           install: |
             apt update -y
-            case "${arch}" in
+            case "${{ matrix.job.arch }}" in
               x86_64)
                 # CMake 3.15+
                 apt install -y gpg wget ca-certificates
                 echo 'deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ bionic main' | tee /etc/apt/sources.list.d/kitware.list >/dev/null
                 wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null
                 apt update -y
-                apt install -y curl zip unzip tar git cmake g++ gcc build-essential pkg-config wget nasm yasm ninja-build
+                apt install -y curl zip unzip tar git cmake g++ gcc build-essential pkg-config wget nasm yasm ninja-build libjpeg8-dev
                 ;;
               aarch64|armv7)
-                apt install -y curl zip unzip tar git cmake g++ gcc build-essential pkg-config wget nasm yasm ninja-build
+                apt install -y curl zip unzip tar git cmake g++ gcc build-essential pkg-config wget nasm yasm ninja-build libjpeg8-dev
             esac
             cmake --version
             gcc -v
           run: |
-            case "${arch}" in
+            case "${{ matrix.job.arch }}" in
               x86_64)
                 export VCPKG_FORCE_SYSTEM_BINARIES=1
                 pushd /artifacts
@@ -256,12 +256,13 @@ jobs:
                 ./vcpkg install libvpx libyuv opus
                 ;;
               aarch64|armv7)
-                git clone https://chromium.googlesource.com/libyuv/libyuv
+                git clone https://chromium.googlesource.com/libyuv/libyuv || true
                 pushd libyuv
+                git pull
                 mkdir build
                 pushd build
-                mkdir -p /opt/artifacts/vcpkg/installed
-                cmake .. -DCMAKE_INSTALL_PREFIX=/opt/artifacts/vcpkg/installed
+                mkdir -p /artifacts/vcpkg/installed
+                cmake .. -DCMAKE_INSTALL_PREFIX=/artifacts/vcpkg/installed
                 make -j4 && make install
                 ;;
             esac
@@ -350,8 +351,8 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          # - { arch: aarch64, target: aarch64-unknown-linux-gnu   , os: ubuntu-18.04, use-cross: true, extra-build-features: "" }
-          # - { arch: aarch64, target: aarch64-unknown-linux-gnu   , os: ubuntu-18.04, use-cross: true, extra-build-features: "flatpak" }
+          - { arch: aarch64, target: aarch64-unknown-linux-gnu   , os: ubuntu-18.04, use-cross: true, extra-build-features: "" }
+          - { arch: aarch64, target: aarch64-unknown-linux-gnu   , os: ubuntu-18.04, use-cross: true, extra-build-features: "flatpak" }
           # - { arch: armv7, target: arm-unknown-linux-gnueabihf , os: ubuntu-18.04, use-cross: true, extra-build-features: "" }
           # - { arch: armv7, target: arm-unknown-linux-gnueabihf , os: ubuntu-18.04, use-cross: true, extra-build-features: "flatpak" }
           # - { target: arm-unknown-linux-musleabihf, os: ubuntu-20.04, use-cross: true }
@@ -374,17 +375,17 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v3
 
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: ${{ matrix.job.target }}
-          override: true
-          profile: minimal # minimal component installation (ie, no documentation)
+      # - name: Install Rust toolchain
+      #   uses: actions-rs/toolchain@v1
+      #   with:
+      #     toolchain: stable
+      #     target: ${{ matrix.job.target }}
+      #     override: true
+      #     profile: minimal # minimal component installation (ie, no documentation)
 
-      - uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: bridge-${{ matrix.job.os }}
+      # - uses: Swatinem/rust-cache@v2
+      #   with:
+      #     prefix-key: bridge-${{ matrix.job.os }}
 
       - name: Disable rust bridge build
         run: |
@@ -402,26 +403,56 @@ jobs:
           name: vcpkg-artifact-${{ matrix.job.arch }}
           path: /opt/artifacts/vcpkg/installed
 
-      - name: Output devs
-        run: |
-          ls -l ./
-          tree -L 3 /opt/artifacts/vcpkg/installed
-
-      - name: Install prerequisites
-        run: |
-          sudo apt update -y
-          case ${{ matrix.job.target }} in
-            x86_64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt install -y g++ gcc;;
-            arm-unknown-linux-*) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
-            aarch64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
-          esac
-          # common package
-          sudo apt install -y git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake libclang-dev ninja-build libappindicator3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libvdpau-dev libva-dev libclang-dev llvm-dev libclang-10-dev llvm-10-dev pkg-config tree
-
-      - name: Build rustdesk lib
-        run: |
-          export VCPKG_ROOT=/opt/artifacts/vcpkg
-          cargo build --lib --features hwcodec,flutter,${{ matrix.job.extra-build-features }} --release
+      - uses: Kingtous/run-on-arch-action@amd64-support
+        name: Build rustdesk library for ${{ matrix.job.arch }}
+        id: vcpkg
+        with:
+          arch: ${{ matrix.job.arch }}
+          distro: ubuntu18.04
+          githubToken: ${{ github.token }}
+          setup: |
+            ls -l "${PWD}"
+          dockerRunArgs: |
+            --volume "${PWD}:/workspace"
+            --volume "/opt/artifacts:/opt/artifacts"
+          shell: /bin/bash
+          install: |
+            apt update -y
+            apt install -y -qq git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake libclang-dev ninja-build libappindicator3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libvdpau-dev libva-dev libclang-dev llvm-dev libclang-10-dev llvm-10-dev pkg-config tree g++ gcc libvpx-dev libopus-dev tree
+            # output devs
+            ls -l ./
+            tree -L 3 /opt/artifacts/vcpkg/installed
+          run: |
+            # disable git safe.directory
+            git config --global --add safe.directory "*"
+            # rust
+            pushd /opt
+            wget -O rust.tar.gz https://static.rust-lang.org/dist/rust-1.65.0-${{ matrix.job.target }}.tar.gz
+            tar -zxvf rust.tar.gz > /dev/null
+            cd rust-1.65.0-${{ matrix.job.target }} && ./install.sh
+            pushd /workspace
+            # mock 
+            case "${{ matrix.job.arch }}" in
+              x86_64)
+                # no need mock on x86_64
+                export VCPKG_ROOT=/opt/artifacts/vcpkg
+                ;;
+              aarch64)
+                cp -r /opt/artifacts/vcpkg/installed/* /usr
+                mkdir -p /vcpkg/installed/arm64-linux
+                ln -s /usr/lib  /vcpkg/installed/arm64-linux/lib
+                ln -s /usr/include /vcpkg/installed/arm64-linux/include
+                export VCPKG_ROOT=/vcpkg
+                ;;
+              armv7)
+                cp -r /opt/artifacts/vcpkg/installed/* /usr
+                mkdir -p /vcpkg/installed/arm-linux
+                ln -s /usr/lib  /vcpkg/installed/arm-linux/lib
+                ln -s /usr/include /vcpkg/installed/arm-linux/include
+                export VCPKG_ROOT=/vcpkg
+                ;;
+            esac
+            cargo build --lib --features hwcodec,flutter,${{ matrix.job.extra-build-features }} --release
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@master
@@ -437,8 +468,8 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          # - { arch: aarch64, target: aarch64-unknown-linux-gnu   , os: ubuntu-18.04, use-cross: true, extra-build-features: "" }
-          # - { arch: aarch64, target: aarch64-unknown-linux-gnu   , os: ubuntu-18.04, use-cross: true, extra-build-features: "flatpak" }
+          - { arch: aarch64, target: aarch64-unknown-linux-gnu   , os: ubuntu-18.04, use-cross: true, extra-build-features: "" }
+          - { arch: aarch64, target: aarch64-unknown-linux-gnu   , os: ubuntu-18.04, use-cross: true, extra-build-features: "flatpak" }
           # - { arch: armv7, target: arm-unknown-linux-gnueabihf , os: ubuntu-18.04, use-cross: true, extra-build-features: "" }
           # - { arch: armv7, target: arm-unknown-linux-gnueabihf , os: ubuntu-18.04, use-cross: true, extra-build-features: "flatpak" }
           # - { target: arm-unknown-linux-musleabihf, os: ubuntu-20.04, use-cross: true }
@@ -470,7 +501,7 @@ jobs:
       - name: Prepare env
         run: |
           sudo apt update -y
-          sudo apt install -y git curl wget nasm yasm libgtk-3-dev
+          sudo apt install -y -qq git curl wget nasm yasm libgtk-3-dev
           mkdir -p ./target/release/
 
       - name: Restore the rustdesk lib file
@@ -494,7 +525,7 @@ jobs:
           shell: /bin/bash
           install: |
             apt update -y
-            apt install -y git cmake g++ gcc build-essential nasm yasm curl unzip xz-utils python3 wget pkg-config ninja-build pkg-config libgtk-3-dev liblzma-dev clang libappindicator3-dev
+            apt install -y -qq git cmake g++ gcc build-essential nasm yasm curl unzip xz-utils python3 wget pkg-config ninja-build pkg-config libgtk-3-dev liblzma-dev clang libappindicator3-dev
           run: |
             # disable git safe.directory
             git config --global --add safe.directory "*"
@@ -579,16 +610,36 @@ jobs:
           files: |
             res/rustdesk*.zst
 
-      - name: Make RPM package
-        shell: bash
-        if: ${{ matrix.job.extra-build-features == '' }}
-        run: |
-          sudo apt install -y rpm
-          HBB=`pwd` rpmbuild ./res/rpm-flutter.spec -bb
-          pushd ~/rpmbuild/RPMS/${{ matrix.job.arch }}
-          for name in rustdesk*??.rpm; do
-              mv "$name" "${name%%.rpm}-fedora28-centos8.rpm" 
-          done
+      - uses: Kingtous/run-on-arch-action@amd64-support
+        name: Build rustdesk rpm package for ${{ matrix.job.arch }}
+        id: rpm
+        with:
+          arch: ${{ matrix.job.arch }}
+          distro: ubuntu18.04
+          githubToken: ${{ github.token }}
+          setup: |
+            ls -l "${PWD}"
+          dockerRunArgs: |
+            --volume "${PWD}:/workspace"
+            --volume "/opt/artifacts:/opt/artifacts"
+          shell: /bin/bash
+          install: |
+            apt update -y
+            apt install -y rpm
+          run: |
+            pushd /workspace
+            case ${{ matrix.job.arch }}
+              armv7)
+                sed -i "s/64bit/32bit/g" ./res/rpm-flutter.spec
+                ;;
+            esac
+            HBB=`pwd` rpmbuild ./res/rpm-flutter.spec -bb
+            pushd ~/rpmbuild/RPMS/${{ matrix.job.arch }}
+            mkdir -p /opt/artifacts/rpm
+            for name in rustdesk*??.rpm; do
+                mv "$name" "/opt/artifacts/rpm/${name%%.rpm}-fedora28-centos8.rpm" 
+            done
+            
 
       - name: Publish fedora28/centos8 package
         if: ${{ matrix.job.extra-build-features == '' }}
@@ -597,7 +648,7 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            /home/runner/rpmbuild/RPMS/${{ matrix.job.arch }}/*.rpm
+            /opt/artifacts/rpm/*.rpm
 
   build-flatpak:
     name: Build Flatpak
