@@ -5,6 +5,8 @@ on:
     # schedule build every night
     - cron: "0 0 * * *"
   workflow_dispatch:
+  # REMOVE ME ON PR
+  push:
 
 env:
   LLVM_VERSION: "10.0"
@@ -199,9 +201,9 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          # - { arch: armv7    , os: ubuntu-18.04}
+          - { arch: armv7    , os: ubuntu-18.04}
           - { arch: x86_64, os: ubuntu-18.04 }
-          # - { arch: aarch64    , os: ubuntu-18.04}
+          - { arch: aarch64    , os: ubuntu-18.04}
     steps:
       - name: Create vcpkg artifacts folder
         run: mkdir -p /opt/artifacts
@@ -227,24 +229,42 @@ jobs:
           shell: /bin/bash
           install: |
             apt update -y
-            # CMake 3.15+
-            apt install -y gpg wget ca-certificates
-            echo 'deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ bionic main' | tee /etc/apt/sources.list.d/kitware.list >/dev/null
-            wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null
-            apt update -y
-            apt install -y curl zip unzip tar git cmake g++ gcc build-essential pkg-config wget nasm yasm ninja-build
+            case "${arch}" in
+              x86_64)
+                # CMake 3.15+
+                apt install -y gpg wget ca-certificates
+                echo 'deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ bionic main' | tee /etc/apt/sources.list.d/kitware.list >/dev/null
+                wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null
+                apt update -y
+                apt install -y curl zip unzip tar git cmake g++ gcc build-essential pkg-config wget nasm yasm ninja-build
+                ;;
+              aarch64|armv7)
+                apt install -y curl zip unzip tar git cmake g++ gcc build-essential pkg-config wget nasm yasm ninja-build
+            esac
             cmake --version
             gcc -v
           run: |
-            export VCPKG_FORCE_SYSTEM_BINARIES=1
-            pushd /artifacts
-            git clone https://github.com/microsoft/vcpkg.git || true
-            git config --global --add safe.directory /artifacts/vcpkg || true
-            pushd vcpkg
-            git reset --hard ${{ env.VCPKG_COMMIT_ID }}
-            ./bootstrap-vcpkg.sh
-            ./vcpkg install libvpx libyuv opus
-
+            case "${arch}" in
+              x86_64)
+                export VCPKG_FORCE_SYSTEM_BINARIES=1
+                pushd /artifacts
+                git clone https://github.com/microsoft/vcpkg.git || true
+                git config --global --add safe.directory /artifacts/vcpkg || true
+                pushd vcpkg
+                git reset --hard ${{ env.VCPKG_COMMIT_ID }}
+                ./bootstrap-vcpkg.sh
+                ./vcpkg install libvpx libyuv opus
+                ;;
+              aarch64|armv7)
+                git clone https://chromium.googlesource.com/libyuv/libyuv
+                pushd libyuv
+                mkdir build
+                pushd build
+                mkdir -p /opt/artifacts/vcpkg/installed
+                cmake .. -DCMAKE_INSTALL_PREFIX=/opt/artifacts/vcpkg/installed
+                make -j4 && make install
+                ;;
+            esac
       - name: Upload artifacts
         uses: actions/upload-artifact@master
         with:
