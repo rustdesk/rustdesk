@@ -931,7 +931,7 @@ impl PeerConfig {
                             .to_owned();
 
                         let id_decoded_string: String;
-                        if id.starts_with("base64_") {
+                        if id.starts_with("base64_") && id != "base64_" {
                             let id_decoded = base64::decode(&id[7..], base64::Variant::Original)
                                 .unwrap_or(Vec::new());
                             id_decoded_string =
