@@ -599,18 +599,13 @@ fn run(sp: GenericService) -> ResultType<()> {
                     }
                     try_gdi += 1;
                 }
-
                 #[cfg(target_os = "linux")]
                 {
                     would_block_count += 1;
                     if !scrap::is_x11() {
-                        if would_block_count >= 1000 {
-                            // For now, the user should choose and agree screen sharing agiain.
-                            // to-do: Remember choice, attendless...
-                            // super::wayland::release_resouce();
-                            // bail!("Wayland capturer none 100 times, try restart captuere");
-                            log::error!("Wayland capturer none 1000 times, try restart captuere");
-                            would_block_count = 0;
+                        if would_block_count >= 100 {
+                            super::wayland::release_resouce();
+                            bail!("Wayland capturer none 100 times, try restart captuere");
                         }
                     }
                 }

@@ -241,6 +241,7 @@ pub(super) fn get_display_num() -> ResultType<usize> {
     }
 }
 
+#[allow(dead_code)]
 pub(super) fn release_resouce() {
     if scrap::is_x11() {
         return;
