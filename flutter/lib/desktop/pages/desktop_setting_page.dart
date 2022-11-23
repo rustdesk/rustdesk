@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/desktop/widgets/login.dart';
@@ -30,8 +31,8 @@ const double _kListViewBottomMargin = 15;
 const double _kTitleFontSize = 20;
 const double _kContentFontSize = 15;
 const Color _accentColor = MyTheme.accent;
-const String _kSettingPageControllerTag = "settingPageController";
-const String _kSettingPageIndexTag = "settingPageIndex";
+const String _kSettingPageControllerTag = 'settingPageController';
+const String _kSettingPageIndexTag = 'settingPageIndex';
 
 class _TabInfo {
   late final String label;
@@ -250,19 +251,19 @@ class _GeneralState extends State<_General> {
 
     return _Card(title: 'Theme', children: [
       _Radio<String>(context,
-          value: "light",
+          value: 'light',
           groupValue: current,
-          label: "Light",
+          label: 'Light',
           onChanged: onChanged),
       _Radio<String>(context,
-          value: "dark",
+          value: 'dark',
           groupValue: current,
-          label: "Dark",
+          label: 'Dark',
           onChanged: onChanged),
       _Radio<String>(context,
-          value: "system",
+          value: 'system',
           groupValue: current,
-          label: "Follow System",
+          label: 'Follow System',
           onChanged: onChanged),
     ]);
   }
@@ -286,8 +287,8 @@ class _GeneralState extends State<_General> {
 
   Widget audio(BuildContext context) {
     String getDefault() {
-      if (Platform.isWindows) return "System Sound";
-      return "";
+      if (Platform.isWindows) return 'System Sound';
+      return '';
     }
 
     Future<String> getValue() async {
@@ -300,7 +301,7 @@ class _GeneralState extends State<_General> {
     }
 
     setDevice(String device) {
-      if (device == getDefault()) device = "";
+      if (device == getDefault()) device = '';
       bind.mainSetOption(key: 'audio-input', value: device);
     }
 
@@ -353,7 +354,7 @@ class _GeneralState extends State<_General> {
             'allow-auto-record-incoming'),
         Row(
           children: [
-            Text('${translate('Directory')}:'),
+            Text('${translate("Directory")}:'),
             Expanded(
               child: GestureDetector(
                   onTap: canlaunch ? () => launchUrl(Uri.file(dir)) : null,
@@ -386,26 +387,26 @@ class _GeneralState extends State<_General> {
   Widget language() {
     return _futureBuilder(future: () async {
       String langs = await bind.mainGetLangs();
-      String lang = await bind.mainGetLocalOption(key: "lang");
-      return {"langs": langs, "lang": lang};
+      String lang = bind.mainGetLocalOption(key: kCommConfKeyLang);
+      return {'langs': langs, 'lang': lang};
     }(), hasData: (res) {
       Map<String, String> data = res as Map<String, String>;
-      List<dynamic> langsList = jsonDecode(data["langs"]!);
+      List<dynamic> langsList = jsonDecode(data['langs']!);
       Map<String, String> langsMap = {for (var v in langsList) v[0]: v[1]};
       List<String> keys = langsMap.keys.toList();
       List<String> values = langsMap.values.toList();
-      keys.insert(0, "");
-      values.insert(0, "Default");
-      String currentKey = data["lang"]!;
+      keys.insert(0, '');
+      values.insert(0, 'Default');
+      String currentKey = data['lang']!;
       if (!keys.contains(currentKey)) {
-        currentKey = "";
+        currentKey = '';
       }
       return _ComboBox(
         keys: keys,
         values: values,
         initialKey: currentKey,
         onChanged: (key) async {
-          await bind.mainSetLocalOption(key: "lang", value: key);
+          await bind.mainSetLocalOption(key: kCommConfKeyLang, value: key);
           reloadAllWindows();
           bind.mainChangeLanguage(lang: key);
         },
@@ -579,20 +580,21 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     return ChangeNotifierProvider.value(
         value: gFFI.serverModel,
         child: Consumer<ServerModel>(builder: ((context, model, child) {
-          List<String> keys = [
+          List<String> passwordKeys = [
             kUseTemporaryPassword,
             kUsePermanentPassword,
             kUseBothPasswords,
           ];
-          List<String> values = [
-            translate("Use temporary password"),
-            translate("Use permanent password"),
-            translate("Use both passwords"),
+          List<String> passwordValues = [
+            translate('Use one-time password'),
+            translate('Use permanent password'),
+            translate('Use both passwords'),
           ];
           bool tmpEnabled = model.verificationMethod != kUsePermanentPassword;
           bool permEnabled = model.verificationMethod != kUseTemporaryPassword;
-          String currentValue = values[keys.indexOf(model.verificationMethod)];
-          List<Widget> radios = values
+          String currentValue =
+              passwordValues[passwordKeys.indexOf(model.verificationMethod)];
+          List<Widget> radios = passwordValues
               .map((value) => _Radio<String>(
                     context,
                     value: value,
@@ -600,8 +602,8 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                     label: value,
                     onChanged: ((value) {
                       () async {
-                        await model
-                            .setVerificationMethod(keys[values.indexOf(value)]);
+                        await model.setVerificationMethod(
+                            passwordKeys[passwordValues.indexOf(value)]);
                         await model.updatePasswordModel();
                       }();
                     }),
@@ -639,20 +641,40 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                   ))
               .toList();
 
+          final modeKeys = ['password', 'click', ''];
+          final modeValues = [
+            translate('Accept sessions via password'),
+            translate('Accept sessions via click'),
+            translate('Accept sessions via both'),
+          ];
+          var modeInitialKey = model.approveMode;
+          if (!modeKeys.contains(modeInitialKey)) modeInitialKey = '';
+          final usePassword = model.approveMode != 'click';
+
           return _Card(title: 'Password', children: [
-            radios[0],
-            _SubLabeledWidget(
-                'Temporary Password Length',
-                Row(
-                  children: [
-                    ...lengthRadios,
-                  ],
-                ),
-                enabled: tmpEnabled && !locked),
-            radios[1],
-            _SubButton('Set permanent password', setPasswordDialog,
-                permEnabled && !locked),
-            radios[2],
+            _ComboBox(
+              keys: modeKeys,
+              values: modeValues,
+              initialKey: modeInitialKey,
+              onChanged: (key) => model.setApproveMode(key),
+            ).marginOnly(left: _kContentHMargin),
+            if (usePassword) radios[0],
+            if (usePassword)
+              _SubLabeledWidget(
+                  'One-time password length',
+                  Row(
+                    children: [
+                      ...lengthRadios,
+                    ],
+                  ),
+                  enabled: tmpEnabled && !locked),
+            if (usePassword) radios[1],
+            if (usePassword)
+              _SubButton('Set permanent password', setPasswordDialog,
+                  permEnabled && !locked),
+            if (usePassword)
+              hide_cm(!locked).marginOnly(left: _kContentHSubMargin - 6),
+            if (usePassword) radios[2],
           ]);
         })));
   }
@@ -781,6 +803,46 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
       ).marginOnly(left: _kCheckBoxLeftMargin);
     });
   }
+
+  Widget hide_cm(bool enabled) {
+    return ChangeNotifierProvider.value(
+        value: gFFI.serverModel,
+        child: Consumer<ServerModel>(builder: (context, model, child) {
+          final enableHideCm = model.approveMode == 'password' &&
+              model.verificationMethod == kUsePermanentPassword;
+          onHideCmChanged(bool? b) {
+            if (b != null) {
+              bind.mainSetOption(
+                  key: 'allow-hide-cm', value: bool2option('allow-hide-cm', b));
+            }
+          }
+
+          return Tooltip(
+              message: enableHideCm ? "" : translate('hide_cm_tip'),
+              child: GestureDetector(
+                onTap:
+                    enableHideCm ? () => onHideCmChanged(!model.hideCm) : null,
+                child: Row(
+                  children: [
+                    Checkbox(
+                            value: model.hideCm,
+                            onChanged: enabled && enableHideCm
+                                ? onHideCmChanged
+                                : null)
+                        .marginOnly(right: 5),
+                    Expanded(
+                      child: Text(
+                        translate('Hide connection management window'),
+                        style: TextStyle(
+                            color: _disabledTextColor(
+                                context, enabled && enableHideCm)),
+                      ),
+                    ),
+                  ],
+                ),
+              ));
+        }));
+  }
 }
 
 class _Network extends StatefulWidget {
@@ -830,12 +892,12 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
       // Setting page is not modal, oldOptions should only be used when getting options, never when setting.
       Map<String, dynamic> oldOptions = jsonDecode(data! as String);
       old(String key) {
-        return (oldOptions[key] ?? "").trim();
+        return (oldOptions[key] ?? '').trim();
       }
 
-      RxString idErrMsg = "".obs;
-      RxString relayErrMsg = "".obs;
-      RxString apiErrMsg = "".obs;
+      RxString idErrMsg = ''.obs;
+      RxString relayErrMsg = ''.obs;
+      RxString apiErrMsg = ''.obs;
       var idController =
           TextEditingController(text: old('custom-rendezvous-server'));
       var relayController = TextEditingController(text: old('relay-server'));
@@ -863,10 +925,10 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
           }
         }
         if (apiServer.isNotEmpty) {
-          if (!apiServer.startsWith('http://') ||
-              !apiServer.startsWith("https://")) {
+          if (!apiServer.startsWith('http://') &&
+              !apiServer.startsWith('https://')) {
             apiErrMsg.value =
-                "${translate("API Server")}: ${translate("invalid_http")}";
+                '${translate("API Server")}: ${translate("invalid_http")}';
             return false;
           }
         }
@@ -893,7 +955,7 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
       import() {
         Clipboard.getData(Clipboard.kTextPlain).then((value) {
           TextEditingController mytext = TextEditingController();
-          String? aNullableString = "";
+          String? aNullableString = '';
           aNullableString = value?.text;
           mytext.text = aNullableString.toString();
           if (mytext.text.isNotEmpty) {
@@ -918,13 +980,13 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
                   }
                 });
               } else {
-                showToast(translate("Invalid server configuration"));
+                showToast(translate('Invalid server configuration'));
               }
             } catch (e) {
-              showToast(translate("Invalid server configuration"));
+              showToast(translate('Invalid server configuration'));
             }
           } else {
-            showToast(translate("Clipboard is empty"));
+            showToast(translate('Clipboard is empty'));
           }
         });
       }
@@ -936,7 +998,7 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
         config['ApiServer'] = apiController.text.trim();
         config['Key'] = keyController.text.trim();
         Clipboard.setData(ClipboardData(text: jsonEncode(config)));
-        showToast(translate("Export server configuration successfully"));
+        showToast(translate('Export server configuration successfully'));
       }
 
       bool secure = !enabled;
@@ -962,7 +1024,7 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
             Obx(() => _LabeledTextField(context, 'API Server', apiController,
                 apiErrMsg.value, enabled, secure)),
             _LabeledTextField(
-                context, 'Key', keyController, "", enabled, secure),
+                context, 'Key', keyController, '', enabled, secure),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [_Button('Apply', submit, enabled: enabled)],
@@ -1028,10 +1090,12 @@ class _AboutState extends State<_About> {
     return _futureBuilder(future: () async {
       final license = await bind.mainGetLicense();
       final version = await bind.mainGetVersion();
-      return {'license': license, 'version': version};
+      final buildDate = await bind.mainGetBuildDate();
+      return {'license': license, 'version': version, 'buildDate': buildDate};
     }(), hasData: (data) {
       final license = data['license'].toString();
       final version = data['version'].toString();
+      final buildDate = data['buildDate'].toString();
       const linkStyle = TextStyle(decoration: TextDecoration.underline);
       final scrollController = ScrollController();
       return DesktopScrollWrapper(
@@ -1039,28 +1103,29 @@ class _AboutState extends State<_About> {
           child: SingleChildScrollView(
             controller: scrollController,
             physics: NeverScrollableScrollPhysics(),
-            child: _Card(title: "About RustDesk", children: [
+            child: _Card(title: 'About RustDesk', children: [
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(
                     height: 8.0,
                   ),
-                  Text("Version: $version").marginSymmetric(vertical: 4.0),
+                  Text('Version: $version').marginSymmetric(vertical: 4.0),
+                  Text('Build Date: $buildDate').marginSymmetric(vertical: 4.0),
                   InkWell(
                       onTap: () {
-                        launchUrlString("https://rustdesk.com/privacy");
+                        launchUrlString('https://rustdesk.com/privacy');
                       },
                       child: const Text(
-                        "Privacy Statement",
+                        'Privacy Statement',
                         style: linkStyle,
                       ).marginSymmetric(vertical: 4.0)),
                   InkWell(
                       onTap: () {
-                        launchUrlString("https://rustdesk.com");
+                        launchUrlString('https://rustdesk.com');
                       },
                       child: const Text(
-                        "Website",
+                        'Website',
                         style: linkStyle,
                       ).marginSymmetric(vertical: 4.0)),
                   Container(
@@ -1074,11 +1139,11 @@ class _AboutState extends State<_About> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                "Copyright &copy; 2022 Purslane Ltd.\n$license",
+                                'Copyright © 2022 Purslane Ltd.\n$license',
                                 style: const TextStyle(color: Colors.white),
                               ),
                               const Text(
-                                "Made with heart in this chaotic world!",
+                                'Made with heart in this chaotic world!',
                                 style: TextStyle(
                                     fontWeight: FontWeight.w800,
                                     color: Colors.white),
@@ -1472,10 +1537,10 @@ class _ComboBox extends StatelessWidget {
 void changeSocks5Proxy() async {
   var socks = await bind.mainGetSocks();
 
-  String proxy = "";
-  String proxyMsg = "";
-  String username = "";
-  String password = "";
+  String proxy = '';
+  String proxyMsg = '';
+  String username = '';
+  String password = '';
   if (socks.length == 3) {
     proxy = socks[0];
     username = socks[1];
@@ -1489,7 +1554,7 @@ void changeSocks5Proxy() async {
   gFFI.dialogManager.show((setState, close) {
     submit() async {
       setState(() {
-        proxyMsg = "";
+        proxyMsg = '';
         isInProgress = true;
       });
       cancel() {
@@ -1517,7 +1582,7 @@ void changeSocks5Proxy() async {
     }
 
     return CustomAlertDialog(
-      title: Text(translate("Socks5 Proxy")),
+      title: Text(translate('Socks5 Proxy')),
       content: ConstrainedBox(
         constraints: const BoxConstraints(minWidth: 500),
         child: Column(
@@ -1530,7 +1595,7 @@ void changeSocks5Proxy() async {
               children: [
                 ConstrainedBox(
                     constraints: const BoxConstraints(minWidth: 100),
-                    child: Text("${translate('Hostname')}:")
+                    child: Text('${translate("Hostname")}:')
                         .marginOnly(bottom: 16.0)),
                 const SizedBox(
                   width: 24.0,
@@ -1553,7 +1618,7 @@ void changeSocks5Proxy() async {
               children: [
                 ConstrainedBox(
                     constraints: const BoxConstraints(minWidth: 100),
-                    child: Text("${translate('Username')}:")
+                    child: Text('${translate("Username")}:')
                         .marginOnly(bottom: 16.0)),
                 const SizedBox(
                   width: 24.0,
@@ -1575,7 +1640,7 @@ void changeSocks5Proxy() async {
               children: [
                 ConstrainedBox(
                     constraints: const BoxConstraints(minWidth: 100),
-                    child: Text("${translate('Password')}:")
+                    child: Text('${translate("Password")}:')
                         .marginOnly(bottom: 16.0)),
                 const SizedBox(
                   width: 24.0,
@@ -1599,8 +1664,8 @@ void changeSocks5Proxy() async {
         ),
       ),
       actions: [
-        TextButton(onPressed: close, child: Text(translate("Cancel"))),
-        TextButton(onPressed: submit, child: Text(translate("OK"))),
+        TextButton(onPressed: close, child: Text(translate('Cancel'))),
+        TextButton(onPressed: submit, child: Text(translate('OK'))),
       ],
       onSubmit: submit,
       onCancel: close,

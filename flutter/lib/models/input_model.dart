@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:ui' as ui;
@@ -39,10 +40,14 @@ class InputModel {
   var alt = false;
   var command = false;
 
+  // trackpad
+  var trackpadScrollDistance = Offset.zero;
+  Timer? _flingTimer;
+
   // mouse
   final isPhysicalMouse = false.obs;
   int _lastMouseDownButtons = 0;
-  Offset last_mouse_pos = Offset.zero;
+  Offset lastMousePos = Offset.zero;
 
   get id => parent.target?.id ?? "";
 
@@ -236,6 +241,7 @@ class InputModel {
     if (!enter) {
       resetModifiers();
     }
+    _flingTimer?.cancel();
     bind.sessionEnterOrLeave(id: id, enter: enter);
   }
 
@@ -257,6 +263,59 @@ class InputModel {
       handleMouse(getEvent(e, 'mousemove'));
     }
   }
+
+/*
+  int _signOrZero(num x) {
+    if (x == 0) {
+      return 0;
+    } else {
+      return x > 0 ? 1 : -1;
+    }
+  }
+
+  void onPointerPanZoomStart(PointerPanZoomStartEvent e) {}
+
+  // https://docs.flutter.dev/release/breaking-changes/trackpad-gestures
+  // TODO(support zoom in/out)
+  void onPointerPanZoomUpdate(PointerPanZoomUpdateEvent e) {
+    var delta = e.panDelta;
+    trackpadScrollDistance += delta;
+    bind.sessionSendMouse(
+        id: id,
+        msg:
+            '{"type": "trackpad", "x": "${delta.dx.toInt()}", "y": "${delta.dy.toInt()}"}');
+  }
+
+  // Simple simulation for fling.
+  void _scheduleFling(var x, y, dx, dy) {
+    if (dx <= 0 && dy <= 0) {
+      return;
+    }
+    _flingTimer = Timer(Duration(milliseconds: 10), () {
+      bind.sessionSendMouse(
+          id: id, msg: '{"type": "trackpad", "x": "$x", "y": "$y"}');
+      dx--;
+      dy--;
+      if (dx == 0) {
+        x = 0;
+      }
+      if (dy == 0) {
+        y = 0;
+      }
+      _scheduleFling(x, y, dx, dy);
+    });
+  }
+
+  void onPointerPanZoomEnd(PointerPanZoomEndEvent e) {
+    var x = _signOrZero(trackpadScrollDistance.dx);
+    var y = _signOrZero(trackpadScrollDistance.dy);
+    var dx = trackpadScrollDistance.dx.abs() ~/ 40;
+    var dy = trackpadScrollDistance.dy.abs() ~/ 40;
+    _scheduleFling(x, y, dx, dy);
+
+    trackpadScrollDistance = Offset.zero;
+  }
+*/
 
   void onPointDownImage(PointerDownEvent e) {
     debugPrint("onPointDownImage");
@@ -308,23 +367,23 @@ class InputModel {
     double y = max(0.0, evt['y']);
     final cursorModel = parent.target!.cursorModel;
 
-    if (cursorModel.is_peer_control_protected) {
-      last_mouse_pos = ui.Offset(x, y);
+    if (cursorModel.isPeerControlProtected) {
+      lastMousePos = ui.Offset(x, y);
       return;
     }
 
-    if (!cursorModel.got_mouse_control) {
-      bool self_get_control =
-          (x - last_mouse_pos.dx).abs() > kMouseControlDistance ||
-              (y - last_mouse_pos.dy).abs() > kMouseControlDistance;
-      if (self_get_control) {
-        cursorModel.got_mouse_control = true;
+    if (!cursorModel.gotMouseControl) {
+      bool selfGetControl =
+          (x - lastMousePos.dx).abs() > kMouseControlDistance ||
+              (y - lastMousePos.dy).abs() > kMouseControlDistance;
+      if (selfGetControl) {
+        cursorModel.gotMouseControl = true;
       } else {
-        last_mouse_pos = ui.Offset(x, y);
+        lastMousePos = ui.Offset(x, y);
         return;
       }
     }
-    last_mouse_pos = ui.Offset(x, y);
+    lastMousePos = ui.Offset(x, y);
 
     var type = '';
     var isMove = false;

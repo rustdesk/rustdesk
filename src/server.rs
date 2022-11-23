@@ -5,7 +5,7 @@ use hbb_common::{
     allow_err,
     anyhow::{anyhow, Context},
     bail,
-    config::{Config, Config2, CONNECT_TIMEOUT, RELAY_PORT},
+    config::{Config, CONNECT_TIMEOUT, RELAY_PORT},
     log,
     message_proto::*,
     protobuf::{Enum, Message as _},
@@ -14,7 +14,11 @@ use hbb_common::{
     sodiumoxide::crypto::{box_, secretbox, sign},
     timeout, tokio, ResultType, Stream,
 };
-use service::{GenericService, Service, ServiceTmpl, Subscriber};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use hbb_common::config::Config2;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use service::ServiceTmpl;
+use service::{GenericService, Service, Subscriber};
 use std::{
     collections::HashMap,
     net::SocketAddr,
@@ -45,6 +49,8 @@ pub const NAME_POS: &'static str = "";
 }
 
 mod connection;
+#[cfg(windows)]
+pub mod portable_service;
 mod service;
 mod video_qos;
 pub mod video_service;
@@ -56,6 +62,7 @@ type ConnMap = HashMap<i32, ConnInner>;
 
 lazy_static::lazy_static! {
     pub static ref CHILD_PROCESS: Childs = Default::default();
+    pub static ref CONN_COUNT: Arc<Mutex<usize>> = Default::default();
 }
 
 pub struct Server {
@@ -255,6 +262,7 @@ impl Server {
             }
         }
         self.connections.insert(conn.id(), conn);
+        *CONN_COUNT.lock().unwrap() = self.connections.len();
     }
 
     pub fn remove_connection(&mut self, conn: &ConnInner) {
@@ -262,6 +270,7 @@ impl Server {
             s.on_unsubscribe(conn.id());
         }
         self.connections.remove(&conn.id());
+        *CONN_COUNT.lock().unwrap() = self.connections.len();
     }
 
     pub fn close_connections(&mut self) {

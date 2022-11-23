@@ -20,17 +20,14 @@ use hbb_common::fs::{
 use hbb_common::message_proto::permission_info::Permission;
 use hbb_common::protobuf::Message as _;
 use hbb_common::rendezvous_proto::ConnType;
+#[cfg(windows)]
+use hbb_common::tokio::sync::Mutex as TokioMutex;
 use hbb_common::tokio::{
     self,
     sync::mpsc,
-    sync::Mutex as TokioMutex,
     time::{self, Duration, Instant, Interval},
 };
-use hbb_common::{
-    allow_err,
-    message_proto::*,
-    sleep,
-};
+use hbb_common::{allow_err, message_proto::*, sleep};
 use hbb_common::{fs, log, Stream};
 use std::collections::HashMap;
 
@@ -918,13 +915,8 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                         }
                         Some(file_response::Union::Block(block)) => {
-                            log::info!(
-                                "file response block, file id:{}, file num: {}",
-                                block.id,
-                                block.file_num
-                            );
                             if let Some(job) = fs::get_job(block.id, &mut self.write_jobs) {
-                                if let Err(_err) = job.write(block, None).await {
+                                if let Err(_err) = job.write(block).await {
                                     // to-do: add "skip" for writing job
                                 }
                                 self.update_jobs_status();
@@ -997,23 +989,31 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                     }
                     Some(misc::Union::Uac(uac)) => {
+                        let msgtype = "custom-uac-nocancel";
+                        let title = "Prompt";
+                        let text = "Please wait for confirmation of UAC...";
+                        let link = "";
                         if uac {
-                            self.handler.msgbox(
-                                "custom-uac-nocancel",
-                                "Warning",
-                                "uac_warning",
-                                "",
-                            );
+                            self.handler.msgbox(msgtype, title, text, link);
+                        } else {
+                            self.handler
+                                .cancel_msgbox(
+                                    &format!("{}-{}-{}-{}", msgtype, title, text, link,),
+                                );
                         }
                     }
                     Some(misc::Union::ForegroundWindowElevated(elevated)) => {
+                        let msgtype = "custom-elevated-foreground-nocancel";
+                        let title = "Prompt";
+                        let text = "elevated_foreground_window_tip";
+                        let link = "";
                         if elevated {
-                            self.handler.msgbox(
-                                "custom-elevated-foreground-nocancel",
-                                "Warning",
-                                "elevated_foreground_window_warning",
-                                "",
-                            );
+                            self.handler.msgbox(msgtype, title, text, link);
+                        } else {
+                            self.handler
+                                .cancel_msgbox(
+                                    &format!("{}-{}-{}-{}", msgtype, title, text, link,),
+                                );
                         }
                     }
                     _ => {}
@@ -1187,7 +1187,7 @@ impl<T: InvokeUiSession> Remote<T> {
     #[cfg(windows)]
     fn handle_cliprdr_msg(&self, clip: hbb_common::message_proto::Cliprdr) {
         if !self.handler.lc.read().unwrap().disable_clipboard {
-            #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+            #[cfg(feature = "flutter")]
             if let Some(hbb_common::message_proto::cliprdr::Union::FormatList(_)) = &clip.union {
                 if self.client_conn_id
                     != clipboard::get_client_conn_id(&crate::flutter::get_cur_session_id())

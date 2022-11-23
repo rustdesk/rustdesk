@@ -30,12 +30,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_open_battery_optimizations_tip", "If you want to disable this feature, please go to the next RustDesk application settings page, find and enter [Battery], Uncheck [Unrestricted]"),
         ("remote_restarting_tip", "Remote device is restarting, please close this message box and reconnect with permanent password after a while"),
         ("Are you sure to close the connection?", "Are you sure you want to close the connection?"),
-        ("elevation_prompt", "Running software without privilege elevation may cause problems when remote users operate certain windows."),
-        ("uac_warning", "Temporarily denied access due to elevation request, please wait for the remote user to accept the UAC dialog. To avoid this problem, it is recommended to install the software on the remote device or run it with administrator privileges."),
-        ("elevated_foreground_window_warning", "Temporarily unable to use the mouse and keyboard, because the current window of the remote desktop requires higher privilege to operate, you can request the remote user to minimize the current window. To avoid this problem, it is recommended to install the software on the remote device or run it with administrator privileges."),
+        ("elevated_foreground_window_tip", "The current window of the remote desktop requires higher privilege to operate, so it's unable to use the mouse and keyboard temporarily. You can request the remote user to minimize the current window, or click elevation button on the connection management window. To avoid this problem, it is recommended to install the software on the remote device."),
         ("JumpLink", "View"),
         ("Stop service", "Stop Service"),
-        ("or", ""),
-        ("Continue with", ""),
+        ("hide_cm_tip", "Allow hiding only if accepting sessions via password and using pernament password"),
         ].iter().cloned().collect();
 }

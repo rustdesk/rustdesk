@@ -6,10 +6,12 @@ use std::{
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use arboard::Clipboard as ClipboardContext;
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use hbb_common::compress::decompress;
 use hbb_common::{
     allow_err,
     anyhow::bail,
-    compress::{compress as compress_func, decompress},
+    compress::{compress as compress_func},
     config::{self, Config, COMPRESS_LEVEL, RENDEZVOUS_TIMEOUT},
     get_version_number, log,
     message_proto::*,

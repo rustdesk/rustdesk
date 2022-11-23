@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/widgets/address_book.dart';
 import 'package:flutter_hbb/consts.dart';
@@ -94,6 +95,12 @@ class _ConnectionPageState extends State<ConnectionPage>
   }
 
   @override
+  void onWindowClose() {
+    super.onWindowClose();
+    bind.mainOnMainWindowClose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Column(
       children: [
@@ -171,12 +178,15 @@ class _ConnectionPageState extends State<ConnectionPage>
           children: [
             Row(
               children: [
-                Text(
-                  translate('Control Remote Desktop'),
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleLarge
-                      ?.merge(TextStyle(height: 1)),
+                Expanded(
+                  child: AutoSizeText(
+                    translate('Control Remote Desktop'),
+                    maxLines: 1,
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.merge(TextStyle(height: 1)),
+                  ),
                 ),
               ],
             ).marginOnly(bottom: 15),

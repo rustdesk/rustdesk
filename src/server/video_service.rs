@@ -19,21 +19,26 @@
 // https://slhck.info/video/2017/03/01/rate-control.html
 
 use super::{video_qos::VideoQoS, *};
+#[cfg(windows)]
+use crate::portable_service::client::PORTABLE_SERVICE_RUNNING;
 use hbb_common::tokio::sync::{
     mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
     Mutex as TokioMutex,
 };
+#[cfg(not(windows))]
+use scrap::Capturer;
 use scrap::{
     codec::{Encoder, EncoderCfg, HwEncoderConfig},
     record::{Recorder, RecorderContext},
     vpxcodec::{VpxEncoderConfig, VpxVideoCodecId},
-    Capturer, Display, TraitCapturer,
+    Display, TraitCapturer,
 };
+#[cfg(windows)]
+use std::sync::Once;
 use std::{
     collections::HashSet,
     io::ErrorKind::WouldBlock,
     ops::{Deref, DerefMut},
-    sync::Once,
     time::{self, Duration, Instant},
 };
 #[cfg(windows)]
@@ -48,7 +53,7 @@ pub const SCRAP_X11_REF_URL: &str = "https://rustdesk.com/docs/en/manual/linux/#
 pub const NAME: &'static str = "video";
 
 lazy_static::lazy_static! {
-    static ref CURRENT_DISPLAY: Arc<Mutex<usize>> = Arc::new(Mutex::new(usize::MAX));
+    pub static ref CURRENT_DISPLAY: Arc<Mutex<usize>> = Arc::new(Mutex::new(usize::MAX));
     static ref LAST_ACTIVE: Arc<Mutex<Instant>> = Arc::new(Mutex::new(Instant::now()));
     static ref SWITCH: Arc<Mutex<bool>> = Default::default();
     static ref FRAME_FETCHED_NOTIFIER: (UnboundedSender<(i32, Option<Instant>)>, Arc<TokioMutex<UnboundedReceiver<(i32, Option<Instant>)>>>) = {
@@ -187,6 +192,8 @@ fn create_capturer(
     privacy_mode_id: i32,
     display: Display,
     use_yuv: bool,
+    _current: usize,
+    _portable_service_running: bool,
 ) -> ResultType<Box<dyn TraitCapturer>> {
     #[cfg(not(windows))]
     let c: Option<Box<dyn TraitCapturer>> = None;
@@ -243,17 +250,23 @@ fn create_capturer(
         }
     }
 
-    let c = match c {
-        Some(c1) => c1,
+    match c {
+        Some(c1) => return Ok(c1),
         None => {
-            let c1 =
-                Capturer::new(display, use_yuv).with_context(|| "Failed to create capturer")?;
             log::debug!("Create capturer dxgi|gdi");
-            Box::new(c1)
+            #[cfg(windows)]
+            return crate::portable_service::client::create_capturer(
+                _current,
+                display,
+                use_yuv,
+                _portable_service_running,
+            );
+            #[cfg(not(windows))]
+            return Ok(Box::new(
+                Capturer::new(display, use_yuv).with_context(|| "Failed to create capturer")?,
+            ));
         }
     };
-
-    Ok(c)
 }
 
 #[cfg(windows)]
@@ -276,8 +289,8 @@ fn ensure_close_virtual_device() -> ResultType<()> {
 pub fn test_create_capturer(privacy_mode_id: i32, timeout_millis: u64) -> bool {
     let test_begin = Instant::now();
     while test_begin.elapsed().as_millis() < timeout_millis as _ {
-        if let Ok((_, _, display)) = get_current_display() {
-            if let Ok(_) = create_capturer(privacy_mode_id, display, true) {
+        if let Ok((_, current, display)) = get_current_display() {
+            if let Ok(_) = create_capturer(privacy_mode_id, display, true, current, false) {
                 return true;
             }
         }
@@ -326,7 +339,7 @@ impl DerefMut for CapturerInfo {
     }
 }
 
-fn get_capturer(use_yuv: bool) -> ResultType<CapturerInfo> {
+fn get_capturer(use_yuv: bool, portable_service_running: bool) -> ResultType<CapturerInfo> {
     #[cfg(target_os = "linux")]
     {
         if !scrap::is_x11() {
@@ -368,7 +381,13 @@ fn get_capturer(use_yuv: bool) -> ResultType<CapturerInfo> {
     } else {
         log::info!("In privacy mode, the peer side cannot watch the screen");
     }
-    let capturer = create_capturer(captuerer_privacy_mode_id, display, use_yuv)?;
+    let capturer = create_capturer(
+        captuerer_privacy_mode_id,
+        display,
+        use_yuv,
+        current,
+        portable_service_running,
+    )?;
     Ok(CapturerInfo {
         origin,
         width,
@@ -388,8 +407,12 @@ fn run(sp: GenericService) -> ResultType<()> {
     // ensure_inited() is needed because release_resouce() may be called.
     #[cfg(target_os = "linux")]
     super::wayland::ensure_inited()?;
+    #[cfg(windows)]
+    let last_portable_service_running = PORTABLE_SERVICE_RUNNING.lock().unwrap().clone();
+    #[cfg(not(windows))]
+    let last_portable_service_running = false;
 
-    let mut c = get_capturer(true)?;
+    let mut c = get_capturer(true, last_portable_service_running)?;
 
     let mut video_qos = VIDEO_QOS.lock().unwrap();
     video_qos.set_size(c.width as _, c.height as _);
@@ -497,10 +520,16 @@ fn run(sp: GenericService) -> ResultType<()> {
         if codec_name != Encoder::current_hw_encoder_name() {
             bail!("SWITCH");
         }
+        #[cfg(windows)]
+        if last_portable_service_running != PORTABLE_SERVICE_RUNNING.lock().unwrap().clone() {
+            bail!("SWITCH");
+        }
         check_privacy_mode_changed(&sp, c.privacy_mode_id)?;
         #[cfg(windows)]
         {
-            if crate::platform::windows::desktop_changed() {
+            if crate::platform::windows::desktop_changed()
+                && !PORTABLE_SERVICE_RUNNING.lock().unwrap().clone()
+            {
                 bail!("Desktop changed");
             }
         }
@@ -529,7 +558,7 @@ fn run(sp: GenericService) -> ResultType<()> {
                         frame_controller.set_send(now, send_conn_ids);
                     }
                     scrap::Frame::RAW(data) => {
-                        if (data.len() != 0) {
+                        if data.len() != 0 {
                             let send_conn_ids =
                                 handle_one_frame(&sp, data, ms, &mut encoder, recorder.clone())?;
                             frame_controller.set_send(now, send_conn_ids);
@@ -873,7 +902,7 @@ pub(super) fn get_current_display_2(mut all: Vec<Display>) -> ResultType<(usize,
     return Ok((n, current, all.remove(current)));
 }
 
-fn get_current_display() -> ResultType<(usize, usize, Display)> {
+pub fn get_current_display() -> ResultType<(usize, usize, Display)> {
     get_current_display_2(try_get_displays()?)
 }
 

@@ -15,7 +15,6 @@ import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:bot_toast/bot_toast.dart';
 
@@ -43,7 +42,9 @@ Future<void> main(List<String> args) async {
   if (args.isNotEmpty && args.first == 'multi_window') {
     windowId = int.parse(args[1]);
     stateGlobal.setWindowId(windowId!);
-    WindowController.fromWindowId(windowId!).showTitleBar(false);
+    if (!Platform.isMacOS) {
+      WindowController.fromWindowId(windowId!).showTitleBar(false);
+    }
     final argument = args[2].isEmpty
         ? <String, dynamic>{}
         : jsonDecode(args[2]) as Map<String, dynamic>;
@@ -84,7 +85,7 @@ Future<void> main(List<String> args) async {
     debugPrint("--cm started");
     desktopType = DesktopType.cm;
     await windowManager.ensureInitialized();
-    runConnectionManagerScreen();
+    runConnectionManagerScreen(args.contains('--hide'));
   } else if (args.contains('--install')) {
     runInstallPage();
   } else {
@@ -97,7 +98,6 @@ Future<void> main(List<String> args) async {
 
 Future<void> initEnv(String appType) async {
   // global shared preference
-  await Get.putAsync(() => SharedPreferences.getInstance());
   await platformFFI.init(appType);
   // global FFI, use this **ONLY** for global configuration
   // for convenience, use global FFI on mobile platform
@@ -170,13 +170,14 @@ void runMultiWindow(
   );
   switch (appType) {
     case kAppTypeDesktopRemote:
-    await restoreWindowPosition(WindowType.RemoteDesktop, windowId: windowId!);
+      await restoreWindowPosition(WindowType.RemoteDesktop,
+          windowId: windowId!);
       break;
     case kAppTypeDesktopFileTransfer:
-    await restoreWindowPosition(WindowType.FileTransfer, windowId: windowId!);
+      await restoreWindowPosition(WindowType.FileTransfer, windowId: windowId!);
       break;
     case kAppTypeDesktopPortForward:
-    await restoreWindowPosition(WindowType.PortForward, windowId: windowId!);
+      await restoreWindowPosition(WindowType.PortForward, windowId: windowId!);
       break;
     default:
       // no such appType
@@ -184,22 +185,38 @@ void runMultiWindow(
   }
 }
 
-void runConnectionManagerScreen() async {
+void runConnectionManagerScreen(bool hide) async {
   await initEnv(kAppTypeMain);
-  // initialize window
-  WindowOptions windowOptions =
-      getHiddenTitleBarWindowOptions(size: kConnectionManagerWindowSize);
   _runApp(
     '',
     const DesktopServerPage(),
     MyTheme.currentThemeMode(),
   );
+  if (hide) {
+    hideCmWindow();
+  } else {
+    showCmWindow();
+  }
+}
+
+void showCmWindow() {
+  WindowOptions windowOptions =
+      getHiddenTitleBarWindowOptions(size: kConnectionManagerWindowSize);
   windowManager.waitUntilReadyToShow(windowOptions, () async {
     await windowManager.show();
     await Future.wait([windowManager.focus(), windowManager.setOpacity(1)]);
     // ensure initial window size to be changed
     await windowManager.setSizeAlignment(
         kConnectionManagerWindowSize, Alignment.topRight);
+  });
+}
+
+void hideCmWindow() {
+  WindowOptions windowOptions =
+      getHiddenTitleBarWindowOptions(size: kConnectionManagerWindowSize);
+  windowManager.setOpacity(0);
+  windowManager.waitUntilReadyToShow(windowOptions, () async {
+    await windowManager.hide();
   });
 }
 

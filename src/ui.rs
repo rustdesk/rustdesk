@@ -15,7 +15,7 @@ use hbb_common::{
     protobuf::Message as _,
     rendezvous_proto::*,
     tcp::FramedStream,
-    tokio::{self, sync::mpsc},
+    tokio,
 };
 
 use crate::common::get_app_name;
@@ -33,7 +33,8 @@ pub mod win_privacy;
 
 type Message = RendezvousMessage;
 
-pub type Childs = Arc<Mutex<(bool, HashMap<(String, String), Child>)>>;
+pub type Children = Arc<Mutex<(bool, HashMap<(String, String), Child>)>>;
+#[allow(dead_code)]
 type Status = (i32, bool, i64, String);
 
 lazy_static::lazy_static! {
@@ -43,30 +44,9 @@ lazy_static::lazy_static! {
 
 struct UIHostHandler;
 
-fn check_connect_status(
-    reconnect: bool,
-) -> (
-    Arc<Mutex<Status>>,
-    Arc<Mutex<HashMap<String, String>>>,
-    mpsc::UnboundedSender<ipc::Data>,
-    Arc<Mutex<String>>,
-) {
-    let status = Arc::new(Mutex::new((0, false, 0, "".to_owned())));
-    let options = Arc::new(Mutex::new(Config::get_options()));
-    let (tx, rx) = mpsc::unbounded_channel::<ipc::Data>();
-    let password = Arc::new(Mutex::new(String::default()));
-    std::thread::spawn(move || crate::ui_interface::check_connect_status_(reconnect, rx));
-    (status, options, tx, password)
-}
-
 pub fn start(args: &mut [String]) {
     #[cfg(target_os = "macos")]
-    if args.len() == 1 && args[0] == "--server" {
-        macos::make_tray();
-        return;
-    } else {
-        macos::show_dock();
-    }
+    macos::show_dock();
     #[cfg(all(target_os = "linux", feature = "inline"))]
     {
         #[cfg(feature = "appimage")]
@@ -111,8 +91,8 @@ pub fn start(args: &mut [String]) {
         args[1] = id;
     }
     if args.is_empty() {
-        let child: Childs = Default::default();
-        std::thread::spawn(move || check_zombie(child));
+        let children: Children = Default::default();
+        std::thread::spawn(move || check_zombie(children));
         crate::common::check_software_update();
         frame.event_handler(UI {});
         frame.sciter_handler(UIHostHandler {});
@@ -662,10 +642,10 @@ impl sciter::host::HostHandler for UIHostHandler {
     }
 }
 
-pub fn check_zombie(childs: Childs) {
+pub fn check_zombie(children: Children) {
     let mut deads = Vec::new();
     loop {
-        let mut lock = childs.lock().unwrap();
+        let mut lock = children.lock().unwrap();
         let mut n = 0;
         for (id, c) in lock.1.iter_mut() {
             if let Ok(Some(_)) = c.try_wait() {

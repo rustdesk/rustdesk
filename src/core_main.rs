@@ -1,6 +1,10 @@
 use hbb_common::log;
 
-// shared by flutter and sciter main function
+/// shared by flutter and sciter main function
+///
+/// [Note]
+/// If it returns [`None`], then the process will terminate, and flutter gui will not be started.
+/// If it returns [`Some`], then the process will continue, and flutter gui will be started.
 pub fn core_main() -> Option<Vec<String>> {
     // https://docs.rs/flexi_logger/latest/flexi_logger/error_info/index.html#write
     // though async logger more efficient, but it also causes more problems, disable it for now
@@ -10,6 +14,7 @@ pub fn core_main() -> Option<Vec<String>> {
     let mut i = 0;
     let mut _is_elevate = false;
     let mut _is_run_as_system = false;
+    let mut _is_quick_support = false;
     let mut _is_flutter_connect = false;
     let mut arg_exe = Default::default();
     for arg in std::env::args() {
@@ -25,6 +30,8 @@ pub fn core_main() -> Option<Vec<String>> {
                 _is_elevate = true;
             } else if arg == "--run-as-system" {
                 _is_run_as_system = true;
+            } else if arg == "--quick_support" {
+                _is_quick_support = true;
             } else {
                 args.push(arg);
             }
@@ -36,6 +43,11 @@ pub fn core_main() -> Option<Vec<String>> {
         return core_main_invoke_new_connection(std::env::args());
     }
     let click_setup = cfg!(windows) && args.is_empty() && crate::common::is_setup(&arg_exe);
+    #[cfg(not(feature = "flutter"))]
+    {
+        _is_quick_support =
+            cfg!(windows) && args.is_empty() && arg_exe.to_lowercase().ends_with("qs.exe");
+    }
     if click_setup {
         args.push("--install".to_owned());
         flutter_args.push("--install".to_string());
@@ -75,6 +87,22 @@ pub fn core_main() -> Option<Vec<String>> {
                 .start()
                 .ok();
         }
+    }
+    #[cfg(windows)]
+    if !crate::platform::is_installed()
+        && args.is_empty()
+        && _is_quick_support
+        && !_is_elevate
+        && !_is_run_as_system
+    {
+        if let Err(e) = crate::portable_service::client::start_portable_service() {
+            log::error!("Failed to start portable service:{:?}", e);
+        }
+    }
+    #[cfg(windows)]
+    if !crate::platform::is_installed() && (_is_elevate || _is_run_as_system) {
+        crate::platform::elevate_or_run_as_system(click_setup, _is_elevate, _is_run_as_system);
+        return None;
     }
     if args.is_empty() {
         std::thread::spawn(move || crate::start_server(false));
@@ -122,7 +150,14 @@ pub fn core_main() -> Option<Vec<String>> {
                 hbb_common::allow_err!(crate::rc::extract_resources(&args[1]));
                 return None;
             } else if args[0] == "--tray" {
-                crate::tray::start_tray(crate::ui_interface::OPTIONS.clone());
+                crate::tray::start_tray();
+                return None;
+            } else if args[0] == "--portable-service" {
+                crate::platform::elevate_or_run_as_system(
+                    click_setup,
+                    _is_elevate,
+                    _is_run_as_system,
+                );
                 return None;
             }
         }
@@ -147,14 +182,21 @@ pub fn core_main() -> Option<Vec<String>> {
             #[cfg(target_os = "macos")]
             {
                 std::thread::spawn(move || crate::start_server(true));
-                // to-do: for flutter, starting tray not ready yet, or we can reuse sciter's tray implementation.
+                crate::tray::make_tray();
+                return None;
             }
-            #[cfg(all(target_os = "linux"))]
+            #[cfg(target_os = "linux")]
             {
                 let handler = std::thread::spawn(move || crate::start_server(true));
-                crate::tray::start_tray(crate::ui_interface::OPTIONS.clone());
-                // revent server exit when encountering errors from tray
-                handler.join();
+                // Show the tray in linux only when current user is a normal user
+                // [Note]
+                // As for GNOME, the tray cannot be shown in user's status bar.
+                // As for KDE, the tray can be shown without user's theme.
+                if !crate::platform::is_root() {
+                    crate::tray::start_tray();
+                }
+                // prevent server exit when encountering errors from tray
+                hbb_common::allow_err!(handler.join());
             }
         } else if args[0] == "--import-config" {
             if args.len() == 2 {
@@ -184,6 +226,7 @@ pub fn core_main() -> Option<Vec<String>> {
             // meanwhile, return true to call flutter window to show control panel
             #[cfg(feature = "flutter")]
             crate::flutter::connection_manager::start_listen_ipc_thread();
+            crate::ui_interface::start_option_status_sync();
         }
     }
     //_async_logger_holder.map(|x| x.flush());
@@ -223,6 +266,8 @@ fn import_config(path: &str) {
 ///
 /// [Note]
 /// this is for invoke new connection from dbus.
+/// If it returns [`None`], then the process will terminate, and flutter gui will not be started.
+/// If it returns [`Some`], then the process will continue, and flutter gui will be started.
 #[cfg(feature = "flutter")]
 fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<String>> {
     args.position(|element| {
@@ -249,5 +294,19 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
             }
         }
     }
-    return None;
+    #[cfg(windows)]
+    {
+        use winapi::um::winuser::WM_USER;
+        let uni_links = format!("rustdesk://connection/new/{}", peer_id);
+        let res = crate::platform::send_message_to_hnwd(
+            "FLUTTER_RUNNER_WIN32_WINDOW",
+            "RustDesk",
+            (WM_USER + 2) as _, // refered from unilinks desktop pub
+            uni_links.as_str(),
+            true,
+        );
+        return if res { None } else { Some(Vec::new()) };
+    }
+    #[cfg(target_os = "macos")]
+    return Some(Vec::new());
 }

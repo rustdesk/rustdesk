@@ -9,6 +9,7 @@ import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/desktop/pages/remote_page.dart';
+import 'package:flutter_hbb/desktop/widgets/remote_menubar.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/desktop/widgets/material_mod_popup_menu.dart'
     as mod_menu;
@@ -43,9 +44,12 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
   static const IconData selectedIcon = Icons.desktop_windows_sharp;
   static const IconData unselectedIcon = Icons.desktop_windows_outlined;
 
+  late MenubarState _menubarState;
+
   var connectionMap = RxList<Widget>.empty(growable: true);
 
   _ConnectionTabPageState(Map<String, dynamic> params) {
+    _menubarState = MenubarState();
     RemoteCountState.init();
     final peerId = params['id'];
     if (peerId != null) {
@@ -59,6 +63,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         page: RemotePage(
           key: ValueKey(peerId),
           id: peerId,
+          menubarState: _menubarState,
         ),
       ));
       _update_remote_count();
@@ -79,7 +84,6 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       if (call.method == "new_remote_desktop") {
         final args = jsonDecode(call.arguments);
         final id = args['id'];
-        ConnectionTypeState.init(id);
         window_on_top(windowId());
         ConnectionTypeState.init(id);
         tabController.add(TabInfo(
@@ -88,7 +92,11 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           selectedIcon: selectedIcon,
           unselectedIcon: unselectedIcon,
           onTabCloseButton: () => tabController.closeBy(id),
-          page: RemotePage(key: ValueKey(id), id: id),
+          page: RemotePage(
+            key: ValueKey(id),
+            id: id,
+            menubarState: _menubarState,
+          ),
         ));
       } else if (call.method == "onDestroy") {
         tabController.clear();
@@ -100,19 +108,28 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
   }
 
   @override
+  void dispose() {
+    super.dispose();
+    _menubarState.save();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final tabWidget = Container(
-      decoration: BoxDecoration(
+    final tabWidget = Obx(
+      () => Container(
+        decoration: BoxDecoration(
           border: Border.all(
               color: MyTheme.color(context).border!,
-              width: kWindowBorderWidth)),
-      child: Scaffold(
+              width: stateGlobal.windowBorderWidth.value),
+        ),
+        child: Scaffold(
           backgroundColor: Theme.of(context).backgroundColor,
           body: DesktopTab(
             controller: tabController,
             onWindowCloseButton: handleWindowCloseButton,
             tail: const AddButton().paddingOnly(left: 10),
             pageViewBuilder: (pageView) => pageView,
+            labelGetter: DesktopTab.labelGetterAlias,
             tabBuilder: (key, icon, label, themeConf) => Obx(() {
               final connectionType = ConnectionTypeState.find(key);
               if (!connectionType.isValid()) {
@@ -166,7 +183,9 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
                 );
               }
             }),
-          )),
+          ),
+        ),
+      ),
     );
     return Platform.isMacOS
         ? tabWidget
@@ -177,7 +196,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           );
   }
 
-  // to-do: some dup code to ../widgets/remote_menubar
+  // Note: Some dup code to ../widgets/remote_menubar
   Widget _tabMenuBuilder(String key, CancelFunc cancelFunc) {
     final List<MenuEntryBase<String>> menu = [];
     const EdgeInsets padding = EdgeInsets.only(left: 8.0, right: 5.0);
@@ -187,7 +206,6 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     final ffi = remotePage.ffi;
     final pi = ffi.ffiModel.pi;
     final perms = ffi.ffiModel.permissions;
-    final showMenuBar = remotePage.showMenubar;
     menu.addAll([
       MenuEntryButton<String>(
         childBuilder: (TextStyle? style) => Text(
@@ -202,11 +220,12 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       ),
       MenuEntryButton<String>(
         childBuilder: (TextStyle? style) => Obx(() => Text(
-              translate(showMenuBar.isTrue ? 'Hide Menubar' : 'Show Menubar'),
+              translate(
+                  _menubarState.show.isTrue ? 'Hide Menubar' : 'Show Menubar'),
               style: style,
             )),
         proc: () {
-          showMenuBar.value = !showMenuBar.value;
+          _menubarState.switchShow();
           cancelFunc();
         },
         padding: padding,
@@ -226,13 +245,12 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             dismissOnClicked: true,
           ),
         ],
-        curOptionGetter: () async {
-          return await bind.sessionGetOption(id: key, arg: 'view-style') ??
-              'adaptive';
-        },
+        curOptionGetter: () async =>
+            // null means peer id is not found, which there's no need to care about
+            await bind.sessionGetViewStyle(id: key) ?? '',
         optionSetter: (String oldValue, String newValue) async {
-          await bind.sessionPeerOption(
-              id: key, name: "view-style", value: newValue);
+          await bind.sessionSetViewStyle(
+              id: key, value: newValue);
           ffi.canvasModel.updateViewStyle();
           cancelFunc();
         },

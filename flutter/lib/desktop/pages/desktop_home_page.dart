@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 
+import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart' hide MenuItem;
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
@@ -202,10 +203,11 @@ class _DesktopHomePageState extends State<DesktopHomePage>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    translate("Password"),
+                  AutoSizeText(
+                    translate("One-time Password"),
                     style: TextStyle(
                         fontSize: 14, color: textColor?.withOpacity(0.5)),
+                    maxLines: 1,
                   ),
                   Row(
                     children: [
@@ -484,7 +486,7 @@ void setPasswordDialog() async {
         errMsg1 = "";
       });
       final pass = p0.text.trim();
-      if (pass.length < 6) {
+      if (pass.length < 6 && pass.isNotEmpty) {
         setState(() {
           errMsg0 = translate("Too short, at least 6 characters.");
         });

@@ -15,8 +15,8 @@ import 'package:flutter_hbb/models/file_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/models/user_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
+import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tuple/tuple.dart';
 import 'package:image/image.dart' as img2;
 import 'package:flutter_custom_cursor/flutter_custom_cursor.dart';
@@ -190,6 +190,13 @@ class FfiModel with ChangeNotifier {
             rustDeskWinManager.newRemoteDesktop(arg);
           });
         }
+      } else if (name == 'alias') {
+        handleAliasChanged(evt);
+      } else if (name == 'show_elevation') {
+        final show = evt['show'].toString() == 'true';
+        parent.target?.serverModel.setShowElevation(show);
+      } else if (name == 'cancel_msgbox') {
+        cancelMsgBox(evt, peerId);
       }
     };
   }
@@ -197,6 +204,13 @@ class FfiModel with ChangeNotifier {
   /// Bind the event listener to receive events from the Rust core.
   updateEventListener(String peerId) {
     platformFFI.setEventCallback(startEventListener(peerId));
+  }
+
+  handleAliasChanged(Map<String, dynamic> evt) {
+    final rxAlias = PeerStringOption.find(evt['id'], 'alias');
+    if (rxAlias.value != evt['alias']) {
+      rxAlias.value = evt['alias'];
+    }
   }
 
   handleSwitchDisplay(Map<String, dynamic> evt) {
@@ -219,6 +233,13 @@ class FfiModel with ChangeNotifier {
     notifyListeners();
   }
 
+  cancelMsgBox(Map<String, dynamic> evt, String id) {
+    if (parent.target == null) return;
+    final dialogManager = parent.target!.dialogManager;
+    final tag = '$id-${evt['tag']}';
+    dialogManager.dismissByTag(tag);
+  }
+
   /// Handle the message box event based on [evt] and [id].
   handleMsgBox(Map<String, dynamic> evt, String id) {
     if (parent.target == null) return;
@@ -234,6 +255,9 @@ class FfiModel with ChangeNotifier {
     } else if (type == 'restarting') {
       showMsgBox(id, type, title, text, link, false, dialogManager,
           hasCancel: false);
+    } else if (type == 'wait-remote-accept-nook') {
+      msgBoxCommon(dialogManager, title, Text(translate(text)),
+          [msgBoxButton("Cancel", closeConnection)]);
     } else {
       var hasRetry = evt['hasRetry'] == 'true';
       showMsgBox(id, type, title, text, link, hasRetry, dialogManager);
@@ -244,7 +268,7 @@ class FfiModel with ChangeNotifier {
   showMsgBox(String id, String type, String title, String text, String link,
       bool hasRetry, OverlayDialogManager dialogManager,
       {bool? hasCancel}) {
-    msgBox(type, title, text, link, dialogManager, hasCancel: hasCancel);
+    msgBox(id, type, title, text, link, dialogManager, hasCancel: hasCancel);
     _timer?.cancel();
     if (hasRetry) {
       _timer = Timer(Duration(seconds: _reconnects), () {
@@ -392,7 +416,7 @@ class ImageModel with ChangeNotifier {
         await initializeCursorAndCanvas(parent.target!);
       }
       if (parent.target?.ffiModel.isPeerAndroid ?? false) {
-        bind.sessionPeerOption(id: id, name: 'view-style', value: 'adaptive');
+        bind.sessionSetViewStyle(id: id, value: 'adaptive');
         parent.target?.canvasModel.updateViewStyle();
       }
     }
@@ -514,7 +538,7 @@ class CanvasModel with ChangeNotifier {
   double get scrollY => _scrollY;
 
   updateViewStyle() async {
-    final style = await bind.sessionGetOption(id: id, arg: 'view-style');
+    final style = await bind.sessionGetViewStyle(id: id);
     if (style == null) {
       return;
     }
@@ -540,7 +564,7 @@ class CanvasModel with ChangeNotifier {
   }
 
   updateScrollStyle() async {
-    final style = await bind.sessionGetOption(id: id, arg: 'scroll-style');
+    final style = await bind.sessionGetScrollStyle(id: id);
     if (style == 'scrollbar') {
       _scrollStyle = ScrollStyle.scrollbar;
       _scrollX = 0.0;
@@ -572,7 +596,7 @@ class CanvasModel with ChangeNotifier {
     return parent.target?.ffiModel.display.height ?? defaultHeight;
   }
 
-  double get windowBorderWidth => stateGlobal.windowBorderWidth;
+  double get windowBorderWidth => stateGlobal.windowBorderWidth.value;
   double get tabBarHeight => stateGlobal.tabBarHeight;
 
   Size get size {
@@ -675,6 +699,8 @@ class CursorData {
   final img2.Image? image;
   double scale;
   Uint8List? data;
+  final double hotxOrigin;
+  final double hotyOrigin;
   double hotx;
   double hoty;
   final int width;
@@ -686,43 +712,122 @@ class CursorData {
     required this.image,
     required this.scale,
     required this.data,
-    required this.hotx,
-    required this.hoty,
+    required this.hotxOrigin,
+    required this.hotyOrigin,
     required this.width,
     required this.height,
-  });
+  })  : hotx = hotxOrigin * scale,
+        hoty = hotxOrigin * scale;
 
   int _doubleToInt(double v) => (v * 10e6).round().toInt();
 
-  double _checkUpdateScale(double scale) {
-    // Update data if scale changed.
-    if (Platform.isWindows) {
-      final tgtWidth = (width * scale).toInt();
-      final tgtHeight = (width * scale).toInt();
-      if (tgtWidth < kMinCursorSize || tgtHeight < kMinCursorSize) {
-        double sw = kMinCursorSize.toDouble() / width;
-        double sh = kMinCursorSize.toDouble() / height;
-        scale = sw < sh ? sh : sw;
+  double _checkUpdateScale(double scale, bool shouldScale) {
+    double oldScale = this.scale;
+    if (!shouldScale) {
+      scale = 1.0;
+    } else {
+      // Update data if scale changed.
+      if (Platform.isWindows) {
+        final tgtWidth = (width * scale).toInt();
+        final tgtHeight = (width * scale).toInt();
+        if (tgtWidth < kMinCursorSize || tgtHeight < kMinCursorSize) {
+          double sw = kMinCursorSize.toDouble() / width;
+          double sh = kMinCursorSize.toDouble() / height;
+          scale = sw < sh ? sh : sw;
+        }
       }
-      if (_doubleToInt(this.scale) != _doubleToInt(scale)) {
+    }
+
+    if (Platform.isWindows) {
+      if (_doubleToInt(oldScale) != _doubleToInt(scale)) {
         data = img2
             .copyResize(
               image!,
               width: (width * scale).toInt(),
               height: (height * scale).toInt(),
+              interpolation: img2.Interpolation.average,
             )
             .getBytes(format: img2.Format.bgra);
-        hotx = (width * scale) / 2;
-        hoty = (height * scale) / 2;
       }
     }
+
     this.scale = scale;
+    hotx = hotxOrigin * scale;
+    hoty = hotyOrigin * scale;
     return scale;
   }
 
-  String updateGetKey(double scale) {
-    scale = _checkUpdateScale(scale);
+  String updateGetKey(double scale, bool shouldScale) {
+    scale = _checkUpdateScale(scale, shouldScale);
     return '${peerId}_${id}_${_doubleToInt(width * scale)}_${_doubleToInt(height * scale)}';
+  }
+}
+
+const _forbiddenCursorPng =
+    'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAAXNSR0IB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAkZQTFRFAAAA2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4GWAwCAAAAAAAA2B4GAAAAMTExAAAAAAAA2B4G2B4G2B4GAAAAmZmZkZGRAQEBAAAA2B4G2B4G2B4G////oKCgAwMDag8D2B4G2B4G2B4Gra2tBgYGbg8D2B4G2B4Gubm5CQkJTwsCVgwC2B4GxcXFDg4OAAAAAAAA2B4G2B4Gz8/PFBQUAAAAAAAA2B4G2B4G2B4G2B4G2B4G2B4G2B4GDgIA2NjYGxsbAAAAAAAA2B4GFwMB4eHhIyMjAAAAAAAA2B4G6OjoLCwsAAAAAAAA2B4G2B4G2B4G2B4G2B4GCQEA4ODgv7+/iYmJY2NjAgICAAAA9PT0Ojo6AAAAAAAAAAAA+/v7SkpKhYWFr6+vAAAAAAAA8/PzOTk5ERER9fX1KCgoAAAAgYGBKioqAAAAAAAApqamlpaWAAAAAAAAAAAAAAAAAAAAAAAALi4u/v7+GRkZAAAAAAAAAAAAAAAAAAAAfn5+AAAAAAAAV1dXkJCQAAAAAAAAAQEBAAAAAAAAAAAA7Hz6BAAAAMJ0Uk5TAAIWEwEynNz6//fVkCAatP2fDUHs6cDD8d0mPfT5fiEskiIR584A0gejr3AZ+P4plfALf5ZiTL85a4ziD6697fzN3UYE4v/4TwrNHuT///tdRKZh///+1U/ZBv///yjb///eAVL//50Cocv//6oFBbPvpGZCbfT//7cIhv///8INM///zBEcWYSZmO7//////1P////ts/////8vBv//////gv//R/z///QQz9sevP///2waXhNO/+fc//8mev/5gAe2r90MAAAByUlEQVR4nGNggANGJmYWBpyAlY2dg5OTi5uHF6s0H78AJxRwCAphyguLgKRExcQlQLSkFLq8tAwnp6ycPNABjAqKQKNElVDllVU4OVVhVquJA81Q10BRoAkUUYbJa4Edoo0sr6PLqaePLG/AyWlohKTAmJPTBFnelAFoixmSAnNOTgsUeQZLTk4rJAXWnJw2EHlbiDyDPCenHZICe04HFrh+RydnBgYWPU5uJAWinJwucPNd3dw9GDw5Ob2QFHBzcnrD7ffx9fMPCOTkDEINhmC4+3x8Q0LDwlEDIoKTMzIKKg9SEBIdE8sZh6SAJZ6Tkx0qD1YQkpCYlIwclCng0AXLQxSEpKalZyCryATKZwkhKQjJzsnNQ1KQXwBUUVhUXBJYWgZREFJeUVmFpMKlWg+anmqgCkJq6+obkG1pLEBTENLU3NKKrIKhrb2js8u4G6Kgpze0r3/CRAZMAHbkpJDJU6ZMmTqtFbuC6TNmhsyaMnsOFlmwgrnzpsxfELJwEXZ5Bp/FS3yWLlsesmLlKuwKVk9Ys5Zh3foN0zduwq5g85atDAzbpqSGbN9RhV0FGOzctWH3lD14FOzdt3H/gQw8Cg4u2gQPAwBYDXXdIH+wqAAAAABJRU5ErkJggg==';
+const _defaultCursorPng =
+    'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARzQklUCAgICHwIZIgAAAFmSURBVFiF7dWxSlxREMbx34QFDRowYBchZSxSCWlMCOwD5FGEFHap06UI7KPsAyyEEIQFqxRaCqYTsqCJFsKkuAeRXb17wrqV918dztw55zszc2fo6Oh47MR/e3zO1/iAHWmznHKGQwx9ip/LEbCfazbsoY8j/JLOhcC6sCW9wsjEwJf483AC9nPNc1+lFRwI13d+l3rYFS799rFGxJMqARv2pBXh+72XQ7gWvklPS7TmMl9Ak/M+DqrENvxAv/guKKApuKPWl0/TROK4+LbSqzhuB+OZ3fRSeFPWY+Fkyn56Y29hfgTSpnQ+s98cvorVey66uPlNFxKwZOYLCGfCs5n9NMYVrsp6mvXSoFqpqYFDvMBkStgJJe93dZOwVXxbqUnBENulydSReqUrDhcX0PT2EXarBYS3GNXMhboinBgIl9K71kg0L3+PvyYGdVpruT2MwrF0iotiXfIwus0Dj+OOjo6Of+e7ab74RkpgAAAAAElFTkSuQmCC';
+
+final preForbiddenCursor = PredefinedCursor(
+  png: _forbiddenCursorPng,
+  id: -2,
+);
+final preDefaultCursor = PredefinedCursor(
+  png: _defaultCursorPng,
+  id: -1,
+  hotxGetter: (double w) => w / 2,
+  hotyGetter: (double h) => h / 2,
+);
+
+class PredefinedCursor {
+  ui.Image? _image;
+  img2.Image? _image2;
+  CursorData? _cache;
+  String png;
+  int id;
+  double Function(double)? hotxGetter;
+  double Function(double)? hotyGetter;
+
+  PredefinedCursor(
+      {required this.png, required this.id, this.hotxGetter, this.hotyGetter}) {
+    init();
+  }
+
+  ui.Image? get image => _image;
+  CursorData? get cache => _cache;
+
+  init() {
+    _image2 = img2.decodePng(base64Decode(png));
+    if (_image2 != null) {
+      () async {
+        final defaultImg = _image2!;
+        // This function is called only one time, no need to care about the performance.
+        Uint8List data = defaultImg.getBytes(format: img2.Format.rgba);
+        _image = await img.decodeImageFromPixels(
+            data, defaultImg.width, defaultImg.height, ui.PixelFormat.rgba8888);
+
+        double scale = 1.0;
+        if (Platform.isWindows) {
+          data = _image2!.getBytes(format: img2.Format.bgra);
+        } else {
+          data = Uint8List.fromList(img2.encodePng(_image2!));
+        }
+
+        _cache = CursorData(
+          peerId: '',
+          id: id,
+          image: _image2?.clone(),
+          scale: scale,
+          data: data,
+          hotxOrigin:
+              hotxGetter != null ? hotxGetter!(_image2!.width.toDouble()) : 0,
+          hotyOrigin:
+              hotyGetter != null ? hotyGetter!(_image2!.height.toDouble()) : 0,
+          width: _image2!.width,
+          height: _image2!.height,
+        );
+      }();
+    }
   }
 }
 
@@ -730,8 +835,6 @@ class CursorModel with ChangeNotifier {
   ui.Image? _image;
   final _images = <int, Tuple3<ui.Image, double, double>>{};
   CursorData? _cache;
-  final _defaultCacheId = -1;
-  CursorData? _defaultCache;
   final _cacheMap = <int, CursorData>{};
   final _cacheKeys = <String>{};
   double _x = -10000;
@@ -740,15 +843,14 @@ class CursorModel with ChangeNotifier {
   double _hoty = 0;
   double _displayOriginX = 0;
   double _displayOriginY = 0;
-  bool got_mouse_control = true;
-  DateTime _last_peer_mouse = DateTime.now()
+  bool gotMouseControl = true;
+  DateTime _lastPeerMouse = DateTime.now()
       .subtract(Duration(milliseconds: 2 * kMouseControlTimeoutMSec));
   String id = '';
   WeakReference<FFI> parent;
 
   ui.Image? get image => _image;
   CursorData? get cache => _cache;
-  CursorData? get defaultCache => _getDefaultCache();
 
   double get x => _x - _displayOriginX;
   double get y => _y - _displayOriginY;
@@ -758,37 +860,14 @@ class CursorModel with ChangeNotifier {
   double get hotx => _hotx;
   double get hoty => _hoty;
 
-  bool get is_peer_control_protected =>
-      DateTime.now().difference(_last_peer_mouse).inMilliseconds <
+  bool get isPeerControlProtected =>
+      DateTime.now().difference(_lastPeerMouse).inMilliseconds <
       kMouseControlTimeoutMSec;
 
   CursorModel(this.parent);
 
   Set<String> get cachedKeys => _cacheKeys;
   addKey(String key) => _cacheKeys.add(key);
-
-  CursorData? _getDefaultCache() {
-    if (_defaultCache == null) {
-      if (Platform.isWindows) {
-        Uint8List data = defaultCursorImage!.getBytes(format: img2.Format.bgra);
-        _hotx = defaultCursorImage!.width / 2;
-        _hoty = defaultCursorImage!.height / 2;
-
-        _defaultCache = CursorData(
-          peerId: id,
-          id: _defaultCacheId,
-          image: defaultCursorImage?.clone(),
-          scale: 1.0,
-          data: data,
-          hotx: _hotx,
-          hoty: _hoty,
-          width: defaultCursorImage!.width,
-          height: defaultCursorImage!.height,
-        );
-      }
-    }
-    return _defaultCache;
-  }
 
   // remote physical display coordinate
   Rect getVisibleRect() {
@@ -917,59 +996,51 @@ class CursorModel with ChangeNotifier {
     var height = int.parse(evt['height']);
     List<dynamic> colors = json.decode(evt['colors']);
     final rgba = Uint8List.fromList(colors.map((s) => s as int).toList());
-    var pid = parent.target?.id;
     final image = await img.decodeImageFromPixels(
         rgba, width, height, ui.PixelFormat.rgba8888);
-    if (parent.target?.id != pid) return;
     _image = image;
-    _images[id] = Tuple3(image, _hotx, _hoty);
-    await _updateCache(image, id, width, height);
+    if (await _updateCache(rgba, image, id, width, height)) {
+      _images[id] = Tuple3(image, _hotx, _hoty);
+    } else {
+      _hotx = 0;
+      _hoty = 0;
+    }
     try {
       // my throw exception, because the listener maybe already dispose
       notifyListeners();
     } catch (e) {
-      debugPrint('notify cursor: $e');
+      debugPrint('WARNING: updateCursorId $id, without notifyListeners(). $e');
     }
   }
 
-  _updateCache(ui.Image image, int id, int w, int h) async {
+  Future<bool> _updateCache(
+      Uint8List rgba, ui.Image image, int id, int w, int h) async {
     Uint8List? data;
-    img2.Image? image2;
+    img2.Image? imgOrigin;
     if (Platform.isWindows) {
-      ByteData? data2 =
-          await image.toByteData(format: ui.ImageByteFormat.rawRgba);
-      if (data2 != null) {
-        data = data2.buffer.asUint8List();
-        image2 = img2.Image.fromBytes(w, h, data);
-      } else {
-        data = defaultCursorImage?.getBytes(format: img2.Format.bgra);
-        image2 = defaultCursorImage?.clone();
-        _hotx = defaultCursorImage!.width / 2;
-        _hoty = defaultCursorImage!.height / 2;
-      }
+      imgOrigin = img2.Image.fromBytes(w, h, rgba, format: img2.Format.rgba);
+      data = imgOrigin.getBytes(format: img2.Format.bgra);
     } else {
-      ByteData? data2 = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (data2 != null) {
-        data = data2.buffer.asUint8List();
-      } else {
-        data = Uint8List.fromList(img2.encodePng(defaultCursorImage!));
-        _hotx = defaultCursorImage!.width / 2;
-        _hoty = defaultCursorImage!.height / 2;
+      ByteData? imgBytes =
+          await image.toByteData(format: ui.ImageByteFormat.png);
+      if (imgBytes == null) {
+        return false;
       }
+      data = imgBytes.buffer.asUint8List();
     }
-
     _cache = CursorData(
       peerId: this.id,
       id: id,
-      image: image2,
+      image: imgOrigin,
       scale: 1.0,
       data: data,
-      hotx: _hotx,
-      hoty: _hoty,
+      hotxOrigin: _hotx,
+      hotyOrigin: _hoty,
       width: w,
       height: h,
     );
     _cacheMap[id] = _cache!;
+    return true;
   }
 
   updateCursorId(Map<String, dynamic> evt) async {
@@ -981,13 +1052,16 @@ class CursorModel with ChangeNotifier {
       _hotx = tmp.item2;
       _hoty = tmp.item3;
       notifyListeners();
+    } else {
+      debugPrint(
+          'WARNING: updateCursorId $id, cache is ${_cache == null ? "null" : "not null"}. without notifyListeners()');
     }
   }
 
   /// Update the cursor position.
   updateCursorPosition(Map<String, dynamic> evt, String id) async {
-    got_mouse_control = false;
-    _last_peer_mouse = DateTime.now();
+    gotMouseControl = false;
+    _lastPeerMouse = DateTime.now();
     _x = double.parse(evt['x']);
     _y = double.parse(evt['y']);
     try {
@@ -1035,15 +1109,6 @@ class CursorModel with ChangeNotifier {
       customCursorController.freeCache(k);
     }
   }
-
-  Uint8List? cachedForbidmemoryCursorData;
-  void updateForbiddenCursorBuffer() {
-    cachedForbidmemoryCursorData ??= base64Decode(
-        'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAAXNSR0IB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAkZQTFRFAAAA2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4G2B4GWAwCAAAAAAAA2B4GAAAAMTExAAAAAAAA2B4G2B4G2B4GAAAAmZmZkZGRAQEBAAAA2B4G2B4G2B4G////oKCgAwMDag8D2B4G2B4G2B4Gra2tBgYGbg8D2B4G2B4Gubm5CQkJTwsCVgwC2B4GxcXFDg4OAAAAAAAA2B4G2B4Gz8/PFBQUAAAAAAAA2B4G2B4G2B4G2B4G2B4G2B4G2B4GDgIA2NjYGxsbAAAAAAAA2B4GFwMB4eHhIyMjAAAAAAAA2B4G6OjoLCwsAAAAAAAA2B4G2B4G2B4G2B4G2B4GCQEA4ODgv7+/iYmJY2NjAgICAAAA9PT0Ojo6AAAAAAAAAAAA+/v7SkpKhYWFr6+vAAAAAAAA8/PzOTk5ERER9fX1KCgoAAAAgYGBKioqAAAAAAAApqamlpaWAAAAAAAAAAAAAAAAAAAAAAAALi4u/v7+GRkZAAAAAAAAAAAAAAAAAAAAfn5+AAAAAAAAV1dXkJCQAAAAAAAAAQEBAAAAAAAAAAAA7Hz6BAAAAMJ0Uk5TAAIWEwEynNz6//fVkCAatP2fDUHs6cDD8d0mPfT5fiEskiIR584A0gejr3AZ+P4plfALf5ZiTL85a4ziD6697fzN3UYE4v/4TwrNHuT///tdRKZh///+1U/ZBv///yjb///eAVL//50Cocv//6oFBbPvpGZCbfT//7cIhv///8INM///zBEcWYSZmO7//////1P////ts/////8vBv//////gv//R/z///QQz9sevP///2waXhNO/+fc//8mev/5gAe2r90MAAAByUlEQVR4nGNggANGJmYWBpyAlY2dg5OTi5uHF6s0H78AJxRwCAphyguLgKRExcQlQLSkFLq8tAwnp6ycPNABjAqKQKNElVDllVU4OVVhVquJA81Q10BRoAkUUYbJa4Edoo0sr6PLqaePLG/AyWlohKTAmJPTBFnelAFoixmSAnNOTgsUeQZLTk4rJAXWnJw2EHlbiDyDPCenHZICe04HFrh+RydnBgYWPU5uJAWinJwucPNd3dw9GDw5Ob2QFHBzcnrD7ffx9fMPCOTkDEINhmC4+3x8Q0LDwlEDIoKTMzIKKg9SEBIdE8sZh6SAJZ6Tkx0qD1YQkpCYlIwclCng0AXLQxSEpKalZyCryATKZwkhKQjJzsnNQ1KQXwBUUVhUXBJYWgZREFJeUVmFpMKlWg+anmqgCkJq6+obkG1pLEBTENLU3NKKrIKhrb2js8u4G6Kgpze0r3/CRAZMAHbkpJDJU6ZMmTqtFbuC6TNmhsyaMnsOFlmwgrnzpsxfELJwEXZ5Bp/FS3yWLlsesmLlKuwKVk9Ys5Zh3foN0zduwq5g85atDAzbpqSGbN9RhV0FGOzctWH3lD14FOzdt3H/gQw8Cg4u2gQPAwBYDXXdIH+wqAAAAABJRU5ErkJggg==');
-  }
-
-  img2.Image? defaultCursorImage = img2.decodePng(base64Decode(
-      'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARzQklUCAgICHwIZIgAAAFmSURBVFiF7dWxSlxREMbx34QFDRowYBchZSxSCWlMCOwD5FGEFHap06UI7KPsAyyEEIQFqxRaCqYTsqCJFsKkuAeRXb17wrqV918dztw55zszc2fo6Oh47MR/e3zO1/iAHWmznHKGQwx9ip/LEbCfazbsoY8j/JLOhcC6sCW9wsjEwJf483AC9nPNc1+lFRwI13d+l3rYFS799rFGxJMqARv2pBXh+72XQ7gWvklPS7TmMl9Ak/M+DqrENvxAv/guKKApuKPWl0/TROK4+LbSqzhuB+OZ3fRSeFPWY+Fkyn56Y29hfgTSpnQ+s98cvorVey66uPlNFxKwZOYLCGfCs5n9NMYVrsp6mvXSoFqpqYFDvMBkStgJJe93dZOwVXxbqUnBENulydSReqUrDhcX0PT2EXarBYS3GNXMhboinBgIl9K71kg0L3+PvyYGdVpruT2MwrF0iotiXfIwus0Dj+OOjo6Of+e7ab74RkpgAAAAAElFTkSuQmCC'));
 }
 
 class QualityMonitorData {
@@ -1219,7 +1284,7 @@ class FFI {
   Future<void> close() async {
     chatModel.close();
     if (imageModel.image != null && !isWebDesktop) {
-      await savePreference(id, cursorModel.x, cursorModel.y, canvasModel.x,
+      await setCanvasConfig(id, cursorModel.x, cursorModel.y, canvasModel.x,
           canvasModel.y, canvasModel.scale, ffiModel.pi.currentDisplay);
     }
     bind.sessionClose(id: id);
@@ -1267,9 +1332,10 @@ class PeerInfo {
   List<Display> displays = [];
 }
 
-Future<void> savePreference(String id, double xCursor, double yCursor,
+const canvasKey = 'canvas';
+
+Future<void> setCanvasConfig(String id, double xCursor, double yCursor,
     double xCanvas, double yCanvas, double scale, int currentDisplay) async {
-  SharedPreferences prefs = await SharedPreferences.getInstance();
   final p = <String, dynamic>{};
   p['xCursor'] = xCursor;
   p['yCursor'] = yCursor;
@@ -1277,25 +1343,27 @@ Future<void> savePreference(String id, double xCursor, double yCursor,
   p['yCanvas'] = yCanvas;
   p['scale'] = scale;
   p['currentDisplay'] = currentDisplay;
-  prefs.setString('peer$id', json.encode(p));
+  await bind.sessionSetFlutterConfig(id: id, k: canvasKey, v: jsonEncode(p));
 }
 
-Future<Map<String, dynamic>?> getPreference(String id) async {
+Future<Map<String, dynamic>?> getCanvasConfig(String id) async {
   if (!isWebDesktop) return null;
-  SharedPreferences prefs = await SharedPreferences.getInstance();
-  var p = prefs.getString('peer$id');
-  if (p == null) return null;
-  Map<String, dynamic> m = json.decode(p);
-  return m;
+  var p = await bind.sessionGetFlutterConfig(id: id, k: canvasKey);
+  if (p == null || p.isEmpty) return null;
+  try {
+    Map<String, dynamic> m = json.decode(p);
+    return m;
+  } catch (e) {
+    return null;
+  }
 }
 
 void removePreference(String id) async {
-  SharedPreferences prefs = await SharedPreferences.getInstance();
-  prefs.remove('peer$id');
+  await bind.sessionSetFlutterConfig(id: id, k: canvasKey, v: '');
 }
 
 Future<void> initializeCursorAndCanvas(FFI ffi) async {
-  var p = await getPreference(ffi.id);
+  var p = await getCanvasConfig(ffi.id);
   int currentDisplay = 0;
   if (p != null) {
     currentDisplay = p['currentDisplay'];

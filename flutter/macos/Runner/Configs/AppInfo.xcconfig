@@ -11,4 +11,4 @@ PRODUCT_NAME = rustdesk
 PRODUCT_BUNDLE_IDENTIFIER = com.carriez.flutterHbb
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2022 com.carriez. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2022 Purslane Ltd. All rights reserved.

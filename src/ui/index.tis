@@ -395,7 +395,8 @@ class MyIdMenu: Reactor.Component {
                 if (value) {
                     var values = value.split(/[\s,;\n]+/g);
                     for (var ip in values) {
-                        if (!ip.match(/^\d+\.\d+\.\d+\.\d+$/)) {
+                        if (!ip.match(/^(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]?|0)\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]?|0)\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]?|0)\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]?|0)(\/([1-9]|[1-2][0-9]|3[0-2])){0,1}$/)
+                            && !ip.match(/^(((?:[0-9A-Fa-f]{1,4}))*((?::[0-9A-Fa-f]{1,4}))*::((?:[0-9A-Fa-f]{1,4}))*((?::[0-9A-Fa-f]{1,4}))*|((?:[0-9A-Fa-f]{1,4}))((?::[0-9A-Fa-f]{1,4})){7})(\/([1-9]|[1-9][0-9]|1[0-1][0-9]|12[0-8])){0,1}$/)) {
                             return translate("Invalid IP") + ": " + ip;
                         }
                     }
@@ -824,7 +825,8 @@ function watch_screen_recording() {
 class PasswordEyeArea : Reactor.Component {
     render() {
         var method = handler.get_option('verification-method');
-        var value = method != 'use-permanent-password' ? password_cache[0] : "-";
+        var mode= handler.get_option('approve-mode');
+        var value = mode == 'click' ||  method == 'use-permanent-password' ? "-" : password_cache[0];
         return
             <div .eye-area style="width: *">
                 <input|text @{this.input} readonly value={value} />
@@ -849,7 +851,7 @@ class TemporaryPasswordLengthMenu: Reactor.Component {
         var me = this;
         var method = handler.get_option('verification-method');
         self.timer(1ms, function() { me.toggleMenuState() });
-        return <li disabled={ method == 'use-permanent-password' ? "true" : "false" }>{translate("Set temporary password length")}
+        return <li disabled={ method == 'use-permanent-password' ? "true" : "false" }>{translate("One-time password length")}
             <menu #temporary-password-length>
                 <li #temporary-password-length-6><span>{svg_checkmark}</span>6</li>
                 <li #temporary-password-length-8><span>{svg_checkmark}</span>8</li>
@@ -890,7 +892,7 @@ class PasswordArea: Reactor.Component {
         self.timer(1ms, function() { me.toggleMenuState() });
         return 
         <div .your-desktop>
-            <div>{translate('Password')}</div>
+            <div>{translate('One-time Password')}</div>
             <div .password style="flow:horizontal">
                 {this.renderPop()}
                 <PasswordEyeArea />
@@ -901,27 +903,46 @@ class PasswordArea: Reactor.Component {
 
     function renderPop() {
         var method = handler.get_option('verification-method');
+        var approve_mode= handler.get_option('approve-mode');
+        var show_password = approve_mode != 'click';
         return <popup><menu.context #edit-password-context>
-            <li #use-temporary-password><span>{svg_checkmark}</span>{translate('Use temporary password')}</li>
-            <li #use-permanent-password><span>{svg_checkmark}</span>{translate('Use permanent password')}</li>
-            <li #use-both-passwords><span>{svg_checkmark}</span>{translate('Use both passwords')}</li>
-            <div .separator />
-            <li #set-password  disabled={ method == 'use-temporary-password' ? "true" : "false" }>{translate('Set permanent password')}</li>
-            <TemporaryPasswordLengthMenu />
+            <li #approve-mode-password><span>{svg_checkmark}</span>{translate('Accept sessions via password')}</li>
+            <li #approve-mode-click><span>{svg_checkmark}</span>{translate('Accept sessions via click')}</li>
+            <li #approve-mode-both><span>{svg_checkmark}</span>{translate('Accept sessions via both')}</li>
+            { !show_password ? '' : <div .separator /> }
+            { !show_password ? '' : <li #use-temporary-password><span>{svg_checkmark}</span>{translate('Use one-time password')}</li> }
+            { !show_password ? '' : <li #use-permanent-password><span>{svg_checkmark}</span>{translate('Use permanent password')}</li> }
+            { !show_password ? '' : <li #use-both-passwords><span>{svg_checkmark}</span>{translate('Use both passwords')}</li> }
+            { !show_password ? '' : <div .separator /> }
+            { !show_password ? '' : <li #set-password  disabled={ method == 'use-temporary-password' ? "true" : "false" }>{translate('Set permanent password')}</li> }
+            { !show_password ? '' : <TemporaryPasswordLengthMenu /> }
         </menu></popup>;
     }
 
     function toggleMenuState() {
-        var id = handler.get_option('verification-method');
-        if (id != 'use-temporary-password' && id != 'use-permanent-password')
-            id = 'use-both-passwords';
-        for (var el in [this.$(li#use-temporary-password), this.$(li#use-permanent-password), this.$(li#use-both-passwords)]) {
-            el.attributes.toggleClass("selected", el.id == id);
+         var mode= handler.get_option('approve-mode');
+        var mode_id;
+        if (mode == 'password')
+            mode_id = 'approve-mode-password';
+        else if (mode == 'click')
+            mode_id = 'approve-mode-click';
+        else
+            mode_id = 'approve-mode-both';
+        var pwd_id = handler.get_option('verification-method');
+        if (pwd_id != 'use-temporary-password' && pwd_id != 'use-permanent-password')
+            pwd_id = 'use-both-passwords';
+        for (var el in this.$$(menu#edit-password-context>li)) {
+            if (el.id.indexOf("approve-mode-") == 0)
+                el.attributes.toggleClass("selected", el.id == mode_id);
+            if (el.id.indexOf("use-") == 0)
+                el.attributes.toggleClass("selected", el.id == pwd_id);
         }
     }
 
     event click $(svg#edit) (_, me) {
-        temporaryPasswordLengthMenu.update({show: true });
+        var approve_mode= handler.get_option('approve-mode');
+        var show_password = approve_mode != 'click';
+        if(show_password && temporaryPasswordLengthMenu) temporaryPasswordLengthMenu.update({show: true });
         var menu = $(menu#edit-password-context);        
         me.popup(menu);
     }
@@ -938,7 +959,7 @@ class PasswordArea: Reactor.Component {
             if (!res) return;
             var p0 = (res.password || "").trim();
             var p1 = (res.confirmation || "").trim();
-            if (p0.length < 6) {
+            if (p0.length < 6 && p0.length != 0) {
                 return translate("Too short, at least 6 characters.");
             }
             if (p0 != p1) {
@@ -954,16 +975,28 @@ class PasswordArea: Reactor.Component {
             handler.set_option('verification-method', me.id);
             this.toggleMenuState();
             passwordArea.update();
+        } else if (me.id.indexOf('approve-mode') == 0) {
+            var approve_mode;
+            if (me.id == 'approve-mode-password')
+                approve_mode = 'password';
+            else if (me.id == 'approve-mode-click')
+                approve_mode = 'click';
+            else
+                approve_mode = '';
+            handler.set_option('approve-mode', approve_mode);
+            this.toggleMenuState();
+            passwordArea.update();
         }
     }
 }
 
-var password_cache = ["","",""];
+var password_cache = ["","","",""];
 function updatePasswordArea() {
     self.timer(1s, function() {
         var temporary_password = handler.temporary_password();
         var verification_method = handler.get_option('verification-method');
         var temporary_password_length = handler.get_option('temporary-password-length');
+        var approve_mode = handler.get_option('approve-mode');
         var update = false;
         if (password_cache[0] != temporary_password) {
             password_cache[0] = temporary_password;
@@ -975,6 +1008,10 @@ function updatePasswordArea() {
         }
         if (password_cache[2] != temporary_password_length) {
             password_cache[2] = temporary_password_length;
+            update = true;
+        }
+        if (password_cache[3] != approve_mode) {
+            password_cache[3] = approve_mode;
             update = true;
         }
         if (update) passwordArea.update();

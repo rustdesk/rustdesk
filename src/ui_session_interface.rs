@@ -1,11 +1,11 @@
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::client::get_key_state;
 use crate::client::io_loop::Remote;
 use crate::client::{
     check_if_retry, handle_hash, handle_login_from_ui, handle_test_delay, input_os_password,
     load_config, send_mouse, start_video_audio_threads, FileManager, Key, LoginConfigHandler,
-    QualityStatus, KEY_MAP, SERVER_KEYBOARD_ENABLED,
+    QualityStatus, KEY_MAP,
 };
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::client::{get_key_state, SERVER_KEYBOARD_ENABLED};
 #[cfg(target_os = "linux")]
 use crate::common::IS_X11;
 use crate::{client::Data, client::Interface};
@@ -15,9 +15,9 @@ use hbb_common::rendezvous_proto::ConnType;
 use hbb_common::tokio::{self, sync::mpsc};
 use hbb_common::{allow_err, message_proto::*};
 use hbb_common::{fs, get_version_number, log, Stream};
+use rdev::{Event, EventType, EventType::*, Key as RdevKey};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use rdev::Keyboard as RdevKeyboard;
-use rdev::{Event, EventType, EventType::*, Key as RdevKey, KeyboardState};
+use rdev::{Keyboard as RdevKeyboard, KeyboardState};
 use std::collections::{HashMap, HashSet};
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -30,6 +30,7 @@ pub static HOTKEY_HOOKED: AtomicBool = AtomicBool::new(false);
 #[cfg(windows)]
 static mut IS_ALT_GR: bool = false;
 #[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::flutter::FlutterHandler;
 
 lazy_static::lazy_static! {
@@ -78,6 +79,10 @@ impl<T: InvokeUiSession> Session<T> {
         self.lc.read().unwrap().view_style.clone()
     }
 
+    pub fn get_scroll_style(&self) -> String {
+        self.lc.read().unwrap().scroll_style.clone()
+    }
+
     pub fn get_image_quality(&self) -> String {
         self.lc.read().unwrap().image_quality.clone()
     }
@@ -96,6 +101,18 @@ impl<T: InvokeUiSession> Session<T> {
 
     pub fn save_view_style(&mut self, value: String) {
         self.lc.write().unwrap().save_view_style(value);
+    }
+
+    pub fn save_scroll_style(&mut self, value: String) {
+        self.lc.write().unwrap().save_scroll_style(value);
+    }
+
+    pub fn save_flutter_config(&mut self, k: String, v: String) {
+        self.lc.write().unwrap().save_ui_flutter(k, v);
+    }
+
+    pub fn get_flutter_config(&self, k: String) -> String {
+        self.lc.write().unwrap().get_ui_flutter(&k)
     }
 
     pub fn toggle_option(&mut self, name: String) {
@@ -183,6 +200,7 @@ impl<T: InvokeUiSession> Session<T> {
             h265 = h265 && encoding_265;
             return (h264, h265);
         }
+        #[allow(dead_code)]
         (false, false)
     }
 
@@ -1111,6 +1129,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool);
     #[cfg(any(target_os = "android", target_os = "ios"))]
     fn clipboard(&self, content: String);
+    fn cancel_msgbox(&self, tag: &str);
 }
 
 impl<T: InvokeUiSession> Deref for Session<T> {
@@ -1562,6 +1581,7 @@ fn get_all_hotkey_state(
 }
 
 #[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn send_key_event_to_session(event: rdev::Event) {
     if let Some(handler) = CUR_SESSION.lock().unwrap().as_ref() {
         handler.handle_hotkey_event(event);
@@ -1590,7 +1610,7 @@ pub fn global_grab_keyboard() {
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     std::thread::spawn(move || {
         let func = move |event: Event| match event.event_type {
-            EventType::KeyPress(key) | EventType::KeyRelease(key) => {
+            EventType::KeyPress(..) | EventType::KeyRelease(..) => {
                 // grab all keys
                 if !IS_IN.load(Ordering::SeqCst) {
                     return Some(event);

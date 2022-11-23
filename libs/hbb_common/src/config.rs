@@ -9,9 +9,9 @@ use std::{
 };
 
 use anyhow::Result;
-use directories_next::ProjectDirs;
 use rand::Rng;
 use regex::Regex;
+use serde as de;
 use serde_derive::{Deserialize, Serialize};
 use sodiumoxide::base64;
 use sodiumoxide::crypto::sign;
@@ -83,6 +83,26 @@ pub const RS_PUB_KEY: &'static str = "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmB
 pub const RENDEZVOUS_PORT: i32 = 21116;
 pub const RELAY_PORT: i32 = 21117;
 
+macro_rules! serde_field_string {
+    ($default_func:ident, $de_func:ident, $default_expr:expr) => {
+        fn $default_func() -> String {
+            $default_expr
+        }
+
+        fn $de_func<'de, D>(deserializer: D) -> Result<String, D::Error>
+        where
+            D: de::Deserializer<'de>,
+        {
+            let s: &str = de::Deserialize::deserialize(deserializer)?;
+            Ok(if s.is_empty() {
+                Self::$default_func()
+            } else {
+                s.to_owned()
+            })
+        }
+    };
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum NetworkType {
     Direct,
@@ -145,9 +165,20 @@ pub struct PeerConfig {
     pub size_ft: Size,
     #[serde(default)]
     pub size_pf: Size,
-    #[serde(default)]
-    pub view_style: String, // original (default), scale
-    #[serde(default)]
+    #[serde(
+        default = "PeerConfig::default_view_style",
+        deserialize_with = "PeerConfig::deserialize_view_style"
+    )]
+    pub view_style: String,
+    #[serde(
+        default = "PeerConfig::default_scroll_style",
+        deserialize_with = "PeerConfig::deserialize_scroll_style"
+    )]
+    pub scroll_style: String,
+    #[serde(
+        default = "PeerConfig::default_image_quality",
+        deserialize_with = "PeerConfig::deserialize_image_quality"
+    )]
     pub image_quality: String,
     #[serde(default)]
     pub custom_image_quality: Vec<i32>,
@@ -170,9 +201,12 @@ pub struct PeerConfig {
     #[serde(default)]
     pub show_quality_monitor: bool,
 
-    // the other scalar value must before this
-    #[serde(default)]
+    // The other scalar value must before this
+    #[serde(default, deserialize_with = "PeerConfig::deserialize_options")]
     pub options: HashMap<String, String>,
+    // Various data for flutter ui
+    #[serde(default)]
+    pub ui_flutter: HashMap<String, String>,
     #[serde(default)]
     pub info: PeerInfoSerde,
     #[serde(default)]
@@ -375,12 +409,15 @@ impl Config {
     pub fn get_home() -> PathBuf {
         #[cfg(any(target_os = "android", target_os = "ios"))]
         return Self::path(APP_HOME_DIR.read().unwrap().as_str());
-        if let Some(path) = dirs_next::home_dir() {
-            patch(path)
-        } else if let Ok(path) = std::env::current_dir() {
-            path
-        } else {
-            std::env::temp_dir()
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        {
+            if let Some(path) = dirs_next::home_dir() {
+                patch(path)
+            } else if let Ok(path) = std::env::current_dir() {
+                path
+            } else {
+                std::env::temp_dir()
+            }
         }
     }
 
@@ -391,17 +428,22 @@ impl Config {
             path.push(p);
             return path;
         }
-        #[cfg(not(target_os = "macos"))]
-        let org = "";
-        #[cfg(target_os = "macos")]
-        let org = ORG.read().unwrap().clone();
-        // /var/root for root
-        if let Some(project) = ProjectDirs::from("", &org, &*APP_NAME.read().unwrap()) {
-            let mut path = patch(project.config_dir().to_path_buf());
-            path.push(p);
-            return path;
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        {
+            #[cfg(not(target_os = "macos"))]
+            let org = "";
+            #[cfg(target_os = "macos")]
+            let org = ORG.read().unwrap().clone();
+            // /var/root for root
+            if let Some(project) =
+                directories_next::ProjectDirs::from("", &org, &*APP_NAME.read().unwrap())
+            {
+                let mut path = patch(project.config_dir().to_path_buf());
+                path.push(p);
+                return path;
+            }
+            return "".into();
         }
-        return "".into();
     }
 
     #[allow(unreachable_code)]
@@ -580,16 +622,19 @@ impl Config {
                     .to_string(),
             );
         }
-        let mut id = 0u32;
+
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        if let Ok(Some(ma)) = mac_address::get_mac_address() {
-            for x in &ma.bytes()[2..] {
-                id = (id << 8) | (*x as u32);
+        {
+            let mut id = 0u32;
+            if let Ok(Some(ma)) = mac_address::get_mac_address() {
+                for x in &ma.bytes()[2..] {
+                    id = (id << 8) | (*x as u32);
+                }
+                id = id & 0x1FFFFFFF;
+                Some(id.to_string())
+            } else {
+                None
             }
-            id = id & 0x1FFFFFFF;
-            Some(id.to_string())
-        } else {
-            None
         }
     }
 
@@ -909,6 +954,33 @@ impl PeerConfig {
         }
         Default::default()
     }
+
+    serde_field_string!(
+        default_view_style,
+        deserialize_view_style,
+        "original".to_owned()
+    );
+    serde_field_string!(
+        default_scroll_style,
+        deserialize_scroll_style,
+        "scrollauto".to_owned()
+    );
+    serde_field_string!(
+        default_image_quality,
+        deserialize_image_quality,
+        "balanced".to_owned()
+    );
+
+    fn deserialize_options<'de, D>(deserializer: D) -> Result<HashMap<String, String>, D::Error>
+    where
+        D: de::Deserializer<'de>,
+    {
+        let mut mp: HashMap<String, String> = de::Deserialize::deserialize(deserializer)?;
+        if !mp.contains_key("codec-preference") {
+            mp.insert("codec-preference".to_owned(), "auto".to_owned());
+        }
+        Ok(mp)
+    }
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
@@ -921,6 +993,9 @@ pub struct LocalConfig {
     pub fav: Vec<String>,
     #[serde(default)]
     options: HashMap<String, String>,
+    // Various data for flutter ui
+    #[serde(default)]
+    ui_flutter: HashMap<String, String>,
 }
 
 impl LocalConfig {
@@ -988,6 +1063,27 @@ impl LocalConfig {
                 config.options.remove(&k);
             } else {
                 config.options.insert(k, v);
+            }
+            config.store();
+        }
+    }
+
+    pub fn get_flutter_config(k: &str) -> String {
+        if let Some(v) = LOCAL_CONFIG.read().unwrap().ui_flutter.get(k) {
+            v.clone()
+        } else {
+            "".to_owned()
+        }
+    }
+
+    pub fn set_flutter_config(k: String, v: String) {
+        let mut config = LOCAL_CONFIG.write().unwrap();
+        let v2 = if v.is_empty() { None } else { Some(&v) };
+        if v2 != config.ui_flutter.get(&k) {
+            if v2.is_none() {
+                config.ui_flutter.remove(&k);
+            } else {
+                config.ui_flutter.insert(k, v);
             }
             config.store();
         }

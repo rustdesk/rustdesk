@@ -63,7 +63,7 @@ pub fn get_cursor() -> ResultType<Option<u64>> {
     unsafe {
         let mut ci: CURSORINFO = mem::MaybeUninit::uninit().assume_init();
         ci.cbSize = std::mem::size_of::<CURSORINFO>() as _;
-        if GetCursorInfo(&mut ci) == FALSE {
+        if crate::portable_service::client::get_cursor_info(&mut ci) == FALSE {
             return Err(io::Error::last_os_error().into());
         }
         if ci.flags & CURSOR_SHOWING == 0 {
@@ -1480,6 +1480,27 @@ pub fn get_user_token(session_id: u32, as_user: bool) -> HANDLE {
     }
 }
 
+pub fn run_background(exe: &str, arg: &str) -> ResultType<bool> {
+    let wexe = wide_string(exe);
+    let warg;
+    unsafe {
+        let ret = ShellExecuteW(
+            NULL as _,
+            NULL as _,
+            wexe.as_ptr() as _,
+            if arg.is_empty() {
+                NULL as _
+            } else {
+                warg = wide_string(arg);
+                warg.as_ptr() as _
+            },
+            NULL as _,
+            SW_HIDE,
+        );
+        return Ok(ret as i32 > 32);
+    }
+}
+
 pub fn run_uac(exe: &str, arg: &str) -> ResultType<bool> {
     let wop = wide_string("runas");
     let wexe = wide_string(exe);
@@ -1532,6 +1553,13 @@ pub fn run_as_system(arg: &str) -> ResultType<()> {
 
 pub fn elevate_or_run_as_system(is_setup: bool, is_elevate: bool, is_run_as_system: bool) {
     // avoid possible run recursively due to failed run.
+    log::info!(
+        "elevate:{}->{:?}, run_as_system:{}->{}",
+        is_elevate,
+        is_elevated(None),
+        is_run_as_system,
+        crate::username(),
+    );
     let arg_elevate = if is_setup {
         "--noinstall --elevate"
     } else {
@@ -1542,9 +1570,11 @@ pub fn elevate_or_run_as_system(is_setup: bool, is_elevate: bool, is_run_as_syst
     } else {
         "--run-as-system"
     };
-
     if is_root() {
-        log::debug!("portable run as system user");
+        if is_run_as_system {
+            log::info!("run portable service");
+            crate::portable_service::server::run_portable_service();
+        }
     } else {
         match is_elevated(None) {
             Ok(elevated) => {
@@ -1645,4 +1675,40 @@ fn wide_string(s: &str) -> Vec<u16> {
         .encode_wide()
         .chain(Some(0).into_iter())
         .collect()
+}
+
+/// send message to currently shown window
+pub fn send_message_to_hnwd(
+    class_name: &str,
+    window_name: &str,
+    dw_data: usize,
+    data: &str,
+    show_window: bool,
+) -> bool {
+    unsafe {
+        let class_name_utf16 = wide_string(class_name);
+        let window_name_utf16 = wide_string(window_name);
+        let window = FindWindowW(class_name_utf16.as_ptr(), window_name_utf16.as_ptr());
+        if window.is_null() {
+            log::warn!("no such window {}:{}", class_name, window_name);
+            return false;
+        }
+        let mut data_struct = COPYDATASTRUCT::default();
+        data_struct.dwData = dw_data;
+        let mut data_zero: String = data.chars().chain(Some('\0').into_iter()).collect();
+        println!("send {:?}", data_zero);
+        data_struct.cbData = data_zero.len() as _;
+        data_struct.lpData = data_zero.as_mut_ptr() as _;
+        SendMessageW(
+            window,
+            WM_COPYDATA,
+            0,
+            &data_struct as *const COPYDATASTRUCT as _,
+        );
+        if show_window {
+            ShowWindow(window, SW_NORMAL);
+            SetForegroundWindow(window);
+        }
+    }
+    return true;
 }

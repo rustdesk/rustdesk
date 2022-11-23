@@ -67,6 +67,8 @@ rdev = { git = "https://github.com/asur4s/rdev" }
 url = { version = "2.1", features = ["serde"] }
 
 reqwest = { version = "0.11", features = ["blocking", "json", "rustls-tls"], default-features=false }
+chrono = "0.4.23"
+cidr-utils = "0.5.9"
 
 [target.'cfg(not(any(target_os = "android", target_os = "linux")))'.dependencies]
 cpal = "0.13.5"
@@ -92,6 +94,8 @@ winreg = "0.10"
 windows-service = "0.4"
 virtual_display = { path = "libs/virtual_display" }
 impersonate_system = { git = "https://github.com/21pages/impersonate-system" }
+shared_memory = "0.12.4"
+shutdown_hooks = "0.1.0"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2"
@@ -123,7 +127,7 @@ jni = "0.19"
 flutter_rust_bridge = { git = "https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge" }
 
 [workspace]
-members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/simple_rc", "libs/portable"]
+members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/virtual_display/dylib", "libs/simple_rc", "libs/portable"]
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2022 Purslane, Inc."
@@ -158,3 +162,4 @@ codegen-units = 1
 panic = 'abort'
 strip = true
 #opt-level = 'z' # only have smaller size after strip
+rpath = true

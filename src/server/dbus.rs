@@ -6,7 +6,9 @@
 use dbus::blocking::Connection;
 use dbus_crossroads::{Crossroads, IfaceBuilder};
 use hbb_common::{log};
-use std::{error::Error, fmt, time::Duration, collections::HashMap};
+use std::{error::Error, fmt, time::Duration};
+#[cfg(feature = "flutter")]
+use std::collections::HashMap;
 
 const DBUS_NAME: &str = "org.rustdesk.rustdesk";
 const DBUS_PREFIX: &str = "/dbus";
@@ -65,7 +67,7 @@ fn handle_client_message(builder: &mut IfaceBuilder<()>) {
         DBUS_METHOD_NEW_CONNECTION,
         (DBUS_METHOD_NEW_CONNECTION_ID,),
         (DBUS_METHOD_RETURN,),
-        move |_, _, (peer_id,): (String,)| {
+        move |_, _, (_peer_id,): (String,)| {
             #[cfg(feature = "flutter")]
             {
                 use crate::flutter::{self, APP_TYPE_MAIN};
@@ -77,7 +79,7 @@ fn handle_client_message(builder: &mut IfaceBuilder<()>) {
                 {
                     let data = HashMap::from([
                         ("name", "new_connection"),
-                        ("peer_id", peer_id.as_str())
+                        ("peer_id", _peer_id.as_str())
                     ]);
                     if !stream.add(serde_json::ser::to_string(&data).unwrap_or("".to_string())) {
                         log::error!("failed to add dbus message to flutter global dbus stream.");

@@ -7,6 +7,7 @@ use crate::video_service;
 #[cfg(any(target_os = "android", target_os = "ios"))]
 use crate::{common::DEVICE_NAME, flutter::connection_manager::start_channel};
 use crate::{ipc, VERSION};
+use cidr_utils::cidr::IpCidr;
 use hbb_common::{
     config::Config,
     fs,
@@ -14,7 +15,8 @@ use hbb_common::{
     futures::{SinkExt, StreamExt},
     get_time, get_version_number,
     message_proto::{option_message::BoolOption, permission_info::Permission},
-    password_security as password, sleep, timeout,
+    password_security::{self as password, ApproveMode},
+    sleep, timeout,
     tokio::{
         net::TcpStream,
         sync::mpsc,
@@ -26,10 +28,9 @@ use hbb_common::{
 use scrap::android::call_main_service_mouse_input;
 use serde_json::{json, value::Value};
 use sha2::{Digest, Sha256};
-use std::sync::{
-    atomic::{AtomicI64, Ordering},
-    mpsc as std_mpsc,
-};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use std::sync::atomic::Ordering;
+use std::sync::{atomic::AtomicI64, mpsc as std_mpsc};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use system_shutdown;
 
@@ -234,8 +235,12 @@ impl Connection {
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         std::thread::spawn(move || Self::handle_input(rx_input, tx_cloned));
         let mut second_timer = time::interval(Duration::from_secs(1));
+        #[cfg(windows)]
         let mut last_uac = false;
+        #[cfg(windows)]
         let mut last_foreground_window_elevated = false;
+        #[cfg(windows)]
+        let is_installed = crate::platform::is_installed();
 
         loop {
             tokio::select! {
@@ -339,6 +344,12 @@ impl Connection {
                             };
                             conn.send(msg_out).await;
                         }
+                        #[cfg(windows)]
+                        ipc::Data::DataPortableService(ipc::DataPortableService::RequestStart) => {
+                            if let Err(e) = crate::portable_service::client::start_portable_service() {
+                                log::error!("Failed to start portable service from cm:{:?}", e);
+                            }
+                        }
                         _ => {}
                     }
                 },
@@ -415,23 +426,36 @@ impl Connection {
                     }
                 },
                 _ = second_timer.tick() => {
-                    let uac = crate::video_service::IS_UAC_RUNNING.lock().unwrap().clone();
-                    if last_uac != uac {
-                        last_uac = uac;
-                        let mut misc = Misc::new();
-                        misc.set_uac(uac);
-                        let mut msg = Message::new();
-                        msg.set_misc(misc);
-                        conn.inner.send(msg.into());
-                    }
-                    let foreground_window_elevated = crate::video_service::IS_FOREGROUND_WINDOW_ELEVATED.lock().unwrap().clone();
-                    if last_foreground_window_elevated != foreground_window_elevated {
-                        last_foreground_window_elevated = foreground_window_elevated;
-                        let mut misc = Misc::new();
-                        misc.set_foreground_window_elevated(foreground_window_elevated);
-                        let mut msg = Message::new();
-                        msg.set_misc(misc);
-                        conn.inner.send(msg.into());
+                    #[cfg(windows)]
+                    {
+                        if !is_installed {
+                            let portable_service_running = crate::portable_service::client::PORTABLE_SERVICE_RUNNING.lock().unwrap().clone();
+                            let uac = crate::video_service::IS_UAC_RUNNING.lock().unwrap().clone();
+                            if last_uac != uac {
+                                last_uac = uac;
+                                if !uac || !portable_service_running{
+                                    let mut misc = Misc::new();
+                                    misc.set_uac(uac);
+                                    let mut msg = Message::new();
+                                    msg.set_misc(misc);
+                                    conn.inner.send(msg.into());
+                                }
+                            }
+                            let foreground_window_elevated = crate::video_service::IS_FOREGROUND_WINDOW_ELEVATED.lock().unwrap().clone();
+                            if last_foreground_window_elevated != foreground_window_elevated {
+                                last_foreground_window_elevated = foreground_window_elevated;
+                                if !foreground_window_elevated || !portable_service_running {
+                                    let mut misc = Misc::new();
+                                    misc.set_foreground_window_elevated(foreground_window_elevated);
+                                    let mut msg = Message::new();
+                                    msg.set_misc(misc);
+                                    conn.inner.send(msg.into());
+                                }
+                            }
+                            let show_elevation = !portable_service_running;
+                            conn.send_to_cm(ipc::Data::DataPortableService(ipc::DataPortableService::CmShowElevation(show_elevation)));
+
+                        }
                     }
                 }
                 _ = test_delay_timer.tick() => {
@@ -608,7 +632,7 @@ impl Connection {
                 .is_none()
             && whitelist
                 .iter()
-                .filter(|x| x.parse() == Ok(addr.ip()))
+                .filter(|x| IpCidr::from_str(x).map_or(false, |y| y.contains(addr.ip())))
                 .next()
                 .is_none()
         {
@@ -1024,6 +1048,21 @@ impl Connection {
             }
             if !crate::is_ip(&lr.username) && lr.username != Config::get_id() {
                 self.send_login_error("Offline").await;
+            } else if password::approve_mode() == ApproveMode::Click
+                || password::approve_mode() == ApproveMode::Both && !password::has_valid_password()
+            {
+                self.try_start_cm(lr.my_id, lr.my_name, false);
+                if hbb_common::get_version_number(&lr.version)
+                    >= hbb_common::get_version_number("1.2.0")
+                {
+                    self.send_login_error("No Password Access").await;
+                }
+                return true;
+            } else if password::approve_mode() == ApproveMode::Password
+                && !password::has_valid_password()
+            {
+                self.send_login_error("Connection not allowed").await;
+                return false;
             } else if self.is_of_recent_session() {
                 self.try_start_cm(lr.my_id, lr.my_name, true);
                 self.send_logon_response().await;
@@ -1033,10 +1072,6 @@ impl Connection {
             } else if lr.password.is_empty() {
                 self.try_start_cm(lr.my_id, lr.my_name, false);
             } else {
-                if !password::has_valid_password() {
-                    self.send_login_error("Connection not allowed").await;
-                    return false;
-                }
                 let mut failure = LOGIN_FAILURES
                     .lock()
                     .unwrap()
@@ -1536,17 +1571,18 @@ async fn start_ipc(
     if let Ok(s) = crate::ipc::connect(1000, "_cm").await {
         stream = Some(s);
     } else {
+        let extra_args = if password::hide_cm() { "--hide" } else { "" };
         let run_done;
         if crate::platform::is_root() {
             let mut res = Ok(None);
             for _ in 0..10 {
                 #[cfg(not(target_os = "linux"))]
                 {
-                    res = crate::platform::run_as_user("--cm");
+                    res = crate::platform::run_as_user(&format!("--cm {}", extra_args));
                 }
                 #[cfg(target_os = "linux")]
                 {
-                    res = crate::platform::run_as_user("--cm", None);
+                    res = crate::platform::run_as_user(&format!("--cm {}", extra_args), None);
                 }
                 if res.is_ok() {
                     break;
@@ -1561,10 +1597,14 @@ async fn start_ipc(
             run_done = false;
         }
         if !run_done {
+            let mut args = vec!["--cm"];
+            if !extra_args.is_empty() {
+                args.push(&extra_args);
+            }
             super::CHILD_PROCESS
                 .lock()
                 .unwrap()
-                .push(crate::run_me(vec!["--cm"])?);
+                .push(crate::run_me(args)?);
         }
         for _ in 0..10 {
             sleep(0.3).await;

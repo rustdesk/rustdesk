@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
 import 'package:wakelock/wakelock.dart';
@@ -27,13 +28,17 @@ class ServerModel with ChangeNotifier {
   bool _inputOk = false;
   bool _audioOk = false;
   bool _fileOk = false;
+  bool _showElevation = true;
+  bool _hideCm = false;
   int _connectStatus = 0; // Rendezvous Server status
   String _verificationMethod = "";
   String _temporaryPasswordLength = "";
+  String _approveMode = "";
 
   late String _emptyIdShow;
   late final IDTextEditingController _serverId;
-  final _serverPasswd = TextEditingController(text: "");
+  final _serverPasswd =
+      TextEditingController(text: translate("Generating ..."));
 
   final tabController = DesktopTabController(tabType: DesktopTabType.cm);
 
@@ -51,6 +56,10 @@ class ServerModel with ChangeNotifier {
 
   bool get fileOk => _fileOk;
 
+  bool get showElevation => _showElevation;
+
+  bool get hideCm => _hideCm;
+
   int get connectStatus => _connectStatus;
 
   String get verificationMethod {
@@ -65,8 +74,14 @@ class ServerModel with ChangeNotifier {
     return _verificationMethod;
   }
 
+  String get approveMode => _approveMode;
+
   setVerificationMethod(String method) async {
     await bind.mainSetOption(key: "verification-method", value: method);
+    if (method != kUsePermanentPassword) {
+      await bind.mainSetOption(
+          key: 'allow-hide-cm', value: bool2option('allow-hide-cm', false));
+    }
   }
 
   String get temporaryPasswordLength {
@@ -79,6 +94,14 @@ class ServerModel with ChangeNotifier {
 
   setTemporaryPasswordLength(String length) async {
     await bind.mainSetOption(key: "temporary-password-length", value: length);
+  }
+
+  setApproveMode(String mode) async {
+    await bind.mainSetOption(key: 'approve-mode', value: mode);
+    if (mode != 'password') {
+      await bind.mainSetOption(
+          key: 'allow-hide-cm', value: bool2option('allow-hide-cm', false));
+    }
   }
 
   TextEditingController get serverId => _serverId;
@@ -95,8 +118,7 @@ class ServerModel with ChangeNotifier {
     _emptyIdShow = translate("Generating ...");
     _serverId = IDTextEditingController(text: _emptyIdShow);
 
-    Timer.periodic(Duration(seconds: 1), (timer) async {
-      if (isTest) return timer.cancel();
+    timerCallback() async {
       var status = await bind.mainGetOnlineStatue();
       if (status > 0) {
         status = 1;
@@ -112,7 +134,18 @@ class ServerModel with ChangeNotifier {
       }
 
       updatePasswordModel();
-    });
+    }
+
+    if (!isTest) {
+      Future.delayed(Duration.zero, () async {
+        if (await bind.optionSynced()) {
+          await timerCallback();
+        }
+      });
+      Timer.periodic(Duration(milliseconds: 500), (timer) async {
+        await timerCallback();
+      });
+    }
   }
 
   /// 1. check android permission
@@ -148,11 +181,24 @@ class ServerModel with ChangeNotifier {
         await bind.mainGetOption(key: "verification-method");
     final temporaryPasswordLength =
         await bind.mainGetOption(key: "temporary-password-length");
+    final approveMode = await bind.mainGetOption(key: 'approve-mode');
+    var hideCm = option2bool(
+        'allow-hide-cm', await bind.mainGetOption(key: 'allow-hide-cm'));
+    if (!(approveMode == 'password' &&
+        verificationMethod == kUsePermanentPassword)) {
+      hideCm = false;
+    }
+    if (_approveMode != approveMode) {
+      _approveMode = approveMode;
+      update = true;
+    }
     final oldPwdText = _serverPasswd.text;
-    if (_serverPasswd.text != temporaryPassword) {
+    if (_serverPasswd.text != temporaryPassword &&
+        temporaryPassword.isNotEmpty) {
       _serverPasswd.text = temporaryPassword;
     }
-    if (verificationMethod == kUsePermanentPassword) {
+    if (verificationMethod == kUsePermanentPassword ||
+        _approveMode == 'click') {
       _serverPasswd.text = '-';
     }
     if (oldPwdText != _serverPasswd.text) {
@@ -164,6 +210,17 @@ class ServerModel with ChangeNotifier {
     }
     if (_temporaryPasswordLength != temporaryPasswordLength) {
       _temporaryPasswordLength = temporaryPasswordLength;
+      update = true;
+    }
+    if (_hideCm != hideCm) {
+      _hideCm = hideCm;
+      if (desktopType == DesktopType.cm) {
+        if (hideCm) {
+          hideCmWindow();
+        } else {
+          showCmWindow();
+        }
+      }
       update = true;
     }
     if (update) {
@@ -412,11 +469,11 @@ class ServerModel with ChangeNotifier {
         },
         page: desktop.buildConnectionCard(client)));
     Future.delayed(Duration.zero, () async {
-      window_on_top(null);
+      if (!hideCm) window_on_top(null);
     });
     if (client.authorized) {
       cmHiddenTimer = Timer(const Duration(seconds: 3), () {
-        windowManager.minimize();
+        if (!hideCm) windowManager.minimize();
         cmHiddenTimer = null;
       });
     }
@@ -529,6 +586,13 @@ class ServerModel with ChangeNotifier {
   void jumpTo(int id) {
     final index = _clients.indexWhere((client) => client.id == id);
     tabController.jumpTo(index);
+  }
+
+  void setShowElevation(bool show) {
+    if (_showElevation != show) {
+      _showElevation = show;
+      notifyListeners();
+    }
   }
 }
 

@@ -9,32 +9,37 @@ use std::{
 use hbb_common::password_security;
 use hbb_common::{
     allow_err,
-    config::{self, Config, LocalConfig, PeerConfig, RENDEZVOUS_PORT, RENDEZVOUS_TIMEOUT},
-    directories_next,
-    futures::future::join_all,
-    log,
-    protobuf::Message as _,
-    rendezvous_proto::*,
-    sleep,
-    tcp::FramedStream,
+    config::{self, Config, LocalConfig, PeerConfig},
+    directories_next, log, sleep,
     tokio::{self, sync::mpsc, time},
 };
 
-use crate::{common::SOFTWARE_UPDATE_URL, ipc, platform};
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+use hbb_common::{
+    config::{RENDEZVOUS_PORT, RENDEZVOUS_TIMEOUT},
+    futures::future::join_all,
+    protobuf::Message as _,
+    rendezvous_proto::*,
+    tcp::FramedStream,
+};
+
 #[cfg(feature = "flutter")]
 use crate::hbbs_http::account;
+use crate::{common::SOFTWARE_UPDATE_URL, ipc};
 
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 type Message = RendezvousMessage;
 
-pub type Childs = Arc<Mutex<(bool, HashMap<(String, String), Child>)>>;
+pub type Children = Arc<Mutex<(bool, HashMap<(String, String), Child>)>>;
 type Status = (i32, bool, i64, String); // (status_num, key_confirmed, mouse_time, id)
 
 lazy_static::lazy_static! {
-    pub static ref CHILDS : Childs = Default::default();
-    pub static ref UI_STATUS : Arc<Mutex<Status>> = Arc::new(Mutex::new((0, false, 0, "".to_owned())));
-    pub static ref OPTIONS : Arc<Mutex<HashMap<String, String>>> = Arc::new(Mutex::new(Config::get_options()));
-    pub static ref ASYNC_JOB_STATUS : Arc<Mutex<String>> = Default::default();
-    pub static ref TEMPORARY_PASSWD : Arc<Mutex<String>> = Arc::new(Mutex::new("".to_owned()));
+    static ref CHILDREN : Children = Default::default();
+    static ref UI_STATUS : Arc<Mutex<Status>> = Arc::new(Mutex::new((0, false, 0, "".to_owned())));
+    static ref OPTIONS : Arc<Mutex<HashMap<String, String>>> = Arc::new(Mutex::new(Config::get_options()));
+    static ref ASYNC_JOB_STATUS : Arc<Mutex<String>> = Default::default();
+    static ref TEMPORARY_PASSWD : Arc<Mutex<String>> = Arc::new(Mutex::new("".to_owned()));
+    pub static ref OPTION_SYNCED : Arc<Mutex<bool>> = Default::default();
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -44,15 +49,16 @@ lazy_static::lazy_static! {
 
 #[inline]
 pub fn recent_sessions_updated() -> bool {
-    let mut childs = CHILDS.lock().unwrap();
-    if childs.0 {
-        childs.0 = false;
+    let mut children = CHILDREN.lock().unwrap();
+    if children.0 {
+        children.0 = false;
         true
     } else {
         false
     }
 }
 
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[inline]
 pub fn get_id() -> String {
     #[cfg(any(target_os = "android", target_os = "ios"))]
@@ -143,16 +149,20 @@ pub fn get_license() -> String {
     #[cfg(windows)]
     if let Some(lic) = crate::platform::windows::get_license() {
         #[cfg(feature = "flutter")]
-        {
-            return format!("Key: {}\nHost: {}\nApi: {}", lic.key, lic.host, lic.api);
-        }
+        return format!("Key: {}\nHost: {}\nApi: {}", lic.key, lic.host, lic.api);
         // default license format is html formed (sciter)
+        #[cfg(not(feature = "flutter"))]
         return format!(
             "<br /> Key: {} <br /> Host: {} Api: {}",
             lic.key, lic.host, lic.api
         );
     }
     Default::default()
+}
+
+#[inline]
+pub fn get_option_opt(key: &str) -> Option<String> {
+    OPTIONS.lock().unwrap().get(key).map(|x| x.clone())
 }
 
 #[inline]
@@ -178,6 +188,18 @@ pub fn get_local_option(key: String) -> String {
 #[inline]
 pub fn set_local_option(key: String, value: String) {
     LocalConfig::set_option(key, value);
+}
+
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+#[inline]
+pub fn get_local_flutter_config(key: String) -> String {
+    LocalConfig::get_flutter_config(&key)
+}
+
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+#[inline]
+pub fn set_local_flutter_config(key: String, value: String) {
+    LocalConfig::set_flutter_config(key, value);
 }
 
 #[inline]
@@ -230,6 +252,7 @@ pub fn test_if_valid_server(host: String) -> String {
 }
 
 #[inline]
+#[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn get_sound_inputs() -> Vec<String> {
     let mut a = Vec::new();
@@ -345,12 +368,15 @@ pub fn set_socks(proxy: String, username: String, password: String) {
     .ok();
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[inline]
 pub fn is_installed() -> bool {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        return crate::platform::is_installed();
-    }
+    crate::platform::is_installed()
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[inline]
+pub fn is_installed() -> bool {
     false
 }
 
@@ -495,7 +521,7 @@ pub fn remove_peer(id: String) {
 
 #[inline]
 pub fn new_remote(id: String, remote_type: String) {
-    let mut lock = CHILDS.lock().unwrap();
+    let mut lock = CHILDREN.lock().unwrap();
     let args = vec![format!("--{}", remote_type), id.clone()];
     let key = (id.clone(), remote_type.clone());
     if let Some(c) = lock.1.get_mut(&key) {
@@ -612,6 +638,7 @@ pub fn get_version() -> String {
     crate::VERSION.to_owned()
 }
 
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[inline]
 pub fn get_app_name() -> String {
     crate::get_app_name()
@@ -650,6 +677,7 @@ pub fn create_shortcut(_id: String) {
     crate::platform::windows::create_shortcut(&_id).ok();
 }
 
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[inline]
 pub fn discover() {
     std::thread::spawn(move || {
@@ -694,6 +722,7 @@ pub fn open_url(url: String) {
     allow_err!(std::process::Command::new(p).arg(url).spawn());
 }
 
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[inline]
 pub fn change_id(id: String) {
     *ASYNC_JOB_STATUS.lock().unwrap() = " ".to_owned();
@@ -754,7 +783,7 @@ pub fn default_video_save_directory() -> String {
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    if let Some(home) = platform::get_active_user_home() {
+    if let Some(home) = crate::platform::get_active_user_home() {
         let name = if cfg!(target_os = "macos") {
             "Movies"
         } else {
@@ -800,13 +829,19 @@ pub fn is_release() -> bool {
     return false;
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[inline]
 pub fn is_root() -> bool {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    return crate::platform::is_root();
+    crate::platform::is_root()
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[inline]
+pub fn is_root() -> bool {
     false
 }
 
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[inline]
 pub fn check_super_user_permission() -> bool {
     #[cfg(feature = "flatpak")]
@@ -818,10 +853,10 @@ pub fn check_super_user_permission() -> bool {
 }
 
 #[allow(dead_code)]
-pub fn check_zombie(childs: Childs) {
+pub fn check_zombie(children: Children) {
     let mut deads = Vec::new();
     loop {
-        let mut lock = childs.lock().unwrap();
+        let mut lock = children.lock().unwrap();
         let mut n = 0;
         for (id, c) in lock.1.iter_mut() {
             if let Ok(Some(_)) = c.try_wait() {
@@ -840,7 +875,12 @@ pub fn check_zombie(childs: Childs) {
     }
 }
 
-pub(crate) fn check_connect_status(reconnect: bool) -> mpsc::UnboundedSender<ipc::Data> {
+pub fn start_option_status_sync() {
+    let _sender = SENDER.lock().unwrap();
+}
+
+// not call directly
+fn check_connect_status(reconnect: bool) -> mpsc::UnboundedSender<ipc::Data> {
     let (tx, rx) = mpsc::unbounded_channel::<ipc::Data>();
     std::thread::spawn(move || check_connect_status_(reconnect, rx));
     tx
@@ -864,7 +904,7 @@ pub fn account_auth_result() -> String {
 // notice: avoiding create ipc connecton repeatly,
 // because windows named pipe has serious memory leak issue.
 #[tokio::main(flavor = "current_thread")]
-pub(crate) async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc::Data>) {
+async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc::Data>) {
     let mut key_confirmed = false;
     let mut rx = rx;
     let mut mouse_time = 0;
@@ -885,7 +925,8 @@ pub(crate) async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedRe
                                 UI_STATUS.lock().unwrap().2 = v;
                             }
                             Ok(Some(ipc::Data::Options(Some(v)))) => {
-                                *OPTIONS.lock().unwrap() = v
+                                *OPTIONS.lock().unwrap() = v;
+                                *OPTION_SYNCED.lock().unwrap() = true;
                             }
                             Ok(Some(ipc::Data::Config((name, Some(value))))) => {
                                 if name == "id" {
@@ -928,6 +969,12 @@ pub(crate) async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedRe
     }
 }
 
+#[allow(dead_code)]
+pub fn option_synced() -> bool {
+    OPTION_SYNCED.lock().unwrap().clone()
+}
+
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[tokio::main(flavor = "current_thread")]
 pub(crate) async fn send_to_cm(data: &ipc::Data) {
     if let Ok(mut c) = ipc::connect(1000, "_cm").await {
@@ -935,9 +982,12 @@ pub(crate) async fn send_to_cm(data: &ipc::Data) {
     }
 }
 
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 const INVALID_FORMAT: &'static str = "Invalid format";
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 const UNKNOWN_ERROR: &'static str = "Unknown error";
 
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[tokio::main(flavor = "current_thread")]
 async fn change_id_(id: String, old_id: String) -> &'static str {
     if !hbb_common::is_valid_custom_id(&id) {
@@ -987,6 +1037,7 @@ async fn change_id_(id: String, old_id: String) -> &'static str {
     err
 }
 
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 async fn check_id(
     rendezvous_server: String,
     old_id: String,
