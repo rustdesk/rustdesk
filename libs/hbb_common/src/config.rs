@@ -11,7 +11,9 @@ use std::{
 use anyhow::Result;
 use directories_next::ProjectDirs;
 use rand::Rng;
+use regex::Regex;
 use serde_derive::{Deserialize, Serialize};
+use sodiumoxide::base64;
 use sodiumoxide::crypto::sign;
 
 use crate::{
@@ -849,7 +851,17 @@ impl PeerConfig {
     }
 
     fn path(id: &str) -> PathBuf {
-        let path: PathBuf = [PEERS, id.replace(":", "_").as_str()].iter().collect();
+        let mut id_encoded: String;
+
+        //If the id contains invalid chars, encode it
+        let forbidden_paths = Regex::new(r".*[<>:/\\|\?\*].*").unwrap();
+        if forbidden_paths.is_match(id) {
+            id_encoded =
+                ("base64_".to_string() + base64::encode(id, base64::Variant::Original).as_str())
+        } else {
+            id_encoded = id.to_string();
+        }
+        let path: PathBuf = [PEERS, id_encoded.as_str()].iter().collect();
         Config::with_extension(Config::path(path))
     }
 
@@ -871,27 +883,23 @@ impl PeerConfig {
                             .file_stem()
                             .map(|p| p.to_str().unwrap_or(""))
                             .unwrap_or("")
-                            .replace("_", ":")
                             .to_owned();
 
-                        //rename PeerConfig files if they contain ":"
-                        //to stay backward compatible with *nix
-                        let current_filename = p
-                            .file_name()
-                            .unwrap_or(OsStr::new(""))
-                            .to_str()
-                            .unwrap_or("");
-                        if current_filename.contains(":") {
-                            if let Some(path) = p.parent() {
-                                fs::rename(p, path.join(current_filename.replace(":", "_"))).ok();
-                            }
+                        let id_decoded_string: String;
+                        if id.starts_with("base64_") {
+                            let id_decoded = base64::decode(&id[7..], base64::Variant::Original)
+                                .unwrap_or(Vec::new());
+                            id_decoded_string =
+                                String::from_utf8_lossy(&id_decoded).as_ref().to_owned();
+                        } else {
+                            id_decoded_string = id;
                         }
 
-                        let c = PeerConfig::load(&id);
+                        let c = PeerConfig::load(&id_decoded_string);
                         if c.info.platform.is_empty() {
                             fs::remove_file(&p).ok();
                         }
-                        (id, t, c)
+                        (id_decoded_string, t, c)
                     })
                     .filter(|p| !p.2.info.platform.is_empty())
                     .collect();
