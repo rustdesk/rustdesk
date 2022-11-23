@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    ffi::{OsStr, OsString},
     fs,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     path::{Path, PathBuf},
@@ -9,8 +10,10 @@ use std::{
 
 use anyhow::Result;
 use rand::Rng;
+use regex::Regex;
 use serde as de;
 use serde_derive::{Deserialize, Serialize};
+use sodiumoxide::base64;
 use sodiumoxide::crypto::sign;
 
 use crate::{
@@ -199,10 +202,7 @@ pub struct PeerConfig {
     pub show_quality_monitor: bool,
 
     // The other scalar value must before this
-    #[serde(
-        default,
-        deserialize_with = "PeerConfig::deserialize_options"
-    )]
+    #[serde(default, deserialize_with = "PeerConfig::deserialize_options")]
     pub options: HashMap<String, String>,
     // Various data for flutter ui
     #[serde(default)]
@@ -896,7 +896,17 @@ impl PeerConfig {
     }
 
     fn path(id: &str) -> PathBuf {
-        let path: PathBuf = [PEERS, id].iter().collect();
+        let mut id_encoded: String;
+
+        //If the id contains invalid chars, encode it
+        let forbidden_paths = Regex::new(r".*[<>:/\\|\?\*].*").unwrap();
+        if forbidden_paths.is_match(id) {
+            id_encoded =
+                ("base64_".to_string() + base64::encode(id, base64::Variant::Original).as_str())
+        } else {
+            id_encoded = id.to_string();
+        }
+        let path: PathBuf = [PEERS, id_encoded.as_str()].iter().collect();
         Config::with_extension(Config::path(path))
     }
 
@@ -919,11 +929,22 @@ impl PeerConfig {
                             .map(|p| p.to_str().unwrap_or(""))
                             .unwrap_or("")
                             .to_owned();
-                        let c = PeerConfig::load(&id);
+
+                        let id_decoded_string: String;
+                        if id.starts_with("base64_") && id != "base64_" {
+                            let id_decoded = base64::decode(&id[7..], base64::Variant::Original)
+                                .unwrap_or(Vec::new());
+                            id_decoded_string =
+                                String::from_utf8_lossy(&id_decoded).as_ref().to_owned();
+                        } else {
+                            id_decoded_string = id;
+                        }
+
+                        let c = PeerConfig::load(&id_decoded_string);
                         if c.info.platform.is_empty() {
                             fs::remove_file(&p).ok();
                         }
-                        (id, t, c)
+                        (id_decoded_string, t, c)
                     })
                     .filter(|p| !p.2.info.platform.is_empty())
                     .collect();
@@ -934,9 +955,21 @@ impl PeerConfig {
         Default::default()
     }
 
-    serde_field_string!(default_view_style,  deserialize_view_style, "original".to_owned());
-    serde_field_string!(default_scroll_style,  deserialize_scroll_style, "scrollauto".to_owned());
-    serde_field_string!(default_image_quality,  deserialize_image_quality, "balanced".to_owned());
+    serde_field_string!(
+        default_view_style,
+        deserialize_view_style,
+        "original".to_owned()
+    );
+    serde_field_string!(
+        default_scroll_style,
+        deserialize_scroll_style,
+        "scrollauto".to_owned()
+    );
+    serde_field_string!(
+        default_image_quality,
+        deserialize_image_quality,
+        "balanced".to_owned()
+    );
 
     fn deserialize_options<'de, D>(deserializer: D) -> Result<HashMap<String, String>, D::Error>
     where
