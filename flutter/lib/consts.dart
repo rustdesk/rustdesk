@@ -70,6 +70,30 @@ const kMouseControlDistance = 12;
 /// [kMouseControlTimeoutMSec] indicates the timeout (in milliseconds) that self-side can get control of mouse.
 const kMouseControlTimeoutMSec = 1000;
 
+/// [kRemoteViewStyleOriginal] Show remote image without scaling.
+const kRemoteViewStyleOriginal = 'original';
+
+/// [kRemoteViewStyleAdaptive] Show remote image scaling by ratio factor.
+const kRemoteViewStyleAdaptive = 'adaptive';
+
+/// [kRemoteScrollStyleAuto] Scroll image auto by position.
+const kRemoteScrollStyleAuto = 'scrollauto';
+
+/// [kRemoteScrollStyleBar] Scroll image with scroll bar.
+const kRemoteScrollStyleBar = 'scrollbar';
+
+/// [kRemoteImageQualityBest] Best image quality.
+const kRemoteImageQualityBest = 'best';
+
+/// [kRemoteImageQualityBalanced] Balanced image quality, mid performance.
+const kRemoteImageQualityBalanced = 'balanced';
+
+/// [kRemoteImageQualityLow] Low image quality, better performance.
+const kRemoteImageQualityLow = 'low';
+
+/// [kRemoteImageQualityCustom] Custom image quality.
+const kRemoteImageQualityCustom = 'custom';
+
 /// flutter/packages/flutter/lib/src/services/keyboard_key.dart -> _keyLabels
 /// see [LogicalKeyboardKey.keyLabel]
 const Map<int, String> logicalKeyMap = <int, String>{
