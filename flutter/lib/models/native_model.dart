@@ -97,7 +97,7 @@ class PlatformFFI {
             : Platform.isWindows
                 ? DynamicLibrary.open('librustdesk.dll')
                 : Platform.isMacOS
-                    ? DynamicLibrary.open('librustdesk.dylib')
+                    ? DynamicLibrary.open("liblibrustdesk.dylib")
                     : DynamicLibrary.process();
     debugPrint('initializing FFI $_appType');
     try {

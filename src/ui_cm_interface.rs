@@ -784,11 +784,11 @@ pub fn can_elevate() -> bool {
     return false;
 }
 
-pub fn elevate_portable(id: i32) {
+pub fn elevate_portable(_id: i32) {
     #[cfg(windows)]
     {
         let lock = CLIENTS.read().unwrap();
-        if let Some(s) = lock.get(&id) {
+        if let Some(s) = lock.get(&_id) {
             allow_err!(s.tx.send(ipc::Data::DataPortableService(
                 ipc::DataPortableService::RequestStart
             )));

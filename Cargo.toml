@@ -68,6 +68,7 @@ url = { version = "2.1", features = ["serde"] }
 
 reqwest = { version = "0.11", features = ["blocking", "json", "rustls-tls"], default-features=false }
 chrono = "0.4.23"
+cidr-utils = "0.5.9"
 
 [target.'cfg(not(any(target_os = "android", target_os = "linux")))'.dependencies]
 cpal = "0.13.5"
@@ -161,3 +162,4 @@ codegen-units = 1
 panic = 'abort'
 strip = true
 #opt-level = 'z' # only have smaller size after strip
+rpath = true

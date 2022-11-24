@@ -1098,6 +1098,10 @@ pub fn version_to_number(v: String) -> i64 {
     hbb_common::get_version_number(&v)
 }
 
+pub fn option_synced() -> bool {
+    crate::ui_interface::option_synced()
+}
+
 pub fn main_is_installed() -> SyncReturn<bool> {
     SyncReturn(is_installed())
 }
