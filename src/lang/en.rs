@@ -33,6 +33,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("elevated_foreground_window_tip", "The current window of the remote desktop requires higher privilege to operate, so it's unable to use the mouse and keyboard temporarily. You can request the remote user to minimize the current window, or click elevation button on the connection management window. To avoid this problem, it is recommended to install the software on the remote device."),
         ("JumpLink", "View"),
         ("Stop service", "Stop Service"),
-        ("hide_cm_tip", "Allow hiding only if accepting sessions via password and using pernament password"),
+        ("hide_cm_tip", "Allow hiding only if accepting sessions via password and using permanent password"),
         ].iter().cloned().collect();
 }
