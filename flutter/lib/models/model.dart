@@ -565,7 +565,7 @@ class CanvasModel with ChangeNotifier {
 
   updateScrollStyle() async {
     final style = await bind.sessionGetScrollStyle(id: id);
-    if (style == 'scrollbar') {
+    if (style == kRemoteScrollStyleBar) {
       _scrollStyle = ScrollStyle.scrollbar;
       _scrollX = 0.0;
       _scrollY = 0.0;

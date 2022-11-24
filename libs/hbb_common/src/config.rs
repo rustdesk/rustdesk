@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    ffi::{OsStr, OsString},
     fs,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     path::{Path, PathBuf},
@@ -896,13 +895,13 @@ impl PeerConfig {
     }
 
     fn path(id: &str) -> PathBuf {
-        let mut id_encoded: String;
+        let id_encoded: String;
 
         //If the id contains invalid chars, encode it
         let forbidden_paths = Regex::new(r".*[<>:/\\|\?\*].*").unwrap();
         if forbidden_paths.is_match(id) {
             id_encoded =
-                ("base64_".to_string() + base64::encode(id, base64::Variant::Original).as_str())
+                "base64_".to_string() + base64::encode(id, base64::Variant::Original).as_str();
         } else {
             id_encoded = id.to_string();
         }
