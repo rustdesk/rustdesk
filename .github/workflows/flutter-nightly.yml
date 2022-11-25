@@ -1133,12 +1133,12 @@ jobs:
   build-flatpak-amd64:
     name: Build Flatpak
     needs: [build-rustdesk-linux-amd64]
-    runs-on: ${{ matrix.job.os }}
+    runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
       matrix:
         job:
-          - { target: x86_64-unknown-linux-gnu, os: ubuntu-20.04, arch: x86_64 }
+          - { target: x86_64-unknown-linux-gnu, os: ubuntu-18.04, arch: x86_64 }
     steps:
       - name: Checkout source code
         uses: actions/checkout@v3
