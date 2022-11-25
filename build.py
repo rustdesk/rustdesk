@@ -217,7 +217,7 @@ Version: %s
 Architecture: amd64
 Maintainer: open-trade <info@rustdesk.com>
 Homepage: https://rustdesk.com
-Depends: libgtk-3-0, libxcb-randr0, libxdo3, libxfixes3, libxcb-shape0, libxcb-xfixes0, libasound2, libsystemd0, pipewire, curl, libappindicator3-1, libva-drm2, libva-x11-2, libvdpau1
+Depends: libgtk-3-0, libxcb-randr0, libxdo3, libxfixes3, libxcb-shape0, libxcb-xfixes0, libasound2, libsystemd0, curl, libappindicator3-1, libva-drm2, libva-x11-2, libvdpau1, libgstreamer-plugins-base1.0-0
 Description: A remote control software.
 
 """ % version
