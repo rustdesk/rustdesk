@@ -698,7 +698,7 @@ jobs:
   build-rustdesk-linux-arm:
     needs: [build-rustdesk-lib-linux-arm]
     name: build-rustdesk ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
-    runs-on: ${{ matrix.job.os }}
+    runs-on: ubuntu-20.04 # 20.04 has more performance on arm build
     strategy:
       fail-fast: false
       matrix:
@@ -706,14 +706,14 @@ jobs:
           - {
               arch: aarch64,
               target: aarch64-unknown-linux-gnu,
-              os: ubuntu-20.04,
+              os: ubuntu-18.04, # just for naming package, not running host
               use-cross: true,
               extra-build-features: "",
             }
           - {
               arch: aarch64,
               target: aarch64-unknown-linux-gnu,
-              os: ubuntu-20.04,
+              os: ubuntu-18.04, # just for naming package, not running host
               use-cross: true,
               extra-build-features: "flatpak",
             }
@@ -902,7 +902,7 @@ jobs:
   build-rustdesk-linux-amd64:
     needs: [build-rustdesk-lib-linux-amd64]
     name: build-rustdesk ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
-    runs-on: ${{ matrix.job.os }}
+    runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
       matrix:
@@ -912,13 +912,13 @@ jobs:
           - {
               arch: x86_64,
               target: x86_64-unknown-linux-gnu,
-              os: ubuntu-20.04,
+              os: ubuntu-18.04,
               extra-build-features: "",
             }
           - {
               arch: x86_64,
               target: x86_64-unknown-linux-gnu,
-              os: ubuntu-20.04,
+              os: ubuntu-18.04,
               extra-build-features: "flatpak",
             }
           # - { target: x86_64-unknown-linux-musl   , os: ubuntu-20.04, use-cross: true }
