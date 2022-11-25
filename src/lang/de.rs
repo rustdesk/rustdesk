@@ -137,9 +137,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Set Password", "Passwort festlegen"),
         ("OS Password", "Betriebssystem-Passwort"),
         ("install_tip", "Aufgrund der Benutzerkontensteuerung (UAC) kann RustDesk in manchen Fällen nicht ordnungsgemäß funktionieren. Um die Benutzerkontensteuerung zu umgehen, klicken Sie bitte auf die Schaltfläche unten, um RustDesk auf dem System zu installieren"),
-        ("Click to upgrade", "Zum Aktualisieren anklicken"),
+        ("Click to upgrade", "Upgrade"),
         ("Click to download", "Zum Herunterladen klicken"),
-        ("Click to update", "Zum Aktualisieren klicken"),
+        ("Click to update", "Update"),
         ("Configure", "Konfigurieren"),
         ("config_acc", "Um Ihren PC aus der Ferne zu steuern, müssen Sie RustDesk Zugriffsrechte erteilen."),
         ("config_screen", "Um aus der Ferne auf Ihren PC zugreifen zu können, müssen Sie RustDesk \"Bildschirm-Aufnahme\"-Berechtigung erteilen."),
@@ -221,7 +221,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Password missed", "Passwort vergessen"),
         ("Wrong credentials", "Falsche Anmeldedaten"),
         ("Edit Tag", "Schlagwort bearbeiten"),
-        ("Unremember Password", "Passwort vergessen"),
+        ("Unremember Password", "Gespeichertes Passwort löschen"),
         ("Favorites", "Favoriten"),
         ("Add to Favorites", "Zu Favoriten hinzufügen"),
         ("Remove from Favorites", "Aus Favoriten entfernen"),
@@ -229,7 +229,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Invalid folder name", "Ungültiger Ordnername"),
         ("Socks5 Proxy", "Socks5 Proxy"),
         ("Hostname", "Hostname"),
-        ("Discovered", "Automatisch gefunden"),
+        ("Discovered", "Im LAN erkannt"),
         ("install_daemon_tip", "Um mit System zu starten, muss der Systemdienst installiert sein"),
         ("Remote ID", "Entfernte ID"),
         ("Paste", "Einfügen"),
@@ -332,7 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Scale adaptive", "Adaptiv skalieren"),
         ("General", "Allgemein"),
         ("Security", "Sicherheit"),
-        ("Account", "KOnto"),
+        ("Account", "Konto"),
         ("Theme", "Farbgebung"),
         ("Dark Theme", "dunkle Farbgebung"),
         ("Dark", "Dunkel"),
@@ -396,6 +396,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("One-time password length", "Länge des Einmalpassworts"),
         ("Request access to your device", "Zugriff zu Ihrem Gerät erbitten"),
         ("Hide connection management window", "Fenster zur Verwaltung der Verbindung verstecken"),
-        ("hide_cm_tip", "Verstecken nur erlauben, wenn die Sitzung über ein festes Passwort erstellt wurde"), // Sehr unklar. Muss noch angepasst werden. Original: Allow hiding only if accepting sessions via password and using pernament password
+        ("hide_cm_tip", "Dies ist nur möglich, wenn der Zugriff nur über ein permanentes Passwort erfolgt."), // Sehr unklar. Muss noch angepasst werden. Original: Allow hiding only if accepting sessions via password and using pernament password
     ].iter().cloned().collect();
 }
