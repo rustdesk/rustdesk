@@ -122,6 +122,7 @@ pub struct PipeWireRecorder {
     appsink: AppSink,
     width: usize,
     height: usize,
+    saved_raw_data: Vec<u128>, // for faster compare and copy
 }
 
 impl PipeWireRecorder {
@@ -160,6 +161,7 @@ impl PipeWireRecorder {
             height: 0,
             buffer_cropped: vec![],
             is_cropped: false,
+            saved_raw_data: Vec::new(),
         })
     }
 }
@@ -192,6 +194,9 @@ impl Recorder for PipeWireRecorder {
             let buf = buf
                 .into_mapped_buffer_readable()
                 .map_err(|_| GStreamerError("Failed to map buffer.".into()))?;
+            if let Err(..) = crate::would_block_if_equal(&mut self.saved_raw_data, buf.as_slice()) {
+                return Ok(PixelProvider::NONE);
+            }
             let buf_size = buf.get_size();
             // BGRx is 4 bytes per pixel
             if buf_size != (w * h * 4) {
@@ -433,16 +438,10 @@ fn request_screen_cast(
                 if version >= 4 {
                     let restore_token = config::LocalConfig::get_option(RESTORE_TOKEN_CONF_KEY);
                     if !restore_token.is_empty() {
-                        args.insert(
-                            RESTORE_TOKEN.to_string(),
-                            Variant(Box::new(restore_token)),
-                        );
+                        args.insert(RESTORE_TOKEN.to_string(), Variant(Box::new(restore_token)));
                     }
                     // persist_mode may be configured by the user.
-                    args.insert(
-                        "persist_mode".to_string(),
-                        Variant(Box::new(2u32)),
-                    );
+                    args.insert("persist_mode".to_string(), Variant(Box::new(2u32)));
                 }
             }
             args.insert(
