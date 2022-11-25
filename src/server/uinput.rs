@@ -63,6 +63,14 @@ pub mod client {
     }
 
     impl KeyboardControllable for UInputKeyboard {
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+
+        fn as_mut_any(&mut self) -> &mut dyn std::any::Any {
+            self
+        }
+
         fn get_key_state(&mut self, key: Key) -> bool {
             match self.send_get_key_state(Data::Keyboard(DataKeyboard::GetKeyState(key))) {
                 Ok(state) => state,
@@ -105,9 +113,21 @@ pub mod client {
         async fn send(&mut self, data: Data) -> ResultType<()> {
             self.conn.send(&data).await
         }
+
+        pub fn send_refresh(&mut self) -> ResultType<()> {
+            self.send(Data::Mouse(DataMouse::Refresh))
+        }
     }
 
     impl MouseControllable for UInputMouse {
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+
+        fn as_mut_any(&mut self) -> &mut dyn std::any::Any {
+            self
+        }
+
         fn mouse_move_to(&mut self, x: i32, y: i32) {
             allow_err!(self.send(Data::Mouse(DataMouse::MoveTo(x, y))));
         }
@@ -492,6 +512,9 @@ pub mod service {
                     allow_err!(mouse.scroll_wheel(&scroll))
                 }
             }
+            DataMouse::Refresh => {
+                // unreachable!()
+            }
         }
     }
 
@@ -562,7 +585,17 @@ pub mod service {
                             Ok(Some(data)) => {
                                 match data {
                                     Data::Mouse(data) => {
-                                        handle_mouse(&mut mouse, &data);
+                                        if let DataMouse::Refresh = data {
+                                            mouse = match mouce::Mouse::new_uinput(rng_x, rng_y) {
+                                                Ok(mouse) => mouse,
+                                                Err(e) => {
+                                                    log::error!("Failed to create mouse, {}", e);
+                                                    return;
+                                                }
+                                            }
+                                        } else {
+                                            handle_mouse(&mut mouse, &data);
+                                        }
                                     }
                                     _ => {
                                     }

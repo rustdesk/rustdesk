@@ -115,7 +115,7 @@ pub(super) fn is_inited() -> Option<Message> {
     }
 }
 
-async fn check_init() -> ResultType<()> {
+pub(super) async fn check_init() -> ResultType<()> {
     if !scrap::is_x11() {
         let mut minx = 0;
         let mut maxx = 0;
@@ -241,6 +241,7 @@ pub(super) fn get_display_num() -> ResultType<usize> {
     }
 }
 
+#[allow(dead_code)]
 pub(super) fn release_resouce() {
     if scrap::is_x11() {
         return;

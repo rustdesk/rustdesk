@@ -16,9 +16,10 @@ use gstreamer as gst;
 use gstreamer::prelude::*;
 use gstreamer_app::AppSink;
 
+use hbb_common::config;
+
 use super::capturable::PixelProvider;
 use super::capturable::{Capturable, Recorder};
-
 use super::pipewire_dbus::{OrgFreedesktopPortalRequestResponse, OrgFreedesktopPortalScreenCast};
 
 #[derive(Debug, Clone, Copy)]
@@ -121,6 +122,7 @@ pub struct PipeWireRecorder {
     appsink: AppSink,
     width: usize,
     height: usize,
+    saved_raw_data: Vec<u128>, // for faster compare and copy
 }
 
 impl PipeWireRecorder {
@@ -130,6 +132,7 @@ impl PipeWireRecorder {
         let src = gst::ElementFactory::make("pipewiresrc", None)?;
         src.set_property("fd", &capturable.fd.as_raw_fd())?;
         src.set_property("path", &format!("{}", capturable.path))?;
+        src.set_property("keepalive_time", &1_000.as_raw_fd())?;
 
         // For some reason pipewire blocks on destruction of AppSink if this is not set to true,
         // see: https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/982
@@ -158,6 +161,7 @@ impl PipeWireRecorder {
             height: 0,
             buffer_cropped: vec![],
             is_cropped: false,
+            saved_raw_data: Vec::new(),
         })
     }
 }
@@ -190,6 +194,9 @@ impl Recorder for PipeWireRecorder {
             let buf = buf
                 .into_mapped_buffer_readable()
                 .map_err(|_| GStreamerError("Failed to map buffer.".into()))?;
+            if let Err(..) = crate::would_block_if_equal(&mut self.saved_raw_data, buf.as_slice()) {
+                return Ok(PixelProvider::NONE);
+            }
             let buf_size = buf.get_size();
             // BGRx is 4 bytes per pixel
             if buf_size != (w * h * 4) {
@@ -384,6 +391,8 @@ fn streams_from_response(response: OrgFreedesktopPortalRequestResponse) -> Vec<P
 }
 
 static mut INIT: bool = false;
+const RESTORE_TOKEN: &str = "restore_token";
+const RESTORE_TOKEN_CONF_KEY: &str = "wayland-restore-token";
 
 // mostly inspired by https://gitlab.gnome.org/snippets/19
 fn request_screen_cast(
@@ -412,6 +421,12 @@ fn request_screen_cast(
         "handle_token".to_string(),
         Variant(Box::new("u1".to_string())),
     );
+    // The following code may be improved.
+    // https://flatpak.github.io/xdg-desktop-portal/#:~:text=To%20avoid%20a%20race%20condition
+    // To avoid a race condition
+    // between the caller subscribing to the signal after receiving the reply for the method call and the signal getting emitted,
+    // a convention for Request object paths has been established that allows
+    // the caller to subscribe to the signal before making the method call.
     let path = portal.create_session(args)?;
     handle_response(
         &conn,
@@ -419,6 +434,16 @@ fn request_screen_cast(
         move |r: OrgFreedesktopPortalRequestResponse, c, _| {
             let portal = get_portal(c);
             let mut args: PropMap = HashMap::new();
+            if let Ok(version) = portal.version() {
+                if version >= 4 {
+                    let restore_token = config::LocalConfig::get_option(RESTORE_TOKEN_CONF_KEY);
+                    if !restore_token.is_empty() {
+                        args.insert(RESTORE_TOKEN.to_string(), Variant(Box::new(restore_token)));
+                    }
+                    // persist_mode may be configured by the user.
+                    args.insert("persist_mode".to_string(), Variant(Box::new(2u32)));
+                }
+            }
             args.insert(
                 "handle_token".to_string(),
                 Variant(Box::new("u2".to_string())),
@@ -476,12 +501,24 @@ fn request_screen_cast(
                         c,
                         path,
                         move |r: OrgFreedesktopPortalRequestResponse, c, _| {
+                            let portal = get_portal(c);
+                            if let Ok(version) = portal.version() {
+                                if version >= 4 {
+                                    if let Some(restore_token) = r.results.get(RESTORE_TOKEN) {
+                                        if let Some(restore_token) = restore_token.as_str() {
+                                            config::LocalConfig::set_option(
+                                                RESTORE_TOKEN_CONF_KEY.to_owned(),
+                                                restore_token.to_owned(),
+                                            );
+                                        }
+                                    }
+                                }
+                            }
                             streams
                                 .clone()
                                 .lock()
                                 .unwrap()
                                 .append(&mut streams_from_response(r));
-                            let portal = get_portal(c);
                             fd.clone().lock().unwrap().replace(
                                 portal.open_pipe_wire_remote(session.clone(), HashMap::new())?,
                             );

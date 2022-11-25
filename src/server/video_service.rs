@@ -599,14 +599,11 @@ fn run(sp: GenericService) -> ResultType<()> {
                     }
                     try_gdi += 1;
                 }
-
                 #[cfg(target_os = "linux")]
                 {
                     would_block_count += 1;
                     if !scrap::is_x11() {
                         if would_block_count >= 100 {
-                            // For now, the user should choose and agree screen sharing agiain.
-                            // to-do: Remember choice, attendless...
                             super::wayland::release_resouce();
                             bail!("Wayland capturer none 100 times, try restart captuere");
                         }
@@ -760,6 +757,16 @@ fn get_display_num() -> usize {
     } else {
         0
     }
+}
+
+pub async fn check_init() -> ResultType<()> {
+    #[cfg(target_os = "linux")]
+    {
+        if !scrap::is_x11() {
+            return super::wayland::check_init().await;
+        }
+    }
+    Ok(())
 }
 
 pub(super) fn get_displays_2(all: &Vec<Display>) -> (usize, Vec<DisplayInfo>) {

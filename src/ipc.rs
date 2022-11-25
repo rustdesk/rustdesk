@@ -117,6 +117,7 @@ pub enum DataMouse {
     Click(enigo::MouseButton),
     ScrollX(i32),
     ScrollY(i32),
+    Refresh,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
