@@ -531,7 +531,7 @@ jobs:
               use-cross: true,
               extra-build-features: "",
             }
-          - { arch: aarch64, target: aarch64-unknown-linux-gnu   , os: ubuntu-20.04, use-cross: true, extra-build-features: "flatpak" }
+          # - { arch: aarch64, target: aarch64-unknown-linux-gnu   , os: ubuntu-20.04, use-cross: true, extra-build-features: "flatpak" }
           # - {
           #     arch: armv7,
           #     target: arm-unknown-linux-gnueabihf,
@@ -710,13 +710,13 @@ jobs:
               use-cross: true,
               extra-build-features: "",
             }
-          - {
-              arch: aarch64,
-              target: aarch64-unknown-linux-gnu,
-              os: ubuntu-18.04, # just for naming package, not running host
-              use-cross: true,
-              extra-build-features: "flatpak",
-            }
+          # - {
+          #     arch: aarch64,
+          #     target: aarch64-unknown-linux-gnu,
+          #     os: ubuntu-18.04, # just for naming package, not running host
+          #     use-cross: true,
+          #     extra-build-features: "flatpak",
+          #   }
           # - { arch: armv7, target: arm-unknown-linux-gnueabihf , os: ubuntu-20.04, use-cross: true, extra-build-features: "" }
           # - { arch: armv7, target: arm-unknown-linux-gnueabihf , os: ubuntu-20.04, use-cross: true, extra-build-features: "flatpak" }
           # - { target: arm-unknown-linux-musleabihf, os: ubuntu-20.04, use-cross: true }
