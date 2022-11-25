@@ -8,6 +8,7 @@ on:
 
 env:
   LLVM_VERSION: "10.0"
+  # Note: currently 3.0.5 does not support arm64 officially, we use latest stable version first.
   FLUTTER_VERSION: "3.0.5"
   TAG_NAME: "nightly"
   # vcpkg version: 2022.05.10
@@ -199,9 +200,9 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          # - { arch: armv7    , os: ubuntu-18.04}
-          - { arch: x86_64, os: ubuntu-18.04 }
-          # - { arch: aarch64    , os: ubuntu-18.04}
+          # - { arch: armv7, os: ubuntu-20.04 }
+          - { arch: x86_64, os: ubuntu-20.04 }
+          - { arch: aarch64, os: ubuntu-20.04 }
     steps:
       - name: Create vcpkg artifacts folder
         run: mkdir -p /opt/artifacts
@@ -227,24 +228,53 @@ jobs:
           shell: /bin/bash
           install: |
             apt update -y
-            # CMake 3.15+
-            apt install -y gpg wget ca-certificates
-            echo 'deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ bionic main' | tee /etc/apt/sources.list.d/kitware.list >/dev/null
-            wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null
-            apt update -y
-            apt install -y curl zip unzip tar git cmake g++ gcc build-essential pkg-config wget nasm yasm ninja-build
+            case "${{ matrix.job.arch }}" in
+              x86_64)
+                # CMake 3.15+
+                apt install -y gpg wget ca-certificates
+                echo 'deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ bionic main' | tee /etc/apt/sources.list.d/kitware.list >/dev/null
+                wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null
+                apt update -y
+                apt install -y curl zip unzip tar git cmake g++ gcc build-essential pkg-config wget nasm yasm ninja-build libjpeg8-dev
+                ;;
+              aarch64|armv7)
+                apt install -y curl zip unzip tar git cmake g++ gcc build-essential pkg-config wget nasm yasm ninja-build libjpeg8-dev automake libtool
+            esac
             cmake --version
             gcc -v
           run: |
-            export VCPKG_FORCE_SYSTEM_BINARIES=1
-            pushd /artifacts
-            git clone https://github.com/microsoft/vcpkg.git || true
-            git config --global --add safe.directory /artifacts/vcpkg || true
-            pushd vcpkg
-            git reset --hard ${{ env.VCPKG_COMMIT_ID }}
-            ./bootstrap-vcpkg.sh
-            ./vcpkg install libvpx libyuv opus
-
+            case "${{ matrix.job.arch }}" in
+              x86_64)
+                export VCPKG_FORCE_SYSTEM_BINARIES=1
+                pushd /artifacts
+                git clone https://github.com/microsoft/vcpkg.git || true
+                git config --global --add safe.directory /artifacts/vcpkg || true
+                pushd vcpkg
+                git reset --hard ${{ env.VCPKG_COMMIT_ID }}
+                ./bootstrap-vcpkg.sh
+                ./vcpkg install libvpx libyuv opus
+                ;;
+              aarch64|armv7)
+                pushd /artifacts
+                # libyuv
+                git clone https://chromium.googlesource.com/libyuv/libyuv || true
+                pushd libyuv
+                git pull
+                mkdir -p build
+                pushd build
+                mkdir -p /artifacts/vcpkg/installed
+                cmake .. -DCMAKE_INSTALL_PREFIX=/artifacts/vcpkg/installed
+                make -j4 && make install
+                popd
+                popd
+                # libopus, ubuntu 18.04 prebuilt is not be compiled with -fPIC
+                wget -O opus.tar.gz http://archive.ubuntu.com/ubuntu/pool/main/o/opus/opus_1.1.2.orig.tar.gz
+                tar -zxvf opus.tar.gz; ls -l
+                pushd opus-1.1.2
+                ./autogen.sh; ./configure --prefix=/artifacts/vcpkg/installed
+                make -j4; make install
+                ;;
+            esac
       - name: Upload artifacts
         uses: actions/upload-artifact@master
         with:
@@ -322,37 +352,50 @@ jobs:
             ./flutter/lib/generated_bridge.dart 
             ./flutter/lib/generated_bridge.freezed.dart
 
-  build-rustdesk-lib-linux:
+  build-rustdesk-lib-linux-amd64:
     needs: [generate-bridge-linux, build-vcpkg-deps-linux]
     name: build-rust-lib ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
       matrix:
+        # use a high level qemu-user-static
         job:
-          # - { arch: aarch64, target: aarch64-unknown-linux-gnu   , os: ubuntu-18.04, use-cross: true, extra-build-features: "" }
-          # - { arch: aarch64, target: aarch64-unknown-linux-gnu   , os: ubuntu-18.04, use-cross: true, extra-build-features: "flatpak" }
-          # - { arch: armv7, target: arm-unknown-linux-gnueabihf , os: ubuntu-18.04, use-cross: true, extra-build-features: "" }
-          # - { arch: armv7, target: arm-unknown-linux-gnueabihf , os: ubuntu-18.04, use-cross: true, extra-build-features: "flatpak" }
-          # - { target: arm-unknown-linux-musleabihf, os: ubuntu-20.04, use-cross: true }
           # - { target: i686-unknown-linux-gnu      , os: ubuntu-20.04, use-cross: true }
           # - { target: i686-unknown-linux-musl     , os: ubuntu-20.04, use-cross: true }
           - {
               arch: x86_64,
               target: x86_64-unknown-linux-gnu,
-              os: ubuntu-18.04,
+              os: ubuntu-20.04,
               extra-build-features: "",
             }
           - {
               arch: x86_64,
               target: x86_64-unknown-linux-gnu,
-              os: ubuntu-18.04,
+              os: ubuntu-20.04,
               extra-build-features: "flatpak",
             }
           # - { target: x86_64-unknown-linux-musl   , os: ubuntu-20.04, use-cross: true }
     steps:
+      - name: Maximize build space
+        run: |
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          sudo apt update -y
+          sudo apt install qemu-user-static
+
       - name: Checkout source code
         uses: actions/checkout@v3
+
+      - name: Set Swap Space
+        uses: pierotofy/set-swap-space@master
+        with:
+          swap-size-gb: 12
+
+      - name: Free Space
+        run: |
+          df
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -364,11 +407,38 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: bridge-${{ matrix.job.os }}
+          prefix-key: rustdesk-lib-cache
+          key: ${{ matrix.job.target }}-${{ matrix.job.extra-build-features }}
+          cache-directories: "/opt/rust-registry"
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.job.target }}
+          override: true
+          profile: minimal # minimal component installation (ie, no documentation)
+
+      - name: Install local registry
+        run: |
+          mkdir -p /opt/rust-registry
+          cargo install cargo-local-registry
+
+      - name: Build local registry
+        uses: nick-fields/retry@v2
+        id: build-local-registry
+        continue-on-error: true
+        with:
+          max_attempts: 3
+          timeout_minutes: 15
+          retry_on: error
+          command: cargo local-registry --sync ./Cargo.lock /opt/rust-registry
 
       - name: Disable rust bridge build
         run: |
           sed -i "s/gen_flutter_rust_bridge();/\/\//g" build.rs
+          # only build cdylib
+          sed -i  "s/\[\"cdylib\", \"staticlib\", \"rlib\"\]/\[\"cdylib\"\]/g" Cargo.toml
 
       - name: Restore bridge files
         uses: actions/download-artifact@master
@@ -382,26 +452,62 @@ jobs:
           name: vcpkg-artifact-${{ matrix.job.arch }}
           path: /opt/artifacts/vcpkg/installed
 
-      - name: Output devs
-        run: |
-          ls -l ./
-          tree -L 3 /opt/artifacts/vcpkg/installed
+      - uses: Kingtous/run-on-arch-action@amd64-support
+        name: Build rustdesk library for ${{ matrix.job.arch }}
+        id: vcpkg
+        with:
+          arch: ${{ matrix.job.arch }}
+          distro: ubuntu18.04
+          # not ready yet
+          # distro: ubuntu18.04-rustdesk
+          githubToken: ${{ github.token }}
+          setup: |
+            ls -l "${PWD}"
+            ls -l /opt/artifacts/vcpkg/installed
+          dockerRunArgs: |
+            --volume "${PWD}:/workspace"
+            --volume "/opt/artifacts:/opt/artifacts"
+            --volume "/opt/rust-registry:/opt/rust-registry"
+          shell: /bin/bash
+          install: |
+            apt update -y
+            echo -e "installing deps"
+            apt-get -qq install -y  git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake libclang-dev ninja-build libappindicator3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libvdpau-dev libva-dev libclang-dev llvm-dev libclang-10-dev llvm-10-dev pkg-config tree g++ gcc libvpx-dev tree > /dev/null
+            # we have libopus compiled by us.
+            apt remove -y libopus-dev || true
+            # output devs
+            ls -l ./
+            tree -L 3 /opt/artifacts/vcpkg/installed
+          run: |
+            # disable git safe.directory
+            git config --global --add safe.directory "*"
+            # rust
+            pushd /opt
+            wget -O rust.tar.gz https://static.rust-lang.org/dist/rust-1.64.0-${{ matrix.job.target }}.tar.gz
+            tar -zxvf rust.tar.gz > /dev/null && rm rust.tar.gz
+            cd rust-1.64.0-${{ matrix.job.target }} && ./install.sh
+            rm -rf rust-1.64.0-${{ matrix.job.target }}
+            # edit config
+            mkdir -p ~/.cargo/
+            echo """
+              [source.crates-io]
+              registry = 'https://github.com/rust-lang/crates.io-index'
+              replace-with = 'local-registry'
 
-      - name: Install prerequisites
-        run: |
-          sudo apt update -y
-          case ${{ matrix.job.target }} in
-            x86_64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt install -y g++ gcc;;
-            arm-unknown-linux-*) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
-            aarch64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
-          esac
-          # common package
-          sudo apt install -y git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake libclang-dev ninja-build libappindicator3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libvdpau-dev libva-dev libclang-dev llvm-dev libclang-10-dev llvm-10-dev pkg-config tree
-
-      - name: Build rustdesk lib
-        run: |
-          export VCPKG_ROOT=/opt/artifacts/vcpkg
-          cargo build --lib --features hwcodec,flutter,${{ matrix.job.extra-build-features }} --release
+              [source.local-registry]
+              local-registry = '/opt/rust-registry/'
+            """ > ~/.cargo/config
+            cat ~/.cargo/config
+            # start build
+            pushd /workspace
+            # mock 
+            case "${{ matrix.job.arch }}" in
+              x86_64)
+                # no need mock on x86_64
+                export VCPKG_ROOT=/opt/artifacts/vcpkg
+                cargo build --lib --features hwcodec,flutter,${{ matrix.job.extra-build-features }} --release
+                ;;
+            esac
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@master
@@ -409,19 +515,398 @@ jobs:
           name: librustdesk-${{ matrix.job.arch }}-${{ matrix.job.extra-build-features }}.so
           path: target/release/liblibrustdesk.so
 
-  build-rustdesk-linux:
-    needs: [build-rustdesk-lib-linux]
-    name: build-rustdesk ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-args }}]
+  build-rustdesk-lib-linux-arm:
+    needs: [generate-bridge-linux, build-vcpkg-deps-linux]
+    name: build-rust-lib ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
       matrix:
+        # use a high level qemu-user-static
         job:
-          # - { arch: aarch64, target: aarch64-unknown-linux-gnu   , os: ubuntu-18.04, use-cross: true, extra-build-features: "" }
-          # - { arch: aarch64, target: aarch64-unknown-linux-gnu   , os: ubuntu-18.04, use-cross: true, extra-build-features: "flatpak" }
-          # - { arch: armv7, target: arm-unknown-linux-gnueabihf , os: ubuntu-18.04, use-cross: true, extra-build-features: "" }
-          # - { arch: armv7, target: arm-unknown-linux-gnueabihf , os: ubuntu-18.04, use-cross: true, extra-build-features: "flatpak" }
+          - {
+              arch: aarch64,
+              target: aarch64-unknown-linux-gnu,
+              os: ubuntu-20.04,
+              use-cross: true,
+              extra-build-features: "",
+            }
+          # - { arch: aarch64, target: aarch64-unknown-linux-gnu   , os: ubuntu-20.04, use-cross: true, extra-build-features: "flatpak" }
+          # - {
+          #     arch: armv7,
+          #     target: arm-unknown-linux-gnueabihf,
+          #     os: ubuntu-20.04,
+          #     use-cross: true,
+          #     extra-build-features: "",
+          #   }
+          # - { arch: armv7, target: arm-unknown-linux-gnueabihf , os: ubuntu-20.04, use-cross: true, extra-build-features: "flatpak" }
           # - { target: arm-unknown-linux-musleabihf, os: ubuntu-20.04, use-cross: true }
+    steps:
+      - name: Maximize build space
+        run: |
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          sudo apt update -y
+          sudo apt install qemu-user-static
+
+      - name: Checkout source code
+        uses: actions/checkout@v3
+
+      - name: Set Swap Space
+        uses: pierotofy/set-swap-space@master
+        with:
+          swap-size-gb: 12
+
+      - name: Free Space
+        run: |
+          df
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.job.target }}
+          override: true
+          profile: minimal # minimal component installation (ie, no documentation)
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.job.target }}
+          override: true
+          profile: minimal # minimal component installation (ie, no documentation)
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: rustdesk-lib-cache
+          key: ${{ matrix.job.target }}-${{ matrix.job.extra-build-features }}
+          cache-directories: "/opt/rust-registry"
+
+
+      - name: Install local registry
+        run: |
+          mkdir -p /opt/rust-registry
+          cargo install cargo-local-registry
+
+      - name: Build local registry
+        uses: nick-fields/retry@v2
+        id: build-local-registry
+        continue-on-error: true
+        with:
+          max_attempts: 3
+          timeout_minutes: 15
+          retry_on: error
+          command: cargo local-registry --sync ./Cargo.lock /opt/rust-registry
+
+      - name: Disable rust bridge build
+        run: |
+          sed -i "s/gen_flutter_rust_bridge();/\/\//g" build.rs
+          # only build cdylib
+          sed -i  "s/\[\"cdylib\", \"staticlib\", \"rlib\"\]/\[\"cdylib\"\]/g" Cargo.toml
+
+      - name: Restore bridge files
+        uses: actions/download-artifact@master
+        with:
+          name: bridge-artifact
+          path: ./
+
+      - name: Restore vcpkg files
+        uses: actions/download-artifact@master
+        with:
+          name: vcpkg-artifact-${{ matrix.job.arch }}
+          path: /opt/artifacts/vcpkg/installed
+
+      - uses: Kingtous/run-on-arch-action@amd64-support
+        name: Build rustdesk library for ${{ matrix.job.arch }}
+        id: vcpkg
+        with:
+          arch: ${{ matrix.job.arch }}
+          distro: ubuntu18.04-rustdesk
+          githubToken: ${{ github.token }}
+          setup: |
+            ls -l "${PWD}"
+            ls -l /opt/artifacts/vcpkg/installed
+          dockerRunArgs: |
+            --volume "${PWD}:/workspace"
+            --volume "/opt/artifacts:/opt/artifacts"
+            --volume "/opt/rust-registry:/opt/rust-registry"
+          shell: /bin/bash
+          install: |
+            apt update -y
+            echo -e "installing deps"
+            apt-get -qq install -y  git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake libclang-dev ninja-build libappindicator3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libvdpau-dev libva-dev libclang-dev llvm-dev libclang-10-dev llvm-10-dev pkg-config tree g++ gcc libvpx-dev tree > /dev/null
+            # we have libopus compiled by us.
+            apt remove -y libopus-dev || true
+            # output devs
+            ls -l ./
+            tree -L 3 /opt/artifacts/vcpkg/installed
+          run: |
+            # disable git safe.directory
+            git config --global --add safe.directory "*"
+            # rust
+            pushd /opt
+            wget -O rust.tar.gz https://static.rust-lang.org/dist/rust-1.64.0-${{ matrix.job.target }}.tar.gz
+            tar -zxvf rust.tar.gz > /dev/null && rm rust.tar.gz
+            cd rust-1.64.0-${{ matrix.job.target }} && ./install.sh
+            rm -rf rust-1.64.0-${{ matrix.job.target }}
+            # edit config
+            mkdir -p ~/.cargo/
+            echo """
+              [source.crates-io]
+              registry = 'https://github.com/rust-lang/crates.io-index'
+              replace-with = 'local-registry'
+
+              [source.local-registry]
+              local-registry = '/opt/rust-registry/'
+            """ > ~/.cargo/config
+            cat ~/.cargo/config
+            # start build
+            pushd /workspace
+            # mock 
+            case "${{ matrix.job.arch }}" in
+              aarch64)
+                cp -r /opt/artifacts/vcpkg/installed/lib/* /usr/lib/aarch64-linux-gnu/
+                cp -r /opt/artifacts/vcpkg/installed/include/* /usr/include/
+                ls -l /opt/artifacts/vcpkg/installed/lib/
+                mkdir -p /vcpkg/installed/arm64-linux
+                ln -s /usr/lib/aarch64-linux-gnu  /vcpkg/installed/arm64-linux/lib
+                ln -s /usr/include /vcpkg/installed/arm64-linux/include
+                export VCPKG_ROOT=/vcpkg
+                # disable hwcodec for compilation
+                cargo build --lib --features flutter,${{ matrix.job.extra-build-features }} --release
+                ;;
+              armv7)
+                cp -r /opt/artifacts/vcpkg/installed/lib/* /usr/lib/arm-linux-gnueabihf/
+                cp -r /opt/artifacts/vcpkg/installed/include/* /usr/include/
+                mkdir -p /vcpkg/installed/arm-linux
+                ln -s /usr/lib/arm-linux-gnueabihf  /vcpkg/installed/arm-linux/lib
+                ln -s /usr/include /vcpkg/installed/arm-linux/include
+                export VCPKG_ROOT=/vcpkg
+                # disable hwcodec for compilation
+                cargo build --lib --features flutter,${{ matrix.job.extra-build-features }} --release
+                ;;
+            esac
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@master
+        with:
+          name: librustdesk-${{ matrix.job.arch }}-${{ matrix.job.extra-build-features }}.so
+          path: target/release/liblibrustdesk.so
+
+  build-rustdesk-linux-arm:
+    needs: [build-rustdesk-lib-linux-arm]
+    name: build-rustdesk ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
+    runs-on: ubuntu-20.04 # 20.04 has more performance on arm build
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - {
+              arch: aarch64,
+              target: aarch64-unknown-linux-gnu,
+              os: ubuntu-18.04, # just for naming package, not running host
+              use-cross: true,
+              extra-build-features: "",
+            }
+          # - {
+          #     arch: aarch64,
+          #     target: aarch64-unknown-linux-gnu,
+          #     os: ubuntu-18.04, # just for naming package, not running host
+          #     use-cross: true,
+          #     extra-build-features: "flatpak",
+          #   }
+          # - { arch: armv7, target: arm-unknown-linux-gnueabihf , os: ubuntu-20.04, use-cross: true, extra-build-features: "" }
+          # - { arch: armv7, target: arm-unknown-linux-gnueabihf , os: ubuntu-20.04, use-cross: true, extra-build-features: "flatpak" }
+          # - { target: arm-unknown-linux-musleabihf, os: ubuntu-20.04, use-cross: true }
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v3
+
+      - name: Restore bridge files
+        uses: actions/download-artifact@master
+        with:
+          name: bridge-artifact
+          path: ./
+
+      - name: Prepare env
+        run: |
+          sudo apt update -y
+          sudo apt-get -qq install -y git curl wget nasm yasm libgtk-3-dev
+          mkdir -p ./target/release/
+
+      - name: Restore the rustdesk lib file
+        uses: actions/download-artifact@master
+        with:
+          name: librustdesk-${{ matrix.job.arch }}-${{ matrix.job.extra-build-features }}.so
+          path: ./target/release/
+
+      - name: Download Flutter
+        shell: bash
+        run: |
+          pushd /opt
+          # Currently 3.0.5 does not support arm build
+          git clone https://github.com/flutter/flutter.git -b stable || true
+          pushd flutter
+          git fetch origin && git reset --hard origin/stable
+          # TODO: `flutter_improved_scrolling` needs to be revised to support arm64 trackpad.
+          # sed xxx
+
+      - uses: Kingtous/run-on-arch-action@amd64-support
+        name: Build rustdesk binary for ${{ matrix.job.arch }}
+        id: vcpkg
+        with:
+          arch: ${{ matrix.job.arch }}
+          distro: ubuntu18.04-rustdesk
+          githubToken: ${{ github.token }}
+          setup: |
+            ls -l "${PWD}"
+          dockerRunArgs: |
+            --volume "${PWD}:/workspace"
+            --volume "/opt/artifacts:/opt/artifacts"
+            --volume "/opt/flutter:/opt/flutter"
+          shell: /bin/bash
+          install: |
+            apt update -y
+            apt-get -qq install -y git cmake g++ gcc build-essential nasm yasm curl unzip xz-utils python3 wget pkg-config ninja-build pkg-config libgtk-3-dev liblzma-dev clang libappindicator3-dev rpm
+          run: |
+            # disable git safe.directory
+            git config --global --add safe.directory "*"
+            # Setup Flutter
+            export PATH=/opt/flutter/bin:$PATH
+            flutter doctor -v
+            flutter precache
+            pushd /workspace
+            # edit to arm64
+            case ${{ matrix.job.arch }} in
+              aarch64)
+                sed -i "s/Architecture: amd64/Architecture: arm64/g" ./build.py
+                sed -i "s/x64\/release/arm64\/release/g" ./build.py
+              ;;
+              armv7)
+                sed -i "s/Architecture: amd64/Architecture: arm/g" ./build.py
+                sed -i "s/x64\/release/arm\/release/g" ./build.py
+              ;;
+            esac
+            python3 ./build.py --flutter --hwcodec --skip-cargo
+            # rpm package
+            echo -e "start packaging"
+            pushd /workspace
+            case ${{ matrix.job.arch }} in
+              armv7)
+                sed -i "s/64bit/32bit/g" ./res/rpm-flutter.spec
+                sed -i "s/linux\/x64/linux\/arm/g" ./res/rpm-flutter.spec
+                ;;
+              aarch64)
+                sed -i "s/linux\/x64/linux\/arm64/g" ./res/rpm-flutter.spec
+                ;;
+            esac
+            HBB=`pwd` rpmbuild ./res/rpm-flutter.spec -bb
+            pushd ~/rpmbuild/RPMS/${{ matrix.job.arch }}
+            mkdir -p /opt/artifacts/rpm
+            for name in rustdesk*??.rpm; do
+                mv "$name" "/opt/artifacts/rpm/${name%%.rpm}-fedora28-centos8.rpm" 
+            done
+
+
+      - name: Rename rustdesk
+        shell: bash
+        run: |
+          for name in rustdesk*??.deb; do
+              mv "$name" "${name%%.deb}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb"
+          done
+
+      - name: Publish debian package
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb
+
+      - name: Upload Artifcat
+        uses: actions/upload-artifact@master
+        if: ${{ contains(matrix.job.extra-build-features, 'flatpak') }}
+        with:
+          name: rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb
+          path: rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb
+
+      - name: Patch archlinux PKGBUILD
+        if: ${{ matrix.job.extra-build-features == '' }}
+        run: |
+          sed -i "s/arch=('x86_64')/arch=('${{ matrix.job.arch }}')/g" res/PKGBUILD
+          case ${{ matrix.job.arch }} in
+              armv7)
+                sed -i "s/linux\/x64/linux\/arm/g" ./res/PKGBUILD
+                ;;
+              aarch64)
+                sed -i "s/linux\/x64/linux\/arm64/g" ./res/PKGBUILD
+                ;;
+          esac
+
+      # Temporary disable for there is no many archlinux arm hosts
+      # - name: Build archlinux package
+      #   if: ${{ matrix.job.extra-build-features == '' }}
+      #   uses: vufa/arch-makepkg-action@master
+      #   with:
+      #     packages: >
+      #       llvm
+      #       clang
+      #       libva
+      #       libvdpau
+      #       rust
+      #       gstreamer
+      #       unzip
+      #       git
+      #       cmake
+      #       gcc
+      #       curl
+      #       wget
+      #       yasm
+      #       nasm
+      #       zip
+      #       make
+      #       pkg-config
+      #       clang
+      #       gtk3
+      #       xdotool
+      #       libxcb
+      #       libxfixes
+      #       alsa-lib
+      #       pipewire
+      #       python
+      #       ttf-arphic-uming
+      #       libappindicator-gtk3
+      #     scripts: |
+      #       cd res && HBB=`pwd`/.. FLUTTER=1 makepkg -f
+
+      # - name: Publish archlinux package
+      #   if: ${{ matrix.job.extra-build-features == '' }}
+      #   uses: softprops/action-gh-release@v1
+      #   with:
+      #     prerelease: true
+      #     tag_name: ${{ env.TAG_NAME }}
+      #     files: |
+      #       res/rustdesk*.zst
+
+      - name: Publish fedora28/centos8 package
+        if: ${{ matrix.job.extra-build-features == '' }}
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            /opt/artifacts/rpm/*.rpm
+
+  build-rustdesk-linux-amd64:
+    needs: [build-rustdesk-lib-linux-amd64]
+    name: build-rustdesk ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
+    runs-on: ubuntu-20.04
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
           # - { target: i686-unknown-linux-gnu      , os: ubuntu-20.04, use-cross: true }
           # - { target: i686-unknown-linux-musl     , os: ubuntu-20.04, use-cross: true }
           - {
@@ -450,7 +935,7 @@ jobs:
       - name: Prepare env
         run: |
           sudo apt update -y
-          sudo apt install -y git curl wget nasm yasm libgtk-3-dev
+          sudo apt-get -qq install -y git curl wget nasm yasm libgtk-3-dev
           mkdir -p ./target/release/
 
       - name: Restore the rustdesk lib file
@@ -474,7 +959,7 @@ jobs:
           shell: /bin/bash
           install: |
             apt update -y
-            apt install -y git cmake g++ gcc build-essential nasm yasm curl unzip xz-utils python3 wget pkg-config ninja-build pkg-config libgtk-3-dev liblzma-dev clang libappindicator3-dev
+            apt-get -qq install -y git cmake g++ gcc build-essential nasm yasm curl unzip xz-utils python3 wget pkg-config ninja-build pkg-config libgtk-3-dev liblzma-dev clang libappindicator3-dev rpm
           run: |
             # disable git safe.directory
             git config --global --add safe.directory "*"
@@ -487,6 +972,19 @@ jobs:
             flutter doctor -v
             pushd /workspace
             python3 ./build.py --flutter --hwcodec --skip-cargo
+            # rpm package
+            pushd /workspace
+            case ${{ matrix.job.arch }} in
+              armv7)
+                sed -i "s/64bit/32bit/g" ./res/rpm-flutter.spec
+                ;;
+            esac
+            HBB=`pwd` rpmbuild ./res/rpm-flutter.spec -bb
+            pushd ~/rpmbuild/RPMS/${{ matrix.job.arch }}
+            mkdir -p /opt/artifacts/rpm
+            for name in rustdesk*??.rpm; do
+                mv "$name" "/opt/artifacts/rpm/${name%%.rpm}-fedora28-centos8.rpm" 
+            done
 
       - name: Rename rustdesk
         shell: bash
@@ -559,17 +1057,6 @@ jobs:
           files: |
             res/rustdesk*.zst
 
-      - name: Make RPM package
-        shell: bash
-        if: ${{ matrix.job.extra-build-features == '' }}
-        run: |
-          sudo apt install -y rpm
-          HBB=`pwd` rpmbuild ./res/rpm-flutter.spec -bb
-          pushd ~/rpmbuild/RPMS/${{ matrix.job.arch }}
-          for name in rustdesk*??.rpm; do
-              mv "$name" "${name%%.rpm}-fedora28-centos8.rpm" 
-          done
-
       - name: Publish fedora28/centos8 package
         if: ${{ matrix.job.extra-build-features == '' }}
         uses: softprops/action-gh-release@v1
@@ -577,26 +1064,84 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            /home/runner/rpmbuild/RPMS/${{ matrix.job.arch }}/*.rpm
+            /opt/artifacts/rpm/*.rpm
 
-  build-flatpak:
+  # Temporary disable flatpak arm build
+  #
+  # build-flatpak-arm:
+  #   name: Build Flatpak
+  #   needs: [build-rustdesk-linux-arm]
+  #   runs-on: ${{ matrix.job.os }}
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       job:
+  #         # - { target: aarch64-unknown-linux-gnu   , os: ubuntu-18.04, arch: arm64 }
+  #         - { target: aarch64-unknown-linux-gnu, os: ubuntu-20.04, arch: arm64  }
+  #   steps:
+  #     - name: Checkout source code
+  #       uses: actions/checkout@v3
+
+  #     - name: Download Binary
+  #       uses: actions/download-artifact@master
+  #       with:
+  #         name: rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb
+  #         path: .
+
+  #     - name: Rename Binary
+  #       run: |
+  #         mv rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb rustdesk-${{ env.VERSION }}.deb
+
+  #     - uses: Kingtous/run-on-arch-action@amd64-support
+  #       name: Build rustdesk flatpak package for ${{ matrix.job.arch }}
+  #       id: rpm
+  #       with:
+  #         arch: ${{ matrix.job.arch }}
+  #         distro: ubuntu18.04
+  #         githubToken: ${{ github.token }}
+  #         setup: |
+  #           ls -l "${PWD}"
+  #         dockerRunArgs: |
+  #           --volume "${PWD}:/workspace"
+  #         shell: /bin/bash
+  #         install: |
+  #           apt update -y
+  #           apt install -y rpm
+  #         run: |
+  #           pushd /workspace
+  #           # install 
+  #           apt update -y
+  #           apt install -y flatpak flatpak-builder cmake g++ gcc git curl wget nasm yasm libgtk-3-dev git
+  #           # flatpak deps
+  #           flatpak --user remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+  #           flatpak --user install -y flathub org.freedesktop.Platform/${{ matrix.job.arch }}/21.08
+  #           flatpak --user install -y flathub org.freedesktop.Sdk/${{ matrix.job.arch }}/21.08
+  #           # package
+  #           pushd flatpak
+  #           git clone https://github.com/flathub/shared-modules.git --depth=1
+  #           flatpak-builder --user --force-clean --repo=repo ./build ./rustdesk.json
+  #           flatpak build-bundle ./repo rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}.flatpak org.rustdesk.rustdesk
+
+  #     - name: Publish flatpak package
+  #       uses: softprops/action-gh-release@v1
+  #       with:
+  #         prerelease: true
+  #         tag_name: ${{ env.TAG_NAME }}
+  #         files: |
+  #           flatpak/rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}.flatpak
+
+  build-flatpak-amd64:
     name: Build Flatpak
-    needs: [build-rustdesk-linux]
+    needs: [build-rustdesk-linux-amd64]
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
       matrix:
         job:
-          # - { target: aarch64-unknown-linux-gnu   , os: ubuntu-18.04, use-cross: true, arch: arm64 }
-          - { target: x86_64-unknown-linux-gnu, os: ubuntu-18.04, arch: x86_64 }
+          - { target: x86_64-unknown-linux-gnu, os: ubuntu-20.04, arch: x86_64 }
     steps:
       - name: Checkout source code
         uses: actions/checkout@v3
-
-      - name: Install dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y flatpak flatpak-builder cmake g++ gcc git curl wget nasm yasm libgtk-3-dev
 
       - name: Download Binary
         uses: actions/download-artifact@master
@@ -608,18 +1153,35 @@ jobs:
         run: |
           mv rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb rustdesk-${{ env.VERSION }}.deb
 
-      - name: Install Flatpak deps
-        run: |
-          flatpak --user remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-          flatpak --user install -y flathub org.freedesktop.Platform/${{ matrix.job.arch }}/21.08
-          flatpak --user install -y flathub org.freedesktop.Sdk/${{ matrix.job.arch }}/21.08
-
-      - name: Make Flatpak package
-        run: |
-          pushd flatpak
-          git clone https://github.com/flathub/shared-modules.git --depth=1
-          flatpak-builder --user --force-clean --repo=repo ./build ./rustdesk.json
-          flatpak build-bundle ./repo rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}.flatpak org.rustdesk.rustdesk
+      - uses: Kingtous/run-on-arch-action@amd64-support
+        name: Build rustdesk flatpak package for ${{ matrix.job.arch }}
+        id: rpm
+        with:
+          arch: ${{ matrix.job.arch }}
+          distro: ubuntu18.04
+          githubToken: ${{ github.token }}
+          setup: |
+            ls -l "${PWD}"
+          dockerRunArgs: |
+            --volume "${PWD}:/workspace"
+          shell: /bin/bash
+          install: |
+            apt update -y
+            apt install -y rpm
+          run: |
+            pushd /workspace
+            # install 
+            apt update -y
+            apt install -y flatpak flatpak-builder cmake g++ gcc git curl wget nasm yasm libgtk-3-dev git
+            # flatpak deps
+            flatpak --user remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+            flatpak --user install -y flathub org.freedesktop.Platform/${{ matrix.job.arch }}/21.08
+            flatpak --user install -y flathub org.freedesktop.Sdk/${{ matrix.job.arch }}/21.08
+            # package
+            pushd flatpak
+            git clone https://github.com/flathub/shared-modules.git --depth=1
+            flatpak-builder --user --force-clean --repo=repo ./build ./rustdesk.json
+            flatpak build-bundle ./repo rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}.flatpak org.rustdesk.rustdesk
 
       - name: Publish flatpak package
         uses: softprops/action-gh-release@v1
