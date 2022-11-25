@@ -5,8 +5,6 @@ on:
     # schedule build every night
     - cron: "0 0 * * *"
   workflow_dispatch:
-  # REMOVE ME ON PR
-  push:
 
 env:
   LLVM_VERSION: "10.0"
