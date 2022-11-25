@@ -163,6 +163,14 @@ impl Default for Enigo {
 }
 
 impl MouseControllable for Enigo {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_mut_any(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+
     fn mouse_move_to(&mut self, x: i32, y: i32) {
         let pressed = Self::pressed_buttons();
 
@@ -319,6 +327,14 @@ impl MouseControllable for Enigo {
 // com/questions/1918841/how-to-convert-ascii-character-to-cgkeycode
 
 impl KeyboardControllable for Enigo {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_mut_any(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+    
     fn key_sequence(&mut self, sequence: &str) {
         // NOTE(dustin): This is a fix for issue https://github.com/enigo-rs/enigo/issues/68
         // TODO(dustin): This could be improved by aggregating 20 bytes worth of graphemes at a time
