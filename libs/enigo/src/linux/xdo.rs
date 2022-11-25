@@ -102,6 +102,14 @@ impl Drop for EnigoXdo {
     }
 }
 impl MouseControllable for EnigoXdo {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_mut_any(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+
     fn mouse_move_to(&mut self, x: i32, y: i32) {
         if self.xdo.is_null() {
             return;
@@ -277,6 +285,14 @@ fn keysequence<'a>(key: Key) -> Cow<'a, str> {
     })
 }
 impl KeyboardControllable for EnigoXdo {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_mut_any(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+
     fn get_key_state(&mut self, key: Key) -> bool {
         if self.xdo.is_null() {
             return false;

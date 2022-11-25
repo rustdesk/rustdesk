@@ -759,6 +759,16 @@ fn get_display_num() -> usize {
     }
 }
 
+pub async fn check_init() -> ResultType<()> {
+    #[cfg(target_os = "linux")]
+    {
+        if !scrap::is_x11() {
+            return super::wayland::check_init().await;
+        }
+    }
+    Ok(())
+}
+
 pub(super) fn get_displays_2(all: &Vec<Display>) -> (usize, Vec<DisplayInfo>) {
     let mut displays = Vec::new();
     let mut primary = 0;

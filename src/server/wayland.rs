@@ -115,7 +115,7 @@ pub(super) fn is_inited() -> Option<Message> {
     }
 }
 
-async fn check_init() -> ResultType<()> {
+pub(super) async fn check_init() -> ResultType<()> {
     if !scrap::is_x11() {
         let mut minx = 0;
         let mut maxx = 0;
