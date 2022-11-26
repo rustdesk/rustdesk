@@ -746,13 +746,16 @@ jobs:
       - name: Download Flutter
         shell: bash
         run: |
+          # disable git safe.directory
+          git config --global --add safe.directory "*"
           pushd /opt
-          # Currently 3.0.5 does not support arm build
-          git clone https://github.com/flutter/flutter.git -b stable || true
-          pushd flutter
-          git fetch origin && git reset --hard origin/stable
-          # TODO: `flutter_improved_scrolling` needs to be revised to support arm64 trackpad.
-          # sed xxx
+          # clone repo and reset to flutter 3.0.5
+          git clone https://github.com/sony/flutter-elinux.git || true
+          pushd flutter-elinux
+            # reset to flutter 3.0.5
+            git fetch
+            git reset --hard b09a90eee643859ce4e676839227edd9fd3feba8 
+          popd
 
       - uses: Kingtous/run-on-arch-action@amd64-support
         name: Build rustdesk binary for ${{ matrix.job.arch }}
@@ -766,7 +769,7 @@ jobs:
           dockerRunArgs: |
             --volume "${PWD}:/workspace"
             --volume "/opt/artifacts:/opt/artifacts"
-            --volume "/opt/flutter:/opt/flutter"
+            --volume "/opt/flutter-elinux:/opt/flutter-elinux"
           shell: /bin/bash
           install: |
             apt update -y
@@ -774,12 +777,13 @@ jobs:
           run: |
             # disable git safe.directory
             git config --global --add safe.directory "*"
-            # Setup Flutter
-            export PATH=/opt/flutter/bin:$PATH
-            flutter doctor -v
-            flutter precache
             pushd /workspace
-            # edit to arm64
+            # we use flutter-elinux to build our rustdesk
+            sed -i "s/flutter build linux --release/flutter-elinux build linux/g" ./build.py
+            # Setup flutter-elinux
+            export PATH=/opt/flutter-elinux/bin:$PATH
+            flutter-elinux doctor -v
+            # edit to corresponding arch
             case ${{ matrix.job.arch }} in
               aarch64)
                 sed -i "s/Architecture: amd64/Architecture: arm64/g" ./build.py
