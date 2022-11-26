@@ -243,12 +243,13 @@ jobs:
             cmake --version
             gcc -v
           run: |
+            # disable git safe.directory
+            git config --global --add safe.directory "*"
             case "${{ matrix.job.arch }}" in
               x86_64)
                 export VCPKG_FORCE_SYSTEM_BINARIES=1
                 pushd /artifacts
                 git clone https://github.com/microsoft/vcpkg.git || true
-                git config --global --add safe.directory /artifacts/vcpkg || true
                 pushd vcpkg
                 git reset --hard ${{ env.VCPKG_COMMIT_ID }}
                 ./bootstrap-vcpkg.sh
@@ -1169,6 +1170,8 @@ jobs:
             apt update -y
             apt install -y rpm
           run: |
+            # disable git safe.directory
+            git config --global --add safe.directory "*"
             pushd /workspace
             # install 
             apt update -y
