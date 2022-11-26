@@ -506,7 +506,6 @@ class CursorPaint extends StatelessWidget {
   Widget build(BuildContext context) {
     final m = Provider.of<CursorModel>(context);
     final c = Provider.of<CanvasModel>(context);
-    // final adjust = m.adjustForKeyboard();
     double hotx = m.hotx;
     double hoty = m.hoty;
     if (m.image == null) {
@@ -515,21 +514,34 @@ class CursorPaint extends StatelessWidget {
         hoty = preDefaultCursor.image!.height / 2;
       }
     }
-    return zoomCursor.isTrue
-        ? CustomPaint(
-            painter: ImagePainter(
-                image: m.image ?? preDefaultCursor.image,
-                x: m.x - hotx + c.x / c.scale,
-                y: m.y - hoty + c.y / c.scale,
-                scale: c.scale),
-          )
-        : CustomPaint(
-            painter: ImagePainter(
-                image: m.image ?? preDefaultCursor.image,
-                x: (m.x - hotx) * c.scale + c.x,
-                y: (m.y - hoty) * c.scale + c.y,
-                scale: 1.0),
-          );
+
+    double cx = c.x;
+    double cy = c.y;
+    if (c.scrollStyle == ScrollStyle.scrollbar) {
+      final d = c.parent.target!.ffiModel.display;
+      final imageWidth = d.width * c.scale;
+      final imageHeight = d.height * c.scale;
+      cx = -imageWidth * c.scrollX;
+      cy = -imageHeight * c.scrollY;
+    }
+
+    double x = (m.x - hotx) * c.scale + cx;
+    double y = (m.y - hoty) * c.scale + cx;
+    double scale = 1.0;
+    if (zoomCursor.isTrue) {
+      x = m.x - hotx + cx / c.scale;
+      y = m.y - hoty + cy / c.scale;
+      scale = c.scale;
+    }
+
+    return CustomPaint(
+      painter: ImagePainter(
+        image: m.image ?? preDefaultCursor.image,
+        x: x,
+        y: y,
+        scale: scale,
+      ),
+    );
   }
 }
 
