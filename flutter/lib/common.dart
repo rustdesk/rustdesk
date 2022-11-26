@@ -6,6 +6,7 @@ import 'dart:typed_data';
 
 import 'package:back_button_interceptor/back_button_interceptor.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -321,7 +322,7 @@ void window_on_top(int? id) {
     windowManager.restore();
     windowManager.show();
     windowManager.focus();
-    rustDeskWinManager.registerActiveWindow(0);
+    rustDeskWinManager.registerActiveWindow(kWindowMainId);
   } else {
     WindowController.fromWindowId(id)
       ..focus()
@@ -1227,41 +1228,50 @@ StreamSubscription? listenUniLinks() {
   return sub;
 }
 
-void checkArguments() {
+/// Returns true if we successfully handle the startup arguments.
+bool checkArguments() {
   // check connect args
   final connectIndex = bootArgs.indexOf("--connect");
   if (connectIndex == -1) {
-    return;
+    return false;
   }
   String? arg =
       bootArgs.length < connectIndex + 1 ? null : bootArgs[connectIndex + 1];
   if (arg != null) {
     if (arg.startsWith(kUniLinksPrefix)) {
-      parseRustdeskUri(arg);
+      return parseRustdeskUri(arg);
     } else {
+      // remove "--connect xxx" in the `bootArgs` array
+      bootArgs.removeAt(connectIndex);
+      bootArgs.removeAt(connectIndex);
       // fallback to peer id
-      rustDeskWinManager.newRemoteDesktop(arg);
-      bootArgs.removeAt(connectIndex);
-      bootArgs.removeAt(connectIndex);
+      Future.delayed(Duration.zero, () {
+        rustDeskWinManager.newRemoteDesktop(arg);
+      });
+      return true;
     }
   }
+  return false;
 }
 
 /// Parse `rustdesk://` unilinks
 ///
+/// Returns true if we successfully handle the uri provided.
 /// [Functions]
 /// 1. New Connection: rustdesk://connection/new/your_peer_id
-void parseRustdeskUri(String uriPath) {
+bool parseRustdeskUri(String uriPath) {
   final uri = Uri.tryParse(uriPath);
   if (uri == null) {
     print("uri is not valid: $uriPath");
-    return;
+    return false;
   }
-  callUniLinksUriHandler(uri);
+  return callUniLinksUriHandler(uri);
 }
 
 /// uri handler
-void callUniLinksUriHandler(Uri uri) {
+///
+/// Returns true if we successfully handle the uri provided.
+bool callUniLinksUriHandler(Uri uri) {
   debugPrint("uni links called: $uri");
   // new connection
   if (uri.authority == "connection" && uri.path.startsWith("/new/")) {
@@ -1269,7 +1279,9 @@ void callUniLinksUriHandler(Uri uri) {
     Future.delayed(Duration.zero, () {
       rustDeskWinManager.newRemoteDesktop(peerId);
     });
+    return true;
   }
+  return false;
 }
 
 /// Connect to a peer with [id].
