@@ -118,13 +118,18 @@ void runMainApp(bool startService) async {
     gFFI.serverModel.startService();
   }
   runApp(App());
+  // check the startup argument, if we successfully handle the argument, we keep the main window hidden.
+  if (checkArguments()) {
+    windowManager.hide();
+  } else {
+    windowManager.show();
+    windowManager.focus();
+  }
   // set window option
   WindowOptions windowOptions = getHiddenTitleBarWindowOptions();
   windowManager.waitUntilReadyToShow(windowOptions, () async {
     restoreWindowPosition(WindowType.Main);
-    await windowManager.show();
-    await windowManager.focus();
-    await windowManager.setOpacity(1);
+    windowManager.setOpacity(1);
   });
 }
 

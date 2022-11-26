@@ -20,6 +20,7 @@ const String kTabLabelHomePage = "Home";
 const String kTabLabelSettingPage = "Settings";
 
 const String kWindowPrefix = "wm_";
+const int kWindowMainId = 0;
 
 // the executable name of the portable version
 const String kEnvPortableExecutable = "RUSTDESK_APPNAME";

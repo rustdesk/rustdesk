@@ -35,7 +35,7 @@ packages:
       name: archive
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "3.3.4"
+    version: "3.3.5"
   args:
     dependency: transitive
     description:
@@ -257,8 +257,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "8ee8eb59cabf6ac83a13fe002de7d4a231263a58"
-      resolved-ref: "8ee8eb59cabf6ac83a13fe002de7d4a231263a58"
+      ref: cb086219bd4760a95a483cb14c1791d2a39ca5a0
+      resolved-ref: cb086219bd4760a95a483cb14c1791d2a39ca5a0
       url: "https://github.com/Kingtous/rustdesk_desktop_multi_window"
     source: git
     version: "0.1.0"
@@ -462,7 +462,7 @@ packages:
       name: frontend_server_client
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "3.1.0"
+    version: "3.2.0"
   get:
     dependency: "direct main"
     description:
@@ -735,7 +735,7 @@ packages:
       name: path_provider_android
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "2.0.21"
+    version: "2.0.22"
   path_provider_ios:
     dependency: transitive
     description:
@@ -1054,14 +1054,14 @@ packages:
       name: url_launcher
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "6.1.6"
+    version: "6.1.7"
   url_launcher_android:
     dependency: transitive
     description:
       name: url_launcher_android
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "6.0.21"
+    version: "6.0.22"
   url_launcher_ios:
     dependency: transitive
     description:
@@ -1124,7 +1124,7 @@ packages:
       name: video_player
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "2.4.7"
+    version: "2.4.8"
   video_player_android:
     dependency: transitive
     description:
@@ -1215,7 +1215,7 @@ packages:
       name: win32
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "3.1.1"
+    version: "3.1.2"
   win32_registry:
     dependency: transitive
     description:
