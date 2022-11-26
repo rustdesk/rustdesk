@@ -1168,7 +1168,7 @@ jobs:
           shell: /bin/bash
           install: |
             apt update -y
-            apt install -y rpm
+            apt install -y rpm git wget curl
           run: |
             # disable git safe.directory
             git config --global --add safe.directory "*"
