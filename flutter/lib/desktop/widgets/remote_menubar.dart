@@ -752,31 +752,6 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       ),
       MenuEntryDivider<String>(),
       MenuEntryRadios<String>(
-        text: translate('Scroll Style'),
-        optionsGetter: () => [
-          MenuEntryRadioOption(
-            text: translate('ScrollAuto'),
-            value: kRemoteScrollStyleAuto,
-            dismissOnClicked: true,
-          ),
-          MenuEntryRadioOption(
-            text: translate('Scrollbar'),
-            value: kRemoteScrollStyleBar,
-            dismissOnClicked: true,
-          ),
-        ],
-        curOptionGetter: () async =>
-            // null means peer id is not found, which there's no need to care about
-            await bind.sessionGetScrollStyle(id: widget.id) ?? '',
-        optionSetter: (String oldValue, String newValue) async {
-          await bind.sessionSetScrollStyle(id: widget.id, value: newValue);
-          widget.ffi.canvasModel.updateScrollStyle();
-        },
-        padding: padding,
-        dismissOnClicked: true,
-      ),
-      MenuEntryDivider<String>(),
-      MenuEntryRadios<String>(
         text: translate('Image Quality'),
         optionsGetter: () => [
           MenuEntryRadioOption(
@@ -954,6 +929,36 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       ),
       MenuEntryDivider<String>(),
     ];
+
+    if (widget.state.viewStyle.value == kRemoteViewStyleOriginal) {
+      displayMenu.insert(
+          2,
+          MenuEntryRadios<String>(
+            text: translate('Scroll Style'),
+            optionsGetter: () => [
+              MenuEntryRadioOption(
+                text: translate('ScrollAuto'),
+                value: kRemoteScrollStyleAuto,
+                dismissOnClicked: true,
+              ),
+              MenuEntryRadioOption(
+                text: translate('Scrollbar'),
+                value: kRemoteScrollStyleBar,
+                dismissOnClicked: true,
+              ),
+            ],
+            curOptionGetter: () async =>
+                // null means peer id is not found, which there's no need to care about
+                await bind.sessionGetScrollStyle(id: widget.id) ?? '',
+            optionSetter: (String oldValue, String newValue) async {
+              await bind.sessionSetScrollStyle(id: widget.id, value: newValue);
+              widget.ffi.canvasModel.updateScrollStyle();
+            },
+            padding: padding,
+            dismissOnClicked: true,
+          ));
+      displayMenu.insert(3, MenuEntryDivider<String>());
+    }
 
     if (_isWindowCanBeAdjusted(remoteCount)) {
       displayMenu.insert(
