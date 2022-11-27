@@ -394,12 +394,12 @@ pub fn is_root() -> bool {
     crate::username() == "root"
 }
 
-pub fn run_as_user(arg: &str) -> ResultType<Option<std::process::Child>> {
+pub fn run_as_user(arg: Vec<&str>) -> ResultType<Option<std::process::Child>> {
     let uid = get_active_userid();
     let cmd = std::env::current_exe()?;
-    let task = std::process::Command::new("launchctl")
-        .args(vec!["asuser", &uid, cmd.to_str().unwrap_or(""), arg])
-        .spawn()?;
+    let mut args = vec!["asuser", &uid, cmd.to_str().unwrap_or("")];
+    args.append(&mut arg.clone());
+    let task = std::process::Command::new("launchctl").args(args).spawn()?;
     Ok(Some(task))
 }
 
@@ -537,7 +537,6 @@ pub fn quit_gui() {
         let () = msg_send!(NSApp(), terminate: nil);
     };
 }
-
 
 pub fn get_double_click_time() -> u32 {
     // to-do: https://github.com/servo/core-foundation-rs/blob/786895643140fa0ee4f913d7b4aeb0c4626b2085/cocoa/src/appkit.rs#L2823
