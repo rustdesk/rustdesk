@@ -393,8 +393,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("One-time Password", "رمز عبور یکبار مصرف"),
         ("Use one-time password", "استفاده از رمز عبور یکبار مصرف"),
         ("One-time password length", "طول رمز عبور یکبار مصرف"),
-        ("Request access to your device", ""),
-        ("Hide connection management window", ""),
-        ("hide_cm_tip", ""),
+        ("Request access to your device", "دسترسی به دستگاه خود را درخواست کنید"),
+        ("Hide connection management window", "پنهان کردن پنجره مدیریت اتصال"),
+        ("hide_cm_tip", "فقط در صورت پذیرفتن جلسات از طریق رمز عبور و استفاده از رمز عبور دائمی، مخفی شدن مجاز است"),
     ].iter().cloned().collect();
 }
