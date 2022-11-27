@@ -1571,18 +1571,21 @@ async fn start_ipc(
     if let Ok(s) = crate::ipc::connect(1000, "_cm").await {
         stream = Some(s);
     } else {
-        let extra_args = if password::hide_cm() { "--hide" } else { "" };
+        let mut args = vec!["--cm"];
+        if password::hide_cm() {
+            args.push("--hide");
+        };
         let run_done;
         if crate::platform::is_root() {
             let mut res = Ok(None);
             for _ in 0..10 {
                 #[cfg(not(target_os = "linux"))]
                 {
-                    res = crate::platform::run_as_user(&format!("--cm {}", extra_args));
+                    res = crate::platform::run_as_user(args.clone());
                 }
                 #[cfg(target_os = "linux")]
                 {
-                    res = crate::platform::run_as_user(&format!("--cm {}", extra_args), None);
+                    res = crate::platform::run_as_user(args.clone(), None);
                 }
                 if res.is_ok() {
                     break;
@@ -1597,10 +1600,6 @@ async fn start_ipc(
             run_done = false;
         }
         if !run_done {
-            let mut args = vec!["--cm"];
-            if !extra_args.is_empty() {
-                args.push(&extra_args);
-            }
             super::CHILD_PROCESS
                 .lock()
                 .unwrap()
