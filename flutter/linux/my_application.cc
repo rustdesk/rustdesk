@@ -14,6 +14,8 @@ struct _MyApplication {
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
+extern bool gIsConnectionManager;
+
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
@@ -51,7 +53,12 @@ static void my_application_activate(GApplication* application) {
 
   // auto bdw = bitsdojo_window_from(window); // <--- add this line
   // bdw->setCustomFrame(true);               // <-- add this line
-  gtk_window_set_default_size(window, 800, 600);   // <-- comment this line
+  int width = 800, height = 600;
+  if (gIsConnectionManager) {
+    width = 300;
+    height = 400;
+  }
+  gtk_window_set_default_size(window, width, height);   // <-- comment this line
   gtk_widget_show(GTK_WIDGET(window));
   gtk_widget_set_opacity(GTK_WIDGET(window), 0);
 
