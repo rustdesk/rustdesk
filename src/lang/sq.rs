@@ -399,5 +399,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("hide_cm_tip", "Kjo është e mundur vetëm nëse aksesi bëhet nëpërmjet një fjalëkalimi të përhershëm"),
         ("wayland_experiment_tip", ""),
         ("Right click to select tabs", ""),
+        ("Add to Address Book", ""),
     ].iter().cloned().collect();
 }

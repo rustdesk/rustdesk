@@ -68,11 +68,21 @@ class AbModel {
     peers.clear();
   }
 
-  void addId(String id) async {
+  void addId(String id, String alias, List<dynamic> tags) {
     if (idContainBy(id)) {
       return;
     }
-    peers.add(Peer.fromJson({"id": id}));
+    final peer = Peer.fromJson({
+      'id': id,
+      'alias': alias,
+      'tags': tags,
+    });
+    peers.add(peer);
+  }
+
+  void addPeer(Peer peer) {
+    peers.removeWhere((e) => e.id == peer.id);
+    peers.add(peer);
   }
 
   void addTag(String tag) async {

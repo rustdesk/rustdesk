@@ -586,6 +586,26 @@ abstract class BasePeerCard extends StatelessWidget {
     );
   }
 
+  @protected
+  MenuEntryBase<String> _addToAb(Peer peer) {
+    return MenuEntryButton<String>(
+      childBuilder: (TextStyle? style) => Text(
+        translate('Add to Address Book'),
+        style: style,
+      ),
+      proc: () {
+        () async {
+          if (!gFFI.abModel.idContainBy(peer.id)) {
+            gFFI.abModel.addPeer(peer);
+            await gFFI.abModel.pushAb();
+          }
+        }();
+      },
+      padding: menuPadding,
+      dismissOnClicked: true,
+    );
+  }
+
   void _rename(String id, bool isAddressBook) async {
     RxBool isInProgress = false.obs;
     var name = peer.alias;
@@ -679,6 +699,9 @@ class RecentPeerCard extends BasePeerCard {
       menuItems.add(_unrememberPasswordAction(peer.id));
     }
     menuItems.add(_addFavAction(peer.id));
+    if (!gFFI.abModel.idContainBy(peer.id)) {
+      menuItems.add(_addToAb(peer));
+    }
     return menuItems;
   }
 }
@@ -716,6 +739,9 @@ class FavoritePeerCard extends BasePeerCard {
     menuItems.add(_rmFavAction(peer.id, () async {
       await bind.mainLoadFavPeers();
     }));
+    if (!gFFI.abModel.idContainBy(peer.id)) {
+      menuItems.add(_addToAb(peer));
+    }
     return menuItems;
   }
 }
@@ -744,6 +770,9 @@ class DiscoveredPeerCard extends BasePeerCard {
     }
     menuItems.add(MenuEntryDivider());
     menuItems.add(_removeAction(peer.id, () async {}));
+    if (!gFFI.abModel.idContainBy(peer.id)) {
+      menuItems.add(_addToAb(peer));
+    }
     return menuItems;
   }
 }
