@@ -876,7 +876,10 @@ pub fn check_zombie(children: Children) {
 }
 
 pub fn start_option_status_sync() {
-    let _sender = SENDER.lock().unwrap();
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        let _sender = SENDER.lock().unwrap();
+    }
 }
 
 // not call directly
