@@ -302,7 +302,7 @@ jobs:
       - name: Install prerequisites
         run: |
           sudo apt update -y
-          sudo apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake libclang-dev ninja-build libappindicator3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libvdpau-dev libva-dev libclang-dev llvm-dev libclang-10-dev llvm-10-dev pkg-config
+          sudo apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang cmake libclang-dev ninja-build llvm-dev libclang-10-dev llvm-10-dev pkg-config
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -315,6 +315,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           prefix-key: bridge-${{ matrix.job.os }}
+          workspace: "/tmp/flutter_rust_bridge/frb_codegen"
 
       - name: Cache Bridge
         id: cache-bridge
@@ -328,6 +329,7 @@ jobs:
         with:
           channel: "stable"
           flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
 
       - name: Install ffigen
         run: |
@@ -352,6 +354,140 @@ jobs:
             ./src/bridge_generated.rs
             ./flutter/lib/generated_bridge.dart 
             ./flutter/lib/generated_bridge.freezed.dart
+
+  build-rustdesk-android-arm64:
+    needs: [generate-bridge-linux]
+    name: build rustdesk android apk ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - {
+              arch: x86_64,
+              target: aarch64-linux-android,
+              os: ubuntu-18.04,
+              extra-build-features: "",
+            }
+          # - {
+          #     arch: x86_64,
+          #     target: armv7-linux-androideabi,
+          #     os: ubuntu-18.04,
+          #     extra-build-features: "",
+          #   }
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt-get -qq install -y  git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake libclang-dev ninja-build libappindicator3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libvdpau-dev libva-dev libclang-dev llvm-dev libclang-10-dev llvm-10-dev pkg-config tree g++ libc6-dev gcc-multilib g++-multilib openjdk-11-jdk-headless
+      - name: Checkout source code
+        uses: actions/checkout@v3
+      - name: Install flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+      - uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r22b
+          add-to-path: true
+
+      - name: Download deps
+        shell: bash
+        run: |
+          pushd /opt
+          wget https://github.com/rustdesk/doc.rustdesk.com/releases/download/console/dep.tar.gz
+          tar xzf dep.tar.gz
+
+      - name: Restore bridge files
+        uses: actions/download-artifact@master
+        with:
+          name: bridge-artifact
+          path: ./
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          profile: minimal # minimal component installation (ie, no documentation)
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: rustdesk-lib-cache
+          key: ${{ matrix.job.target }}-${{ matrix.job.extra-build-features }}
+
+      - name: Disable rust bridge build
+        run: |
+          sed -i "s/gen_flutter_rust_bridge();/\/\//g" build.rs
+
+      - name: Build rustdesk lib
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
+          VCPKG_ROOT: /opt/vcpkg
+        run: |
+          rustup target add ${{ matrix.job.target }} 
+          cargo install cargo-ndk
+          case ${{ matrix.job.target }} in
+            aarch64-linux-android)
+              ./flutter/ndk_arm64.sh
+              mkdir -p ./flutter/android/app/src/main/jniLibs/arm64-v8a
+              cp ./target/${{ matrix.job.target }}/release/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/librustdesk.so
+            ;;
+            armv7-linux-androideabi)
+              ./flutter/ndk_arm.sh
+              mkdir -p ./flutter/android/app/src/main/jniLibs/armeabi-v7a
+              cp ./target/${{ matrix.job.target }}/release/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/armeabi-v7a/librustdesk.so
+            ;;
+          esac
+
+      - name: Build rustdesk
+        shell: bash
+        env:
+          JAVA_HOME: /usr/lib/jvm/java-11-openjdk-amd64
+        run: |
+          export PATH=/usr/lib/jvm/java-11-openjdk-amd64/bin:$PATH
+          # download so
+          pushd flutter
+            wget -O so.tar.gz https://github.com/rustdesk/doc.rustdesk.com/releases/download/console/so.tar.gz
+            tar xzvf so.tar.gz
+          popd
+          # temporary use debug sign config
+          sed -i "s/signingConfigs.release/signingConfigs.debug/g" ./flutter/android/app/build.gradle
+          case ${{ matrix.job.target }} in
+            aarch64-linux-android)
+              mkdir -p ./flutter/android/app/src/main/jniLibs/arm64-v8a
+              cp ./target/${{ matrix.job.target }}/release/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/librustdesk.so
+              # build flutter
+              pushd flutter
+              flutter build apk --release --target-platform android-arm64 --split-per-abi
+              mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ../rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk
+            ;;
+            armv7-linux-androideabi)
+              mkdir -p ./flutter/android/app/src/main/jniLibs/armeabi-v7a
+              cp ./target/${{ matrix.job.target }}/release/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/armeabi-v7a/librustdesk.so
+              # build flutter
+              pushd flutter
+              flutter build apk --release --target-platform android-arm --split-per-abi
+              mv build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk ../rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk
+            ;;
+          esac
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@master
+        with:
+          name: rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk
+          path: rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk
+
+      - name: Publish apk package
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk
 
   build-rustdesk-lib-linux-amd64:
     needs: [generate-bridge-linux, build-vcpkg-deps-linux]
@@ -585,7 +721,6 @@ jobs:
           key: ${{ matrix.job.target }}-${{ matrix.job.extra-build-features }}
           cache-directories: "/opt/rust-registry"
 
-
       - name: Install local registry
         run: |
           mkdir -p /opt/rust-registry
@@ -814,7 +949,6 @@ jobs:
                 mv "$name" "/opt/artifacts/rpm/${name%%.rpm}-fedora28-centos8.rpm" 
             done
 
-
       - name: Rename rustdesk
         shell: bash
         run: |
@@ -823,6 +957,7 @@ jobs:
           done
 
       - name: Publish debian package
+        if: ${{ matrix.job.extra-build-features == '' }}
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
@@ -1114,7 +1249,7 @@ jobs:
   #           apt install -y rpm
   #         run: |
   #           pushd /workspace
-  #           # install 
+  #           # install
   #           apt update -y
   #           apt install -y flatpak flatpak-builder cmake g++ gcc git curl wget nasm yasm libgtk-3-dev git
   #           # flatpak deps
