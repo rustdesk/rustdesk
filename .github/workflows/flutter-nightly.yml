@@ -371,7 +371,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt-get -qq install -y  git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake libclang-dev ninja-build libappindicator3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libvdpau-dev libva-dev libclang-dev llvm-dev libclang-10-dev llvm-10-dev pkg-config tree g++ 
+          sudo apt-get -qq install -y  git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake libclang-dev ninja-build libappindicator3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libvdpau-dev libva-dev libclang-dev llvm-dev libclang-10-dev llvm-10-dev pkg-config tree g++ libc6-dev g++-multilib
       - name: Checkout source code
         uses: actions/checkout@v3
       - uses: nttld/setup-ndk@v1
@@ -382,8 +382,6 @@ jobs:
 
       - name: Download deps
         shell: bash
-        env:
-          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
           pushd /opt
           wget https://github.com/rustdesk/doc.rustdesk.com/releases/download/console/dep.tar.gz
@@ -414,6 +412,10 @@ jobs:
           sed -i  "s/\[\"cdylib\", \"staticlib\", \"rlib\"\]/\[\"cdylib\"\]/g" Cargo.toml
       
       - name: Build rustdesk arm64 so
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
+          VCPKG_ROOT: /opt/vcpkg
         run: |
           rustup target add aarch64-linux-android 
           cargo install cargo-ndk
@@ -914,6 +916,7 @@ jobs:
           done
 
       - name: Publish debian package
+        if: ${{ matrix.job.extra-build-features == '' }}
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
