@@ -122,6 +122,10 @@ class AbModel {
     }
   }
 
+  Peer? find(String id) {
+    return peers.firstWhereOrNull((e) => e.id == id);
+  }
+
   bool idContainBy(String id) {
     return peers.where((element) => element.id == id).isNotEmpty;
   }
@@ -160,13 +164,28 @@ class AbModel {
     }
   }
 
-  void setPeerAlias(String id, String value) {
+  Future<void> setPeerAlias(String id, String value) async {
     final it = peers.where((p0) => p0.id == id);
-    if (it.isEmpty) {
-      debugPrint("$id is not exists");
-      return;
-    } else {
+    if (it.isNotEmpty) {
       it.first.alias = value;
+      await pushAb();
+    }
+  }
+
+  Future<void> setPeerForceAlwaysRelay(String id, bool value) async {
+    final it = peers.where((p0) => p0.id == id);
+    if (it.isNotEmpty) {
+      it.first.forceAlwaysRelay = value;
+      await pushAb();
+    }
+  }
+
+  Future<void> setRdp(String id, String port, String username) async {
+    final it = peers.where((p0) => p0.id == id);
+    if (it.isNotEmpty) {
+      it.first.rdpPort = port;
+      it.first.rdpUsername = username;
+      await pushAb();
     }
   }
 
