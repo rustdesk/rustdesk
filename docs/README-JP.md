@@ -29,11 +29,11 @@ RustDeskは誰からの貢献も歓迎します。 貢献するには [`docs/CON
 下記のサーバーは、無料で使用できますが、後々変更されることがあります。これらのサーバーから遠い場合、接続が遅い可能性があります。
 | Location | Vendor | Specification |
 | --------- | ------------- | ------------------ |
-| Seoul | AWS lightsail | 1 VCPU / 0.5GB RAM |
-| Singapore | Vultr | 1 VCPU / 1GB RAM |
-| Dallas | Vultr | 1 VCPU / 1GB RAM |
-| Germany | Hetzner | 2 VCPU / 4GB RAM |
-| Germany | Codext | 4 VCPU / 8GB RAM |
+| Seoul | AWS lightsail | 1 vCPU / 0.5GB RAM |
+| Germany | Hetzner | 2 vCPU / 4GB RAM |
+| Germany | Codext | 4 vCPU / 8GB RAM |
+| Finland (Helsinki) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
+| USA (Ashburn) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
 
 ## 依存関係
 
