@@ -18,19 +18,12 @@ fn main() {
 
 use hbb_common::log;
 use librustdesk::{
-    setup,
+    core_main,
+    ui,
     invoke_handler::invoke_handler, common,
 };
 use tauri::{GlobalShortcutManager, Manager};
 
-fn create_main_window(app: &tauri::AppHandle) -> tauri::Window {
-    tauri::Window::builder(app, "main", tauri::WindowUrl::App("index.html".into()))
-        .title("Rustdesk")
-        .inner_size(700f64, 600f64)
-        .center()
-        .build()
-        .unwrap()
-}
 
 fn main() {
     if !common::global_init() {
@@ -43,6 +36,8 @@ fn main() {
     .system_tray(
         tauri::SystemTray::new().with_menu(
             tauri::SystemTrayMenu::new()
+                .add_item(tauri::CustomMenuItem::new("remote".to_string(), "Remote"))
+                .add_native_item(tauri::SystemTrayMenuItem::Separator)
                 .add_item(tauri::CustomMenuItem::new("toggle".to_string(), "Hide"))
                 .add_native_item(tauri::SystemTrayMenuItem::Separator)
                 .add_item(tauri::CustomMenuItem::new("quit", "Quit")),
@@ -62,7 +57,7 @@ fn main() {
             ..
         } => {
             let window = app.get_window("main").unwrap();
-            // update dashboard menu text
+            // update dashboard menu text 
             if window.is_visible().unwrap() {
                 app.tray_handle()
                     .get_item("toggle")
@@ -85,6 +80,7 @@ fn main() {
         }
         tauri::SystemTrayEvent::MenuItemClick { id, .. } => {
             match id.as_str() {
+                "remote" => ui::show_remote_window(app),
                 "quit" => {
                     let app = app.clone();
                     std::thread::spawn(move || app.exit(0));
@@ -103,8 +99,10 @@ fn main() {
         _ => todo!(),
     })
     .setup(|app| {
-        setup::setup(&app.handle());
-        create_main_window(&app.handle());
+        if let Some(args) = core_main::core_main().as_mut(){
+            ui::start(&app.handle(), args);
+        }
+        ui::create_main_window(&app.handle());
         app.get_window("main").unwrap().open_devtools();
         Ok(())
     })

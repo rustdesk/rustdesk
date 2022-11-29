@@ -2,7 +2,7 @@ mod tauri_session_handler;
 use hbb_common::config;
 use tauri::{Builder, Wry};
 
-use crate::{ui_interface, ui_cm_interface};
+use crate::{ui_interface, ui_cm_interface, ui::show_remote_window};
 
 #[tauri::command(async)]
 fn exit(app: tauri::AppHandle) {
@@ -69,6 +69,12 @@ fn send_msg(id: i32, text: String) {
     ui_cm_interface::send_chat(id, text);
 }
 
+#[inline]
+#[tauri::command(async)]
+pub fn new_remote_tauri(app: tauri::AppHandle) {
+    show_remote_window(&app);
+}
+
 pub fn invoke_handler(builder: Builder<Wry>) -> Builder<Wry>{
     builder.invoke_handler(tauri::generate_handler![
         exit,
@@ -92,6 +98,7 @@ pub fn invoke_handler(builder: Builder<Wry>) -> Builder<Wry>{
         ui_interface::closing, // set config size
         ui_interface::get_size, // get config size
         ui_interface::new_remote, // create new remote connection
+        new_remote_tauri,
         send_wol, // wake on lan signal
         ui_interface::remove_peer, // remove id from PeerConfig
         remove_discovered, // remove id from discovered peers

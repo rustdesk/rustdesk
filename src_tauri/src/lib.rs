@@ -44,7 +44,6 @@ mod port_forward;
 
 mod tray;
 
-pub mod setup;
 pub mod invoke_handler;
 
 mod ui_cm_interface;

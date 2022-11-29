@@ -24,6 +24,35 @@ pub mod remote;
 pub mod win_privacy;
 
 
+pub fn create_main_window(app: &tauri::AppHandle) -> tauri::Window {
+    tauri::Window::builder(app, "main", tauri::WindowUrl::App("index.html".into()))
+        .title("Rustdesk")
+        .inner_size(700f64, 600f64)
+        .center()
+        .build()
+        .unwrap()
+}
+
+pub fn show_remote_window(app: &tauri::AppHandle) {
+    if let Some(settings_window) = app.get_window("main") {
+        settings_window.show().unwrap();
+        settings_window.unminimize().unwrap();
+        settings_window.set_focus().unwrap();
+    } else {
+        create_remote_window(app);
+    }
+}
+
+fn create_remote_window(app: &tauri::AppHandle) -> tauri::Window {
+    tauri::Window::builder(app, "remote", tauri::WindowUrl::App("index.html".into()))
+        .title("Rustdesk")
+        .inner_size(700f64, 600f64)
+        .center()
+        .build()
+        .unwrap()
+}
+
+
 pub fn start(app: &tauri::AppHandle, args: &mut [String]) {
     #[cfg(all(windows, not(feature = "inline")))]
     unsafe {
