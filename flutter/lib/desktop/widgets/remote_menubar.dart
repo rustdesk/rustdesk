@@ -1088,23 +1088,25 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     }
 
     /// Show remote cursor
-    displayMenu.add(() {
-      final state = ShowRemoteCursorState.find(widget.id);
-      return MenuEntrySwitch2<String>(
-        switchType: SwitchType.scheckbox,
-        text: translate('Show remote cursor'),
-        getter: () {
-          return state;
-        },
-        setter: (bool v) async {
-          state.value = v;
-          await bind.sessionToggleOption(
-              id: widget.id, value: 'show-remote-cursor');
-        },
-        padding: padding,
-        dismissOnClicked: true,
-      );
-    }());
+    if (!widget.ffi.canvasModel.cursorEmbeded) {
+      displayMenu.add(() {
+        final state = ShowRemoteCursorState.find(widget.id);
+        return MenuEntrySwitch2<String>(
+          switchType: SwitchType.scheckbox,
+          text: translate('Show remote cursor'),
+          getter: () {
+            return state;
+          },
+          setter: (bool v) async {
+            state.value = v;
+            await bind.sessionToggleOption(
+                id: widget.id, value: 'show-remote-cursor');
+          },
+          padding: padding,
+          dismissOnClicked: true,
+        );
+      }());
+    }
 
     /// Show remote cursor scaling with image
     if (widget.state.viewStyle.value != kRemoteViewStyleOriginal) {

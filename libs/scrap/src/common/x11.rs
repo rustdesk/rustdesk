@@ -3,6 +3,8 @@ use std::{io, ops, time::Duration};
 
 pub struct Capturer(x11::Capturer);
 
+pub const IS_CURSOR_EMBEDED: bool = true;
+
 impl Capturer {
     pub fn new(display: Display, yuv: bool) -> io::Result<Capturer> {
         x11::Capturer::new(display.0, yuv).map(Capturer)
