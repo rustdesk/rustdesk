@@ -324,7 +324,6 @@ class ServerModel with ChangeNotifier {
     parent.target?.ffiModel.updateEventListener("");
     await parent.target?.invokeMethod("init_service");
     await bind.mainStartService();
-    _fetchID();
     updateClientState();
     if (!Platform.isLinux) {
       // current linux is not supported
@@ -360,26 +359,12 @@ class ServerModel with ChangeNotifier {
     }
   }
 
-  _fetchID() async {
-    final old = _serverId.id;
-    var count = 0;
-    const maxCount = 10;
-    while (count < maxCount) {
-      await Future.delayed(Duration(seconds: 1));
-      final id = await bind.mainGetMyId();
-      if (id.isEmpty) {
-        continue;
-      } else {
-        _serverId.id = id;
-      }
-
-      debugPrint("fetch id again at $count:id:${_serverId.id}");
-      count++;
-      if (_serverId.id != old) {
-        break;
-      }
+  fetchID() async {
+    final id = await bind.mainGetMyId();
+    if (id != _serverId.id) {
+      _serverId.id = id;
+      notifyListeners();
     }
-    notifyListeners();
   }
 
   changeStatue(String name, bool value) {

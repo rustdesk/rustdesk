@@ -1403,3 +1403,10 @@ void onActiveWindowChanged() async {
     }
   }
 }
+
+Timer periodic_immediate(Duration duration, Future<void> Function() callback) {
+  Future.delayed(Duration.zero, callback);
+  return Timer.periodic(duration, (timer) async {
+    await callback();
+  });
+}

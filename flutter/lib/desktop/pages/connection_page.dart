@@ -61,7 +61,7 @@ class _ConnectionPageState extends State<ConnectionPage>
         }
       }();
     }
-    _updateTimer = Timer.periodic(Duration(seconds: 1), (timer) {
+    _updateTimer = periodic_immediate(Duration(seconds: 1), () async {
       updateStatus();
     });
     _idFocusNode.addListener(() {

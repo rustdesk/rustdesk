@@ -461,7 +461,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   void initState() {
     super.initState();
     bind.mainStartGrabKeyboard();
-    _updateTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
+    _updateTimer = periodic_immediate(const Duration(seconds: 1), () async {
+      await gFFI.serverModel.fetchID();
       final url = await bind.mainGetSoftwareUpdateUrl();
       if (updateUrl != url) {
         updateUrl = url;
