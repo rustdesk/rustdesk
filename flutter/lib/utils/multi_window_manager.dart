@@ -202,9 +202,8 @@ class RustDeskMultiWindowManager {
       // ignore
     } else {
       _activeWindows.add(windowId);
-      _notifyActiveWindow();
     }
-    
+    _notifyActiveWindow();
   }
 
   /// Remove active window which has [`windowId`]
@@ -218,8 +217,8 @@ class RustDeskMultiWindowManager {
       // ignore
     } else {
       _activeWindows.remove(windowId);
-      _notifyActiveWindow();
     }
+    _notifyActiveWindow();
   }
 
   void registerActiveWindowListener(VoidCallback callback) {

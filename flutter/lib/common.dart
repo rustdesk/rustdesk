@@ -6,7 +6,7 @@ import 'dart:typed_data';
 
 import 'package:back_button_interceptor/back_button_interceptor.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
-import 'package:flutter/foundation.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -42,6 +42,8 @@ var isWeb = false;
 var isWebDesktop = false;
 var version = "";
 int androidVersion = 0;
+/// only avaliable for Windows target
+int windowsBuildNumber = 0;
 DesktopType? desktopType;
 
 /// * debug or test only, DO NOT enable in release build
@@ -1409,4 +1411,26 @@ Timer periodic_immediate(Duration duration, Future<void> Function() callback) {
   return Timer.periodic(duration, (timer) async {
     await callback();
   });
+}
+/// return a human readable windows version
+WindowsTarget getWindowsTarget(int buildNumber) {
+  if (!Platform.isWindows) {
+    return WindowsTarget.naw;
+  } 
+  if (buildNumber >= 22000) {
+    return WindowsTarget.w11;
+  } else if (buildNumber >= 10240) {
+    return WindowsTarget.w10;
+  } else if (buildNumber >= 9600) {
+    return WindowsTarget.w8_1;
+  } else if (buildNumber >= 9200) {
+    return WindowsTarget.w8;
+  } else if (buildNumber >= 7601) {
+    return WindowsTarget.w7;
+  } else if (buildNumber >= 6002) {
+    return WindowsTarget.vista;
+  } else {
+    // minimum support
+    return WindowsTarget.xp;
+  }
 }
