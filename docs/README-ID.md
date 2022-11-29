@@ -24,11 +24,11 @@ RustDesk menyambut baik kontribusi dari semua orang. Lihat [`docs/CONTRIBUTING.m
 Di bawah ini adalah server yang bisa Anda gunakan secara gratis, dapat berubah seiring waktu. Jika Anda tidak dekat dengan salah satu dari ini, jaringan Anda mungkin lambat.
 | Lokasi | Vendor | Spesifikasi |
 | --------- | ------------- | ------------------ |
-| Seoul | AWS lightsail | 1 VCPU / 0.5GB RAM |
-| Singapore | Vultr | 1 VCPU / 1GB RAM |
-| Dallas | Vultr | 1 VCPU / 1GB RAM |
-| Germany | Hetzner | 2 VCPU / 4GB RAM |
-| Germany | Codext | 4 VCPU / 8GB RAM |
+| Seoul | AWS lightsail | 1 vCPU / 0.5GB RAM |
+| Germany | Hetzner | 2 vCPU / 4GB RAM |
+| Germany | Codext | 4 vCPU / 8GB RAM |
+| Finland (Helsinki) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
+| USA (Ashburn) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
 
 ## Dependencies
 
