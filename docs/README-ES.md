@@ -32,9 +32,10 @@ A continuación se muestran los servidores gratuitos, pueden cambiar a medida qu
 | Ubicación | Compañía | Especificación |
 | --------- | ------------- | ------------------ |
 | Seúl | AWS lightsail | 1 vCPU / 0.5GB RAM |
-| Singapur | Vultr | 1 vCPU / 1GB RAM |
 | Alemania | Hetzner | 2 vCPU / 4GB RAM |
 | Alemania | Codext | 4 vCPU / 8GB RAM |
+| Finlandia (Helsinki) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
+| Estados Unidos (Ashburn) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
 
 ## Dependencias
 
