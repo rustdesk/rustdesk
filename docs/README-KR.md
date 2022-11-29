@@ -29,11 +29,11 @@ RustDesk는 모든 기여를 환영합니다. 기여하고자 한다면 [`docs/C
 표에 있는 서버는 무료로 사용할 수 있지만 추후 변경될 수도 있습니다. 이 서버에서 멀다면, 네트워크가 느려질 가능성도 있습니다.
 | Location | Vendor | Specification |
 | --------- | ------------- | ------------------ |
-| Seoul | AWS lightsail | 1 VCPU / 0.5GB RAM |
-| Singapore | Vultr | 1 VCPU / 1GB RAM |
-| Dallas | Vultr | 1 VCPU / 1GB RAM |
-| Germany | Hetzner | 2 VCPU / 4GB RAM |
-| Germany | Codext | 4 VCPU / 8GB RAM |
+| Seoul | AWS lightsail | 1 vCPU / 0.5GB RAM |
+| Germany | Hetzner | 2 vCPU / 4GB RAM |
+| Germany | Codext | 4 vCPU / 8GB RAM |
+| Finland (Helsinki) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
+| USA (Ashburn) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
 
 ## 의존관계
 
