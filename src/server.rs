@@ -379,7 +379,6 @@ pub async fn start_server(is_server: bool) {
         #[cfg(windows)]
         crate::platform::windows::bootstrap();
         input_service::fix_key_down_timeout_loop();
-        allow_err!(video_service::check_init().await);
         #[cfg(target_os = "macos")]
         tokio::spawn(async { sync_and_watch_config_dir().await });
         crate::RendezvousMediator::start_all().await;

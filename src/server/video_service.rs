@@ -660,6 +660,11 @@ fn run(sp: GenericService) -> ResultType<()> {
             std::thread::sleep(spf - elapsed);
         }
     }
+
+    if !scrap::is_x11() {
+        super::wayland::release_resouce();
+    }
+
     Ok(())
 }
 
@@ -762,16 +767,6 @@ fn get_display_num() -> usize {
     } else {
         0
     }
-}
-
-pub async fn check_init() -> ResultType<()> {
-    #[cfg(target_os = "linux")]
-    {
-        if !scrap::is_x11() {
-            return super::wayland::check_init().await;
-        }
-    }
-    Ok(())
 }
 
 pub(super) fn get_displays_2(all: &Vec<Display>) -> (usize, Vec<DisplayInfo>) {
