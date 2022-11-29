@@ -661,6 +661,7 @@ fn run(sp: GenericService) -> ResultType<()> {
         }
     }
 
+    #[cfg(target_os = "linux")]
     if !scrap::is_x11() {
         super::wayland::release_resouce();
     }
