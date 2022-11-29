@@ -155,7 +155,7 @@ impl InvokeUiSession for FlutterHandler {
     }
 
     /// unused in flutter, use switch_display or set_peer_info
-    fn set_display(&self, _x: i32, _y: i32, _w: i32, _h: i32) {}
+    fn set_display(&self, _x: i32, _y: i32, _w: i32, _h: i32, _cursor_embeded: bool) {}
 
     fn update_privacy_mode(&self) {
         self.push_event("update_privacy_mode", [].into());
@@ -295,6 +295,7 @@ impl InvokeUiSession for FlutterHandler {
             h.insert("y", d.y);
             h.insert("width", d.width);
             h.insert("height", d.height);
+            h.insert("cursor_embeded", if d.cursor_embeded { 1 } else { 0 });
             displays.push(h);
         }
         let displays = serde_json::ser::to_string(&displays).unwrap_or("".to_owned());
@@ -343,6 +344,7 @@ impl InvokeUiSession for FlutterHandler {
                 ("y", &display.y.to_string()),
                 ("width", &display.width.to_string()),
                 ("height", &display.height.to_string()),
+                ("cursor_embeded", &{if display.cursor_embeded {1} else {0}}.to_string()),
             ],
         );
     }

@@ -4,6 +4,8 @@ use std::{io, sync::RwLock, time::Duration};
 
 pub struct Capturer(Display, Box<dyn Recorder>, bool, Vec<u8>);
 
+pub const IS_CURSOR_EMBEDED: bool = true;
+
 lazy_static::lazy_static! {
     static ref MAP_ERR: RwLock<Option<fn(err: String)-> io::Error>> = Default::default();
 }
@@ -66,7 +68,7 @@ impl Display {
     }
 
     pub fn all() -> io::Result<Vec<Display>> {
-        Ok(pipewire::get_capturables(false)
+        Ok(pipewire::get_capturables(true)
             .map_err(map_err)?
             .drain(..)
             .map(|x| Display(x))

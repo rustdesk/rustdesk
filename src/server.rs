@@ -85,8 +85,10 @@ pub fn new() -> ServerPtr {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         server.add_service(Box::new(clipboard_service::new()));
-        server.add_service(Box::new(input_service::new_cursor()));
-        server.add_service(Box::new(input_service::new_pos()));
+        if !video_service::capture_cursor_embeded() {
+            server.add_service(Box::new(input_service::new_cursor()));
+            server.add_service(Box::new(input_service::new_pos()));
+        }
     }
     Arc::new(RwLock::new(server))
 }

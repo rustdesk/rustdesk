@@ -494,38 +494,45 @@ class _RemotePageState extends State<RemotePage> {
   Widget getBodyForMobile() {
     return Container(
         color: MyTheme.canvasColor,
-        child: Stack(children: [
-          ImagePaint(),
-          CursorPaint(),
-          QualityMonitor(gFFI.qualityMonitorModel),
-          getHelpTools(),
-          SizedBox(
-            width: 0,
-            height: 0,
-            child: !_showEdit
-                ? Container()
-                : TextFormField(
-                    textInputAction: TextInputAction.newline,
-                    autocorrect: false,
-                    enableSuggestions: false,
-                    autofocus: true,
-                    focusNode: _mobileFocusNode,
-                    maxLines: null,
-                    initialValue: _value,
-                    // trick way to make backspace work always
-                    keyboardType: TextInputType.multiline,
-                    onChanged: handleSoftKeyboardInput,
-                  ),
-          ),
-        ]));
+        child: Stack(children: () {
+          final paints = [
+            ImagePaint(),
+            QualityMonitor(gFFI.qualityMonitorModel),
+            getHelpTools(),
+            SizedBox(
+              width: 0,
+              height: 0,
+              child: !_showEdit
+                  ? Container()
+                  : TextFormField(
+                      textInputAction: TextInputAction.newline,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      autofocus: true,
+                      focusNode: _mobileFocusNode,
+                      maxLines: null,
+                      initialValue: _value,
+                      // trick way to make backspace work always
+                      keyboardType: TextInputType.multiline,
+                      onChanged: handleSoftKeyboardInput,
+                    ),
+            ),
+          ];
+          if (!gFFI.canvasModel.cursorEmbeded) {
+            paints.add(CursorPaint());
+          }
+          return paints;
+        }()));
   }
 
   Widget getBodyForDesktopWithListener(bool keyboard) {
     var paints = <Widget>[ImagePaint()];
-    final cursor = bind.sessionGetToggleOptionSync(
-        id: widget.id, arg: 'show-remote-cursor');
-    if (keyboard || cursor) {
-      paints.add(CursorPaint());
+    if (!gFFI.canvasModel.cursorEmbeded) {
+      final cursor = bind.sessionGetToggleOptionSync(
+          id: widget.id, arg: 'show-remote-cursor');
+      if (keyboard || cursor) {
+        paints.add(CursorPaint());
+      }
     }
     return Container(
         color: MyTheme.canvasColor, child: Stack(children: paints));
@@ -1046,9 +1053,12 @@ void showOptions(
     }
 
     final toggles = [
-      getToggle(id, setState, 'show-remote-cursor', 'Show remote cursor'),
       getToggle(id, setState, 'show-quality-monitor', 'Show quality monitor'),
     ];
+    if (!gFFI.canvasModel.cursorEmbeded) {
+      toggles.insert(0,
+          getToggle(id, setState, 'show-remote-cursor', 'Show remote cursor'));
+    }
 
     return CustomAlertDialog(
       content: Column(
