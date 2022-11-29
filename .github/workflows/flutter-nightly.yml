@@ -474,12 +474,28 @@ jobs:
               mv build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk ../rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk
             ;;
           esac
+          popd
+          mkdir -p signed-apk; pushd signed-apk
+          mv ../rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk .
+      
+      - uses: r0adkll/sign-android-release@v1
+        name: Sign app APK
+        id: sign-rustdesk
+        with:
+          releaseDirectory: ./signed-apk
+          signingKeyBase64: ${{ secrets.SIGNING_KEY }}
+          alias: ${{ secrets.ALIAS }}
+          keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
+          keyPassword: ${{ secrets.KEY_PASSWORD }}
+        env:
+          # override default build-tools version (29.0.3) -- optional
+          BUILD_TOOLS_VERSION: "30.0.2"
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@master
         with:
-          name: rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk
-          path: rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk
+          name: rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release-signed.apk
+          path: ${{steps.sign-rustdesk.outputs.signedReleaseFile}}
 
       - name: Publish apk package
         uses: softprops/action-gh-release@v1
@@ -487,7 +503,7 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk
+            ${{steps.sign-rustdesk.outputs.signedReleaseFile}}
 
   build-rustdesk-lib-linux-amd64:
     needs: [generate-bridge-linux, build-vcpkg-deps-linux]
