@@ -26,9 +26,10 @@ Nedenfor er de servere, du bruger gratis, det kan ændre sig med tiden. Hvis du 
 | Beliggenhed | Udbyder | Specifikation |
 | ---------- | ------------- | ------------------ |
 | Seoul | AWS lightsail | 1 vCPU / 0,5 GB RAM |
-| Singapore | Vultr | 1 vCPU / 1 GB RAM |
 | Tyskland | Hetzner | 2 vCPU / 4 GB RAM |
 | Tyskland | Codext | 4 vCPU / 8 GB RAM |
+| Finland (Helsinki) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
+| USA (Ashburn) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
 
 ## Afhængigheder
 
