@@ -40,7 +40,12 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   @override
   bool get wantKeepAlive => true;
   var updateUrl = '';
+  var systemError = '';
   StreamSubscription? _uniLinksSubscription;
+  var svcStopped = false.obs;
+  var watchIsCanScreenRecording = false;
+  var watchIsProcessTrust = false;
+  Timer? _updateTimer;
 
   @override
   Widget build(BuildContext context) {
@@ -317,13 +322,37 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         await launchUrl(url);
       });
     }
-    if (Platform.isMacOS) {}
+    if (systemError.isNotEmpty) {
+      return buildInstallCard("", systemError, "", () {});
+    }
+    if (Platform.isMacOS) {
+      if (!bind.mainIsCanScreenRecording(prompt: false)) {
+        return buildInstallCard("Permissions", "config_screen", "Configure",
+            () async {
+          bind.mainIsCanScreenRecording(prompt: true);
+          watchIsCanScreenRecording = true;
+        }, help: 'Help', link: translate("doc_mac_permission"));
+      } else if (!bind.mainIsProcessTrusted(prompt: false)) {
+        return buildInstallCard("Permissions", "config_acc", "Configure",
+            () async {
+          bind.mainIsProcessTrusted(prompt: true);
+          watchIsProcessTrust = true;
+        }, help: 'Help', link: translate("doc_mac_permission"));
+      } else if (!svcStopped.value &&
+          bind.mainIsInstalled() &&
+          !bind.mainIsInstalledDaemon(prompt: false)) {
+        return buildInstallCard("", "install_daemon_tip", "Install", () async {
+          bind.mainIsInstalledDaemon(prompt: true);
+        });
+      }
+    }
     if (bind.mainIsInstalledLowerVersion()) {}
     return Container();
   }
 
   Widget buildInstallCard(String title, String content, String btnText,
-      GestureTapCallback onPressed) {
+      GestureTapCallback onPressed,
+      {String? help, String? link}) {
     return Container(
       margin: EdgeInsets.only(top: 20),
       child: Container(
@@ -338,44 +367,64 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           )),
           padding: EdgeInsets.all(20),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.start,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: (title.isNotEmpty
-                    ? <Widget>[
-                        Center(
-                            child: Text(
-                          translate(title),
-                          style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15),
-                        ).marginOnly(bottom: 6)),
-                      ]
-                    : <Widget>[]) +
-                <Widget>[
-                  Text(
-                    translate(content),
-                    style: TextStyle(
-                        height: 1.5,
-                        color: Colors.white,
-                        fontWeight: FontWeight.normal,
-                        fontSize: 13),
-                  ).marginOnly(bottom: 20),
-                  Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    FixedWidthButton(
-                      width: 150,
-                      padding: 8,
-                      isOutline: true,
-                      text: translate(btnText),
-                      textColor: Colors.white,
-                      borderColor: Colors.white,
-                      textSize: 20,
-                      radius: 10,
-                      onTap: onPressed,
-                    )
-                  ]),
-                ],
-          )),
+              mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: (title.isNotEmpty
+                      ? <Widget>[
+                          Center(
+                              child: Text(
+                            translate(title),
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15),
+                          ).marginOnly(bottom: 6)),
+                        ]
+                      : <Widget>[]) +
+                  <Widget>[
+                    Text(
+                      translate(content),
+                      style: TextStyle(
+                          height: 1.5,
+                          color: Colors.white,
+                          fontWeight: FontWeight.normal,
+                          fontSize: 13),
+                    ).marginOnly(bottom: 20)
+                  ] +
+                  (btnText.isNotEmpty
+                      ? <Widget>[
+                          Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                FixedWidthButton(
+                                  width: 150,
+                                  padding: 8,
+                                  isOutline: true,
+                                  text: translate(btnText),
+                                  textColor: Colors.white,
+                                  borderColor: Colors.white,
+                                  textSize: 20,
+                                  radius: 10,
+                                  onTap: onPressed,
+                                )
+                              ])
+                        ]
+                      : <Widget>[]) +
+                  (help != null
+                      ? <Widget>[
+                          Center(
+                              child: InkWell(
+                                  onTap: () async =>
+                                      await launchUrl(Uri.parse(link!)),
+                                  child: Text(
+                                    translate(help),
+                                    style: TextStyle(
+                                        decoration: TextDecoration.underline,
+                                        color: Colors.white,
+                                        fontSize: 12),
+                                  )).marginOnly(top: 6)),
+                        ]
+                      : <Widget>[]))),
     );
   }
 
@@ -412,16 +461,42 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   void initState() {
     super.initState();
     bind.mainStartGrabKeyboard();
-    Timer(const Duration(seconds: 5), () async {
-      updateUrl = await bind.mainGetSoftwareUpdateUrl();
-      if (updateUrl.isNotEmpty) setState(() {});
+    _updateTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
+      final url = await bind.mainGetSoftwareUpdateUrl();
+      if (updateUrl != url) {
+        updateUrl = url;
+        setState(() {});
+      }
+      final error = await bind.mainGetError();
+      if (systemError != error) {
+        systemError = error;
+        setState(() {});
+      }
+      final v = await bind.mainGetOption(key: "stop-service") == "Y";
+      if (v != svcStopped.value) {
+        svcStopped.value = v;
+        setState(() {});
+      }
+      if (watchIsCanScreenRecording) {
+        if (bind.mainIsCanScreenRecording(prompt: false)) {
+          watchIsCanScreenRecording = false;
+          setState(() {});
+        }
+      }
+      if (watchIsProcessTrust) {
+        if (bind.mainIsProcessTrusted(prompt: false)) {
+          watchIsProcessTrust = false;
+          setState(() {});
+        }
+      }
     });
+    Get.put<RxBool>(svcStopped, tag: 'stop-service');
     // disable this tray because we use tray function provided by rust now
     // initTray();
     trayManager.addListener(this);
     rustDeskWinManager.registerActiveWindowListener(onActiveWindowChanged);
     // main window may be hidden because of the initial uni link or arguments.
-    // note that we must wrap this active window registration in future because 
+    // note that we must wrap this active window registration in future because
     // we must ensure the execution is after `windowManager.hide/show()`.
     Future.delayed(Duration.zero, () {
       windowManager.isVisible().then((visibility) {
@@ -475,6 +550,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     // rustDeskWinManager.unregisterActiveWindowListener(onActiveWindowChanged);
     trayManager.removeListener(this);
     _uniLinksSubscription?.cancel();
+    Get.delete<RxBool>(tag: 'stop-service');
+    _updateTimer?.cancel();
     super.dispose();
   }
 }

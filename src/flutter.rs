@@ -40,7 +40,7 @@ pub extern "C" fn rustdesk_core_main() -> bool {
 
 #[cfg(windows)]
 #[no_mangle]
-pub extern "C" fn rustdesk_core_main(args_len: *mut c_int) -> *mut *mut c_char {
+pub extern "C" fn rustdesk_core_main_args(args_len: *mut c_int) -> *mut *mut c_char {
     unsafe { std::ptr::write(args_len, 0) };
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {

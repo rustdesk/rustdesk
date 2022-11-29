@@ -42,7 +42,7 @@ class _ConnectionPageState extends State<ConnectionPage>
   final RxBool _idInputFocused = false.obs;
   final FocusNode _idFocusNode = FocusNode();
 
-  var svcStopped = false.obs;
+  var svcStopped = Get.find<RxBool>(tag: 'stop-service');
   var svcStatusCode = 0.obs;
   var svcIsUsingPublicServer = true.obs;
 
@@ -67,7 +67,6 @@ class _ConnectionPageState extends State<ConnectionPage>
     _idFocusNode.addListener(() {
       _idInputFocused.value = _idFocusNode.hasFocus;
     });
-    Get.put<RxBool>(svcStopped, tag: 'service-stop');
     windowManager.addListener(this);
   }
 
@@ -75,7 +74,6 @@ class _ConnectionPageState extends State<ConnectionPage>
   void dispose() {
     _idController.dispose();
     _updateTimer?.cancel();
-    Get.delete<RxBool>(tag: 'service-stop');
     windowManager.removeListener(this);
     super.dispose();
   }
@@ -296,7 +294,7 @@ class _ConnectionPageState extends State<ConnectionPage>
               // stop
               Offstage(
                 offstage: !svcStopped.value,
-                child: GestureDetector(
+                child: InkWell(
                         onTap: () async {
                           bool checked = !bind.mainIsInstalled() ||
                               await bind.mainCheckSuperUserPermission();
@@ -357,7 +355,6 @@ class _ConnectionPageState extends State<ConnectionPage>
   }
 
   updateStatus() async {
-    svcStopped.value = await bind.mainGetOption(key: "stop-service") == "Y";
     final status =
         jsonDecode(await bind.mainGetConnectStatus()) as Map<String, dynamic>;
     svcStatusCode.value = status["status_num"];

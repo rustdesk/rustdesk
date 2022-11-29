@@ -483,6 +483,10 @@ pub fn main_get_option(key: String) -> String {
     get_option(key)
 }
 
+pub fn main_get_error() -> String {
+    get_error()
+}
+
 pub fn main_set_option(key: String, value: String) {
     if key.eq("custom-rendezvous-server") {
         set_option(key, value);
