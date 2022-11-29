@@ -36,7 +36,7 @@ dependencies:
     provider: ^6.0.3
     tuple: ^2.0.0
     wakelock: ^0.6.2
-    device_info_plus: ^4.1.2
+    device_info_plus: ^8.0.0
     #firebase_analytics: ^9.1.5
     package_info_plus: ^1.4.2
     url_launcher: ^6.0.9
@@ -72,7 +72,7 @@ dependencies:
     flutter_custom_cursor:
         git:
             url: https://github.com/Kingtous/rustdesk_flutter_custom_cursor
-            ref: bfb19c84a8244771488bc05cc5f9c9b5e0324cfd
+            ref: 74b1b314142b6775c1243067a3503ac568ebc74b
     window_size:
         git:
             url: https://github.com/google/flutter-desktop-embedding.git

@@ -145,6 +145,7 @@ class PlatformFFI {
           WindowsDeviceInfo winInfo = await deviceInfo.windowsInfo;
           name = winInfo.computerName;
           id = winInfo.computerName;
+          windowsBuildNumber = winInfo.buildNumber;
         } catch (e) {
           debugPrint("$e");
           name = "unknown";

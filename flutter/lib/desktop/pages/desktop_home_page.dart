@@ -496,16 +496,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     // initTray();
     trayManager.addListener(this);
     rustDeskWinManager.registerActiveWindowListener(onActiveWindowChanged);
-    // main window may be hidden because of the initial uni link or arguments.
-    // note that we must wrap this active window registration in future because
-    // we must ensure the execution is after `windowManager.hide/show()`.
-    Future.delayed(Duration.zero, () {
-      windowManager.isVisible().then((visibility) {
-        if (visibility) {
-          rustDeskWinManager.registerActiveWindow(kWindowMainId);
-        }
-      });
-    });
 
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
       debugPrint(
