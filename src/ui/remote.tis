@@ -6,6 +6,7 @@ var display_width = 0;
 var display_height = 0;
 var display_origin_x = 0;
 var display_origin_y = 0;
+var display_cursor_embeded = false;
 var display_scale = 1;
 var keyboard_enabled = true; // server side
 var clipboard_enabled = true; // server side
@@ -15,11 +16,12 @@ var restart_enabled = true; // server side
 var recording_enabled = true; // server side
 var scroll_body = $(body);
 
-handler.setDisplay = function(x, y, w, h) {
+handler.setDisplay = function(x, y, w, h, cursor_embeded) {
     display_width = w;
     display_height = h;
     display_origin_x = x;
     display_origin_y = y;
+    display_cursor_embeded = cursor_embeded;
     adaptDisplay();
     if (recording) handler.record_screen(true, w, h);
 }
@@ -195,6 +197,9 @@ function handler.onMouse(evt)
         dragging = false;
         break;
       case Event.MOUSE_MOVE:
+        if (display_cursor_embeded) {
+            break;
+        }
         if (cursor_img.style#display != "none" && keyboard_enabled) {
             cursor_img.style#display = "none";
         }
@@ -360,6 +365,10 @@ function updateCursor(system=false) {
 }
 
 function refreshCursor() {
+    if (display_cursor_embeded) {
+        cursor_img.style#display = "none";
+        return;
+    }
     if (cur_id != -1) {
         handler.setCursorId(cur_id);
     }

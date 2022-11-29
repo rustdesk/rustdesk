@@ -69,3 +69,19 @@ pub trait TraitCapturer {
 pub fn is_x11() -> bool {
     "x11" == hbb_common::platform::linux::get_display_server()
 }
+
+#[cfg(x11)]
+#[inline]
+pub fn is_cursor_embeded() -> bool {
+    if is_x11() {
+        x11::IS_CURSOR_EMBEDED
+    } else {
+        wayland::IS_CURSOR_EMBEDED
+    }
+}
+
+#[cfg(not(x11))]
+#[inline]
+pub fn is_cursor_embeded() -> bool {
+    false
+}

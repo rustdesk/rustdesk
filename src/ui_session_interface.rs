@@ -1098,7 +1098,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn set_cursor_data(&self, cd: CursorData);
     fn set_cursor_id(&self, id: String);
     fn set_cursor_position(&self, cp: CursorPosition);
-    fn set_display(&self, x: i32, y: i32, w: i32, h: i32);
+    fn set_display(&self, x: i32, y: i32, w: i32, h: i32, cursor_embeded: bool);
     fn switch_display(&self, display: &SwitchDisplay);
     fn set_peer_info(&self, peer_info: &PeerInfo); // flutter
     fn update_privacy_mode(&self);
@@ -1211,7 +1211,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
                 input_os_password(p, true, self.clone());
             }
             let current = &pi.displays[pi.current_display as usize];
-            self.set_display(current.x, current.y, current.width, current.height);
+            self.set_display(current.x, current.y, current.width, current.height, current.cursor_embeded);
         }
         self.update_privacy_mode();
         // Save recent peers, then push event to flutter. So flutter can refresh peer page.

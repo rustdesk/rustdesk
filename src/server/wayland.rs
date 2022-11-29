@@ -127,7 +127,10 @@ pub(super) async fn check_init() -> ResultType<()> {
             if *lock == 0 {
                 let all = Display::all()?;
                 let num = all.len();
-                let (primary, displays) = super::video_service::get_displays_2(&all);
+                let (primary, mut displays) = super::video_service::get_displays_2(&all);
+                for display in displays.iter_mut() {
+                    display.cursor_embeded = true;
+                }
 
                 let mut rects: Vec<((i32, i32), usize, usize)> = Vec::new();
                 for d in &all {
