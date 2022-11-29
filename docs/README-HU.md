@@ -33,10 +33,10 @@ Ezalatt az üzenet alatt találhatóak azok a publikus szerverek, amelyeket ingy
 | Hely | Host | Specifikáció |
 | --------- | ------------- | ------------------ |
 | Seoul | AWS lightsail | 1 VCPU / 0.5GB RAM |
-| Singapore | Vultr | 1 VCPU / 1GB RAM |
-| Dallas | Vultr | 1 VCPU / 1GB RAM | |
 | Germany | Hetzner | 2 VCPU / 4GB RAM |
 | Germany | Codext | 4 VCPU / 8GB RAM |
+| Finland (Helsinki) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
+| USA (Ashburn) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
 
 ## Dependencies
 
