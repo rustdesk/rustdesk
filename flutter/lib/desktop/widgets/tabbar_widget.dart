@@ -421,19 +421,16 @@ class DesktopTab extends StatelessWidget {
                   ],
                 ))),
         // hide simulated action buttons when we in compatible ui mode, because of reusing system title bar.
-        Offstage(
-          offstage: kUseCompatibleUiMode,
-          child: WindowActionPanel(
-            isMainWindow: isMainWindow,
-            tabType: tabType,
-            state: state,
-            tail: tail,
-            isMaximized: isMaximized,
-            showMinimize: showMinimize,
-            showMaximize: showMaximize,
-            showClose: showClose,
-            onClose: onWindowCloseButton,
-          ),
+        WindowActionPanel(
+          isMainWindow: isMainWindow,
+          tabType: tabType,
+          state: state,
+          tail: tail,
+          isMaximized: isMaximized,
+          showMinimize: showMinimize,
+          showMaximize: showMaximize,
+          showClose: showClose,
+          onClose: onWindowCloseButton,
         )
       ],
     );
@@ -547,50 +544,59 @@ class WindowActionPanelState extends State<WindowActionPanel>
       children: [
         Offstage(offstage: widget.tail == null, child: widget.tail),
         Offstage(
-            offstage: !widget.showMinimize,
-            child: ActionIcon(
-              message: 'Minimize',
-              icon: IconFont.min,
-              onTap: () {
-                if (widget.isMainWindow) {
-                  windowManager.minimize();
-                } else {
-                  WindowController.fromWindowId(windowId!).minimize();
-                }
-              },
-              isClose: false,
-            )),
-        Offstage(
-            offstage: !widget.showMaximize,
-            child: Obx(() => ActionIcon(
-                  message: widget.isMaximized.value ? "Restore" : "Maximize",
-                  icon: widget.isMaximized.value
-                      ? IconFont.restore
-                      : IconFont.max,
-                  onTap: _toggleMaximize,
-                  isClose: false,
-                ))),
-        Offstage(
-            offstage: !widget.showClose,
-            child: ActionIcon(
-              message: 'Close',
-              icon: IconFont.close,
-              onTap: () async {
-                final res = await widget.onClose?.call() ?? true;
-                if (res) {
-                  // hide for all window
-                  // note: the main window can be restored by tray icon
-                  Future.delayed(Duration.zero, () async {
-                    if (widget.isMainWindow) {
-                      await windowManager.close();
-                    } else {
-                      await WindowController.fromWindowId(windowId!).close();
-                    }
-                  });
-                }
-              },
-              isClose: true,
-            )),
+          offstage: kUseCompatibleUiMode,
+          child: Row(
+            children: [
+              Offstage(
+                  offstage: !widget.showMinimize,
+                  child: ActionIcon(
+                    message: 'Minimize',
+                    icon: IconFont.min,
+                    onTap: () {
+                      if (widget.isMainWindow) {
+                        windowManager.minimize();
+                      } else {
+                        WindowController.fromWindowId(windowId!).minimize();
+                      }
+                    },
+                    isClose: false,
+                  )),
+              Offstage(
+                  offstage: !widget.showMaximize,
+                  child: Obx(() => ActionIcon(
+                        message:
+                            widget.isMaximized.value ? "Restore" : "Maximize",
+                        icon: widget.isMaximized.value
+                            ? IconFont.restore
+                            : IconFont.max,
+                        onTap: _toggleMaximize,
+                        isClose: false,
+                      ))),
+              Offstage(
+                  offstage: !widget.showClose,
+                  child: ActionIcon(
+                    message: 'Close',
+                    icon: IconFont.close,
+                    onTap: () async {
+                      final res = await widget.onClose?.call() ?? true;
+                      if (res) {
+                        // hide for all window
+                        // note: the main window can be restored by tray icon
+                        Future.delayed(Duration.zero, () async {
+                          if (widget.isMainWindow) {
+                            await windowManager.close();
+                          } else {
+                            await WindowController.fromWindowId(windowId!)
+                                .close();
+                          }
+                        });
+                      }
+                    },
+                    isClose: true,
+                  ))
+            ],
+          ),
+        ),
       ],
     );
   }
