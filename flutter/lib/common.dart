@@ -1,12 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ffi' hide Size;
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:back_button_interceptor/back_button_interceptor.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
-import 'package:device_info_plus/device_info_plus.dart';
+import 'package:ffi/ffi.dart';
+import 'package:flutter/foundation.dart';
+import 'package:win32/win32.dart' as win32;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -42,6 +45,7 @@ var isWeb = false;
 var isWebDesktop = false;
 var version = "";
 int androidVersion = 0;
+
 /// only avaliable for Windows target
 int windowsBuildNumber = 0;
 DesktopType? desktopType;
@@ -1412,11 +1416,12 @@ Timer periodic_immediate(Duration duration, Future<void> Function() callback) {
     await callback();
   });
 }
+
 /// return a human readable windows version
 WindowsTarget getWindowsTarget(int buildNumber) {
   if (!Platform.isWindows) {
     return WindowsTarget.naw;
-  } 
+  }
   if (buildNumber >= 22000) {
     return WindowsTarget.w11;
   } else if (buildNumber >= 10240) {
@@ -1434,3 +1439,47 @@ WindowsTarget getWindowsTarget(int buildNumber) {
     return WindowsTarget.xp;
   }
 }
+
+/// Get windows target build number.
+///
+/// [Note]
+/// Please use this function wrapped with `Platform.isWindows`.
+int getWindowsTargetBuildNumber() {
+  final rtlGetVersion = DynamicLibrary.open('ntdll.dll').lookupFunction<
+      Void Function(Pointer<win32.OSVERSIONINFOEX>),
+      void Function(Pointer<win32.OSVERSIONINFOEX>)>('RtlGetVersion');
+  final osVersionInfo = getOSVERSIONINFOEXPointer();
+  rtlGetVersion(osVersionInfo);
+  int buildNumber = osVersionInfo.ref.dwBuildNumber;
+  calloc.free(osVersionInfo);
+  return buildNumber;
+}
+
+/// Get Windows OS version pointer
+///
+/// [Note]
+/// Please use this function wrapped with `Platform.isWindows`.
+Pointer<win32.OSVERSIONINFOEX> getOSVERSIONINFOEXPointer() {
+  final pointer = calloc<win32.OSVERSIONINFOEX>();
+  pointer.ref
+    ..dwOSVersionInfoSize = sizeOf<win32.OSVERSIONINFOEX>()
+    ..dwBuildNumber = 0
+    ..dwMajorVersion = 0
+    ..dwMinorVersion = 0
+    ..dwPlatformId = 0
+    ..szCSDVersion = ''
+    ..wServicePackMajor = 0
+    ..wServicePackMinor = 0
+    ..wSuiteMask = 0
+    ..wProductType = 0
+    ..wReserved = 0;
+  return pointer;
+}
+
+/// Indicating we need to use compatible ui mode.
+///
+/// [Conditions]
+/// - Windows 7, window will overflow when we use frameless ui.
+bool get kUseCompatibleUiMode =>
+    Platform.isWindows &&
+    const [WindowsTarget.w7].contains(windowsBuildNumber.windowsVersion);

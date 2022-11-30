@@ -36,7 +36,7 @@ dependencies:
     provider: ^6.0.3
     tuple: ^2.0.0
     wakelock: ^0.6.2
-    device_info_plus: ^8.0.0
+    device_info_plus: ^4.1.2
     #firebase_analytics: ^9.1.5
     package_info_plus: ^1.4.2
     url_launcher: ^6.0.9
@@ -102,6 +102,8 @@ dependencies:
     path: ^1.8.1
     auto_size_text: ^3.0.0
     bot_toast: ^4.0.3
+    win32: any
+
 
 dev_dependencies:
     icons_launcher: ^2.0.4
