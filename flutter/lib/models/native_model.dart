@@ -131,7 +131,7 @@ class PlatformFFI {
         AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
         name = '${androidInfo.brand}-${androidInfo.model}';
         id = androidInfo.id.hashCode.toString();
-        androidVersion = androidInfo.version.sdkInt ?? 0;
+        androidVersion = androidInfo.version.sdkInt;
       } else if (Platform.isIOS) {
         IosDeviceInfo iosInfo = await deviceInfo.iosInfo;
         name = iosInfo.utsname.machine ?? '';

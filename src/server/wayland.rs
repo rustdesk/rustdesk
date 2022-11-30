@@ -174,14 +174,13 @@ pub(super) async fn check_init() -> ResultType<()> {
 
         if minx != maxx && miny != maxy {
             log::info!(
-                "send uinput resolution: ({}, {}), ({}, {})",
+                "update mouse resolution: ({}, {}), ({}, {})",
                 minx,
                 maxx,
                 miny,
                 maxy
             );
-            allow_err!(input_service::set_uinput_resolution(minx, maxx, miny, maxy).await);
-            allow_err!(input_service::set_uinput().await);
+            allow_err!(input_service::update_mouse_resolution(minx, maxx, miny, maxy).await);
         }
     }
     Ok(())

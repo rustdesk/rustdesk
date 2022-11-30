@@ -379,6 +379,10 @@ pub async fn start_server(is_server: bool) {
         #[cfg(windows)]
         crate::platform::windows::bootstrap();
         input_service::fix_key_down_timeout_loop();
+        #[cfg(target_os = "linux")]
+        if crate::platform::current_is_wayland() {
+            allow_err!(input_service::setup_uinput(0, 1920, 0, 1080).await);
+        }
         #[cfg(target_os = "macos")]
         tokio::spawn(async { sync_and_watch_config_dir().await });
         crate::RendezvousMediator::start_all().await;
