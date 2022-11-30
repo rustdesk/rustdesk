@@ -25,11 +25,11 @@ Hier sind die Server, die du kostenlos nutzen kannst, es kann sein das sich dies
 
 | Standort  | Serverart     | Spezifikationen    | Kommentare |
 | --------- | ------------- | ------------------ | ---------- |
-| Seoul     | AWS lightsail | 1 VCPU / 0.5GB RAM |            |
-| Singapore | Vultr         | 1 VCPU / 1GB RAM   |            |
-| Dallas    | Vultr         | 1 VCPU / 1GB RAM   |            |
-| Germany   | Codext        | 2 VCPU / 4GB RAM   |
-| Germany   | Hetzner       | 4 VCPU / 8GB RAM   |
+| Seoul     | AWS lightsail | 1 vCPU / 0.5GB RAM |            |
+| Germany   | Codext        | 2 vCPU / 4GB RAM   |
+| Germany   | Hetzner       | 4 vCPU / 8GB RAM   |
+| Finland (Helsinki)   | 0x101 Cyber Security       | 4 vCPU / 8GB RAM   |
+| USA (Ashburn)   | 0x101 Cyber Security       | 4 vCPU / 8GB RAM   |
 
 ## Abhängigkeiten
 

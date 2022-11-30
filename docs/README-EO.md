@@ -24,9 +24,11 @@ RustDesk bonvenigas kontribuon de ĉiuj. Vidu [`docs/CONTRIBUTING.md`](CONTRIBUT
 Malsupre estas la serviloj, kiuj vi uzas senpage, ĝi povas ŝanĝi laŭlonge de la tempo. Se vi ne estas proksima de unu de tiuj, via reto povas esti malrapida.
 | Situo | Vendanto | Detaloj |
 | --------- | ------------- | ------------------ |
-| Seulo | AWS lightsail | 1 VCPU / 0.5GB RAM |
-| Singapuro | Vultr | 1 VCPU / 1GB RAM |
-| Dalaso | Vultr | 1 VCPU / 1GB RAM | |
+| Seoul | AWS lightsail | 1 vCPU / 0.5GB RAM |
+| Germany | Hetzner | 2 vCPU / 4GB RAM |
+| Germany | Codext | 4 vCPU / 8GB RAM |
+| Finland (Helsinki) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
+| USA (Ashburn) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
 
 ## Dependantaĵoj
 

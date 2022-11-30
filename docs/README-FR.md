@@ -23,11 +23,13 @@ RustDesk accueille les contributions de tout le monde. Voir [`docs/CONTRIBUTING.
 
 Ci-dessous se trouvent les serveurs que vous utilisez gratuitement, cela peut changer au fil du temps. Si vous n'êtes pas proche de l'un d'entre eux, votre réseau peut être lent.
 
-- Séoul, AWS lightsail, 1 VCPU/0.5G RAM
-- Singapour, Vultr, 1 VCPU/1G RAM
-- Dallas, Vultr, 1 VCPU/1G RAM
-- Germany, Codext, 2 VCPU / 4GB RAM 
-- Germany, Hetzner, 4 VCPU / 8GB RAM
+| Location | Vendor | Specification |
+| --------- | ------------- | ------------------ |
+| Seoul | AWS lightsail | 1 vCPU / 0.5GB RAM |
+| Germany | Hetzner | 2 vCPU / 4GB RAM |
+| Germany | Codext | 4 vCPU / 8GB RAM |
+| Finland (Helsinki) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
+| USA (Ashburn) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
 
 ## Dépendances
 

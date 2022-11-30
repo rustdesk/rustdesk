@@ -24,11 +24,11 @@
 നിങ്ങൾ സൗജന്യമായി ഉപയോഗിക്കുന്ന സെർവറുകൾ ചുവടെയുണ്ട്, അത് സമയത്തിനനുസരിച്ച് മാറിയേക്കാം. നിങ്ങൾ ഇവയിലൊന്നിനോട് അടുത്തല്ലെങ്കിൽ, നിങ്ങളുടെ നെറ്റ്‌വർക്ക് സ്ലോ ആയേക്കാം.
 | സ്ഥാനം | കച്ചവടക്കാരൻ | വിവരണം |
 | --------- | ------------- | ------------------ |
-| Seoul | AWS lightsail | 1 VCPU / 0.5GB RAM |
-| Singapore | Vultr | 1 VCPU / 1GB RAM |
-| Dallas | Vultr | 1 VCPU / 1GB RAM |
-| Germany | Hetzner | 2 VCPU / 4GB RAM |
-| Germany | Codext | 4 VCPU / 8GB RAM |
+| Seoul | AWS lightsail | 1 vCPU / 0.5GB RAM |
+| Germany | Hetzner | 2 vCPU / 4GB RAM |
+| Germany | Codext | 4 vCPU / 8GB RAM |
+| Finland (Helsinki) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
+| USA (Ashburn) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
 
 ## ഡിപെൻഡൻസികൾ
 
