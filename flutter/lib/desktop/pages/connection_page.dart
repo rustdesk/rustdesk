@@ -113,7 +113,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                     delegate: SliverChildListDelegate([
                   Row(
                     children: [
-                      _buildRemoteIDTextField(context),
+                      Flexible(child: _buildRemoteIDTextField(context)),
                     ],
                   ).marginOnly(top: 22),
                   SizedBox(height: 12),
@@ -237,9 +237,8 @@ class _ConnectionPageState extends State<ConnectionPage>
         ),
       ),
     );
-    return Center(
-        child: Container(
-            constraints: const BoxConstraints(maxWidth: 600), child: w));
+    return Container(
+        constraints: const BoxConstraints(maxWidth: 600), child: w);
   }
 
   Widget buildStatus() {

@@ -90,7 +90,7 @@ class _AddressBookState extends State<AddressBook> {
         Text(translate(error)),
         TextButton(
             onPressed: () {
-              setState(() {});
+              gFFI.abModel.pullAb();
             },
             child: Text(translate("Retry")))
       ],
