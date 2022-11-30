@@ -177,8 +177,7 @@ void runMultiWindow(
     MyTheme.currentThemeMode(),
   );
   // we do not hide titlebar on win7 because of the frame overflow.
-  if (Platform.isWindows &&
-      const [WindowsTarget.w7].contains(windowsBuildNumber.windowsVersion)) {
+  if (kUseCompatibleUiMode) {
     WindowController.fromWindowId(windowId!).showTitleBar(true);
   }
   switch (appType) {
@@ -283,8 +282,7 @@ void runInstallPage() async {
 WindowOptions getHiddenTitleBarWindowOptions({Size? size}) {
   var defaultTitleBarStyle = TitleBarStyle.hidden;
   // we do not hide titlebar on win7 because of the frame overflow.
-  if (Platform.isWindows &&
-      const [WindowsTarget.w7].contains(windowsBuildNumber.windowsVersion)) {
+  if (kUseCompatibleUiMode) {
     defaultTitleBarStyle = TitleBarStyle.normal;
   }
   return WindowOptions(

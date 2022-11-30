@@ -266,7 +266,8 @@ class DesktopTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(children: [
       Obx(() => Offstage(
-          offstage: !stateGlobal.showTabBar.isTrue,
+          offstage: !stateGlobal.showTabBar.isTrue ||
+              (kUseCompatibleUiMode && isHideSingleItem()),
           child: SizedBox(
             height: _kTabBarHeight,
             child: Column(
@@ -335,6 +336,15 @@ class DesktopTab extends StatelessWidget {
                 .toList(growable: false))));
   }
 
+  /// Check whether to show ListView
+  ///
+  /// Conditions:
+  /// - hide single item when only has one item (home) on [DesktopTabPage].
+  bool isHideSingleItem() {
+    return state.value.tabs.length == 1 &&
+        controller.tabType == DesktopTabType.main;
+  }
+
   Widget _buildBar() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -362,23 +372,26 @@ class DesktopTab extends StatelessWidget {
                         child: const SizedBox(
                           width: 78,
                         )),
-                    Row(children: [
-                      Offstage(
-                          offstage: !showLogo,
-                          child: SvgPicture.asset(
-                            'assets/logo.svg',
-                            width: 16,
-                            height: 16,
-                          )),
-                      Offstage(
-                          offstage: !showTitle,
-                          child: const Text(
-                            "RustDesk",
-                            style: TextStyle(fontSize: 13),
-                          ).marginOnly(left: 2))
-                    ]).marginOnly(
-                      left: 5,
-                      right: 10,
+                    Offstage(
+                      offstage: kUseCompatibleUiMode,
+                      child: Row(children: [
+                        Offstage(
+                            offstage: !showLogo,
+                            child: SvgPicture.asset(
+                              'assets/logo.svg',
+                              width: 16,
+                              height: 16,
+                            )),
+                        Offstage(
+                            offstage: !showTitle,
+                            child: const Text(
+                              "RustDesk",
+                              style: TextStyle(fontSize: 13),
+                            ).marginOnly(left: 2))
+                      ]).marginOnly(
+                        left: 5,
+                        right: 10,
+                      ),
                     ),
                     Expanded(
                         child: Listener(
@@ -407,16 +420,20 @@ class DesktopTab extends StatelessWidget {
                                     unSelectedTabBackgroundColor))),
                   ],
                 ))),
-        WindowActionPanel(
-          isMainWindow: isMainWindow,
-          tabType: tabType,
-          state: state,
-          tail: tail,
-          isMaximized: isMaximized,
-          showMinimize: showMinimize,
-          showMaximize: showMaximize,
-          showClose: showClose,
-          onClose: onWindowCloseButton,
+        // hide simulated action buttons when we in compatible ui mode, because of reusing system title bar.
+        Offstage(
+          offstage: kUseCompatibleUiMode,
+          child: WindowActionPanel(
+            isMainWindow: isMainWindow,
+            tabType: tabType,
+            state: state,
+            tail: tail,
+            isMaximized: isMaximized,
+            showMinimize: showMinimize,
+            showMaximize: showMaximize,
+            showClose: showClose,
+            onClose: onWindowCloseButton,
+          ),
         )
       ],
     );

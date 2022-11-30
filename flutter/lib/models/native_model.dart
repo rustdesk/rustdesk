@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:win32/win32.dart' as win32;
 
 import '../common.dart';
 import '../generated_bridge.dart';
@@ -142,12 +143,14 @@ class PlatformFFI {
         id = linuxInfo.machineId ?? linuxInfo.id;
       } else if (Platform.isWindows) {
         try {
+          // request windows build number to fix overflow on win7
+          windowsBuildNumber = getWindowsTargetBuildNumber();
           WindowsDeviceInfo winInfo = await deviceInfo.windowsInfo;
           name = winInfo.computerName;
           id = winInfo.computerName;
-          windowsBuildNumber = winInfo.buildNumber;
-        } catch (e) {
-          debugPrint("$e");
+        } catch (e, stacktrace) {
+          debugPrint("get windows device info failed: $e");
+          debugPrintStack(stackTrace: stacktrace);
           name = "unknown";
           id = "unknown";
         }
