@@ -413,8 +413,12 @@ class _ImagePaintState extends State<ImagePaint> {
       );
     } else {
       widget = Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [widget],
+        children: [
+          Container(
+            width: ((layoutSize.width - size.width) ~/ 2).toDouble(),
+          ),
+          widget,
+        ],
       );
     }
     if (layoutSize.height < size.height) {
@@ -430,8 +434,12 @@ class _ImagePaintState extends State<ImagePaint> {
       );
     } else {
       widget = Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [widget],
+        children: [
+          Container(
+            height: ((layoutSize.height - size.height) ~/ 2).toDouble(),
+          ),
+          widget,
+        ],
       );
     }
     if (layoutSize.width < size.width) {
@@ -576,7 +584,8 @@ class ImagePainter extends CustomPainter {
         paint.filterQuality = FilterQuality.high;
       }
     }
-    canvas.drawImage(image!, Offset(x, y), paint);
+    canvas.drawImage(
+        image!, Offset(x.toInt().toDouble(), y.toInt().toDouble()), paint);
   }
 
   @override
