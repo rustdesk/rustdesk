@@ -30,11 +30,13 @@ RustDesk вітає внесок кожного. Дивіться [`docs/CONTRIB
 Нижче наведені сервери, для безкоштовного використання, вони можуть змінюватися з часом. Якщо ви не перебуваєте поруч з одним із них, ваша мережа може працювати повільно.
 | Місцезнаходження | Постачальник | Технічні характеристики |
 | --------- | ------------- | ------------------ |
-| Сеул | AWS lightsail | 1 VCPU / 0.5GB RAM |
-| Сінгапур | Vultr | 1 VCPU / 1GB RAM |
-| Даллас | Vultr | 1 VCPU / 1GB RAM
-Німеччина | Hetzner | 2 VCPU / 4GB RAM | 2 VCPU / 4GB RAM | Німеччина | Hetzner | 2 VCPU / 4GB RAM |
-| Germany | Codext | 4 VCPU / 8GB RAM |
+| Сеул | AWS lightsail | 1 vCPU / 0.5GB RAM |
+| Сінгапур | Vultr | 1 vCPU / 1GB RAM |
+| Даллас | Vultr | 1 vCPU / 1GB RAM
+Німеччина | Hetzner | 2 vCPU / 4GB RAM | 2 VCPU / 4GB RAM | Німеччина | Hetzner | 2 VCPU / 4GB RAM |
+| Germany | Codext | 4 vCPU / 8GB RAM |
+| Finland (Helsinki) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
+| USA (Ashburn) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
 
 ## Залежності
 

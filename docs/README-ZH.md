@@ -24,11 +24,13 @@ Chat with us: [知乎](https://www.zhihu.com/people/rustdesk) | [Discord](https:
 
 以下是您可以使用的、免费的、会随时更新的公共服务器列表，在国内也许网速会很慢或者无法访问。
 
-- 首尔, AWS lightsail, 1 VCPU/0.5G RAM
-- 新加坡, Vultr, 1 VCPU/1G RAM
-- 达拉斯, Vultr, 1 VCPU/1G RAM
-- 德国, Codext, 2 VCPU / 4GB RAM
-- 德国, Hetzner, 4 VCPU / 8GB RAM
+| Location | Vendor | Specification |
+| --------- | ------------- | ------------------ |
+| Seoul | AWS lightsail | 1 vCPU / 0.5GB RAM |
+| Germany | Hetzner | 2 vCPU / 4GB RAM |
+| Germany | Codext | 4 vCPU / 8GB RAM |
+| Finland (Helsinki) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
+| USA (Ashburn) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
 
 ## 依赖
 
