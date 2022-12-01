@@ -350,7 +350,7 @@ pub mod server {
                         if e.kind() != std::io::ErrorKind::WouldBlock {
                             // DXGI_ERROR_INVALID_CALL after each success on Microsoft GPU driver
                             // log::error!("capture frame failed:{:?}", e);
-                            if crate::platform::windows::desktop_changed() {
+                            if crate::platform::windows_lib::desktop_changed() {
                                 crate::platform::try_change_desktop();
                                 c = None;
                                 std::thread::sleep(spf);

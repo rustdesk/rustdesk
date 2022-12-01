@@ -512,7 +512,7 @@ impl<T: InvokeUiSession> Session<T> {
         let ctrl = get_key_state(enigo::Key::Control) || get_key_state(enigo::Key::RightControl);
         let shift = get_key_state(enigo::Key::Shift) || get_key_state(enigo::Key::RightShift);
         #[cfg(windows)]
-        let command = crate::platform::windows::get_win_key_state();
+        let command = crate::platform::windows_lib::get_win_key_state();
         #[cfg(not(windows))]
         let command = get_key_state(enigo::Key::Meta);
         let control_key = match key {
@@ -803,7 +803,7 @@ impl<T: InvokeUiSession> Session<T> {
         self.grab_hotkeys(true);
 
         #[cfg(windows)]
-        crate::platform::windows::stop_system_key_propagate(true);
+        crate::platform::windows_lib::stop_system_key_propagate(true);
     }
 
     pub fn leave(&self) {
@@ -815,7 +815,7 @@ impl<T: InvokeUiSession> Session<T> {
             self.map_keyboard_mode(false, *key, None)
         }
         #[cfg(windows)]
-        crate::platform::windows::stop_system_key_propagate(false);
+        crate::platform::windows_lib::stop_system_key_propagate(false);
     }
 
     #[cfg(target_os = "linux")]
@@ -973,7 +973,7 @@ impl<T: InvokeUiSession> Session<T> {
         let mut command = command;
         #[cfg(windows)]
         {
-            if !command && crate::platform::windows::get_win_key_state() {
+            if !command && crate::platform::windows_lib::get_win_key_state() {
                 command = true;
             }
         }
@@ -1233,7 +1233,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
             let path = path.with_extension(crate::get_app_name().to_lowercase());
             std::fs::File::create(&path).ok();
             if let Some(path) = path.to_str() {
-                crate::platform::windows::add_recent_document(&path);
+                crate::platform::windows_lib::add_recent_document(&path);
             }
         }
         // only run in sciter
@@ -1372,7 +1372,7 @@ impl<T: InvokeUiSession> Session<T> {
 
         let me = self.clone();
         #[cfg(windows)]
-        crate::platform::windows::enable_lowlevel_keyboard(std::ptr::null_mut() as _);
+        crate::platform::windows_lib::enable_lowlevel_keyboard(std::ptr::null_mut() as _);
         std::thread::spawn(move || {
             // This will block.
             std::env::set_var("KEYBOARD_ONLY", "y");

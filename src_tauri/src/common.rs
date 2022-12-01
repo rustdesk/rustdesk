@@ -574,7 +574,7 @@ pub fn get_custom_rendezvous_server(custom: String) -> String {
         return custom;
     }
     #[cfg(windows)]
-    if let Some(lic) = crate::platform::windows::get_license() {
+    if let Some(lic) = crate::platform::windows_lib::get_license() {
         if !lic.host.is_empty() {
             return lic.host.clone();
         }
@@ -590,7 +590,7 @@ pub fn get_api_server(api: String, custom: String) -> String {
         return api.to_owned();
     }
     #[cfg(windows)]
-    if let Some(lic) = crate::platform::windows::get_license() {
+    if let Some(lic) = crate::platform::windows_lib::get_license() {
         if !lic.api.is_empty() {
             return lic.api.clone();
         }

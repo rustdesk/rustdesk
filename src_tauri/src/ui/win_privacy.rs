@@ -1,6 +1,6 @@
 use crate::{
     ipc::{connect, Data, PrivacyModeState},
-    platform::windows::get_user_token,
+    platform::windows_lib::get_user_token,
 };
 use hbb_common::{allow_err, bail, lazy_static, log, tokio, ResultType};
 use std::{

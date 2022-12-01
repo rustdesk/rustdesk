@@ -1,2 +1,0 @@
-import "./globals";
-import "./ui";

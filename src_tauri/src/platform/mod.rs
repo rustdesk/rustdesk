@@ -3,10 +3,10 @@ pub use linux::*;
 #[cfg(target_os = "macos")]
 pub use macos::*;
 #[cfg(windows)]
-pub use windows::*;
+pub use windows_lib::*;
 
 #[cfg(windows)]
-pub mod windows;
+pub mod windows_lib;
 
 #[cfg(target_os = "macos")]
 pub mod macos;
@@ -21,7 +21,7 @@ const SERVICE_INTERVAL: u64 = 300;
 
 pub fn get_license_key() -> String {
     #[cfg(windows)]
-    if let Some(lic) = windows::get_license() {
+    if let Some(lic) = windows_lib::get_license() {
         return lic.key;
     }
     Default::default()

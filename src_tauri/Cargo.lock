@@ -44,15 +44,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "allo-isolate"
-version = "0.1.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ccb993621e6bf1b67591005b0adad126159a0ab31af379743906158aed5330d0"
-dependencies = [
- "atomic",
-]
-
-[[package]]
 name = "alloc-no-stdlib"
 version = "2.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -105,18 +96,6 @@ dependencies = [
  "env_logger 0.8.4",
  "lazy_static",
  "log",
-]
-
-[[package]]
-name = "android_logger"
-version = "0.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b5e9dd62f37dea550caf48c77591dc50bd1a378ce08855be1a0c42a97b7550fb"
-dependencies = [
- "android_log-sys",
- "env_logger 0.9.3",
- "log",
- "once_cell",
 ]
 
 [[package]]
@@ -296,15 +275,6 @@ dependencies = [
  "gobject-sys 0.15.10",
  "libc",
  "system-deps 6.0.3",
-]
-
-[[package]]
-name = "atomic"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b88d82667eca772c4aa12f0f1348b3ae643424c8876448f3f7bd5787032e234c"
-dependencies = [
- "autocfg 1.1.0",
 ]
 
 [[package]]
@@ -573,62 +543,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "camino"
-version = "1.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "88ad0e1e3e88dd237a156ab9f571021b8a158caa0ae44b1968a241efb5144c1e"
-dependencies = [
- "serde 1.0.147",
-]
-
-[[package]]
-name = "cargo-platform"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cbdb825da8a5df079a43676dbe042702f1707b1109f713a01420fbb4cc71fa27"
-dependencies = [
- "serde 1.0.147",
-]
-
-[[package]]
-name = "cargo_metadata"
-version = "0.14.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4acbb09d9ee8e23699b9634375c72795d095bf268439da88562cf9b501f181fa"
-dependencies = [
- "camino",
- "cargo-platform",
- "semver 1.0.14",
- "serde 1.0.147",
- "serde_json 1.0.88",
-]
-
-[[package]]
 name = "cargo_toml"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aa0e3586af56b3bfa51fca452bd56e8dbbbd5d8d81cbf0b7e4e35b695b537eb8"
 dependencies = [
  "serde 1.0.147",
- "toml",
-]
-
-[[package]]
-name = "cbindgen"
-version = "0.23.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b6d248e3ca02f3fbfabcb9284464c596baec223a26d91bbf44a5a62ddb0d900"
-dependencies = [
- "clap 3.2.23",
- "heck 0.4.0",
- "indexmap",
- "log",
- "proc-macro2",
- "quote",
- "serde 1.0.147",
- "serde_json 1.0.88",
- "syn",
- "tempfile",
  "toml",
 ]
 
@@ -919,12 +839,6 @@ name = "convert_case"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6245d59a3e82a7fc217c5828a6692dbc6dfb63a0c8c90495621f7b9d79704a0e"
-
-[[package]]
-name = "convert_case"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb4a24b1aaf0fd0ce8b45161144d6f42cd91677fd5940fd431183eb023b3a2b8"
 
 [[package]]
 name = "core-foundation"
@@ -1491,7 +1405,7 @@ version = "0.99.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4fb810d30a7c1953f91334de7244731fc3f3c10d7fe163338a35b9f640960321"
 dependencies = [
- "convert_case 0.4.0",
+ "convert_case",
  "proc-macro2",
  "quote",
  "rustc_version 0.4.0",
@@ -1713,18 +1627,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "enum_dispatch"
-version = "0.3.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0eb359f1476bf611266ac1f5355bc14aeca37b299d0ebccc038ee7058891c9cb"
-dependencies = [
- "once_cell",
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "enumflags2"
 version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1908,49 +1810,6 @@ dependencies = [
  "thiserror",
  "time 0.3.9",
 ]
-
-[[package]]
-name = "flutter_rust_bridge"
-version = "1.32.0"
-source = "git+https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge#e5adce55eea0b74d3680e66a2c5252edf17b07e1"
-dependencies = [
- "allo-isolate",
- "anyhow",
- "flutter_rust_bridge_macros",
- "lazy_static",
- "parking_lot 0.12.1",
- "threadpool",
-]
-
-[[package]]
-name = "flutter_rust_bridge_codegen"
-version = "1.32.0"
-source = "git+https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge#e5adce55eea0b74d3680e66a2c5252edf17b07e1"
-dependencies = [
- "anyhow",
- "cargo_metadata",
- "cbindgen",
- "convert_case 0.5.0",
- "enum_dispatch",
- "env_logger 0.9.3",
- "lazy_static",
- "log",
- "pathdiff",
- "quote",
- "regex",
- "serde 1.0.147",
- "serde_yaml",
- "structopt",
- "syn",
- "tempfile",
- "thiserror",
- "toml",
-]
-
-[[package]]
-name = "flutter_rust_bridge_macros"
-version = "1.32.0"
-source = "git+https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge#e5adce55eea0b74d3680e66a2c5252edf17b07e1"
 
 [[package]]
 name = "fnv"
@@ -3321,12 +3180,6 @@ checksum = "9272ab7b96c9046fbc5bc56c06c117cb639fe2d509df0c421cad82d2915cf369"
 dependencies = [
  "cc",
 ]
-
-[[package]]
-name = "linked-hash-map"
-version = "0.5.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0717cef1bc8b636c6e1c1bbdefc09e6322da8a9321966e8928ef80d20f7f770f"
 
 [[package]]
 name = "lock_api"
@@ -5307,7 +5160,6 @@ dependencies = [
 name = "rustdesk_tauri"
 version = "1.2.0"
 dependencies = [
- "android_logger 0.11.1",
  "arboard",
  "async-process",
  "async-trait",
@@ -5337,15 +5189,12 @@ dependencies = [
  "errno",
  "evdev",
  "flexi_logger",
- "flutter_rust_bridge",
- "flutter_rust_bridge_codegen",
  "gtk",
  "hbb_common",
  "heck 0.4.0",
  "hound",
  "impersonate_system",
  "include_dir",
- "jni 0.19.0",
  "lazy_static",
  "libappindicator",
  "libc",
@@ -5529,7 +5378,7 @@ checksum = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
 name = "scrap"
 version = "0.5.0"
 dependencies = [
- "android_logger 0.10.1",
+ "android_logger",
  "bindgen 0.59.2",
  "block",
  "cfg-if 1.0.0",
@@ -5734,18 +5583,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "serde_yaml"
-version = "0.8.26"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "578a7433b776b56a35785ed5ce9a7e777ac0598aac5a6dd1b4b18a307c7fc71b"
-dependencies = [
- "indexmap",
- "ryu",
- "serde 1.0.147",
- "yaml-rust",
 ]
 
 [[package]]
@@ -6071,30 +5908,6 @@ name = "strsim"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
-
-[[package]]
-name = "structopt"
-version = "0.3.26"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c6b5c64445ba8094a6ab0c3cd2ad323e07171012d9c98b0b15651daf1787a10"
-dependencies = [
- "clap 2.34.0",
- "lazy_static",
- "structopt-derive",
-]
-
-[[package]]
-name = "structopt-derive"
-version = "0.4.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dcb5ae327f9cc13b68763b5749770cb9e048a99bd9dfdfa58d0cf05d5f64afe0"
-dependencies = [
- "heck 0.3.3",
- "proc-macro-error",
- "proc-macro2",
- "quote",
- "syn",
-]
 
 [[package]]
 name = "strum"
@@ -6666,15 +6479,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5516c27b78311c50bf42c071425c560ac799b11c30b31f87e3081965fe5e0180"
 dependencies = [
  "once_cell",
-]
-
-[[package]]
-name = "threadpool"
-version = "1.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d050e60b33d41c19108b32cea32164033a9013fe3b46cbd4457559bfbf77afaa"
-dependencies = [
- "num_cpus",
 ]
 
 [[package]]
@@ -8184,15 +7988,6 @@ name = "xml-rs"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2d7d3948613f75c98fd9328cfdcc45acc4d360655289d0a7d4ec931392200a3"
-
-[[package]]
-name = "yaml-rust"
-version = "0.4.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56c1936c4cc7a1c9ab21a1ebb602eb942ba868cbd44a99cb7cdc5892335e1c85"
-dependencies = [
- "linked-hash-map",
-]
 
 [[package]]
 name = "zbus"
