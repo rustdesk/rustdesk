@@ -57,6 +57,10 @@ lazy_static::lazy_static! {
 
 lazy_static::lazy_static! {
     pub static ref APP_DIR: Arc<RwLock<String>> = Default::default();
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+lazy_static::lazy_static! {
     pub static ref APP_HOME_DIR: Arc<RwLock<String>> = Default::default();
 }
 

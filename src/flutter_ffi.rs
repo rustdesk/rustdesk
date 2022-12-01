@@ -967,8 +967,22 @@ pub fn session_change_prefer_codec(id: String) {
     }
 }
 
-pub fn main_set_home_dir(home: String) {
-    *config::APP_HOME_DIR.write().unwrap() = home;
+pub fn main_set_home_dir(_home: String) {
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        *config::APP_HOME_DIR.write().unwrap() = _home;
+    }
+}
+
+// This is a temporary method to get data dir for ios
+pub fn main_get_data_dir_ios() -> SyncReturn<String> {
+    let data_dir = config::Config::path("data");
+    if !data_dir.exists() {
+        if let Err(e) = std::fs::create_dir_all(&data_dir) {
+            log::warn!("Failed to create data dir {}", e);
+        }
+    }
+    SyncReturn(data_dir.to_string_lossy().to_string())
 }
 
 pub fn main_stop_service() {
