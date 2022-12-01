@@ -2,7 +2,7 @@ lazy_static::lazy_static! {
 pub static ref T: std::collections::HashMap<&'static str, &'static str> =
     [
         ("desk_tip", "Desktopi juaj mund të aksesohet me këtë ID dhe fjalëkalim."),
-        ("connecting_status", "Duke u lidhur me rrjetin RustDesk.")
+        ("connecting_status", "Duke u lidhur me rrjetin RustDesk."),
         ("not_ready_status", "Jo gati.Ju lutem kontolloni lidhjen tuaj."),
         ("id_change_tip", "Lejohen Vetëm karkteret a-z,A-Z,0-9 dhe _(nënvizimet).Shkronja e parë duhet të jetë a-z, A-Z. Gjatesia midis 6 dhe 16."),
         ("install_tip", "Për shkak të UAC, Rustdesk nuk mund të punoj sic duhet si nje remote në distancë në disa raste. Për të shamngur UAC, ju lutem klikoni butonin më poshtë për të instaluar RustDesk në sistem."),
