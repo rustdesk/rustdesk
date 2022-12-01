@@ -998,12 +998,10 @@ packages:
   uni_links_desktop:
     dependency: "direct main"
     description:
-      path: "."
-      ref: "5be5113d59c753989dbf1106241379e3fd4c9b18"
-      resolved-ref: "5be5113d59c753989dbf1106241379e3fd4c9b18"
-      url: "https://github.com/fufesou/uni_links_desktop.git"
-    source: git
-    version: "0.1.3"
+      name: uni_links_desktop
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "0.1.4"
   uni_links_platform_interface:
     dependency: transitive
     description:
