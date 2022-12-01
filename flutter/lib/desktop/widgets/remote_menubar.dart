@@ -498,7 +498,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
 
   Widget _buildClose(BuildContext context) {
     return IconButton(
-      tooltip: translate('Close'),
+      tooltip: translate('Close connection'),
       onPressed: () {
         clientClose(widget.id, widget.ffi.dialogManager);
       },
