@@ -1290,11 +1290,24 @@ bool callUniLinksUriHandler(Uri uri) {
   return false;
 }
 
+connectMainDesktop(String id,
+    {required bool isFileTransfer,
+    required bool isTcpTunneling,
+    required bool isRDP}) async {
+  if (isFileTransfer) {
+    await rustDeskWinManager.newFileTransfer(id);
+  } else if (isTcpTunneling || isRDP) {
+    await rustDeskWinManager.newPortForward(id, isRDP);
+  } else {
+    await rustDeskWinManager.newRemoteDesktop(id);
+  }
+}
+
 /// Connect to a peer with [id].
 /// If [isFileTransfer], starts a session only for file transfer.
 /// If [isTcpTunneling], starts a session only for tcp tunneling.
 /// If [isRDP], starts a session only for rdp.
-void connect(BuildContext context, String id,
+connect(BuildContext context, String id,
     {bool isFileTransfer = false,
     bool isTcpTunneling = false,
     bool isRDP = false}) async {
@@ -1304,12 +1317,20 @@ void connect(BuildContext context, String id,
       "more than one connect type");
 
   if (isDesktop) {
-    if (isFileTransfer) {
-      await rustDeskWinManager.newFileTransfer(id);
-    } else if (isTcpTunneling || isRDP) {
-      await rustDeskWinManager.newPortForward(id, isRDP);
+    if (desktopType == DesktopType.main) {
+      await connectMainDesktop(
+        id,
+        isFileTransfer: isFileTransfer,
+        isTcpTunneling: isTcpTunneling,
+        isRDP: isRDP,
+      );
     } else {
-      await rustDeskWinManager.newRemoteDesktop(id);
+      await rustDeskWinManager.call(WindowType.Main, kWindowConnect, {
+        'id': id,
+        'isFileTransfer': isFileTransfer,
+        'isTcpTunneling': isTcpTunneling,
+        'isRDP': isRDP,
+      });
     }
   } else {
     if (isFileTransfer) {
