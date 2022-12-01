@@ -383,8 +383,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: bfb19c84a8244771488bc05cc5f9c9b5e0324cfd
-      resolved-ref: bfb19c84a8244771488bc05cc5f9c9b5e0324cfd
+      ref: "74b1b314142b6775c1243067a3503ac568ebc74b"
+      resolved-ref: "74b1b314142b6775c1243067a3503ac568ebc74b"
       url: "https://github.com/Kingtous/rustdesk_flutter_custom_cursor"
     source: git
     version: "0.0.1"
@@ -617,13 +617,6 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "0.1.4"
-  menu_base:
-    dependency: transitive
-    description:
-      name: menu_base
-      url: "https://pub.dartlang.org"
-    source: hosted
-    version: "0.1.1"
   meta:
     dependency: transitive
     description:
@@ -892,13 +885,6 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "1.0.3"
-  shortid:
-    dependency: transitive
-    description:
-      name: shortid
-      url: "https://pub.dartlang.org"
-    source: hosted
-    version: "0.1.2"
   sky_engine:
     dependency: transitive
     description: flutter
@@ -988,15 +974,6 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "1.4.0"
-  tray_manager:
-    dependency: "direct main"
-    description:
-      path: "."
-      ref: "3aa37c86e47ea748e7b5507cbe59f2c54ebdb23a"
-      resolved-ref: "3aa37c86e47ea748e7b5507cbe59f2c54ebdb23a"
-      url: "https://github.com/Kingtous/rustdesk_tray_manager"
-    source: git
-    version: "0.1.8"
   tuple:
     dependency: "direct main"
     description:
@@ -1210,7 +1187,7 @@ packages:
     source: hosted
     version: "2.2.0"
   win32:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: win32
       url: "https://pub.dartlang.org"

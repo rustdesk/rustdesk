@@ -14,11 +14,8 @@ import 'package:flutter_hbb/desktop/widgets/scroll_wrapper.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
-import 'package:flutter_hbb/utils/tray_manager.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
-import 'package:tray_manager/tray_manager.dart';
-import 'package:window_manager/window_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:window_size/window_size.dart' as window_size;
 
@@ -34,7 +31,7 @@ class DesktopHomePage extends StatefulWidget {
 const borderColor = Color(0xFF2F65BA);
 
 class _DesktopHomePageState extends State<DesktopHomePage>
-    with TrayListener, AutomaticKeepAliveClientMixin {
+    with AutomaticKeepAliveClientMixin {
   final _leftPaneScrollController = ScrollController();
 
   @override
@@ -429,35 +426,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   }
 
   @override
-  void onTrayIconMouseDown() {
-    windowManager.show();
-  }
-
-  @override
-  void onTrayIconRightMouseDown() {
-    // linux does not support popup menu manually.
-    // linux will handle popup action ifself.
-    if (Platform.isMacOS || Platform.isWindows) {
-      trayManager.popUpContextMenu();
-    }
-  }
-
-  @override
-  void onTrayMenuItemClick(MenuItem menuItem) {
-    switch (menuItem.key) {
-      case kTrayItemQuitKey:
-        windowManager.close();
-        break;
-      case kTrayItemShowKey:
-        windowManager.show();
-        windowManager.focus();
-        break;
-      default:
-        break;
-    }
-  }
-
-  @override
   void initState() {
     super.initState();
     bind.mainStartGrabKeyboard();
@@ -492,9 +460,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       }
     });
     Get.put<RxBool>(svcStopped, tag: 'stop-service');
-    // disable this tray because we use tray function provided by rust now
-    // initTray();
-    trayManager.addListener(this);
     rustDeskWinManager.registerActiveWindowListener(onActiveWindowChanged);
 
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
@@ -536,10 +501,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
   @override
   void dispose() {
-    // destoryTray();
-    // fix: disable unregister to prevent from receiving events from other windows
-    // rustDeskWinManager.unregisterActiveWindowListener(onActiveWindowChanged);
-    trayManager.removeListener(this);
     _uniLinksSubscription?.cancel();
     Get.delete<RxBool>(tag: 'stop-service');
     _updateTimer?.cancel();
