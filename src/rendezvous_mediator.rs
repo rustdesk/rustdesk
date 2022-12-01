@@ -340,8 +340,8 @@ impl RendezvousMediator {
         let relay_server = self.get_relay_server(fla.relay_server);
         msg_out.set_local_addr(LocalAddr {
             id: Config::get_id(),
-            socket_addr: AddrMangle::encode(peer_addr).into(),
-            local_addr: AddrMangle::encode(local_addr).into(),
+            socket_addr: AddrMangle::encode(1, peer_addr).into(),
+            local_addr: AddrMangle::encode(1, local_addr).into(),
             relay_server,
             version: crate::VERSION.to_owned(),
             ..Default::default()
