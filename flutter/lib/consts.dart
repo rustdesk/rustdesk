@@ -11,9 +11,12 @@ const String kAppTypeDesktopRemote = "remote";
 const String kAppTypeDesktopFileTransfer = "file transfer";
 const String kAppTypeDesktopPortForward = "port forward";
 
+const String kWindowMainWindowOnTop = "main_window_on_top";
+const String kWindowGetWindowInfo = "get_window_info";
 const String kWindowActionRebuild = "rebuild";
 const String kWindowEventHide = "hide";
 const String kWindowEventShow = "show";
+const String kWindowConnect = "connect";
 
 const String kUniLinksPrefix = "rustdesk://";
 const String kActionNewConnection = "connection/new/";

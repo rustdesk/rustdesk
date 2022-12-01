@@ -65,10 +65,6 @@ dependencies:
             url: https://github.com/Kingtous/rustdesk_desktop_multi_window
             ref: cb086219bd4760a95a483cb14c1791d2a39ca5a0
     freezed_annotation: ^2.0.3
-    tray_manager:
-        git:
-            url: https://github.com/Kingtous/rustdesk_tray_manager
-            ref: 3aa37c86e47ea748e7b5507cbe59f2c54ebdb23a
     flutter_custom_cursor:
         git:
             url: https://github.com/Kingtous/rustdesk_flutter_custom_cursor
