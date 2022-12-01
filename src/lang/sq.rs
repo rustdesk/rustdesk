@@ -76,7 +76,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Name", "Emri"),
         ("Type", "Shkruaj"),
         ("Modified", "E modifikuar"),
-        ("Size", "Madhesia"
+        ("Size", "Madhesia"),
         ("Show Hidden Files", "Shfaq skedarët e fshehur"),
         ("Receive", "Merr"),
         ("Send", "Dërgo"),
@@ -374,7 +374,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Other", "Tjetër"),
         ("Confirm before closing multiple tabs", "Konfirmo përpara se të mbyllësh shumë skeda"),
         ("Keyboard Settings", "Cilësimet e tastierës"),
-        ("Custom", "personalizuar"
+        ("Custom", "Personalizuar"),
         ("Full Access", "Qasje e plotë"),
         ("Screen Share", "Ndarja e ekranit"),
         ("Wayland requires Ubuntu 21.04 or higher version.", "Wayland kërkon Ubuntu 21.04 ose version më të lartë"),
