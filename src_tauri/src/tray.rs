@@ -1,8 +1,13 @@
+use crate::ui;
+
 use super::ui_interface::get_option_opt;
 #[cfg(target_os = "linux")]
 use hbb_common::log::{debug, error, info};
 #[cfg(target_os = "linux")]
 use libappindicator::AppIndicator;
+use tauri::{Builder, Wry};
+use tauri::{GlobalShortcutManager, Manager};
+
 #[cfg(target_os = "linux")]
 use std::env::temp_dir;
 #[cfg(target_os = "windows")]
@@ -21,6 +26,76 @@ enum Events {
     DoubleClickTrayIcon,
     StopService,
     StartService,
+}
+
+// TODO: implement tray managment
+pub fn start_tray_tauri(builder: Builder<Wry>) -> Builder<Wry>{
+    builder.system_tray(
+        tauri::SystemTray::new().with_menu(
+            tauri::SystemTrayMenu::new()
+                .add_item(tauri::CustomMenuItem::new("remote".to_string(), "Remote"))
+                .add_native_item(tauri::SystemTrayMenuItem::Separator)
+                .add_item(tauri::CustomMenuItem::new("toggle".to_string(), "Hide"))
+                .add_native_item(tauri::SystemTrayMenuItem::Separator)
+                .add_item(tauri::CustomMenuItem::new("quit", "Quit")),
+        ),
+    )
+    .on_system_tray_event(move |app, event| match event {
+        tauri::SystemTrayEvent::LeftClick {
+            position: _,
+            size: _,
+            ..
+        } => {
+            println!("system tray received a left click");
+        }
+        tauri::SystemTrayEvent::RightClick {
+            position: _,
+            size: _,
+            ..
+        } => {
+            let window = app.get_window("main").unwrap();
+            // update dashboard menu text 
+            if window.is_visible().unwrap() {
+                app.tray_handle()
+                    .get_item("toggle")
+                    .set_title("Hide")
+                    .unwrap();
+            } else {
+                app.tray_handle()
+                    .get_item("toggle")
+                    .set_title("Show")
+                    .unwrap();
+            }
+            println!("system tray received a right click");
+        }
+        tauri::SystemTrayEvent::DoubleClick {
+            position: _,
+            size: _,
+            ..
+        } => {
+            println!("system tray received a double click");
+        }
+        tauri::SystemTrayEvent::MenuItemClick { id, .. } => {
+            match id.as_str() {
+                "remote" => ui::show_remote_window(app),
+                "quit" => {
+                    let app = app.clone();
+                    std::thread::spawn(move || app.exit(0));
+                }
+                "toggle" => {
+                    let window = app.get_window("main").unwrap();
+                    if window.is_visible().unwrap() {
+                        window.hide().unwrap();
+                    } else {
+                        window.show().unwrap();
+                    }
+                }
+                _ => {}
+            }
+        }
+        _ => todo!(),
+    })
+    
 }
 
 #[cfg(target_os = "windows")]

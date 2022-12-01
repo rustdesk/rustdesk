@@ -6,10 +6,11 @@ use hbb_common::{
 use std::{
     collections::HashMap,
     process::Child,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex}, error::Error,
 };
 
 use tauri::Manager;
+use winapi::ctypes::c_void;
 
 
 pub type Childs = Arc<Mutex<(bool, HashMap<(String, String), Child>)>>;
@@ -33,25 +34,34 @@ pub fn create_main_window(app: &tauri::AppHandle) -> tauri::Window {
         .unwrap()
 }
 
-pub fn show_remote_window(app: &tauri::AppHandle) {
-    if let Some(settings_window) = app.get_window("main") {
-        settings_window.show().unwrap();
-        settings_window.unminimize().unwrap();
-        settings_window.set_focus().unwrap();
-    } else {
-        create_remote_window(app);
-    }
-}
-
-fn create_remote_window(app: &tauri::AppHandle) -> tauri::Window {
+fn create_remote_window(app: &tauri::AppHandle, id: &String) -> tauri::Window {
     tauri::Window::builder(app, "remote", tauri::WindowUrl::App("index.html".into()))
-        .title("Rustdesk")
+        .title(id)
         .inner_size(700f64, 600f64)
         .center()
         .build()
         .unwrap()
 }
 
+pub fn show_remote_window(app: &tauri::AppHandle) {
+    if let Some(remote_window) = app.get_window("remote") {
+        remote_window.show().unwrap();
+        remote_window.unminimize().unwrap();
+        remote_window.set_focus().unwrap();
+    } else {
+        create_remote_window(app, &"Undef".to_string());
+    }
+}
+
+pub fn get_hwnd(window: impl raw_window_handle::HasRawWindowHandle) -> Result<*mut c_void, Box<dyn Error>> {
+    match window.raw_window_handle() {
+        #[cfg(target_os = "windows")]
+        raw_window_handle::RawWindowHandle::Win32(handle) => {
+            return Ok(handle.hwnd)
+        }
+        _ => Err("\"clear_acrylic()\" is only available on Windows 10 v1809 or newer and Windows 11.").map_err(Into::into),
+    }
+}
 
 pub fn start(app: &tauri::AppHandle, args: &mut [String]) {
     #[cfg(all(windows, not(feature = "inline")))]
@@ -59,8 +69,6 @@ pub fn start(app: &tauri::AppHandle, args: &mut [String]) {
         winapi::um::shellscalingapi::SetProcessDpiAwareness(2); // PROCESS_PER_MONITOR_DPI_AWARE
     }
     let page;
-    let mut handler: Vec<String> = Vec::new();
-    // let window = app.get_window("main").unwrap();
     if args.len() > 1 && args[0] == "--play" {
         args[0] = "--connect".to_owned();
         let path: std::path::PathBuf = (&args[1]).into();
@@ -78,11 +86,13 @@ pub fn start(app: &tauri::AppHandle, args: &mut [String]) {
         // TODO:
         //  crate::common::check_software_update();
         page = "index.html";
+        create_main_window(app);
+        app.get_window("main").unwrap().open_devtools();
     } else if args[0] == "--install" {
         page = "install.html";
     } else if args[0] == "--cm" {
+        // Implemetation "connection-manager" behavior using tauri state manager
         app.manage(Mutex::new(cm::TauriConnectionManager::new(app.clone()))); //TODO: Move app to static
-        handler.push("connection-manager".to_string());
         page = "cm.html";
     } else if (args[0] == "--connect"
         || args[0] == "--file-transfer"
@@ -90,26 +100,25 @@ pub fn start(app: &tauri::AppHandle, args: &mut [String]) {
         || args[0] == "--rdp")
         && args.len() > 1
     {
-        // #[cfg(windows)]
-        // {
-        //     let hw = crate::processing::get_hwnd(&window).unwrap();
-        //     // below copied from https://github.com/TigerVNC/tigervnc/blob/master/vncviewer/win32.c
-        //     crate::platform::windows_lib::enable_lowlevel_keyboard(hw as _);
-        // }
         let mut iter = args.iter();
         let cmd = iter.next().unwrap().clone();
         let id = iter.next().unwrap().clone();
         let pass = iter.next().unwrap_or(&"".to_owned()).clone();
         let args: Vec<String> = iter.map(|x| x.clone()).collect();
-        // window.set_title(&id).unwrap();
-        // TODO: TauriSession handler implementation
+        let remote = create_remote_window(&app, &id);
+        #[cfg(windows)]
+        {
+            let hw = get_hwnd(remote).unwrap();
+            // below copied from https://github.com/TigerVNC/tigervnc/blob/master/vncviewer/win32.c
+            crate::platform::windows_lib::enable_lowlevel_keyboard(hw as _);
+        }
+        // Implemetation "native-remote" behavior using tauri state manager
         app.manage(Mutex::new(remote::TauriSession::new(
             cmd.clone(),
             id.clone(),
             pass.clone(),
             args.clone(),
         )));
-        handler.push(format!("native-remote {} {} {} {:?}", cmd, id, pass, args)); 
         page = "remote.html";
     } else {
         log::error!("Wrong command: {:?}", args);

@@ -33,88 +33,14 @@ fn main() {
     let mut builder = tauri::Builder::default();
     builder = invoke_handler(builder);
     builder
-    .system_tray(
-        tauri::SystemTray::new().with_menu(
-            tauri::SystemTrayMenu::new()
-                .add_item(tauri::CustomMenuItem::new("remote".to_string(), "Remote"))
-                .add_native_item(tauri::SystemTrayMenuItem::Separator)
-                .add_item(tauri::CustomMenuItem::new("toggle".to_string(), "Hide"))
-                .add_native_item(tauri::SystemTrayMenuItem::Separator)
-                .add_item(tauri::CustomMenuItem::new("quit", "Quit")),
-        ),
-    )
-    .on_system_tray_event(move |app, event| match event {
-        tauri::SystemTrayEvent::LeftClick {
-            position: _,
-            size: _,
-            ..
-        } => {
-            println!("system tray received a left click");
-        }
-        tauri::SystemTrayEvent::RightClick {
-            position: _,
-            size: _,
-            ..
-        } => {
-            let window = app.get_window("main").unwrap();
-            // update dashboard menu text 
-            if window.is_visible().unwrap() {
-                app.tray_handle()
-                    .get_item("toggle")
-                    .set_title("Hide")
-                    .unwrap();
-            } else {
-                app.tray_handle()
-                    .get_item("toggle")
-                    .set_title("Show")
-                    .unwrap();
-            }
-            println!("system tray received a right click");
-        }
-        tauri::SystemTrayEvent::DoubleClick {
-            position: _,
-            size: _,
-            ..
-        } => {
-            println!("system tray received a double click");
-        }
-        tauri::SystemTrayEvent::MenuItemClick { id, .. } => {
-            match id.as_str() {
-                "remote" => ui::show_remote_window(app),
-                "quit" => {
-                    let app = app.clone();
-                    std::thread::spawn(move || app.exit(0));
-                }
-                "toggle" => {
-                    let window = app.get_window("main").unwrap();
-                    if window.is_visible().unwrap() {
-                        window.hide().unwrap();
-                    } else {
-                        window.show().unwrap();
-                    }
-                }
-                _ => {}
-            }
-        }
-        _ => todo!(),
-    })
     .setup(|app| {
         if let Some(args) = core_main::core_main().as_mut(){
             ui::start(&app.handle(), args);
         }
-        ui::create_main_window(&app.handle());
-        app.get_window("main").unwrap().open_devtools();
         Ok(())
     })
-    .build(tauri::generate_context!())
-    .expect("error while running tauri application")
-    .run(|_app_handle, event| match event {
-        tauri::RunEvent::ExitRequested { api, .. } => {
-            log::info!("exit requested");
-            api.prevent_exit();
-        }
-        _ => {}
-    });
+    .run(tauri::generate_context!())
+    .expect("error while running tauri application");
     common::global_clean();
 }
 

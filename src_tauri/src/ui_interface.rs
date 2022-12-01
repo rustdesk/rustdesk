@@ -27,7 +27,7 @@ use hbb_common::{
 
 #[cfg(feature = "flutter")]
 use crate::hbbs_http::account;
-use crate::{common::SOFTWARE_UPDATE_URL, ipc};
+use crate::{common::SOFTWARE_UPDATE_URL, ipc, ui::{show_remote_window, self}};
 
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 type Message = RendezvousMessage;
@@ -567,7 +567,7 @@ pub fn remove_peer(id: String) {
 
 #[inline]
 #[tauri::command(async)]
-pub fn new_remote(id: String, remote_type: String) {
+pub fn new_remote(app: tauri::AppHandle, id: String, remote_type: String) {
     let mut lock = CHILDREN.lock().unwrap();
     let args = vec![format!("--{}", remote_type), id.clone()];
     let key = (id.clone(), remote_type.clone());
@@ -594,6 +594,23 @@ pub fn new_remote(id: String, remote_type: String) {
         }
     }
 }
+
+// #[inline]
+// #[tauri::command(async)]
+// pub fn new_remote_tauri(app: tauri::AppHandle, id: String, remote_type: String) {
+//     let mut lock = CHILDREN.lock().unwrap();
+//     let args = vec![format!("--{}", remote_type), id.clone()];
+//     let key = (id.clone(), remote_type.clone());
+//     if let Some(remote) = lock.1.get_mut(&key) {
+//         remote.close();
+//         lock.1.remove(&key);
+
+//     }
+//     // TODO: how to stop process?
+//     lock.1.insert(key, _);
+//     ui::start(&app, &mut args);
+// }
+
 
 #[inline]
 #[tauri::command(async)]

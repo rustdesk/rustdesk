@@ -1156,8 +1156,7 @@ impl Connection {
                         }
                     }
                 }
-                Some(message::Union::Clipboard(cb)) =>
-                {
+                Some(message::Union::Clipboard(cb)) => {
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     if self.clipboard {
                         update_clipboard(cb, None);
