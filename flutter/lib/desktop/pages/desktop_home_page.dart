@@ -465,9 +465,9 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
       debugPrint(
           "[Main] call ${call.method} with args ${call.arguments} from window $fromWindowId");
-      if (call.method == "main_window_on_top") {
+      if (call.method == kWindowMainWindowOnTop) {
         window_on_top(null);
-      } else if (call.method == "get_window_info") {
+      } else if (call.method == kWindowGetWindowInfo) {
         final screen = (await window_size.getWindowInfo()).screen;
         if (screen == null) {
           return "";
@@ -494,6 +494,13 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         rustDeskWinManager.registerActiveWindow(call.arguments["id"]);
       } else if (call.method == kWindowEventHide) {
         rustDeskWinManager.unregisterActiveWindow(call.arguments["id"]);
+      } else if (call.method == kWindowConnect) {
+        await connectMainDesktop(
+          call.arguments['id'],
+          isFileTransfer: call.arguments['isFileTransfer'],
+          isTcpTunneling: call.arguments['isTcpTunneling'],
+          isRDP: call.arguments['isRDP'],
+        );
       }
     });
     _uniLinksSubscription = listenUniLinks();

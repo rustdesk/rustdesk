@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:rxdart/rxdart.dart' as rxdart;
@@ -201,7 +202,8 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   }
 
   _updateScreen() async {
-    final v = await DesktopMultiWindow.invokeMethod(0, 'get_window_info', '');
+    final v = await rustDeskWinManager.call(
+        WindowType.Main, kWindowGetWindowInfo, '');
     final String valueStr = v;
     if (valueStr.isEmpty) {
       _screen = null;

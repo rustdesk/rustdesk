@@ -1033,8 +1033,8 @@ class AddButton extends StatelessWidget {
     return ActionIcon(
         message: 'New Connection',
         icon: IconFont.add,
-        onTap: () =>
-            rustDeskWinManager.call(WindowType.Main, "main_window_on_top", ""),
+        onTap: () => rustDeskWinManager.call(
+            WindowType.Main, kWindowMainWindowOnTop, ""),
         isClose: false);
   }
 }
