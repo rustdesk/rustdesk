@@ -10,7 +10,7 @@ pub use protos::rendezvous as rendezvous_proto;
 use std::{
     fs::File,
     io::{self, BufRead},
-    net::{Ipv4Addr, SocketAddr, SocketAddrV4},
+    net::{IpAddr,Ipv4Addr, SocketAddr, SocketAddrV4},
     path::Path,
     time::{self, SystemTime, UNIX_EPOCH},
 };
@@ -40,6 +40,10 @@ pub use tokio_socks::TargetAddr;
 pub mod password_security;
 pub use chrono;
 pub use directories_next;
+
+// u128 from Ipv6Addr: "64:ff9b::"
+// https://en.wikipedia.org/wiki/NAT64#:~:text=The%20%22well%2Dknown%20prefix%22%20reserved%20for%20this%20service%20is%2064%3Aff9b%3A%3A/96.
+const PREF64: u128 = 524413980667603649783483181312245760;
 
 #[cfg(feature = "quic")]
 pub type Stream = quic::Connection;
@@ -242,12 +246,35 @@ pub fn get_time() -> i64 {
         .unwrap_or(0) as _
 }
 
+fn is_nat64_ipv4(addr: &SocketAddr) -> bool {
+    addr.is_ipv6() && match addr.ip() {
+        IpAddr::V4(_) => { false }
+        IpAddr::V6(addr_v6) => {
+            u128::from(addr_v6) & PREF64 == PREF64
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::net::{Ipv6Addr, SocketAddrV6};
+    use std::str::FromStr;
     use super::*;
     #[test]
     fn test_mangle() {
         let addr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(192, 168, 16, 32), 21116));
         assert_eq!(addr, AddrMangle::decode(&AddrMangle::encode(addr)));
+    }
+
+    #[test]
+    fn test_nat64_ipv4() {
+        let addr_nat64_v4 = SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::from_str("64:ff9b::1.1.1.1").unwrap(), 21116, 0, 0));
+        let addr_v4 = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::from_str("1.1.1.1").unwrap(), 21116));
+        let addr_v6 = SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::from_str("1050:0:0:0:5:600:300c:326b").unwrap(), 21116, 0, 0));
+        let addr_customize_nat64_v6 = SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::from_str("::ffff:192.1.56.10").unwrap(), 21116, 0, 0));
+        assert!(is_nat64_ipv4(&addr_nat64_v4));
+        assert!(!is_nat64_ipv4(&addr_v4));
+        assert!(!is_nat64_ipv4(&addr_v6));
+        assert!(!is_nat64_ipv4(&addr_customize_nat64_v6));
     }
 }
