@@ -10,7 +10,7 @@ import package_info_plus_macos
 import path_provider_macos
 import screen_retriever
 import sqflite
-import tray_manager
+// import tray_manager
 import uni_links_desktop
 import url_launcher_macos
 import wakelock_macos
@@ -39,7 +39,7 @@ class MainFlutterWindow: NSWindow {
             FLTPackageInfoPlusPlugin.register(with: controller.registrar(forPlugin: "FLTPackageInfoPlusPlugin"))
             PathProviderPlugin.register(with: controller.registrar(forPlugin: "PathProviderPlugin"))
             SqflitePlugin.register(with: controller.registrar(forPlugin: "SqflitePlugin"))
-            TrayManagerPlugin.register(with: controller.registrar(forPlugin: "TrayManagerPlugin"))
+            // TrayManagerPlugin.register(with: controller.registrar(forPlugin: "TrayManagerPlugin"))
             UniLinksDesktopPlugin.register(with: controller.registrar(forPlugin: "UniLinksDesktopPlugin"))
             UrlLauncherPlugin.register(with: controller.registrar(forPlugin: "UrlLauncherPlugin"))
             WakelockMacosPlugin.register(with: controller.registrar(forPlugin: "WakelockMacosPlugin"))
