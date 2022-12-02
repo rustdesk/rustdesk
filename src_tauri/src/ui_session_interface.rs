@@ -28,13 +28,13 @@ pub static IS_IN: AtomicBool = AtomicBool::new(false);
 pub static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
 pub static HOTKEY_HOOKED: AtomicBool = AtomicBool::new(false);
 #[cfg(windows)]
-static mut IS_ALT_GR: bool = false;
+pub static mut IS_ALT_GR: bool = false;
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::flutter::FlutterHandler;
 
 lazy_static::lazy_static! {
-    static ref TO_RELEASE: Arc<Mutex<HashSet<RdevKey>>> = Arc::new(Mutex::new(HashSet::<RdevKey>::new()));
+    pub static ref TO_RELEASE: Arc<Mutex<HashSet<RdevKey>>> = Arc::new(Mutex::new(HashSet::<RdevKey>::new()));
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -994,13 +994,13 @@ impl<T: InvokeUiSession> Session<T> {
         }
     }
 
-    pub fn reconnect(&self) {
+    pub fn reconnect(&self, app: tauri::AppHandle) {
         self.send(Data::Close);
         let cloned = self.clone();
         let mut lock = self.thread.lock().unwrap();
         lock.take().map(|t| t.join());
         *lock = Some(std::thread::spawn(move || {
-            io_loop(cloned);
+            io_loop(app.clone(), cloned);
         }));
     }
 
@@ -1124,7 +1124,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn update_block_input_state(&self, on: bool);
     fn job_progress(&self, id: i32, file_num: i32, speed: f64, finished_size: f64);
     fn adapt_size(&self);
-    fn on_rgba(&self, data: &[u8]);
+    fn on_rgba(&self, app: &tauri::AppHandle, data: &[u8]);
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool);
     #[cfg(any(target_os = "android", target_os = "ios"))]
     fn clipboard(&self, content: String);
@@ -1404,7 +1404,7 @@ impl<T: InvokeUiSession> Session<T> {
 }
 
 #[tokio::main(flavor = "current_thread")]
-pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>) {
+pub async fn io_loop<T: InvokeUiSession>(app: tauri::AppHandle, handler: Session<T>) {
     let (sender, mut receiver) = mpsc::unbounded_channel::<Data>();
     *handler.sender.write().unwrap() = Some(sender.clone());
     let mut options = crate::ipc::get_options_async().await;
@@ -1504,7 +1504,7 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>) {
     let ui_handler = handler.ui_handler.clone();
     let (video_sender, audio_sender) = start_video_audio_threads(move |data: &[u8]| {
         frame_count_cl.fetch_add(1, Ordering::Relaxed);
-        ui_handler.on_rgba(data);
+        ui_handler.on_rgba(&app, data);
     });
 
     let mut remote = Remote::new(
@@ -1562,7 +1562,7 @@ fn get_hotkey_state(key: RdevKey) -> bool {
     }
 }
 
-fn get_all_hotkey_state(
+pub fn get_all_hotkey_state(
     alt: bool,
     ctrl: bool,
     shift: bool,
@@ -1636,7 +1636,7 @@ pub fn global_save_keyboard_mode(value: String) {
     std::env::set_var("KEYBOARD_MODE", value);
 }
 
-fn is_long_press(event: &Event) -> bool {
+pub fn is_long_press(event: &Event) -> bool {
     let mut keys = MUTEX_SPECIAL_KEYS.lock().unwrap();
     match event.event_type {
         EventType::KeyPress(k) => {

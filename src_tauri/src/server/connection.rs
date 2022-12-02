@@ -48,7 +48,7 @@ pub struct ConnInner {
     tx_video: Option<Sender>,
 }
 
-enum MessageInput {
+pub enum MessageInput {
     Mouse((MouseEvent, i32)),
     Key((KeyEvent, bool)),
     BlockOn,

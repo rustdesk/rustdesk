@@ -135,8 +135,8 @@ pub fn lock_screen(tauri_session: tauri::State<Mutex<TauriSession>>){
     tauri_session.lock().unwrap().lock_screen()
 }
 #[tauri::command(async)]
-pub fn reconnect(tauri_session: tauri::State<Mutex<TauriSession>>){
-    tauri_session.lock().unwrap().reconnect()
+pub fn reconnect(app: tauri::AppHandle, tauri_session: tauri::State<Mutex<TauriSession>>){
+    tauri_session.lock().unwrap().reconnect(app)
 }
 
 #[tauri::command(async)]

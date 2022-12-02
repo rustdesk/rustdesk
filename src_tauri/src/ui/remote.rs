@@ -18,6 +18,7 @@ use hbb_common::{
     allow_err, fs::TransferJobMeta, log, message_proto::*, rendezvous_proto::ConnType,
 };
 use serde::{Serialize, Deserialize};
+use tauri::Manager;
 
 use crate::{
     client::*,
@@ -46,6 +47,13 @@ impl SciterHandler {
         if let Some(ref e) = self.element.lock().unwrap().as_ref() {
             allow_err!(e.call_method(func, args));
         }
+    }
+    
+    fn call_tauri(&self, app: &tauri::AppHandle, func: &str, args: &[String]) {
+        // if let Some(e) = self.element.lock().unwrap().as_ref() {
+        //     allow_err!(e.call_method(func, &super::value_crash_workaround(args)[..]));
+        // }
+        app.emit_all(func, args).unwrap();
     }
 
     // #[inline]
@@ -205,12 +213,17 @@ impl InvokeUiSession for SciterHandler {
         self.call("adaptSize", &make_args!());
     }
 
-    fn on_rgba(&self, data: &[u8]) {
-        VIDEO
-            .lock()
-            .unwrap()
-            .as_mut()
-            .map(|v| v.render_frame(data).ok());
+    // fn on_rgba(&self, data: &[u8]) {
+    //     VIDEO
+    //         .lock()
+    //         .unwrap()
+    //         .as_mut()
+    //         .map(|v| v.render_frame(data).ok());
+    // }
+
+    fn on_rgba(&self, app: &tauri::AppHandle, data: &[u8]) {
+        log::info!("native-remote {}", serde_json::to_string(&data).unwrap());
+        self.call_tauri(app, "native-remote", &[serde_json::to_string(&data).unwrap()]);
     }
 
     fn set_peer_info(&self, pi: &PeerInfo) {
@@ -311,7 +324,7 @@ impl sciter::EventHandler for  TauriSession {
                     let site = AssetPtr::adopt(ptr as *mut video_destination);
                     log::debug!("[video] start video");
                     *VIDEO.lock().unwrap() = Some(site);
-                    self.reconnect();
+                    // self.reconnect();
                 }
             }
             BEHAVIOR_EVENTS::VIDEO_INITIALIZED => {
