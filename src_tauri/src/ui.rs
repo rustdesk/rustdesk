@@ -10,7 +10,7 @@ use std::{
 };
 
 use tauri::Manager;
-use winapi::ctypes::c_void;
+// use winapi::ctypes::c_void;
 
 
 pub type Childs = Arc<Mutex<(bool, HashMap<(String, String), Child>)>>;
@@ -53,15 +53,15 @@ pub fn show_remote_window(app: &tauri::AppHandle) {
     }
 }
 
-pub fn get_hwnd(window: impl raw_window_handle::HasRawWindowHandle) -> Result<*mut c_void, Box<dyn Error>> {
-    match window.raw_window_handle() {
-        #[cfg(target_os = "windows")]
-        raw_window_handle::RawWindowHandle::Win32(handle) => {
-            return Ok(handle.hwnd)
-        }
-        _ => Err("\"clear_acrylic()\" is only available on Windows 10 v1809 or newer and Windows 11.").map_err(Into::into),
-    }
-}
+// pub fn get_hwnd(window: impl raw_window_handle::HasRawWindowHandle) -> Result<*mut c_void, Box<dyn Error>> {
+//     match window.raw_window_handle() {
+//         #[cfg(target_os = "windows")]
+//         raw_window_handle::RawWindowHandle::Win32(handle) => {
+//             return Ok(handle.hwnd)
+//         }
+//         _ => Err("\"clear_acrylic()\" is only available on Windows 10 v1809 or newer and Windows 11.").map_err(Into::into),
+//     }
+// }
 
 pub fn start(app: &tauri::AppHandle, args: &mut [String]) {
     #[cfg(all(windows, not(feature = "inline")))]
