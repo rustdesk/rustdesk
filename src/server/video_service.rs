@@ -21,9 +21,12 @@
 use super::{video_qos::VideoQoS, *};
 #[cfg(windows)]
 use crate::portable_service::client::PORTABLE_SERVICE_RUNNING;
-use hbb_common::tokio::sync::{
-    mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
-    Mutex as TokioMutex,
+use hbb_common::{
+    get_version_number,
+    tokio::sync::{
+        mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
+        Mutex as TokioMutex,
+    },
 };
 #[cfg(not(windows))]
 use scrap::Capturer;
@@ -92,7 +95,8 @@ pub fn get_privacy_mode_conn_id() -> i32 {
 
 pub fn is_privacy_mode_supported() -> bool {
     #[cfg(windows)]
-    return *IS_CAPTURER_MAGNIFIER_SUPPORTED;
+    return *IS_CAPTURER_MAGNIFIER_SUPPORTED
+        && get_version_number(&crate::VERSION) > get_version_number("1.1.9");
     #[cfg(not(windows))]
     return false;
 }

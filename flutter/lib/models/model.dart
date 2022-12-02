@@ -344,6 +344,8 @@ class FfiModel with ChangeNotifier {
         _waitForImage[peerId] = true;
         _reconnects = 1;
       }
+      Map<String, dynamic> features = json.decode(evt['features']);
+      _pi.features.privacyMode = features['privacy_mode'] == 1;
     }
     notifyListeners();
   }
@@ -1328,6 +1330,10 @@ class Display {
   }
 }
 
+class Features {
+  bool privacyMode = false;
+}
+
 class PeerInfo {
   String version = '';
   String username = '';
@@ -1336,6 +1342,7 @@ class PeerInfo {
   bool sasEnabled = false;
   int currentDisplay = 0;
   List<Display> displays = [];
+  Features features = Features();
 }
 
 const canvasKey = 'canvas';
