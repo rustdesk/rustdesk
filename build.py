@@ -252,7 +252,7 @@ def build_flutter_deb(version, features):
     os.system('mkdir -p tmpdeb/usr/share/rustdesk/files/systemd/')
     os.system('mkdir -p tmpdeb/usr/share/applications/')
     os.system('mkdir -p tmpdeb/usr/share/polkit-1/actions')
-    os.system('rm tmpdeb/usr/bin/rustdesk')
+    os.system('rm tmpdeb/usr/bin/rustdesk || true')
     os.system(
         'cp -r build/linux/x64/release/bundle/* tmpdeb/usr/lib/rustdesk/')
     os.system(
