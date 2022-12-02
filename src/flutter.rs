@@ -8,7 +8,8 @@ use std::{
 use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
 
 use hbb_common::{
-    bail, config::LocalConfig, message_proto::*, rendezvous_proto::ConnType, ResultType,
+    bail, config::LocalConfig, get_version_number, message_proto::*, rendezvous_proto::ConnType,
+    ResultType,
 };
 use serde_json::json;
 
@@ -299,6 +300,15 @@ impl InvokeUiSession for FlutterHandler {
             displays.push(h);
         }
         let displays = serde_json::ser::to_string(&displays).unwrap_or("".to_owned());
+        let mut features: HashMap<&str, i32> = Default::default();
+        for ref f in pi.features.iter() {
+            features.insert("privacy_mode", if f.privacy_mode { 1 } else { 0 });
+        }
+        // compatible with 1.1.9
+        if get_version_number(&pi.version) < get_version_number("1.2.0") {
+            features.insert("privacy_mode", 0);
+        }
+        let features = serde_json::ser::to_string(&features).unwrap_or("".to_owned());
         self.push_event(
             "peer_info",
             vec![
@@ -308,6 +318,7 @@ impl InvokeUiSession for FlutterHandler {
                 ("sas_enabled", &pi.sas_enabled.to_string()),
                 ("displays", &displays),
                 ("version", &pi.version),
+                ("features", &features),
                 ("current_display", &pi.current_display.to_string()),
             ],
         );

@@ -1170,7 +1170,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       }
       displayMenu.add(_createSwitchMenuEntry(
           'Lock after session end', 'lock-after-session-end', padding, true));
-      if (pi.platform == 'Windows') {
+      if (pi.features.privacyMode) {
         displayMenu.add(MenuEntrySwitch2<String>(
           switchType: SwitchType.scheckbox,
           text: translate('Privacy mode'),
