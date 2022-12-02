@@ -49,12 +49,12 @@ impl SciterHandler {
         }
     }
     
-    fn call_tauri(&self, app: &tauri::AppHandle, func: &str, args: &[String]) {
-        // if let Some(e) = self.element.lock().unwrap().as_ref() {
-        //     allow_err!(e.call_method(func, &super::value_crash_workaround(args)[..]));
-        // }
-        app.emit_all(func, args).unwrap();
-    }
+    // fn call_tauri(&self, app: &tauri::AppHandle, func: &str, args: &[String]) {
+    //     // if let Some(e) = self.element.lock().unwrap().as_ref() {
+    //     //     allow_err!(e.call_method(func, &super::value_crash_workaround(args)[..]));
+    //     // }
+    //     app.emit_all(func, args).unwrap();
+    // }
 
     // #[inline]
     // fn call2(&self, func: &str, args: &[Value]) {
@@ -222,8 +222,9 @@ impl InvokeUiSession for SciterHandler {
     // }
 
     fn on_rgba(&self, app: &tauri::AppHandle, data: &[u8]) {
-        log::info!("native-remote {}", serde_json::to_string(&data).unwrap());
-        self.call_tauri(app, "native-remote", &[serde_json::to_string(&data).unwrap()]);
+        // log::info!("native-remote {}", serde_json::to_string(&data).unwrap());
+        // self.call_tauri(app, "native-remote", &[serde_json::to_string(&data).unwrap()]);
+        app.emit_all("native-remote", data).unwrap();
     }
 
     fn set_peer_info(&self, pi: &PeerInfo) {
