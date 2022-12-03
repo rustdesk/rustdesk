@@ -122,7 +122,10 @@ mod components {
                         std::thread::spawn(move || {
                             let func = move |event: Event| match event.event_type {
                                 EventType::KeyPress(key) | EventType::KeyRelease(key) => {
-                                    // todo!: CAPSLOCK don't work
+                                    // fix #2211：CAPS LOCK don't work
+                                    if key == Key::CapsLock || key == Key::NumLock {
+                                        return Some(event);
+                                    }
                                     if KEYBOARD_HOOKED.load(Ordering::SeqCst) {
                                         keyboard::client::process_event(event);
                                         return None;
