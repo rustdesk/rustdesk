@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
@@ -144,18 +145,14 @@ class FileModel extends ChangeNotifier {
     }
   }
 
-  bool get currentShowHidden =>
-      _isSelectedLocal ? _localOption.showHidden : _remoteOption.showHidden;
-
-  bool getCurrentShowHidden(bool isLocal) {
-    return isLocal ? _localOption.showHidden : _remoteOption.showHidden;
+  bool getCurrentShowHidden([bool? isLocal]) {
+    final isLocal_ = isLocal ?? _isSelectedLocal;
+    return isLocal_ ? _localOption.showHidden : _remoteOption.showHidden;
   }
 
-  bool get currentIsWindows =>
-      _isSelectedLocal ? _localOption.isWindows : _remoteOption.isWindows;
-
-  bool getCurrentIsWindows(bool isLocal) {
-    return isLocal ? _localOption.isWindows : _remoteOption.isWindows;
+  bool getCurrentIsWindows([bool? isLocal]) {
+    final isLocal_ = isLocal ?? _isSelectedLocal;
+    return isLocal_ ? _localOption.isWindows : _remoteOption.isWindows;
   }
 
   final _fileFetcher = FileFetcher();
@@ -330,13 +327,13 @@ class FileModel extends ChangeNotifier {
     _localOption.showHidden = (await bind.sessionGetPeerOption(
             id: parent.target?.id ?? "", name: "local_show_hidden"))
         .isNotEmpty;
+    _localOption.isWindows = Platform.isWindows;
 
     _remoteOption.showHidden = (await bind.sessionGetPeerOption(
             id: parent.target?.id ?? "", name: "remote_show_hidden"))
         .isNotEmpty;
-    _remoteOption.isWindows = parent.target?.ffiModel.pi.platform == "Windows";
-
-    debugPrint("remote platform: ${parent.target?.ffiModel.pi.platform}");
+    _remoteOption.isWindows =
+        parent.target?.ffiModel.pi.platform.toLowerCase() == "windows";
 
     await Future.delayed(Duration(milliseconds: 100));
 
@@ -404,14 +401,10 @@ class FileModel extends ChangeNotifier {
     if (!isBack) {
       pushHistory(isLocal);
     }
-    final showHidden =
-        isLocal ? _localOption.showHidden : _remoteOption.showHidden;
-    final isWindows =
-        isLocal ? _localOption.isWindows : _remoteOption.isWindows;
+    final showHidden = getCurrentShowHidden(isLocal);
+    final isWindows = getCurrentIsWindows(isLocal);
     // process /C:\ -> C:\ on Windows
-    if (isLocal
-        ? _localOption.isWindows
-        : _remoteOption.isWindows && path.length > 1 && path[0] == '/') {
+    if (isWindows && path.length > 1 && path[0] == '/') {
       path = path.substring(1);
       if (path[path.length - 1] != '\\') {
         path = "$path\\";

@@ -825,7 +825,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                     final x = offset.dx;
                     final y = offset.dy + size.height + 1;
 
-                    final isPeerWindows = isWindows(isLocal);
+                    final isPeerWindows = model.getCurrentIsWindows(isLocal);
                     final List<MenuEntryBase> menuItems = [
                       MenuEntryButton(
                           childBuilder: (TextStyle? style) => isPeerWindows
@@ -913,7 +913,8 @@ class _FileManagerPageState extends State<FileManagerPage>
       bool isLocal, void Function(List<String>) onPressed) {
     final path = model.getCurrentDir(isLocal).path;
     final breadCrumbList = List<BreadCrumbItem>.empty(growable: true);
-    if (isWindows(isLocal) && path == '/') {
+    final isWindows = model.getCurrentIsWindows(isLocal);
+    if (isWindows && path == '/') {
       breadCrumbList.add(BreadCrumbItem(
           content: TextButton(
                   child: buildWindowsThisPC(),
@@ -922,7 +923,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                   onPressed: () => onPressed(['/']))
               .marginSymmetric(horizontal: 4)));
     } else {
-      final list = PathUtil.split(path, model.getCurrentIsWindows(isLocal));
+      final list = PathUtil.split(path, isWindows);
       breadCrumbList.addAll(list.asMap().entries.map((e) => BreadCrumbItem(
           content: TextButton(
                   child: Text(e.value),
@@ -932,14 +933,6 @@ class _FileManagerPageState extends State<FileManagerPage>
               .marginSymmetric(horizontal: 4))));
     }
     return breadCrumbList;
-  }
-
-  bool isWindows(bool isLocal) {
-    if (isLocal) {
-      return Platform.isWindows;
-    } else {
-      return _ffi.ffiModel.pi.platform.toLowerCase() == "windows";
-    }
   }
 
   breadCrumbScrollToEnd(bool isLocal) {
