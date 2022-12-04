@@ -32,15 +32,17 @@ class _FileManagerPageState extends State<FileManagerPage> {
           .showLoading(translate('Connecting...'), onCancel: closeConnection);
     });
     gFFI.ffiModel.updateEventListener(widget.id);
+    model.onDirChanged = (_) => breadCrumbScrollToEnd();
     Wakelock.enable();
   }
 
   @override
   void dispose() {
-    model.onClose();
-    gFFI.close();
-    gFFI.dialogManager.dismissAll();
-    Wakelock.disable();
+    model.onClose().whenComplete(() {
+      gFFI.close();
+      gFFI.dialogManager.dismissAll();
+      Wakelock.disable();
+    });
     super.dispose();
   }
 
@@ -309,7 +311,6 @@ class _FileManagerPageState extends State<FileManagerPage> {
                 }
                 if (entries[index].isDirectory || entries[index].isDrive) {
                   model.openDirectory(entries[index].path);
-                  breadCrumbScrollToEnd();
                 } else {
                   // Perform file-related tasks.
                 }

@@ -93,6 +93,7 @@ class _FileManagerPageState extends State<FileManagerPage>
       Wakelock.enable();
     }
     debugPrint("File manager page init success with id ${widget.id}");
+    model.onDirChanged = breadCrumbScrollToEnd;
     // register location listener
     _locationNodeLocal.addListener(onLocalLocationFocusChanged);
     _locationNodeRemote.addListener(onRemoteLocationFocusChanged);
@@ -100,17 +101,18 @@ class _FileManagerPageState extends State<FileManagerPage>
 
   @override
   void dispose() {
-    model.onClose();
-    _ffi.close();
-    _ffi.dialogManager.dismissAll();
-    if (!Platform.isLinux) {
-      Wakelock.disable();
-    }
-    Get.delete<FFI>(tag: 'ft_${widget.id}');
-    _locationNodeLocal.removeListener(onLocalLocationFocusChanged);
-    _locationNodeRemote.removeListener(onRemoteLocationFocusChanged);
-    _locationNodeLocal.dispose();
-    _locationNodeRemote.dispose();
+    model.onClose().whenComplete(() {
+      _ffi.close();
+      _ffi.dialogManager.dismissAll();
+      if (!Platform.isLinux) {
+        Wakelock.disable();
+      }
+      Get.delete<FFI>(tag: 'ft_${widget.id}');
+      _locationNodeLocal.removeListener(onLocalLocationFocusChanged);
+      _locationNodeRemote.removeListener(onRemoteLocationFocusChanged);
+      _locationNodeLocal.dispose();
+      _locationNodeRemote.dispose();
+    });
     super.dispose();
   }
 
@@ -636,7 +638,6 @@ class _FileManagerPageState extends State<FileManagerPage>
             }),
             IconButton(
                 onPressed: () {
-                  breadCrumbScrollToEnd(isLocal);
                   model.refresh(isLocal: isLocal);
                 },
                 splashRadius: kDesktopIconButtonSplashRadius,
@@ -999,9 +1000,7 @@ class _FileManagerPageState extends State<FileManagerPage>
   }
 
   openDirectory(String path, {bool isLocal = false}) {
-    model.openDirectory(path, isLocal: isLocal).then((_) {
-      breadCrumbScrollToEnd(isLocal);
-    });
+    model.openDirectory(path, isLocal: isLocal);
   }
 
   void handleDragDone(DropDoneDetails details, bool isLocal) {

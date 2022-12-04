@@ -42,6 +42,9 @@ class FileModel extends ChangeNotifier {
   /// JobTable <jobId, JobProgress>
   final _jobTable = List<JobProgress>.empty(growable: true).obs;
 
+  /// `isLocal` bool
+  Function(bool)? onDirChanged;
+
   RxList<JobProgress> get jobTable => _jobTable;
 
   bool get isLocal => _isSelectedLocal;
@@ -354,9 +357,11 @@ class FileModel extends ChangeNotifier {
     await bind.sessionLoadLastTransferJobs(id: '${parent.target?.id}');
   }
 
-  onClose() {
+  Future<void> onClose() async {
     parent.target?.dialogManager.dismissAll();
     jobReset();
+
+    onDirChanged = null;
 
     // save config
     Map<String, String> msgMap = {};
@@ -367,7 +372,7 @@ class FileModel extends ChangeNotifier {
     msgMap["remote_show_hidden"] = _remoteOption.showHidden ? "Y" : "";
     final id = parent.target?.id ?? "";
     for (final msg in msgMap.entries) {
-      bind.sessionPeerOption(id: id, name: msg.key, value: msg.value);
+      await bind.sessionPeerOption(id: id, name: msg.key, value: msg.value);
     }
     _currentLocalDir.clear();
     _currentRemoteDir.clear();
@@ -421,6 +426,7 @@ class FileModel extends ChangeNotifier {
         _currentRemoteDir = fd;
       }
       notifyListeners();
+      onDirChanged?.call(isLocal);
     } catch (e) {
       debugPrint("Failed to openDirectory $path: $e");
     }
