@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:ui' as ui;
 
 import 'package:bot_toast/bot_toast.dart';
@@ -30,8 +31,9 @@ class _TabEntry {
 
 class _PeerTabPageState extends State<PeerTabPage>
     with SingleTickerProviderStateMixin {
-  late final RxInt _tabHiddenFlag;
-  late final RxString _currentTab;
+  late final RxInt tabHiddenFlag;
+  late final RxString currentTab;
+  late final RxList<String> visibleOrderedTabs;
   final List<_TabEntry> entries = [
     _TabEntry(
         'Recent Sessions',
@@ -61,12 +63,30 @@ class _PeerTabPageState extends State<PeerTabPage>
 
   @override
   void initState() {
-    _tabHiddenFlag = (int.tryParse(
+    tabHiddenFlag = (int.tryParse(
                 bind.getLocalFlutterConfig(k: 'hidden-peer-card'),
                 radix: 2) ??
             0)
         .obs;
-    _currentTab = bind.getLocalFlutterConfig(k: 'current-peer-tab').obs;
+    currentTab = bind.getLocalFlutterConfig(k: 'current-peer-tab').obs;
+    visibleOrderedTabs = entries
+        .where((e) => !isTabHidden(e.name))
+        .map((e) => e.name)
+        .toList()
+        .obs;
+    try {
+      final json = jsonDecode(bind.getLocalFlutterConfig(k: 'peer-tab-order'));
+      if (json is List) {
+        final List<String> list = json.map((e) => e.toString()).toList();
+        if (list.length == visibleOrderedTabs.length &&
+            visibleOrderedTabs.every((e) => list.contains(e))) {
+          visibleOrderedTabs.value = list;
+        }
+      }
+    } catch (e) {
+      debugPrint('$e');
+    }
+
     adjustTab();
 
     final uiType = bind.getLocalFlutterConfig(k: 'peer-card-ui-type');
@@ -78,9 +98,8 @@ class _PeerTabPageState extends State<PeerTabPage>
     super.initState();
   }
 
-  // hard code for now
   Future<void> handleTabSelection(String tabName) async {
-    _currentTab.value = tabName;
+    currentTab.value = tabName;
     await bind.setLocalFlutterConfig(k: 'current-peer-tab', v: tabName);
     entries.firstWhereOrNull((e) => e.name == tabName)?.load();
   }
@@ -122,45 +141,62 @@ class _PeerTabPageState extends State<PeerTabPage>
 
   Widget _createSwitchBar(BuildContext context) {
     final textColor = Theme.of(context).textTheme.titleLarge?.color;
-    return Obx(() => ListView(
-        scrollDirection: Axis.horizontal,
-        shrinkWrap: true,
-        controller: ScrollController(),
-        children: entries.where((e) => !isTabHidden(e.name)).map((t) {
-          return InkWell(
-            child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                decoration: BoxDecoration(
-                  color: _currentTab.value == t.name
-                      ? Theme.of(context).backgroundColor
-                      : null,
-                  borderRadius: BorderRadius.circular(isDesktop ? 2 : 6),
-                ),
-                child: Align(
-                  alignment: Alignment.center,
-                  child: Text(
-                    translate(t.name),
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                        height: 1,
-                        fontSize: 14,
-                        color:
-                            _currentTab.value == t.name ? textColor : textColor
+    return Obx(() {
+      int indexCounter = -1;
+      return ReorderableListView(
+          buildDefaultDragHandles: false,
+          onReorder: (oldIndex, newIndex) {
+            var list = visibleOrderedTabs.toList();
+            if (oldIndex < newIndex) {
+              newIndex -= 1;
+            }
+            final String item = list.removeAt(oldIndex);
+            list.insert(newIndex, item);
+            bind.setLocalFlutterConfig(
+                k: 'peer-tab-order', v: jsonEncode(list));
+            visibleOrderedTabs.value = list;
+          },
+          scrollDirection: Axis.horizontal,
+          shrinkWrap: true,
+          scrollController: ScrollController(),
+          children: visibleOrderedTabs.map((t) {
+            indexCounter++;
+            return ReorderableDragStartListener(
+              key: ValueKey(t),
+              index: indexCounter,
+              child: InkWell(
+                child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    decoration: BoxDecoration(
+                      color: currentTab.value == t
+                          ? Theme.of(context).backgroundColor
+                          : null,
+                      borderRadius: BorderRadius.circular(isDesktop ? 2 : 6),
+                    ),
+                    child: Align(
+                      alignment: Alignment.center,
+                      child: Text(
+                        translate(t),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            height: 1,
+                            fontSize: 14,
+                            color: currentTab.value == t ? textColor : textColor
                               ?..withOpacity(0.5)),
-                  ),
-                )),
-            onTap: () async => await handleTabSelection(t.name),
-          );
-        }).toList()));
+                      ),
+                    )),
+                onTap: () async => await handleTabSelection(t),
+              ),
+            );
+          }).toList());
+    });
   }
 
   Widget _createPeersView() {
     final verticalMargin = isDesktop ? 12.0 : 6.0;
     return Expanded(
       child: Obx(() =>
-          entries
-              .firstWhereOrNull((e) => e.name == _currentTab.value)
-              ?.widget ??
+          entries.firstWhereOrNull((e) => e.name == currentTab.value)?.widget ??
           visibleContextMenuListener(Center(
             child: Text(translate('Right click to select tabs')),
           ))).marginSymmetric(vertical: verticalMargin),
@@ -200,21 +236,19 @@ class _PeerTabPageState extends State<PeerTabPage>
   bool isTabHidden(String name) {
     int index = entries.indexWhere((e) => e.name == name);
     if (index >= 0) {
-      return _tabHiddenFlag & (1 << index) != 0;
+      return tabHiddenFlag & (1 << index) != 0;
     }
     assert(false);
     return false;
   }
 
   adjustTab() {
-    List<String> visibleTabs =
-        entries.where((e) => !isTabHidden(e.name)).map((e) => e.name).toList();
-    if (visibleTabs.isNotEmpty) {
-      if (!visibleTabs.contains(_currentTab.value)) {
-        handleTabSelection(visibleTabs[0]);
+    if (visibleOrderedTabs.isNotEmpty) {
+      if (!visibleOrderedTabs.contains(currentTab.value)) {
+        handleTabSelection(visibleOrderedTabs[0]);
       }
     } else {
-      _currentTab.value = '';
+      currentTab.value = '';
     }
   }
 
@@ -243,17 +277,25 @@ class _PeerTabPageState extends State<PeerTabPage>
           switchType: SwitchType.scheckbox,
           text: translate(e.value.name),
           getter: () async {
-            return _tabHiddenFlag.value & bitMask == 0;
+            return tabHiddenFlag.value & bitMask == 0;
           },
           setter: (show) async {
             if (show) {
-              _tabHiddenFlag.value &= ~bitMask;
+              tabHiddenFlag.value &= ~bitMask;
             } else {
-              _tabHiddenFlag.value |= bitMask;
+              tabHiddenFlag.value |= bitMask;
             }
             await bind.setLocalFlutterConfig(
-                k: 'hidden-peer-card',
-                v: _tabHiddenFlag.value.toRadixString(2));
+                k: 'hidden-peer-card', v: tabHiddenFlag.value.toRadixString(2));
+            visibleOrderedTabs.removeWhere((e) => isTabHidden(e));
+            visibleOrderedTabs.addAll(entries
+                .where((e) =>
+                    !visibleOrderedTabs.contains(e.name) &&
+                    !isTabHidden(e.name))
+                .map((e) => e.name)
+                .toList());
+            await bind.setLocalFlutterConfig(
+                k: 'peer-tab-order', v: jsonEncode(visibleOrderedTabs));
             cancelFunc();
             adjustTab();
           });
