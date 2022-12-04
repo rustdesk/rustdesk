@@ -93,6 +93,7 @@ class _FileManagerPageState extends State<FileManagerPage>
       Wakelock.enable();
     }
     debugPrint("File manager page init success with id ${widget.id}");
+    model.onDirChanged = breadCrumbScrollToEnd;
     // register location listener
     _locationNodeLocal.addListener(onLocalLocationFocusChanged);
     _locationNodeRemote.addListener(onRemoteLocationFocusChanged);
@@ -100,17 +101,18 @@ class _FileManagerPageState extends State<FileManagerPage>
 
   @override
   void dispose() {
-    model.onClose();
-    _ffi.close();
-    _ffi.dialogManager.dismissAll();
-    if (!Platform.isLinux) {
-      Wakelock.disable();
-    }
-    Get.delete<FFI>(tag: 'ft_${widget.id}');
-    _locationNodeLocal.removeListener(onLocalLocationFocusChanged);
-    _locationNodeRemote.removeListener(onRemoteLocationFocusChanged);
-    _locationNodeLocal.dispose();
-    _locationNodeRemote.dispose();
+    model.onClose().whenComplete(() {
+      _ffi.close();
+      _ffi.dialogManager.dismissAll();
+      if (!Platform.isLinux) {
+        Wakelock.disable();
+      }
+      Get.delete<FFI>(tag: 'ft_${widget.id}');
+      _locationNodeLocal.removeListener(onLocalLocationFocusChanged);
+      _locationNodeRemote.removeListener(onRemoteLocationFocusChanged);
+      _locationNodeLocal.dispose();
+      _locationNodeRemote.dispose();
+    });
     super.dispose();
   }
 
@@ -636,7 +638,6 @@ class _FileManagerPageState extends State<FileManagerPage>
             }),
             IconButton(
                 onPressed: () {
-                  breadCrumbScrollToEnd(isLocal);
                   model.refresh(isLocal: isLocal);
                 },
                 splashRadius: kDesktopIconButtonSplashRadius,
@@ -800,7 +801,8 @@ class _FileManagerPageState extends State<FileManagerPage>
                         onPointerSignal: (e) {
                           if (e is PointerScrollEvent) {
                             final sc = getBreadCrumbScrollController(isLocal);
-                            sc.jumpTo(sc.offset + e.scrollDelta.dy / 4);
+                            final scale = Platform.isWindows ? 2 : 4;
+                            sc.jumpTo(sc.offset + e.scrollDelta.dy / scale);
                           }
                         },
                         child: BreadCrumb(
@@ -824,7 +826,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                     final x = offset.dx;
                     final y = offset.dy + size.height + 1;
 
-                    final isPeerWindows = isWindows(isLocal);
+                    final isPeerWindows = model.getCurrentIsWindows(isLocal);
                     final List<MenuEntryBase> menuItems = [
                       MenuEntryButton(
                           childBuilder: (TextStyle? style) => isPeerWindows
@@ -912,7 +914,8 @@ class _FileManagerPageState extends State<FileManagerPage>
       bool isLocal, void Function(List<String>) onPressed) {
     final path = model.getCurrentDir(isLocal).path;
     final breadCrumbList = List<BreadCrumbItem>.empty(growable: true);
-    if (isWindows(isLocal) && path == '/') {
+    final isWindows = model.getCurrentIsWindows(isLocal);
+    if (isWindows && path == '/') {
       breadCrumbList.add(BreadCrumbItem(
           content: TextButton(
                   child: buildWindowsThisPC(),
@@ -921,7 +924,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                   onPressed: () => onPressed(['/']))
               .marginSymmetric(horizontal: 4)));
     } else {
-      final list = PathUtil.split(path, model.getCurrentIsWindows(isLocal));
+      final list = PathUtil.split(path, isWindows);
       breadCrumbList.addAll(list.asMap().entries.map((e) => BreadCrumbItem(
           content: TextButton(
                   child: Text(e.value),
@@ -931,14 +934,6 @@ class _FileManagerPageState extends State<FileManagerPage>
               .marginSymmetric(horizontal: 4))));
     }
     return breadCrumbList;
-  }
-
-  bool isWindows(bool isLocal) {
-    if (isLocal) {
-      return Platform.isWindows;
-    } else {
-      return _ffi.ffiModel.pi.platform.toLowerCase() == "windows";
-    }
   }
 
   breadCrumbScrollToEnd(bool isLocal) {
@@ -999,9 +994,7 @@ class _FileManagerPageState extends State<FileManagerPage>
   }
 
   openDirectory(String path, {bool isLocal = false}) {
-    model.openDirectory(path, isLocal: isLocal).then((_) {
-      breadCrumbScrollToEnd(isLocal);
-    });
+    model.openDirectory(path, isLocal: isLocal);
   }
 
   void handleDragDone(DropDoneDetails details, bool isLocal) {

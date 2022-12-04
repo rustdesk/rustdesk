@@ -32,15 +32,17 @@ class _FileManagerPageState extends State<FileManagerPage> {
           .showLoading(translate('Connecting...'), onCancel: closeConnection);
     });
     gFFI.ffiModel.updateEventListener(widget.id);
+    model.onDirChanged = (_) => breadCrumbScrollToEnd();
     Wakelock.enable();
   }
 
   @override
   void dispose() {
-    model.onClose();
-    gFFI.close();
-    gFFI.dialogManager.dismissAll();
-    Wakelock.disable();
+    model.onClose().whenComplete(() {
+      gFFI.close();
+      gFFI.dialogManager.dismissAll();
+      Wakelock.disable();
+    });
     super.dispose();
   }
 
@@ -136,7 +138,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
                             child: Row(
                               children: [
                                 Icon(
-                                    model.currentShowHidden
+                                    model.getCurrentShowHidden()
                                         ? Icons.check_box_outlined
                                         : Icons.check_box_outline_blank,
                                     color: Theme.of(context).iconTheme.color),
@@ -183,7 +185,8 @@ class _FileManagerPageState extends State<FileManagerPage> {
                                                 model.createDir(PathUtil.join(
                                                     model.currentDir.path,
                                                     name.value.text,
-                                                    model.currentIsWindows));
+                                                    model
+                                                        .getCurrentIsWindows()));
                                                 close();
                                               }
                                             },
@@ -309,7 +312,6 @@ class _FileManagerPageState extends State<FileManagerPage> {
                 }
                 if (entries[index].isDirectory || entries[index].isDrive) {
                   model.openDirectory(entries[index].path);
-                  breadCrumbScrollToEnd();
                 } else {
                   // Perform file-related tasks.
                 }
@@ -350,12 +352,12 @@ class _FileManagerPageState extends State<FileManagerPage> {
               if (model.currentHome.startsWith(list[0])) {
                 // absolute path
                 for (var item in list) {
-                  path = PathUtil.join(path, item, model.currentIsWindows);
+                  path = PathUtil.join(path, item, model.getCurrentIsWindows());
                 }
               } else {
                 path += model.currentHome;
                 for (var item in list) {
-                  path = PathUtil.join(path, item, model.currentIsWindows);
+                  path = PathUtil.join(path, item, model.getCurrentIsWindows());
                 }
               }
               model.openDirectory(path);
@@ -499,7 +501,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
   List<BreadCrumbItem> getPathBreadCrumbItems(
       void Function() onHome, void Function(List<String>) onPressed) {
     final path = model.currentShortPath;
-    final list = PathUtil.split(path, model.currentIsWindows);
+    final list = PathUtil.split(path, model.getCurrentIsWindows());
     final breadCrumbList = [
       BreadCrumbItem(
           content: IconButton(
