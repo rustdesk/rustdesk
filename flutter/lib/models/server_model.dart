@@ -581,10 +581,17 @@ class ServerModel with ChangeNotifier {
   }
 }
 
+enum ClientType {
+  remote,
+  file,
+  portForward,
+}
+
 class Client {
   int id = 0; // client connections inner count id
   bool authorized = false;
   bool isFileTransfer = false;
+  String portForward = "";
   String name = "";
   String peerId = ""; // peer user's id,show at app
   bool keyboard = false;
@@ -604,6 +611,7 @@ class Client {
     id = json['id'];
     authorized = json['authorized'];
     isFileTransfer = json['is_file_transfer'];
+    portForward = json['port_forward'];
     name = json['name'];
     peerId = json['peer_id'];
     keyboard = json['keyboard'];
@@ -620,6 +628,7 @@ class Client {
     data['id'] = id;
     data['is_start'] = authorized;
     data['is_file_transfer'] = isFileTransfer;
+    data['port_forward'] = portForward;
     data['name'] = name;
     data['peer_id'] = peerId;
     data['keyboard'] = keyboard;
@@ -630,6 +639,16 @@ class Client {
     data['recording'] = recording;
     data['disconnected'] = disconnected;
     return data;
+  }
+
+  ClientType type_() {
+    if (isFileTransfer) {
+      return ClientType.file;
+    } else if (portForward.isNotEmpty) {
+      return ClientType.portForward;
+    } else {
+      return ClientType.remote;
+    }
   }
 }
 
