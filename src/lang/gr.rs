@@ -397,6 +397,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request access to your device", "Αίτημα πρόσβασης στη συσκευή σας"),
         ("Hide connection management window", "Απόκρυψη παραθύρου διαχείρισης σύνδεσης"),
         ("hide_cm_tip", "Να επιτρέπεται η απόκρυψη, μόνο εάν αποδέχεστε συνδέσεις μέσω κωδικού πρόσβασης και χρησιμοποιείτε μόνιμο κωδικό πρόσβασης"),
-        ("wayland_experiment_tip", ""),
+        ("Right click to select tabs", ""),
     ].iter().cloned().collect();
 }

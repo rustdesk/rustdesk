@@ -121,28 +121,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                 ])),
                 SliverFillRemaining(
                   hasScrollBody: false,
-                  child: PeerTabPage(
-                    tabs: [
-                      translate('Recent Sessions'),
-                      translate('Favorites'),
-                      translate('Discovered'),
-                      translate('Address Book')
-                    ],
-                    children: [
-                      RecentPeersView(
-                        menuPadding: kDesktopMenuPadding,
-                      ),
-                      FavoritePeersView(
-                        menuPadding: kDesktopMenuPadding,
-                      ),
-                      DiscoveredPeersView(
-                        menuPadding: kDesktopMenuPadding,
-                      ),
-                      const AddressBook(
-                        menuPadding: kDesktopMenuPadding,
-                      ),
-                    ],
-                  ).paddingOnly(right: 12.0),
+                  child: PeerTabPage().paddingOnly(right: 12.0),
                 )
               ],
             ).paddingOnly(left: 12.0),
