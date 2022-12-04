@@ -416,9 +416,9 @@ fn get_display() -> String {
 
 pub fn is_login_wayland() -> bool {
     if let Ok(contents) = std::fs::read_to_string("/etc/gdm3/custom.conf") {
-        contents.contains("#WaylandEnable=false")
+        contents.contains("#WaylandEnable=false") || contents.contains("WaylandEnable=true")
     } else if let Ok(contents) = std::fs::read_to_string("/etc/gdm/custom.conf") {
-        contents.contains("#WaylandEnable=false")
+        contents.contains("#WaylandEnable=false") || contents.contains("WaylandEnable=true")
     } else {
         false
     }
