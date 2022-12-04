@@ -801,7 +801,8 @@ class _FileManagerPageState extends State<FileManagerPage>
                         onPointerSignal: (e) {
                           if (e is PointerScrollEvent) {
                             final sc = getBreadCrumbScrollController(isLocal);
-                            sc.jumpTo(sc.offset + e.scrollDelta.dy / 4);
+                            final scale = Platform.isWindows ? 2 : 4;
+                            sc.jumpTo(sc.offset + e.scrollDelta.dy / scale);
                           }
                         },
                         child: BreadCrumb(
