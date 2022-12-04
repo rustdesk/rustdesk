@@ -88,12 +88,41 @@ jobs:
       - name: Build rustdesk
         run: python3 .\build.py --portable --hwcodec --flutter
 
-      - name: Rename rustdesk
+      - name: Sign rustdesk files
+        uses: DanaBear/code-sign-action@v4
+        with:
+          certificate: '${{ secrets.WINDOWS_PFX_BASE64 }}'
+          password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
+          certificatesha1: '${{ secrets.WINDOWS_PFX_SHA1_THUMBPRINT }}'
+          # certificatename: '${{ secrets.CERTNAME }}'
+          folder: './flutter/build/windows/runner/Release/'
+          recursive: true
+
+      - name: Build self-extracted executable
         shell: bash
         run: |
-          for name in rustdesk*??-install.exe; do
-              mv "$name" "${name%%-install.exe}-${{ matrix.job.target }}.exe"
-          done
+          pushd ./libs/portable
+          python3 ./generate.py -f ../../flutter/build/windows/runner/Release/ -o . -e ../../flutter/build/windows/runner/Release/
+          popd
+          mkdir -p ./SignOutput
+          mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}.exe
+
+      # - name: Rename rustdesk
+      #   shell: bash
+      #   run: |
+      #     for name in rustdesk*??-install.exe; do
+      #         mv "$name" ./SignOutput/"${name%%-install.exe}-${{ matrix.job.target }}.exe"
+      #     done
+
+      - name: Sign rustdesk self-extracted file
+        uses: DanaBear/code-sign-action@v4
+        with:
+          certificate: '${{ secrets.WINDOWS_PFX_BASE64 }}'
+          password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
+          certificatesha1: '${{ secrets.WINDOWS_PFX_SHA1_THUMBPRINT }}'
+          # certificatename: '${{ secrets.WINDOWS_PFX_NAME }}'
+          folder: './SignOutput'
+          recursive: false
 
       - name: Publish Release
         uses: softprops/action-gh-release@v1
@@ -101,7 +130,7 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            rustdesk-*.exe
+            ./SignOutput/rustdesk-*.exe
 
   build-for-macOS:
     name: ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-args }}]
