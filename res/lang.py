@@ -16,7 +16,9 @@ def get_lang(lang):
 
 def line_split(line):
     toks = line.split('", "')    
-    assert(len(toks) == 2)    
+    if len(toks) != 2:
+        print(line)
+        assert(0)
     k = toks[0][2:]    
     v = toks[1][:-3]
     return k, v
@@ -34,7 +36,8 @@ def main():
 def expand():
   for fn in glob.glob('./src/lang/*'): 
     lang = os.path.basename(fn)[:-3] 
-    if lang in ['en','cn']: continue  
+    if lang in ['en','cn']: continue
+    print(lang)
     dict = get_lang(lang)
     fw = open("./src/lang/%s.rs"%lang, "wt")
     for line in open('./src/lang/cn.rs'):

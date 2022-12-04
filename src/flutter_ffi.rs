@@ -529,6 +529,7 @@ pub fn main_get_app_name() -> String {
 pub fn main_get_app_name_sync() -> SyncReturn<String> {
     SyncReturn(get_app_name())
 }
+
 pub fn main_get_license() -> String {
     get_license()
 }
@@ -1205,6 +1206,14 @@ pub fn main_on_main_window_close() {
     // may called more than one times
     #[cfg(windows)]
     crate::portable_service::client::drop_portable_service_shared_memory();
+}
+
+pub fn main_current_is_wayland() -> SyncReturn<bool> {
+    SyncReturn(current_is_wayland())
+}
+
+pub fn main_is_login_wayland() -> SyncReturn<bool> {
+    SyncReturn(is_login_wayland())
 }
 
 #[cfg(target_os = "android")]

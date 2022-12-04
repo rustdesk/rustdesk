@@ -301,15 +301,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   }
 
   Widget buildHelpCards() {
-    if (Platform.isWindows) {
-      if (!bind.mainIsInstalled()) {
-        return buildInstallCard(
-            "", "install_tip", "Install", bind.mainGotoInstall);
-      } else if (bind.mainIsInstalledLowerVersion()) {
-        return buildInstallCard("Status", "Your installation is lower version.",
-            "Click to upgrade", bind.mainUpdateMe);
-      }
-    }
     if (updateUrl.isNotEmpty) {
       return buildInstallCard(
           "Status",
@@ -322,7 +313,15 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     if (systemError.isNotEmpty) {
       return buildInstallCard("", systemError, "", () {});
     }
-    if (Platform.isMacOS) {
+    if (Platform.isWindows) {
+      if (!bind.mainIsInstalled()) {
+        return buildInstallCard(
+            "", "install_tip", "Install", bind.mainGotoInstall);
+      } else if (bind.mainIsInstalledLowerVersion()) {
+        return buildInstallCard("Status", "Your installation is lower version.",
+            "Click to upgrade", bind.mainUpdateMe);
+      }
+    } else if (Platform.isMacOS) {
       if (!bind.mainIsCanScreenRecording(prompt: false)) {
         return buildInstallCard("Permissions", "config_screen", "Configure",
             () async {
@@ -342,8 +341,19 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           bind.mainIsInstalledDaemon(prompt: true);
         });
       }
+    } else if (Platform.isLinux) {
+      if (bind.mainCurrentIsWayland()) {
+        return buildInstallCard(
+            "Warning", translate("wayland_experiment_tip"), "", () async {},
+            help: 'Help',
+            link: 'https://rustdesk.com/docs/en/manual/linux/#x11-required');
+      } else if (bind.mainIsLoginWayland()) {
+        return buildInstallCard("Warning",
+            "Login screen using Wayland is not supported", "", () async {},
+            help: 'Help',
+            link: 'https://rustdesk.com/docs/en/manual/linux/#login-screen');
+      }
     }
-    if (bind.mainIsInstalledLowerVersion()) {}
     return Container();
   }
 
