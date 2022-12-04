@@ -398,5 +398,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hide connection management window", "Ocultar ventana de gestión de conexión"),
         ("hide_cm_tip", "Permitir ocultar solo si se aceptan sesiones a través de contraseña y usando contraseña permanente"),
         ("wayland_experiment_tip", ""),
+        ("Right click to select tabs", ""),
     ].iter().cloned().collect();
 }

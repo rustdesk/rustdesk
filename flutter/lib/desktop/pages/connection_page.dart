@@ -113,7 +113,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                     delegate: SliverChildListDelegate([
                   Row(
                     children: [
-                      _buildRemoteIDTextField(context),
+                      Flexible(child: _buildRemoteIDTextField(context)),
                     ],
                   ).marginOnly(top: 22),
                   SizedBox(height: 12),
@@ -121,28 +121,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                 ])),
                 SliverFillRemaining(
                   hasScrollBody: false,
-                  child: PeerTabPage(
-                    tabs: [
-                      translate('Recent Sessions'),
-                      translate('Favorites'),
-                      translate('Discovered'),
-                      translate('Address Book')
-                    ],
-                    children: [
-                      RecentPeersView(
-                        menuPadding: kDesktopMenuPadding,
-                      ),
-                      FavoritePeersView(
-                        menuPadding: kDesktopMenuPadding,
-                      ),
-                      DiscoveredPeersView(
-                        menuPadding: kDesktopMenuPadding,
-                      ),
-                      const AddressBook(
-                        menuPadding: kDesktopMenuPadding,
-                      ),
-                    ],
-                  ).paddingOnly(right: 12.0),
+                  child: PeerTabPage().paddingOnly(right: 12.0),
                 )
               ],
             ).paddingOnly(left: 12.0),
@@ -258,9 +237,8 @@ class _ConnectionPageState extends State<ConnectionPage>
         ),
       ),
     );
-    return Center(
-        child: Container(
-            constraints: const BoxConstraints(maxWidth: 600), child: w));
+    return Container(
+        constraints: const BoxConstraints(maxWidth: 600), child: w);
   }
 
   Widget buildStatus() {

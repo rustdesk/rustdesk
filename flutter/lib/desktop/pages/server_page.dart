@@ -238,7 +238,7 @@ Widget buildConnectionCard(Client client) {
             key: ValueKey(client.id),
             children: [
               _CmHeader(client: client),
-              client.isFileTransfer || client.disconnected
+              client.type_() != ClientType.remote || client.disconnected
                   ? Offstage()
                   : _PrivilegeBoard(client: client),
               Expanded(
@@ -376,7 +376,7 @@ class _CmHeaderState extends State<_CmHeader>
           ),
         ),
         Offstage(
-          offstage: !client.authorized || client.isFileTransfer,
+          offstage: !client.authorized || client.type_() != ClientType.remote,
           child: IconButton(
               onPressed: () => checkClickTime(
                   client.id, () => gFFI.chatModel.toggleCMChatPage(client.id)),
@@ -510,7 +510,9 @@ class _CmControlPanel extends StatelessWidget {
   buildAuthorized(BuildContext context) {
     final bool canElevate = bind.cmCanElevate();
     final model = Provider.of<ServerModel>(context);
-    final showElevation = canElevate && model.showElevation;
+    final showElevation = canElevate &&
+        model.showElevation &&
+        client.type_() == ClientType.remote;
     return Column(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
@@ -560,7 +562,9 @@ class _CmControlPanel extends StatelessWidget {
   buildUnAuthorized(BuildContext context) {
     final bool canElevate = bind.cmCanElevate();
     final model = Provider.of<ServerModel>(context);
-    final showElevation = canElevate && model.showElevation;
+    final showElevation = canElevate &&
+        model.showElevation &&
+        client.type_() == ClientType.remote;
     final showAccept = model.approveMode != 'password';
     return Column(
       mainAxisAlignment: MainAxisAlignment.end,

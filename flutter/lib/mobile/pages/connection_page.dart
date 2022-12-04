@@ -75,20 +75,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
         ])),
         SliverFillRemaining(
           hasScrollBody: false,
-          child: PeerTabPage(
-            tabs: [
-              translate('Recent Sessions'),
-              translate('Favorites'),
-              translate('Discovered'),
-              translate('Address Book')
-            ],
-            children: [
-              RecentPeersView(),
-              FavoritePeersView(),
-              DiscoveredPeersView(),
-              const AddressBook(),
-            ],
-          ),
+          child: PeerTabPage(),
         )
       ],
     ).marginOnly(top: 2, left: 10, right: 10);

@@ -398,5 +398,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hide connection management window", "Göm hanteringsfönster"),
         ("hide_cm_tip", "Tillåt att gömma endast om accepterande sessioner med lösenord och permanenta lösenord"),
         ("wayland_experiment_tip", ""),
+        ("Right click to select tabs", ""),
     ].iter().cloned().collect();
 }

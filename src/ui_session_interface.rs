@@ -200,7 +200,7 @@ impl<T: InvokeUiSession> Session<T> {
             h265 = h265 && encoding_265;
             return (h264, h265);
         }
-        #[allow(dead_code)]
+        #[allow(unreachable_code)]
         (false, false)
     }
 
@@ -1211,7 +1211,13 @@ impl<T: InvokeUiSession> Interface for Session<T> {
                 input_os_password(p, true, self.clone());
             }
             let current = &pi.displays[pi.current_display as usize];
-            self.set_display(current.x, current.y, current.width, current.height, current.cursor_embeded);
+            self.set_display(
+                current.x,
+                current.y,
+                current.width,
+                current.height,
+                current.cursor_embeded,
+            );
         }
         self.update_privacy_mode();
         // Save recent peers, then push event to flutter. So flutter can refresh peer page.

@@ -34,13 +34,20 @@ class AbModel {
       if (resp.body.isNotEmpty && resp.body.toLowerCase() != "null") {
         Map<String, dynamic> json = jsonDecode(resp.body);
         if (json.containsKey('error')) {
-          abError = json['error'];
+          abError.value = json['error'];
         } else if (json.containsKey('data')) {
           final data = jsonDecode(json['data']);
-          tags.value = data['tags'];
-          peers.clear();
-          for (final peer in data['peers']) {
-            peers.add(Peer.fromJson(peer));
+          if (data != null) {
+            tags.clear();
+            peers.clear();
+            if (data['tags'] is List) {
+              tags.value = data['tags'];
+            }
+            if (data['peers'] is List) {
+              for (final peer in data['peers']) {
+                peers.add(Peer.fromJson(peer));
+              }
+            }
           }
         }
         return resp.body;
