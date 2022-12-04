@@ -90,7 +90,7 @@ jobs:
         run: python3 .\build.py --portable --hwcodec --flutter
 
       - name: Sign rustdesk files
-        uses: DanaBear/code-sign-action@v4
+        uses: GermanBluefox/code-sign-action@v7
         with:
           certificate: '${{ secrets.WINDOWS_PFX_BASE64 }}'
           password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
@@ -103,7 +103,7 @@ jobs:
         shell: bash
         run: |
           pushd ./libs/portable
-          python3 ./generate.py -f ../../flutter/build/windows/runner/Release/ -o . -e ../../flutter/build/windows/runner/Release/
+          python3 ./generate.py -f ../../flutter/build/windows/runner/Release/ -o . -e ../../flutter/build/windows/runner/Release/rustdesk.exe
           popd
           mkdir -p ./SignOutput
           mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}.exe
@@ -116,7 +116,7 @@ jobs:
       #     done
 
       - name: Sign rustdesk self-extracted file
-        uses: DanaBear/code-sign-action@v4
+        uses: GermanBluefox/code-sign-action@v7
         with:
           certificate: '${{ secrets.WINDOWS_PFX_BASE64 }}'
           password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
