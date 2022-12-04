@@ -116,7 +116,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Good image quality", "Qualidade visual boa"),
         ("Balanced", "Equilibrada"),
         ("Optimize reaction time", "Optimizar tempo de reacção"),
-        ("Custom", "Personalizado"),
+        ("Custom", ""),
         ("Show remote cursor", "Mostrar cursor remoto"),
         ("Show quality monitor", ""),
         ("Disable clipboard", "Desabilitar área de transferência"),
@@ -197,7 +197,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Reboot required", "Reinicialização necessária"),
         ("Unsupported display server ", "Servidor de display não suportado"),
         ("x11 expected", "x11 em falha"),
-        ("Port", "Porta"),
+        ("Port", ""),
         ("Settings", "Configurações"),
         ("Username", "Nome de utilizador"),
         ("Invalid port", "Porta inválida"),
@@ -397,5 +397,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request access to your device", ""),
         ("Hide connection management window", ""),
         ("hide_cm_tip", ""),
+        ("wayland_experiment_tip", ""),
     ].iter().cloned().collect();
 }

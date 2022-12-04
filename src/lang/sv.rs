@@ -116,7 +116,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Good image quality", "Bra bildkvalitet"),
         ("Balanced", "Balanserad"),
         ("Optimize reaction time", "Optimera reaktionstid"),
-        ("Custom", "Anpassad"),
+        ("Custom", "Anpassat"),
         ("Show remote cursor", "Visa fjärrmus"),
         ("Show quality monitor", "Visa bildkvalitet"),
         ("Disable clipboard", "Stäng av urklipp"),
@@ -231,7 +231,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hostname", "Hostname"),
         ("Discovered", "Upptäckt"),
         ("install_daemon_tip", "För att starta efter boot måste du installera systemtjänsten."),
-        ("android_input_permission_tip1", "För att kontrollera din Android-enhet med mus eller touch, måste du tillåta RustDesk att använda \"Tillgänglighets\" tjänsten."),
         ("Remote ID", "Fjärr ID"),
         ("Paste", "Klistra in"),
         ("Paste here?", "Klistra in här?"),
@@ -398,5 +397,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request access to your device", "Begär åtkomst till din enhet"),
         ("Hide connection management window", "Göm hanteringsfönster"),
         ("hide_cm_tip", "Tillåt att gömma endast om accepterande sessioner med lösenord och permanenta lösenord"),
-        ].iter().cloned().collect();
+        ("wayland_experiment_tip", ""),
+    ].iter().cloned().collect();
 }

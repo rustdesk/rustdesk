@@ -116,7 +116,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Good image quality", "Qualità immagine migliore"),
         ("Balanced", "Bilanciato"),
         ("Optimize reaction time", "Ottimizza il tempo di reazione"),
-        ("Custom", "Personalizza"),
+        ("Custom", "Personalizzato"),
         ("Show remote cursor", "Mostra il cursore remoto"),
         ("Show quality monitor", "Visualizza qualità video"),
         ("Disable clipboard", "Disabilita appunti"),
@@ -278,7 +278,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_stop_service_tip", "La chiusura del servizio chiuderà automaticamente tutte le connessioni stabilite."),
         ("android_version_audio_tip", "L'attuale versione di Android non supporta l'acquisizione audio, esegui l'upgrade ad Android 10 o versioni successive."),
         ("android_start_service_tip", "Toccare [Avvia servizio] o APRI l'autorizzazione [Cattura schermo] per avviare il servizio di condivisione dello schermo."),
-        ("Account", ""),
+        ("Account", "Account"),
         ("Overwrite", "Sovrascrivi"),
         ("This file exists, skip or overwrite this file?", "Questo file esiste, saltare o sovrascrivere questo file?"),
         ("Quit", "Esci"),
@@ -397,5 +397,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request access to your device", "Richiedi l'accesso al tuo dispositivo"),
         ("Hide connection management window", "Nascondi la finestra di gestione delle connessioni"),
         ("hide_cm_tip", "Permetti di nascondere solo se si accettano sessioni con password permanente"),
+        ("wayland_experiment_tip", ""),
     ].iter().cloned().collect();
 }

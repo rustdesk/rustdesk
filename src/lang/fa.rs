@@ -278,7 +278,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_stop_service_tip", "با بستن سرویس، تمام اتصالات برقرار شده به طور خودکار بسته می شود"),
         ("android_version_audio_tip", "نسخه فعلی اندروید از ضبط صدا پشتیبانی نمی‌کند، لطفاً به اندروید 10 یا بالاتر به‌روزرسانی کنید"),
         ("android_start_service_tip", "برای شروع سرویس اشتراک‌گذاری صفحه، روی مجوز \"شروع مرحله‌بندی سرور\" یا OPEN \"Screen Capture\" کلیک کنید."),
-        ("Account", "حساب"),
+        ("Account", "حساب کاربری"),
         ("Overwrite", "بازنویسی"),
         ("This file exists, skip or overwrite this file?", "این فایل وجود دارد، از فایل رد شود یا بازنویسی شود؟"),
         ("Quit", "خروج"),
@@ -385,6 +385,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("This PC", "This PC"),
         ("or", "یا"),
         ("Continue with", "ادامه با"),
+        ("Elevate", ""),
         ("Zoom cursor", "نشانگر بزرگنمایی"),
         ("Accept sessions via password", "قبول درخواست با رمز عبور"),
         ("Accept sessions via click", "قبول درخواست با کلیک موس"),
@@ -396,5 +397,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request access to your device", "دسترسی به دستگاه خود را درخواست کنید"),
         ("Hide connection management window", "پنهان کردن پنجره مدیریت اتصال"),
         ("hide_cm_tip", "فقط در صورت پذیرفتن جلسات از طریق رمز عبور و استفاده از رمز عبور دائمی، مخفی شدن مجاز است"),
+        ("wayland_experiment_tip", ""),
     ].iter().cloned().collect();
 }

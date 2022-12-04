@@ -34,5 +34,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("JumpLink", "View"),
         ("Stop service", "Stop Service"),
         ("hide_cm_tip", "Allow hiding only if accepting sessions via password and using permanent password"),
+        ("wayland_experiment_tip", "Wayland support is in experimental stage, please use X11 if you require unattended access."),
         ].iter().cloned().collect();
 }

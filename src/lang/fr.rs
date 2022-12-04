@@ -397,5 +397,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request access to your device", "Demande d'accès à votre appareil"),
         ("Hide connection management window", "Masquer la fenêtre de gestion des connexions"),
         ("hide_cm_tip", "Autoriser le masquage uniquement si vous acceptez des sessions via un mot de passe et utilisez un mot de passe permanent"),
+        ("wayland_experiment_tip", ""),
     ].iter().cloned().collect();
 }
