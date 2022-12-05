@@ -268,6 +268,7 @@ class FileModel extends ChangeNotifier {
   }
 
   jobError(Map<String, dynamic> evt) {
+    final err = evt['err'].toString();
     if (!isDesktop) {
       if (_jobResultListener.isListening) {
         _jobResultListener.complete(evt);
@@ -275,12 +276,24 @@ class FileModel extends ChangeNotifier {
       }
       _selectMode = false;
       _jobProgress.clear();
+      _jobProgress.err = err;
       _jobProgress.state = JobState.error;
+      _jobProgress.fileNum = int.parse(evt['file_num']);
+      if (err == "skipped") {
+        _jobProgress.state = JobState.done;
+        _jobProgress.finishedSize = _jobProgress.totalSize;
+      }
     } else {
       int jobIndex = getJob(int.parse(evt['id']));
       if (jobIndex != -1) {
         final job = jobTable[jobIndex];
         job.state = JobState.error;
+        job.err = err;
+        job.fileNum = int.parse(evt['file_num']);
+        if (err == "skipped") {
+          job.state = JobState.done;
+          job.finishedSize = job.totalSize;
+        }
       }
     }
     debugPrint("jobError $evt");
@@ -1089,6 +1102,7 @@ class JobProgress {
   var remote = "";
   var to = "";
   var showHidden = false;
+  var err = "";
 
   clear() {
     state = JobState.none;
@@ -1100,6 +1114,14 @@ class JobProgress {
     fileCount = 0;
     remote = "";
     to = "";
+    err = "";
+  }
+
+  String display() {
+    if (state == JobState.done && err == "skipped") {
+      return translate("Skipped");
+    }
+    return state.display();
   }
 }
 

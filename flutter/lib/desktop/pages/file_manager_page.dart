@@ -458,7 +458,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                               Wrap(
                                 children: [
                                   Text(
-                                      '${item.state.display()} ${max(0, item.fileNum)}/${item.fileCount} '),
+                                      '${item.display()} ${max(0, item.fileNum)}/${item.fileCount} '),
                                   Text(
                                       '${translate("files")} ${readableFileSize(item.totalSize.toDouble())} '),
                                   Offstage(
