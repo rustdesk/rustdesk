@@ -29,6 +29,10 @@ class _TabEntry {
   _TabEntry(this.name, this.widget, this.load);
 }
 
+EdgeInsets? _menuPadding() {
+  return isDesktop ? kDesktopMenuPadding : null;
+}
+
 class _PeerTabPageState extends State<PeerTabPage>
     with SingleTickerProviderStateMixin {
   late final RxInt tabHiddenFlag;
@@ -38,25 +42,25 @@ class _PeerTabPageState extends State<PeerTabPage>
     _TabEntry(
         'Recent Sessions',
         RecentPeersView(
-          menuPadding: kDesktopMenuPadding,
+          menuPadding: _menuPadding(),
         ),
         bind.mainLoadRecentPeers),
     _TabEntry(
         'Favorites',
         FavoritePeersView(
-          menuPadding: kDesktopMenuPadding,
+          menuPadding: _menuPadding(),
         ),
         bind.mainLoadFavPeers),
     _TabEntry(
         'Discovered',
         DiscoveredPeersView(
-          menuPadding: kDesktopMenuPadding,
+          menuPadding: _menuPadding(),
         ),
         bind.mainDiscover),
     _TabEntry(
         'Address Book',
-        const AddressBook(
-          menuPadding: kDesktopMenuPadding,
+        AddressBook(
+          menuPadding: _menuPadding(),
         ),
         () => {}),
   ];
