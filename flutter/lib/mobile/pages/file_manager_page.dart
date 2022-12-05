@@ -335,10 +335,12 @@ class _FileManagerPageState extends State<FileManagerPage> {
 
   breadCrumbScrollToEnd() {
     Future.delayed(Duration(milliseconds: 200), () {
-      _breadCrumbScroller.animateTo(
-          _breadCrumbScroller.position.maxScrollExtent,
-          duration: Duration(milliseconds: 200),
-          curve: Curves.fastLinearToSlowEaseIn);
+      if (_breadCrumbScroller.hasClients) {
+        _breadCrumbScroller.animateTo(
+            _breadCrumbScroller.position.maxScrollExtent,
+            duration: Duration(milliseconds: 200),
+            curve: Curves.fastLinearToSlowEaseIn);
+      }
     });
   }
 
@@ -479,7 +481,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
         return BottomSheetBody(
           leading: Icon(Icons.check),
           title: "${translate("Successful")}!",
-          text: "",
+          text: model.jobProgress.display(),
           onCanceled: () => model.jobReset(),
         );
       case JobState.error:
