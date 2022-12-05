@@ -489,8 +489,8 @@ class _FileManagerPageState extends State<FileManagerPage>
                                   icon: const Icon(Icons.restart_alt_rounded)),
                             ),
                             IconButton(
-                              icon: const Icon(Icons.delete_forever_outlined),
-                              splashRadius: kDesktopIconButtonSplashRadius,
+                              icon: const Icon(Icons.close),
+                              splashRadius: 1,
                               onPressed: () {
                                 model.jobTable.removeAt(index);
                                 model.cancelJob(item.id);
