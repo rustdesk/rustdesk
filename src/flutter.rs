@@ -210,10 +210,10 @@ impl InvokeUiSession for FlutterHandler {
         );
     }
 
-    fn job_done(&self, id: i32, file_num: i32) {
+    fn job_done(&self, id: i32, file_num: i32, skipped: bool) {
         self.push_event(
             "job_done",
-            vec![("id", &id.to_string()), ("file_num", &file_num.to_string())],
+            vec![("id", &id.to_string()), ("file_num", &file_num.to_string()), ("skipped", skipped)],
         );
     }
 

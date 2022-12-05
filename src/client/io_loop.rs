@@ -499,7 +499,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                         let mut msg = Message::new();
                         let mut file_action = FileAction::new();
-                        file_action.set_send_confirm(FileTransferSendConfirmRequest {
+                        let req = FileTransferSendConfirmRequest {
                             id,
                             file_num,
                             union: if need_override {
@@ -508,7 +508,9 @@ impl<T: InvokeUiSession> Remote<T> {
                                 Some(file_transfer_send_confirm_request::Union::Skip(true))
                             },
                             ..Default::default()
-                        });
+                        };
+                        job.confirm(&req);
+                        file_action.set_send_confirm(req);
                         msg.set_file_action(file_action);
                         allow_err!(peer.send(&msg).await);
                     }
@@ -862,28 +864,30 @@ impl<T: InvokeUiSession> Remote<T> {
                                         match fs::is_write_need_confirmation(&write_path, &digest) {
                                             Ok(res) => match res {
                                                 DigestCheckResult::IsSame => {
-                                                    let msg= new_send_confirm(FileTransferSendConfirmRequest {
+                                                    let req = FileTransferSendConfirmRequest {
                                                         id: digest.id,
                                                         file_num: digest.file_num,
                                                         union: Some(file_transfer_send_confirm_request::Union::Skip(true)),
                                                         ..Default::default()
-                                                    });
+                                                    };
+                                                    job.confirm(&req);
+                                                    let msg = new_send_confirm(req);
                                                     allow_err!(peer.send(&msg).await);
                                                 }
                                                 DigestCheckResult::NeedConfirm(digest) => {
                                                     if let Some(overwrite) = overwrite_strategy {
-                                                        let msg = new_send_confirm(
-                                                            FileTransferSendConfirmRequest {
-                                                                id: digest.id,
-                                                                file_num: digest.file_num,
-                                                                union: Some(if overwrite {
-                                                                    file_transfer_send_confirm_request::Union::OffsetBlk(0)
-                                                                } else {
-                                                                    file_transfer_send_confirm_request::Union::Skip(true)
-                                                                }),
-                                                                ..Default::default()
-                                                            },
-                                                        );
+                                                        let req = FileTransferSendConfirmRequest {
+                                                            id: digest.id,
+                                                            file_num: digest.file_num,
+                                                            union: Some(if overwrite {
+                                                                file_transfer_send_confirm_request::Union::OffsetBlk(0)
+                                                            } else {
+                                                                file_transfer_send_confirm_request::Union::Skip(true)
+                                                            }),
+                                                            ..Default::default()
+                                                        };
+                                                        job.confirm(&req);
+                                                        let msg = new_send_confirm(req);
                                                         allow_err!(peer.send(&msg).await);
                                                     } else {
                                                         self.handler.override_file_confirm(
@@ -895,14 +899,14 @@ impl<T: InvokeUiSession> Remote<T> {
                                                     }
                                                 }
                                                 DigestCheckResult::NoSuchFile => {
-                                                    let msg = new_send_confirm(
-                                                    FileTransferSendConfirmRequest {
+                                                    let req = FileTransferSendConfirmRequest {
                                                         id: digest.id,
                                                         file_num: digest.file_num,
                                                         union: Some(file_transfer_send_confirm_request::Union::OffsetBlk(0)),
                                                         ..Default::default()
-                                                    },
-                                                );
+                                                    };
+                                                    job.confirm(&req);
+                                                    let msg = new_send_confirm(req);
                                                     allow_err!(peer.send(&msg).await);
                                                 }
                                             },
@@ -915,6 +919,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                         }
                         Some(file_response::Union::Block(block)) => {
+                            log::debug!("recv block: {}", block.blk_id);
                             if let Some(job) = fs::get_job(block.id, &mut self.write_jobs) {
                                 if let Err(_err) = job.write(block).await {
                                     // to-do: add "skip" for writing job
@@ -923,11 +928,18 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                         }
                         Some(file_response::Union::Done(d)) => {
+                            let mut err: Option<String> = None;
                             if let Some(job) = fs::get_job(d.id, &mut self.write_jobs) {
                                 job.modify_time();
+                                err = job.job_error();
                                 fs::remove_job(d.id, &mut self.write_jobs);
                             }
-                            self.handle_job_status(d.id, d.file_num, None);
+                            if let Some(job) = fs::get_job(d.id, &mut self.read_jobs) {
+                                job.modify_time();
+                                err = job.job_error();
+                                fs::remove_job(d.id, &mut self.read_jobs);
+                            }
+                            self.handle_job_status(d.id, d.file_num, err);
                         }
                         Some(file_response::Union::Error(e)) => {
                             self.handle_job_status(e.id, e.file_num, Some(e.error));
@@ -976,7 +988,8 @@ impl<T: InvokeUiSession> Remote<T> {
                         self.handler.ui_handler.switch_display(&s);
                         self.video_sender.send(MediaData::Reset).ok();
                         if s.width > 0 && s.height > 0 {
-                            self.handler.set_display(s.x, s.y, s.width, s.height, s.cursor_embeded);
+                            self.handler
+                                .set_display(s.x, s.y, s.width, s.height, s.cursor_embeded);
                         }
                     }
                     Some(misc::Union::CloseReason(c)) => {

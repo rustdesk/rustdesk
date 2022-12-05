@@ -245,7 +245,13 @@ class JobTable: Reactor.Component {
     var percent = job.total_size == 0 ? 100 : (100. * job.finished_size / job.total_size).toInteger(); // (100. * i / (n || 1)).toInteger();
     if (job.finished) percent = '100';
     if (percent) res += ", " + percent + "%";
-    if (job.finished) res = translate("Finished") + " " + res;
+    if (job.finished) {
+      if (job.err == "skipped") {
+        res = translate("Skipped") + " " + res;
+      } else {
+        res = translate("Finished") + " " + res;
+      }
+    }
     if (job.speed) res += ", " + getSize(0, job.speed) + "/s";
     return res;
   }
@@ -268,9 +274,10 @@ class JobTable: Reactor.Component {
     if (file_num < job.file_num) return;
     job.file_num = file_num;
     var n = job.num_entries || job.entries.length;
-    job.finished = job.file_num >= n - 1 || err == "cancel";
+    job.finished = job.file_num >= n - 1 || err == "cancel" || err == "skipped";
     job.finished_size = finished_size;
     job.speed = speed || 0;
+    job.err = err;
     this.updateJob(job);
     if (job.type == "del-dir") {
       if (job.finished) {
