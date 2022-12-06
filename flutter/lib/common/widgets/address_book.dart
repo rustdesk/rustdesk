@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/common/formatter/id_formatter.dart';
 import 'package:flutter_hbb/common/widgets/peer_card.dart';
 import 'package:flutter_hbb/common/widgets/peers_view.dart';
 import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
@@ -237,29 +238,32 @@ class _AddressBookState extends State<AddressBook> {
   }
 
   void abAddId() async {
-    var field = "";
-    var msg = "";
     var isInProgress = false;
-    TextEditingController controller = TextEditingController(text: field);
+    IDTextEditingController idController = IDTextEditingController(text: '');
+    TextEditingController aliasController = TextEditingController(text: '');
+    final tags = List.of(gFFI.abModel.tags);
+    var selectedTag = List<dynamic>.empty(growable: true).obs;
+    final style = TextStyle(fontSize: 14.0);
+    String? errorMsg;
 
     gFFI.dialogManager.show((setState, close) {
       submit() async {
         setState(() {
-          msg = "";
           isInProgress = true;
+          errorMsg = null;
         });
-        field = controller.text.trim();
-        if (field.isEmpty) {
+        String id = idController.id;
+        if (id.isEmpty) {
           // pass
         } else {
-          final ids = field.trim().split(RegExp(r"[\s,;\n]+"));
-          field = ids.join(',');
-          for (final newId in ids) {
-            if (gFFI.abModel.idContainBy(newId)) {
-              continue;
-            }
-            gFFI.abModel.addId(newId);
+          if (gFFI.abModel.idContainBy(id)) {
+            setState(() {
+              isInProgress = false;
+              errorMsg = translate('ID already exists');
+            });
+            return;
           }
+          gFFI.abModel.addId(id, aliasController.text.trim(), selectedTag);
           await gFFI.abModel.pushAb();
           this.setState(() {});
           // final currentPeers
@@ -272,21 +276,70 @@ class _AddressBookState extends State<AddressBook> {
         content: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(translate("whitelist_sep")),
-            const SizedBox(
-              height: 8.0,
-            ),
-            Row(
+            Column(
               children: [
-                Expanded(
-                  child: TextField(
-                      maxLines: null,
-                      decoration: InputDecoration(
-                        border: const OutlineInputBorder(),
-                        errorText: msg.isEmpty ? null : translate(msg),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Row(
+                    children: [
+                      Text(
+                        '*',
+                        style: TextStyle(color: Colors.red, fontSize: 14),
                       ),
-                      controller: controller,
-                      focusNode: FocusNode()..requestFocus()),
+                      Text(
+                        'ID',
+                        style: style,
+                      ),
+                    ],
+                  ),
+                ),
+                TextField(
+                  controller: idController,
+                  inputFormatters: [IDTextInputFormatter()],
+                  decoration: InputDecoration(
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                      errorText: errorMsg),
+                  style: style,
+                ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    translate('Alias'),
+                    style: style,
+                  ),
+                ).marginOnly(top: 8, bottom: 2),
+                TextField(
+                  controller: aliasController,
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  style: style,
+                ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    translate('Tags'),
+                    style: style,
+                  ),
+                ).marginOnly(top: 8),
+                Container(
+                  child: Wrap(
+                    children: tags
+                        .map((e) => AddressBookTag(
+                            name: e,
+                            tags: selectedTag,
+                            onTap: () {
+                              if (selectedTag.contains(e)) {
+                                selectedTag.remove(e);
+                              } else {
+                                selectedTag.add(e);
+                              }
+                            },
+                            showActionMenu: false))
+                        .toList(growable: false),
+                  ),
                 ),
               ],
             ),

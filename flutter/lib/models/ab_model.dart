@@ -68,11 +68,21 @@ class AbModel {
     peers.clear();
   }
 
-  void addId(String id) async {
+  void addId(String id, String alias, List<dynamic> tags) {
     if (idContainBy(id)) {
       return;
     }
-    peers.add(Peer.fromJson({"id": id}));
+    final peer = Peer.fromJson({
+      'id': id,
+      'alias': alias,
+      'tags': tags,
+    });
+    peers.add(peer);
+  }
+
+  void addPeer(Peer peer) {
+    peers.removeWhere((e) => e.id == peer.id);
+    peers.add(peer);
   }
 
   void addTag(String tag) async {
@@ -110,6 +120,10 @@ class AbModel {
     } finally {
       abLoading.value = false;
     }
+  }
+
+  Peer? find(String id) {
+    return peers.firstWhereOrNull((e) => e.id == id);
   }
 
   bool idContainBy(String id) {
@@ -150,13 +164,28 @@ class AbModel {
     }
   }
 
-  void setPeerAlias(String id, String value) {
+  Future<void> setPeerAlias(String id, String value) async {
     final it = peers.where((p0) => p0.id == id);
-    if (it.isEmpty) {
-      debugPrint("$id is not exists");
-      return;
-    } else {
+    if (it.isNotEmpty) {
       it.first.alias = value;
+      await pushAb();
+    }
+  }
+
+  Future<void> setPeerForceAlwaysRelay(String id, bool value) async {
+    final it = peers.where((p0) => p0.id == id);
+    if (it.isNotEmpty) {
+      it.first.forceAlwaysRelay = value;
+      await pushAb();
+    }
+  }
+
+  Future<void> setRdp(String id, String port, String username) async {
+    final it = peers.where((p0) => p0.id == id);
+    if (it.isNotEmpty) {
+      it.first.rdpPort = port;
+      it.first.rdpUsername = username;
+      await pushAb();
     }
   }
 

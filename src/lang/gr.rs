@@ -399,5 +399,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("hide_cm_tip", "Να επιτρέπεται η απόκρυψη, μόνο εάν αποδέχεστε συνδέσεις μέσω κωδικού πρόσβασης και χρησιμοποιείτε μόνιμο κωδικό πρόσβασης"),
         ("wayland_experiment_tip", "Η υποστήριξη Wayland βρίσκεται σε πειραματικό στάδιο, χρησιμοποιήστε το X11 εάν χρειάζεστε πρόσβαση χωρίς επίβλεψη."),
         ("Right click to select tabs", "Κάντε δεξί κλικ για να επιλέξετε καρτέλες"),
+        ("Add to Address Book", ""),
     ].iter().cloned().collect();
 }

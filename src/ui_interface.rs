@@ -685,6 +685,19 @@ pub fn discover() {
     });
 }
 
+pub fn peer_to_map(id: String, p: PeerConfig) -> HashMap<&'static str, String> {
+    HashMap::<&str, String>::from_iter([
+        ("id", id),
+        ("username", p.info.username.clone()),
+        ("hostname", p.info.hostname.clone()),
+        ("platform", p.info.platform.clone()),
+        (
+            "alias",
+            p.options.get("alias").unwrap_or(&"".to_owned()).to_owned(),
+        ),
+    ])
+}
+
 #[inline]
 pub fn get_lan_peers() -> Vec<HashMap<&'static str, String>> {
     config::LanPeers::load()

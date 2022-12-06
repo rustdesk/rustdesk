@@ -399,5 +399,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("hide_cm_tip", "Dies ist nur möglich, wenn der Zugriff nur über ein permanentes Passwort erfolgt."), // Sehr unklar. Muss noch angepasst werden. Original: Allow hiding only if accepting sessions via password and using pernament passw"),
         ("wayland_experiment_tip", ""),
         ("Right click to select tabs", ""),
+        ("Add to Address Book", ""),
     ].iter().cloned().collect();
 }

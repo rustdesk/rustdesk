@@ -399,5 +399,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("hide_cm_tip", "Разрешать скрытие случае, если принимаются сеансы по паролю или используется постоянный пароль"),
         ("wayland_experiment_tip", "Поддержка Wayland находится на экспериментальной стадии, используйте X11, если вам требуется автоматический доступ."),
         ("Right click to select tabs", "Выбор вкладок щелчком правой кнопки мыши"),
+        ("Add to Address Book", ""),
     ].iter().cloned().collect();
 }
