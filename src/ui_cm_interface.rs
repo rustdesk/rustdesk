@@ -596,6 +596,12 @@ async fn handle_fs(fs: ipc::FS, write_jobs: &mut Vec<fs::TransferJob>, tx: &Unbo
                 fs::remove_job(id, write_jobs);
             }
         }
+        ipc::FS::WriteError { id, file_num, err } => {
+            if let Some(job) = fs::get_job(id, write_jobs) {
+                send_raw(fs::new_error(job.id(), err, file_num), tx);
+                fs::remove_job(job.id(), write_jobs);
+            }
+        }
         ipc::FS::WriteBlock {
             id,
             file_num,

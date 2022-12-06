@@ -75,6 +75,11 @@ pub enum FS {
         id: i32,
         file_num: i32,
     },
+    WriteError {
+        id: i32,
+        file_num: i32,
+        err: String
+    },
     WriteOffset {
         id: i32,
         file_num: i32,

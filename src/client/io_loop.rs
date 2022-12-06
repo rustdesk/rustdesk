@@ -933,14 +933,12 @@ impl<T: InvokeUiSession> Remote<T> {
                                 err = job.job_error();
                                 fs::remove_job(d.id, &mut self.write_jobs);
                             }
-                            if let Some(job) = fs::get_job(d.id, &mut self.read_jobs) {
-                                job.modify_time();
-                                err = job.job_error();
-                                fs::remove_job(d.id, &mut self.read_jobs);
-                            }
                             self.handle_job_status(d.id, d.file_num, err);
                         }
                         Some(file_response::Union::Error(e)) => {
+                            if let Some(job) = fs::get_job(e.id, &mut self.write_jobs) {
+                                fs::remove_job(e.id, &mut self.write_jobs);
+                            }
                             self.handle_job_status(e.id, e.file_num, Some(e.error));
                         }
                         _ => {}

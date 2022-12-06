@@ -1304,6 +1304,13 @@ impl Connection {
                         last_modified: d.last_modified,
                         is_upload: true,
                     }),
+                    Some(file_response::Union::Error(e)) => {
+                        self.send_fs(ipc::FS::WriteError {
+                            id: e.id,
+                            file_num: e.file_num,
+                            err: e.error,
+                        });
+                    }
                     _ => {}
                 },
                 Some(message::Union::Misc(misc)) => match misc.union {
