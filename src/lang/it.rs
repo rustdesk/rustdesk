@@ -397,8 +397,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request access to your device", "Richiedi l'accesso al tuo dispositivo"),
         ("Hide connection management window", "Nascondi la finestra di gestione delle connessioni"),
         ("hide_cm_tip", "Permetti di nascondere solo se si accettano sessioni con password permanente"),
-        ("wayland_experiment_tip", ""),
-        ("Right click to select tabs", ""),
-        ("Add to Address Book", ""),
+        ("wayland_experiment_tip", "Il supporto Wayland è in fase sperimentale, utilizza X11 se necessiti di un accesso stabile."),
+        ("Right click to select tabs", "Clic con il tasto destro per selezionare le schede"),
+        ("Add to Address Book", "Aggiungi alla rubrica"),
     ].iter().cloned().collect();
 }
