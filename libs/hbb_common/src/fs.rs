@@ -572,6 +572,22 @@ impl TransferJob {
         self.file_skipped() && self.files.len() == 1
     }
 
+    /// Check whether the job is completed after `read` returns `None`
+    /// This is a helper function which gives additional lifecycle when the job reads `None`.
+    /// If returns `true`, it means we can delete the job automatically. `False` otherwise.
+    ///
+    /// [`Note`]
+    /// Conditions:
+    /// 1. Files are not waiting for comfirmation by peers.
+    #[inline]
+    pub fn job_completed(&self) -> bool {
+        // has no error, Condition 2
+        if !self.enable_overwrite_detection || (!self.file_confirmed && !self.file_is_waiting) {
+            return true;
+        }
+        return false;
+    }
+
     /// Get job error message, useful for getting status when job had finished
     pub fn job_error(&self) -> Option<String> {
         if self.job_skipped() {
@@ -597,7 +613,6 @@ impl TransferJob {
             match r.union {
                 Some(file_transfer_send_confirm_request::Union::Skip(s)) => {
                     if s {
-                        log::debug!("skip file id:{}, file_num:{}", r.id, r.file_num);
                         self.set_file_skipped();
                     } else {
                         self.set_file_confirmed(true);
@@ -744,13 +759,16 @@ pub async fn handle_read_jobs(
                 stream.send(&new_block(block)).await?;
             }
             Ok(None) => {
-                if !job.enable_overwrite_detection || (!job.file_confirmed && !job.file_is_waiting)
-                {
-                    // for getting error detail, we do not remove this job, we will handle it in io loop
-                    if job.job_error().is_none() {
-                        finished.push(job.id());
+                if job.job_completed() {
+                    finished.push(job.id());
+                    let err = job.job_error();
+                    if err.is_some() {
+                        stream
+                            .send(&new_error(job.id(), err.unwrap(), job.file_num()))
+                            .await?;
+                    } else {
+                        stream.send(&new_done(job.id(), job.file_num())).await?;
                     }
-                    stream.send(&new_done(job.id(), job.file_num())).await?;
                 } else {
                     // waiting confirmation.
                 }
@@ -758,8 +776,10 @@ pub async fn handle_read_jobs(
         }
     }
     for id in finished {
+        log::info!("remove read job {}", id);
         remove_job(id, jobs);
     }
+    // log::info!("read jobs: {:?}", jobs.iter().map(|item| {item.id}).collect::<Vec<i32>>());
     Ok(())
 }
 
