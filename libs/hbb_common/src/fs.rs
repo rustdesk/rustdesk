@@ -776,10 +776,8 @@ pub async fn handle_read_jobs(
         }
     }
     for id in finished {
-        log::info!("remove read job {}", id);
         remove_job(id, jobs);
     }
-    // log::info!("read jobs: {:?}", jobs.iter().map(|item| {item.id}).collect::<Vec<i32>>());
     Ok(())
 }
 
