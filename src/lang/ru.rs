@@ -372,7 +372,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("elevated_foreground_window_tip", "Текущее окно удалённого рабочего стола требует более высоких привилегий для работы, поэтому временно невозможно использовать мышь и клавиатуру. Можно попросить удалённого пользователя свернуть текущее окно или нажать кнопку повышения прав в окне управления подключением. Чтобы избежать этой проблемы в дальнейшем, рекомендуется выполнить установку программного обеспечения на удалённом устройстве."),
         ("Disconnected", "Отключено"),
         ("Other", "Другое"),
-        ("Confirm before closing multiple tabs", "Подтверждение закрытия несколько вкладок"),
+        ("Confirm before closing multiple tabs", "Подтверждать закрытие несколько вкладок"),
         ("Keyboard Settings", "Настройки клавиатуры"),
         ("Custom", "Своё"),
         ("Full Access", "Полный доступ"),
@@ -380,7 +380,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wayland requires Ubuntu 21.04 or higher version.", "Wayland требует Ubuntu 21.04 или более позднюю версию."),
         ("Wayland requires higher version of linux distro. Please try X11 desktop or change your OS.", "Для Wayland требуется более поздняя версия дистрибутива Linux. Пожалуйста, попробуйте рабочий стол X11 или смените ОС."),
         ("JumpLink", "Просмотр"),
-        ("Please Select the screen to be shared(Operate on the peer side).", "Пожалуйста, выберите экран для совместного использования (работайте на одноранговой стороне)."),
+        ("Please Select the screen to be shared(Operate on the peer side).", "Выберите экран для совместного использования (работайте на одноранговой стороне)."),
         ("Show RustDesk", "Показать RustDesk"),
         ("This PC", "Этот компьютер"),
         ("or", "или"),
@@ -399,6 +399,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("hide_cm_tip", "Разрешать скрытие случае, если принимаются сеансы по паролю или используется постоянный пароль"),
         ("wayland_experiment_tip", "Поддержка Wayland находится на экспериментальной стадии, используйте X11, если вам требуется автоматический доступ."),
         ("Right click to select tabs", "Выбор вкладок щелчком правой кнопки мыши"),
-        ("Add to Address Book", ""),
+        ("Add to Address Book", "Добавить в адресную книгу"),
     ].iter().cloned().collect();
 }
