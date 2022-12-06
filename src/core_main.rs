@@ -214,7 +214,11 @@ pub fn core_main() -> Option<Vec<String>> {
             return None;
         } else if args[0] == "--password" {
             if args.len() == 2 {
-                crate::ipc::set_permanent_password(args[1].to_owned()).unwrap();
+                if crate::platform::is_root() {
+                    crate::ipc::set_permanent_password(args[1].to_owned()).unwrap();
+                } else {
+                    log::info!("Permission denied!");
+                }
             }
             return None;
         } else if args[0] == "--check-hwcodec-config" {
