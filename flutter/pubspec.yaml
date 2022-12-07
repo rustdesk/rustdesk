@@ -79,7 +79,7 @@ dependencies:
     contextmenu: ^3.0.0
     desktop_drop: ^0.3.3
     scroll_pos: ^0.3.0
-    rxdart: ^0.27.5
+    debounce_throttle: ^2.0.0
     file_picker: ^5.1.0
     flutter_svg: ^1.1.5
     flutter_improved_scrolling: ^0.0.3
