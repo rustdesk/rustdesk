@@ -11,7 +11,7 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
-import 'package:rxdart/rxdart.dart' as rxdart;
+import 'package:debounce_throttle/debounce_throttle.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:window_size/window_size.dart' as window_size;
 
@@ -119,10 +119,11 @@ class RemoteMenubar extends StatefulWidget {
 }
 
 class _RemoteMenubarState extends State<RemoteMenubar> {
-  final Rx<Color> _hideColor = Colors.white12.obs;
-  final _rxHideReplay = rxdart.ReplaySubject<int>();
+  late Debouncer<int> _debouncerHide;
   bool _isCursorOverImage = false;
   window_size.Screen? _screen;
+  final _fractionX = 0.5.obs;
+  final _dragging = false.obs;
 
   int get windowId => stateGlobal.windowId;
 
@@ -139,23 +140,26 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   initState() {
     super.initState();
 
+    _debouncerHide = Debouncer<int>(
+      Duration(milliseconds: 5000),
+      onChanged: _debouncerHideProc,
+      initialValue: 0,
+    );
+
     widget.onEnterOrLeaveImageSetter((enter) {
       if (enter) {
-        _rxHideReplay.add(0);
+        _debouncerHide.value = 0;
         _isCursorOverImage = true;
       } else {
         _isCursorOverImage = false;
       }
     });
+  }
 
-    _rxHideReplay
-        .throttleTime(const Duration(milliseconds: 5000),
-            trailing: true, leading: false)
-        .listen((int v) {
-      if (!pin && show.isTrue && _isCursorOverImage) {
-        show.value = false;
-      }
-    });
+  _debouncerHideProc(int v) {
+    if (!pin && show.isTrue && _isCursorOverImage && _dragging.isFalse) {
+      show.value = false;
+    }
   }
 
   @override
@@ -169,36 +173,29 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   Widget build(BuildContext context) {
     return Align(
       alignment: Alignment.topCenter,
-      child: Obx(
-          () => show.value ? _buildMenubar(context) : _buildShowHide(context)),
+      child: Obx(() => show.value
+          ? _buildMenubar(context)
+          : _buildDraggableShowHide(context)),
     );
   }
 
-  Widget _buildShowHide(BuildContext context) {
-    return Obx(() => Tooltip(
-        message: translate(show.value ? 'Hide Menubar' : 'Show Menubar'),
-        child: SizedBox(
-            width: 100,
-            height: 13,
-            child: TextButton(
-              onHover: (bool v) {
-                _hideColor.value = v ? Colors.white60 : Colors.white24;
-              },
-              onPressed: () {
-                show.value = !show.value;
-                _hideColor.value = Colors.white24;
-                if (show.isTrue) {
-                  _updateScreen();
-                }
-              },
-              child: Obx(() => Container(
-                    decoration: BoxDecoration(
-                      color: _hideColor.value,
-                      border: Border.all(color: MyTheme.border),
-                      borderRadius: BorderRadius.all(Radius.circular(5.0)),
-                    ),
-                  ).marginOnly(bottom: 8.0)),
-            ))));
+  Widget _buildDraggableShowHide(BuildContext context) {
+    return Obx(() {
+      if (show.isTrue && _dragging.isFalse) {
+        _debouncerHide.value = 1;
+      }
+      return Align(
+        alignment: FractionalOffset(_fractionX.value, 0),
+        child: Offstage(
+          offstage: _dragging.isTrue,
+          child: _DraggableShowHide(
+            dragging: _dragging,
+            fractionX: _fractionX,
+            show: show,
+          ),
+        ),
+      );
+    });
   }
 
   _updateScreen() async {
@@ -255,13 +252,12 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
               decoration: BoxDecoration(
                 color: Colors.white,
                 border: Border.all(color: MyTheme.border),
-                borderRadius: BorderRadius.all(Radius.circular(10.0)),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: menubarItems,
               )),
-          _buildShowHide(context),
+          _buildDraggableShowHide(context),
         ]));
   }
 
@@ -831,15 +827,13 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
               qualityInitValue = qualityMaxValue;
             }
             final RxDouble qualitySliderValue = RxDouble(qualityInitValue);
-            final qualityRxReplay = rxdart.ReplaySubject<double>();
-            qualityRxReplay
-                .throttleTime(const Duration(milliseconds: 1000),
-                    trailing: true, leading: false)
-                .listen((double v) {
-              () async {
-                await setCustomValues(quality: v);
-              }();
-            });
+            final debouncerQuanlity = Debouncer<double>(
+              Duration(milliseconds: 1000),
+              onChanged: (double v) {
+                setCustomValues(quality: v);
+              },
+              initialValue: qualityInitValue,
+            );
             final qualitySlider = Obx(() => Row(
                   children: [
                     Slider(
@@ -849,7 +843,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                       divisions: 90,
                       onChanged: (double value) {
                         qualitySliderValue.value = value;
-                        qualityRxReplay.add(value);
+                        debouncerQuanlity.value = value;
                       },
                     ),
                     SizedBox(
@@ -869,15 +863,13 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
               fpsInitValue = 30;
             }
             final RxDouble fpsSliderValue = RxDouble(fpsInitValue);
-            final fpsRxReplay = rxdart.ReplaySubject<double>();
-            fpsRxReplay
-                .throttleTime(const Duration(milliseconds: 1000),
-                    trailing: true, leading: false)
-                .listen((double v) {
-              () async {
-                await setCustomValues(fps: v);
-              }();
-            });
+            final debouncerFps = Debouncer<double>(
+              Duration(milliseconds: 1000),
+              onChanged: (double v) {
+                setCustomValues(fps: v);
+              },
+              initialValue: qualityInitValue,
+            );
             bool? direct;
             try {
               direct = ConnectionTypeState.find(widget.id).direct.value ==
@@ -898,7 +890,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                         divisions: 22,
                         onChanged: (double value) {
                           fpsSliderValue.value = value;
-                          fpsRxReplay.add(value);
+                          debouncerFps.value = value;
                         },
                       ))),
                   SizedBox(
@@ -1351,4 +1343,92 @@ void showAuditDialog(String id, dialogManager) async {
       onCancel: close,
     );
   });
+}
+
+class _DraggableShowHide extends StatefulWidget {
+  final RxDouble fractionX;
+  final RxBool dragging;
+  final RxBool show;
+  const _DraggableShowHide({
+    Key? key,
+    required this.fractionX,
+    required this.dragging,
+    required this.show,
+  }) : super(key: key);
+
+  @override
+  State<_DraggableShowHide> createState() => __DraggableShowHideState();
+}
+
+class __DraggableShowHideState extends State<_DraggableShowHide> {
+  Offset position = Offset.zero;
+  Size size = Size.zero;
+
+  Widget _buildDraggable(BuildContext context) {
+    return Draggable(
+      axis: Axis.horizontal,
+      child: Icon(
+        Icons.drag_indicator,
+        size: 15,
+      ),
+      feedback: widget,
+      onDragStarted: (() {
+        final RenderObject? renderObj = context.findRenderObject();
+        if (renderObj != null) {
+          final RenderBox renderBox = renderObj as RenderBox;
+          size = renderBox.size;
+          position = renderBox.localToGlobal(Offset.zero);
+        }
+        widget.dragging.value = true;
+      }),
+      onDragEnd: (details) {
+        final mediaSize = MediaQueryData.fromWindow(ui.window).size;
+        widget.fractionX.value +=
+            (details.offset.dx - position.dx) / (mediaSize.width - size.width);
+        if (widget.fractionX.value < 0.35) {
+          widget.fractionX.value = 0.35;
+        }
+        if (widget.fractionX.value > 0.65) {
+          widget.fractionX.value = 0.65;
+        }
+        widget.dragging.value = false;
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ButtonStyle buttonStyle = ButtonStyle(
+      minimumSize: MaterialStateProperty.all(const Size(0, 0)),
+      padding: MaterialStateProperty.all(EdgeInsets.zero),
+    );
+    final child = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildDraggable(context),
+        TextButton(
+          onPressed: () => setState(() {
+            widget.show.value = !widget.show.value;
+          }),
+          child: Obx((() => Icon(
+                widget.show.isTrue ? Icons.expand_less : Icons.expand_more,
+                size: 15,
+              ))),
+        ),
+      ],
+    );
+    return TextButtonTheme(
+      data: TextButtonThemeData(style: buttonStyle),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: MyTheme.border),
+        ),
+        child: SizedBox(
+          height: 15,
+          child: child,
+        ),
+      ),
+    );
+  }
 }
