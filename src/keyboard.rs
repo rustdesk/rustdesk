@@ -93,7 +93,20 @@ pub mod client {
         shift: bool,
         command: bool,
     ) -> (bool, bool, bool, bool) {
-        get_modifiers_state(alt, ctrl, shift, command)
+        let modifiers_lock = MODIFIERS_STATE.lock().unwrap();
+        let ctrl = *modifiers_lock.get(&Key::ControlLeft).unwrap()
+            || *modifiers_lock.get(&Key::ControlRight).unwrap()
+            || ctrl;
+        let shift = *modifiers_lock.get(&Key::ShiftLeft).unwrap()
+            || *modifiers_lock.get(&Key::ShiftRight).unwrap()
+            || shift;
+        let command = *modifiers_lock.get(&Key::MetaLeft).unwrap()
+            || *modifiers_lock.get(&Key::MetaRight).unwrap()
+            || command;
+        let alt =
+            *modifiers_lock.get(&Key::Alt).unwrap() || *modifiers_lock.get(&Key::AltGr).unwrap() || alt;
+    
+        (alt, ctrl, shift, command)
     }
 
     pub fn legacy_modifiers(
@@ -166,7 +179,7 @@ pub fn grab_loop(recv: mpsc::Receiver<GrabState>) {
                                     return Some(event);
                                 }
                                 if KEYBOARD_HOOKED.load(Ordering::SeqCst) {
-                                    keyboard::client::process_event(event);
+                                    client::process_event(event);
                                     return None;
                                 } else {
                                     return Some(event);
@@ -185,7 +198,7 @@ pub fn grab_loop(recv: mpsc::Receiver<GrabState>) {
                             if let Key::Unknown(keycode) = key {
                                 log::error!("rdev get unknown key, keycode is : {:?}", keycode);
                             } else {
-                                crate::keyboard::client::process_event(event);
+                                client::process_event(event);
                             }
                             None
                         }
@@ -243,7 +256,7 @@ pub fn release_remote_keys() {
     }
 }
 
-pub fn get_keyboard_mode_enum() -> KeyboardMode {
+pub fn  get_keyboard_mode_enum() -> KeyboardMode {
     match client::get_keyboard_mode().as_str() {
         "map" => KeyboardMode::Map,
         "translate" => KeyboardMode::Translate,
@@ -278,28 +291,6 @@ pub fn convert_numpad_keys(key: Key) -> Key {
         Key::Kp9 => Key::PageUp,
         _ => key,
     }
-}
-
-pub fn get_modifiers_state(
-    alt: bool,
-    ctrl: bool,
-    shift: bool,
-    command: bool,
-) -> (bool, bool, bool, bool) {
-    let modifiers_lock = MODIFIERS_STATE.lock().unwrap();
-    let ctrl = *modifiers_lock.get(&Key::ControlLeft).unwrap()
-        || *modifiers_lock.get(&Key::ControlRight).unwrap()
-        || ctrl;
-    let shift = *modifiers_lock.get(&Key::ShiftLeft).unwrap()
-        || *modifiers_lock.get(&Key::ShiftRight).unwrap()
-        || shift;
-    let command = *modifiers_lock.get(&Key::MetaLeft).unwrap()
-        || *modifiers_lock.get(&Key::MetaRight).unwrap()
-        || command;
-    let alt =
-        *modifiers_lock.get(&Key::Alt).unwrap() || *modifiers_lock.get(&Key::AltGr).unwrap() || alt;
-
-    (alt, ctrl, shift, command)
 }
 
 fn update_modifiers_state(event: &Event) {
@@ -595,7 +586,7 @@ pub fn legacy_keyboard_mode(event: &Event, key_event: &mut KeyEvent) {
             return;
         }
     }
-    let (alt, ctrl, shift, command) = get_modifiers_state(alt, ctrl, shift, command);
+    let (alt, ctrl, shift, command) = client::get_modifiers_state(alt, ctrl, shift, command);
     client::legacy_modifiers(key_event, alt, ctrl, shift, command);
 
     if down_or_up == true {
