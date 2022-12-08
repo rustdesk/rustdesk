@@ -1004,9 +1004,6 @@ pub fn handle_key_(evt: &KeyEvent) {
     }
 
     match evt.mode.unwrap() {
-        KeyboardMode::Legacy => {
-            legacy_keyboard_mode(evt);
-        }
         KeyboardMode::Map => {
             map_keyboard_mode(evt);
         }
