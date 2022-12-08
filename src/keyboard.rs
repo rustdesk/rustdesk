@@ -1,7 +1,10 @@
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::client::get_key_state;
 use crate::common::GrabState;
 #[cfg(feature = "flutter")]
 use crate::flutter::FlutterHandler;
+#[cfg(not(feature = "flutter"))]
+use crate::ui::remote::SciterHandler;
 use crate::ui_session_interface::Session;
 use hbb_common::{log, message_proto::*};
 use rdev::{Event, EventType, Key};
@@ -16,10 +19,18 @@ use std::time::SystemTime;
 static mut IS_ALT_GR: bool = false;
 pub static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
 
+lazy_static::lazy_static! {
+    pub static ref GRAB_SENDER: Arc<Mutex<Option<mpsc::Sender<GrabState>>>> = Default::default();
+}
+
 #[cfg(feature = "flutter")]
 lazy_static::lazy_static! {
     pub static ref CUR_SESSION: Arc<Mutex<Option<Session<FlutterHandler>>>> = Default::default();
-    pub static ref GRAB_SENDER: Arc<Mutex<Option<mpsc::Sender<GrabState>>>> = Default::default();
+}
+
+#[cfg(not(feature = "flutter"))]
+lazy_static::lazy_static! {
+    pub static ref CUR_SESSION: Arc<Mutex<Option<Session<SciterHandler>>>> = Default::default();
 }
 
 lazy_static::lazy_static! {
@@ -50,19 +61,12 @@ pub mod client {
         }
     }
 
-    pub fn save_keyboard_mode(value: String) {
-        release_remote_keys();
-        if let Some(handler) = CUR_SESSION.lock().unwrap().as_mut() {
-            handler.save_keyboard_mode(value);
-        }
-    }
-
     pub fn start_grab_loop() {
         let (sender, receiver) = mpsc::channel::<GrabState>();
-        unsafe {
-            grab_loop(receiver);
-            *GRAB_SENDER.lock().unwrap() = Some(sender);
-        }
+
+        grab_loop(receiver);
+        *GRAB_SENDER.lock().unwrap() = Some(sender);
+
         change_grab_status(GrabState::Ready);
     }
 
@@ -70,11 +74,8 @@ pub mod client {
         if GrabState::Wait == state {
             release_remote_keys();
         }
-        unsafe {
-            if let Some(sender) = &*GRAB_SENDER.lock().unwrap() {
-                log::info!("grab state: {:?}", state);
-                sender.send(state);
-            }
+        if let Some(sender) = &*GRAB_SENDER.lock().unwrap() {
+            sender.send(state).ok();
         }
     }
 
@@ -83,7 +84,6 @@ pub mod client {
             return;
         }
         let key_event = event_to_key_event(&event);
-        log::info!("key event: {:?}", key_event);
         send_key_event(&key_event);
     }
 
@@ -103,9 +103,10 @@ pub mod client {
         let command = *modifiers_lock.get(&Key::MetaLeft).unwrap()
             || *modifiers_lock.get(&Key::MetaRight).unwrap()
             || command;
-        let alt =
-            *modifiers_lock.get(&Key::Alt).unwrap() || *modifiers_lock.get(&Key::AltGr).unwrap() || alt;
-    
+        let alt = *modifiers_lock.get(&Key::Alt).unwrap()
+            || *modifiers_lock.get(&Key::AltGr).unwrap()
+            || alt;
+
         (alt, ctrl, shift, command)
     }
 
@@ -229,7 +230,7 @@ pub fn grab_loop(recv: mpsc::Receiver<GrabState>) {
 }
 
 pub fn is_long_press(event: &Event) -> bool {
-    let mut keys = MODIFIERS_STATE.lock().unwrap();
+    let keys = MODIFIERS_STATE.lock().unwrap();
     match event.event_type {
         EventType::KeyPress(k) => {
             if let Some(&state) = keys.get(&k) {
@@ -251,12 +252,11 @@ pub fn release_remote_keys() {
     for key in keys {
         let event_type = EventType::KeyRelease(key);
         let event = event_type_to_event(event_type);
-        log::info!("release key: {:?}", key);
         client::process_event(event);
     }
 }
 
-pub fn  get_keyboard_mode_enum() -> KeyboardMode {
+pub fn get_keyboard_mode_enum() -> KeyboardMode {
     match client::get_keyboard_mode().as_str() {
         "map" => KeyboardMode::Map,
         "translate" => KeyboardMode::Translate,
@@ -264,6 +264,7 @@ pub fn  get_keyboard_mode_enum() -> KeyboardMode {
     }
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn add_numlock_capslock_state(key_event: &mut KeyEvent) {
     if get_key_state(enigo::Key::CapsLock) {
         key_event.modifiers.push(ControlKey::CapsLock.into());
@@ -273,6 +274,7 @@ pub fn add_numlock_capslock_state(key_event: &mut KeyEvent) {
     }
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn convert_numpad_keys(key: Key) -> Key {
     if get_key_state(enigo::Key::NumLock) {
         return key;
@@ -337,6 +339,7 @@ pub fn event_to_key_event(event: &Event) -> KeyEvent {
             translate_keyboard_mode(event, &mut key_event);
         }
         _ => {
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             legacy_keyboard_mode(event, &mut key_event);
         }
     };
@@ -356,10 +359,8 @@ pub fn event_type_to_event(event_type: EventType) -> Event {
     }
 }
 
-#[cfg(feature = "flutter")]
 pub fn send_key_event(key_event: &KeyEvent) {
     if let Some(handler) = CUR_SESSION.lock().unwrap().as_ref() {
-        log::info!("Sending key even {:?}", key_event);
         handler.send_key_event(key_event);
     }
 }
@@ -373,6 +374,7 @@ pub fn get_peer_platform() -> String {
     }
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn legacy_keyboard_mode(event: &Event, key_event: &mut KeyEvent) {
     // legacy mode(0): Generate characters locally, look for keycode on other side.
     let (mut key, down_or_up) = match event.event_type {
@@ -616,4 +618,4 @@ pub fn map_keyboard_mode(event: &Event, key_event: &mut KeyEvent) {
     key_event.set_chr(keycode);
 }
 
-pub fn translate_keyboard_mode(event: &Event, key_event: &mut KeyEvent) {}
+pub fn translate_keyboard_mode(_event: &Event, _key_event: &mut KeyEvent) {}

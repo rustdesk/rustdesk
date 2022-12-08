@@ -4,8 +4,7 @@ use crate::client::{
     load_config, send_mouse, start_video_audio_threads, FileManager, Key, LoginConfigHandler,
     QualityStatus, KEY_MAP,
 };
-#[cfg(target_os = "linux")]
-use crate::common::IS_X11;
+use crate::common::GrabState;
 use crate::{client::Data, client::Interface};
 use async_trait::async_trait;
 use hbb_common::config::{Config, LocalConfig, PeerConfig};
@@ -17,7 +16,8 @@ use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
-
+use crate::keyboard;
+use rdev::{Event, EventType::*};
 pub static IS_IN: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone, Default)]
@@ -292,7 +292,7 @@ impl<T: InvokeUiSession> Session<T> {
         return "".to_owned();
     }
 
-    pub fn send_key_event(&self, mut evt: &KeyEvent) {
+    pub fn send_key_event(&self, evt: &KeyEvent) {
         // mode: legacy(0), map(1), translate(2), auto(3)
         let mut msg_out = Message::new();
         msg_out.set_key_event(evt.clone());
@@ -362,6 +362,40 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::Message(msg_out));
     }
 
+    pub fn handle_flutter_key_event(
+        &self,
+        name: &str,
+        keycode: i32,
+        scancode: i32,
+        down_or_up: bool,
+    ) {
+        if scancode < 0 || keycode < 0 {
+            return;
+        }
+        let keycode: u32 = keycode as u32;
+        let scancode: u32 = scancode as u32;
+
+        #[cfg(not(target_os = "windows"))]
+        let key = rdev::key_from_scancode(scancode) as rdev::Key;
+        // Windows requires special handling
+        #[cfg(target_os = "windows")]
+        let key = rdev::get_win_key(keycode, scancode);
+
+        let event_type = if down_or_up {
+            KeyPress(key)
+        } else {
+            KeyRelease(key)
+        };
+        let event = Event {
+            time: std::time::SystemTime::now(),
+            name: Option::Some(name.to_owned()),
+            code: keycode as _,
+            scan_code: scancode as _,
+            event_type: event_type,
+        };
+        keyboard::client::process_event(event);
+    }
+
     // flutter only TODO new input
     fn _input_key(
         &self,
@@ -423,7 +457,6 @@ impl<T: InvokeUiSession> Session<T> {
             }
         }
 
-        // todo! chieh
         // #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let (alt, ctrl, shift, command) =
             keyboard::client::get_modifiers_state(alt, ctrl, shift, command);

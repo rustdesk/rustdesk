@@ -764,11 +764,6 @@ fn rdev_key_down_or_up(key: RdevKey, down_or_up: bool) {
     std::thread::sleep(Duration::from_millis(20));
 }
 
-fn rdev_key_click(key: RdevKey) {
-    rdev_key_down_or_up(key, true);
-    rdev_key_down_or_up(key, false);
-}
-
 fn sync_status(evt: &KeyEvent) {
     let mut en = ENIGO.lock().unwrap();
 
