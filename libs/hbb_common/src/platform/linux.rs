@@ -43,7 +43,8 @@ pub fn get_display_server() -> String {
 }
 
 fn get_display_server_of_session(session: &str) -> String {
-    if let Ok(output) = run_loginctl(Some(vec!["show-session", "-p", "Type", session]))
+    let mut display_server = if let Ok(output) =
+        run_loginctl(Some(vec!["show-session", "-p", "Type", session]))
     // Check session type of the session
     {
         let display_server = String::from_utf8_lossy(&output.stdout)
@@ -76,16 +77,19 @@ fn get_display_server_of_session(session: &str) -> String {
                 display_server
             }
         } else {
-            // loginctl has not given the expected output.  try something else.
-            if let Ok(sestype) = std::env::var("XDG_SESSION_TYPE") {
-                return sestype.to_owned();
-            }
-            // If the session is not a tty, then just return the type as usual
-            display_server
+            "".to_owned()
         }
     } else {
         "".to_owned()
+    };
+    if display_server.is_empty() {
+        // loginctl has not given the expected output.  try something else.
+        if let Ok(sestype) = std::env::var("XDG_SESSION_TYPE") {
+            display_server = sestype;
+        }
     }
+    // If the session is not a tty, then just return the type as usual
+    display_server
 }
 
 pub fn get_values_of_seat0(indices: Vec<usize>) -> Vec<String> {
@@ -126,8 +130,7 @@ pub fn get_values_of_seat0(indices: Vec<usize>) -> Vec<String> {
 }
 
 fn is_active(sid: &str) -> bool {
-    if let Ok(output) = run_loginctl(Some(vec!["show-session", "-p", "State", sid]))
-    {
+    if let Ok(output) = run_loginctl(Some(vec!["show-session", "-p", "State", sid])) {
         String::from_utf8_lossy(&output.stdout).contains("active")
     } else {
         false
