@@ -285,7 +285,7 @@ pub fn session_handle_flutter_key_event(
     down_or_up: bool,
 ) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        // session.handle_flutter_key_event(&name, keycode, scancode, down_or_up);
+        session.handle_flutter_key_event(&name, keycode, scancode, down_or_up);
     }
 }
 
