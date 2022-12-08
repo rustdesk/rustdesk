@@ -6,8 +6,6 @@ use cpal::{
 };
 use magnum_opus::{Channels::*, Decoder as AudioDecoder};
 use sha2::{Digest, Sha256};
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
-use std::sync::atomic::Ordering;
 use std::{
     collections::HashMap,
     net::SocketAddr,
