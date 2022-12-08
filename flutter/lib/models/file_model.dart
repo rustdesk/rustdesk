@@ -363,8 +363,6 @@ class FileModel extends ChangeNotifier {
     if (_currentRemoteDir.path.isEmpty) {
       openDirectory(_remoteOption.home, isLocal: false);
     }
-    // load last transfer jobs
-    await bind.sessionLoadLastTransferJobs(id: '${parent.target?.id}');
   }
 
   Future<void> onClose() async {
