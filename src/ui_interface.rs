@@ -685,6 +685,7 @@ pub fn discover() {
     });
 }
 
+#[cfg(feature = "flutter")]
 pub fn peer_to_map(id: String, p: PeerConfig) -> HashMap<&'static str, String> {
     HashMap::<&str, String>::from_iter([
         ("id", id),
