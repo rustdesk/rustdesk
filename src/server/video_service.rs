@@ -21,8 +21,9 @@
 use super::{video_qos::VideoQoS, *};
 #[cfg(windows)]
 use crate::portable_service::client::PORTABLE_SERVICE_RUNNING;
+#[cfg(windows)]
+use hbb_common::get_version_number;
 use hbb_common::{
-    get_version_number,
     tokio::sync::{
         mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
         Mutex as TokioMutex,
