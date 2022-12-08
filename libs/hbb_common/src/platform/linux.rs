@@ -65,20 +65,12 @@ fn get_display_server_of_session(session: &str) -> String {
                 {
                     if xorg_results.trim_end().to_string() != "" {
                         // If it is, manually return "x11", otherwise return tty
-                        "x11".to_owned()
-                    } else {
-                        display_server
+                        return "x11".to_owned()
                     }
-                } else {
-                    // If any of these commands fail just fall back to the display server
-                    display_server
                 }
-            } else {
-                display_server
             }
-        } else {
-            "".to_owned()
         }
+        display_server
     } else {
         "".to_owned()
     };
