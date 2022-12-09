@@ -544,7 +544,7 @@ async fn check_pid(postfix: &str) {
             }
         }
     }
-    hbb_common::allow_err!(std::fs::remove_file(&Config::ipc_path(postfix)));
+    std::fs::remove_file(&Config::ipc_path(postfix));
 }
 
 #[inline]
