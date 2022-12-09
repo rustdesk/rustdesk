@@ -221,6 +221,13 @@ pub fn core_main() -> Option<Vec<String>> {
                 }
             }
             return None;
+        } else if args[0] == "--id" {
+            if crate::platform::is_root() {
+                println!("{}", crate::ipc::get_id());
+            } else {
+                println!("Permission denied!");
+            }
+            return None;
         } else if args[0] == "--check-hwcodec-config" {
             #[cfg(feature = "hwcodec")]
             scrap::hwcodec::check_config();
