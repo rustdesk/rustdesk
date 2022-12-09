@@ -56,7 +56,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Too frequent", "Zu häufig"),
         ("Cancel", "Abbrechen"),
         ("Skip", "Überspringen"),
-        ("Close", "Sitzung beenden"),
+        ("Close", "Schließen"),
         ("Retry", "Erneut versuchen"),
         ("OK", "OK"),
         ("Password Required", "Passwort erforderlich"),
@@ -358,7 +358,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Unpin menubar", "Menüleiste lösen"),
         ("Recording", "Aufnahme"),
         ("Directory", "Verzeichnis"),
-        ("Automatically record incoming sessions", "Automatische Aufzeichnung eingehender Sitzungen"),
+        ("Automatically record incoming sessions", "Eingehende Sitzungen automatisch aufzeichnen"),
         ("Change", "Ändern"),
         ("Start session recording", "Sitzungsaufzeichnung starten"),
         ("Stop session recording", "Sitzungsaufzeichnung beenden"),
@@ -398,7 +398,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hide connection management window", "Fenster zur Verwaltung der Verbindung verstecken"),
         ("hide_cm_tip", "Dies ist nur möglich, wenn der Zugriff nur über ein permanentes Passwort erfolgt."), // Sehr unklar. Muss noch angepasst werden. Original: Allow hiding only if accepting sessions via password and using pernament passw"),
         ("wayland_experiment_tip", ""),
-        ("Right click to select tabs", ""),
-        ("Add to Address Book", ""),
+        ("Right click to select tabs", "Register mit rechtem Mausklick auswählen"),
+        ("Add to Address Book", "Zum Adressbuch hinzufügen"),
     ].iter().cloned().collect();
 }
