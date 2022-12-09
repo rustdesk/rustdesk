@@ -5,6 +5,7 @@ use crate::client::{
     QualityStatus, KEY_MAP,
 };
 use crate::common::GrabState;
+use crate::keyboard;
 use crate::{client::Data, client::Interface};
 use async_trait::async_trait;
 use hbb_common::config::{Config, LocalConfig, PeerConfig};
@@ -12,12 +13,11 @@ use hbb_common::rendezvous_proto::ConnType;
 use hbb_common::tokio::{self, sync::mpsc};
 use hbb_common::{allow_err, message_proto::*};
 use hbb_common::{fs, get_version_number, log, Stream};
+use rdev::{Event, EventType::*};
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
-use crate::keyboard;
-use rdev::{Event, EventType::*};
 pub static IS_IN: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone, Default)]
@@ -580,6 +580,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn set_display(&self, x: i32, y: i32, w: i32, h: i32, cursor_embeded: bool);
     fn switch_display(&self, display: &SwitchDisplay);
     fn set_peer_info(&self, peer_info: &PeerInfo); // flutter
+    fn on_connected(&self, conn_type: ConnType);
     fn update_privacy_mode(&self);
     fn set_permission(&self, name: &str, value: bool);
     fn close_success(&self);
@@ -712,6 +713,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
                 "",
             );
         }
+        self.on_connected(self.lc.read().unwrap().conn_type);
         #[cfg(windows)]
         {
             let mut path = std::env::temp_dir();
