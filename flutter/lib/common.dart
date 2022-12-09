@@ -1013,7 +1013,7 @@ class LastWindowPosition {
       return LastWindowPosition(m["width"], m["height"], m["offsetWidth"],
           m["offsetHeight"], m["isMaximized"]);
     } catch (e) {
-      debugPrint(e.toString());
+      debugPrintStack(label: e.toString());
       return null;
     }
   }
@@ -1147,7 +1147,7 @@ Future<bool> restoreWindowPosition(WindowType type, {int? windowId}) async {
   final pos = bind.getLocalFlutterConfig(k: kWindowPrefix + type.name);
   var lpos = LastWindowPosition.loadFromString(pos);
   if (lpos == null) {
-    debugPrint("window position saved, but cannot be parsed");
+    debugPrint("no window position saved, ignoring position restoration");
     return false;
   }
 
@@ -1212,7 +1212,7 @@ Future<void> initUniLinks() async {
     }
     parseRustdeskUri(initialLink);
   } catch (err) {
-    debugPrint("$err");
+    debugPrintStack(label: "$err");
   }
 }
 
@@ -1422,7 +1422,7 @@ void onActiveWindowChanged() async {
         rustDeskWinManager.closeAllSubWindows()
       ]);
     } catch (err) {
-      debugPrint("$err");
+      debugPrintStack(label: "$err");
     } finally {
       await windowManager.setPreventClose(false);
       await windowManager.close();

@@ -63,7 +63,7 @@ class DesktopSettingPage extends StatefulWidget {
         DesktopTabPage.onAddSetting(initialPage: page);
       }
     } catch (e) {
-      debugPrint('$e');
+      debugPrintStack(label: '$e');
     }
   }
 }

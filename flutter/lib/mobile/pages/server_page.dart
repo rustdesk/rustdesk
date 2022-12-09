@@ -564,7 +564,7 @@ void androidChannelInit() {
           }
       }
     } catch (e) {
-      debugPrint("MethodCallHandler err:$e");
+      debugPrintStack(label: "MethodCallHandler err:$e");
     }
     return "";
   });
