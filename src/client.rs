@@ -863,12 +863,14 @@ impl VideoHandler {
         self.record = false;
         if start {
             self.recorder = Recorder::new(RecorderContext {
+                server: false,
                 id,
                 default_dir: crate::ui_interface::default_video_save_directory(),
                 filename: "".to_owned(),
                 width: w as _,
                 height: h as _,
                 codec_id: scrap::record::RecordCodecID::VP9,
+                tx: None,
             })
             .map_or(Default::default(), |r| Arc::new(Mutex::new(Some(r))));
         } else {

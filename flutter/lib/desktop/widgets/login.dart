@@ -460,7 +460,7 @@ Future<bool> loginDialog() async {
         debugPrint('$resp');
         completer.complete(true);
       } catch (err) {
-        debugPrint(err.toString());
+        debugPrintStack(label: err.toString());
         cancel();
         return;
       }

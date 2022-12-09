@@ -79,16 +79,19 @@ class _PeerTabPageState extends State<PeerTabPage>
         .toList()
         .obs;
     try {
-      final json = jsonDecode(bind.getLocalFlutterConfig(k: 'peer-tab-order'));
-      if (json is List) {
-        final List<String> list = json.map((e) => e.toString()).toList();
-        if (list.length == visibleOrderedTabs.length &&
-            visibleOrderedTabs.every((e) => list.contains(e))) {
-          visibleOrderedTabs.value = list;
+      final conf = bind.getLocalFlutterConfig(k: 'peer-tab-order');
+      if (conf.isNotEmpty) {
+        final json = jsonDecode(conf);
+        if (json is List) {
+          final List<String> list = json.map((e) => e.toString()).toList();
+          if (list.length == visibleOrderedTabs.length &&
+              visibleOrderedTabs.every((e) => list.contains(e))) {
+            visibleOrderedTabs.value = list;
+          }
         }
       }
     } catch (e) {
-      debugPrint('$e');
+      debugPrintStack(label: '$e');
     }
 
     adjustTab();
