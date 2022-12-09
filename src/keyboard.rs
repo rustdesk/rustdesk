@@ -14,7 +14,6 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex,
     },
-    thread,
     time::SystemTime,
 };
 
@@ -63,7 +62,7 @@ pub mod client {
     }
 
     pub fn start_grab_loop() {
-        thread::spawn(grab_loop);
+        super::start_grab_loop();
     }
 
     pub fn change_grab_status(state: GrabState) {
@@ -179,7 +178,7 @@ pub mod client {
     }
 }
 
-pub fn grab_loop() {
+pub fn start_grab_loop() {
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     std::thread::spawn(move || {
         let func = move |event: Event| match event.event_type {
@@ -233,10 +232,9 @@ pub fn is_long_press(event: &Event) -> bool {
 
 pub fn release_remote_keys() {
     // todo!: client quit suddenly, how to release keys?
-    let to_release = TO_RELEASE.lock().unwrap();
-    let keys = to_release.iter().map(|&key| key).collect::<Vec<Key>>();
-    drop(to_release);
-    for key in keys {
+    let to_release = TO_RELEASE.lock().unwrap().clone();
+    TO_RELEASE.lock().unwrap().clear();
+    for key in to_release {
         let event_type = EventType::KeyRelease(key);
         let event = event_type_to_event(event_type);
         client::process_event(event);
@@ -304,17 +302,15 @@ pub fn event_to_key_event(event: &Event) -> KeyEvent {
     let mut key_event = KeyEvent::new();
     update_modifiers_state(event);
 
-    let mut to_release = TO_RELEASE.lock().unwrap();
     match event.event_type {
         EventType::KeyPress(key) => {
-            to_release.insert(key);
+            TO_RELEASE.lock().unwrap().insert(key);
         }
         EventType::KeyRelease(key) => {
-            to_release.remove(&key);
+            TO_RELEASE.lock().unwrap().remove(&key);
         }
         _ => {}
     }
-    drop(to_release);
 
     let keyboard_mode = get_keyboard_mode_enum();
     key_event.mode = keyboard_mode.into();
