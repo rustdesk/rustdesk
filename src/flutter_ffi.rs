@@ -17,8 +17,6 @@ use hbb_common::{
 
 use crate::flutter::{self, SESSIONS};
 use crate::ui_interface::{self, *};
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::keyboard::CUR_SESSION;
 use crate::{
     client::file_trait::FileManager,
     flutter::{make_fd_to_json, session_add, session_start_},
@@ -293,7 +291,7 @@ pub fn session_enter_or_leave(id: String, enter: bool) {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
         if enter {
-            *CUR_SESSION.lock().unwrap() = Some(session.clone());
+            crate::keyboard::set_cur_session(session.clone());
             session.enter();
         } else {
             session.leave();

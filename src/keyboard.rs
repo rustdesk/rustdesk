@@ -8,29 +8,31 @@ use crate::ui::remote::SciterHandler;
 use crate::ui_session_interface::Session;
 use hbb_common::{log, message_proto::*};
 use rdev::{Event, EventType, Key};
-use std::collections::{HashMap, HashSet};
-use std::sync::atomic::AtomicBool;
-#[cfg(any(target_os = "windows", target_os = "macos"))]
-use std::sync::atomic::Ordering;
-use std::sync::{mpsc, Arc, Mutex};
-use std::thread;
-use std::time::SystemTime;
+use std::{
+    collections::{HashMap, HashSet},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc, Arc, Mutex,
+    },
+    thread,
+    time::SystemTime,
+};
 
 static mut IS_ALT_GR: bool = false;
-pub static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
+static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
 
 lazy_static::lazy_static! {
-    pub static ref GRAB_SENDER: Arc<Mutex<Option<mpsc::Sender<GrabState>>>> = Default::default();
+    static ref GRAB_SENDER: Arc<Mutex<Option<mpsc::Sender<GrabState>>>> = Default::default();
 }
 
 #[cfg(feature = "flutter")]
 lazy_static::lazy_static! {
-    pub static ref CUR_SESSION: Arc<Mutex<Option<Session<FlutterHandler>>>> = Default::default();
+    static ref CUR_SESSION: Arc<Mutex<Option<Session<FlutterHandler>>>> = Default::default();
 }
 
 #[cfg(not(feature = "flutter"))]
 lazy_static::lazy_static! {
-    pub static ref CUR_SESSION: Arc<Mutex<Option<Session<SciterHandler>>>> = Default::default();
+    static ref CUR_SESSION: Arc<Mutex<Option<Session<SciterHandler>>>> = Default::default();
 }
 
 lazy_static::lazy_static! {
@@ -47,7 +49,10 @@ lazy_static::lazy_static! {
         m.insert(Key::MetaRight, false);
         Mutex::new(m)
     };
+}
 
+pub fn set_cur_session(session: Session<SciterHandler>) {
+    *CUR_SESSION.lock().unwrap() = Some(session);
 }
 
 pub mod client {

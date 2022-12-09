@@ -231,6 +231,17 @@ impl InvokeUiSession for SciterHandler {
         self.call("updatePi", &make_args!(pi_sciter));
     }
 
+    fn on_connected(&self, conn_type: ConnType) {
+        match conn_type {
+            ConnType::RDP => {},
+            ConnType::PORT_FORWARD => {},
+            ConnType::FILE_TRANSFER => {},
+            ConnType::DEFAULT_CONN => {
+                crate::keyboard::client::start_grab_loop();
+            },
+        }
+    }
+
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool) {
         self.call2(
             "msgbox_retry",
@@ -432,6 +443,10 @@ impl SciterSession {
         session.lc.write().unwrap().initialize(id, conn_type);
 
         Self(session)
+    }
+
+    pub fn inner(&self) -> Session<SciterHandler> {
+        self.0.clone()
     }
 
     fn get_custom_image_quality(&mut self) -> Value {

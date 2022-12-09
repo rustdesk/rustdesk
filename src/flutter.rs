@@ -324,6 +324,8 @@ impl InvokeUiSession for FlutterHandler {
         );
     }
 
+    fn on_connected(&self, _conn_type: ConnType) {}
+
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool) {
         let has_retry = if retry { "true" } else { "" };
         self.push_event(
