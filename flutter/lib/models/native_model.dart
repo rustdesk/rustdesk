@@ -126,7 +126,7 @@ class PlatformFFI {
           // no need to set home dir
         }
       } catch (e) {
-        debugPrint('initialize failed: $e');
+        debugPrintStack(label: 'initialize failed: $e');
       }
       String id = 'NA';
       String name = 'Flutter';
@@ -151,9 +151,8 @@ class PlatformFFI {
           WindowsDeviceInfo winInfo = await deviceInfo.windowsInfo;
           name = winInfo.computerName;
           id = winInfo.computerName;
-        } catch (e, stacktrace) {
-          debugPrint("get windows device info failed: $e");
-          debugPrintStack(stackTrace: stacktrace);
+        } catch (e) {
+          debugPrintStack(label: "get windows device info failed: $e");
           name = "unknown";
           id = "unknown";
         }
@@ -174,7 +173,7 @@ class PlatformFFI {
       await _ffiBind.mainSetHomeDir(home: _homeDir);
       await _ffiBind.mainInit(appDir: _dir);
     } catch (e) {
-      debugPrint('initialize failed: $e');
+      debugPrintStack(label: 'initialize failed: $e');
     }
     version = await getVersion();
   }

@@ -246,16 +246,18 @@ pub async fn setup_uinput(minx: i32, maxx: i32, miny: i32, maxy: i32) -> ResultT
 pub async fn update_mouse_resolution(minx: i32, maxx: i32, miny: i32, maxy: i32) -> ResultType<()> {
     set_uinput_resolution(minx, maxx, miny, maxy).await?;
 
-    if let Some(mouse) = ENIGO.lock().unwrap().get_custom_mouse() {
-        if let Some(mouse) = mouse
-            .as_mut_any()
-            .downcast_mut::<super::uinput::client::UInputMouse>()
-        {
-            allow_err!(mouse.send_refresh());
-        } else {
-            log::error!("failed downcast uinput mouse");
+    std::thread::spawn(|| {
+        if let Some(mouse) = ENIGO.lock().unwrap().get_custom_mouse() {
+            if let Some(mouse) = mouse
+                .as_mut_any()
+                .downcast_mut::<super::uinput::client::UInputMouse>()
+            {
+                allow_err!(mouse.send_refresh());
+            } else {
+                log::error!("failed downcast uinput mouse");
+            }
         }
-    }
+    });
 
     Ok(())
 }

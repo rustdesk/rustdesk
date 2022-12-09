@@ -936,7 +936,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             self.handle_job_status(d.id, d.file_num, err);
                         }
                         Some(file_response::Union::Error(e)) => {
-                            if let Some(job) = fs::get_job(e.id, &mut self.write_jobs) {
+                            if let Some(_job) = fs::get_job(e.id, &mut self.write_jobs) {
                                 fs::remove_job(e.id, &mut self.write_jobs);
                             }
                             self.handle_job_status(e.id, e.file_num, Some(e.error));
