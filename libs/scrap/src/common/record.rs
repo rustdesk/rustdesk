@@ -12,11 +12,10 @@ use hwcodec::mux::{MuxContext, Muxer};
 use std::{
     fs::{File, OpenOptions},
     io,
-    time::Instant,
-};
-use std::{
     ops::{Deref, DerefMut},
     path::PathBuf,
+    sync::mpsc::Sender,
+    time::Instant,
 };
 use webm::mux::{self, Segment, Track, VideoTrack, Writer};
 
@@ -31,12 +30,14 @@ pub enum RecordCodecID {
 
 #[derive(Debug, Clone)]
 pub struct RecorderContext {
+    pub server: bool,
     pub id: String,
     pub default_dir: String,
     pub filename: String,
     pub width: usize,
     pub height: usize,
     pub codec_id: RecordCodecID,
+    pub tx: Option<Sender<RecordState>>,
 }
 
 impl RecorderContext {
@@ -52,7 +53,8 @@ impl RecorderContext {
                 std::fs::create_dir_all(&dir)?;
             }
         }
-        let file = self.id.clone()
+        let file = if self.server { "s" } else { "c" }.to_string()
+            + &self.id.clone()
             + &chrono::Local::now().format("_%Y%m%d%H%M%S").to_string()
             + if self.codec_id == RecordCodecID::VP9 {
                 ".webm"
@@ -60,7 +62,7 @@ impl RecorderContext {
                 ".mp4"
             };
         self.filename = PathBuf::from(&dir).join(file).to_string_lossy().to_string();
-        log::info!("video save to:{}", self.filename);
+        log::info!("video will save to:{}", self.filename);
         Ok(())
     }
 }
@@ -73,6 +75,14 @@ pub trait RecorderApi {
     where
         Self: Sized;
     fn write_video(&mut self, frame: &EncodedVideoFrame) -> bool;
+}
+
+#[derive(Debug)]
+pub enum RecordState {
+    NewFile(String),
+    NewFrame,
+    WriteTail,
+    RemoveFile,
 }
 
 pub struct Recorder {
@@ -110,6 +120,7 @@ impl Recorder {
             #[cfg(not(feature = "hwcodec"))]
             _ => bail!("unsupported codec type"),
         };
+        recorder.send_state(RecordState::NewFile(recorder.ctx.filename.clone()));
         Ok(recorder)
     }
 
@@ -123,6 +134,7 @@ impl Recorder {
             _ => bail!("unsupported codec type"),
         };
         self.ctx = ctx;
+        self.send_state(RecordState::NewFile(self.ctx.filename.clone()));
         Ok(())
     }
 
@@ -171,7 +183,12 @@ impl Recorder {
             }
             _ => bail!("unsupported frame type"),
         }
+        self.send_state(RecordState::NewFrame);
         Ok(())
+    }
+
+    fn send_state(&self, state: RecordState) {
+        self.ctx.tx.as_ref().map(|tx| tx.send(state));
     }
 }
 
@@ -237,9 +254,12 @@ impl RecorderApi for WebmRecorder {
 impl Drop for WebmRecorder {
     fn drop(&mut self) {
         std::mem::replace(&mut self.webm, None).map_or(false, |webm| webm.finalize(None));
+        let mut state = RecordState::WriteTail;
         if !self.written || self.start.elapsed().as_secs() < MIN_SECS {
             std::fs::remove_file(&self.ctx.filename).ok();
+            state = RecordState::RemoveFile;
         }
+        self.ctx.tx.as_ref().map(|tx| tx.send(state));
     }
 }
 
@@ -292,8 +312,11 @@ impl RecorderApi for HwRecorder {
 impl Drop for HwRecorder {
     fn drop(&mut self) {
         self.muxer.write_tail().ok();
+        let mut state = RecordState::WriteTail;
         if !self.written || self.start.elapsed().as_secs() < MIN_SECS {
             std::fs::remove_file(&self.ctx.filename).ok();
+            state = RecordState::RemoveFile;
         }
+        self.ctx.tx.as_ref().map(|tx| tx.send(state));
     }
 }

@@ -715,3 +715,4 @@ pub fn get_double_click_time() -> u32 {
         double_click_time
     }
 }
+

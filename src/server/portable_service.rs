@@ -44,7 +44,7 @@ const ADDR_CAPTURE_FRAME_COUNTER: usize = ADDR_CAPTURE_WOULDBLOCK + size_of::<i3
 const ADDR_CAPTURE_FRAME: usize =
     (ADDR_CAPTURE_FRAME_COUNTER + SIZE_COUNTER + FRAME_ALIGN - 1) / FRAME_ALIGN * FRAME_ALIGN;
 
-const IPC_PROFIX: &str = "_portable_service";
+const IPC_SUFFIX: &str = "_portable_service";
 pub const SHMEM_NAME: &str = "_portable_service";
 const MAX_NACK: usize = 3;
 const MAX_DXGI_FAIL_TIME: usize = 5;
@@ -376,7 +376,7 @@ pub mod server {
     async fn run_ipc_client() {
         use DataPortableService::*;
 
-        let postfix = IPC_PROFIX;
+        let postfix = IPC_SUFFIX;
 
         match ipc::connect(1000, postfix).await {
             Ok(mut stream) => {
@@ -622,7 +622,7 @@ pub mod client {
     async fn start_ipc_server_async(rx: mpsc::UnboundedReceiver<Data>) {
         use DataPortableService::*;
         let rx = Arc::new(tokio::sync::Mutex::new(rx));
-        let postfix = IPC_PROFIX;
+        let postfix = IPC_SUFFIX;
         #[cfg(feature = "flutter")]
         let quick_support = {
             let args: Vec<_> = std::env::args().collect();

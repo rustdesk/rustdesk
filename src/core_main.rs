@@ -217,7 +217,7 @@ pub fn core_main() -> Option<Vec<String>> {
                 if crate::platform::is_root() {
                     crate::ipc::set_permanent_password(args[1].to_owned()).unwrap();
                 } else {
-                    log::info!("Permission denied!");
+                    println!("Administrative privileges required!");
                 }
             }
             return None;

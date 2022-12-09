@@ -54,7 +54,7 @@ class InputModel {
   InputModel(this.parent);
 
   KeyEventResult handleRawKeyEvent(FocusNode data, RawKeyEvent e) {
-    bind.sessionGetKeyboardName(id: id).then((result) {
+    bind.sessionGetKeyboardMode(id: id).then((result) {
       keyboardMode = result.toString();
     });
 
