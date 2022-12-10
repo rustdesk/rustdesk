@@ -130,8 +130,9 @@ pub fn start(args: &mut [String]) {
                 pass.clone(),
                 args.clone(),
             );
-            let inner = handler.inner();
-            crate::keyboard::set_cur_session(inner);
+            #[cfg(not(feature = "flutter"))]
+            crate::keyboard::set_cur_session(handler.inner());
+            
             Box::new(handler)
         });
         page = "remote.html";
