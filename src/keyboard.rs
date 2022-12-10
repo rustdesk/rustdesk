@@ -91,7 +91,7 @@ pub mod client {
         }
     }
 
-    pub fn process_event(event: Event) {
+    pub fn process_event(event: &Event) {
         if is_long_press(&event) {
             return;
         }
@@ -181,19 +181,25 @@ pub mod client {
 pub fn start_grab_loop() {
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     std::thread::spawn(move || {
-        let func = move |event: Event| match event.event_type {
-            EventType::KeyPress(key) | EventType::KeyRelease(key) => {
-                // fix #2211：CAPS LOCK don't work
-                if key == Key::CapsLock || key == Key::NumLock {
-                    return Some(event);
-                }
-                if KEYBOARD_HOOKED.load(Ordering::SeqCst) {
-                    client::process_event(event);
+        let try_handle_keyboard = move |event: Event, key: Key, is_press: bool| -> Option<Event> {
+            // fix #2211：CAPS LOCK don't work
+            if key == Key::CapsLock || key == Key::NumLock {
+                return Some(event);
+            }
+            if KEYBOARD_HOOKED.load(Ordering::SeqCst) {
+                client::process_event(&event);
+                if is_press {
                     return None;
                 } else {
                     return Some(event);
                 }
+            } else {
+                return Some(event);
             }
+        };
+        let func = move |event: Event| match event.event_type {
+            EventType::KeyPress(key) => try_handle_keyboard(event, key, true),
+            EventType::KeyRelease(key) => try_handle_keyboard(event, key, false),
             _ => Some(event),
         };
         if let Err(error) = rdev::grab(func) {
@@ -207,7 +213,7 @@ pub fn start_grab_loop() {
             if let Key::Unknown(keycode) = key {
                 log::error!("rdev get unknown key, keycode is : {:?}", keycode);
             } else {
-                client::process_event(event);
+                client::process_event(&event);
             }
             None
         }
@@ -237,7 +243,7 @@ pub fn release_remote_keys() {
     for key in to_release {
         let event_type = EventType::KeyRelease(key);
         let event = event_type_to_event(event_type);
-        client::process_event(event);
+        client::process_event(&event);
     }
 }
 

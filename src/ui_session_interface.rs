@@ -393,7 +393,7 @@ impl<T: InvokeUiSession> Session<T> {
             scan_code: scancode as _,
             event_type: event_type,
         };
-        keyboard::client::process_event(event);
+        keyboard::client::process_event(&event);
     }
 
     // flutter only TODO new input
