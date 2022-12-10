@@ -8,29 +8,26 @@ use crate::ui::remote::SciterHandler;
 use crate::ui_session_interface::Session;
 use hbb_common::{log, message_proto::*};
 use rdev::{Event, EventType, Key};
-use std::collections::{HashMap, HashSet};
-use std::sync::atomic::AtomicBool;
-#[cfg(any(target_os = "windows", target_os = "macos"))]
-use std::sync::atomic::Ordering;
-use std::sync::{mpsc, Arc, Mutex};
-use std::thread;
-use std::time::SystemTime;
+use std::{
+    collections::{HashMap, HashSet},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
+    time::SystemTime,
+};
 
 static mut IS_ALT_GR: bool = false;
-pub static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
-
-lazy_static::lazy_static! {
-    pub static ref GRAB_SENDER: Arc<Mutex<Option<mpsc::Sender<GrabState>>>> = Default::default();
-}
+static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
 
 #[cfg(feature = "flutter")]
 lazy_static::lazy_static! {
-    pub static ref CUR_SESSION: Arc<Mutex<Option<Session<FlutterHandler>>>> = Default::default();
+    static ref CUR_SESSION: Arc<Mutex<Option<Session<FlutterHandler>>>> = Default::default();
 }
 
 #[cfg(not(feature = "flutter"))]
 lazy_static::lazy_static! {
-    pub static ref CUR_SESSION: Arc<Mutex<Option<Session<SciterHandler>>>> = Default::default();
+    static ref CUR_SESSION: Arc<Mutex<Option<Session<SciterHandler>>>> = Default::default();
 }
 
 lazy_static::lazy_static! {
@@ -47,7 +44,10 @@ lazy_static::lazy_static! {
         m.insert(Key::MetaRight, false);
         Mutex::new(m)
     };
+}
 
+pub fn set_cur_session(session: Session<SciterHandler>) {
+    *CUR_SESSION.lock().unwrap() = Some(session);
 }
 
 pub mod client {
@@ -62,20 +62,32 @@ pub mod client {
     }
 
     pub fn start_grab_loop() {
-        let (sender, receiver) = mpsc::channel::<GrabState>();
-
-        grab_loop(receiver);
-        *GRAB_SENDER.lock().unwrap() = Some(sender);
-
-        change_grab_status(GrabState::Ready);
+        super::start_grab_loop();
     }
 
     pub fn change_grab_status(state: GrabState) {
-        if GrabState::Wait == state {
-            release_remote_keys();
-        }
-        if let Some(sender) = &*GRAB_SENDER.lock().unwrap() {
-            sender.send(state).ok();
+        match state {
+            GrabState::Ready => {}
+            GrabState::Run => {
+                #[cfg(any(target_os = "windows", target_os = "macos"))]
+                KEYBOARD_HOOKED.swap(true, Ordering::SeqCst);
+
+                #[cfg(target_os = "linux")]
+                rdev::enable_grab().ok();
+            }
+            GrabState::Wait => {
+                release_remote_keys();
+
+                #[cfg(any(target_os = "windows", target_os = "macos"))]
+                KEYBOARD_HOOKED.swap(false, Ordering::SeqCst);
+
+                #[cfg(target_os = "linux")]
+                rdev::disable_grab().ok();
+            }
+            GrabState::Exit => {
+                #[cfg(target_os = "linux")]
+                rdev::exit_grab_listen().ok();
+            }
         }
     }
 
@@ -166,66 +178,40 @@ pub mod client {
     }
 }
 
-pub fn grab_loop(recv: mpsc::Receiver<GrabState>) {
-    thread::spawn(move || loop {
-        if let Some(state) = recv.recv().ok() {
-            match state {
-                GrabState::Ready => {
-                    #[cfg(any(target_os = "windows", target_os = "macos"))]
-                    std::thread::spawn(move || {
-                        let func = move |event: Event| match event.event_type {
-                            EventType::KeyPress(key) | EventType::KeyRelease(key) => {
-                                // fix #2211：CAPS LOCK don't work
-                                if key == Key::CapsLock || key == Key::NumLock {
-                                    return Some(event);
-                                }
-                                if KEYBOARD_HOOKED.load(Ordering::SeqCst) {
-                                    client::process_event(event);
-                                    return None;
-                                } else {
-                                    return Some(event);
-                                }
-                            }
-                            _ => Some(event),
-                        };
-                        if let Err(error) = rdev::grab(func) {
-                            log::error!("rdev Error: {:?}", error)
-                        }
-                    });
-
-                    #[cfg(target_os = "linux")]
-                    rdev::start_grab_listen(move |event: Event| match event.event_type {
-                        EventType::KeyPress(key) | EventType::KeyRelease(key) => {
-                            if let Key::Unknown(keycode) = key {
-                                log::error!("rdev get unknown key, keycode is : {:?}", keycode);
-                            } else {
-                                client::process_event(event);
-                            }
-                            None
-                        }
-                        _ => Some(event),
-                    });
+pub fn start_grab_loop() {
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    std::thread::spawn(move || {
+        let func = move |event: Event| match event.event_type {
+            EventType::KeyPress(key) | EventType::KeyRelease(key) => {
+                // fix #2211：CAPS LOCK don't work
+                if key == Key::CapsLock || key == Key::NumLock {
+                    return Some(event);
                 }
-                GrabState::Run => {
-                    #[cfg(any(target_os = "windows", target_os = "macos"))]
-                    KEYBOARD_HOOKED.swap(true, Ordering::SeqCst);
-
-                    #[cfg(target_os = "linux")]
-                    rdev::enable_grab().ok();
-                }
-                GrabState::Wait => {
-                    #[cfg(any(target_os = "windows", target_os = "macos"))]
-                    KEYBOARD_HOOKED.swap(false, Ordering::SeqCst);
-
-                    #[cfg(target_os = "linux")]
-                    rdev::disable_grab().ok();
-                }
-                GrabState::Exit => {
-                    #[cfg(target_os = "linux")]
-                    rdev::exit_grab_listen().ok();
+                if KEYBOARD_HOOKED.load(Ordering::SeqCst) {
+                    client::process_event(event);
+                    return None;
+                } else {
+                    return Some(event);
                 }
             }
+            _ => Some(event),
+        };
+        if let Err(error) = rdev::grab(func) {
+            log::error!("rdev Error: {:?}", error)
         }
+    });
+
+    #[cfg(target_os = "linux")]
+    rdev::start_grab_listen(move |event: Event| match event.event_type {
+        EventType::KeyPress(key) | EventType::KeyRelease(key) => {
+            if let Key::Unknown(keycode) = key {
+                log::error!("rdev get unknown key, keycode is : {:?}", keycode);
+            } else {
+                client::process_event(event);
+            }
+            None
+        }
+        _ => Some(event),
     });
 }
 
@@ -246,10 +232,9 @@ pub fn is_long_press(event: &Event) -> bool {
 
 pub fn release_remote_keys() {
     // todo!: client quit suddenly, how to release keys?
-    let to_release = TO_RELEASE.lock().unwrap();
-    let keys = to_release.iter().map(|&key| key).collect::<Vec<Key>>();
-    drop(to_release);
-    for key in keys {
+    let to_release = TO_RELEASE.lock().unwrap().clone();
+    TO_RELEASE.lock().unwrap().clear();
+    for key in to_release {
         let event_type = EventType::KeyRelease(key);
         let event = event_type_to_event(event_type);
         client::process_event(event);
@@ -317,17 +302,15 @@ pub fn event_to_key_event(event: &Event) -> KeyEvent {
     let mut key_event = KeyEvent::new();
     update_modifiers_state(event);
 
-    let mut to_release = TO_RELEASE.lock().unwrap();
     match event.event_type {
         EventType::KeyPress(key) => {
-            to_release.insert(key);
+            TO_RELEASE.lock().unwrap().insert(key);
         }
         EventType::KeyRelease(key) => {
-            to_release.remove(&key);
+            TO_RELEASE.lock().unwrap().remove(&key);
         }
         _ => {}
     }
-    drop(to_release);
 
     let keyboard_mode = get_keyboard_mode_enum();
     key_event.mode = keyboard_mode.into();
