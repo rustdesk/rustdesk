@@ -213,7 +213,7 @@ pub fn start_grab_loop() {
             if let Key::Unknown(keycode) = key {
                 log::error!("rdev get unknown key, keycode is : {:?}", keycode);
             } else {
-                client::process_event(event);
+                client::process_event(&event);
             }
             None
         }
