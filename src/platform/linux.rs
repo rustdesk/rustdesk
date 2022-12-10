@@ -179,7 +179,8 @@ fn set_x11_env(uid: &str) {
     log::info!("uid of seat0: {}", uid);
     let gdm = format!("/run/user/{}/gdm/Xauthority", uid);
     let mut auth = get_env_tries("XAUTHORITY", uid, 10);
-    if auth.is_empty() {
+    // auth is another user's when uid = 0, https://github.com/rustdesk/rustdesk/issues/2468
+    if auth.is_empty() || uid == "0" {
         auth = if std::path::Path::new(&gdm).exists() {
             gdm
         } else {
