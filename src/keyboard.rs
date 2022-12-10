@@ -46,6 +46,12 @@ lazy_static::lazy_static! {
     };
 }
 
+#[cfg(feature = "flutter")]
+pub fn set_cur_session(session: Session<FlutterHandler>) {
+    *CUR_SESSION.lock().unwrap() = Some(session);
+}
+
+#[cfg(not(feature = "flutter"))]
 pub fn set_cur_session(session: Session<SciterHandler>) {
     *CUR_SESSION.lock().unwrap() = Some(session);
 }
