@@ -69,7 +69,6 @@ url = { version = "2.1", features = ["serde"] }
 reqwest = { version = "0.11", features = ["blocking", "json", "rustls-tls"], default-features=false }
 chrono = "0.4.23"
 cidr-utils = "0.5.9"
-glib = "0.16.5"
 
 [target.'cfg(not(any(target_os = "android", target_os = "linux")))'.dependencies]
 cpal = "0.13.5"
@@ -119,6 +118,7 @@ dbus = "0.9"
 dbus-crossroads = "0.5"
 gtk = "0.15"
 libappindicator = "0.7"
+glib = "0.16.5"
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.11"
