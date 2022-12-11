@@ -7,7 +7,7 @@ use crate::flutter::FlutterHandler;
 use crate::ui::remote::SciterHandler;
 use crate::ui_session_interface::Session;
 use hbb_common::{log, message_proto::*};
-use rdev::{Event, EventType, Key};
+use rdev::{Event, EventType, Key, GrabError};
 use std::{
     collections::{HashMap, HashSet},
     sync::{
@@ -79,7 +79,7 @@ pub mod client {
                 KEYBOARD_HOOKED.swap(true, Ordering::SeqCst);
 
                 #[cfg(target_os = "linux")]
-                rdev::enable_grab().ok();
+                rdev::enable_grab();
             }
             GrabState::Wait => {
                 release_remote_keys();
@@ -88,11 +88,11 @@ pub mod client {
                 KEYBOARD_HOOKED.swap(false, Ordering::SeqCst);
 
                 #[cfg(target_os = "linux")]
-                rdev::disable_grab().ok();
+                rdev::disable_grab();
             }
             GrabState::Exit => {
                 #[cfg(target_os = "linux")]
-                rdev::exit_grab_listen().ok();
+                rdev::exit_grab_listen();
             }
         }
     }
@@ -214,7 +214,7 @@ pub fn start_grab_loop() {
     });
 
     #[cfg(target_os = "linux")]
-    rdev::start_grab_listen(move |event: Event| match event.event_type {
+    if let Err(err) = rdev::start_grab_listen(move |event: Event| match event.event_type {
         EventType::KeyPress(key) | EventType::KeyRelease(key) => {
             if let Key::Unknown(keycode) = key {
                 log::error!("rdev get unknown key, keycode is : {:?}", keycode);
@@ -224,7 +224,9 @@ pub fn start_grab_loop() {
             None
         }
         _ => Some(event),
-    });
+    }) {
+        log::error!("Failed to init rdev grab thread: {:?}", err);
+    };
 }
 
 pub fn is_long_press(event: &Event) -> bool {
