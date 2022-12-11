@@ -400,5 +400,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("wayland_experiment_tip", "Η υποστήριξη Wayland βρίσκεται σε πειραματικό στάδιο, χρησιμοποιήστε το X11 εάν χρειάζεστε πρόσβαση χωρίς επίβλεψη."),
         ("Right click to select tabs", "Κάντε δεξί κλικ για να επιλέξετε καρτέλες"),
         ("Add to Address Book", ""),
+        ("Group", ""),
+        ("Search", ""),
     ].iter().cloned().collect();
 }

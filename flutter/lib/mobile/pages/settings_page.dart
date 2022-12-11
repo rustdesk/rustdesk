@@ -547,7 +547,6 @@ void showLogin(OverlayDialogManager dialogManager) {
                           error = resp['error'];
                           return;
                         }
-                        gFFI.abModel.pullAb();
                       }
                       close();
                     },

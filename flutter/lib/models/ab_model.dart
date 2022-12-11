@@ -21,10 +21,8 @@ class AbModel {
 
   AbModel(this.parent);
 
-  FFI? get _ffi => parent.target;
-
   Future<dynamic> pullAb() async {
-    if (_ffi!.userModel.userName.isEmpty) return;
+    if (gFFI.userModel.userName.isEmpty) return;
     abLoading.value = true;
     abError.value = "";
     final api = "${await bind.mainGetApiServer()}/api/ab/get";
@@ -63,7 +61,8 @@ class AbModel {
     return null;
   }
 
-  void reset() {
+  Future<void> reset() async {
+    await bind.mainSetLocalOption(key: "selected-tags", value: '');
     tags.clear();
     peers.clear();
   }
@@ -187,10 +186,5 @@ class AbModel {
       it.first.rdpUsername = username;
       await pushAb();
     }
-  }
-
-  void clear() {
-    peers.clear();
-    tags.clear();
   }
 }

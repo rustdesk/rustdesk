@@ -117,6 +117,7 @@ void runMainApp(bool startService) async {
     // await windowManager.ensureInitialized();
     gFFI.serverModel.startService();
   }
+  gFFI.userModel.refreshCurrentUser();
   runApp(App());
   // restore the location of the main window before window hide or show
   await restoreWindowPosition(WindowType.Main);

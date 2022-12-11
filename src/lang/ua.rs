@@ -400,5 +400,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("wayland_experiment_tip", ""),
         ("Right click to select tabs", ""),
         ("Add to Address Book", ""),
+        ("Group", ""),
+        ("Search", ""),
     ].iter().cloned().collect();
 }

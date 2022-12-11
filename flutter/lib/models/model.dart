@@ -12,6 +12,7 @@ import 'package:flutter_hbb/generated_bridge.dart';
 import 'package:flutter_hbb/models/ab_model.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/file_model.dart';
+import 'package:flutter_hbb/models/group_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/models/user_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
@@ -1221,6 +1222,7 @@ class FFI {
   late final ChatModel chatModel; // session
   late final FileModel fileModel; // session
   late final AbModel abModel; // global
+  late final GroupModel groupModel; // global
   late final UserModel userModel; // global
   late final QualityMonitorModel qualityMonitorModel; // session
   late final RecordingModel recordingModel; // recording
@@ -1234,8 +1236,9 @@ class FFI {
     serverModel = ServerModel(WeakReference(this));
     chatModel = ChatModel(WeakReference(this));
     fileModel = FileModel(WeakReference(this));
-    abModel = AbModel(WeakReference(this));
     userModel = UserModel(WeakReference(this));
+    abModel = AbModel(WeakReference(this));
+    groupModel = GroupModel(WeakReference(this));
     qualityMonitorModel = QualityMonitorModel(WeakReference(this));
     recordingModel = RecordingModel(WeakReference(this));
     inputModel = InputModel(WeakReference(this));

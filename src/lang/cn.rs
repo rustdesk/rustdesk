@@ -401,5 +401,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Right click to select tabs", "右键选择选项卡"),
         ("Skipped", "已跳过"),
         ("Add to Address Book", "添加到地址簿"),
+        ("Group", "小组"),
+        ("Search", "搜索"),
     ].iter().cloned().collect();
 }
