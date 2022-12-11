@@ -822,9 +822,9 @@ impl<T: InvokeUiSession> Session<T> {
     #[cfg(target_os = "linux")]
     pub fn grab_hotkeys(&self, _grab: bool) {
         if _grab {
-            rdev::enable_grab().ok();
+            rdev::enable_grab();
         } else {
-            rdev::disable_grab().ok();
+            rdev::disable_grab();
         }
     }
 
@@ -1342,7 +1342,7 @@ impl<T: InvokeUiSession> Session<T> {
                 }
                 _ => Some(event),
             };
-            rdev::start_grab_listen(func)
+            rdev::start_grab_listen(func);
         }
         #[cfg(any(target_os = "windows", target_os = "macos"))]
         std::thread::spawn(move || {
@@ -1610,7 +1610,7 @@ pub fn global_grab_keyboard() {
             }
             _ => Some(event),
         };
-        rdev::start_grab_listen(func)
+        rdev::start_grab_listen(func);
     }
 
     #[cfg(any(target_os = "windows", target_os = "macos"))]
