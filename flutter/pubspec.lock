@@ -352,7 +352,7 @@ packages:
       name: file_picker
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "5.2.2"
+    version: "5.2.3"
   fixnum:
     dependency: transitive
     description:
@@ -389,12 +389,10 @@ packages:
   flutter_custom_cursor:
     dependency: "direct main"
     description:
-      path: "."
-      ref: "74b1b314142b6775c1243067a3503ac568ebc74b"
-      resolved-ref: "74b1b314142b6775c1243067a3503ac568ebc74b"
-      url: "https://github.com/Kingtous/rustdesk_flutter_custom_cursor"
-    source: git
-    version: "0.0.1"
+      name: flutter_custom_cursor
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "0.0.2"
   flutter_improved_scrolling:
     dependency: "direct main"
     description:
@@ -455,7 +453,7 @@ packages:
       name: freezed
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "2.2.1"
+    version: "2.3.2"
   freezed_annotation:
     dependency: "direct main"
     description:
@@ -637,7 +635,7 @@ packages:
       name: mime
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "1.0.2"
+    version: "1.0.3"
   nested:
     dependency: transitive
     description:
@@ -1113,7 +1111,7 @@ packages:
       name: video_player
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "2.4.8"
+    version: "2.4.9"
   video_player_android:
     dependency: transitive
     description:

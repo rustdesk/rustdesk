@@ -19,7 +19,7 @@ import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:tuple/tuple.dart';
 import 'package:image/image.dart' as img2;
-import 'package:flutter_custom_cursor/flutter_custom_cursor.dart';
+import 'package:flutter_custom_cursor/cursor_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../common.dart';
@@ -1113,7 +1113,8 @@ class CursorModel with ChangeNotifier {
   _clearCache() {
     final keys = {...cachedKeys};
     for (var k in keys) {
-      customCursorController.freeCache(k);
+      debugPrint("deleting cursor with key $k");
+      CursorManager.instance.deleteCursor(k);
     }
   }
 }
