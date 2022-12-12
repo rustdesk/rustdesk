@@ -7,7 +7,9 @@ use crate::flutter::FlutterHandler;
 use crate::ui::remote::SciterHandler;
 use crate::ui_session_interface::Session;
 use hbb_common::{log, message_proto::*};
-use rdev::{Event, EventType, Key, GrabError};
+#[cfg(target_os = "linux")]
+use rdev::GrabError;
+use rdev::{Event, EventType, Key};
 use std::{
     collections::{HashMap, HashSet},
     sync::{
@@ -594,7 +596,8 @@ pub fn legacy_keyboard_mode(event: &Event, key_event: &mut KeyEvent) {
 }
 
 pub fn map_keyboard_mode(event: &Event, key_event: &mut KeyEvent) {
-    let peer = get_peer_platform();
+    let mut peer = get_peer_platform().to_lowercase();
+    peer.retain(|c| !c.is_whitespace());
 
     let key = match event.event_type {
         EventType::KeyPress(key) => {
@@ -608,8 +611,8 @@ pub fn map_keyboard_mode(event: &Event, key_event: &mut KeyEvent) {
         _ => return,
     };
     let keycode: u32 = match peer.as_str() {
-        "Windows" => rdev::win_keycode_from_key(key).unwrap_or_default().into(),
-        "MacOS" => rdev::macos_keycode_from_key(key).unwrap_or_default().into(),
+        "windows" => rdev::win_keycode_from_key(key).unwrap_or_default().into(),
+        "macos" => rdev::macos_keycode_from_key(key).unwrap_or_default().into(),
         _ => rdev::linux_keycode_from_key(key).unwrap_or_default().into(),
     };
     key_event.set_chr(keycode);
