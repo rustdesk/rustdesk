@@ -3060,7 +3060,7 @@ dependencies = [
 [[package]]
 name = "magnum-opus"
 version = "0.4.0"
-source = "git+https://github.com/SoLongAndThanksForAllThePizza/magnum-opus#6247071a64af7b18e2d553e235729e6865f63ece"
+source = "git+https://github.com/rustdesk/magnum-opus#79be072c939168e907fe851690759dcfd6a326af"
 dependencies = [
  "bindgen 0.59.2",
  "target_build_utils",
