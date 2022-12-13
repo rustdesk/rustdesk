@@ -94,7 +94,7 @@ impl EncoderApi for HwEncoder {
             frames.push(EncodedVideoFrame {
                 data: Bytes::from(frame.data),
                 pts: frame.pts as _,
-                key:frame.key == 1,
+                key: frame.key == 1,
                 ..Default::default()
             });
         }
@@ -175,6 +175,7 @@ pub struct HwDecoder {
     pub info: CodecInfo,
 }
 
+#[derive(Default)]
 pub struct HwDecoders {
     pub h264: Option<HwDecoder>,
     pub h265: Option<HwDecoder>,
