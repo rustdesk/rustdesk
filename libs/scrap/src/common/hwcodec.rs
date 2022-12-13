@@ -190,28 +190,22 @@ impl HwDecoder {
     }
 
     pub fn new_decoders() -> HwDecoders {
-        flog("enter new_decoders");
         let best = HwDecoder::best();
-        flog(&format!("best:${:?}", best));
         let mut h264: Option<HwDecoder> = None;
         let mut h265: Option<HwDecoder> = None;
         let mut fail = false;
 
         if let Some(info) = best.h264 {
-            flog(&format!("before new h264 codec"));
             h264 = HwDecoder::new(info).ok();
             if h264.is_none() {
                 fail = true;
             }
-            flog(&format!("new h264 codec result:{:}", h264.is_some()));
         }
         if let Some(info) = best.h265 {
-            flog(&format!("before new h265 codec"));
             h265 = HwDecoder::new(info).ok();
             if h265.is_none() {
                 fail = true;
             }
-            flog(&format!("new h265 codec result:{:}", h265.is_some()));
         }
         if fail {
             check_config_process(true);
@@ -328,21 +322,11 @@ pub fn check_config_process(force_reset: bool) {
     }
     if let Ok(exe) = std::env::current_exe() {
         std::thread::spawn(move || {
-            let result = std::process::Command::new(exe)
+            std::process::Command::new(exe)
                 .arg("--check-hwcodec-config")
                 .status()
                 .ok();
-            flog(&format!("check codec process run result:{:?}", result));
             HwCodecConfig::refresh();
         });
     };
-}
-
-pub fn flog(s: &str) {
-    use hbb_common::chrono::prelude::*;
-    use std::io::Write;
-    let mut option = std::fs::OpenOptions::new();
-    if let Ok(mut f) = option.append(true).create(true).open("/tmp/log.txt") {
-        write!(&mut f, "{:?} {}\n", Local::now(), s).ok();
-    }
 }
