@@ -766,55 +766,92 @@ fn rdev_key_down_or_up(key: RdevKey, down_or_up: bool) {
     std::thread::sleep(Duration::from_millis(20));
 }
 
-fn sync_status(evt: &KeyEvent) {
+fn is_modifier_in_key_event(modifier: ControlKey, key_event: &KeyEvent) -> bool {
+    key_event
+        .modifiers
+        .iter()
+        .position(|&m| m == modifier.into())
+        .is_some()
+}
+
+fn is_not_same_status(client_locking: bool, remote_locking: bool) -> bool {
+    client_locking != remote_locking
+}
+
+#[cfg(target_os = "windows")]
+fn has_numpad_key(key_event: &KeyEvent) -> bool {
+    key_event
+        .modifiers
+        .iter()
+        .filter(|&&ck| NUMPAD_KEY_MAP.get(&ck.value()).is_some())
+        .count()
+        != 0
+}
+
+#[cfg(target_os = "windows")]
+fn is_rdev_numpad_key(key_event: &KeyEvent) -> bool {
+    let code = key_event.chr();
+    let key = rdev::get_win_key(code, 0);
+    match key {
+        RdevKey::Home
+        | RdevKey::UpArrow
+        | RdevKey::PageUp
+        | RdevKey::LeftArrow
+        | RdevKey::RightArrow
+        | RdevKey::End
+        | RdevKey::DownArrow
+        | RdevKey::PageDown
+        | RdevKey::Insert
+        | RdevKey::Delete => true,
+        _ => false,
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn is_numlock_disabled(key_event: &KeyEvent) -> bool {
+    // disable numlock if press home etc when numlock is on,
+    // because we will get numpad value (7,8,9 etc) if not
+    match key_event.mode.unwrap() {
+        KeyboardMode::Map => is_rdev_numpad_key(key_event),
+        _ => has_numpad_key(key_event),
+    }
+}
+
+fn click_capslock(en: &mut Enigo) {
+    #[cfg(not(targe_os = "macos"))]
+    en.key_click(enigo::Key::CapsLock);
+    #[cfg(target_os = "macos")]
+    en.key_down(enigo::Key::CapsLock);
+}
+
+fn click_numlock(en: &mut Enigo) {
+    // without numlock in macos
+    #[cfg(not(target_os = "macos"))]
+    en.key_click(enigo::Key::NumLock);
+}
+
+fn sync_status(key_event: &KeyEvent) {
     let mut en = ENIGO.lock().unwrap();
 
-    // remote caps status
-    let caps_locking = evt
-        .modifiers
-        .iter()
-        .position(|&r| r == ControlKey::CapsLock.into())
-        .is_some();
-    // remote numpad status
-    let num_locking = evt
-        .modifiers
-        .iter()
-        .position(|&r| r == ControlKey::NumLock.into())
-        .is_some();
+    let client_caps_locking = is_modifier_in_key_event(ControlKey::CapsLock, key_event);
+    let client_num_locking = is_modifier_in_key_event(ControlKey::NumLock, key_event);
+    let remote_caps_locking = en.get_key_state(enigo::Key::CapsLock);
+    let remote_num_locking = en.get_key_state(enigo::Key::NumLock);
 
-    let click_capslock = (caps_locking && !en.get_key_state(enigo::Key::CapsLock))
-        || (!caps_locking && en.get_key_state(enigo::Key::CapsLock));
-    let click_numlock = (num_locking && !en.get_key_state(enigo::Key::NumLock))
-        || (!num_locking && en.get_key_state(enigo::Key::NumLock));
-    #[cfg(windows)]
-    let click_numlock = {
-        let code = evt.chr();
-        let key = rdev::get_win_key(code, 0);
-        match key {
-            RdevKey::Home
-            | RdevKey::UpArrow
-            | RdevKey::PageUp
-            | RdevKey::LeftArrow
-            | RdevKey::RightArrow
-            | RdevKey::End
-            | RdevKey::DownArrow
-            | RdevKey::PageDown
-            | RdevKey::Insert
-            | RdevKey::Delete => en.get_key_state(enigo::Key::NumLock),
-            _ => click_numlock,
-        }
-    };
+    let need_click_capslock = is_not_same_status(client_caps_locking, remote_caps_locking);
+    let need_click_numlock = is_not_same_status(client_num_locking, remote_num_locking);
 
-    if click_capslock {
-        #[cfg(not(target_os = "macos"))]
-        en.key_click(enigo::Key::CapsLock);
-        #[cfg(target_os = "macos")]
-        en.key_down(enigo::Key::CapsLock);
+    #[cfg(not(target_os = "windows"))]
+    let disable_numlock = false;
+    #[cfg(target_os = "windows")]
+    let disable_numlock = is_numlock_disabled(key_event);
+
+    if need_click_capslock {
+        click_capslock(&mut en);
     }
 
-    if click_numlock {
-        #[cfg(not(target_os = "macos"))]
-        en.key_click(enigo::Key::NumLock);
+    if need_click_numlock && !disable_numlock {
+        click_capslock(&mut en);
     }
 }
 
@@ -845,10 +882,7 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
     #[cfg(windows)]
     crate::platform::windows::try_change_desktop();
     let mut en = ENIGO.lock().unwrap();
-    // disable numlock if press home etc when numlock is on,
-    // because we will get numpad value (7,8,9 etc) if not
-    #[cfg(windows)]
-    let mut _disable_numlock = false;
+
     #[cfg(target_os = "macos")]
     en.reset_flag();
     // When long-pressed the command key, then press and release
@@ -896,14 +930,6 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
     match evt.union {
         Some(key_event::Union::ControlKey(ck)) => {
             if let Some(key) = KEY_MAP.get(&ck.value()) {
-                #[cfg(windows)]
-                if let Some(_) = NUMPAD_KEY_MAP.get(&ck.value()) {
-                    _disable_numlock = en.get_key_state(Key::NumLock);
-                    if _disable_numlock {
-                        en.key_down(Key::NumLock).ok();
-                        en.key_up(Key::NumLock);
-                    }
-                }
                 if evt.down {
                     en.key_down(key.clone()).ok();
                     KEYS_DOWN
@@ -1000,53 +1026,4 @@ async fn send_sas() -> ResultType<()> {
     let mut stream = crate::ipc::connect(1000, crate::POSTFIX_SERVICE).await?;
     timeout(1000, stream.send(&crate::ipc::Data::SAS)).await??;
     Ok(())
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use rdev::{listen, Event, EventType, Key};
-    use std::sync::mpsc;
-
-    #[test]
-    fn test_handle_key() {
-        // listen
-        let (tx, rx) = mpsc::channel();
-        std::thread::spawn(move || {
-            std::env::set_var("KEYBOARD_ONLY", "y");
-            let func = move |event: Event| {
-                tx.send(event).ok();
-            };
-            if let Err(error) = listen(func) {
-                println!("Error: {:?}", error);
-            }
-        });
-        // set key/char base on char
-        let mut evt = KeyEvent::new();
-        evt.set_chr(66);
-        evt.mode = KeyboardMode::Legacy.into();
-
-        evt.modifiers.push(ControlKey::CapsLock.into());
-
-        // press
-        evt.down = true;
-        handle_key(&evt);
-        if let Ok(listen_evt) = rx.recv() {
-            assert_eq!(listen_evt.event_type, EventType::KeyPress(Key::Num1))
-        }
-        // release
-        evt.down = false;
-        handle_key(&evt);
-        if let Ok(listen_evt) = rx.recv() {
-            assert_eq!(listen_evt.event_type, EventType::KeyRelease(Key::Num1))
-        }
-    }
-    #[test]
-    fn test_get_key_state() {
-        let mut en = ENIGO.lock().unwrap();
-        println!(
-            "[*] test_get_key_state: {:?}",
-            en.get_key_state(enigo::Key::NumLock)
-        );
-    }
 }
