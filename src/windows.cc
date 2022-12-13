@@ -588,4 +588,44 @@ extern "C"
         stop_system_key_propagate = v;
     }
 
+    // https://stackoverflow.com/questions/4023586/correct-way-to-find-out-if-a-service-is-running-as-the-system-user
+    BOOL is_local_system()
+    {
+        HANDLE hToken;
+        UCHAR bTokenUser[sizeof(TOKEN_USER) + 8 + 4 * SID_MAX_SUB_AUTHORITIES];
+        PTOKEN_USER pTokenUser = (PTOKEN_USER)bTokenUser;
+        ULONG cbTokenUser;
+        SID_IDENTIFIER_AUTHORITY siaNT = SECURITY_NT_AUTHORITY;
+        PSID pSystemSid;
+        BOOL bSystem;
+
+        // open process token
+        if (!OpenProcessToken(GetCurrentProcess(),
+                              TOKEN_QUERY,
+                              &hToken))
+            return FALSE;
+
+        // retrieve user SID
+        if (!GetTokenInformation(hToken, TokenUser, pTokenUser,
+                                 sizeof(bTokenUser), &cbTokenUser))
+        {
+            CloseHandle(hToken);
+            return FALSE;
+        }
+
+        CloseHandle(hToken);
+
+        // allocate LocalSystem well-known SID
+        if (!AllocateAndInitializeSid(&siaNT, 1, SECURITY_LOCAL_SYSTEM_RID,
+                                      0, 0, 0, 0, 0, 0, 0, &pSystemSid))
+            return FALSE;
+
+        // compare the user SID from the token with the LocalSystem SID
+        bSystem = EqualSid(pTokenUser->User.Sid, pSystemSid);
+
+        FreeSid(pSystemSid);
+
+        return bSystem;
+    }
+
 } // end of extern "C"
