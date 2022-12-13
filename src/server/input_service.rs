@@ -830,7 +830,7 @@ fn click_numlock(en: &mut Enigo) {
     en.key_click(enigo::Key::NumLock);
 }
 
-fn sync_status(key_event: &KeyEvent) {
+fn sync_numlock_capslock_status(key_event: &KeyEvent) {
     let mut en = ENIGO.lock().unwrap();
 
     let client_caps_locking = is_modifier_in_key_event(ControlKey::CapsLock, key_event);
@@ -851,7 +851,7 @@ fn sync_status(key_event: &KeyEvent) {
     }
 
     if need_click_numlock && !disable_numlock {
-        click_capslock(&mut en);
+        click_numlock(&mut en);
     }
 }
 
@@ -1001,7 +1001,7 @@ pub fn handle_key_(evt: &KeyEvent) {
     }
 
     if evt.down {
-        sync_status(evt)
+        sync_numlock_capslock_status(evt)
     }
     match evt.mode.unwrap() {
         KeyboardMode::Map => {
