@@ -218,7 +218,7 @@ impl Encoder {
     #[inline]
     pub fn current_hw_encoder_name() -> Option<String> {
         #[cfg(feature = "hwcodec")]
-        if check_hwcodec_config() {
+        if enable_hwcodec_option() {
             return HwEncoder::current_name().lock().unwrap().clone();
         } else {
             return None;
@@ -229,7 +229,7 @@ impl Encoder {
 
     pub fn supported_encoding() -> (bool, bool) {
         #[cfg(feature = "hwcodec")]
-        if check_hwcodec_config() {
+        if enable_hwcodec_option() {
             let best = HwEncoder::best();
             (
                 best.h264.as_ref().map_or(false, |c| c.score > 0),
@@ -246,7 +246,7 @@ impl Encoder {
 impl Decoder {
     pub fn video_codec_state(_id: &str) -> VideoCodecState {
         #[cfg(feature = "hwcodec")]
-        if check_hwcodec_config() {
+        if enable_hwcodec_option() {
             let best = HwDecoder::best();
             return VideoCodecState {
                 score_vpx: SCORE_VPX,
@@ -257,7 +257,7 @@ impl Decoder {
             };
         }
         #[cfg(feature = "mediacodec")]
-        if check_hwcodec_config() {
+        if enable_hwcodec_option() {
             let score_h264 = if H264_DECODER_SUPPORT.load(std::sync::atomic::Ordering::SeqCst) {
                 92
             } else {
@@ -287,11 +287,19 @@ impl Decoder {
         Decoder {
             vpx,
             #[cfg(feature = "hwcodec")]
-            hw: HwDecoder::new_decoders(),
+            hw: if enable_hwcodec_option() {
+                HwDecoder::new_decoders()
+            } else {
+                HwDecoders::default()
+            },
             #[cfg(feature = "hwcodec")]
             i420: vec![],
             #[cfg(feature = "mediacodec")]
-            media_codec: MediaCodecDecoder::new_decoders(),
+            media_codec: if enable_hwcodec_option() {
+                MediaCodecDecoder::new_decoders()
+            } else {
+                MediaCodecDecoders::default()
+            },
         }
     }
 
@@ -415,7 +423,7 @@ impl Decoder {
 }
 
 #[cfg(any(feature = "hwcodec", feature = "mediacodec"))]
-fn check_hwcodec_config() -> bool {
+fn enable_hwcodec_option() -> bool {
     if let Some(v) = Config2::get().options.get("enable-hwcodec") {
         return v != "N";
     }
