@@ -213,7 +213,7 @@ class FileModel extends ChangeNotifier {
   }
 
   receiveFileDir(Map<String, dynamic> evt) {
-    debugPrint("recv file dir:$evt");
+    // debugPrint("recv file dir:$evt");
     if (evt['is_local'] == "false") {
       // init remote home, the connection will automatic read remote home when established,
       try {
