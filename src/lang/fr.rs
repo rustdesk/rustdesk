@@ -399,8 +399,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("hide_cm_tip", "Autoriser le masquage uniquement si vous acceptez des sessions via un mot de passe et utilisez un mot de passe permanent"),
         ("wayland_experiment_tip", ""),
         ("Right click to select tabs", ""),
-        ("Add to Address Book", ""),
-        ("Group", ""),
-        ("Search", ""),
+        ("Add to Address Book", "Ajouter au carnet d'adresses"),
+        ("Group", "Groupe"),
+        ("Search", "Rechercher"),
     ].iter().cloned().collect();
 }
