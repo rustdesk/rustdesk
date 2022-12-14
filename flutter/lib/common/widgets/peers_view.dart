@@ -326,3 +326,21 @@ class AddressBookPeersView extends BasePeersView {
     return true;
   }
 }
+
+class MyGroupPeerView extends BasePeersView {
+  MyGroupPeerView(
+      {Key? key,
+      EdgeInsets? menuPadding,
+      ScrollController? scrollController,
+      required List<Peer> initPeers})
+      : super(
+          key: key,
+          name: 'my group peer',
+          loadEvent: 'load_my_group_peers',
+          peerCardBuilder: (Peer peer) => MyGroupPeerCard(
+            peer: peer,
+            menuPadding: menuPadding,
+          ),
+          initPeers: initPeers,
+        );
+}

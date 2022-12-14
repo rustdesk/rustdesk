@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
+import 'package:flutter_hbb/common/hbbs/hbbs.dart';
+import 'package:flutter_hbb/common/widgets/peer_tab_page.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 
@@ -10,17 +11,19 @@ import 'model.dart';
 import 'platform_model.dart';
 
 class UserModel {
-  var userName = ''.obs;
+  final RxString userName = ''.obs;
+  final RxString groupName = ''.obs;
+  final RxBool isAdmin = false.obs;
   WeakReference<FFI> parent;
 
-  UserModel(this.parent) {
-    refreshCurrentUser();
-  }
+  UserModel(this.parent);
 
   void refreshCurrentUser() async {
-    await getUserName();
     final token = bind.mainGetLocalOption(key: 'access_token');
-    if (token == '') return;
+    if (token == '') {
+      await _updateOtherModels();
+      return;
+    }
     final url = await bind.mainGetApiServer();
     final body = {
       'id': await bind.mainGetMyId(),
@@ -35,55 +38,42 @@ class UserModel {
           body: json.encode(body));
       final status = response.statusCode;
       if (status == 401 || status == 400) {
-        resetToken();
+        reset();
         return;
       }
-      await _parseResp(response.body);
+      final data = json.decode(response.body);
+      final error = data['error'];
+      if (error != null) {
+        throw error;
+      }
+      await _parseUserInfo(data);
     } catch (e) {
       print('Failed to refreshCurrentUser: $e');
+    } finally {
+      await _updateOtherModels();
     }
   }
 
-  void resetToken() async {
+  Future<void> reset() async {
     await bind.mainSetLocalOption(key: 'access_token', value: '');
     await bind.mainSetLocalOption(key: 'user_info', value: '');
+    await gFFI.abModel.reset();
+    await gFFI.groupModel.reset();
     userName.value = '';
+    groupName.value = '';
+    statePeerTab.check();
   }
 
-  Future<String> _parseResp(String body) async {
-    final data = json.decode(body);
-    final error = data['error'];
-    if (error != null) {
-      return error!;
-    }
-    final token = data['access_token'];
-    if (token != null) {
-      await bind.mainSetLocalOption(key: 'access_token', value: token);
-    }
-    final info = data['user'];
-    if (info != null) {
-      final value = json.encode(info);
-      await bind.mainSetOption(key: 'user_info', value: value);
-      userName.value = info['name'];
-    }
-    return '';
+  Future<void> _parseUserInfo(dynamic userinfo) async {
+    bind.mainSetLocalOption(key: 'user_info', value: jsonEncode(userinfo));
+    userName.value = userinfo['name'] ?? '';
+    groupName.value = userinfo['grp'] ?? '';
+    isAdmin.value = userinfo['is_admin'] == true;
   }
 
-  Future<String> getUserName() async {
-    if (userName.isNotEmpty) {
-      return userName.value;
-    }
-    final userInfo = bind.mainGetLocalOption(key: 'user_info');
-    if (userInfo.trim().isEmpty) {
-      return '';
-    }
-    final m = jsonDecode(userInfo);
-    if (m == null) {
-      userName.value = '';
-    } else {
-      userName.value = m['name'] ?? '';
-    }
-    return userName.value;
+  Future<void> _updateOtherModels() async {
+    await gFFI.abModel.pullAb();
+    await gFFI.groupModel.pull();
   }
 
   Future<void> logOut() async {
@@ -95,13 +85,7 @@ class UserModel {
           'uuid': await bind.mainGetUuid(),
         },
         headers: await getHttpHeaders());
-    await Future.wait([
-      bind.mainSetLocalOption(key: 'access_token', value: ''),
-      bind.mainSetLocalOption(key: 'user_info', value: ''),
-      bind.mainSetLocalOption(key: 'selected-tags', value: ''),
-    ]);
-    parent.target?.abModel.clear();
-    userName.value = '';
+    await reset();
     gFFI.dialogManager.dismissByTag(tag);
   }
 
@@ -119,12 +103,12 @@ class UserModel {
       final body = jsonDecode(resp.body);
       bind.mainSetLocalOption(
           key: 'access_token', value: body['access_token'] ?? '');
-      bind.mainSetLocalOption(
-          key: 'user_info', value: jsonEncode(body['user']));
-      this.userName.value = body['user']?['name'] ?? '';
+      await _parseUserInfo(body['user']);
       return body;
     } catch (err) {
       return {'error': '$err'};
+    } finally {
+      await _updateOtherModels();
     }
   }
 }

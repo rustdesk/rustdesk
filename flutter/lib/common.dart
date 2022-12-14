@@ -99,22 +99,28 @@ class IconFont {
 class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
   const ColorThemeExtension({
     required this.border,
+    required this.highlight,
   });
 
   final Color? border;
+  final Color? highlight;
 
   static const light = ColorThemeExtension(
     border: Color(0xFFCCCCCC),
+    highlight: Color(0xFFE5E5E5),
   );
 
   static const dark = ColorThemeExtension(
     border: Color(0xFF555555),
+    highlight: Color(0xFF3F3F3F),
   );
 
   @override
-  ThemeExtension<ColorThemeExtension> copyWith({Color? border}) {
+  ThemeExtension<ColorThemeExtension> copyWith(
+      {Color? border, Color? highlight}) {
     return ColorThemeExtension(
       border: border ?? this.border,
+      highlight: highlight ?? this.highlight,
     );
   }
 
@@ -126,6 +132,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
     }
     return ColorThemeExtension(
       border: Color.lerp(border, other.border, t),
+      highlight: Color.lerp(highlight, other.highlight, t),
     );
   }
 }

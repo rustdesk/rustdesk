@@ -28,7 +28,6 @@ class _AddressBookState extends State<AddressBook> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => gFFI.abModel.pullAb());
   }
 
   @override
@@ -45,11 +44,7 @@ class _AddressBookState extends State<AddressBook> {
   handleLogin() {
     // TODO refactor login dialog for desktop and mobile
     if (isDesktop) {
-      loginDialog().then((success) {
-        if (success) {
-          gFFI.abModel.pullAb();
-        }
-      });
+      loginDialog();
     } else {
       showLogin(gFFI.dialogManager);
     }
