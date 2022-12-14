@@ -65,7 +65,7 @@ class GroupModel {
           if (json.containsKey('error')) {
             throw json['error'];
           } else {
-            total = json['total'];
+            if (total == 0) total = json['total'];
             if (json.containsKey('data')) {
               final data = json['data'];
               if (data is List) {
@@ -76,7 +76,7 @@ class GroupModel {
             }
           }
         }
-      } while (current < total);
+      } while (current < total + 1);
     } catch (err) {
       debugPrint('$err');
       userLoadError.value = err.toString();
@@ -115,7 +115,7 @@ class GroupModel {
           if (json.containsKey('error')) {
             throw json['error'];
           } else {
-            total = json['total'];
+            if (total == 0) total = json['total'];
             if (json.containsKey('data')) {
               final data = json['data'];
               if (data is List) {
@@ -128,7 +128,7 @@ class GroupModel {
             }
           }
         }
-      } while (current < total);
+      } while (current < total + 1);
     } catch (err) {
       debugPrint('$err');
       peerLoadError.value = err.toString();
