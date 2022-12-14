@@ -228,8 +228,7 @@ class _FileManagerPageState extends State<FileManagerPage>
         onDragExited: (exit) {
           _dropMaskVisible.value = false;
         },
-        child:
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           headTools(isLocal),
           Expanded(
               child: Row(
@@ -270,7 +269,6 @@ class _FileManagerPageState extends State<FileManagerPage>
 
     return MouseRegion(
       onEnter: (evt) {
-        print("enter $evt");
         _mouseFocusScope.value =
             isLocal ? MouseFocusScope.local : MouseFocusScope.remote;
         if (isLocal) {
@@ -280,9 +278,7 @@ class _FileManagerPageState extends State<FileManagerPage>
         }
       },
       onExit: (evt) {
-        print("exit $evt");
         _mouseFocusScope.value = MouseFocusScope.none;
-        // FocusManager.instance.primaryFocus?.unfocus();
       },
       child: ListSearchActionListener(
         node: isLocal ? _keyboardNodeLocal : _keyboardNodeRemote,
@@ -304,19 +300,18 @@ class _FileManagerPageState extends State<FileManagerPage>
               .skip(skipCount)
               .where((element) => element.name.startsWith(buffer));
           if (searchResult.isEmpty) {
-            // loop
+            // cannot find next, lets restart search from head
             searchResult =
                 entries.where((element) => element.name.startsWith(buffer));
           }
           if (searchResult.isEmpty) {
+            setState(() {
+              getSelectedItems(isLocal).clear();
+            });
             return;
           }
-          final offset = entries.indexOf(searchResult.first) * rowHeight;
-          setState(() {
-            selectedEntries.clear();
-            selectedEntries.add(isLocal, searchResult.first);
-            debugPrint("focused on ${searchResult.first.name}");
-          });
+          _jumpToEntry(
+              isLocal, searchResult.first, scrollController, rowHeight, buffer);
         },
         onSearch: (buffer) {
           debugPrint("searching for $buffer");
@@ -325,12 +320,13 @@ class _FileManagerPageState extends State<FileManagerPage>
               entries.where((element) => element.name.startsWith(buffer));
           selectedEntries.clear();
           if (searchResult.isEmpty) {
+            setState(() {
+              getSelectedItems(isLocal).clear();
+            });
             return;
           }
-          setState(() {
-            selectedEntries.add(isLocal, searchResult.first);
-            debugPrint("focused on ${searchResult.first.name}");
-          });
+          _jumpToEntry(
+              isLocal, searchResult.first, scrollController, rowHeight, buffer);
         },
         child: ObxValue<RxString>(
           (searchText) {
@@ -420,7 +416,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                             )),
                         onTap: () {
                           final items = getSelectedItems(isLocal);
-      
+
                           // handle double click
                           if (_checkDoubleClick(entry)) {
                             openDirectory(entry.path, isLocal: isLocal);
@@ -446,8 +442,8 @@ class _FileManagerPageState extends State<FileManagerPage>
                           child: Text(
                             sizeStr,
                             overflow: TextOverflow.ellipsis,
-                            style:
-                                TextStyle(fontSize: 10, color: MyTheme.darkGray),
+                            style: TextStyle(
+                                fontSize: 10, color: MyTheme.darkGray),
                           ))),
                     ]);
               }).toList(growable: false),
@@ -457,6 +453,31 @@ class _FileManagerPageState extends State<FileManagerPage>
         ),
       ),
     );
+  }
+
+  void _jumpToEntry(bool isLocal, Entry entry,
+      ScrollController scrollController, double rowHeight, String buffer) {
+    final entries = model.getCurrentDir(isLocal).entries;
+    final index = entries.indexOf(entry);
+    if (index == -1) {
+      debugPrint("entry is not valid: ${entry.path}");
+    }
+    final selectedEntries = getSelectedItems(isLocal);
+    final searchResult =
+        entries.where((element) => element.name.startsWith(buffer));
+    selectedEntries.clear();
+    if (searchResult.isEmpty) {
+      return;
+    }
+    final offset = min(
+        max(scrollController.position.minScrollExtent,
+            entries.indexOf(searchResult.first) * rowHeight),
+        scrollController.position.maxScrollExtent);
+    scrollController.jumpTo(offset);
+    setState(() {
+      selectedEntries.add(isLocal, searchResult.first);
+      debugPrint("focused on ${searchResult.first.name}");
+    });
   }
 
   void _onSelectedChanged(SelectedItems selectedItems, List<Entry> entries,
