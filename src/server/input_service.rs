@@ -280,11 +280,15 @@ pub fn mouse_move_relative(x: i32, y: i32) {
     en.mouse_move_relative(x, y);
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(windows)]
 fn modifier_sleep() {
     // sleep for a while, this is only for keying in rdp in peer so far
-    #[cfg(windows)]
     std::thread::sleep(std::time::Duration::from_nanos(1));
+}
+
+#[inline]
+fn is_pressed(key: &Key, en: &mut Enigo) -> bool {
+    get_modifier_state(key.clone(), en)
 }
 
 #[inline]
@@ -505,6 +509,7 @@ pub fn handle_mouse_(evt: &MouseEvent) {
                 if key != &Key::CapsLock && key != &Key::NumLock {
                     if !get_modifier_state(key.clone(), &mut en) {
                         en.key_down(key.clone()).ok();
+                        #[cfg(windows)]
                         modifier_sleep();
                         to_release.push(key);
                     }
@@ -643,100 +648,6 @@ pub async fn lock_screen() {
     super::video_service::switch_to_primary().await;
 }
 
-lazy_static::lazy_static! {
-    static ref KEY_MAP: HashMap<i32, Key> =
-    [
-        (ControlKey::Alt, Key::Alt),
-        (ControlKey::Backspace, Key::Backspace),
-        (ControlKey::CapsLock, Key::CapsLock),
-        (ControlKey::Control, Key::Control),
-        (ControlKey::Delete, Key::Delete),
-        (ControlKey::DownArrow, Key::DownArrow),
-        (ControlKey::End, Key::End),
-        (ControlKey::Escape, Key::Escape),
-        (ControlKey::F1, Key::F1),
-        (ControlKey::F10, Key::F10),
-        (ControlKey::F11, Key::F11),
-        (ControlKey::F12, Key::F12),
-        (ControlKey::F2, Key::F2),
-        (ControlKey::F3, Key::F3),
-        (ControlKey::F4, Key::F4),
-        (ControlKey::F5, Key::F5),
-        (ControlKey::F6, Key::F6),
-        (ControlKey::F7, Key::F7),
-        (ControlKey::F8, Key::F8),
-        (ControlKey::F9, Key::F9),
-        (ControlKey::Home, Key::Home),
-        (ControlKey::LeftArrow, Key::LeftArrow),
-        (ControlKey::Meta, Key::Meta),
-        (ControlKey::Option, Key::Option),
-        (ControlKey::PageDown, Key::PageDown),
-        (ControlKey::PageUp, Key::PageUp),
-        (ControlKey::Return, Key::Return),
-        (ControlKey::RightArrow, Key::RightArrow),
-        (ControlKey::Shift, Key::Shift),
-        (ControlKey::Space, Key::Space),
-        (ControlKey::Tab, Key::Tab),
-        (ControlKey::UpArrow, Key::UpArrow),
-        (ControlKey::Numpad0, Key::Numpad0),
-        (ControlKey::Numpad1, Key::Numpad1),
-        (ControlKey::Numpad2, Key::Numpad2),
-        (ControlKey::Numpad3, Key::Numpad3),
-        (ControlKey::Numpad4, Key::Numpad4),
-        (ControlKey::Numpad5, Key::Numpad5),
-        (ControlKey::Numpad6, Key::Numpad6),
-        (ControlKey::Numpad7, Key::Numpad7),
-        (ControlKey::Numpad8, Key::Numpad8),
-        (ControlKey::Numpad9, Key::Numpad9),
-        (ControlKey::Cancel, Key::Cancel),
-        (ControlKey::Clear, Key::Clear),
-        (ControlKey::Menu, Key::Alt),
-        (ControlKey::Pause, Key::Pause),
-        (ControlKey::Kana, Key::Kana),
-        (ControlKey::Hangul, Key::Hangul),
-        (ControlKey::Junja, Key::Junja),
-        (ControlKey::Final, Key::Final),
-        (ControlKey::Hanja, Key::Hanja),
-        (ControlKey::Kanji, Key::Kanji),
-        (ControlKey::Convert, Key::Convert),
-        (ControlKey::Select, Key::Select),
-        (ControlKey::Print, Key::Print),
-        (ControlKey::Execute, Key::Execute),
-        (ControlKey::Snapshot, Key::Snapshot),
-        (ControlKey::Insert, Key::Insert),
-        (ControlKey::Help, Key::Help),
-        (ControlKey::Sleep, Key::Sleep),
-        (ControlKey::Separator, Key::Separator),
-        (ControlKey::Scroll, Key::Scroll),
-        (ControlKey::NumLock, Key::NumLock),
-        (ControlKey::RWin, Key::RWin),
-        (ControlKey::Apps, Key::Apps),
-        (ControlKey::Multiply, Key::Multiply),
-        (ControlKey::Add, Key::Add),
-        (ControlKey::Subtract, Key::Subtract),
-        (ControlKey::Decimal, Key::Decimal),
-        (ControlKey::Divide, Key::Divide),
-        (ControlKey::Equals, Key::Equals),
-        (ControlKey::NumpadEnter, Key::NumpadEnter),
-        (ControlKey::RAlt, Key::RightAlt),
-        (ControlKey::RControl, Key::RightControl),
-        (ControlKey::RShift, Key::RightShift),
-    ].iter().map(|(a, b)| (a.value(), b.clone())).collect();
-    static ref NUMPAD_KEY_MAP: HashMap<i32, bool> =
-    [
-        (ControlKey::Home, true),
-        (ControlKey::UpArrow, true),
-        (ControlKey::PageUp, true),
-        (ControlKey::LeftArrow, true),
-        (ControlKey::RightArrow, true),
-        (ControlKey::End, true),
-        (ControlKey::DownArrow, true),
-        (ControlKey::PageDown, true),
-        (ControlKey::Insert, true),
-        (ControlKey::Delete, true),
-    ].iter().map(|(a, b)| (a.value(), b.clone())).collect();
-}
-
 pub fn handle_key(evt: &KeyEvent) {
     #[cfg(target_os = "macos")]
     if !*IS_SERVER {
@@ -766,12 +677,16 @@ fn rdev_key_down_or_up(key: RdevKey, down_or_up: bool) {
     std::thread::sleep(Duration::from_millis(20));
 }
 
-fn is_modifier_in_key_event(modifier: ControlKey, key_event: &KeyEvent) -> bool {
+fn is_modifier_in_key_event(control_key: ControlKey, key_event: &KeyEvent) -> bool {
     key_event
         .modifiers
         .iter()
-        .position(|&m| m == modifier.into())
+        .position(|&m| m == control_key.into())
         .is_some()
+}
+
+fn control_key_to_key(control_key: &EnumOrUnknown<ControlKey>) -> Option<&Key> {
+    KEY_MAP.get(&control_key.value())
 }
 
 fn is_not_same_status(client_locking: bool, remote_locking: bool) -> bool {
@@ -878,121 +793,158 @@ fn map_keyboard_mode(evt: &KeyEvent) {
     return;
 }
 
-fn legacy_keyboard_mode(evt: &KeyEvent) {
-    #[cfg(windows)]
-    crate::platform::windows::try_change_desktop();
-    let mut en = ENIGO.lock().unwrap();
-
-    #[cfg(target_os = "macos")]
-    en.reset_flag();
+#[cfg(target_os = "macos")]
+fn add_flags_to_enigo(en: &mut Enigo, key_event: &KeyEvent) {
     // When long-pressed the command key, then press and release
     // the Tab key, there should be CGEventFlagCommand in the flag.
-    #[cfg(target_os = "macos")]
+    en.reset_flag();
     for ck in evt.modifiers.iter() {
         if let Some(key) = KEY_MAP.get(&ck.value()) {
             en.add_flag(key);
         }
     }
-    #[cfg(not(target_os = "macos"))]
-    let mut to_release = Vec::new();
+}
 
-    if evt.down {
-        let ck = if let Some(key_event::Union::ControlKey(ck)) = evt.union {
-            ck.value()
-        } else {
-            -1
-        };
-        fix_modifiers(&evt.modifiers[..], &mut en, ck);
-        for ref ck in evt.modifiers.iter() {
-            if let Some(key) = KEY_MAP.get(&ck.value()) {
+fn get_control_key_value(key_event: &KeyEvent) -> i32 {
+    if let Some(key_event::Union::ControlKey(ck)) = key_event.union {
+        ck.value()
+    } else {
+        -1
+    }
+}
+
+fn release_unpressed_modifiers(en: &mut Enigo, key_event: &KeyEvent) {
+    let ck_value = get_control_key_value(key_event);
+    fix_modifiers(&key_event.modifiers[..], en, ck_value);
+}
+
+fn is_altgr_pressed(en: &mut Enigo) -> bool {
+    KEYS_DOWN
+        .lock()
+        .unwrap()
+        .get(&(ControlKey::RAlt.value() as _))
+        .is_some()
+}
+
+fn press_modifiers(en: &mut Enigo, key_event: &KeyEvent, to_release: &mut Vec<Key>) {
+    for ref ck in key_event.modifiers.iter() {
+        if let Some(key) = control_key_to_key(ck) {
+            if !is_pressed(key, en) {
                 #[cfg(target_os = "linux")]
-                if key == &Key::Alt && !get_modifier_state(key.clone(), &mut en) {
-                    // for AltGr on Linux
-                    if KEYS_DOWN
-                        .lock()
-                        .unwrap()
-                        .get(&(ControlKey::RAlt.value() as _))
-                        .is_some()
-                    {
-                        continue;
-                    }
+                if key == &Key::Alt && is_altgr_pressed(en) {
+                    continue;
                 }
-                #[cfg(not(target_os = "macos"))]
-                if !get_modifier_state(key.clone(), &mut en) {
-                    en.key_down(key.clone()).ok();
-                    modifier_sleep();
-                    to_release.push(key);
-                }
+                en.key_down(key.clone()).ok();
+                to_release.push(key.clone());
+                #[cfg(windows)]
+                modifier_sleep();
             }
         }
     }
+}
 
-    match evt.union {
-        Some(key_event::Union::ControlKey(ck)) => {
-            if let Some(key) = KEY_MAP.get(&ck.value()) {
-                if evt.down {
-                    en.key_down(key.clone()).ok();
-                    KEYS_DOWN
-                        .lock()
-                        .unwrap()
-                        .insert(ck.value() as _, Instant::now());
-                } else {
-                    en.key_up(key.clone());
-                    KEYS_DOWN.lock().unwrap().remove(&(ck.value() as _));
-                }
-            } else if ck.value() == ControlKey::CtrlAltDel.value() {
-                // have to spawn new thread because send_sas is tokio_main, the caller can not be tokio_main.
-                std::thread::spawn(|| {
-                    allow_err!(send_sas());
-                });
-            } else if ck.value() == ControlKey::LockScreen.value() {
-                lock_screen_2();
-            }
-        }
-        Some(key_event::Union::Chr(chr)) => {
-            if evt.down {
-                if en.key_down(get_layout(chr)).is_ok() {
-                    KEYS_DOWN
-                        .lock()
-                        .unwrap()
-                        .insert(chr as u64 + KEY_CHAR_START, Instant::now());
-                } else {
-                    if let Ok(chr) = char::try_from(chr) {
-                        let mut x = chr.to_string();
-                        if get_modifier_state(Key::Shift, &mut en)
-                            || get_modifier_state(Key::CapsLock, &mut en)
-                        {
-                            x = x.to_uppercase();
-                        }
-                        en.key_sequence(&x);
-                    }
-                }
-                KEYS_DOWN
-                    .lock()
-                    .unwrap()
-                    .insert(chr as u64 + KEY_CHAR_START, Instant::now());
-            } else {
-                en.key_up(get_layout(chr));
-                KEYS_DOWN
-                    .lock()
-                    .unwrap()
-                    .remove(&(chr as u64 + KEY_CHAR_START));
-            }
-        }
-        Some(key_event::Union::Unicode(chr)) => {
-            if let Ok(chr) = char::try_from(chr) {
-                en.key_sequence(&chr.to_string());
-            }
-        }
-        Some(key_event::Union::Seq(ref seq)) => {
-            en.key_sequence(&seq);
-        }
-        _ => {}
+fn sync_modifiers(en: &mut Enigo, key_event: &KeyEvent, to_release: &mut Vec<Key>) {
+    #[cfg(target_os = "macos")]
+    add_flag_to_enigo(&mut en, key_event);
+
+    if key_event.down {
+        release_unpressed_modifiers(en, key_event);
+        #[cfg(not(target_os = "macos"))]
+        press_modifiers(en, key_event, to_release);
     }
-    #[cfg(not(target_os = "macos"))]
+}
+
+fn process_control_key(en: &mut Enigo, ck: &EnumOrUnknown<ControlKey>, down: bool) {
+    let mut key_down = KEYS_DOWN.lock().unwrap();
+
+    if ck.value() == ControlKey::CtrlAltDel.value() {
+        // have to spawn new thread because send_sas is tokio_main, the caller can not be tokio_main.
+        std::thread::spawn(|| {
+            allow_err!(send_sas());
+        });
+    } else if ck.value() == ControlKey::LockScreen.value() {
+        lock_screen_2();
+    } else if let Some(key) = control_key_to_key(ck) {
+        if down {
+            en.key_down(key.clone()).ok();
+            key_down.insert(ck.value() as _, Instant::now());
+        } else {
+            en.key_up(key.clone());
+            key_down.remove(&(ck.value() as _));
+        }
+    }
+}
+
+#[inline]
+fn chr_to_record_chr(chr: u32) -> u64 {
+    chr as u64 + KEY_CHAR_START
+}
+
+#[inline]
+fn need_to_uppercase(en: &mut Enigo) -> bool {
+    get_modifier_state(Key::Shift, en) || get_modifier_state(Key::CapsLock, en)
+}
+
+fn process_chr(en: &mut Enigo, chr: u32, down: bool) {
+    let mut key_down = KEYS_DOWN.lock().unwrap();
+    let key = get_layout(chr);
+    let record_chr = chr_to_record_chr(chr);
+
+    if down {
+        if en.key_down(key).is_ok() {
+            key_down.insert(record_chr, Instant::now());
+        } else {
+            if let Ok(chr) = char::try_from(chr) {
+                let mut s = chr.to_string();
+                if need_to_uppercase(en) {
+                    s = s.to_uppercase();
+                }
+                en.key_sequence(&s);
+            };
+        }
+        key_down.insert(record_chr, Instant::now());
+    } else {
+        en.key_up(key);
+        key_down.remove(&record_chr);
+    }
+}
+
+fn process_unicode(en: &mut Enigo, chr: u32) {
+    if let Ok(chr) = char::try_from(chr) {
+        en.key_sequence(&chr.to_string());
+    }
+}
+
+fn process_seq(en: &mut Enigo, sequence: &str) {
+    en.key_sequence(&sequence);
+}
+
+fn release_keys(en: &mut Enigo, to_release: &Vec<Key>) {
     for key in to_release {
         en.key_up(key.clone());
     }
+}
+
+fn legacy_keyboard_mode(evt: &KeyEvent) {
+    #[cfg(windows)]
+    crate::platform::windows::try_change_desktop();
+    #[cfg(not(target_os = "macos"))]
+    let mut to_release: Vec<Key> = Vec::new();
+
+    let mut en = ENIGO.lock().unwrap();
+    sync_modifiers(&mut en, &evt, &mut to_release);
+
+    let down = evt.down;
+    match evt.union {
+        Some(key_event::Union::ControlKey(ck)) => process_control_key(&mut en, &ck, down),
+        Some(key_event::Union::Chr(chr)) => process_chr(&mut en, chr, down),
+        Some(key_event::Union::Unicode(chr)) => process_unicode(&mut en, chr),
+        Some(key_event::Union::Seq(ref seq)) => process_seq(&mut en, seq),
+        _ => {}
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    release_keys(&mut en, &to_release);
 }
 
 pub fn handle_key_(evt: &KeyEvent) {
@@ -1026,4 +978,108 @@ async fn send_sas() -> ResultType<()> {
     let mut stream = crate::ipc::connect(1000, crate::POSTFIX_SERVICE).await?;
     timeout(1000, stream.send(&crate::ipc::Data::SAS)).await??;
     Ok(())
+}
+
+lazy_static::lazy_static! {
+    static ref MODIFIER_MAP: HashMap<i32, Key> = [
+        (ControlKey::Alt, Key::Alt),
+        (ControlKey::RAlt, Key::RightAlt),
+        (ControlKey::Control, Key::Control),
+        (ControlKey::RControl, Key::RightControl),
+        (ControlKey::Shift, Key::Shift),
+        (ControlKey::RShift, Key::RightShift),
+        (ControlKey::Meta, Key::Meta),
+        (ControlKey::RWin, Key::RWin),
+    ].iter().map(|(a, b)| (a.value(), b.clone())).collect();
+    static ref KEY_MAP: HashMap<i32, Key> =
+    [
+        (ControlKey::Alt, Key::Alt),
+        (ControlKey::Backspace, Key::Backspace),
+        (ControlKey::CapsLock, Key::CapsLock),
+        (ControlKey::Control, Key::Control),
+        (ControlKey::Delete, Key::Delete),
+        (ControlKey::DownArrow, Key::DownArrow),
+        (ControlKey::End, Key::End),
+        (ControlKey::Escape, Key::Escape),
+        (ControlKey::F1, Key::F1),
+        (ControlKey::F10, Key::F10),
+        (ControlKey::F11, Key::F11),
+        (ControlKey::F12, Key::F12),
+        (ControlKey::F2, Key::F2),
+        (ControlKey::F3, Key::F3),
+        (ControlKey::F4, Key::F4),
+        (ControlKey::F5, Key::F5),
+        (ControlKey::F6, Key::F6),
+        (ControlKey::F7, Key::F7),
+        (ControlKey::F8, Key::F8),
+        (ControlKey::F9, Key::F9),
+        (ControlKey::Home, Key::Home),
+        (ControlKey::LeftArrow, Key::LeftArrow),
+        (ControlKey::Meta, Key::Meta),
+        (ControlKey::Option, Key::Option),
+        (ControlKey::PageDown, Key::PageDown),
+        (ControlKey::PageUp, Key::PageUp),
+        (ControlKey::Return, Key::Return),
+        (ControlKey::RightArrow, Key::RightArrow),
+        (ControlKey::Shift, Key::Shift),
+        (ControlKey::Space, Key::Space),
+        (ControlKey::Tab, Key::Tab),
+        (ControlKey::UpArrow, Key::UpArrow),
+        (ControlKey::Numpad0, Key::Numpad0),
+        (ControlKey::Numpad1, Key::Numpad1),
+        (ControlKey::Numpad2, Key::Numpad2),
+        (ControlKey::Numpad3, Key::Numpad3),
+        (ControlKey::Numpad4, Key::Numpad4),
+        (ControlKey::Numpad5, Key::Numpad5),
+        (ControlKey::Numpad6, Key::Numpad6),
+        (ControlKey::Numpad7, Key::Numpad7),
+        (ControlKey::Numpad8, Key::Numpad8),
+        (ControlKey::Numpad9, Key::Numpad9),
+        (ControlKey::Cancel, Key::Cancel),
+        (ControlKey::Clear, Key::Clear),
+        (ControlKey::Menu, Key::Alt),
+        (ControlKey::Pause, Key::Pause),
+        (ControlKey::Kana, Key::Kana),
+        (ControlKey::Hangul, Key::Hangul),
+        (ControlKey::Junja, Key::Junja),
+        (ControlKey::Final, Key::Final),
+        (ControlKey::Hanja, Key::Hanja),
+        (ControlKey::Kanji, Key::Kanji),
+        (ControlKey::Convert, Key::Convert),
+        (ControlKey::Select, Key::Select),
+        (ControlKey::Print, Key::Print),
+        (ControlKey::Execute, Key::Execute),
+        (ControlKey::Snapshot, Key::Snapshot),
+        (ControlKey::Insert, Key::Insert),
+        (ControlKey::Help, Key::Help),
+        (ControlKey::Sleep, Key::Sleep),
+        (ControlKey::Separator, Key::Separator),
+        (ControlKey::Scroll, Key::Scroll),
+        (ControlKey::NumLock, Key::NumLock),
+        (ControlKey::RWin, Key::RWin),
+        (ControlKey::Apps, Key::Apps),
+        (ControlKey::Multiply, Key::Multiply),
+        (ControlKey::Add, Key::Add),
+        (ControlKey::Subtract, Key::Subtract),
+        (ControlKey::Decimal, Key::Decimal),
+        (ControlKey::Divide, Key::Divide),
+        (ControlKey::Equals, Key::Equals),
+        (ControlKey::NumpadEnter, Key::NumpadEnter),
+        (ControlKey::RAlt, Key::RightAlt),
+        (ControlKey::RControl, Key::RightControl),
+        (ControlKey::RShift, Key::RightShift),
+    ].iter().map(|(a, b)| (a.value(), b.clone())).collect();
+    static ref NUMPAD_KEY_MAP: HashMap<i32, bool> =
+    [
+        (ControlKey::Home, true),
+        (ControlKey::UpArrow, true),
+        (ControlKey::PageUp, true),
+        (ControlKey::LeftArrow, true),
+        (ControlKey::RightArrow, true),
+        (ControlKey::End, true),
+        (ControlKey::DownArrow, true),
+        (ControlKey::PageDown, true),
+        (ControlKey::Insert, true),
+        (ControlKey::Delete, true),
+    ].iter().map(|(a, b)| (a.value(), b.clone())).collect();
 }
