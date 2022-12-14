@@ -4,10 +4,8 @@ use crate::client::{
     load_config, send_mouse, start_video_audio_threads, FileManager, Key, LoginConfigHandler,
     QualityStatus, KEY_MAP,
 };
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::client::{get_key_state, SERVER_KEYBOARD_ENABLED};
-#[cfg(target_os = "linux")]
-use crate::common::IS_X11;
+use crate::common::GrabState;
+use crate::keyboard;
 use crate::{client::Data, client::Interface};
 use async_trait::async_trait;
 use hbb_common::config::{Config, LocalConfig, PeerConfig};
@@ -15,53 +13,12 @@ use hbb_common::rendezvous_proto::ConnType;
 use hbb_common::tokio::{self, sync::mpsc};
 use hbb_common::{allow_err, message_proto::*};
 use hbb_common::{fs, get_version_number, log, Stream};
-use rdev::{Event, EventType, EventType::*, Key as RdevKey};
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use rdev::{Keyboard as RdevKeyboard, KeyboardState};
-use std::collections::{HashMap, HashSet};
+use rdev::{Event, EventType::*};
+use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
-
-/// IS_IN KEYBOARD_HOOKED sciter only
 pub static IS_IN: AtomicBool = AtomicBool::new(false);
-pub static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
-pub static HOTKEY_HOOKED: AtomicBool = AtomicBool::new(false);
-#[cfg(windows)]
-static mut IS_ALT_GR: bool = false;
-#[cfg(feature = "flutter")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::flutter::FlutterHandler;
-
-lazy_static::lazy_static! {
-    static ref TO_RELEASE: Arc<Mutex<HashSet<RdevKey>>> = Arc::new(Mutex::new(HashSet::<RdevKey>::new()));
-}
-
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-lazy_static::lazy_static! {
-    static ref KEYBOARD: Arc<Mutex<RdevKeyboard>> = Arc::new(Mutex::new(RdevKeyboard::new().unwrap()));
-}
-
-#[cfg(feature = "flutter")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-lazy_static::lazy_static! {
-    pub static ref CUR_SESSION: Arc<Mutex<Option<Session<FlutterHandler>>>> = Default::default();
-}
-
-lazy_static::lazy_static! {
-    static ref MUTEX_SPECIAL_KEYS: Mutex<HashMap<RdevKey, bool>> = {
-        let mut m = HashMap::new();
-        m.insert(RdevKey::ShiftLeft, false);
-        m.insert(RdevKey::ShiftRight, false);
-        m.insert(RdevKey::ControlLeft, false);
-        m.insert(RdevKey::ControlRight, false);
-        m.insert(RdevKey::Alt, false);
-        m.insert(RdevKey::AltGr, false);
-        m.insert(RdevKey::MetaLeft, false);
-        m.insert(RdevKey::MetaRight, false);
-        Mutex::new(m)
-    };
-}
 
 #[derive(Clone, Default)]
 pub struct Session<T: InvokeUiSession> {
@@ -92,11 +49,11 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn get_keyboard_mode(&self) -> String {
-        global_get_keyboard_mode()
+        self.lc.read().unwrap().keyboard_mode.clone()
     }
 
-    pub fn save_keyboard_mode(&self, value: String) {
-        global_save_keyboard_mode(value);
+    pub fn save_keyboard_mode(&mut self, value: String) {
+        self.lc.write().unwrap().save_keyboard_mode(value);
     }
 
     pub fn save_view_style(&mut self, value: String) {
@@ -307,439 +264,6 @@ impl<T: InvokeUiSession> Session<T> {
         self.lc.read().unwrap().info.platform.clone()
     }
 
-    pub fn ctrl_alt_del(&self) {
-        if self.peer_platform() == "Windows" {
-            let mut key_event = KeyEvent::new();
-            key_event.set_control_key(ControlKey::CtrlAltDel);
-            // todo
-            key_event.down = true;
-            self.send_key_event(key_event, KeyboardMode::Legacy);
-        } else {
-            let mut key_event = KeyEvent::new();
-            key_event.set_control_key(ControlKey::Delete);
-            self.legacy_modifiers(&mut key_event, true, true, false, false);
-            // todo
-            key_event.press = true;
-            self.send_key_event(key_event, KeyboardMode::Legacy);
-        }
-    }
-
-    fn send_key_event(&self, mut evt: KeyEvent, keyboard_mode: KeyboardMode) {
-        // mode: legacy(0), map(1), translate(2), auto(3)
-        evt.mode = keyboard_mode.into();
-        let mut msg_out = Message::new();
-        msg_out.set_key_event(evt);
-        self.send(Data::Message(msg_out));
-    }
-
-    #[allow(dead_code)]
-    fn convert_numpad_keys(&self, key: RdevKey) -> RdevKey {
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        if get_key_state(enigo::Key::NumLock) {
-            return key;
-        }
-        match key {
-            RdevKey::Kp0 => RdevKey::Insert,
-            RdevKey::KpDecimal => RdevKey::Delete,
-            RdevKey::Kp1 => RdevKey::End,
-            RdevKey::Kp2 => RdevKey::DownArrow,
-            RdevKey::Kp3 => RdevKey::PageDown,
-            RdevKey::Kp4 => RdevKey::LeftArrow,
-            RdevKey::Kp5 => RdevKey::Clear,
-            RdevKey::Kp6 => RdevKey::RightArrow,
-            RdevKey::Kp7 => RdevKey::Home,
-            RdevKey::Kp8 => RdevKey::UpArrow,
-            RdevKey::Kp9 => RdevKey::PageUp,
-            _ => key,
-        }
-    }
-
-    fn map_keyboard_mode(&self, down_or_up: bool, key: RdevKey, _evt: Option<Event>) {
-        // map mode(1): Send keycode according to the peer platform.
-        #[cfg(target_os = "windows")]
-        let key = if let Some(e) = _evt {
-            rdev::get_win_key(e.code.into(), e.scan_code)
-        } else {
-            key
-        };
-
-        let peer = self.peer_platform();
-        let mut key_event = KeyEvent::new();
-        // According to peer platform.
-        let keycode: u32 = if peer == "Linux" {
-            rdev::linux_keycode_from_key(key).unwrap_or_default().into()
-        } else if peer == "Windows" {
-            rdev::win_keycode_from_key(key).unwrap_or_default().into()
-        } else {
-            // Without Clear Key on Mac OS
-            if key == rdev::Key::Clear {
-                return;
-            }
-            rdev::macos_keycode_from_key(key).unwrap_or_default().into()
-        };
-
-        key_event.set_chr(keycode);
-        key_event.down = down_or_up;
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        if get_key_state(enigo::Key::CapsLock) {
-            key_event.modifiers.push(ControlKey::CapsLock.into());
-        }
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        if get_key_state(enigo::Key::NumLock) {
-            key_event.modifiers.push(ControlKey::NumLock.into());
-        }
-        self.send_key_event(key_event, KeyboardMode::Map);
-    }
-
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    fn translate_keyboard_mode(&self, down_or_up: bool, key: RdevKey, evt: Event) {
-        // translate mode(2): locally generated characters are send to the peer.
-
-        // get char
-        let string = match KEYBOARD.lock() {
-            Ok(mut keyboard) => {
-                let string = keyboard.add(&evt.event_type).unwrap_or_default();
-                if keyboard.is_dead() && string == "" && down_or_up == true {
-                    return;
-                }
-                string
-            }
-            Err(_) => "".to_owned(),
-        };
-
-        // maybe two string
-        let chars = if string == "" {
-            None
-        } else {
-            let chars: Vec<char> = string.chars().collect();
-            Some(chars)
-        };
-
-        if let Some(chars) = chars {
-            for chr in chars {
-                let mut key_event = KeyEvent::new();
-                key_event.set_chr(chr as _);
-                key_event.down = true;
-                key_event.press = false;
-
-                self.send_key_event(key_event, KeyboardMode::Translate);
-            }
-        } else {
-            let success = if down_or_up == true {
-                TO_RELEASE.lock().unwrap().insert(key)
-            } else {
-                TO_RELEASE.lock().unwrap().remove(&key)
-            };
-
-            // AltGr && LeftControl(SpecialKey) without action
-            if key == RdevKey::AltGr || evt.scan_code == 541 {
-                return;
-            }
-            if success {
-                self.map_keyboard_mode(down_or_up, key, None);
-            }
-        }
-    }
-
-    fn legacy_modifiers(
-        &self,
-        key_event: &mut KeyEvent,
-        alt: bool,
-        ctrl: bool,
-        shift: bool,
-        command: bool,
-    ) {
-        if alt
-            && !crate::is_control_key(&key_event, &ControlKey::Alt)
-            && !crate::is_control_key(&key_event, &ControlKey::RAlt)
-        {
-            key_event.modifiers.push(ControlKey::Alt.into());
-        }
-        if shift
-            && !crate::is_control_key(&key_event, &ControlKey::Shift)
-            && !crate::is_control_key(&key_event, &ControlKey::RShift)
-        {
-            key_event.modifiers.push(ControlKey::Shift.into());
-        }
-        if ctrl
-            && !crate::is_control_key(&key_event, &ControlKey::Control)
-            && !crate::is_control_key(&key_event, &ControlKey::RControl)
-        {
-            key_event.modifiers.push(ControlKey::Control.into());
-        }
-        if command
-            && !crate::is_control_key(&key_event, &ControlKey::Meta)
-            && !crate::is_control_key(&key_event, &ControlKey::RWin)
-        {
-            key_event.modifiers.push(ControlKey::Meta.into());
-        }
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        if get_key_state(enigo::Key::CapsLock) {
-            key_event.modifiers.push(ControlKey::CapsLock.into());
-        }
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        if self.peer_platform() != "Mac OS" {
-            if get_key_state(enigo::Key::NumLock) {
-                key_event.modifiers.push(ControlKey::NumLock.into());
-            }
-        }
-    }
-
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    fn legacy_keyboard_mode(&self, down_or_up: bool, key: RdevKey, evt: Event) {
-        // legacy mode(0): Generate characters locally, look for keycode on other side.
-        let peer = self.peer_platform();
-        let is_win = peer == "Windows";
-
-        let alt = get_key_state(enigo::Key::Alt);
-        #[cfg(windows)]
-        let ctrl = {
-            let mut tmp =
-                get_key_state(enigo::Key::Control) || get_key_state(enigo::Key::RightControl);
-            unsafe {
-                if IS_ALT_GR {
-                    if alt || key == RdevKey::AltGr {
-                        if tmp {
-                            tmp = false;
-                        }
-                    } else {
-                        IS_ALT_GR = false;
-                    }
-                }
-            }
-            tmp
-        };
-        #[cfg(not(windows))]
-        let ctrl = get_key_state(enigo::Key::Control) || get_key_state(enigo::Key::RightControl);
-        let shift = get_key_state(enigo::Key::Shift) || get_key_state(enigo::Key::RightShift);
-        #[cfg(windows)]
-        let command = crate::platform::windows::get_win_key_state();
-        #[cfg(not(windows))]
-        let command = get_key_state(enigo::Key::Meta);
-        let control_key = match key {
-            RdevKey::Alt => Some(ControlKey::Alt),
-            RdevKey::AltGr => Some(ControlKey::RAlt),
-            RdevKey::Backspace => Some(ControlKey::Backspace),
-            RdevKey::ControlLeft => {
-                // when pressing AltGr, an extra VK_LCONTROL with a special
-                // scancode with bit 9 set is sent, let's ignore this.
-                #[cfg(windows)]
-                if evt.scan_code & 0x200 != 0 {
-                    unsafe {
-                        IS_ALT_GR = true;
-                    }
-                    return;
-                }
-                Some(ControlKey::Control)
-            }
-            RdevKey::ControlRight => Some(ControlKey::RControl),
-            RdevKey::DownArrow => Some(ControlKey::DownArrow),
-            RdevKey::Escape => Some(ControlKey::Escape),
-            RdevKey::F1 => Some(ControlKey::F1),
-            RdevKey::F10 => Some(ControlKey::F10),
-            RdevKey::F11 => Some(ControlKey::F11),
-            RdevKey::F12 => Some(ControlKey::F12),
-            RdevKey::F2 => Some(ControlKey::F2),
-            RdevKey::F3 => Some(ControlKey::F3),
-            RdevKey::F4 => Some(ControlKey::F4),
-            RdevKey::F5 => Some(ControlKey::F5),
-            RdevKey::F6 => Some(ControlKey::F6),
-            RdevKey::F7 => Some(ControlKey::F7),
-            RdevKey::F8 => Some(ControlKey::F8),
-            RdevKey::F9 => Some(ControlKey::F9),
-            RdevKey::LeftArrow => Some(ControlKey::LeftArrow),
-            RdevKey::MetaLeft => Some(ControlKey::Meta),
-            RdevKey::MetaRight => Some(ControlKey::RWin),
-            RdevKey::Return => Some(ControlKey::Return),
-            RdevKey::RightArrow => Some(ControlKey::RightArrow),
-            RdevKey::ShiftLeft => Some(ControlKey::Shift),
-            RdevKey::ShiftRight => Some(ControlKey::RShift),
-            RdevKey::Space => Some(ControlKey::Space),
-            RdevKey::Tab => Some(ControlKey::Tab),
-            RdevKey::UpArrow => Some(ControlKey::UpArrow),
-            RdevKey::Delete => {
-                if is_win && ctrl && alt {
-                    self.ctrl_alt_del();
-                    return;
-                }
-                Some(ControlKey::Delete)
-            }
-            RdevKey::Apps => Some(ControlKey::Apps),
-            RdevKey::Cancel => Some(ControlKey::Cancel),
-            RdevKey::Clear => Some(ControlKey::Clear),
-            RdevKey::Kana => Some(ControlKey::Kana),
-            RdevKey::Hangul => Some(ControlKey::Hangul),
-            RdevKey::Junja => Some(ControlKey::Junja),
-            RdevKey::Final => Some(ControlKey::Final),
-            RdevKey::Hanja => Some(ControlKey::Hanja),
-            RdevKey::Hanji => Some(ControlKey::Hanja),
-            RdevKey::Convert => Some(ControlKey::Convert),
-            RdevKey::Print => Some(ControlKey::Print),
-            RdevKey::Select => Some(ControlKey::Select),
-            RdevKey::Execute => Some(ControlKey::Execute),
-            RdevKey::PrintScreen => Some(ControlKey::Snapshot),
-            RdevKey::Help => Some(ControlKey::Help),
-            RdevKey::Sleep => Some(ControlKey::Sleep),
-            RdevKey::Separator => Some(ControlKey::Separator),
-            RdevKey::KpReturn => Some(ControlKey::NumpadEnter),
-            RdevKey::Kp0 => Some(ControlKey::Numpad0),
-            RdevKey::Kp1 => Some(ControlKey::Numpad1),
-            RdevKey::Kp2 => Some(ControlKey::Numpad2),
-            RdevKey::Kp3 => Some(ControlKey::Numpad3),
-            RdevKey::Kp4 => Some(ControlKey::Numpad4),
-            RdevKey::Kp5 => Some(ControlKey::Numpad5),
-            RdevKey::Kp6 => Some(ControlKey::Numpad6),
-            RdevKey::Kp7 => Some(ControlKey::Numpad7),
-            RdevKey::Kp8 => Some(ControlKey::Numpad8),
-            RdevKey::Kp9 => Some(ControlKey::Numpad9),
-            RdevKey::KpDivide => Some(ControlKey::Divide),
-            RdevKey::KpMultiply => Some(ControlKey::Multiply),
-            RdevKey::KpDecimal => Some(ControlKey::Decimal),
-            RdevKey::KpMinus => Some(ControlKey::Subtract),
-            RdevKey::KpPlus => Some(ControlKey::Add),
-            RdevKey::CapsLock | RdevKey::NumLock | RdevKey::ScrollLock => {
-                return;
-            }
-            RdevKey::Home => Some(ControlKey::Home),
-            RdevKey::End => Some(ControlKey::End),
-            RdevKey::Insert => Some(ControlKey::Insert),
-            RdevKey::PageUp => Some(ControlKey::PageUp),
-            RdevKey::PageDown => Some(ControlKey::PageDown),
-            RdevKey::Pause => Some(ControlKey::Pause),
-            _ => None,
-        };
-        let mut key_event = KeyEvent::new();
-        if let Some(k) = control_key {
-            key_event.set_control_key(k);
-        } else {
-            let mut chr = match evt.name {
-                Some(ref s) => {
-                    if s.len() <= 2 {
-                        // exclude chinese characters
-                        s.chars().next().unwrap_or('\0')
-                    } else {
-                        '\0'
-                    }
-                }
-                _ => '\0',
-            };
-            if chr == '·' {
-                // special for Chinese
-                chr = '`';
-            }
-            if chr == '\0' {
-                chr = match key {
-                    RdevKey::Num1 => '1',
-                    RdevKey::Num2 => '2',
-                    RdevKey::Num3 => '3',
-                    RdevKey::Num4 => '4',
-                    RdevKey::Num5 => '5',
-                    RdevKey::Num6 => '6',
-                    RdevKey::Num7 => '7',
-                    RdevKey::Num8 => '8',
-                    RdevKey::Num9 => '9',
-                    RdevKey::Num0 => '0',
-                    RdevKey::KeyA => 'a',
-                    RdevKey::KeyB => 'b',
-                    RdevKey::KeyC => 'c',
-                    RdevKey::KeyD => 'd',
-                    RdevKey::KeyE => 'e',
-                    RdevKey::KeyF => 'f',
-                    RdevKey::KeyG => 'g',
-                    RdevKey::KeyH => 'h',
-                    RdevKey::KeyI => 'i',
-                    RdevKey::KeyJ => 'j',
-                    RdevKey::KeyK => 'k',
-                    RdevKey::KeyL => 'l',
-                    RdevKey::KeyM => 'm',
-                    RdevKey::KeyN => 'n',
-                    RdevKey::KeyO => 'o',
-                    RdevKey::KeyP => 'p',
-                    RdevKey::KeyQ => 'q',
-                    RdevKey::KeyR => 'r',
-                    RdevKey::KeyS => 's',
-                    RdevKey::KeyT => 't',
-                    RdevKey::KeyU => 'u',
-                    RdevKey::KeyV => 'v',
-                    RdevKey::KeyW => 'w',
-                    RdevKey::KeyX => 'x',
-                    RdevKey::KeyY => 'y',
-                    RdevKey::KeyZ => 'z',
-                    RdevKey::Comma => ',',
-                    RdevKey::Dot => '.',
-                    RdevKey::SemiColon => ';',
-                    RdevKey::Quote => '\'',
-                    RdevKey::LeftBracket => '[',
-                    RdevKey::RightBracket => ']',
-                    RdevKey::Slash => '/',
-                    RdevKey::BackSlash => '\\',
-                    RdevKey::Minus => '-',
-                    RdevKey::Equal => '=',
-                    RdevKey::BackQuote => '`',
-                    _ => '\0',
-                }
-            }
-            if chr != '\0' {
-                if chr == 'l' && is_win && command {
-                    self.lock_screen();
-                    return;
-                }
-                key_event.set_chr(chr as _);
-            } else {
-                log::error!("Unknown key {:?}", evt);
-                return;
-            }
-        }
-
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        let (alt, ctrl, shift, command) = get_all_hotkey_state(alt, ctrl, shift, command);
-        self.legacy_modifiers(&mut key_event, alt, ctrl, shift, command);
-
-        if down_or_up == true {
-            key_event.down = true;
-        }
-        self.send_key_event(key_event, KeyboardMode::Legacy)
-    }
-
-    fn key_down_or_up(&self, down_or_up: bool, key: RdevKey, evt: Event) {
-        // Call different functions according to keyboard mode.
-        let mode = match self.get_keyboard_mode().as_str() {
-            "map" => KeyboardMode::Map,
-            "legacy" => KeyboardMode::Legacy,
-            "translate" => KeyboardMode::Translate,
-            _ => KeyboardMode::Legacy,
-        };
-
-        #[cfg(not(windows))]
-        let key = self.convert_numpad_keys(key);
-
-        let mut to_release = TO_RELEASE.lock().unwrap();
-        match mode {
-            KeyboardMode::Map => {
-                if down_or_up == true {
-                    to_release.insert(key);
-                } else {
-                    to_release.remove(&key);
-                }
-                self.map_keyboard_mode(down_or_up, key, Some(evt));
-            }
-            KeyboardMode::Legacy =>
-            {
-                #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                self.legacy_keyboard_mode(down_or_up, key, evt)
-            }
-            KeyboardMode::Translate => {
-                #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                self.translate_keyboard_mode(down_or_up, key, evt);
-            }
-            _ =>
-            {
-                #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                self.legacy_keyboard_mode(down_or_up, key, evt)
-            }
-        }
-    }
-
     pub fn get_platform(&self, is_remote: bool) -> String {
         if is_remote {
             self.peer_platform()
@@ -768,6 +292,13 @@ impl<T: InvokeUiSession> Session<T> {
         return "".to_owned();
     }
 
+    pub fn send_key_event(&self, evt: &KeyEvent) {
+        // mode: legacy(0), map(1), translate(2), auto(3)
+        let mut msg_out = Message::new();
+        msg_out.set_key_event(evt.clone());
+        self.send(Data::Message(msg_out));
+    }
+
     pub fn send_chat(&self, text: String) {
         let mut misc = Misc::new();
         misc.set_chat_message(ChatMessage {
@@ -790,77 +321,14 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::Message(msg_out));
     }
 
-    pub fn lock_screen(&self) {
-        let mut key_event = KeyEvent::new();
-        key_event.set_control_key(ControlKey::LockScreen);
-        // todo
-        key_event.down = true;
-        self.send_key_event(key_event, KeyboardMode::Legacy);
-    }
-
     pub fn enter(&self) {
         IS_IN.store(true, Ordering::SeqCst);
-        #[cfg(target_os = "linux")]
-        self.grab_hotkeys(true);
-
-        #[cfg(windows)]
-        crate::platform::windows::stop_system_key_propagate(true);
+        keyboard::client::change_grab_status(GrabState::Run);
     }
 
     pub fn leave(&self) {
         IS_IN.store(false, Ordering::SeqCst);
-        #[cfg(target_os = "linux")]
-        self.grab_hotkeys(false);
-
-        for key in TO_RELEASE.lock().unwrap().iter() {
-            self.map_keyboard_mode(false, *key, None)
-        }
-        #[cfg(windows)]
-        crate::platform::windows::stop_system_key_propagate(false);
-    }
-
-    #[cfg(target_os = "linux")]
-    pub fn grab_hotkeys(&self, _grab: bool) {
-        if _grab {
-            rdev::enable_grab();
-        } else {
-            rdev::disable_grab();
-        }
-    }
-
-    pub fn handle_flutter_key_event(
-        &self,
-        name: &str,
-        keycode: i32,
-        scancode: i32,
-        down_or_up: bool,
-    ) {
-        if scancode < 0 || keycode < 0 {
-            return;
-        }
-        let keycode: u32 = keycode as u32;
-        let scancode: u32 = scancode as u32;
-
-        #[cfg(not(target_os = "windows"))]
-        let key = rdev::key_from_scancode(scancode) as RdevKey;
-        // Windows requires special handling
-        #[cfg(target_os = "windows")]
-        let key = rdev::get_win_key(keycode, scancode);
-
-        let event_type = if down_or_up {
-            KeyPress(key)
-        } else {
-            KeyRelease(key)
-        };
-        let evt = Event {
-            time: std::time::SystemTime::now(),
-            name: Option::Some(name.to_owned()),
-            code: keycode as _,
-            scan_code: scancode as _,
-            event_type: event_type,
-        };
-
-        self.key_down_or_up(down_or_up, key, evt)
+        keyboard::client::change_grab_status(GrabState::Wait);
     }
 
     // flutter only TODO new input
@@ -874,9 +342,6 @@ impl<T: InvokeUiSession> Session<T> {
         shift: bool,
         command: bool,
     ) {
-        if HOTKEY_HOOKED.load(Ordering::SeqCst) {
-            return;
-        }
         let chars: Vec<char> = name.chars().collect();
         if chars.len() == 1 {
             let key = Key::_Raw(chars[0] as _);
@@ -895,6 +360,40 @@ impl<T: InvokeUiSession> Session<T> {
         let mut msg_out = Message::new();
         msg_out.set_key_event(key_event);
         self.send(Data::Message(msg_out));
+    }
+
+    pub fn handle_flutter_key_event(
+        &self,
+        name: &str,
+        keycode: i32,
+        scancode: i32,
+        down_or_up: bool,
+    ) {
+        if scancode < 0 || keycode < 0 {
+            return;
+        }
+        let keycode: u32 = keycode as u32;
+        let scancode: u32 = scancode as u32;
+
+        #[cfg(not(target_os = "windows"))]
+        let key = rdev::key_from_scancode(scancode) as rdev::Key;
+        // Windows requires special handling
+        #[cfg(target_os = "windows")]
+        let key = rdev::get_win_key(keycode, scancode);
+
+        let event_type = if down_or_up {
+            KeyPress(key)
+        } else {
+            KeyRelease(key)
+        };
+        let event = Event {
+            time: std::time::SystemTime::now(),
+            name: Option::Some(name.to_owned()),
+            code: keycode as _,
+            scan_code: scancode as _,
+            event_type: event_type,
+        };
+        keyboard::client::process_event(&event);
     }
 
     // flutter only TODO new input
@@ -921,25 +420,6 @@ impl<T: InvokeUiSession> Session<T> {
                 key_event.set_chr(chr);
             }
             Key::ControlKey(key) => {
-                #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                let key = if !get_key_state(enigo::Key::NumLock) {
-                    match key {
-                        ControlKey::Numpad0 => ControlKey::Insert,
-                        ControlKey::Decimal => ControlKey::Delete,
-                        ControlKey::Numpad1 => ControlKey::End,
-                        ControlKey::Numpad2 => ControlKey::DownArrow,
-                        ControlKey::Numpad3 => ControlKey::PageDown,
-                        ControlKey::Numpad4 => ControlKey::LeftArrow,
-                        ControlKey::Numpad5 => ControlKey::Clear,
-                        ControlKey::Numpad6 => ControlKey::RightArrow,
-                        ControlKey::Numpad7 => ControlKey::Home,
-                        ControlKey::Numpad8 => ControlKey::UpArrow,
-                        ControlKey::Numpad9 => ControlKey::PageUp,
-                        _ => key,
-                    }
-                } else {
-                    key
-                };
                 key_event.set_control_key(key.clone());
             }
             Key::_Raw(raw) => {
@@ -947,17 +427,15 @@ impl<T: InvokeUiSession> Session<T> {
             }
         }
 
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        let (alt, ctrl, shift, command) = get_all_hotkey_state(alt, ctrl, shift, command);
-
-        self.legacy_modifiers(&mut key_event, alt, ctrl, shift, command);
         if v == 1 {
             key_event.down = true;
         } else if v == 3 {
             key_event.press = true;
         }
+        keyboard::client::legacy_modifiers(&mut key_event, alt, ctrl, shift, command);
+        key_event.mode = KeyboardMode::Legacy.into();
 
-        self.send_key_event(key_event, KeyboardMode::Legacy);
+        self.send_key_event(&key_event);
     }
 
     pub fn send_mouse(
@@ -979,8 +457,9 @@ impl<T: InvokeUiSession> Session<T> {
             }
         }
 
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        let (alt, ctrl, shift, command) = get_all_hotkey_state(alt, ctrl, shift, command);
+        // #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        let (alt, ctrl, shift, command) =
+            keyboard::client::get_modifiers_state(alt, ctrl, shift, command);
 
         send_mouse(mask, x, y, alt, ctrl, shift, command, self);
         // on macos, ctrl + left button down = right button down, up won't emit, so we need to
@@ -1101,6 +580,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn set_display(&self, x: i32, y: i32, w: i32, h: i32, cursor_embeded: bool);
     fn switch_display(&self, display: &SwitchDisplay);
     fn set_peer_info(&self, peer_info: &PeerInfo); // flutter
+    fn on_connected(&self, conn_type: ConnType);
     fn update_privacy_mode(&self);
     fn set_permission(&self, name: &str, value: bool);
     fn close_success(&self);
@@ -1233,6 +713,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
                 "",
             );
         }
+        self.on_connected(self.lc.read().unwrap().conn_type);
         #[cfg(windows)]
         {
             let mut path = std::env::temp_dir();
@@ -1242,23 +723,6 @@ impl<T: InvokeUiSession> Interface for Session<T> {
             if let Some(path) = path.to_str() {
                 crate::platform::windows::add_recent_document(&path);
             }
-        }
-        // only run in sciter
-        #[cfg(not(feature = "flutter"))]
-        {
-            // rdev::grab and rdev::listen use the same api in macOS & Windows
-            /* todo! Unused */
-            #[cfg(not(any(
-                target_os = "android",
-                target_os = "ios",
-                target_os = "macos",
-                target_os = "windows",
-                target_os = "linux",
-            )))]
-            self.start_keyboard_hook();
-            /* todo! (sciter) Only one device can be connected at the same time in linux */
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            self.start_grab_hotkey();
         }
     }
 
@@ -1300,113 +764,14 @@ impl<T: InvokeUiSession> Interface for Session<T> {
     }
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
 impl<T: InvokeUiSession> Session<T> {
-    fn handle_hotkey_event(&self, event: Event) {
-        // if is long press, don't do anything.
-        if is_long_press(&event) {
-            return;
-        }
-
-        let (key, down) = match event.event_type {
-            EventType::KeyPress(key) => (key, true),
-            EventType::KeyRelease(key) => (key, false),
-            _ => return,
-        };
-
-        self.key_down_or_up(down, key, event);
+    pub fn lock_screen(&self) {
+        log::info!("Sending key even");
+        crate::keyboard::client::lock_screen();
     }
-
-    #[allow(dead_code)]
-    fn start_grab_hotkey(&self) {
-        if self.is_port_forward() || self.is_file_transfer() {
-            return;
-        }
-        #[cfg(target_os = "linux")]
-        if !*IS_X11.lock().unwrap() {
-            return;
-        }
-        if HOTKEY_HOOKED.swap(true, Ordering::SeqCst) {
-            return;
-        }
-
-        log::info!("starting grab hotkeys");
-        let me = self.clone();
-
-        #[cfg(target_os = "linux")]
-        {
-            let func = move |event: Event| match event.event_type {
-                EventType::KeyPress(_key) | EventType::KeyRelease(_key) => {
-                    me.handle_hotkey_event(event);
-                    None
-                }
-                _ => Some(event),
-            };
-            rdev::start_grab_listen(func);
-        }
-        #[cfg(any(target_os = "windows", target_os = "macos"))]
-        std::thread::spawn(move || {
-            let func = move |event: Event| match event.event_type {
-                EventType::KeyPress(..) | EventType::KeyRelease(..) => {
-                    // grab all keys
-                    if !IS_IN.load(Ordering::SeqCst)
-                        || !SERVER_KEYBOARD_ENABLED.load(Ordering::SeqCst)
-                    {
-                        return Some(event);
-                    } else {
-                        me.handle_hotkey_event(event);
-                        return None;
-                    }
-                }
-                _ => Some(event),
-            };
-            if let Err(error) = rdev::grab(func) {
-                log::error!("Error: {:?}", error)
-            }
-        });
-    }
-
-    #[allow(dead_code)]
-    fn start_keyboard_hook(&self) {
-        // only run in sciter
-        if self.is_port_forward() || self.is_file_transfer() {
-            return;
-        }
-        if KEYBOARD_HOOKED.swap(true, Ordering::SeqCst) {
-            return;
-        }
-        log::info!("keyboard hooked");
-
-        let me = self.clone();
-        #[cfg(windows)]
-        crate::platform::windows::enable_lowlevel_keyboard(std::ptr::null_mut() as _);
-        std::thread::spawn(move || {
-            // This will block.
-            std::env::set_var("KEYBOARD_ONLY", "y");
-
-            let func = move |evt: Event| {
-                /* todo! IS_IN can't determine if the user is focused on remote page */
-                if !IS_IN.load(Ordering::SeqCst) || !SERVER_KEYBOARD_ENABLED.load(Ordering::SeqCst)
-                {
-                    return;
-                }
-                if is_long_press(&evt) {
-                    return;
-                }
-                let (key, down) = match evt.event_type {
-                    EventType::KeyPress(key) => (key, true),
-                    EventType::KeyRelease(key) => (key, false),
-                    _ => return,
-                };
-                me.key_down_or_up(down, key, evt);
-            };
-            /* todo!: Shift + a -> AA in sciter
-             * rdev::listen and rdev::grab both send a
-             */
-            if let Err(error) = rdev::listen(func) {
-                log::error!("rdev: {:?}", error);
-            }
-        });
+    pub fn ctrl_alt_del(&self) {
+        log::info!("Sending key even");
+        crate::keyboard::client::lock_screen();
     }
 }
 
@@ -1559,108 +924,4 @@ async fn start_one_port_forward<T: InvokeUiSession>(
 async fn send_note(url: String, id: String, conn_id: i32, note: String) {
     let body = serde_json::json!({ "id": id, "Id": conn_id, "note": note });
     allow_err!(crate::post_request(url, body.to_string(), "").await);
-}
-
-fn get_hotkey_state(key: RdevKey) -> bool {
-    if let Some(&state) = MUTEX_SPECIAL_KEYS.lock().unwrap().get(&key) {
-        return state;
-    } else {
-        return false;
-    }
-}
-
-fn get_all_hotkey_state(
-    alt: bool,
-    ctrl: bool,
-    shift: bool,
-    command: bool,
-) -> (bool, bool, bool, bool) {
-    let ctrl =
-        get_hotkey_state(RdevKey::ControlLeft) || get_hotkey_state(RdevKey::ControlRight) || ctrl;
-    let shift =
-        get_hotkey_state(RdevKey::ShiftLeft) || get_hotkey_state(RdevKey::ShiftRight) || shift;
-    let command =
-        get_hotkey_state(RdevKey::MetaLeft) || get_hotkey_state(RdevKey::MetaRight) || command;
-    let alt = get_hotkey_state(RdevKey::Alt) || get_hotkey_state(RdevKey::AltGr) || alt;
-
-    (alt, ctrl, shift, command)
-}
-
-#[cfg(feature = "flutter")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn send_key_event_to_session(event: rdev::Event) {
-    if let Some(handler) = CUR_SESSION.lock().unwrap().as_ref() {
-        handler.handle_hotkey_event(event);
-    }
-}
-
-#[cfg(feature = "flutter")]
-pub fn global_grab_keyboard() {
-    if HOTKEY_HOOKED.swap(true, Ordering::SeqCst) {
-        return;
-    }
-    log::info!("starting global grab keyboard");
-
-    #[cfg(target_os = "linux")]
-    {
-        let func = move |event: Event| match event.event_type {
-            EventType::KeyPress(_key) | EventType::KeyRelease(_key) => {
-                send_key_event_to_session(event);
-                None
-            }
-            _ => Some(event),
-        };
-        rdev::start_grab_listen(func);
-    }
-
-    #[cfg(any(target_os = "windows", target_os = "macos"))]
-    std::thread::spawn(move || {
-        let func = move |event: Event| match event.event_type {
-            EventType::KeyPress(..) | EventType::KeyRelease(..) => {
-                // grab all keys
-                if !IS_IN.load(Ordering::SeqCst) {
-                    return Some(event);
-                } else {
-                    send_key_event_to_session(event);
-                    return None;
-                }
-            }
-            _ => Some(event),
-        };
-        if let Err(error) = rdev::grab(func) {
-            log::error!("Error: {:?}", error)
-        }
-    });
-}
-
-pub fn global_get_keyboard_mode() -> String {
-    return std::env::var("KEYBOARD_MODE")
-        .unwrap_or(String::from("map"))
-        .to_lowercase();
-}
-
-pub fn global_save_keyboard_mode(value: String) {
-    std::env::set_var("KEYBOARD_MODE", value);
-}
-
-fn is_long_press(event: &Event) -> bool {
-    let mut keys = MUTEX_SPECIAL_KEYS.lock().unwrap();
-    match event.event_type {
-        EventType::KeyPress(k) => {
-            if let Some(&state) = keys.get(&k) {
-                if state == true {
-                    return true;
-                } else {
-                    keys.insert(k, true);
-                }
-            }
-        }
-        EventType::KeyRelease(k) => {
-            if keys.contains_key(&k) {
-                keys.insert(k, false);
-            }
-        }
-        _ => {}
-    };
-    return false;
 }

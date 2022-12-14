@@ -324,6 +324,8 @@ impl InvokeUiSession for FlutterHandler {
         );
     }
 
+    fn on_connected(&self, _conn_type: ConnType) {}
+
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool) {
         let has_retry = if retry { "true" } else { "" };
         self.push_event(
@@ -422,8 +424,6 @@ pub fn session_start_(id: &str, event_stream: StreamSink<EventToUI>) -> ResultTy
         *session.event_stream.write().unwrap() = Some(event_stream);
         let session = session.clone();
         std::thread::spawn(move || {
-            // if flutter : disable keyboard listen
-            crate::client::disable_keyboard_listening();
             io_loop(session);
         });
         Ok(())

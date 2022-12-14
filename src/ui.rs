@@ -124,12 +124,16 @@ pub fn start(args: &mut [String]) {
         let args: Vec<String> = iter.map(|x| x.clone()).collect();
         frame.set_title(&id);
         frame.register_behavior("native-remote", move || {
-            Box::new(remote::SciterSession::new(
+            let handler = remote::SciterSession::new(
                 cmd.clone(),
                 id.clone(),
                 pass.clone(),
                 args.clone(),
-            ))
+            );
+            #[cfg(not(feature = "flutter"))]
+            crate::keyboard::set_cur_session(handler.inner());
+            
+            Box::new(handler)
         });
         page = "remote.html";
     } else {

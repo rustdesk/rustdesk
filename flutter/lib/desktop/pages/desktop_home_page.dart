@@ -438,7 +438,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   @override
   void initState() {
     super.initState();
-    bind.mainStartGrabKeyboard();
     _updateTimer = periodic_immediate(const Duration(seconds: 1), () async {
       await gFFI.serverModel.fetchID();
       final url = await bind.mainGetSoftwareUpdateUrl();
