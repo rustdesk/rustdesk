@@ -45,18 +45,11 @@ class _MyGroupState extends State<MyGroup> {
       if (gFFI.groupModel.userLoadError.isNotEmpty) {
         return _buildShowError(gFFI.groupModel.userLoadError.value);
       }
-      return Row(
-        children: [
-          _buildLeftDesktop(),
-          Expanded(
-            child: Align(
-                alignment: Alignment.topLeft,
-                child: MyGroupPeerView(
-                    menuPadding: widget.menuPadding,
-                    initPeers: gFFI.groupModel.peersShow.value)),
-          )
-        ],
-      );
+      if (isDesktop) {
+        return _buildDesktop();
+      } else {
+        return _buildMobile();
+      }
     });
   }
 
@@ -75,37 +68,86 @@ class _MyGroupState extends State<MyGroup> {
     ));
   }
 
-  Widget _buildLeftDesktop() {
-    return Row(
-      children: [
-        Card(
-          margin: EdgeInsets.symmetric(horizontal: 4.0),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side:
-                  BorderSide(color: Theme.of(context).scaffoldBackgroundColor)),
-          child: Container(
-            width: 200,
-            height: double.infinity,
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-            child: Column(
-              children: [
-                _buildLeftHeader(),
-                Expanded(
-                  child: Container(
+  Widget _buildDesktop() {
+    return Obx(
+      () => Row(
+        children: [
+          Card(
+            margin: EdgeInsets.symmetric(horizontal: 4.0),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(
+                    color: Theme.of(context).scaffoldBackgroundColor)),
+            child: Container(
+              width: 200,
+              height: double.infinity,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+              child: Column(
+                children: [
+                  _buildLeftHeader(),
+                  Expanded(
+                    child: Container(
+                      width: double.infinity,
+                      height: double.infinity,
+                      decoration:
+                          BoxDecoration(borderRadius: BorderRadius.circular(2)),
+                      child: _buildUserContacts(),
+                    ).marginSymmetric(vertical: 8.0),
+                  )
+                ],
+              ),
+            ),
+          ).marginOnly(right: 8.0),
+          Expanded(
+            child: Align(
+                alignment: Alignment.topLeft,
+                child: MyGroupPeerView(
+                    menuPadding: widget.menuPadding,
+                    initPeers: gFFI.groupModel.peersShow.value)),
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMobile() {
+    return Obx(
+      () => Column(
+        children: [
+          Card(
+            margin: EdgeInsets.symmetric(horizontal: 4.0),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(
+                    color: Theme.of(context).scaffoldBackgroundColor)),
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildLeftHeader(),
+                  Container(
                     width: double.infinity,
-                    height: double.infinity,
                     decoration:
-                        BoxDecoration(borderRadius: BorderRadius.circular(2)),
+                        BoxDecoration(borderRadius: BorderRadius.circular(4)),
                     child: _buildUserContacts(),
-                  ).marginSymmetric(vertical: 8.0),
-                )
-              ],
+                  ).marginSymmetric(vertical: 8.0)
+                ],
+              ),
             ),
           ),
-        ).marginOnly(right: 8.0),
-      ],
+          Divider(),
+          Expanded(
+            child: Align(
+                alignment: Alignment.topLeft,
+                child: MyGroupPeerView(
+                    menuPadding: widget.menuPadding,
+                    initPeers: gFFI.groupModel.peersShow.value)),
+          )
+        ],
+      ),
     );
   }
 
