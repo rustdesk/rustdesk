@@ -28,7 +28,7 @@ mod ca;
 mod gr;
 mod sv;
 mod sq;
-mod sr;
+mod sr; // Serbian
 
 lazy_static::lazy_static! {
     pub static ref LANGS: Value =
