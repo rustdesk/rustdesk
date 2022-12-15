@@ -622,14 +622,14 @@ pub fn map_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Option<KeyEv
     #[cfg(target_os = "macos")]
     let keycode = match peer.as_str() {
         "windows" => rdev::macos_code_to_win_scancode(event.code as _)?,
-        "macos" => rdev::macos_code_to_linux_code(event.code as _)?,
-        _ => event.code,
+        "macos" => event.code,
+        _ => rdev::macos_code_to_linux_code(event.code as _)?,
     };
     #[cfg(target_os = "linux")]
     let keycode = match peer.as_str() {
         "windows" => rdev::linux_code_to_win_scancode(event.code as _)?,
-        "macos" => event.code,
-        _ => rdev::linux_code_to_macos_code(event.code as _)?,
+        "macos" => rdev::linux_code_to_macos_code(event.code as _)?,
+        _ => event.code,
     };
 
     key_event.set_chr(keycode);
