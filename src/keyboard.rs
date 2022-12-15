@@ -7,19 +7,19 @@ use crate::flutter::FlutterHandler;
 use crate::ui::remote::SciterHandler;
 use crate::ui_session_interface::Session;
 use hbb_common::{log, message_proto::*};
-#[cfg(target_os = "linux")]
-use rdev::GrabError;
 use rdev::{Event, EventType, Key};
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
     collections::{HashMap, HashSet},
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
-    },
+    sync::{Arc, Mutex},
     time::SystemTime,
 };
 
+#[cfg(windows)]
 static mut IS_ALT_GR: bool = false;
+
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
 
 #[cfg(feature = "flutter")]
