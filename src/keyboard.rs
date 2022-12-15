@@ -610,11 +610,26 @@ pub fn map_keyboard_mode(event: &Event, key_event: &mut KeyEvent) {
         }
         _ => return,
     };
-    let keycode: u32 = match peer.as_str() {
-        "windows" => rdev::win_keycode_from_key(key).unwrap_or_default().into(),
+
+    #[cfg(target_os = "windows")]
+    let keycode = match peer.as_str() {
+        "windows" => event.scan_code,
         "macos" => rdev::macos_keycode_from_key(key).unwrap_or_default().into(),
         _ => rdev::linux_keycode_from_key(key).unwrap_or_default().into(),
     };
+    #[cfg(target_os = "macos")]
+    let keycode = match peer.as_str() {
+        "windows" => rdev::win_scancode_from_key(key).unwrap_or_default().into(),
+        "macos" => rdev::macos_keycode_from_key(key).unwrap_or_default().into(),
+        _ => event.code,
+    };
+    #[cfg(target_os = "linux")]
+    let keycode = match peer.as_str() {
+        "windows" => rdev::win_scancode_from_key(key).unwrap_or_default().into(),
+        "macos" => event.code,
+        _ => rdev::linux_keycode_from_key(key).unwrap_or_default().into(),
+    };
+
     key_event.set_chr(keycode);
 }
 
