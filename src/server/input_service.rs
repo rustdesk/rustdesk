@@ -69,6 +69,7 @@ struct Input {
     y: i32,
 }
 
+const KEY_RDEV_START: u64 = 999;
 const KEY_CHAR_START: u64 = 9999;
 
 #[derive(Clone, Default)]
@@ -339,7 +340,7 @@ pub fn handle_mouse(evt: &MouseEvent, conn: i32) {
 
 pub fn fix_key_down_timeout_loop() {
     std::thread::spawn(move || loop {
-        std::thread::sleep(std::time::Duration::from_millis(1_000));
+        std::thread::sleep(std::time::Duration::from_millis(10_000));
         fix_key_down_timeout(false);
     });
     if let Err(err) = ctrlc::set_handler(move || {
@@ -360,38 +361,61 @@ pub fn fix_key_down_timeout_at_exit() {
 }
 
 #[inline]
-fn get_layout(key: u32) -> Key {
-    Key::Layout(std::char::from_u32(key).unwrap_or('\0'))
+fn record_key_is_control_key(record_key: u64) -> bool {
+    record_key < KEY_CHAR_START
+}
+
+#[inline]
+fn record_key_is_chr(record_key: u64) -> bool {
+    KEY_RDEV_START <= record_key && record_key < KEY_CHAR_START
+}
+
+#[inline]
+fn record_key_is_rdev_layout(record_key: u64) -> bool {
+    KEY_CHAR_START <= record_key
+}
+
+#[inline]
+fn record_key_to_key(record_key: u64) -> Option<Key> {
+    if record_key_is_control_key(record_key) {
+        control_key_value_to_key(record_key as _)
+    } else if record_key_is_chr(record_key) {
+        let chr: u32 = (record_key - KEY_CHAR_START) as _;
+        Some(char_value_to_key(chr))
+    } else {
+        None
+    }
+}
+
+#[inline]
+fn release_record_key(record_key: u64) {
+    let func = move || {
+        if record_key_is_rdev_layout(record_key) {
+            rdev_key_down_or_up(RdevKey::Unknown((record_key - KEY_RDEV_START) as _), false);
+        } else if let Some(key) = record_key_to_key(record_key) {
+            ENIGO.lock().unwrap().key_up(key);
+            log::debug!("Fixed {:?} timeout", key);
+        }
+    };
+    
+    #[cfg(target_os = "macos")]
+    QUEUE.exec_async(func);
+    #[cfg(not(target_os = "macos"))]
+    func();
 }
 
 fn fix_key_down_timeout(force: bool) {
-    if KEYS_DOWN.lock().unwrap().is_empty() {
+    let key_down = KEYS_DOWN.lock().unwrap();
+    if key_down.is_empty() {
         return;
     }
-    let cloned = (*KEYS_DOWN.lock().unwrap()).clone();
-    for (key, value) in cloned.into_iter() {
-        if force || value.elapsed().as_millis() >= 360_000 {
-            KEYS_DOWN.lock().unwrap().remove(&key);
-            let key = if key < KEY_CHAR_START {
-                if let Some(key) = KEY_MAP.get(&(key as _)) {
-                    Some(*key)
-                } else {
-                    None
-                }
-            } else {
-                Some(get_layout((key - KEY_CHAR_START) as _))
-            };
-            if let Some(key) = key {
-                let func = move || {
-                    let mut en = ENIGO.lock().unwrap();
-                    en.key_up(key);
-                    log::debug!("Fixed {:?} timeout", key);
-                };
-                #[cfg(target_os = "macos")]
-                QUEUE.exec_async(func);
-                #[cfg(not(target_os = "macos"))]
-                func();
-            }
+    let cloned = (*key_down).clone();
+    drop(key_down);
+
+    for (record_key, time) in cloned.into_iter() {
+        if force || time.elapsed().as_millis() >= 360_000 {
+            record_pressed_key(record_key, false);
+            release_record_key(record_key);
         }
     }
 }
@@ -685,8 +709,14 @@ fn is_modifier_in_key_event(control_key: ControlKey, key_event: &KeyEvent) -> bo
         .is_some()
 }
 
-fn control_key_to_key(control_key: &EnumOrUnknown<ControlKey>) -> Option<&Key> {
-    KEY_MAP.get(&control_key.value())
+#[inline]
+fn control_key_value_to_key(value: i32) -> Option<Key> {
+    KEY_MAP.get(&value).and_then(|k| Some(*k))
+}
+
+#[inline]
+fn char_value_to_key(value: u32) -> Key {
+    Key::Layout(std::char::from_u32(value).unwrap_or('\0'))
 }
 
 fn is_not_same_status(client_locking: bool, remote_locking: bool) -> bool {
@@ -772,6 +802,8 @@ fn sync_numlock_capslock_status(key_event: &KeyEvent) {
 
 fn map_keyboard_mode(evt: &KeyEvent) {
     // map mode(1): Send keycode according to the peer platform.
+    record_pressed_key(evt.chr() as u64 + KEY_CHAR_START, evt.down);
+
     #[cfg(windows)]
     crate::platform::windows::try_change_desktop();
 
@@ -818,7 +850,7 @@ fn release_unpressed_modifiers(en: &mut Enigo, key_event: &KeyEvent) {
     fix_modifiers(&key_event.modifiers[..], en, ck_value);
 }
 
-fn is_altgr_pressed(en: &mut Enigo) -> bool {
+fn is_altgr_pressed() -> bool {
     KEYS_DOWN
         .lock()
         .unwrap()
@@ -828,10 +860,10 @@ fn is_altgr_pressed(en: &mut Enigo) -> bool {
 
 fn press_modifiers(en: &mut Enigo, key_event: &KeyEvent, to_release: &mut Vec<Key>) {
     for ref ck in key_event.modifiers.iter() {
-        if let Some(key) = control_key_to_key(ck) {
-            if !is_pressed(key, en) {
+        if let Some(key) = control_key_value_to_key(ck.value()) {
+            if !is_pressed(&key, en) {
                 #[cfg(target_os = "linux")]
-                if key == &Key::Alt && is_altgr_pressed(en) {
+                if key == Key::Alt && is_altgr_pressed() {
                     continue;
                 }
                 en.key_down(key.clone()).ok();
@@ -855,29 +887,13 @@ fn sync_modifiers(en: &mut Enigo, key_event: &KeyEvent, to_release: &mut Vec<Key
 }
 
 fn process_control_key(en: &mut Enigo, ck: &EnumOrUnknown<ControlKey>, down: bool) {
-    let mut key_down = KEYS_DOWN.lock().unwrap();
-
-    if ck.value() == ControlKey::CtrlAltDel.value() {
-        // have to spawn new thread because send_sas is tokio_main, the caller can not be tokio_main.
-        std::thread::spawn(|| {
-            allow_err!(send_sas());
-        });
-    } else if ck.value() == ControlKey::LockScreen.value() {
-        lock_screen_2();
-    } else if let Some(key) = control_key_to_key(ck) {
+    if let Some(key) = control_key_value_to_key(ck.value()) {
         if down {
-            en.key_down(key.clone()).ok();
-            key_down.insert(ck.value() as _, Instant::now());
+            en.key_down(key).ok();
         } else {
-            en.key_up(key.clone());
-            key_down.remove(&(ck.value() as _));
+            en.key_up(key);
         }
     }
-}
-
-#[inline]
-fn chr_to_record_chr(chr: u32) -> u64 {
-    chr as u64 + KEY_CHAR_START
 }
 
 #[inline]
@@ -886,13 +902,10 @@ fn need_to_uppercase(en: &mut Enigo) -> bool {
 }
 
 fn process_chr(en: &mut Enigo, chr: u32, down: bool) {
-    let mut key_down = KEYS_DOWN.lock().unwrap();
-    let key = get_layout(chr);
-    let record_chr = chr_to_record_chr(chr);
+    let key = char_value_to_key(chr);
 
     if down {
         if en.key_down(key).is_ok() {
-            key_down.insert(record_chr, Instant::now());
         } else {
             if let Ok(chr) = char::try_from(chr) {
                 let mut s = chr.to_string();
@@ -902,10 +915,8 @@ fn process_chr(en: &mut Enigo, chr: u32, down: bool) {
                 en.key_sequence(&s);
             };
         }
-        key_down.insert(record_chr, Instant::now());
     } else {
         en.key_up(key);
-        key_down.remove(&record_chr);
     }
 }
 
@@ -925,6 +936,30 @@ fn release_keys(en: &mut Enigo, to_release: &Vec<Key>) {
     }
 }
 
+fn record_pressed_key(record_key: u64, down: bool) {
+    let mut key_down = KEYS_DOWN.lock().unwrap();
+    if down {
+        key_down.insert(record_key, Instant::now());
+    } else {
+        key_down.remove(&record_key);
+    }
+}
+
+fn is_function_key(ck: &EnumOrUnknown<ControlKey>) -> bool {
+    let mut res = false;
+    if ck.value() == ControlKey::CtrlAltDel.value() {
+        // have to spawn new thread because send_sas is tokio_main, the caller can not be tokio_main.
+        std::thread::spawn(|| {
+            allow_err!(send_sas());
+        });
+        res = true;
+    } else if ck.value() == ControlKey::LockScreen.value() {
+        lock_screen_2();
+        res = true;
+    }
+    return res;
+}
+
 fn legacy_keyboard_mode(evt: &KeyEvent) {
     #[cfg(windows)]
     crate::platform::windows::try_change_desktop();
@@ -936,8 +971,19 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
 
     let down = evt.down;
     match evt.union {
-        Some(key_event::Union::ControlKey(ck)) => process_control_key(&mut en, &ck, down),
-        Some(key_event::Union::Chr(chr)) => process_chr(&mut en, chr, down),
+        Some(key_event::Union::ControlKey(ck)) => {
+            if is_function_key(&ck) {
+                return;
+            }
+            let record_key = ck.value() as u64;
+            record_pressed_key(record_key, down);
+            process_control_key(&mut en, &ck, down)
+        }
+        Some(key_event::Union::Chr(chr)) => {
+            let record_key = chr as u64 + KEY_CHAR_START;
+            record_pressed_key(record_key, down);
+            process_chr(&mut en, chr, down)
+        }
         Some(key_event::Union::Unicode(chr)) => process_unicode(&mut en, chr),
         Some(key_event::Union::Seq(ref seq)) => process_seq(&mut en, seq),
         _ => {}
