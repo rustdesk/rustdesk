@@ -316,7 +316,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Restarting Remote Device", "Restartovanje daljinskog uređaja"),
         ("remote_restarting_tip", "Udaljeni uređaj se restartuje, molimo zatvorite ovu poruku i ponovo se kasnije povežite trajnom šifrom"),
         ("Are you sure to close the connection?", "Da li ste sigurni da želite da zatvorite konekciju?"),
-
         ("Copied", "Kopirano"),
         ("Exit Fullscreen", "Napusti mod celog ekrana"),
         ("Fullscreen", "Mod celog ekrana"),
