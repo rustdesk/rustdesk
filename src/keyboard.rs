@@ -598,20 +598,18 @@ pub fn legacy_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Option<Ke
 }
 
 pub fn map_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Option<KeyEvent> {
-    let mut peer = get_peer_platform().to_lowercase();
-    peer.retain(|c| !c.is_whitespace());
-
-    let mut key = match event.event_type {
-        EventType::KeyPress(key) => {
+    match event.event_type {
+        EventType::KeyPress(..) => {
             key_event.down = true;
-            key
         }
-        EventType::KeyRelease(key) => {
+        EventType::KeyRelease(..) => {
             key_event.down = false;
-            key
         }
         _ => return None,
     };
+
+    let mut peer = get_peer_platform().to_lowercase();
+    peer.retain(|c| !c.is_whitespace());
 
     #[cfg(target_os = "windows")]
     let keycode = match peer.as_str() {
@@ -622,14 +620,14 @@ pub fn map_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Option<KeyEv
     #[cfg(target_os = "macos")]
     let keycode = match peer.as_str() {
         "windows" => rdev::macos_code_to_win_scancode(event.code as _)?,
-        "macos" => event.code,
+        "macos" => event.code as _,
         _ => rdev::macos_code_to_linux_code(event.code as _)?,
     };
     #[cfg(target_os = "linux")]
     let keycode = match peer.as_str() {
         "windows" => rdev::linux_code_to_win_scancode(event.code as _)?,
         "macos" => rdev::linux_code_to_macos_code(event.code as _)?,
-        _ => event.code,
+        _ => event.code as _,
     };
 
     key_event.set_chr(keycode);
