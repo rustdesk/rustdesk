@@ -26,6 +26,7 @@ mod ua;
 mod fa;
 mod ca;
 mod gr;
+mod sr;
 mod sv;
 mod sq;
 
@@ -57,6 +58,7 @@ lazy_static::lazy_static! {
             ("fa", "فارسی"),
             ("ca", "Català"),
             ("gr", "Ελληνικά"),
+            ("sr", "Srpski"),
             ("sv", "Svenska"),
             ("sq", "Shqip"),
         ]);
@@ -112,6 +114,7 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "fa" => fa::T.deref(),
         "ca" => ca::T.deref(),
         "gr" => gr::T.deref(),
+        "sr" => sr::T.deref(),
         "sv" => sv::T.deref(),
         "sq" => sq::T.deref(),
         _ => en::T.deref(),
