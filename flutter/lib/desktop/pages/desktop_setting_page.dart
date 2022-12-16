@@ -932,6 +932,10 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
             return false;
           }
         }
+        final old = await bind.mainGetOption(key: 'custom-rendezvous-server');
+        if (old.isNotEmpty && old != idServer) {
+          await gFFI.userModel.logOut();
+        }
         // should set one by one
         await bind.mainSetOption(
             key: 'custom-rendezvous-server', value: idServer);

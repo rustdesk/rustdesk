@@ -261,6 +261,9 @@ void showServerSettingsWithValue(String id, String relay, String key,
             });
             if (await validate()) {
               if (id != id0) {
+                if (id0.isNotEmpty) {
+                  await gFFI.userModel.logOut();
+                }
                 bind.mainSetOption(key: "custom-rendezvous-server", value: id);
               }
               if (relay != relay0) {

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter_hbb/common/hbbs/hbbs.dart';
 import 'package:flutter_hbb/common/widgets/peer_tab_page.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
@@ -78,15 +77,18 @@ class UserModel {
 
   Future<void> logOut() async {
     final tag = gFFI.dialogManager.showLoading(translate('Waiting'));
-    final url = await bind.mainGetApiServer();
-    final _ = await http.post(Uri.parse('$url/api/logout'),
-        body: {
-          'id': await bind.mainGetMyId(),
-          'uuid': await bind.mainGetUuid(),
-        },
-        headers: await getHttpHeaders());
-    await reset();
-    gFFI.dialogManager.dismissByTag(tag);
+    try {
+      final url = await bind.mainGetApiServer();
+      final _ = await http.post(Uri.parse('$url/api/logout'),
+          body: {
+            'id': await bind.mainGetMyId(),
+            'uuid': await bind.mainGetUuid(),
+          },
+          headers: await getHttpHeaders());
+    } finally {
+      await reset();
+      gFFI.dialogManager.dismissByTag(tag);
+    }
   }
 
   Future<Map<String, dynamic>> login(String userName, String pass) async {
