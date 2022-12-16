@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/mobile/widgets/dialog.dart';
 import 'package:provider/provider.dart';
@@ -107,10 +109,21 @@ class ServerPage extends StatefulWidget implements PageShape {
 }
 
 class _ServerPageState extends State<ServerPage> {
+  Timer? _updateTimer;
+
   @override
   void initState() {
     super.initState();
+    _updateTimer = periodic_immediate(const Duration(seconds: 3), () async {
+      await gFFI.serverModel.fetchID();
+    });
     gFFI.serverModel.checkAndroidPermission();
+  }
+
+  @override
+  void dispose() {
+    _updateTimer?.cancel();
+    super.dispose();
   }
 
   @override
