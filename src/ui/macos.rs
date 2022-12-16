@@ -13,7 +13,6 @@ use objc::{
 };
 use sciter::{make_args, Host};
 use std::{ffi::c_void, rc::Rc};
-use dark_light;
 
 static APP_HANDLER_IVAR: &str = "GoDeskAppHandler";
 
