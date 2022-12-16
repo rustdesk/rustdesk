@@ -367,7 +367,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable LAN Discovery", "LAN-Erkennung aktivieren"),
         ("Deny LAN Discovery", "LAN-Erkennung verbieten"),
         ("Write a message", "Nachricht schreiben"),
-        ("Prompt", ""), //Aufforderu"),
+        ("Prompt", ""), //Aufforderung???
         ("Please wait for confirmation of UAC...", "Bitte auf die Bestätigung des Nutzers warten..."),
         ("elevated_foreground_window_tip", ""),
         ("Disconnected", "Verbindung abgebrochen"),
@@ -396,11 +396,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("One-time password length", "Länge des Einmalpassworts"),
         ("Request access to your device", "Zugriff zu Ihrem Gerät erbitten"),
         ("Hide connection management window", "Fenster zur Verwaltung der Verbindung verstecken"),
-        ("hide_cm_tip", "Dies ist nur möglich, wenn der Zugriff nur über ein permanentes Passwort erfolgt."), // Sehr unklar. Muss noch angepasst werden. Original: Allow hiding only if accepting sessions via password and using pernament passw"),
-        ("wayland_experiment_tip", ""),
+        ("hide_cm_tip", "Dies ist nur möglich, wenn der Zugriff nur über ein permanentes Passwort erfolgt."),
+        ("wayland_experiment_tip", "Die Unterstützung von Wayland ist nur experimentell. Bitte nutzen Sie X11, wenn Sie einen unbeaufsichtigten Zugriff benötigen."),
         ("Right click to select tabs", "Register mit rechtem Mausklick auswählen"),
         ("Add to Address Book", "Zum Adressbuch hinzufügen"),
-        ("Group", ""),
-        ("Search", ""),
+        ("Group", "Gruppe"),
+        ("Search", "Suchen"),
     ].iter().cloned().collect();
 }
