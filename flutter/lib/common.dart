@@ -230,7 +230,7 @@ class MyTheme {
         bind.mainSetLocalOption(
             key: kCommConfKeyTheme, value: mode.toShortString());
       }
-      bind.mainChangeTheme(dark: currentThemeMode().toShortString());
+      bind.mainChangeTheme(dark: mode.toShortString());
     }
   }
 

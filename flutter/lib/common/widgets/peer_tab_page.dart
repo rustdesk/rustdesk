@@ -18,6 +18,7 @@ import '../../common.dart';
 import '../../models/platform_model.dart';
 
 const int groupTabIndex = 4;
+const String defaultGroupTabname = 'Group';
 
 class StatePeerTab {
   final RxInt currentTab = 0.obs;
@@ -26,11 +27,11 @@ class StatePeerTab {
   final RxList<int> visibleTabOrder = RxList.empty(growable: true);
   int tabHiddenFlag = 0;
   final RxList<String> tabNames = [
-    translate('Recent Sessions'),
-    translate('Favorites'),
-    translate('Discovered'),
-    translate('Address Book'),
-    translate('Group'),
+    'Recent Sessions',
+    'Favorites',
+    'Discovered',
+    'Address Book',
+    defaultGroupTabname,
   ].obs;
 
   StatePeerTab._() {
@@ -80,7 +81,7 @@ class StatePeerTab {
           gFFI.userModel.groupName.isNotEmpty) {
         tabNames[groupTabIndex] = gFFI.userModel.groupName.value;
       } else {
-        tabNames[groupTabIndex] = translate('Group');
+        tabNames[groupTabIndex] = defaultGroupTabname;
       }
       if (isTabHidden(groupTabIndex)) {
         visibleTabOrder.remove(groupTabIndex);
@@ -301,7 +302,7 @@ class _PeerTabPageState extends State<PeerTabPage>
                     child: Align(
                       alignment: Alignment.center,
                       child: Text(
-                        statePeerTab.tabNames[t], // TODO
+                        translatedTabname(t),
                         textAlign: TextAlign.center,
                         style: TextStyle(
                             height: 1,
@@ -321,6 +322,23 @@ class _PeerTabPageState extends State<PeerTabPage>
             );
           }).toList());
     });
+  }
+
+  translatedTabname(int index) {
+    if (index < statePeerTab.tabNames.length) {
+      final name = statePeerTab.tabNames[index];
+      if (index == groupTabIndex) {
+        if (name == defaultGroupTabname) {
+          return translate(name);
+        } else {
+          return name;
+        }
+      } else {
+        return translate(name);
+      }
+    }
+    assert(false);
+    return index.toString();
   }
 
   Widget _createPeersView() {
@@ -414,7 +432,7 @@ class _PeerTabPageState extends State<PeerTabPage>
         int bitMask = 1 << i;
         menu.add(MenuEntrySwitch(
             switchType: SwitchType.scheckbox,
-            text: statePeerTab.tabNames[i],
+            text: translatedTabname(i),
             getter: () async {
               return statePeerTab.tabHiddenFlag & bitMask == 0;
             },
@@ -430,9 +448,9 @@ class _PeerTabPageState extends State<PeerTabPage>
               statePeerTab.visibleTabOrder
                   .removeWhere((e) => statePeerTab.isTabHidden(e));
               for (int j = 0; j < statePeerTab.tabNames.length; j++) {
-                if (!statePeerTab.visibleTabOrder.contains(j) &&
-                    !statePeerTab.isTabHidden(j)) {
-                  statePeerTab.visibleTabOrder.add(j);
+                if (!statePeerTab.isTabHidden(j) &&
+                    !(j == groupTabIndex && statePeerTab.filterGroupCard())) {
+                  statePeerTab.addTabInOrder(statePeerTab.visibleTabOrder, j);
                 }
               }
               statePeerTab.saveTabOrder();
