@@ -766,12 +766,10 @@ impl<T: InvokeUiSession> Interface for Session<T> {
 
 impl<T: InvokeUiSession> Session<T> {
     pub fn lock_screen(&self) {
-        log::info!("Sending key even");
         crate::keyboard::client::lock_screen();
     }
     pub fn ctrl_alt_del(&self) {
-        log::info!("Sending key even");
-        crate::keyboard::client::lock_screen();
+        crate::keyboard::client::ctrl_alt_del();
     }
 }
 
