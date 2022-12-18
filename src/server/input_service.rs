@@ -863,6 +863,7 @@ fn release_unpressed_modifiers(en: &mut Enigo, key_event: &KeyEvent) {
     fix_modifiers(&key_event.modifiers[..], en, ck_value);
 }
 
+#[cfg(target_os = "linux")]
 fn is_altgr_pressed() -> bool {
     KEYS_DOWN
         .lock()
