@@ -691,9 +691,9 @@ fn sim_rdev_rawkey(code: u32, down_or_up: bool) {
     let rawkey = RawKey::ScanCode(code);
     #[cfg(target_os = "linux")]
     let rawkey = RawKey::LinuxXorgKeycode(code);
-    // to-do: test android
-    #[cfg(target_os = "android")]
-    let rawkey = RawKey::LinuxConsoleKeycode(code);
+    // // to-do: test android
+    // #[cfg(target_os = "android")]
+    // let rawkey = RawKey::LinuxConsoleKeycode(code);
     #[cfg(target_os = "macos")]
     let rawkey = RawKey::MacVirtualKeycode(code);
 
