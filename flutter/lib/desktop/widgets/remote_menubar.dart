@@ -571,7 +571,8 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       ),
     ]);
     // {handler.get_audit_server() && <li #note>{translate('Note')}</li>}
-    final auditServer = bind.sessionGetAuditServerSync(id: widget.id);
+    final auditServer =
+        bind.sessionGetAuditServerSync(id: widget.id, typ: "conn");
     if (auditServer.isNotEmpty) {
       displayMenu.add(
         MenuEntryButton<String>(
