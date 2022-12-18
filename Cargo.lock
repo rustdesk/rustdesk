@@ -4305,7 +4305,7 @@ dependencies = [
 [[package]]
 name = "rdev"
 version = "0.5.0-2"
-source = "git+https://github.com/asur4s/rdev#3d6d413a9b2ab703edc22071acea31826b0efce3"
+source = "git+https://github.com/asur4s/rdev#18bb9dd64563fc9761005bb39ff830e6402e326e"
 dependencies = [
  "cocoa",
  "core-foundation 0.9.3",
@@ -4316,6 +4316,7 @@ dependencies = [
  "inotify",
  "lazy_static",
  "libc",
+ "log",
  "mio 0.8.5",
  "strum 0.24.1",
  "strum_macros 0.24.3",

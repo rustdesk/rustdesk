@@ -376,7 +376,7 @@ impl<T: InvokeUiSession> Session<T> {
         let scancode: u32 = scancode as u32;
 
         #[cfg(not(target_os = "windows"))]
-        let key = rdev::key_from_scancode(scancode) as rdev::Key;
+        let key = rdev::key_from_code(keycode) as rdev::Key;
         // Windows requires special handling
         #[cfg(target_os = "windows")]
         let key = rdev::get_win_key(keycode, scancode);

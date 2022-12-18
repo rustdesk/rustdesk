@@ -5,7 +5,7 @@ use crate::common::IS_X11;
 use dispatch::Queue;
 use enigo::{Enigo, Key, KeyboardControllable, MouseButton, MouseControllable};
 use hbb_common::{config::COMPRESS_LEVEL, get_time, protobuf::EnumOrUnknown};
-use rdev::{simulate, EventType, Key as RdevKey};
+use rdev::{self, simulate, EventType, Key as RdevKey, RawKey};
 use std::time::Duration;
 use std::{
     convert::TryFrom,
@@ -686,6 +686,20 @@ pub fn handle_key(evt: &KeyEvent) {
     handle_key_(evt);
 }
 
+fn sim_rdev_rawkey(code: u32, down_or_up: bool) {
+    #[cfg(target_os = "windows")]
+    let rawkey = RawKey::ScanCode(code);
+    #[cfg(target_os = "linux")]
+    let rawkey = RawKey::LinuxXorgKeycode(code);
+    // // to-do: test android
+    // #[cfg(target_os = "android")]
+    // let rawkey = RawKey::LinuxConsoleKeycode(code);
+    #[cfg(target_os = "macos")]
+    let rawkey = RawKey::MacVirtualKeycode(code);
+
+    rdev_key_down_or_up(RdevKey::RawKey(rawkey), down_or_up);
+}
+
 fn rdev_key_down_or_up(key: RdevKey, down_or_up: bool) {
     let event_type = match down_or_up {
         true => EventType::KeyPress(key),
@@ -821,8 +835,7 @@ fn map_keyboard_mode(evt: &KeyEvent) {
         return;
     }
 
-    rdev_key_down_or_up(RdevKey::Unknown(evt.chr()), evt.down);
-    return;
+    sim_rdev_rawkey(evt.chr(), evt.down);
 }
 
 #[cfg(target_os = "macos")]
@@ -850,6 +863,7 @@ fn release_unpressed_modifiers(en: &mut Enigo, key_event: &KeyEvent) {
     fix_modifiers(&key_event.modifiers[..], en, ck_value);
 }
 
+#[cfg(target_os = "linux")]
 fn is_altgr_pressed() -> bool {
     KEYS_DOWN
         .lock()
