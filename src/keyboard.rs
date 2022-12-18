@@ -266,7 +266,7 @@ pub fn get_keyboard_mode_enum() -> KeyboardMode {
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn add_numlock_capslock_state(key_event: &mut KeyEvent) {
+pub fn add_numlock_capslock_status(key_event: &mut KeyEvent) {
     if get_key_state(enigo::Key::CapsLock) {
         key_event.modifiers.push(ControlKey::CapsLock.into());
     }
@@ -343,7 +343,7 @@ pub fn event_to_key_event(event: &Event) -> KeyEvent {
         }
     };
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    add_numlock_capslock_state(&mut key_event);
+    add_numlock_capslock_status(&mut key_event);
 
     return key_event;
 }
