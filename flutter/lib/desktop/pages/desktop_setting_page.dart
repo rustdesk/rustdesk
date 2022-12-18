@@ -1106,22 +1106,22 @@ class _AboutState extends State<_About> {
                   const SizedBox(
                     height: 8.0,
                   ),
-                  Text('Version: $version').marginSymmetric(vertical: 4.0),
-                  Text('Build Date: $buildDate').marginSymmetric(vertical: 4.0),
+                  Text(translate('Version') + ': $version').marginSymmetric(vertical: 4.0),
+                  Text(translate('Build Date') + ': $buildDate').marginSymmetric(vertical: 4.0),
                   InkWell(
                       onTap: () {
                         launchUrlString('https://rustdesk.com/privacy');
                       },
-                      child: const Text(
-                        'Privacy Statement',
+                      child: Text(
+                        translate('Privacy Statement'),
                         style: linkStyle,
                       ).marginSymmetric(vertical: 4.0)),
                   InkWell(
                       onTap: () {
                         launchUrlString('https://rustdesk.com');
                       },
-                      child: const Text(
-                        'Website',
+                      child: Text(
+                        translate('Website'),
                         style: linkStyle,
                       ).marginSymmetric(vertical: 4.0)),
                   Container(
@@ -1138,8 +1138,8 @@ class _AboutState extends State<_About> {
                                 'Copyright © 2022 Purslane Ltd.\n$license',
                                 style: const TextStyle(color: Colors.white),
                               ),
-                              const Text(
-                                'Made with heart in this chaotic world!',
+                              Text(
+                                translate('Slogan_tip'),
                                 style: TextStyle(
                                     fontWeight: FontWeight.w800,
                                     color: Colors.white),
