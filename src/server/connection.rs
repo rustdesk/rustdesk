@@ -72,6 +72,8 @@ pub struct Connection {
     hash: Hash,
     read_jobs: Vec<fs::TransferJob>,
     timer: Interval,
+    file_timer: Interval,
+    http_timer: Interval,
     file_transfer: Option<(String, bool)>,
     port_forward_socket: Option<Framed<TcpStream, BytesCodec>>,
     port_forward_address: String,
@@ -164,6 +166,8 @@ impl Connection {
             hash,
             read_jobs: Vec::new(),
             timer: time::interval(SEC30),
+            file_timer: time::interval(SEC30),
+            http_timer: time::interval(Duration::from_secs(3)),
             file_transfer: None,
             port_forward_socket: None,
             port_forward_address: "".to_owned(),
@@ -377,15 +381,17 @@ impl Connection {
                         break;
                     }
                 },
-                _ = conn.timer.tick() => {
+                _ = conn.file_timer.tick() => {
                     if !conn.read_jobs.is_empty() {
                         if let Err(err) = fs::handle_read_jobs(&mut conn.read_jobs, &mut conn.stream).await {
                             conn.on_close(&err.to_string(), false).await;
                             break;
                         }
                     } else {
-                        conn.timer = time::interval_at(Instant::now() + SEC30, SEC30);
+                        conn.file_timer = time::interval_at(Instant::now() + SEC30, SEC30);
                     }
+                }
+                _ = conn.http_timer.tick() => {
                     conn.post_conn_audit(json!({})); // heartbeat
                 },
                 Some((instant, value)) = rx_video.recv() => {
@@ -1270,7 +1276,7 @@ impl Connection {
                                             .await;
                                         let mut files = job.files().to_owned();
                                         self.read_jobs.push(job);
-                                        self.timer = time::interval(MILLI1);
+                                        self.file_timer = time::interval(MILLI1);
                                         self.post_file_audit(
                                             "send",
                                             &s.path,
