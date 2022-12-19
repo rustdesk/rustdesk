@@ -106,7 +106,8 @@ class GroupModel {
             queryParameters: {
               'current': current.toString(),
               'pageSize': pageSize.toString(),
-              'user_name': username
+              'grp': gFFI.userModel.groupName.value,
+              'target_user': username
             });
         current += pageSize;
         final resp = await http.get(uri, headers: await getHttpHeaders());
