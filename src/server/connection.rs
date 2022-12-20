@@ -654,6 +654,13 @@ impl Connection {
         {
             self.send_login_error("Your ip is blocked by the peer")
                 .await;
+            Self::post_alarm_audit(
+                AlarmAuditType::IpWhiltelist, //"ip whiltelist",
+                true,
+                json!({
+                            "ip":addr.ip(),
+                }),
+            );
             sleep(1.).await;
             return false;
         }
@@ -745,6 +752,26 @@ impl Connection {
             "is_file":is_file,
             "info":json!(info).to_string(),
         });
+        tokio::spawn(async move {
+            allow_err!(Self::post_audit_async(url, v).await);
+        });
+    }
+
+    pub fn post_alarm_audit(typ: AlarmAuditType, from_remote: bool, info: Value) {
+        let url = crate::get_audit_server(
+            Config::get_option("api-server"),
+            Config::get_option("custom-rendezvous-server"),
+            "alarm".to_owned(),
+        );
+        if url.is_empty() {
+            return;
+        }
+        let mut v = Value::default();
+        v["id"] = json!(Config::get_id());
+        v["uuid"] = json!(base64::encode(hbb_common::get_uuid()));
+        v["typ"] = json!(typ as i8);
+        v["from_remote"] = json!(from_remote);
+        v["info"] = serde_json::Value::String(info.to_string());
         tokio::spawn(async move {
             allow_err!(Self::post_audit_async(url, v).await);
         });
@@ -1157,8 +1184,22 @@ impl Connection {
                 if failure.2 > 30 {
                     self.send_login_error("Too many wrong password attempts")
                         .await;
+                    Self::post_alarm_audit(
+                        AlarmAuditType::ManyWrongPassword,
+                        true,
+                        json!({
+                                    "ip":self.ip,
+                        }),
+                    );
                 } else if time == failure.0 && failure.1 > 6 {
                     self.send_login_error("Please try 1 minute later").await;
+                    Self::post_alarm_audit(
+                        AlarmAuditType::FrequentAttempt,
+                        true,
+                        json!({
+                                    "ip":self.ip,
+                        }),
+                    );
                 } else if !self.validate_password() {
                     if failure.0 == time {
                         failure.1 += 1;
@@ -1818,4 +1859,10 @@ struct ConnAuditResponse {
     #[allow(dead_code)]
     ret: bool,
     action: String,
+}
+
+pub enum AlarmAuditType {
+    IpWhiltelist = 0,
+    ManyWrongPassword = 1,
+    FrequentAttempt = 2,
 }
