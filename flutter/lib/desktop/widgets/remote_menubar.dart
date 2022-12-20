@@ -1032,7 +1032,9 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         final h265 = codecsJson['h265'] ?? false;
         codecs.add(h264);
         codecs.add(h265);
-      } finally {}
+      } catch (e) {
+        debugPrint("Show Codec Preference err=$e");
+      }
       if (codecs.length == 2 && (codecs[0] || codecs[1])) {
         displayMenu.add(MenuEntryRadios<String>(
           text: translate('Codec Preference'),

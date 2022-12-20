@@ -982,6 +982,8 @@ class _FileManagerPageState extends State<FileManagerPage>
                               },
                               dismissOnClicked: true));
                         }
+                      } catch (e) {
+                        debugPrint("buildBread fetchDirectory err=$e");
                       } finally {
                         if (!isLocal) {
                           _ffi.dialogManager.dismissByTag(loadingTag);
