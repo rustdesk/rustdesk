@@ -129,18 +129,18 @@ impl PipeWireRecorder {
     pub fn new(capturable: PipeWireCapturable) -> Result<Self, Box<dyn Error>> {
         let pipeline = gst::Pipeline::new(None);
 
-        let src = gst::ElementFactory::make("pipewiresrc", None)?;
-        src.set_property("fd", &capturable.fd.as_raw_fd())?;
-        src.set_property("path", &format!("{}", capturable.path))?;
-        src.set_property("keepalive_time", &1_000.as_raw_fd())?;
+        let src = gst::ElementFactory::make_with_name("pipewiresrc", None).unwrap();
+        src.set_property("fd", &capturable.fd.as_raw_fd());
+        src.set_property("path", &format!("{}", capturable.path));
+        src.set_property("keepalive_time", &1_000.as_raw_fd());
 
         // For some reason pipewire blocks on destruction of AppSink if this is not set to true,
         // see: https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/982
-        src.set_property("always-copy", &true)?;
+        src.set_property("always-copy", &true);
 
-        let sink = gst::ElementFactory::make("appsink", None)?;
-        sink.set_property("drop", &true)?;
-        sink.set_property("max-buffers", &1u32)?;
+        let sink = gst::ElementFactory::make_with_name("appsink", None).unwrap();
+        sink.set_property("drop", &true);
+        sink.set_property("max-buffers", &1u32);
 
         pipeline.add_many(&[&src, &sink])?;
         src.link(&sink)?;
@@ -173,20 +173,20 @@ impl Recorder for PipeWireRecorder {
             .try_pull_sample(gst::ClockTime::from_mseconds(timeout_ms))
         {
             let cap = sample
-                .get_caps()
+                .caps()
                 .ok_or("Failed get caps")?
-                .get_structure(0)
+                .structure(0)
                 .ok_or("Failed to get structure")?;
-            let w: i32 = cap.get_value("width")?.get_some()?;
-            let h: i32 = cap.get_value("height")?.get_some()?;
+            let w: i32 = cap.value("width")?.get()?;
+            let h: i32 = cap.value("height")?.get()?;
             let w = w as usize;
             let h = h as usize;
             let buf = sample
-                .get_buffer_owned()
+                .buffer_owned()
                 .ok_or_else(|| GStreamerError("Failed to get owned buffer.".into()))?;
             let mut crop = buf
-                .get_meta::<gstreamer_video::VideoCropMeta>()
-                .map(|m| m.get_rect());
+                .meta::<gstreamer_video::VideoCropMeta>()
+                .map(|m| m.rect());
             // only crop if necessary
             if Some((0, 0, w as u32, h as u32)) == crop {
                 crop = None;
@@ -197,7 +197,7 @@ impl Recorder for PipeWireRecorder {
             if let Err(..) = crate::would_block_if_equal(&mut self.saved_raw_data, buf.as_slice()) {
                 return Ok(PixelProvider::NONE);
             }
-            let buf_size = buf.get_size();
+            let buf_size = buf.size();
             // BGRx is 4 bytes per pixel
             if buf_size != (w * h * 4) {
                 // for some reason the width and height of the caps do not guarantee correct buffer
