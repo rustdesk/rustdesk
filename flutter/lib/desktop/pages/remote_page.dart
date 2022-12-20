@@ -157,6 +157,11 @@ class _RemotePageState extends State<RemotePage>
                       focusNode: _rawKeyFocusNode,
                       onFocusChange: (bool v) {
                         _imageFocused = v;
+                        if (_imageFocused) {
+                          _ffi.inputModel.enterOrLeave(true);
+                        } else {
+                          _ffi.inputModel.enterOrLeave(false);
+                        }
                       },
                       inputModel: _ffi.inputModel,
                       child: getBodyForDesktop(context)));
@@ -195,7 +200,6 @@ class _RemotePageState extends State<RemotePage>
         //
       }
     }
-    _ffi.inputModel.enterOrLeave(true);
   }
 
   void leaveView(PointerExitEvent evt) {
@@ -208,7 +212,6 @@ class _RemotePageState extends State<RemotePage>
         //
       }
     }
-    _ffi.inputModel.enterOrLeave(false);
   }
 
   Widget getBodyForDesktop(BuildContext context) {
