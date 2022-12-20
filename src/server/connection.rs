@@ -26,6 +26,7 @@ use hbb_common::{
 };
 #[cfg(any(target_os = "android", target_os = "ios"))]
 use scrap::android::call_main_service_mouse_input;
+use serde::Deserialize;
 use serde_json::{json, value::Value};
 use sha2::{Digest, Sha256};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -261,7 +262,7 @@ impl Connection {
                             }
                         }
                         ipc::Data::Close => {
-                            conn.on_close_manually("connection manager").await;
+                            conn.on_close_manually("connection manager", "peer").await;
                             break;
                         }
                         ipc::Data::ChatMessage{text} => {
@@ -392,7 +393,10 @@ impl Connection {
                     }
                 }
                 _ = conn.http_timer.tick() => {
-                    conn.post_conn_audit(json!({})); // heartbeat
+                    if let Err(_) = Connection::post_heartbeat(conn.server_audit_conn.clone(), conn.inner.id).await {
+                        conn.on_close_manually("web console", "web console").await;
+                        break;
+                    }
                 },
                 Some((instant, value)) = rx_video.recv() => {
                     if !conn.video_ack_required {
@@ -420,7 +424,7 @@ impl Connection {
                         Some(message::Union::Misc(m)) => {
                             match &m.union {
                                 Some(misc::Union::StopService(_)) => {
-                                    conn.on_close_manually("stop service").await;
+                                    conn.on_close_manually("stop service", "peer").await;
                                     break;
                                 }
                                 _ => {},
@@ -609,7 +613,7 @@ impl Connection {
                         if last_recv_time.elapsed() >= H1 {
                             bail!("Timeout");
                         }
-                        self.post_conn_audit(json!({})); // heartbeat
+                        Connection::post_heartbeat(self.server_audit_conn.clone(), self.inner.id).await?;
                     }
                 }
             }
@@ -692,6 +696,25 @@ impl Connection {
         });
     }
 
+    async fn post_heartbeat(server_audit_conn: String, conn_id: i32) -> ResultType<()> {
+        if server_audit_conn.is_empty() {
+            return Ok(());
+        }
+        let url = server_audit_conn.clone();
+        let mut v = Value::default();
+        v["id"] = json!(Config::get_id());
+        v["uuid"] = json!(base64::encode(hbb_common::get_uuid()));
+        v["Id"] = json!(conn_id);
+        if let Ok(rsp) = Self::post_audit_async(url, v).await {
+            if let Ok(rsp) = serde_json::from_str::<ConnAuditResponse>(&rsp) {
+                if rsp.action == "disconnect" {
+                    bail!("disconnect by server");
+                }
+            }
+        }
+        return Ok(());
+    }
+
     fn post_file_audit(&self, action: &str, path: &str, files: Vec<(String, i64)>, info: Value) {
         if self.server_audit_file.is_empty() {
             return;
@@ -728,9 +751,8 @@ impl Connection {
     }
 
     #[inline]
-    async fn post_audit_async(url: String, v: Value) -> ResultType<()> {
-        crate::post_request(url, v.to_string(), "").await?;
-        Ok(())
+    async fn post_audit_async(url: String, v: Value) -> ResultType<String> {
+        crate::post_request(url, v.to_string(), "").await
     }
 
     async fn send_logon_response(&mut self) {
@@ -1610,10 +1632,10 @@ impl Connection {
         self.port_forward_socket.take();
     }
 
-    async fn on_close_manually(&mut self, close_from: &str) {
+    async fn on_close_manually(&mut self, close_from: &str, close_by: &str) {
         self.close_manually = true;
         let mut misc = Misc::new();
-        misc.set_close_reason("Closed manually by the peer".into());
+        misc.set_close_reason(format!("Closed manually by the {}", close_by));
         let mut msg_out = Message::new();
         msg_out.set_misc(misc);
         self.send(msg_out).await;
@@ -1789,4 +1811,11 @@ mod privacy_mode {
             Ok(true)
         }
     }
+}
+
+#[derive(Debug, Deserialize)]
+struct ConnAuditResponse {
+    #[allow(dead_code)]
+    ret: bool,
+    action: String,
 }
