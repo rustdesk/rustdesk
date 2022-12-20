@@ -50,6 +50,12 @@ impl TraitCapturer for Capturer {
             } else {
                 x
             })),
+            PixelProvider::RGB0(w, h, x) => Ok(Frame(if self.2 {
+                crate::common::rgba_to_i420(w as _, h as _, &x, &mut self.3);
+                &self.3[..]
+            } else {
+                x
+            })),
             PixelProvider::NONE => Err(std::io::ErrorKind::WouldBlock.into()),
             _ => Err(map_err("Invalid data")),
         }
