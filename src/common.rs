@@ -693,8 +693,8 @@ pub fn is_keyboard_mode_supported(keyboard_mode: &KeyboardMode, version_number: 
     match keyboard_mode {
         KeyboardMode::Legacy => true,
         KeyboardMode::Map => version_number >= hbb_common::get_version_number("1.2.0"),
-        KeyboardMode::Translate => true,
-        KeyboardMode::Auto => true,
+        KeyboardMode::Translate => false,
+        KeyboardMode::Auto => false,
     }
 }
 

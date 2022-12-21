@@ -4,7 +4,7 @@ use crate::client::{
     load_config, send_mouse, start_video_audio_threads, FileManager, Key, LoginConfigHandler,
     QualityStatus, KEY_MAP,
 };
-use crate::common::GrabState;
+use crate::common::{is_keyboard_mode_supported, GrabState};
 use crate::keyboard;
 use crate::{client::Data, client::Interface};
 use async_trait::async_trait;
@@ -46,6 +46,10 @@ impl<T: InvokeUiSession> Session<T> {
 
     pub fn get_custom_image_quality(&self) -> Vec<i32> {
         self.lc.read().unwrap().custom_image_quality.clone()
+    }
+
+    pub fn get_peer_version(&self) -> i64 {
+        self.lc.read().unwrap().version.clone()
     }
 
     pub fn get_keyboard_mode(&self) -> String {
@@ -196,6 +200,14 @@ impl<T: InvokeUiSession> Session<T> {
 
     pub fn is_xfce(&self) -> bool {
         crate::platform::is_xfce()
+    }
+
+    pub fn get_supported_keyboard_modes(&self) -> Vec<KeyboardMode> {
+        let version = self.get_peer_version();
+        KeyboardMode::iter()
+            .filter(|&mode| is_keyboard_mode_supported(mode, version))
+            .map(|&mode| mode)
+            .collect::<Vec<_>>()
     }
 
     pub fn remove_port_forward(&self, port: i32) {
