@@ -635,6 +635,8 @@ pub fn map_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Option<KeyEv
         "macos" => rdev::linux_code_to_macos_code(event.code as _)?,
         _ => event.code as _,
     };
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let keycode = 0;
 
     key_event.set_chr(keycode);
     Some(key_event)
