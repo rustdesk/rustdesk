@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../../common.dart';
@@ -234,6 +235,149 @@ void wrongPasswordDialog(String id, OverlayDialogManager dialogManager) {
               child: Text(translate('Retry')),
             ),
           ]));
+}
+
+void showServerSettingsWithValue(String id, String relay, String key,
+    String api, OverlayDialogManager dialogManager) async {
+  Map<String, dynamic> oldOptions = jsonDecode(await bind.mainGetOptions());
+  String id0 = oldOptions['custom-rendezvous-server'] ?? "";
+  String relay0 = oldOptions['relay-server'] ?? "";
+  String api0 = oldOptions['api-server'] ?? "";
+  String key0 = oldOptions['key'] ?? "";
+  var isInProgress = false;
+  final idController = TextEditingController(text: id);
+  final relayController = TextEditingController(text: relay);
+  final apiController = TextEditingController(text: api);
+
+  String? idServerMsg;
+  String? relayServerMsg;
+  String? apiServerMsg;
+
+  dialogManager.show((setState, close) {
+    Future<bool> validate() async {
+      if (idController.text != id) {
+        final res = await validateAsync(idController.text);
+        setState(() => idServerMsg = res);
+        if (idServerMsg != null) return false;
+        id = idController.text;
+      }
+      if (relayController.text != relay) {
+        relayServerMsg = await validateAsync(relayController.text);
+        if (relayServerMsg != null) return false;
+        relay = relayController.text;
+      }
+      if (apiController.text != relay) {
+        apiServerMsg = await validateAsync(apiController.text);
+        if (apiServerMsg != null) return false;
+        api = apiController.text;
+      }
+      return true;
+    }
+
+    return CustomAlertDialog(
+      title: Text(translate('ID/Relay Server')),
+      content: Form(
+          child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                    TextFormField(
+                      controller: idController,
+                      decoration: InputDecoration(
+                          labelText: translate('ID Server'),
+                          errorText: idServerMsg),
+                    )
+                  ] +
+                  (isAndroid
+                      ? [
+                          TextFormField(
+                            controller: relayController,
+                            decoration: InputDecoration(
+                                labelText: translate('Relay Server'),
+                                errorText: relayServerMsg),
+                          )
+                        ]
+                      : []) +
+                  [
+                    TextFormField(
+                      controller: apiController,
+                      decoration: InputDecoration(
+                        labelText: translate('API Server'),
+                      ),
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
+                      validator: (v) {
+                        if (v != null && v.isNotEmpty) {
+                          if (!(v.startsWith('http://') ||
+                              v.startsWith("https://"))) {
+                            return translate("invalid_http");
+                          }
+                        }
+                        return apiServerMsg;
+                      },
+                    ),
+                    TextFormField(
+                      initialValue: key,
+                      decoration: InputDecoration(
+                        labelText: 'Key',
+                      ),
+                      onChanged: (String? value) {
+                        if (value != null) key = value.trim();
+                      },
+                    ),
+                    Offstage(
+                        offstage: !isInProgress,
+                        child: LinearProgressIndicator())
+                  ])),
+      actions: [
+        TextButton(
+          style: flatButtonStyle,
+          onPressed: () {
+            close();
+          },
+          child: Text(translate('Cancel')),
+        ),
+        TextButton(
+          style: flatButtonStyle,
+          onPressed: () async {
+            setState(() {
+              idServerMsg = null;
+              relayServerMsg = null;
+              apiServerMsg = null;
+              isInProgress = true;
+            });
+            if (await validate()) {
+              if (id != id0) {
+                if (id0.isNotEmpty) {
+                  await gFFI.userModel.logOut();
+                }
+                bind.mainSetOption(key: "custom-rendezvous-server", value: id);
+              }
+              if (relay != relay0) {
+                bind.mainSetOption(key: "relay-server", value: relay);
+              }
+              if (key != key0) bind.mainSetOption(key: "key", value: key);
+              if (api != api0) {
+                bind.mainSetOption(key: "api-server", value: api);
+              }
+              close();
+            }
+            setState(() {
+              isInProgress = false;
+            });
+          },
+          child: Text(translate('OK')),
+        ),
+      ],
+    );
+  });
+}
+
+Future<String?> validateAsync(String value) async {
+  value = value.trim();
+  if (value.isEmpty) {
+    return null;
+  }
+  final res = await bind.mainTestIfValidServer(server: value);
+  return res.isEmpty ? null : res;
 }
 
 class PasswordWidget extends StatefulWidget {
