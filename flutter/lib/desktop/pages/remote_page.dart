@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -48,7 +49,7 @@ class RemotePage extends StatefulWidget {
 }
 
 class _RemotePageState extends State<RemotePage>
-    with AutomaticKeepAliveClientMixin {
+    with AutomaticKeepAliveClientMixin, MultiWindowListener {
   Timer? _timer;
   String keyboardMode = "legacy";
   final _cursorOverImage = false.obs;
@@ -57,7 +58,7 @@ class _RemotePageState extends State<RemotePage>
   late RxBool _remoteCursorMoved;
   late RxBool _keyboardEnabled;
 
-  final FocusNode _rawKeyFocusNode = FocusNode();
+  final FocusNode _rawKeyFocusNode = FocusNode(debugLabel: "rawkeyFocusNode");
   var _imageFocused = false;
 
   Function(bool)? _onEnterOrLeaveImage4Menubar;
@@ -111,6 +112,7 @@ class _RemotePageState extends State<RemotePage>
         id: widget.id, arg: 'show-remote-cursor');
     _zoomCursor.value =
         bind.sessionGetToggleOptionSync(id: widget.id, arg: 'zoom-cursor');
+    DesktopMultiWindow.addListener(this);
     // if (!_isCustomCursorInited) {
     //   customCursorController.registerNeedUpdateCursorCallback(
     //       (String? lastKey, String? currentKey) async {
@@ -125,8 +127,17 @@ class _RemotePageState extends State<RemotePage>
   }
 
   @override
+  void onWindowBlur() {
+    super.onWindowBlur();
+    // unfocus the key focus when the whole window is lost focus,
+    // and let OS to handle events instead.
+    _rawKeyFocusNode.unfocus();
+  }
+
+  @override
   void dispose() {
     debugPrint("REMOTE PAGE dispose ${widget.id}");
+    DesktopMultiWindow.removeListener(this);
     _ffi.dialogManager.hideMobileActionsOverlay();
     _ffi.recordingModel.onClose();
     _rawKeyFocusNode.dispose();

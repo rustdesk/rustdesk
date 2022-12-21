@@ -117,16 +117,6 @@ class _ConnectionTabPageState extends State<ConnectionTabPage>
   }
 
   @override
-  void onWindowBlur() {
-    super.onWindowBlur();
-    final state = tabController.state.value;
-    if (state.tabs.isNotEmpty) {
-      final sessionId = state.tabs[state.selected].key;
-      bind.sessionEnterOrLeave(id: sessionId, enter: false);
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
     final tabWidget = Obx(
       () => Container(
