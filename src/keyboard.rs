@@ -343,7 +343,7 @@ pub fn event_to_key_event(event: &Event) -> Option<KeyEvent> {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             res = legacy_keyboard_mode(event, key_event)?;
             #[cfg(any(target_os = "android", target_os = "ios"))]
-            res = None;
+            res = None?;
             res
         }
     };
