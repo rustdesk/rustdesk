@@ -958,23 +958,17 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
 
       import() {
         Clipboard.getData(Clipboard.kTextPlain).then((value) {
-          TextEditingController mytext = TextEditingController();
-          String? aNullableString = '';
-          aNullableString = value?.text;
-          mytext.text = aNullableString.toString();
-          if (mytext.text.isNotEmpty) {
+          final text = value?.text;
+          if (text != null && text.isNotEmpty) {
             try {
-              Map<String, dynamic> config = jsonDecode(mytext.text);
-              if (config.containsKey('IdServer')) {
-                String id = config['IdServer'] ?? '';
-                String relay = config['RelayServer'] ?? '';
-                String api = config['ApiServer'] ?? '';
-                String key = config['Key'] ?? '';
-                idController.text = id;
-                relayController.text = relay;
-                apiController.text = api;
-                keyController.text = key;
-                Future<bool> success = set(id, relay, api, key);
+              final sc = ServerConfig.decode(text);
+              if (sc.idServer.isNotEmpty) {
+                idController.text = sc.idServer;
+                relayController.text = sc.relayServer;
+                apiController.text = sc.apiServer;
+                keyController.text = sc.key;
+                Future<bool> success =
+                    set(sc.idServer, sc.relayServer, sc.apiServer, sc.key);
                 success.then((value) {
                   if (value) {
                     showToast(
@@ -996,12 +990,15 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
       }
 
       export() {
-        Map<String, String> config = {};
-        config['IdServer'] = idController.text.trim();
-        config['RelayServer'] = relayController.text.trim();
-        config['ApiServer'] = apiController.text.trim();
-        config['Key'] = keyController.text.trim();
-        Clipboard.setData(ClipboardData(text: jsonEncode(config)));
+        final text = ServerConfig(
+                idServer: idController.text,
+                relayServer: relayController.text,
+                apiServer: apiController.text,
+                key: keyController.text)
+            .encode();
+        debugPrint("ServerConfig export: $text");
+
+        Clipboard.setData(ClipboardData(text: text));
         showToast(translate('Export server configuration successfully'));
       }
 
@@ -1106,8 +1103,10 @@ class _AboutState extends State<_About> {
                   const SizedBox(
                     height: 8.0,
                   ),
-                  Text(translate('Version') + ': $version').marginSymmetric(vertical: 4.0),
-                  Text(translate('Build Date') + ': $buildDate').marginSymmetric(vertical: 4.0),
+                  Text(translate('Version') + ': $version')
+                      .marginSymmetric(vertical: 4.0),
+                  Text(translate('Build Date') + ': $buildDate')
+                      .marginSymmetric(vertical: 4.0),
                   InkWell(
                       onTap: () {
                         launchUrlString('https://rustdesk.com/privacy');

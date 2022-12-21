@@ -1510,3 +1510,53 @@ Pointer<win32.OSVERSIONINFOEX> getOSVERSIONINFOEXPointer() {
 bool get kUseCompatibleUiMode =>
     Platform.isWindows &&
     const [WindowsTarget.w7].contains(windowsBuildNumber.windowsVersion);
+
+class ServerConfig {
+  late String idServer;
+  late String relayServer;
+  late String apiServer;
+  late String key;
+
+  ServerConfig(
+      {String? idServer, String? relayServer, String? apiServer, String? key}) {
+    this.idServer = idServer?.trim() ?? '';
+    this.relayServer = relayServer?.trim() ?? '';
+    this.apiServer = apiServer?.trim() ?? '';
+    this.key = key?.trim() ?? '';
+  }
+
+  /// decode from shared string (from user shared or rustdesk-server generated)
+  /// also see [encode]
+  /// throw when decoding failure
+  ServerConfig.decode(String msg) {
+    final input = msg.split('').reversed.join('');
+    final bytes = base64Decode(base64.normalize(input));
+    final json = jsonDecode(utf8.decode(bytes));
+
+    idServer = json['host'] ?? '';
+    relayServer = json['relay'] ?? '';
+    apiServer = json['api'] ?? '';
+    key = json['key'] ?? '';
+  }
+
+  /// encode to shared string
+  /// also see [ServerConfig.decode]
+  String encode() {
+    Map<String, String> config = {};
+    config['host'] = idServer.trim();
+    config['relay'] = relayServer.trim();
+    config['api'] = apiServer.trim();
+    config['key'] = key.trim();
+    return base64Encode(Uint8List.fromList(jsonEncode(config).codeUnits))
+        .split('')
+        .reversed
+        .join();
+  }
+
+  /// from local options
+  ServerConfig.fromOptions(Map<String, dynamic> options)
+      : idServer = options['custom-rendezvous-server'] ?? "",
+        relayServer = options['relay-server'] ?? "",
+        apiServer = options['api-server'] ?? "",
+        key = options['key'] ?? "";
+}

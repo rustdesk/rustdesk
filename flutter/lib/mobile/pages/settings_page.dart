@@ -391,11 +391,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
 
 void showServerSettings(OverlayDialogManager dialogManager) async {
   Map<String, dynamic> options = jsonDecode(await bind.mainGetOptions());
-  String id = options['custom-rendezvous-server'] ?? "";
-  String relay = options['relay-server'] ?? "";
-  String api = options['api-server'] ?? "";
-  String key = options['key'] ?? "";
-  showServerSettingsWithValue(id, relay, key, api, dialogManager);
+  showServerSettingsWithValue(ServerConfig.fromOptions(options), dialogManager);
 }
 
 void showLanguageSettings(OverlayDialogManager dialogManager) async {
