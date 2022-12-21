@@ -130,7 +130,7 @@ impl PipeWireRecorder {
     pub fn new(capturable: PipeWireCapturable) -> Result<Self, Box<dyn Error>> {
         let pipeline = gst::Pipeline::new(None);
 
-        let src = gst::ElementFactory::make_with_name("pipewiresrc", None).unwrap();
+        let src = gst::ElementFactory::make_with_name("pipewiresrc", None)?;
         src.set_property("fd", &capturable.fd.as_raw_fd());
         src.set_property("path", &format!("{}", capturable.path));
         src.set_property("keepalive_time", &1_000.as_raw_fd());
@@ -139,7 +139,7 @@ impl PipeWireRecorder {
         // see: https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/982
         src.set_property("always-copy", &true);
 
-        let sink = gst::ElementFactory::make_with_name("appsink", None).unwrap();
+        let sink = gst::ElementFactory::make_with_name("appsink", None)?;
         sink.set_property("drop", &true);
         sink.set_property("max-buffers", &1u32);
 
@@ -254,12 +254,18 @@ impl Recorder for PipeWireRecorder {
         let buf = if self.is_cropped {
             self.buffer_cropped.as_slice()
         } else {
-            self.buffer.as_ref().unwrap().as_slice()
+            self.buffer
+                .as_ref()
+                .ok_or("Failed to get buffer as ref")?
+                .as_slice()
         };
         match self.pix_fmt.as_str() {
             "BGRx" => Ok(PixelProvider::BGR0(self.width, self.height, buf)),
             "RGBx" => Ok(PixelProvider::RGB0(self.width, self.height, buf)),
-            _ => unreachable!(),
+            _ => Err(Box::new(GStreamerError(format!(
+                "Unreachable! Unknown pix_fmt, {}",
+                &self.pix_fmt
+            )))),
         }
     }
 }
