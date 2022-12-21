@@ -52,6 +52,7 @@ class _RemotePageState extends State<RemotePage>
     with AutomaticKeepAliveClientMixin, MultiWindowListener {
   Timer? _timer;
   String keyboardMode = "legacy";
+  bool _isWindowBlur = false;
   final _cursorOverImage = false.obs;
   late RxBool _showRemoteCursor;
   late RxBool _zoomCursor;
@@ -59,7 +60,6 @@ class _RemotePageState extends State<RemotePage>
   late RxBool _keyboardEnabled;
 
   final FocusNode _rawKeyFocusNode = FocusNode(debugLabel: "rawkeyFocusNode");
-  var _imageFocused = false;
 
   Function(bool)? _onEnterOrLeaveImage4Menubar;
 
@@ -104,7 +104,6 @@ class _RemotePageState extends State<RemotePage>
     if (!Platform.isLinux) {
       Wakelock.enable();
     }
-    _rawKeyFocusNode.requestFocus();
     _ffi.ffiModel.updateEventListener(widget.id);
     _ffi.qualityMonitorModel.checkShowQualityMonitor(widget.id);
     // Session option should be set after models.dart/FFI.start
@@ -129,9 +128,16 @@ class _RemotePageState extends State<RemotePage>
   @override
   void onWindowBlur() {
     super.onWindowBlur();
+    _isWindowBlur = true;
     // unfocus the key focus when the whole window is lost focus,
     // and let OS to handle events instead.
     _rawKeyFocusNode.unfocus();
+  }
+
+  @override
+  void onWindowFocus() {
+    super.onWindowFocus();
+    _isWindowBlur = false;
   }
 
   @override
@@ -166,9 +172,16 @@ class _RemotePageState extends State<RemotePage>
                   color: Colors.black,
                   child: RawKeyFocusScope(
                       focusNode: _rawKeyFocusNode,
-                      onFocusChange: (bool v) {
-                        _imageFocused = v;
-                        if (_imageFocused) {
+                      onFocusChange: (bool imageFocused) {
+                        debugPrint(
+                            "onFocusChange(window active:${!_isWindowBlur}) $imageFocused");
+                        if (_isWindowBlur) {
+                          imageFocused = false;
+                          Future.delayed(Duration.zero, () {
+                            _rawKeyFocusNode.unfocus();
+                          });
+                        }
+                        if (imageFocused) {
                           _ffi.inputModel.enterOrLeave(true);
                         } else {
                           _ffi.inputModel.enterOrLeave(false);
@@ -199,9 +212,6 @@ class _RemotePageState extends State<RemotePage>
   }
 
   void enterView(PointerEnterEvent evt) {
-    if (!_imageFocused) {
-      _rawKeyFocusNode.requestFocus();
-    }
     _cursorOverImage.value = true;
     _firstEnterImage.value = true;
     if (_onEnterOrLeaveImage4Menubar != null) {
@@ -244,6 +254,11 @@ class _RemotePageState extends State<RemotePage>
           listenerBuilder: (child) => RawPointerMouseRegion(
             onEnter: enterView,
             onExit: leaveView,
+            onPointerDown: (event) {
+              if (!_rawKeyFocusNode.hasFocus) {
+                _rawKeyFocusNode.requestFocus();
+              }
+            },
             inputModel: _ffi.inputModel,
             child: child,
           ),
