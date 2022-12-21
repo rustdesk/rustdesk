@@ -37,8 +37,7 @@ class ConnectionTabPage extends StatefulWidget {
   State<ConnectionTabPage> createState() => _ConnectionTabPageState(params);
 }
 
-class _ConnectionTabPageState extends State<ConnectionTabPage>
-    with MultiWindowListener {
+class _ConnectionTabPageState extends State<ConnectionTabPage> {
   final tabController = Get.put(DesktopTabController(
       tabType: DesktopTabType.remoteScreen,
       onSelected: (_, id) => bind.setCurSessionId(id: id)));
@@ -106,13 +105,11 @@ class _ConnectionTabPageState extends State<ConnectionTabPage>
       }
       _update_remote_count();
     });
-    DesktopMultiWindow.addListener(this);
   }
 
   @override
   void dispose() {
     super.dispose();
-    DesktopMultiWindow.removeListener(this);
     _menubarState.save();
   }
 
