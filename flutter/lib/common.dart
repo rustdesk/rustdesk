@@ -1525,7 +1525,9 @@ class ServerConfig {
     this.key = key?.trim() ?? '';
   }
 
-  /// throw decoding failure
+  /// decode from shared string (from user shared or rustdesk-server generated)
+  /// also see [encode]
+  /// throw when decoding failure
   ServerConfig.decode(String msg) {
     final input = msg.split('').reversed.join('');
     final bytes = base64Decode(base64.normalize(input));
@@ -1537,6 +1539,8 @@ class ServerConfig {
     key = json['key'] ?? '';
   }
 
+  /// encode to shared string
+  /// also see [ServerConfig.decode]
   String encode() {
     Map<String, String> config = {};
     config['host'] = idServer.trim();
@@ -1548,4 +1552,11 @@ class ServerConfig {
         .reversed
         .join();
   }
+
+  /// from local options
+  ServerConfig.fromOptions(Map<String, dynamic> options)
+      : idServer = options['custom-rendezvous-server'] ?? "",
+        relayServer = options['relay-server'] ?? "",
+        apiServer = options['api-server'] ?? "",
+        key = options['key'] ?? "";
 }

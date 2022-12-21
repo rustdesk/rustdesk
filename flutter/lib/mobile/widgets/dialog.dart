@@ -237,17 +237,16 @@ void wrongPasswordDialog(String id, OverlayDialogManager dialogManager) {
           ]));
 }
 
-void showServerSettingsWithValue(String id, String relay, String key,
-    String api, OverlayDialogManager dialogManager) async {
+void showServerSettingsWithValue(
+    ServerConfig serverConfig, OverlayDialogManager dialogManager) async {
   Map<String, dynamic> oldOptions = jsonDecode(await bind.mainGetOptions());
-  String id0 = oldOptions['custom-rendezvous-server'] ?? "";
-  String relay0 = oldOptions['relay-server'] ?? "";
-  String api0 = oldOptions['api-server'] ?? "";
-  String key0 = oldOptions['key'] ?? "";
+  final oldCfg = ServerConfig.fromOptions(oldOptions);
+
   var isInProgress = false;
-  final idController = TextEditingController(text: id);
-  final relayController = TextEditingController(text: relay);
-  final apiController = TextEditingController(text: api);
+  final idCtrl = TextEditingController(text: serverConfig.idServer);
+  final relayCtrl = TextEditingController(text: serverConfig.relayServer);
+  final apiCtrl = TextEditingController(text: serverConfig.apiServer);
+  final keyCtrl = TextEditingController(text: serverConfig.key);
 
   String? idServerMsg;
   String? relayServerMsg;
@@ -255,21 +254,18 @@ void showServerSettingsWithValue(String id, String relay, String key,
 
   dialogManager.show((setState, close) {
     Future<bool> validate() async {
-      if (idController.text != id) {
-        final res = await validateAsync(idController.text);
+      if (idCtrl.text != oldCfg.idServer) {
+        final res = await validateAsync(idCtrl.text);
         setState(() => idServerMsg = res);
         if (idServerMsg != null) return false;
-        id = idController.text;
       }
-      if (relayController.text != relay) {
-        relayServerMsg = await validateAsync(relayController.text);
+      if (relayCtrl.text != oldCfg.relayServer) {
+        relayServerMsg = await validateAsync(relayCtrl.text);
         if (relayServerMsg != null) return false;
-        relay = relayController.text;
       }
-      if (apiController.text != relay) {
-        apiServerMsg = await validateAsync(apiController.text);
+      if (apiCtrl.text != oldCfg.apiServer) {
+        apiServerMsg = await validateAsync(apiCtrl.text);
         if (apiServerMsg != null) return false;
-        api = apiController.text;
       }
       return true;
     }
@@ -281,7 +277,7 @@ void showServerSettingsWithValue(String id, String relay, String key,
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
                     TextFormField(
-                      controller: idController,
+                      controller: idCtrl,
                       decoration: InputDecoration(
                           labelText: translate('ID Server'),
                           errorText: idServerMsg),
@@ -290,7 +286,7 @@ void showServerSettingsWithValue(String id, String relay, String key,
                   (isAndroid
                       ? [
                           TextFormField(
-                            controller: relayController,
+                            controller: relayCtrl,
                             decoration: InputDecoration(
                                 labelText: translate('Relay Server'),
                                 errorText: relayServerMsg),
@@ -299,7 +295,7 @@ void showServerSettingsWithValue(String id, String relay, String key,
                       : []) +
                   [
                     TextFormField(
-                      controller: apiController,
+                      controller: apiCtrl,
                       decoration: InputDecoration(
                         labelText: translate('API Server'),
                       ),
@@ -315,13 +311,10 @@ void showServerSettingsWithValue(String id, String relay, String key,
                       },
                     ),
                     TextFormField(
-                      initialValue: key,
+                      controller: keyCtrl,
                       decoration: InputDecoration(
                         labelText: 'Key',
                       ),
-                      onChanged: (String? value) {
-                        if (value != null) key = value.trim();
-                      },
                     ),
                     Offstage(
                         offstage: !isInProgress,
@@ -345,18 +338,21 @@ void showServerSettingsWithValue(String id, String relay, String key,
               isInProgress = true;
             });
             if (await validate()) {
-              if (id != id0) {
-                if (id0.isNotEmpty) {
+              if (idCtrl.text != oldCfg.idServer) {
+                if (oldCfg.idServer.isNotEmpty) {
                   await gFFI.userModel.logOut();
                 }
-                bind.mainSetOption(key: "custom-rendezvous-server", value: id);
+                bind.mainSetOption(
+                    key: "custom-rendezvous-server", value: idCtrl.text);
               }
-              if (relay != relay0) {
-                bind.mainSetOption(key: "relay-server", value: relay);
+              if (relayCtrl.text != oldCfg.relayServer) {
+                bind.mainSetOption(key: "relay-server", value: relayCtrl.text);
               }
-              if (key != key0) bind.mainSetOption(key: "key", value: key);
-              if (api != api0) {
-                bind.mainSetOption(key: "api-server", value: api);
+              if (keyCtrl.text != oldCfg.key) {
+                bind.mainSetOption(key: "key", value: keyCtrl.text);
+              }
+              if (apiCtrl.text != oldCfg.apiServer) {
+                bind.mainSetOption(key: "api-server", value: apiCtrl.text);
               }
               close();
             }
@@ -429,7 +425,7 @@ class _PasswordWidgetState extends State<PasswordWidget> {
             color: Theme.of(context).primaryColorDark,
           ),
           onPressed: () {
-            // Update the state i.e. toogle the state of passwordVisible variable
+            // Update the state i.e. toggle the state of passwordVisible variable
             setState(() {
               _passwordVisible = !_passwordVisible;
             });
