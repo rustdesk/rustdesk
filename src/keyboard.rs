@@ -339,8 +339,12 @@ pub fn event_to_key_event(event: &Event) -> Option<KeyEvent> {
             translate_keyboard_mode(event, key_event)?
         }
         _ => {
+            let res;
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            legacy_keyboard_mode(event, key_event)?
+            res = legacy_keyboard_mode(event, key_event)?;
+            #[cfg(any(target_os = "android", target_os = "ios"))]
+            res = None;
+            res
         }
     };
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
