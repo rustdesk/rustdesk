@@ -79,12 +79,16 @@ class UserModel {
     final tag = gFFI.dialogManager.showLoading(translate('Waiting'));
     try {
       final url = await bind.mainGetApiServer();
-      final _ = await http.post(Uri.parse('$url/api/logout'),
-          body: {
-            'id': await bind.mainGetMyId(),
-            'uuid': await bind.mainGetUuid(),
-          },
-          headers: await getHttpHeaders());
+      await http
+          .post(Uri.parse('$url/api/logout'),
+              body: {
+                'id': await bind.mainGetMyId(),
+                'uuid': await bind.mainGetUuid(),
+              },
+              headers: await getHttpHeaders())
+          .timeout(Duration(seconds: 2));
+    } catch (e) {
+      print("request /api/logout failed: err=$e");
     } finally {
       await reset();
       gFFI.dialogManager.dismissByTag(tag);
