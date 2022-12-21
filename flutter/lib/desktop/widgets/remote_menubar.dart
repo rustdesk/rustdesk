@@ -827,7 +827,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
               qualityInitValue = qualityMaxValue;
             }
             final RxDouble qualitySliderValue = RxDouble(qualityInitValue);
-            final debouncerQuanlity = Debouncer<double>(
+            final debouncerQuality = Debouncer<double>(
               Duration(milliseconds: 1000),
               onChanged: (double v) {
                 setCustomValues(quality: v);
@@ -843,7 +843,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                       divisions: 90,
                       onChanged: (double value) {
                         qualitySliderValue.value = value;
-                        debouncerQuanlity.value = value;
+                        debouncerQuality.value = value;
                       },
                     ),
                     SizedBox(
