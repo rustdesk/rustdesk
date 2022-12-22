@@ -48,9 +48,9 @@ bindgen = "0.59"
 [target.'cfg(target_os = "linux")'.dependencies]
 dbus = { version = "0.9", optional = true }
 tracing = { version = "0.1", optional = true }
-gstreamer = { version = "0.16", optional = true }
-gstreamer-app = { version = "0.16", features = ["v1_10"], optional = true }
-gstreamer-video = { version = "0.16", optional = true }
+gstreamer = { version = "0.19", optional = true }
+gstreamer-app = { version = "0.19", features = ["v1_16"], optional = true }
+gstreamer-video = { version = "0.19", optional = true }
 
 [target.'cfg(any(target_os = "windows", target_os = "linux"))'.dependencies]
 hwcodec = { git = "https://github.com/21pages/hwcodec", optional = true }
