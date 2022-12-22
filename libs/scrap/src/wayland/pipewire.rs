@@ -117,7 +117,6 @@ impl Capturable for PipeWireCapturable {
 pub struct PipeWireRecorder {
     buffer: Option<gst::MappedBuffer<gst::buffer::Readable>>,
     buffer_cropped: Vec<u8>,
-    pix_fmt: String,
     is_cropped: bool,
     pipeline: gst::Pipeline,
     appsink: AppSink,
@@ -130,42 +129,34 @@ impl PipeWireRecorder {
     pub fn new(capturable: PipeWireCapturable) -> Result<Self, Box<dyn Error>> {
         let pipeline = gst::Pipeline::new(None);
 
-        let src = gst::ElementFactory::make_with_name("pipewiresrc", None)?;
-        src.set_property("fd", &capturable.fd.as_raw_fd());
-        src.set_property("path", &format!("{}", capturable.path));
-        src.set_property("keepalive_time", &1_000.as_raw_fd());
+        let src = gst::ElementFactory::make("pipewiresrc", None)?;
+        src.set_property("fd", &capturable.fd.as_raw_fd())?;
+        src.set_property("path", &format!("{}", capturable.path))?;
+        src.set_property("keepalive_time", &1_000.as_raw_fd())?;
 
         // For some reason pipewire blocks on destruction of AppSink if this is not set to true,
         // see: https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/982
-        src.set_property("always-copy", &true);
+        src.set_property("always-copy", &true)?;
 
-        let sink = gst::ElementFactory::make_with_name("appsink", None)?;
-        sink.set_property("drop", &true);
-        sink.set_property("max-buffers", &1u32);
+        let sink = gst::ElementFactory::make("appsink", None)?;
+        sink.set_property("drop", &true)?;
+        sink.set_property("max-buffers", &1u32)?;
 
         pipeline.add_many(&[&src, &sink])?;
         src.link(&sink)?;
-
         let appsink = sink
             .dynamic_cast::<AppSink>()
             .map_err(|_| GStreamerError("Sink element is expected to be an appsink!".into()))?;
-        let mut caps = gst::Caps::new_empty();
-        caps.merge_structure(gst::structure::Structure::new(
+        appsink.set_caps(Some(&gst::Caps::new_simple(
             "video/x-raw",
             &[("format", &"BGRx")],
-        ));
-        caps.merge_structure(gst::structure::Structure::new(
-            "video/x-raw",
-            &[("format", &"RGBx")],
-        ));
-        appsink.set_caps(Some(&caps));
+        )));
 
         pipeline.set_state(gst::State::Playing)?;
         Ok(Self {
             pipeline,
             appsink,
             buffer: None,
-            pix_fmt: "".into(),
             width: 0,
             height: 0,
             buffer_cropped: vec![],
@@ -182,21 +173,20 @@ impl Recorder for PipeWireRecorder {
             .try_pull_sample(gst::ClockTime::from_mseconds(timeout_ms))
         {
             let cap = sample
-                .caps()
+                .get_caps()
                 .ok_or("Failed get caps")?
-                .structure(0)
+                .get_structure(0)
                 .ok_or("Failed to get structure")?;
-            let w: i32 = cap.value("width")?.get()?;
-            let h: i32 = cap.value("height")?.get()?;
-            self.pix_fmt = cap.value("format")?.get()?;
+            let w: i32 = cap.get_value("width")?.get_some()?;
+            let h: i32 = cap.get_value("height")?.get_some()?;
             let w = w as usize;
             let h = h as usize;
             let buf = sample
-                .buffer_owned()
+                .get_buffer_owned()
                 .ok_or_else(|| GStreamerError("Failed to get owned buffer.".into()))?;
             let mut crop = buf
-                .meta::<gstreamer_video::VideoCropMeta>()
-                .map(|m| m.rect());
+                .get_meta::<gstreamer_video::VideoCropMeta>()
+                .map(|m| m.get_rect());
             // only crop if necessary
             if Some((0, 0, w as u32, h as u32)) == crop {
                 crop = None;
@@ -207,7 +197,7 @@ impl Recorder for PipeWireRecorder {
             if let Err(..) = crate::would_block_if_equal(&mut self.saved_raw_data, buf.as_slice()) {
                 return Ok(PixelProvider::NONE);
             }
-            let buf_size = buf.size();
+            let buf_size = buf.get_size();
             // BGRx is 4 bytes per pixel
             if buf_size != (w * h * 4) {
                 // for some reason the width and height of the caps do not guarantee correct buffer
@@ -251,22 +241,15 @@ impl Recorder for PipeWireRecorder {
         if self.buffer.is_none() {
             return Err(Box::new(GStreamerError("No buffer available!".into())));
         }
-        let buf = if self.is_cropped {
-            self.buffer_cropped.as_slice()
-        } else {
-            self.buffer
-                .as_ref()
-                .ok_or("Failed to get buffer as ref")?
-                .as_slice()
-        };
-        match self.pix_fmt.as_str() {
-            "BGRx" => Ok(PixelProvider::BGR0(self.width, self.height, buf)),
-            "RGBx" => Ok(PixelProvider::RGB0(self.width, self.height, buf)),
-            _ => Err(Box::new(GStreamerError(format!(
-                "Unreachable! Unknown pix_fmt, {}",
-                &self.pix_fmt
-            )))),
-        }
+        Ok(PixelProvider::BGR0(
+            self.width,
+            self.height,
+            if self.is_cropped {
+                self.buffer_cropped.as_slice()
+            } else {
+                self.buffer.as_ref().unwrap().as_slice()
+            },
+        ))
     }
 }
 
