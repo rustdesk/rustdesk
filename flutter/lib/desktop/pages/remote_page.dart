@@ -128,21 +128,31 @@ class _RemotePageState extends State<RemotePage>
   @override
   void onWindowBlur() {
     super.onWindowBlur();
-    _isWindowBlur = true;
-    // unfocus the key focus when the whole window is lost focus,
-    // and let OS to handle events instead.
-    _rawKeyFocusNode.unfocus();
+    // On windows, we use `focus` way to handle keyboard better.
+    // Now on Linux, there's some rdev issues which will break the input.
+    // We disable the `focus` way for non-Windows temporarily.
+    if (Platform.isWindows) {
+      _isWindowBlur = true;
+      // unfocus the primary-focus when the whole window is lost focus,
+      // and let OS to handle events instead.
+      _rawKeyFocusNode.unfocus();
+    }
   }
 
   @override
   void onWindowFocus() {
     super.onWindowFocus();
-    _isWindowBlur = false;
+    // See [onWindowBlur].
+    if (Platform.isWindows) {
+      _isWindowBlur = false;
+    }
   }
 
   @override
   void dispose() {
     debugPrint("REMOTE PAGE dispose ${widget.id}");
+    // ensure we leave this session, this is a double check
+    bind.sessionEnterOrLeave(id: widget.id, enter: false);
     DesktopMultiWindow.removeListener(this);
     _ffi.dialogManager.hideMobileActionsOverlay();
     _ffi.recordingModel.onClose();
@@ -175,16 +185,19 @@ class _RemotePageState extends State<RemotePage>
                       onFocusChange: (bool imageFocused) {
                         debugPrint(
                             "onFocusChange(window active:${!_isWindowBlur}) $imageFocused");
-                        if (_isWindowBlur) {
-                          imageFocused = false;
-                          Future.delayed(Duration.zero, () {
-                            _rawKeyFocusNode.unfocus();
-                          });
-                        }
-                        if (imageFocused) {
-                          _ffi.inputModel.enterOrLeave(true);
-                        } else {
-                          _ffi.inputModel.enterOrLeave(false);
+                        // See [onWindowBlur].
+                        if (Platform.isWindows) {
+                          if (_isWindowBlur) {
+                            imageFocused = false;
+                            Future.delayed(Duration.zero, () {
+                              _rawKeyFocusNode.unfocus();
+                            });
+                          }
+                          if (imageFocused) {
+                            _ffi.inputModel.enterOrLeave(true);
+                          } else {
+                            _ffi.inputModel.enterOrLeave(false);
+                          }
                         }
                       },
                       inputModel: _ffi.inputModel,
@@ -221,6 +234,13 @@ class _RemotePageState extends State<RemotePage>
         //
       }
     }
+    // See [onWindowBlur].
+    if (!Platform.isWindows) {
+      if (!_rawKeyFocusNode.hasFocus) {
+        _rawKeyFocusNode.requestFocus();
+      }
+      bind.sessionEnterOrLeave(id: widget.id, enter: true);
+    }
   }
 
   void leaveView(PointerExitEvent evt) {
@@ -232,6 +252,10 @@ class _RemotePageState extends State<RemotePage>
       } catch (e) {
         //
       }
+    }
+    // See [onWindowBlur].
+    if (!Platform.isWindows) {
+      bind.sessionEnterOrLeave(id: widget.id, enter: false);
     }
   }
 
