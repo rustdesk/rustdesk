@@ -122,7 +122,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Good image quality", "Eredetihez hű"),
         ("Balanced", "Kiegyensúlyozott"),
         ("Optimize reaction time", "Gyorsan reagáló"),
-        ("Custom", "Egyedi"),
+        ("Custom Quality", "Egyedi"),
         ("Show remote cursor", "Távoli kurzor megjelenítése"),
         ("Show quality monitor", ""),
         ("Disable clipboard", "Közös vágólap kikapcsolása"),

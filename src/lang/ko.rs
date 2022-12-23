@@ -122,7 +122,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Good image quality", "최적 이미지 품질"),
         ("Balanced", "균형"),
         ("Optimize reaction time", "반응 시간 최적화"),
-        ("Custom", ""),
+        ("Custom Quality", ""),
         ("Show remote cursor", "원격 커서 보이기"),
         ("Show quality monitor", "품질 모니터 띄우기"),
         ("Disable clipboard", "클립보드 비활성화"),

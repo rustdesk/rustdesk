@@ -122,7 +122,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Good image quality", "Qualità immagine migliore"),
         ("Balanced", "Bilanciato"),
         ("Optimize reaction time", "Ottimizza il tempo di reazione"),
-        ("Custom", "Personalizzato"),
+        ("Custom Quality", "Personalizzato"),
         ("Show remote cursor", "Mostra il cursore remoto"),
         ("Show quality monitor", "Visualizza qualità video"),
         ("Disable clipboard", "Disabilita appunti"),

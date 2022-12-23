@@ -770,7 +770,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             dismissOnClicked: true,
           ),
           MenuEntryRadioOption(
-              text: translate('Custom'),
+              text: translate('Custom Quality'),
               value: kRemoteImageQualityCustom,
               dismissOnClicked: true),
         ],
