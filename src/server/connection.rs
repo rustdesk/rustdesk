@@ -697,7 +697,7 @@ impl Connection {
         let mut v = v;
         v["id"] = json!(Config::get_id());
         v["uuid"] = json!(base64::encode(hbb_common::get_uuid()));
-        v["Id"] = json!(self.inner.id);
+        v["conn_id"] = json!(self.inner.id);
         tokio::spawn(async move {
             allow_err!(Self::post_audit_async(url, v).await);
         });
@@ -711,7 +711,7 @@ impl Connection {
         let mut v = Value::default();
         v["id"] = json!(Config::get_id());
         v["uuid"] = json!(base64::encode(hbb_common::get_uuid()));
-        v["Id"] = json!(conn_id);
+        v["conn_id"] = json!(conn_id);
         if let Ok(rsp) = Self::post_audit_async(url, v).await {
             if let Ok(rsp) = serde_json::from_str::<ConnAuditResponse>(&rsp) {
                 if rsp.action == "disconnect" {
@@ -722,7 +722,13 @@ impl Connection {
         return Ok(());
     }
 
-    fn post_file_audit(&self, action: &str, path: &str, files: Vec<(String, i64)>, info: Value) {
+    fn post_file_audit(
+        &self,
+        r#type: FileAuditType,
+        path: &str,
+        files: Vec<(String, i64)>,
+        info: Value,
+    ) {
         if self.server_audit_file.is_empty() {
             return;
         }
@@ -731,12 +737,7 @@ impl Connection {
         let mut files = files;
         files.sort_by(|a, b| b.1.cmp(&a.1));
         files.truncate(10);
-        let is_file = match action {
-            "send" | "receive" => files.len() == 1 && files[0].0.is_empty(),
-            "remove_dir" | "create_dir" => false,
-            "remove_file" => true,
-            _ => true,
-        };
+        let is_file = files.len() == 1 && files[0].0.is_empty();
         let mut info = info;
         info["ip"] = json!(self.ip.clone());
         info["name"] = json!(self.lr.my_name.clone());
@@ -745,9 +746,8 @@ impl Connection {
         let v = json!({
             "id":json!(Config::get_id()),
             "uuid":json!(base64::encode(hbb_common::get_uuid())),
-            "Id":json!(self.inner.id),
             "peer_id":json!(self.lr.my_id),
-            "action": action,
+            "type": r#type as i8,
             "path":path,
             "is_file":is_file,
             "info":json!(info).to_string(),
@@ -793,7 +793,7 @@ impl Connection {
         } else {
             0
         };
-        self.post_conn_audit(json!({"peer": self.peer_info, "Type": conn_type}));
+        self.post_conn_audit(json!({"peer": self.peer_info, "type": conn_type}));
         #[allow(unused_mut)]
         let mut username = crate::platform::get_active_username();
         let mut res = LoginResponse::new();
@@ -1341,7 +1341,7 @@ impl Connection {
                                         self.read_jobs.push(job);
                                         self.file_timer = time::interval(MILLI1);
                                         self.post_file_audit(
-                                            "send",
+                                            FileAuditType::RemoteSend,
                                             &s.path,
                                             files
                                                 .drain(..)
@@ -1371,7 +1371,7 @@ impl Connection {
                                     overwrite_detection: od,
                                 });
                                 self.post_file_audit(
-                                    "receive",
+                                    FileAuditType::RemoteReceive,
                                     &r.path,
                                     r.files
                                         .to_vec()
@@ -1865,4 +1865,9 @@ pub enum AlarmAuditType {
     IpWhiltelist = 0,
     ManyWrongPassword = 1,
     FrequentAttempt = 2,
+}
+
+pub enum FileAuditType {
+    RemoteSend = 0,
+    RemoteReceive = 1,
 }
