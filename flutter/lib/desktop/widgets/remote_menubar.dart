@@ -171,6 +171,8 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
 
   @override
   Widget build(BuildContext context) {
+    // No need to use future builder here.
+    _updateScreen();
     return Align(
       alignment: Alignment.topCenter,
       child: Obx(() => show.value
