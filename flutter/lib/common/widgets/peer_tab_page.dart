@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:ui' as ui;
 
 import 'package:bot_toast/bot_toast.dart';
@@ -22,10 +21,7 @@ const String defaultGroupTabname = 'Group';
 
 class StatePeerTab {
   final RxInt currentTab = 0.obs;
-  static const List<int> tabIndexs = [0, 1, 2, 3, 4];
-  List<int> tabOrder = List.empty(growable: true);
-  final RxList<int> visibleTabOrder = RxList.empty(growable: true);
-  int tabHiddenFlag = 0;
+  final RxInt tabHiddenFlag = 0.obs;
   final RxList<String> tabNames = [
     'Recent Sessions',
     'Favorites',
@@ -35,44 +31,25 @@ class StatePeerTab {
   ].obs;
 
   StatePeerTab._() {
-    tabHiddenFlag = (int.tryParse(
+    tabHiddenFlag.value = (int.tryParse(
             bind.getLocalFlutterConfig(k: 'hidden-peer-card'),
             radix: 2) ??
         0);
+    var tabs = _notHiddenTabs();
     currentTab.value =
         int.tryParse(bind.getLocalFlutterConfig(k: 'peer-tab-index')) ?? 0;
-    if (!tabIndexs.contains(currentTab.value)) {
-      currentTab.value = tabIndexs[0];
+    if (!tabs.contains(currentTab.value)) {
+      currentTab.value = 0;
     }
-    tabOrder = tabIndexs.toList();
-    try {
-      final conf = bind.getLocalFlutterConfig(k: 'peer-tab-order');
-      if (conf.isNotEmpty) {
-        final json = jsonDecode(conf);
-        if (json is List) {
-          final List<int> list =
-              json.map((e) => int.tryParse(e.toString()) ?? -1).toList();
-          if (list.length == tabOrder.length &&
-              tabOrder.every((e) => list.contains(e))) {
-            tabOrder = list;
-          }
-        }
-      }
-    } catch (e) {
-      debugPrintStack(label: '$e');
-    }
-    visibleTabOrder.value = tabOrder.where((e) => !isTabHidden(e)).toList();
-    visibleTabOrder.remove(groupTabIndex);
   }
   static final StatePeerTab instance = StatePeerTab._();
 
   check() {
-    List<int> oldOrder = visibleTabOrder;
+    var tabs = _notHiddenTabs();
     if (filterGroupCard()) {
-      visibleTabOrder.remove(groupTabIndex);
       if (currentTab.value == groupTabIndex) {
         currentTab.value =
-            visibleTabOrder.firstWhereOrNull((e) => e != groupTabIndex) ?? 0;
+            tabs.firstWhereOrNull((e) => e != groupTabIndex) ?? 0;
         bind.setLocalFlutterConfig(
             k: 'peer-tab-index', v: currentTab.value.toString());
       }
@@ -83,26 +60,22 @@ class StatePeerTab {
       } else {
         tabNames[groupTabIndex] = defaultGroupTabname;
       }
-      if (isTabHidden(groupTabIndex)) {
-        visibleTabOrder.remove(groupTabIndex);
-      } else {
-        if (!visibleTabOrder.contains(groupTabIndex)) {
-          addTabInOrder(visibleTabOrder, groupTabIndex);
-        }
-      }
-      if (visibleTabOrder.contains(groupTabIndex) &&
+      if (tabs.contains(groupTabIndex) &&
           int.tryParse(bind.getLocalFlutterConfig(k: 'peer-tab-index')) ==
               groupTabIndex) {
         currentTab.value = groupTabIndex;
       }
     }
-    if (oldOrder != visibleTabOrder) {
-      saveTabOrder();
-    }
   }
 
-  bool isTabHidden(int tabindex) {
-    return tabHiddenFlag & (1 << tabindex) != 0;
+  List<int> currentTabs() {
+    var v = List<int>.empty(growable: true);
+    for (int i = 0; i < tabNames.length; i++) {
+      if (!_isTabHidden(i) && !_isTabFilter(i)) {
+        v.add(i);
+      }
+    }
+    return v;
   }
 
   bool filterGroupCard() {
@@ -114,50 +87,25 @@ class StatePeerTab {
     }
   }
 
-  addTabInOrder(List<int> list, int tabIndex) {
-    if (!tabOrder.contains(tabIndex) || list.contains(tabIndex)) {
-      return;
-    }
-    bool sameOrder = true;
-    int lastIndex = -1;
-    for (int i = 0; i < list.length; i++) {
-      var index = tabOrder.lastIndexOf(list[i]);
-      if (index > lastIndex) {
-        lastIndex = index;
-        continue;
-      } else {
-        sameOrder = false;
-        break;
-      }
-    }
-    if (sameOrder) {
-      var indexInTabOrder = tabOrder.indexOf(tabIndex);
-      var left = List.empty(growable: true);
-      for (int i = 0; i < indexInTabOrder; i++) {
-        left.add(tabOrder[i]);
-      }
-      int insertIndex = list.lastIndexWhere((e) => left.contains(e));
-      if (insertIndex < 0) {
-        insertIndex = 0;
-      } else {
-        insertIndex += 1;
-      }
-      list.insert(insertIndex, tabIndex);
-    } else {
-      list.add(tabIndex);
-    }
+  bool _isTabHidden(int tabindex) {
+    return tabHiddenFlag & (1 << tabindex) != 0;
   }
 
-  saveTabOrder() {
-    var list = statePeerTab.visibleTabOrder.toList();
-    var left = tabOrder
-        .where((e) => !statePeerTab.visibleTabOrder.contains(e))
-        .toList();
-    for (var t in left) {
-      addTabInOrder(list, t);
+  bool _isTabFilter(int tabIndex) {
+    if (tabIndex == groupTabIndex) {
+      return filterGroupCard();
     }
-    statePeerTab.tabOrder = list;
-    bind.setLocalFlutterConfig(k: 'peer-tab-order', v: jsonEncode(list));
+    return false;
+  }
+
+  List<int> _notHiddenTabs() {
+    var v = List<int>.empty(growable: true);
+    for (int i = 0; i < tabNames.length; i++) {
+      if (!_isTabHidden(i)) {
+        v.add(i);
+      }
+    }
+    return v;
   }
 }
 
@@ -266,59 +214,41 @@ class _PeerTabPageState extends State<PeerTabPage>
 
   Widget _createSwitchBar(BuildContext context) {
     final textColor = Theme.of(context).textTheme.titleLarge?.color;
-    statePeerTab.visibleTabOrder
-        .removeWhere((e) => !StatePeerTab.tabIndexs.contains(e));
     return Obx(() {
-      int indexCounter = -1;
-      return ReorderableListView(
-          buildDefaultDragHandles: false,
-          onReorder: (oldIndex, newIndex) {
-            var list = statePeerTab.visibleTabOrder.toList();
-            if (oldIndex < newIndex) {
-              newIndex -= 1;
-            }
-            final int item = list.removeAt(oldIndex);
-            list.insert(newIndex, item);
-            statePeerTab.visibleTabOrder.value = list;
-            statePeerTab.saveTabOrder();
-          },
+      var tabs = statePeerTab.currentTabs();
+      return ListView(
           scrollDirection: Axis.horizontal,
-          shrinkWrap: true,
-          scrollController: ScrollController(),
-          children: statePeerTab.visibleTabOrder.map((t) {
-            indexCounter++;
-            return ReorderableDragStartListener(
-              key: ValueKey(t),
-              index: indexCounter,
-              child: InkWell(
-                child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    decoration: BoxDecoration(
-                      color: statePeerTab.currentTab.value == t
-                          ? Theme.of(context).backgroundColor
-                          : null,
-                      borderRadius: BorderRadius.circular(isDesktop ? 2 : 6),
+          physics: NeverScrollableScrollPhysics(),
+          controller: ScrollController(),
+          children: tabs.map((t) {
+            return InkWell(
+              child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: statePeerTab.currentTab.value == t
+                        ? Theme.of(context).backgroundColor
+                        : null,
+                    borderRadius: BorderRadius.circular(isDesktop ? 2 : 6),
+                  ),
+                  child: Align(
+                    alignment: Alignment.center,
+                    child: Text(
+                      translatedTabname(t),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          height: 1,
+                          fontSize: 14,
+                          color: statePeerTab.currentTab.value == t
+                              ? textColor
+                              : textColor
+                            ?..withOpacity(0.5)),
                     ),
-                    child: Align(
-                      alignment: Alignment.center,
-                      child: Text(
-                        translatedTabname(t),
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                            height: 1,
-                            fontSize: 14,
-                            color: statePeerTab.currentTab.value == t
-                                ? textColor
-                                : textColor
-                              ?..withOpacity(0.5)),
-                      ),
-                    )),
-                onTap: () async {
-                  await handleTabSelection(t);
-                  await bind.setLocalFlutterConfig(
-                      k: 'peer-tab-index', v: t.toString());
-                },
-              ),
+                  )),
+              onTap: () async {
+                await handleTabSelection(t);
+                await bind.setLocalFlutterConfig(
+                    k: 'peer-tab-index', v: t.toString());
+              },
             );
           }).toList());
     });
@@ -343,20 +273,18 @@ class _PeerTabPageState extends State<PeerTabPage>
 
   Widget _createPeersView() {
     final verticalMargin = isDesktop ? 12.0 : 6.0;
-    statePeerTab.visibleTabOrder
-        .removeWhere((e) => !StatePeerTab.tabIndexs.contains(e));
     return Expanded(
         child: Obx(() {
-      if (statePeerTab.visibleTabOrder.isEmpty) {
+      var tabs = statePeerTab.currentTabs();
+      if (tabs.isEmpty) {
         return visibleContextMenuListener(Center(
           child: Text(translate('Right click to select tabs')),
         ));
       } else {
-        if (statePeerTab.visibleTabOrder
-            .contains(statePeerTab.currentTab.value)) {
+        if (tabs.contains(statePeerTab.currentTab.value)) {
           return entries[statePeerTab.currentTab.value].widget;
         } else {
-          statePeerTab.currentTab.value = statePeerTab.visibleTabOrder[0];
+          statePeerTab.currentTab.value = tabs[0];
           return entries[statePeerTab.currentTab.value].widget;
         }
       }
@@ -394,13 +322,9 @@ class _PeerTabPageState extends State<PeerTabPage>
   }
 
   adjustTab() {
-    if (statePeerTab.visibleTabOrder.isNotEmpty) {
-      if (!statePeerTab.visibleTabOrder
-          .contains(statePeerTab.currentTab.value)) {
-        handleTabSelection(statePeerTab.visibleTabOrder[0]);
-      }
-    } else {
-      statePeerTab.currentTab.value = 0;
+    var tabs = statePeerTab.currentTabs();
+    if (tabs.isNotEmpty && !tabs.contains(statePeerTab.currentTab.value)) {
+      statePeerTab.currentTab.value = tabs[0];
     }
   }
 
@@ -438,22 +362,13 @@ class _PeerTabPageState extends State<PeerTabPage>
             },
             setter: (show) async {
               if (show) {
-                statePeerTab.tabHiddenFlag &= ~bitMask;
+                statePeerTab.tabHiddenFlag.value &= ~bitMask;
               } else {
-                statePeerTab.tabHiddenFlag |= bitMask;
+                statePeerTab.tabHiddenFlag.value |= bitMask;
               }
               await bind.setLocalFlutterConfig(
                   k: 'hidden-peer-card',
-                  v: statePeerTab.tabHiddenFlag.toRadixString(2));
-              statePeerTab.visibleTabOrder
-                  .removeWhere((e) => statePeerTab.isTabHidden(e));
-              for (int j = 0; j < statePeerTab.tabNames.length; j++) {
-                if (!statePeerTab.isTabHidden(j) &&
-                    !(j == groupTabIndex && statePeerTab.filterGroupCard())) {
-                  statePeerTab.addTabInOrder(statePeerTab.visibleTabOrder, j);
-                }
-              }
-              statePeerTab.saveTabOrder();
+                  v: statePeerTab.tabHiddenFlag.value.toRadixString(2));
               cancelFunc();
               adjustTab();
             }));
