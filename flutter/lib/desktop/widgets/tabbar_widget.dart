@@ -331,6 +331,7 @@ class DesktopTab extends StatelessWidget {
     return _buildBlock(
         child: Obx(() => PageView(
             controller: state.value.pageController,
+            physics: NeverScrollableScrollPhysics(),
             children: state.value.tabs
                 .map((tab) => tab.page)
                 .toList(growable: false))));
