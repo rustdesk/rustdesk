@@ -208,7 +208,7 @@ class RustDeskMultiWindowManager {
 
   /// Remove active window which has [`windowId`]
   /// 
-  /// [Avaliability]
+  /// [Availability]
   /// This function should only be called from main window.
   /// For other windows, please post a unregister(hide) event to main window handler:
   /// `rustDeskWinManager.call(WindowType.Main, kWindowEventHide, {"id": windowId!});`

@@ -500,7 +500,7 @@ pub fn start_os_service() {
                     Err(err) => {
                         log::error!("Failed to start server: {}", err);
                     }
-                    _ => { /*no hapen*/ }
+                    _ => { /*no happen*/ }
                 }
             }
             std::thread::sleep(std::time::Duration::from_millis(super::SERVICE_INTERVAL));

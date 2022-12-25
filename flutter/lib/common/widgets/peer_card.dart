@@ -464,7 +464,7 @@ abstract class BasePeerCard extends StatelessWidget {
     );
   }
 
-  /// Only avaliable on Windows.
+  /// Only available on Windows.
   @protected
   MenuEntryBase<String> _createShortCutAction(String id) {
     return MenuEntryButton<String>(

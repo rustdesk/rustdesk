@@ -47,7 +47,7 @@ BOOL IsDeviceCreated(PBOOL created);
 /**
  * @brief Create device.
  *        Only one device should be created.
- *        If device is installed ealier, this function returns FALSE.
+ *        If device is installed earlier, this function returns FALSE.
  *
  * @param hSwDevice [out] Handler of software device, used by DeviceCreate(). Should be **NULL**.
  *

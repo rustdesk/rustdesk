@@ -339,7 +339,7 @@ impl CapturerMag {
             }
 
             // Register the host window class. See the MSDN documentation of the
-            // Magnification API for more infomation.
+            // Magnification API for more information.
             let wcex = WNDCLASSEXA {
                 cbSize: size_of::<WNDCLASSEXA>() as _,
                 style: 0,

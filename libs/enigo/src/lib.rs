@@ -21,7 +21,7 @@
 //! Possible use cases could be for testing user interfaces on different
 //! plattforms,
 //! building remote control applications or just automating tasks for user
-//! interfaces unaccessible by a public API or scripting laguage.
+//! interfaces unaccessible by a public API or scripting language.
 //!
 //! For the keyboard there are currently two modes you can use. The first mode
 //! is represented by the [key_sequence]() function

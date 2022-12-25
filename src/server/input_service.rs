@@ -223,7 +223,7 @@ lazy_static::lazy_static! {
 
 // First call set_uinput() will create keyboard and mouse clients.
 // The clients are ipc connections that must live shorter than tokio runtime.
-// Thus this funtion must not be called in a temporary runtime.
+// Thus this function must not be called in a temporary runtime.
 #[cfg(target_os = "linux")]
 pub async fn setup_uinput(minx: i32, maxx: i32, miny: i32, maxy: i32) -> ResultType<()> {
     // Keyboard and mouse both open /dev/uinput
