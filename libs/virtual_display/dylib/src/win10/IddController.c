@@ -221,7 +221,7 @@ BOOL DeviceCreate(PHSWDEVICE hSwDevice)
     SW_DEVICE_CREATE_INFO createInfo = { 0 };
     PCWSTR description = L"RustDesk Idd Driver";
 
-    // These match the Pnp id's in the inf file so OS will load the driver when the device is created    
+    // These match the Pnp id's in the inf file so OS will load the driver when the device is created
     PCWSTR instanceId = L"RustDeskIddDriver";
     PCWSTR hardwareIds = L"RustDeskIddDriver\0\0";
     PCWSTR compatibleIds = L"RustDeskIddDriver\0\0";

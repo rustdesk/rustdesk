@@ -12,22 +12,22 @@ div#file-transfer {
 }
 
 table
-{              
+{
   font: system;
   border: 1px solid color(border);
   flow: table-fixed;
   prototype: Grid;
   size: *;
   padding:0;
-  border-spacing: 0;                                                       
+  border-spacing: 0;
   overflow-x: auto;
   overflow-y: hidden;
 }
-  
-table > thead {             
+
+table > thead {
   behavior: column-resizer;
   border-bottom: color(border) solid 1px;
-} 
+}
 
 table > tbody {
   behavior: select-multiple;
@@ -41,20 +41,20 @@ table th {
 }
 
 table th
-{     
+{
   padding: 4px;
   foreground-repeat: no-repeat;
   foreground-position: 50% 3px auto auto;
   border-left: color(border) solid 1px;
-} 
+}
 
-table th.sortable[sort=asc]       
-{                                        
+table th.sortable[sort=asc]
+{
   foreground-image: url(stock:arrow-down);
-}                   
+}
 
 table th.sortable[sort=desc]
-{ 
+{
   foreground-image: url(stock:arrow-up);
 }
 
@@ -81,10 +81,10 @@ table.has_current thead th:current {
 table tr:nth-child(odd) { background-color: white; } /* each odd row */
 table tr:nth-child(even) { background-color: #F4F5F6; } /* each even row */
 
-table.has_current tr:current /* current row */ 
-{ 
-  background-color: color(accent); 
-} 
+table.has_current tr:current /* current row */
+{
+  background-color: color(accent);
+}
 
 table.has_current tbody tr:checked
 {
@@ -95,9 +95,9 @@ table.has_current tbody tr:checked td {
   color: highlighttext;
 }
 
-table td 
-{ 
-  padding: 4px; 
+table td
+{
+  padding: 4px;
   text-align: left;
   font-size: 1em;
   height: 1.4em;
@@ -124,11 +124,11 @@ table td:nth-child(4) {
 section {
   size: *;
   margin: 1em;
-  border-spacing: 0.5em; 
+  border-spacing: 0.5em;
 }
 
 table td:nth-child(1)  {
-  foreground-repeat: no-repeat;    
+  foreground-repeat: no-repeat;
   foreground-position: 50% 50%
 }
 
@@ -160,11 +160,11 @@ div.toolbar > div.button:hover {
 
 div.toolbar > div.send {
   flow: horizontal;
-  border-spacing: 0.5em; 
+  border-spacing: 0.5em;
 }
 
 div.remote > div.send svg {
-  transform: scale(-1, 1); 
+  transform: scale(-1, 1);
 }
 
 div.navbar {
@@ -207,7 +207,7 @@ table.job-table tr td {
   padding: 0.5em 1em;
   border-bottom: color(border) 1px solid;
   flow: horizontal;
-  border-spacing: 1em;                                                       
+  border-spacing: 1em;
   height: 3em;
   overflow-x: hidden;
 }
@@ -217,11 +217,11 @@ table.job-table tr svg {
 }
 
 table.job-table tr.is_remote svg {
-  transform: scale(-1, 1); 
+  transform: scale(-1, 1);
 }
 
 table.job-table tr.is_remote div.svg_continue svg {
-  transform: scale(1, 1); 
+  transform: scale(1, 1);
 }
 
 table.job-table tr td div.text {
@@ -246,7 +246,7 @@ table#port-forward thead tr th {
 
 table#port-forward tr td {
   height: 3em;
-  text-align: left; 
+  text-align: left;
 }
 
 table#port-forward input[type=text], table#port-forward input[type=number] {
