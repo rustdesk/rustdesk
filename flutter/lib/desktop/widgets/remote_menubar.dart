@@ -701,11 +701,11 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       return false;
     }
     double scale = _screen!.scaleFactor;
-    double selfWidth = _screen!.frame.width;
-    double selfHeight = _screen!.frame.height;
+    double selfWidth = _screen!.visibleFrame.width;
+    double selfHeight = _screen!.visibleFrame.height;
     if (isFullscreen) {
-      selfWidth = _screen!.visibleFrame.width;
-      selfHeight = _screen!.visibleFrame.height;
+      selfWidth = _screen!.frame.width;
+      selfHeight = _screen!.frame.height;
     }
 
     final canvasModel = widget.ffi.canvasModel;
