@@ -1185,10 +1185,25 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     final keyboardMenu = [
       MenuEntryRadios<String>(
         text: translate('Ratio'),
-        optionsGetter: () => [
-          MenuEntryRadioOption(text: translate('Legacy mode'), value: 'legacy'),
-          MenuEntryRadioOption(text: translate('Map mode'), value: 'map'),
-        ],
+        optionsGetter: () {
+          List<MenuEntryRadioOption> list = [];
+          List<String> modes = ["legacy"];
+
+          if (bind.sessionIsKeyboardModeSupported(id: widget.id, mode: "map")) {
+            modes.add("map");
+          }
+
+          for (String mode in modes) {
+            if (mode == "legacy") {
+              list.add(MenuEntryRadioOption(
+                  text: translate('Legacy mode'), value: 'legacy'));
+            } else if (mode == "map") {
+              list.add(MenuEntryRadioOption(
+                  text: translate('Map mode'), value: 'map'));
+            }
+          }
+          return list;
+        },
         curOptionGetter: () async {
           return await bind.sessionGetKeyboardMode(id: widget.id) ?? "legacy";
         },
