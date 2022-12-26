@@ -264,7 +264,6 @@ void showServerSettingsWithValue(
         if (relayServerMsg != null) return false;
       }
       if (apiCtrl.text != oldCfg.apiServer) {
-        apiServerMsg = await validateAsync(apiCtrl.text);
         if (apiServerMsg != null) return false;
       }
       return true;
@@ -355,6 +354,7 @@ void showServerSettingsWithValue(
                 bind.mainSetOption(key: "api-server", value: apiCtrl.text);
               }
               close();
+              showToast(translate('Successful'));
             }
             setState(() {
               isInProgress = false;
