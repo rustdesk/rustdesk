@@ -44,8 +44,8 @@ pub mod record;
 mod vpx;
 
 #[inline]
-pub fn would_block_if_equal(old: &mut Vec<u128>, b: &[u8]) -> std::io::Result<()> {
-    let b = unsafe { std::slice::from_raw_parts::<u128>(b.as_ptr() as _, b.len() / 16) };
+pub fn would_block_if_equal(old: &mut Vec<u8>, b: &[u8]) -> std::io::Result<()> {
+    // does this really help?
     if b == &old[..] {
         return Err(std::io::ErrorKind::WouldBlock.into());
     }

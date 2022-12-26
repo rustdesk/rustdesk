@@ -50,7 +50,7 @@ pub struct Capturer {
     rotated: Vec<u8>,
     gdi_capturer: Option<CapturerGDI>,
     gdi_buffer: Vec<u8>,
-    saved_raw_data: Vec<u128>, // for faster compare and copy
+    saved_raw_data: Vec<u8>, // for faster compare and copy
 }
 
 impl Capturer {

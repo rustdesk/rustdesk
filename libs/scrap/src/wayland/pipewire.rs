@@ -123,7 +123,7 @@ pub struct PipeWireRecorder {
     appsink: AppSink,
     width: usize,
     height: usize,
-    saved_raw_data: Vec<u128>, // for faster compare and copy
+    saved_raw_data: Vec<u8>, // for faster compare and copy
 }
 
 impl PipeWireRecorder {
