@@ -21,7 +21,7 @@ skip_cargo = False
 def custom_os_system(cmd):
     err = os._system(cmd)
     if err != 0:
-        print(f"Error occured when executing: {cmd}. Exiting.")
+        print(f"Error occurred when executing: {cmd}. Exiting.")
         sys.exit(-1)
 # replace prebuilt os.system
 os._system = os.system

@@ -377,7 +377,7 @@ jobs:
         run: |
           ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart
 
-      - name: Upload Artifcat
+      - name: Upload Artifact
         uses: actions/upload-artifact@master
         with:
           name: bridge-artifact
@@ -1012,7 +1012,7 @@ jobs:
           files: |
             rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb
 
-      - name: Upload Artifcat
+      - name: Upload Artifact
         uses: actions/upload-artifact@master
         if: ${{ contains(matrix.job.extra-build-features, 'flatpak') }}
         with:
@@ -1188,7 +1188,7 @@ jobs:
           files: |
             rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb
 
-      - name: Upload Artifcat
+      - name: Upload Artifact
         uses: actions/upload-artifact@master
         if: ${{ contains(matrix.job.extra-build-features, 'flatpak') }}
         with:

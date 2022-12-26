@@ -95,7 +95,7 @@ extern "C"
 
                 CreateEnvironmentBlock(&lpEnvironment, // Environment block
                                        hToken,         // New token
-                                       TRUE);          // Inheritence
+                                       TRUE);          // Inheritance
             }
             if (lpEnvironment)
             {

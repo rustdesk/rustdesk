@@ -45,7 +45,7 @@ div.right-panel {
 
 div.icon-and-id {
     flow: horizontal;
-    border-spacing: 1em; 
+    border-spacing: 1em;
 }
 
 div.icon {
@@ -64,7 +64,7 @@ div.id {
 
 div.permissions {
     flow: horizontal;
-    border-spacing: 0.5em; 
+    border-spacing: 0.5em;
 }
 
 div.permissions > div {
@@ -141,7 +141,7 @@ button.elevate>span {
 }
 
 button.elevate>span>span {
-    margin-left:*; 
+    margin-left:*;
     margin-right:*;
 }
 

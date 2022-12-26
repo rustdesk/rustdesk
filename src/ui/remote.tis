@@ -26,7 +26,7 @@ handler.setDisplay = function(x, y, w, h, cursor_embeded) {
     if (recording) handler.record_screen(true, w, h);
 }
 
-// in case toolbar not shown correclty
+// in case toolbar not shown correctly
 view.windowMinSize = (scaleIt(500), scaleIt(300));
 
 function adaptDisplay() {

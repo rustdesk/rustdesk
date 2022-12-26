@@ -22,8 +22,8 @@
 import { simd } from "wasm-feature-detect";
 
 export async function loadVp9(callback) {
-  // Multithreading is used only if `options.threading` is true. 
-  // This requires browser support for the new `SharedArrayBuffer` and `Atomics` APIs, 
+  // Multithreading is used only if `options.threading` is true.
+  // This requires browser support for the new `SharedArrayBuffer` and `Atomics` APIs,
   // currently available in Firefox and Chrome with experimental flags enabled.
   // 所有主流浏览器均默认于2018年1月5日禁用SharedArrayBuffer
   const isSIMD = await simd();

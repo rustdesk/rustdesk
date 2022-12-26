@@ -4,22 +4,22 @@ import os
 import glob
 import sys
 import csv
-    
-def get_lang(lang): 
-  out = {}    
+
+def get_lang(lang):
+  out = {}
   for ln in open('./src/lang/%s.rs'%lang):
     ln = ln.strip()
     if ln.startswith('("'):
       k, v = line_split(ln)
       out[k] = v
-  return out 
+  return out
 
 def line_split(line):
-    toks = line.split('", "')    
+    toks = line.split('", "')
     if len(toks) != 2:
         print(line)
         assert(0)
-    k = toks[0][2:]    
+    k = toks[0][2:]
     v = toks[1][:-3]
     return k, v
 
@@ -34,8 +34,8 @@ def main():
 
 
 def expand():
-  for fn in glob.glob('./src/lang/*'): 
-    lang = os.path.basename(fn)[:-3] 
+  for fn in glob.glob('./src/lang/*'):
+    lang = os.path.basename(fn)[:-3]
     if lang in ['en','cn']: continue
     print(lang)
     dict = get_lang(lang)
@@ -52,11 +52,11 @@ def expand():
       else:
         fw.write(line)
     fw.close()
- 
+
 
 def to_csv():
-  for fn in glob.glob('./src/lang/*.rs'): 
-    lang = os.path.basename(fn)[:-3] 
+  for fn in glob.glob('./src/lang/*.rs'):
+    lang = os.path.basename(fn)[:-3]
     csvfile = open('./src/lang/%s.csv'%lang, "wt")
     csvwriter = csv.writer(csvfile)
     for line in open(fn):

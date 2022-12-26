@@ -46,7 +46,7 @@ var isWebDesktop = false;
 var version = "";
 int androidVersion = 0;
 
-/// only avaliable for Windows target
+/// only available for Windows target
 int windowsBuildNumber = 0;
 DesktopType? desktopType;
 
@@ -1373,7 +1373,7 @@ Future<Map<String, String>> getHttpHeaders() async {
   };
 }
 
-// Simple wrapper of built-in types for refrence use.
+// Simple wrapper of built-in types for reference use.
 class SimpleWrapper<T> {
   T value;
   SimpleWrapper(this.value);
@@ -1409,7 +1409,7 @@ Future<void> reloadAllWindows() async {
 /// Indicate the flutter app is running in portable mode.
 ///
 /// [Note]
-/// Portable build is only avaliable on Windows.
+/// Portable build is only available on Windows.
 bool isRunningInPortableMode() {
   if (!Platform.isWindows) {
     return false;
