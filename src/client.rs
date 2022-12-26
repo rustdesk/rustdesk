@@ -892,8 +892,6 @@ pub struct LoginConfigHandler {
     pub supported_encoding: Option<(bool, bool)>,
     pub restarting_remote_device: bool,
     pub force_relay: bool,
-    pub direct: Option<bool>,
-    pub received: bool,
 }
 
 impl Deref for LoginConfigHandler {
@@ -931,8 +929,6 @@ impl LoginConfigHandler {
         self.supported_encoding = None;
         self.restarting_remote_device = false;
         self.force_relay = !self.get_option("force-always-relay").is_empty();
-        self.direct = None;
-        self.received = false;
     }
 
     /// Check if the client should auto login.
@@ -1819,7 +1815,6 @@ pub trait Interface: Send + Clone + 'static + Sized {
     fn handle_login_error(&mut self, err: &str) -> bool;
     fn handle_peer_info(&mut self, pi: PeerInfo);
     fn set_force_relay(&mut self, direct: bool, received: bool);
-    fn set_connection_info(&mut self, direct: bool, received: bool);
     fn is_file_transfer(&self) -> bool;
     fn is_port_forward(&self) -> bool;
     fn is_rdp(&self) -> bool;
@@ -1995,10 +1990,11 @@ lazy_static::lazy_static! {
 /// * `title` - The title of the message.
 /// * `text` - The text of the message.
 #[inline]
-pub fn check_if_retry(msgtype: &str, title: &str, text: &str, retry_for_relay: bool) -> bool {
+pub fn check_if_retry(msgtype: &str, title: &str, text: &str) -> bool {
     msgtype == "error"
         && title == "Connection Error"
-        && ((text.contains("10054") || text.contains("104")) && retry_for_relay
+        && (text.contains("10054")
+            || text.contains("104")
             || (!text.to_lowercase().contains("offline")
                 && !text.to_lowercase().contains("exist")
                 && !text.to_lowercase().contains("handshake")
