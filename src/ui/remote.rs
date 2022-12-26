@@ -233,12 +233,12 @@ impl InvokeUiSession for SciterHandler {
 
     fn on_connected(&self, conn_type: ConnType) {
         match conn_type {
-            ConnType::RDP => {},
-            ConnType::PORT_FORWARD => {},
-            ConnType::FILE_TRANSFER => {},
+            ConnType::RDP => {}
+            ConnType::PORT_FORWARD => {}
+            ConnType::FILE_TRANSFER => {}
             ConnType::DEFAULT_CONN => {
                 crate::keyboard::client::start_grab_loop();
-            },
+            }
         }
     }
 
@@ -348,7 +348,7 @@ impl sciter::EventHandler for SciterSession {
     }
 
     sciter::dispatch_script_call! {
-        fn get_audit_server();
+        fn get_audit_server(String);
         fn send_note(String);
         fn is_xfce();
         fn get_id();

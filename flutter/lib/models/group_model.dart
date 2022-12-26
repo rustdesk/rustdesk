@@ -45,8 +45,9 @@ class GroupModel {
       var uri0 = Uri.parse(api);
       final pageSize = 20;
       var total = 0;
-      int current = 1;
+      int current = 0;
       do {
+        current += 1;
         var uri = Uri(
             scheme: uri0.scheme,
             host: uri0.host,
@@ -58,7 +59,6 @@ class GroupModel {
               if (gFFI.userModel.isAdmin.isFalse)
                 'grp': gFFI.userModel.groupName.value,
             });
-        current += pageSize;
         final resp = await http.get(uri, headers: await getHttpHeaders());
         if (resp.body.isNotEmpty && resp.body.toLowerCase() != "null") {
           Map<String, dynamic> json = jsonDecode(resp.body);
@@ -76,7 +76,7 @@ class GroupModel {
             }
           }
         }
-      } while (current < total + 1);
+      } while (current * pageSize < total);
     } catch (err) {
       debugPrint('$err');
       userLoadError.value = err.toString();
@@ -96,8 +96,9 @@ class GroupModel {
       var uri0 = Uri.parse(api);
       final pageSize = 20;
       var total = 0;
-      int current = 1;
+      int current = 0;
       do {
+        current += 1;
         var uri = Uri(
             scheme: uri0.scheme,
             host: uri0.host,
@@ -109,7 +110,6 @@ class GroupModel {
               'grp': gFFI.userModel.groupName.value,
               'target_user': username
             });
-        current += pageSize;
         final resp = await http.get(uri, headers: await getHttpHeaders());
         if (resp.body.isNotEmpty && resp.body.toLowerCase() != "null") {
           Map<String, dynamic> json = jsonDecode(resp.body);
@@ -129,7 +129,7 @@ class GroupModel {
             }
           }
         }
-      } while (current < total + 1);
+      } while (current * pageSize < total);
     } catch (err) {
       debugPrint('$err');
       peerLoadError.value = err.toString();

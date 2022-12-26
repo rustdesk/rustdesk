@@ -406,5 +406,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Add to Address Book", "添加到地址簿"),
         ("Group", "小组"),
         ("Search", "搜索"),
+        ("Closed manually by the web console", "被web控制台手动关闭"),
     ].iter().cloned().collect();
 }

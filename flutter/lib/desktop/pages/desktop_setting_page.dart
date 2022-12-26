@@ -125,6 +125,7 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
                   scrollController: controller,
                   child: PageView(
                     controller: controller,
+                    physics: NeverScrollableScrollPhysics(),
                     children: const [
                       _General(),
                       _Safety(),

@@ -173,7 +173,7 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::Message(msg));
     }
 
-    pub fn get_audit_server(&self) -> String {
+    pub fn get_audit_server(&self, typ: String) -> String {
         if self.lc.read().unwrap().conn_id <= 0
             || LocalConfig::get_option("access_token").is_empty()
         {
@@ -182,11 +182,12 @@ impl<T: InvokeUiSession> Session<T> {
         crate::get_audit_server(
             Config::get_option("api-server"),
             Config::get_option("custom-rendezvous-server"),
+            typ,
         )
     }
 
     pub fn send_note(&self, note: String) {
-        let url = self.get_audit_server();
+        let url = self.get_audit_server("conn".to_string());
         let id = self.id.clone();
         let conn_id = self.lc.read().unwrap().conn_id;
         std::thread::spawn(move || {

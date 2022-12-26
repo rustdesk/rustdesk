@@ -894,9 +894,9 @@ pub fn session_restart_remote_device(id: String) {
     }
 }
 
-pub fn session_get_audit_server_sync(id: String) -> SyncReturn<String> {
+pub fn session_get_audit_server_sync(id: String, typ: String) -> SyncReturn<String> {
     let res = if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.get_audit_server()
+        session.get_audit_server(typ)
     } else {
         "".to_owned()
     };
