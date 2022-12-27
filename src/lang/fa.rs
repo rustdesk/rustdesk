@@ -39,7 +39,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Change ID", "تعویض شناسه"),
         ("Website", "وب سایت"),
         ("About", "درباره"),
-        ("About RustDesk", ""),
         ("Slogan_tip", ""),
         ("Privacy Statement", ""),
         ("Mute", "بستن صدا"),
@@ -402,9 +401,12 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("hide_cm_tip", "فقط در صورت پذیرفتن جلسات از طریق رمز عبور و استفاده از رمز عبور دائمی، مخفی شدن مجاز است"),
         ("wayland_experiment_tip", "پشتیبانی Wayland در مرحله آزمایشی است، لطفاً در صورت نیاز به دسترسی بدون مراقبت از X11 استفاده کنید."),
         ("Right click to select tabs", "برای انتخاب تب ها راست کلیک کنید"),
+        ("Skipped", ""),
         ("Add to Address Book", "افزودن به دفترچه آدرس"),
         ("Group", ""),
         ("Search", ""),
         ("Closed manually by the web console", ""),
+        ("Local keyboard type", ""),
+        ("Select local keyboard type", ""),
     ].iter().cloned().collect();
 }

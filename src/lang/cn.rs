@@ -39,7 +39,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Change ID", "改变ID"),
         ("Website", "网站"),
         ("About", "关于"),
-        ("About RustDesk", ""),
         ("Slogan_tip", ""),
         ("Privacy Statement", ""),
         ("Mute", "静音"),

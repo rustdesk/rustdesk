@@ -361,7 +361,7 @@ class MyIdMenu: Reactor.Component {
 
     function showAbout() {
         var name = handler.get_app_name();
-        msgbox("custom-nocancel-nook-hasclose", "About " + name, "<div style='line-height: 2em'> \
+        msgbox("custom-nocancel-nook-hasclose", translate("About") + " " + name, "<div style='line-height: 2em'> \
             <div>Version: " + handler.get_version() + " \
             <div .link .custom-event url='https://rustdesk.com/privacy'>Privacy Statement</div> \
             <div .link .custom-event url='https://rustdesk.com'>Website</div> \
