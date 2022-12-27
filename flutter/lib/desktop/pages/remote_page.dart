@@ -149,6 +149,16 @@ class _RemotePageState extends State<RemotePage>
   }
 
   @override
+  void onWindowRestore() {
+    super.onWindowRestore();
+    // On windows, we use `onWindowRestore` way to handle window restore from
+    // a minimized state.
+    if (Platform.isWindows) {
+      _isWindowBlur = false;
+    }
+  }
+
+  @override
   void dispose() {
     debugPrint("REMOTE PAGE dispose ${widget.id}");
     // ensure we leave this session, this is a double check
