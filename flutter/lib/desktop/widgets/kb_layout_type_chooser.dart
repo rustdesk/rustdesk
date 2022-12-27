@@ -18,8 +18,8 @@ const String _kKBLayoutTypeISO = 'ISO';
 const String _kKBLayoutTypeNotISO = 'Not ISO';
 
 const _kKBLayoutImageMap = {
-  _kKBLayoutTypeISO: 'KB_LAYOUT_ISO',
-  _kKBLayoutTypeNotISO: 'KB_LAYOUT_NOT_ISO',
+  _kKBLayoutTypeISO: 'kb_layout_iso',
+  _kKBLayoutTypeNotISO: 'kb_layout_not_iso',
 };
 
 class _KBImage extends StatelessWidget {
