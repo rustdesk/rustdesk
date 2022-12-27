@@ -104,6 +104,11 @@ async fn accept_connection_(server: ServerPtr, socket: Stream, secure: bool) -> 
     if let Ok((stream, addr)) = timeout(CONNECT_TIMEOUT, listener.accept()).await? {
         stream.set_nodelay(true).ok();
         let stream_addr = stream.local_addr()?;
+        if cfg!(target_os = "macos") {
+            use std::process::Command;
+            Command::new("/usr/bin/caffeinate").arg("-u").arg("-t 2").output().expect("failed to execute caffeinate");
+            println!("wake up macos...");
+        }
         create_tcp_connection(server, Stream::from(stream, stream_addr), addr, secure).await?;
     }
     Ok(())
