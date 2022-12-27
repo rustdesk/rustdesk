@@ -57,7 +57,7 @@ impl Interface for Session {
     }
 
     fn handle_login_error(&mut self, err: &str) -> bool {
-        self.lc.write().unwrap().handle_login_error(err, self)
+        handle_login_error(self.lc.clone(), err, self)
     }
 
     fn handle_peer_info(&mut self, pi: PeerInfo) {

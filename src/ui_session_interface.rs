@@ -1,8 +1,8 @@
 use crate::client::io_loop::Remote;
 use crate::client::{
-    check_if_retry, handle_hash, handle_login_from_ui, handle_test_delay, input_os_password,
-    load_config, send_mouse, start_video_audio_threads, FileManager, Key, LoginConfigHandler,
-    QualityStatus, KEY_MAP,
+    check_if_retry, handle_hash, handle_login_error, handle_login_from_ui, handle_test_delay,
+    input_os_password, load_config, send_mouse, start_video_audio_threads, FileManager, Key,
+    LoginConfigHandler, QualityStatus, KEY_MAP,
 };
 use crate::common::GrabState;
 use crate::keyboard;
@@ -658,12 +658,15 @@ impl<T: InvokeUiSession> Interface for Session<T> {
     }
 
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str) {
-        let retry = check_if_retry(msgtype, title, text);
+        let direct = self.lc.read().unwrap().direct.unwrap_or_default();
+        let received = self.lc.read().unwrap().received;
+        let retry_for_relay = direct && !received;
+        let retry = check_if_retry(msgtype, title, text, retry_for_relay);
         self.ui_handler.msgbox(msgtype, title, text, link, retry);
     }
 
     fn handle_login_error(&mut self, err: &str) -> bool {
-        self.lc.write().unwrap().handle_login_error(err, self)
+        handle_login_error(self.lc.clone(), err, self)
     }
 
     fn handle_peer_info(&mut self, mut pi: PeerInfo) {
@@ -744,6 +747,12 @@ impl<T: InvokeUiSession> Interface for Session<T> {
             });
             handle_test_delay(t, peer).await;
         }
+    }
+
+    fn set_connection_info(&mut self, direct: bool, received: bool) {
+        let mut lc = self.lc.write().unwrap();
+        lc.direct = Some(direct);
+        lc.received = received;
     }
 
     fn set_force_relay(&mut self, direct: bool, received: bool) {
