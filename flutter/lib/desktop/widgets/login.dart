@@ -9,7 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../common.dart';
 
-final kMidButtonPadding = const EdgeInsets.fromLTRB(15, 0, 15, 0);
+final _kMidButtonPadding = const EdgeInsets.fromLTRB(15, 0, 15, 0);
 
 class _IconOP extends StatelessWidget {
   final String icon;
@@ -53,7 +53,7 @@ class ButtonOP extends StatelessWidget {
       Expanded(
         child: Container(
           height: height,
-          padding: kMidButtonPadding,
+          padding: _kMidButtonPadding,
           child: Obx(() => ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   primary: curOP.value.isEmpty || curOP.value == op
@@ -315,7 +315,7 @@ class LoginWidgetUserPass extends StatelessWidget {
           height: 8.0,
         ),
         Container(
-          padding: kMidButtonPadding,
+          padding: _kMidButtonPadding,
           child: Row(
             children: [
               ConstrainedBox(
@@ -343,7 +343,7 @@ class LoginWidgetUserPass extends StatelessWidget {
           height: 8.0,
         ),
         Container(
-          padding: kMidButtonPadding,
+          padding: _kMidButtonPadding,
           child: Row(
             children: [
               ConstrainedBox(
@@ -377,7 +377,7 @@ class LoginWidgetUserPass extends StatelessWidget {
           Expanded(
             child: Container(
               height: 38,
-              padding: kMidButtonPadding,
+              padding: _kMidButtonPadding,
               child: Obx(() => ElevatedButton(
                     style: curOP.value.isEmpty || curOP.value == 'rustdesk'
                         ? null

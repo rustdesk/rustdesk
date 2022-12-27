@@ -998,6 +998,8 @@ pub struct LocalConfig {
     #[serde(default)]
     remote_id: String, // latest used one
     #[serde(default)]
+    kb_layout_type: String,
+    #[serde(default)]
     size: Size,
     #[serde(default)]
     pub fav: Vec<String>,
@@ -1015,6 +1017,16 @@ impl LocalConfig {
 
     fn store(&self) {
         Config::store_(self, "_local");
+    }
+
+    pub fn get_kb_layout_type() -> String {
+        LOCAL_CONFIG.read().unwrap().kb_layout_type.clone()
+    }
+
+    pub fn set_kb_layout_type(kb_layout_type: String) {
+        let mut config = LOCAL_CONFIG.write().unwrap();
+        config.kb_layout_type = kb_layout_type;
+        config.store();
     }
 
     pub fn get_size() -> Size {
