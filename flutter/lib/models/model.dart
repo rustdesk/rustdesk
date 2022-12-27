@@ -381,12 +381,22 @@ class ImageModel with ChangeNotifier {
 
   WeakReference<FFI> parent;
 
+  final List<Function(String)> _callbacksOnFirstImage = [];
+
   ImageModel(this.parent);
+
+  addCallbackOnFirstImage(Function(String) cb) =>
+      _callbacksOnFirstImage.add(cb);
 
   onRgba(Uint8List rgba) {
     if (_waitForImage[id]!) {
       _waitForImage[id] = false;
       parent.target?.dialogManager.dismissAll();
+      if (isDesktop) {
+        for (final cb in _callbacksOnFirstImage) {
+          cb(id);
+        }
+      }
     }
     final pid = parent.target?.id;
     ui.decodeImageFromPixels(

@@ -22,6 +22,7 @@ import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
 import './popup_menu.dart';
 import './material_mod_popup_menu.dart' as mod_menu;
+import './kb_layout_type_chooser.dart';
 
 class MenubarState {
   final kStoreKey = 'remoteMenubarState';
@@ -1187,7 +1188,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   }
 
   List<MenuEntryBase<String>> _getKeyboardMenu() {
-    final keyboardMenu = [
+    final List<MenuEntryBase<String>> keyboardMenu = [
       MenuEntryRadios<String>(
         text: translate('Ratio'),
         optionsGetter: () => [
@@ -1203,7 +1204,55 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         },
       )
     ];
-
+    final localPlatform =
+        getLocalPlatformForKBLayoutType(widget.ffi.ffiModel.pi.platform);
+    if (localPlatform != '') {
+      keyboardMenu.add(MenuEntryDivider());
+      keyboardMenu.add(
+        MenuEntryButton<String>(
+          childBuilder: (TextStyle? style) => Container(
+              alignment: AlignmentDirectional.center,
+              height: _MenubarTheme.height,
+              child: Row(
+                children: [
+                  Obx(() => RichText(
+                        text: TextSpan(
+                          text: '${translate('Local keyboard type')}: ',
+                          style: DefaultTextStyle.of(context).style,
+                          children: <TextSpan>[
+                            TextSpan(
+                              text: KBLayoutType.value,
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      )),
+                  Expanded(
+                      child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Transform.scale(
+                      scale: 0.8,
+                      child: IconButton(
+                        padding: EdgeInsets.zero,
+                        icon: const Icon(Icons.settings),
+                        onPressed: () {
+                          if (Navigator.canPop(context)) {
+                            Navigator.pop(context);
+                          }
+                          showKBLayoutTypeChooser(
+                              localPlatform, widget.ffi.dialogManager);
+                        },
+                      ),
+                    ),
+                  ))
+                ],
+              )),
+          proc: () {},
+          padding: EdgeInsets.zero,
+          dismissOnClicked: false,
+        ),
+      );
+    }
     return keyboardMenu;
   }
 

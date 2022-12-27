@@ -6,7 +6,7 @@ use crate::flutter::FlutterHandler;
 #[cfg(not(feature = "flutter"))]
 use crate::ui::remote::SciterHandler;
 use crate::ui_session_interface::Session;
-use hbb_common::{log, message_proto::*};
+use hbb_common::{log, message_proto::*, config::LocalConfig};
 use rdev::{Event, EventType, Key};
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -620,7 +620,13 @@ pub fn map_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Option<KeyEv
     #[cfg(target_os = "windows")]
     let keycode = match peer.as_str() {
         "windows" => event.scan_code,
-        "macos" => rdev::win_scancode_to_macos_code(event.scan_code)?,
+        "macos" => {
+            if LocalConfig::get_kb_layout_type() == "ISO" {
+                rdev::win_scancode_to_macos_iso_code(event.scan_code)?
+            } else {
+                rdev::win_scancode_to_macos_code(event.scan_code)?
+            }
+        },
         _ => rdev::win_scancode_to_linux_code(event.scan_code)?,
     };
     #[cfg(target_os = "macos")]
@@ -632,7 +638,13 @@ pub fn map_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Option<KeyEv
     #[cfg(target_os = "linux")]
     let keycode = match peer.as_str() {
         "windows" => rdev::linux_code_to_win_scancode(event.code as _)?,
-        "macos" => rdev::linux_code_to_macos_code(event.code as _)?,
+        "macos" => {
+            if LocalConfig::get_kb_layout_type() == "ISO" {
+                rdev::linux_code_to_macos_iso_code(event.scan_code)?
+            } else {
+                rdev::linux_code_to_macos_code(event.code as _)?
+            }
+        },
         _ => event.code as _,
     };
     #[cfg(any(target_os = "android", target_os = "ios"))]
