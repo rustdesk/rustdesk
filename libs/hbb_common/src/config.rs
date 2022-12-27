@@ -1024,7 +1024,9 @@ impl LocalConfig {
     }
 
     pub fn set_kb_layout_type(kb_layout_type: String) {
-        LOCAL_CONFIG.write().unwrap().kb_layout_type = kb_layout_type
+        let mut config = LOCAL_CONFIG.write().unwrap();
+        config.kb_layout_type = kb_layout_type;
+        config.store();
     }
 
     pub fn get_size() -> Size {

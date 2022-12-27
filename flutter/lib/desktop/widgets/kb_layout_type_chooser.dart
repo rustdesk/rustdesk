@@ -6,7 +6,7 @@ import 'package:flutter_hbb/models/platform_model.dart';
 
 import '../../common.dart';
 
-typedef KBChoosedCallback = bool Function(String);
+typedef KBChoosedCallback = Future<bool> Function(String);
 
 const double _kImageMarginVertical = 6.0;
 const double _kImageMarginHorizental = 10.0;
@@ -78,11 +78,19 @@ class _KBChooser extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    onChanged(String? v) async {
+      if (v != null) {
+        if (await cb(v)) {
+          choosedType.value = v;
+        }
+      }
+    }
+
     return Column(
       children: [
         TextButton(
           onPressed: () {
-            choosedType.value = kbLayoutType;
+            onChanged(kbLayoutType);
           },
           child: _KBImage(
             kbLayoutType: kbLayoutType,
@@ -98,21 +106,13 @@ class _KBChooser extends StatelessWidget {
                     splashRadius: 0,
                     value: kbLayoutType,
                     groupValue: choosedType.value,
-                    onChanged: (String? newValue) {
-                      if (newValue != null) {
-                        if (cb(newValue)) {
-                          choosedType.value = newValue;
-                        }
-                      }
-                    },
+                    onChanged: onChanged,
                   )),
               Text(kbLayoutType),
             ],
           ),
           onPressed: () {
-            if (cb(kbLayoutType)) {
-              choosedType.value = kbLayoutType;
-            }
+            onChanged(kbLayoutType);
           },
         ),
       ],
@@ -138,31 +138,28 @@ class KBLayoutTypeChooser extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final imageWidth = width / 2 - dividerWidth;
-    return Container(
-      color: Colors.white,
-      child: SizedBox(
-        width: width,
-        height: height,
-        child: Center(
-          child: Row(
-            children: [
-              _KBChooser(
-                kbLayoutType: _kKBLayoutTypeISO,
-                imageWidth: imageWidth,
-                choosedType: choosedType,
-                cb: cb,
-              ),
-              VerticalDivider(
-                width: dividerWidth * 2,
-              ),
-              _KBChooser(
-                kbLayoutType: _kKBLayoutTypeNotISO,
-                imageWidth: imageWidth,
-                choosedType: choosedType,
-                cb: cb,
-              ),
-            ],
-          ),
+    return SizedBox(
+      width: width,
+      height: height,
+      child: Center(
+        child: Row(
+          children: [
+            _KBChooser(
+              kbLayoutType: _kKBLayoutTypeISO,
+              imageWidth: imageWidth,
+              choosedType: choosedType,
+              cb: cb,
+            ),
+            VerticalDivider(
+              width: dividerWidth * 2,
+            ),
+            _KBChooser(
+              kbLayoutType: _kKBLayoutTypeNotISO,
+              imageWidth: imageWidth,
+              choosedType: choosedType,
+              cb: cb,
+            ),
+          ],
         ),
       ),
     );
@@ -215,8 +212,8 @@ showKBLayoutTypeChooser(
           width: 360,
           height: 200,
           dividerWidth: 4.0,
-          cb: (String v) {
-            bind.setLocalKbLayoutType(kbLayoutType: v);
+          cb: (String v) async {
+            await bind.setLocalKbLayoutType(kbLayoutType: v);
             KBLayoutType.value = bind.getLocalKbLayoutType();
             return v == KBLayoutType.value;
           }),
