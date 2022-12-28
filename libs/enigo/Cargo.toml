@@ -22,7 +22,7 @@ appveyor = { repository = "pythoneer/enigo-85xiy" }
 serde = { version = "1.0", optional = true }
 serde_derive = { version = "1.0", optional = true }
 log = "0.4"
-rdev = { git = "https://github.com/asur4s/rdev" }
+rdev = { git = "https://github.com/fufesou/rdev" }
 tfc = { git = "https://github.com/asur4s/The-Fat-Controller" }
 hbb_common = { path = "../hbb_common" }
 
