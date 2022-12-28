@@ -130,7 +130,7 @@ impl AddrMangle {
     pub fn decode(bytes: &[u8]) -> SocketAddr {
         if bytes.len() > 16 {
             if bytes.len() != 18 {
-                return Config::get_any_listen_addr_v6();
+                return Config::get_any_listen_addr(false);
             }
             #[allow(invalid_value)]
             let mut tmp: [u8; 2] = unsafe { std::mem::MaybeUninit::uninit().assume_init() };
@@ -299,4 +299,11 @@ mod tests {
             "failed"
         );
     }
+}
+
+#[inline]
+pub fn is_ipv4_str(id: &str) -> bool {
+    regex::Regex::new(r"^\d+\.\d+\.\d+\.\d+(:\d+)?$")
+        .unwrap()
+        .is_match(id)
 }

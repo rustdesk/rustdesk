@@ -14,20 +14,17 @@ use hbb_common::{
     tokio::{self, sync::mpsc, time},
 };
 
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 use hbb_common::{
     config::{RENDEZVOUS_PORT, RENDEZVOUS_TIMEOUT},
     futures::future::join_all,
     protobuf::Message as _,
     rendezvous_proto::*,
-    tcp::FramedStream,
 };
 
 #[cfg(feature = "flutter")]
 use crate::hbbs_http::account;
 use crate::{common::SOFTWARE_UPDATE_URL, ipc};
 
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 type Message = RendezvousMessage;
 
 pub type Children = Arc<Mutex<(bool, HashMap<(String, String), Child>)>>;
@@ -752,7 +749,7 @@ pub fn change_id(id: String) {
     *ASYNC_JOB_STATUS.lock().unwrap() = " ".to_owned();
     let old_id = get_id();
     std::thread::spawn(move || {
-        *ASYNC_JOB_STATUS.lock().unwrap() = change_id_(id, old_id).to_owned();
+        *ASYNC_JOB_STATUS.lock().unwrap() = change_id_shared(id, old_id).to_owned();
     });
 }
 
@@ -1009,14 +1006,11 @@ pub(crate) async fn send_to_cm(data: &ipc::Data) {
     }
 }
 
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 const INVALID_FORMAT: &'static str = "Invalid format";
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 const UNKNOWN_ERROR: &'static str = "Unknown error";
 
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[tokio::main(flavor = "current_thread")]
-async fn change_id_(id: String, old_id: String) -> &'static str {
+pub async fn change_id_shared(id: String, old_id: String) -> &'static str {
     if !hbb_common::is_valid_custom_id(&id) {
         return INVALID_FORMAT;
     }
@@ -1064,17 +1058,14 @@ async fn change_id_(id: String, old_id: String) -> &'static str {
     err
 }
 
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 async fn check_id(
     rendezvous_server: String,
     old_id: String,
     id: String,
     uuid: String,
 ) -> &'static str {
-    let any_addr = Config::get_any_listen_addr();
-    if let Ok(mut socket) = FramedStream::new(
+    if let Ok(mut socket) = hbb_common::socket_client::connect_tcp(
         crate::check_port(rendezvous_server, RENDEZVOUS_PORT),
-        any_addr,
         RENDEZVOUS_TIMEOUT,
     )
     .await

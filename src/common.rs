@@ -312,7 +312,6 @@ async fn test_nat_type_() -> ResultType<bool> {
     let mut port2 = 0;
     let server1 = socket_client::get_target_addr(&server1)?;
     let server2 = socket_client::get_target_addr(&server2)?;
-    let mut addr = Config::get_any_listen_addr();
     for i in 0..2 {
         let mut socket = socket_client::connect_tcp(
             if i == 0 {
@@ -320,11 +319,15 @@ async fn test_nat_type_() -> ResultType<bool> {
             } else {
                 server2.clone()
             },
-            addr,
             RENDEZVOUS_TIMEOUT,
         )
         .await?;
-        addr = socket.local_addr();
+        if i == 0 {
+            Config::set_option(
+                "local-ip-addr".to_owned(),
+                socket.local_addr().ip().to_string(),
+            );
+        }
         socket.send(&msg_out).await?;
         if let Some(Ok(bytes)) = socket.next_timeout(RENDEZVOUS_TIMEOUT).await {
             if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
@@ -347,7 +350,6 @@ async fn test_nat_type_() -> ResultType<bool> {
             break;
         }
     }
-    Config::set_option("local-ip-addr".to_owned(), addr.ip().to_string());
     let ok = port1 > 0 && port2 > 0;
     if ok {
         let t = if port1 == port2 {
@@ -424,7 +426,6 @@ async fn test_rendezvous_server_() {
             let tm = std::time::Instant::now();
             if socket_client::connect_tcp(
                 crate::check_port(&host, RENDEZVOUS_PORT),
-                Config::get_any_listen_addr(),
                 RENDEZVOUS_TIMEOUT,
             )
             .await
@@ -526,8 +527,7 @@ async fn check_software_update_() -> hbb_common::ResultType<()> {
 
     let rendezvous_server =
         socket_client::get_target_addr(&format!("rs-sg.rustdesk.com:{}", config::RENDEZVOUS_PORT))?;
-    let mut socket =
-        socket_client::new_udp(Config::get_any_listen_addr(), RENDEZVOUS_TIMEOUT).await?;
+    let mut socket = socket_client::new_udp_for(&rendezvous_server, RENDEZVOUS_TIMEOUT).await?;
 
     let mut msg_out = RendezvousMessage::new();
     msg_out.set_software_update(SoftwareUpdate {
@@ -565,12 +565,6 @@ pub fn get_full_name() -> String {
         hbb_common::config::ORG.read().unwrap(),
         hbb_common::config::APP_NAME.read().unwrap(),
     )
-}
-
-pub fn is_ip(id: &str) -> bool {
-    hbb_common::regex::Regex::new(r"^\d+\.\d+\.\d+\.\d+(:\d+)?$")
-        .unwrap()
-        .is_match(id)
 }
 
 pub fn is_setup(name: &str) -> bool {

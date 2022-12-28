@@ -111,15 +111,13 @@ impl RendezvousMediator {
             })
             .unwrap_or(host.to_owned());
         let mut rz = Self {
-            addr: Config::get_any_listen_addr().into_target_addr()?,
+            addr: socket_client::get_target_addr(&crate::check_port(&host, RENDEZVOUS_PORT))?,
             host: host.clone(),
             host_prefix,
             last_id_pk_registry: "".to_owned(),
         };
 
-        rz.addr = socket_client::get_target_addr(&crate::check_port(&host, RENDEZVOUS_PORT))?;
-        let any_addr = Config::get_any_listen_addr();
-        let mut socket = socket_client::new_udp(any_addr, RENDEZVOUS_TIMEOUT).await?;
+        let mut socket = socket_client::new_udp_for(&rz.addr, RENDEZVOUS_TIMEOUT).await?;
 
         const TIMER_OUT: Duration = Duration::from_secs(1);
         let mut timer = interval(TIMER_OUT);
@@ -253,7 +251,7 @@ impl RendezvousMediator {
                                     rz.addr = socket_client::get_target_addr(&crate::check_port(&host, RENDEZVOUS_PORT))?;
                                     // in some case of network reconnect (dial IP network),
                                     // old UDP socket not work any more after network recover
-                                    if let Some(s) = socket_client::rebind_udp(any_addr).await? {
+                                    if let Some(s) = socket_client::rebind_udp_for(&rz.addr).await? {
                                         socket = s;
                                     }
                                     last_dns_check = Instant::now();
@@ -293,19 +291,15 @@ impl RendezvousMediator {
     ) -> ResultType<()> {
         let peer_addr = AddrMangle::decode(&socket_addr);
         log::info!(
-            "create_relay requested from from {:?}, relay_server: {}, uuid: {}, secure: {}",
+            "create_relay requested from {:?}, relay_server: {}, uuid: {}, secure: {}",
             peer_addr,
             relay_server,
             uuid,
             secure,
         );
 
-        let mut socket = socket_client::connect_tcp(
-            self.addr.to_owned(),
-            Config::get_any_listen_addr(),
-            RENDEZVOUS_TIMEOUT,
-        )
-        .await?;
+        let mut socket =
+            socket_client::connect_tcp(self.addr.to_owned(), RENDEZVOUS_TIMEOUT).await?;
 
         let mut msg_out = Message::new();
         let mut rr = RelayResponse {
@@ -320,24 +314,35 @@ impl RendezvousMediator {
         }
         msg_out.set_relay_response(rr);
         socket.send(&msg_out).await?;
-        crate::create_relay_connection(server, relay_server, uuid, peer_addr, secure).await;
+        let v4 = socket_client::is_ipv4(&self.addr);
+        crate::create_relay_connection(server, relay_server, uuid, peer_addr, secure, v4).await;
         Ok(())
     }
 
     async fn handle_intranet(&self, fla: FetchLocalAddr, server: ServerPtr) -> ResultType<()> {
+        let relay_server = self.get_relay_server(fla.relay_server);
+        if !socket_client::is_ipv4(&self.addr) {
+            // nat64, go relay directly, because current hbbs will crash if demangle ipv6 address
+            let uuid = Uuid::new_v4().to_string();
+            return self
+                .create_relay(
+                    fla.socket_addr.into(),
+                    relay_server,
+                    uuid,
+                    server,
+                    true,
+                    true,
+                )
+                .await;
+        }
         let peer_addr = AddrMangle::decode(&fla.socket_addr);
         log::debug!("Handle intranet from {:?}", peer_addr);
-        let mut socket = socket_client::connect_tcp(
-            self.addr.to_owned(),
-            Config::get_any_listen_addr(),
-            RENDEZVOUS_TIMEOUT,
-        )
-        .await?;
+        let mut socket =
+            socket_client::connect_tcp(self.addr.to_owned(), RENDEZVOUS_TIMEOUT).await?;
         let local_addr = socket.local_addr();
         let local_addr: SocketAddr =
             format!("{}:{}", local_addr.ip(), local_addr.port()).parse()?;
         let mut msg_out = Message::new();
-        let relay_server = self.get_relay_server(fla.relay_server);
         msg_out.set_local_addr(LocalAddr {
             id: Config::get_id(),
             socket_addr: AddrMangle::encode(peer_addr).into(),
@@ -372,16 +377,12 @@ impl RendezvousMediator {
         let peer_addr = AddrMangle::decode(&ph.socket_addr);
         log::debug!("Punch hole to {:?}", peer_addr);
         let mut socket = {
-            let socket = socket_client::connect_tcp(
-                self.addr.to_owned(),
-                Config::get_any_listen_addr(),
-                RENDEZVOUS_TIMEOUT,
-            )
-            .await?;
+            let socket =
+                socket_client::connect_tcp(self.addr.to_owned(), RENDEZVOUS_TIMEOUT).await?;
             let local_addr = socket.local_addr();
             // key important here for punch hole to tell my gateway incoming peer is safe.
             // it can not be async here, because local_addr can not be reused, we must close the connection before use it again.
-            allow_err!(socket_client::connect_tcp(peer_addr, local_addr, 30).await);
+            allow_err!(socket_client::connect_tcp_local(peer_addr, local_addr, 30).await);
             socket
         };
         let mut msg_out = Message::new();
@@ -534,7 +535,9 @@ async fn direct_server(server: ServerPtr) {
             if let Ok(Ok((stream, addr))) = hbb_common::timeout(1000, l.accept()).await {
                 stream.set_nodelay(true).ok();
                 log::info!("direct access from {}", addr);
-                let local_addr = stream.local_addr().unwrap_or(Config::get_any_listen_addr());
+                let local_addr = stream
+                    .local_addr()
+                    .unwrap_or(Config::get_any_listen_addr(true));
                 let server = server.clone();
                 tokio::spawn(async move {
                     allow_err!(
@@ -653,12 +656,7 @@ async fn create_online_stream() -> ResultType<FramedStream> {
     }
     let online_server = format!("{}:{}", tmp[0], port - 1);
     let server_addr = socket_client::get_target_addr(&online_server)?;
-    socket_client::connect_tcp(
-        server_addr,
-        Config::get_any_listen_addr(),
-        RENDEZVOUS_TIMEOUT,
-    )
-    .await
+    socket_client::connect_tcp(server_addr, RENDEZVOUS_TIMEOUT).await
 }
 
 async fn query_online_states_(

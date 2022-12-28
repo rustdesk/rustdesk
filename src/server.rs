@@ -215,9 +215,10 @@ pub async fn create_relay_connection(
     uuid: String,
     peer_addr: SocketAddr,
     secure: bool,
+    ipv4: bool,
 ) {
     if let Err(err) =
-        create_relay_connection_(server, relay_server, uuid.clone(), peer_addr, secure).await
+        create_relay_connection_(server, relay_server, uuid.clone(), peer_addr, secure, ipv4).await
     {
         log::error!(
             "Failed to create relay connection for {} with uuid {}: {}",
@@ -234,10 +235,10 @@ async fn create_relay_connection_(
     uuid: String,
     peer_addr: SocketAddr,
     secure: bool,
+    ipv4: bool,
 ) -> ResultType<()> {
     let mut stream = socket_client::connect_tcp(
-        crate::check_port(relay_server, RELAY_PORT),
-        Config::get_any_listen_addr(),
+        socket_client::ipv4_to_ipv6(crate::check_port(relay_server, RELAY_PORT), ipv4),
         CONNECT_TIMEOUT,
     )
     .await?;
