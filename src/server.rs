@@ -194,9 +194,14 @@ pub async fn create_tcp_connection(
         }
     }
 
-    #[cfg(target_os = "macos")]{
+    #[cfg(target_os = "macos")]
+    {
         use std::process::Command;
-        Command::new("/usr/bin/caffeinate").arg("-u").arg("-t 5").spawn().ok();
+        Command::new("/usr/bin/caffeinate")
+            .arg("-u")
+            .arg("-t 5")
+            .spawn()
+            .ok();
         log::info!("wake up macos");
     }
     Connection::start(addr, stream, id, Arc::downgrade(&server)).await;
@@ -385,6 +390,7 @@ pub async fn start_server(is_server: bool) {
         #[cfg(windows)]
         crate::platform::windows::bootstrap();
         input_service::fix_key_down_timeout_loop();
+        crate::hbbs_http::sync::start();
         #[cfg(target_os = "linux")]
         if crate::platform::current_is_wayland() {
             allow_err!(input_service::setup_uinput(0, 1920, 0, 1080).await);

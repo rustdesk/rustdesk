@@ -26,7 +26,6 @@ use hbb_common::{
 };
 #[cfg(any(target_os = "android", target_os = "ios"))]
 use scrap::android::call_main_service_mouse_input;
-use serde::Deserialize;
 use serde_json::{json, value::Value};
 use sha2::{Digest, Sha256};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -40,6 +39,7 @@ pub type Sender = mpsc::UnboundedSender<(Instant, Arc<Message>)>;
 lazy_static::lazy_static! {
     static ref LOGIN_FAILURES: Arc::<Mutex<HashMap<String, (i32, i32, i32)>>> = Default::default();
     static ref SESSIONS: Arc::<Mutex<HashMap<String, Session>>> = Default::default();
+    static ref ALIVE_CONNS: Arc::<Mutex<Vec<i32>>> = Default::default();
 }
 pub static CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 pub static MOUSE_MOVE_TIME: AtomicI64 = AtomicI64::new(0);
@@ -74,7 +74,6 @@ pub struct Connection {
     read_jobs: Vec<fs::TransferJob>,
     timer: Interval,
     file_timer: Interval,
-    http_timer: Interval,
     file_transfer: Option<(String, bool)>,
     port_forward_socket: Option<Framed<TcpStream, BytesCodec>>,
     port_forward_address: String,
@@ -147,6 +146,7 @@ impl Connection {
             challenge: Config::get_auto_password(6),
             ..Default::default()
         };
+        ALIVE_CONNS.lock().unwrap().push(id);
         let (tx_from_cm_holder, mut rx_from_cm) = mpsc::unbounded_channel::<ipc::Data>();
         // holding tx_from_cm_holder to avoid cpu burning of rx_from_cm.recv when all sender closed
         let tx_from_cm = tx_from_cm_holder.clone();
@@ -154,7 +154,7 @@ impl Connection {
         let (tx, mut rx) = mpsc::unbounded_channel::<(Instant, Arc<Message>)>();
         let (tx_video, mut rx_video) = mpsc::unbounded_channel::<(Instant, Arc<Message>)>();
         let (tx_input, rx_input) = std_mpsc::channel();
-        let (tx_stop, mut rx_stop) = mpsc::unbounded_channel::<String>();
+        let mut hbbs_rx = crate::hbbs_http::sync::signal_receiver();
 
         let tx_cloned = tx.clone();
         let mut conn = Self {
@@ -169,7 +169,6 @@ impl Connection {
             read_jobs: Vec::new(),
             timer: time::interval(SEC30),
             file_timer: time::interval(SEC30),
-            http_timer: time::interval(Duration::from_secs(3)),
             file_transfer: None,
             port_forward_socket: None,
             port_forward_address: "".to_owned(),
@@ -393,12 +392,11 @@ impl Connection {
                         conn.file_timer = time::interval_at(Instant::now() + SEC30, SEC30);
                     }
                 }
-                _ = conn.http_timer.tick() => {
-                    Connection::post_heartbeat(conn.server_audit_conn.clone(), conn.inner.id, tx_stop.clone());
-                },
-                Some(reason) = rx_stop.recv() => {
-                    conn.on_close_manually(&reason, &reason).await;
-
+                Ok(conns) = hbbs_rx.recv() => {
+                    if conns.contains(&id) {
+                        conn.on_close_manually("web console", "web console").await;
+                        break;
+                    }
                 }
                 Some((instant, value)) = rx_video.recv() => {
                     if !conn.video_ack_required {
@@ -514,6 +512,7 @@ impl Connection {
         conn.post_conn_audit(json!({
             "action": "close",
         }));
+        ALIVE_CONNS.lock().unwrap().retain(|&c| c != id);
         log::info!("#{} connection loop exited", id);
     }
 
@@ -584,10 +583,10 @@ impl Connection {
         rx_from_cm: &mut mpsc::UnboundedReceiver<Data>,
     ) -> ResultType<()> {
         let mut last_recv_time = Instant::now();
-        let (tx_stop, mut rx_stop) = mpsc::unbounded_channel::<String>();
         if let Some(mut forward) = self.port_forward_socket.take() {
             log::info!("Running port forwarding loop");
             self.stream.set_raw();
+            let mut hbbs_rx = crate::hbbs_http::sync::signal_receiver();
             loop {
                 tokio::select! {
                     Some(data) = rx_from_cm.recv() => {
@@ -618,10 +617,12 @@ impl Connection {
                         if last_recv_time.elapsed() >= H1 {
                             bail!("Timeout");
                         }
-                        Connection::post_heartbeat(self.server_audit_conn.clone(), self.inner.id, tx_stop.clone());
                     }
-                    Some(reason) = rx_stop.recv() => {
-                        bail!(reason);
+                    Ok(conns) = hbbs_rx.recv() => {
+                        if conns.contains(&self.inner.id) {
+                            // todo: check reconnect
+                            bail!("Closed manually by the web console");
+                        }
                     }
                 }
             }
@@ -708,30 +709,6 @@ impl Connection {
         v["conn_id"] = json!(self.inner.id);
         tokio::spawn(async move {
             allow_err!(Self::post_audit_async(url, v).await);
-        });
-    }
-
-    fn post_heartbeat(
-        server_audit_conn: String,
-        conn_id: i32,
-        tx_stop: mpsc::UnboundedSender<String>,
-    ) {
-        if server_audit_conn.is_empty() {
-            return;
-        }
-        let url = server_audit_conn.clone();
-        let mut v = Value::default();
-        v["id"] = json!(Config::get_id());
-        v["uuid"] = json!(base64::encode(hbb_common::get_uuid()));
-        v["conn_id"] = json!(conn_id);
-        tokio::spawn(async move {
-            if let Ok(rsp) = Self::post_audit_async(url, v).await {
-                if let Ok(rsp) = serde_json::from_str::<ConnAuditResponse>(&rsp) {
-                    if rsp.action == "disconnect" {
-                        tx_stop.send("web console".to_string()).ok();
-                    }
-                }
-            }
         });
     }
 
@@ -1710,6 +1687,10 @@ impl Connection {
     async fn send(&mut self, msg: Message) {
         allow_err!(self.stream.send(&msg).await);
     }
+
+    pub fn alive_conns() -> Vec<i32> {
+        ALIVE_CONNS.lock().unwrap().clone()
+    }
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -1865,13 +1846,6 @@ mod privacy_mode {
             Ok(true)
         }
     }
-}
-
-#[derive(Debug, Deserialize)]
-struct ConnAuditResponse {
-    #[allow(dead_code)]
-    ret: bool,
-    action: String,
 }
 
 pub enum AlarmAuditType {
