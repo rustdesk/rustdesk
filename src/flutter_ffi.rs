@@ -19,7 +19,8 @@ use crate::flutter::{self, SESSIONS};
 use crate::ui_interface::{self, *};
 use crate::{
     client::file_trait::FileManager,
-    flutter::{make_fd_to_json, session_add, session_start_},
+    common::make_fd_to_json,
+    flutter::{session_add, session_start_},
 };
 fn initialize(app_dir: &str) {
     *config::APP_DIR.write().unwrap() = app_dir.to_owned();

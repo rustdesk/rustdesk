@@ -24,7 +24,7 @@ use hbb_common::{
         time::{interval, Duration},
     },
     udp::FramedSocket,
-    AddrMangle, IntoTargetAddr, ResultType, TargetAddr,
+    AddrMangle, ResultType, TargetAddr,
 };
 
 use crate::server::{check_zombie, new as new_server, ServerPtr};

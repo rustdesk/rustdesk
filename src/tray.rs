@@ -206,7 +206,7 @@ fn is_service_stoped() -> bool {
 pub fn make_tray() {
     use tray_item::TrayItem;
     let mode = dark_light::detect();
-    let mut icon_path = "";
+    let icon_path;
     match mode {
         dark_light::Mode::Dark => {
             icon_path = "mac-tray-light.png";

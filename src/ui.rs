@@ -11,7 +11,6 @@ use hbb_common::{
     allow_err,
     config::{self, PeerConfig},
     log,
-    rendezvous_proto::*,
 };
 
 use crate::common::get_app_name;

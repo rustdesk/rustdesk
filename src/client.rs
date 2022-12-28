@@ -420,7 +420,7 @@ impl Client {
         key: &str,
         conn: &mut Stream,
         direct: bool,
-        mut interface: impl Interface,
+        interface: impl Interface,
     ) -> ResultType<()> {
         let rs_pk = get_rs_pk(if key.is_empty() {
             hbb_common::config::RS_PUB_KEY
