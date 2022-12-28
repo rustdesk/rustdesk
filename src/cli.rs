@@ -6,6 +6,7 @@ use hbb_common::{
     protobuf::Message as _,
     tokio::{self, sync::mpsc},
     Stream,
+    rendezvous_proto::ConnType,
 };
 use std::sync::{Arc, RwLock};
 
@@ -33,14 +34,18 @@ impl Session {
             .lc
             .write()
             .unwrap()
-            .initialize(id.to_owned(), false, true);
+            .initialize(id.to_owned(), ConnType::PORT_FORWARD);
         session
     }
 }
 
 #[async_trait]
 impl Interface for Session {
-    fn msgbox(&self, msgtype: &str, title: &str, text: &str) {
+    fn get_login_config_handler(&self) -> Arc<RwLock<LoginConfigHandler>> {
+        return self.lc.clone();
+    }
+    
+    fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str) {
         if msgtype == "input-password" {
             self.sender
                 .send(Data::Login((self.password.clone(), true)))
@@ -61,12 +66,11 @@ impl Interface for Session {
     }
 
     fn handle_peer_info(&mut self, pi: PeerInfo) {
-        let username = self.lc.read().unwrap().get_username(&pi);
-        self.lc.write().unwrap().handle_peer_info(username, pi);
+        self.lc.write().unwrap().handle_peer_info(&pi);
     }
 
-    async fn handle_hash(&mut self, hash: Hash, peer: &mut Stream) {
-        handle_hash(self.lc.clone(), hash, self, peer).await;
+    async fn handle_hash(&mut self, pass: &str, hash: Hash, peer: &mut Stream) {
+        handle_hash(self.lc.clone(), &pass, hash, self, peer).await;
     }
 
     async fn handle_login_from_ui(&mut self, password: String, remember: bool, peer: &mut Stream) {
@@ -95,9 +99,19 @@ pub async fn start_one_port_forward(
     crate::common::test_nat_type();
     let (sender, mut receiver) = mpsc::unbounded_channel::<Data>();
     let handler = Session::new(&id, sender);
-    handler.lc.write().unwrap().port_forward = (remote_host, remote_port);
-    if let Err(err) =
-        crate::port_forward::listen(handler.id.clone(), port, handler.clone(), receiver, &key, &token).await
+    if let Err(err) = crate::port_forward::listen(
+        handler.id.clone(),
+        handler.password.clone(),
+        port,
+        handler.clone(),
+        receiver,
+        &key,
+        &token,
+        handler.lc.clone(),
+        remote_host,
+        remote_port,
+    )
+    .await
     {
         log::error!("Failed to listen on {}: {}", port, err);
     }

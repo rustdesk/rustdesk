@@ -32,6 +32,32 @@ pub struct Session<T: InvokeUiSession> {
 }
 
 impl<T: InvokeUiSession> Session<T> {
+    pub fn is_file_transfer(&self) -> bool {
+        self.lc
+            .read()
+            .unwrap()
+            .conn_type
+            .eq(&ConnType::FILE_TRANSFER)
+    }
+
+    pub fn is_port_forward(&self) -> bool {
+        self.lc
+            .read()
+            .unwrap()
+            .conn_type
+            .eq(&ConnType::PORT_FORWARD)
+    }
+
+    pub fn is_rdp(&self) -> bool {
+        self.lc.read().unwrap().conn_type.eq(&ConnType::RDP)
+    }
+
+    pub fn set_connection_info(&mut self, direct: bool, received: bool) {
+        let mut lc = self.lc.write().unwrap();
+        lc.direct = Some(direct);
+        lc.received = received;
+    }
+
     pub fn get_view_style(&self) -> String {
         self.lc.read().unwrap().view_style.clone()
     }
@@ -631,30 +657,14 @@ impl<T: InvokeUiSession> FileManager for Session<T> {}
 
 #[async_trait]
 impl<T: InvokeUiSession> Interface for Session<T> {
+    fn get_login_config_handler(&self) -> Arc<RwLock<LoginConfigHandler>> {
+        return self.lc.clone();
+    }
+
     fn send(&self, data: Data) {
         if let Some(sender) = self.sender.read().unwrap().as_ref() {
             sender.send(data).ok();
         }
-    }
-
-    fn is_file_transfer(&self) -> bool {
-        self.lc
-            .read()
-            .unwrap()
-            .conn_type
-            .eq(&ConnType::FILE_TRANSFER)
-    }
-
-    fn is_port_forward(&self) -> bool {
-        self.lc
-            .read()
-            .unwrap()
-            .conn_type
-            .eq(&ConnType::PORT_FORWARD)
-    }
-
-    fn is_rdp(&self) -> bool {
-        self.lc.read().unwrap().conn_type.eq(&ConnType::RDP)
     }
 
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str) {
@@ -747,30 +757,6 @@ impl<T: InvokeUiSession> Interface for Session<T> {
             });
             handle_test_delay(t, peer).await;
         }
-    }
-
-    fn set_connection_info(&mut self, direct: bool, received: bool) {
-        let mut lc = self.lc.write().unwrap();
-        lc.direct = Some(direct);
-        lc.received = received;
-    }
-
-    fn set_force_relay(&mut self, direct: bool, received: bool) {
-        let mut lc = self.lc.write().unwrap();
-        lc.force_relay = false;
-        if direct && !received {
-            let errno = errno::errno().0;
-            log::info!("errno is {}", errno);
-            // TODO: check mac and ios
-            if cfg!(windows) && errno == 10054 || !cfg!(windows) && errno == 104 {
-                lc.force_relay = true;
-                lc.set_option("force-always-relay".to_owned(), "Y".to_owned());
-            }
-        }
-    }
-
-    fn is_force_relay(&self) -> bool {
-        self.lc.read().unwrap().force_relay
     }
 }
 

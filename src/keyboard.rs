@@ -3,10 +3,10 @@ use crate::client::get_key_state;
 use crate::common::GrabState;
 #[cfg(feature = "flutter")]
 use crate::flutter::FlutterHandler;
-#[cfg(not(feature = "flutter"))]
+#[cfg(not(any(feature = "flutter", feature = "cli")))]
 use crate::ui::remote::SciterHandler;
 use crate::ui_session_interface::Session;
-use hbb_common::{log, message_proto::*, config::LocalConfig};
+use hbb_common::{log, message_proto::*};
 use rdev::{Event, EventType, Key};
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -27,7 +27,7 @@ lazy_static::lazy_static! {
     static ref CUR_SESSION: Arc<Mutex<Option<Session<FlutterHandler>>>> = Default::default();
 }
 
-#[cfg(not(feature = "flutter"))]
+#[cfg(not(any(feature = "flutter", feature = "cli")))]
 lazy_static::lazy_static! {
     static ref CUR_SESSION: Arc<Mutex<Option<Session<SciterHandler>>>> = Default::default();
 }
@@ -53,7 +53,7 @@ pub fn set_cur_session(session: Session<FlutterHandler>) {
     *CUR_SESSION.lock().unwrap() = Some(session);
 }
 
-#[cfg(not(feature = "flutter"))]
+#[cfg(not(any(feature = "flutter", feature = "cli")))]
 pub fn set_cur_session(session: Session<SciterHandler>) {
     *CUR_SESSION.lock().unwrap() = Some(session);
 }
@@ -62,11 +62,11 @@ pub mod client {
     use super::*;
 
     pub fn get_keyboard_mode() -> String {
+        #[cfg(not(feature = "cli"))]
         if let Some(handler) = CUR_SESSION.lock().unwrap().as_ref() {
-            handler.get_keyboard_mode()
-        } else {
-            "legacy".to_string()
-        }
+            return handler.get_keyboard_mode();
+        } 
+        "legacy".to_string()
     }
 
     pub fn start_grab_loop() {
@@ -332,12 +332,8 @@ pub fn event_to_key_event(event: &Event) -> Option<KeyEvent> {
     let keyboard_mode = get_keyboard_mode_enum();
     key_event.mode = keyboard_mode.into();
     let mut key_event = match keyboard_mode {
-        KeyboardMode::Map => {
-            map_keyboard_mode(event, key_event)?
-        }
-        KeyboardMode::Translate => {
-            translate_keyboard_mode(event, key_event)?
-        }
+        KeyboardMode::Map => map_keyboard_mode(event, key_event)?,
+        KeyboardMode::Translate => translate_keyboard_mode(event, key_event)?,
         _ => {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {
@@ -366,18 +362,18 @@ pub fn event_type_to_event(event_type: EventType) -> Event {
 }
 
 pub fn send_key_event(key_event: &KeyEvent) {
+    #[cfg(not(feature = "cli"))]
     if let Some(handler) = CUR_SESSION.lock().unwrap().as_ref() {
         handler.send_key_event(key_event);
     }
 }
 
 pub fn get_peer_platform() -> String {
+    #[cfg(not(feature = "cli"))]
     if let Some(handler) = CUR_SESSION.lock().unwrap().as_ref() {
-        handler.peer_platform()
-    } else {
-        log::error!("get peer platform error");
-        "Windows".to_string()
-    }
+        return handler.peer_platform();
+    } 
+    "Windows".to_string()
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -389,7 +385,7 @@ pub fn legacy_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Option<Ke
         _ => {
             return None;
         }
-    }; 
+    };
 
     let peer = get_peer_platform();
     let is_win = peer == "Windows";
@@ -621,12 +617,12 @@ pub fn map_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Option<KeyEv
     let keycode = match peer.as_str() {
         "windows" => event.scan_code,
         "macos" => {
-            if LocalConfig::get_kb_layout_type() == "ISO" {
+            if hbb_common::config::LocalConfig::get_kb_layout_type() == "ISO" {
                 rdev::win_scancode_to_macos_iso_code(event.scan_code)?
             } else {
                 rdev::win_scancode_to_macos_code(event.scan_code)?
             }
-        },
+        }
         _ => rdev::win_scancode_to_linux_code(event.scan_code)?,
     };
     #[cfg(target_os = "macos")]
@@ -639,12 +635,12 @@ pub fn map_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Option<KeyEv
     let keycode = match peer.as_str() {
         "windows" => rdev::linux_code_to_win_scancode(event.code as _)?,
         "macos" => {
-            if LocalConfig::get_kb_layout_type() == "ISO" {
+            if hbb_common::config::LocalConfig::get_kb_layout_type() == "ISO" {
                 rdev::linux_code_to_macos_iso_code(event.scan_code)?
             } else {
                 rdev::linux_code_to_macos_code(event.code as _)?
             }
-        },
+        }
         _ => event.code as _,
     };
     #[cfg(any(target_os = "android", target_os = "ios"))]
