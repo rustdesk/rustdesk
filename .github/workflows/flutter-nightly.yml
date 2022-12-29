@@ -154,6 +154,12 @@ jobs:
         with: 
           p12-file-base64: ${{ secrets.MACOS_P12_BASE64 }}
           p12-password: ${{ secrets.MACOS_P12_PASSWORD }}
+          keychain: rustdesk
+      
+      - name: Check sign 
+        run: |
+          security default-keychain -s rustdesk.keychain
+          security find-identity -v
 
       - name: Install build runtime
         run: |
@@ -216,6 +222,16 @@ jobs:
         run: |
           # --hwcodec not supported on macos yet
           ./build.py --flutter ${{ matrix.job.extra-build-args }}
+
+      - name: Codesign app and create signed dmg
+        run: |
+          security default-keychain -s rustdesk.keychain
+          security unlock-keychain -p ${{ secrets.MACOS_P12_PASSWORD }} rustdesk.keychain
+          # start sign the rustdesk.app and dmg
+          rm rustdesk-${{ env.VERSION }}.dmg || true
+          codesign --force -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep ./flutter/build/macos/Build/Products/Release/rustdesk.app -v
+          create-dmg rustdesk-${{ env.VERSION }}.dmg ./flutter/build/macos/Build/Products/Release/rustdesk.app
+          codesign --force -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep rustdesk-${{ env.VERSION }}.dmg -v
 
       - name: Rename rustdesk
         run: |
