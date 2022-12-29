@@ -149,6 +149,12 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v3
 
+      - name: Import the codesign cert
+        uses: apple-actions/import-codesign-certs@v1
+        with: 
+          p12-file-base64: ${{ secrets.MACOS_P12_BASE64 }}
+          p12-password: ${{ secrets.MACOS_P12_PASSWORD }}
+
       - name: Install build runtime
         run: |
           brew install llvm create-dmg nasm yasm cmake gcc wget ninja
