@@ -7,8 +7,8 @@
   <vendor_url>https://rustdesk.com/</vendor_url>
   <icon_name>rustdesk</icon_name>
   <action id="com.rustdesk.RustDesk.options">
-    <description>Change RustDesk options</description>
-    <message>Authentication is required to change RustDesk options</message>
+    <description>Change GerarDesk options</description>
+    <message>Authentication is required to change GerarDesk options</message>
     <message xml:lang="zh_CN">要更改RustDesk选项, 需要您先通过身份验证</message>
     <message xml:lang="zh_TW">要變更RustDesk選項, 需要您先通過身份驗證</message>
     <annotate key="org.freedesktop.policykit.exec.path">/usr/share/rustdesk/files/polkit</annotate>

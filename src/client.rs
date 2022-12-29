@@ -424,11 +424,7 @@ impl Client {
         direct: bool,
         mut interface: impl Interface,
     ) -> ResultType<()> {
-        let rs_pk = get_rs_pk(if key.is_empty() {
-            hbb_common::config::RS_PUB_KEY
-        } else {
-            key
-        });
+        let rs_pk = get_rs_pk(hbb_common::config::RS_PUB_KEY); //remove the if statement and just assign it directly
         let mut sign_pk = None;
         if !signed_id_pk.is_empty() && rs_pk.is_some() {
             if let Ok((id, pk)) = decode_id_pk(&signed_id_pk, &rs_pk.unwrap()) {

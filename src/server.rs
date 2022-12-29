@@ -242,7 +242,7 @@ async fn create_relay_connection_(
     )
     .await?;
     let mut msg_out = RendezvousMessage::new();
-    let mut licence_key = Config::get_option("key");
+    let mut licence_key = hbb_common::config::RS_PUB_KEY.to_owned(); //was Config::get_option("key");
     if licence_key.is_empty() {
         licence_key = crate::platform::get_license_key();
     }

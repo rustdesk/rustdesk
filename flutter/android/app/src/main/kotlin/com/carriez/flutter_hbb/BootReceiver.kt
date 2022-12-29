@@ -12,7 +12,7 @@ class BootReceiver : BroadcastReceiver() {
             val it = Intent(context,MainService::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            Toast.makeText(context, "RustDesk is Open", Toast.LENGTH_LONG).show();
+            Toast.makeText(context, "GerarDesk is Open", Toast.LENGTH_LONG).show();
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(it)
             }else{

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../res/logo-header.svg" alt="RustDesk - Your remote desktop"><br>
+  <img src="../res/logo-header.svg" alt="GerarDesk - Your remote desktop"><br>
   <a href="#免费公共服务器">服务器</a> •
   <a href="#基本构建步骤">编译</a> •
   <a href="#使用Docker编译">Docker</a> •
@@ -115,7 +115,7 @@ cargo run
 
 ### 把 Wayland 修改成 X11 (Xorg)
 
-RustDesk 暂时不支持 Wayland，不过正在积极开发中。
+GerarDesk 暂时不支持 Wayland，不过正在积极开发中。
 > [点我](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/)
 查看 如何将Xorg设置成默认的GNOME session
 

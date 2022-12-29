@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../res/logo-header.svg" alt="RustDesk - Your remote desktop"><br>
+  <img src="../res/logo-header.svg" alt="GerarDesk - Your remote desktop"><br>
   <a href="#darmowe-serwery-publiczne">Serwery</a> •
   <a href="#podstawowe-kroki-do-kompilacji">Kompilacja</a> •
   <a href="#jak-kompilować-za-pomocą-dockera">Docker</a> •
@@ -15,7 +15,7 @@ Porozmawiaj z nami na: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](http
 
 Kolejny program do zdalnego pulpitu, napisany w Rust. Działa od samego początku, nie wymaga konfiguracji. Masz pełną kontrolę nad swoimi danymi, bez obaw o bezpieczeństwo. Możesz skorzystać z naszego darmowego serwera publicznego , [skonfigurować własny](https://rustdesk.com/server), lub [napisać własny serwer rendezvous/relay server](https://github.com/rustdesk/rustdesk-server-demo).
 
-RustDesk zaprasza do współpracy każdego. Zobacz [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) pomoc w uruchomieniu programu.
+GerarDesk zaprasza do współpracy każdego. Zobacz [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) pomoc w uruchomieniu programu.
 
 [**POBIERZ KOMPILACJE**](https://github.com/rustdesk/rustdesk/releases)
 
@@ -109,7 +109,7 @@ cargo run
 
 ### Zmień Wayland na X11 (Xorg)
 
-RustDesk nie obsługuje Waylanda. Sprawdź [this](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) by skonfigurować Xorg jako domyślną sesję GNOME.
+GerarDesk nie obsługuje Waylanda. Sprawdź [this](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) by skonfigurować Xorg jako domyślną sesję GNOME.
 
 ## Jak kompilować za pomocą Dockera
 

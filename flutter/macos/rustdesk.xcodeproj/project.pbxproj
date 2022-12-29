@@ -50,7 +50,7 @@
 			attributes = {
 				LastUpgradeCheck = 1300;
 			};
-			buildConfigurationList = CA603C4309E180E02D6C7F57 /* Build configuration list for PBXProject "rustdesk" */;
+			buildConfigurationList = CA603C4309E180E02D6C7F57 /* Build configuration list for PBXProject "gerardesk" */;
 			compatibilityVersion = "Xcode 11.4";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -114,7 +114,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		CA603C4309E180E02D6C7F57 /* Build configuration list for PBXProject "rustdesk" */ = {
+		CA603C4309E180E02D6C7F57 /* Build configuration list for PBXProject "gerardesk" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				CA608F3F78EE3CC16B37690B /* Release */,

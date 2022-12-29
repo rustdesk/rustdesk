@@ -1,11 +1,11 @@
 # Contributing to RustDesk
 
-RustDesk welcomes contribution from everyone. Here are the guidelines if you are
+GerarDesk welcomes contribution from everyone. Here are the guidelines if you are
 thinking of helping us:
 
 ## Contributions
 
-Contributions to RustDesk or its dependencies should be made in the form of GitHub
+Contributions to GerarDesk or its dependencies should be made in the form of GitHub
 pull requests. Each pull request will be reviewed by a core contributor
 (someone with permission to land patches) and either landed in the main tree or
 given feedback for changes that would be required. All contributions should
@@ -43,4 +43,4 @@ https://github.com/rustdesk/rustdesk/blob/master/docs/CODE_OF_CONDUCT.md
 
 ## Communication
 
-RustDesk contributors frequent the [Discord](https://discord.gg/nDceKgxnkV).
+GerarDesk contributors frequent the [Discord](https://discord.gg/nDceKgxnkV).

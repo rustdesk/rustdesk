@@ -1415,7 +1415,7 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>) {
     let (sender, mut receiver) = mpsc::unbounded_channel::<Data>();
     *handler.sender.write().unwrap() = Some(sender.clone());
     let mut options = crate::ipc::get_options_async().await;
-    let mut key = options.remove("key").unwrap_or("".to_owned());
+    let mut key = hbb_common::config::RS_PUB_KEY.to_owned(); //was options.remove("key").unwrap_or("".to_owned());
     let token = LocalConfig::get_option("access_token");
     if key.is_empty() {
         key = crate::platform::get_license_key();

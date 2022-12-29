@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../res/logo-header.svg" alt="RustDesk - Seu desktop remoto"><br>
+  <img src="../res/logo-header.svg" alt="GerarDesk - Seu desktop remoto"><br>
   <a href="#servidores-públicos-grátis">Servidores</a> •
   <a href="#compilação-crua">Compilar</a> •
   <a href="#como-compilar-com-docker">Docker</a> •
@@ -15,7 +15,7 @@ Converse conosco: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://t
 
 Mais um software de desktop remoto, escrito em Rust. Funciona por padrão, sem necessidade de configuração. Você tem completo controle de seus dados, sem se preocupar com segurança. Você pode usar nossos servidores de rendezvous/relay, [configurar seu próprio](https://rustdesk.com/server), ou [escrever seu próprio servidor de rendezvous/relay](https://github.com/rustdesk/rustdesk-server-demo).
 
-RustDesk acolhe contribuições de todos. Leia [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) para ver como começar.
+GerarDesk acolhe contribuições de todos. Leia [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) para ver como começar.
 
 [**DOWNLOAD DE BINÁRIOS**](https://github.com/rustdesk/rustdesk/releases)
 
@@ -110,7 +110,7 @@ VCPKG_ROOT=$HOME/vcpkg cargo run
 
 ### Mude Wayland para X11 (Xorg)
 
-RustDesk não suporta Wayland. Veja [esse link](https://docs.fedoraproject.org/pt_BR/quick-docs/configuring-xorg-as-default-gnome-session/) para configurar o Xorg como a sessão padrão do GNOME.
+GerarDesk não suporta Wayland. Veja [esse link](https://docs.fedoraproject.org/pt_BR/quick-docs/configuring-xorg-as-default-gnome-session/) para configurar o Xorg como a sessão padrão do GNOME.
 
 ## Como compilar com Docker
 

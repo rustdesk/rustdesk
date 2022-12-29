@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../res/logo-header.svg" alt="RustDesk - Your remote desktop"><br>
+  <img src="../res/logo-header.svg" alt="GerarDesk - Your remote desktop"><br>
   <a href="#senpagaj-publikaj-serviloj">Serviloj</a> •
   <a href="#paŝoj-por-kompili">Kompili</a> •
   <a href="#kiel-kompili-kun-docker">Docker</a> •
@@ -15,7 +15,7 @@ Babili kun ni: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twit
 
 Denove alia fora labortabla programo, skribita en Rust. Ĝi funkcias elskatole, ne bezonas konfiguraĵon. Vi havas la tutan kontrolon sur viaj datumoj, sen zorgo pri sekureco. Vi povas uzi nian servilon rendezvous/relajsan, [agordi vian propran](https://rustdesk.com/server), aŭ [skribi vian propran servilon rendezvous/relajsan](https://github.com/rustdesk/rustdesk-server-demo).
 
-RustDesk bonvenigas kontribuon de ĉiuj. Vidu [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) por helpo komenci.
+GerarDesk bonvenigas kontribuon de ĉiuj. Vidu [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) por helpo komenci.
 
 [**BINARA ELŜUTO**](https://github.com/rustdesk/rustdesk/releases)
 
@@ -109,7 +109,7 @@ VCPKG_ROOT=$HOME/vcpkg cargo run
 
 ### Ŝanĝi Wayland por X11 (Xorg)
 
-RustDesk ne subtenas Wayland. Kontrolu [tion](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) por agordi Xorg kiel defaŭlta sesio GNOME.
+GerarDesk ne subtenas Wayland. Kontrolu [tion](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) por agordi Xorg kiel defaŭlta sesio GNOME.
 
 ## Kiel kompili kun Docker
 

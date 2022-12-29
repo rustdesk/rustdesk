@@ -1,6 +1,6 @@
 {
-    "name": "rustdesk",
-    "short_name": "rustdesk",
+    "name": "gerardesk",
+    "short_name": "gerardesk",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

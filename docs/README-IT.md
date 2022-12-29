@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="../res/logo-header.svg" alt="RustDesk - Your remote desktop"><br>
+  <img src="../res/logo-header.svg" alt="GerarDesk - Your remote desktop"><br>
   <a href="#server-pubblici-gratuiti">Servers</a> •
   <a href="#passaggi-per-la-compilazione">Compilazione</a> •
   <a href="#come-compilare-con-docker">Docker</a> •
   <a href="#struttura-dei-file">Struttura</a> •
   <a href="#screenshots">Screenshots</a><br>
   [<a href="../README.md">English</a>] | [<a href="README-UA.md">Українська</a>] | [<a href="README-CS.md">česky</a>] | [<a href="README-ZH.md">中文</a>] | [<a href="README-HU.md">Magyar</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FA.md">فارسی</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-ID.md">Indonesian</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PTBR.md">Português (Brasil)</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">한국어</a>] | [<a href="README-AR.md">العربي</a>] | [<a href="README-VN.md">Tiếng Việt</a>]<br>
-  <b>Abbiamo bisogno del tuo aiuto per tradurre questo README e la <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">RustDesk UI</a> nella tua lingua nativa</b>
+  <b>Abbiamo bisogno del tuo aiuto per tradurre questo README e la <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">GerarDesk UI</a> nella tua lingua nativa</b>
 </p>
 
 Chatta con noi: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
@@ -15,7 +15,7 @@ Chatta con noi: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twi
 
 Ancora un altro software per il controllo remoto del desktop, scritto in Rust. Funziona immediatamente, nessuna configurazione richiesta. Hai il pieno controllo dei tuoi dati, senza preoccupazioni per la sicurezza. Puoi utilizzare il nostro server rendezvous/relay, [configurare il tuo](https://rustdesk.com/server) o [scrivere il tuo rendezvous/relay server](https://github.com/rustdesk/rustdesk-server-demo).
 
-RustDesk accoglie il contributo di tutti. Per ulteriori informazioni su come inizare a contribuire, vedere [`docs/CONTRIBUTING.md`](CONTRIBUTING.md).
+GerarDesk accoglie il contributo di tutti. Per ulteriori informazioni su come inizare a contribuire, vedere [`docs/CONTRIBUTING.md`](CONTRIBUTING.md).
 
 [**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
 
@@ -109,7 +109,7 @@ VCPKG_ROOT=$HOME/vcpkg cargo run
 
 ### Cambiare Wayland a X11 (Xorg)
 
-RustDesk non supporta Wayland. Controlla [questo](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) per configurare Xorg come sessione di default di GNOME.
+GerarDesk non supporta Wayland. Controlla [questo](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) per configurare Xorg come sessione di default di GNOME.
 
 ## Come compilare con Docker
 

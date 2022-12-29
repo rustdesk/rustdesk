@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../res/logo-header.svg" alt="RustDesk - Etätyöpöytäsi"><br>
+  <img src="../res/logo-header.svg" alt="GerarDesk - Etätyöpöytäsi"><br>
   <a href="#free-public-servers">Palvelimet</a> •
   <a href="#raw-steps-to-build">Rakenna</a> •
   <a href="#how-to-build-with-docker">Docker</a> •
@@ -15,7 +15,7 @@ Juttele meidän kanssa: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](htt
 
 Vielä yksi etätyöpöytäohjelmisto, ohjelmoitu Rust-kielellä. Toimii suoraan pakkauksesta, ei tarvitse asetusta. Hallitset täysin tietojasi, ei tarvitse murehtia turvallisuutta. Voit käyttää meidän rendezvous/relay-palvelinta, [aseta omasi](https://rustdesk.com/server), tai [kirjoittaa oma rendezvous/relay-palvelin](https://github.com/rustdesk/rustdesk-server-demo).
 
-RustDesk toivottaa avustukset tervetulleiksi kaikilta. Katso lisätietoja [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) avun saamiseksi.
+GerarDesk toivottaa avustukset tervetulleiksi kaikilta. Katso lisätietoja [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) avun saamiseksi.
 
 [**BINAARILATAUS**](https://github.com/rustdesk/rustdesk/releases)
 
@@ -109,7 +109,7 @@ VCPKG_ROOT=$HOME/vcpkg cargo run
 
 ### Vaihda Wayland-ympäristö X11 (Xorg)-ympäristöön
 
-RustDesk ei tue Waylandia. Tarkista [tämä](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) asettamalla Xorg oletus GNOME-istuntoon.
+GerarDesk ei tue Waylandia. Tarkista [tämä](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) asettamalla Xorg oletus GNOME-istuntoon.
 
 ## Kuinka rakennetaan Dockerin kanssa
 

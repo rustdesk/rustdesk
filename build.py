@@ -477,7 +477,7 @@ def main():
     codesign -s "Developer ID Application: {0}" --force --options runtime  ./target/release/bundle/osx/RustDesk.app
     '''.format(pa))
                 os.system('create-dmg target/release/bundle/osx/RustDesk.app')
-                os.rename('RustDesk %s.dmg' %
+                os.rename('GerarDesk %s.dmg' %
                           version, 'rustdesk-%s.dmg' % version)
                 if pa:
                     os.system('''

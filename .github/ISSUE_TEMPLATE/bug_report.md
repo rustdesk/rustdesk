@@ -24,7 +24,7 @@ assignees: ''
 
 ---
 
-**RustDesk version and environment**
+**GerarDesk version and environment**
 
 <!--
 In order to reproduce your issue, please add some information about the environment

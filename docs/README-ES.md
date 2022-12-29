@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../res/logo-header.svg" alt="RustDesk - Your remote desktop"><br>
+  <img src="../res/logo-header.svg" alt="GerarDesk - Your remote desktop"><br>
   <a href="#servidores-gratis-de-uso-público">Servidores</a> •
   <a href="#pasos-para-compilar-desde-el-inicio">Compilar</a> •
   <a href="#como-compilar-con-docker">Docker</a> •
@@ -15,7 +15,7 @@ Chatea con nosotros: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https:
 
 Otro software de escritorio remoto, escrito en Rust. Funciona de forma inmediata, sin necesidad de configuración. Tienes el control total de tus datos, sin preocupaciones sobre la seguridad. Puedes utilizar nuestro servidor de rendezvous/relay, [instalar el tuyo](https://rustdesk.com/server), o [escribir tu propio servidor rendezvous/relay](https://github.com/rustdesk/rustdesk-server-demo).
 
-RustDesk agradece la contribución de todo el mundo. Lee [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) para ayuda para empezar.
+GerarDesk agradece la contribución de todo el mundo. Lee [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) para ayuda para empezar.
 
 [**¿Cómo funciona rustdesk?**](https://github.com/rustdesk/rustdesk/wiki/How-does-RustDesk-work%3F)
 
@@ -118,7 +118,7 @@ cargo run
 
 ### Cambia Wayland a X11 (Xorg)
 
-RustDesk no soporta Wayland. Lee [esto](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) para configurar Xorg en la sesión por defecto de GNOME.
+GerarDesk no soporta Wayland. Lee [esto](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) para configurar Xorg en la sesión por defecto de GNOME.
 
 ## Soporte para Wayland
 
@@ -130,7 +130,7 @@ Cuando wayland esta del lado controlado, hay que iniciar de la siguiente manera:
 $ sudo rustdesk --service
 $ rustdesk
 ```
-**Aviso**: La grabación de pantalla de Wayland utiliza diferentes interfaces. RustDesk actualmente sólo soporta org.freedesktop.portal.ScreenCast
+**Aviso**: La grabación de pantalla de Wayland utiliza diferentes interfaces. GerarDesk actualmente sólo soporta org.freedesktop.portal.ScreenCast
 ```bash
 $ dbus-send --session --print-reply       \
   --dest=org.freedesktop.portal.Desktop \

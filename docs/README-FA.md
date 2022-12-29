@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="../res/logo-header.svg" alt="RustDesk - Your remote desktop"><br>
+  <img src="../res/logo-header.svg" alt="GerarDesk - Your remote desktop"><br>
   <a dir="rtl" href="#اسکرین-شات-ها">اسنپ شات</a> •
   <a dir="rtl" href="#ساختار-پوشه-ها">ساختار</a> •
   <a dir="rtl" href="#نحوه-ساخت-با-داکر">داکر</a> •
   <a dir="rtl" href="#ساخت">ساخت</a> •
   <a dir="rtl" href="#سرورهای-عمومی-رایگان">سرور</a><br>
   [<a href="../README.md">English</a>] | [<a href="README-UA.md">Українська</a>] | [<a href="README-CS.md">česky</a>] | [<a href="README-ZH.md">中文</a>] | [<a href="README-HU.md">Magyar</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-ID.md">Indonesian</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PTBR.md">Português (Brasil)</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">한국어</a>] | [<a href="README-AR.md">العربي</a>] | [<a href="README-VN.md">Tiếng Việt</a>]<br>
-  &#x202b;<b>برای ترجمه این  <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang"> RustDesk UI</a>  ،README  و <a href="https://github.com/rustdesk/doc.rustdesk.com">Doc</a> به زبان مادری شما به کمکتون نیاز داریم
+  &#x202b;<b>برای ترجمه این  <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang"> GerarDesk UI</a>  ،README  و <a href="https://github.com/rustdesk/doc.rustdesk.com">Doc</a> به زبان مادری شما به کمکتون نیاز داریم
 </p>
 
 با ما گپ بزنید:  [Reddit](https://www.reddit.com/r/rustdesk) | [Twitter](https://twitter.com/rustdesk) | [Discord](https://discord.gg/nDceKgxnkV) 
@@ -148,7 +148,7 @@ target/debug/rustdesk
 target/release/rustdesk
 ```
 
-لطفاً اطمینان حاصل کنید که این دستورات را از پوشه مخزن RustDesk اجرا می کنید، در غیر این صورت ممکن است برنامه نتواند منابع مورد نیاز را پیدا کند. همچنین توجه داشته باشید که سایر دستورات فرعی Cargo مانند `install` یا `run` در حال حاضر از طریق این روش پشتیبانی نمی شوند زیرا برنامه به جای سیستم عامل میزبان, در داخل کانتینر نصب و اجرا میشود.
+لطفاً اطمینان حاصل کنید که این دستورات را از پوشه مخزن GerarDesk اجرا می کنید، در غیر این صورت ممکن است برنامه نتواند منابع مورد نیاز را پیدا کند. همچنین توجه داشته باشید که سایر دستورات فرعی Cargo مانند `install` یا `run` در حال حاضر از طریق این روش پشتیبانی نمی شوند زیرا برنامه به جای سیستم عامل میزبان, در داخل کانتینر نصب و اجرا میشود.
 
 ## ساختار پوشه ها 
 

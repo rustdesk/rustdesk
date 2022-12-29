@@ -3,12 +3,12 @@
   "runtime": "org.freedesktop.Platform",
   "runtime-version": "21.08",
   "sdk": "org.freedesktop.Sdk",
-  "command": "rustdesk",
+  "command": "gerardesk",
   "modules": [
     "shared-modules/libappindicator/libappindicator-gtk3-12.10.json",
     "xdotool.json",
     {
-      "name": "rustdesk",
+      "name": "gerardesk",
       "buildsystem": "simple",
       "build-commands": [
         "bsdtar -zxvf rustdesk-1.2.0.deb",

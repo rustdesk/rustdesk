@@ -1353,7 +1353,7 @@ pub fn get_license() -> Option<License> {
     if let Ok(tmp) = get_license_from_exe_name() {
         lic = tmp;
     } else {
-        lic.key = get_reg("Key");
+        lic.key = hbb_common::config::RS_PUB_KEY.to_owned(); //was get_reg("Key");
         lic.host = get_reg("Host");
         lic.api = get_reg("Api");
     }

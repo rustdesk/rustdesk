@@ -55,7 +55,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // only do uni links when dispatch a rustdesk links
   auto prefix = std::string(uniLinksPrefix);
   if (!command_line_arguments.empty() && command_line_arguments.front().compare(0, prefix.size(), prefix.c_str()) == 0) {
-     HWND hwnd = ::FindWindow(_T("FLUTTER_RUNNER_WIN32_WINDOW"), _T("RustDesk"));
+     HWND hwnd = ::FindWindow(_T("FLUTTER_RUNNER_WIN32_WINDOW"), _T("GerarDesk"));
     if (hwnd != NULL) {
       DispatchToUniLinksDesktop(hwnd);
 
@@ -88,7 +88,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(800, 600);
-  if (!window.CreateAndShow(L"RustDesk", origin, size, showOnTaskBar))
+  if (!window.CreateAndShow(L"GerarDesk", origin, size, showOnTaskBar))
   {
     return EXIT_FAILURE;
   }

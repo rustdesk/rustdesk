@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../res/logo-header.svg" alt="RustDesk – vaše vzdálená plocha"><br>
+  <img src="../res/logo-header.svg" alt="GerarDesk – vaše vzdálená plocha"><br>
   <a href="#free-public-servers">Servery</a> •
   <a href="#raw-steps-to-build">Sestavení ze zdrojových kódů</a> •
   <a href="#how-to-build-with-docker">Docker</a> •
@@ -16,9 +16,9 @@ Dopisujte si s námi: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https
 
 Zase další software pro přístup k ploše na dálku, naprogramovaný v jazyce Rust. Funguje hned tak, jak je – není třeba žádného nastavování. Svá data máte ve svých rukách, bez obav o zabezpečení. Je možné používat námi poskytovaný propojovací/předávací (relay) server, [vytvořit si svůj vlastní](https://rustdesk.com/server), nebo [si dokonce svůj vlastní naprogramovat](https://github.com/rustdesk/rustdesk-server-demo), budete-li chtít.
 
-Projekt RustDesk vítá přiložení ruky k dílu od každého. Jak začít se dozvíte z [`docs/CONTRIBUTING.md`](CONTRIBUTING.md).
+Projekt GerarDesk vítá přiložení ruky k dílu od každého. Jak začít se dozvíte z [`docs/CONTRIBUTING.md`](CONTRIBUTING.md).
 
-[**Jak RustDesk funguje?**](https://github.com/rustdesk/rustdesk/wiki/How-does-RustDesk-work%3F)
+[**Jak GerarDesk funguje?**](https://github.com/rustdesk/rustdesk/wiki/How-does-RustDesk-work%3F)
 
 [**STAHOVÁNÍ ZKOMPILOVANÝCH APLIKACÍ**](https://github.com/rustdesk/rustdesk/releases)
 
@@ -116,7 +116,7 @@ VCPKG_ROOT=$HOME/vcpkg cargo run
 
 ### Změna z Wayland na X11 (Xorg)
 
-RustDesk (zatím) nepodporuje zobrazovací server Wayland. Jak nastavit Xorg jako výchozí pro relace v prostředí GNOME naleznete [zde](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/).
+GerarDesk (zatím) nepodporuje zobrazovací server Wayland. Jak nastavit Xorg jako výchozí pro relace v prostředí GNOME naleznete [zde](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/).
 
 ## Jak sestavit prostřednictvím Docker kontejnerizace
 

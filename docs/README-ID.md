@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="../res/logo-header.svg" alt="RustDesk - Your remote desktop"><br>
+  <img src="../res/logo-header.svg" alt="GerarDesk - Your remote desktop"><br>
   <a href="#free-public-servers">Servers</a> •
   <a href="#raw-steps-to-build">Build</a> •
   <a href="#how-to-build-with-docker">Docker</a> •
   <a href="#file-structure">Structure</a> •
   <a href="#snapshot">Snapshot</a><br>
   [<a href="../README.md">English</a>] | [<a href="README-UA.md">Українська</a>] | [<a href="README-CS.md">česky</a>] | [<a href="README-ZH.md">中文</a>] | [<a href="README-HU.md">Magyar</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FA.md">فارسی</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PTBR.md">Português (Brasil)</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">한국어</a>] | [<a href="README-AR.md">العربي</a>] | [<a href="README-VN.md">Tiếng Việt</a>]<br>
-  <b>Kami membutuhkan bantuan Anda untuk menerjemahkan README ini dan <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">RustDesk UI</a> ke bahasa asli anda</b>
+  <b>Kami membutuhkan bantuan Anda untuk menerjemahkan README ini dan <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">GerarDesk UI</a> ke bahasa asli anda</b>
 </p>
 
 Birbincang bersama kami: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
@@ -15,7 +15,7 @@ Birbincang bersama kami: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](ht
 
 Perangkat lunak desktop jarak jauh lainnya, ditulis dengan Rust. Bekerja begitu saja, tidak memerlukan konfigurasi. Anda memiliki kendali penuh atas data Anda, tanpa khawatir tentang keamanan. Anda dapat menggunakan server rendezvous/relay kami, [konfigurasi server sendiri](https://rustdesk.com/server), or [tulis rendezvous/relay server anda sendiri](https://github.com/rustdesk/rustdesk-server-demo).
 
-RustDesk menyambut baik kontribusi dari semua orang. Lihat [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) untuk membantu sebelum memulai.
+GerarDesk menyambut baik kontribusi dari semua orang. Lihat [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) untuk membantu sebelum memulai.
 
 [**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
 
@@ -109,7 +109,7 @@ VCPKG_ROOT=$HOME/vcpkg cargo run
 
 ### Ubah Wayland menjadi X11 (Xorg)
 
-RustDesk tidak mendukung Wayland. Cek [ini](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) untuk mengonfigurasi Xorg sebagai sesi GNOME default.
+GerarDesk tidak mendukung Wayland. Cek [ini](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) untuk mengonfigurasi Xorg sebagai sesi GNOME default.
 
 ## Bagaimana build dengan Docker
 

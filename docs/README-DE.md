@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../res/logo-header.svg" alt="RustDesk - Your remote desktop"><br>
+  <img src="../res/logo-header.svg" alt="GerarDesk - Your remote desktop"><br>
   <a href="#kostenlose-öffentliche-server">Server</a> •
   <a href="#die-groben-schritte-zum-kompilieren">Kompilieren</a> •
   <a href="#auf-docker-kompilieren">Docker</a> •
@@ -15,7 +15,7 @@ Rede mit uns: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitt
 
 Das hier ist ein Programm was, man nutzen kann, um einen Computer fernzusteuern, es wurde in Rust geschrieben. Es funktioniert ohne Konfiguration oder ähnliches, man kann es einfach direkt nutzen. Du hast volle Kontrolle über deine Daten und brauchst dir daher auch keine Sorgen um die Sicherheit dieser Daten zu machen. Du kannst unseren Rendezvous/Relay Server nutzen, [einen eigenen Server eröffnen](https://rustdesk.com/server) oder [einen neuen eigenen Server programmieren](https://github.com/rustdesk/rustdesk-server-demo).
 
-RustDesk heißt jegliche Mitarbeit willkommen. Schau dir [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) an, wenn du Hilfe brauchst für den Start.
+GerarDesk heißt jegliche Mitarbeit willkommen. Schau dir [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) an, wenn du Hilfe brauchst für den Start.
 
 [**PROGRAMM DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
 
@@ -110,7 +110,7 @@ cargo run
 
 ### Ändere Wayland zu X11 (Xorg)
 
-RustDesk unterstützt "Wayland" nicht. Siehe [hier](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) um Xorg als Standard GNOME Session zu nutzen.
+GerarDesk unterstützt "Wayland" nicht. Siehe [hier](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) um Xorg als Standard GNOME Session zu nutzen.
 
 ## Auf Docker Kompilieren
 
@@ -140,7 +140,7 @@ Oder, wenn du eine Releaseversion benutzt:
 target/release/rustdesk
 ```
 
-Bitte gehe sicher, dass du diese Befehle vom Stammverzeichnis vom RustDesk Repository nutzt, sonst kann es passieren, dass das Programm die Ressourcen nicht finden kann. Bitte bedenke auch, dass Unterbefehle von Cargo, wie z. B. `install` oder `run` aktuell noch nicht unterstützt werden, da sie das Programm innerhalb des Containers starten oder installieren würden, anstatt auf deinem eigentlichen System.
+Bitte gehe sicher, dass du diese Befehle vom Stammverzeichnis vom GerarDesk Repository nutzt, sonst kann es passieren, dass das Programm die Ressourcen nicht finden kann. Bitte bedenke auch, dass Unterbefehle von Cargo, wie z. B. `install` oder `run` aktuell noch nicht unterstützt werden, da sie das Programm innerhalb des Containers starten oder installieren würden, anstatt auf deinem eigentlichen System.
 
 ## Dateistruktur
 

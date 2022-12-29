@@ -59,7 +59,7 @@ Future<void> main(List<String> args) async {
         runMultiWindow(
           argument,
           kAppTypeDesktopRemote,
-          'RustDesk - Remote Desktop',
+          'GerarDesk - Remote Desktop',
         );
         break;
       case WindowType.FileTransfer:
@@ -67,7 +67,7 @@ Future<void> main(List<String> args) async {
         runMultiWindow(
           argument,
           kAppTypeDesktopFileTransfer,
-          'RustDesk - File Transfer',
+          'GerarDesk - File Transfer',
         );
         break;
       case WindowType.PortForward:
@@ -75,7 +75,7 @@ Future<void> main(List<String> args) async {
         runMultiWindow(
           argument,
           kAppTypeDesktopPortForward,
-          'RustDesk - Port Forward',
+          'GerarDesk - Port Forward',
         );
         break;
       default:

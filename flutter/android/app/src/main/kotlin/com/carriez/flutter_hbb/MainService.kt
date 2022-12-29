@@ -48,7 +48,7 @@ const val INIT_SERVICE = "init_service"
 const val ACTION_LOGIN_REQ_NOTIFY = "ACTION_LOGIN_REQ_NOTIFY"
 const val EXTRA_LOGIN_REQ_NOTIFY = "EXTRA_LOGIN_REQ_NOTIFY"
 
-const val DEFAULT_NOTIFY_TITLE = "RustDesk"
+const val DEFAULT_NOTIFY_TITLE = "GerarDesk"
 const val DEFAULT_NOTIFY_TEXT = "Service is running"
 const val DEFAULT_NOTIFY_ID = 1
 const val NOTIFY_ID_OFFSET = 100
@@ -69,7 +69,7 @@ const val AUDIO_CHANNEL_MASK = AudioFormat.CHANNEL_IN_STEREO
 class MainService : Service() {
 
     init {
-        System.loadLibrary("rustdesk")
+        System.loadLibrary("gerardesk")
     }
 
     @Keep
@@ -561,13 +561,13 @@ class MainService : Service() {
     private fun initNotification() {
         notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationChannel = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channelId = "RustDesk"
-            val channelName = "RustDesk Service"
+            val channelId = "GerarDesk"
+            val channelName = "GerarDesk Service"
             val channel = NotificationChannel(
                 channelId,
                 channelName, NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "RustDesk Service Channel"
+                description = "GerarDesk Service Channel"
             }
             channel.lightColor = Color.BLUE
             channel.lockscreenVisibility = Notification.VISIBILITY_PRIVATE

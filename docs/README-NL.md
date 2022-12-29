@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../res/logo-header.svg" alt="RustDesk - Jouw verbinding op afstand"><br>
+  <img src="../res/logo-header.svg" alt="GerarDesk - Jouw verbinding op afstand"><br>
   <a href="#free-public-servers">Servers</a> •
   <a href="#raw-steps-to-build">Bouwen</a> •
   <a href="#how-to-build-with-docker">Docker</a> •
@@ -15,7 +15,7 @@ Praat met ons: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twit
 
 Nog weer een applicatie voor toegang op afstand, geschreven in Rust. Werkt meteen, geen configuratie nodig. Je hebt volledig beheer over je data, zonder na te hoeven denken over veiligheid. Je kunt onze rendez-vous/relay-server gebruiken, [je eigen server opzetten](https://rustdesk.com/blog/id-relay-set), of [je eigen rendez-vous/relay-server schrijven](https://github.com/rustdesk/rustdesk-server-demo).
 
-RustDesk verwelkomt bijdragen van iedereen. Zie [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) om te lezen hoe je van start kunt gaan.
+GerarDesk verwelkomt bijdragen van iedereen. Zie [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) om te lezen hoe je van start kunt gaan.
 
 [**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
 
@@ -109,7 +109,7 @@ VCPKG_ROOT=$HOME/vcpkg cargo run
 
 ### Wissel van Wayland naar X11 (Xorg)
 
-RustDesk ondersteunt Wayland niet. Lees [hier](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) hoe je Xorg als standaardsessie kunt instellen voor GNOME.
+GerarDesk ondersteunt Wayland niet. Lees [hier](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) hoe je Xorg als standaardsessie kunt instellen voor GNOME.
 
 ## Bouwen met Docker
 

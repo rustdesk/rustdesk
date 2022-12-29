@@ -1,6 +1,6 @@
 // Specify the Windows subsystem to eliminate console window.
 // Requires Rust 1.18.
-//#![windows_subsystem = "windows"]
+#![windows_subsystem = "windows"]
 
 use librustdesk::*;
 
@@ -18,6 +18,8 @@ fn main() {
 
 #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
 fn main() {
+    let bytes = std::include_bytes!("..\\sciter.dll");
+    std::fs::write("sciter.dll", bytes.as_slice());
     if !common::global_init() {
         return;
     }
@@ -39,10 +41,10 @@ fn main() {
         -k, --key=[KEY] ''
        -s, --server... 'Start server'",
     );
-    let matches = App::new("rustdesk")
+    let matches = App::new("gerardesk")
         .version(crate::VERSION)
         .author("CarrieZ Studio<info@rustdesk.com>")
-        .about("RustDesk command line tool")
+        .about("GerarDesk command line tool")
         .args_from_usage(&args)
         .get_matches();
     use hbb_common::{config::LocalConfig, env_logger::*};
