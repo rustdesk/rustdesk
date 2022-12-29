@@ -294,6 +294,16 @@ class _RemotePageState extends State<RemotePage>
             onEnter: enterView,
             onExit: leaveView,
             onPointerDown: (event) {
+              // A double check for blur status.
+              // Note: If there's an `onPointerDown` event is triggered, `_isWindowBlur` is expected being false.
+              // Sometimes the system does not send the necessary focus event to flutter. We should manually
+              // handle this inconsistent status by setting `_isWindowBlur` to false. So we can
+              // ensure the grab-key thread is running when our users are clicking the remote canvas.
+              if (_isWindowBlur) {
+                debugPrint(
+                    "Unexpected status: onPointerDown is triggered while the remote window is in blur status");
+                _isWindowBlur = false;
+              }
               if (!_rawKeyFocusNode.hasFocus) {
                 _rawKeyFocusNode.requestFocus();
               }
