@@ -38,7 +38,7 @@ fn main() {
         "-p, --port-forward=[PORT-FORWARD-OPTIONS] 'Format: remote-id:local-port:remote-port[:remote-host]'
         -c, --connect=[REMOTE_ID] 'test only'
         -k, --key=[KEY] ''
-       -s, --server... 'Start server'",
+       -s, --server=[] 'Start server'",
     );
     let matches = App::new("rustdesk")
         .version(crate::VERSION)

@@ -118,20 +118,33 @@ pub fn ipv4_to_ipv6(addr: String, ipv4: bool) -> String {
     addr
 }
 
-async fn test_is_ipv4(target: &str) -> bool {
+async fn test_target(target: &str) -> ResultType<SocketAddr> {
     if let Ok(Ok(s)) = super::timeout(1000, tokio::net::TcpStream::connect(target)).await {
-        return s.local_addr().map(|x| x.is_ipv4()).unwrap_or(true);
+        if let Ok(addr) = s.peer_addr() {
+            return Ok(addr);
+        }
     }
-    true
+    tokio::net::lookup_host(target)
+        .await?
+        .next()
+        .context(format!("Failed to look up host for {}", target))
 }
 
 #[inline]
-pub async fn new_udp_for(target: &str, ms_timeout: u64) -> ResultType<FramedSocket> {
-    new_udp(
-        Config::get_any_listen_addr(test_is_ipv4(target).await),
-        ms_timeout,
-    )
-    .await
+pub async fn new_udp_for(
+    target: &str,
+    ms_timeout: u64,
+) -> ResultType<(FramedSocket, TargetAddr<'static>)> {
+    let (ipv4, target) = if NetworkType::Direct == Config::get_network_type() {
+        let addr = test_target(target).await?;
+        (addr.is_ipv4(), addr.into_target_addr()?)
+    } else {
+        (true, target.into_target_addr()?)
+    };
+    Ok((
+        new_udp(Config::get_any_listen_addr(ipv4), ms_timeout).await?,
+        target.to_owned(),
+    ))
 }
 
 async fn new_udp<T: ToSocketAddrs>(local: T, ms_timeout: u64) -> ResultType<FramedSocket> {
@@ -151,13 +164,18 @@ async fn new_udp<T: ToSocketAddrs>(local: T, ms_timeout: u64) -> ResultType<Fram
     }
 }
 
-pub async fn rebind_udp_for(target: &str) -> ResultType<Option<FramedSocket>> {
-    match Config::get_network_type() {
-        NetworkType::Direct => Ok(Some(
-            FramedSocket::new(Config::get_any_listen_addr(test_is_ipv4(target).await)).await?,
-        )),
-        _ => Ok(None),
+pub async fn rebind_udp_for(
+    target: &str,
+) -> ResultType<Option<(FramedSocket, TargetAddr<'static>)>> {
+    if Config::get_network_type() != NetworkType::Direct {
+        return Ok(None);
     }
+    let addr = test_target(target).await?;
+    let v4 = addr.is_ipv4();
+    Ok(Some((
+        FramedSocket::new(Config::get_any_listen_addr(v4)).await?,
+        addr.into_target_addr()?.to_owned(),
+    )))
 }
 
 #[cfg(test)]

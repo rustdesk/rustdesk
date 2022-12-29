@@ -520,7 +520,8 @@ async fn check_software_update_() -> hbb_common::ResultType<()> {
     sleep(3.).await;
 
     let rendezvous_server = format!("rs-sg.rustdesk.com:{}", config::RENDEZVOUS_PORT);
-    let mut socket = socket_client::new_udp_for(&rendezvous_server, RENDEZVOUS_TIMEOUT).await?;
+    let (mut socket, rendezvous_server) =
+        socket_client::new_udp_for(&rendezvous_server, RENDEZVOUS_TIMEOUT).await?;
 
     let mut msg_out = RendezvousMessage::new();
     msg_out.set_software_update(SoftwareUpdate {

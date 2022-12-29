@@ -18,13 +18,14 @@ use hbb_common::{
     log,
     protobuf::Message as _,
     rendezvous_proto::*,
-    sleep, socket_client,
+    sleep,
+    socket_client::{self, is_ipv4},
     tokio::{
         self, select,
         time::{interval, Duration},
     },
     udp::FramedSocket,
-    AddrMangle, ResultType, TargetAddr,
+    AddrMangle, ResultType,
 };
 
 use crate::server::{check_zombie, new as new_server, ServerPtr};
@@ -38,11 +39,10 @@ static SHOULD_EXIT: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone)]
 pub struct RendezvousMediator {
-    addr: String,
+    addr: hbb_common::tokio_socks::TargetAddr<'static>,
     host: String,
     host_prefix: String,
     last_id_pk_registry: String,
-    is_ipv4: bool,
 }
 
 impl RendezvousMediator {
@@ -111,16 +111,14 @@ impl RendezvousMediator {
                 }
             })
             .unwrap_or(host.to_owned());
+        let host = crate::check_port(&host, RENDEZVOUS_PORT);
+        let (mut socket, addr) = socket_client::new_udp_for(&host, RENDEZVOUS_TIMEOUT).await?;
         let mut rz = Self {
-            addr: crate::check_port(&host, RENDEZVOUS_PORT),
-            is_ipv4: false,
+            addr: addr,
             host: host.clone(),
             host_prefix,
             last_id_pk_registry: "".to_owned(),
         };
-
-        let mut socket = socket_client::new_udp_for(&rz.addr, RENDEZVOUS_TIMEOUT).await?;
-        rz.is_ipv4 = socket.is_ipv4();
 
         const TIMER_OUT: Duration = Duration::from_secs(1);
         let mut timer = interval(TIMER_OUT);
@@ -253,9 +251,9 @@ impl RendezvousMediator {
                                 if last_dns_check.elapsed().as_millis() as i64 > DNS_INTERVAL {
                                     // in some case of network reconnect (dial IP network),
                                     // old UDP socket not work any more after network recover
-                                    if let Some(s) = socket_client::rebind_udp_for(&rz.addr).await? {
+                                    if let Some((s, addr)) = socket_client::rebind_udp_for(&rz.host).await? {
                                         socket = s;
-                                        rz.is_ipv4 = socket.is_ipv4();
+                                        rz.addr = addr;
                                     }
                                     last_dns_check = Instant::now();
                                 }
@@ -301,8 +299,7 @@ impl RendezvousMediator {
             secure,
         );
 
-        let mut socket =
-            socket_client::connect_tcp(self.addr.to_owned(), RENDEZVOUS_TIMEOUT).await?;
+        let mut socket = socket_client::connect_tcp(&*self.host, RENDEZVOUS_TIMEOUT).await?;
 
         let mut msg_out = Message::new();
         let mut rr = RelayResponse {
@@ -317,14 +314,21 @@ impl RendezvousMediator {
         }
         msg_out.set_relay_response(rr);
         socket.send(&msg_out).await?;
-        crate::create_relay_connection(server, relay_server, uuid, peer_addr, secure, self.is_ipv4)
-            .await;
+        crate::create_relay_connection(
+            server,
+            relay_server,
+            uuid,
+            peer_addr,
+            secure,
+            is_ipv4(&self.addr),
+        )
+        .await;
         Ok(())
     }
 
     async fn handle_intranet(&self, fla: FetchLocalAddr, server: ServerPtr) -> ResultType<()> {
         let relay_server = self.get_relay_server(fla.relay_server);
-        if !self.is_ipv4 {
+        if !is_ipv4(&self.addr) {
             // nat64, go relay directly, because current hbbs will crash if demangle ipv6 address
             let uuid = Uuid::new_v4().to_string();
             return self
@@ -340,8 +344,7 @@ impl RendezvousMediator {
         }
         let peer_addr = AddrMangle::decode(&fla.socket_addr);
         log::debug!("Handle intranet from {:?}", peer_addr);
-        let mut socket =
-            socket_client::connect_tcp(self.addr.to_owned(), RENDEZVOUS_TIMEOUT).await?;
+        let mut socket = socket_client::connect_tcp(&*self.host, RENDEZVOUS_TIMEOUT).await?;
         let local_addr = socket.local_addr();
         let local_addr: SocketAddr =
             format!("{}:{}", local_addr.ip(), local_addr.port()).parse()?;
@@ -380,8 +383,7 @@ impl RendezvousMediator {
         let peer_addr = AddrMangle::decode(&ph.socket_addr);
         log::debug!("Punch hole to {:?}", peer_addr);
         let mut socket = {
-            let socket =
-                socket_client::connect_tcp(self.addr.to_owned(), RENDEZVOUS_TIMEOUT).await?;
+            let socket = socket_client::connect_tcp(&*self.host, RENDEZVOUS_TIMEOUT).await?;
             let local_addr = socket.local_addr();
             // key important here for punch hole to tell my gateway incoming peer is safe.
             // it can not be async here, because local_addr can not be reused, we must close the connection before use it again.
