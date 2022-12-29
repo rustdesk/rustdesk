@@ -102,6 +102,8 @@ pub async fn connect_test(
         handler,
     ).await {
         log::error!("Failed to connect {}: {}", &id, err);
+    } else {
+        // rpassword::prompt_password("Input anything to exit").ok();
     }
 }
 

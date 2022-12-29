@@ -164,4 +164,13 @@ impl FramedSocket {
             None
         }
     }
+
+    pub fn is_ipv4(&self) -> bool {
+        if let FramedSocket::Direct(x) = self {
+            if let Ok(v) = x.get_ref().local_addr() {
+                return v.is_ipv4();
+            }
+        }
+        true
+    }
 }
