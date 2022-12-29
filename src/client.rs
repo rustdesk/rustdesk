@@ -47,14 +47,12 @@ pub use super::lang::*;
 pub mod file_trait;
 pub mod helper;
 pub mod io_loop;
+use crate::video_service::{SCRAP_X11_REQUIRED, SCRAP_X11_REF_URL};
 pub static SERVER_KEYBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
 pub static SERVER_FILE_TRANSFER_ENABLED: AtomicBool = AtomicBool::new(true);
 pub static SERVER_CLIPBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
 pub const MILLI1: Duration = Duration::from_millis(1);
 pub const SEC30: Duration = Duration::from_secs(30);
-
-const SCRAP_X11_REQUIRED: &str = "x11 expected";
-const SCRAP_X11_REF_URL: &str = "https://rustdesk.com/docs/en/manual/linux/#x11-required";
 
 /// Client of the remote desktop.
 pub struct Client;
