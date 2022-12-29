@@ -223,7 +223,9 @@ lazy_static::lazy_static! {
     static ref IS_SERVER: bool =  std::env::args().nth(1) == Some("--server".to_owned());
 }
 
+#[cfg(target_os = "macos")]
 static mut VIRTUAL_INPUT_MTX: Mutex<()> = Mutex::new(());
+#[cfg(target_os = "macos")]
 static mut VIRTUAL_INPUT: Option<VirtualInput> = None;
 
 // First call set_uinput() will create keyboard and mouse clients.
@@ -697,6 +699,7 @@ pub fn handle_key(evt: &KeyEvent) {
     std::thread::sleep(Duration::from_millis(20));
 }
 
+#[cfg(target_os = "macos")]
 #[inline]
 fn reset_input() {
     unsafe {
