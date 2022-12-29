@@ -36,7 +36,6 @@ fn main() {
     use hbb_common::log;
     let args = format!(
         "-p, --port-forward=[PORT-FORWARD-OPTIONS] 'Format: remote-id:local-port:remote-port[:remote-host]'
-        -c, --connect=[REMOTE_ID] 'test only'
         -k, --key=[KEY] ''
        -s, --server... 'Start server'",
     );
@@ -72,8 +71,6 @@ fn main() {
         if options.len() > 3 {
             remote_host = options[3].clone();
         }
-        common::test_rendezvous_server();
-        common::test_nat_type();
         let key = matches.value_of("key").unwrap_or("").to_owned();
         let token = LocalConfig::get_option("access_token");
         cli::start_one_port_forward(
@@ -84,14 +81,6 @@ fn main() {
             key,
             token,
         );
-    } else if let Some(p) = matches.value_of("connect") {
-        common::test_rendezvous_server();
-        common::test_nat_type();
-        let key = matches.value_of("key").unwrap_or("").to_owned();
-        let token = LocalConfig::get_option("access_token");
-        cli::connect_test(p, key, token);
-    } else if let Some(p) = matches.value_of("server") {
-        crate::start_server(true);
     }
     common::global_clean();
 }

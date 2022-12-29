@@ -26,12 +26,10 @@ use std::{
     time::Duration,
 };
 
-#[cfg(not(feature = "cli"))]
 pub mod audio_service;
 cfg_if::cfg_if! {
 if #[cfg(not(any(target_os = "android", target_os = "ios")))] {
 mod clipboard_service;
-#[cfg(not(feature = "cli"))]
 #[cfg(target_os = "linux")]
 pub(crate) mod wayland;
 #[cfg(target_os = "linux")]
@@ -55,13 +53,7 @@ mod connection;
 pub mod portable_service;
 mod service;
 mod video_qos;
-#[cfg(not(feature = "cli"))]
 pub mod video_service;
-
-#[cfg(feature = "cli")]
-mod stub;
-#[cfg(feature = "cli")]
-pub use stub::*;
 
 use hbb_common::tcp::new_listener;
 
@@ -319,7 +311,6 @@ impl Drop for Server {
         for s in self.services.values() {
             s.join();
         }
-        #[cfg(not(feature = "cli"))]
         #[cfg(target_os = "linux")]
         wayland::clear();
     }

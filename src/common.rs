@@ -50,7 +50,6 @@ lazy_static::lazy_static! {
 }
 
 pub fn global_init() -> bool {
-    #[cfg(not(feature = "cli"))]
     #[cfg(target_os = "linux")]
     {
         if !scrap::is_x11() {

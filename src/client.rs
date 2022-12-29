@@ -4,7 +4,6 @@ use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
     Device, Host, StreamConfig,
 };
-#[cfg(not(features = "cli"))]
 use magnum_opus::{Channels::*, Decoder as AudioDecoder};
 use sha2::{Digest, Sha256};
 use std::{
@@ -37,7 +36,6 @@ use hbb_common::{
 };
 pub use helper::LatencyController;
 pub use helper::*;
-#[cfg(not(features = "cli"))]
 use scrap::{
     codec::{Decoder, DecoderCfg},
     record::{Recorder, RecorderContext},
@@ -49,7 +47,7 @@ pub use super::lang::*;
 pub mod file_trait;
 pub mod helper;
 pub mod io_loop;
-use crate::video_service::{SCRAP_X11_REQUIRED, SCRAP_X11_REF_URL};
+use crate::server::video_service::{SCRAP_X11_REF_URL, SCRAP_X11_REQUIRED};
 pub static SERVER_KEYBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
 pub static SERVER_FILE_TRANSFER_ENABLED: AtomicBool = AtomicBool::new(true);
 pub static SERVER_CLIPBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
@@ -587,7 +585,6 @@ impl Client {
 }
 
 /// Audio handler for the [`Client`].
-#[cfg(not(features = "cli"))]
 #[derive(Default)]
 pub struct AudioHandler {
     audio_decoder: Option<(AudioDecoder, Vec<f32>)>,
@@ -604,7 +601,6 @@ pub struct AudioHandler {
     latency_controller: Arc<Mutex<LatencyController>>,
 }
 
-#[cfg(not(features = "cli"))]
 impl AudioHandler {
     /// Create a new audio handler.
     pub fn new(latency_controller: Arc<Mutex<LatencyController>>) -> Self {
@@ -800,7 +796,6 @@ impl AudioHandler {
 }
 
 /// Video handler for the [`Client`].
-#[cfg(not(features = "cli"))]
 pub struct VideoHandler {
     decoder: Decoder,
     latency_controller: Arc<Mutex<LatencyController>>,
@@ -809,7 +804,6 @@ pub struct VideoHandler {
     record: bool,
 }
 
-#[cfg(not(features = "cli"))]
 impl VideoHandler {
     /// Create a new video handler.
     pub fn new(latency_controller: Arc<Mutex<LatencyController>>) -> Self {
@@ -1530,7 +1524,6 @@ where
     let latency_controller = LatencyController::new();
     let latency_controller_cl = latency_controller.clone();
 
-    #[cfg(not(features = "cli"))]
     std::thread::spawn(move || {
         let mut video_handler = VideoHandler::new(latency_controller);
         loop {
@@ -1555,7 +1548,6 @@ where
         }
         log::info!("Video decoder loop exits");
     });
-    #[cfg(not(features = "cli"))]
     std::thread::spawn(move || {
         let mut audio_handler = AudioHandler::new(latency_controller_cl);
         loop {

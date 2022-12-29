@@ -500,7 +500,6 @@ impl Connection {
             let _ = privacy_mode::turn_off_privacy(0);
         }
         video_service::notify_video_frame_feched(id, None);
-        #[cfg(not(feature = "cli"))]
         scrap::codec::Encoder::update_video_encoder(id, scrap::codec::EncoderUpdate::Remove);
         video_service::VIDEO_QOS.lock().unwrap().reset();
         if conn.authorized {
@@ -1077,20 +1076,17 @@ impl Connection {
             if let Some(o) = lr.option.as_ref() {
                 self.update_option(o).await;
                 if let Some(q) = o.video_codec_state.clone().take() {
-                    #[cfg(not(feature = "cli"))]
                     scrap::codec::Encoder::update_video_encoder(
                         self.inner.id(),
                         scrap::codec::EncoderUpdate::State(q),
                     );
                 } else {
-                    #[cfg(not(feature = "cli"))]
                     scrap::codec::Encoder::update_video_encoder(
                         self.inner.id(),
                         scrap::codec::EncoderUpdate::DisableHwIfNotExist,
                     );
                 }
             } else {
-                #[cfg(not(feature = "cli"))]
                 scrap::codec::Encoder::update_video_encoder(
                     self.inner.id(),
                     scrap::codec::EncoderUpdate::DisableHwIfNotExist,
@@ -1649,7 +1645,6 @@ impl Connection {
             }
         }
         if let Some(q) = o.video_codec_state.clone().take() {
-            #[cfg(not(feature = "cli"))]
             scrap::codec::Encoder::update_video_encoder(
                 self.inner.id(),
                 scrap::codec::EncoderUpdate::State(q),
