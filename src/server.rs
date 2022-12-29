@@ -93,6 +93,14 @@ pub fn new() -> ServerPtr {
     Arc::new(RwLock::new(server))
 }
 
+fn mac_wakeup(){
+    #[cfg(target_os = "macos")]{
+        use std::process::Command;
+        Command::new("/usr/bin/caffeinate").arg("-u").arg("-t 5").spawn().expect("failed to execute caffeinate");
+        println!("wake up macos");
+    }
+}
+
 async fn accept_connection_(server: ServerPtr, socket: Stream, secure: bool) -> ResultType<()> {
     let local_addr = socket.local_addr();
     drop(socket);
@@ -104,11 +112,7 @@ async fn accept_connection_(server: ServerPtr, socket: Stream, secure: bool) -> 
     if let Ok((stream, addr)) = timeout(CONNECT_TIMEOUT, listener.accept()).await? {
         stream.set_nodelay(true).ok();
         let stream_addr = stream.local_addr()?;
-        if cfg!(target_os = "macos") {
-            use std::process::Command;
-            Command::new("/usr/bin/caffeinate").arg("-u").arg("-t 5").spawn().expect("failed to execute caffeinate");
-            println!("wake up macos...");
-        }
+        mac_wakeup();
         create_tcp_connection(server, Stream::from(stream, stream_addr), addr, secure).await?;
     }
     Ok(())
@@ -257,6 +261,7 @@ async fn create_relay_connection_(
         ..Default::default()
     });
     stream.send(&msg_out).await?;
+    mac_wakeup();
     create_tcp_connection(server, stream, peer_addr, secure).await?;
     Ok(())
 }
