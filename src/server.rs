@@ -96,8 +96,8 @@ pub fn new() -> ServerPtr {
 fn mac_wakeup(){
     #[cfg(target_os = "macos")]{
         use std::process::Command;
-        Command::new("/usr/bin/caffeinate").arg("-u").arg("-t 5").spawn().expect("failed to execute caffeinate");
-        println!("wake up macos");
+        Command::new("/usr/bin/caffeinate").arg("-u").arg("-t 5").spawn().ok();
+        log::info!("wake up macos");
     }
 }
 
