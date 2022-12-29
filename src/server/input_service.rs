@@ -288,6 +288,7 @@ fn modifier_sleep() {
 }
 
 #[inline]
+#[cfg(not(target_os = "macos"))]
 fn is_pressed(key: &Key, en: &mut Enigo) -> bool {
     get_modifier_state(key.clone(), en)
 }
@@ -780,13 +781,13 @@ fn click_capslock(en: &mut Enigo) {
     #[cfg(not(targe_os = "macos"))]
     en.key_click(enigo::Key::CapsLock);
     #[cfg(target_os = "macos")]
-    en.key_down(enigo::Key::CapsLock);
+    let _ = en.key_down(enigo::Key::CapsLock);
 }
 
-fn click_numlock(en: &mut Enigo) {
+fn click_numlock(_en: &mut Enigo) {
     // without numlock in macos
     #[cfg(not(target_os = "macos"))]
-    en.key_click(enigo::Key::NumLock);
+    _en.key_click(enigo::Key::NumLock);
 }
 
 fn sync_numlock_capslock_status(key_event: &KeyEvent) {
@@ -872,6 +873,7 @@ fn is_altgr_pressed() -> bool {
         .is_some()
 }
 
+#[cfg(not(target_os = "macos"))]
 fn press_modifiers(en: &mut Enigo, key_event: &KeyEvent, to_release: &mut Vec<Key>) {
     for ref ck in key_event.modifiers.iter() {
         if let Some(key) = control_key_value_to_key(ck.value()) {
@@ -889,14 +891,14 @@ fn press_modifiers(en: &mut Enigo, key_event: &KeyEvent, to_release: &mut Vec<Ke
     }
 }
 
-fn sync_modifiers(en: &mut Enigo, key_event: &KeyEvent, to_release: &mut Vec<Key>) {
+fn sync_modifiers(en: &mut Enigo, key_event: &KeyEvent, _to_release: &mut Vec<Key>) {
     #[cfg(target_os = "macos")]
     add_flags_to_enigo(en, key_event);
 
     if key_event.down {
         release_unpressed_modifiers(en, key_event);
         #[cfg(not(target_os = "macos"))]
-        press_modifiers(en, key_event, to_release);
+        press_modifiers(en, key_event, _to_release);
     }
 }
 
@@ -944,6 +946,7 @@ fn process_seq(en: &mut Enigo, sequence: &str) {
     en.key_sequence(&sequence);
 }
 
+#[cfg(not(target_os = "macos"))]
 fn release_keys(en: &mut Enigo, to_release: &Vec<Key>) {
     for key in to_release {
         en.key_up(key.clone());

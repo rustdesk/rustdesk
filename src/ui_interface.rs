@@ -158,6 +158,7 @@ pub fn get_license() -> String {
 }
 
 #[inline]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 pub fn get_option_opt(key: &str) -> Option<String> {
     OPTIONS.lock().unwrap().get(key).map(|x| x.clone())
 }
@@ -199,11 +200,13 @@ pub fn set_local_flutter_config(key: String, value: String) {
     LocalConfig::set_flutter_config(key, value);
 }
 
+#[cfg(feature = "flutter")]
 #[inline]
 pub fn get_kb_layout_type() -> String {
     LocalConfig::get_kb_layout_type()
 }
 
+#[cfg(feature = "flutter")]
 #[inline]
 pub fn set_kb_layout_type(kb_layout_type: String) {
     LocalConfig::set_kb_layout_type(kb_layout_type);

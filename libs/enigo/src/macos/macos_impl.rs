@@ -40,6 +40,7 @@ const BUF_LEN: usize = 4;
 #[allow(improper_ctypes)]
 #[allow(non_snake_case)]
 #[link(name = "ApplicationServices", kind = "framework")]
+#[link(name = "Carbon", kind = "framework")]
 extern "C" {
     fn CFDataGetBytePtr(theData: CFDataRef) -> *const u8;
     fn TISCopyCurrentKeyboardInputSource() -> TISInputSourceRef;
