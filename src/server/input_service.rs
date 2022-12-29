@@ -5,7 +5,9 @@ use crate::common::IS_X11;
 use dispatch::Queue;
 use enigo::{Enigo, Key, KeyboardControllable, MouseButton, MouseControllable};
 use hbb_common::{config::COMPRESS_LEVEL, get_time, protobuf::EnumOrUnknown};
-use rdev::{self, simulate, EventType, Key as RdevKey, RawKey};
+use rdev::{self, EventType, Key as RdevKey, RawKey};
+#[cfg(target_os = "macos")]
+use rdev::{CGEventSourceStateID, CGEventTapLocation, VirtualInput};
 use std::time::Duration;
 use std::{
     convert::TryFrom,
@@ -221,6 +223,10 @@ lazy_static::lazy_static! {
     static ref IS_SERVER: bool =  std::env::args().nth(1) == Some("--server".to_owned());
 }
 
+// virtual_input must be used in main thread.
+// No need to wrap mutex.
+static mut VIRTUAL_INPUT: Option<VirtualInput> = None;
+
 // First call set_uinput() will create keyboard and mouse clients.
 // The clients are ipc connections that must live shorter than tokio runtime.
 // Thus this function must not be called in a temporary runtime.
@@ -392,13 +398,15 @@ fn record_key_to_key(record_key: u64) -> Option<Key> {
 fn release_record_key(record_key: u64) {
     let func = move || {
         if record_key_is_rdev_layout(record_key) {
-            rdev_key_down_or_up(RdevKey::Unknown((record_key - KEY_RDEV_START) as _), false);
+            simulate_(&EventType::KeyRelease(RdevKey::Unknown(
+                (record_key - KEY_RDEV_START) as _,
+            )));
         } else if let Some(key) = record_key_to_key(record_key) {
             ENIGO.lock().unwrap().key_up(key);
             log::debug!("Fixed {:?} timeout", key);
         }
     };
-    
+
     #[cfg(target_os = "macos")]
     QUEUE.exec_async(func);
     #[cfg(not(target_os = "macos"))]
@@ -687,7 +695,27 @@ pub fn handle_key(evt: &KeyEvent) {
     handle_key_(evt);
 }
 
-fn sim_rdev_rawkey(code: u32, down_or_up: bool) {
+#[inline]
+fn reset_input() {
+    unsafe {
+        VIRTUAL_INPUT = VirtualInput::new(
+            CGEventSourceStateID::Private,
+            CGEventTapLocation::AnnotatedSession,
+        )
+        .ok();
+    }
+}
+
+#[cfg(target_os = "macos")]
+pub fn reset_input_ondisconn() {
+    if !*IS_SERVER {
+        QUEUE.exec_async(reset_input);
+    } else {
+        reset_input();
+    }
+}
+
+fn sim_rdev_rawkey(code: u32, keydown: bool) {
     #[cfg(target_os = "windows")]
     let rawkey = RawKey::ScanCode(code);
     #[cfg(target_os = "linux")]
@@ -698,22 +726,34 @@ fn sim_rdev_rawkey(code: u32, down_or_up: bool) {
     #[cfg(target_os = "macos")]
     let rawkey = RawKey::MacVirtualKeycode(code);
 
-    rdev_key_down_or_up(RdevKey::RawKey(rawkey), down_or_up);
+    let event_type = if keydown {
+        EventType::KeyPress(RdevKey::RawKey(rawkey))
+    } else {
+        EventType::KeyRelease(RdevKey::RawKey(rawkey))
+    };
+    simulate_(&event_type);
 }
 
-fn rdev_key_down_or_up(key: RdevKey, down_or_up: bool) {
-    let event_type = match down_or_up {
-        true => EventType::KeyPress(key),
-        false => EventType::KeyRelease(key),
-    };
-    match simulate(&event_type) {
+#[cfg(target_os = "macos")]
+#[inline]
+fn simulate_(event_type: &EventType) {
+    unsafe {
+        if let Some(virtual_input) = &VIRTUAL_INPUT {
+            let _ = virtual_input.simulate(&event_type);
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+#[inline]
+fn simulate_(event_type: &EventType) {
+    match rdev::simulate(&event_type) {
         Ok(()) => (),
         Err(_simulate_error) => {
             log::error!("Could not send {:?}", &event_type);
         }
     }
-    #[cfg(target_os = "macos")]
-    std::thread::sleep(Duration::from_millis(20));
 }
 
 fn is_modifier_in_key_event(control_key: ControlKey, key_event: &KeyEvent) -> bool {
