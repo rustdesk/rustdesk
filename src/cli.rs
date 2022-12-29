@@ -4,9 +4,9 @@ use hbb_common::{
     log,
     message_proto::*,
     protobuf::Message as _,
+    rendezvous_proto::ConnType,
     tokio::{self, sync::mpsc},
     Stream,
-    rendezvous_proto::ConnType,
 };
 use std::sync::{Arc, RwLock};
 
@@ -44,7 +44,7 @@ impl Interface for Session {
     fn get_login_config_handler(&self) -> Arc<RwLock<LoginConfigHandler>> {
         return self.lc.clone();
     }
-    
+
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str) {
         if msgtype == "input-password" {
             self.sender
@@ -83,6 +83,25 @@ impl Interface for Session {
 
     fn send(&self, data: Data) {
         self.sender.send(data).ok();
+    }
+}
+
+#[tokio::main(flavor = "current_thread")]
+pub async fn connect_test(
+    id: &str,
+    key: String,
+    token: String,
+) {
+    let (sender, mut receiver) = mpsc::unbounded_channel::<Data>();
+    let handler = Session::new(&id, sender);
+    if let Err(err) = crate::client::Client::start(
+        id,
+        &key,
+        &token,
+        ConnType::PORT_FORWARD,
+        handler,
+    ).await {
+        log::error!("Failed to connect {}: {}", &id, err);
     }
 }
 
