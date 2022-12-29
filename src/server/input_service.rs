@@ -223,8 +223,7 @@ lazy_static::lazy_static! {
     static ref IS_SERVER: bool =  std::env::args().nth(1) == Some("--server".to_owned());
 }
 
-// virtual_input must be used in main thread.
-// No need to wrap mutex.
+static mut VIRTUAL_INPUT_MTX: Mutex<()> = Mutex::new(());
 static mut VIRTUAL_INPUT: Option<VirtualInput> = None;
 
 // First call set_uinput() will create keyboard and mouse clients.
@@ -687,17 +686,21 @@ pub fn handle_key(evt: &KeyEvent) {
         // having GUI, run main GUI thread, otherwise crash
         let evt = evt.clone();
         QUEUE.exec_async(move || handle_key_(&evt));
+        std::thread::sleep(Duration::from_millis(20));
         return;
     }
     #[cfg(windows)]
     crate::portable_service::client::handle_key(evt);
     #[cfg(not(windows))]
     handle_key_(evt);
+    #[cfg(target_os = "macos")]
+    std::thread::sleep(Duration::from_millis(20));
 }
 
 #[inline]
 fn reset_input() {
     unsafe {
+        let _lock = VIRTUAL_INPUT_MTX.lock();
         VIRTUAL_INPUT = VirtualInput::new(
             CGEventSourceStateID::Private,
             CGEventTapLocation::AnnotatedSession,
@@ -738,9 +741,9 @@ fn sim_rdev_rawkey(code: u32, keydown: bool) {
 #[inline]
 fn simulate_(event_type: &EventType) {
     unsafe {
+        let _lock = VIRTUAL_INPUT_MTX.lock();
         if let Some(virtual_input) = &VIRTUAL_INPUT {
             let _ = virtual_input.simulate(&event_type);
-            std::thread::sleep(Duration::from_millis(20));
         }
     }
 }
