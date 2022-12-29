@@ -31,6 +31,7 @@ pub mod audio_service;
 cfg_if::cfg_if! {
 if #[cfg(not(any(target_os = "android", target_os = "ios")))] {
 mod clipboard_service;
+#[cfg(not(feature = "cli"))]
 #[cfg(target_os = "linux")]
 pub(crate) mod wayland;
 #[cfg(target_os = "linux")]
@@ -318,6 +319,7 @@ impl Drop for Server {
         for s in self.services.values() {
             s.join();
         }
+        #[cfg(not(feature = "cli"))]
         #[cfg(target_os = "linux")]
         wayland::clear();
     }
