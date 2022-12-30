@@ -406,7 +406,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Group", "Gruppo"),
         ("Search", "Cerca"),
         ("Closed manually by the web console", "Chiudi manualmente dalla console Web"),
-        ("Local keyboard type", ""),
-        ("Select local keyboard type", ""),
+        ("Local keyboard type", "Tipo di tastiera locale"),
+        ("Select local keyboard type", "Seleziona il tipo di tastiera locale"),
     ].iter().cloned().collect();
 }
