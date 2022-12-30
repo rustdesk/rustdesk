@@ -365,8 +365,6 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                     RxInt display = CurrentDisplayState.find(widget.id);
                     if (display.value != i) {
                       bind.sessionSwitchDisplay(id: widget.id, value: i);
-                      pi.currentDisplay = i;
-                      display.value = i;
                     }
                   },
                 )
