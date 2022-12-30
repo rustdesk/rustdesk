@@ -401,12 +401,12 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("hide_cm_tip", "Permetti di nascondere solo se si accettano sessioni con password permanente"),
         ("wayland_experiment_tip", "Il supporto Wayland è in fase sperimentale, utilizza X11 se necessiti di un accesso stabile."),
         ("Right click to select tabs", "Clic con il tasto destro per selezionare le schede"),
-        ("Skipped", ""),
+        ("Skipped", "Saltato"),
         ("Add to Address Book", "Aggiungi alla rubrica"),
         ("Group", "Gruppo"),
         ("Search", "Cerca"),
         ("Closed manually by the web console", "Chiudi manualmente dalla console Web"),
-        ("Local keyboard type", ""),
-        ("Select local keyboard type", ""),
+        ("Local keyboard type", "Tipo tastiera locale"),
+        ("Select local keyboard type", "Seleziona la tastiera locale"),
     ].iter().cloned().collect();
 }
