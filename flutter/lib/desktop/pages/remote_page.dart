@@ -316,8 +316,8 @@ class _RemotePageState extends State<RemotePage>
     ];
 
     if (!_ffi.canvasModel.cursorEmbeded) {
-      paints.add(Obx(() => Visibility(
-          visible: _showRemoteCursor.isTrue && _remoteCursorMoved.isTrue,
+      paints.add(Obx(() => Offstage(
+          offstage: _showRemoteCursor.isFalse || _remoteCursorMoved.isFalse,
           child: CursorPaint(
             id: widget.id,
             zoomCursor: _zoomCursor,
@@ -617,7 +617,8 @@ class CursorPaint extends StatelessWidget {
 
     double cx = c.x;
     double cy = c.y;
-    if (c.scrollStyle == ScrollStyle.scrollbar) {
+    if (c.viewStyle.style == kRemoteViewStyleOriginal &&
+        c.scrollStyle == ScrollStyle.scrollbar) {
       final d = c.parent.target!.ffiModel.display;
       final imageWidth = d.width * c.scale;
       final imageHeight = d.height * c.scale;
@@ -626,7 +627,7 @@ class CursorPaint extends StatelessWidget {
     }
 
     double x = (m.x - hotx) * c.scale + cx;
-    double y = (m.y - hoty) * c.scale + cx;
+    double y = (m.y - hoty) * c.scale + cy;
     double scale = 1.0;
     if (zoomCursor.isTrue) {
       x = m.x - hotx + cx / c.scale;

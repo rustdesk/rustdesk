@@ -141,7 +141,7 @@ class FfiModel with ChangeNotifier {
         setConnectionType(
             peerId, evt['secure'] == 'true', evt['direct'] == 'true');
       } else if (name == 'switch_display') {
-        handleSwitchDisplay(evt);
+        handleSwitchDisplay(evt, peerId);
       } else if (name == 'cursor_data') {
         await parent.target?.cursorModel.updateCursorData(evt);
       } else if (name == 'cursor_id') {
@@ -214,7 +214,7 @@ class FfiModel with ChangeNotifier {
     }
   }
 
-  handleSwitchDisplay(Map<String, dynamic> evt) {
+  handleSwitchDisplay(Map<String, dynamic> evt, String peerId) {
     final oldOrientation = _display.width > _display.height;
     var old = _pi.currentDisplay;
     _pi.currentDisplay = int.parse(evt['display']);
@@ -225,6 +225,12 @@ class FfiModel with ChangeNotifier {
     _display.cursorEmbeded = int.parse(evt['cursor_embeded']) == 1;
     if (old != _pi.currentDisplay) {
       parent.target?.cursorModel.updateDisplayOrigin(_display.x, _display.y);
+    }
+
+    try {
+      CurrentDisplayState.find(peerId).value = _pi.currentDisplay;
+    } catch (e) {
+      //
     }
 
     // remote is mobile, and orientation changed
@@ -506,7 +512,7 @@ class ViewStyle {
 
   double get scale {
     double s = 1.0;
-    if (style == 'adaptive') {
+    if (style == kRemoteViewStyleAdaptive) {
       final s1 = width / displayWidth;
       final s2 = height / displayHeight;
       s = s1 < s2 ? s1 : s2;
@@ -543,6 +549,9 @@ class CanvasModel with ChangeNotifier {
   double get y => _y;
   double get scale => _scale;
   ScrollStyle get scrollStyle => _scrollStyle;
+  ViewStyle get viewStyle => _lastViewStyle;
+
+  _resetScroll() => setScrollPercent(0.0, 0.0);
 
   setScrollPercent(double x, double y) {
     _scrollX = x;
@@ -571,6 +580,9 @@ class CanvasModel with ChangeNotifier {
     if (_lastViewStyle == viewStyle) {
       return;
     }
+    if (_lastViewStyle.style != viewStyle.style) {
+      _resetScroll();
+    }
     _lastViewStyle = viewStyle;
     _scale = viewStyle.scale;
     _x = (sizeWidth - displayWidth * _scale) / 2;
@@ -582,8 +594,7 @@ class CanvasModel with ChangeNotifier {
     final style = await bind.sessionGetScrollStyle(id: id);
     if (style == kRemoteScrollStyleBar) {
       _scrollStyle = ScrollStyle.scrollbar;
-      _scrollX = 0.0;
-      _scrollY = 0.0;
+      _resetScroll();
     } else {
       _scrollStyle = ScrollStyle.scrollauto;
     }
