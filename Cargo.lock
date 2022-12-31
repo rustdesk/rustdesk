@@ -1317,8 +1317,7 @@ checksum = "f578e8e2c440e7297e008bb5486a3a8a194775224bbc23729b0dbdfaeebf162e"
 [[package]]
 name = "default-net"
 version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05e70d471b0ba4e722c85651b3bb04b6880dfdb1224a43ade80c1295314db646"
+source = "git+https://github.com/Kingtous/default-net#bdaad8dd5b08efcba303e71729d3d0b1d5ccdb25"
 dependencies = [
  "libc",
  "memalloc",
