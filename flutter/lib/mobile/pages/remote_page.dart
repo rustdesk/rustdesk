@@ -518,7 +518,7 @@ class _RemotePageState extends State<RemotePage> {
                     ),
             ),
           ];
-          if (!gFFI.canvasModel.cursorEmbeded) {
+          if (!gFFI.canvasModel.cursorEmbedded) {
             paints.add(CursorPaint());
           }
           return paints;
@@ -527,7 +527,7 @@ class _RemotePageState extends State<RemotePage> {
 
   Widget getBodyForDesktopWithListener(bool keyboard) {
     var paints = <Widget>[ImagePaint()];
-    if (!gFFI.canvasModel.cursorEmbeded) {
+    if (!gFFI.canvasModel.cursorEmbedded) {
       final cursor = bind.sessionGetToggleOptionSync(
           id: widget.id, arg: 'show-remote-cursor');
       if (keyboard || cursor) {
@@ -1058,7 +1058,7 @@ void showOptions(
     final toggles = [
       getToggle(id, setState, 'show-quality-monitor', 'Show quality monitor'),
     ];
-    if (!gFFI.canvasModel.cursorEmbeded) {
+    if (!gFFI.canvasModel.cursorEmbedded) {
       toggles.insert(0,
           getToggle(id, setState, 'show-remote-cursor', 'Show remote cursor'));
     }

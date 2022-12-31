@@ -257,7 +257,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       ),
     ]);
 
-    if (!ffi.canvasModel.cursorEmbeded) {
+    if (!ffi.canvasModel.cursorEmbedded) {
       menu.add(MenuEntryDivider<String>());
       menu.add(() {
         final state = ShowRemoteCursorState.find(key);
