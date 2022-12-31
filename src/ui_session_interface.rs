@@ -604,7 +604,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn set_cursor_data(&self, cd: CursorData);
     fn set_cursor_id(&self, id: String);
     fn set_cursor_position(&self, cp: CursorPosition);
-    fn set_display(&self, x: i32, y: i32, w: i32, h: i32, cursor_embeded: bool);
+    fn set_display(&self, x: i32, y: i32, w: i32, h: i32, cursor_embedded: bool);
     fn switch_display(&self, display: &SwitchDisplay);
     fn set_peer_info(&self, peer_info: &PeerInfo); // flutter
     fn on_connected(&self, conn_type: ConnType);
@@ -710,7 +710,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
                 current.y,
                 current.width,
                 current.height,
-                current.cursor_embeded,
+                current.cursor_embedded,
             );
         }
         self.update_privacy_mode();

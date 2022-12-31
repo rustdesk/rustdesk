@@ -1086,7 +1086,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     }
 
     /// Show remote cursor
-    if (!widget.ffi.canvasModel.cursorEmbeded) {
+    if (!widget.ffi.canvasModel.cursorEmbedded) {
       displayMenu.add(() {
         final state = ShowRemoteCursorState.find(widget.id);
         return MenuEntrySwitch2<String>(

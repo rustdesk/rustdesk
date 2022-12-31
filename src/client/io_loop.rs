@@ -990,7 +990,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         self.video_sender.send(MediaData::Reset).ok();
                         if s.width > 0 && s.height > 0 {
                             self.handler
-                                .set_display(s.x, s.y, s.width, s.height, s.cursor_embeded);
+                                .set_display(s.x, s.y, s.width, s.height, s.cursor_embedded);
                         }
                     }
                     Some(misc::Union::CloseReason(c)) => {

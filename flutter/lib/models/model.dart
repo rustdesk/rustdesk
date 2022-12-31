@@ -222,7 +222,7 @@ class FfiModel with ChangeNotifier {
     _display.y = double.parse(evt['y']);
     _display.width = int.parse(evt['width']);
     _display.height = int.parse(evt['height']);
-    _display.cursorEmbeded = int.parse(evt['cursor_embeded']) == 1;
+    _display.cursorEmbedded = int.parse(evt['cursor_embedded']) == 1;
     if (old != _pi.currentDisplay) {
       parent.target?.cursorModel.updateDisplayOrigin(_display.x, _display.y);
     }
@@ -338,7 +338,7 @@ class FfiModel with ChangeNotifier {
         d.y = d0['y'].toDouble();
         d.width = d0['width'];
         d.height = d0['height'];
-        d.cursorEmbeded = d0['cursor_embeded'] == 1;
+        d.cursorEmbedded = d0['cursor_embedded'] == 1;
         _pi.displays.add(d);
       }
       if (_pi.currentDisplay < _pi.displays.length) {
@@ -608,8 +608,8 @@ class CanvasModel with ChangeNotifier {
     notifyListeners();
   }
 
-  bool get cursorEmbeded =>
-      parent.target?.ffiModel.display.cursorEmbeded ?? false;
+  bool get cursorEmbedded =>
+      parent.target?.ffiModel.display.cursorEmbedded ?? false;
 
   int getDisplayWidth() {
     final defaultWidth = (isDesktop || isWebDesktop)
@@ -1343,7 +1343,7 @@ class Display {
   double y = 0;
   int width = 0;
   int height = 0;
-  bool cursorEmbeded = false;
+  bool cursorEmbedded = false;
 
   Display() {
     width = (isDesktop || isWebDesktop)

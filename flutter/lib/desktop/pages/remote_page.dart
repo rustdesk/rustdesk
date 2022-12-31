@@ -315,7 +315,7 @@ class _RemotePageState extends State<RemotePage>
       }))
     ];
 
-    if (!_ffi.canvasModel.cursorEmbeded) {
+    if (!_ffi.canvasModel.cursorEmbedded) {
       paints.add(Obx(() => Offstage(
           offstage: _showRemoteCursor.isFalse || _remoteCursorMoved.isFalse,
           child: CursorPaint(
@@ -382,7 +382,7 @@ class _ImagePaintState extends State<ImagePaint> {
 
     mouseRegion({child}) => Obx(() => MouseRegion(
         cursor: cursorOverImage.isTrue
-            ? c.cursorEmbeded
+            ? c.cursorEmbedded
                 ? SystemMouseCursors.none
                 : keyboardEnabled.isTrue
                     ? (() {

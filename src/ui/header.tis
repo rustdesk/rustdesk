@@ -164,10 +164,10 @@ class Header: Reactor.Component {
         var codecs = handler.supported_hwcodec();
         var show_codec = handler.has_hwcodec() && (codecs[0] || codecs[1]);
 
-        var cursor_embeded = false;
+        var cursor_embedded = false;
         if ((pi.displays || []).length > 0) {
             if (pi.displays.length > pi.current_display) {
-                cursor_embeded = pi.displays[pi.current_display].cursor_embeded;
+                cursor_embedded = pi.displays[pi.current_display].cursor_embedded;
             }
         }
 
@@ -191,7 +191,7 @@ class Header: Reactor.Component {
                 {codecs[1] ? <li #h265 type="codec-preference"><span>{svg_checkmark}</span>H265</li> : ""}
                 </div> : ""}
                 <div .separator />
-                {!cursor_embeded && <li #show-remote-cursor .toggle-option><span>{svg_checkmark}</span>{translate('Show remote cursor')}</li>}
+                {!cursor_embedded && <li #show-remote-cursor .toggle-option><span>{svg_checkmark}</span>{translate('Show remote cursor')}</li>}
                 <li #show-quality-monitor .toggle-option><span>{svg_checkmark}</span>{translate('Show quality monitor')}</li> 
                 {audio_enabled ? <li #disable-audio .toggle-option><span>{svg_checkmark}</span>{translate('Mute')}</li> : ""}
                 {is_win && pi.platform == 'Windows' && file_enabled ? <li #enable-file-transfer .toggle-option><span>{svg_checkmark}</span>{translate('Allow file copy and paste')}</li> : ""}

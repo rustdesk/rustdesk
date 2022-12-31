@@ -9,7 +9,7 @@ import '../../common.dart';
 typedef KBChoosedCallback = Future<bool> Function(String);
 
 const double _kImageMarginVertical = 6.0;
-const double _kImageMarginHorizental = 10.0;
+const double _kImageMarginHorizontal = 10.0;
 const double _kImageBoarderWidth = 4.0;
 const double _kImagePaddingWidth = 4.0;
 const Color _kImageBorderColor = Color.fromARGB(125, 202, 247, 2);
@@ -47,14 +47,14 @@ class _KBImage extends StatelessWidget {
           ),
         ),
         margin: EdgeInsets.symmetric(
-          horizontal: _kImageMarginHorizental,
+          horizontal: _kImageMarginHorizontal,
           vertical: _kImageMarginVertical,
         ),
         padding: EdgeInsets.all(_kImagePaddingWidth),
         child: SvgPicture.asset(
           'assets/${_kKBLayoutImageMap[kbLayoutType] ?? ""}.svg',
           width: imageWidth -
-              _kImageMarginHorizental * 2 -
+              _kImageMarginHorizontal * 2 -
               _kImagePaddingWidth * 2 -
               _kImageBoarderWidth * 2,
         ),
