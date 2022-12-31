@@ -59,7 +59,7 @@ base64 = "0.13"
 sysinfo = "0.24"
 num_cpus = "1.13"
 bytes = { version = "1.2", features = ["serde"] }
-default-net = "0.11.0"
+default-net = { git = "https://github.com/Kingtous/default-net" }
 wol-rs = "0.9.1"
 flutter_rust_bridge = { git = "https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge", optional = true }
 errno = "0.2.8"
