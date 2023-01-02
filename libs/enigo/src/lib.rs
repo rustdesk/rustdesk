@@ -447,8 +447,9 @@ pub trait KeyboardControllable {
     where
         Self: Sized,
     {
-        self.key_sequence_parse_try(sequence)
-            .expect("Could not parse sequence");
+        if let Err(..) = self.key_sequence_parse_try(sequence) {
+            println!("Could not parse sequence");
+        }
     }
     /// Same as key_sequence_parse except returns any errors
     fn key_sequence_parse_try(&mut self, sequence: &str) -> Result<(), dsl::ParseError>

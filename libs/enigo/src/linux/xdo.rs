@@ -391,8 +391,9 @@ impl KeyboardControllable for EnigoXdo {
     where
         Self: Sized,
     {
-        self.key_sequence_parse_try(sequence)
-            .expect("Could not parse sequence");
+        if let Err(..) = self.key_sequence_parse_try(sequence) {
+            println!("Could not parse sequence");
+        }
     }
 
     fn key_sequence_parse_try(&mut self, sequence: &str) -> Result<(), crate::dsl::ParseError>
