@@ -27,7 +27,7 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v3
         with:
-          ref: 'master@{2022-12-05 00:00:00}'
+          ref: '8d1254cf14b69f545c9cefa026c5eeb0e7dd3e7c'
 
       - name: Install LLVM and Clang
         uses: KyleMayes/install-llvm-action@v1
