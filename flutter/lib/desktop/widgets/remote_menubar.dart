@@ -1422,7 +1422,8 @@ class __DraggableShowHideState extends State<_DraggableShowHide> {
       axis: Axis.horizontal,
       child: Icon(
         Icons.drag_indicator,
-        size: 15,
+        size: 20,
+        color: Colors.grey,
       ),
       feedback: widget,
       onDragStarted: (() {
@@ -1465,7 +1466,7 @@ class __DraggableShowHideState extends State<_DraggableShowHide> {
           }),
           child: Obx((() => Icon(
                 widget.show.isTrue ? Icons.expand_less : Icons.expand_more,
-                size: 15,
+                size: 20,
               ))),
         ),
       ],
@@ -1478,7 +1479,7 @@ class __DraggableShowHideState extends State<_DraggableShowHide> {
           border: Border.all(color: MyTheme.border),
         ),
         child: SizedBox(
-          height: 15,
+          height: 20,
           child: child,
         ),
       ),
