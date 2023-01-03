@@ -39,6 +39,7 @@ Below are the servers you are using for free, it may change along the time. If y
 | Germany | Codext | 4 vCPU / 8GB RAM |
 | Finland (Helsinki) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
 | USA (Ashburn) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
+| Ukraine (Kyiv) | dc.volia (2VM) | 2 vCPU / 4GB RAM |
 
 ## Dependencies
 
