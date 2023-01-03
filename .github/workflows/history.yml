@@ -13,7 +13,7 @@ env:
   VERSION: "1.2.0"
 
 jobs:
-  build-for-windows:
+  build-for-windows-2022-12-05:
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
     runs-on: ${{ matrix.job.os }}
     strategy:
@@ -93,6 +93,273 @@ jobs:
           popd
           mkdir -p ./SignOutput
           mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-2022-12-05-${{ matrix.job.target }}.exe
+          
+      - name: Publish Release
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            ./SignOutput/rustdesk-*.exe
+
+  build-for-windows-2022-12-12:
+    name: ${{ matrix.job.target }} (${{ matrix.job.os }})
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          # - { target: i686-pc-windows-msvc        , os: windows-2019                  }
+          # - { target: x86_64-pc-windows-gnu       , os: windows-2019                  }
+          - { target: x86_64-pc-windows-msvc, os: windows-2019 }
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v3
+        with:
+          ref: '3dd43b79ec0409fc38103bed0c7eb0bc3cd993d5'
+
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v1
+        with:
+          version: ${{ env.LLVM_VERSION }}
+
+      - name: Install flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Replace engine with rustdesk custom flutter engine
+        run: |
+          flutter doctor -v
+          flutter precache --windows
+          Invoke-WebRequest -Uri https://github.com/Kingtous/engine/releases/download/v3.0.5-rustdesk.2/windows-x64-flutter-release.zip -OutFile windows-x64-flutter-release.zip
+          Expand-Archive windows-x64-flutter-release.zip -DestinationPath engine
+          mv -Force engine/*  C:/hostedtoolcache/windows/flutter/stable-3.0.5-x64/bin/cache/artifacts/engine/windows-x64-release/
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: "1.62"
+          target: ${{ matrix.job.target }}
+          override: true
+          components: rustfmt
+          profile: minimal # minimal component installation (ie, no documentation)
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: ${{ matrix.job.os }}
+
+      - name: Install flutter rust bridge deps
+        run: |
+          dart pub global activate ffigen --version 5.0.1
+          $exists = Test-Path ~/.cargo/bin/flutter_rust_bridge_codegen.exe
+          Push-Location ..
+          git clone https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge --depth=1
+          Push-Location flutter_rust_bridge/frb_codegen ; cargo install --path . ; Pop-Location
+          Pop-Location
+          Push-Location flutter ; flutter pub get ; Pop-Location
+          ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart
+      - name: Restore from cache and install vcpkg
+        uses: lukka/run-vcpkg@v7
+        with:
+          setupOnly: true
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+
+      - name: Install vcpkg dependencies
+        run: |
+          $VCPKG_ROOT/vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
+        shell: bash
+
+      - name: Build rustdesk
+        run: python3 .\build.py --portable --hwcodec --flutter
+
+      - name: Build self-extracted executable
+        shell: bash
+        run: |
+          pushd ./libs/portable
+          python3 ./generate.py -f ../../flutter/build/windows/runner/Release/ -o . -e ../../flutter/build/windows/runner/Release/rustdesk.exe
+          popd
+          mkdir -p ./SignOutput
+          mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-2022-12-12-${{ matrix.job.target }}.exe
+          
+      - name: Publish Release
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            ./SignOutput/rustdesk-*.exe
+
+  build-for-windows-2022-12-19:
+    name: ${{ matrix.job.target }} (${{ matrix.job.os }})
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          # - { target: i686-pc-windows-msvc        , os: windows-2019                  }
+          # - { target: x86_64-pc-windows-gnu       , os: windows-2019                  }
+          - { target: x86_64-pc-windows-msvc, os: windows-2019 }
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v3
+        with:
+          ref: '1054715891c4e73ad9b164acec6dadecfc599a65'
+
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v1
+        with:
+          version: ${{ env.LLVM_VERSION }}
+
+      - name: Install flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Replace engine with rustdesk custom flutter engine
+        run: |
+          flutter doctor -v
+          flutter precache --windows
+          Invoke-WebRequest -Uri https://github.com/Kingtous/engine/releases/download/v3.0.5-rustdesk.2/windows-x64-flutter-release.zip -OutFile windows-x64-flutter-release.zip
+          Expand-Archive windows-x64-flutter-release.zip -DestinationPath engine
+          mv -Force engine/*  C:/hostedtoolcache/windows/flutter/stable-3.0.5-x64/bin/cache/artifacts/engine/windows-x64-release/
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: "1.62"
+          target: ${{ matrix.job.target }}
+          override: true
+          components: rustfmt
+          profile: minimal # minimal component installation (ie, no documentation)
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: ${{ matrix.job.os }}
+
+      - name: Install flutter rust bridge deps
+        run: |
+          dart pub global activate ffigen --version 5.0.1
+          $exists = Test-Path ~/.cargo/bin/flutter_rust_bridge_codegen.exe
+          Push-Location ..
+          git clone https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge --depth=1
+          Push-Location flutter_rust_bridge/frb_codegen ; cargo install --path . ; Pop-Location
+          Pop-Location
+          Push-Location flutter ; flutter pub get ; Pop-Location
+          ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart
+      - name: Restore from cache and install vcpkg
+        uses: lukka/run-vcpkg@v7
+        with:
+          setupOnly: true
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+
+      - name: Install vcpkg dependencies
+        run: |
+          $VCPKG_ROOT/vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
+        shell: bash
+
+      - name: Build rustdesk
+        run: python3 .\build.py --portable --hwcodec --flutter
+
+      - name: Build self-extracted executable
+        shell: bash
+        run: |
+          pushd ./libs/portable
+          python3 ./generate.py -f ../../flutter/build/windows/runner/Release/ -o . -e ../../flutter/build/windows/runner/Release/rustdesk.exe
+          popd
+          mkdir -p ./SignOutput
+          mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-2022-12-19-${{ matrix.job.target }}.exe
+          
+      - name: Publish Release
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            ./SignOutput/rustdesk-*.exe
+
+  build-for-windows-2022-12-26:
+    name: ${{ matrix.job.target }} (${{ matrix.job.os }})
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          # - { target: i686-pc-windows-msvc        , os: windows-2019                  }
+          # - { target: x86_64-pc-windows-gnu       , os: windows-2019                  }
+          - { target: x86_64-pc-windows-msvc, os: windows-2019 }
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v3
+        with:
+          ref: 'b241925fe093dc4da804a5aac419375f4ca7653f'
+
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v1
+        with:
+          version: ${{ env.LLVM_VERSION }}
+
+      - name: Install flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Replace engine with rustdesk custom flutter engine
+        run: |
+          flutter doctor -v
+          flutter precache --windows
+          Invoke-WebRequest -Uri https://github.com/Kingtous/engine/releases/download/v3.0.5-rustdesk.2/windows-x64-flutter-release.zip -OutFile windows-x64-flutter-release.zip
+          Expand-Archive windows-x64-flutter-release.zip -DestinationPath engine
+          mv -Force engine/*  C:/hostedtoolcache/windows/flutter/stable-3.0.5-x64/bin/cache/artifacts/engine/windows-x64-release/
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: "1.62"
+          target: ${{ matrix.job.target }}
+          override: true
+          components: rustfmt
+          profile: minimal # minimal component installation (ie, no documentation)
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: ${{ matrix.job.os }}
+
+      - name: Install flutter rust bridge deps
+        run: |
+          dart pub global activate ffigen --version 5.0.1
+          $exists = Test-Path ~/.cargo/bin/flutter_rust_bridge_codegen.exe
+          Push-Location ..
+          git clone https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge --depth=1
+          Push-Location flutter_rust_bridge/frb_codegen ; cargo install --path . ; Pop-Location
+          Pop-Location
+          Push-Location flutter ; flutter pub get ; Pop-Location
+          ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart
+      - name: Restore from cache and install vcpkg
+        uses: lukka/run-vcpkg@v7
+        with:
+          setupOnly: true
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+
+      - name: Install vcpkg dependencies
+        run: |
+          $VCPKG_ROOT/vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
+        shell: bash
+
+      - name: Build rustdesk
+        run: python3 .\build.py --portable --hwcodec --flutter
+
+      - name: Build self-extracted executable
+        shell: bash
+        run: |
+          pushd ./libs/portable
+          python3 ./generate.py -f ../../flutter/build/windows/runner/Release/ -o . -e ../../flutter/build/windows/runner/Release/rustdesk.exe
+          popd
+          mkdir -p ./SignOutput
+          mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-2022-12-26-${{ matrix.job.target }}.exe
           
       - name: Publish Release
         uses: softprops/action-gh-release@v1
