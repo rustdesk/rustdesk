@@ -334,7 +334,6 @@ lazy_static::lazy_static! {
             ("Scale adaptive", "ขนาดยืดหยุ่น"),
             ("General", "ทั่วไป"),
             ("Security", "ความปลอดภัย"),
-            ("Account", "บัญชี"),
             ("Theme", "ธีม"),
             ("Dark Theme", "ธีมมืด"),
             ("Dark", "มืด"),
@@ -347,7 +346,6 @@ lazy_static::lazy_static! {
             ("Server", "เซิร์ฟเวอร์"),
             ("Direct IP Access", "การเข้าถึง IP ตรง"),
             ("Proxy", "พรอกซี"),
-            ("Port", "พอร์ท"),
             ("Apply", "นำไปใช้"),
             ("Disconnect all devices?", "ยกเลิกการเชื่อมต่ออุปกรณ์ทั้งหมด?"),
             ("Clear", "ล้างข้อมูล"),
@@ -376,7 +374,6 @@ lazy_static::lazy_static! {
             ("Other", "อื่นๆ"),
             ("Confirm before closing multiple tabs", "ยืนยันการปิดหลายแท็บ"),
             ("Keyboard Settings", "การตั้งค่าคีย์บอร์ด"),
-            ("Custom", "กำหนดเอง"),
             ("Full Access", "การเข้าถึงทั้งหมด"),
             ("Screen Share", "การแชร์จอ"),
             ("Wayland requires Ubuntu 21.04 or higher version.", "Wayland ต้องการ Ubuntu เวอร์ชั่น 21.04 หรือสูงกว่า"),
@@ -410,4 +407,3 @@ lazy_static::lazy_static! {
             ("Select local keyboard type", "เลือกประเภทคีย์บอร์ด"),
         ].iter().cloned().collect();
     }
-    
