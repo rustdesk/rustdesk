@@ -107,7 +107,7 @@ class WidgetOP extends StatefulWidget {
 class _WidgetOPState extends State<WidgetOP> {
   Timer? _updateTimer;
   String _stateMsg = '';
-  String _FailedMsg = '';
+  String _failedMsg = '';
   String _url = '';
 
   @override
@@ -140,7 +140,7 @@ class _WidgetOPState extends State<WidgetOP> {
       String failedMsg = resultMap['failed_msg'];
       final String? url = resultMap['url'];
       final authBody = resultMap['auth_body'];
-      if (_stateMsg != stateMsg || _FailedMsg != failedMsg) {
+      if (_stateMsg != stateMsg || _failedMsg != failedMsg) {
         if (_url.isEmpty && url != null && url.isNotEmpty) {
           launchUrl(Uri.parse(url));
           _url = url;
@@ -154,7 +154,7 @@ class _WidgetOPState extends State<WidgetOP> {
 
         setState(() {
           _stateMsg = stateMsg;
-          _FailedMsg = failedMsg;
+          _failedMsg = failedMsg;
           if (failedMsg.isNotEmpty) {
             widget.curOP.value = '';
             _updateTimer?.cancel();
@@ -166,7 +166,7 @@ class _WidgetOPState extends State<WidgetOP> {
 
   _resetState() {
     _stateMsg = '';
-    _FailedMsg = '';
+    _failedMsg = '';
     _url = '';
   }
 
@@ -190,11 +190,11 @@ class _WidgetOPState extends State<WidgetOP> {
         Obx(() {
           if (widget.curOP.isNotEmpty &&
               widget.curOP.value != widget.config.op) {
-            _FailedMsg = '';
+            _failedMsg = '';
           }
           return Offstage(
               offstage:
-                  _FailedMsg.isEmpty && widget.curOP.value != widget.config.op,
+                  _failedMsg.isEmpty && widget.curOP.value != widget.config.op,
               child: Row(
                 children: [
                   Text(
@@ -203,7 +203,7 @@ class _WidgetOPState extends State<WidgetOP> {
                   ),
                   SizedBox(width: 8),
                   Text(
-                    _FailedMsg,
+                    _failedMsg,
                     style: TextStyle(
                       fontSize: 14,
                       color: Colors.red,
