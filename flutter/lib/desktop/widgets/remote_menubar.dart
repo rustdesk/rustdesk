@@ -1410,10 +1410,10 @@ class _DraggableShowHide extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<_DraggableShowHide> createState() => __DraggableShowHideState();
+  State<_DraggableShowHide> createState() => _DraggableShowHideState();
 }
 
-class __DraggableShowHideState extends State<_DraggableShowHide> {
+class _DraggableShowHideState extends State<_DraggableShowHide> {
   Offset position = Offset.zero;
   Size size = Size.zero;
 
