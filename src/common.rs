@@ -21,7 +21,7 @@ use hbb_common::{
     anyhow::bail,
     compress::compress as compress_func,
     config::{self, Config, COMPRESS_LEVEL, RENDEZVOUS_TIMEOUT},
-    get_version_number, log,
+    get_version_number, is_ipv6_str, log,
     message_proto::*,
     protobuf::Enum,
     protobuf::Message as _,
@@ -477,6 +477,12 @@ pub fn username() -> String {
 #[inline]
 pub fn check_port<T: std::string::ToString>(host: T, port: i32) -> String {
     let host = host.to_string();
+    if is_ipv6_str(&host) {
+        if host.contains("[") {
+            return host;
+        }
+        return format!("[{}]:{}", host, port);
+    }
     if !host.contains(":") {
         return format!("{}:{}", host, port);
     }
@@ -705,4 +711,18 @@ pub fn make_fd_to_json(id: i32, path: String, entries: &Vec<FileEntry>) -> Strin
     }
     fd_json.insert("entries".into(), json!(entries_out));
     serde_json::to_string(&fd_json).unwrap_or("".into())
+}
+
+#[cfg(test)]
+mod test_common {
+    use super::*;
+
+    #[test]
+    fn test_check_port() {
+        assert_eq!(check_port("[1:2]:12", 32), "[1:2]:12");
+        assert_eq!(check_port("1:2", 32), "[1:2]:32");
+        assert_eq!(check_port("1.1.1.1", 32), "1.1.1.1:32");
+        assert_eq!(check_port("1.1.1.1:32", 32), "1.1.1.1:32");
+        assert_eq!(check_port("test.com:32", 0), "test.com:32");
+    }
 }

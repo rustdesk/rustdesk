@@ -506,8 +506,7 @@ async fn direct_server(server: ServerPtr) {
         let disabled = Config::get_option("direct-server").is_empty();
         if !disabled && listener.is_none() {
             port = get_direct_port();
-            let addr = format!("0.0.0.0:{}", port);
-            match hbb_common::tcp::new_listener(&addr, false).await {
+            match hbb_common::tcp::listen_any(port as _).await {
                 Ok(l) => {
                     listener = Some(l);
                     log::info!(
@@ -518,8 +517,8 @@ async fn direct_server(server: ServerPtr) {
                 Err(err) => {
                     // to-do: pass to ui
                     log::error!(
-                        "Failed to start direct server on : {}, error: {}",
-                        addr,
+                        "Failed to start direct server on port: {}, error: {}",
+                        port,
                         err
                     );
                     loop {

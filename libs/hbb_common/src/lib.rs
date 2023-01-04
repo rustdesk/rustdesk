@@ -285,7 +285,7 @@ mod tests {
 
         let addr = "[2001:db8::1]:8080".parse::<SocketAddr>().unwrap();
         assert_eq!(addr, AddrMangle::decode(&AddrMangle::encode(addr)));
-        
+
         let addr = "[2001:db8:ff::1111]:80".parse::<SocketAddr>().unwrap();
         assert_eq!(addr, AddrMangle::decode(&AddrMangle::encode(addr)));
     }
@@ -306,4 +306,37 @@ pub fn is_ipv4_str(id: &str) -> bool {
     regex::Regex::new(r"^\d+\.\d+\.\d+\.\d+(:\d+)?$")
         .unwrap()
         .is_match(id)
+}
+
+#[inline]
+pub fn is_ipv6_str(id: &str) -> bool {
+    regex::Regex::new(r"^((([a-fA-F0-9]{1,4}:{1,2})+[a-fA-F0-9]{1,4})|(\[([a-fA-F0-9]{1,4}:{1,2})+[a-fA-F0-9]{1,4}\]:\d+))$")
+        .unwrap()
+        .is_match(id)
+}
+
+#[inline]
+pub fn is_ip_str(id: &str) -> bool {
+    is_ipv4_str(id) || is_ipv6_str(id)
+}
+
+#[cfg(test)]
+mod test_lib {
+    use super::*;
+
+    #[test]
+    fn test_ipv6() {
+        assert_eq!(is_ipv6_str("1:2:3"), true);
+        assert_eq!(is_ipv6_str("[ab:2:3]:12"), true);
+        assert_eq!(is_ipv6_str("[ABEF:2a:3]:12"), true);
+        assert_eq!(is_ipv6_str("[ABEG:2a:3]:12"), false);
+        assert_eq!(is_ipv6_str("1[ab:2:3]:12"), false);
+        assert_eq!(is_ipv6_str("1.1.1.1"), false);
+        assert_eq!(is_ip_str("1.1.1.1"), true);
+        assert_eq!(is_ipv6_str("1:2:"), false);
+        assert_eq!(is_ipv6_str("1:2::0"), true);
+        assert_eq!(is_ipv6_str("[1:2::0]:1"), true);
+        assert_eq!(is_ipv6_str("[1:2::0]:"), false);
+        assert_eq!(is_ipv6_str("1:2::0]:1"), false);
+    }
 }

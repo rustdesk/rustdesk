@@ -5,7 +5,7 @@ use protobuf::Message;
 use sodiumoxide::crypto::secretbox::{self, Key, Nonce};
 use std::{
     io::{self, Error, ErrorKind},
-    net::SocketAddr,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     ops::{Deref, DerefMut},
     pin::Pin,
     task::{Context, Poll},
@@ -256,6 +256,38 @@ pub async fn new_listener<T: ToSocketAddrs>(addr: T, reuse: bool) -> ResultType<
         }
         bail!("could not resolve to any address");
     }
+}
+
+pub async fn listen_any(port: u16) -> ResultType<TcpListener> {
+    if let Ok(mut socket) = TcpSocket::new_v6() {
+        #[cfg(unix)]
+        {
+            use std::os::unix::io::{FromRawFd, IntoRawFd};
+            let raw_fd = socket.into_raw_fd();
+            let sock2 = unsafe { socket2::Socket::from_raw_fd(raw_fd) };
+            sock2.set_only_v6(false).ok();
+            socket = unsafe { TcpSocket::from_raw_fd(sock2.into_raw_fd()) };
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::prelude::{FromRawSocket, IntoRawSocket};
+            let raw_socket = socket.into_raw_socket();
+            let sock2 = unsafe { socket2::Socket::from_raw_socket(raw_socket) };
+            sock2.set_only_v6(false).ok();
+            socket = unsafe { TcpSocket::from_raw_socket(sock2.into_raw_socket()) };
+        }
+        if socket
+            .bind(SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), port))
+            .is_ok()
+        {
+            if let Ok(l) = socket.listen(DEFAULT_BACKLOG) {
+                return Ok(l);
+            }
+        }
+    }
+    let s = TcpSocket::new_v4()?;
+    s.bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port))?;
+    Ok(s.listen(DEFAULT_BACKLOG)?)
 }
 
 impl Unpin for DynTcpStream {}

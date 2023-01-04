@@ -167,7 +167,7 @@ impl Client {
         interface: impl Interface,
     ) -> ResultType<(Stream, bool)> {
         // to-do: remember the port for each peer, so that we can retry easier
-        if hbb_common::is_ipv4_str(peer) {
+        if hbb_common::is_ip_str(peer) {
             return Ok((
                 socket_client::connect_tcp(
                     crate::check_port(peer, RELAY_PORT + 1),
@@ -376,7 +376,8 @@ impl Client {
         log::info!("peer address: {}, timeout: {}", peer, connect_timeout);
         let start = std::time::Instant::now();
         // NOTICE: Socks5 is be used event in intranet. Which may be not a good way.
-        let mut conn = socket_client::connect_tcp_local(peer, Some(local_addr), connect_timeout).await;
+        let mut conn =
+            socket_client::connect_tcp_local(peer, Some(local_addr), connect_timeout).await;
         let mut direct = !conn.is_err();
         if interface.is_force_relay() || conn.is_err() {
             if !relay_server.is_empty() {
@@ -1847,7 +1848,10 @@ pub trait Interface: Send + Clone + 'static + Sized {
 
     fn get_login_config_handler(&self) -> Arc<RwLock<LoginConfigHandler>>;
     fn set_force_relay(&self, direct: bool, received: bool) {
-        self.get_login_config_handler().write().unwrap().set_force_relay(direct, received);
+        self.get_login_config_handler()
+            .write()
+            .unwrap()
+            .set_force_relay(direct, received);
     }
     fn is_force_relay(&self) -> bool {
         self.get_login_config_handler().read().unwrap().force_relay
