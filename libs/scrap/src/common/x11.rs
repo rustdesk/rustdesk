@@ -3,6 +3,7 @@ use std::{io, ops, time::Duration};
 
 pub struct Capturer(x11::Capturer);
 
+#[allow(non_upper_case_globals)]
 pub const is_cursor_embedded: bool = false;
 
 impl Capturer {
