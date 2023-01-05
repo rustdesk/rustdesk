@@ -74,9 +74,9 @@ pub fn is_x11() -> bool {
 #[inline]
 pub fn is_cursor_embedded() -> bool {
     if is_x11() {
-        x11::is_cursor_embedded
+        x11::IS_CURSOR_EMBEDDED
     } else {
-        wayland::is_cursor_embedded
+        wayland::IS_CURSOR_EMBEDDED
     }
 }
 

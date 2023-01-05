@@ -636,7 +636,7 @@ pub fn map_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Option<KeyEv
         "windows" => rdev::linux_code_to_win_scancode(event.code as _)?,
         "macos" => {
             if hbb_common::config::LocalConfig::get_kb_layout_type() == "ISO" {
-                rdev::linux_code_to_macos_iso_code(event.scan_code)?
+                rdev::linux_code_to_macos_iso_code(event.code as _)?
             } else {
                 rdev::linux_code_to_macos_code(event.code as _)?
             }

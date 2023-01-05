@@ -50,7 +50,7 @@ class InputModel {
 
   // mouse
   final isPhysicalMouse = false.obs;
-  int _lastMouseDownButtons = 0;
+  int _lastButtons = 0;
   Offset lastMousePos = Offset.zero;
 
   get id => parent.target?.id ?? "";
@@ -195,17 +195,17 @@ class InputModel {
     if (command) out['command'] = 'true';
 
     // Check update event type and set buttons to be sent.
-    int buttons = _lastMouseDownButtons;
+    int buttons = _lastButtons;
     if (type == _kMouseEventMove) {
       // flutter may emit move event if one button is pressed and anoter button
       // is pressing or releasing.
-      if (evt.buttons != _lastMouseDownButtons) {
+      if (evt.buttons != _lastButtons) {
         // For simplicity
         // Just consider 3 - 1 ((Left + Right buttons) - Left button)
         // Do not consider 2 - 1 (Right button - Left button)
         // or 6 - 5 ((Right + Mid buttons) - (Left + Mid buttons))
         // and so on
-        buttons = evt.buttons - _lastMouseDownButtons;
+        buttons = evt.buttons - _lastButtons;
         if (buttons > 0) {
           type = _kMouseEventDown;
         } else {
@@ -218,7 +218,7 @@ class InputModel {
         buttons = evt.buttons;
       }
     }
-    _lastMouseDownButtons = evt.buttons;
+    _lastButtons = evt.buttons;
 
     out['buttons'] = buttons;
     out['type'] = type;
