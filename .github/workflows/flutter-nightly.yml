@@ -1181,6 +1181,7 @@ jobs:
           done
 
       - name: Publish debian package
+        if: ${{ matrix.job.extra-build-features == '' }}
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
