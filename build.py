@@ -489,7 +489,7 @@ def main():
     codesign -s "Developer ID Application: {0}" --force --options runtime ./rustdesk-{1}.dmg
     # https://appstoreconnect.apple.com/access/api
     # https://gregoryszorc.com/docs/apple-codesign/0.16.0/apple_codesign_rcodesign.html#notarizing-and-stapling
-    # https://documentation.onesignal.com/docs/establishing-an-apns-authentication-key#step-2-generate-a-new-p8-key
+    # p8 file is generated when you generate api key, download and put it under ~/.private_keys/
     rcodesign notarize --api-issuer {2} --api-key {3} --staple ./rustdesk-{1}.dmg
     # verify:  spctl -a -t exec -v /Applications/RustDesk.app
     '''.format(pa, version, os.environ.get('api-issuer'), os.environ.get('api-key')))
