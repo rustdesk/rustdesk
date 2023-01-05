@@ -36,5 +36,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("hide_cm_tip", "Allow hiding only if accepting sessions via password and using permanent password"),
         ("wayland_experiment_tip", "Wayland support is in experimental stage, please use X11 if you require unattended access."),
         ("Slogan_tip", "Made with heart in this chaotic world!"),
+        ("software_render_tip", "If you have an Nvidia graphics card and the remote window closes immediately after connecting, installing the nouveau driver and choosing to use software rendering may help. A software restart is required.")
         ].iter().cloned().collect();
 }
