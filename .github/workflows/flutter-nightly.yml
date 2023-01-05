@@ -156,10 +156,26 @@ jobs:
           p12-password: ${{ secrets.MACOS_P12_PASSWORD }}
           keychain: rustdesk
       
-      - name: Check sign 
+      - name: Check sign and import sign key
         run: |
           security default-keychain -s rustdesk.keychain
           security find-identity -v
+
+      - name: Import notarize key
+        uses: timheuer/base64-to-file@v1.2
+        with:
+          fileName: rustdesk.json
+          fileDir: ${{ github.workspace }}
+          encodedString: ${{ secrets.MACOS_NOTARIZE_JSON }}
+          
+      - name: Install rcodesign tool
+        shell: bash
+        run: | 
+          pushd /tmp
+          wget https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F0.22.0/apple-codesign-0.22.0-macos-universal.tar.gz
+          tar -zxvf apple-codesign-0.22.0-macos-universal.tar.gz
+          mv apple-codesign-0.22.0-macos-universal/rcodesign /usr/local/bin
+          popd
 
       - name: Install build runtime
         run: |
@@ -232,6 +248,8 @@ jobs:
           codesign --force -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep ./flutter/build/macos/Build/Products/Release/rustdesk.app -v
           create-dmg rustdesk-${{ env.VERSION }}.dmg ./flutter/build/macos/Build/Products/Release/rustdesk.app
           codesign --force -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep rustdesk-${{ env.VERSION }}.dmg -v
+          # notarize the rustdesk-${{ env.VERSION }}.dmg
+          rcodesign notary-submit --api-key-path ${{ github.workspace }}/rustdesk.json  --staple rustdesk-${{ env.VERSION }}.dmg
 
       - name: Rename rustdesk
         run: |
