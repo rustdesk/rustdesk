@@ -134,9 +134,18 @@ impl MouseControllable for Enigo {
                 MouseButton::Left => MOUSEEVENTF_LEFTDOWN,
                 MouseButton::Middle => MOUSEEVENTF_MIDDLEDOWN,
                 MouseButton::Right => MOUSEEVENTF_RIGHTDOWN,
-                _ => unimplemented!(),
+                MouseButton::Back => MOUSEEVENTF_XDOWN,
+                MouseButton::Forward => MOUSEEVENTF_XDOWN,
+                _ => {
+                    log::info!("Unsupported button {:?}", button);
+                    return Ok(());
+                }
             },
-            0,
+            match button {
+                MouseButton::Back => XBUTTON1 as _,
+                MouseButton::Forward => XBUTTON2 as _,
+                _ => 0, 
+            },
             0,
             0,
         );
@@ -155,9 +164,18 @@ impl MouseControllable for Enigo {
                 MouseButton::Left => MOUSEEVENTF_LEFTUP,
                 MouseButton::Middle => MOUSEEVENTF_MIDDLEUP,
                 MouseButton::Right => MOUSEEVENTF_RIGHTUP,
-                _ => unimplemented!(),
+                MouseButton::Back => MOUSEEVENTF_XUP,
+                MouseButton::Forward => MOUSEEVENTF_XUP,
+                _ => {
+                    log::info!("Unsupported button {:?}", button);
+                    return;
+                }
             },
-            0,
+            match button {
+                MouseButton::Back => XBUTTON1 as _,
+                MouseButton::Forward => XBUTTON2 as _,
+                _ => 0, 
+            },
             0,
             0,
         );

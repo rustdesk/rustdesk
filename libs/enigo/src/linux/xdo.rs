@@ -57,6 +57,8 @@ fn mousebutton(button: MouseButton) -> c_int {
         MouseButton::ScrollDown => 5,
         MouseButton::ScrollLeft => 6,
         MouseButton::ScrollRight => 7,
+        MouseButton::Back => 8,
+        MouseButton::Forward => 9,
     }
 }
 

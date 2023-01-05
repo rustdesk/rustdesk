@@ -556,26 +556,38 @@ pub fn handle_mouse_(evt: &MouseEvent) {
             en.mouse_move_to(evt.x, evt.y);
         }
         1 => match buttons {
-            1 => {
+            0x01 => {
                 allow_err!(en.mouse_down(MouseButton::Left));
             }
-            2 => {
+            0x02 => {
                 allow_err!(en.mouse_down(MouseButton::Right));
             }
-            4 => {
+            0x04 => {
                 allow_err!(en.mouse_down(MouseButton::Middle));
+            }
+            0x08 => {
+                allow_err!(en.mouse_down(MouseButton::Back));
+            }
+            0x10 => {
+                allow_err!(en.mouse_down(MouseButton::Forward));
             }
             _ => {}
         },
         2 => match buttons {
-            1 => {
+            0x01 => {
                 en.mouse_up(MouseButton::Left);
             }
-            2 => {
+            0x02 => {
                 en.mouse_up(MouseButton::Right);
             }
-            4 => {
+            0x04 => {
                 en.mouse_up(MouseButton::Middle);
+            }
+            0x08 => {
+                en.mouse_up(MouseButton::Back);
+            }
+            0x10 => {
+                en.mouse_up(MouseButton::Forward);
             }
             _ => {}
         },
