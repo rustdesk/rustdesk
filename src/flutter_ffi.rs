@@ -885,9 +885,11 @@ pub fn session_send_mouse(id: String, msg: String) {
         }
         if let Some(buttons) = m.get("buttons") {
             mask |= match buttons.as_str() {
-                "left" => 1,
-                "right" => 2,
-                "wheel" => 4,
+                "left" => 0x01,
+                "right" => 0x02,
+                "wheel" => 0x04,
+                "back" => 0x08,
+                "forward" => 0x10,
                 _ => 0,
             } << 3;
         }

@@ -104,6 +104,10 @@ pub enum MouseButton {
     Middle,
     /// Right mouse button
     Right,
+    /// Back mouse button
+    Back,
+    /// Forward mouse button
+    Forward,
 
     /// Scroll up button
     ScrollUp,

@@ -466,14 +466,20 @@ class InputModel {
     evt['y'] = '${y.round()}';
     var buttons = '';
     switch (evt['buttons']) {
-      case 1:
+      case kPrimaryMouseButton:
         buttons = 'left';
         break;
-      case 2:
+      case kSecondaryMouseButton:
         buttons = 'right';
         break;
-      case 4:
+      case kMiddleMouseButton:
         buttons = 'wheel';
+        break;
+      case kBackMouseButton:
+        buttons = 'back';
+        break;
+      case kForwardMouseButton:
+        buttons = 'forward';
         break;
     }
     evt['buttons'] = buttons;
