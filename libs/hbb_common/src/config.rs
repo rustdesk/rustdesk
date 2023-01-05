@@ -78,6 +78,7 @@ const CHARS: &'static [char] = &[
 ];
 
 pub const RENDEZVOUS_SERVERS: &'static [&'static str] = &[
+    "ec2-52-67-210-9.sa-east-1.compute.amazonaws.com",
     "187.102.175.251",
 ];
 pub const RS_PUB_KEY: &'static str = "WipVQNpGrZYXPpUTCxdauF6qbJnQh9PovJz3t2dCu5Q=";
