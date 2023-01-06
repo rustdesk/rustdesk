@@ -204,8 +204,12 @@ jobs:
         run: |
           dart pub global activate ffigen --version 5.0.1
           # flutter_rust_bridge
-          pushd /tmp && git clone https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge --depth=1 && popd
-          pushd /tmp/flutter_rust_bridge/frb_codegen && cargo install --path . && popd
+          pushd /tmp
+            wget https://github.com/Kingtous/flutter_rust_bridge/releases/download/1.32.0-rustdesk/flutter_rust_bridge_codegen-x86_64-darwin.tgz
+            tar -zxvf flutter_rust_bridge_codegen-x86_64-darwin.tgz
+            mkdir -p ~/.cargo/bin
+            mv flutter_rust_bridge_codegen ~/.cargo/bin; chmod +x ~/.cargo/bin/flutter_rust_bridge_codegen
+          popd
           pushd flutter && flutter pub get && popd
           ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart
 
