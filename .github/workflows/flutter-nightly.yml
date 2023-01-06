@@ -164,6 +164,7 @@ jobs:
       - name: Import notarize key
         uses: timheuer/base64-to-file@v1.2
         with:
+          # https://gregoryszorc.com/docs/apple-codesign/stable/apple_codesign_rcodesign.html#notarizing-and-stapling
           fileName: rustdesk.json
           fileDir: ${{ github.workspace }}
           encodedString: ${{ secrets.MACOS_NOTARIZE_JSON }}
