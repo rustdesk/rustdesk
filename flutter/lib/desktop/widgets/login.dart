@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/common/hbbs/hbbs.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -9,18 +10,21 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../common.dart';
 
-final _kMidButtonPadding = const EdgeInsets.fromLTRB(15, 0, 15, 0);
-
 class _IconOP extends StatelessWidget {
   final String icon;
   final double iconWidth;
-  const _IconOP({Key? key, required this.icon, required this.iconWidth})
+  final EdgeInsets margin;
+  const _IconOP(
+      {Key? key,
+      required this.icon,
+      required this.iconWidth,
+      this.margin = const EdgeInsets.symmetric(horizontal: 4.0)})
       : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 4.0),
+      margin: margin,
       child: SvgPicture.asset(
         'assets/$icon.svg',
         width: iconWidth,
@@ -50,33 +54,33 @@ class ButtonOP extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(children: [
-      Expanded(
-        child: Container(
-          height: height,
-          padding: _kMidButtonPadding,
-          child: Obx(() => ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  primary: curOP.value.isEmpty || curOP.value == op
-                      ? primaryColor
-                      : Colors.grey,
-                ).copyWith(elevation: ButtonStyleButton.allOrNull(0.0)),
-                onPressed:
-                    curOP.value.isEmpty || curOP.value == op ? onTap : null,
-                child: Stack(children: [
-                  Center(child: Text('${translate("Continue with")} $op')),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: SizedBox(
-                        width: 120,
-                        child: _IconOP(
-                          icon: op,
-                          iconWidth: iconWidth,
-                        )),
-                  ),
-                ]),
-              )),
-        ),
-      )
+      Container(
+        height: height,
+        width: 200,
+        child: Obx(() => ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              primary: curOP.value.isEmpty || curOP.value == op
+                  ? primaryColor
+                  : Colors.grey,
+            ).copyWith(elevation: ButtonStyleButton.allOrNull(0.0)),
+            onPressed: curOP.value.isEmpty || curOP.value == op ? onTap : null,
+            child: Row(
+              children: [
+                SizedBox(
+                    width: 30,
+                    child: _IconOP(
+                      icon: op,
+                      iconWidth: iconWidth,
+                      margin: EdgeInsets.only(right: 5),
+                    )),
+                Expanded(
+                    child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Center(
+                            child: Text('${translate("Continue with")} $op')))),
+              ],
+            ))),
+      ),
     ]);
   }
 }
@@ -277,22 +281,25 @@ class LoginWidgetOP extends StatelessWidget {
       children.removeLast();
     }
     return SingleChildScrollView(
-        child: Column(
-      mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.spaceAround,
-      children: children,
-    ));
+        child: Container(
+            width: 200,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: children,
+            )));
   }
 }
 
 class LoginWidgetUserPass extends StatelessWidget {
-  final String username;
-  final String pass;
-  final String usernameMsg;
-  final String passMsg;
+  final TextEditingController username;
+  final TextEditingController pass;
+  final String? usernameMsg;
+  final String? passMsg;
   final bool isInProgress;
   final RxString curOP;
-  final Function(String, String) onLogin;
+  final RxBool autoLogin;
+  final Function() onLogin;
   const LoginWidgetUserPass({
     Key? key,
     required this.username,
@@ -301,129 +308,135 @@ class LoginWidgetUserPass extends StatelessWidget {
     required this.passMsg,
     required this.isInProgress,
     required this.curOP,
+    required this.autoLogin,
     required this.onLogin,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    var userController = TextEditingController(text: username);
-    var pwdController = TextEditingController(text: pass);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Padding(
+        padding: EdgeInsets.all(0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const SizedBox(height: 8.0),
+            DialogTextField(
+                title: '${translate("Username")}:',
+                controller: username,
+                autoFocus: true,
+                errorText: usernameMsg),
+            DialogTextField(
+                title: '${translate("Password")}:',
+                obscureText: true,
+                controller: pass,
+                errorText: passMsg),
+            Obx(() => CheckboxListTile(
+                  contentPadding: const EdgeInsets.all(0),
+                  dense: true,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: Text(
+                    translate("Remember me"),
+                  ),
+                  value: autoLogin.value,
+                  onChanged: (v) {
+                    if (v == null) return;
+                    autoLogin.value = v;
+                  },
+                )),
+            Offstage(
+                offstage: !isInProgress,
+                child: const LinearProgressIndicator()),
+            const SizedBox(height: 12.0),
+            FittedBox(
+                child:
+                    Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Container(
+                height: 38,
+                width: 200,
+                child: Obx(() => ElevatedButton(
+                      child: Text(
+                        translate('Login'),
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      onPressed:
+                          curOP.value.isEmpty || curOP.value == 'rustdesk'
+                              ? () {
+                                  onLogin();
+                                }
+                              : null,
+                    )),
+              ),
+            ])),
+          ],
+        ));
+  }
+}
+
+class DialogTextField extends StatelessWidget {
+  final String title;
+  final bool autoFocus;
+  final bool obscureText;
+  final String? errorText;
+  final TextEditingController controller;
+  final FocusNode focusNode = FocusNode();
+
+  DialogTextField(
+      {Key? key,
+      this.autoFocus = false,
+      this.obscureText = false,
+      this.errorText,
+      required this.title,
+      required this.controller})
+      : super(key: key) {
+    // todo mobile requestFocus, on mobile, widget will reload every time the text changes
+    if (autoFocus && isDesktop) {
+      Timer(Duration(milliseconds: 200), () => focusNode.requestFocus());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
       children: [
-        const SizedBox(
-          height: 8.0,
-        ),
-        Container(
-          padding: _kMidButtonPadding,
-          child: Row(
-            children: [
-              ConstrainedBox(
-                  constraints: const BoxConstraints(minWidth: 100),
-                  child: Text(
-                    '${translate("Username")}:',
-                    textAlign: TextAlign.start,
-                  ).marginOnly(bottom: 16.0)),
-              const SizedBox(
-                width: 24.0,
-              ),
-              Expanded(
-                child: TextField(
-                  decoration: InputDecoration(
-                      border: const OutlineInputBorder(),
-                      errorText: usernameMsg.isNotEmpty ? usernameMsg : null),
-                  controller: userController,
-                  focusNode: FocusNode()..requestFocus(),
-                ),
-              ),
-            ],
+        Expanded(
+          child: TextField(
+            decoration: InputDecoration(
+                labelText: title,
+                border: const OutlineInputBorder(),
+                errorText: errorText),
+            controller: controller,
+            focusNode: focusNode,
+            autofocus: true,
+            obscureText: obscureText,
           ),
         ),
-        const SizedBox(
-          height: 8.0,
-        ),
-        Container(
-          padding: _kMidButtonPadding,
-          child: Row(
-            children: [
-              ConstrainedBox(
-                  constraints: const BoxConstraints(minWidth: 100),
-                  child: Text('${translate("Password")}:')
-                      .marginOnly(bottom: 16.0)),
-              const SizedBox(
-                width: 24.0,
-              ),
-              Expanded(
-                child: TextField(
-                  obscureText: true,
-                  decoration: InputDecoration(
-                      border: const OutlineInputBorder(),
-                      errorText: passMsg.isNotEmpty ? passMsg : null),
-                  controller: pwdController,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(
-          height: 4.0,
-        ),
-        Offstage(
-            offstage: !isInProgress, child: const LinearProgressIndicator()),
-        const SizedBox(
-          height: 12.0,
-        ),
-        Row(children: [
-          Expanded(
-            child: Container(
-              height: 38,
-              padding: _kMidButtonPadding,
-              child: Obx(() => ElevatedButton(
-                    style: curOP.value.isEmpty || curOP.value == 'rustdesk'
-                        ? null
-                        : ElevatedButton.styleFrom(
-                            primary: Colors.grey,
-                          ),
-                    child: Text(
-                      translate('Login'),
-                      style: TextStyle(fontSize: 16),
-                    ),
-                    onPressed: curOP.value.isEmpty || curOP.value == 'rustdesk'
-                        ? () {
-                            onLogin(userController.text, pwdController.text);
-                          }
-                        : null,
-                  )),
-            ),
-          ),
-        ]),
       ],
-    );
+    ).paddingSymmetric(vertical: 4.0);
   }
 }
 
 /// common login dialog for desktop
 /// call this directly
-Future<bool> loginDialog() async {
-  String username = '';
-  var usernameMsg = '';
-  String pass = '';
-  var passMsg = '';
+Future<bool?> loginDialog() async {
+  var username = TextEditingController();
+  var password = TextEditingController();
+
+  String? usernameMsg;
+  String? passwordMsg;
   var isInProgress = false;
-  var completer = Completer<bool>();
+  final autoLogin = true.obs;
   final RxString curOP = ''.obs;
 
-  gFFI.dialogManager.show((setState, close) {
+  return gFFI.dialogManager.show<bool>((setState, close) {
     cancel() {
       isInProgress = false;
-      completer.complete(false);
-      close();
+      close(false);
     }
 
-    onLogin(String username0, String pass0) async {
+    onLogin() async {
       setState(() {
-        usernameMsg = '';
-        passMsg = '';
+        usernameMsg = null;
+        passwordMsg = null;
         isInProgress = true;
       });
       cancel() {
@@ -436,30 +449,44 @@ Future<bool> loginDialog() async {
       }
 
       curOP.value = 'rustdesk';
-      username = username0;
-      pass = pass0;
-      if (username.isEmpty) {
+      if (username.text.isEmpty) {
         usernameMsg = translate('Username missed');
         cancel();
         return;
       }
-      if (pass.isEmpty) {
-        passMsg = translate('Password missed');
+      if (password.text.isEmpty) {
+        passwordMsg = translate('Password missed');
         cancel();
         return;
       }
       try {
-        final resp = await gFFI.userModel.login(username, pass);
-        if (resp.containsKey('error')) {
-          passMsg = resp['error'];
-          cancel();
-          return;
+        final resp = await gFFI.userModel.login(LoginRequest(
+            username: username.text,
+            password: password.text,
+            id: await bind.mainGetMyId(),
+            uuid: await bind.mainGetUuid(),
+            autoLogin: autoLogin.value,
+            type: HttpType.kAuthReqTypeAccount));
+
+        switch (resp.type) {
+          case HttpType.kAuthResTypeToken:
+            if (resp.access_token != null) {
+              bind.mainSetLocalOption(
+                  key: 'access_token', value: resp.access_token!);
+              close(true);
+              return;
+            }
+            break;
+          case HttpType.kAuthResTypeEmailCheck:
+            break;
         }
-        // {access_token: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJndWlkIjoiMDFkZjQ2ZjgtZjg3OS00MDE0LTk5Y2QtMGMwYzM2MmViZGJlIiwiZXhwIjoxNjYxNDg2NzYwfQ.GZpe1oI8TfM5yTYNrpcwbI599P4Z_-b2GmnwNl2Lr-w,
-        // token_type: Bearer, user: {id: , name: admin, email: null, note: null, status: null, grp: null, is_admin: true}}
-        debugPrint('$resp');
-        completer.complete(true);
+      } on RequestException catch (err) {
+        passwordMsg = translate(err.cause);
+        debugPrintStack(label: err.toString());
+        cancel();
+        return;
       } catch (err) {
+        passwordMsg = "Unknown Error";
         debugPrintStack(label: err.toString());
         cancel();
         return;
@@ -469,53 +496,50 @@ Future<bool> loginDialog() async {
 
     return CustomAlertDialog(
       title: Text(translate('Login')),
-      content: ConstrainedBox(
-        constraints: const BoxConstraints(minWidth: 500),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(
-              height: 8.0,
-            ),
-            LoginWidgetUserPass(
-              username: username,
-              pass: pass,
-              usernameMsg: usernameMsg,
-              passMsg: passMsg,
-              isInProgress: isInProgress,
-              curOP: curOP,
-              onLogin: onLogin,
-            ),
-            const SizedBox(
-              height: 8.0,
-            ),
-            Center(
-                child: Text(
-              translate('or'),
-              style: TextStyle(fontSize: 16),
-            )),
-            const SizedBox(
-              height: 8.0,
-            ),
-            LoginWidgetOP(
-              ops: [
-                ConfigOP(op: 'Github', iconWidth: 20),
-                ConfigOP(op: 'Google', iconWidth: 20),
-                ConfigOP(op: 'Okta', iconWidth: 38),
-              ],
-              curOP: curOP,
-              cbLogin: (String username) {
-                gFFI.userModel.userName.value = username;
-                completer.complete(true);
-                close();
-              },
-            ),
-          ],
-        ),
+      contentBoxConstraints: BoxConstraints(minWidth: 400),
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          const SizedBox(
+            height: 8.0,
+          ),
+          LoginWidgetUserPass(
+            username: username,
+            pass: password,
+            usernameMsg: usernameMsg,
+            passMsg: passwordMsg,
+            isInProgress: isInProgress,
+            curOP: curOP,
+            autoLogin: autoLogin,
+            onLogin: onLogin,
+          ),
+          const SizedBox(
+            height: 8.0,
+          ),
+          Center(
+              child: Text(
+            translate('or'),
+            style: TextStyle(fontSize: 16),
+          )),
+          const SizedBox(
+            height: 8.0,
+          ),
+          LoginWidgetOP(
+            ops: [
+              ConfigOP(op: 'Github', iconWidth: 20),
+              ConfigOP(op: 'Google', iconWidth: 20),
+              ConfigOP(op: 'Okta', iconWidth: 38),
+            ],
+            curOP: curOP,
+            cbLogin: (String username) {
+              gFFI.userModel.userName.value = username;
+              close(true);
+            },
+          ),
+        ],
       ),
       actions: [msgBoxButton(translate('Close'), cancel)],
       onCancel: cancel,
     );
   });
-  return completer.future;
 }

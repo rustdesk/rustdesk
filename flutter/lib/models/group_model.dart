@@ -59,7 +59,7 @@ class GroupModel {
               if (gFFI.userModel.isAdmin.isFalse)
                 'grp': gFFI.userModel.groupName.value,
             });
-        final resp = await http.get(uri, headers: await getHttpHeaders());
+        final resp = await http.get(uri, headers: getHttpHeaders());
         if (resp.body.isNotEmpty && resp.body.toLowerCase() != "null") {
           Map<String, dynamic> json = jsonDecode(resp.body);
           if (json.containsKey('error')) {
@@ -110,7 +110,7 @@ class GroupModel {
               'grp': gFFI.userModel.groupName.value,
               'target_user': username
             });
-        final resp = await http.get(uri, headers: await getHttpHeaders());
+        final resp = await http.get(uri, headers: getHttpHeaders());
         if (resp.body.isNotEmpty && resp.body.toLowerCase() != "null") {
           Map<String, dynamic> json = jsonDecode(resp.body);
           if (json.containsKey('error')) {

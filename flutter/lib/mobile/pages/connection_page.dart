@@ -7,10 +7,9 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../common.dart';
-import '../../common/widgets/address_book.dart';
 import '../../common/widgets/peer_tab_page.dart';
-import '../../common/widgets/peers_view.dart';
 import '../../consts.dart';
+import '../../desktop/widgets/login.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import 'home_page.dart';
@@ -258,7 +257,7 @@ class _WebMenuState extends State<WebMenu> {
           }
           if (value == 'login') {
             if (gFFI.userModel.userName.value.isEmpty) {
-              showLogin(gFFI.dialogManager);
+              loginDialog();
             } else {
               gFFI.userModel.logOut();
             }

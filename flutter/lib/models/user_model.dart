@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter_hbb/common/hbbs/hbbs.dart';
 import 'package:flutter_hbb/common/widgets/peer_tab_page.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
@@ -45,7 +46,9 @@ class UserModel {
       if (error != null) {
         throw error;
       }
-      await _parseUserInfo(data);
+
+      final user = UserPayload.fromJson(data);
+      await _parseAndUpdateUser(user);
     } catch (e) {
       print('Failed to refreshCurrentUser: $e');
     } finally {
@@ -55,7 +58,6 @@ class UserModel {
 
   Future<void> reset() async {
     await bind.mainSetLocalOption(key: 'access_token', value: '');
-    await bind.mainSetLocalOption(key: 'user_info', value: '');
     await gFFI.abModel.reset();
     await gFFI.groupModel.reset();
     userName.value = '';
@@ -63,11 +65,10 @@ class UserModel {
     statePeerTab.check();
   }
 
-  Future<void> _parseUserInfo(dynamic userinfo) async {
-    bind.mainSetLocalOption(key: 'user_info', value: jsonEncode(userinfo));
-    userName.value = userinfo['name'] ?? '';
-    groupName.value = userinfo['grp'] ?? '';
-    isAdmin.value = userinfo['is_admin'] == true;
+  Future<void> _parseAndUpdateUser(UserPayload user) async {
+    userName.value = user.name;
+    groupName.value = user.grp;
+    isAdmin.value = user.isAdmin;
   }
 
   Future<void> _updateOtherModels() async {
@@ -85,7 +86,7 @@ class UserModel {
                 'id': await bind.mainGetMyId(),
                 'uuid': await bind.mainGetUuid(),
               },
-              headers: await getHttpHeaders())
+              headers: getHttpHeaders())
           .timeout(Duration(seconds: 2));
     } catch (e) {
       print("request /api/logout failed: err=$e");
@@ -95,26 +96,38 @@ class UserModel {
     }
   }
 
-  Future<Map<String, dynamic>> login(String userName, String pass) async {
+  /// throw [RequestException]
+  Future<LoginResponse> login(LoginRequest loginRequest) async {
     final url = await bind.mainGetApiServer();
+    final resp = await http.post(Uri.parse('$url/api/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(loginRequest.toJson()));
+
+    final Map<String, dynamic> body;
     try {
-      final resp = await http.post(Uri.parse('$url/api/login'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            'username': userName,
-            'password': pass,
-            'id': await bind.mainGetMyId(),
-            'uuid': await bind.mainGetUuid()
-          }));
-      final body = jsonDecode(resp.body);
-      bind.mainSetLocalOption(
-          key: 'access_token', value: body['access_token'] ?? '');
-      await _parseUserInfo(body['user']);
-      return body;
-    } catch (err) {
-      return {'error': '$err'};
-    } finally {
-      await _updateOtherModels();
+      body = jsonDecode(resp.body);
+    } catch (e) {
+      print("jsonDecode resp body failed: ${e.toString()}");
+      rethrow;
     }
+
+    if (resp.statusCode != 200) {
+      throw RequestException(resp.statusCode, body['error'] ?? '');
+    }
+
+    final LoginResponse loginResponse;
+    try {
+      loginResponse = LoginResponse.fromJson(body);
+    } catch (e) {
+      print("jsonDecode LoginResponse failed: ${e.toString()}");
+      rethrow;
+    }
+
+    if (loginResponse.user != null) {
+      await _parseAndUpdateUser(loginResponse.user!);
+    }
+
+    await _updateOtherModels();
+    return loginResponse;
   }
 }

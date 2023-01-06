@@ -1367,7 +1367,7 @@ connect(BuildContext context, String id,
   }
 }
 
-Future<Map<String, String>> getHttpHeaders() async {
+Map<String, String> getHttpHeaders() {
   return {
     'Authorization': 'Bearer ${bind.mainGetLocalOption(key: 'access_token')}'
   };
