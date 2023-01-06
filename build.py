@@ -305,7 +305,8 @@ def build_flutter_deb(version, features):
 
 def build_flutter_dmg(version, features):
     if not skip_cargo:
-        os.system(f'cargo build --features {features} --lib --release')
+        # set minimum osx build target, now is 10.14, which is the same as the flutter xcode project
+        os.system(f'MACOSX_DEPLOYMENT_TARGET=10.14 cargo build --features {features} --lib --release')
     # copy dylib
     os.system(
         "cp target/release/liblibrustdesk.dylib target/release/librustdesk.dylib")
