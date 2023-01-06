@@ -1113,6 +1113,10 @@ pub fn main_is_can_screen_recording(prompt: bool) -> SyncReturn<bool> {
     SyncReturn(is_can_screen_recording(prompt))
 }
 
+pub fn main_is_can_input_monitoring(prompt: bool) -> SyncReturn<bool> {
+    SyncReturn(is_can_input_monitoring(prompt))
+}
+
 pub fn main_is_share_rdp() -> SyncReturn<bool> {
     SyncReturn(is_share_rdp())
 }

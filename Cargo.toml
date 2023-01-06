@@ -119,6 +119,7 @@ dbus-crossroads = "0.5"
 gtk = "0.15"
 libappindicator = "0.7"
 glib = "0.16.5"
+backtrace = "0.3"
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.11"
