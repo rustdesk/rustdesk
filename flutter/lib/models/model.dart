@@ -22,6 +22,7 @@ import 'package:tuple/tuple.dart';
 import 'package:image/image.dart' as img2;
 import 'package:flutter_custom_cursor/cursor_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:get/get.dart';
 
 import '../common.dart';
 import '../common/shared_state.dart';
@@ -542,6 +543,8 @@ class CanvasModel with ChangeNotifier {
   ScrollStyle _scrollStyle = ScrollStyle.scrollauto;
   ViewStyle _lastViewStyle = ViewStyle();
 
+  final _imageOverflow = false.obs;
+
   WeakReference<FFI> parent;
 
   CanvasModel(this.parent);
@@ -552,6 +555,7 @@ class CanvasModel with ChangeNotifier {
   Size get size => _size;
   ScrollStyle get scrollStyle => _scrollStyle;
   ViewStyle get viewStyle => _lastViewStyle;
+  RxBool get imageOverflow => _imageOverflow;
 
   _resetScroll() => setScrollPercent(0.0, 0.0);
 
@@ -601,6 +605,7 @@ class CanvasModel with ChangeNotifier {
     }
     _x = (size.width - displayWidth * _scale) / 2;
     _y = (size.height - displayHeight * _scale) / 2;
+    _imageOverflow.value = _x < 0 || y < 0;
     notifyListeners();
   }
 

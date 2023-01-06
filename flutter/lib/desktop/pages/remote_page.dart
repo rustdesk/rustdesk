@@ -402,12 +402,10 @@ class _ImagePaintState extends State<ImagePaint> {
         onHover: (evt) {},
         child: child));
 
-    final imageWidth = c.getDisplayWidth() * s;
-    final imageHeight = c.getDisplayHeight() * s;
-    final imageSize = Size(imageWidth, imageHeight);
-    bool overflow =
-        c.size.width < imageSize.width || c.size.height < imageSize.height;
-    if (overflow && c.scrollStyle == ScrollStyle.scrollbar) {
+    if (c.imageOverflow.isTrue && c.scrollStyle == ScrollStyle.scrollbar) {
+      final imageWidth = c.getDisplayWidth() * s;
+      final imageHeight = c.getDisplayHeight() * s;
+      final imageSize = Size(imageWidth, imageHeight);
       final imageWidget = CustomPaint(
         size: imageSize,
         painter: ImagePainter(image: m.image, x: 0, y: 0, scale: s),

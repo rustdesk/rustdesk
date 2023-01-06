@@ -936,11 +936,13 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                 text: translate('ScrollAuto'),
                 value: kRemoteScrollStyleAuto,
                 dismissOnClicked: true,
+                enabled: widget.ffi.canvasModel.imageOverflow,
               ),
               MenuEntryRadioOption(
                 text: translate('Scrollbar'),
                 value: kRemoteScrollStyleBar,
                 dismissOnClicked: true,
+                enabled: widget.ffi.canvasModel.imageOverflow,
               ),
             ],
             curOptionGetter: () async =>
@@ -1200,7 +1202,6 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         },
         optionSetter: (String oldValue, String newValue) async {
           await bind.sessionSetKeyboardMode(id: widget.id, value: newValue);
-          widget.ffi.canvasModel.updateViewStyle();
         },
       )
     ];
