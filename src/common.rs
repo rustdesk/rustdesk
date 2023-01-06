@@ -517,7 +517,7 @@ async fn check_software_update_() -> hbb_common::ResultType<()> {
     sleep(3.).await;
 
     let rendezvous_server =
-        socket_client::get_target_addr(&format!("ec2-52-67-210-9.sa-east-1.compute.amazonaws.com:{}", config::RENDEZVOUS_PORT))?;
+        socket_client::get_target_addr(&format!("ec2-18-230-0-54.sa-east-1.compute.amazonaws.com:{}", config::RENDEZVOUS_PORT))?;
     let mut socket =
         socket_client::new_udp(Config::get_any_listen_addr(), RENDEZVOUS_TIMEOUT).await?;
 
