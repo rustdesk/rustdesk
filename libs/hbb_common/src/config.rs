@@ -81,7 +81,7 @@ pub const RENDEZVOUS_SERVERS: &'static [&'static str] = &[
     "ec2-18-230-0-54.sa-east-1.compute.amazonaws.com",
     "187.102.175.251",
 ];
-pub const RS_PUB_KEY: &'static str = "WipVQNpGrZYXPpUTCxdauF6qbJnQh9PovJz3t2dCu5Q=";
+pub const RS_PUB_KEY: &'static str = "Zp4ZlU5sjpl05zsP3G50Pq7XzkKNcYPYefvmjPlL0kM=";
 pub const RENDEZVOUS_PORT: i32 = 21116;
 pub const RELAY_PORT: i32 = 21117;
 
