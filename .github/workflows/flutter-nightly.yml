@@ -142,7 +142,7 @@ jobs:
         job:
           - {
               target: x86_64-apple-darwin,
-              os: macos-10.15,
+              os: macos-latest,
               extra-build-args: "",
             }
     steps:
@@ -186,7 +186,6 @@ jobs:
         with:
           channel: "stable"
           flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: true
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -246,7 +245,7 @@ jobs:
           # start sign the rustdesk.app and dmg
           rm rustdesk-${{ env.VERSION }}.dmg || true
           codesign --force -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep ./flutter/build/macos/Build/Products/Release/rustdesk.app -v
-          create-dmg rustdesk-${{ env.VERSION }}.dmg ./flutter/build/macos/Build/Products/Release/rustdesk.app
+          create-dmg --icon "rustdesk.app" 200 190 --hide-extension "rustdesk.app" --window-size 800 400 --app-drop-link 600 185 rustdesk-${{ env.VERSION }}.dmg ./flutter/build/macos/Build/Products/Release/rustdesk.app
           codesign --force -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep rustdesk-${{ env.VERSION }}.dmg -v
           # notarize the rustdesk-${{ env.VERSION }}.dmg
           rcodesign notary-submit --api-key-path ${{ github.workspace }}/rustdesk.json  --staple rustdesk-${{ env.VERSION }}.dmg
