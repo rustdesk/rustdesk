@@ -402,35 +402,36 @@ class _ImagePaintState extends State<ImagePaint> {
         onHover: (evt) {},
         child: child));
 
-    if (c.scrollStyle == ScrollStyle.scrollbar) {
+    if (c.imageOverflow.isTrue && c.scrollStyle == ScrollStyle.scrollbar) {
       final imageWidth = c.getDisplayWidth() * s;
       final imageHeight = c.getDisplayHeight() * s;
+      final imageSize = Size(imageWidth, imageHeight);
       final imageWidget = CustomPaint(
-        size: Size(imageWidth, imageHeight),
+        size: imageSize,
         painter: ImagePainter(image: m.image, x: 0, y: 0, scale: s),
       );
 
       return NotificationListener<ScrollNotification>(
-        onNotification: (notification) {
-          final percentX = _horizontal.hasClients
-              ? _horizontal.position.extentBefore /
-                  (_horizontal.position.extentBefore +
-                      _horizontal.position.extentInside +
-                      _horizontal.position.extentAfter)
-              : 0.0;
-          final percentY = _vertical.hasClients
-              ? _vertical.position.extentBefore /
-                  (_vertical.position.extentBefore +
-                      _vertical.position.extentInside +
-                      _vertical.position.extentAfter)
-              : 0.0;
-          c.setScrollPercent(percentX, percentY);
-          return false;
-        },
-        child: mouseRegion(
-            child: _buildCrossScrollbar(context, _buildListener(imageWidget),
-                Size(imageWidth, imageHeight))),
-      );
+          onNotification: (notification) {
+            final percentX = _horizontal.hasClients
+                ? _horizontal.position.extentBefore /
+                    (_horizontal.position.extentBefore +
+                        _horizontal.position.extentInside +
+                        _horizontal.position.extentAfter)
+                : 0.0;
+            final percentY = _vertical.hasClients
+                ? _vertical.position.extentBefore /
+                    (_vertical.position.extentBefore +
+                        _vertical.position.extentInside +
+                        _vertical.position.extentAfter)
+                : 0.0;
+            c.setScrollPercent(percentX, percentY);
+            return false;
+          },
+          child: mouseRegion(
+            child: Obx(() => _buildCrossScrollbarFromLayout(
+                context, _buildListener(imageWidget), c.size, imageSize)),
+          ));
     } else {
       final imageWidget = CustomPaint(
         size: Size(c.size.width, c.size.height),
@@ -563,24 +564,6 @@ class _ImagePaintState extends State<ImagePaint> {
     }
 
     return widget;
-  }
-
-  Widget _buildCrossScrollbar(BuildContext context, Widget child, Size size) {
-    var layoutSize = MediaQuery.of(context).size;
-    // If minimized, w or h may be negative here.
-    final w = layoutSize.width - kWindowBorderWidth * 2;
-    final h =
-        layoutSize.height - kWindowBorderWidth * 2 - kDesktopRemoteTabBarHeight;
-    layoutSize = Size(
-      w < 0 ? 0 : w,
-      h < 0 ? 0 : h,
-    );
-    bool overflow =
-        layoutSize.width < size.width || layoutSize.height < size.height;
-    return overflow
-        ? Obx(() =>
-            _buildCrossScrollbarFromLayout(context, child, layoutSize, size))
-        : _buildCrossScrollbarFromLayout(context, child, layoutSize, size);
   }
 
   Widget _buildListener(Widget child) {

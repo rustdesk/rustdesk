@@ -699,7 +699,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     if (_screen == null) {
       return false;
     }
-    double scale = _screen!.scaleFactor;
+    final scale = kIgnoreDpi ? 1.0 : _screen!.scaleFactor;
     double selfWidth = _screen!.visibleFrame.width;
     double selfHeight = _screen!.visibleFrame.height;
     if (isFullscreen) {
@@ -936,11 +936,13 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                 text: translate('ScrollAuto'),
                 value: kRemoteScrollStyleAuto,
                 dismissOnClicked: true,
+                enabled: widget.ffi.canvasModel.imageOverflow,
               ),
               MenuEntryRadioOption(
                 text: translate('Scrollbar'),
                 value: kRemoteScrollStyleBar,
                 dismissOnClicked: true,
+                enabled: widget.ffi.canvasModel.imageOverflow,
               ),
             ],
             curOptionGetter: () async =>
@@ -986,15 +988,17 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                     wndRect.bottom - wndRect.top - mediaSize.height * scale;
 
                 final canvasModel = widget.ffi.canvasModel;
-                final width = (canvasModel.getDisplayWidth() +
-                            canvasModel.windowBorderWidth * 2) *
-                        scale +
-                    magicWidth;
-                final height = (canvasModel.getDisplayHeight() +
-                            canvasModel.tabBarHeight +
-                            canvasModel.windowBorderWidth * 2) *
-                        scale +
-                    magicHeight;
+                final width =
+                    (canvasModel.getDisplayWidth() * canvasModel.scale +
+                                canvasModel.windowBorderWidth * 2) *
+                            scale +
+                        magicWidth;
+                final height =
+                    (canvasModel.getDisplayHeight() * canvasModel.scale +
+                                canvasModel.tabBarHeight +
+                                canvasModel.windowBorderWidth * 2) *
+                            scale +
+                        magicHeight;
                 double left = wndRect.left + (wndRect.width - width) / 2;
                 double top = wndRect.top + (wndRect.height - height) / 2;
 
@@ -1198,7 +1202,6 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         },
         optionSetter: (String oldValue, String newValue) async {
           await bind.sessionSetKeyboardMode(id: widget.id, value: newValue);
-          widget.ffi.canvasModel.updateViewStyle();
         },
       )
     ];
