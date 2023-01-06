@@ -407,6 +407,7 @@ lazy_static::lazy_static! {
             ("Select local keyboard type", "เลือกประเภทคีย์บอร์ด"),
             ("software_render_tip", ""),
             ("Always use software rendering", ""),
+            ("config_input", ""),
         ].iter().cloned().collect();
     }
     

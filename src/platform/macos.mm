@@ -2,6 +2,8 @@
 #import <AppKit/AppKit.h>
 #import <IOKit/hidsystem/IOHIDLib.h>
 
+// https://github.com/codebytere/node-mac-permissions/blob/main/permissions.mm
+
 extern "C" bool InputMonitoringAuthStatus(bool prompt) {
     if  (@available(macos 10.15, *)) {
         IOHIDAccessType theType = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent);

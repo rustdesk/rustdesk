@@ -407,5 +407,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Select local keyboard type", "請選擇本地鍵盤類型"),
         ("software_render_tip", "如果你使用英偉達顯卡, 並且遠程窗口在會話建立後會立刻關閉, 那麼安裝nouveau驅動並且選擇使用軟件渲染可能會有幫助。重啟軟件後生效。"),
         ("Always use software rendering", "使用軟件渲染"),
+        ("config_input", ""),
     ].iter().cloned().collect();
 }

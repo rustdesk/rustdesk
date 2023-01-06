@@ -407,5 +407,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Select local keyboard type", ""),
         ("software_render_tip", ""),
         ("Always use software rendering", ""),
+        ("config_input", ""),
     ].iter().cloned().collect();
 }

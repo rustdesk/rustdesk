@@ -405,5 +405,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Closed manually by the web console", "Ročno zaprto iz spletne konzole"),
         ("Local keyboard type", "Lokalna vrsta tipkovnice"),
         ("Select local keyboard type", "Izberite lokalno vrsto tipkovnice"),
+        ("software_render_tip", ""),
+        ("Always use software rendering", ""),
+        ("config_input", ""),
     ].iter().cloned().collect();
 }
