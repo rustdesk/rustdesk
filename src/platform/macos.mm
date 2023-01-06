@@ -7,7 +7,7 @@
 extern "C" bool InputMonitoringAuthStatus(bool prompt) {
     if  (@available(macos 10.15, *)) {
         IOHIDAccessType theType = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent);
-        NSLog(@"IOHIDCheckAccess = %d", theType);
+        NSLog(@"IOHIDCheckAccess = %d, kIOHIDAccessTypeGranted = %d", theType, kIOHIDAccessTypeGranted);
         switch (theType) {
             case kIOHIDAccessTypeGranted:
                 return true;
