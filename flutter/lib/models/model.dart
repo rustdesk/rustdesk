@@ -528,6 +528,7 @@ class CanvasModel with ChangeNotifier {
   double _y = 0;
   // image scale
   double _scale = 1.0;
+  Size _size = Size.zero;
   // the tabbar over the image
   // double tabBarHeight = 0.0;
   // the window border's width
@@ -548,6 +549,7 @@ class CanvasModel with ChangeNotifier {
   double get x => _x;
   double get y => _y;
   double get scale => _scale;
+  Size get size => _size;
   ScrollStyle get scrollStyle => _scrollStyle;
   ViewStyle get viewStyle => _lastViewStyle;
 
@@ -562,18 +564,26 @@ class CanvasModel with ChangeNotifier {
   double get scrollY => _scrollY;
 
   updateViewStyle() async {
+    Size getSize() {
+      final size = MediaQueryData.fromWindow(ui.window).size;
+      // If minimized, w or h may be negative here.
+      double w = size.width - windowBorderWidth * 2;
+      double h = size.height - tabBarHeight - windowBorderWidth * 2;
+      return Size(w < 0 ? 0 : w, h < 0 ? 0 : h);
+    }
+
     final style = await bind.sessionGetViewStyle(id: id);
     if (style == null) {
       return;
     }
-    final sizeWidth = size.width;
-    final sizeHeight = size.height;
+
+    _size = getSize();
     final displayWidth = getDisplayWidth();
     final displayHeight = getDisplayHeight();
     final viewStyle = ViewStyle(
       style: style,
-      width: sizeWidth,
-      height: sizeHeight,
+      width: size.width,
+      height: size.height,
       displayWidth: displayWidth,
       displayHeight: displayHeight,
     );
@@ -585,8 +595,12 @@ class CanvasModel with ChangeNotifier {
     }
     _lastViewStyle = viewStyle;
     _scale = viewStyle.scale;
-    _x = (sizeWidth - displayWidth * _scale) / 2;
-    _y = (sizeHeight - displayHeight * _scale) / 2;
+
+    if (kIgnoreDpi && style == kRemoteViewStyleOriginal) {
+      _scale = 1.0 / ui.window.devicePixelRatio;
+    }
+    _x = (size.width - displayWidth * _scale) / 2;
+    _y = (size.height - displayHeight * _scale) / 2;
     notifyListeners();
   }
 
@@ -627,14 +641,6 @@ class CanvasModel with ChangeNotifier {
 
   double get windowBorderWidth => stateGlobal.windowBorderWidth.value;
   double get tabBarHeight => stateGlobal.tabBarHeight;
-
-  Size get size {
-    final size = MediaQueryData.fromWindow(ui.window).size;
-    // If minimized, w or h may be negative here.
-    double w = size.width - windowBorderWidth * 2;
-    double h = size.height - tabBarHeight - windowBorderWidth * 2;
-    return Size(w < 0 ? 0 : w, h < 0 ? 0 : h);
-  }
 
   moveDesktopMouse(double x, double y) {
     // On mobile platforms, move the canvas with the cursor.

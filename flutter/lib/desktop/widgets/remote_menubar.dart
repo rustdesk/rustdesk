@@ -699,7 +699,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     if (_screen == null) {
       return false;
     }
-    double scale = _screen!.scaleFactor;
+    final scale = kIgnoreDpi ? 1.0 : _screen!.scaleFactor;
     double selfWidth = _screen!.visibleFrame.width;
     double selfHeight = _screen!.visibleFrame.height;
     if (isFullscreen) {
@@ -986,15 +986,17 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                     wndRect.bottom - wndRect.top - mediaSize.height * scale;
 
                 final canvasModel = widget.ffi.canvasModel;
-                final width = (canvasModel.getDisplayWidth() +
-                            canvasModel.windowBorderWidth * 2) *
-                        scale +
-                    magicWidth;
-                final height = (canvasModel.getDisplayHeight() +
-                            canvasModel.tabBarHeight +
-                            canvasModel.windowBorderWidth * 2) *
-                        scale +
-                    magicHeight;
+                final width =
+                    (canvasModel.getDisplayWidth() * canvasModel.scale +
+                                canvasModel.windowBorderWidth * 2) *
+                            scale +
+                        magicWidth;
+                final height =
+                    (canvasModel.getDisplayHeight() * canvasModel.scale +
+                                canvasModel.tabBarHeight +
+                                canvasModel.windowBorderWidth * 2) *
+                            scale +
+                        magicHeight;
                 double left = wndRect.left + (wndRect.width - width) / 2;
                 double top = wndRect.top + (wndRect.height - height) / 2;
 
