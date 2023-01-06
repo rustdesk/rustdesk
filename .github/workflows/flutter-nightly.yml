@@ -223,10 +223,6 @@ jobs:
         run: |
           $VCPKG_ROOT/vcpkg install libvpx libyuv opus
 
-      - name: Install cargo bundle tools
-        run: |
-          cargo install cargo-bundle
-
       - name: Show version information (Rust, cargo, Clang)
         shell: bash
         run: |
@@ -248,9 +244,9 @@ jobs:
           security unlock-keychain -p ${{ secrets.MACOS_P12_PASSWORD }} rustdesk.keychain
           # start sign the rustdesk.app and dmg
           rm rustdesk-${{ env.VERSION }}.dmg || true
-          codesign --force -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep ./flutter/build/macos/Build/Products/Release/rustdesk.app -v
+          codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep ./flutter/build/macos/Build/Products/Release/rustdesk.app -v
           create-dmg --icon "rustdesk.app" 200 190 --hide-extension "rustdesk.app" --window-size 800 400 --app-drop-link 600 185 rustdesk-${{ env.VERSION }}.dmg ./flutter/build/macos/Build/Products/Release/rustdesk.app
-          codesign --force -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep rustdesk-${{ env.VERSION }}.dmg -v
+          codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep rustdesk-${{ env.VERSION }}.dmg -v
           # notarize the rustdesk-${{ env.VERSION }}.dmg
           rcodesign notary-submit --api-key-path ${{ github.workspace }}/rustdesk.json  --staple rustdesk-${{ env.VERSION }}.dmg
 
