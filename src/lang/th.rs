@@ -280,7 +280,6 @@ lazy_static::lazy_static! {
             ("android_stop_service_tip", "การปิดการใช้งานเซอร์วิสจะปิดการเชื่อมต่อทั้งหมดโดยอัตโนมัติ"),
             ("android_version_audio_tip", "เวอร์ชั่นแอนดรอยด์ปัจจุบันของคุณไม่รองรับการบันทึกข้อมูลเสียง กรุณาอัปเกรดเป็นแอนดรอยด์เวอร์ชั่น 10 หรือสูงกว่า"),
             ("android_start_service_tip", "แตะ [เริ่มต้นใช้งานเซอร์วิส] หรือเปิดสิทธิ์ [การบันทึกหน้าจอ] เพื่อเริ่มเซอร์วิสการแชร์หน้าจอ"),
-            ("Account", "บัญชี"),
             ("Overwrite", "เขียนทับ"),
             ("This file exists, skip or overwrite this file?", "พบไฟล์ที่มีอยู่แล้ว ต้องการเขียนทับหรือไม่?"),
             ("Quit", "ออก"),
@@ -334,6 +333,7 @@ lazy_static::lazy_static! {
             ("Scale adaptive", "ขนาดยืดหยุ่น"),
             ("General", "ทั่วไป"),
             ("Security", "ความปลอดภัย"),
+            ("Account", "บัญชี"),
             ("Theme", "ธีม"),
             ("Dark Theme", "ธีมมืด"),
             ("Dark", "มืด"),
@@ -405,5 +405,8 @@ lazy_static::lazy_static! {
             ("Closed manually by the web console", "ถูกปิดโดยเว็บคอนโซล"),
             ("Local keyboard type", "ประเภทคีย์บอร์ด"),
             ("Select local keyboard type", "เลือกประเภทคีย์บอร์ด"),
+            ("software_render_tip", ""),
+            ("Always use software rendering", ""),
         ].iter().cloned().collect();
     }
+    

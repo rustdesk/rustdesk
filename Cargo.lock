@@ -4562,6 +4562,7 @@ dependencies = [
  "arboard",
  "async-process",
  "async-trait",
+ "backtrace",
  "base64",
  "bytes",
  "cc",

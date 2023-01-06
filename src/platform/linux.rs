@@ -717,3 +717,92 @@ pub fn get_double_click_time() -> u32 {
     }
 }
 
+/// forever: may not work
+pub fn system_message(title: &str, msg: &str, forever: bool) -> ResultType<()> {
+    if std::process::Command::new("notify-send")
+        .arg(title)
+        .arg(msg)
+        .spawn()
+        .is_ok()
+    {
+        return Ok(());
+    }
+    if std::process::Command::new("zenity")
+        .arg("--info")
+        .arg("--timeout")
+        .arg(if forever { "0" } else { "3" })
+        .arg("--title")
+        .arg(title)
+        .arg("--text")
+        .arg(msg)
+        .spawn()
+        .is_ok()
+    {
+        return Ok(());
+    }
+    if std::process::Command::new("kdialog")
+        .arg("--title")
+        .arg(title)
+        .arg("--msgbox")
+        .arg(msg)
+        .spawn()
+        .is_ok()
+    {
+        return Ok(());
+    }
+    if std::process::Command::new("xmessage")
+        .arg("-center")
+        .arg("-timeout")
+        .arg(if forever { "0" } else { "3" })
+        .arg(title)
+        .arg(msg)
+        .spawn()
+        .is_ok()
+    {
+        return Ok(());
+    }
+    bail!("failed to post system message");
+}
+
+extern "C" fn breakdown_signal_handler(sig: i32) {
+    let mut stack = vec![];
+    backtrace::trace(|frame| {
+        backtrace::resolve_frame(frame, |symbol| {
+            if let Some(name) = symbol.name() {
+                stack.push(name.to_string());
+            }
+        });
+        true // keep going to the next frame
+    });
+    let mut info = String::default();
+    if stack.iter().any(|s| {
+        s.contains(&"nouveau_pushbuf_kick")
+            || s.to_lowercase().contains("nvidia")
+            || s.contains("gdk_window_end_draw_frame")
+    }) {
+        hbb_common::config::Config::set_option(
+            "allow-always-software-render".to_string(),
+            "Y".to_string(),
+        );
+        info = "Always use software rendering will be set.".to_string();
+        log::info!("{}", info);
+    }
+    log::error!(
+        "Got signal {} and exit. stack:\n{}",
+        sig,
+        stack.join("\n").to_string()
+    );
+    system_message(
+        "RustDesk",
+        &format!("Got signal {} and exit.{}", sig, info),
+        true,
+    )
+    .ok();
+    std::process::exit(0);
+}
+
+pub fn register_breakdown_handler() {
+    unsafe {
+        libc::signal(libc::SIGSEGV, breakdown_signal_handler as _);
+    }
+}
