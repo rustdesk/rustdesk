@@ -5,7 +5,7 @@
 // https://github.com/codebytere/node-mac-permissions/blob/main/permissions.mm
 
 extern "C" bool InputMonitoringAuthStatus(bool prompt) {
-    if  (@available(macos 10.15, *)) {
+    if (floor(NSAppKitVersionNumber) >= NSAppKitVersionNumber10_15) {
         IOHIDAccessType theType = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent);
         NSLog(@"IOHIDCheckAccess = %d, kIOHIDAccessTypeGranted = %d", theType, kIOHIDAccessTypeGranted);
         switch (theType) {
