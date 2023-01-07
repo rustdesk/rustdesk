@@ -49,7 +49,8 @@ class MainFlutterWindow: NSWindow {
         super.awakeFromNib()
     }
     
-//     override func bitsdojo_window_configure() -> UInt {
-//         return BDW_CUSTOM_FRAME | BDW_HIDE_ON_STARTUP
-//     }
+    override public func order(_ place: NSWindow.OrderingMode, relativeTo otherWin: Int) {
+        super.order(place, relativeTo: otherWin)
+        hiddenWindowAtLaunch()
+    }
 }

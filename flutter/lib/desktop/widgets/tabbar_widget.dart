@@ -527,13 +527,19 @@ class WindowActionPanelState extends State<WindowActionPanel>
   void onWindowClose() async {
     // hide window on close
     if (widget.isMainWindow) {
+      await rustDeskWinManager.unregisterActiveWindow(0);
+      // `hide` must be placed after unregisterActiveWindow, because once all windows are hidden,
+      // flutter closes the application on macOS. We should ensure the post-run logic has ran successfully.
+      // e.g.: saving window position.
       await windowManager.hide();
-      rustDeskWinManager.unregisterActiveWindow(0);
     } else {
-      widget.onClose?.call();
+      // it's safe to hide the subwindow
       await WindowController.fromWindowId(windowId!).hide();
-      rustDeskWinManager
-          .call(WindowType.Main, kWindowEventHide, {"id": windowId!});
+      await Future.wait([
+        rustDeskWinManager
+            .call(WindowType.Main, kWindowEventHide, {"id": windowId!}),
+        widget.onClose?.call() ?? Future.microtask(() => null)
+      ]);
     }
     super.onWindowClose();
   }

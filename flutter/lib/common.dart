@@ -1418,7 +1418,7 @@ bool isRunningInPortableMode() {
 }
 
 /// Window status callback
-void onActiveWindowChanged() async {
+Future<void> onActiveWindowChanged() async {
   print(
       "[MultiWindowHandler] active window changed: ${rustDeskWinManager.getActiveWindows()}");
   if (rustDeskWinManager.getActiveWindows().isEmpty) {
