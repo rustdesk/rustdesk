@@ -513,9 +513,9 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       } else if (call.method == kWindowActionRebuild) {
         reloadCurrentWindow();
       } else if (call.method == kWindowEventShow) {
-        rustDeskWinManager.registerActiveWindow(call.arguments["id"]);
+        await rustDeskWinManager.registerActiveWindow(call.arguments["id"]);
       } else if (call.method == kWindowEventHide) {
-        rustDeskWinManager.unregisterActiveWindow(call.arguments["id"]);
+        await rustDeskWinManager.unregisterActiveWindow(call.arguments["id"]);
       } else if (call.method == kWindowConnect) {
         await connectMainDesktop(
           call.arguments['id'],

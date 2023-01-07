@@ -196,6 +196,8 @@ void runMultiWindow(
       // no such appType
       exit(0);
   }
+  // show window from hidden status
+  WindowController.fromWindowId(windowId!).show();
 }
 
 void runConnectionManagerScreen(bool hide) async {
