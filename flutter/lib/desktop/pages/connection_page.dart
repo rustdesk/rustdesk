@@ -184,6 +184,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                       cursorColor:
                           Theme.of(context).textTheme.titleLarge?.color,
                       decoration: InputDecoration(
+                          counterText: '',
                           hintText: _idInputFocused.value
                               ? null
                               : translate('Enter Remote ID'),
