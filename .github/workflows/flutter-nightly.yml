@@ -1291,9 +1291,11 @@ jobs:
         shell: bash
         run: |
           # set-up appimage-builder
+          pushd /tmp
           wget -O appimage-builder-x86_64.AppImage https://github.com/AppImageCrafters/appimage-builder/releases/download/v1.1.0/appimage-builder-1.1.0-x86_64.AppImage
           chmod +x appimage-builder-x86_64.AppImage
           sudo mv appimage-builder-x86_64.AppImage /usr/local/bin/appimage-builder
+          popd
           # run appimage-builder
           pushd appimage
           appimage-builder --skip-tests
