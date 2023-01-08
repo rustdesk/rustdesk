@@ -599,6 +599,12 @@ jobs:
               os: ubuntu-20.04,
               extra-build-features: "flatpak",
             }
+          - {
+              arch: x86_64,
+              target: x86_64-unknown-linux-gnu,
+              os: ubuntu-20.04,
+              extra-build-features: "appimage",
+            }
           # - { target: x86_64-unknown-linux-musl   , os: ubuntu-20.04, use-cross: true }
     steps:
       - name: Maximize build space
@@ -1148,6 +1154,12 @@ jobs:
               os: ubuntu-18.04,
               extra-build-features: "flatpak",
             }
+          - {
+              arch: x86_64,
+              target: x86_64-unknown-linux-gnu,
+              os: ubuntu-18.04,
+              extra-build-features: "appimage",
+            }
           # - { target: x86_64-unknown-linux-musl   , os: ubuntu-20.04, use-cross: true }
     steps:
       - name: Checkout source code
@@ -1287,7 +1299,7 @@ jobs:
             res/rustdesk*.zst
 
       - name: Build appimage package
-        if: ${{ matrix.job.extra-build-features == '' }}
+        if: ${{ matrix.job.extra-build-features == 'appimage' }}
         shell: bash
         run: |
           # set-up appimage-builder
@@ -1301,7 +1313,7 @@ jobs:
           sudo appimage-builder --skip-tests
 
       - name: Publish appimage package
-        if: ${{ matrix.job.extra-build-features == '' }}
+        if: ${{ matrix.job.extra-build-features == 'appimage' }}
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
