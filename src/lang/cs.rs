@@ -210,6 +210,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Always connect via relay", "Vždy se spojovat prostřednictvím brány pro předávání (relay)"),
         ("whitelist_tip", "Přístup je umožněn pouze z IP adres, nacházejících se na seznamu povolených"),
         ("Login", "Přihlásit se"),
+        ("Remember me", ""),
         ("Logout", "Odhlásit se"),
         ("Tags", "Štítky"),
         ("Search ID", "Hledat identifikátor"),

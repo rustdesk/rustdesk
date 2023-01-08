@@ -210,6 +210,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Always connect via relay", "Zawsze łącz pośrednio"),
         ("whitelist_tip", "Zezwlaj na łączenie z tym komputerem tylko z adresów IP znajdujących się na białej liście"),
         ("Login", "Zaloguj"),
+        ("Remember me", ""),
         ("Logout", "Wyloguj"),
         ("Tags", "Tagi"),
         ("Search ID", "Szukaj ID"),
