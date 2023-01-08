@@ -1298,7 +1298,7 @@ jobs:
           popd
           # run appimage-builder
           pushd appimage
-          appimage-builder --skip-tests
+          sudo appimage-builder --skip-tests
 
       - name: Publish appimage package
         if: ${{ matrix.job.extra-build-features == '' }}
