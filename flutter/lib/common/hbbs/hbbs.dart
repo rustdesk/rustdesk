@@ -103,14 +103,6 @@ class LoginResponse {
   LoginResponse.fromJson(Map<String, dynamic> json) {
     access_token = json['access_token'];
     type = json['type'];
-    print("user: ${json['user']}");
-    print("user id: ${json['user']['id']}");
-    print("user name: ${json['user']['name']}");
-    print("user email: ${json['user']['id']}");
-    print("user note: ${json['user']['note']}");
-    print("user status: ${json['user']['status']}");
-    print("user grp: ${json['user']['grp']}");
-    print("user is_admin: ${json['user']['is_admin']}");
     user = json['user'] != null ? UserPayload.fromJson(json['user']) : null;
   }
 }

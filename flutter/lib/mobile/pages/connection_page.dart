@@ -7,9 +7,9 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../common.dart';
+import '../../common/widgets/login.dart';
 import '../../common/widgets/peer_tab_page.dart';
 import '../../consts.dart';
-import '../../desktop/widgets/login.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import 'home_page.dart';

@@ -9,7 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../common.dart';
 import '../../common/widgets/dialog.dart';
-import '../../desktop/widgets/login.dart';
+import '../../common/widgets/login.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../widgets/dialog.dart';
@@ -398,7 +398,7 @@ void showServerSettings(OverlayDialogManager dialogManager) async {
 void showLanguageSettings(OverlayDialogManager dialogManager) async {
   try {
     final langs = json.decode(await bind.mainGetLangs()) as List<dynamic>;
-    var lang = await bind.mainGetLocalOption(key: "lang");
+    var lang = bind.mainGetLocalOption(key: "lang");
     dialogManager.show((setState, close) {
       setLang(v) {
         if (lang != v) {
