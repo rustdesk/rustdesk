@@ -599,6 +599,12 @@ jobs:
               os: ubuntu-20.04,
               extra-build-features: "flatpak",
             }
+          - {
+              arch: x86_64,
+              target: x86_64-unknown-linux-gnu,
+              os: ubuntu-20.04,
+              extra-build-features: "appimage",
+            }
           # - { target: x86_64-unknown-linux-musl   , os: ubuntu-20.04, use-cross: true }
     steps:
       - name: Maximize build space
@@ -1148,6 +1154,12 @@ jobs:
               os: ubuntu-18.04,
               extra-build-features: "flatpak",
             }
+          - {
+              arch: x86_64,
+              target: x86_64-unknown-linux-gnu,
+              os: ubuntu-18.04,
+              extra-build-features: "appimage",
+            }
           # - { target: x86_64-unknown-linux-musl   , os: ubuntu-20.04, use-cross: true }
     steps:
       - name: Checkout source code
@@ -1162,7 +1174,7 @@ jobs:
       - name: Prepare env
         run: |
           sudo apt update -y
-          sudo apt-get -qq install -y git curl wget nasm yasm libgtk-3-dev
+          sudo apt-get -qq install -y git curl wget nasm yasm libgtk-3-dev libarchive-tools
           mkdir -p ./target/release/
 
       - name: Restore the rustdesk lib file
@@ -1217,7 +1229,8 @@ jobs:
         shell: bash
         run: |
           for name in rustdesk*??.deb; do
-              mv "$name" "${name%%.deb}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb"
+              # use cp to duplicate deb files to fit other packages.
+              cp "$name" "${name%%.deb}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb"
           done
 
       - name: Publish debian package
@@ -1284,6 +1297,29 @@ jobs:
           tag_name: ${{ env.TAG_NAME }}
           files: |
             res/rustdesk*.zst
+
+      - name: Build appimage package
+        if: ${{ matrix.job.extra-build-features == 'appimage' }}
+        shell: bash
+        run: |
+          # set-up appimage-builder
+          pushd /tmp
+          wget -O appimage-builder-x86_64.AppImage https://github.com/AppImageCrafters/appimage-builder/releases/download/v1.1.0/appimage-builder-1.1.0-x86_64.AppImage
+          chmod +x appimage-builder-x86_64.AppImage
+          sudo mv appimage-builder-x86_64.AppImage /usr/local/bin/appimage-builder
+          popd
+          # run appimage-builder
+          pushd appimage
+          sudo appimage-builder --skip-tests
+
+      - name: Publish appimage package
+        if: ${{ matrix.job.extra-build-features == 'appimage' }}
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            ./appimage/rustdesk-${{ env.VERSION }}-*.AppImage
 
       - name: Publish fedora28/centos8 package
         if: ${{ matrix.job.extra-build-features == '' }}
