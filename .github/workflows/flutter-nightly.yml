@@ -761,6 +761,13 @@ jobs:
               use-cross: true,
               extra-build-features: "",
             }
+          - {
+              arch: aarch64,
+              target: aarch64-unknown-linux-gnu,
+              os: ubuntu-18.04, # just for naming package, not running host
+              use-cross: true,
+              extra-build-features: "appimage",
+            }
           # - { arch: aarch64, target: aarch64-unknown-linux-gnu   , os: ubuntu-20.04, use-cross: true, extra-build-features: "flatpak" }
           # - {
           #     arch: armv7,
@@ -939,6 +946,13 @@ jobs:
               use-cross: true,
               extra-build-features: "",
             }
+          - {
+              arch: aarch64,
+              target: aarch64-unknown-linux-gnu,
+              os: ubuntu-18.04, # just for naming package, not running host
+              use-cross: true,
+              extra-build-features: "appimage",
+            }
           # - {
           #     arch: aarch64,
           #     target: aarch64-unknown-linux-gnu,
@@ -1046,7 +1060,7 @@ jobs:
         shell: bash
         run: |
           for name in rustdesk*??.deb; do
-              mv "$name" "${name%%.deb}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb"
+              cp "$name" "${name%%.deb}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb"
           done
 
       - name: Publish debian package
@@ -1057,6 +1071,29 @@ jobs:
           tag_name: ${{ env.TAG_NAME }}
           files: |
             rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb
+      
+      - name: Build appimage package
+        if: ${{ matrix.job.extra-build-features == 'appimage' }}
+        shell: bash
+        run: |
+          # set-up appimage-builder
+          pushd /tmp
+          wget -O appimage-builder-x86_64.AppImage https://github.com/AppImageCrafters/appimage-builder/releases/download/v1.1.0/appimage-builder-1.1.0-x86_64.AppImage
+          chmod +x appimage-builder-x86_64.AppImage
+          sudo mv appimage-builder-x86_64.AppImage /usr/local/bin/appimage-builder
+          popd
+          # run appimage-builder
+          pushd appimage
+          sudo appimage-builder --skip-tests --recipe ./AppImageBuilder-${{ matrix.job.arch }}.yml
+
+      - name: Publish appimage package
+        if: ${{ matrix.job.extra-build-features == 'appimage' }}
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            ./appimage/rustdesk-${{ env.VERSION }}-*.AppImage
 
       - name: Upload Artifact
         uses: actions/upload-artifact@master
@@ -1310,7 +1347,7 @@ jobs:
           popd
           # run appimage-builder
           pushd appimage
-          sudo appimage-builder --skip-tests
+          sudo appimage-builder --skip-tests --recipe ./AppImageBuilder-x86_64.yml
 
       - name: Publish appimage package
         if: ${{ matrix.job.extra-build-features == 'appimage' }}
