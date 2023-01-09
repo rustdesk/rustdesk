@@ -795,11 +795,11 @@ static HRESULT STDMETHODCALLTYPE CliprdrDataObject_QueryGetData(IDataObject *Thi
 }
 
 static HRESULT STDMETHODCALLTYPE CliprdrDataObject_GetCanonicalFormatEtc(IDataObject *This,
-																		 FORMATETC *pformatectIn,
+																		 FORMATETC *pformatetcIn,
 																		 FORMATETC *pformatetcOut)
 {
 	(void)This;
-	(void)pformatectIn;
+	(void)pformatetcIn;
 
 	if (!pformatetcOut)
 		return E_INVALIDARG;
