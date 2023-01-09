@@ -15,7 +15,7 @@ const MIN_LATENCY: i64 = 100;
 /// Only sync the audio to video, not the other way around.
 #[derive(Debug)]
 pub struct LatencyController {
-    last_video_remote_ts: i64, // generated on remote deivce
+    last_video_remote_ts: i64, // generated on remote device
     update_time: Instant,
     allow_audio: bool,
 }
