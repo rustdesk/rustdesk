@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../common.dart';
 import '../../common/widgets/dialog.dart';
+import '../../common/widgets/login.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../widgets/dialog.dart';
@@ -300,7 +301,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
               leading: Icon(Icons.person),
               onPressed: (context) {
                 if (gFFI.userModel.userName.value.isEmpty) {
-                  showLogin(gFFI.dialogManager);
+                  loginDialog();
                 } else {
                   gFFI.userModel.logOut();
                 }
@@ -397,7 +398,7 @@ void showServerSettings(OverlayDialogManager dialogManager) async {
 void showLanguageSettings(OverlayDialogManager dialogManager) async {
   try {
     final langs = json.decode(await bind.mainGetLangs()) as List<dynamic>;
-    var lang = await bind.mainGetLocalOption(key: "lang");
+    var lang = bind.mainGetLocalOption(key: "lang");
     dialogManager.show((setState, close) {
       setLang(v) {
         if (lang != v) {
@@ -480,77 +481,6 @@ void showAbout(OverlayDialogManager dialogManager) {
       actions: [],
     );
   }, clickMaskDismiss: true, backDismiss: true);
-}
-
-void showLogin(OverlayDialogManager dialogManager) {
-  final passwordController = TextEditingController();
-  final nameController = TextEditingController();
-  var loading = false;
-  var error = '';
-  dialogManager.show((setState, close) {
-    return CustomAlertDialog(
-      title: Text(translate('Login')),
-      content: Column(mainAxisSize: MainAxisSize.min, children: [
-        TextField(
-          autofocus: true,
-          autocorrect: false,
-          enableSuggestions: false,
-          keyboardType: TextInputType.visiblePassword,
-          decoration: InputDecoration(
-            labelText: translate('Username'),
-          ),
-          controller: nameController,
-        ),
-        PasswordWidget(controller: passwordController, autoFocus: false),
-      ]),
-      actions: (loading
-              ? <Widget>[CircularProgressIndicator()]
-              : (error != ""
-                  ? <Widget>[
-                      Text(translate(error),
-                          style: TextStyle(color: Colors.red))
-                    ]
-                  : <Widget>[])) +
-          <Widget>[
-            TextButton(
-              style: flatButtonStyle,
-              onPressed: loading
-                  ? null
-                  : () {
-                      close();
-                      setState(() {
-                        loading = false;
-                      });
-                    },
-              child: Text(translate('Cancel')),
-            ),
-            TextButton(
-              style: flatButtonStyle,
-              onPressed: loading
-                  ? null
-                  : () async {
-                      final name = nameController.text.trim();
-                      final pass = passwordController.text.trim();
-                      if (name != "" && pass != "") {
-                        setState(() {
-                          loading = true;
-                        });
-                        final resp = await gFFI.userModel.login(name, pass);
-                        setState(() {
-                          loading = false;
-                        });
-                        if (resp.containsKey('error')) {
-                          error = resp['error'];
-                          return;
-                        }
-                      }
-                      close();
-                    },
-              child: Text(translate('OK')),
-            ),
-          ],
-    );
-  });
 }
 
 class ScanButton extends StatelessWidget {
