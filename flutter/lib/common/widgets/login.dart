@@ -324,11 +324,13 @@ class LoginWidgetUserPass extends StatelessWidget {
                 title: '${translate("Username")}:',
                 controller: username,
                 autoFocus: true,
+                prefixIcon: Icon(Icons.account_circle_outlined),
                 errorText: usernameMsg),
             DialogTextField(
                 title: '${translate("Password")}:',
                 obscureText: true,
                 controller: pass,
+                prefixIcon: Icon(Icons.lock_outline),
                 errorText: passMsg),
             Obx(() => CheckboxListTile(
                   contentPadding: const EdgeInsets.all(0),
@@ -377,6 +379,8 @@ class DialogTextField extends StatelessWidget {
   final bool autoFocus;
   final bool obscureText;
   final String? errorText;
+  final String? helperText;
+  final Widget? prefixIcon;
   final TextEditingController controller;
   final FocusNode focusNode = FocusNode();
 
@@ -385,6 +389,8 @@ class DialogTextField extends StatelessWidget {
       this.autoFocus = false,
       this.obscureText = false,
       this.errorText,
+      this.helperText,
+      this.prefixIcon,
       required this.title,
       required this.controller})
       : super(key: key) {
@@ -403,6 +409,9 @@ class DialogTextField extends StatelessWidget {
             decoration: InputDecoration(
                 labelText: title,
                 border: const OutlineInputBorder(),
+                prefixIcon: prefixIcon,
+                helperText: helperText,
+                helperMaxLines: 8,
                 errorText: errorText),
             controller: controller,
             focusNode: focusNode,
@@ -427,38 +436,36 @@ Future<bool?> loginDialog() async {
   final autoLogin = true.obs;
   final RxString curOP = ''.obs;
 
-  return gFFI.dialogManager.show<bool>((setState, close) {
-    cancel() {
+  final res = await gFFI.dialogManager.show<bool>((setState, close) {
+    username.addListener(() {
+      if (usernameMsg != null) {
+        setState(() => usernameMsg = null);
+      }
+    });
+
+    password.addListener(() {
+      if (passwordMsg != null) {
+        setState(() => passwordMsg = null);
+      }
+    });
+
+    onDialogCancel() {
       isInProgress = false;
       close(false);
     }
 
     onLogin() async {
-      setState(() {
-        usernameMsg = null;
-        passwordMsg = null;
-        isInProgress = true;
-      });
-      cancel() {
-        curOP.value = '';
-        if (isInProgress) {
-          setState(() {
-            isInProgress = false;
-          });
-        }
-      }
-
-      curOP.value = 'rustdesk';
+      // validate
       if (username.text.isEmpty) {
-        usernameMsg = translate('Username missed');
-        cancel();
+        setState(() => usernameMsg = translate('Username missed'));
         return;
       }
       if (password.text.isEmpty) {
-        passwordMsg = translate('Password missed');
-        cancel();
+        setState(() => passwordMsg = translate('Password missed'));
         return;
       }
+      curOP.value = 'rustdesk';
+      setState(() => isInProgress = true);
       try {
         final resp = await gFFI.userModel.login(LoginRequest(
             username: username.text,
@@ -471,27 +478,33 @@ Future<bool?> loginDialog() async {
         switch (resp.type) {
           case HttpType.kAuthResTypeToken:
             if (resp.access_token != null) {
-              bind.mainSetLocalOption(
+              await bind.mainSetLocalOption(
                   key: 'access_token', value: resp.access_token!);
               close(true);
               return;
             }
             break;
           case HttpType.kAuthResTypeEmailCheck:
+            setState(() => isInProgress = false);
+            final res = await verificationCodeDialog(resp.user);
+            if (res == true) {
+              close(true);
+              return;
+            }
+            break;
+          default:
+            passwordMsg = "Failed, bad response from server";
             break;
         }
       } on RequestException catch (err) {
         passwordMsg = translate(err.cause);
         debugPrintStack(label: err.toString());
-        cancel();
-        return;
       } catch (err) {
-        passwordMsg = "Unknown Error";
+        passwordMsg = "Unknown Error: $err";
         debugPrintStack(label: err.toString());
-        cancel();
-        return;
       }
-      close();
+      curOP.value = '';
+      setState(() => isInProgress = false);
     }
 
     return CustomAlertDialog(
@@ -538,8 +551,125 @@ Future<bool?> loginDialog() async {
           ),
         ],
       ),
-      actions: [msgBoxButton(translate('Close'), cancel)],
-      onCancel: cancel,
+      actions: [msgBoxButton(translate('Close'), onDialogCancel)],
+      onCancel: onDialogCancel,
     );
   });
+
+  if (res != null) {
+    // update ab and group status
+    await gFFI.abModel.pullAb();
+    await gFFI.groupModel.pull();
+  }
+
+  return res;
+}
+
+Future<bool?> verificationCodeDialog(UserPayload? user) async {
+  var autoLogin = true;
+  var isInProgress = false;
+  String? errorText;
+
+  final code = TextEditingController();
+
+  final res = await gFFI.dialogManager.show<bool>((setState, close) {
+    bool validate() {
+      return code.text.length >= 6;
+    }
+
+    code.addListener(() {
+      if (errorText != null) {
+        setState(() => errorText = null);
+      }
+    });
+
+    void onVerify() async {
+      if (!validate()) {
+        setState(
+            () => errorText = translate('Too short, at least 6 characters.'));
+        return;
+      }
+      setState(() => isInProgress = true);
+
+      try {
+        final resp = await gFFI.userModel.login(LoginRequest(
+            verificationCode: code.text,
+            username: user?.name,
+            id: await bind.mainGetMyId(),
+            uuid: await bind.mainGetUuid(),
+            autoLogin: autoLogin,
+            type: HttpType.kAuthReqTypeEmailCode));
+
+        switch (resp.type) {
+          case HttpType.kAuthResTypeToken:
+            if (resp.access_token != null) {
+              await bind.mainSetLocalOption(
+                  key: 'access_token', value: resp.access_token!);
+              close(true);
+              return;
+            }
+            break;
+          default:
+            errorText = "Failed, bad response from server";
+            break;
+        }
+      } on RequestException catch (err) {
+        errorText = translate(err.cause);
+        debugPrintStack(label: err.toString());
+      } catch (err) {
+        errorText = "Unknown Error: $err";
+        debugPrintStack(label: err.toString());
+      }
+
+      setState(() => isInProgress = false);
+    }
+
+    return CustomAlertDialog(
+        title: Text(translate("Verification code")),
+        contentBoxConstraints: BoxConstraints(maxWidth: 300),
+        content: Column(
+          children: [
+            Offstage(
+                offstage: user?.email == null,
+                child: TextField(
+                  decoration: InputDecoration(
+                      labelText: "Email",
+                      prefixIcon: Icon(Icons.email),
+                      border: InputBorder.none),
+                  readOnly: true,
+                  controller: TextEditingController(text: user?.email),
+                )),
+            const SizedBox(height: 8),
+            DialogTextField(
+              title: '${translate("Verification code")}:',
+              controller: code,
+              autoFocus: true,
+              errorText: errorText,
+              helperText: translate('verification_tip'),
+            ),
+            CheckboxListTile(
+              contentPadding: const EdgeInsets.all(0),
+              dense: true,
+              controlAffinity: ListTileControlAffinity.leading,
+              title: Row(children: [
+                Expanded(child: Text(translate("Trust this device")))
+              ]),
+              value: autoLogin,
+              onChanged: (v) {
+                if (v == null) return;
+                setState(() => autoLogin = !autoLogin);
+              },
+            ),
+            Offstage(
+                offstage: !isInProgress,
+                child: const LinearProgressIndicator()),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: close, child: Text(translate("Cancel"))),
+          TextButton(onPressed: onVerify, child: Text(translate("Verify"))),
+        ]);
+  });
+
+  return res;
 }

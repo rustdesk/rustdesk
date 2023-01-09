@@ -36,5 +36,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("hide_cm_tip", "Allow hiding only if accepting sessions via password and using permanent password"),
         ("wayland_experiment_tip", "Wayland support is in experimental stage, please use X11 if you require unattended access."),
         ("Slogan_tip", "Made with heart in this chaotic world!"),
+        ("verification_tip", "A new device has been detected, and a verification code has been sent to the registered email address, enter the verification code to continue logging in."),
         ].iter().cloned().collect();
 }

@@ -127,7 +127,6 @@ class UserModel {
       await _parseAndUpdateUser(loginResponse.user!);
     }
 
-    await _updateOtherModels();
     return loginResponse;
   }
 }
