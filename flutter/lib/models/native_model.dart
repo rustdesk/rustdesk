@@ -33,7 +33,7 @@ class PlatformFFI {
   String _homeDir = '';
   F2? _translate;
   final _eventHandlers = <String, Map<String, HandleEvent>>{};
-  late RustdeskImpl _ffiBind;
+  late GerardeskImpl _ffiBind;
   late String _appType;
   StreamEventHandler? _eventCallback;
 
@@ -42,7 +42,7 @@ class PlatformFFI {
   static final PlatformFFI instance = PlatformFFI._();
   final _toAndroidChannel = const MethodChannel('mChannel');
 
-  RustdeskImpl get ffiBind => _ffiBind;
+  GerardeskImpl get ffiBind => _ffiBind;
 
   static get localeName => Platform.localeName;
 
@@ -110,7 +110,7 @@ class PlatformFFI {
       } catch (e) {
         debugPrint('Failed to get documents directory: $e');
       }
-      _ffiBind = RustdeskImpl(dylib);
+      _ffiBind = GerardeskImpl(dylib);
       if (Platform.isLinux) {
         // start dbus service, no need to await
         await _ffiBind.mainStartDbusServer();
@@ -196,10 +196,10 @@ class PlatformFFI {
   }
 
   /// Start listening to the Rust core's events and frames.
-  void _startListenEvent(RustdeskImpl rustdeskImpl) {
+  void _startListenEvent(GerardeskImpl gerardeskImpl) {
     () async {
       await for (final message
-          in rustdeskImpl.startGlobalEventStream(appType: _appType)) {
+          in gerardeskImpl.startGlobalEventStream(appType: _appType)) {
         try {
           Map<String, dynamic> event = json.decode(message);
           // _tryHandle here may be more flexible than _eventCallback
