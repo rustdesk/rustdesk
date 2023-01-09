@@ -1,9 +1,9 @@
-# Appveyor configuration template for Rust using rustup for Rust installation
+# AppVeyor configuration template for Rust using rustup for Rust installation
 # https://github.com/starkat99/appveyor-rust
 
 ## Operating System (VM environment) ##
 
-# Rust needs at least Visual Studio 2013 Appveyor OS for MSVC targets.
+# Rust needs at least Visual Studio 2013 AppVeyor OS for MSVC targets.
 os: Visual Studio 2015
 
 ## Build Matrix ##
@@ -83,7 +83,7 @@ environment:
 
 ### Allowed failures ###
 
-# See Appveyor documentation for specific details. In short, place any channel or targets you wish
+# See AppVeyor documentation for specific details. In short, place any channel or targets you wish
 # to allow build failures on (usually nightly at least is a wise choice). This will prevent a build
 # or test failure in the matching channels/targets from failing the entire build.
 matrix:
@@ -95,7 +95,7 @@ matrix:
 
 ## Install Script ##
 
-# This is the most important part of the Appveyor configuration. This installs the version of Rust
+# This is the most important part of the AppVeyor configuration. This installs the version of Rust
 # specified by the 'channel' and 'target' environment variables from the build matrix. This uses
 # rustup to install Rust.
 #
@@ -110,7 +110,7 @@ install:
 
 ## Build Script ##
 
-# 'cargo test' takes care of building for us, so disable Appveyor's build stage. This prevents
+# 'cargo test' takes care of building for us, so disable AppVeyor's build stage. This prevents
 # the "directory does not contain a project or solution file" error.
 build: false
 
