@@ -31,7 +31,7 @@ class Body: Reactor.Component
         var disconnected = c.disconnected;
         var show_elevation_btn = handler.can_elevate() && show_elevation && !c.is_file_transfer && c.port_forward.length == 0;
         var show_accept_btn = handler.get_option('approve-mode') != 'password';
-       // below size:* is work around for Linux, it already set in css, but not work, shit sciter
+       // below size:* is a workaround for Linux, it already set in css, but not work, shit sciter
         return <div .content style="size:*">
             <div .left-panel>
                 <div .icon-and-id>
