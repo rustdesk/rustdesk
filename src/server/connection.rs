@@ -663,7 +663,7 @@ impl Connection {
             self.send_login_error("Your ip is blocked by the peer")
                 .await;
             Self::post_alarm_audit(
-                AlarmAuditType::IpWhiltelist, //"ip whiltelist",
+                AlarmAuditType::IpWhitelist, //"ip whitelist",
                 true,
                 json!({
                             "ip":addr.ip(),
@@ -1875,7 +1875,7 @@ struct ConnAuditResponse {
 }
 
 pub enum AlarmAuditType {
-    IpWhiltelist = 0,
+    IpWhitelist = 0,
     ManyWrongPassword = 1,
     FrequentAttempt = 2,
 }
