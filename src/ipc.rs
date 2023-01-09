@@ -9,7 +9,7 @@ use parity_tokio_ipc::{
 use serde_derive::{Deserialize, Serialize};
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub use clipboard::ClipbaordFile;
+pub use clipboard::ClipboardFile;
 use hbb_common::{
     allow_err, bail, bytes,
     bytes_codec::BytesCodec,
@@ -191,7 +191,7 @@ pub enum Data {
     Test,
     SyncConfig(Option<(Config, Config2)>),
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    ClipbaordFile(ClipbaordFile),
+    ClipboardFile(ClipboardFile),
     ClipboardFileEnabled(bool),
     PrivacyModeState((i32, PrivacyModeState)),
     TestRendezvousServer,

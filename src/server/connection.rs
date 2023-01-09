@@ -319,7 +319,7 @@ impl Connection {
                             allow_err!(conn.stream.send_raw(bytes).await);
                         }
                         #[cfg(windows)]
-                        ipc::Data::ClipbaordFile(_clip) => {
+                        ipc::Data::ClipboardFile(_clip) => {
                             if conn.file_transfer_enabled() {
                                 allow_err!(conn.stream.send(&clip_2_msg(_clip)).await);
                             }
@@ -1309,7 +1309,7 @@ impl Connection {
                     if self.file_transfer_enabled() {
                         #[cfg(windows)]
                         if let Some(clip) = msg_2_clip(_clip) {
-                            self.send_to_cm(ipc::Data::ClipbaordFile(clip))
+                            self.send_to_cm(ipc::Data::ClipboardFile(clip))
                         }
                     }
                 }
