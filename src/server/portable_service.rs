@@ -756,7 +756,7 @@ pub mod client {
             log::info!("portable service status mismatch");
         }
         if portable_service_running {
-            log::info!("Create shared memeory capturer");
+            log::info!("Create shared memory capturer");
             return Ok(Box::new(CapturerPortable::new(current_display, use_yuv)));
         } else {
             log::debug!("Create capturer dxgi|gdi");
