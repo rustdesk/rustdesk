@@ -16,7 +16,7 @@ use hwcodec::{
     ffmpeg::{CodecInfo, CodecInfos, DataFormat},
     AVPixelFormat,
     Quality::{self, *},
-    RateContorl::{self, *},
+    RateControl::{self, *},
 };
 use std::sync::{Arc, Mutex};
 
@@ -31,7 +31,7 @@ const DEFAULT_PIXFMT: AVPixelFormat = AVPixelFormat::AV_PIX_FMT_YUV420P;
 pub const DEFAULT_TIME_BASE: [i32; 2] = [1, 30];
 const DEFAULT_GOP: i32 = 60;
 const DEFAULT_HW_QUALITY: Quality = Quality_Default;
-const DEFAULT_RC: RateContorl = RC_DEFAULT;
+const DEFAULT_RC: RateControl = RC_DEFAULT;
 
 pub struct HwEncoder {
     encoder: Encoder,
