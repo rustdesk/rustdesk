@@ -593,7 +593,7 @@ impl Connection {
                     Some(data) = rx_from_cm.recv() => {
                         match data {
                             ipc::Data::Close => {
-                                bail!("Close requested from selfection manager");
+                                bail!("Close requested from selection manager");
                             }
                             _ => {}
                         }
