@@ -1662,7 +1662,7 @@ pub fn send_mouse(
     interface.send(Data::Message(msg_out));
 }
 
-/// Avtivate OS by sending mouse movement.
+/// Activate OS by sending mouse movement.
 ///
 /// # Arguments
 ///
@@ -1690,7 +1690,7 @@ fn activate_os(interface: &impl Interface) {
 /// # Arguments
 ///
 /// * `p` - The password.
-/// * `avtivate` - Whether to activate OS.
+/// * `activate` - Whether to activate OS.
 /// * `interface` - The interface for sending data.
 pub fn input_os_password(p: String, activate: bool, interface: impl Interface) {
     std::thread::spawn(move || {
@@ -1703,7 +1703,7 @@ pub fn input_os_password(p: String, activate: bool, interface: impl Interface) {
 /// # Arguments
 ///
 /// * `p` - The password.
-/// * `avtivate` - Whether to activate OS.
+/// * `activate` - Whether to activate OS.
 /// * `interface` - The interface for sending data.
 fn _input_os_password(p: String, activate: bool, interface: impl Interface) {
     if activate {
