@@ -468,7 +468,7 @@ pub trait KeyboardControllable {
     /// Emits keystrokes such that the given string is inputted.
     ///
     /// You can use many unicode here like: ❤️. This works
-    /// regadless of the current keyboardlayout.
+    /// regardless of the current keyboardlayout.
     ///
     /// # Example
     ///
