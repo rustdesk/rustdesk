@@ -445,7 +445,7 @@ enum ImageQuality {
 }
 
 message VideoCodecState {
-  enum PerferCodec {
+  enum PreferCodec {
     Auto = 0;
     VPX = 1;
     H264 = 2;
@@ -455,7 +455,7 @@ message VideoCodecState {
   int32 score_vpx = 1;
   int32 score_h264 = 2;
   int32 score_h265 = 3;
-  PerferCodec perfer = 4;
+  PreferCodec prefer = 4;
 }
 
 message OptionMessage {
