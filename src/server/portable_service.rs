@@ -407,7 +407,7 @@ pub mod server {
                                     }
                                     ConnCount(Some(n)) => {
                                         if n == 0 {
-                                            log::info!("Connnection count equals 0, exit");
+                                            log::info!("Connection count equals 0, exit");
                                             stream.send(&Data::DataPortableService(WillClose)).await.ok();
                                             break;
                                         }
