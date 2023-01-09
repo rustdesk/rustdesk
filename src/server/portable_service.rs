@@ -203,7 +203,7 @@ mod utils {
     }
 }
 
-// functions called in seperate SYSTEM user process.
+// functions called in separate SYSTEM user process.
 pub mod server {
     use super::*;
 
