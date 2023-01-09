@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import re 
+import re
 import os
 import glob
 from tabnanny import check
@@ -69,7 +69,7 @@ def main():
    for ln in open('../../../Cargo.toml', encoding='utf-8'):
       if ln.startswith('version ='):
          print('export const ' + ln)
-      
+
 
 def removeComment(ln):
    return re.sub('\s+\/\/.*$', '', ln)

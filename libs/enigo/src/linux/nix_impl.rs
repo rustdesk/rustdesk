@@ -88,7 +88,13 @@ impl Default for Enigo {
         Self {
             is_x11,
             tfc: if is_x11 {
-                Some(TFC_Context::new().expect("kbd context error"))
+                match TFC_Context::new() {
+                    Ok(ctx) => Some(ctx),
+                    Err(..) => {
+                        println!("kbd context error");
+                        None
+                    }
+                }
             } else {
                 None
             },

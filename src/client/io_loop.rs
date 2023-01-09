@@ -107,6 +107,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 SERVER_CLIPBOARD_ENABLED.store(true, Ordering::SeqCst);
                 SERVER_FILE_TRANSFER_ENABLED.store(true, Ordering::SeqCst);
                 self.handler.set_connection_type(peer.is_secured(), direct); // flutter -> connection_ready
+                self.handler.set_connection_info(direct, false);
 
                 // just build for now
                 #[cfg(not(windows))]
@@ -144,7 +145,10 @@ impl<T: InvokeUiSession> Remote<T> {
                                     }
                                     Ok(ref bytes) => {
                                         last_recv_time = Instant::now();
-                                        received = true;
+                                        if !received {
+                                            received = true;
+                                            self.handler.set_connection_info(direct, true);
+                                        }
                                         self.data_count.fetch_add(bytes.len(), Ordering::Relaxed);
                                         if !self.handle_msg_from_peer(bytes, &mut peer).await {
                                             break
@@ -986,7 +990,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         self.video_sender.send(MediaData::Reset).ok();
                         if s.width > 0 && s.height > 0 {
                             self.handler
-                                .set_display(s.x, s.y, s.width, s.height, s.cursor_embeded);
+                                .set_display(s.x, s.y, s.width, s.height, s.cursor_embedded);
                         }
                     }
                     Some(misc::Union::CloseReason(c)) => {

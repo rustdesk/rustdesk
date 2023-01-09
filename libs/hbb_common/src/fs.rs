@@ -578,7 +578,7 @@ impl TransferJob {
     ///
     /// [`Note`]
     /// Conditions:
-    /// 1. Files are not waiting for comfirmation by peers.
+    /// 1. Files are not waiting for confirmation by peers.
     #[inline]
     pub fn job_completed(&self) -> bool {
         // has no error, Condition 2

@@ -78,7 +78,7 @@ pub enum FS {
     WriteError {
         id: i32,
         file_num: i32,
-        err: String
+        err: String,
     },
     WriteOffset {
         id: i32,
@@ -111,7 +111,7 @@ pub enum DataKeyboardResponse {
     GetKeyState(bool),
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "t", content = "c")]
 pub enum DataMouse {
@@ -195,11 +195,11 @@ pub enum Data {
     ClipboardFileEnabled(bool),
     PrivacyModeState((i32, PrivacyModeState)),
     TestRendezvousServer,
-    #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     Keyboard(DataKeyboard),
-    #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     KeyboardResponse(DataKeyboardResponse),
-    #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     Mouse(DataMouse),
     Control(DataControl),
     Theme(String),
@@ -544,7 +544,7 @@ async fn check_pid(postfix: &str) {
             }
         }
     }
-    hbb_common::allow_err!(std::fs::remove_file(&Config::ipc_path(postfix)));
+    std::fs::remove_file(&Config::ipc_path(postfix)).ok();
 }
 
 #[inline]

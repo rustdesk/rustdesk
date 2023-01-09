@@ -40,7 +40,7 @@ message DisplayInfo {
   int32 height = 4;
   string name = 5;
   bool online = 6;
-  bool cursor_embeded = 7;
+  bool cursor_embedded = 7;
 }
 
 message PortForward {
@@ -420,7 +420,7 @@ message SwitchDisplay {
   sint32 y = 3;
   int32 width = 4;
   int32 height = 5;
-  bool cursor_embeded = 6;
+  bool cursor_embedded = 6;
 }
 
 message PermissionInfo {

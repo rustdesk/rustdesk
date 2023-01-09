@@ -4,6 +4,7 @@
 
 use super::{CursorData, ResultType};
 use cocoa::{
+    appkit::{NSApp, NSApplication, NSApplicationActivationPolicy::*},
     base::{id, nil, BOOL, NO, YES},
     foundation::{NSDictionary, NSPoint, NSSize, NSString},
 };
@@ -32,6 +33,7 @@ extern "C" {
     fn CGEventGetLocation(e: *const c_void) -> CGPoint;
     static kAXTrustedCheckOptionPrompt: CFStringRef;
     fn AXIsProcessTrustedWithOptions(options: CFDictionaryRef) -> BOOL;
+    fn InputMonitoringAuthStatus(_: BOOL) -> BOOL;
 }
 
 pub fn is_process_trusted(prompt: bool) -> bool {
@@ -44,6 +46,13 @@ pub fn is_process_trusted(prompt: bool) -> bool {
             kAXTrustedCheckOptionPrompt as _,
         );
         AXIsProcessTrustedWithOptions(options as _) == YES
+    }
+}
+
+pub fn is_can_input_monitoring(prompt: bool) -> bool {
+    unsafe {
+        let value = if prompt { YES } else { NO };
+        InputMonitoringAuthStatus(value) == YES
     }
 }
 
@@ -500,7 +509,7 @@ pub fn start_os_service() {
                     Err(err) => {
                         log::error!("Failed to start server: {}", err);
                     }
-                    _ => { /*no hapen*/ }
+                    _ => { /*no happen*/ }
                 }
             }
             std::thread::sleep(std::time::Duration::from_millis(super::SERVICE_INTERVAL));
@@ -541,4 +550,10 @@ pub fn quit_gui() {
 pub fn get_double_click_time() -> u32 {
     // to-do: https://github.com/servo/core-foundation-rs/blob/786895643140fa0ee4f913d7b4aeb0c4626b2085/cocoa/src/appkit.rs#L2823
     500 as _
+}
+
+pub fn hide_dock() {
+    unsafe {
+        NSApp().setActivationPolicy_(NSApplicationActivationPolicyAccessory);
+    }
 }

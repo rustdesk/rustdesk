@@ -17,6 +17,10 @@ import './state_model.dart';
 /// Mouse button enum.
 enum MouseButtons { left, right, wheel }
 
+const _kMouseEventDown = 'mousedown';
+const _kMouseEventUp = 'mouseup';
+const _kMouseEventMove = 'mousemove';
+
 extension ToString on MouseButtons {
   String get value {
     switch (this) {
@@ -46,7 +50,7 @@ class InputModel {
 
   // mouse
   final isPhysicalMouse = false.obs;
-  int _lastMouseDownButtons = 0;
+  int _lastButtons = 0;
   Offset lastMousePos = Offset.zero;
 
   get id => parent.target?.id ?? "";
@@ -54,7 +58,7 @@ class InputModel {
   InputModel(this.parent);
 
   KeyEventResult handleRawKeyEvent(FocusNode data, RawKeyEvent e) {
-    bind.sessionGetKeyboardName(id: id).then((result) {
+    bind.sessionGetKeyboardMode(id: id).then((result) {
       keyboardMode = result.toString();
     });
 
@@ -183,20 +187,42 @@ class InputModel {
 
   Map<String, dynamic> getEvent(PointerEvent evt, String type) {
     final Map<String, dynamic> out = {};
-    out['type'] = type;
     out['x'] = evt.position.dx;
     out['y'] = evt.position.dy;
     if (alt) out['alt'] = 'true';
     if (shift) out['shift'] = 'true';
     if (ctrl) out['ctrl'] = 'true';
     if (command) out['command'] = 'true';
-    out['buttons'] = evt
-        .buttons; // left button: 1, right button: 2, middle button: 4, 1 | 2 = 3 (left + right)
-    if (evt.buttons != 0) {
-      _lastMouseDownButtons = evt.buttons;
+
+    // Check update event type and set buttons to be sent.
+    int buttons = _lastButtons;
+    if (type == _kMouseEventMove) {
+      // flutter may emit move event if one button is pressed and anoter button
+      // is pressing or releasing.
+      if (evt.buttons != _lastButtons) {
+        // For simplicity
+        // Just consider 3 - 1 ((Left + Right buttons) - Left button)
+        // Do not consider 2 - 1 (Right button - Left button)
+        // or 6 - 5 ((Right + Mid buttons) - (Left + Mid buttons))
+        // and so on
+        buttons = evt.buttons - _lastButtons;
+        if (buttons > 0) {
+          type = _kMouseEventDown;
+        } else {
+          type = _kMouseEventUp;
+          buttons = -buttons;
+        }
+      }
     } else {
-      out['buttons'] = _lastMouseDownButtons;
+      if (evt.buttons != 0) {
+        buttons = evt.buttons;
+      }
     }
+    _lastButtons = evt.buttons;
+
+    out['buttons'] = buttons;
+    out['type'] = type;
+
     return out;
   }
 
@@ -260,7 +286,7 @@ class InputModel {
       isPhysicalMouse.value = true;
     }
     if (isPhysicalMouse.value) {
-      handleMouse(getEvent(e, 'mousemove'));
+      handleMouse(getEvent(e, _kMouseEventMove));
     }
   }
 
@@ -325,21 +351,21 @@ class InputModel {
       }
     }
     if (isPhysicalMouse.value) {
-      handleMouse(getEvent(e, 'mousedown'));
+      handleMouse(getEvent(e, _kMouseEventDown));
     }
   }
 
   void onPointUpImage(PointerUpEvent e) {
     if (e.kind != ui.PointerDeviceKind.mouse) return;
     if (isPhysicalMouse.value) {
-      handleMouse(getEvent(e, 'mouseup'));
+      handleMouse(getEvent(e, _kMouseEventUp));
     }
   }
 
   void onPointMoveImage(PointerMoveEvent e) {
     if (e.kind != ui.PointerDeviceKind.mouse) return;
     if (isPhysicalMouse.value) {
-      handleMouse(getEvent(e, 'mousemove'));
+      handleMouse(getEvent(e, _kMouseEventMove));
     }
   }
 
@@ -388,13 +414,13 @@ class InputModel {
     var type = '';
     var isMove = false;
     switch (evt['type']) {
-      case 'mousedown':
+      case _kMouseEventDown:
         type = 'down';
         break;
-      case 'mouseup':
+      case _kMouseEventUp:
         type = 'up';
         break;
-      case 'mousemove':
+      case _kMouseEventMove:
         isMove = true;
         break;
       default:
@@ -440,14 +466,20 @@ class InputModel {
     evt['y'] = '${y.round()}';
     var buttons = '';
     switch (evt['buttons']) {
-      case 1:
+      case kPrimaryMouseButton:
         buttons = 'left';
         break;
-      case 2:
+      case kSecondaryMouseButton:
         buttons = 'right';
         break;
-      case 4:
+      case kMiddleMouseButton:
         buttons = 'wheel';
+        break;
+      case kBackMouseButton:
+        buttons = 'back';
+        break;
+      case kForwardMouseButton:
+        buttons = 'forward';
         break;
     }
     evt['buttons'] = buttons;

@@ -1,9 +1,16 @@
 #[cfg(windows)]
 fn build_windows() {
-    cc::Build::new().file("src/windows.cc").compile("windows");
+    let file = "src/platform/windows.cc";
+    cc::Build::new().file(file).compile("windows");
     println!("cargo:rustc-link-lib=WtsApi32");
-    println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed=windows.cc");
+    println!("cargo:rerun-if-changed={}", file);
+}
+
+#[cfg(target_os = "macos")]
+fn build_mac() {
+    let file = "src/platform/macos.mm";
+    cc::Build::new().file(file).compile("macos");
+    println!("cargo:rerun-if-changed={}", file);
 }
 
 #[cfg(all(windows, feature = "inline"))]
@@ -117,5 +124,8 @@ fn main() {
     #[cfg(windows)]
     build_windows();
     #[cfg(target_os = "macos")]
+    build_mac();
+    #[cfg(target_os = "macos")]
     println!("cargo:rustc-link-lib=framework=ApplicationServices");
+    println!("cargo:rerun-if-changed=build.rs");
 }

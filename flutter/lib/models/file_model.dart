@@ -213,7 +213,6 @@ class FileModel extends ChangeNotifier {
   }
 
   receiveFileDir(Map<String, dynamic> evt) {
-    debugPrint("recv file dir:$evt");
     if (evt['is_local'] == "false") {
       // init remote home, the connection will automatic read remote home when established,
       try {
@@ -237,7 +236,9 @@ class FileModel extends ChangeNotifier {
           debugPrint("init remote home:${fd.path}");
           _currentRemoteDir = fd;
         }
-      } finally {}
+      } catch (e) {
+        debugPrint("receiveFileDir err=$e");
+      }
     }
     _fileFetcher.tryCompleteTask(evt['value'], evt['is_local']);
     notifyListeners();

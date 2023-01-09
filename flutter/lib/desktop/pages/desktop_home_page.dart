@@ -42,6 +42,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   var svcStopped = false.obs;
   var watchIsCanScreenRecording = false;
   var watchIsProcessTrust = false;
+  var watchIsInputMonitoring = false;
   Timer? _updateTimer;
 
   @override
@@ -334,6 +335,12 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           bind.mainIsProcessTrusted(prompt: true);
           watchIsProcessTrust = true;
         }, help: 'Help', link: translate("doc_mac_permission"));
+      } else if (!bind.mainIsCanInputMonitoring(prompt: false)) {
+        return buildInstallCard("Permissions", "config_input", "Configure",
+            () async {
+          bind.mainIsCanInputMonitoring(prompt: true);
+          watchIsInputMonitoring = true;
+        }, help: 'Help', link: translate("doc_mac_permission"));
       } else if (!svcStopped.value &&
           bind.mainIsInstalled() &&
           !bind.mainIsInstalledDaemon(prompt: false)) {
@@ -438,7 +445,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   @override
   void initState() {
     super.initState();
-    bind.mainStartGrabKeyboard();
     _updateTimer = periodic_immediate(const Duration(seconds: 1), () async {
       await gFFI.serverModel.fetchID();
       final url = await bind.mainGetSoftwareUpdateUrl();
@@ -465,6 +471,12 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       if (watchIsProcessTrust) {
         if (bind.mainIsProcessTrusted(prompt: false)) {
           watchIsProcessTrust = false;
+          setState(() {});
+        }
+      }
+      if (watchIsInputMonitoring) {
+        if (bind.mainIsCanInputMonitoring(prompt: false)) {
+          watchIsInputMonitoring = false;
           setState(() {});
         }
       }
@@ -501,9 +513,9 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       } else if (call.method == kWindowActionRebuild) {
         reloadCurrentWindow();
       } else if (call.method == kWindowEventShow) {
-        rustDeskWinManager.registerActiveWindow(call.arguments["id"]);
+        await rustDeskWinManager.registerActiveWindow(call.arguments["id"]);
       } else if (call.method == kWindowEventHide) {
-        rustDeskWinManager.unregisterActiveWindow(call.arguments["id"]);
+        await rustDeskWinManager.unregisterActiveWindow(call.arguments["id"]);
       } else if (call.method == kWindowConnect) {
         await connectMainDesktop(
           call.arguments['id'],

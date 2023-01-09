@@ -156,7 +156,7 @@ impl InvokeUiSession for FlutterHandler {
     }
 
     /// unused in flutter, use switch_display or set_peer_info
-    fn set_display(&self, _x: i32, _y: i32, _w: i32, _h: i32, _cursor_embeded: bool) {}
+    fn set_display(&self, _x: i32, _y: i32, _w: i32, _h: i32, _cursor_embedded: bool) {}
 
     fn update_privacy_mode(&self) {
         self.push_event("update_privacy_mode", [].into());
@@ -242,7 +242,7 @@ impl InvokeUiSession for FlutterHandler {
             self.push_event(
                 "file_dir",
                 vec![
-                    ("value", &make_fd_to_json(id, path, entries)),
+                    ("value", &crate::common::make_fd_to_json(id, path, entries)),
                     ("is_local", "false"),
                 ],
             );
@@ -296,7 +296,7 @@ impl InvokeUiSession for FlutterHandler {
             h.insert("y", d.y);
             h.insert("width", d.width);
             h.insert("height", d.height);
-            h.insert("cursor_embeded", if d.cursor_embeded { 1 } else { 0 });
+            h.insert("cursor_embedded", if d.cursor_embedded { 1 } else { 0 });
             displays.push(h);
         }
         let displays = serde_json::ser::to_string(&displays).unwrap_or("".to_owned());
@@ -323,6 +323,8 @@ impl InvokeUiSession for FlutterHandler {
             ],
         );
     }
+
+    fn on_connected(&self, _conn_type: ConnType) {}
 
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool) {
         let has_retry = if retry { "true" } else { "" };
@@ -355,7 +357,7 @@ impl InvokeUiSession for FlutterHandler {
                 ("y", &display.y.to_string()),
                 ("width", &display.width.to_string()),
                 ("height", &display.height.to_string()),
-                ("cursor_embeded", &{if display.cursor_embeded {1} else {0}}.to_string()),
+                ("cursor_embedded", &{if display.cursor_embedded {1} else {0}}.to_string()),
             ],
         );
     }
@@ -422,8 +424,6 @@ pub fn session_start_(id: &str, event_stream: StreamSink<EventToUI>) -> ResultTy
         *session.event_stream.write().unwrap() = Some(event_stream);
         let session = session.clone();
         std::thread::spawn(move || {
-            // if flutter : disable keyboard listen
-            crate::client::disable_keyboard_listening();
             io_loop(session);
         });
         Ok(())
@@ -543,24 +543,6 @@ pub fn get_session_id(id: String) -> String {
     } else {
         id
     };
-}
-
-pub fn make_fd_to_json(id: i32, path: String, entries: &Vec<FileEntry>) -> String {
-    let mut fd_json = serde_json::Map::new();
-    fd_json.insert("id".into(), json!(id));
-    fd_json.insert("path".into(), json!(path));
-
-    let mut entries_out = vec![];
-    for entry in entries {
-        let mut entry_map = serde_json::Map::new();
-        entry_map.insert("entry_type".into(), json!(entry.entry_type.value()));
-        entry_map.insert("name".into(), json!(entry.name));
-        entry_map.insert("size".into(), json!(entry.size));
-        entry_map.insert("modified_time".into(), json!(entry.modified_time));
-        entries_out.push(entry_map);
-    }
-    fd_json.insert("entries".into(), json!(entries_out));
-    serde_json::to_string(&fd_json).unwrap_or("".into())
 }
 
 pub fn make_fd_flutter(id: i32, entries: &Vec<FileEntry>, only_count: bool) -> String {

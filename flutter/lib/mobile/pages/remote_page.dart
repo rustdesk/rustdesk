@@ -518,7 +518,7 @@ class _RemotePageState extends State<RemotePage> {
                     ),
             ),
           ];
-          if (!gFFI.canvasModel.cursorEmbeded) {
+          if (!gFFI.canvasModel.cursorEmbedded) {
             paints.add(CursorPaint());
           }
           return paints;
@@ -527,7 +527,7 @@ class _RemotePageState extends State<RemotePage> {
 
   Widget getBodyForDesktopWithListener(bool keyboard) {
     var paints = <Widget>[ImagePaint()];
-    if (!gFFI.canvasModel.cursorEmbeded) {
+    if (!gFFI.canvasModel.cursorEmbedded) {
       final cursor = bind.sessionGetToggleOptionSync(
           id: widget.id, arg: 'show-remote-cursor');
       if (keyboard || cursor) {
@@ -692,10 +692,11 @@ class _RemotePageState extends State<RemotePage> {
   }
 
   void changePhysicalKeyboardInputMode() async {
-    var current = await bind.sessionGetKeyboardName(id: widget.id);
+    var current = await bind.sessionGetKeyboardMode(id: widget.id) ?? "legacy";
     gFFI.dialogManager.show((setState, close) {
       void setMode(String? v) async {
-        await bind.sessionSetKeyboardMode(id: widget.id, keyboardMode: v ?? '');
+        await bind.sessionPeerOption(
+            id: widget.id, name: "keyboard-mode", value: v ?? "");
         setState(() => current = v ?? '');
         Future.delayed(Duration(milliseconds: 300), close);
       }
@@ -977,7 +978,9 @@ void showOptions(
       final h265 = codecsJson['h265'] ?? false;
       codecs.add(h264);
       codecs.add(h265);
-    } finally {}
+    } catch (e) {
+      debugPrint("Show Codec Preference err=$e");
+    }
   }
 
   dialogManager.show((setState, close) {
@@ -1055,7 +1058,7 @@ void showOptions(
     final toggles = [
       getToggle(id, setState, 'show-quality-monitor', 'Show quality monitor'),
     ];
-    if (!gFFI.canvasModel.cursorEmbeded) {
+    if (!gFFI.canvasModel.cursorEmbedded) {
       toggles.insert(0,
           getToggle(id, setState, 'show-remote-cursor', 'Show remote cursor'));
     }

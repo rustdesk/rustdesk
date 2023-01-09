@@ -117,6 +117,7 @@ void runMainApp(bool startService) async {
     // await windowManager.ensureInitialized();
     gFFI.serverModel.startService();
   }
+  gFFI.userModel.refreshCurrentUser();
   runApp(App());
   // restore the location of the main window before window hide or show
   await restoreWindowPosition(WindowType.Main);
@@ -195,6 +196,8 @@ void runMultiWindow(
       // no such appType
       exit(0);
   }
+  // show window from hidden status
+  WindowController.fromWindowId(windowId!).show();
 }
 
 void runConnectionManagerScreen(bool hide) async {

@@ -46,7 +46,7 @@ var isWebDesktop = false;
 var version = "";
 int androidVersion = 0;
 
-/// only avaliable for Windows target
+/// only available for Windows target
 int windowsBuildNumber = 0;
 DesktopType? desktopType;
 
@@ -99,22 +99,28 @@ class IconFont {
 class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
   const ColorThemeExtension({
     required this.border,
+    required this.highlight,
   });
 
   final Color? border;
+  final Color? highlight;
 
   static const light = ColorThemeExtension(
     border: Color(0xFFCCCCCC),
+    highlight: Color(0xFFE5E5E5),
   );
 
   static const dark = ColorThemeExtension(
     border: Color(0xFF555555),
+    highlight: Color(0xFF3F3F3F),
   );
 
   @override
-  ThemeExtension<ColorThemeExtension> copyWith({Color? border}) {
+  ThemeExtension<ColorThemeExtension> copyWith(
+      {Color? border, Color? highlight}) {
     return ColorThemeExtension(
       border: border ?? this.border,
+      highlight: highlight ?? this.highlight,
     );
   }
 
@@ -126,6 +132,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
     }
     return ColorThemeExtension(
       border: Color.lerp(border, other.border, t),
+      highlight: Color.lerp(highlight, other.highlight, t),
     );
   }
 }
@@ -223,7 +230,7 @@ class MyTheme {
         bind.mainSetLocalOption(
             key: kCommConfKeyTheme, value: mode.toShortString());
       }
-      bind.mainChangeTheme(dark: currentThemeMode().toShortString());
+      bind.mainChangeTheme(dark: mode.toShortString());
     }
   }
 
@@ -1360,13 +1367,13 @@ connect(BuildContext context, String id,
   }
 }
 
-Future<Map<String, String>> getHttpHeaders() async {
+Map<String, String> getHttpHeaders() {
   return {
     'Authorization': 'Bearer ${bind.mainGetLocalOption(key: 'access_token')}'
   };
 }
 
-// Simple wrapper of built-in types for refrence use.
+// Simple wrapper of built-in types for reference use.
 class SimpleWrapper<T> {
   T value;
   SimpleWrapper(this.value);
@@ -1402,7 +1409,7 @@ Future<void> reloadAllWindows() async {
 /// Indicate the flutter app is running in portable mode.
 ///
 /// [Note]
-/// Portable build is only avaliable on Windows.
+/// Portable build is only available on Windows.
 bool isRunningInPortableMode() {
   if (!Platform.isWindows) {
     return false;
@@ -1411,7 +1418,7 @@ bool isRunningInPortableMode() {
 }
 
 /// Window status callback
-void onActiveWindowChanged() async {
+Future<void> onActiveWindowChanged() async {
   print(
       "[MultiWindowHandler] active window changed: ${rustDeskWinManager.getActiveWindows()}");
   if (rustDeskWinManager.getActiveWindows().isEmpty) {
@@ -1503,3 +1510,53 @@ Pointer<win32.OSVERSIONINFOEX> getOSVERSIONINFOEXPointer() {
 bool get kUseCompatibleUiMode =>
     Platform.isWindows &&
     const [WindowsTarget.w7].contains(windowsBuildNumber.windowsVersion);
+
+class ServerConfig {
+  late String idServer;
+  late String relayServer;
+  late String apiServer;
+  late String key;
+
+  ServerConfig(
+      {String? idServer, String? relayServer, String? apiServer, String? key}) {
+    this.idServer = idServer?.trim() ?? '';
+    this.relayServer = relayServer?.trim() ?? '';
+    this.apiServer = apiServer?.trim() ?? '';
+    this.key = key?.trim() ?? '';
+  }
+
+  /// decode from shared string (from user shared or rustdesk-server generated)
+  /// also see [encode]
+  /// throw when decoding failure
+  ServerConfig.decode(String msg) {
+    final input = msg.split('').reversed.join('');
+    final bytes = base64Decode(base64.normalize(input));
+    final json = jsonDecode(utf8.decode(bytes));
+
+    idServer = json['host'] ?? '';
+    relayServer = json['relay'] ?? '';
+    apiServer = json['api'] ?? '';
+    key = json['key'] ?? '';
+  }
+
+  /// encode to shared string
+  /// also see [ServerConfig.decode]
+  String encode() {
+    Map<String, String> config = {};
+    config['host'] = idServer.trim();
+    config['relay'] = relayServer.trim();
+    config['api'] = apiServer.trim();
+    config['key'] = key.trim();
+    return base64Encode(Uint8List.fromList(jsonEncode(config).codeUnits))
+        .split('')
+        .reversed
+        .join();
+  }
+
+  /// from local options
+  ServerConfig.fromOptions(Map<String, dynamic> options)
+      : idServer = options['custom-rendezvous-server'] ?? "",
+        relayServer = options['relay-server'] ?? "",
+        apiServer = options['api-server'] ?? "",
+        key = options['key'] ?? "";
+}
