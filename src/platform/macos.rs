@@ -331,7 +331,7 @@ pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
         */
         let mut colors: Vec<u8> = Vec::new();
         colors.reserve((size.height * size.width) as usize * 4);
-        // TIFF is rgb colrspace, no need to convert
+        // TIFF is rgb colorspace, no need to convert
         // let cs: id = msg_send![class!(NSColorSpace), sRGBColorSpace];
         for y in 0..(size.height as _) {
             for x in 0..(size.width as _) {
