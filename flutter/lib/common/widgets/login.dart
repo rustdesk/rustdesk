@@ -300,8 +300,10 @@ class LoginWidgetUserPass extends StatelessWidget {
   final RxString curOP;
   final RxBool autoLogin;
   final Function() onLogin;
+  final FocusNode? userFocusNode;
   const LoginWidgetUserPass({
     Key? key,
+    this.userFocusNode,
     required this.username,
     required this.pass,
     required this.usernameMsg,
@@ -323,7 +325,7 @@ class LoginWidgetUserPass extends StatelessWidget {
             DialogTextField(
                 title: '${translate("Username")}:',
                 controller: username,
-                autoFocus: true,
+                focusNode: userFocusNode,
                 prefixIcon: Icon(Icons.account_circle_outlined),
                 errorText: usernameMsg),
             DialogTextField(
@@ -376,29 +378,23 @@ class LoginWidgetUserPass extends StatelessWidget {
 
 class DialogTextField extends StatelessWidget {
   final String title;
-  final bool autoFocus;
   final bool obscureText;
   final String? errorText;
   final String? helperText;
   final Widget? prefixIcon;
   final TextEditingController controller;
-  final FocusNode focusNode = FocusNode();
+  final FocusNode? focusNode;
 
   DialogTextField(
       {Key? key,
-      this.autoFocus = false,
+      this.focusNode,
       this.obscureText = false,
       this.errorText,
       this.helperText,
       this.prefixIcon,
       required this.title,
       required this.controller})
-      : super(key: key) {
-    // todo mobile requestFocus, on mobile, widget will reload every time the text changes
-    if (autoFocus && isDesktop) {
-      Timer(Duration(milliseconds: 200), () => focusNode.requestFocus());
-    }
-  }
+      : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -429,6 +425,8 @@ class DialogTextField extends StatelessWidget {
 Future<bool?> loginDialog() async {
   var username = TextEditingController();
   var password = TextEditingController();
+  final userFocusNode = FocusNode()..requestFocus();
+  Timer(Duration(milliseconds: 100), () => userFocusNode..requestFocus());
 
   String? usernameMsg;
   String? passwordMsg;
@@ -525,6 +523,7 @@ Future<bool?> loginDialog() async {
             curOP: curOP,
             autoLogin: autoLogin,
             onLogin: onLogin,
+            userFocusNode: userFocusNode,
           ),
           const SizedBox(
             height: 8.0,
@@ -571,6 +570,8 @@ Future<bool?> verificationCodeDialog(UserPayload? user) async {
   String? errorText;
 
   final code = TextEditingController();
+  final focusNode = FocusNode()..requestFocus();
+  Timer(Duration(milliseconds: 100), () => focusNode..requestFocus());
 
   final res = await gFFI.dialogManager.show<bool>((setState, close) {
     bool validate() {
@@ -643,8 +644,8 @@ Future<bool?> verificationCodeDialog(UserPayload? user) async {
             DialogTextField(
               title: '${translate("Verification code")}:',
               controller: code,
-              autoFocus: true,
               errorText: errorText,
+              focusNode: focusNode,
               helperText: translate('verification_tip'),
             ),
             CheckboxListTile(
