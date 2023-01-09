@@ -82,7 +82,7 @@ export default class Connection {
     this._ws = ws;
     this._id = id;
     console.log(
-      new Date() + ": Conntecting to rendezvoous server: " + uri + ", for " + id
+      new Date() + ": Connecting to rendezvoous server: " + uri + ", for " + id
     );
     await ws.open();
     console.log(new Date() + ": Connected to rendezvoous server");
