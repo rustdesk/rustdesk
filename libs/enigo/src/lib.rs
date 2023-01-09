@@ -19,7 +19,7 @@
 //! or any other "special" key on the Linux, macOS and Windows operating system.
 //!
 //! Possible use cases could be for testing user interfaces on different
-//! plattforms,
+//! platforms,
 //! building remote control applications or just automating tasks for user
 //! interfaces unaccessible by a public API or scripting language.
 //!
