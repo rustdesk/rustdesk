@@ -18,10 +18,9 @@ pub use arboard::Clipboard as ClipboardContext;
 use hbb_common::compress::decompress;
 use hbb_common::{
     allow_err,
-    anyhow::bail,
     compress::compress as compress_func,
     config::{self, Config, COMPRESS_LEVEL, RENDEZVOUS_TIMEOUT},
-    get_version_number, is_ipv6_str, log,
+    get_version_number, log,
     message_proto::*,
     protobuf::Enum,
     protobuf::Message as _,
@@ -293,7 +292,7 @@ async fn test_nat_type_() -> ResultType<bool> {
     let start = std::time::Instant::now();
     let (rendezvous_server, _, _) = get_rendezvous_server(1_000).await;
     let server1 = rendezvous_server;
-    let server2 = crate::increase_port(server1, -1);
+    let server2 = crate::increase_port(&server1, -1);
     let mut msg_out = RendezvousMessage::new();
     let serial = Config::get_serial();
     msg_out.set_test_nat_request(TestNatRequest {
@@ -356,13 +355,7 @@ pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>, boo
     let (mut a, mut b) = get_rendezvous_server_(ms_timeout).await;
     let mut b: Vec<String> = b
         .drain(..)
-        .map(|x| {
-            if !x.contains(":") {
-                format!("{}:{}", x, config::RENDEZVOUS_PORT)
-            } else {
-                x
-            }
-        })
+        .map(|x| socket_client::check_port(x, config::RENDEZVOUS_PORT))
         .collect();
     let c = if b.contains(&a) {
         b = b.drain(..).filter(|x| x != &a).collect();
@@ -586,7 +579,7 @@ pub fn get_api_server(api: String, custom: String) -> String {
     }
     let s0 = get_custom_rendezvous_server(custom);
     if !s0.is_empty() {
-        let s = crate::increase_port(s0, -2);
+        let s = crate::increase_port(&s0, -2);
         if s == s0 {
             format!("http://{}:{}", s, config::RENDEZVOUS_PORT - 2);
         } else {
