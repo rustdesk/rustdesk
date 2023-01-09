@@ -825,7 +825,7 @@ impl VideoHandler {
     /// Handle a new video frame.
     pub fn handle_frame(&mut self, vf: VideoFrame) -> ResultType<bool> {
         if vf.timestamp != 0 {
-            // Update the lantency controller with the latest timestamp.
+            // Update the latency controller with the latest timestamp.
             self.latency_controller
                 .lock()
                 .unwrap()
