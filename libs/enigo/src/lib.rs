@@ -206,7 +206,7 @@ pub trait MouseControllable {
 
     /// Click a mouse button
     ///
-    /// it's essentially just a consecutive invokation of
+    /// it's essentially just a consecutive invocation of
     /// [mouse_down](trait.MouseControllable.html#tymethod.mouse_down) followed
     /// by a [mouse_up](trait.MouseControllable.html#tymethod.mouse_up). Just
     /// for
