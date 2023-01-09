@@ -39,7 +39,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Change ID", "Cambiar ID"),
         ("Website", "Sitio web"),
         ("About", "Acerca de"),
-        ("Slogan_tip", ""),
+        ("Slogan_tip", "Hecho con corazón en este mundo caótico!"),
         ("Privacy Statement", ""),
         ("Mute", "Silenciar"),
         ("Audio Input", "Entrada de audio"),
@@ -410,5 +410,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Closed manually by the web console", "Cerrado manualmente por la consola web"),
         ("Local keyboard type", "Tipo de teclado local"),
         ("Select local keyboard type", "Seleccionar tipo de teclado local"),
+        ("software_render_tip", "Si tienes una gráfica Nvidia y la ventana remota se cierra inmediatamente, instalar el driver nouveau y elegir renderizado por software podría ayudar. Se requiere reiniciar la aplicación."),
+        ("Always use software rendering", "Usar siempre renderizado por software"),
+        ("config_input", "Para controlar el escritorio remoto con el teclado necesitas dar a RustDesk permisos de \"Monitorización de entrada\"."),
     ].iter().cloned().collect();
 }

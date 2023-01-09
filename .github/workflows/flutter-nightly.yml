@@ -142,12 +142,41 @@ jobs:
         job:
           - {
               target: x86_64-apple-darwin,
-              os: macos-10.15,
+              os: macos-latest,
               extra-build-args: "",
             }
     steps:
       - name: Checkout source code
         uses: actions/checkout@v3
+
+      - name: Import the codesign cert
+        uses: apple-actions/import-codesign-certs@v1
+        with: 
+          p12-file-base64: ${{ secrets.MACOS_P12_BASE64 }}
+          p12-password: ${{ secrets.MACOS_P12_PASSWORD }}
+          keychain: rustdesk
+      
+      - name: Check sign and import sign key
+        run: |
+          security default-keychain -s rustdesk.keychain
+          security find-identity -v
+
+      - name: Import notarize key
+        uses: timheuer/base64-to-file@v1.2
+        with:
+          # https://gregoryszorc.com/docs/apple-codesign/stable/apple_codesign_rcodesign.html#notarizing-and-stapling
+          fileName: rustdesk.json
+          fileDir: ${{ github.workspace }}
+          encodedString: ${{ secrets.MACOS_NOTARIZE_JSON }}
+          
+      - name: Install rcodesign tool
+        shell: bash
+        run: | 
+          pushd /tmp
+          wget https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F0.22.0/apple-codesign-0.22.0-macos-universal.tar.gz
+          tar -zxvf apple-codesign-0.22.0-macos-universal.tar.gz
+          mv apple-codesign-0.22.0-macos-universal/rcodesign /usr/local/bin
+          popd
 
       - name: Install build runtime
         run: |
@@ -158,7 +187,6 @@ jobs:
         with:
           channel: "stable"
           flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: true
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -177,8 +205,12 @@ jobs:
         run: |
           dart pub global activate ffigen --version 5.0.1
           # flutter_rust_bridge
-          pushd /tmp && git clone https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge --depth=1 && popd
-          pushd /tmp/flutter_rust_bridge/frb_codegen && cargo install --path . && popd
+          pushd /tmp
+            wget https://github.com/Kingtous/flutter_rust_bridge/releases/download/1.32.0-rustdesk/flutter_rust_bridge_codegen-x86_64-darwin.tgz
+            tar -zxvf flutter_rust_bridge_codegen-x86_64-darwin.tgz
+            mkdir -p ~/.cargo/bin
+            mv flutter_rust_bridge_codegen ~/.cargo/bin; chmod +x ~/.cargo/bin/flutter_rust_bridge_codegen
+          popd
           pushd flutter && flutter pub get && popd
           ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart
 
@@ -191,10 +223,6 @@ jobs:
       - name: Install vcpkg dependencies
         run: |
           $VCPKG_ROOT/vcpkg install libvpx libyuv opus
-
-      - name: Install cargo bundle tools
-        run: |
-          cargo install cargo-bundle
 
       - name: Show version information (Rust, cargo, Clang)
         shell: bash
@@ -210,6 +238,18 @@ jobs:
         run: |
           # --hwcodec not supported on macos yet
           ./build.py --flutter ${{ matrix.job.extra-build-args }}
+
+      - name: Codesign app and create signed dmg
+        run: |
+          security default-keychain -s rustdesk.keychain
+          security unlock-keychain -p ${{ secrets.MACOS_P12_PASSWORD }} rustdesk.keychain
+          # start sign the rustdesk.app and dmg
+          rm rustdesk-${{ env.VERSION }}.dmg || true
+          codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep ./flutter/build/macos/Build/Products/Release/rustdesk.app -v
+          create-dmg --icon "rustdesk.app" 200 190 --hide-extension "rustdesk.app" --window-size 800 400 --app-drop-link 600 185 rustdesk-${{ env.VERSION }}.dmg ./flutter/build/macos/Build/Products/Release/rustdesk.app
+          codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep rustdesk-${{ env.VERSION }}.dmg -v
+          # notarize the rustdesk-${{ env.VERSION }}.dmg
+          rcodesign notary-submit --api-key-path ${{ github.workspace }}/rustdesk.json  --staple rustdesk-${{ env.VERSION }}.dmg
 
       - name: Rename rustdesk
         run: |
@@ -558,6 +598,12 @@ jobs:
               target: x86_64-unknown-linux-gnu,
               os: ubuntu-20.04,
               extra-build-features: "flatpak",
+            }
+          - {
+              arch: x86_64,
+              target: x86_64-unknown-linux-gnu,
+              os: ubuntu-20.04,
+              extra-build-features: "appimage",
             }
           # - { target: x86_64-unknown-linux-musl   , os: ubuntu-20.04, use-cross: true }
     steps:
@@ -1108,6 +1154,12 @@ jobs:
               os: ubuntu-18.04,
               extra-build-features: "flatpak",
             }
+          - {
+              arch: x86_64,
+              target: x86_64-unknown-linux-gnu,
+              os: ubuntu-18.04,
+              extra-build-features: "appimage",
+            }
           # - { target: x86_64-unknown-linux-musl   , os: ubuntu-20.04, use-cross: true }
     steps:
       - name: Checkout source code
@@ -1122,7 +1174,7 @@ jobs:
       - name: Prepare env
         run: |
           sudo apt update -y
-          sudo apt-get -qq install -y git curl wget nasm yasm libgtk-3-dev
+          sudo apt-get -qq install -y git curl wget nasm yasm libgtk-3-dev libarchive-tools
           mkdir -p ./target/release/
 
       - name: Restore the rustdesk lib file
@@ -1177,10 +1229,12 @@ jobs:
         shell: bash
         run: |
           for name in rustdesk*??.deb; do
-              mv "$name" "${name%%.deb}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb"
+              # use cp to duplicate deb files to fit other packages.
+              cp "$name" "${name%%.deb}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb"
           done
 
       - name: Publish debian package
+        if: ${{ matrix.job.extra-build-features == '' }}
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
@@ -1243,6 +1297,29 @@ jobs:
           tag_name: ${{ env.TAG_NAME }}
           files: |
             res/rustdesk*.zst
+
+      - name: Build appimage package
+        if: ${{ matrix.job.extra-build-features == 'appimage' }}
+        shell: bash
+        run: |
+          # set-up appimage-builder
+          pushd /tmp
+          wget -O appimage-builder-x86_64.AppImage https://github.com/AppImageCrafters/appimage-builder/releases/download/v1.1.0/appimage-builder-1.1.0-x86_64.AppImage
+          chmod +x appimage-builder-x86_64.AppImage
+          sudo mv appimage-builder-x86_64.AppImage /usr/local/bin/appimage-builder
+          popd
+          # run appimage-builder
+          pushd appimage
+          sudo appimage-builder --skip-tests
+
+      - name: Publish appimage package
+        if: ${{ matrix.job.extra-build-features == 'appimage' }}
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            ./appimage/rustdesk-${{ env.VERSION }}-*.AppImage
 
       - name: Publish fedora28/centos8 package
         if: ${{ matrix.job.extra-build-features == '' }}

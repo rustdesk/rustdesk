@@ -56,6 +56,20 @@ fn keybd_event(flags: u32, vk: u16, scan: u16) -> DWORD {
     input.type_ = INPUT_KEYBOARD;
     unsafe {
         let dst_ptr = (&mut input.u as *mut _) as *mut u8;
+        let flags = match vk as _ {
+            winapi::um::winuser::VK_HOME |
+            winapi::um::winuser::VK_UP |
+            winapi::um::winuser::VK_PRIOR |
+            winapi::um::winuser::VK_LEFT |
+            winapi::um::winuser::VK_RIGHT |
+            winapi::um::winuser::VK_END |
+            winapi::um::winuser::VK_DOWN |
+            winapi::um::winuser::VK_NEXT |
+            winapi::um::winuser::VK_INSERT | 
+            winapi::um::winuser::VK_DELETE => flags | winapi::um::winuser::KEYEVENTF_EXTENDEDKEY,
+            _ => flags,
+        };
+    
         let k = KEYBDINPUT {
             wVk: vk,
             wScan: scan,
@@ -134,9 +148,18 @@ impl MouseControllable for Enigo {
                 MouseButton::Left => MOUSEEVENTF_LEFTDOWN,
                 MouseButton::Middle => MOUSEEVENTF_MIDDLEDOWN,
                 MouseButton::Right => MOUSEEVENTF_RIGHTDOWN,
-                _ => unimplemented!(),
+                MouseButton::Back => MOUSEEVENTF_XDOWN,
+                MouseButton::Forward => MOUSEEVENTF_XDOWN,
+                _ => {
+                    log::info!("Unsupported button {:?}", button);
+                    return Ok(());
+                }
             },
-            0,
+            match button {
+                MouseButton::Back => XBUTTON1 as _,
+                MouseButton::Forward => XBUTTON2 as _,
+                _ => 0, 
+            },
             0,
             0,
         );
@@ -155,9 +178,18 @@ impl MouseControllable for Enigo {
                 MouseButton::Left => MOUSEEVENTF_LEFTUP,
                 MouseButton::Middle => MOUSEEVENTF_MIDDLEUP,
                 MouseButton::Right => MOUSEEVENTF_RIGHTUP,
-                _ => unimplemented!(),
+                MouseButton::Back => MOUSEEVENTF_XUP,
+                MouseButton::Forward => MOUSEEVENTF_XUP,
+                _ => {
+                    log::info!("Unsupported button {:?}", button);
+                    return;
+                }
             },
-            0,
+            match button {
+                MouseButton::Back => XBUTTON1 as _,
+                MouseButton::Forward => XBUTTON2 as _,
+                _ => 0, 
+            },
             0,
             0,
         );

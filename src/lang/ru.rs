@@ -206,7 +206,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Closed manually by the peer", "Закрыто удалённым узлом вручную"),
         ("Enable remote configuration modification", "Разрешить удалённое изменение конфигурации"),
         ("Run without install", "Запустить без установки"),
-        ("Always connected via relay", "Всегда подключён через ретрансляционный сервер"),
+        ("Always connected via relay", "Всегда подключается через ретрансляционный сервер"),
         ("Always connect via relay", "Всегда подключаться через ретрансляционный сервер"),
         ("whitelist_tip", "Только IP-адреса из белого списка могут получить доступ ко мне"),
         ("Login", "Войти"),
@@ -410,5 +410,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Closed manually by the web console", "Закрыто вручную через веб-консоль"),
         ("Local keyboard type", "Тип локальной клавиатуры"),
         ("Select local keyboard type", "Выберите тип локальной клавиатуры"),
+        ("software_render_tip", "Если у вас видеокарта Nvidia и удалённое окно закрывается сразу после подключения, может помочь установка драйвера Nouveau и выбор использования программной визуализации. Потребуется перезапуск."),
+        ("Always use software rendering", "Использовать программную визуализацию"),
+        ("config_input", "Чтобы управлять удалённым рабочим столом с помощью клавиатуры, необходимо предоставить RustDesk разрешения \"Мониторинг ввода\"."),
     ].iter().cloned().collect();
 }

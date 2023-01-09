@@ -1,0 +1,87 @@
+# appimage-builder recipe see https://appimage-builder.readthedocs.io for details
+version: 1
+script:
+ - rm -rf ./AppDir || true
+ - bsdtar -zxvf ../rustdesk-1.2.0.deb
+ - tar -xvf ./data.tar.xz
+ - mkdir ./AppDir
+ - mv ./usr ./AppDir/usr
+ # 32x32 icon
+ - for i in {32,64,128}; do mkdir -p ./AppDir/usr/share/icons/hicolor/$i\x$i/apps/; cp ../res/$i\x$i.png ./AppDir/usr/share/icons/hicolor/$i\x$i/apps/rustdesk.png; done
+ # desktop file
+ # - sed -i "s/Icon=\/usr\/share\/rustdesk\/files\/rustdesk.png/Icon=rustdesk/g" ./AppDir/usr/share/applications/rustdesk.desktop
+ - rm -rf ./AppDir/usr/share/applications
+AppDir:
+  path: ./AppDir
+  app_info:
+    id: rustdesk
+    name: rustdesk
+    icon: rustdesk
+    version: 1.2.0
+    exec: usr/lib/rustdesk/rustdesk
+    exec_args: $@
+  apt:
+    arch:
+    - amd64
+    allow_unauthenticated: true
+    sources:
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ bionic main restricted
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ bionic-updates main restricted
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ bionic universe
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ bionic-updates universe
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ bionic multiverse
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ bionic-updates multiverse
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ bionic-backports main restricted
+        universe multiverse
+    - sourceline: deb http://ppa.launchpad.net/pipewire-debian/pipewire-upstream/ubuntu
+        bionic main
+    include:
+    - libc6:amd64
+    - libgtk-3-0
+    - libxcb-randr0
+    - libxdo3
+    - libxfixes3
+    - libxcb-shape0
+    - libxcb-xfixes0
+    - libasound2
+    - libsystemd0
+    - curl
+    - libva-drm2
+    - libva-x11-2
+    - libvdpau1
+    - libgstreamer-plugins-base1.0-0
+    exclude:
+    - humanity-icon-theme
+    - hicolor-icon-theme
+    - adwaita-icon-theme
+    - ubuntu-mono
+  files:
+    include: []
+    exclude:
+    - usr/share/man
+    - usr/share/doc/*/README.*
+    - usr/share/doc/*/changelog.*
+    - usr/share/doc/*/NEWS.*
+    - usr/share/doc/*/TODO.*
+  runtime:
+    env:
+      GIO_MODULE_DIR: $APPDIR/usr/lib/x86_64-linux-gnu/gio/modules/
+  test:
+    fedora-30:
+      image: appimagecrafters/tests-env:fedora-30
+      command: ./AppRun
+    debian-stable:
+      image: appimagecrafters/tests-env:debian-stable
+      command: ./AppRun
+    archlinux-latest:
+      image: appimagecrafters/tests-env:archlinux-latest
+      command: ./AppRun
+    centos-7:
+      image: appimagecrafters/tests-env:centos-7
+      command: ./AppRun
+    ubuntu-xenial:
+      image: appimagecrafters/tests-env:ubuntu-xenial
+      command: ./AppRun
+AppImage:
+  arch: x86_64
+  update-information: guess

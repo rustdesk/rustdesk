@@ -32,6 +32,7 @@ extern "C" {
     fn CGEventGetLocation(e: *const c_void) -> CGPoint;
     static kAXTrustedCheckOptionPrompt: CFStringRef;
     fn AXIsProcessTrustedWithOptions(options: CFDictionaryRef) -> BOOL;
+    fn InputMonitoringAuthStatus(_: BOOL) -> BOOL;
 }
 
 pub fn is_process_trusted(prompt: bool) -> bool {
@@ -44,6 +45,13 @@ pub fn is_process_trusted(prompt: bool) -> bool {
             kAXTrustedCheckOptionPrompt as _,
         );
         AXIsProcessTrustedWithOptions(options as _) == YES
+    }
+}
+
+pub fn is_can_input_monitoring(prompt: bool) -> bool {
+    unsafe {
+        let value = if prompt { YES } else { NO };
+        InputMonitoringAuthStatus(value) == YES
     }
 }
 

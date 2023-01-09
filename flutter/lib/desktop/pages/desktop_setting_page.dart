@@ -274,6 +274,15 @@ class _GeneralState extends State<_General> {
       _OptionCheckBox(context, 'Confirm before closing multiple tabs',
           'enable-confirm-closing-tabs'),
       _OptionCheckBox(context, 'Adaptive Bitrate', 'enable-abr'),
+      if (Platform.isLinux)
+        Tooltip(
+          message: translate('software_render_tip'),
+          child: _OptionCheckBox(
+            context,
+            "Always use software rendering",
+            'allow-always-software-render',
+          ),
+        )
     ]);
   }
 
@@ -1223,7 +1232,7 @@ Widget _OptionCheckBox(BuildContext context, String label, String key,
             ref.value = option;
             if (reverse) option = !option;
             String value = bool2option(key, option);
-            bind.mainSetOption(key: key, value: value);
+            await bind.mainSetOption(key: key, value: value);
             update?.call();
           }
         }

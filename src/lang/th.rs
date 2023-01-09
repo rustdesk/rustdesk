@@ -410,5 +410,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Closed manually by the web console", "ถูกปิดโดยเว็บคอนโซล"),
         ("Local keyboard type", "ประเภทคีย์บอร์ด"),
         ("Select local keyboard type", "เลือกประเภทคีย์บอร์ด"),
+        ("software_render_tip", ""),
+        ("Always use software rendering", ""),
+        ("config_input", ""),
     ].iter().cloned().collect();
 }
