@@ -638,7 +638,7 @@ pub async fn post_request(url: String, body: String, header: &str) -> ResultType
         if !res.is_empty() {
             return Ok(res);
         }
-        bail!(String::from_utf8_lossy(&output.stderr).to_string());
+        hbb_common::bail!(String::from_utf8_lossy(&output.stderr).to_string());
     }
 }
 
