@@ -4,6 +4,7 @@ use hbb_common::{allow_err, bail, log};
 use libc::{c_char, c_int, c_void};
 use std::{
     cell::RefCell,
+    collections::HashMap,
     path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -719,47 +720,38 @@ pub fn get_double_click_time() -> u32 {
 
 /// forever: may not work
 pub fn system_message(title: &str, msg: &str, forever: bool) -> ResultType<()> {
-    if std::process::Command::new("notify-send")
-        .arg(title)
-        .arg(msg)
-        .spawn()
-        .is_ok()
-    {
-        return Ok(());
-    }
-    if std::process::Command::new("zenity")
-        .arg("--info")
-        .arg("--timeout")
-        .arg(if forever { "0" } else { "3" })
-        .arg("--title")
-        .arg(title)
-        .arg("--text")
-        .arg(msg)
-        .spawn()
-        .is_ok()
-    {
-        return Ok(());
-    }
-    if std::process::Command::new("kdialog")
-        .arg("--title")
-        .arg(title)
-        .arg("--msgbox")
-        .arg(msg)
-        .spawn()
-        .is_ok()
-    {
-        return Ok(());
-    }
-    if std::process::Command::new("xmessage")
-        .arg("-center")
-        .arg("-timeout")
-        .arg(if forever { "0" } else { "3" })
-        .arg(title)
-        .arg(msg)
-        .spawn()
-        .is_ok()
-    {
-        return Ok(());
+    let cmds: HashMap<&str, Vec<&str>> = HashMap::from([
+        ("notify-send", [title, msg].to_vec()),
+        (
+            "zenity",
+            [
+                "--info",
+                "--timeout",
+                if forever { "0" } else { "3" },
+                "--title",
+                title,
+                "--text",
+                msg,
+            ]
+            .to_vec(),
+        ),
+        ("kdialog", ["--title", title, "--msgbox", msg].to_vec()),
+        (
+            "xmessage",
+            [
+                "-center",
+                "-timeout",
+                if forever { "0" } else { "3" },
+                title,
+                msg,
+            ]
+            .to_vec(),
+        ),
+    ]);
+    for (k, v) in cmds {
+        if std::process::Command::new(k).args(v).spawn().is_ok() {
+            return Ok(());
+        }
     }
     bail!("failed to post system message");
 }
