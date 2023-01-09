@@ -440,7 +440,7 @@ pub fn start_os_service() {
                     .status()
                     .ok();
                 println!("The others killed");
-                // launchctl load/unload/start agent not work in daemon, show not priviledged.
+                // launchctl load/unload/start agent not work in daemon, show not privileged.
                 // sudo launchctl asuser 501 open -n also not allowed.
                 std::process::Command::new("launchctl")
                     .args(&[
