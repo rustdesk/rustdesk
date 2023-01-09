@@ -120,7 +120,7 @@ function resetWheel() {
 
 var INERTIA_ACCELERATION = 30;
 
-// not good, precision not enough to simulate accelation effect,
+// not good, precision not enough to simulate acceleration effect,
 // seems have to use pixel based rather line based delta
 function accWheel(v, is_x) {
     if (wheeling) return;
