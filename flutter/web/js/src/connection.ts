@@ -82,10 +82,10 @@ export default class Connection {
     this._ws = ws;
     this._id = id;
     console.log(
-      new Date() + ": Connecting to rendezvoous server: " + uri + ", for " + id
+      new Date() + ": Connecting to rendezvous server: " + uri + ", for " + id
     );
     await ws.open();
-    console.log(new Date() + ": Connected to rendezvoous server");
+    console.log(new Date() + ": Connected to rendezvous server");
     const conn_type = rendezvous.ConnType.DEFAULT_CONN;
     const nat_type = rendezvous.NatType.SYMMETRIC;
     const punch_hole_request = rendezvous.PunchHoleRequest.fromPartial({
