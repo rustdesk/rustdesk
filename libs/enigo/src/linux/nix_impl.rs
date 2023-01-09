@@ -21,7 +21,7 @@ impl Enigo {
     pub fn delay(&self) -> u64 {
         self.xdo.delay()
     }
-    /// Set delay of xdo implemetation.
+    /// Set delay of xdo implementation.
     pub fn set_delay(&mut self, delay: u64) {
         self.xdo.set_delay(delay)
     }
