@@ -293,8 +293,8 @@ pub fn check_config() {
         quality: DEFAULT_HW_QUALITY,
         rc: DEFAULT_RC,
     };
-    let encoders = CodecInfo::score(Encoder::avaliable_encoders(ctx));
-    let decoders = CodecInfo::score(Decoder::avaliable_decoders());
+    let encoders = CodecInfo::score(Encoder::available_encoders(ctx));
+    let decoders = CodecInfo::score(Decoder::available_decoders());
 
     if let Ok(old_encoders) = get_config(CFG_KEY_ENCODER) {
         if let Ok(old_decoders) = get_config(CFG_KEY_DECODER) {
