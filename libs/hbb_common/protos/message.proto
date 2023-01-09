@@ -503,7 +503,7 @@ message AudioFrame {
 
 // Notify peer to show message box.
 message MessageBox {
-  // Message type. Refer to flutter/lib/commom.dart/msgBox().
+  // Message type. Refer to flutter/lib/common.dart/msgBox().
   string msgtype = 1;
   string title = 2;
   // English
