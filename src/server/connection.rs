@@ -1857,8 +1857,8 @@ mod privacy_mode {
     pub(super) fn turn_on_privacy(_conn_id: i32) -> ResultType<bool> {
         #[cfg(windows)]
         {
-            let plugin_exitst = crate::ui::win_privacy::turn_on_privacy(_conn_id)?;
-            Ok(plugin_exitst)
+            let plugin_exist = crate::ui::win_privacy::turn_on_privacy(_conn_id)?;
+            Ok(plugin_exist)
         }
         #[cfg(not(windows))]
         {
