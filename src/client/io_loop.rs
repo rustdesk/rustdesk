@@ -915,7 +915,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                                 }
                                             },
                                             Err(err) => {
-                                                println!("error recving digest: {}", err);
+                                                println!("error receiving digest: {}", err);
                                             }
                                         }
                                     }
