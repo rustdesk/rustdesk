@@ -293,15 +293,7 @@ async fn test_nat_type_() -> ResultType<bool> {
     let start = std::time::Instant::now();
     let (rendezvous_server, _, _) = get_rendezvous_server(1_000).await;
     let server1 = rendezvous_server;
-    let tmp: Vec<&str> = server1.split(":").collect();
-    if tmp.len() != 2 {
-        bail!("Invalid server address: {}", server1);
-    }
-    let port: u16 = tmp[1].parse()?;
-    if port == 0 {
-        bail!("Invalid server address: {}", server1);
-    }
-    let server2 = format!("{}:{}", tmp[0], port - 1);
+    let server2 = crate::increase_port(server1, -1);
     let mut msg_out = RendezvousMessage::new();
     let serial = Config::get_serial();
     msg_out.set_test_nat_request(TestNatRequest {
@@ -592,18 +584,13 @@ pub fn get_api_server(api: String, custom: String) -> String {
             return lic.api.clone();
         }
     }
-    let s = get_custom_rendezvous_server(custom);
-    if !s.is_empty() {
-        if s.contains(':') {
-            let tmp: Vec<&str> = s.split(":").collect();
-            if tmp.len() == 2 {
-                let port: u16 = tmp[1].parse().unwrap_or(0);
-                if port > 2 {
-                    return format!("http://{}:{}", tmp[0], port - 2);
-                }
-            }
+    let s0 = get_custom_rendezvous_server(custom);
+    if !s0.is_empty() {
+        let s = crate::increase_port(s0, -2);
+        if s == s0 {
+            format!("http://{}:{}", s, config::RENDEZVOUS_PORT - 2);
         } else {
-            return format!("http://{}:{}", s, config::RENDEZVOUS_PORT - 2);
+            format!("http://{}", s);
         }
     }
     "https://admin.rustdesk.com".to_owned()
