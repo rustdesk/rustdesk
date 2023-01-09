@@ -22,19 +22,18 @@ AppDir:
     exec_args: $@
   apt:
     arch:
-    - aarch64
+    - arm64
     allow_unauthenticated: true
     sources:
-    - sourceline: deb https://mirrors.ustc.edu.cn/ubuntu-ports/ bionic main restricted
-    - sourceline: deb https://mirrors.ustc.edu.cn/ubuntu-ports/ bionic-updates main restricted
-    - sourceline: deb https://mirrors.ustc.edu.cn/ubuntu-ports/ bionic universe
-    - sourceline: deb https://mirrors.ustc.edu.cn/ubuntu-ports/ bionic-updates universe
-    - sourceline: deb https://mirrors.ustc.edu.cn/ubuntu-ports/ bionic multiverse
-    - sourceline: deb https://mirrors.ustc.edu.cn/ubuntu-ports/ bionic-updates multiverse
-    - sourceline: deb https://mirrors.ustc.edu.cn/ubuntu-ports/ bionic-backports main restricted
+    - sourceline: deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ bionic main restricted universe multiverse
+      key_url: 'http://keyserver.ubuntu.com/pks/lookup?op=get&search=0x3b4fe6acc0b21f32'
+    - sourceline: deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ bionic-updates main restricted universe multiverse
+      key_url: 'http://keyserver.ubuntu.com/pks/lookup?op=get&search=0x3b4fe6acc0b21f32'
+    - sourceline: deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ bionic-backports main restricted
         universe multiverse
+      key_url: 'http://keyserver.ubuntu.com/pks/lookup?op=get&search=0x3b4fe6acc0b21f32'
     include:
-    - libc6:amd64
+    - libc6
     - libgtk-3-0
     - libxcb-randr0
     - libxdo3
