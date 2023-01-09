@@ -538,7 +538,7 @@ Future<bool?> loginDialog() async {
           ),
           LoginWidgetOP(
             ops: [
-              ConfigOP(op: 'Github', iconWidth: 20),
+              ConfigOP(op: 'GitHub', iconWidth: 20),
               ConfigOP(op: 'Google', iconWidth: 20),
               ConfigOP(op: 'Okta', iconWidth: 38),
             ],
