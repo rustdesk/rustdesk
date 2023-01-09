@@ -276,7 +276,7 @@ pub(super) fn get_capturer() -> ResultType<super::video_service::CapturerInfo> {
                 ndisplay: cap_display_info.num,
                 current: cap_display_info.current,
                 privacy_mode_id: 0,
-                _captuerer_privacy_mode_id: 0,
+                _capturer_privacy_mode_id: 0,
                 capturer: Box::new(cap_display_info.capturer.clone()),
             })
         }
