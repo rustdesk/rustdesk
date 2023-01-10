@@ -65,7 +65,7 @@ pub mod client {
         #[cfg(not(feature = "cli"))]
         if let Some(handler) = CUR_SESSION.lock().unwrap().as_ref() {
             return handler.get_keyboard_mode();
-        } 
+        }
         "legacy".to_string()
     }
 
@@ -372,7 +372,7 @@ pub fn get_peer_platform() -> String {
     #[cfg(not(feature = "cli"))]
     if let Some(handler) = CUR_SESSION.lock().unwrap().as_ref() {
         return handler.peer_platform();
-    } 
+    }
     "Windows".to_string()
 }
 
@@ -615,7 +615,13 @@ pub fn map_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Option<KeyEv
 
     #[cfg(target_os = "windows")]
     let keycode = match peer.as_str() {
-        "windows" => event.scan_code,
+        "windows" => {
+            // https://github.com/rustdesk/rustdesk/issues/1371
+            if event.scan_code > 255 {
+                return None;
+            }
+            event.scan_code
+        }
         "macos" => {
             if hbb_common::config::LocalConfig::get_kb_layout_type() == "ISO" {
                 rdev::win_scancode_to_macos_iso_code(event.scan_code)?
