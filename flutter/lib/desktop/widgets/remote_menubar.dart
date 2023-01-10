@@ -956,77 +956,77 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             dismissOnClicked: true,
           ));
       displayMenu.insert(3, MenuEntryDivider<String>());
-    }
 
-    if (_isWindowCanBeAdjusted(remoteCount)) {
-      displayMenu.insert(
-        0,
-        MenuEntryDivider<String>(),
-      );
-      displayMenu.insert(
-        0,
-        MenuEntryButton<String>(
-          childBuilder: (TextStyle? style) => Container(
-              child: Text(
-            translate('Adjust Window'),
-            style: style,
-          )),
-          proc: () {
-            () async {
-              await _updateScreen();
-              if (_screen != null) {
-                _setFullscreen(false);
-                double scale = _screen!.scaleFactor;
-                final wndRect =
-                    await WindowController.fromWindowId(windowId).getFrame();
-                final mediaSize = MediaQueryData.fromWindow(ui.window).size;
-                // On windows, wndRect is equal to GetWindowRect and mediaSize is equal to GetClientRect.
-                // https://stackoverflow.com/a/7561083
-                double magicWidth =
-                    wndRect.right - wndRect.left - mediaSize.width * scale;
-                double magicHeight =
-                    wndRect.bottom - wndRect.top - mediaSize.height * scale;
+      if (_isWindowCanBeAdjusted(remoteCount)) {
+        displayMenu.insert(
+          0,
+          MenuEntryDivider<String>(),
+        );
+        displayMenu.insert(
+          0,
+          MenuEntryButton<String>(
+            childBuilder: (TextStyle? style) => Container(
+                child: Text(
+              translate('Adjust Window'),
+              style: style,
+            )),
+            proc: () {
+              () async {
+                await _updateScreen();
+                if (_screen != null) {
+                  _setFullscreen(false);
+                  double scale = _screen!.scaleFactor;
+                  final wndRect =
+                      await WindowController.fromWindowId(windowId).getFrame();
+                  final mediaSize = MediaQueryData.fromWindow(ui.window).size;
+                  // On windows, wndRect is equal to GetWindowRect and mediaSize is equal to GetClientRect.
+                  // https://stackoverflow.com/a/7561083
+                  double magicWidth =
+                      wndRect.right - wndRect.left - mediaSize.width * scale;
+                  double magicHeight =
+                      wndRect.bottom - wndRect.top - mediaSize.height * scale;
 
-                final canvasModel = widget.ffi.canvasModel;
-                final width =
-                    (canvasModel.getDisplayWidth() * canvasModel.scale +
-                                canvasModel.windowBorderWidth * 2) *
-                            scale +
-                        magicWidth;
-                final height =
-                    (canvasModel.getDisplayHeight() * canvasModel.scale +
-                                canvasModel.tabBarHeight +
-                                canvasModel.windowBorderWidth * 2) *
-                            scale +
-                        magicHeight;
-                double left = wndRect.left + (wndRect.width - width) / 2;
-                double top = wndRect.top + (wndRect.height - height) / 2;
+                  final canvasModel = widget.ffi.canvasModel;
+                  final width =
+                      (canvasModel.getDisplayWidth() * canvasModel.scale +
+                                  canvasModel.windowBorderWidth * 2) *
+                              scale +
+                          magicWidth;
+                  final height =
+                      (canvasModel.getDisplayHeight() * canvasModel.scale +
+                                  canvasModel.tabBarHeight +
+                                  canvasModel.windowBorderWidth * 2) *
+                              scale +
+                          magicHeight;
+                  double left = wndRect.left + (wndRect.width - width) / 2;
+                  double top = wndRect.top + (wndRect.height - height) / 2;
 
-                Rect frameRect = _screen!.frame;
-                if (!isFullscreen) {
-                  frameRect = _screen!.visibleFrame;
+                  Rect frameRect = _screen!.frame;
+                  if (!isFullscreen) {
+                    frameRect = _screen!.visibleFrame;
+                  }
+                  if (left < frameRect.left) {
+                    left = frameRect.left;
+                  }
+                  if (top < frameRect.top) {
+                    top = frameRect.top;
+                  }
+                  if ((left + width) > frameRect.right) {
+                    left = frameRect.right - width;
+                  }
+                  if ((top + height) > frameRect.bottom) {
+                    top = frameRect.bottom - height;
+                  }
+                  await WindowController.fromWindowId(windowId)
+                      .setFrame(Rect.fromLTWH(left, top, width, height));
                 }
-                if (left < frameRect.left) {
-                  left = frameRect.left;
-                }
-                if (top < frameRect.top) {
-                  top = frameRect.top;
-                }
-                if ((left + width) > frameRect.right) {
-                  left = frameRect.right - width;
-                }
-                if ((top + height) > frameRect.bottom) {
-                  top = frameRect.bottom - height;
-                }
-                await WindowController.fromWindowId(windowId)
-                    .setFrame(Rect.fromLTWH(left, top, width, height));
-              }
-            }();
-          },
-          padding: padding,
-          dismissOnClicked: true,
-        ),
-      );
+              }();
+            },
+            padding: padding,
+            dismissOnClicked: true,
+          ),
+        );
+      }
     }
 
     /// Show Codec Preference
