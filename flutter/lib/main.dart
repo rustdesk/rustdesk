@@ -61,6 +61,8 @@ Future<void> main(List<String> args) async {
           kAppTypeDesktopRemote,
           'RustDesk - Remote Desktop',
         );
+        WindowController.fromWindowId(windowId!)
+            .setTitle('RustDesk - Remote Desktop');
         break;
       case WindowType.FileTransfer:
         desktopType = DesktopType.fileTransfer;
@@ -69,6 +71,8 @@ Future<void> main(List<String> args) async {
           kAppTypeDesktopFileTransfer,
           'RustDesk - File Transfer',
         );
+        WindowController.fromWindowId(windowId!)
+            .setTitle('RustDesk - File Transfer');
         break;
       case WindowType.PortForward:
         desktopType = DesktopType.portForward;
@@ -135,6 +139,7 @@ void runMainApp(bool startService) async {
   windowManager.waitUntilReadyToShow(windowOptions, () async {
     windowManager.setOpacity(1);
   });
+  windowManager.setTitle("RustDesk");
 }
 
 void runMobileApp() async {
@@ -198,6 +203,7 @@ void runMultiWindow(
   }
   // show window from hidden status
   WindowController.fromWindowId(windowId!).show();
+  WindowController.fromWindowId(windowId!).setTitle(title);
 }
 
 void runConnectionManagerScreen(bool hide) async {

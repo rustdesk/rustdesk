@@ -66,6 +66,7 @@ AppDir:
   runtime:
     env:
       GIO_MODULE_DIR: $APPDIR/usr/lib/x86_64-linux-gnu/gio/modules/
+      GDK_BACKEND: x11
   test:
     fedora-30:
       image: appimagecrafters/tests-env:fedora-30
