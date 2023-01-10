@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 
@@ -170,14 +171,14 @@ RxString KBLayoutType = ''.obs;
 
 String getLocalPlatformForKBLayoutType(String peerPlatform) {
   String localPlatform = '';
-  if (peerPlatform != 'Mac OS') {
+  if (peerPlatform != kPeerPlatformMacOS) {
     return localPlatform;
   }
 
   if (Platform.isWindows) {
-    localPlatform = 'Windows';
+    localPlatform = kPeerPlatformWindows;
   } else if (Platform.isLinux) {
-    localPlatform = 'Linux';
+    localPlatform = kPeerPlatformLinux;
   }
   // to-do: web desktop support ?
   return localPlatform;

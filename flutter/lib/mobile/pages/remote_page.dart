@@ -574,14 +574,14 @@ class _RemotePageState extends State<RemotePage> {
       more.add(PopupMenuItem<String>(
           child: Text(translate('Physical Keyboard Input Mode')),
           value: 'input-mode'));
-      if (pi.platform == 'Linux' || pi.sasEnabled) {
+      if (pi.platform == kPeerPlatformLinux || pi.sasEnabled) {
         more.add(PopupMenuItem<String>(
             child: Text('${translate('Insert')} Ctrl + Alt + Del'),
             value: 'cad'));
       }
       more.add(PopupMenuItem<String>(
           child: Text(translate('Insert Lock')), value: 'lock'));
-      if (pi.platform == 'Windows' &&
+      if (pi.platform == kPeerPlatformWindows &&
           await bind.sessionGetToggleOption(id: id, arg: 'privacy-mode') !=
               true) {
         more.add(PopupMenuItem<String>(
@@ -591,9 +591,9 @@ class _RemotePageState extends State<RemotePage> {
       }
     }
     if (perms["restart"] != false &&
-        (pi.platform == "Linux" ||
-            pi.platform == "Windows" ||
-            pi.platform == "Mac OS")) {
+        (pi.platform == kPeerPlatformLinux ||
+            pi.platform == kPeerPlatformWindows ||
+            pi.platform == kPeerPlatformMacOS)) {
       more.add(PopupMenuItem<String>(
           child: Text(translate('Restart Remote Device')), value: 'restart'));
     }
@@ -740,7 +740,7 @@ class _RemotePageState extends State<RemotePage> {
     }
 
     final pi = gFFI.ffiModel.pi;
-    final isMac = pi.platform == "Mac OS";
+    final isMac = pi.platform == kPeerPlatformMacOS;
     final modifiers = <Widget>[
       wrap('Ctrl ', () {
         setState(() => inputModel.ctrl = !inputModel.ctrl);
@@ -995,7 +995,7 @@ void showOptions(
       }
       more.add(getToggle(
           id, setState, 'lock-after-session-end', 'Lock after session end'));
-      if (pi.platform == 'Windows') {
+      if (pi.platform == kPeerPlatformWindows) {
         more.add(getToggle(id, setState, 'privacy-mode', 'Privacy mode'));
       }
     }
