@@ -45,7 +45,7 @@ def expand():
       if line_strip.startswith('("'):
         k, v = line_split(line_strip)
         if k in dict:
-          # embrased with " to avoid empty v
+          # embraced with " to avoid empty v
           line = line.replace('"%s"'%v, '"%s"'%dict[k])
         else:
           line = line.replace(v, "")

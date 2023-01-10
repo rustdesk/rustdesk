@@ -127,8 +127,8 @@ class _PortForwardPageState extends State<PortForwardPage>
   }
 
   buildTunnel(BuildContext context) {
-    text(String lable) => Expanded(
-        child: Text(translate(lable)).marginOnly(left: _kTextLeftMargin));
+    text(String label) => Expanded(
+        child: Text(translate(label)).marginOnly(left: _kTextLeftMargin));
 
     return Theme(
       data: Theme.of(context)
@@ -241,8 +241,8 @@ class _PortForwardPageState extends State<PortForwardPage>
   }
 
   Widget buildTunnelDataRow(BuildContext context, _PortForward pf, int index) {
-    text(String lable) => Expanded(
-        child: Text(lable, style: const TextStyle(fontSize: 20))
+    text(String label) => Expanded(
+        child: Text(label, style: const TextStyle(fontSize: 20))
             .marginOnly(left: _kTextLeftMargin));
 
     return Container(
@@ -285,11 +285,11 @@ class _PortForwardPageState extends State<PortForwardPage>
   }
 
   buildRdp(BuildContext context) {
-    text1(String lable) => Expanded(
-        child: Text(translate(lable)).marginOnly(left: _kTextLeftMargin));
-    text2(String lable) => Expanded(
+    text1(String label) => Expanded(
+        child: Text(translate(label)).marginOnly(left: _kTextLeftMargin));
+    text2(String label) => Expanded(
             child: Text(
-          lable,
+          label,
           style: const TextStyle(fontSize: 20),
         ).marginOnly(left: _kTextLeftMargin));
     return Theme(

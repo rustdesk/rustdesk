@@ -197,7 +197,7 @@ class InputModel {
     // Check update event type and set buttons to be sent.
     int buttons = _lastButtons;
     if (type == _kMouseEventMove) {
-      // flutter may emit move event if one button is pressed and anoter button
+      // flutter may emit move event if one button is pressed and another button
       // is pressing or releasing.
       if (evt.buttons != _lastButtons) {
         // For simplicity

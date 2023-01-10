@@ -13,7 +13,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("setup_server_tip", "For faster connection, please set up your own server"),
         ("Auto Login", "Auto Login (Only valid if you set \"Lock after session end\")"),
         ("whitelist_tip", "Only whitelisted IP can access me"),
-        ("whitelist_sep", "Seperated by comma, semicolon, spaces or new line"),
+        ("whitelist_sep", "Separated by comma, semicolon, spaces or new line"),
         ("Wrong credentials", "Wrong username or password"),
         ("invalid_http", "must start with http:// or https://"),
         ("install_daemon_tip", "For starting on boot, you need to install system service."),

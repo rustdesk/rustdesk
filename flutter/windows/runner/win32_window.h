@@ -31,7 +31,7 @@ class Win32Window {
   // Creates and shows a win32 window with |title| and position and size using
   // |origin| and |size|. New windows are created on the default monitor. Window
   // sizes are specified to the OS in physical pixels, hence to ensure a
-  // consistent size to will treat the width height passed in to this function
+  // consistent size to will treat the width height passed into this function
   // as logical pixels and scale to appropriate for the default monitor. Returns
   // true if the window was created successfully.
   bool CreateAndShow(const std::wstring& title,
@@ -77,7 +77,7 @@ class Win32Window {
   // OS callback called by message pump. Handles the WM_NCCREATE message which
   // is passed when the non-client area is being created and enables automatic
   // non-client DPI scaling so that the non-client area automatically
-  // responsponds to changes in DPI. All other messages are handled by
+  // responds to changes in DPI. All other messages are handled by
   // MessageHandler.
   static LRESULT CALLBACK WndProc(HWND const window,
                                   UINT const message,

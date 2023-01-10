@@ -707,9 +707,9 @@ pub fn get_double_click_time() -> u32 {
     unsafe {
         let mut double_click_time = 0u32;
         let property = std::ffi::CString::new("gtk-double-click-time").unwrap();
-        let setings = gtk_settings_get_default();
+        let settings = gtk_settings_get_default();
         g_object_get(
-            setings,
+            settings,
             property.as_ptr(),
             &mut double_click_time as *mut u32,
             0 as *const libc::c_void,

@@ -148,7 +148,7 @@ impl Connection {
             ..Default::default()
         };
         let (tx_from_cm_holder, mut rx_from_cm) = mpsc::unbounded_channel::<ipc::Data>();
-        // holding tx_from_cm_holde to avoid cpu burning of rx_from_cm.recv when all sender closed
+        // holding tx_from_cm_holder to avoid cpu burning of rx_from_cm.recv when all sender closed
         let tx_from_cm = tx_from_cm_holder.clone();
         let (tx_to_cm, rx_to_cm) = mpsc::unbounded_channel::<ipc::Data>();
         let (tx, mut rx) = mpsc::unbounded_channel::<(Instant, Arc<Message>)>();
@@ -319,7 +319,7 @@ impl Connection {
                             allow_err!(conn.stream.send_raw(bytes).await);
                         }
                         #[cfg(windows)]
-                        ipc::Data::ClipbaordFile(_clip) => {
+                        ipc::Data::ClipboardFile(_clip) => {
                             if conn.file_transfer_enabled() {
                                 allow_err!(conn.stream.send(&clip_2_msg(_clip)).await);
                             }
@@ -593,7 +593,7 @@ impl Connection {
                     Some(data) = rx_from_cm.recv() => {
                         match data {
                             ipc::Data::Close => {
-                                bail!("Close requested from selfection manager");
+                                bail!("Close requested from selection manager");
                             }
                             _ => {}
                         }
@@ -663,7 +663,7 @@ impl Connection {
             self.send_login_error("Your ip is blocked by the peer")
                 .await;
             Self::post_alarm_audit(
-                AlarmAuditType::IpWhiltelist, //"ip whiltelist",
+                AlarmAuditType::IpWhitelist, //"ip whitelist",
                 true,
                 json!({
                             "ip":addr.ip(),
@@ -1309,7 +1309,7 @@ impl Connection {
                     if self.file_transfer_enabled() {
                         #[cfg(windows)]
                         if let Some(clip) = msg_2_clip(_clip) {
-                            self.send_to_cm(ipc::Data::ClipbaordFile(clip))
+                            self.send_to_cm(ipc::Data::ClipboardFile(clip))
                         }
                     }
                 }
@@ -1857,8 +1857,8 @@ mod privacy_mode {
     pub(super) fn turn_on_privacy(_conn_id: i32) -> ResultType<bool> {
         #[cfg(windows)]
         {
-            let plugin_exitst = crate::ui::win_privacy::turn_on_privacy(_conn_id)?;
-            Ok(plugin_exitst)
+            let plugin_exist = crate::ui::win_privacy::turn_on_privacy(_conn_id)?;
+            Ok(plugin_exist)
         }
         #[cfg(not(windows))]
         {
@@ -1875,7 +1875,7 @@ struct ConnAuditResponse {
 }
 
 pub enum AlarmAuditType {
-    IpWhiltelist = 0,
+    IpWhitelist = 0,
     ManyWrongPassword = 1,
     FrequentAttempt = 2,
 }

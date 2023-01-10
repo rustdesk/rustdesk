@@ -262,7 +262,7 @@ impl Capturer {
                         _ => {
                             return Err(io::Error::new(
                                 io::ErrorKind::Other,
-                                "Unknown roration".to_string(),
+                                "Unknown rotation".to_string(),
                             ));
                         }
                     };

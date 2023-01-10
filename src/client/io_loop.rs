@@ -728,11 +728,11 @@ impl<T: InvokeUiSession> Remote<T> {
                         self.handler.adapt_size();
                         self.send_opts_after_login(peer).await;
                     }
-                    let incomming_format = CodecFormat::from(&vf);
-                    if self.video_format != incomming_format {
-                        self.video_format = incomming_format.clone();
+                    let incoming_format = CodecFormat::from(&vf);
+                    if self.video_format != incoming_format {
+                        self.video_format = incoming_format.clone();
                         self.handler.update_quality_status(QualityStatus {
-                            codec_format: Some(incomming_format),
+                            codec_format: Some(incoming_format),
                             ..Default::default()
                         })
                     };
@@ -915,7 +915,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                                 }
                                             },
                                             Err(err) => {
-                                                println!("error recving digest: {}", err);
+                                                println!("error receiving digest: {}", err);
                                             }
                                         }
                                     }

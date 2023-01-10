@@ -1,15 +1,15 @@
 use crate::ResultType;
 
 lazy_static::lazy_static! {
-    pub static ref DISTRO: Disto = Disto::new();
+    pub static ref DISTRO: Distro = Distro::new();
 }
 
-pub struct Disto {
+pub struct Distro {
     pub name: String,
     pub version_id: String,
 }
 
-impl Disto {
+impl Distro {
     fn new() -> Self {
         let name = run_cmds("awk -F'=' '/^NAME=/ {print $2}' /etc/os-release".to_owned())
             .unwrap_or_default()

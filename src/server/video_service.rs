@@ -309,9 +309,9 @@ pub fn test_create_capturer(privacy_mode_id: i32, timeout_millis: u64) -> bool {
 }
 
 #[cfg(windows)]
-fn check_uac_switch(privacy_mode_id: i32, captuerer_privacy_mode_id: i32) -> ResultType<()> {
-    if captuerer_privacy_mode_id != 0 {
-        if privacy_mode_id != captuerer_privacy_mode_id {
+fn check_uac_switch(privacy_mode_id: i32, capturer_privacy_mode_id: i32) -> ResultType<()> {
+    if capturer_privacy_mode_id != 0 {
+        if privacy_mode_id != capturer_privacy_mode_id {
             if !crate::ui::win_privacy::is_process_consent_running()? {
                 bail!("consent.exe is running");
             }
@@ -330,7 +330,7 @@ pub(super) struct CapturerInfo {
     pub ndisplay: usize,
     pub current: usize,
     pub privacy_mode_id: i32,
-    pub _captuerer_privacy_mode_id: i32,
+    pub _capturer_privacy_mode_id: i32,
     pub capturer: Box<dyn TraitCapturer>,
 }
 
@@ -371,29 +371,29 @@ fn get_capturer(use_yuv: bool, portable_service_running: bool) -> ResultType<Cap
 
     let privacy_mode_id = *PRIVACY_MODE_CONN_ID.lock().unwrap();
     #[cfg(not(windows))]
-    let captuerer_privacy_mode_id = privacy_mode_id;
+    let capturer_privacy_mode_id = privacy_mode_id;
     #[cfg(windows)]
-    let mut captuerer_privacy_mode_id = privacy_mode_id;
+    let mut capturer_privacy_mode_id = privacy_mode_id;
     #[cfg(windows)]
-    if captuerer_privacy_mode_id != 0 {
+    if capturer_privacy_mode_id != 0 {
         if crate::ui::win_privacy::is_process_consent_running()? {
-            captuerer_privacy_mode_id = 0;
+            capturer_privacy_mode_id = 0;
         }
     }
     log::debug!(
-        "Try create capturer with captuerer privacy mode id {}",
-        captuerer_privacy_mode_id,
+        "Try create capturer with capturer privacy mode id {}",
+        capturer_privacy_mode_id,
     );
 
     if privacy_mode_id != 0 {
-        if privacy_mode_id != captuerer_privacy_mode_id {
+        if privacy_mode_id != capturer_privacy_mode_id {
             log::info!("In privacy mode, but show UAC prompt window for now");
         } else {
             log::info!("In privacy mode, the peer side cannot watch the screen");
         }
     }
     let capturer = create_capturer(
-        captuerer_privacy_mode_id,
+        capturer_privacy_mode_id,
         display,
         use_yuv,
         current,
@@ -406,7 +406,7 @@ fn get_capturer(use_yuv: bool, portable_service_running: bool) -> ResultType<Cap
         ndisplay,
         current,
         privacy_mode_id,
-        _captuerer_privacy_mode_id: captuerer_privacy_mode_id,
+        _capturer_privacy_mode_id: capturer_privacy_mode_id,
         capturer,
     })
 }
@@ -493,7 +493,7 @@ fn run(sp: GenericService) -> ResultType<()> {
 
     while sp.ok() {
         #[cfg(windows)]
-        check_uac_switch(c.privacy_mode_id, c._captuerer_privacy_mode_id)?;
+        check_uac_switch(c.privacy_mode_id, c._capturer_privacy_mode_id)?;
 
         let mut video_qos = VIDEO_QOS.lock().unwrap();
         if video_qos.check_if_updated() {
@@ -602,7 +602,7 @@ fn run(sp: GenericService) -> ResultType<()> {
                     if !scrap::is_x11() {
                         if would_block_count >= 100 {
                             super::wayland::release_resource();
-                            bail!("Wayland capturer none 100 times, try restart captuere");
+                            bail!("Wayland capturer none 100 times, try restart capture");
                         }
                     }
                 }
@@ -637,7 +637,7 @@ fn run(sp: GenericService) -> ResultType<()> {
         while wait_begin.elapsed().as_millis() < timeout_millis as _ {
             check_privacy_mode_changed(&sp, c.privacy_mode_id)?;
             #[cfg(windows)]
-            check_uac_switch(c.privacy_mode_id, c._captuerer_privacy_mode_id)?;
+            check_uac_switch(c.privacy_mode_id, c._capturer_privacy_mode_id)?;
             frame_controller.try_wait_next(&mut fetched_conn_ids, 300);
             // break if all connections have received current frame
             if fetched_conn_ids.len() >= frame_controller.send_conn_ids.len() {

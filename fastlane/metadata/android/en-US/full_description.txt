@@ -2,7 +2,7 @@ An open-source remote desktop application, the open source TeamViewer alternativ
 Source code: https://github.com/rustdesk/rustdesk
 Doc: https://rustdesk.com/docs/en/manual/mobile/
 
-In order for a remote device to control your Android device via mouse or touch, you need to allow RustDesk to use the "Accessibility" service, RustDesk uses AccessibilityService API to implement Addroid remote control.
+In order for a remote device to control your Android device via mouse or touch, you need to allow RustDesk to use the "Accessibility" service, RustDesk uses AccessibilityService API to implement Android remote control.
 
 In addition to remote control, you can also transfer files between Android devices and PCs easily with RustDesk.
 

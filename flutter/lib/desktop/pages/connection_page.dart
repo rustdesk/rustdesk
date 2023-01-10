@@ -44,7 +44,7 @@ class _ConnectionPageState extends State<ConnectionPage>
   var svcStatusCode = 0.obs;
   var svcIsUsingPublicServer = true.obs;
 
-  bool isWindowMinisized = false;
+  bool isWindowMinimized = false;
 
   @override
   void initState() {
@@ -80,13 +80,13 @@ class _ConnectionPageState extends State<ConnectionPage>
   void onWindowEvent(String eventName) {
     super.onWindowEvent(eventName);
     if (eventName == 'minimize') {
-      isWindowMinisized = true;
+      isWindowMinimized = true;
     } else if (eventName == 'maximize' || eventName == 'restore') {
-      if (isWindowMinisized && Platform.isWindows) {
-        // windows can't update when minisized.
+      if (isWindowMinimized && Platform.isWindows) {
+        // windows can't update when minimized.
         Get.forceAppUpdate();
       }
-      isWindowMinisized = false;
+      isWindowMinimized = false;
     }
   }
 

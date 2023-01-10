@@ -203,7 +203,7 @@ mod utils {
     }
 }
 
-// functions called in seperate SYSTEM user process.
+// functions called in separate SYSTEM user process.
 pub mod server {
     use super::*;
 
@@ -407,7 +407,7 @@ pub mod server {
                                     }
                                     ConnCount(Some(n)) => {
                                         if n == 0 {
-                                            log::info!("Connnection count equals 0, exit");
+                                            log::info!("Connection count equals 0, exit");
                                             stream.send(&Data::DataPortableService(WillClose)).await.ok();
                                             break;
                                         }
@@ -756,7 +756,7 @@ pub mod client {
             log::info!("portable service status mismatch");
         }
         if portable_service_running {
-            log::info!("Create shared memeory capturer");
+            log::info!("Create shared memory capturer");
             return Ok(Box::new(CapturerPortable::new(current_display, use_yuv)));
         } else {
             log::debug!("Create capturer dxgi|gdi");

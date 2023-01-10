@@ -19,7 +19,7 @@
 //! or any other "special" key on the Linux, macOS and Windows operating system.
 //!
 //! Possible use cases could be for testing user interfaces on different
-//! plattforms,
+//! platforms,
 //! building remote control applications or just automating tasks for user
 //! interfaces unaccessible by a public API or scripting language.
 //!
@@ -206,7 +206,7 @@ pub trait MouseControllable {
 
     /// Click a mouse button
     ///
-    /// it's esentially just a consecutive invokation of
+    /// it's essentially just a consecutive invocation of
     /// [mouse_down](trait.MouseControllable.html#tymethod.mouse_down) followed
     /// by a [mouse_up](trait.MouseControllable.html#tymethod.mouse_up). Just
     /// for
@@ -468,7 +468,7 @@ pub trait KeyboardControllable {
     /// Emits keystrokes such that the given string is inputted.
     ///
     /// You can use many unicode here like: ❤️. This works
-    /// regadless of the current keyboardlayout.
+    /// regardless of the current keyboardlayout.
     ///
     /// # Example
     ///
