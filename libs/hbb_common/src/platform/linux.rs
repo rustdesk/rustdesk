@@ -74,7 +74,7 @@ fn get_display_server_of_session(session: &str) -> String {
     } else {
         "".to_owned()
     };
-    if display_server.is_empty() {
+    if display_server.is_empty() || display_server == "tty" {
         // loginctl has not given the expected output.  try something else.
         if let Ok(sestype) = std::env::var("XDG_SESSION_TYPE") {
             display_server = sestype;
