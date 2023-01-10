@@ -617,7 +617,8 @@ pub fn map_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Option<KeyEv
     let keycode = match peer.as_str() {
         "windows" => {
             // https://github.com/rustdesk/rustdesk/issues/1371
-            if event.scan_code > 255 {
+            // Filter scancodes that are greater than 255 and the hight word is not 0xE0.
+            if event.scan_code > 255 && (event.scan_code >> 8) != 0xE0 {
                 return None;
             }
             event.scan_code
