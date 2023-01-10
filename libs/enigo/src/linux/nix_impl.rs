@@ -183,6 +183,7 @@ impl MouseControllable for Enigo {
 
 fn get_led_state(key: Key) -> bool {
     let led_file = match key {
+        // FIXME: the file may be /sys/class/leds/input2 or input5 ...
         Key::CapsLock => "/sys/class/leds/input1::capslock/brightness",
         Key::NumLock => "/sys/class/leds/input1::numlock/brightness",
         _ => {

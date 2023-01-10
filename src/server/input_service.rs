@@ -882,7 +882,7 @@ fn map_keyboard_mode(evt: &KeyEvent) {
 
     // Wayland
     #[cfg(target_os = "linux")]
-    if !*IS_X11.lock().unwrap() {
+    if !*IS_X11 {
         let mut en = ENIGO.lock().unwrap();
         let code = evt.chr() as u16;
 

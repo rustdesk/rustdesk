@@ -289,10 +289,11 @@ pub fn session_handle_flutter_key_event(
     name: String,
     keycode: i32,
     scancode: i32,
+    lock_modes: i32,
     down_or_up: bool,
 ) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.handle_flutter_key_event(&name, keycode, scancode, down_or_up);
+        session.handle_flutter_key_event(&name, keycode, scancode, lock_modes, down_or_up);
     }
 }
 
@@ -1093,8 +1094,13 @@ pub fn main_is_installed() -> SyncReturn<bool> {
     SyncReturn(is_installed())
 }
 
-pub fn main_start_grab_keyboard() {
+pub fn main_start_grab_keyboard() -> SyncReturn<bool> {
+    #[cfg(target_os = "linux")]
+    if !*crate::common::IS_X11 {
+        return SyncReturn(false);
+    }
     crate::keyboard::client::start_grab_loop();
+    SyncReturn(true)
 }
 
 pub fn main_is_installed_lower_version() -> SyncReturn<bool> {

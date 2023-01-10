@@ -99,11 +99,11 @@ pub mod client {
         }
     }
 
-    pub fn process_event(event: &Event) {
+    pub fn process_event(event: &Event, lock_modes: Option<i32>) {
         if is_long_press(&event) {
             return;
         }
-        if let Some(key_event) = event_to_key_event(&event) {
+        if let Some(key_event) = event_to_key_event(&event, lock_modes) {
             send_key_event(&key_event);
         }
     }
@@ -196,7 +196,7 @@ pub fn start_grab_loop() {
                 return Some(event);
             }
             if KEYBOARD_HOOKED.load(Ordering::SeqCst) {
-                client::process_event(&event);
+                client::process_event(&event, None);
                 if is_press {
                     return None;
                 } else {
@@ -222,7 +222,7 @@ pub fn start_grab_loop() {
             if let Key::Unknown(keycode) = key {
                 log::error!("rdev get unknown key, keycode is : {:?}", keycode);
             } else {
-                client::process_event(&event);
+                client::process_event(&event, None);
             }
             None
         }
@@ -254,7 +254,7 @@ pub fn release_remote_keys() {
     for key in to_release {
         let event_type = EventType::KeyRelease(key);
         let event = event_type_to_event(event_type);
-        client::process_event(&event);
+        client::process_event(&event, None);
     }
 }
 
@@ -267,7 +267,23 @@ pub fn get_keyboard_mode_enum() -> KeyboardMode {
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn add_numlock_capslock_status(key_event: &mut KeyEvent) {
+fn add_numlock_capslock_with_lock_modes(key_event: &mut KeyEvent, lock_modes: i32) {
+    const CAPS_LOCK: i32 = 1;
+    const NUM_LOCK: i32 = 2;
+    // const SCROLL_LOCK: i32 = 3;
+    if lock_modes & (1 << CAPS_LOCK) != 0 {
+        key_event.modifiers.push(ControlKey::CapsLock.into());
+    }
+    if lock_modes & (1 << NUM_LOCK) != 0 {
+        key_event.modifiers.push(ControlKey::NumLock.into());
+    }
+    // if lock_modes & (1 << SCROLL_LOCK) != 0 {
+    //     key_event.modifiers.push(ControlKey::ScrollLock.into());
+    // }
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn add_numlock_capslock_status(key_event: &mut KeyEvent) {
     if get_key_state(enigo::Key::CapsLock) {
         key_event.modifiers.push(ControlKey::CapsLock.into());
     }
@@ -315,7 +331,7 @@ fn update_modifiers_state(event: &Event) {
     };
 }
 
-pub fn event_to_key_event(event: &Event) -> Option<KeyEvent> {
+pub fn event_to_key_event(event: &Event, lock_modes: Option<i32>) -> Option<KeyEvent> {
     let mut key_event = KeyEvent::new();
     update_modifiers_state(event);
 
@@ -345,8 +361,12 @@ pub fn event_to_key_event(event: &Event) -> Option<KeyEvent> {
             }
         }
     };
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    add_numlock_capslock_status(&mut key_event);
+    if let Some(lock_modes) = lock_modes {
+        add_numlock_capslock_with_lock_modes(&mut key_event, lock_modes);
+    } else {
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        add_numlock_capslock_status(&mut key_event);
+    }
 
     return Some(key_event);
 }

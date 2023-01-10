@@ -51,7 +51,7 @@ lazy_static::lazy_static! {
 pub fn global_init() -> bool {
     #[cfg(target_os = "linux")]
     {
-        if !scrap::is_x11() {
+        if !*IS_X11 {
             crate::server::wayland::set_wayland_scrap_map_err();
         }
     }
@@ -660,13 +660,13 @@ pub fn make_privacy_mode_msg(state: back_notification::PrivacyModeState) -> Mess
 
 #[cfg(not(target_os = "linux"))]
 lazy_static::lazy_static! {
-    pub static ref IS_X11: Mutex<bool> = Mutex::new(false);
+    pub static ref IS_X11: bool = false;
 
 }
 
 #[cfg(target_os = "linux")]
 lazy_static::lazy_static! {
-    pub static ref IS_X11: Mutex<bool> = Mutex::new("x11" == hbb_common::platform::linux::get_display_server());
+    pub static ref IS_X11: bool = "x11" == hbb_common::platform::linux::get_display_server();
 }
 
 pub fn make_fd_to_json(id: i32, path: String, entries: &Vec<FileEntry>) -> String {
