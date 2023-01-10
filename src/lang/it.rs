@@ -411,7 +411,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Local keyboard type", "Tipo di tastiera locale"),
         ("Select local keyboard type", "Seleziona il tipo di tastiera locale"),
         ("software_render_tip", ""),
-        ("Always use software rendering", ""),
+        ("Always use software rendering", "Usa sempre il render Software"),
         ("config_input", ""),
     ].iter().cloned().collect();
 }
