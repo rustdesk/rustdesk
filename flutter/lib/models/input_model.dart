@@ -119,8 +119,11 @@ class InputModel {
       keyCode = newData.keyCode;
     } else if (e.data is RawKeyEventDataLinux) {
       RawKeyEventDataLinux newData = e.data as RawKeyEventDataLinux;
-      scanCode = newData.scanCode;
-      keyCode = newData.keyCode;
+      // scanCode and keyCode of RawKeyEventDataLinux are incorrect.
+      // 1. scanCode means keycode
+      // 2. keyCode means keysym
+      scanCode = 0;
+      keyCode = newData.scanCode;
     } else if (e.data is RawKeyEventDataAndroid) {
       RawKeyEventDataAndroid newData = e.data as RawKeyEventDataAndroid;
       scanCode = newData.scanCode + 8;
@@ -135,16 +138,33 @@ class InputModel {
     } else {
       down = false;
     }
-    inputRawKey(e.character ?? "", keyCode, scanCode, down);
+    inputRawKey(e.character ?? '', keyCode, scanCode, down);
   }
 
   /// Send raw Key Event
   void inputRawKey(String name, int keyCode, int scanCode, bool down) {
+    const capslock = 1;
+    const numlock = 2;
+    const scrolllock = 3;
+    int lockModes = 0;
+    if (HardwareKeyboard.instance.lockModesEnabled
+        .contains(KeyboardLockMode.capsLock)) {
+      lockModes |= (1 << capslock);
+    }
+    if (HardwareKeyboard.instance.lockModesEnabled
+        .contains(KeyboardLockMode.numLock)) {
+      lockModes |= (1 << numlock);
+    }
+    if (HardwareKeyboard.instance.lockModesEnabled
+        .contains(KeyboardLockMode.scrollLock)) {
+      lockModes |= (1 << scrolllock);
+    }
     bind.sessionHandleFlutterKeyEvent(
         id: id,
         name: name,
         keycode: keyCode,
         scancode: scanCode,
+        lockModes: lockModes,
         downOrUp: down);
   }
 
