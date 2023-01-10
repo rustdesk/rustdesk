@@ -61,7 +61,7 @@ class FfiModel with ChangeNotifier {
 
   bool get touchMode => _touchMode;
 
-  bool get isPeerAndroid => _pi.platform == 'Android';
+  bool get isPeerAndroid => _pi.platform == kPeerPlatformAndroid;
 
   set inputBlocked(v) {
     _inputBlocked = v;
@@ -237,6 +237,11 @@ class FfiModel with ChangeNotifier {
     // remote is mobile, and orientation changed
     if ((_display.width > _display.height) != oldOrientation) {
       gFFI.canvasModel.updateViewStyle();
+    }
+    if (_pi.platform == kPeerPlatformLinux ||
+        _pi.platform == kPeerPlatformWindows ||
+        _pi.platform == kPeerPlatformMacOS) {
+      parent.target?.canvasModel.updateViewStyle();
     }
     parent.target?.recordingModel.onSwitchDisplay();
     notifyListeners();

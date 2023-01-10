@@ -589,7 +589,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     }
     displayMenu.add(MenuEntryDivider());
     if (perms['keyboard'] != false) {
-      if (pi.platform == 'Linux' || pi.sasEnabled) {
+      if (pi.platform == kPeerPlatformLinux || pi.sasEnabled) {
         displayMenu.add(MenuEntryButton<String>(
           childBuilder: (TextStyle? style) => Text(
             '${translate("Insert")} Ctrl + Alt + Del',
@@ -604,9 +604,9 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       }
     }
     if (perms['restart'] != false &&
-        (pi.platform == 'Linux' ||
-            pi.platform == 'Windows' ||
-            pi.platform == 'Mac OS')) {
+        (pi.platform == kPeerPlatformLinux ||
+            pi.platform == kPeerPlatformWindows ||
+            pi.platform == kPeerPlatformMacOS)) {
       displayMenu.add(MenuEntryButton<String>(
         childBuilder: (TextStyle? style) => Text(
           translate('Restart Remote Device'),
@@ -633,7 +633,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         dismissOnClicked: true,
       ));
 
-      if (pi.platform == 'Windows') {
+      if (pi.platform == kPeerPlatformWindows) {
         displayMenu.add(MenuEntryButton<String>(
           childBuilder: (TextStyle? style) => Obx(() => Text(
                 translate(
@@ -1157,7 +1157,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     }
 
     if (Platform.isWindows &&
-        pi.platform == 'Windows' &&
+        pi.platform == kPeerPlatformWindows &&
         perms['file'] != false) {
       displayMenu.add(_createSwitchMenuEntry(
           'Allow file copy and paste', 'enable-file-transfer', padding, true));

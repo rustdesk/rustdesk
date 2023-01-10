@@ -977,10 +977,10 @@ Future<bool> matchPeer(String searchText, Peer peer) async {
 
 /// Get the image for the current [platform].
 Widget getPlatformImage(String platform, {double size = 50}) {
-  platform = platform.toLowerCase();
-  if (platform == 'mac os') {
+  if (platform == kPeerPlatformMacOS) {
     platform = 'mac';
-  } else if (platform != 'linux' && platform != 'android') {
+  } else if (platform != kPeerPlatformLinux &&
+      platform != kPeerPlatformAndroid) {
     platform = 'win';
   }
   return SvgPicture.asset('assets/$platform.svg', height: size, width: size);

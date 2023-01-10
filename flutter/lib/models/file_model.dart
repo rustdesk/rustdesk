@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:get/get.dart';
 import 'package:path/path.dart' as path;
 
@@ -347,7 +348,7 @@ class FileModel extends ChangeNotifier {
             id: parent.target?.id ?? "", name: "remote_show_hidden"))
         .isNotEmpty;
     _remoteOption.isWindows =
-        parent.target?.ffiModel.pi.platform.toLowerCase() == "windows";
+        parent.target?.ffiModel.pi.platform == kPeerPlatformWindows;
 
     await Future.delayed(Duration(milliseconds: 100));
 
