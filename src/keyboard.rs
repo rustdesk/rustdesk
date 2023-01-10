@@ -361,11 +361,10 @@ pub fn event_to_key_event(event: &Event, lock_modes: Option<i32>) -> Option<KeyE
             }
         }
     };
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if let Some(lock_modes) = lock_modes {
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         add_numlock_capslock_with_lock_modes(&mut key_event, lock_modes);
     } else {
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         add_numlock_capslock_status(&mut key_event);
     }
 
