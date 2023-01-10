@@ -73,8 +73,7 @@ impl Interface for Session {
 
     async fn handle_hash(&mut self, pass: &str, hash: Hash, peer: &mut Stream) {
         log::info!(
-            "id={}, password={}",
-            crate::ipc::get_id(),
+            "password={}",
             hbb_common::password_security::temporary_password()
         );
         handle_hash(self.lc.clone(), &pass, hash, self, peer).await;
