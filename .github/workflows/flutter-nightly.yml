@@ -254,7 +254,7 @@ jobs:
       - name: Rename rustdesk
         run: |
           for name in rustdesk*??.dmg; do
-              mv "$name" "${name%%.dmg}-untested-${{ matrix.job.target }}.dmg"
+              mv "$name" "${name%%.dmg}-${{ matrix.job.target }}.dmg"
           done
 
       - name: Publish DMG package
