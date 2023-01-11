@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
@@ -34,7 +35,7 @@ class RustDeskMultiWindowManager {
   static final instance = RustDeskMultiWindowManager._();
 
   final List<int> _activeWindows = List.empty(growable: true);
-  final List<VoidCallback> _windowActiveCallbacks = List.empty(growable: true);
+  final List<AsyncCallback> _windowActiveCallbacks = List.empty(growable: true);
   int? _remoteDesktopWindowId;
   int? _fileTransferWindowId;
   int? _portForwardWindowId;
@@ -191,41 +192,41 @@ class RustDeskMultiWindowManager {
     return _activeWindows;
   }
 
-  void _notifyActiveWindow() {
+  Future<void> _notifyActiveWindow() async {
     for (final callback in _windowActiveCallbacks) {
-      callback.call();
+      await callback.call();
     }
   }
 
-  void registerActiveWindow(int windowId) {
+  Future<void> registerActiveWindow(int windowId) async {
     if (_activeWindows.contains(windowId)) {
       // ignore
     } else {
       _activeWindows.add(windowId);
     }
-    _notifyActiveWindow();
+    await _notifyActiveWindow();
   }
 
   /// Remove active window which has [`windowId`]
   /// 
-  /// [Avaliability]
+  /// [Availability]
   /// This function should only be called from main window.
   /// For other windows, please post a unregister(hide) event to main window handler:
   /// `rustDeskWinManager.call(WindowType.Main, kWindowEventHide, {"id": windowId!});`
-  void unregisterActiveWindow(int windowId) {
+  Future<void> unregisterActiveWindow(int windowId) async {
     if (!_activeWindows.contains(windowId)) {
       // ignore
     } else {
       _activeWindows.remove(windowId);
     }
-    _notifyActiveWindow();
+    await _notifyActiveWindow();
   }
 
-  void registerActiveWindowListener(VoidCallback callback) {
+  void registerActiveWindowListener(AsyncCallback callback) {
     _windowActiveCallbacks.add(callback);
   }
 
-  void unregisterActiveWindowListener(VoidCallback callback) {
+  void unregisterActiveWindowListener(AsyncCallback callback) {
     _windowActiveCallbacks.remove(callback);
   }
 }

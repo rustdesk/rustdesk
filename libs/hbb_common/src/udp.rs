@@ -49,7 +49,7 @@ impl FramedSocket {
 
     #[allow(clippy::never_loop)]
     pub async fn new_reuse<T: std::net::ToSocketAddrs>(addr: T) -> ResultType<Self> {
-        for addr in addr.to_socket_addrs()?.filter(|x| x.is_ipv4()) {
+        for addr in addr.to_socket_addrs()? {
             let socket = new_socket(addr, true, 0)?.into_udp_socket();
             return Ok(Self::Direct(UdpFramed::new(
                 UdpSocket::from_std(socket)?,
@@ -63,7 +63,7 @@ impl FramedSocket {
         addr: T,
         buf_size: usize,
     ) -> ResultType<Self> {
-        for addr in addr.to_socket_addrs()?.filter(|x| x.is_ipv4()) {
+        for addr in addr.to_socket_addrs()? {
             return Ok(Self::Direct(UdpFramed::new(
                 UdpSocket::from_std(new_socket(addr, false, buf_size)?.into_udp_socket())?,
                 BytesCodec::new(),
@@ -163,5 +163,14 @@ impl FramedSocket {
         } else {
             None
         }
+    }
+
+    pub fn is_ipv4(&self) -> bool {
+        if let FramedSocket::Direct(x) = self {
+            if let Ok(v) = x.get_ref().local_addr() {
+                return v.is_ipv4();
+            }
+        }
+        true
     }
 }

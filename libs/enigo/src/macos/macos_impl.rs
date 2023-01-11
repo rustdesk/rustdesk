@@ -40,6 +40,7 @@ const BUF_LEN: usize = 4;
 #[allow(improper_ctypes)]
 #[allow(non_snake_case)]
 #[link(name = "ApplicationServices", kind = "framework")]
+#[link(name = "Carbon", kind = "framework")]
 extern "C" {
     fn CFDataGetBytePtr(theData: CFDataRef) -> *const u8;
     fn TISCopyCurrentKeyboardInputSource() -> TISInputSourceRef;
@@ -68,7 +69,7 @@ extern "C" {
     ) -> Boolean;
 
     fn CGEventPost(tapLocation: CGEventTapLocation, event: *mut MyCGEvent);
-    // Actually return CFDataRef which is const here, but for coding convienence, return *mut c_void
+    // Actually return CFDataRef which is const here, but for coding convenience, return *mut c_void
     fn TISGetInputSourceProperty(source: TISInputSourceRef, property: *const c_void)
         -> *mut c_void;
     // not present in servo/core-graphics
@@ -225,7 +226,10 @@ impl MouseControllable for Enigo {
             MouseButton::Left => (CGMouseButton::Left, CGEventType::LeftMouseDown),
             MouseButton::Middle => (CGMouseButton::Center, CGEventType::OtherMouseDown),
             MouseButton::Right => (CGMouseButton::Right, CGEventType::RightMouseDown),
-            _ => unimplemented!(),
+            _ => {
+                log::info!("Unsupported button {:?}", button);
+                return Ok(());
+            },
         };
         let dest = CGPoint::new(current_x as f64, current_y as f64);
         if let Some(src) = self.event_source.as_ref() {
@@ -248,7 +252,10 @@ impl MouseControllable for Enigo {
             MouseButton::Left => (CGMouseButton::Left, CGEventType::LeftMouseUp),
             MouseButton::Middle => (CGMouseButton::Center, CGEventType::OtherMouseUp),
             MouseButton::Right => (CGMouseButton::Right, CGEventType::RightMouseUp),
-            _ => unimplemented!(),
+            _ => {
+                log::info!("Unsupported button {:?}", button);
+                return;
+            },
         };
         let dest = CGPoint::new(current_x as f64, current_y as f64);
         if let Some(src) = self.event_source.as_ref() {

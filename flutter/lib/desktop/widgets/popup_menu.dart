@@ -118,6 +118,15 @@ abstract class MenuEntryBase<T> {
     this.enabled,
   });
   List<mod_menu.PopupMenuEntry<T>> build(BuildContext context, MenuConfig conf);
+
+  enabledStyle(BuildContext context) => TextStyle(
+      color: Theme.of(context).textTheme.titleLarge?.color,
+      fontSize: MenuConfig.fontSize,
+      fontWeight: FontWeight.normal);
+  disabledStyle() => TextStyle(
+      color: Colors.grey,
+      fontSize: MenuConfig.fontSize,
+      fontWeight: FontWeight.normal);
 }
 
 class MenuEntryDivider<T> extends MenuEntryBase<T> {
@@ -189,54 +198,76 @@ class MenuEntryRadios<T> extends MenuEntryBase<T> {
 
   mod_menu.PopupMenuEntry<T> _buildMenuItem(
       BuildContext context, MenuConfig conf, MenuEntryRadioOption opt) {
+    Widget getTextChild() {
+      final enabledTextChild = Text(
+        opt.text,
+        style: enabledStyle(context),
+      );
+      final disabledTextChild = Text(
+        opt.text,
+        style: disabledStyle(),
+      );
+      if (opt.enabled == null) {
+        return enabledTextChild;
+      } else {
+        return Obx(
+            () => opt.enabled!.isTrue ? enabledTextChild : disabledTextChild);
+      }
+    }
+
+    final child = Container(
+      padding: padding,
+      alignment: AlignmentDirectional.centerStart,
+      constraints:
+          BoxConstraints(minHeight: conf.height, maxHeight: conf.height),
+      child: Row(
+        children: [
+          getTextChild(),
+          Expanded(
+              child: Align(
+                  alignment: Alignment.centerRight,
+                  child: Transform.scale(
+                    scale: MenuConfig.iconScale,
+                    child: Obx(() => opt.value == curOption.value
+                        ? IconButton(
+                            padding:
+                                const EdgeInsets.fromLTRB(8.0, 0.0, 8.0, 0.0),
+                            hoverColor: Colors.transparent,
+                            focusColor: Colors.transparent,
+                            onPressed: () {},
+                            icon: Icon(
+                              Icons.check,
+                              color: (opt.enabled ?? true.obs).isTrue
+                                  ? conf.commonColor
+                                  : Colors.grey,
+                            ))
+                        : const SizedBox.shrink()),
+                  ))),
+        ],
+      ),
+    );
+    onPressed() {
+      if (opt.dismissOnClicked && Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+      setOption(opt.value);
+    }
+
     return mod_menu.PopupMenuItem(
       padding: EdgeInsets.zero,
       height: conf.height,
       child: Container(
-          width: conf.boxWidth,
-          child: TextButton(
-            child: Container(
-              padding: padding,
-              alignment: AlignmentDirectional.centerStart,
-              constraints: BoxConstraints(
-                  minHeight: conf.height, maxHeight: conf.height),
-              child: Row(
-                children: [
-                  Text(
-                    opt.text,
-                    style: TextStyle(
-                        color: Theme.of(context).textTheme.titleLarge?.color,
-                        fontSize: MenuConfig.fontSize,
-                        fontWeight: FontWeight.normal),
-                  ),
-                  Expanded(
-                      child: Align(
-                          alignment: Alignment.centerRight,
-                          child: Transform.scale(
-                            scale: MenuConfig.iconScale,
-                            child: Obx(() => opt.value == curOption.value
-                                ? IconButton(
-                                    padding: const EdgeInsets.fromLTRB(
-                                        8.0, 0.0, 8.0, 0.0),
-                                    hoverColor: Colors.transparent,
-                                    focusColor: Colors.transparent,
-                                    onPressed: () {},
-                                    icon: Icon(
-                                      Icons.check,
-                                      color: conf.commonColor,
-                                    ))
-                                : const SizedBox.shrink()),
-                          ))),
-                ],
-              ),
-            ),
-            onPressed: () {
-              if (opt.dismissOnClicked && Navigator.canPop(context)) {
-                Navigator.pop(context);
-              }
-              setOption(opt.value);
-            },
-          )),
+        width: conf.boxWidth,
+        child: opt.enabled == null
+            ? TextButton(
+                child: child,
+                onPressed: onPressed,
+              )
+            : Obx(() => TextButton(
+                  child: child,
+                  onPressed: opt.enabled!.isTrue ? onPressed : null,
+                )),
+      ),
     );
   }
 
@@ -567,12 +598,9 @@ class MenuEntrySubMenu<T> extends MenuEntryBase<T> {
           const SizedBox(width: MenuConfig.midPadding),
           Obx(() => Text(
                 text,
-                style: TextStyle(
-                    color: super.enabled!.value
-                        ? Theme.of(context).textTheme.titleLarge?.color
-                        : Colors.grey,
-                    fontSize: MenuConfig.fontSize,
-                    fontWeight: FontWeight.normal),
+                style: super.enabled!.value
+                    ? enabledStyle(context)
+                    : disabledStyle(),
               )),
           Expanded(
               child: Align(
@@ -605,14 +633,6 @@ class MenuEntryButton<T> extends MenuEntryBase<T> {
         );
 
   Widget _buildChild(BuildContext context, MenuConfig conf) {
-    final enabledStyle = TextStyle(
-        color: Theme.of(context).textTheme.titleLarge?.color,
-        fontSize: MenuConfig.fontSize,
-        fontWeight: FontWeight.normal);
-    const disabledStyle = TextStyle(
-        color: Colors.grey,
-        fontSize: MenuConfig.fontSize,
-        fontWeight: FontWeight.normal);
     super.enabled ??= true.obs;
     return Obx(() => Container(
         width: conf.boxWidth,
@@ -631,7 +651,7 @@ class MenuEntryButton<T> extends MenuEntryBase<T> {
             constraints:
                 BoxConstraints(minHeight: conf.height, maxHeight: conf.height),
             child: childBuilder(
-                super.enabled!.value ? enabledStyle : disabledStyle),
+                super.enabled!.value ? enabledStyle(context) : disabledStyle()),
           ),
         )));
   }

@@ -1,3 +1,4 @@
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 use super::ui_interface::get_option_opt;
 #[cfg(target_os = "linux")]
 use hbb_common::log::{debug, error, info};
@@ -44,7 +45,7 @@ pub fn start_tray() {
         } else {
             *control_flow = ControlFlow::Wait;
         }
-        let stopped = is_service_stoped();
+        let stopped = is_service_stopped();
         let state = if stopped { 2 } else { 1 };
         let old = *old_state.lock().unwrap();
         if state != old {
@@ -88,6 +89,9 @@ pub fn start_tray() {
 /// This function will block current execution, show the tray icon and handle events.
 #[cfg(target_os = "linux")]
 pub fn start_tray() {
+    use std::time::Duration;
+
+    use glib::{clone, Continue};
     use gtk::traits::{GtkMenuItemExt, MenuShellExt, WidgetExt};
 
     info!("configuring tray");
@@ -98,7 +102,7 @@ pub fn start_tray() {
     }
     if let Some(mut appindicator) = get_default_app_indicator() {
         let mut menu = gtk::Menu::new();
-        let stoped = is_service_stoped();
+        let stoped = is_service_stopped();
         // start/stop service
         let label = if stoped {
             crate::client::translate("Start Service".to_owned())
@@ -106,9 +110,9 @@ pub fn start_tray() {
             crate::client::translate("Stop service".to_owned())
         };
         let menu_item_service = gtk::MenuItem::with_label(label.as_str());
-        menu_item_service.connect_activate(move |item| {
+        menu_item_service.connect_activate(move |_| {
             let _lock = crate::ui_interface::SENDER.lock().unwrap();
-            update_tray_service_item(item);
+            change_service_state();
         });
         menu.append(&menu_item_service);
         // show tray item
@@ -116,6 +120,16 @@ pub fn start_tray() {
         appindicator.set_menu(&mut menu);
         // start event loop
         info!("Setting tray event loop");
+        // check the connection status for every second
+        glib::timeout_add_local(
+            Duration::from_secs(1),
+            clone!(@strong menu_item_service as item => move || {
+                let _lock = crate::ui_interface::SENDER.lock().unwrap();
+                update_tray_service_item(&item);
+                // continue to trigger the next status check
+                Continue(true)
+            }),
+        );
         gtk::main();
     } else {
         error!("Tray process exit now");
@@ -123,17 +137,25 @@ pub fn start_tray() {
 }
 
 #[cfg(target_os = "linux")]
-fn update_tray_service_item(item: &gtk::MenuItem) {
-    use gtk::traits::GtkMenuItemExt;
-
-    if is_service_stoped() {
+fn change_service_state() {
+    if is_service_stopped() {
         debug!("Now try to start service");
-        item.set_label(&crate::client::translate("Stop service".to_owned()));
         crate::ipc::set_option("stop-service", "");
     } else {
         debug!("Now try to stop service");
-        item.set_label(&crate::client::translate("Start Service".to_owned()));
         crate::ipc::set_option("stop-service", "Y");
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[inline]
+fn update_tray_service_item(item: &gtk::MenuItem) {
+    use gtk::traits::GtkMenuItemExt;
+
+    if is_service_stopped() {
+        item.set_label(&crate::client::translate("Start Service".to_owned()));
+    } else {
+        item.set_label(&crate::client::translate("Stop service".to_owned()));
     }
 }
 
@@ -173,7 +195,8 @@ fn get_default_app_indicator() -> Option<AppIndicator> {
 /// Check if service is stoped.
 /// Return [`true`] if service is stoped, [`false`] otherwise.
 #[inline]
-fn is_service_stoped() -> bool {
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+fn is_service_stopped() -> bool {
     if let Some(v) = get_option_opt("stop-service") {
         v == "Y"
     } else {
@@ -183,17 +206,28 @@ fn is_service_stoped() -> bool {
 
 #[cfg(target_os = "macos")]
 pub fn make_tray() {
+    extern "C" {
+        fn BackingScaleFactor() -> f32;
+    }
+    let f = unsafe { BackingScaleFactor() };
     use tray_item::TrayItem;
     let mode = dark_light::detect();
-    let mut icon_path = "";
-    match mode {
+    let icon_path = match mode {
         dark_light::Mode::Dark => {
-            icon_path = "mac-tray-light.png";
-        },
+            if f > 1. {
+                "mac-tray-light-x2.png"
+            } else {
+                "mac-tray-light.png"
+            }
+        }
         dark_light::Mode::Light => {
-            icon_path = "mac-tray-dark.png";
-        },
-    }
+            if f > 1. {
+                "mac-tray-dark-x2.png"
+            } else {
+                "mac-tray-dark.png"
+            }
+        }
+    };
     if let Ok(mut tray) = TrayItem::new(&crate::get_app_name(), icon_path) {
         tray.add_label(&format!(
             "{} {}",
@@ -211,4 +245,3 @@ pub fn make_tray() {
         }
     }
 }
-

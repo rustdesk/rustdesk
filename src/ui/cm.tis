@@ -31,7 +31,7 @@ class Body: Reactor.Component
         var disconnected = c.disconnected;
         var show_elevation_btn = handler.can_elevate() && show_elevation && !c.is_file_transfer && c.port_forward.length == 0;
         var show_accept_btn = handler.get_option('approve-mode') != 'password';
-       // below size:* is work around for Linux, it alreayd set in css, but not work, shit sciter
+       // below size:* is a workaround for Linux, it already set in css, but not work, shit sciter
         return <div .content style="size:*">
             <div .left-panel>
                 <div .icon-and-id>
@@ -42,7 +42,7 @@ class Body: Reactor.Component
                         <div .id style="font-weight: bold; font-size: 1.2em;">{c.name}</div>
                         <div .id>({c.peer_id})</div>
                         <div style="margin-top: 1.2em">{auth
-                            ? <span>{disconnected ? translate('Disconnected') : translate('Connected')}{" "}<span #time>{getElaspsed(c.time, c.now)}</span></span> 
+                            ? <span>{disconnected ? translate('Disconnected') : translate('Connected')}{" "}<span #time>{getElapsed(c.time, c.now)}</span></span> 
                             : <span>{translate('Request access to your device')}{"..."}</span>}
                         </div>
                     </div>
@@ -442,7 +442,7 @@ function self.ready() {
     view.move(sw - w, 0, w, h);
 }
 
-function getElaspsed(time, now) {
+function getElapsed(time, now) {
     var seconds = Date.diff(time, now, #seconds);
     var hours = seconds / 3600;
     var days = hours / 24;
@@ -482,7 +482,7 @@ function updateTime() {
         if (el) {
             var c = connections[body.cur];
             if (c && c.authorized && !c.disconnected) {
-                el.text = getElaspsed(c.time, c.now);
+                el.text = getElapsed(c.time, c.now);
             }
         }
         updateTime();

@@ -78,11 +78,11 @@ fn is_capturer_mag_supported() -> bool {
     false
 }
 
-pub fn capture_cursor_embeded() -> bool {
-    scrap::is_cursor_embeded()
+pub fn capture_cursor_embedded() -> bool {
+    scrap::is_cursor_embedded()
 }
 
-pub fn notify_video_frame_feched(conn_id: i32, frame_tm: Option<Instant>) {
+pub fn notify_video_frame_fetched(conn_id: i32, frame_tm: Option<Instant>) {
     FRAME_FETCHED_NOTIFIER.0.send((conn_id, frame_tm)).unwrap()
 }
 
@@ -146,7 +146,7 @@ impl VideoFrameController {
                 fetched_conn_ids.insert(id);
             }
             Ok(None) => {
-                // this branch would nerver be reached
+                // this branch would never be reached
             }
         }
     }
@@ -162,7 +162,7 @@ fn check_display_changed(
     last_n: usize,
     last_current: usize,
     last_width: usize,
-    last_hegiht: usize,
+    last_height: usize,
 ) -> bool {
     #[cfg(target_os = "linux")]
     {
@@ -187,7 +187,7 @@ fn check_display_changed(
             if i != last_current {
                 return true;
             };
-            if d.width() != last_width || d.height() != last_hegiht {
+            if d.width() != last_width || d.height() != last_height {
                 return true;
             };
         }
@@ -249,7 +249,7 @@ fn create_capturer(
                             PRIVACY_WINDOW_NAME
                         );
                     }
-                    log::debug!("Create maginifier capture for {}", privacy_mode_id);
+                    log::debug!("Create magnifier capture for {}", privacy_mode_id);
                     c = Some(Box::new(c1));
                 }
                 Err(e) => {
@@ -309,9 +309,9 @@ pub fn test_create_capturer(privacy_mode_id: i32, timeout_millis: u64) -> bool {
 }
 
 #[cfg(windows)]
-fn check_uac_switch(privacy_mode_id: i32, captuerer_privacy_mode_id: i32) -> ResultType<()> {
-    if captuerer_privacy_mode_id != 0 {
-        if privacy_mode_id != captuerer_privacy_mode_id {
+fn check_uac_switch(privacy_mode_id: i32, capturer_privacy_mode_id: i32) -> ResultType<()> {
+    if capturer_privacy_mode_id != 0 {
+        if privacy_mode_id != capturer_privacy_mode_id {
             if !crate::ui::win_privacy::is_process_consent_running()? {
                 bail!("consent.exe is running");
             }
@@ -330,7 +330,7 @@ pub(super) struct CapturerInfo {
     pub ndisplay: usize,
     pub current: usize,
     pub privacy_mode_id: i32,
-    pub _captuerer_privacy_mode_id: i32,
+    pub _capturer_privacy_mode_id: i32,
     pub capturer: Box<dyn TraitCapturer>,
 }
 
@@ -371,27 +371,29 @@ fn get_capturer(use_yuv: bool, portable_service_running: bool) -> ResultType<Cap
 
     let privacy_mode_id = *PRIVACY_MODE_CONN_ID.lock().unwrap();
     #[cfg(not(windows))]
-    let captuerer_privacy_mode_id = privacy_mode_id;
+    let capturer_privacy_mode_id = privacy_mode_id;
     #[cfg(windows)]
-    let mut captuerer_privacy_mode_id = privacy_mode_id;
+    let mut capturer_privacy_mode_id = privacy_mode_id;
     #[cfg(windows)]
-    if captuerer_privacy_mode_id != 0 {
+    if capturer_privacy_mode_id != 0 {
         if crate::ui::win_privacy::is_process_consent_running()? {
-            captuerer_privacy_mode_id = 0;
+            capturer_privacy_mode_id = 0;
         }
     }
     log::debug!(
-        "Try create capturer with captuerer privacy mode id {}",
-        captuerer_privacy_mode_id,
+        "Try create capturer with capturer privacy mode id {}",
+        capturer_privacy_mode_id,
     );
 
-    if privacy_mode_id != captuerer_privacy_mode_id {
-        log::info!("In privacy mode, but show UAC prompt window for now");
-    } else {
-        log::info!("In privacy mode, the peer side cannot watch the screen");
+    if privacy_mode_id != 0 {
+        if privacy_mode_id != capturer_privacy_mode_id {
+            log::info!("In privacy mode, but show UAC prompt window for now");
+        } else {
+            log::info!("In privacy mode, the peer side cannot watch the screen");
+        }
     }
     let capturer = create_capturer(
-        captuerer_privacy_mode_id,
+        capturer_privacy_mode_id,
         display,
         use_yuv,
         current,
@@ -404,7 +406,7 @@ fn get_capturer(use_yuv: bool, portable_service_running: bool) -> ResultType<Cap
         ndisplay,
         current,
         privacy_mode_id,
-        _captuerer_privacy_mode_id: captuerer_privacy_mode_id,
+        _capturer_privacy_mode_id: capturer_privacy_mode_id,
         capturer,
     })
 }
@@ -413,7 +415,7 @@ fn run(sp: GenericService) -> ResultType<()> {
     #[cfg(windows)]
     ensure_close_virtual_device()?;
 
-    // ensure_inited() is needed because release_resouce() may be called.
+    // ensure_inited() is needed because release_resource() may be called.
     #[cfg(target_os = "linux")]
     super::wayland::ensure_inited()?;
     #[cfg(windows)]
@@ -464,7 +466,7 @@ fn run(sp: GenericService) -> ResultType<()> {
             y: c.origin.1 as _,
             width: c.width as _,
             height: c.height as _,
-            cursor_embeded: capture_cursor_embeded(),
+            cursor_embedded: capture_cursor_embedded(),
             ..Default::default()
         });
         let mut msg_out = Message::new();
@@ -491,7 +493,7 @@ fn run(sp: GenericService) -> ResultType<()> {
 
     while sp.ok() {
         #[cfg(windows)]
-        check_uac_switch(c.privacy_mode_id, c._captuerer_privacy_mode_id)?;
+        check_uac_switch(c.privacy_mode_id, c._capturer_privacy_mode_id)?;
 
         let mut video_qos = VIDEO_QOS.lock().unwrap();
         if video_qos.check_if_updated() {
@@ -599,8 +601,8 @@ fn run(sp: GenericService) -> ResultType<()> {
                     would_block_count += 1;
                     if !scrap::is_x11() {
                         if would_block_count >= 100 {
-                            super::wayland::release_resouce();
-                            bail!("Wayland capturer none 100 times, try restart captuere");
+                            super::wayland::release_resource();
+                            bail!("Wayland capturer none 100 times, try restart capture");
                         }
                     }
                 }
@@ -635,7 +637,7 @@ fn run(sp: GenericService) -> ResultType<()> {
         while wait_begin.elapsed().as_millis() < timeout_millis as _ {
             check_privacy_mode_changed(&sp, c.privacy_mode_id)?;
             #[cfg(windows)]
-            check_uac_switch(c.privacy_mode_id, c._captuerer_privacy_mode_id)?;
+            check_uac_switch(c.privacy_mode_id, c._capturer_privacy_mode_id)?;
             frame_controller.try_wait_next(&mut fetched_conn_ids, 300);
             // break if all connections have received current frame
             if fetched_conn_ids.len() >= frame_controller.send_conn_ids.len() {
@@ -653,7 +655,7 @@ fn run(sp: GenericService) -> ResultType<()> {
 
     #[cfg(target_os = "linux")]
     if !scrap::is_x11() {
-        super::wayland::release_resouce();
+        super::wayland::release_resource();
     }
 
     Ok(())
@@ -821,7 +823,7 @@ pub(super) fn get_displays_2(all: &Vec<Display>) -> (usize, Vec<DisplayInfo>) {
             height: d.height() as _,
             name: d.name(),
             online: d.is_online(),
-            cursor_embeded: false,
+            cursor_embedded: false,
             ..Default::default()
         });
     }

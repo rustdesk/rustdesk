@@ -13,7 +13,7 @@ class Install: Reactor.Component {
             </div>
             <div><button|checkbox #startmenu checked>{translate('Create start menu shortcuts')}</button></div>
             <div><button|checkbox #desktopicon checked>{translate('Create desktop icon')}</button></div>
-            <div #aggrement .link style="margin-top: 2em;">{translate('End-user license agreement')}</div>
+            <div #agreement .link style="margin-top: 2em;">{translate('End-user license agreement')}</div>
             <div>{translate('agreement_tip')}</div>
             <div style="height: 1px; background: gray; margin-top: 1em" />
             <div style="text-align: right;">
@@ -46,7 +46,7 @@ class Install: Reactor.Component {
         }
     }
 
-    event click $(#aggrement) {
+    event click $(#agreement) {
         view.open_url("http://rustdesk.com/privacy");
     }
 

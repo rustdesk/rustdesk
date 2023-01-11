@@ -3,14 +3,12 @@ import 'package:flutter_hbb/common/formatter/id_formatter.dart';
 import 'package:flutter_hbb/common/widgets/peer_card.dart';
 import 'package:flutter_hbb/common/widgets/peers_view.dart';
 import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
-import 'package:flutter_hbb/desktop/widgets/login.dart';
 import '../../consts.dart';
 import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
 import 'package:get/get.dart';
 
 import '../../common.dart';
-import '../../desktop/pages/desktop_home_page.dart';
-import '../../mobile/pages/settings_page.dart';
+import 'login.dart';
 
 class AddressBook extends StatefulWidget {
   final EdgeInsets? menuPadding;
@@ -28,7 +26,6 @@ class _AddressBookState extends State<AddressBook> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => gFFI.abModel.pullAb());
   }
 
   @override
@@ -42,25 +39,12 @@ class _AddressBookState extends State<AddressBook> {
         }
       });
 
-  handleLogin() {
-    // TODO refactor login dialog for desktop and mobile
-    if (isDesktop) {
-      loginDialog().then((success) {
-        if (success) {
-          gFFI.abModel.pullAb();
-        }
-      });
-    } else {
-      showLogin(gFFI.dialogManager);
-    }
-  }
-
   Future<Widget> buildBody(BuildContext context) async {
     return Obx(() {
       if (gFFI.userModel.userName.value.isEmpty) {
         return Center(
           child: InkWell(
-            onTap: handleLogin,
+            onTap: loginDialog,
             child: Text(
               translate("Login"),
               style: const TextStyle(decoration: TextDecoration.underline),

@@ -38,6 +38,17 @@ pub fn core_main() -> Option<Vec<String>> {
         }
         i += 1;
     }
+    #[cfg(target_os = "linux")]
+    #[cfg(feature = "flutter")]
+    {
+        crate::platform::linux::register_breakdown_handler();
+        let (k, v) = ("LIBGL_ALWAYS_SOFTWARE", "true");
+        if !hbb_common::config::Config::get_option("allow-always-software-render").is_empty() {
+            std::env::set_var(k, v);
+        } else {
+            std::env::remove_var(k);
+        }
+    }
     #[cfg(feature = "flutter")]
     if _is_flutter_connect {
         return core_main_invoke_new_connection(std::env::args());
@@ -173,7 +184,7 @@ pub fn core_main() -> Option<Vec<String>> {
             crate::start_os_service();
             return None;
         } else if args[0] == "--server" {
-            log::info!("start --server");
+            log::info!("start --server with user {}", crate::username());
             #[cfg(target_os = "windows")]
             {
                 crate::start_server(true);
@@ -182,6 +193,7 @@ pub fn core_main() -> Option<Vec<String>> {
             #[cfg(target_os = "macos")]
             {
                 std::thread::spawn(move || crate::start_server(true));
+                crate::platform::macos::hide_dock();
                 crate::tray::make_tray();
                 return None;
             }
@@ -231,6 +243,8 @@ pub fn core_main() -> Option<Vec<String>> {
             #[cfg(feature = "flutter")]
             crate::flutter::connection_manager::start_listen_ipc_thread();
             crate::ui_interface::start_option_status_sync();
+            #[cfg(target_os = "macos")]
+            crate::platform::macos::hide_dock();
         }
     }
     //_async_logger_holder.map(|x| x.flush());
@@ -305,7 +319,7 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
         let res = crate::platform::send_message_to_hnwd(
             "FLUTTER_RUNNER_WIN32_WINDOW",
             "RustDesk",
-            (WM_USER + 2) as _, // refered from unilinks desktop pub
+            (WM_USER + 2) as _, // referred from unilinks desktop pub
             uni_links.as_str(),
             true,
         );

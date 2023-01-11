@@ -21,16 +21,13 @@ class AbModel {
 
   AbModel(this.parent);
 
-  FFI? get _ffi => parent.target;
-
   Future<dynamic> pullAb() async {
-    if (_ffi!.userModel.userName.isEmpty) return;
+    if (gFFI.userModel.userName.isEmpty) return;
     abLoading.value = true;
     abError.value = "";
     final api = "${await bind.mainGetApiServer()}/api/ab/get";
     try {
-      final resp =
-          await http.post(Uri.parse(api), headers: await getHttpHeaders());
+      final resp = await http.post(Uri.parse(api), headers: getHttpHeaders());
       if (resp.body.isNotEmpty && resp.body.toLowerCase() != "null") {
         Map<String, dynamic> json = jsonDecode(resp.body);
         if (json.containsKey('error')) {
@@ -63,7 +60,8 @@ class AbModel {
     return null;
   }
 
-  void reset() {
+  Future<void> reset() async {
+    await bind.mainSetLocalOption(key: "selected-tags", value: '');
     tags.clear();
     peers.clear();
   }
@@ -103,7 +101,7 @@ class AbModel {
   Future<void> pushAb() async {
     abLoading.value = true;
     final api = "${await bind.mainGetApiServer()}/api/ab";
-    var authHeaders = await getHttpHeaders();
+    var authHeaders = getHttpHeaders();
     authHeaders['Content-Type'] = "application/json";
     final peersJsonData = peers.map((e) => e.toJson()).toList();
     final body = jsonEncode({
@@ -187,10 +185,5 @@ class AbModel {
       it.first.rdpUsername = username;
       await pushAb();
     }
-  }
-
-  void clear() {
-    peers.clear();
-    tags.clear();
   }
 }

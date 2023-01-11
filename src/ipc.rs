@@ -9,7 +9,7 @@ use parity_tokio_ipc::{
 use serde_derive::{Deserialize, Serialize};
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub use clipboard::ClipbaordFile;
+pub use clipboard::ClipboardFile;
 use hbb_common::{
     allow_err, bail, bytes,
     bytes_codec::BytesCodec,
@@ -111,7 +111,7 @@ pub enum DataKeyboardResponse {
     GetKeyState(bool),
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "t", content = "c")]
 pub enum DataMouse {
@@ -191,15 +191,15 @@ pub enum Data {
     Test,
     SyncConfig(Option<(Config, Config2)>),
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    ClipbaordFile(ClipbaordFile),
+    ClipboardFile(ClipboardFile),
     ClipboardFileEnabled(bool),
     PrivacyModeState((i32, PrivacyModeState)),
     TestRendezvousServer,
-    #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     Keyboard(DataKeyboard),
-    #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     KeyboardResponse(DataKeyboardResponse),
-    #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     Mouse(DataMouse),
     Control(DataControl),
     Theme(String),

@@ -257,7 +257,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       ),
     ]);
 
-    if (!ffi.canvasModel.cursorEmbeded) {
+    if (!ffi.canvasModel.cursorEmbedded) {
       menu.add(MenuEntryDivider<String>());
       menu.add(() {
         final state = ShowRemoteCursorState.find(key);
@@ -308,7 +308,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         dismissOnClicked: true,
       ));
 
-      if (pi.platform == 'Linux' || pi.sasEnabled) {
+      if (pi.platform == kPeerPlatformLinux || pi.sasEnabled) {
         menu.add(MenuEntryButton<String>(
           childBuilder: (TextStyle? style) => Text(
             '${translate("Insert")} Ctrl + Alt + Del',

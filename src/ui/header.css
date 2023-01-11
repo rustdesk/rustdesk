@@ -8,7 +8,7 @@ header #screens {
   height: 22px;
   border-radius: 4px;
   flow: horizontal;
-  border-spacing: 0.5em; 
+  border-spacing: 0.5em;
   padding-right: 1em;
   position: relative;
 }

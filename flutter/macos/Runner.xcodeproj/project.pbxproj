@@ -26,6 +26,10 @@
 		33CC10F32044A3C60003C045 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 33CC10F22044A3C60003C045 /* Assets.xcassets */; };
 		33CC10F62044A3C60003C045 /* MainMenu.xib in Resources */ = {isa = PBXBuildFile; fileRef = 33CC10F42044A3C60003C045 /* MainMenu.xib */; };
 		33CC11132044BFA00003C045 /* MainFlutterWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CC11122044BFA00003C045 /* MainFlutterWindow.swift */; };
+		7E4BCD762966B0EC006D24E2 /* mac-tray-light.png in Resources */ = {isa = PBXBuildFile; fileRef = 7E4BCD742966B0EC006D24E2 /* mac-tray-light.png */; };
+		7E4BCD772966B0EC006D24E2 /* mac-tray-dark.png in Resources */ = {isa = PBXBuildFile; fileRef = 7E4BCD752966B0EC006D24E2 /* mac-tray-dark.png */; };
+		7E881462296E98EE00A0C54F /* mac-tray-light-x2.png in Resources */ = {isa = PBXBuildFile; fileRef = 7E881461296E98ED00A0C54F /* mac-tray-light-x2.png */; };
+		7E881464296E991200A0C54F /* mac-tray-dark-x2.png in Resources */ = {isa = PBXBuildFile; fileRef = 7E881463296E991200A0C54F /* mac-tray-dark-x2.png */; };
 		84010BA8292CF66600152837 /* liblibrustdesk.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 84010BA7292CF66600152837 /* liblibrustdesk.dylib */; settings = {ATTRIBUTES = (Weak, ); }; };
 		84010BA9292CF68300152837 /* liblibrustdesk.dylib in Embed Libraries */ = {isa = PBXBuildFile; fileRef = 84010BA7292CF66600152837 /* liblibrustdesk.dylib */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		C5E54335B73C89F72DB1B606 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 26C84465887F29AE938039CB /* Pods_Runner.framework */; };
@@ -74,6 +78,10 @@
 		33E5194F232828860026EE4D /* AppInfo.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = AppInfo.xcconfig; sourceTree = "<group>"; };
 		7436B85D94E8F7B5A9324869 /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
+		7E4BCD742966B0EC006D24E2 /* mac-tray-light.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = "mac-tray-light.png"; path = "../../res/mac-tray-light.png"; sourceTree = "<group>"; };
+		7E4BCD752966B0EC006D24E2 /* mac-tray-dark.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = "mac-tray-dark.png"; path = "../../res/mac-tray-dark.png"; sourceTree = "<group>"; };
+		7E881461296E98ED00A0C54F /* mac-tray-light-x2.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = "mac-tray-light-x2.png"; path = "../../res/mac-tray-light-x2.png"; sourceTree = "<group>"; };
+		7E881463296E991200A0C54F /* mac-tray-dark-x2.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = "mac-tray-dark-x2.png"; path = "../../res/mac-tray-dark-x2.png"; sourceTree = "<group>"; };
 		84010BA7292CF66600152837 /* liblibrustdesk.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = liblibrustdesk.dylib; path = ../../target/release/liblibrustdesk.dylib; sourceTree = "<group>"; };
 		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		C3BB669FF6190AE1B11BCAEA /* Pods-Runner.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"; sourceTree = "<group>"; };
@@ -127,6 +135,10 @@
 		33CC11242044D66E0003C045 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				7E881463296E991200A0C54F /* mac-tray-dark-x2.png */,
+				7E881461296E98ED00A0C54F /* mac-tray-light-x2.png */,
+				7E4BCD752966B0EC006D24E2 /* mac-tray-dark.png */,
+				7E4BCD742966B0EC006D24E2 /* mac-tray-light.png */,
 				33CC10F22044A3C60003C045 /* Assets.xcassets */,
 				33CC10F42044A3C60003C045 /* MainMenu.xib */,
 				33CC10F72044A3C60003C045 /* Info.plist */,
@@ -253,8 +265,12 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7E881462296E98EE00A0C54F /* mac-tray-light-x2.png in Resources */,
+				7E4BCD762966B0EC006D24E2 /* mac-tray-light.png in Resources */,
+				7E4BCD772966B0EC006D24E2 /* mac-tray-dark.png in Resources */,
 				33CC10F32044A3C60003C045 /* Assets.xcassets in Resources */,
 				33CC10F62044A3C60003C045 /* MainMenu.xib in Resources */,
+				7E881464296E991200A0C54F /* mac-tray-dark-x2.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -378,7 +394,7 @@
 			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ARCHS = x86_64;
+				ARCHS = "$(ARCHS_STANDARD)";
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -403,6 +419,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -428,8 +445,11 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = Runner/DebugProfile.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Runner/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -459,7 +479,7 @@
 			baseConfigurationReference = 9740EEB21CF90195004384FC /* Debug.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ARCHS = x86_64;
+				ARCHS = "$(ARCHS_STANDARD)";
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -513,7 +533,7 @@
 			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ARCHS = x86_64;
+				ARCHS = "$(ARCHS_STANDARD)";
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -538,6 +558,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -550,6 +571,12 @@
 				MACOSX_DEPLOYMENT_TARGET = 10.14;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				ONLY_ACTIVE_ARCH = YES;
+				OTHER_LDFLAGS = (
+					"-sectcreate",
+					__CGPreLoginApp,
+					__cgpreloginapp,
+					/dev/null,
+				);
 				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
@@ -563,8 +590,10 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = Runner/DebugProfile.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = "";
 				INFOPLIST_FILE = Runner/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -590,8 +619,11 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = Runner/Release.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Runner/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -602,6 +634,12 @@
 					../../target/release,
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.14;
+				OTHER_LDFLAGS = (
+					"-sectcreate",
+					__CGPreLoginApp,
+					__cgpreloginapp,
+					/dev/null,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.carriez.rustdesk;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				"SWIFT_OBJC_BRIDGING_HEADER[arch=*]" = Runner/bridge_generated.h;

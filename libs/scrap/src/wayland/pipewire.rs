@@ -117,12 +117,13 @@ impl Capturable for PipeWireCapturable {
 pub struct PipeWireRecorder {
     buffer: Option<gst::MappedBuffer<gst::buffer::Readable>>,
     buffer_cropped: Vec<u8>,
+    pix_fmt: String,
     is_cropped: bool,
     pipeline: gst::Pipeline,
     appsink: AppSink,
     width: usize,
     height: usize,
-    saved_raw_data: Vec<u128>, // for faster compare and copy
+    saved_raw_data: Vec<u8>, // for faster compare and copy
 }
 
 impl PipeWireRecorder {
@@ -144,19 +145,27 @@ impl PipeWireRecorder {
 
         pipeline.add_many(&[&src, &sink])?;
         src.link(&sink)?;
+
         let appsink = sink
             .dynamic_cast::<AppSink>()
             .map_err(|_| GStreamerError("Sink element is expected to be an appsink!".into()))?;
-        appsink.set_caps(Some(&gst::Caps::new_simple(
+        let mut caps = gst::Caps::new_empty();
+        caps.merge_structure(gst::structure::Structure::new(
             "video/x-raw",
             &[("format", &"BGRx")],
-        )));
+        ));
+        caps.merge_structure(gst::structure::Structure::new(
+            "video/x-raw",
+            &[("format", &"RGBx")],
+        ));
+        appsink.set_caps(Some(&caps));
 
         pipeline.set_state(gst::State::Playing)?;
         Ok(Self {
             pipeline,
             appsink,
             buffer: None,
+            pix_fmt: "".into(),
             width: 0,
             height: 0,
             buffer_cropped: vec![],
@@ -181,6 +190,11 @@ impl Recorder for PipeWireRecorder {
             let h: i32 = cap.get_value("height")?.get_some()?;
             let w = w as usize;
             let h = h as usize;
+            self.pix_fmt = cap
+                .get::<&str>("format")?
+                .ok_or("Failed to get pixel format")?
+                .to_string();
+
             let buf = sample
                 .get_buffer_owned()
                 .ok_or_else(|| GStreamerError("Failed to get owned buffer.".into()))?;
@@ -241,15 +255,22 @@ impl Recorder for PipeWireRecorder {
         if self.buffer.is_none() {
             return Err(Box::new(GStreamerError("No buffer available!".into())));
         }
-        Ok(PixelProvider::BGR0(
-            self.width,
-            self.height,
-            if self.is_cropped {
-                self.buffer_cropped.as_slice()
-            } else {
-                self.buffer.as_ref().unwrap().as_slice()
-            },
-        ))
+        let buf = if self.is_cropped {
+            self.buffer_cropped.as_slice()
+        } else {
+            self.buffer
+                .as_ref()
+                .ok_or("Failed to get buffer as ref")?
+                .as_slice()
+        };
+        match self.pix_fmt.as_str() {
+            "BGRx" => Ok(PixelProvider::BGR0(self.width, self.height, buf)),
+            "RGBx" => Ok(PixelProvider::RGB0(self.width, self.height, buf)),
+            _ => Err(Box::new(GStreamerError(format!(
+                "Unreachable! Unknown pix_fmt, {}",
+                &self.pix_fmt
+            )))),
+        }
     }
 }
 

@@ -13,7 +13,6 @@ use objc::{
 };
 use sciter::{make_args, Host};
 use std::{ffi::c_void, rc::Rc};
-use dark_light;
 
 static APP_HANDLER_IVAR: &str = "GoDeskAppHandler";
 
@@ -43,7 +42,7 @@ impl DelegateState {
     }
 }
 
-static mut LAUCHED: bool = false;
+static mut LAUNCHED: bool = false;
 
 impl AppHandler for Rc<Host> {
     fn command(&mut self, cmd: u32) {
@@ -110,7 +109,7 @@ unsafe fn set_delegate(handler: Option<Box<dyn AppHandler>>) {
 
 extern "C" fn application_did_finish_launching(_this: &mut Object, _: Sel, _notification: id) {
     unsafe {
-        LAUCHED = true;
+        LAUNCHED = true;
     }
     unsafe {
         let () = msg_send![NSApp(), activateIgnoringOtherApps: YES];
@@ -123,7 +122,7 @@ extern "C" fn application_should_handle_open_untitled_file(
     _sender: id,
 ) -> BOOL {
     unsafe {
-        if !LAUCHED {
+        if !LAUNCHED {
             return YES;
         }
         hbb_common::log::debug!("icon clicked on finder");

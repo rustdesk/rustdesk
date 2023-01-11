@@ -39,6 +39,7 @@ pub type Sender = mpsc::UnboundedSender<(Instant, Arc<Message>)>;
 lazy_static::lazy_static! {
     static ref LOGIN_FAILURES: Arc::<Mutex<HashMap<String, (i32, i32, i32)>>> = Default::default();
     static ref SESSIONS: Arc::<Mutex<HashMap<String, Session>>> = Default::default();
+    static ref ALIVE_CONNS: Arc::<Mutex<Vec<i32>>> = Default::default();
 }
 pub static CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 pub static MOUSE_MOVE_TIME: AtomicI64 = AtomicI64::new(0);
@@ -72,6 +73,7 @@ pub struct Connection {
     hash: Hash,
     read_jobs: Vec<fs::TransferJob>,
     timer: Interval,
+    file_timer: Interval,
     file_transfer: Option<(String, bool)>,
     port_forward_socket: Option<Framed<TcpStream, BytesCodec>>,
     port_forward_address: String,
@@ -93,7 +95,8 @@ pub struct Connection {
     tx_input: std_mpsc::Sender<MessageInput>, // handle input messages
     video_ack_required: bool,
     peer_info: (String, String),
-    api_server: String,
+    server_audit_conn: String,
+    server_audit_file: String,
     lr: LoginRequest,
     last_recv_time: Arc<Mutex<Instant>>,
     chat_unanswered: bool,
@@ -143,13 +146,15 @@ impl Connection {
             challenge: Config::get_auto_password(6),
             ..Default::default()
         };
+        ALIVE_CONNS.lock().unwrap().push(id);
         let (tx_from_cm_holder, mut rx_from_cm) = mpsc::unbounded_channel::<ipc::Data>();
-        // holding tx_from_cm_holde to avoid cpu burning of rx_from_cm.recv when all sender closed
+        // holding tx_from_cm_holder to avoid cpu burning of rx_from_cm.recv when all sender closed
         let tx_from_cm = tx_from_cm_holder.clone();
         let (tx_to_cm, rx_to_cm) = mpsc::unbounded_channel::<ipc::Data>();
         let (tx, mut rx) = mpsc::unbounded_channel::<(Instant, Arc<Message>)>();
         let (tx_video, mut rx_video) = mpsc::unbounded_channel::<(Instant, Arc<Message>)>();
         let (tx_input, rx_input) = std_mpsc::channel();
+        let mut hbbs_rx = crate::hbbs_http::sync::signal_receiver();
 
         let tx_cloned = tx.clone();
         let mut conn = Self {
@@ -163,6 +168,7 @@ impl Connection {
             hash,
             read_jobs: Vec::new(),
             timer: time::interval(SEC30),
+            file_timer: time::interval(SEC30),
             file_transfer: None,
             port_forward_socket: None,
             port_forward_address: "".to_owned(),
@@ -184,7 +190,8 @@ impl Connection {
             tx_input,
             video_ack_required: false,
             peer_info: Default::default(),
-            api_server: "".to_owned(),
+            server_audit_conn: "".to_owned(),
+            server_audit_file: "".to_owned(),
             lr: Default::default(),
             last_recv_time: Arc::new(Mutex::new(Instant::now())),
             chat_unanswered: false,
@@ -244,7 +251,7 @@ impl Connection {
 
         loop {
             tokio::select! {
-                // biased; // video has higher priority // causing test_delay_timer failed while transfering big file
+                // biased; // video has higher priority // causing test_delay_timer failed while transferring big file
 
                 Some(data) = rx_from_cm.recv() => {
                     match data {
@@ -255,7 +262,7 @@ impl Connection {
                             }
                         }
                         ipc::Data::Close => {
-                            conn.on_close_manually("connection manager").await;
+                            conn.on_close_manually("connection manager", "peer").await;
                             break;
                         }
                         ipc::Data::ChatMessage{text} => {
@@ -311,7 +318,7 @@ impl Connection {
                             allow_err!(conn.stream.send_raw(bytes).await);
                         }
                         #[cfg(windows)]
-                        ipc::Data::ClipbaordFile(_clip) => {
+                        ipc::Data::ClipboardFile(_clip) => {
                             if conn.file_transfer_enabled() {
                                 allow_err!(conn.stream.send(&clip_2_msg(_clip)).await);
                             }
@@ -375,20 +382,25 @@ impl Connection {
                         break;
                     }
                 },
-                _ = conn.timer.tick() => {
+                _ = conn.file_timer.tick() => {
                     if !conn.read_jobs.is_empty() {
                         if let Err(err) = fs::handle_read_jobs(&mut conn.read_jobs, &mut conn.stream).await {
                             conn.on_close(&err.to_string(), false).await;
                             break;
                         }
                     } else {
-                        conn.timer = time::interval_at(Instant::now() + SEC30, SEC30);
+                        conn.file_timer = time::interval_at(Instant::now() + SEC30, SEC30);
                     }
-                    conn.post_audit(json!({})); // heartbeat
-                },
+                }
+                Ok(conns) = hbbs_rx.recv() => {
+                    if conns.contains(&id) {
+                        conn.on_close_manually("web console", "web console").await;
+                        break;
+                    }
+                }
                 Some((instant, value)) = rx_video.recv() => {
                     if !conn.video_ack_required {
-                        video_service::notify_video_frame_feched(id, Some(instant.into()));
+                        video_service::notify_video_frame_fetched(id, Some(instant.into()));
                     }
                     if let Err(err) = conn.stream.send(&value as &Message).await {
                         conn.on_close(&err.to_string(), false).await;
@@ -412,7 +424,7 @@ impl Connection {
                         Some(message::Union::Misc(m)) => {
                             match &m.union {
                                 Some(misc::Union::StopService(_)) => {
-                                    conn.on_close_manually("stop service").await;
+                                    conn.on_close_manually("stop service", "peer").await;
                                     break;
                                 }
                                 _ => {},
@@ -487,7 +499,7 @@ impl Connection {
         } else if video_privacy_conn_id == 0 {
             let _ = privacy_mode::turn_off_privacy(0);
         }
-        video_service::notify_video_frame_feched(id, None);
+        video_service::notify_video_frame_fetched(id, None);
         scrap::codec::Encoder::update_video_encoder(id, scrap::codec::EncoderUpdate::Remove);
         video_service::VIDEO_QOS.lock().unwrap().reset();
         if conn.authorized {
@@ -497,9 +509,10 @@ impl Connection {
             conn.on_close(&err.to_string(), false).await;
         }
 
-        conn.post_audit(json!({
+        conn.post_conn_audit(json!({
             "action": "close",
         }));
+        ALIVE_CONNS.lock().unwrap().retain(|&c| c != id);
         log::info!("#{} connection loop exited", id);
     }
 
@@ -511,6 +524,8 @@ impl Connection {
             rdev::set_dw_mouse_extra_info(enigo::ENIGO_INPUT_EXTRA_VALUE);
             rdev::set_dw_keyboard_extra_info(enigo::ENIGO_INPUT_EXTRA_VALUE);
         }
+        #[cfg(target_os = "macos")]
+        reset_input_ondisconn();
         loop {
             match receiver.recv_timeout(std::time::Duration::from_millis(500)) {
                 Ok(v) => match v {
@@ -571,12 +586,13 @@ impl Connection {
         if let Some(mut forward) = self.port_forward_socket.take() {
             log::info!("Running port forwarding loop");
             self.stream.set_raw();
+            let mut hbbs_rx = crate::hbbs_http::sync::signal_receiver();
             loop {
                 tokio::select! {
                     Some(data) = rx_from_cm.recv() => {
                         match data {
                             ipc::Data::Close => {
-                                bail!("Close requested from selfection manager");
+                                bail!("Close requested from selection manager");
                             }
                             _ => {}
                         }
@@ -601,7 +617,12 @@ impl Connection {
                         if last_recv_time.elapsed() >= H1 {
                             bail!("Timeout");
                         }
-                        self.post_audit(json!({})); // heartbeat
+                    }
+                    Ok(conns) = hbbs_rx.recv() => {
+                        if conns.contains(&self.inner.id) {
+                            // todo: check reconnect
+                            bail!("Closed manually by the web console");
+                        }
                     }
                 }
             }
@@ -642,6 +663,13 @@ impl Connection {
         {
             self.send_login_error("Your ip is blocked by the peer")
                 .await;
+            Self::post_alarm_audit(
+                AlarmAuditType::IpWhitelist, //"ip whitelist",
+                true,
+                json!({
+                            "ip":addr.ip(),
+                }),
+            );
             sleep(1.).await;
             return false;
         }
@@ -650,7 +678,7 @@ impl Connection {
         msg_out.set_hash(self.hash.clone());
         self.send(msg_out).await;
         self.get_api_server();
-        self.post_audit(json!({
+        self.post_conn_audit(json!({
             "ip": addr.ip(),
             "action": "new",
         }));
@@ -658,30 +686,90 @@ impl Connection {
     }
 
     fn get_api_server(&mut self) {
-        self.api_server = crate::get_audit_server(
+        self.server_audit_conn = crate::get_audit_server(
             Config::get_option("api-server"),
             Config::get_option("custom-rendezvous-server"),
+            "conn".to_owned(),
+        );
+        self.server_audit_file = crate::get_audit_server(
+            Config::get_option("api-server"),
+            Config::get_option("custom-rendezvous-server"),
+            "file".to_owned(),
         );
     }
 
-    fn post_audit(&self, v: Value) {
-        if self.api_server.is_empty() {
+    fn post_conn_audit(&self, v: Value) {
+        if self.server_audit_conn.is_empty() {
             return;
         }
-        let url = self.api_server.clone();
+        let url = self.server_audit_conn.clone();
         let mut v = v;
         v["id"] = json!(Config::get_id());
         v["uuid"] = json!(base64::encode(hbb_common::get_uuid()));
-        v["Id"] = json!(self.inner.id);
+        v["conn_id"] = json!(self.inner.id);
+        tokio::spawn(async move {
+            allow_err!(Self::post_audit_async(url, v).await);
+        });
+    }
+
+    fn post_file_audit(
+        &self,
+        r#type: FileAuditType,
+        path: &str,
+        files: Vec<(String, i64)>,
+        info: Value,
+    ) {
+        if self.server_audit_file.is_empty() {
+            return;
+        }
+        let url = self.server_audit_file.clone();
+        let file_num = files.len();
+        let mut files = files;
+        files.sort_by(|a, b| b.1.cmp(&a.1));
+        files.truncate(10);
+        let is_file = files.len() == 1 && files[0].0.is_empty();
+        let mut info = info;
+        info["ip"] = json!(self.ip.clone());
+        info["name"] = json!(self.lr.my_name.clone());
+        info["num"] = json!(file_num);
+        info["files"] = json!(files);
+        let v = json!({
+            "id":json!(Config::get_id()),
+            "uuid":json!(base64::encode(hbb_common::get_uuid())),
+            "peer_id":json!(self.lr.my_id),
+            "type": r#type as i8,
+            "path":path,
+            "is_file":is_file,
+            "info":json!(info).to_string(),
+        });
+        tokio::spawn(async move {
+            allow_err!(Self::post_audit_async(url, v).await);
+        });
+    }
+
+    pub fn post_alarm_audit(typ: AlarmAuditType, from_remote: bool, info: Value) {
+        let url = crate::get_audit_server(
+            Config::get_option("api-server"),
+            Config::get_option("custom-rendezvous-server"),
+            "alarm".to_owned(),
+        );
+        if url.is_empty() {
+            return;
+        }
+        let mut v = Value::default();
+        v["id"] = json!(Config::get_id());
+        v["uuid"] = json!(base64::encode(hbb_common::get_uuid()));
+        v["typ"] = json!(typ as i8);
+        v["from_remote"] = json!(from_remote);
+        v["info"] = serde_json::Value::String(info.to_string());
         tokio::spawn(async move {
             allow_err!(Self::post_audit_async(url, v).await);
         });
     }
 
     #[inline]
-    async fn post_audit_async(url: String, v: Value) -> ResultType<()> {
-        crate::post_request(url, v.to_string(), "").await?;
-        Ok(())
+    async fn post_audit_async(url: String, v: Value) -> ResultType<String> {
+        crate::post_request(url, v.to_string(), "").await
     }
 
     async fn send_logon_response(&mut self) {
@@ -695,7 +783,7 @@ impl Connection {
         } else {
             0
         };
-        self.post_audit(json!({"peer": self.peer_info, "Type": conn_type}));
+        self.post_conn_audit(json!({"peer": self.peer_info, "type": conn_type}));
         #[allow(unused_mut)]
         let mut username = crate::platform::get_active_username();
         let mut res = LoginResponse::new();
@@ -930,18 +1018,21 @@ impl Connection {
         false
     }
 
-    fn is_of_recent_session(&mut self) -> bool {
+    fn is_recent_session(&mut self) -> bool {
         let session = SESSIONS
             .lock()
             .unwrap()
             .get(&self.lr.my_id)
             .map(|s| s.to_owned());
+        SESSIONS
+            .lock()
+            .unwrap()
+            .retain(|_, s| s.last_recv_time.lock().unwrap().elapsed() < SESSION_TIMEOUT);
         if let Some(session) = session {
             if session.name == self.lr.my_name
                 && session.session_id == self.lr.session_id
                 && !self.lr.password.is_empty()
                 && self.validate_one_password(session.random_password.clone())
-                && session.last_recv_time.lock().unwrap().elapsed() < SESSION_TIMEOUT
             {
                 SESSIONS.lock().unwrap().insert(
                     self.lr.my_id.clone(),
@@ -1050,7 +1141,7 @@ impl Connection {
                 }
                 _ => {}
             }
-            if !crate::is_ip(&lr.username) && lr.username != Config::get_id() {
+            if !hbb_common::is_ipv4_str(&lr.username) && lr.username != Config::get_id() {
                 self.send_login_error("Offline").await;
             } else if password::approve_mode() == ApproveMode::Click
                 || password::approve_mode() == ApproveMode::Both && !password::has_valid_password()
@@ -1067,7 +1158,7 @@ impl Connection {
             {
                 self.send_login_error("Connection not allowed").await;
                 return false;
-            } else if self.is_of_recent_session() {
+            } else if self.is_recent_session() {
                 self.try_start_cm(lr.my_id, lr.my_name, true);
                 self.send_logon_response().await;
                 if self.port_forward_socket.is_some() {
@@ -1086,8 +1177,22 @@ impl Connection {
                 if failure.2 > 30 {
                     self.send_login_error("Too many wrong password attempts")
                         .await;
+                    Self::post_alarm_audit(
+                        AlarmAuditType::ManyWrongPassword,
+                        true,
+                        json!({
+                                    "ip":self.ip,
+                        }),
+                    );
                 } else if time == failure.0 && failure.1 > 6 {
                     self.send_login_error("Please try 1 minute later").await;
+                    Self::post_alarm_audit(
+                        AlarmAuditType::FrequentAttempt,
+                        true,
+                        json!({
+                                    "ip":self.ip,
+                        }),
+                    );
                 } else if !self.validate_password() {
                     if failure.0 == time {
                         failure.1 += 1;
@@ -1184,7 +1289,7 @@ impl Connection {
                     if self.file_transfer_enabled() {
                         #[cfg(windows)]
                         if let Some(clip) = msg_2_clip(_clip) {
-                            self.send_to_cm(ipc::Data::ClipbaordFile(clip))
+                            self.send_to_cm(ipc::Data::ClipboardFile(clip))
                         }
                     }
                 }
@@ -1225,8 +1330,18 @@ impl Connection {
                                     Ok(job) => {
                                         self.send(fs::new_dir(id, path, job.files().to_vec()))
                                             .await;
+                                        let mut files = job.files().to_owned();
                                         self.read_jobs.push(job);
-                                        self.timer = time::interval(MILLI1);
+                                        self.file_timer = time::interval(MILLI1);
+                                        self.post_file_audit(
+                                            FileAuditType::RemoteSend,
+                                            &s.path,
+                                            files
+                                                .drain(..)
+                                                .map(|f| (f.name, f.size as _))
+                                                .collect(),
+                                            json!({}),
+                                        );
                                     }
                                 }
                             }
@@ -1237,7 +1352,7 @@ impl Connection {
                                     &self.lr.version,
                                 ));
                                 self.send_fs(ipc::FS::NewWrite {
-                                    path: r.path,
+                                    path: r.path.clone(),
                                     id: r.id,
                                     file_num: r.file_num,
                                     files: r
@@ -1248,6 +1363,16 @@ impl Connection {
                                         .collect(),
                                     overwrite_detection: od,
                                 });
+                                self.post_file_audit(
+                                    FileAuditType::RemoteReceive,
+                                    &r.path,
+                                    r.files
+                                        .to_vec()
+                                        .drain(..)
+                                        .map(|f| (f.name, f.size as _))
+                                        .collect(),
+                                    json!({}),
+                                );
                             }
                             Some(file_action::Union::RemoveDir(d)) => {
                                 self.send_fs(ipc::FS::RemoveDir {
@@ -1330,7 +1455,7 @@ impl Connection {
                         }
                     }
                     Some(misc::Union::VideoReceived(_)) => {
-                        video_service::notify_video_frame_feched(
+                        video_service::notify_video_frame_fetched(
                             self.inner.id,
                             Some(Instant::now().into()),
                         );
@@ -1541,10 +1666,10 @@ impl Connection {
         self.port_forward_socket.take();
     }
 
-    async fn on_close_manually(&mut self, close_from: &str) {
+    async fn on_close_manually(&mut self, close_from: &str, close_by: &str) {
         self.close_manually = true;
         let mut misc = Misc::new();
-        misc.set_close_reason("Closed manually by the peer".into());
+        misc.set_close_reason(format!("Closed manually by the {}", close_by));
         let mut msg_out = Message::new();
         msg_out.set_misc(misc);
         self.send(msg_out).await;
@@ -1564,6 +1689,10 @@ impl Connection {
     #[inline]
     async fn send(&mut self, msg: Message) {
         allow_err!(self.stream.send(&msg).await);
+    }
+
+    pub fn alive_conns() -> Vec<i32> {
+        ALIVE_CONNS.lock().unwrap().clone()
     }
 }
 
@@ -1712,12 +1841,23 @@ mod privacy_mode {
     pub(super) fn turn_on_privacy(_conn_id: i32) -> ResultType<bool> {
         #[cfg(windows)]
         {
-            let plugin_exitst = crate::ui::win_privacy::turn_on_privacy(_conn_id)?;
-            Ok(plugin_exitst)
+            let plugin_exist = crate::ui::win_privacy::turn_on_privacy(_conn_id)?;
+            Ok(plugin_exist)
         }
         #[cfg(not(windows))]
         {
             Ok(true)
         }
     }
+}
+
+pub enum AlarmAuditType {
+    IpWhitelist = 0,
+    ManyWrongPassword = 1,
+    FrequentAttempt = 2,
+}
+
+pub enum FileAuditType {
+    RemoteSend = 0,
+    RemoteReceive = 1,
 }

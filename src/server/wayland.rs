@@ -129,7 +129,7 @@ pub(super) async fn check_init() -> ResultType<()> {
                 let num = all.len();
                 let (primary, mut displays) = super::video_service::get_displays_2(&all);
                 for display in displays.iter_mut() {
-                    display.cursor_embeded = true;
+                    display.cursor_embedded = true;
                 }
 
                 let mut rects: Vec<((i32, i32), usize, usize)> = Vec::new();
@@ -244,7 +244,7 @@ pub(super) fn get_display_num() -> ResultType<usize> {
 }
 
 #[allow(dead_code)]
-pub(super) fn release_resouce() {
+pub(super) fn release_resource() {
     if scrap::is_x11() {
         return;
     }
@@ -276,7 +276,7 @@ pub(super) fn get_capturer() -> ResultType<super::video_service::CapturerInfo> {
                 ndisplay: cap_display_info.num,
                 current: cap_display_info.current,
                 privacy_mode_id: 0,
-                _captuerer_privacy_mode_id: 0,
+                _capturer_privacy_mode_id: 0,
                 capturer: Box::new(cap_display_info.capturer.clone()),
             })
         }

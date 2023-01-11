@@ -79,8 +79,8 @@ impl InvokeUiSession for SciterHandler {
         }
     }
 
-    fn set_display(&self, x: i32, y: i32, w: i32, h: i32, cursor_embeded: bool) {
-        self.call("setDisplay", &make_args!(x, y, w, h, cursor_embeded));
+    fn set_display(&self, x: i32, y: i32, w: i32, h: i32, cursor_embedded: bool) {
+        self.call("setDisplay", &make_args!(x, y, w, h, cursor_embedded));
         // https://sciter.com/forums/topic/color_spaceiyuv-crash
         // Nothing spectacular in decoder – done on CPU side.
         // So if you can do BGRA translation on your side – the better.
@@ -223,7 +223,7 @@ impl InvokeUiSession for SciterHandler {
             display.set_item("y", d.y);
             display.set_item("width", d.width);
             display.set_item("height", d.height);
-            display.set_item("cursor_embeded", d.cursor_embeded);
+            display.set_item("cursor_embedded", d.cursor_embedded);
             displays.push(display);
         }
         pi_sciter.set_item("displays", displays);
@@ -233,12 +233,12 @@ impl InvokeUiSession for SciterHandler {
 
     fn on_connected(&self, conn_type: ConnType) {
         match conn_type {
-            ConnType::RDP => {},
-            ConnType::PORT_FORWARD => {},
-            ConnType::FILE_TRANSFER => {},
+            ConnType::RDP => {}
+            ConnType::PORT_FORWARD => {}
+            ConnType::FILE_TRANSFER => {}
             ConnType::DEFAULT_CONN => {
                 crate::keyboard::client::start_grab_loop();
-            },
+            }
         }
     }
 
@@ -348,7 +348,7 @@ impl sciter::EventHandler for SciterSession {
     }
 
     sciter::dispatch_script_call! {
-        fn get_audit_server();
+        fn get_audit_server(String);
         fn send_note(String);
         fn is_xfce();
         fn get_id();

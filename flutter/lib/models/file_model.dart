@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:get/get.dart';
 import 'package:path/path.dart' as path;
 
@@ -213,7 +214,6 @@ class FileModel extends ChangeNotifier {
   }
 
   receiveFileDir(Map<String, dynamic> evt) {
-    debugPrint("recv file dir:$evt");
     if (evt['is_local'] == "false") {
       // init remote home, the connection will automatic read remote home when established,
       try {
@@ -237,7 +237,9 @@ class FileModel extends ChangeNotifier {
           debugPrint("init remote home:${fd.path}");
           _currentRemoteDir = fd;
         }
-      } finally {}
+      } catch (e) {
+        debugPrint("receiveFileDir err=$e");
+      }
     }
     _fileFetcher.tryCompleteTask(evt['value'], evt['is_local']);
     notifyListeners();
@@ -346,7 +348,7 @@ class FileModel extends ChangeNotifier {
             id: parent.target?.id ?? "", name: "remote_show_hidden"))
         .isNotEmpty;
     _remoteOption.isWindows =
-        parent.target?.ffiModel.pi.platform.toLowerCase() == "windows";
+        parent.target?.ffiModel.pi.platform == kPeerPlatformWindows;
 
     await Future.delayed(Duration(milliseconds: 100));
 

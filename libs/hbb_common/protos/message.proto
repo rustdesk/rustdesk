@@ -40,7 +40,7 @@ message DisplayInfo {
   int32 height = 4;
   string name = 5;
   bool online = 6;
-  bool cursor_embeded = 7;
+  bool cursor_embedded = 7;
 }
 
 message PortForward {
@@ -420,7 +420,7 @@ message SwitchDisplay {
   sint32 y = 3;
   int32 width = 4;
   int32 height = 5;
-  bool cursor_embeded = 6;
+  bool cursor_embedded = 6;
 }
 
 message PermissionInfo {
@@ -445,7 +445,7 @@ enum ImageQuality {
 }
 
 message VideoCodecState {
-  enum PerferCodec {
+  enum PreferCodec {
     Auto = 0;
     VPX = 1;
     H264 = 2;
@@ -455,7 +455,7 @@ message VideoCodecState {
   int32 score_vpx = 1;
   int32 score_h264 = 2;
   int32 score_h265 = 3;
-  PerferCodec perfer = 4;
+  PreferCodec prefer = 4;
 }
 
 message OptionMessage {
@@ -503,7 +503,7 @@ message AudioFrame {
 
 // Notify peer to show message box.
 message MessageBox {
-  // Message type. Refer to flutter/lib/commom.dart/msgBox().
+  // Message type. Refer to flutter/lib/common.dart/msgBox().
   string msgtype = 1;
   string title = 2;
   // English

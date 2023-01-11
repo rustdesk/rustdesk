@@ -4,7 +4,7 @@ use std::{io, sync::RwLock, time::Duration};
 
 pub struct Capturer(Display, Box<dyn Recorder>, bool, Vec<u8>);
 
-pub const IS_CURSOR_EMBEDED: bool = true;
+pub const IS_CURSOR_EMBEDDED: bool = true;
 
 lazy_static::lazy_static! {
     static ref MAP_ERR: RwLock<Option<fn(err: String)-> io::Error>> = Default::default();
@@ -46,6 +46,12 @@ impl TraitCapturer for Capturer {
         match self.1.capture(timeout.as_millis() as _).map_err(map_err)? {
             PixelProvider::BGR0(w, h, x) => Ok(Frame(if self.2 {
                 crate::common::bgra_to_i420(w as _, h as _, &x, &mut self.3);
+                &self.3[..]
+            } else {
+                x
+            })),
+            PixelProvider::RGB0(w, h, x) => Ok(Frame(if self.2 {
+                crate::common::rgba_to_i420(w as _, h as _, &x, &mut self.3);
                 &self.3[..]
             } else {
                 x

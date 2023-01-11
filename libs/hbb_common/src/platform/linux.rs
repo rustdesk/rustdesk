@@ -1,15 +1,15 @@
 use crate::ResultType;
 
 lazy_static::lazy_static! {
-    pub static ref DISTRO: Disto = Disto::new();
+    pub static ref DISTRO: Distro = Distro::new();
 }
 
-pub struct Disto {
+pub struct Distro {
     pub name: String,
     pub version_id: String,
 }
 
-impl Disto {
+impl Distro {
     fn new() -> Self {
         let name = run_cmds("awk -F'=' '/^NAME=/ {print $2}' /etc/os-release".to_owned())
             .unwrap_or_default()
@@ -74,7 +74,7 @@ fn get_display_server_of_session(session: &str) -> String {
     } else {
         "".to_owned()
     };
-    if display_server.is_empty() {
+    if display_server.is_empty() || display_server == "tty" {
         // loginctl has not given the expected output.  try something else.
         if let Ok(sestype) = std::env::var("XDG_SESSION_TYPE") {
             display_server = sestype;

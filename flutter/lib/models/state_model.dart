@@ -9,6 +9,7 @@ import '../consts.dart';
 class StateGlobal {
   int _windowId = -1;
   bool _fullscreen = false;
+  bool grabKeyboard = false;
   final RxBool _showTabBar = true.obs;
   final RxDouble _resizeEdgeSize = RxDouble(kWindowEdgeSize);
   final RxDouble _windowBorderWidth = RxDouble(kWindowBorderWidth);

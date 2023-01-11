@@ -61,6 +61,8 @@ Future<void> main(List<String> args) async {
           kAppTypeDesktopRemote,
           'RustDesk - Remote Desktop',
         );
+        WindowController.fromWindowId(windowId!)
+            .setTitle('RustDesk - Remote Desktop');
         break;
       case WindowType.FileTransfer:
         desktopType = DesktopType.fileTransfer;
@@ -69,6 +71,8 @@ Future<void> main(List<String> args) async {
           kAppTypeDesktopFileTransfer,
           'RustDesk - File Transfer',
         );
+        WindowController.fromWindowId(windowId!)
+            .setTitle('RustDesk - File Transfer');
         break;
       case WindowType.PortForward:
         desktopType = DesktopType.portForward;
@@ -117,6 +121,7 @@ void runMainApp(bool startService) async {
     // await windowManager.ensureInitialized();
     gFFI.serverModel.startService();
   }
+  gFFI.userModel.refreshCurrentUser();
   runApp(App());
   // restore the location of the main window before window hide or show
   await restoreWindowPosition(WindowType.Main);
@@ -134,6 +139,7 @@ void runMainApp(bool startService) async {
   windowManager.waitUntilReadyToShow(windowOptions, () async {
     windowManager.setOpacity(1);
   });
+  windowManager.setTitle("RustDesk");
 }
 
 void runMobileApp() async {
@@ -195,6 +201,9 @@ void runMultiWindow(
       // no such appType
       exit(0);
   }
+  // show window from hidden status
+  WindowController.fromWindowId(windowId!).show();
+  WindowController.fromWindowId(windowId!).setTitle(title);
 }
 
 void runConnectionManagerScreen(bool hide) async {

@@ -22,7 +22,8 @@ use crate::flutter::{self, SESSIONS};
 use crate::ui_interface::{self, *};
 use crate::{
     client::file_trait::FileManager,
-    flutter::{make_fd_to_json, session_add, session_start_},
+    common::make_fd_to_json,
+    flutter::{session_add, session_start_},
 };
 fn initialize(app_dir: &str) {
     *config::APP_DIR.write().unwrap() = app_dir.to_owned();
@@ -184,6 +185,14 @@ pub fn set_local_flutter_config(k: String, v: String) {
     ui_interface::set_local_flutter_config(k, v);
 }
 
+pub fn get_local_kb_layout_type() -> SyncReturn<String> {
+    SyncReturn(ui_interface::get_kb_layout_type())
+}
+
+pub fn set_local_kb_layout_type(kb_layout_type: String) {
+    ui_interface::set_kb_layout_type(kb_layout_type)
+}
+
 pub fn session_get_view_style(id: String) -> Option<String> {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
         Some(session.get_view_style())
@@ -298,10 +307,11 @@ pub fn session_handle_flutter_key_event(
     name: String,
     keycode: i32,
     scancode: i32,
+    lock_modes: i32,
     down_or_up: bool,
 ) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.handle_flutter_key_event(&name, keycode, scancode, down_or_up);
+        session.handle_flutter_key_event(&name, keycode, scancode, lock_modes, down_or_up);
     }
 }
 
@@ -894,9 +904,11 @@ pub fn session_send_mouse(id: String, msg: String) {
         }
         if let Some(buttons) = m.get("buttons") {
             mask |= match buttons.as_str() {
-                "left" => 1,
-                "right" => 2,
-                "wheel" => 4,
+                "left" => 0x01,
+                "right" => 0x02,
+                "wheel" => 0x04,
+                "back" => 0x08,
+                "forward" => 0x10,
                 _ => 0,
             } << 3;
         }
@@ -912,9 +924,9 @@ pub fn session_restart_remote_device(id: String) {
     }
 }
 
-pub fn session_get_audit_server_sync(id: String) -> SyncReturn<String> {
+pub fn session_get_audit_server_sync(id: String, typ: String) -> SyncReturn<String> {
     let res = if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.get_audit_server()
+        session.get_audit_server(typ)
     } else {
         "".to_owned()
     };
@@ -1100,8 +1112,13 @@ pub fn main_is_installed() -> SyncReturn<bool> {
     SyncReturn(is_installed())
 }
 
-pub fn main_start_grab_keyboard() {
+pub fn main_start_grab_keyboard() -> SyncReturn<bool> {
+    #[cfg(target_os = "linux")]
+    if !*crate::common::IS_X11 {
+        return SyncReturn(false);
+    }
     crate::keyboard::client::start_grab_loop();
+    SyncReturn(true)
 }
 
 pub fn main_is_installed_lower_version() -> SyncReturn<bool> {
@@ -1118,6 +1135,10 @@ pub fn main_is_process_trusted(prompt: bool) -> SyncReturn<bool> {
 
 pub fn main_is_can_screen_recording(prompt: bool) -> SyncReturn<bool> {
     SyncReturn(is_can_screen_recording(prompt))
+}
+
+pub fn main_is_can_input_monitoring(prompt: bool) -> SyncReturn<bool> {
+    SyncReturn(is_can_input_monitoring(prompt))
 }
 
 pub fn main_is_share_rdp() -> SyncReturn<bool> {

@@ -22,6 +22,7 @@ import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
 import './popup_menu.dart';
 import './material_mod_popup_menu.dart' as mod_menu;
+import './kb_layout_type_chooser.dart';
 
 class MenubarState {
   final kStoreKey = 'remoteMenubarState';
@@ -171,6 +172,8 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
 
   @override
   Widget build(BuildContext context) {
+    // No need to use future builder here.
+    _updateScreen();
     return Align(
       alignment: Alignment.topCenter,
       child: Obx(() => show.value
@@ -362,8 +365,6 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                     RxInt display = CurrentDisplayState.find(widget.id);
                     if (display.value != i) {
                       bind.sessionSwitchDisplay(id: widget.id, value: i);
-                      pi.currentDisplay = i;
-                      display.value = i;
                     }
                   },
                 )
@@ -569,7 +570,8 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       ),
     ]);
     // {handler.get_audit_server() && <li #note>{translate('Note')}</li>}
-    final auditServer = bind.sessionGetAuditServerSync(id: widget.id);
+    final auditServer =
+        bind.sessionGetAuditServerSync(id: widget.id, typ: "conn");
     if (auditServer.isNotEmpty) {
       displayMenu.add(
         MenuEntryButton<String>(
@@ -587,7 +589,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     }
     displayMenu.add(MenuEntryDivider());
     if (perms['keyboard'] != false) {
-      if (pi.platform == 'Linux' || pi.sasEnabled) {
+      if (pi.platform == kPeerPlatformLinux || pi.sasEnabled) {
         displayMenu.add(MenuEntryButton<String>(
           childBuilder: (TextStyle? style) => Text(
             '${translate("Insert")} Ctrl + Alt + Del',
@@ -602,9 +604,9 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       }
     }
     if (perms['restart'] != false &&
-        (pi.platform == 'Linux' ||
-            pi.platform == 'Windows' ||
-            pi.platform == 'Mac OS')) {
+        (pi.platform == kPeerPlatformLinux ||
+            pi.platform == kPeerPlatformWindows ||
+            pi.platform == kPeerPlatformMacOS)) {
       displayMenu.add(MenuEntryButton<String>(
         childBuilder: (TextStyle? style) => Text(
           translate('Restart Remote Device'),
@@ -631,7 +633,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         dismissOnClicked: true,
       ));
 
-      if (pi.platform == 'Windows') {
+      if (pi.platform == kPeerPlatformWindows) {
         displayMenu.add(MenuEntryButton<String>(
           childBuilder: (TextStyle? style) => Obx(() => Text(
                 translate(
@@ -697,12 +699,12 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     if (_screen == null) {
       return false;
     }
-    double scale = _screen!.scaleFactor;
-    double selfWidth = _screen!.frame.width;
-    double selfHeight = _screen!.frame.height;
+    final scale = kIgnoreDpi ? 1.0 : _screen!.scaleFactor;
+    double selfWidth = _screen!.visibleFrame.width;
+    double selfHeight = _screen!.visibleFrame.height;
     if (isFullscreen) {
-      selfWidth = _screen!.visibleFrame.width;
-      selfHeight = _screen!.visibleFrame.height;
+      selfWidth = _screen!.frame.width;
+      selfHeight = _screen!.frame.height;
     }
 
     final canvasModel = widget.ffi.canvasModel;
@@ -827,7 +829,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
               qualityInitValue = qualityMaxValue;
             }
             final RxDouble qualitySliderValue = RxDouble(qualityInitValue);
-            final debouncerQuanlity = Debouncer<double>(
+            final debouncerQuality = Debouncer<double>(
               Duration(milliseconds: 1000),
               onChanged: (double v) {
                 setCustomValues(quality: v);
@@ -843,7 +845,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                       divisions: 90,
                       onChanged: (double value) {
                         qualitySliderValue.value = value;
-                        debouncerQuanlity.value = value;
+                        debouncerQuality.value = value;
                       },
                     ),
                     SizedBox(
@@ -934,11 +936,13 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                 text: translate('ScrollAuto'),
                 value: kRemoteScrollStyleAuto,
                 dismissOnClicked: true,
+                enabled: widget.ffi.canvasModel.imageOverflow,
               ),
               MenuEntryRadioOption(
                 text: translate('Scrollbar'),
                 value: kRemoteScrollStyleBar,
                 dismissOnClicked: true,
+                enabled: widget.ffi.canvasModel.imageOverflow,
               ),
             ],
             curOptionGetter: () async =>
@@ -952,75 +956,77 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             dismissOnClicked: true,
           ));
       displayMenu.insert(3, MenuEntryDivider<String>());
-    }
 
-    if (_isWindowCanBeAdjusted(remoteCount)) {
-      displayMenu.insert(
-        0,
-        MenuEntryDivider<String>(),
-      );
-      displayMenu.insert(
-        0,
-        MenuEntryButton<String>(
-          childBuilder: (TextStyle? style) => Container(
-              child: Text(
-            translate('Adjust Window'),
-            style: style,
-          )),
-          proc: () {
-            () async {
-              await _updateScreen();
-              if (_screen != null) {
-                _setFullscreen(false);
-                double scale = _screen!.scaleFactor;
-                final wndRect =
-                    await WindowController.fromWindowId(windowId).getFrame();
-                final mediaSize = MediaQueryData.fromWindow(ui.window).size;
-                // On windows, wndRect is equal to GetWindowRect and mediaSize is equal to GetClientRect.
-                // https://stackoverflow.com/a/7561083
-                double magicWidth =
-                    wndRect.right - wndRect.left - mediaSize.width * scale;
-                double magicHeight =
-                    wndRect.bottom - wndRect.top - mediaSize.height * scale;
+      if (_isWindowCanBeAdjusted(remoteCount)) {
+        displayMenu.insert(
+          0,
+          MenuEntryDivider<String>(),
+        );
+        displayMenu.insert(
+          0,
+          MenuEntryButton<String>(
+            childBuilder: (TextStyle? style) => Container(
+                child: Text(
+              translate('Adjust Window'),
+              style: style,
+            )),
+            proc: () {
+              () async {
+                await _updateScreen();
+                if (_screen != null) {
+                  _setFullscreen(false);
+                  double scale = _screen!.scaleFactor;
+                  final wndRect =
+                      await WindowController.fromWindowId(windowId).getFrame();
+                  final mediaSize = MediaQueryData.fromWindow(ui.window).size;
+                  // On windows, wndRect is equal to GetWindowRect and mediaSize is equal to GetClientRect.
+                  // https://stackoverflow.com/a/7561083
+                  double magicWidth =
+                      wndRect.right - wndRect.left - mediaSize.width * scale;
+                  double magicHeight =
+                      wndRect.bottom - wndRect.top - mediaSize.height * scale;
 
-                final canvasModel = widget.ffi.canvasModel;
-                final width = (canvasModel.getDisplayWidth() +
-                            canvasModel.windowBorderWidth * 2) *
-                        scale +
-                    magicWidth;
-                final height = (canvasModel.getDisplayHeight() +
-                            canvasModel.tabBarHeight +
-                            canvasModel.windowBorderWidth * 2) *
-                        scale +
-                    magicHeight;
-                double left = wndRect.left + (wndRect.width - width) / 2;
-                double top = wndRect.top + (wndRect.height - height) / 2;
+                  final canvasModel = widget.ffi.canvasModel;
+                  final width =
+                      (canvasModel.getDisplayWidth() * canvasModel.scale +
+                                  canvasModel.windowBorderWidth * 2) *
+                              scale +
+                          magicWidth;
+                  final height =
+                      (canvasModel.getDisplayHeight() * canvasModel.scale +
+                                  canvasModel.tabBarHeight +
+                                  canvasModel.windowBorderWidth * 2) *
+                              scale +
+                          magicHeight;
+                  double left = wndRect.left + (wndRect.width - width) / 2;
+                  double top = wndRect.top + (wndRect.height - height) / 2;
 
-                Rect frameRect = _screen!.frame;
-                if (!isFullscreen) {
-                  frameRect = _screen!.visibleFrame;
+                  Rect frameRect = _screen!.frame;
+                  if (!isFullscreen) {
+                    frameRect = _screen!.visibleFrame;
+                  }
+                  if (left < frameRect.left) {
+                    left = frameRect.left;
+                  }
+                  if (top < frameRect.top) {
+                    top = frameRect.top;
+                  }
+                  if ((left + width) > frameRect.right) {
+                    left = frameRect.right - width;
+                  }
+                  if ((top + height) > frameRect.bottom) {
+                    top = frameRect.bottom - height;
+                  }
+                  await WindowController.fromWindowId(windowId)
+                      .setFrame(Rect.fromLTWH(left, top, width, height));
                 }
-                if (left < frameRect.left) {
-                  left = frameRect.left;
-                }
-                if (top < frameRect.top) {
-                  top = frameRect.top;
-                }
-                if ((left + width) > frameRect.right) {
-                  left = frameRect.right - width;
-                }
-                if ((top + height) > frameRect.bottom) {
-                  top = frameRect.bottom - height;
-                }
-                await WindowController.fromWindowId(windowId)
-                    .setFrame(Rect.fromLTWH(left, top, width, height));
-              }
-            }();
-          },
-          padding: padding,
-          dismissOnClicked: true,
-        ),
-      );
+              }();
+            },
+            padding: padding,
+            dismissOnClicked: true,
+          ),
+        );
+      }
     }
 
     /// Show Codec Preference
@@ -1032,7 +1038,9 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         final h265 = codecsJson['h265'] ?? false;
         codecs.add(h264);
         codecs.add(h265);
-      } finally {}
+      } catch (e) {
+        debugPrint("Show Codec Preference err=$e");
+      }
       if (codecs.length == 2 && (codecs[0] || codecs[1])) {
         displayMenu.add(MenuEntryRadios<String>(
           text: translate('Codec Preference'),
@@ -1082,7 +1090,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     }
 
     /// Show remote cursor
-    if (!widget.ffi.canvasModel.cursorEmbeded) {
+    if (!widget.ffi.canvasModel.cursorEmbedded) {
       displayMenu.add(() {
         final state = ShowRemoteCursorState.find(widget.id);
         return MenuEntrySwitch2<String>(
@@ -1149,7 +1157,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     }
 
     if (Platform.isWindows &&
-        pi.platform == 'Windows' &&
+        pi.platform == kPeerPlatformWindows &&
         perms['file'] != false) {
       displayMenu.add(_createSwitchMenuEntry(
           'Allow file copy and paste', 'enable-file-transfer', padding, true));
@@ -1182,7 +1190,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   }
 
   List<MenuEntryBase<String>> _getKeyboardMenu() {
-    final keyboardMenu = [
+    final List<MenuEntryBase<String>> keyboardMenu = [
       MenuEntryRadios<String>(
         text: translate('Ratio'),
         optionsGetter: () {
@@ -1209,11 +1217,58 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         },
         optionSetter: (String oldValue, String newValue) async {
           await bind.sessionSetKeyboardMode(id: widget.id, value: newValue);
-          widget.ffi.canvasModel.updateViewStyle();
         },
       )
     ];
-
+    final localPlatform =
+        getLocalPlatformForKBLayoutType(widget.ffi.ffiModel.pi.platform);
+    if (localPlatform != '') {
+      keyboardMenu.add(MenuEntryDivider());
+      keyboardMenu.add(
+        MenuEntryButton<String>(
+          childBuilder: (TextStyle? style) => Container(
+              alignment: AlignmentDirectional.center,
+              height: _MenubarTheme.height,
+              child: Row(
+                children: [
+                  Obx(() => RichText(
+                        text: TextSpan(
+                          text: '${translate('Local keyboard type')}: ',
+                          style: DefaultTextStyle.of(context).style,
+                          children: <TextSpan>[
+                            TextSpan(
+                              text: KBLayoutType.value,
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      )),
+                  Expanded(
+                      child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Transform.scale(
+                      scale: 0.8,
+                      child: IconButton(
+                        padding: EdgeInsets.zero,
+                        icon: const Icon(Icons.settings),
+                        onPressed: () {
+                          if (Navigator.canPop(context)) {
+                            Navigator.pop(context);
+                          }
+                          showKBLayoutTypeChooser(
+                              localPlatform, widget.ffi.dialogManager);
+                        },
+                      ),
+                    ),
+                  ))
+                ],
+              )),
+          proc: () {},
+          padding: EdgeInsets.zero,
+          dismissOnClicked: false,
+        ),
+      );
+    }
     return keyboardMenu;
   }
 
@@ -1373,10 +1428,10 @@ class _DraggableShowHide extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<_DraggableShowHide> createState() => __DraggableShowHideState();
+  State<_DraggableShowHide> createState() => _DraggableShowHideState();
 }
 
-class __DraggableShowHideState extends State<_DraggableShowHide> {
+class _DraggableShowHideState extends State<_DraggableShowHide> {
   Offset position = Offset.zero;
   Size size = Size.zero;
 
@@ -1385,7 +1440,8 @@ class __DraggableShowHideState extends State<_DraggableShowHide> {
       axis: Axis.horizontal,
       child: Icon(
         Icons.drag_indicator,
-        size: 15,
+        size: 20,
+        color: Colors.grey,
       ),
       feedback: widget,
       onDragStarted: (() {
@@ -1428,7 +1484,7 @@ class __DraggableShowHideState extends State<_DraggableShowHide> {
           }),
           child: Obx((() => Icon(
                 widget.show.isTrue ? Icons.expand_less : Icons.expand_more,
-                size: 15,
+                size: 20,
               ))),
         ),
       ],
@@ -1441,7 +1497,7 @@ class __DraggableShowHideState extends State<_DraggableShowHide> {
           border: Border.all(color: MyTheme.border),
         ),
         child: SizedBox(
-          height: 15,
+          height: 20,
           child: child,
         ),
       ),
