@@ -983,7 +983,7 @@ Widget getPlatformImage(String platform, {double size = 50}) {
       platform != kPeerPlatformAndroid) {
     platform = 'win';
   } else {
-      platform = 'linux';
+      platform = platform.toLowerCase();
   }
   return SvgPicture.asset('assets/$platform.svg', height: size, width: size);
 }
