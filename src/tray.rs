@@ -215,16 +215,16 @@ pub fn make_tray() {
     let icon_path = match mode {
         dark_light::Mode::Dark => {
             if f > 1. {
-                "mac-tray-light_x2.png";
+                "mac-tray-light_x2.png"
             } else {
-                "mac-tray-light.png";
+                "mac-tray-light.png"
             }
         }
         dark_light::Mode::Light => {
             if f > 1. {
-                "mac-tray-dark_x2.png";
+                "mac-tray-dark_x2.png"
             } else {
-                "mac-tray-dark.png";
+                "mac-tray-dark.png"
             }
         }
     };
