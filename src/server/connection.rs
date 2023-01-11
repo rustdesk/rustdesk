@@ -1041,18 +1041,21 @@ impl Connection {
         false
     }
 
-    fn is_of_recent_session(&mut self) -> bool {
+    fn is_recent_session(&mut self) -> bool {
         let session = SESSIONS
             .lock()
             .unwrap()
             .get(&self.lr.my_id)
             .map(|s| s.to_owned());
+        SESSIONS
+            .lock()
+            .unwrap()
+            .retain(|_, s| s.last_recv_time.lock().unwrap().elapsed() < SESSION_TIMEOUT);
         if let Some(session) = session {
             if session.name == self.lr.my_name
                 && session.session_id == self.lr.session_id
                 && !self.lr.password.is_empty()
                 && self.validate_one_password(session.random_password.clone())
-                && session.last_recv_time.lock().unwrap().elapsed() < SESSION_TIMEOUT
             {
                 SESSIONS.lock().unwrap().insert(
                     self.lr.my_id.clone(),
@@ -1178,7 +1181,7 @@ impl Connection {
             {
                 self.send_login_error("Connection not allowed").await;
                 return false;
-            } else if self.is_of_recent_session() {
+            } else if self.is_recent_session() {
                 self.try_start_cm(lr.my_id, lr.my_name, true);
                 self.send_logon_response().await;
                 if self.port_forward_socket.is_some() {
