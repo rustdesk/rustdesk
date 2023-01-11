@@ -982,6 +982,8 @@ Widget getPlatformImage(String platform, {double size = 50}) {
   } else if (platform != kPeerPlatformLinux &&
       platform != kPeerPlatformAndroid) {
     platform = 'win';
+  } else {
+      platform = 'linux';
   }
   return SvgPicture.asset('assets/$platform.svg', height: size, width: size);
 }
