@@ -658,6 +658,22 @@ pub fn make_privacy_mode_msg(state: back_notification::PrivacyModeState) -> Mess
     msg_out
 }
 
+pub fn is_keyboard_mode_supported(keyboard_mode: &KeyboardMode, version_number: i64) -> bool {
+    match keyboard_mode {
+        KeyboardMode::Legacy => true,
+        KeyboardMode::Map => version_number >= hbb_common::get_version_number("1.2.0"),
+        KeyboardMode::Translate => false,
+        KeyboardMode::Auto => false,
+    }
+}
+
+pub fn get_supported_keyboard_modes(version: i64) -> Vec<KeyboardMode> {
+    KeyboardMode::iter()
+        .filter(|&mode| is_keyboard_mode_supported(mode, version))
+        .map(|&mode| mode)
+        .collect::<Vec<_>>()
+}
+
 #[cfg(not(target_os = "linux"))]
 lazy_static::lazy_static! {
     pub static ref IS_X11: bool = false;

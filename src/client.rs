@@ -7,6 +7,7 @@ use cpal::{
 use magnum_opus::{Channels::*, Decoder as AudioDecoder};
 use sha2::{Digest, Sha256};
 use std::{
+    str::FromStr,
     collections::HashMap,
     net::SocketAddr,
     ops::{Deref, Not},
@@ -23,7 +24,7 @@ use hbb_common::{
         Config, PeerConfig, PeerInfoSerde, CONNECT_TIMEOUT, READ_TIMEOUT, RELAY_PORT,
         RENDEZVOUS_TIMEOUT,
     },
-    log,
+    get_version_number, log,
     message_proto::{option_message::BoolOption, *},
     protobuf::Message as _,
     rand,
@@ -47,7 +48,10 @@ pub use super::lang::*;
 pub mod file_trait;
 pub mod helper;
 pub mod io_loop;
-use crate::server::video_service::{SCRAP_X11_REF_URL, SCRAP_X11_REQUIRED};
+use crate::{
+    common::{self, is_keyboard_mode_supported},
+    server::video_service::{SCRAP_X11_REF_URL, SCRAP_X11_REQUIRED},
+};
 pub static SERVER_KEYBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
 pub static SERVER_FILE_TRANSFER_ENABLED: AtomicBool = AtomicBool::new(true);
 pub static SERVER_CLIPBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
@@ -1392,12 +1396,18 @@ impl LoginConfigHandler {
                 log::debug!("remove password of {}", self.id);
             }
         }
-        if config.keyboard_mode == "" {
-            if hbb_common::get_version_number(&pi.version) < hbb_common::get_version_number("1.2.0")
-            {
-                config.keyboard_mode = "legacy".to_string();
+        if config.keyboard_mode.is_empty() {
+            if is_keyboard_mode_supported(&KeyboardMode::Map, get_version_number(&pi.version)) {
+                config.keyboard_mode = KeyboardMode::Map.to_string();
             } else {
-                config.keyboard_mode = "map".to_string();
+                config.keyboard_mode = KeyboardMode::Legacy.to_string();
+            }
+        } else {
+            let keyboard_modes =
+                common::get_supported_keyboard_modes(get_version_number(&pi.version));
+            let current_mode = &KeyboardMode::from_str(&config.keyboard_mode).unwrap_or_default();
+            if !keyboard_modes.contains(current_mode) {
+                config.keyboard_mode = KeyboardMode::Legacy.to_string();
             }
         }
         self.conn_id = pi.conn_id;

@@ -7,11 +7,14 @@ use std::{
 use flutter_rust_bridge::{StreamSink, SyncReturn, ZeroCopyBuffer};
 use serde_json::json;
 
+use crate::common::is_keyboard_mode_supported;
+use hbb_common::message_proto::KeyboardMode;
 use hbb_common::ResultType;
 use hbb_common::{
     config::{self, LocalConfig, PeerConfig, ONLINE},
     fs, log,
 };
+use std::str::FromStr;
 
 // use crate::hbbs_http::account::AuthResult;
 
@@ -251,6 +254,21 @@ pub fn session_get_custom_image_quality(id: String) -> Option<Vec<i32>> {
         Some(session.get_custom_image_quality())
     } else {
         None
+    }
+}
+
+pub fn session_is_keyboard_mode_supported(id: String, mode: String) -> SyncReturn<bool> {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        if let Ok(mode) = KeyboardMode::from_str(&mode[..]) {
+            SyncReturn(is_keyboard_mode_supported(
+                &mode,
+                session.get_peer_version(),
+            ))
+        } else {
+            SyncReturn(false)
+        }
+    } else {
+        SyncReturn(false)
     }
 }
 
