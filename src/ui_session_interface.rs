@@ -4,7 +4,7 @@ use crate::client::{
     load_config, send_mouse, start_video_audio_threads, FileManager, Key, LoginConfigHandler,
     QualityStatus, KEY_MAP,
 };
-use crate::common::{is_keyboard_mode_supported, GrabState};
+use crate::common::{self, is_keyboard_mode_supported, GrabState};
 use crate::keyboard;
 use crate::{client::Data, client::Interface};
 use async_trait::async_trait;
@@ -204,10 +204,7 @@ impl<T: InvokeUiSession> Session<T> {
 
     pub fn get_supported_keyboard_modes(&self) -> Vec<KeyboardMode> {
         let version = self.get_peer_version();
-        KeyboardMode::iter()
-            .filter(|&mode| is_keyboard_mode_supported(mode, version))
-            .map(|&mode| mode)
-            .collect::<Vec<_>>()
+        common::get_supported_keyboard_modes(version)
     }
 
     pub fn remove_port_forward(&self, port: i32) {

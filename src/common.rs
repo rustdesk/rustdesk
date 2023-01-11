@@ -698,6 +698,13 @@ pub fn is_keyboard_mode_supported(keyboard_mode: &KeyboardMode, version_number: 
     }
 }
 
+pub fn get_supported_keyboard_modes(version: i64) -> Vec<KeyboardMode> {
+    KeyboardMode::iter()
+        .filter(|&mode| is_keyboard_mode_supported(mode, version))
+        .map(|&mode| mode)
+        .collect::<Vec<_>>()
+}
+
 #[cfg(not(target_os = "linux"))]
 lazy_static::lazy_static! {
     pub static ref IS_X11: Mutex<bool> = Mutex::new(false);

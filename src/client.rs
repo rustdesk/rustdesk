@@ -7,6 +7,7 @@ use cpal::{
 use magnum_opus::{Channels::*, Decoder as AudioDecoder};
 use sha2::{Digest, Sha256};
 use std::{
+    str::FromStr,
     collections::HashMap,
     net::SocketAddr,
     ops::{Deref, Not},
@@ -48,7 +49,7 @@ pub mod file_trait;
 pub mod helper;
 pub mod io_loop;
 use crate::{
-    common::is_keyboard_mode_supported,
+    common::{self, is_keyboard_mode_supported},
     server::video_service::{SCRAP_X11_REF_URL, SCRAP_X11_REQUIRED},
 };
 pub static SERVER_KEYBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
@@ -1417,6 +1418,13 @@ impl LoginConfigHandler {
             if is_keyboard_mode_supported(&KeyboardMode::Map, get_version_number(&pi.version)) {
                 config.keyboard_mode = KeyboardMode::Map.to_string();
             } else {
+                config.keyboard_mode = KeyboardMode::Legacy.to_string();
+            }
+        } else {
+            let keyboard_modes =
+                common::get_supported_keyboard_modes(get_version_number(&pi.version));
+            let current_mode = &KeyboardMode::from_str(&config.keyboard_mode).unwrap_or_default();
+            if !keyboard_modes.contains(current_mode) {
                 config.keyboard_mode = KeyboardMode::Legacy.to_string();
             }
         }
