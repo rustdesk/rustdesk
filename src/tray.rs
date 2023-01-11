@@ -206,17 +206,28 @@ fn is_service_stopped() -> bool {
 
 #[cfg(target_os = "macos")]
 pub fn make_tray() {
+    extern "C" {
+        fn BackingScaleFactor() -> f32;
+    }
+    let f = unsafe { BackingScaleFactor() };
     use tray_item::TrayItem;
     let mode = dark_light::detect();
-    let icon_path;
-    match mode {
+    let icon_path = match mode {
         dark_light::Mode::Dark => {
-            icon_path = "mac-tray-light.png";
+            if f > 1. {
+                "mac-tray-light_x2.png";
+            } else {
+                "mac-tray-light.png";
+            }
         }
         dark_light::Mode::Light => {
-            icon_path = "mac-tray-dark.png";
+            if f > 1. {
+                "mac-tray-dark_x2.png";
+            } else {
+                "mac-tray-dark.png";
+            }
         }
-    }
+    };
     if let Ok(mut tray) = TrayItem::new(&crate::get_app_name(), icon_path) {
         tray.add_label(&format!(
             "{} {}",

@@ -541,7 +541,6 @@ pub fn is_installed() -> bool {
 }
 
 pub fn quit_gui() {
-    use cocoa::appkit::NSApp;
     unsafe {
         let () = msg_send!(NSApp(), terminate: nil);
     };

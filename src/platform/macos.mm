@@ -34,3 +34,9 @@ extern "C" bool InputMonitoringAuthStatus(bool prompt) {
     }
     return false;
 }
+
+extern "C" float BackingScaleFactor() {
+    NSScreen* s = [NSScreen mainScreen];
+    if (s) return [s backingScaleFactor];
+    return 1;
+}

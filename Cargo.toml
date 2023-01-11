@@ -155,7 +155,7 @@ identifier = "com.carriez.rustdesk"
 icon = ["res/32x32.png", "res/128x128.png", "res/128x128@2x.png"]
 deb_depends = ["libgtk-3-0", "libxcb-randr0", "libxdo3", "libxfixes3", "libxcb-shape0", "libxcb-xfixes0", "libasound2", "libsystemd0", "curl", "libvdpau1", "libva2"]
 osx_minimum_system_version = "10.14"
-resources = ["res/mac-tray-light.png","res/mac-tray-dark.png"]
+resources = ["res/mac-tray-light.png","res/mac-tray-dark.png", "res/mac-tray-light-x2.png","res/mac-tray-dark-x2.png"]
 
 #https://github.com/johnthagen/min-sized-rust
 [profile.release]
