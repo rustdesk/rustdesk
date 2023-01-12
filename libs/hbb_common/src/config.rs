@@ -94,7 +94,7 @@ pub const RENDEZVOUS_SERVERS: &'static [&'static str] = &[
 ];
 
 //check for env variable RS_PUB_KEY if not use default
-pub const RS_PUB_KEY: &'static str = match option_env!("RS_PUB_KEY") {
+pub const RS_PUB_KEY: &'static str = match option_env!("RS_PUB_KEY_VAL") {
     Some(key) => key,
     None => "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=",
 };
