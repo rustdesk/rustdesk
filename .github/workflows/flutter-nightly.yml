@@ -20,6 +20,7 @@ env:
   RENDEZVOUS_SERVER2: '${{ secrets.RENDEZVOUS_SERVER2 }}'
   RENDEZVOUS_SERVER3: '${{ secrets.RENDEZVOUS_SERVER3 }}'
   NO_OSX_KEYS: ${{ secrets.NO_OSX_KEYS == 'true' }}
+  NO_APP_KEYS: ${{ secrets.NO_APP_KEYS == 'true' }}
 
 jobs:
   build-for-windows:
@@ -561,6 +562,7 @@ jobs:
       
       - uses: r0adkll/sign-android-release@v1
         name: Sign app APK
+        if: ${{ env.NO_APP_KEYS== 'true' }}
         id: sign-rustdesk
         with:
           releaseDirectory: ./signed-apk
