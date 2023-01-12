@@ -19,6 +19,7 @@ env:
   RENDEZVOUS_SERVER1: '${{ secrets.RENDEZVOUS_SERVER1 }}'
   RENDEZVOUS_SERVER2: '${{ secrets.RENDEZVOUS_SERVER2 }}'
   RENDEZVOUS_SERVER3: '${{ secrets.RENDEZVOUS_SERVER3 }}'
+  NO_OSX_KEYS: ${{ secrets.NO_OSX_KEYS == 'False' }}
 
 jobs:
   build-for-windows:
@@ -154,6 +155,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Import the codesign cert
+        if: ${{ env.NO_OSX_KEYS!= 'true' }}
         uses: apple-actions/import-codesign-certs@v1
         with: 
           p12-file-base64: ${{ secrets.MACOS_P12_BASE64 }}
@@ -161,11 +163,13 @@ jobs:
           keychain: rustdesk
       
       - name: Check sign and import sign key
+        if: ${{ env.NO_OSX_KEYS!= 'true' }}
         run: |
           security default-keychain -s rustdesk.keychain
           security find-identity -v
 
       - name: Import notarize key
+        if: ${{ env.NO_OSX_KEYS!= 'true' }}
         uses: timheuer/base64-to-file@v1.2
         with:
           # https://gregoryszorc.com/docs/apple-codesign/stable/apple_codesign_rcodesign.html#notarizing-and-stapling
@@ -174,6 +178,7 @@ jobs:
           encodedString: ${{ secrets.MACOS_NOTARIZE_JSON }}
           
       - name: Install rcodesign tool
+        if: ${{ env.NO_OSX_KEYS!= 'true' }}
         shell: bash
         run: | 
           pushd /tmp
@@ -244,6 +249,7 @@ jobs:
           ./build.py --flutter ${{ matrix.job.extra-build-args }}
 
       - name: Codesign app and create signed dmg
+        if: ${{ env.NO_OSX_KEYS!= 'true' }}
         run: |
           security default-keychain -s rustdesk.keychain
           security unlock-keychain -p ${{ secrets.MACOS_P12_PASSWORD }} rustdesk.keychain
