@@ -7,7 +7,7 @@ env:
   LLVM_VERSION: "10.0"
   # Note: currently 3.0.5 does not support arm64 officially, we use latest stable version first.
   FLUTTER_VERSION: "3.0.5"
-  TAG_NAME: "nightly"
+  TAG_NAME: "custom-build"
   # vcpkg version: 2022.05.10
   # for multiarch gcc compatibility
   VCPKG_COMMIT_ID: "14e7bb4ae24616ec54ff6b2f6ef4e8659434ea44"
