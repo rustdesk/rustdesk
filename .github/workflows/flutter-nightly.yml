@@ -19,7 +19,7 @@ env:
   RENDEZVOUS_SERVER1: '${{ secrets.RENDEZVOUS_SERVER1 }}'
   RENDEZVOUS_SERVER2: '${{ secrets.RENDEZVOUS_SERVER2 }}'
   RENDEZVOUS_SERVER3: '${{ secrets.RENDEZVOUS_SERVER3 }}'
-  NO_OSX_KEYS: ${{ secrets.NO_OSX_KEYS == 'False' }}
+  NO_OSX_KEYS: ${{ secrets.NO_OSX_KEYS == 'true' }}
 
 jobs:
   build-for-windows:
