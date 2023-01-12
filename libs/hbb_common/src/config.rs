@@ -77,10 +77,20 @@ const CHARS: &'static [char] = &[
     'm', 'n', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
 ];
 
+//check for env variable RENDEZVOUS_SERVER1-3 if not use the default
 pub const RENDEZVOUS_SERVERS: &'static [&'static str] = &[
-    "rs-ny.rustdesk.com",
-    "rs-sg.rustdesk.com",
-    "rs-cn.rustdesk.com",
+    match option_env!("RENDEZVOUS_SERVER1") {
+        Some(key) => key,
+        None => "rs-ny.rustdesk.com",
+    },
+    match option_env!("RENDEZVOUS_SERVER2") {
+        Some(key) => key,
+        None => "rs-sg.rustdesk.com",
+    },
+    match option_env!("RENDEZVOUS_SERVER3") {
+        Some(key) => key,
+        None => "rs-cn.rustdesk.com",
+    },
 ];
 
 //check for env variable RS_PUB_KEY if not use default
