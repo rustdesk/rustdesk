@@ -401,7 +401,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request access to your device", "请求访问你的设备"),
         ("Hide connection management window", "隐藏连接管理窗口"),
         ("hide_cm_tip", "在只允许密码连接并且只用固定密码的情况下才允许隐藏"),
-        ("wayland_experiment_tip", ""),
+        ("wayland_experiment_tip", "Wayland支持处于实验阶段，如果你需要使用无人值守访问，请使用X11。"),
         ("Right click to select tabs", "右键选择选项卡"),
         ("Skipped", "已跳过"),
         ("Add to Address Book", "添加到地址簿"),
