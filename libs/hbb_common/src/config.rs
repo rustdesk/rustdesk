@@ -123,7 +123,7 @@ macro_rules! serde_field_string {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-If RS_PUB_KEY is set as an env variable use the env variablepub enum NetworkType {
+pub enum NetworkType {
     Direct,
     ProxySocks,
 }
