@@ -82,7 +82,13 @@ pub const RENDEZVOUS_SERVERS: &'static [&'static str] = &[
     "rs-sg.rustdesk.com",
     "rs-cn.rustdesk.com",
 ];
-pub const RS_PUB_KEY: &'static str = "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=";
+
+//check for env variable RS_PUB_KEY if not use default
+pub const RS_PUB_KEY: &'static str = match option_env!("RS_PUB_KEY") {
+    Some(key) => key,
+    None => "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=",
+};
+
 pub const RENDEZVOUS_PORT: i32 = 21116;
 pub const RELAY_PORT: i32 = 21117;
 
@@ -107,7 +113,7 @@ macro_rules! serde_field_string {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum NetworkType {
+If RS_PUB_KEY is set as an env variable use the env variablepub enum NetworkType {
     Direct,
     ProxySocks,
 }
