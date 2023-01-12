@@ -163,13 +163,13 @@ jobs:
           keychain: rustdesk
       
       - name: Check sign and import sign key
-        if: ${{ env.NO_OSX_KEYS!= 'true' }}
+        if: ${{ env.NO_OSX_KEYS== 'true' }}
         run: |
           security default-keychain -s rustdesk.keychain
           security find-identity -v
 
       - name: Import notarize key
-        if: ${{ env.NO_OSX_KEYS!= 'true' }}
+        if: ${{ env.NO_OSX_KEYS== 'true' }}
         uses: timheuer/base64-to-file@v1.2
         with:
           # https://gregoryszorc.com/docs/apple-codesign/stable/apple_codesign_rcodesign.html#notarizing-and-stapling
@@ -178,7 +178,7 @@ jobs:
           encodedString: ${{ secrets.MACOS_NOTARIZE_JSON }}
           
       - name: Install rcodesign tool
-        if: ${{ env.NO_OSX_KEYS!= 'true' }}
+        if: ${{ env.NO_OSX_KEYS== 'true' }}
         shell: bash
         run: | 
           pushd /tmp
@@ -249,7 +249,7 @@ jobs:
           ./build.py --flutter ${{ matrix.job.extra-build-args }}
 
       - name: Codesign app and create signed dmg
-        if: ${{ env.NO_OSX_KEYS!= 'true' }}
+        if: ${{ env.NO_OSX_KEYS== 'true' }}
         run: |
           security default-keychain -s rustdesk.keychain
           security unlock-keychain -p ${{ secrets.MACOS_P12_PASSWORD }} rustdesk.keychain
