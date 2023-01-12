@@ -413,5 +413,15 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("software_render_tip", "Si vous avez une carte graphique NVIDIA et que la fenêtre distante se ferme immédiatement après la connexion, l'installation du pilote Nouveau et le choix d'utiliser le rendu du logiciel peuvent aider. Un redémarrage du logiciel est requis."),
         ("Always use software rendering", "Utiliser toujours le rendu logiciel"),
         ("config_input", "Afin de contrôler le bureau à distance avec le clavier, vous devez accorder à Rustdesk l'autorisation \"Surveillance de l’entrée\"."),
+        ("request_elevation_tip", ""),
+        ("Wait",""),
+        ("Elevation Error", ""),
+        ("Ask the remote user for authentication", ""),
+        ("Choose this if the remote account is administrator", ""),
+        ("Transmit the username and password of administrator", ""),
+        ("still_click_uac_tip", ""),
+        ("Request Elevation", ""),
+        ("wait_accept_uac_tip", ""),
+        ("Elevate successfully", ""),
     ].iter().cloned().collect();
 }

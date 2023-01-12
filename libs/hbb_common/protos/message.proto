@@ -552,6 +552,18 @@ message BackNotification {
   }
 }
 
+message ElevationRequestWithLogon {
+  string username = 1;
+  string password = 2;
+}
+
+message ElevationRequest {
+  oneof union {
+    bool direct = 1;
+    ElevationRequestWithLogon logon = 2;
+  }
+}
+
 message Misc {
   oneof union {
     ChatMessage chat_message = 4;
@@ -567,6 +579,9 @@ message Misc {
     bool uac = 15;
     bool foreground_window_elevated = 16;
     bool stop_service = 17;
+    ElevationRequest elevation_request = 18;
+    string elevation_response = 19;
+    bool portable_service_running = 20;
   }
 }
 

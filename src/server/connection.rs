@@ -101,6 +101,7 @@ pub struct Connection {
     last_recv_time: Arc<Mutex<Instant>>,
     chat_unanswered: bool,
     close_manually: bool,
+    elevation_requested: bool,
 }
 
 impl Subscriber for ConnInner {
@@ -196,6 +197,7 @@ impl Connection {
             last_recv_time: Arc::new(Mutex::new(Instant::now())),
             chat_unanswered: false,
             close_manually: false,
+            elevation_requested: false,
         };
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         tokio::spawn(async move {
@@ -246,6 +248,8 @@ impl Connection {
         let mut last_uac = false;
         #[cfg(windows)]
         let mut last_foreground_window_elevated = false;
+        #[cfg(windows)]
+        let mut last_portable_service_running = false;
         #[cfg(windows)]
         let is_installed = crate::platform::is_installed();
 
@@ -353,7 +357,8 @@ impl Connection {
                         }
                         #[cfg(windows)]
                         ipc::Data::DataPortableService(ipc::DataPortableService::RequestStart) => {
-                            if let Err(e) = crate::portable_service::client::start_portable_service() {
+                            use crate::portable_service::client;
+                            if let Err(e) = client::start_portable_service(client::StartPara::Direct) {
                                 log::error!("Failed to start portable service from cm:{:?}", e);
                             }
                         }
@@ -440,8 +445,18 @@ impl Connection {
                 _ = second_timer.tick() => {
                     #[cfg(windows)]
                     {
-                        if !is_installed {
-                            let portable_service_running = crate::portable_service::client::PORTABLE_SERVICE_RUNNING.lock().unwrap().clone();
+                        if !is_installed  && conn.file_transfer.is_none() && conn.port_forward_socket.is_none(){
+                            let portable_service_running = crate::portable_service::client::running();
+                            if portable_service_running != last_portable_service_running {
+                                last_portable_service_running = portable_service_running;
+                                if portable_service_running && conn.elevation_requested {
+                                    let mut misc = Misc::new();
+                                    misc.set_portable_service_running(portable_service_running);
+                                    let mut msg = Message::new();
+                                    msg.set_misc(misc);
+                                    conn.inner.send(msg.into());
+                                }
+                            }
                             let uac = crate::video_service::IS_UAC_RUNNING.lock().unwrap().clone();
                             if last_uac != uac {
                                 last_uac = uac;
@@ -1476,6 +1491,51 @@ impl Connection {
                             }
                         }
                     }
+                    Some(misc::Union::ElevationRequest(r)) => match r.union {
+                        Some(elevation_request::Union::Direct(_)) => {
+                            #[cfg(windows)]
+                            {
+                                let mut err = "No need to elevate".to_string();
+                                if !crate::platform::is_installed()
+                                    && !crate::portable_service::client::running()
+                                {
+                                    use crate::portable_service::client;
+                                    err = client::start_portable_service(client::StartPara::Direct)
+                                        .err()
+                                        .map_or("".to_string(), |e| e.to_string());
+                                }
+                                self.elevation_requested = err.is_empty();
+                                let mut misc = Misc::new();
+                                misc.set_elevation_response(err);
+                                let mut msg = Message::new();
+                                msg.set_misc(misc);
+                                self.send(msg).await;
+                            }
+                        }
+                        Some(elevation_request::Union::Logon(r)) => {
+                            #[cfg(windows)]
+                            {
+                                let mut err = "No need to elevate".to_string();
+                                if !crate::platform::is_installed()
+                                    && !crate::portable_service::client::running()
+                                {
+                                    use crate::portable_service::client;
+                                    err = client::start_portable_service(client::StartPara::Logon(
+                                        r.username, r.password,
+                                    ))
+                                    .err()
+                                    .map_or("".to_string(), |e| e.to_string());
+                                }
+                                self.elevation_requested = err.is_empty();
+                                let mut misc = Misc::new();
+                                misc.set_elevation_response(err);
+                                let mut msg = Message::new();
+                                msg.set_misc(misc);
+                                self.send(msg).await;
+                            }
+                        }
+                        _ => {}
+                    },
                     _ => {}
                 },
                 _ => {}

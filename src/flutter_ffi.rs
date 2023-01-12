@@ -492,6 +492,18 @@ pub fn session_resume_job(id: String, act_id: i32, is_remote: bool) {
     }
 }
 
+pub fn session_elevate_direct(id: String) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.elevate_direct();
+    }
+}
+
+pub fn session_elevate_with_logon(id: String, username: String, password: String) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.elevate_with_logon(username, password);
+    }
+}
+
 pub fn main_get_sound_inputs() -> Vec<String> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     return get_sound_inputs();

@@ -413,5 +413,15 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("software_render_tip", "如果你使用英伟达显卡, 并且远程窗口在会话建立后会立刻关闭, 那么安装nouveau驱动并且选择使用软件渲染可能会有帮助。重启软件后生效。"),
         ("Always use software rendering", "使用软件渲染"),
         ("config_input", "为了能够通过键盘控制远程桌面, 请给予 RustDesk \"输入监控\" 权限。"),
+        ("request_elevation_tip", "如果对面有人, 也可以请求提升权限。"),
+        ("Wait","等待"),
+        ("Elevation Error", "提权失败"),
+        ("Ask the remote user for authentication", "请求远端用户授权"),
+        ("Choose this if the remote account is administrator", "当对面电脑是管理员账号时选择该选项"),
+        ("Transmit the username and password of administrator", "发送管理员账号的用户名密码"),
+        ("still_click_uac_tip", "依然需要被控端用戶在運行RustDesk的UAC窗口點擊確認。"),
+        ("Request Elevation", "请求提权"),
+        ("wait_accept_uac_tip", "请等待远端用户确认UAC对话框。"),
+        ("Elevate successfully", "提权成功"),
     ].iter().cloned().collect();
 }

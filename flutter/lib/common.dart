@@ -549,6 +549,10 @@ class OverlayDialogManager {
       hideMobileActionsOverlay();
     }
   }
+
+  bool existing(String tag) {
+    return _dialogs.keys.contains(tag);
+  }
 }
 
 void showToast(String text, {Duration timeout = const Duration(seconds: 2)}) {
@@ -983,7 +987,7 @@ Widget getPlatformImage(String platform, {double size = 50}) {
       platform != kPeerPlatformAndroid) {
     platform = 'win';
   } else {
-      platform = platform.toLowerCase();
+    platform = platform.toLowerCase();
   }
   return SvgPicture.asset('assets/$platform.svg', height: size, width: size);
 }

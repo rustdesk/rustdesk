@@ -413,5 +413,15 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("software_render_tip", "Wenn Sie eine Nvidia-Grafikkarte haben und sich das entfernte Fenster sofort nach dem Herstellen der Verbindung schließt, kann es helfen, den Nouveau-Treiber zu installieren und Software-Rendering zu verwenden. Ein Neustart der Software ist erforderlich."),
         ("Always use software rendering", "Software-Rendering immer verwenden"),
         ("config_input", "Um den entfernten Desktop mit der Tastatur steuern zu können, müssen Sie RustDesk \"Input Monitoring\"-Rechte erteilen."),
+        ("request_elevation_tip", ""),
+        ("Wait",""),
+        ("Elevation Error", ""),
+        ("Ask the remote user for authentication", ""),
+        ("Choose this if the remote account is administrator", ""),
+        ("Transmit the username and password of administrator", ""),
+        ("still_click_uac_tip", ""),
+        ("Request Elevation", ""),
+        ("wait_accept_uac_tip", ""),
+        ("Elevate successfully", ""),
     ].iter().cloned().collect();
 }
