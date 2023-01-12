@@ -15,7 +15,7 @@ env:
   # for multiarch gcc compatibility
   VCPKG_COMMIT_ID: "14e7bb4ae24616ec54ff6b2f6ef4e8659434ea44"
   VERSION: "1.2.0"
-  RS_PUB_KEY: '${{ secrets.RS_PUB_KEY }}'
+  RS_PUB_KEY_VAL: '${{ secrets.RS_PUB_KEY_VAL }}'
   RENDEZVOUS_SERVER1: '${{ secrets.RENDEZVOUS_SERVER1 }}'
   RENDEZVOUS_SERVER2: '${{ secrets.RENDEZVOUS_SERVER2 }}'
   RENDEZVOUS_SERVER3: '${{ secrets.RENDEZVOUS_SERVER3 }}'
