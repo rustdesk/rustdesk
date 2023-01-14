@@ -632,6 +632,28 @@ impl<T: InvokeUiSession> Remote<T> {
                     .video_sender
                     .send(MediaData::RecordScreen(start, w, h, id));
             }
+            Data::ElevateDirect => {
+                let mut request = ElevationRequest::new();
+                request.set_direct(true);
+                let mut misc = Misc::new();
+                misc.set_elevation_request(request);
+                let mut msg = Message::new();
+                msg.set_misc(misc);
+                allow_err!(peer.send(&msg).await);
+            }
+            Data::ElevateWithLogon(username, password) => {
+                let mut request = ElevationRequest::new();
+                request.set_logon(ElevationRequestWithLogon {
+                    username,
+                    password,
+                    ..Default::default()
+                });
+                let mut misc = Misc::new();
+                misc.set_elevation_request(request);
+                let mut msg = Message::new();
+                msg.set_misc(misc);
+                allow_err!(peer.send(&msg).await);
+            }
             _ => {}
         }
         true
@@ -989,8 +1011,13 @@ impl<T: InvokeUiSession> Remote<T> {
                         self.handler.ui_handler.switch_display(&s);
                         self.video_sender.send(MediaData::Reset).ok();
                         if s.width > 0 && s.height > 0 {
-                            self.handler
-                                .set_display(s.x, s.y, s.width, s.height, s.cursor_embedded);
+                            self.handler.set_display(
+                                s.x,
+                                s.y,
+                                s.width,
+                                s.height,
+                                s.cursor_embedded,
+                            );
                         }
                     }
                     Some(misc::Union::CloseReason(c)) => {
@@ -1003,31 +1030,85 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                     }
                     Some(misc::Union::Uac(uac)) => {
-                        let msgtype = "custom-uac-nocancel";
-                        let title = "Prompt";
-                        let text = "Please wait for confirmation of UAC...";
-                        let link = "";
-                        if uac {
-                            self.handler.msgbox(msgtype, title, text, link);
-                        } else {
-                            self.handler
-                                .cancel_msgbox(
-                                    &format!("{}-{}-{}-{}", msgtype, title, text, link,),
+                        #[cfg(feature = "flutter")]
+                        {
+                            if uac {
+                                self.handler.msgbox(
+                                    "on-uac",
+                                    "Prompt",
+                                    "Please wait for confirmation of UAC...",
+                                    "",
                                 );
+                            } else {
+                                self.handler.cancel_msgbox("on-uac");
+                                self.handler.cancel_msgbox("wait-uac");
+                                self.handler.cancel_msgbox("elevation-error");
+                            }
+                        }
+                        #[cfg(not(feature = "flutter"))]
+                        {
+                            let msgtype = "custom-uac-nocancel";
+                            let title = "Prompt";
+                            let text = "Please wait for confirmation of UAC...";
+                            let link = "";
+                            if uac {
+                                self.handler.msgbox(msgtype, title, text, link);
+                            } else {
+                                self.handler.cancel_msgbox(&format!(
+                                    "{}-{}-{}-{}",
+                                    msgtype, title, text, link,
+                                ));
+                            }
                         }
                     }
                     Some(misc::Union::ForegroundWindowElevated(elevated)) => {
-                        let msgtype = "custom-elevated-foreground-nocancel";
-                        let title = "Prompt";
-                        let text = "elevated_foreground_window_tip";
-                        let link = "";
-                        if elevated {
-                            self.handler.msgbox(msgtype, title, text, link);
+                        #[cfg(feature = "flutter")]
+                        {
+                            if elevated {
+                                self.handler.msgbox(
+                                    "on-foreground-elevated",
+                                    "Prompt",
+                                    "elevated_foreground_window_tip",
+                                    "",
+                                );
+                            } else {
+                                self.handler.cancel_msgbox("on-foreground-elevated");
+                                self.handler.cancel_msgbox("wait-uac");
+                                self.handler.cancel_msgbox("elevation-error");
+                            }
+                        }
+                        #[cfg(not(feature = "flutter"))]
+                        {
+                            let msgtype = "custom-elevated-foreground-nocancel";
+                            let title = "Prompt";
+                            let text = "elevated_foreground_window_tip";
+                            let link = "";
+                            if elevated {
+                                self.handler.msgbox(msgtype, title, text, link);
+                            } else {
+                                self.handler.cancel_msgbox(&format!(
+                                    "{}-{}-{}-{}",
+                                    msgtype, title, text, link,
+                                ));
+                            }
+                        }
+                    }
+                    Some(misc::Union::ElevationResponse(err)) => {
+                        if err.is_empty() {
+                            self.handler.msgbox("wait-uac", "", "", "");
                         } else {
                             self.handler
-                                .cancel_msgbox(
-                                    &format!("{}-{}-{}-{}", msgtype, title, text, link,),
-                                );
+                                .msgbox("elevation-error", "Elevation Error", &err, "");
+                        }
+                    }
+                    Some(misc::Union::PortableServiceRunning(b)) => {
+                        if b {
+                            self.handler.msgbox(
+                                "custom-nocancel",
+                                "Successful",
+                                "Elevate successfully",
+                                "",
+                            );
                         }
                     }
                     _ => {}

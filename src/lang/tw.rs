@@ -413,5 +413,15 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("software_render_tip", "如果你使用英偉達顯卡, 並且遠程窗口在會話建立後會立刻關閉, 那麼安裝nouveau驅動並且選擇使用軟件渲染可能會有幫助。重啟軟件後生效。"),
         ("Always use software rendering", "使用軟件渲染"),
         ("config_input", ""),
+        ("request_elevation_tip", "如果對面有人, 也可以請求提升權限。"),
+        ("Wait","等待"),
+        ("Elevation Error", "提權失敗"),
+        ("Ask the remote user for authentication", "請求遠端用戶授權"),
+        ("Choose this if the remote account is administrator", "當對面電腦是管理員賬號時選擇該選項"),
+        ("Transmit the username and password of administrator", "發送管理員賬號的用戶名密碼"),
+        ("still_click_uac_tip", "依然需要被控端用戶在UAC窗口點擊確認。"),
+        ("Request Elevation", "請求提權"),
+        ("wait_accept_uac_tip", "請等待遠端用戶確認UAC對話框。"),
+        ("Elevate successfully", "提權成功"),
     ].iter().cloned().collect();
 }

@@ -20,14 +20,10 @@
 
 use super::{video_qos::VideoQoS, *};
 #[cfg(windows)]
-use crate::portable_service::client::PORTABLE_SERVICE_RUNNING;
-#[cfg(windows)]
 use hbb_common::get_version_number;
-use hbb_common::{
-    tokio::sync::{
-        mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
-        Mutex as TokioMutex,
-    },
+use hbb_common::tokio::sync::{
+    mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
+    Mutex as TokioMutex,
 };
 #[cfg(not(windows))]
 use scrap::Capturer;
@@ -419,7 +415,7 @@ fn run(sp: GenericService) -> ResultType<()> {
     #[cfg(target_os = "linux")]
     super::wayland::ensure_inited()?;
     #[cfg(windows)]
-    let last_portable_service_running = PORTABLE_SERVICE_RUNNING.lock().unwrap().clone();
+    let last_portable_service_running = crate::portable_service::client::running();
     #[cfg(not(windows))]
     let last_portable_service_running = false;
 
@@ -518,14 +514,14 @@ fn run(sp: GenericService) -> ResultType<()> {
             bail!("SWITCH");
         }
         #[cfg(windows)]
-        if last_portable_service_running != PORTABLE_SERVICE_RUNNING.lock().unwrap().clone() {
+        if last_portable_service_running != crate::portable_service::client::running() {
             bail!("SWITCH");
         }
         check_privacy_mode_changed(&sp, c.privacy_mode_id)?;
         #[cfg(windows)]
         {
             if crate::platform::windows::desktop_changed()
-                && !PORTABLE_SERVICE_RUNNING.lock().unwrap().clone()
+                && !crate::portable_service::client::running()
             {
                 bail!("Desktop changed");
             }

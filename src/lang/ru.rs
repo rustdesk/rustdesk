@@ -413,5 +413,15 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("software_render_tip", "Если у вас видеокарта Nvidia и удалённое окно закрывается сразу после подключения, может помочь установка драйвера Nouveau и выбор использования программной визуализации. Потребуется перезапуск."),
         ("Always use software rendering", "Использовать программную визуализацию"),
         ("config_input", "Чтобы управлять удалённым рабочим столом с помощью клавиатуры, необходимо предоставить RustDesk разрешения \"Мониторинг ввода\"."),
+        ("request_elevation_tip", ""),
+        ("Wait",""),
+        ("Elevation Error", ""),
+        ("Ask the remote user for authentication", ""),
+        ("Choose this if the remote account is administrator", ""),
+        ("Transmit the username and password of administrator", ""),
+        ("still_click_uac_tip", ""),
+        ("Request Elevation", ""),
+        ("wait_accept_uac_tip", ""),
+        ("Elevate successfully", ""),
     ].iter().cloned().collect();
 }

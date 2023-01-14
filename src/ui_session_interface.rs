@@ -608,6 +608,14 @@ impl<T: InvokeUiSession> Session<T> {
         }
         self.update_transfer_list();
     }
+
+    pub fn elevate_direct(&self) {
+        self.send(Data::ElevateDirect);
+    }
+
+    pub fn elevate_with_logon(&self, username: String, password: String) {
+        self.send(Data::ElevateWithLogon(username, password));
+    }
 }
 
 pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {

@@ -780,11 +780,7 @@ fn cm_inner_send(id: i32, data: Data) {
 pub fn can_elevate() -> bool {
     #[cfg(windows)]
     {
-        return !crate::platform::is_installed()
-            && !crate::portable_service::client::PORTABLE_SERVICE_RUNNING
-                .lock()
-                .unwrap()
-                .clone();
+        return !crate::platform::is_installed() && !crate::portable_service::client::running();
     }
     #[cfg(not(windows))]
     return false;
