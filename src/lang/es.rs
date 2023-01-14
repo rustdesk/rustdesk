@@ -403,7 +403,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("hide_cm_tip", "Permitir ocultar solo si se aceptan sesiones a través de contraseña y usando contraseña permanente"),
         ("wayland_experiment_tip", "El soporte para Wayland está en fase experimental, por favor, use X11 si necesita acceso desatendido."),
         ("Right click to select tabs", "Clic derecho para seleccionar pestañas"),
-        ("Skipped", ""),
+        ("Skipped", "Omitido"),
         ("Add to Address Book", "Añadir a la libreta de direcciones"),
         ("Group", "Grupo"),
         ("Search", "Búsqueda"),

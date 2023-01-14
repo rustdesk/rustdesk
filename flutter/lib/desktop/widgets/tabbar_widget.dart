@@ -374,7 +374,7 @@ class DesktopTab extends StatelessWidget {
                           width: 78,
                         )),
                     Offstage(
-                      offstage: kUseCompatibleUiMode,
+                      offstage: kUseCompatibleUiMode || Platform.isMacOS,
                       child: Row(children: [
                         Offstage(
                             offstage: !showLogo,
@@ -555,7 +555,7 @@ class WindowActionPanelState extends State<WindowActionPanel>
           child: Row(
             children: [
               Offstage(
-                  offstage: !widget.showMinimize,
+                  offstage: !widget.showMinimize || Platform.isMacOS,
                   child: ActionIcon(
                     message: 'Minimize',
                     icon: IconFont.min,
@@ -569,7 +569,7 @@ class WindowActionPanelState extends State<WindowActionPanel>
                     isClose: false,
                   )),
               Offstage(
-                  offstage: !widget.showMaximize,
+                  offstage: !widget.showMaximize || Platform.isMacOS,
                   child: Obx(() => ActionIcon(
                         message:
                             widget.isMaximized.value ? "Restore" : "Maximize",
@@ -580,7 +580,7 @@ class WindowActionPanelState extends State<WindowActionPanel>
                         isClose: false,
                       ))),
               Offstage(
-                  offstage: !widget.showClose,
+                  offstage: !widget.showClose || Platform.isMacOS,
                   child: ActionIcon(
                     message: 'Close',
                     icon: IconFont.close,
