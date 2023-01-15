@@ -550,7 +550,7 @@ Future<bool?> loginDialog() async {
           ),
         ],
       ),
-      actions: [msgBoxButton(translate('Close'), onDialogCancel)],
+      actions: [dialogButton('Close', onPressed: onDialogCancel)],
       onCancel: onDialogCancel,
     );
   });
@@ -667,8 +667,8 @@ Future<bool?> verificationCodeDialog(UserPayload? user) async {
           ],
         ),
         actions: [
-          TextButton(onPressed: close, child: Text(translate("Cancel"))),
-          TextButton(onPressed: onVerify, child: Text(translate("Verify"))),
+          dialogButton("Cancel", onPressed: close, isOutline: true),
+          dialogButton("Verify", onPressed: onVerify),
         ]);
   });
 

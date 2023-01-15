@@ -687,8 +687,8 @@ Future<bool> closeConfirmDialog() async {
           ]),
       // confirm checkbox
       actions: [
-        TextButton(onPressed: close, child: Text(translate("Cancel"))),
-        ElevatedButton(onPressed: submit, child: Text(translate("OK"))),
+        dialogButton("Cancel", onPressed: close, isOutline: true),
+        dialogButton("OK", onPressed: submit),
       ],
       onSubmit: submit,
       onCancel: close,

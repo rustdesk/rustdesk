@@ -273,13 +273,12 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                             content: Text(translate(
                                 "android_open_battery_optimizations_tip")),
                             actions: [
-                              TextButton(
-                                  onPressed: () => close(),
-                                  child: Text(translate("Cancel"))),
-                              ElevatedButton(
-                                  onPressed: () => close(true),
-                                  child:
-                                      Text(translate("Open System Setting"))),
+                              dialogButton("Cancel",
+                                  onPressed: () => close(), isOutline: true),
+                              dialogButton(
+                                "Open System Setting",
+                                onPressed: () => close(true),
+                              ),
                             ],
                           ));
                   if (res == true) {

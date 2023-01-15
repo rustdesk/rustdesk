@@ -271,7 +271,7 @@ class FfiModel with ChangeNotifier {
           hasCancel: false);
     } else if (type == 'wait-remote-accept-nook') {
       msgBoxCommon(dialogManager, title, Text(translate(text)),
-          [msgBoxButton("Cancel", closeConnection)]);
+          [dialogButton("Cancel", onPressed: closeConnection)]);
     } else if (type == 'on-uac' || type == 'on-foreground-elevated') {
       showOnBlockDialog(id, type, title, text, dialogManager);
     } else if (type == 'wait-uac') {

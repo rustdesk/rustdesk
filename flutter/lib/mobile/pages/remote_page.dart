@@ -1098,15 +1098,9 @@ void showSetOSPassword(
           ),
         ]),
         actions: [
-          TextButton(
-            style: flatButtonStyle,
-            onPressed: () {
-              close();
-            },
-            child: Text(translate('Cancel')),
-          ),
-          TextButton(
-            style: flatButtonStyle,
+          dialogButton('Cancel', onPressed: close, isOutline: true),
+          dialogButton(
+            'OK',
             onPressed: () {
               var text = controller.text.trim();
               bind.sessionPeerOption(id: id, name: "os-password", value: text);
@@ -1117,7 +1111,6 @@ void showSetOSPassword(
               }
               close();
             },
-            child: Text(translate('OK')),
           ),
         ]);
   });

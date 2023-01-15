@@ -304,8 +304,8 @@ class ServerModel with ChangeNotifier {
           ]),
           content: Text(translate("android_service_will_start_tip")),
           actions: [
-            TextButton(onPressed: close, child: Text(translate("Cancel"))),
-            ElevatedButton(onPressed: submit, child: Text(translate("OK"))),
+            dialogButton("Cancel", onPressed: close, isOutline: true),
+            dialogButton("OK", onPressed: submit),
           ],
           onSubmit: submit,
           onCancel: close,
@@ -501,8 +501,8 @@ class ServerModel with ChangeNotifier {
           ],
         ),
         actions: [
-          TextButton(onPressed: cancel, child: Text(translate("Dismiss"))),
-          ElevatedButton(onPressed: submit, child: Text(translate("Accept"))),
+          dialogButton("Dismiss", onPressed: cancel, isOutline: true),
+          dialogButton("Accept", onPressed: submit),
         ],
         onSubmit: submit,
         onCancel: cancel,
@@ -674,9 +674,8 @@ showInputWarnAlert(FFI ffi) {
         ],
       ),
       actions: [
-        TextButton(onPressed: close, child: Text(translate("Cancel"))),
-        ElevatedButton(
-            onPressed: submit, child: Text(translate("Open System Setting"))),
+        dialogButton("Cancel", onPressed: close, isOutline: true),
+        dialogButton("Open System Setting", onPressed: submit),
       ],
       onSubmit: submit,
       onCancel: close,

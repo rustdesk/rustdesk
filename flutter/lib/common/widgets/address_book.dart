@@ -335,8 +335,8 @@ class _AddressBookState extends State<AddressBook> {
           ],
         ),
         actions: [
-          TextButton(onPressed: close, child: Text(translate("Cancel"))),
-          TextButton(onPressed: submit, child: Text(translate("OK"))),
+          dialogButton("Cancel", onPressed: close, isOutline: true),
+          dialogButton("OK", onPressed: submit),
         ],
         onSubmit: submit,
         onCancel: close,
@@ -402,8 +402,8 @@ class _AddressBookState extends State<AddressBook> {
           ],
         ),
         actions: [
-          TextButton(onPressed: close, child: Text(translate("Cancel"))),
-          TextButton(onPressed: submit, child: Text(translate("OK"))),
+          dialogButton("Cancel", onPressed: close, isOutline: true),
+          dialogButton("OK", onPressed: submit),
         ],
         onSubmit: submit,
         onCancel: close,

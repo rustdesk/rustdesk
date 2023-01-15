@@ -665,14 +665,8 @@ class FileModel extends ChangeNotifier {
                   : const SizedBox.shrink()
             ]),
         actions: [
-          TextButton(
-              style: flatButtonStyle,
-              onPressed: cancel,
-              child: Text(translate("Cancel"))),
-          TextButton(
-              style: flatButtonStyle,
-              onPressed: submit,
-              child: Text(translate("OK"))),
+          dialogButton("Cancel", onPressed: cancel, isOutline: true),
+          dialogButton("OK", onPressed: submit),
         ],
         onSubmit: submit,
         onCancel: cancel,
@@ -724,18 +718,9 @@ class FileModel extends ChangeNotifier {
                   : const SizedBox.shrink()
             ]),
         actions: [
-          TextButton(
-              style: flatButtonStyle,
-              onPressed: cancel,
-              child: Text(translate("Cancel"))),
-          TextButton(
-              style: flatButtonStyle,
-              onPressed: () => close(null),
-              child: Text(translate("Skip"))),
-          TextButton(
-              style: flatButtonStyle,
-              onPressed: submit,
-              child: Text(translate("OK"))),
+          dialogButton("Cancel", onPressed: cancel, isOutline: true),
+          dialogButton("Skip", onPressed: () => close(null), isOutline: true),
+          dialogButton("OK", onPressed: submit),
         ],
         onSubmit: submit,
         onCancel: cancel,
