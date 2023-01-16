@@ -423,5 +423,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request Elevation", "Richiedi elevazione dei diritti"),
         ("wait_accept_uac_tip", "Attendere che l'utente remoto accetti la finestra di dialogo UAC."),
         ("Elevate successfully", "Elevazione dei diritti effettuata con successo"),
+        ("uppercase", ""),
+        ("lowercase", ""),
+        ("digit", ""),
+        ("special character", ""),
+        ("length>=8", ""),
+        ("Weak", ""),
+        ("Medium", ""),
+        ("Strong", ""),
     ].iter().cloned().collect();
 }

@@ -93,6 +93,7 @@ dependencies:
     auto_size_text: ^3.0.0
     bot_toast: ^4.0.3
     win32: any
+    password_strength: ^0.2.0
 
 
 dev_dependencies:

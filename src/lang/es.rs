@@ -414,7 +414,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Always use software rendering", "Usar siempre renderizado por software"),
         ("config_input", "Para controlar el escritorio remoto con el teclado necesitas dar a RustDesk permisos de \"Monitorización de entrada\"."),
         ("request_elevation_tip", ""),
-        ("Wait",""),
+        ("Wait", ""),
         ("Elevation Error", ""),
         ("Ask the remote user for authentication", ""),
         ("Choose this if the remote account is administrator", ""),
@@ -423,5 +423,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request Elevation", ""),
         ("wait_accept_uac_tip", ""),
         ("Elevate successfully", ""),
+        ("uppercase", ""),
+        ("lowercase", ""),
+        ("digit", ""),
+        ("special character", ""),
+        ("length>=8", ""),
+        ("Weak", ""),
+        ("Medium", ""),
+        ("Strong", ""),
     ].iter().cloned().collect();
 }
