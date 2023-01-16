@@ -613,8 +613,9 @@ class CustomAlertDialog extends StatelessWidget {
     Future.delayed(Duration.zero, () {
       if (!focusNode.hasFocus) focusNode.requestFocus();
     });
-    return Focus(
-      focusNode: focusNode,
+    FocusScopeNode scopeNode = FocusScopeNode();
+    return FocusScope(
+      node: scopeNode,
       autofocus: true,
       onKey: (node, key) {
         if (key.logicalKey == LogicalKeyboardKey.escape) {
@@ -625,6 +626,11 @@ class CustomAlertDialog extends StatelessWidget {
         } else if (onSubmit != null &&
             key.logicalKey == LogicalKeyboardKey.enter) {
           if (key is RawKeyDownEvent) onSubmit?.call();
+          return KeyEventResult.handled;
+        } else if (key.logicalKey == LogicalKeyboardKey.tab) {
+          if (key is RawKeyDownEvent) {
+            scopeNode.nextFocus();
+          }
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
