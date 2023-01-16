@@ -15,12 +15,12 @@ env:
   # for multiarch gcc compatibility
   VCPKG_COMMIT_ID: "14e7bb4ae24616ec54ff6b2f6ef4e8659434ea44"
   VERSION: "1.2.0"
-  #To make a custom build with your own servers set the below secret values
+  # To make a custom build with your own servers set the below secret values
   RS_PUB_KEY_VAL: '${{ secrets.RS_PUB_KEY_VAL }}'
   RENDEZVOUS_SERVER1: '${{ secrets.RENDEZVOUS_SERVER1 }}'
   RENDEZVOUS_SERVER2: '${{ secrets.RENDEZVOUS_SERVER2 }}'
   RENDEZVOUS_SERVER3: '${{ secrets.RENDEZVOUS_SERVER3 }}'
-  #ignore signing with key files if values below are set
+  # Ignore signing with key files if values below are set
   NO_OSX_KEYS: ${{ secrets.NO_OSX_KEYS == 'true' }}
   NO_APP_KEYS: ${{ secrets.NO_APP_KEYS == 'true' }}
 
