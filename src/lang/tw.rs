@@ -414,7 +414,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Always use software rendering", "使用軟件渲染"),
         ("config_input", ""),
         ("request_elevation_tip", "如果對面有人, 也可以請求提升權限。"),
-        ("Wait","等待"),
+        ("Wait", "等待"),
         ("Elevation Error", "提權失敗"),
         ("Ask the remote user for authentication", "請求遠端用戶授權"),
         ("Choose this if the remote account is administrator", "當對面電腦是管理員賬號時選擇該選項"),
@@ -423,5 +423,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request Elevation", "請求提權"),
         ("wait_accept_uac_tip", "請等待遠端用戶確認UAC對話框。"),
         ("Elevate successfully", "提權成功"),
+        ("uppercase", "大寫字母"),
+        ("lowercase", "小寫字母"),
+        ("digit", "數字"),
+        ("special character", "特殊字符"),
+        ("length>=8", "長度不小於8"),
+        ("Weak", "弱"),
+        ("Medium", "中"),
+        ("Strong", "強"),
     ].iter().cloned().collect();
 }

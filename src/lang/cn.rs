@@ -414,7 +414,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Always use software rendering", "使用软件渲染"),
         ("config_input", "为了能够通过键盘控制远程桌面, 请给予 RustDesk \"输入监控\" 权限。"),
         ("request_elevation_tip", "如果对面有人, 也可以请求提升权限。"),
-        ("Wait","等待"),
+        ("Wait", "等待"),
         ("Elevation Error", "提权失败"),
         ("Ask the remote user for authentication", "请求远端用户授权"),
         ("Choose this if the remote account is administrator", "当对面电脑是管理员账号时选择该选项"),
@@ -423,5 +423,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request Elevation", "请求提权"),
         ("wait_accept_uac_tip", "请等待远端用户确认UAC对话框。"),
         ("Elevate successfully", "提权成功"),
+        ("uppercase", "大写字母"),
+        ("lowercase", "小写字母"),
+        ("digit", "数字"),
+        ("special character", "特殊字符"),
+        ("length>=8", "长度不小于8"),
+        ("Weak", "弱"),
+        ("Medium", "中"),
+        ("Strong", "强"),
     ].iter().cloned().collect();
 }
