@@ -668,24 +668,25 @@ void msgBox(String id, String type, String title, String text, String link,
 
   if (type != "connecting" && type != "success" && !type.contains("nook")) {
     hasOk = true;
-    buttons.insert(0, msgBoxButton(translate('OK'), submit));
+    buttons.insert(0, dialogButton('OK', onPressed: submit));
   }
   hasCancel ??= !type.contains("error") &&
       !type.contains("nocancel") &&
       type != "restarting";
   if (hasCancel) {
-    buttons.insert(0, msgBoxButton(translate('Cancel'), cancel));
+    buttons.insert(
+        0, dialogButton('Cancel', onPressed: cancel, isOutline: true));
   }
   // TODO: test this button
   if (type.contains("hasclose")) {
     buttons.insert(
         0,
-        msgBoxButton(translate('Close'), () {
+        dialogButton('Close', onPressed: () {
           dialogManager.dismissAll();
         }));
   }
   if (link.isNotEmpty) {
-    buttons.insert(0, msgBoxButton(translate('JumpLink'), jumplink));
+    buttons.insert(0, dialogButton('JumpLink', onPressed: jumplink));
   }
   dialogManager.show(
     (setState, close) => CustomAlertDialog(
@@ -1565,4 +1566,31 @@ class ServerConfig {
         relayServer = options['relay-server'] ?? "",
         apiServer = options['api-server'] ?? "",
         key = options['key'] ?? "";
+}
+
+Widget dialogButton(String text,
+    {required VoidCallback? onPressed,
+    bool isOutline = false,
+    TextStyle? style}) {
+  if (isDesktop) {
+    if (isOutline) {
+      return OutlinedButton(
+        onPressed: onPressed,
+        child: Text(translate(text), style: style),
+      );
+    } else {
+      return ElevatedButton(
+        style: ElevatedButton.styleFrom(elevation: 0),
+        onPressed: onPressed,
+        child: Text(translate(text), style: style),
+      );
+    }
+  } else {
+    return TextButton(
+        onPressed: onPressed,
+        child: Text(
+          translate(text),
+          style: style,
+        ));
+  }
 }

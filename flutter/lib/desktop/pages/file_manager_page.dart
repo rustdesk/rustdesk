@@ -802,14 +802,9 @@ class _FileManagerPageState extends State<FileManagerPage>
                               ],
                             ),
                             actions: [
-                              TextButton(
-                                  style: flatButtonStyle,
-                                  onPressed: cancel,
-                                  child: Text(translate("Cancel"))),
-                              ElevatedButton(
-                                  style: flatButtonStyle,
-                                  onPressed: submit,
-                                  child: Text(translate("OK")))
+                              dialogButton("Cancel",
+                                  onPressed: cancel, isOutline: true),
+                              dialogButton("OK", onPressed: submit)
                             ],
                             onSubmit: submit,
                             onCancel: cancel,

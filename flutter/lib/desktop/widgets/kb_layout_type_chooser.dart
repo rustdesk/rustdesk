@@ -218,7 +218,7 @@ showKBLayoutTypeChooser(
             KBLayoutType.value = bind.getLocalKbLayoutType();
             return v == KBLayoutType.value;
           }),
-      actions: [msgBoxButton(translate('Close'), close)],
+      actions: [dialogButton('Close', onPressed: close)],
       onCancel: close,
     );
   });

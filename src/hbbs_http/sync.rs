@@ -54,6 +54,7 @@ async fn start_hbbs_sync_async() {
                         last_send = Instant::now();
                         let mut v = Value::default();
                         v["id"] = json!(Config::get_id());
+                        v["ver"] = json!(hbb_common::get_version_number(crate::VERSION));
                         if !conns.is_empty() {
                             v["conns"] = json!(conns);
                         }
@@ -100,33 +101,16 @@ fn heartbeat_url() -> String {
 }
 
 fn handle_config_options(config_options: HashMap<String, String>) {
-    let map = HashMap::from([
-        ("enable-keyboard", ""),
-        ("enable-clipboard", ""),
-        ("enable-file-transfer", ""),
-        ("enable-audio", ""),
-        ("enable-tunnel", ""),
-        ("enable-remote-restart", ""),
-        ("enable-record-session", ""),
-        ("allow-remote-config-modification", ""),
-        ("approve-mode", ""),
-        ("verification-method", "use-both-passwords"),
-        ("enable-rdp", ""),
-        ("enable-lan-discovery", ""),
-        ("direct-server", ""),
-        ("direct-access-port", ""),
-    ]);
     let mut options = Config::get_options();
-    for (k, v) in map {
-        if let Some(v2) = config_options.get(k) {
-            if v == v2 {
+    config_options
+        .iter()
+        .map(|(k, v)| {
+            if v.is_empty() {
                 options.remove(k);
             } else {
-                options.insert(k.to_string(), v2.to_string());
+                options.insert(k.to_string(), v.to_string());
             }
-        } else {
-            options.remove(k);
-        }
-    }
+        })
+        .count();
     Config::set_options(options);
 }

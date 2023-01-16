@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/desktop/widgets/button.dart';
 import 'package:get/get.dart';
 
 import '../../common.dart';
@@ -33,10 +34,8 @@ void showRestartRemoteDevice(
             content: Text(
                 "${translate('Are you sure you want to restart')} \n${pi.username}@${pi.hostname}($id) ?"),
             actions: [
-              TextButton(
-                  onPressed: () => close(), child: Text(translate("Cancel"))),
-              ElevatedButton(
-                  onPressed: () => close(true), child: Text(translate("OK"))),
+              dialogButton("Cancel", onPressed: () => close(), isOutline: true),
+              dialogButton("OK", onPressed: () => close(true)),
             ],
           ));
   if (res == true) bind.sessionRestartRemoteDevice(id: id);
@@ -96,15 +95,15 @@ void setPermanentPasswordDialog(OverlayDialogManager dialogManager) async {
             ),
           ])),
       actions: [
-        TextButton(
-          style: flatButtonStyle,
+        dialogButton(
+          'Cancel',
           onPressed: () {
             close();
           },
-          child: Text(translate('Cancel')),
+          isOutline: true,
         ),
-        TextButton(
-          style: flatButtonStyle,
+        dialogButton(
+          'OK',
           onPressed: (validateLength && validateSame)
               ? () async {
                   close();
@@ -118,7 +117,6 @@ void setPermanentPasswordDialog(OverlayDialogManager dialogManager) async {
                   }
                 }
               : null,
-          child: Text(translate('OK')),
         ),
       ],
     );
@@ -198,16 +196,8 @@ void enterPasswordDialog(String id, OverlayDialogManager dialogManager) async {
         ),
       ]),
       actions: [
-        TextButton(
-          style: flatButtonStyle,
-          onPressed: cancel,
-          child: Text(translate('Cancel')),
-        ),
-        TextButton(
-          style: flatButtonStyle,
-          onPressed: submit,
-          child: Text(translate('OK')),
-        ),
+        dialogButton('Cancel', onPressed: cancel, isOutline: true),
+        dialogButton('OK', onPressed: submit),
       ],
       onSubmit: submit,
       onCancel: cancel,
@@ -220,20 +210,19 @@ void wrongPasswordDialog(String id, OverlayDialogManager dialogManager) {
           title: Text(translate('Wrong Password')),
           content: Text(translate('Do you want to enter again?')),
           actions: [
-            TextButton(
-              style: flatButtonStyle,
+            dialogButton(
+              'Cancel',
               onPressed: () {
                 close();
                 closeConnection();
               },
-              child: Text(translate('Cancel')),
+              isOutline: true,
             ),
-            TextButton(
-              style: flatButtonStyle,
+            dialogButton(
+              'Retry',
               onPressed: () {
                 enterPasswordDialog(id, dialogManager);
               },
-              child: Text(translate('Retry')),
             ),
           ]));
 }
@@ -321,15 +310,11 @@ void showServerSettingsWithValue(
                         child: LinearProgressIndicator())
                   ])),
       actions: [
-        TextButton(
-          style: flatButtonStyle,
-          onPressed: () {
-            close();
-          },
-          child: Text(translate('Cancel')),
-        ),
-        TextButton(
-          style: flatButtonStyle,
+        dialogButton('Cancel', onPressed: () {
+          close();
+        }, isOutline: true),
+        dialogButton(
+          'OK',
           onPressed: () async {
             setState(() {
               idServerMsg = null;
@@ -361,7 +346,6 @@ void showServerSettingsWithValue(
               isInProgress = false;
             });
           },
-          child: Text(translate('OK')),
         ),
       ],
     );
@@ -512,17 +496,8 @@ void _showRequestElevationDialog(
       title: Text(translate('Request Elevation')),
       content: content,
       actions: [
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(elevation: 0),
-          onPressed: submit,
-          child: Text(translate('OK')),
-        ),
-        OutlinedButton(
-          onPressed: () {
-            close();
-          },
-          child: Text(translate('Cancel')),
-        ),
+        dialogButton('Cancel', onPressed: close, isOutline: true),
+        dialogButton('OK', onPressed: submit),
       ],
       onSubmit: submit,
       onCancel: close,
@@ -561,17 +536,10 @@ void showOnBlockDialog(
       title: Text(translate(title)),
       content: content,
       actions: [
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(elevation: 0),
-          onPressed: submit,
-          child: Text(translate('Request Elevation')),
-        ),
-        OutlinedButton(
-          onPressed: () {
-            close();
-          },
-          child: Text(translate('Wait')),
-        ),
+        dialogButton('Wait', onPressed: () {
+          close();
+        }, isOutline: true),
+        dialogButton('Request Elevation', onPressed: submit),
       ],
       onSubmit: submit,
       onCancel: close,
@@ -591,17 +559,10 @@ void showElevationError(String id, String type, String title, String text,
       title: Text(translate(title)),
       content: Text(translate(text)),
       actions: [
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(elevation: 0),
-          onPressed: submit,
-          child: Text(translate('Retry')),
-        ),
-        OutlinedButton(
-          onPressed: () {
-            close();
-          },
-          child: Text(translate('Cancel')),
-        ),
+        dialogButton('Cancel', onPressed: () {
+          close();
+        }, isOutline: true),
+        dialogButton('Retry', onPressed: submit),
       ],
       onSubmit: submit,
       onCancel: close,
