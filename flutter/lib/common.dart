@@ -634,8 +634,14 @@ class CustomAlertDialog extends StatelessWidget {
         title: title,
         contentPadding: EdgeInsets.symmetric(
             horizontal: contentPadding ?? 25, vertical: 10),
-        content:
-            ConstrainedBox(constraints: contentBoxConstraints, child: content),
+        content: ConstrainedBox(
+            constraints: contentBoxConstraints,
+            child: Theme(
+                data: ThemeData(
+                  inputDecorationTheme: InputDecorationTheme(
+                      isDense: true, contentPadding: EdgeInsets.all(15)),
+                ),
+                child: content)),
         actions: actions,
       ),
     );

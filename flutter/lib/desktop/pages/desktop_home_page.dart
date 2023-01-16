@@ -597,8 +597,6 @@ void setPasswordDialog() async {
                   child: TextField(
                     obscureText: true,
                     decoration: InputDecoration(
-                        isDense: true,
-                        contentPadding: EdgeInsets.all(15),
                         labelText: translate('Password'),
                         border: const OutlineInputBorder(),
                         errorText: errMsg0.isNotEmpty ? errMsg0 : null),
@@ -625,8 +623,6 @@ void setPasswordDialog() async {
                   child: TextField(
                     obscureText: true,
                     decoration: InputDecoration(
-                        isDense: true,
-                        contentPadding: EdgeInsets.all(15),
                         border: const OutlineInputBorder(),
                         labelText: translate('Confirmation'),
                         errorText: errMsg1.isNotEmpty ? errMsg1 : null),
