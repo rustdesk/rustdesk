@@ -199,12 +199,6 @@ class FfiModel with ChangeNotifier {
         parent.target?.serverModel.setShowElevation(show);
       } else if (name == 'cancel_msgbox') {
         cancelMsgBox(evt, peerId);
-      } else if (name == 'switch_sides') {
-        final peer_id = evt['peer_id'].toString();
-        final uuid = evt['uuid'].toString();
-        Future.delayed(Duration.zero, () {
-          rustDeskWinManager.newRemoteDesktop(peer_id, switch_uuid: uuid);
-        });
       } else if (name == 'switch_back') {
         final peer_id = evt['peer_id'].toString();
         await bind.sessionSwitchSides(id: peer_id);

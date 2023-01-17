@@ -1307,8 +1307,10 @@ bool callUniLinksUriHandler(Uri uri) {
   // new connection
   if (uri.authority == "connection" && uri.path.startsWith("/new/")) {
     final peerId = uri.path.substring("/new/".length);
+    var param = uri.queryParameters;
+    String? switch_uuid = param["switch_uuid"];
     Future.delayed(Duration.zero, () {
-      rustDeskWinManager.newRemoteDesktop(peerId);
+      rustDeskWinManager.newRemoteDesktop(peerId, switch_uuid: switch_uuid);
     });
     return true;
   }

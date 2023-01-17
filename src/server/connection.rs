@@ -1573,8 +1573,16 @@ impl Connection {
                     },
                     #[cfg(feature = "flutter")]
                     Some(misc::Union::SwitchSidesRequest(s)) => {
-                        crate::flutter::switch_sides(&self.lr.my_id, &s.uuid);
-                        return false;
+                        if let Ok(uuid) = uuid::Uuid::from_slice(&s.uuid.to_vec()[..]) {
+                            crate::run_me(vec![
+                                "--connect",
+                                &self.lr.my_id,
+                                "--switch_uuid",
+                                uuid.to_string().as_ref(),
+                            ])
+                            .ok();
+                            return false;
+                        }
                     }
                     _ => {}
                 },

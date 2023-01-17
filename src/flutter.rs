@@ -612,17 +612,3 @@ pub fn set_cur_session_id(id: String) {
         *CUR_SESSION_ID.write().unwrap() = id;
     }
 }
-
-pub fn switch_sides(peer_id: &str, uuid: &Bytes) {
-    if let Some(stream) = GLOBAL_EVENT_STREAM.read().unwrap().get(APP_TYPE_MAIN) {
-        if let Ok(uuid) = uuid::Uuid::from_slice(uuid.to_vec().as_ref()) {
-            let uuid = uuid.to_string();
-            let data = HashMap::from([
-                ("name", "switch_sides"),
-                ("peer_id", peer_id),
-                ("uuid", &uuid),
-            ]);
-            stream.add(serde_json::ser::to_string(&data).unwrap_or("".into()));
-        }
-    }
-}
