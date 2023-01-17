@@ -621,10 +621,7 @@ impl<T: InvokeUiSession> Session<T> {
 
     pub fn switch_sides(&self) {
         let uuid = Uuid::new_v4();
-        crate::server::SWITCH_SIDES_UUID
-            .lock()
-            .unwrap()
-            .insert(self.id.clone(), (tokio::time::Instant::now(), uuid.clone()));
+        crate::server::insert_switch_sides_uuid(self.id.clone(), uuid.clone());
         let mut misc = Misc::new();
         misc.set_switch_sides_request(SwitchSidesRequest {
             uuid: Bytes::from(uuid.as_bytes().to_vec()),

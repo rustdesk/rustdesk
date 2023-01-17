@@ -40,7 +40,7 @@ lazy_static::lazy_static! {
     static ref LOGIN_FAILURES: Arc::<Mutex<HashMap<String, (i32, i32, i32)>>> = Default::default();
     static ref SESSIONS: Arc::<Mutex<HashMap<String, Session>>> = Default::default();
     static ref ALIVE_CONNS: Arc::<Mutex<Vec<i32>>> = Default::default();
-    pub static ref SWITCH_SIDES_UUID: Arc::<Mutex<HashMap<String, (Instant, uuid::Uuid)>>> = Default::default();
+    static ref SWITCH_SIDES_UUID: Arc::<Mutex<HashMap<String, (Instant, uuid::Uuid)>>> = Default::default();
 }
 pub static CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 pub static MOUSE_MOVE_TIME: AtomicI64 = AtomicI64::new(0);
@@ -136,7 +136,7 @@ const MILLI1: Duration = Duration::from_millis(1);
 const SEND_TIMEOUT_VIDEO: u64 = 12_000;
 const SEND_TIMEOUT_OTHER: u64 = SEND_TIMEOUT_VIDEO * 10;
 const SESSION_TIMEOUT: Duration = Duration::from_secs(30);
-const SWITCH_SIDES_TIMEOUT: Duration = Duration::from_secs(30);
+const SWITCH_SIDES_TIMEOUT: Duration = Duration::from_secs(10);
 
 impl Connection {
     pub async fn start(
@@ -1267,10 +1267,14 @@ impl Connection {
             #[cfg(feature = "flutter")]
             if let Some(lr) = _s.lr.clone().take() {
                 self.handle_login_request_without_validation(&lr).await;
+                SWITCH_SIDES_UUID
+                    .lock()
+                    .unwrap()
+                    .retain(|_, v| v.0.elapsed() < SWITCH_SIDES_TIMEOUT);
                 let uuid_old = SWITCH_SIDES_UUID.lock().unwrap().remove(&lr.my_id);
                 if let Ok(uuid) = uuid::Uuid::from_slice(_s.uuid.to_vec().as_ref()) {
                     if let Some((instant, uuid_old)) = uuid_old {
-                        if instant.elapsed() < SWITCH_SIDES_TIMEOUT && uuid == uuid_old {
+                        if uuid == uuid_old {
                             self.from_switch = true;
                             self.try_start_cm(lr.my_id.clone(), lr.my_name.clone(), true);
                             self.send_logon_response().await;
@@ -1790,6 +1794,14 @@ impl Connection {
     pub fn alive_conns() -> Vec<i32> {
         ALIVE_CONNS.lock().unwrap().clone()
     }
+}
+
+#[cfg(feature = "flutter")]
+pub fn insert_switch_sides_uuid(id: String, uuid: uuid::Uuid) {
+    SWITCH_SIDES_UUID
+        .lock()
+        .unwrap()
+        .insert(id, (tokio::time::Instant::now(), uuid));
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
