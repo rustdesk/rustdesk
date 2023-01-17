@@ -425,7 +425,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Elevate successfully", "Επιτυχής ανύψωση δικαιωμάτων χρήστη"),
         ("uppercase", "κεφαλαία γράμματα"),
         ("lowercase", "πεζά γράμματα"),
-        ("digit", "ψηφίο"),
+        ("digit", "Αριθμός"),
         ("special character", "ειδικός χαρακτήρας"),
         ("length>=8", "μήκος>=8"),
         ("Weak", "Αδύναμο"),
