@@ -181,6 +181,17 @@ impl Client {
                 true,
             ));
         }
+        // Allow connect to {hostname}:{port}
+        if hbb_common.is_hostname_port_str(peer) {
+            return Ok((
+                socket_client::connect_tcp(
+                    peer,
+                    RENDEZVOUS_TIMEOUT,
+                )
+                .await?,
+                true,
+            ));
+        }
         let (mut rendezvous_server, servers, contained) = crate::get_rendezvous_server(1_000).await;
         let mut socket = socket_client::connect_tcp(&*rendezvous_server, RENDEZVOUS_TIMEOUT).await;
         debug_assert!(!servers.contains(&rendezvous_server));

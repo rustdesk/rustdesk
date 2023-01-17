@@ -321,6 +321,13 @@ pub fn is_ip_str(id: &str) -> bool {
     is_ipv4_str(id) || is_ipv6_str(id)
 }
 
+#[inline]
+pub fn is_hostname_port_str(id: &str) -> bool {
+    regex::Regex::new(r"^[\-.0-9a-zA-Z]+:\d{1,5}$")
+        .unwrap()
+        .is_match(id)
+}
+
 #[cfg(test)]
 mod test_lib {
     use super::*;
@@ -339,5 +346,20 @@ mod test_lib {
         assert_eq!(is_ipv6_str("[1:2::0]:1"), true);
         assert_eq!(is_ipv6_str("[1:2::0]:"), false);
         assert_eq!(is_ipv6_str("1:2::0]:1"), false);
+    }
+    #[test]
+    fn test_hostname_port() {
+        assert_eq!(is_ipv6_str("a:12"), true);
+        assert_eq!(is_ipv6_str("a.b.c:12"), true);
+        assert_eq!(is_ipv6_str("test.com:12"), true);
+        assert_eq!(is_ipv6_str("1.2.3:12"), true);
+        assert_eq!(is_ipv6_str("a.b.c:123456"), false);
+        // todo: should we also check for these edge case?
+        // out-of-range port
+        assert_eq!(is_ipv6_str("test.com:0"), true);
+        assert_eq!(is_ipv6_str("test.com:98989"), true);
+        // invalid hostname
+        assert_eq!(is_ipv6_str("---:12"), true);
+        assert_eq!(is_ipv6_str(".:12"), true);
     }
 }
