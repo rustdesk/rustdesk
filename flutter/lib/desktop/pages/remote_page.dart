@@ -33,10 +33,12 @@ class RemotePage extends StatefulWidget {
     Key? key,
     required this.id,
     required this.menubarState,
+    this.switchUuid,
   }) : super(key: key);
 
   final String id;
   final MenubarState menubarState;
+  final String? switchUuid;
   final SimpleWrapper<State<RemotePage>?> _lastState = SimpleWrapper(null);
 
   FFI get ffi => (_lastState.value! as _RemotePageState)._ffi;
@@ -100,7 +102,10 @@ class _RemotePageState extends State<RemotePage>
       showKBLayoutTypeChooserIfNeeded(
           _ffi.ffiModel.pi.platform, _ffi.dialogManager);
     });
-    _ffi.start(widget.id);
+    _ffi.start(
+      widget.id,
+      switchUuid: widget.switchUuid,
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
       _ffi.dialogManager

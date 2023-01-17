@@ -1606,3 +1606,16 @@ Widget dialogButton(String text,
         ));
   }
 }
+
+int get_version_num(String version) {
+  final list = version.split('.');
+  var n = 0;
+  for (var i = 0; i < list.length; i++) {
+    n = n * 1000 + (int.tryParse(list[i]) ?? 0);
+  }
+  return n;
+}
+
+int version_cmp(String v1, String v2) {
+  return get_version_num(v1) - get_version_num(v2);
+}

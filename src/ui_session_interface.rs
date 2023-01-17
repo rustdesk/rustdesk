@@ -8,6 +8,7 @@ use crate::common::{self, is_keyboard_mode_supported, GrabState};
 use crate::keyboard;
 use crate::{client::Data, client::Interface};
 use async_trait::async_trait;
+use bytes::Bytes;
 use hbb_common::config::{Config, LocalConfig, PeerConfig};
 use hbb_common::rendezvous_proto::ConnType;
 use hbb_common::tokio::{self, sync::mpsc};
@@ -18,6 +19,7 @@ use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
+use uuid::Uuid;
 pub static IS_IN: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone, Default)]
@@ -616,6 +618,22 @@ impl<T: InvokeUiSession> Session<T> {
     pub fn elevate_with_logon(&self, username: String, password: String) {
         self.send(Data::ElevateWithLogon(username, password));
     }
+
+    pub fn switch_sides(&self) {
+        let uuid = Uuid::new_v4();
+        crate::server::SWITCH_SIDES_UUID
+            .lock()
+            .unwrap()
+            .insert(self.id.clone(), (tokio::time::Instant::now(), uuid.clone()));
+        let mut misc = Misc::new();
+        misc.set_switch_sides_request(SwitchSidesRequest {
+            uuid: Bytes::from(uuid.as_bytes().to_vec()),
+            ..Default::default()
+        });
+        let mut msg_out = Message::new();
+        msg_out.set_misc(misc);
+        self.send(Data::Message(msg_out));
+    }
 }
 
 pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
@@ -655,6 +673,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     #[cfg(any(target_os = "android", target_os = "ios"))]
     fn clipboard(&self, content: String);
     fn cancel_msgbox(&self, tag: &str);
+    fn switch_back(&self, id: &str);
 }
 
 impl<T: InvokeUiSession> Deref for Session<T> {

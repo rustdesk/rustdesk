@@ -1,21 +1,18 @@
+use crate::ui_session_interface::{io_loop, InvokeUiSession, Session};
+use crate::{client::*, flutter_ffi::EventToUI};
+use bytes::Bytes;
+use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
+use hbb_common::{
+    bail, config::LocalConfig, get_version_number, message_proto::*, rendezvous_proto::ConnType,
+    ResultType,
+};
+use serde_json::json;
 use std::{
     collections::HashMap,
     ffi::CString,
     os::raw::{c_char, c_int},
     sync::{Arc, RwLock},
 };
-
-use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
-
-use hbb_common::{
-    bail, config::LocalConfig, get_version_number, message_proto::*, rendezvous_proto::ConnType,
-    ResultType,
-};
-use serde_json::json;
-
-use crate::ui_session_interface::{io_loop, InvokeUiSession, Session};
-
-use crate::{client::*, flutter_ffi::EventToUI};
 
 pub(super) const APP_TYPE_MAIN: &str = "main";
 pub(super) const APP_TYPE_DESKTOP_REMOTE: &str = "remote";
@@ -366,7 +363,17 @@ impl InvokeUiSession for FlutterHandler {
                 ("y", &display.y.to_string()),
                 ("width", &display.width.to_string()),
                 ("height", &display.height.to_string()),
-                ("cursor_embedded", &{if display.cursor_embedded {1} else {0}}.to_string()),
+                (
+                    "cursor_embedded",
+                    &{
+                        if display.cursor_embedded {
+                            1
+                        } else {
+                            0
+                        }
+                    }
+                    .to_string(),
+                ),
             ],
         );
     }
@@ -382,6 +389,10 @@ impl InvokeUiSession for FlutterHandler {
     fn clipboard(&self, content: String) {
         self.push_event("clipboard", vec![("content", &content)]);
     }
+
+    fn switch_back(&self, peer_id: &str) {
+        self.push_event("switch_back", [("peer_id", peer_id)].into());
+    }
 }
 
 /// Create a new remote session with the given id.
@@ -391,7 +402,12 @@ impl InvokeUiSession for FlutterHandler {
 /// * `id` - The identifier of the remote session with prefix. Regex: [\w]*[\_]*[\d]+
 /// * `is_file_transfer` - If the session is used for file transfer.
 /// * `is_port_forward` - If the session is used for port forward.
-pub fn session_add(id: &str, is_file_transfer: bool, is_port_forward: bool) -> ResultType<()> {
+pub fn session_add(
+    id: &str,
+    is_file_transfer: bool,
+    is_port_forward: bool,
+    switch_uuid: &str,
+) -> ResultType<()> {
     let session_id = get_session_id(id.to_owned());
     LocalConfig::set_remote_id(&session_id);
 
@@ -409,11 +425,17 @@ pub fn session_add(id: &str, is_file_transfer: bool, is_port_forward: bool) -> R
         ConnType::DEFAULT_CONN
     };
 
+    let switch_uuid = if switch_uuid.is_empty() {
+        None
+    } else {
+        Some(switch_uuid.to_string())
+    };
+
     session
         .lc
         .write()
         .unwrap()
-        .initialize(session_id, conn_type);
+        .initialize(session_id, conn_type, switch_uuid);
 
     if let Some(same_id_session) = SESSIONS.write().unwrap().insert(id.to_owned(), session) {
         same_id_session.close();
@@ -588,5 +610,19 @@ pub fn get_cur_session_id() -> String {
 pub fn set_cur_session_id(id: String) {
     if get_cur_session_id() != id {
         *CUR_SESSION_ID.write().unwrap() = id;
+    }
+}
+
+pub fn switch_sides(peer_id: &str, uuid: &Bytes) {
+    if let Some(stream) = GLOBAL_EVENT_STREAM.read().unwrap().get(APP_TYPE_MAIN) {
+        if let Ok(uuid) = uuid::Uuid::from_slice(uuid.to_vec().as_ref()) {
+            let uuid = uuid.to_string();
+            let data = HashMap::from([
+                ("name", "switch_sides"),
+                ("peer_id", peer_id),
+                ("uuid", &uuid),
+            ]);
+            stream.add(serde_json::ser::to_string(&data).unwrap_or("".into()));
+        }
     }
 }

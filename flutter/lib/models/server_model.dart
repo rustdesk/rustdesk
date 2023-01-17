@@ -601,6 +601,7 @@ class Client {
   bool restart = false;
   bool recording = false;
   bool disconnected = false;
+  bool fromSwitch = false;
 
   RxBool hasUnreadChatMessage = false.obs;
 
@@ -621,6 +622,7 @@ class Client {
     restart = json['restart'];
     recording = json['recording'];
     disconnected = json['disconnected'];
+    fromSwitch = json['from_switch'];
   }
 
   Map<String, dynamic> toJson() {
@@ -638,6 +640,7 @@ class Client {
     data['restart'] = restart;
     data['recording'] = recording;
     data['disconnected'] = disconnected;
+    data['from_switch'] = fromSwitch;
     return data;
   }
 

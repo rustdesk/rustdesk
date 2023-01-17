@@ -509,6 +509,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   List<MenuEntryBase<String>> _getControlMenu(BuildContext context) {
     final pi = widget.ffi.ffiModel.pi;
     final perms = widget.ffi.ffiModel.permissions;
+    final peer_version = widget.ffi.ffiModel.pi.version;
     const EdgeInsets padding = EdgeInsets.only(left: 14.0, right: 5.0);
     final List<MenuEntryBase<String>> displayMenu = [];
     displayMenu.addAll([
@@ -651,6 +652,18 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           dismissOnClicked: true,
         ));
       }
+      if (version_cmp(peer_version, '1.2.0') >= 0) {
+        displayMenu.add(MenuEntryButton<String>(
+          childBuilder: (TextStyle? style) => Text(
+            translate('Switch Sides'),
+            style: style,
+          ),
+          proc: () =>
+              showConfirmSwitchSidesDialog(widget.id, widget.ffi.dialogManager),
+          padding: padding,
+          dismissOnClicked: true,
+        ));
+      }
     }
 
     if (pi.version.isNotEmpty) {
@@ -721,6 +734,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   List<MenuEntryBase<String>> _getDisplayMenu(
       dynamic futureData, int remoteCount) {
     const EdgeInsets padding = EdgeInsets.only(left: 18.0, right: 8.0);
+    final peer_version = widget.ffi.ffiModel.pi.version;
     final displayMenu = [
       MenuEntryRadios<String>(
         text: translate('Ratio'),
@@ -880,9 +894,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             final fpsSlider = Offstage(
               offstage:
                   (await bind.mainIsUsingPublicServer() && direct != true) ||
-                      (await bind.versionToNumber(
-                              v: widget.ffi.ffiModel.pi.version) <
-                          await bind.versionToNumber(v: '1.2.0')),
+                      version_cmp(peer_version, '1.2.0') < 0,
               child: Row(
                 children: [
                   Obx((() => Slider(
@@ -1391,16 +1403,33 @@ void showAuditDialog(String id, dialogManager) async {
             focusNode: focusNode,
           )),
       actions: [
-        TextButton(
-          style: flatButtonStyle,
-          onPressed: close,
-          child: Text(translate('Cancel')),
-        ),
-        TextButton(
-          style: flatButtonStyle,
-          onPressed: submit,
-          child: Text(translate('OK')),
-        ),
+        dialogButton('Cancel', onPressed: close, isOutline: true),
+        dialogButton('OK', onPressed: submit)
+      ],
+      onSubmit: submit,
+      onCancel: close,
+    );
+  });
+}
+
+void showConfirmSwitchSidesDialog(
+    String id, OverlayDialogManager dialogManager) async {
+  dialogManager.show((setState, close) {
+    submit() async {
+      await bind.sessionSwitchSides(id: id);
+      closeConnection(id: id);
+    }
+
+    return CustomAlertDialog(
+      title: Text(translate('Switch Sides')),
+      content: Column(
+        children: [
+          Text(translate('Please confirm if you want to share your desktop?')),
+        ],
+      ),
+      actions: [
+        dialogButton('Cancel', onPressed: close, isOutline: true),
+        dialogButton('OK', onPressed: submit),
       ],
       onSubmit: submit,
       onCancel: close,

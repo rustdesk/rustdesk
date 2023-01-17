@@ -64,6 +64,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           key: ValueKey(peerId),
           id: peerId,
           menubarState: _menubarState,
+          switchUuid: params['switch_uuid'],
         ),
       ));
       _update_remote_count();
@@ -84,6 +85,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       if (call.method == "new_remote_desktop") {
         final args = jsonDecode(call.arguments);
         final id = args['id'];
+        final switchUuid = args['switch_uuid'];
         window_on_top(windowId());
         ConnectionTypeState.init(id);
         tabController.add(TabInfo(
@@ -96,6 +98,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             key: ValueKey(id),
             id: id,
             menubarState: _menubarState,
+            switchUuid: switchUuid,
           ),
         ));
       } else if (call.method == "onDestroy") {

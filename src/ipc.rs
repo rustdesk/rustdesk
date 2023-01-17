@@ -166,6 +166,7 @@ pub enum Data {
         file_transfer_enabled: bool,
         restart: bool,
         recording: bool,
+        from_switch: bool,
     },
     ChatMessage {
         text: String,
@@ -207,6 +208,7 @@ pub enum Data {
     Empty,
     Disconnected,
     DataPortableService(DataPortableService),
+    SwitchBack,
 }
 
 #[tokio::main(flavor = "current_thread")]
