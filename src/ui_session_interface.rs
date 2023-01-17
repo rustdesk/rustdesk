@@ -17,6 +17,7 @@ use hbb_common::{fs, get_version_number, log, Stream};
 use rdev::{Event, EventType::*};
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
+use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use uuid::Uuid;
@@ -619,17 +620,38 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::ElevateWithLogon(username, password));
     }
 
-    pub fn switch_sides(&self) {
-        let uuid = Uuid::new_v4();
-        crate::server::insert_switch_sides_uuid(self.id.clone(), uuid.clone());
-        let mut misc = Misc::new();
-        misc.set_switch_sides_request(SwitchSidesRequest {
-            uuid: Bytes::from(uuid.as_bytes().to_vec()),
-            ..Default::default()
-        });
-        let mut msg_out = Message::new();
-        msg_out.set_misc(misc);
-        self.send(Data::Message(msg_out));
+    #[tokio::main(flavor = "current_thread")]
+    pub async fn switch_sides(&self) {
+        match crate::ipc::connect(1000, "").await {
+            Ok(mut conn) => {
+                if conn
+                    .send(&crate::ipc::Data::SwitchSidesRequest(self.id.to_string()))
+                    .await
+                    .is_ok()
+                {
+                    if let Ok(Some(data)) = conn.next_timeout(1000).await {
+                        match data {
+                            crate::ipc::Data::SwitchSidesRequest(str_uuid) => {
+                                if let Ok(uuid) = Uuid::from_str(&str_uuid) {
+                                    let mut misc = Misc::new();
+                                    misc.set_switch_sides_request(SwitchSidesRequest {
+                                        uuid: Bytes::from(uuid.as_bytes().to_vec()),
+                                        ..Default::default()
+                                    });
+                                    let mut msg_out = Message::new();
+                                    msg_out.set_misc(misc);
+                                    self.send(Data::Message(msg_out));
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+            Err(err) => {
+                log::info!("server not started (will try to start): {}", err);
+            }
+        }
     }
 }
 

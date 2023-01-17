@@ -248,7 +248,7 @@ pub fn get_clients_length() -> usize {
 #[cfg(feature = "flutter")]
 pub fn switch_back(id: i32) {
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
-        allow_err!(client.tx.send(Data::SwitchBack));
+        allow_err!(client.tx.send(Data::SwitchSidesBack));
     };
 }
 

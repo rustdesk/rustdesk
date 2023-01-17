@@ -366,7 +366,7 @@ impl Connection {
                                 log::error!("Failed to start portable service from cm:{:?}", e);
                             }
                         }
-                        ipc::Data::SwitchBack => {
+                        ipc::Data::SwitchSidesBack => {
                             let mut misc = Misc::new();
                             misc.set_switch_back(SwitchBack::default());
                             let mut msg = Message::new();
@@ -1796,7 +1796,6 @@ impl Connection {
     }
 }
 
-#[cfg(feature = "flutter")]
 pub fn insert_switch_sides_uuid(id: String, uuid: uuid::Uuid) {
     SWITCH_SIDES_UUID
         .lock()
