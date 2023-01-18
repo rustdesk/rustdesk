@@ -208,10 +208,6 @@ impl UI {
         show_run_without_install()
     }
 
-    fn has_rendezvous_service(&self) -> bool {
-        has_rendezvous_service()
-    }
-
     fn get_license(&self) -> String {
         get_license()
     }
@@ -599,7 +595,6 @@ impl sciter::EventHandler for UI {
         fn peer_has_password(String);
         fn forget_password(String);
         fn set_peer_option(String, String, String);
-        fn has_rendezvous_service();
         fn get_license();
         fn test_if_valid_server(String);
         fn get_sound_inputs();
