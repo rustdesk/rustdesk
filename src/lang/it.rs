@@ -39,7 +39,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Change ID", "Cambia ID"),
         ("Website", "Sito web"),
         ("About", "Informazioni"),
-        ("Slogan_tip", ""),
+        ("Slogan_tip", "Fatta con il cuore in questo mondo caotico!"),
         ("Privacy Statement", ""),
         ("Mute", "Silenzia"),
         ("Audio Input", "Input audio"),
