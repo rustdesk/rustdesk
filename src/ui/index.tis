@@ -9,7 +9,6 @@ var app;
 var tmp = handler.get_connect_status();
 var connect_status = tmp[0];
 var service_stopped = handler.get_option("stop-service") == "Y";
-var rendezvous_service_stopped = false;
 var using_public_server = handler.using_public_server();
 var software_update_url = "";
 var key_confirmed = tmp[1];
@@ -467,8 +466,6 @@ class MyIdMenu: Reactor.Component {
             }, 240);
         } else if (me.id == "stop-service") {
             handler.set_option("stop-service", service_stopped ? "" : "Y");
-        } else if (me.id == "stop-rendezvous-service") {
-            handler.set_option("stop-rendezvous-service",  rendezvous_service_stopped ? "" : "Y");
         } else if (me.id == "change-id") {
             msgbox("custom-id", translate("Change ID"), "<div .form .set-password> \
             <div>" + translate('id_change_tip') + " </div> \
@@ -1119,11 +1116,6 @@ function checkConnectStatus() {
         if (tmp != service_stopped) {
             service_stopped = tmp;
             app.update();
-        }
-        tmp = !!handler.get_option("stop-rendezvous-service");
-        if (tmp != rendezvous_service_stopped) {
-            rendezvous_service_stopped = tmp;
-            myIdMenu.update();
         }
         tmp = handler.using_public_server();
         if (tmp != using_public_server) {

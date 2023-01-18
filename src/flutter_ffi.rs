@@ -619,10 +619,6 @@ pub fn main_discover() {
     discover();
 }
 
-pub fn main_has_rendezvous_service() -> bool {
-    has_rendezvous_service()
-}
-
 pub fn main_get_api_server() -> String {
     get_api_server()
 }
