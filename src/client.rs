@@ -182,7 +182,7 @@ impl Client {
             ));
         }
         // Allow connect to {hostname}:{port}
-        if hbb_common.is_hostname_port_str(peer) {
+        if hbb_common::is_hostname_port_str(peer) {
             return Ok((
                 socket_client::connect_tcp(
                     peer,
