@@ -1041,7 +1041,7 @@ jobs:
             esac
             python3 ./build.py --flutter --hwcodec --skip-cargo
             # rpm package
-            echo -e "start packaging"
+            echo -e "start packaging fedora package"
             pushd /workspace
             case ${{ matrix.job.arch }} in
               armv7)
@@ -1057,6 +1057,24 @@ jobs:
             mkdir -p /opt/artifacts/rpm
             for name in rustdesk*??.rpm; do
                 mv "$name" "/opt/artifacts/rpm/${name%%.rpm}-fedora28-centos8.rpm" 
+            done
+            # rpm suse package
+            echo -e "start packaging suse package"
+            pushd /workspace
+            case ${{ matrix.job.arch }} in
+              armv7)
+                sed -i "s/64bit/32bit/g" ./res/rpm-flutter-suse.spec
+                sed -i "s/linux\/x64/linux\/arm/g" ./res/rpm-flutter-suse.spec
+                ;;
+              aarch64)
+                sed -i "s/linux\/x64/linux\/arm64/g" ./res/rpm-flutter-suse.spec
+                ;;
+            esac
+            HBB=`pwd` rpmbuild ./res/rpm-flutter.spec -bb
+            pushd ~/rpmbuild/RPMS/${{ matrix.job.arch }}
+            mkdir -p /opt/artifacts/rpm
+            for name in rustdesk*??.rpm; do
+                mv "$name" "/opt/artifacts/rpm/${name%%.rpm}-suse.rpm" 
             done
 
       - name: Rename rustdesk
@@ -1263,6 +1281,19 @@ jobs:
             mkdir -p /opt/artifacts/rpm
             for name in rustdesk*??.rpm; do
                 mv "$name" "/opt/artifacts/rpm/${name%%.rpm}-fedora28-centos8.rpm" 
+            done
+            # rpm suse package
+            pushd /workspace
+            case ${{ matrix.job.arch }} in
+              armv7)
+                sed -i "s/64bit/32bit/g" ./res/rpm-flutter-suse.spec
+                ;;
+            esac
+            HBB=`pwd` rpmbuild ./res/rpm-flutter-suse.spec -bb
+            pushd ~/rpmbuild/RPMS/${{ matrix.job.arch }}
+            mkdir -p /opt/artifacts/rpm
+            for name in rustdesk*??.rpm; do
+                mv "$name" "/opt/artifacts/rpm/${name%%.rpm}-suse.rpm" 
             done
 
       - name: Rename rustdesk
