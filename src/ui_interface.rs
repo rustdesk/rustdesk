@@ -243,7 +243,11 @@ pub fn set_peer_option(id: String, name: String, value: String) {
 
 #[inline]
 pub fn using_public_server() -> bool {
-    crate::get_custom_rendezvous_server(get_option_("custom-rendezvous-server")).is_empty()
+    if hbb_common::config::RS_PUB_KEY == hbb_common::config::RS_DEF_PUB_KEY {
+        return true
+    } else {
+        return false
+    }
 }
 
 #[inline]
