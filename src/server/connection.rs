@@ -102,6 +102,7 @@ pub struct Connection {
     last_recv_time: Arc<Mutex<Instant>>,
     chat_unanswered: bool,
     close_manually: bool,
+    #[allow(unused)]
     elevation_requested: bool,
     from_switch: bool,
 }
@@ -1547,7 +1548,7 @@ impl Connection {
                                 self.send(msg).await;
                             }
                         }
-                        Some(elevation_request::Union::Logon(r)) => {
+                        Some(elevation_request::Union::Logon(_r)) => {
                             #[cfg(windows)]
                             {
                                 let mut err = "No need to elevate".to_string();
@@ -1556,7 +1557,8 @@ impl Connection {
                                 {
                                     use crate::portable_service::client;
                                     err = client::start_portable_service(client::StartPara::Logon(
-                                        r.username, r.password,
+                                        _r.username,
+                                        _r.password,
                                     ))
                                     .err()
                                     .map_or("".to_string(), |e| e.to_string());

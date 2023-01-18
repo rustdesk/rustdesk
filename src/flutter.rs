@@ -1,6 +1,5 @@
 use crate::ui_session_interface::{io_loop, InvokeUiSession, Session};
 use crate::{client::*, flutter_ffi::EventToUI};
-use bytes::Bytes;
 use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
 use hbb_common::{
     bail, config::LocalConfig, get_version_number, message_proto::*, rendezvous_proto::ConnType,

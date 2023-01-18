@@ -1261,23 +1261,28 @@ StreamSubscription? listenUniLinks() {
 
 /// Returns true if we successfully handle the startup arguments.
 bool checkArguments() {
+  // bootArgs:[--connect, 362587269, --switch_uuid, e3d531cc-5dce-41e0-bd06-5d4a2b1eec05]
   // check connect args
   final connectIndex = bootArgs.indexOf("--connect");
   if (connectIndex == -1) {
     return false;
   }
-  String? arg =
+  String? id =
       bootArgs.length < connectIndex + 1 ? null : bootArgs[connectIndex + 1];
-  if (arg != null) {
-    if (arg.startsWith(kUniLinksPrefix)) {
-      return parseRustdeskUri(arg);
+  final switchUuidIndex = bootArgs.indexOf("--switch_uuid");
+  String? switchUuid = bootArgs.length < switchUuidIndex + 1
+      ? null
+      : bootArgs[switchUuidIndex + 1];
+  if (id != null) {
+    if (id.startsWith(kUniLinksPrefix)) {
+      return parseRustdeskUri(id);
     } else {
       // remove "--connect xxx" in the `bootArgs` array
       bootArgs.removeAt(connectIndex);
       bootArgs.removeAt(connectIndex);
       // fallback to peer id
       Future.delayed(Duration.zero, () {
-        rustDeskWinManager.newRemoteDesktop(arg);
+        rustDeskWinManager.newRemoteDesktop(id, switch_uuid: switchUuid);
       });
       return true;
     }

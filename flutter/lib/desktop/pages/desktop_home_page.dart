@@ -544,7 +544,7 @@ void setPasswordDialog() async {
   final p1 = TextEditingController(text: pw);
   var errMsg0 = "";
   var errMsg1 = "";
-  final RxString rxPass = p0.text.obs;
+  final RxString rxPass = pw.trim().obs;
   final rules = [
     DigitValidationRule(),
     UppercaseValidationRule(),
@@ -603,7 +603,7 @@ void setPasswordDialog() async {
                     controller: p0,
                     focusNode: FocusNode()..requestFocus(),
                     onChanged: (value) {
-                      rxPass.value = value;
+                      rxPass.value = value.trim();
                     },
                   ),
                 ),
