@@ -321,6 +321,18 @@ pub fn is_ip_str(id: &str) -> bool {
     is_ipv4_str(id) || is_ipv6_str(id)
 }
 
+#[inline]
+pub fn is_domain_port_str(id: &str) -> bool {
+    // modified regex for RFC1123 hostname. check https://stackoverflow.com/a/106223 for original version for hostname.
+    // according to [TLD List](https://data.iana.org/TLD/tlds-alpha-by-domain.txt) version 2023011700,
+    // there is no digits in TLD, and length is 2~63.
+    regex::Regex::new(
+        r"(?i)^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z-]{0,61}[a-z]:\d{1,5}$",
+    )
+    .unwrap()
+    .is_match(id)
+}
+
 #[cfg(test)]
 mod test_lib {
     use super::*;
@@ -339,5 +351,26 @@ mod test_lib {
         assert_eq!(is_ipv6_str("[1:2::0]:1"), true);
         assert_eq!(is_ipv6_str("[1:2::0]:"), false);
         assert_eq!(is_ipv6_str("1:2::0]:1"), false);
+    }
+
+    #[test]
+    fn test_hostname_port() {
+        assert_eq!(is_domain_port_str("a:12"), false);
+        assert_eq!(is_domain_port_str("a.b.c:12"), false);
+        assert_eq!(is_domain_port_str("test.com:12"), true);
+        assert_eq!(is_domain_port_str("test-UPPER.com:12"), true);
+        assert_eq!(is_domain_port_str("some-other.domain.com:12"), true);
+        assert_eq!(is_domain_port_str("under_score:12"), false);
+        assert_eq!(is_domain_port_str("a@bc:12"), false);
+        assert_eq!(is_domain_port_str("1.1.1.1:12"), false);
+        assert_eq!(is_domain_port_str("1.2.3:12"), false);
+        assert_eq!(is_domain_port_str("1.2.3.45:12"), false);
+        assert_eq!(is_domain_port_str("a.b.c:123456"), false);
+        assert_eq!(is_domain_port_str("---:12"), false);
+        assert_eq!(is_domain_port_str(".:12"), false);
+        // todo: should we also check for these edge cases?
+        // out-of-range port
+        assert_eq!(is_domain_port_str("test.com:0"), true);
+        assert_eq!(is_domain_port_str("test.com:98989"), true);
     }
 }

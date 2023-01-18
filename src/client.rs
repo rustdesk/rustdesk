@@ -7,10 +7,10 @@ use cpal::{
 use magnum_opus::{Channels::*, Decoder as AudioDecoder};
 use sha2::{Digest, Sha256};
 use std::{
-    str::FromStr,
     collections::HashMap,
     net::SocketAddr,
     ops::{Deref, Not},
+    str::FromStr,
     sync::{atomic::AtomicBool, mpsc, Arc, Mutex, RwLock},
 };
 use uuid::Uuid;
@@ -178,6 +178,13 @@ impl Client {
                     RENDEZVOUS_TIMEOUT,
                 )
                 .await?,
+                true,
+            ));
+        }
+        // Allow connect to {domain}:{port}
+        if hbb_common::is_domain_port_str(peer) {
+            return Ok((
+                socket_client::connect_tcp(peer, RENDEZVOUS_TIMEOUT).await?,
                 true,
             ));
         }
