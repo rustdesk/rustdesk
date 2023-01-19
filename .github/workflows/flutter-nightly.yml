@@ -15,6 +15,9 @@ env:
   # for multiarch gcc compatibility
   VCPKG_COMMIT_ID: "14e7bb4ae24616ec54ff6b2f6ef4e8659434ea44"
   VERSION: "1.2.0"
+  #signing keys
+  ANDROID_SIGNING_KEY: '${{ secrets.ANDROID_SIGNING_KEY }}'
+  MACOS_P12_BASE64: '${{ secrets.MACOS_P12_BASE64 }}'
   # To make a custom build with your own servers set the below secret values
   RS_PUB_KEY: '${{ secrets.RS_PUB_KEY }}'
   RENDEZVOUS_SERVER: '${{ secrets.RENDEZVOUS_SERVER }}'
