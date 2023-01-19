@@ -15,6 +15,10 @@ env:
   # for multiarch gcc compatibility
   VCPKG_COMMIT_ID: "14e7bb4ae24616ec54ff6b2f6ef4e8659434ea44"
   VERSION: "1.2.0"
+  #signing keys env variable checks
+  ANDROID_SIGNING_KEY: '${{ secrets.ANDROID_SIGNING_KEY }}'
+  MACOS_P12_BASE64: '${{ secrets.MACOS_P12_BASE64 }}'
+  # To make a custom build with your own servers set the below secret values
   RS_PUB_KEY: '${{ secrets.RS_PUB_KEY }}'
   RENDEZVOUS_SERVER: '${{ secrets.RENDEZVOUS_SERVER }}'
 
@@ -152,6 +156,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Import the codesign cert
+        if: env.MACOS_P12_BASE64 != null
         uses: apple-actions/import-codesign-certs@v1
         with: 
           p12-file-base64: ${{ secrets.MACOS_P12_BASE64 }}
@@ -159,11 +164,13 @@ jobs:
           keychain: rustdesk
       
       - name: Check sign and import sign key
+        if: env.MACOS_P12_BASE64 != null
         run: |
           security default-keychain -s rustdesk.keychain
           security find-identity -v
 
       - name: Import notarize key
+        if: env.MACOS_P12_BASE64 != null
         uses: timheuer/base64-to-file@v1.2
         with:
           # https://gregoryszorc.com/docs/apple-codesign/stable/apple_codesign_rcodesign.html#notarizing-and-stapling
@@ -172,6 +179,7 @@ jobs:
           encodedString: ${{ secrets.MACOS_NOTARIZE_JSON }}
           
       - name: Install rcodesign tool
+        if: env.MACOS_P12_BASE64 != null
         shell: bash
         run: | 
           pushd /tmp
@@ -242,6 +250,7 @@ jobs:
           ./build.py --flutter ${{ matrix.job.extra-build-args }}
 
       - name: Codesign app and create signed dmg
+        if: env.MACOS_P12_BASE64 != null
         run: |
           security default-keychain -s rustdesk.keychain
           security unlock-keychain -p ${{ secrets.MACOS_P12_PASSWORD }} rustdesk.keychain
@@ -554,6 +563,7 @@ jobs:
       
       - uses: r0adkll/sign-android-release@v1
         name: Sign app APK
+        if: env.ANDROID_SIGNING_KEY != null
         id: sign-rustdesk
         with:
           releaseDirectory: ./signed-apk
@@ -566,18 +576,29 @@ jobs:
           BUILD_TOOLS_VERSION: "30.0.2"
 
       - name: Upload Artifacts
+        if: env.ANDROID_SIGNING_KEY != null
         uses: actions/upload-artifact@master
         with:
           name: rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release-signed.apk
           path: ${{steps.sign-rustdesk.outputs.signedReleaseFile}}
 
-      - name: Publish apk package
+      - name: Publish signed apk package
+        if: env.ANDROID_SIGNING_KEY != null
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
             ${{steps.sign-rustdesk.outputs.signedReleaseFile}}
+
+      - name: Publish unsigned apk package
+        if: env.ANDROID_SIGNING_KEY == null
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            ../rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk
 
   build-rustdesk-lib-linux-amd64:
     needs: [generate-bridge-linux, build-vcpkg-deps-linux]
