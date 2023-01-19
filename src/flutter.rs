@@ -39,6 +39,15 @@ pub extern "C" fn rustdesk_core_main() -> bool {
     false
 }
 
+#[cfg(target_os = "macos")]
+#[no_mangle]
+pub extern "C" fn handle_applicationShouldOpenUntitledFile() {
+    hbb_common::log::debug!("icon clicked on finder");
+    if std::env::args().nth(1) == Some("--server".to_owned()) {
+        crate::platform::macos::check_main_window();
+    }
+}
+
 #[cfg(windows)]
 #[no_mangle]
 pub extern "C" fn rustdesk_core_main_args(args_len: *mut c_int) -> *mut *mut c_char {

@@ -556,3 +556,23 @@ pub fn hide_dock() {
         NSApp().setActivationPolicy_(NSApplicationActivationPolicyAccessory);
     }
 }
+
+pub fn check_main_window() {
+    use sysinfo::{ProcessExt, System, SystemExt};
+    let mut sys = System::new();
+    sys.refresh_processes();
+    let app = format!("/Applications/{}.app", crate::get_app_name());
+    let my_uid = sys
+        .process((std::process::id() as i32).into())
+        .map(|x| x.user_id())
+        .unwrap_or_default();
+    for (_, p) in sys.processes().iter() {
+        if p.cmd().len() == 1 && p.user_id() == my_uid && p.cmd()[0].contains(&app) {
+            return;
+        }
+    }
+    std::process::Command::new("open")
+        .args(["-n", &app])
+        .status()
+        .ok();
+}

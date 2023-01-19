@@ -7,4 +7,9 @@ class AppDelegate: FlutterAppDelegate {
       dummy_method_to_enforce_bundling()
     return true
   }
+    
+    override func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool {
+        handle_applicationShouldOpenUntitledFile();
+        return true
+    }
 }
