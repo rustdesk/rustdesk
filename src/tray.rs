@@ -216,6 +216,7 @@ pub fn make_tray() {
         dark_light::Mode::Dark => {
             // still show big overflow icon in my test, so still use x1 png.
             // let's do it with objc with svg support later.
+            // or use another tray crate, or find out in tauri (it has tray support)
             if f > 2. {
                 "mac-tray-light-x2.png"
             } else {
