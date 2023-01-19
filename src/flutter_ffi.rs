@@ -1119,6 +1119,10 @@ pub fn query_onlines(ids: Vec<String>) {
     crate::rendezvous_mediator::query_online_states(ids, handle_query_onlines)
 }
 
+pub fn version_to_number(v: String) -> SyncReturn<i64> {
+    SyncReturn(hbb_common::get_version_number(&v))
+}
+
 pub fn option_synced() -> bool {
     crate::ui_interface::option_synced()
 }

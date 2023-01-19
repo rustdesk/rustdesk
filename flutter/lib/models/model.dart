@@ -1316,14 +1316,14 @@ class FFI {
     final cb = ffiModel.startEventListener(id);
     () async {
       await for (final message in stream) {
-        if (message is Event) {
+        if (message is EventToUI_Event) {
           try {
             Map<String, dynamic> event = json.decode(message.field0);
             await cb(event);
           } catch (e) {
             debugPrint('json.decode fail1(): $e, ${message.field0}');
           }
-        } else if (message is Rgba) {
+        } else if (message is EventToUI_Rgba) {
           imageModel.onRgba(message.field0);
         }
       }
