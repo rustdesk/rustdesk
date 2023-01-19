@@ -156,7 +156,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Import the codesign cert
-        if: env.MACOS_P12_BASE64 != null
+        if: secrets.MACOS_P12_BASE64 != null
         uses: apple-actions/import-codesign-certs@v1
         with: 
           p12-file-base64: ${{ secrets.MACOS_P12_BASE64 }}
