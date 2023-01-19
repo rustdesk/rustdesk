@@ -563,7 +563,7 @@ jobs:
       
       - uses: r0adkll/sign-android-release@v1
         name: Sign app APK
-        if: ${{ env.ANDROID_SIGNING_KEY== 'true' }}
+        if: env.ANDROID_SIGNING_KEY != null
         id: sign-rustdesk
         with:
           releaseDirectory: ./signed-apk
@@ -576,14 +576,14 @@ jobs:
           BUILD_TOOLS_VERSION: "30.0.2"
 
       - name: Upload Artifacts
-        if: ${{ env.ANDROID_SIGNING_KEY== 'true' }}
+        if: env.ANDROID_SIGNING_KEY != null
         uses: actions/upload-artifact@master
         with:
           name: rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release-signed.apk
           path: ${{steps.sign-rustdesk.outputs.signedReleaseFile}}
 
       - name: Publish signed apk package
-        if: ${{ env.ANDROID_SIGNING_KEY== 'true' }}
+        if: env.ANDROID_SIGNING_KEY != null
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
@@ -592,7 +592,7 @@ jobs:
             ${{steps.sign-rustdesk.outputs.signedReleaseFile}}
 
       - name: Publish unsigned apk package
-        if: ${{ env.ANDROID_SIGNING_KEY!= 'true' }}
+        if: env.ANDROID_SIGNING_KEY != null
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
