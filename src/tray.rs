@@ -215,6 +215,7 @@ pub fn make_tray() {
     let icon_path = match mode {
         dark_light::Mode::Dark => {
             // still show big overflow icon in my test, so still use x1 png.
+            // let's do it with objc with svg support later.
             if f > 2. {
                 "mac-tray-light-x2.png"
             } else {
