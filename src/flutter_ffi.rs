@@ -319,7 +319,6 @@ pub fn session_enter_or_leave(id: String, enter: bool) {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
         if enter {
-            crate::keyboard::set_cur_session(session.clone());
             session.enter();
         } else {
             session.leave();

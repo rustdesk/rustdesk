@@ -577,6 +577,7 @@ pub fn is_installed_daemon(_prompt: bool) -> bool {
 }
 
 #[inline]
+#[cfg(feature = "flutter")]
 pub fn is_can_input_monitoring(_prompt: bool) -> bool {
     #[cfg(target_os = "macos")]
     return crate::platform::macos::is_can_input_monitoring(_prompt);
