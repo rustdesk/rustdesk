@@ -600,7 +600,7 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            ./rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk
+            signed-apk/rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk
 
   build-rustdesk-lib-linux-amd64:
     needs: [generate-bridge-linux, build-vcpkg-deps-linux]
