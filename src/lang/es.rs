@@ -57,7 +57,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Not available", "No disponible"),
         ("Too frequent", "Demasiado frecuente"),
         ("Cancel", "Cancelar"),
-        ("Skip", "Saltar"),
+        ("Skip", "Omitir"),
         ("Close", "Cerrar"),
         ("Retry", "Reintentar"),
         ("OK", ""),
