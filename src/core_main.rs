@@ -322,7 +322,7 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
             "RustDesk",
             (WM_USER + 2) as _, // referred from unilinks desktop pub
             uni_links.as_str(),
-            true,
+            false,
         );
         return if res { None } else { Some(Vec::new()) };
     }

@@ -1310,7 +1310,7 @@ bool callUniLinksUriHandler(Uri uri) {
     Future.delayed(Duration.zero, () {
       rustDeskWinManager.newRemoteDesktop(peerId);
     });
-    return true;
+    return false;
   }
   return false;
 }
