@@ -560,8 +560,6 @@ jobs:
           popd
           mkdir -p signed-apk; pushd signed-apk
           mv ../rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk .
-          pwd
-          ls
       
       - uses: r0adkll/sign-android-release@v1
         name: Sign app APK
