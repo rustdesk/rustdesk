@@ -4,7 +4,7 @@ use crate::client::{
     input_os_password, load_config, send_mouse, start_video_audio_threads, FileManager, Key,
     LoginConfigHandler, QualityStatus, KEY_MAP,
 };
-use crate::common::{self, is_keyboard_mode_supported, GrabState};
+use crate::common::{self, GrabState};
 use crate::keyboard;
 use crate::{client::Data, client::Interface};
 use async_trait::async_trait;
@@ -780,10 +780,10 @@ impl<T: InvokeUiSession> Interface for Session<T> {
 
 impl<T: InvokeUiSession> Session<T> {
     pub fn lock_screen(&self) {
-        crate::keyboard::client::lock_screen();
+        self.send_key_event(&crate::keyboard::client::event_lock_screen());
     }
     pub fn ctrl_alt_del(&self) {
-        crate::keyboard::client::ctrl_alt_del();
+        self.send_key_event(&crate::keyboard::client::event_ctrl_alt_del());
     }
 }
 

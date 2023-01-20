@@ -2,10 +2,9 @@
 use crate::client::get_key_state;
 use crate::common::GrabState;
 #[cfg(feature = "flutter")]
-use crate::flutter::FlutterHandler;
+use crate::flutter::{CUR_SESSION_ID, SESSIONS};
 #[cfg(not(any(feature = "flutter", feature = "cli")))]
-use crate::ui::remote::SciterHandler;
-use crate::ui_session_interface::Session;
+use crate::ui::CUR_SESSION;
 use hbb_common::{log, message_proto::*};
 use rdev::{Event, EventType, Key};
 #[cfg(any(target_os = "windows", target_os = "macos"))]
@@ -21,16 +20,6 @@ static mut IS_ALT_GR: bool = false;
 
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
-
-#[cfg(feature = "flutter")]
-lazy_static::lazy_static! {
-    static ref CUR_SESSION: Arc<Mutex<Option<Session<FlutterHandler>>>> = Default::default();
-}
-
-#[cfg(not(any(feature = "flutter", feature = "cli")))]
-lazy_static::lazy_static! {
-    static ref CUR_SESSION: Arc<Mutex<Option<Session<SciterHandler>>>> = Default::default();
-}
 
 lazy_static::lazy_static! {
     static ref TO_RELEASE: Arc<Mutex<HashSet<Key>>> = Arc::new(Mutex::new(HashSet::<Key>::new()));
@@ -48,23 +37,21 @@ lazy_static::lazy_static! {
     };
 }
 
-#[cfg(feature = "flutter")]
-pub fn set_cur_session(session: Session<FlutterHandler>) {
-    *CUR_SESSION.lock().unwrap() = Some(session);
-}
-
-#[cfg(not(any(feature = "flutter", feature = "cli")))]
-pub fn set_cur_session(session: Session<SciterHandler>) {
-    *CUR_SESSION.lock().unwrap() = Some(session);
-}
-
 pub mod client {
     use super::*;
 
     pub fn get_keyboard_mode() -> String {
-        #[cfg(not(feature = "cli"))]
-        if let Some(handler) = CUR_SESSION.lock().unwrap().as_ref() {
-            return handler.get_keyboard_mode();
+        #[cfg(not(any(feature = "flutter", feature = "cli")))]
+        if let Some(session) = CUR_SESSION.lock().unwrap().as_ref() {
+            return session.get_keyboard_mode();
+        }
+        #[cfg(feature = "flutter")]
+        if let Some(session) = SESSIONS
+            .read()
+            .unwrap()
+            .get(&*CUR_SESSION_ID.read().unwrap())
+        {
+            return session.get_keyboard_mode();
         }
         "legacy".to_string()
     }
@@ -164,15 +151,20 @@ pub mod client {
         }
     }
 
-    pub fn lock_screen() {
+    pub fn event_lock_screen() -> KeyEvent {
         let mut key_event = KeyEvent::new();
         key_event.set_control_key(ControlKey::LockScreen);
         key_event.down = true;
         key_event.mode = KeyboardMode::Legacy.into();
-        send_key_event(&key_event);
+        key_event
     }
 
-    pub fn ctrl_alt_del() {
+    #[inline]
+    pub fn lock_screen() {
+        send_key_event(&event_lock_screen());
+    }
+
+    pub fn event_ctrl_alt_del() -> KeyEvent {
         let mut key_event = KeyEvent::new();
         if get_peer_platform() == "Windows" {
             key_event.set_control_key(ControlKey::CtrlAltDel);
@@ -183,7 +175,12 @@ pub mod client {
             key_event.press = true;
         }
         key_event.mode = KeyboardMode::Legacy.into();
-        send_key_event(&key_event);
+        key_event
+    }
+
+    #[inline]
+    pub fn ctrl_alt_del() {
+        send_key_event(&event_ctrl_alt_del());
     }
 }
 
@@ -254,6 +251,8 @@ pub fn release_remote_keys() {
     for key in to_release {
         let event_type = EventType::KeyRelease(key);
         let event = event_type_to_event(event_type);
+        // to-do: BUG
+        // Release events should be sent to the corresponding sessions, instead of current session.
         client::process_event(&event, None);
     }
 }
@@ -382,16 +381,32 @@ pub fn event_type_to_event(event_type: EventType) -> Event {
 }
 
 pub fn send_key_event(key_event: &KeyEvent) {
-    #[cfg(not(feature = "cli"))]
-    if let Some(handler) = CUR_SESSION.lock().unwrap().as_ref() {
-        handler.send_key_event(key_event);
+    #[cfg(not(any(feature = "flutter", feature = "cli")))]
+    if let Some(session) = CUR_SESSION.lock().unwrap().as_ref() {
+        session.send_key_event(key_event);
+    }
+    #[cfg(feature = "flutter")]
+    if let Some(session) = SESSIONS
+        .read()
+        .unwrap()
+        .get(&*CUR_SESSION_ID.read().unwrap())
+    {
+        session.send_key_event(key_event);
     }
 }
 
 pub fn get_peer_platform() -> String {
-    #[cfg(not(feature = "cli"))]
-    if let Some(handler) = CUR_SESSION.lock().unwrap().as_ref() {
-        return handler.peer_platform();
+    #[cfg(not(any(feature = "flutter", feature = "cli")))]
+    if let Some(session) = CUR_SESSION.lock().unwrap().as_ref() {
+        return session.peer_platform();
+    }
+    #[cfg(feature = "flutter")]
+    if let Some(session) = SESSIONS
+        .read()
+        .unwrap()
+        .get(&*CUR_SESSION_ID.read().unwrap())
+    {
+        return session.peer_platform();
     }
     "Windows".to_string()
 }
