@@ -52,18 +52,20 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   free_c_args(c_args, args_len);
 
   // uni links dispatch
-  // only do uni links when dispatch a rustdesk links
-  auto prefix = std::string(uniLinksPrefix);
-  if (!command_line_arguments.empty() && command_line_arguments.front().compare(0, prefix.size(), prefix.c_str()) == 0) {
-     HWND hwnd = ::FindWindow(_T("FLUTTER_RUNNER_WIN32_WINDOW"), _T("RustDesk"));
-    if (hwnd != NULL) {
+  HWND hwnd = ::FindWindow(_T("FLUTTER_RUNNER_WIN32_WINDOW"), _T("RustDesk"));
+  if (hwnd != NULL) {
+    if (!command_line_arguments.empty()) {
+      // Dispatch command line arguments
       DispatchToUniLinksDesktop(hwnd);
-
+    } else {
+      // Not called with arguments, or just open the app shortcut on desktop. 
+      // So we just show the main window instead.
       ::ShowWindow(hwnd, SW_NORMAL);
       ::SetForegroundWindow(hwnd);
-      return EXIT_FAILURE;
     }
+    return EXIT_FAILURE;
   }
+  
   // Attach to console when present (e.g., 'flutter run') or create a
   // new console when running with a debugger.
   if (!::AttachConsole(ATTACH_PARENT_PROCESS) && ::IsDebuggerPresent())
