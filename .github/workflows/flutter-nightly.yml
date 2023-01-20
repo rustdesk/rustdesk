@@ -560,6 +560,8 @@ jobs:
           popd
           mkdir -p signed-apk; pushd signed-apk
           mv ../rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk .
+          pwd
+          ls
       
       - uses: r0adkll/sign-android-release@v1
         name: Sign app APK
@@ -599,6 +601,9 @@ jobs:
           tag_name: ${{ env.TAG_NAME }}
           files: |
             ../rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk
+        run: |
+          pwd
+          ls
 
   build-rustdesk-lib-linux-amd64:
     needs: [generate-bridge-linux, build-vcpkg-deps-linux]
