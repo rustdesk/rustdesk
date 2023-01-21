@@ -145,7 +145,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Configure", "Konfigurieren"),
         ("config_acc", "Um Ihren PC aus der Ferne zu steuern, müssen Sie RustDesk Zugriffsrechte erteilen."),
         ("config_screen", "Um aus der Ferne auf Ihren PC zugreifen zu können, müssen Sie RustDesk die Berechtigung \"Bildschirmaufnahme\" erteilen."),
-        ("Installing ...", "Installiere..."),
+        ("Installing ...", "Installieren..."),
         ("Install", "Installieren"),
         ("Installation", "Installation"),
         ("Installation Path", "Installationspfad"),
@@ -201,7 +201,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("x11 expected", "X11 erwartet"),
         ("Port", "Port"),
         ("Settings", "Einstellungen"),
-        ("Username", " Benutzername"),
+        ("Username", "Benutzername"),
         ("Invalid port", "Ungültiger Port"),
         ("Closed manually by the peer", "Von der Gegenstelle manuell geschlossen"),
         ("Enable remote configuration modification", "Änderung der Konfiguration aus der Ferne zulassen"),
@@ -431,7 +431,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Weak", "Schwach"),
         ("Medium", "Mittel"),
         ("Strong", "Stark"),
-        ("Switch Sides", ""),
-        ("Please confirm if you want to share your desktop?", ""),
+        ("Switch Sides", "Seiten wechseln"),
+        ("Please confirm if you want to share your desktop?", "Bitte bestätigen Sie, ob Sie Ihren Desktop freigeben möchten."),
     ].iter().cloned().collect();
 }
