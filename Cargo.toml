@@ -61,7 +61,7 @@ num_cpus = "1.13"
 bytes = { version = "1.2", features = ["serde"] }
 default-net = { git = "https://github.com/Kingtous/default-net" }
 wol-rs = "0.9.1"
-flutter_rust_bridge = { git = "https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge", optional = true }
+flutter_rust_bridge = { version = "1.61.1", optional = true }
 errno = "0.2.8"
 rdev = { git = "https://github.com/fufesou/rdev" }
 url = { version = "2.1", features = ["serde"] }
@@ -126,7 +126,7 @@ android_logger = "0.11"
 jni = "0.19"
 
 [target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
-flutter_rust_bridge = { git = "https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge" }
+flutter_rust_bridge = "1.61.1"
 
 [workspace]
 members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/virtual_display/dylib", "libs/simple_rc", "libs/portable"]
@@ -144,7 +144,7 @@ winapi = { version = "0.3", features = [ "winnt" ] }
 cc = "1.0"
 hbb_common = { path = "libs/hbb_common" }
 simple_rc = { path = "libs/simple_rc", optional = true }
-flutter_rust_bridge_codegen = { git = "https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge" }
+flutter_rust_bridge_codegen = "1.61.1"
 
 [dev-dependencies]
 hound = "3.5"

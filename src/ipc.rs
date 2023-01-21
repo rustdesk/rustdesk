@@ -166,6 +166,7 @@ pub enum Data {
         file_transfer_enabled: bool,
         restart: bool,
         recording: bool,
+        from_switch: bool,
     },
     ChatMessage {
         text: String,
@@ -207,6 +208,8 @@ pub enum Data {
     Empty,
     Disconnected,
     DataPortableService(DataPortableService),
+    SwitchSidesRequest(String),
+    SwitchSidesBack,
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -426,6 +429,15 @@ async fn handle(data: Data, stream: &mut Connection) {
         }
         Data::TestRendezvousServer => {
             crate::test_rendezvous_server();
+        }
+        Data::SwitchSidesRequest(id) => {
+            let uuid = uuid::Uuid::new_v4();
+            crate::server::insert_switch_sides_uuid(id, uuid.clone());
+            allow_err!(
+                stream
+                    .send(&Data::SwitchSidesRequest(uuid.to_string()))
+                    .await
+            );
         }
         _ => {}
     }

@@ -72,12 +72,7 @@ jobs:
 
       - name: Install flutter rust bridge deps
         run: |
-          dart pub global activate ffigen --version 5.0.1
-          $exists = Test-Path ~/.cargo/bin/flutter_rust_bridge_codegen.exe
-          Push-Location ..
-          git clone https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge --depth=1
-          Push-Location flutter_rust_bridge/frb_codegen ; cargo install --path . ; Pop-Location
-          Pop-Location
+          cargo install flutter_rust_bridge_codegen
           Push-Location flutter ; flutter pub get ; Pop-Location
           ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart
 
@@ -213,14 +208,7 @@ jobs:
       - name: Install flutter rust bridge deps
         shell: bash
         run: |
-          dart pub global activate ffigen --version 5.0.1
-          # flutter_rust_bridge
-          pushd /tmp
-            wget https://github.com/Kingtous/flutter_rust_bridge/releases/download/1.32.0-rustdesk/flutter_rust_bridge_codegen-x86_64-darwin.tgz
-            tar -zxvf flutter_rust_bridge_codegen-x86_64-darwin.tgz
-            mkdir -p ~/.cargo/bin
-            mv flutter_rust_bridge_codegen ~/.cargo/bin; chmod +x ~/.cargo/bin/flutter_rust_bridge_codegen
-          popd
+          cargo install flutter_rust_bridge_codegen
           pushd flutter && flutter pub get && popd
           ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart
 
@@ -414,15 +402,10 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
-      - name: Install ffigen
-        run: |
-          dart pub global activate ffigen --version 5.0.1
-
       - name: Install flutter rust bridge deps
         shell: bash
         run: |
-          pushd /tmp && git clone https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge --depth=1 || true && popd
-          pushd /tmp/flutter_rust_bridge/frb_codegen && cargo install --path . && popd
+          cargo install flutter_rust_bridge_codegen
           pushd flutter && flutter pub get && popd
 
       - name: Run flutter rust bridge
@@ -435,6 +418,7 @@ jobs:
           name: bridge-artifact
           path: |
             ./src/bridge_generated.rs
+            ./src/bridge_generated.io.rs
             ./flutter/lib/generated_bridge.dart 
             ./flutter/lib/generated_bridge.freezed.dart
 

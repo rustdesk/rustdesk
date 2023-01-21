@@ -784,12 +784,14 @@ extern "C" fn breakdown_signal_handler(sig: i32) {
         sig,
         stack.join("\n").to_string()
     );
-    system_message(
-        "RustDesk",
-        &format!("Got signal {} and exit.{}", sig, info),
-        true,
-    )
-    .ok();
+    if !info.is_empty() {
+        system_message(
+            "RustDesk",
+            &format!("Got signal {} and exit.{}", sig, info),
+            true,
+        )
+        .ok();
+    }
     std::process::exit(0);
 }
 

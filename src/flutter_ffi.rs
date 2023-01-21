@@ -84,8 +84,9 @@ pub fn session_add_sync(
     id: String,
     is_file_transfer: bool,
     is_port_forward: bool,
+    switch_uuid: String,
 ) -> SyncReturn<String> {
-    if let Err(e) = session_add(&id, is_file_transfer, is_port_forward) {
+    if let Err(e) = session_add(&id, is_file_transfer, is_port_forward, &switch_uuid) {
         SyncReturn(format!("Failed to add session with id {}, {}", &id, e))
     } else {
         SyncReturn("".to_owned())
@@ -500,6 +501,12 @@ pub fn session_elevate_direct(id: String) {
 pub fn session_elevate_with_logon(id: String, username: String, password: String) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
         session.elevate_with_logon(username, password);
+    }
+}
+
+pub fn session_switch_sides(id: String) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.switch_sides();
     }
 }
 
@@ -1065,6 +1072,10 @@ pub fn cm_elevate_portable(conn_id: i32) {
     crate::ui_cm_interface::elevate_portable(conn_id);
 }
 
+pub fn cm_switch_back(conn_id: i32) {
+    crate::ui_cm_interface::switch_back(conn_id);
+}
+
 pub fn main_get_icon() -> String {
     #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
     return ui_interface::get_icon();
@@ -1107,8 +1118,8 @@ pub fn query_onlines(ids: Vec<String>) {
     crate::rendezvous_mediator::query_online_states(ids, handle_query_onlines)
 }
 
-pub fn version_to_number(v: String) -> i64 {
-    hbb_common::get_version_number(&v)
+pub fn version_to_number(v: String) -> SyncReturn<i64> {
+    SyncReturn(hbb_common::get_version_number(&v))
 }
 
 pub fn option_synced() -> bool {

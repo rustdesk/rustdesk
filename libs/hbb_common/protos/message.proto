@@ -564,6 +564,17 @@ message ElevationRequest {
   }
 }
 
+message SwitchSidesRequest {
+  bytes uuid = 1;
+}
+
+message SwitchSidesResponse {
+  bytes uuid = 1;
+  LoginRequest lr = 2;
+}
+
+message SwitchBack {}
+
 message Misc {
   oneof union {
     ChatMessage chat_message = 4;
@@ -582,6 +593,8 @@ message Misc {
     ElevationRequest elevation_request = 18;
     string elevation_response = 19;
     bool portable_service_running = 20;
+    SwitchSidesRequest switch_sides_request = 21;
+    SwitchBack switch_back = 22;
   }
 }
 
@@ -606,5 +619,6 @@ message Message {
     Misc misc = 19;
     Cliprdr cliprdr = 20;
     MessageBox message_box = 21;
+    SwitchSidesResponse switch_sides_response = 22;
   }
 }

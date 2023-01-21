@@ -264,6 +264,8 @@ impl InvokeUiSession for SciterHandler {
     fn update_block_input_state(&self, on: bool) {
         self.call("updateBlockInputState", &make_args!(on));
     }
+
+    fn switch_back(&self, _id: &str) {}
 }
 
 pub struct SciterSession(Session<SciterHandler>);
@@ -440,7 +442,7 @@ impl SciterSession {
             ConnType::DEFAULT_CONN
         };
 
-        session.lc.write().unwrap().initialize(id, conn_type);
+        session.lc.write().unwrap().initialize(id, conn_type, None);
 
         Self(session)
     }

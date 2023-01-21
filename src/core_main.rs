@@ -298,11 +298,27 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
         eprintln!("please provide a valid peer id");
         return None;
     }
+    let mut switch_uuid = None;
+    while let Some(item) = args.next() {
+        if item == "--switch_uuid" {
+            switch_uuid = args.next();
+        }
+    }
+
+    let switch_uuid = switch_uuid.map_or("".to_string(), |p| format!("switch_uuid={}", p));
+    let params = vec![switch_uuid].join("&");
+    let params_flag = if params.is_empty() { "" } else { "?" };
+    #[allow(unused)]
+    let uni_links = format!(
+        "rustdesk://connection/new/{}{}{}",
+        peer_id, params_flag, params
+    );
+
     #[cfg(target_os = "linux")]
     {
         use crate::dbus::invoke_new_connection;
 
-        match invoke_new_connection(peer_id) {
+        match invoke_new_connection(uni_links) {
             Ok(()) => {
                 return None;
             }
@@ -316,7 +332,6 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
     #[cfg(windows)]
     {
         use winapi::um::winuser::WM_USER;
-        let uni_links = format!("rustdesk://connection/new/{}", peer_id);
         let res = crate::platform::send_message_to_hnwd(
             "FLUTTER_RUNNER_WIN32_WINDOW",
             "RustDesk",
