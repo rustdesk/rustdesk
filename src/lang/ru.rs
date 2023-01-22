@@ -431,7 +431,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Weak", "Слабый"),
         ("Medium", "Средний"),
         ("Strong", "Стойкий"),
-        ("Switch Sides", ""),
-        ("Please confirm if you want to share your desktop?", ""),
+        ("Switch Sides", "Переключить стороны"),
+        ("Please confirm if you want to share your desktop?", "Подтвердите, что хотите поделиться своим рабочим столом?"),
     ].iter().cloned().collect();
 }
