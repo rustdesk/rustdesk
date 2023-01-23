@@ -78,6 +78,13 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "2.3.1"
+  build_cli_annotations:
+    dependency: transitive
+    description:
+      name: build_cli_annotations
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "2.1.0"
   build_config:
     dependency: transitive
     description:
@@ -169,6 +176,13 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "2.0.1"
+  cli_util:
+    dependency: transitive
+    description:
+      name: cli_util
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "0.3.5"
   clock:
     dependency: transitive
     description:
@@ -190,6 +204,13 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "1.16.0"
+  colorize:
+    dependency: transitive
+    description:
+      name: colorize
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "3.0.0"
   contextmenu:
     dependency: "direct main"
     description:
@@ -339,6 +360,13 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "2.0.1"
+  ffigen:
+    dependency: "direct dev"
+    description:
+      name: ffigen
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "7.2.4"
   file:
     dependency: transitive
     description:
@@ -429,12 +457,10 @@ packages:
   flutter_rust_bridge:
     dependency: "direct main"
     description:
-      path: frb_dart
-      ref: master
-      resolved-ref: e5adce55eea0b74d3680e66a2c5252edf17b07e1
-      url: "https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge"
-    source: git
-    version: "1.32.0"
+      name: flutter_rust_bridge
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "1.61.1"
   flutter_svg:
     dependency: "direct main"
     description:
@@ -846,6 +872,13 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "1.2.1"
+  puppeteer:
+    dependency: transitive
+    description:
+      name: puppeteer
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "2.12.0"
   qr_code_scanner:
     dependency: "direct main"
     description:
@@ -853,6 +886,13 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "1.0.1"
+  quiver:
+    dependency: transitive
+    description:
+      name: quiver
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "3.2.1"
   rxdart:
     dependency: transitive
     description:
@@ -890,6 +930,13 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "1.4.0"
+  shelf_static:
+    dependency: transitive
+    description:
+      name: shelf_static
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "1.1.1"
   shelf_web_socket:
     dependency: transitive
     description:
@@ -1256,6 +1303,13 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "3.1.1"
+  yaml_edit:
+    dependency: transitive
+    description:
+      name: yaml_edit
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "2.0.3"
   zxing2:
     dependency: "direct main"
     description:
