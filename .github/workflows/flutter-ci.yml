@@ -503,14 +503,6 @@ jobs:
           key: ${{ matrix.job.target }}-${{ matrix.job.extra-build-features }}
           cache-directories: "/opt/rust-registry"
 
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: ${{ matrix.job.target }}
-          override: true
-          profile: minimal # minimal component installation (ie, no documentation)
-
       - name: Install local registry
         run: |
           mkdir -p /opt/rust-registry
@@ -660,14 +652,6 @@ jobs:
       - name: Free Space
         run: |
           df
-
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: ${{ matrix.job.target }}
-          override: true
-          profile: minimal # minimal component installation (ie, no documentation)
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
