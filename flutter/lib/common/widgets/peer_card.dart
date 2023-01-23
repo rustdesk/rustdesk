@@ -316,21 +316,11 @@ class _PeerCardState extends State<_PeerCard>
   bool get wantKeepAlive => true;
 }
 
-enum CardType {
-  recent,
-  fav,
-  lan,
-  ab,
-  grp,
-}
-
 abstract class BasePeerCard extends StatelessWidget {
   final Peer peer;
   final EdgeInsets? menuPadding;
-  final CardType cardType;
 
-  BasePeerCard(
-      {required this.peer, required this.cardType, this.menuPadding, Key? key})
+  BasePeerCard({required this.peer, this.menuPadding, Key? key})
       : super(key: key);
 
   @override
@@ -435,7 +425,7 @@ abstract class BasePeerCard extends StatelessWidget {
                         if (Navigator.canPop(context)) {
                           Navigator.pop(context);
                         }
-                        _rdpDialog(id, cardType);
+                        _rdpDialog(id);
                       },
                     )),
               ))
@@ -481,22 +471,24 @@ abstract class BasePeerCard extends StatelessWidget {
   }
 
   @protected
+  Future<bool> _isForceAlwaysRelay(String id) async {
+    return (await bind.mainGetPeerOption(id: id, key: 'force-always-relay'))
+        .isNotEmpty;
+  }
+
+  @protected
   Future<MenuEntryBase<String>> _forceAlwaysRelayAction(String id) async {
     const option = 'force-always-relay';
     return MenuEntrySwitch<String>(
       switchType: SwitchType.scheckbox,
       text: translate('Always connect via relay'),
       getter: () async {
-        if (cardType == CardType.ab) {
-          return gFFI.abModel.find(id)?.forceAlwaysRelay ?? false;
-        } else {
-          return (await bind.mainGetPeerOption(id: id, key: option)).isNotEmpty;
-        }
+        return await _isForceAlwaysRelay(id);
       },
       setter: (bool v) async {
         gFFI.abModel.setPeerForceAlwaysRelay(id, v);
         await bind.mainSetPeerOption(
-            id: id, key: option, value: bool2option('force-always-relay', v));
+            id: id, key: option, value: bool2option(option, v));
       },
       padding: menuPadding,
       dismissOnClicked: true,
@@ -621,14 +613,13 @@ abstract class BasePeerCard extends StatelessWidget {
     );
   }
 
+  @protected
+  Future<String> _getAlias(String id) async =>
+      await bind.mainGetPeerOption(id: id, key: 'alias');
+
   void _rename(String id) async {
     RxBool isInProgress = false.obs;
-    String name;
-    if (cardType == CardType.ab) {
-      name = gFFI.abModel.find(id)?.alias ?? "";
-    } else {
-      name = await bind.mainGetPeerOption(id: id, key: 'alias');
-    }
+    String name = await _getAlias(id);
     var controller = TextEditingController(text: name);
     gFFI.dialogManager.show((setState, close) {
       submit() async {
@@ -636,7 +627,7 @@ abstract class BasePeerCard extends StatelessWidget {
         String name = controller.text.trim();
         await bind.mainSetPeerAlias(id: id, alias: name);
         gFFI.abModel.setPeerAlias(id, name);
-        update();
+        _update();
         close();
         isInProgress.value = false;
       }
@@ -671,34 +662,13 @@ abstract class BasePeerCard extends StatelessWidget {
     });
   }
 
-  void update() {
-    switch (cardType) {
-      case CardType.recent:
-        bind.mainLoadRecentPeers();
-        break;
-      case CardType.fav:
-        bind.mainLoadFavPeers();
-        break;
-      case CardType.lan:
-        bind.mainLoadLanPeers();
-        break;
-      case CardType.ab:
-        gFFI.abModel.pullAb();
-        break;
-      case CardType.grp:
-        gFFI.groupModel.pull();
-        break;
-    }
-  }
+  @protected
+  void _update();
 }
 
 class RecentPeerCard extends BasePeerCard {
   RecentPeerCard({required Peer peer, EdgeInsets? menuPadding, Key? key})
-      : super(
-            peer: peer,
-            cardType: CardType.recent,
-            menuPadding: menuPadding,
-            key: key);
+      : super(peer: peer, menuPadding: menuPadding, key: key);
 
   @override
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
@@ -732,15 +702,15 @@ class RecentPeerCard extends BasePeerCard {
     }
     return menuItems;
   }
+
+  @protected
+  @override
+  void _update() => bind.mainLoadRecentPeers();
 }
 
 class FavoritePeerCard extends BasePeerCard {
   FavoritePeerCard({required Peer peer, EdgeInsets? menuPadding, Key? key})
-      : super(
-            peer: peer,
-            cardType: CardType.fav,
-            menuPadding: menuPadding,
-            key: key);
+      : super(peer: peer, menuPadding: menuPadding, key: key);
 
   @override
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
@@ -776,15 +746,15 @@ class FavoritePeerCard extends BasePeerCard {
     }
     return menuItems;
   }
+
+  @protected
+  @override
+  void _update() => bind.mainLoadFavPeers();
 }
 
 class DiscoveredPeerCard extends BasePeerCard {
   DiscoveredPeerCard({required Peer peer, EdgeInsets? menuPadding, Key? key})
-      : super(
-            peer: peer,
-            cardType: CardType.lan,
-            menuPadding: menuPadding,
-            key: key);
+      : super(peer: peer, menuPadding: menuPadding, key: key);
 
   @override
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
@@ -811,15 +781,15 @@ class DiscoveredPeerCard extends BasePeerCard {
     }
     return menuItems;
   }
+
+  @protected
+  @override
+  void _update() => bind.mainLoadLanPeers();
 }
 
 class AddressBookPeerCard extends BasePeerCard {
   AddressBookPeerCard({required Peer peer, EdgeInsets? menuPadding, Key? key})
-      : super(
-            peer: peer,
-            cardType: CardType.ab,
-            menuPadding: menuPadding,
-            key: key);
+      : super(peer: peer, menuPadding: menuPadding, key: key);
 
   @override
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
@@ -850,6 +820,20 @@ class AddressBookPeerCard extends BasePeerCard {
     }
     return menuItems;
   }
+
+  @protected
+  @override
+  Future<bool> _isForceAlwaysRelay(String id) async =>
+      gFFI.abModel.find(id)?.forceAlwaysRelay ?? false;
+
+  @protected
+  @override
+  Future<String> _getAlias(String id) async =>
+      gFFI.abModel.find(id)?.alias ?? '';
+
+  @protected
+  @override
+  void _update() => gFFI.abModel.pullAb();
 
   @protected
   @override
@@ -943,11 +927,7 @@ class AddressBookPeerCard extends BasePeerCard {
 
 class MyGroupPeerCard extends BasePeerCard {
   MyGroupPeerCard({required Peer peer, EdgeInsets? menuPadding, Key? key})
-      : super(
-            peer: peer,
-            cardType: CardType.grp,
-            menuPadding: menuPadding,
-            key: key);
+      : super(peer: peer, menuPadding: menuPadding, key: key);
 
   @override
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
@@ -974,18 +954,15 @@ class MyGroupPeerCard extends BasePeerCard {
     }
     return menuItems;
   }
+
+  @protected
+  @override
+  void _update() => gFFI.groupModel.pull();
 }
 
-void _rdpDialog(String id, CardType card) async {
-  String port, username;
-  if (card == CardType.ab) {
-    port = gFFI.abModel.find(id)?.rdpPort ?? '';
-    username = gFFI.abModel.find(id)?.rdpUsername ?? '';
-  } else {
-    port = await bind.mainGetPeerOption(id: id, key: 'rdp_port');
-    username = await bind.mainGetPeerOption(id: id, key: 'rdp_username');
-  }
-
+void _rdpDialog(String id) async {
+  final port = await bind.mainGetPeerOption(id: id, key: 'rdp_port');
+  final username = await bind.mainGetPeerOption(id: id, key: 'rdp_username');
   final portController = TextEditingController(text: port);
   final userController = TextEditingController(text: username);
   final passwordController = TextEditingController(
