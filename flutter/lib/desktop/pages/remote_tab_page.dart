@@ -39,8 +39,7 @@ class ConnectionTabPage extends StatefulWidget {
 
 class _ConnectionTabPageState extends State<ConnectionTabPage> {
   final tabController = Get.put(DesktopTabController(
-      tabType: DesktopTabType.remoteScreen,
-      onSelected: (_, id) => bind.setCurSessionId(id: id)));
+      tabType: DesktopTabType.remoteScreen));
   static const IconData selectedIcon = Icons.desktop_windows_sharp;
   static const IconData unselectedIcon = Icons.desktop_windows_outlined;
 
@@ -54,6 +53,11 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     final peerId = params['id'];
     if (peerId != null) {
       ConnectionTypeState.init(peerId);
+      tabController.onSelected = (_, id) {
+        bind.setCurSessionId(id: id);
+        WindowController.fromWindowId(windowId())
+            .setTitle(getWindowNameWithId(id));
+      };
       tabController.add(TabInfo(
         key: peerId,
         label: peerId,
@@ -76,6 +80,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     super.initState();
 
     tabController.onRemoved = (_, id) => onRemoveId(id);
+   
 
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
       print(

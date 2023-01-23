@@ -26,13 +26,15 @@ import 'mobile/pages/home_page.dart';
 import 'mobile/pages/server_page.dart';
 import 'models/platform_model.dart';
 
-int? windowId;
-late List<String> bootArgs;
+/// Basic window and launch properties.
+int? kWindowId;
+WindowType? kWindowType;
+late List<String> kBootArgs;
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   debugPrint("launch args: $args");
-  bootArgs = List.from(args);
+  kBootArgs = List.from(args);
 
   if (!isDesktop) {
     runMobileApp();
@@ -40,10 +42,10 @@ Future<void> main(List<String> args) async {
   }
   // main window
   if (args.isNotEmpty && args.first == 'multi_window') {
-    windowId = int.parse(args[1]);
-    stateGlobal.setWindowId(windowId!);
+    kWindowId = int.parse(args[1]);
+    stateGlobal.setWindowId(kWindowId!);
     if (!Platform.isMacOS) {
-      WindowController.fromWindowId(windowId!).showTitleBar(false);
+      WindowController.fromWindowId(kWindowId!).showTitleBar(false);
     }
     final argument = args[2].isEmpty
         ? <String, dynamic>{}
@@ -51,35 +53,32 @@ Future<void> main(List<String> args) async {
     int type = argument['type'] ?? -1;
     // to-do: No need to parse window id ?
     // Because stateGlobal.windowId is a global value.
-    argument['windowId'] = windowId;
-    WindowType wType = type.windowType;
-    switch (wType) {
+    argument['windowId'] = kWindowId;
+    kWindowType = type.windowType;
+    final windowName = getWindowName();
+    switch (kWindowType) {
       case WindowType.RemoteDesktop:
         desktopType = DesktopType.remote;
         runMultiWindow(
           argument,
           kAppTypeDesktopRemote,
-          'RustDesk - Remote Desktop',
+          windowName,
         );
-        WindowController.fromWindowId(windowId!)
-            .setTitle('RustDesk - Remote Desktop');
         break;
       case WindowType.FileTransfer:
         desktopType = DesktopType.fileTransfer;
         runMultiWindow(
           argument,
           kAppTypeDesktopFileTransfer,
-          'RustDesk - File Transfer',
+          windowName,
         );
-        WindowController.fromWindowId(windowId!)
-            .setTitle('RustDesk - File Transfer');
         break;
       case WindowType.PortForward:
         desktopType = DesktopType.portForward;
         runMultiWindow(
           argument,
           kAppTypeDesktopPortForward,
-          'RustDesk - Port Forward',
+          windowName,
         );
         break;
       default:
@@ -139,7 +138,7 @@ void runMainApp(bool startService) async {
   windowManager.waitUntilReadyToShow(windowOptions, () async {
     windowManager.setOpacity(1);
   });
-  windowManager.setTitle("RustDesk");
+  windowManager.setTitle(getWindowName());
 }
 
 void runMobileApp() async {
@@ -155,7 +154,7 @@ void runMultiWindow(
 ) async {
   await initEnv(appType);
   // set prevent close to true, we handle close event manually
-  WindowController.fromWindowId(windowId!).setPreventClose(true);
+  WindowController.fromWindowId(kWindowId!).setPreventClose(true);
   late Widget widget;
   switch (appType) {
     case kAppTypeDesktopRemote:
@@ -184,26 +183,26 @@ void runMultiWindow(
   );
   // we do not hide titlebar on win7 because of the frame overflow.
   if (kUseCompatibleUiMode) {
-    WindowController.fromWindowId(windowId!).showTitleBar(true);
+    WindowController.fromWindowId(kWindowId!).showTitleBar(true);
   }
   switch (appType) {
     case kAppTypeDesktopRemote:
       await restoreWindowPosition(WindowType.RemoteDesktop,
-          windowId: windowId!);
+          windowId: kWindowId!);
       break;
     case kAppTypeDesktopFileTransfer:
-      await restoreWindowPosition(WindowType.FileTransfer, windowId: windowId!);
+      await restoreWindowPosition(WindowType.FileTransfer,
+          windowId: kWindowId!);
       break;
     case kAppTypeDesktopPortForward:
-      await restoreWindowPosition(WindowType.PortForward, windowId: windowId!);
+      await restoreWindowPosition(WindowType.PortForward, windowId: kWindowId!);
       break;
     default:
       // no such appType
       exit(0);
   }
   // show window from hidden status
-  WindowController.fromWindowId(windowId!).show();
-  WindowController.fromWindowId(windowId!).setTitle(title);
+  WindowController.fromWindowId(kWindowId!).show();
 }
 
 void runConnectionManagerScreen(bool hide) async {

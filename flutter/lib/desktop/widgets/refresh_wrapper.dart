@@ -26,7 +26,7 @@ class RefreshWrapperState extends State<RefreshWrapper> {
   }
 
   rebuild() {
-    debugPrint("=====Global State Rebuild (win-${windowId ?? 'main'})=====");
+    debugPrint("=====Global State Rebuild (win-${kWindowId ?? 'main'})=====");
     if (Get.context != null) {
       (context as Element).visitChildren(_rebuildElement);
     }
