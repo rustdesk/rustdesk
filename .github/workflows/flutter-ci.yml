@@ -14,7 +14,7 @@ on:
 env:
   LLVM_VERSION: "15.0.6"
   # Note: currently 3.0.5 does not support arm64 officially, we use latest stable version first.
-  FLUTTER_VERSION: "3.3.10"
+  FLUTTER_VERSION: "3.0.5"
   # vcpkg version: 2022.05.10
   # for multiarch gcc compatibility
   VCPKG_COMMIT_ID: "14e7bb4ae24616ec54ff6b2f6ef4e8659434ea44"
@@ -47,13 +47,13 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
-      #- name: Replace engine with rustdesk custom flutter engine
-      #  run: |
-      #    flutter doctor -v
-      #    flutter precache --windows
-      #    Invoke-WebRequest -Uri https://github.com/Kingtous/engine/releases/download/v3.0.5-rustdesk.2/windows-x64-flutter-release.zip -OutFile windows-x64-flutter-release.zip
-      #    Expand-Archive windows-x64-flutter-release.zip -DestinationPath engine
-      #    mv -Force engine/*  C:/hostedtoolcache/windows/flutter/stable-3.0.5-x64/bin/cache/artifacts/engine/windows-x64-release/
+      - name: Replace engine with rustdesk custom flutter engine
+        run: |
+          flutter doctor -v
+          flutter precache --windows
+          Invoke-WebRequest -Uri https://github.com/Kingtous/engine/releases/download/v3.0.5-rustdesk.2/windows-x64-flutter-release.zip -OutFile windows-x64-flutter-release.zip
+          Expand-Archive windows-x64-flutter-release.zip -DestinationPath engine
+          mv -Force engine/*  C:/hostedtoolcache/windows/flutter/stable-3.0.5-x64/bin/cache/artifacts/engine/windows-x64-release/
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
