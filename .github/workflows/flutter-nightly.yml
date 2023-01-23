@@ -9,7 +9,7 @@ on:
 env:
   LLVM_VERSION: "10.0"
   # Note: currently 3.0.5 does not support arm64 officially, we use latest stable version first.
-  FLUTTER_VERSION: "3.0.5"
+  FLUTTER_VERSION: "3.3.10"
   TAG_NAME: "nightly"
   # vcpkg version: 2022.05.10
   # for multiarch gcc compatibility
