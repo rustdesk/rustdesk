@@ -12,7 +12,7 @@ on:
       - ".github/**"
 
 env:
-  LLVM_VERSION: "10.0"
+  LLVM_VERSION: "15.0.6"
   # Note: currently 3.0.5 does not support arm64 officially, we use latest stable version first.
   FLUTTER_VERSION: "3.3.10"
   # vcpkg version: 2022.05.10
