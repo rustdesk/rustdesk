@@ -96,10 +96,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   flutter::DartProject project(L"data");
   // connection manager hide icon from taskbar
-  bool showOnTaskBar = true;
+  bool is_cm_page = false;
   auto cmParam = std::string("--cm");
   if (!command_line_arguments.empty() && command_line_arguments.front().compare(0, cmParam.size(), cmParam.c_str()) == 0) {
-      showOnTaskBar = false;
+    is_cm_page = true;
   }
   command_line_arguments.insert(command_line_arguments.end(), rust_args.begin(), rust_args.end());
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
@@ -107,9 +107,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(800, 600);
-  if (!window.CreateAndShow(L"RustDesk", origin, size, showOnTaskBar))
-  {
-    return EXIT_FAILURE;
+  if (!window.CreateAndShow(
+          is_cm_page ? L"RustDesk - Connection Manager" : L"RustDesk", origin,
+          size, !is_cm_page)) {
+      return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);
 

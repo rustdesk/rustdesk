@@ -31,6 +31,10 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
     isRDP = params['isRDP'];
     tabController =
         Get.put(DesktopTabController(tabType: DesktopTabType.portForward));
+    tabController.onSelected = (_, id) {
+      WindowController.fromWindowId(windowId())
+          .setTitle(getWindowNameWithId(id));
+    };
     tabController.add(TabInfo(
         key: params['id'],
         label: params['id'],
