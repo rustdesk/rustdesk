@@ -49,13 +49,13 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
-      - name: Replace engine with rustdesk custom flutter engine
-        run: |
-          flutter doctor -v
-          flutter precache --windows
-          Invoke-WebRequest -Uri https://github.com/Kingtous/engine/releases/download/v3.0.5-rustdesk.2/windows-x64-flutter-release.zip -OutFile windows-x64-flutter-release.zip
-          Expand-Archive windows-x64-flutter-release.zip -DestinationPath engine
-          mv -Force engine/*  C:/hostedtoolcache/windows/flutter/stable-3.0.5-x64/bin/cache/artifacts/engine/windows-x64-release/
+      #- name: Replace engine with rustdesk custom flutter engine
+      #  run: |
+      #    flutter doctor -v
+      #    flutter precache --windows
+      #    Invoke-WebRequest -Uri https://github.com/Kingtous/engine/releases/download/v3.0.5-rustdesk.2/windows-x64-flutter-release.zip -OutFile windows-x64-flutter-release.zip
+      #    Expand-Archive windows-x64-flutter-release.zip -DestinationPath engine
+      #    mv -Force engine/*  C:/hostedtoolcache/windows/flutter/stable-3.0.5-x64/bin/cache/artifacts/engine/windows-x64-release/
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
