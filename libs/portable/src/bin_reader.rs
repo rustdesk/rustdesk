@@ -4,7 +4,10 @@ use std::{
     path::PathBuf,
 };
 
+#[cfg(windows)]
 const BIN_DATA: &[u8] = include_bytes!("../data.bin");
+#[cfg(not(windows))]
+const BIN_DATA: &[u8] = &[];
 // 4bytes
 const LENGTH: usize = 4;
 const IDENTIFIER_LENGTH: usize = 8;
@@ -71,7 +74,7 @@ impl BinaryReader {
         assert!(BIN_DATA.len() > IDENTIFIER_LENGTH, "bin data invalid!");
         let mut iden = String::from_utf8_lossy(&BIN_DATA[base..base + IDENTIFIER_LENGTH]);
         if iden != "rustdesk" {
-            panic!("bin file is not vaild!");
+            panic!("bin file is not valid!");
         }
         base += IDENTIFIER_LENGTH;
         loop {
@@ -118,7 +121,7 @@ impl BinaryReader {
         (parsed, executable)
     }
 
-    #[cfg(unix)]
+    #[cfg(linux)]
     pub fn configure_permission(&self, prefix: &PathBuf) {
         use std::os::unix::prelude::PermissionsExt;
 

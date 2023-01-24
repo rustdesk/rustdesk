@@ -32,15 +32,17 @@ class _FileManagerPageState extends State<FileManagerPage> {
           .showLoading(translate('Connecting...'), onCancel: closeConnection);
     });
     gFFI.ffiModel.updateEventListener(widget.id);
+    model.onDirChanged = (_) => breadCrumbScrollToEnd();
     Wakelock.enable();
   }
 
   @override
   void dispose() {
-    model.onClose();
-    gFFI.close();
-    gFFI.dialogManager.dismissAll();
-    Wakelock.disable();
+    model.onClose().whenComplete(() {
+      gFFI.close();
+      gFFI.dialogManager.dismissAll();
+      Wakelock.disable();
+    });
     super.dispose();
   }
 
@@ -136,7 +138,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
                             child: Row(
                               children: [
                                 Icon(
-                                    model.currentShowHidden
+                                    model.getCurrentShowHidden()
                                         ? Icons.check_box_outlined
                                         : Icons.check_box_outline_blank,
                                     color: Theme.of(context).iconTheme.color),
@@ -172,22 +174,18 @@ class _FileManagerPageState extends State<FileManagerPage> {
                                         ],
                                       ),
                                       actions: [
-                                        TextButton(
-                                            style: flatButtonStyle,
+                                        dialogButton("Cancel",
                                             onPressed: () => close(false),
-                                            child: Text(translate("Cancel"))),
-                                        ElevatedButton(
-                                            style: flatButtonStyle,
-                                            onPressed: () {
-                                              if (name.value.text.isNotEmpty) {
-                                                model.createDir(PathUtil.join(
-                                                    model.currentDir.path,
-                                                    name.value.text,
-                                                    model.currentIsWindows));
-                                                close();
-                                              }
-                                            },
-                                            child: Text(translate("OK")))
+                                            isOutline: true),
+                                        dialogButton("OK", onPressed: () {
+                                          if (name.value.text.isNotEmpty) {
+                                            model.createDir(PathUtil.join(
+                                                model.currentDir.path,
+                                                name.value.text,
+                                                model.getCurrentIsWindows()));
+                                            close();
+                                          }
+                                        })
                                       ]));
                         } else if (v == "hidden") {
                           model.toggleShowHidden();
@@ -309,7 +307,6 @@ class _FileManagerPageState extends State<FileManagerPage> {
                 }
                 if (entries[index].isDirectory || entries[index].isDrive) {
                   model.openDirectory(entries[index].path);
-                  breadCrumbScrollToEnd();
                 } else {
                   // Perform file-related tasks.
                 }
@@ -333,10 +330,12 @@ class _FileManagerPageState extends State<FileManagerPage> {
 
   breadCrumbScrollToEnd() {
     Future.delayed(Duration(milliseconds: 200), () {
-      _breadCrumbScroller.animateTo(
-          _breadCrumbScroller.position.maxScrollExtent,
-          duration: Duration(milliseconds: 200),
-          curve: Curves.fastLinearToSlowEaseIn);
+      if (_breadCrumbScroller.hasClients) {
+        _breadCrumbScroller.animateTo(
+            _breadCrumbScroller.position.maxScrollExtent,
+            duration: Duration(milliseconds: 200),
+            curve: Curves.fastLinearToSlowEaseIn);
+      }
     });
   }
 
@@ -350,12 +349,12 @@ class _FileManagerPageState extends State<FileManagerPage> {
               if (model.currentHome.startsWith(list[0])) {
                 // absolute path
                 for (var item in list) {
-                  path = PathUtil.join(path, item, model.currentIsWindows);
+                  path = PathUtil.join(path, item, model.getCurrentIsWindows());
                 }
               } else {
                 path += model.currentHome;
                 for (var item in list) {
-                  path = PathUtil.join(path, item, model.currentIsWindows);
+                  path = PathUtil.join(path, item, model.getCurrentIsWindows());
                 }
               }
               model.openDirectory(path);
@@ -477,7 +476,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
         return BottomSheetBody(
           leading: Icon(Icons.check),
           title: "${translate("Successful")}!",
-          text: "",
+          text: model.jobProgress.display(),
           onCanceled: () => model.jobReset(),
         );
       case JobState.error:
@@ -499,7 +498,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
   List<BreadCrumbItem> getPathBreadCrumbItems(
       void Function() onHome, void Function(List<String>) onPressed) {
     final path = model.currentShortPath;
-    final list = PathUtil.split(path, model.currentIsWindows);
+    final list = PathUtil.split(path, model.getCurrentIsWindows());
     final breadCrumbList = [
       BreadCrumbItem(
           content: IconButton(

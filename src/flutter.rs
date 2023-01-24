@@ -1,3 +1,11 @@
+use crate::ui_session_interface::{io_loop, InvokeUiSession, Session};
+use crate::{client::*, flutter_ffi::EventToUI};
+use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
+use hbb_common::{
+    bail, config::LocalConfig, get_version_number, message_proto::*, rendezvous_proto::ConnType,
+    ResultType,
+};
+use serde_json::json;
 use std::{
     collections::HashMap,
     ffi::CString,
@@ -5,24 +13,13 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
-
-use hbb_common::{
-    bail, config::LocalConfig, message_proto::*, rendezvous_proto::ConnType, ResultType,
-};
-use serde_json::json;
-
-use crate::ui_session_interface::{io_loop, InvokeUiSession, Session};
-
-use crate::{client::*, flutter_ffi::EventToUI};
-
 pub(super) const APP_TYPE_MAIN: &str = "main";
 pub(super) const APP_TYPE_DESKTOP_REMOTE: &str = "remote";
 pub(super) const APP_TYPE_DESKTOP_FILE_TRANSFER: &str = "file transfer";
 pub(super) const APP_TYPE_DESKTOP_PORT_FORWARD: &str = "port forward";
 
 lazy_static::lazy_static! {
-    static ref CUR_SESSION_ID: RwLock<String> = Default::default();
+    pub static ref CUR_SESSION_ID: RwLock<String> = Default::default();
     pub static ref SESSIONS: RwLock<HashMap<String, Session<FlutterHandler>>> = Default::default();
     pub static ref GLOBAL_EVENT_STREAM: RwLock<HashMap<String, StreamSink<String>>> = Default::default(); // rust to dart event channel
 }
@@ -36,6 +33,15 @@ pub extern "C" fn rustdesk_core_main() -> bool {
     return crate::core_main::core_main().is_some();
     #[cfg(any(target_os = "android", target_os = "ios"))]
     false
+}
+
+#[cfg(target_os = "macos")]
+#[no_mangle]
+pub extern "C" fn handle_applicationShouldOpenUntitledFile() {
+    hbb_common::log::debug!("icon clicked on finder");
+    if std::env::args().nth(1) == Some("--server".to_owned()) {
+        crate::platform::macos::check_main_window();
+    }
 }
 
 #[cfg(windows)]
@@ -155,7 +161,7 @@ impl InvokeUiSession for FlutterHandler {
     }
 
     /// unused in flutter, use switch_display or set_peer_info
-    fn set_display(&self, _x: i32, _y: i32, _w: i32, _h: i32, _cursor_embeded: bool) {}
+    fn set_display(&self, _x: i32, _y: i32, _w: i32, _h: i32, _cursor_embedded: bool) {}
 
     fn update_privacy_mode(&self) {
         self.push_event("update_privacy_mode", [].into());
@@ -241,7 +247,7 @@ impl InvokeUiSession for FlutterHandler {
             self.push_event(
                 "file_dir",
                 vec![
-                    ("value", &make_fd_to_json(id, path, entries)),
+                    ("value", &crate::common::make_fd_to_json(id, path, entries)),
                     ("is_local", "false"),
                 ],
             );
@@ -295,10 +301,19 @@ impl InvokeUiSession for FlutterHandler {
             h.insert("y", d.y);
             h.insert("width", d.width);
             h.insert("height", d.height);
-            h.insert("cursor_embeded", if d.cursor_embeded { 1 } else { 0 });
+            h.insert("cursor_embedded", if d.cursor_embedded { 1 } else { 0 });
             displays.push(h);
         }
         let displays = serde_json::ser::to_string(&displays).unwrap_or("".to_owned());
+        let mut features: HashMap<&str, i32> = Default::default();
+        for ref f in pi.features.iter() {
+            features.insert("privacy_mode", if f.privacy_mode { 1 } else { 0 });
+        }
+        // compatible with 1.1.9
+        if get_version_number(&pi.version) < get_version_number("1.2.0") {
+            features.insert("privacy_mode", 0);
+        }
+        let features = serde_json::ser::to_string(&features).unwrap_or("".to_owned());
         self.push_event(
             "peer_info",
             vec![
@@ -308,10 +323,13 @@ impl InvokeUiSession for FlutterHandler {
                 ("sas_enabled", &pi.sas_enabled.to_string()),
                 ("displays", &displays),
                 ("version", &pi.version),
+                ("features", &features),
                 ("current_display", &pi.current_display.to_string()),
             ],
         );
     }
+
+    fn on_connected(&self, _conn_type: ConnType) {}
 
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool) {
         let has_retry = if retry { "true" } else { "" };
@@ -344,7 +362,17 @@ impl InvokeUiSession for FlutterHandler {
                 ("y", &display.y.to_string()),
                 ("width", &display.width.to_string()),
                 ("height", &display.height.to_string()),
-                ("cursor_embeded", &{if display.cursor_embeded {1} else {0}}.to_string()),
+                (
+                    "cursor_embedded",
+                    &{
+                        if display.cursor_embedded {
+                            1
+                        } else {
+                            0
+                        }
+                    }
+                    .to_string(),
+                ),
             ],
         );
     }
@@ -360,6 +388,10 @@ impl InvokeUiSession for FlutterHandler {
     fn clipboard(&self, content: String) {
         self.push_event("clipboard", vec![("content", &content)]);
     }
+
+    fn switch_back(&self, peer_id: &str) {
+        self.push_event("switch_back", [("peer_id", peer_id)].into());
+    }
 }
 
 /// Create a new remote session with the given id.
@@ -369,7 +401,12 @@ impl InvokeUiSession for FlutterHandler {
 /// * `id` - The identifier of the remote session with prefix. Regex: [\w]*[\_]*[\d]+
 /// * `is_file_transfer` - If the session is used for file transfer.
 /// * `is_port_forward` - If the session is used for port forward.
-pub fn session_add(id: &str, is_file_transfer: bool, is_port_forward: bool) -> ResultType<()> {
+pub fn session_add(
+    id: &str,
+    is_file_transfer: bool,
+    is_port_forward: bool,
+    switch_uuid: &str,
+) -> ResultType<()> {
     let session_id = get_session_id(id.to_owned());
     LocalConfig::set_remote_id(&session_id);
 
@@ -387,11 +424,17 @@ pub fn session_add(id: &str, is_file_transfer: bool, is_port_forward: bool) -> R
         ConnType::DEFAULT_CONN
     };
 
+    let switch_uuid = if switch_uuid.is_empty() {
+        None
+    } else {
+        Some(switch_uuid.to_string())
+    };
+
     session
         .lc
         .write()
         .unwrap()
-        .initialize(session_id, conn_type);
+        .initialize(session_id, conn_type, switch_uuid);
 
     if let Some(same_id_session) = SESSIONS.write().unwrap().insert(id.to_owned(), session) {
         same_id_session.close();
@@ -411,8 +454,6 @@ pub fn session_start_(id: &str, event_stream: StreamSink<EventToUI>) -> ResultTy
         *session.event_stream.write().unwrap() = Some(event_stream);
         let session = session.clone();
         std::thread::spawn(move || {
-            // if flutter : disable keyboard listen
-            crate::client::disable_keyboard_listening();
             io_loop(session);
         });
         Ok(())
@@ -532,24 +573,6 @@ pub fn get_session_id(id: String) -> String {
     } else {
         id
     };
-}
-
-pub fn make_fd_to_json(id: i32, path: String, entries: &Vec<FileEntry>) -> String {
-    let mut fd_json = serde_json::Map::new();
-    fd_json.insert("id".into(), json!(id));
-    fd_json.insert("path".into(), json!(path));
-
-    let mut entries_out = vec![];
-    for entry in entries {
-        let mut entry_map = serde_json::Map::new();
-        entry_map.insert("entry_type".into(), json!(entry.entry_type.value()));
-        entry_map.insert("name".into(), json!(entry.name));
-        entry_map.insert("size".into(), json!(entry.size));
-        entry_map.insert("modified_time".into(), json!(entry.modified_time));
-        entries_out.push(entry_map);
-    }
-    fd_json.insert("entries".into(), json!(entries_out));
-    serde_json::to_string(&fd_json).unwrap_or("".into())
 }
 
 pub fn make_fd_flutter(id: i32, entries: &Vec<FileEntry>, only_count: bool) -> String {

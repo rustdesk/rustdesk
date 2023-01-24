@@ -10,7 +10,7 @@ pub use protos::rendezvous as rendezvous_proto;
 use std::{
     fs::File,
     io::{self, BufRead},
-    net::{Ipv4Addr, SocketAddr, SocketAddrV4},
+    net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4},
     path::Path,
     time::{self, SystemTime, UNIX_EPOCH},
 };
@@ -40,6 +40,7 @@ pub use tokio_socks::TargetAddr;
 pub mod password_security;
 pub use chrono;
 pub use directories_next;
+pub mod keyboard;
 
 #[cfg(feature = "quic")]
 pub type Stream = quic::Connection;
@@ -58,6 +59,21 @@ macro_rules! allow_err {
             log::debug!(
                 "{:?}, {}:{}:{}:{}",
                 err,
+                module_path!(),
+                file!(),
+                line!(),
+                column!()
+            );
+        } else {
+        }
+    };
+
+    ($e:expr, $($arg:tt)*) => {
+        if let Err(err) = $e {
+            log::debug!(
+                "{:?}, {}, {}:{}:{}:{}",
+                err,
+                format_args!($($arg)*),
                 module_path!(),
                 file!(),
                 line!(),
@@ -102,13 +118,31 @@ impl AddrMangle {
                 }
                 bytes[..(16 - n_padding)].to_vec()
             }
-            _ => {
-                panic!("Only support ipv4");
+            SocketAddr::V6(addr_v6) => {
+                let mut x = addr_v6.ip().octets().to_vec();
+                let port: [u8; 2] = addr_v6.port().to_le_bytes();
+                x.push(port[0]);
+                x.push(port[1]);
+                x
             }
         }
     }
 
     pub fn decode(bytes: &[u8]) -> SocketAddr {
+        if bytes.len() > 16 {
+            if bytes.len() != 18 {
+                return Config::get_any_listen_addr(false);
+            }
+            #[allow(invalid_value)]
+            let mut tmp: [u8; 2] = unsafe { std::mem::MaybeUninit::uninit().assume_init() };
+            tmp.copy_from_slice(&bytes[16..]);
+            let port = u16::from_le_bytes(tmp);
+            #[allow(invalid_value)]
+            let mut tmp: [u8; 16] = unsafe { std::mem::MaybeUninit::uninit().assume_init() };
+            tmp.copy_from_slice(&bytes[..16]);
+            let ip = std::net::Ipv6Addr::from(tmp);
+            return SocketAddr::new(IpAddr::V6(ip), port);
+        }
         let mut padded = [0u8; 16];
         padded[..bytes.len()].copy_from_slice(&bytes);
         let number = u128::from_le_bytes(padded);
@@ -249,5 +283,94 @@ mod tests {
     fn test_mangle() {
         let addr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(192, 168, 16, 32), 21116));
         assert_eq!(addr, AddrMangle::decode(&AddrMangle::encode(addr)));
+
+        let addr = "[2001:db8::1]:8080".parse::<SocketAddr>().unwrap();
+        assert_eq!(addr, AddrMangle::decode(&AddrMangle::encode(addr)));
+
+        let addr = "[2001:db8:ff::1111]:80".parse::<SocketAddr>().unwrap();
+        assert_eq!(addr, AddrMangle::decode(&AddrMangle::encode(addr)));
+    }
+
+    #[test]
+    fn test_allow_err() {
+        allow_err!(Err("test err") as Result<(), &str>);
+        allow_err!(
+            Err("test err with msg") as Result<(), &str>,
+            "prompt {}",
+            "failed"
+        );
+    }
+}
+
+#[inline]
+pub fn is_ipv4_str(id: &str) -> bool {
+    regex::Regex::new(r"^\d+\.\d+\.\d+\.\d+(:\d+)?$")
+        .unwrap()
+        .is_match(id)
+}
+
+#[inline]
+pub fn is_ipv6_str(id: &str) -> bool {
+    regex::Regex::new(r"^((([a-fA-F0-9]{1,4}:{1,2})+[a-fA-F0-9]{1,4})|(\[([a-fA-F0-9]{1,4}:{1,2})+[a-fA-F0-9]{1,4}\]:\d+))$")
+        .unwrap()
+        .is_match(id)
+}
+
+#[inline]
+pub fn is_ip_str(id: &str) -> bool {
+    is_ipv4_str(id) || is_ipv6_str(id)
+}
+
+#[inline]
+pub fn is_domain_port_str(id: &str) -> bool {
+    // modified regex for RFC1123 hostname. check https://stackoverflow.com/a/106223 for original version for hostname.
+    // according to [TLD List](https://data.iana.org/TLD/tlds-alpha-by-domain.txt) version 2023011700,
+    // there is no digits in TLD, and length is 2~63.
+    regex::Regex::new(
+        r"(?i)^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z-]{0,61}[a-z]:\d{1,5}$",
+    )
+    .unwrap()
+    .is_match(id)
+}
+
+#[cfg(test)]
+mod test_lib {
+    use super::*;
+
+    #[test]
+    fn test_ipv6() {
+        assert_eq!(is_ipv6_str("1:2:3"), true);
+        assert_eq!(is_ipv6_str("[ab:2:3]:12"), true);
+        assert_eq!(is_ipv6_str("[ABEF:2a:3]:12"), true);
+        assert_eq!(is_ipv6_str("[ABEG:2a:3]:12"), false);
+        assert_eq!(is_ipv6_str("1[ab:2:3]:12"), false);
+        assert_eq!(is_ipv6_str("1.1.1.1"), false);
+        assert_eq!(is_ip_str("1.1.1.1"), true);
+        assert_eq!(is_ipv6_str("1:2:"), false);
+        assert_eq!(is_ipv6_str("1:2::0"), true);
+        assert_eq!(is_ipv6_str("[1:2::0]:1"), true);
+        assert_eq!(is_ipv6_str("[1:2::0]:"), false);
+        assert_eq!(is_ipv6_str("1:2::0]:1"), false);
+    }
+
+    #[test]
+    fn test_hostname_port() {
+        assert_eq!(is_domain_port_str("a:12"), false);
+        assert_eq!(is_domain_port_str("a.b.c:12"), false);
+        assert_eq!(is_domain_port_str("test.com:12"), true);
+        assert_eq!(is_domain_port_str("test-UPPER.com:12"), true);
+        assert_eq!(is_domain_port_str("some-other.domain.com:12"), true);
+        assert_eq!(is_domain_port_str("under_score:12"), false);
+        assert_eq!(is_domain_port_str("a@bc:12"), false);
+        assert_eq!(is_domain_port_str("1.1.1.1:12"), false);
+        assert_eq!(is_domain_port_str("1.2.3:12"), false);
+        assert_eq!(is_domain_port_str("1.2.3.45:12"), false);
+        assert_eq!(is_domain_port_str("a.b.c:123456"), false);
+        assert_eq!(is_domain_port_str("---:12"), false);
+        assert_eq!(is_domain_port_str(".:12"), false);
+        // todo: should we also check for these edge cases?
+        // out-of-range port
+        assert_eq!(is_domain_port_str("test.com:0"), true);
+        assert_eq!(is_domain_port_str("test.com:98989"), true);
     }
 }

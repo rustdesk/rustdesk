@@ -37,6 +37,7 @@ impl Deref for MediaCodecDecoder {
     }
 }
 
+#[derive(Default)]
 pub struct MediaCodecDecoders {
     pub h264: Option<MediaCodecDecoder>,
     pub h265: Option<MediaCodecDecoder>,

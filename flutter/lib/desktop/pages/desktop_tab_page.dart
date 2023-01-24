@@ -31,7 +31,7 @@ class DesktopTabPage extends StatefulWidget {
             initialPage: initialPage,
           )));
     } catch (e) {
-      debugPrint('$e');
+      debugPrintStack(label: '$e');
     }
   }
 }

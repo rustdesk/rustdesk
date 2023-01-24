@@ -7,6 +7,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_breadcrumb/flutter_breadcrumb.dart';
+import 'package:flutter_hbb/desktop/widgets/list_search_action_listener.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/file_model.dart';
 import 'package:get/get.dart';
@@ -32,6 +33,18 @@ enum LocationStatus {
   fileSearchBar
 }
 
+/// The status of currently focused scope of the mouse
+enum MouseFocusScope {
+  /// Mouse is in local field.
+  local,
+
+  /// Mouse is in remote field.
+  remote,
+
+  /// Mouse is not in local field, remote neither.
+  none
+}
+
 class FileManagerPage extends StatefulWidget {
   const FileManagerPage({Key? key, required this.id}) : super(key: key);
   final String id;
@@ -55,6 +68,11 @@ class _FileManagerPageState extends State<FileManagerPage>
   final _searchTextRemote = "".obs;
   final _breadCrumbScrollerLocal = ScrollController();
   final _breadCrumbScrollerRemote = ScrollController();
+  final _mouseFocusScope = Rx<MouseFocusScope>(MouseFocusScope.none);
+  final _keyboardNodeLocal = FocusNode(debugLabel: "keyboardNodeLocal");
+  final _keyboardNodeRemote = FocusNode(debugLabel: "keyboardNodeRemote");
+  final _listSearchBufferLocal = TimeoutStringBuffer();
+  final _listSearchBufferRemote = TimeoutStringBuffer();
 
   /// [_lastClickTime], [_lastClickEntry] help to handle double click
   int _lastClickTime =
@@ -93,6 +111,7 @@ class _FileManagerPageState extends State<FileManagerPage>
       Wakelock.enable();
     }
     debugPrint("File manager page init success with id ${widget.id}");
+    model.onDirChanged = breadCrumbScrollToEnd;
     // register location listener
     _locationNodeLocal.addListener(onLocalLocationFocusChanged);
     _locationNodeRemote.addListener(onRemoteLocationFocusChanged);
@@ -100,17 +119,18 @@ class _FileManagerPageState extends State<FileManagerPage>
 
   @override
   void dispose() {
-    model.onClose();
-    _ffi.close();
-    _ffi.dialogManager.dismissAll();
-    if (!Platform.isLinux) {
-      Wakelock.disable();
-    }
-    Get.delete<FFI>(tag: 'ft_${widget.id}');
-    _locationNodeLocal.removeListener(onLocalLocationFocusChanged);
-    _locationNodeRemote.removeListener(onRemoteLocationFocusChanged);
-    _locationNodeLocal.dispose();
-    _locationNodeRemote.dispose();
+    model.onClose().whenComplete(() {
+      _ffi.close();
+      _ffi.dialogManager.dismissAll();
+      if (!Platform.isLinux) {
+        Wakelock.disable();
+      }
+      Get.delete<FFI>(tag: 'ft_${widget.id}');
+      _locationNodeLocal.removeListener(onLocalLocationFocusChanged);
+      _locationNodeRemote.removeListener(onRemoteLocationFocusChanged);
+      _locationNodeLocal.dispose();
+      _locationNodeRemote.dispose();
+    });
     super.dispose();
   }
 
@@ -195,6 +215,7 @@ class _FileManagerPageState extends State<FileManagerPage>
   }
 
   Widget body({bool isLocal = false}) {
+    final scrollController = ScrollController();
     return Container(
       decoration: BoxDecoration(border: Border.all(color: Colors.black26)),
       margin: const EdgeInsets.all(16.0),
@@ -215,8 +236,8 @@ class _FileManagerPageState extends State<FileManagerPage>
             children: [
               Expanded(
                 child: SingleChildScrollView(
-                  controller: ScrollController(),
-                  child: _buildDataTable(context, isLocal),
+                  controller: scrollController,
+                  child: _buildDataTable(context, isLocal, scrollController),
                 ),
               )
             ],
@@ -226,7 +247,9 @@ class _FileManagerPageState extends State<FileManagerPage>
     );
   }
 
-  Widget _buildDataTable(BuildContext context, bool isLocal) {
+  Widget _buildDataTable(
+      BuildContext context, bool isLocal, ScrollController scrollController) {
+    const rowHeight = 25.0;
     final fd = model.getCurrentDir(isLocal);
     final entries = fd.entries;
     final sortIndex = (SortBy style) {
@@ -244,128 +267,217 @@ class _FileManagerPageState extends State<FileManagerPage>
     final sortAscending =
         isLocal ? model.localSortAscending : model.remoteSortAscending;
 
-    return ObxValue<RxString>(
-      (searchText) {
-        final filteredEntries = searchText.isNotEmpty
-            ? entries.where((element) {
-                return element.name.contains(searchText.value);
-              }).toList(growable: false)
-            : entries;
-        return DataTable(
-          key: ValueKey(isLocal ? 0 : 1),
-          showCheckboxColumn: false,
-          dataRowHeight: 25,
-          headingRowHeight: 30,
-          horizontalMargin: 8,
-          columnSpacing: 8,
-          showBottomBorder: true,
-          sortColumnIndex: sortIndex,
-          sortAscending: sortAscending,
-          columns: [
-            DataColumn(
-                label: Text(
-                  translate("Name"),
-                ).marginSymmetric(horizontal: 4),
-                onSort: (columnIndex, ascending) {
-                  model.changeSortStyle(SortBy.name,
-                      isLocal: isLocal, ascending: ascending);
-                }),
-            DataColumn(
-                label: Text(
-                  translate("Modified"),
-                ),
-                onSort: (columnIndex, ascending) {
-                  model.changeSortStyle(SortBy.modified,
-                      isLocal: isLocal, ascending: ascending);
-                }),
-            DataColumn(
-                label: Text(translate("Size")),
-                onSort: (columnIndex, ascending) {
-                  model.changeSortStyle(SortBy.size,
-                      isLocal: isLocal, ascending: ascending);
-                }),
-          ],
-          rows: filteredEntries.map((entry) {
-            final sizeStr =
-                entry.isFile ? readableFileSize(entry.size.toDouble()) : "";
-            final lastModifiedStr = entry.isDrive
-                ? " "
-                : "${entry.lastModified().toString().replaceAll(".000", "")}   ";
-            return DataRow(
-                key: ValueKey(entry.name),
-                onSelectChanged: (s) {
-                  _onSelectedChanged(getSelectedItems(isLocal), filteredEntries,
-                      entry, isLocal);
-                },
-                selected: getSelectedItems(isLocal).contains(entry),
-                cells: [
-                  DataCell(
-                    Container(
-                        width: 200,
-                        child: Tooltip(
-                          waitDuration: Duration(milliseconds: 500),
-                          message: entry.name,
-                          child: Row(children: [
-                            entry.isDrive
-                                ? Image(
-                                        image: iconHardDrive,
-                                        fit: BoxFit.scaleDown,
+    return MouseRegion(
+      onEnter: (evt) {
+        _mouseFocusScope.value =
+            isLocal ? MouseFocusScope.local : MouseFocusScope.remote;
+        if (isLocal) {
+          _keyboardNodeLocal.requestFocus();
+        } else {
+          _keyboardNodeRemote.requestFocus();
+        }
+      },
+      onExit: (evt) {
+        _mouseFocusScope.value = MouseFocusScope.none;
+      },
+      child: ListSearchActionListener(
+        node: isLocal ? _keyboardNodeLocal : _keyboardNodeRemote,
+        buffer: isLocal ? _listSearchBufferLocal : _listSearchBufferRemote,
+        onNext: (buffer) {
+          debugPrint("searching next for $buffer");
+          assert(buffer.length == 1);
+          final selectedEntries = getSelectedItems(isLocal);
+          assert(selectedEntries.length <= 1);
+          var skipCount = 0;
+          if (selectedEntries.items.isNotEmpty) {
+            final index = entries.indexOf(selectedEntries.items.first);
+            if (index < 0) {
+              return;
+            }
+            skipCount = index + 1;
+          }
+          var searchResult = entries
+              .skip(skipCount)
+              .where((element) => element.name.startsWith(buffer));
+          if (searchResult.isEmpty) {
+            // cannot find next, lets restart search from head
+            searchResult =
+                entries.where((element) => element.name.startsWith(buffer));
+          }
+          if (searchResult.isEmpty) {
+            setState(() {
+              getSelectedItems(isLocal).clear();
+            });
+            return;
+          }
+          _jumpToEntry(
+              isLocal, searchResult.first, scrollController, rowHeight, buffer);
+        },
+        onSearch: (buffer) {
+          debugPrint("searching for $buffer");
+          final selectedEntries = getSelectedItems(isLocal);
+          final searchResult =
+              entries.where((element) => element.name.startsWith(buffer));
+          selectedEntries.clear();
+          if (searchResult.isEmpty) {
+            setState(() {
+              getSelectedItems(isLocal).clear();
+            });
+            return;
+          }
+          _jumpToEntry(
+              isLocal, searchResult.first, scrollController, rowHeight, buffer);
+        },
+        child: ObxValue<RxString>(
+          (searchText) {
+            final filteredEntries = searchText.isNotEmpty
+                ? entries.where((element) {
+                    return element.name.contains(searchText.value);
+                  }).toList(growable: false)
+                : entries;
+            return DataTable(
+              key: ValueKey(isLocal ? 0 : 1),
+              showCheckboxColumn: false,
+              dataRowHeight: rowHeight,
+              headingRowHeight: 30,
+              horizontalMargin: 8,
+              columnSpacing: 8,
+              showBottomBorder: true,
+              sortColumnIndex: sortIndex,
+              sortAscending: sortAscending,
+              columns: [
+                DataColumn(
+                    label: Text(
+                      translate("Name"),
+                    ).marginSymmetric(horizontal: 4),
+                    onSort: (columnIndex, ascending) {
+                      model.changeSortStyle(SortBy.name,
+                          isLocal: isLocal, ascending: ascending);
+                    }),
+                DataColumn(
+                    label: Text(
+                      translate("Modified"),
+                    ),
+                    onSort: (columnIndex, ascending) {
+                      model.changeSortStyle(SortBy.modified,
+                          isLocal: isLocal, ascending: ascending);
+                    }),
+                DataColumn(
+                    label: Text(translate("Size")),
+                    onSort: (columnIndex, ascending) {
+                      model.changeSortStyle(SortBy.size,
+                          isLocal: isLocal, ascending: ascending);
+                    }),
+              ],
+              rows: filteredEntries.map((entry) {
+                final sizeStr =
+                    entry.isFile ? readableFileSize(entry.size.toDouble()) : "";
+                final lastModifiedStr = entry.isDrive
+                    ? " "
+                    : "${entry.lastModified().toString().replaceAll(".000", "")}   ";
+                return DataRow(
+                    key: ValueKey(entry.name),
+                    onSelectChanged: (s) {
+                      _onSelectedChanged(getSelectedItems(isLocal),
+                          filteredEntries, entry, isLocal);
+                    },
+                    selected: getSelectedItems(isLocal).contains(entry),
+                    cells: [
+                      DataCell(
+                        Container(
+                            width: 200,
+                            child: Tooltip(
+                              waitDuration: Duration(milliseconds: 500),
+                              message: entry.name,
+                              child: Row(children: [
+                                entry.isDrive
+                                    ? Image(
+                                            image: iconHardDrive,
+                                            fit: BoxFit.scaleDown,
+                                            color: Theme.of(context)
+                                                .iconTheme
+                                                .color
+                                                ?.withOpacity(0.7))
+                                        .paddingAll(4)
+                                    : Icon(
+                                        entry.isFile
+                                            ? Icons.feed_outlined
+                                            : Icons.folder,
+                                        size: 20,
                                         color: Theme.of(context)
                                             .iconTheme
                                             .color
-                                            ?.withOpacity(0.7))
-                                    .paddingAll(4)
-                                : Icon(
-                                    entry.isFile
-                                        ? Icons.feed_outlined
-                                        : Icons.folder,
-                                    size: 20,
-                                    color: Theme.of(context)
-                                        .iconTheme
-                                        .color
-                                        ?.withOpacity(0.7),
-                                  ).marginSymmetric(horizontal: 2),
-                            Expanded(
-                                child: Text(entry.name,
-                                    overflow: TextOverflow.ellipsis))
-                          ]),
-                        )),
-                    onTap: () {
-                      final items = getSelectedItems(isLocal);
+                                            ?.withOpacity(0.7),
+                                      ).marginSymmetric(horizontal: 2),
+                                Expanded(
+                                    child: Text(entry.name,
+                                        overflow: TextOverflow.ellipsis))
+                              ]),
+                            )),
+                        onTap: () {
+                          final items = getSelectedItems(isLocal);
 
-                      // handle double click
-                      if (_checkDoubleClick(entry)) {
-                        openDirectory(entry.path, isLocal: isLocal);
-                        items.clear();
-                        return;
-                      }
-                      _onSelectedChanged(
-                          items, filteredEntries, entry, isLocal);
-                    },
-                  ),
-                  DataCell(FittedBox(
-                      child: Tooltip(
+                          // handle double click
+                          if (_checkDoubleClick(entry)) {
+                            openDirectory(entry.path, isLocal: isLocal);
+                            items.clear();
+                            return;
+                          }
+                          _onSelectedChanged(
+                              items, filteredEntries, entry, isLocal);
+                        },
+                      ),
+                      DataCell(FittedBox(
+                          child: Tooltip(
+                              waitDuration: Duration(milliseconds: 500),
+                              message: lastModifiedStr,
+                              child: Text(
+                                lastModifiedStr,
+                                style: TextStyle(
+                                    fontSize: 12, color: MyTheme.darkGray),
+                              )))),
+                      DataCell(Tooltip(
                           waitDuration: Duration(milliseconds: 500),
-                          message: lastModifiedStr,
+                          message: sizeStr,
                           child: Text(
-                            lastModifiedStr,
+                            sizeStr,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                                fontSize: 12, color: MyTheme.darkGray),
-                          )))),
-                  DataCell(Tooltip(
-                      waitDuration: Duration(milliseconds: 500),
-                      message: sizeStr,
-                      child: Text(
-                        sizeStr,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 10, color: MyTheme.darkGray),
-                      ))),
-                ]);
-          }).toList(growable: false),
-        );
-      },
-      isLocal ? _searchTextLocal : _searchTextRemote,
+                                fontSize: 10, color: MyTheme.darkGray),
+                          ))),
+                    ]);
+              }).toList(growable: false),
+            );
+          },
+          isLocal ? _searchTextLocal : _searchTextRemote,
+        ),
+      ),
     );
+  }
+
+  void _jumpToEntry(bool isLocal, Entry entry,
+      ScrollController scrollController, double rowHeight, String buffer) {
+    final entries = model.getCurrentDir(isLocal).entries;
+    final index = entries.indexOf(entry);
+    if (index == -1) {
+      debugPrint("entry is not valid: ${entry.path}");
+    }
+    final selectedEntries = getSelectedItems(isLocal);
+    final searchResult =
+        entries.where((element) => element.name.startsWith(buffer));
+    selectedEntries.clear();
+    if (searchResult.isEmpty) {
+      return;
+    }
+    final offset = min(
+        max(scrollController.position.minScrollExtent,
+            entries.indexOf(searchResult.first) * rowHeight),
+        scrollController.position.maxScrollExtent);
+    scrollController.jumpTo(offset);
+    setState(() {
+      selectedEntries.add(isLocal, searchResult.first);
+      debugPrint("focused on ${searchResult.first.name}");
+    });
   }
 
   void _onSelectedChanged(SelectedItems selectedItems, List<Entry> entries,
@@ -456,7 +568,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                               Wrap(
                                 children: [
                                   Text(
-                                      '${item.state.display()} ${max(0, item.fileNum)}/${item.fileCount} '),
+                                      '${item.display()} ${max(0, item.fileNum)}/${item.fileCount} '),
                                   Text(
                                       '${translate("files")} ${readableFileSize(item.totalSize.toDouble())} '),
                                   Offstage(
@@ -487,8 +599,8 @@ class _FileManagerPageState extends State<FileManagerPage>
                                   icon: const Icon(Icons.restart_alt_rounded)),
                             ),
                             IconButton(
-                              icon: const Icon(Icons.delete_forever_outlined),
-                              splashRadius: kDesktopIconButtonSplashRadius,
+                              icon: const Icon(Icons.close),
+                              splashRadius: 1,
                               onPressed: () {
                                 model.jobTable.removeAt(index);
                                 model.cancelJob(item.id);
@@ -636,7 +748,6 @@ class _FileManagerPageState extends State<FileManagerPage>
             }),
             IconButton(
                 onPressed: () {
-                  breadCrumbScrollToEnd(isLocal);
                   model.refresh(isLocal: isLocal);
                 },
                 splashRadius: kDesktopIconButtonSplashRadius,
@@ -691,14 +802,9 @@ class _FileManagerPageState extends State<FileManagerPage>
                               ],
                             ),
                             actions: [
-                              TextButton(
-                                  style: flatButtonStyle,
-                                  onPressed: cancel,
-                                  child: Text(translate("Cancel"))),
-                              ElevatedButton(
-                                  style: flatButtonStyle,
-                                  onPressed: submit,
-                                  child: Text(translate("OK")))
+                              dialogButton("Cancel",
+                                  onPressed: cancel, isOutline: true),
+                              dialogButton("OK", onPressed: submit)
                             ],
                             onSubmit: submit,
                             onCancel: cancel,
@@ -800,7 +906,8 @@ class _FileManagerPageState extends State<FileManagerPage>
                         onPointerSignal: (e) {
                           if (e is PointerScrollEvent) {
                             final sc = getBreadCrumbScrollController(isLocal);
-                            sc.jumpTo(sc.offset + e.scrollDelta.dy / 4);
+                            final scale = Platform.isWindows ? 2 : 4;
+                            sc.jumpTo(sc.offset + e.scrollDelta.dy / scale);
                           }
                         },
                         child: BreadCrumb(
@@ -824,7 +931,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                     final x = offset.dx;
                     final y = offset.dy + size.height + 1;
 
-                    final isPeerWindows = isWindows(isLocal);
+                    final isPeerWindows = model.getCurrentIsWindows(isLocal);
                     final List<MenuEntryBase> menuItems = [
                       MenuEntryButton(
                           childBuilder: (TextStyle? style) => isPeerWindows
@@ -870,6 +977,8 @@ class _FileManagerPageState extends State<FileManagerPage>
                               },
                               dismissOnClicked: true));
                         }
+                      } catch (e) {
+                        debugPrint("buildBread fetchDirectory err=$e");
                       } finally {
                         if (!isLocal) {
                           _ffi.dialogManager.dismissByTag(loadingTag);
@@ -912,7 +1021,8 @@ class _FileManagerPageState extends State<FileManagerPage>
       bool isLocal, void Function(List<String>) onPressed) {
     final path = model.getCurrentDir(isLocal).path;
     final breadCrumbList = List<BreadCrumbItem>.empty(growable: true);
-    if (isWindows(isLocal) && path == '/') {
+    final isWindows = model.getCurrentIsWindows(isLocal);
+    if (isWindows && path == '/') {
       breadCrumbList.add(BreadCrumbItem(
           content: TextButton(
                   child: buildWindowsThisPC(),
@@ -921,7 +1031,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                   onPressed: () => onPressed(['/']))
               .marginSymmetric(horizontal: 4)));
     } else {
-      final list = PathUtil.split(path, model.getCurrentIsWindows(isLocal));
+      final list = PathUtil.split(path, isWindows);
       breadCrumbList.addAll(list.asMap().entries.map((e) => BreadCrumbItem(
           content: TextButton(
                   child: Text(e.value),
@@ -931,14 +1041,6 @@ class _FileManagerPageState extends State<FileManagerPage>
               .marginSymmetric(horizontal: 4))));
     }
     return breadCrumbList;
-  }
-
-  bool isWindows(bool isLocal) {
-    if (isLocal) {
-      return Platform.isWindows;
-    } else {
-      return _ffi.ffiModel.pi.platform.toLowerCase() == "windows";
-    }
   }
 
   breadCrumbScrollToEnd(bool isLocal) {
@@ -999,9 +1101,7 @@ class _FileManagerPageState extends State<FileManagerPage>
   }
 
   openDirectory(String path, {bool isLocal = false}) {
-    model.openDirectory(path, isLocal: isLocal).then((_) {
-      breadCrumbScrollToEnd(isLocal);
-    });
+    model.openDirectory(path, isLocal: isLocal);
   }
 
   void handleDragDone(DropDoneDetails details, bool isLocal) {
@@ -1021,5 +1121,15 @@ class _FileManagerPageState extends State<FileManagerPage>
                 FileSystemEntity.isDirectorySync(f.path) ? 0 : f.lengthSync());
     }
     model.sendFiles(items, isRemote: false);
+  }
+
+  void refocusKeyboardListener(bool isLocal) {
+    Future.delayed(Duration.zero, () {
+      if (isLocal) {
+        _keyboardNodeLocal.requestFocus();
+      } else {
+        _keyboardNodeRemote.requestFocus();
+      }
+    });
   }
 }

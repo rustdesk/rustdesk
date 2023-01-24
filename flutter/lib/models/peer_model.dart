@@ -9,6 +9,9 @@ class Peer {
   final String platform;
   String alias;
   List<dynamic> tags;
+  bool forceAlwaysRelay = false;
+  String rdpPort;
+  String rdpUsername;
   bool online = false;
 
   Peer.fromJson(Map<String, dynamic> json)
@@ -17,7 +20,10 @@ class Peer {
         hostname = json['hostname'] ?? '',
         platform = json['platform'] ?? '',
         alias = json['alias'] ?? '',
-        tags = json['tags'] ?? [];
+        tags = json['tags'] ?? [],
+        forceAlwaysRelay = json['forceAlwaysRelay'] == 'true',
+        rdpPort = json['rdpPort'] ?? '',
+        rdpUsername = json['rdpUsername'] ?? '';
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
@@ -27,6 +33,9 @@ class Peer {
       "platform": platform,
       "alias": alias,
       "tags": tags,
+      "forceAlwaysRelay": forceAlwaysRelay.toString(),
+      "rdpPort": rdpPort,
+      "rdpUsername": rdpUsername,
     };
   }
 
@@ -37,16 +46,23 @@ class Peer {
     required this.platform,
     required this.alias,
     required this.tags,
+    required this.forceAlwaysRelay,
+    required this.rdpPort,
+    required this.rdpUsername,
   });
 
   Peer.loading()
       : this(
-            id: '...',
-            username: '...',
-            hostname: '...',
-            platform: '...',
-            alias: '',
-            tags: []);
+          id: '...',
+          username: '...',
+          hostname: '...',
+          platform: '...',
+          alias: '',
+          tags: [],
+          forceAlwaysRelay: false,
+          rdpPort: '',
+          rdpUsername: '',
+        );
 }
 
 class Peers extends ChangeNotifier {

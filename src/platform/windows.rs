@@ -24,7 +24,7 @@ use winapi::{
         minwinbase::STILL_ACTIVE,
         processthreadsapi::{
             GetCurrentProcess, GetCurrentProcessId, GetExitCodeProcess, OpenProcess,
-            OpenProcessToken,
+            OpenProcessToken, PROCESS_INFORMATION, STARTUPINFOW,
         },
         securitybaseapi::GetTokenInformation,
         shellapi::ShellExecuteW,
@@ -439,6 +439,7 @@ extern "C" {
     fn win32_disable_lowlevel_keyboard(hwnd: HWND);
     fn win_stop_system_key_propagate(v: BOOL);
     fn is_win_down() -> BOOL;
+    fn is_local_system() -> BOOL;
 }
 
 extern "system" {
@@ -718,10 +719,10 @@ pub fn set_share_rdp(enable: bool) {
 }
 
 pub fn get_active_username() -> String {
-    let name = crate::username();
-    if name != "SYSTEM" {
-        return name;
+    if !is_root() {
+        return crate::username();
     }
+
     extern "C" {
         fn get_active_user(path: *mut u16, n: u32, rdp: BOOL) -> u32;
     }
@@ -757,7 +758,8 @@ pub fn is_prelogin() -> bool {
 }
 
 pub fn is_root() -> bool {
-    crate::username() == "SYSTEM"
+    // https://stackoverflow.com/questions/4023586/correct-way-to-find-out-if-a-service-is-running-as-the-system-user
+    unsafe { is_local_system() == TRUE }
 }
 
 pub fn lock_screen() {
@@ -1366,22 +1368,6 @@ pub fn get_license() -> Option<License> {
 pub fn bootstrap() {
     if let Some(lic) = get_license() {
         *config::PROD_RENDEZVOUS_SERVER.write().unwrap() = lic.host.clone();
-        #[cfg(feature = "hbbs")]
-        {
-            if !is_win_server() {
-                return;
-            }
-            crate::hbbs::bootstrap(&lic.key, &lic.host);
-            std::thread::spawn(move || loop {
-                let tmp = Config::get_option("stop-rendezvous-service");
-                if tmp.is_empty() {
-                    crate::hbbs::start();
-                } else {
-                    crate::hbbs::stop();
-                }
-                std::thread::sleep(std::time::Duration::from_millis(100));
-            });
-        }
     }
 }
 
@@ -1711,4 +1697,43 @@ pub fn send_message_to_hnwd(
         }
     }
     return true;
+}
+
+pub fn create_process_with_logon(user: &str, pwd: &str, exe: &str, arg: &str) -> ResultType<()> {
+    unsafe {
+        let wuser = wide_string(user);
+        let wpc = wide_string("");
+        let wpwd = wide_string(pwd);
+        let cmd = if arg.is_empty() {
+            format!("\"{}\"", exe)
+        } else {
+            format!("\"{}\" {}", exe, arg)
+        };
+        let mut wcmd = wide_string(&cmd);
+        let mut si: STARTUPINFOW = mem::zeroed();
+        si.wShowWindow = SW_HIDE as _;
+        si.lpDesktop = NULL as _;
+        si.cb = std::mem::size_of::<STARTUPINFOW>() as _;
+        si.dwFlags = STARTF_USESHOWWINDOW;
+        let mut pi: PROCESS_INFORMATION = mem::zeroed();
+        let wexe = wide_string(exe);
+        if FALSE
+            == CreateProcessWithLogonW(
+                wuser.as_ptr(),
+                wpc.as_ptr(),
+                wpwd.as_ptr(),
+                LOGON_WITH_PROFILE,
+                wexe.as_ptr(),
+                wcmd.as_mut_ptr(),
+                CREATE_UNICODE_ENVIRONMENT,
+                NULL,
+                NULL as _,
+                &mut si as *mut STARTUPINFOW,
+                &mut pi as *mut PROCESS_INFORMATION,
+            )
+        {
+            bail!("CreateProcessWithLogonW failed, errno={}", GetLastError());
+        }
+    }
+    return Ok(());
 }

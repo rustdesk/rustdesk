@@ -6,7 +6,7 @@ project(rustdesk LANGUAGES CXX)
 # the on-disk name of your application.
 set(BINARY_NAME "rustdesk")
 
-# Explicitly opt in to modern CMake behaviors to avoid warnings with recent
+# Explicitly opt into modern CMake behaviors to avoid warnings with recent
 # versions of CMake.
 cmake_policy(SET CMP0063 NEW)
 

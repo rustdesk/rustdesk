@@ -304,8 +304,8 @@ class ServerModel with ChangeNotifier {
           ]),
           content: Text(translate("android_service_will_start_tip")),
           actions: [
-            TextButton(onPressed: close, child: Text(translate("Cancel"))),
-            ElevatedButton(onPressed: submit, child: Text(translate("OK"))),
+            dialogButton("Cancel", onPressed: close, isOutline: true),
+            dialogButton("OK", onPressed: submit),
           ],
           onSubmit: submit,
           onCancel: close,
@@ -501,8 +501,8 @@ class ServerModel with ChangeNotifier {
           ],
         ),
         actions: [
-          TextButton(onPressed: cancel, child: Text(translate("Dismiss"))),
-          ElevatedButton(onPressed: submit, child: Text(translate("Accept"))),
+          dialogButton("Dismiss", onPressed: cancel, isOutline: true),
+          dialogButton("Accept", onPressed: submit),
         ],
         onSubmit: submit,
         onCancel: cancel,
@@ -581,10 +581,17 @@ class ServerModel with ChangeNotifier {
   }
 }
 
+enum ClientType {
+  remote,
+  file,
+  portForward,
+}
+
 class Client {
   int id = 0; // client connections inner count id
   bool authorized = false;
   bool isFileTransfer = false;
+  String portForward = "";
   String name = "";
   String peerId = ""; // peer user's id,show at app
   bool keyboard = false;
@@ -594,6 +601,7 @@ class Client {
   bool restart = false;
   bool recording = false;
   bool disconnected = false;
+  bool fromSwitch = false;
 
   RxBool hasUnreadChatMessage = false.obs;
 
@@ -604,6 +612,7 @@ class Client {
     id = json['id'];
     authorized = json['authorized'];
     isFileTransfer = json['is_file_transfer'];
+    portForward = json['port_forward'];
     name = json['name'];
     peerId = json['peer_id'];
     keyboard = json['keyboard'];
@@ -613,6 +622,7 @@ class Client {
     restart = json['restart'];
     recording = json['recording'];
     disconnected = json['disconnected'];
+    fromSwitch = json['from_switch'];
   }
 
   Map<String, dynamic> toJson() {
@@ -620,6 +630,7 @@ class Client {
     data['id'] = id;
     data['is_start'] = authorized;
     data['is_file_transfer'] = isFileTransfer;
+    data['port_forward'] = portForward;
     data['name'] = name;
     data['peer_id'] = peerId;
     data['keyboard'] = keyboard;
@@ -629,7 +640,18 @@ class Client {
     data['restart'] = restart;
     data['recording'] = recording;
     data['disconnected'] = disconnected;
+    data['from_switch'] = fromSwitch;
     return data;
+  }
+
+  ClientType type_() {
+    if (isFileTransfer) {
+      return ClientType.file;
+    } else if (portForward.isNotEmpty) {
+      return ClientType.portForward;
+    } else {
+      return ClientType.remote;
+    }
   }
 }
 
@@ -655,9 +677,8 @@ showInputWarnAlert(FFI ffi) {
         ],
       ),
       actions: [
-        TextButton(onPressed: close, child: Text(translate("Cancel"))),
-        ElevatedButton(
-            onPressed: submit, child: Text(translate("Open System Setting"))),
+        dialogButton("Cancel", onPressed: close, isOutline: true),
+        dialogButton("Open System Setting", onPressed: submit),
       ],
       onSubmit: submit,
       onCancel: close,

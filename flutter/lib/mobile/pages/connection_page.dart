@@ -7,9 +7,8 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../common.dart';
-import '../../common/widgets/address_book.dart';
+import '../../common/widgets/login.dart';
 import '../../common/widgets/peer_tab_page.dart';
-import '../../common/widgets/peers_view.dart';
 import '../../consts.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
@@ -75,20 +74,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
         ])),
         SliverFillRemaining(
           hasScrollBody: false,
-          child: PeerTabPage(
-            tabs: [
-              translate('Recent Sessions'),
-              translate('Favorites'),
-              translate('Discovered'),
-              translate('Address Book')
-            ],
-            children: [
-              RecentPeersView(),
-              FavoritePeersView(),
-              DiscoveredPeersView(),
-              const AddressBook(),
-            ],
-          ),
+          child: PeerTabPage(),
         )
       ],
     ).marginOnly(top: 2, left: 10, right: 10);
@@ -271,7 +257,7 @@ class _WebMenuState extends State<WebMenu> {
           }
           if (value == 'login') {
             if (gFFI.userModel.userName.value.isEmpty) {
-              showLogin(gFFI.dialogManager);
+              loginDialog();
             } else {
               gFFI.userModel.logOut();
             }

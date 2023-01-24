@@ -215,6 +215,8 @@ pub struct TransferJob {
     transferred: u64,
     enable_overwrite_detection: bool,
     file_confirmed: bool,
+    // indicating the last file is skipped
+    file_skipped: bool,
     file_is_waiting: bool,
     default_overwrite_strategy: Option<bool>,
 }
@@ -541,25 +543,66 @@ impl TransferJob {
     pub fn set_file_confirmed(&mut self, file_confirmed: bool) {
         log::info!("id: {}, file_confirmed: {}", self.id, file_confirmed);
         self.file_confirmed = file_confirmed;
+        self.file_skipped = false;
     }
 
     pub fn set_file_is_waiting(&mut self, file_is_waiting: bool) {
         self.file_is_waiting = file_is_waiting;
     }
 
+    #[inline]
     pub fn file_is_waiting(&self) -> bool {
         self.file_is_waiting
     }
 
+    #[inline]
     pub fn file_confirmed(&self) -> bool {
         self.file_confirmed
     }
 
-    pub fn skip_current_file(&mut self) -> bool {
+    /// Indicating whether the last file is skipped
+    #[inline]
+    pub fn file_skipped(&self) -> bool {
+        self.file_skipped
+    }
+
+    /// Indicating whether the whole task is skipped
+    #[inline]
+    pub fn job_skipped(&self) -> bool {
+        self.file_skipped() && self.files.len() == 1
+    }
+
+    /// Check whether the job is completed after `read` returns `None`
+    /// This is a helper function which gives additional lifecycle when the job reads `None`.
+    /// If returns `true`, it means we can delete the job automatically. `False` otherwise.
+    ///
+    /// [`Note`]
+    /// Conditions:
+    /// 1. Files are not waiting for confirmation by peers.
+    #[inline]
+    pub fn job_completed(&self) -> bool {
+        // has no error, Condition 2
+        if !self.enable_overwrite_detection || (!self.file_confirmed && !self.file_is_waiting) {
+            return true;
+        }
+        return false;
+    }
+
+    /// Get job error message, useful for getting status when job had finished
+    pub fn job_error(&self) -> Option<String> {
+        if self.job_skipped() {
+            return Some("skipped".to_string());
+        }
+        None
+    }
+
+    pub fn set_file_skipped(&mut self) -> bool {
+        log::debug!("skip file {} in job {}", self.file_num, self.id);
         self.file.take();
         self.set_file_confirmed(false);
         self.set_file_is_waiting(false);
         self.file_num += 1;
+        self.file_skipped = true;
         true
     }
 
@@ -570,8 +613,7 @@ impl TransferJob {
             match r.union {
                 Some(file_transfer_send_confirm_request::Union::Skip(s)) => {
                     if s {
-                        log::debug!("skip file id:{}, file_num:{}", r.id, r.file_num);
-                        self.skip_current_file();
+                        self.set_file_skipped();
                     } else {
                         self.set_file_confirmed(true);
                     }
@@ -717,10 +759,16 @@ pub async fn handle_read_jobs(
                 stream.send(&new_block(block)).await?;
             }
             Ok(None) => {
-                if !job.enable_overwrite_detection || (!job.file_confirmed && !job.file_is_waiting)
-                {
+                if job.job_completed() {
                     finished.push(job.id());
-                    stream.send(&new_done(job.id(), job.file_num())).await?;
+                    let err = job.job_error();
+                    if err.is_some() {
+                        stream
+                            .send(&new_error(job.id(), err.unwrap(), job.file_num()))
+                            .await?;
+                    } else {
+                        stream.send(&new_done(job.id(), job.file_num())).await?;
+                    }
                 } else {
                     // waiting confirmation.
                 }

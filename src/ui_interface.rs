@@ -14,20 +14,17 @@ use hbb_common::{
     tokio::{self, sync::mpsc, time},
 };
 
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 use hbb_common::{
     config::{RENDEZVOUS_PORT, RENDEZVOUS_TIMEOUT},
     futures::future::join_all,
     protobuf::Message as _,
     rendezvous_proto::*,
-    tcp::FramedStream,
 };
 
 #[cfg(feature = "flutter")]
 use crate::hbbs_http::account;
 use crate::{common::SOFTWARE_UPDATE_URL, ipc};
 
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 type Message = RendezvousMessage;
 
 pub type Children = Arc<Mutex<(bool, HashMap<(String, String), Child>)>>;
@@ -138,13 +135,6 @@ pub fn show_run_without_install() -> bool {
 }
 
 #[inline]
-pub fn has_rendezvous_service() -> bool {
-    #[cfg(all(windows, feature = "hbbs"))]
-    return crate::platform::is_win_server() && crate::platform::windows::get_license().is_some();
-    return false;
-}
-
-#[inline]
 pub fn get_license() -> String {
     #[cfg(windows)]
     if let Some(lic) = crate::platform::windows::get_license() {
@@ -161,6 +151,7 @@ pub fn get_license() -> String {
 }
 
 #[inline]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 pub fn get_option_opt(key: &str) -> Option<String> {
     OPTIONS.lock().unwrap().get(key).map(|x| x.clone())
 }
@@ -202,6 +193,18 @@ pub fn set_local_flutter_config(key: String, value: String) {
     LocalConfig::set_flutter_config(key, value);
 }
 
+#[cfg(feature = "flutter")]
+#[inline]
+pub fn get_kb_layout_type() -> String {
+    LocalConfig::get_kb_layout_type()
+}
+
+#[cfg(feature = "flutter")]
+#[inline]
+pub fn set_kb_layout_type(kb_layout_type: String) {
+    LocalConfig::set_kb_layout_type(kb_layout_type);
+}
+
 #[inline]
 pub fn peer_has_password(id: String) -> bool {
     !PeerConfig::load(&id).password.is_empty()
@@ -233,7 +236,8 @@ pub fn set_peer_option(id: String, name: String, value: String) {
 
 #[inline]
 pub fn using_public_server() -> bool {
-    crate::get_custom_rendezvous_server(get_option_("custom-rendezvous-server")).is_empty()
+    option_env!("RENDEZVOUS_SERVER").is_none()
+        && crate::get_custom_rendezvous_server(get_option_("custom-rendezvous-server")).is_empty()
 }
 
 #[inline]
@@ -573,6 +577,15 @@ pub fn is_installed_daemon(_prompt: bool) -> bool {
 }
 
 #[inline]
+#[cfg(feature = "flutter")]
+pub fn is_can_input_monitoring(_prompt: bool) -> bool {
+    #[cfg(target_os = "macos")]
+    return crate::platform::macos::is_can_input_monitoring(_prompt);
+    #[cfg(not(target_os = "macos"))]
+    return true;
+}
+
+#[inline]
 pub fn get_error() -> String {
     #[cfg(not(any(feature = "cli")))]
     #[cfg(target_os = "linux")]
@@ -685,6 +698,20 @@ pub fn discover() {
     });
 }
 
+#[cfg(feature = "flutter")]
+pub fn peer_to_map(id: String, p: PeerConfig) -> HashMap<&'static str, String> {
+    HashMap::<&str, String>::from_iter([
+        ("id", id),
+        ("username", p.info.username.clone()),
+        ("hostname", p.info.hostname.clone()),
+        ("platform", p.info.platform.clone()),
+        (
+            "alias",
+            p.options.get("alias").unwrap_or(&"".to_owned()).to_owned(),
+        ),
+    ])
+}
+
 #[inline]
 pub fn get_lan_peers() -> Vec<HashMap<&'static str, String>> {
     config::LanPeers::load()
@@ -728,7 +755,7 @@ pub fn change_id(id: String) {
     *ASYNC_JOB_STATUS.lock().unwrap() = " ".to_owned();
     let old_id = get_id();
     std::thread::spawn(move || {
-        *ASYNC_JOB_STATUS.lock().unwrap() = change_id_(id, old_id).to_owned();
+        *ASYNC_JOB_STATUS.lock().unwrap() = change_id_shared(id, old_id).to_owned();
     });
 }
 
@@ -904,7 +931,7 @@ pub fn account_auth_result() -> String {
     serde_json::to_string(&account::OidcSession::get_result()).unwrap_or_default()
 }
 
-// notice: avoiding create ipc connecton repeatly,
+// notice: avoiding create ipc connection repeatedly,
 // because windows named pipe has serious memory leak issue.
 #[tokio::main(flavor = "current_thread")]
 async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc::Data>) {
@@ -985,14 +1012,11 @@ pub(crate) async fn send_to_cm(data: &ipc::Data) {
     }
 }
 
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 const INVALID_FORMAT: &'static str = "Invalid format";
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 const UNKNOWN_ERROR: &'static str = "Unknown error";
 
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[tokio::main(flavor = "current_thread")]
-async fn change_id_(id: String, old_id: String) -> &'static str {
+pub async fn change_id_shared(id: String, old_id: String) -> &'static str {
     if !hbb_common::is_valid_custom_id(&id) {
         return INVALID_FORMAT;
     }
@@ -1040,17 +1064,14 @@ async fn change_id_(id: String, old_id: String) -> &'static str {
     err
 }
 
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 async fn check_id(
     rendezvous_server: String,
     old_id: String,
     id: String,
     uuid: String,
 ) -> &'static str {
-    let any_addr = Config::get_any_listen_addr();
-    if let Ok(mut socket) = FramedStream::new(
+    if let Ok(mut socket) = hbb_common::socket_client::connect_tcp(
         crate::check_port(rendezvous_server, RENDEZVOUS_PORT),
-        any_addr,
         RENDEZVOUS_TIMEOUT,
     )
     .await

@@ -57,6 +57,8 @@ fn mousebutton(button: MouseButton) -> c_int {
         MouseButton::ScrollDown => 5,
         MouseButton::ScrollLeft => 6,
         MouseButton::ScrollRight => 7,
+        MouseButton::Back => 8,
+        MouseButton::Forward => 9,
     }
 }
 
@@ -391,8 +393,9 @@ impl KeyboardControllable for EnigoXdo {
     where
         Self: Sized,
     {
-        self.key_sequence_parse_try(sequence)
-            .expect("Could not parse sequence");
+        if let Err(..) = self.key_sequence_parse_try(sequence) {
+            println!("Could not parse sequence");
+        }
     }
 
     fn key_sequence_parse_try(&mut self, sequence: &str) -> Result<(), crate::dsl::ParseError>

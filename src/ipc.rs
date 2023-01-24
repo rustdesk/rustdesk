@@ -9,7 +9,7 @@ use parity_tokio_ipc::{
 use serde_derive::{Deserialize, Serialize};
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub use clipboard::ClipbaordFile;
+pub use clipboard::ClipboardFile;
 use hbb_common::{
     allow_err, bail, bytes,
     bytes_codec::BytesCodec,
@@ -75,6 +75,11 @@ pub enum FS {
         id: i32,
         file_num: i32,
     },
+    WriteError {
+        id: i32,
+        file_num: i32,
+        err: String,
+    },
     WriteOffset {
         id: i32,
         file_num: i32,
@@ -106,7 +111,7 @@ pub enum DataKeyboardResponse {
     GetKeyState(bool),
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "t", content = "c")]
 pub enum DataMouse {
@@ -161,6 +166,7 @@ pub enum Data {
         file_transfer_enabled: bool,
         restart: bool,
         recording: bool,
+        from_switch: bool,
     },
     ChatMessage {
         text: String,
@@ -186,15 +192,15 @@ pub enum Data {
     Test,
     SyncConfig(Option<(Config, Config2)>),
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    ClipbaordFile(ClipbaordFile),
+    ClipboardFile(ClipboardFile),
     ClipboardFileEnabled(bool),
     PrivacyModeState((i32, PrivacyModeState)),
     TestRendezvousServer,
-    #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     Keyboard(DataKeyboard),
-    #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     KeyboardResponse(DataKeyboardResponse),
-    #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     Mouse(DataMouse),
     Control(DataControl),
     Theme(String),
@@ -202,6 +208,8 @@ pub enum Data {
     Empty,
     Disconnected,
     DataPortableService(DataPortableService),
+    SwitchSidesRequest(String),
+    SwitchSidesBack,
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -422,6 +430,15 @@ async fn handle(data: Data, stream: &mut Connection) {
         Data::TestRendezvousServer => {
             crate::test_rendezvous_server();
         }
+        Data::SwitchSidesRequest(id) => {
+            let uuid = uuid::Uuid::new_v4();
+            crate::server::insert_switch_sides_uuid(id, uuid.clone());
+            allow_err!(
+                stream
+                    .send(&Data::SwitchSidesRequest(uuid.to_string()))
+                    .await
+            );
+        }
         _ => {}
     }
 }
@@ -539,7 +556,7 @@ async fn check_pid(postfix: &str) {
             }
         }
     }
-    hbb_common::allow_err!(std::fs::remove_file(&Config::ipc_path(postfix)));
+    std::fs::remove_file(&Config::ipc_path(postfix)).ok();
 }
 
 #[inline]

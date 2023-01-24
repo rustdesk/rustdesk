@@ -40,7 +40,7 @@ message DisplayInfo {
   int32 height = 4;
   string name = 5;
   bool online = 6;
-  bool cursor_embeded = 7;
+  bool cursor_embedded = 7;
 }
 
 message PortForward {
@@ -420,7 +420,7 @@ message SwitchDisplay {
   sint32 y = 3;
   int32 width = 4;
   int32 height = 5;
-  bool cursor_embeded = 6;
+  bool cursor_embedded = 6;
 }
 
 message PermissionInfo {
@@ -445,7 +445,7 @@ enum ImageQuality {
 }
 
 message VideoCodecState {
-  enum PerferCodec {
+  enum PreferCodec {
     Auto = 0;
     VPX = 1;
     H264 = 2;
@@ -455,7 +455,7 @@ message VideoCodecState {
   int32 score_vpx = 1;
   int32 score_h264 = 2;
   int32 score_h265 = 3;
-  PerferCodec perfer = 4;
+  PreferCodec prefer = 4;
 }
 
 message OptionMessage {
@@ -503,7 +503,7 @@ message AudioFrame {
 
 // Notify peer to show message box.
 message MessageBox {
-  // Message type. Refer to flutter/lib/commom.dart/msgBox().
+  // Message type. Refer to flutter/lib/common.dart/msgBox().
   string msgtype = 1;
   string title = 2;
   // English
@@ -552,6 +552,29 @@ message BackNotification {
   }
 }
 
+message ElevationRequestWithLogon {
+  string username = 1;
+  string password = 2;
+}
+
+message ElevationRequest {
+  oneof union {
+    bool direct = 1;
+    ElevationRequestWithLogon logon = 2;
+  }
+}
+
+message SwitchSidesRequest {
+  bytes uuid = 1;
+}
+
+message SwitchSidesResponse {
+  bytes uuid = 1;
+  LoginRequest lr = 2;
+}
+
+message SwitchBack {}
+
 message Misc {
   oneof union {
     ChatMessage chat_message = 4;
@@ -567,6 +590,11 @@ message Misc {
     bool uac = 15;
     bool foreground_window_elevated = 16;
     bool stop_service = 17;
+    ElevationRequest elevation_request = 18;
+    string elevation_response = 19;
+    bool portable_service_running = 20;
+    SwitchSidesRequest switch_sides_request = 21;
+    SwitchBack switch_back = 22;
   }
 }
 
@@ -591,5 +619,6 @@ message Message {
     Misc misc = 19;
     Cliprdr cliprdr = 20;
     MessageBox message_box = 21;
+    SwitchSidesResponse switch_sides_response = 22;
   }
 }

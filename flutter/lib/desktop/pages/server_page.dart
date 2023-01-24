@@ -30,7 +30,12 @@ class _DesktopServerPageState extends State<DesktopServerPage>
   void initState() {
     gFFI.ffiModel.updateEventListener("");
     windowManager.addListener(this);
-    tabController.onRemoved = (_, id) => onRemoveId(id);
+    tabController.onRemoved = (_, id) {
+      onRemoveId(id);
+    };
+    tabController.onSelected = (_, id) {
+      windowManager.setTitle(getWindowNameWithId(id));
+    };
     super.initState();
   }
 
@@ -238,7 +243,7 @@ Widget buildConnectionCard(Client client) {
             key: ValueKey(client.id),
             children: [
               _CmHeader(client: client),
-              client.isFileTransfer || client.disconnected
+              client.type_() != ClientType.remote || client.disconnected
                   ? Offstage()
                   : _PrivilegeBoard(client: client),
               Expanded(
@@ -376,7 +381,7 @@ class _CmHeaderState extends State<_CmHeader>
           ),
         ),
         Offstage(
-          offstage: !client.authorized || client.isFileTransfer,
+          offstage: !client.authorized || client.type_() != ClientType.remote,
           child: IconButton(
               onPressed: () => checkClickTime(
                   client.id, () => gFFI.chatModel.toggleCMChatPage(client.id)),
@@ -510,10 +515,21 @@ class _CmControlPanel extends StatelessWidget {
   buildAuthorized(BuildContext context) {
     final bool canElevate = bind.cmCanElevate();
     final model = Provider.of<ServerModel>(context);
-    final showElevation = canElevate && model.showElevation;
+    final showElevation = canElevate &&
+        model.showElevation &&
+        client.type_() == ClientType.remote;
     return Column(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
+        Offstage(
+          offstage: !client.fromSwitch,
+          child: buildButton(context,
+              color: Colors.purple,
+              onClick: () => handleSwitchBack(context),
+              icon: Icon(Icons.reply, color: Colors.white),
+              text: "Switch Sides",
+              textColor: Colors.white),
+        ),
         Offstage(
           offstage: !showElevation,
           child: buildButton(context, color: Colors.green[700], onClick: () {
@@ -560,7 +576,9 @@ class _CmControlPanel extends StatelessWidget {
   buildUnAuthorized(BuildContext context) {
     final bool canElevate = bind.cmCanElevate();
     final model = Provider.of<ServerModel>(context);
-    final showElevation = canElevate && model.showElevation;
+    final showElevation = canElevate &&
+        model.showElevation &&
+        client.type_() == ClientType.remote;
     final showAccept = model.approveMode != 'password';
     return Column(
       mainAxisAlignment: MainAxisAlignment.end,
@@ -669,6 +687,10 @@ class _CmControlPanel extends StatelessWidget {
     if (await bind.cmGetClientsLength() == 0) {
       windowManager.close();
     }
+  }
+
+  void handleSwitchBack(BuildContext context) {
+    bind.cmSwitchBack(connId: client.id);
   }
 }
 

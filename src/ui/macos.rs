@@ -13,7 +13,6 @@ use objc::{
 };
 use sciter::{make_args, Host};
 use std::{ffi::c_void, rc::Rc};
-use dark_light;
 
 static APP_HANDLER_IVAR: &str = "GoDeskAppHandler";
 
@@ -43,7 +42,7 @@ impl DelegateState {
     }
 }
 
-static mut LAUCHED: bool = false;
+static mut LAUNCHED: bool = false;
 
 impl AppHandler for Rc<Host> {
     fn command(&mut self, cmd: u32) {
@@ -110,7 +109,7 @@ unsafe fn set_delegate(handler: Option<Box<dyn AppHandler>>) {
 
 extern "C" fn application_did_finish_launching(_this: &mut Object, _: Sel, _notification: id) {
     unsafe {
-        LAUCHED = true;
+        LAUNCHED = true;
     }
     unsafe {
         let () = msg_send![NSApp(), activateIgnoringOtherApps: YES];
@@ -123,12 +122,12 @@ extern "C" fn application_should_handle_open_untitled_file(
     _sender: id,
 ) -> BOOL {
     unsafe {
-        if !LAUCHED {
+        if !LAUNCHED {
             return YES;
         }
         hbb_common::log::debug!("icon clicked on finder");
         if std::env::args().nth(1) == Some("--server".to_owned()) {
-            check_main_window();
+            crate::platform::macos::check_main_window();
         }
         let inner: *mut c_void = *this.get_ivar(APP_HANDLER_IVAR);
         let inner = &mut *(inner as *mut DelegateState);
@@ -234,24 +233,4 @@ pub fn make_tray() {
         set_delegate(None);
     }
     crate::tray::make_tray();
-}
-
-pub fn check_main_window() {
-    use sysinfo::{ProcessExt, System, SystemExt};
-    let mut sys = System::new();
-    sys.refresh_processes();
-    let app = format!("/Applications/{}.app", crate::get_app_name());
-    let my_uid = sys
-        .process((std::process::id() as i32).into())
-        .map(|x| x.user_id())
-        .unwrap_or_default();
-    for (_, p) in sys.processes().iter() {
-        if p.cmd().len() == 1 && p.user_id() == my_uid && p.cmd()[0].contains(&app) {
-            return;
-        }
-    }
-    std::process::Command::new("open")
-        .args(["-n", &app])
-        .status()
-        .ok();
 }

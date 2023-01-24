@@ -78,6 +78,13 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "2.3.1"
+  build_cli_annotations:
+    dependency: transitive
+    description:
+      name: build_cli_annotations
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "2.1.0"
   build_config:
     dependency: transitive
     description:
@@ -105,7 +112,7 @@ packages:
       name: build_runner
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "2.3.2"
+    version: "2.3.3"
   build_runner_core:
     dependency: transitive
     description:
@@ -169,6 +176,13 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "2.0.1"
+  cli_util:
+    dependency: transitive
+    description:
+      name: cli_util
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "0.3.5"
   clock:
     dependency: transitive
     description:
@@ -182,7 +196,7 @@ packages:
       name: code_builder
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "4.3.0"
+    version: "4.4.0"
   collection:
     dependency: transitive
     description:
@@ -190,6 +204,13 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "1.16.0"
+  colorize:
+    dependency: transitive
+    description:
+      name: colorize
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "3.0.0"
   contextmenu:
     dependency: "direct main"
     description:
@@ -246,6 +267,13 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "0.0.15"
+  debounce_throttle:
+    dependency: "direct main"
+    description:
+      name: debounce_throttle
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "2.0.0"
   desktop_drop:
     dependency: "direct main"
     description:
@@ -257,8 +285,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: cb086219bd4760a95a483cb14c1791d2a39ca5a0
-      resolved-ref: cb086219bd4760a95a483cb14c1791d2a39ca5a0
+      ref: "057e6eb1bc7dcbcf9dafd1384274a611e4fe7124"
+      resolved-ref: "057e6eb1bc7dcbcf9dafd1384274a611e4fe7124"
       url: "https://github.com/Kingtous/rustdesk_desktop_multi_window"
     source: git
     version: "0.1.0"
@@ -332,6 +360,13 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "2.0.1"
+  ffigen:
+    dependency: "direct dev"
+    description:
+      name: ffigen
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "7.2.4"
   file:
     dependency: transitive
     description:
@@ -345,7 +380,7 @@ packages:
       name: file_picker
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "5.2.2"
+    version: "5.2.4"
   fixnum:
     dependency: transitive
     description:
@@ -382,12 +417,10 @@ packages:
   flutter_custom_cursor:
     dependency: "direct main"
     description:
-      path: "."
-      ref: bfb19c84a8244771488bc05cc5f9c9b5e0324cfd
-      resolved-ref: bfb19c84a8244771488bc05cc5f9c9b5e0324cfd
-      url: "https://github.com/Kingtous/rustdesk_flutter_custom_cursor"
-    source: git
-    version: "0.0.1"
+      name: flutter_custom_cursor
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "0.0.2"
   flutter_improved_scrolling:
     dependency: "direct main"
     description:
@@ -424,12 +457,10 @@ packages:
   flutter_rust_bridge:
     dependency: "direct main"
     description:
-      path: frb_dart
-      ref: master
-      resolved-ref: e5adce55eea0b74d3680e66a2c5252edf17b07e1
-      url: "https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge"
-    source: git
-    version: "1.32.0"
+      name: flutter_rust_bridge
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "1.61.1"
   flutter_svg:
     dependency: "direct main"
     description:
@@ -448,7 +479,7 @@ packages:
       name: freezed
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "2.2.1"
+    version: "2.3.2"
   freezed_annotation:
     dependency: "direct main"
     description:
@@ -539,7 +570,7 @@ packages:
       name: image_picker_android
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "0.8.5+3"
+    version: "0.8.5+4"
   image_picker_for_web:
     dependency: transitive
     description:
@@ -553,7 +584,7 @@ packages:
       name: image_picker_ios
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "0.8.6+1"
+    version: "0.8.6+3"
   image_picker_platform_interface:
     dependency: transitive
     description:
@@ -617,13 +648,6 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "0.1.4"
-  menu_base:
-    dependency: transitive
-    description:
-      name: menu_base
-      url: "https://pub.dartlang.org"
-    source: hosted
-    version: "0.1.1"
   meta:
     dependency: transitive
     description:
@@ -637,7 +661,7 @@ packages:
       name: mime
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "1.0.2"
+    version: "1.0.3"
   nested:
     dependency: transitive
     description:
@@ -701,6 +725,13 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "2.1.0"
+  password_strength:
+    dependency: "direct main"
+    description:
+      name: password_strength
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "0.2.0"
   path:
     dependency: "direct main"
     description:
@@ -826,7 +857,7 @@ packages:
       name: provider
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "6.0.4"
+    version: "6.0.5"
   pub_semver:
     dependency: transitive
     description:
@@ -841,6 +872,13 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "1.2.1"
+  puppeteer:
+    dependency: transitive
+    description:
+      name: puppeteer
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "2.12.0"
   qr_code_scanner:
     dependency: "direct main"
     description:
@@ -848,8 +886,15 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "1.0.1"
+  quiver:
+    dependency: transitive
+    description:
+      name: quiver
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "3.2.1"
   rxdart:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: rxdart
       url: "https://pub.dartlang.org"
@@ -885,6 +930,13 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "1.4.0"
+  shelf_static:
+    dependency: transitive
+    description:
+      name: shelf_static
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "1.1.1"
   shelf_web_socket:
     dependency: transitive
     description:
@@ -892,13 +944,13 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "1.0.3"
-  shortid:
+  simple_observable:
     dependency: transitive
     description:
-      name: shortid
+      name: simple_observable
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "0.1.2"
+    version: "2.0.0"
   sky_engine:
     dependency: transitive
     description: flutter
@@ -988,15 +1040,6 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "1.4.0"
-  tray_manager:
-    dependency: "direct main"
-    description:
-      path: "."
-      ref: "3aa37c86e47ea748e7b5507cbe59f2c54ebdb23a"
-      resolved-ref: "3aa37c86e47ea748e7b5507cbe59f2c54ebdb23a"
-      url: "https://github.com/Kingtous/rustdesk_tray_manager"
-    source: git
-    version: "0.1.8"
   tuple:
     dependency: "direct main"
     description:
@@ -1021,12 +1064,10 @@ packages:
   uni_links_desktop:
     dependency: "direct main"
     description:
-      path: "."
-      ref: "5be5113d59c753989dbf1106241379e3fd4c9b18"
-      resolved-ref: "5be5113d59c753989dbf1106241379e3fd4c9b18"
-      url: "https://github.com/fufesou/uni_links_desktop.git"
-    source: git
-    version: "0.1.3"
+      name: uni_links_desktop
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "0.1.4"
   uni_links_platform_interface:
     dependency: transitive
     description:
@@ -1124,35 +1165,35 @@ packages:
       name: video_player
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "2.4.8"
+    version: "2.4.10"
   video_player_android:
     dependency: transitive
     description:
       name: video_player_android
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "2.3.9"
+    version: "2.3.10"
   video_player_avfoundation:
     dependency: transitive
     description:
       name: video_player_avfoundation
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "2.3.7"
+    version: "2.3.8"
   video_player_platform_interface:
     dependency: transitive
     description:
       name: video_player_platform_interface
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "5.1.4"
+    version: "6.0.1"
   video_player_web:
     dependency: transitive
     description:
       name: video_player_web
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "2.0.12"
+    version: "2.0.13"
   visibility_detector:
     dependency: "direct main"
     description:
@@ -1210,12 +1251,12 @@ packages:
     source: hosted
     version: "2.2.0"
   win32:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: win32
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "3.1.2"
+    version: "3.1.3"
   win32_registry:
     dependency: transitive
     description:
@@ -1262,6 +1303,13 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "3.1.1"
+  yaml_edit:
+    dependency: transitive
+    description:
+      name: yaml_edit
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "2.0.3"
   zxing2:
     dependency: "direct main"
     description:

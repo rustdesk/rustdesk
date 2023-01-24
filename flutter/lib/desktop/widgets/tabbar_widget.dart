@@ -331,6 +331,7 @@ class DesktopTab extends StatelessWidget {
     return _buildBlock(
         child: Obx(() => PageView(
             controller: state.value.pageController,
+            physics: NeverScrollableScrollPhysics(),
             children: state.value.tabs
                 .map((tab) => tab.page)
                 .toList(growable: false))));
@@ -373,7 +374,7 @@ class DesktopTab extends StatelessWidget {
                           width: 78,
                         )),
                     Offstage(
-                      offstage: kUseCompatibleUiMode,
+                      offstage: kUseCompatibleUiMode || Platform.isMacOS,
                       child: Row(children: [
                         Offstage(
                             offstage: !showLogo,
@@ -485,7 +486,7 @@ class WindowActionPanelState extends State<WindowActionPanel>
           }
         });
       } else {
-        final wc = WindowController.fromWindowId(windowId!);
+        final wc = WindowController.fromWindowId(kWindowId!);
         wc.isMaximized().then((maximized) {
           debugPrint("isMaximized $maximized");
           if (widget.isMaximized.value != maximized) {
@@ -526,13 +527,19 @@ class WindowActionPanelState extends State<WindowActionPanel>
   void onWindowClose() async {
     // hide window on close
     if (widget.isMainWindow) {
+      await rustDeskWinManager.unregisterActiveWindow(0);
+      // `hide` must be placed after unregisterActiveWindow, because once all windows are hidden,
+      // flutter closes the application on macOS. We should ensure the post-run logic has ran successfully.
+      // e.g.: saving window position.
       await windowManager.hide();
-      rustDeskWinManager.unregisterActiveWindow(0);
     } else {
-      widget.onClose?.call();
-      await WindowController.fromWindowId(windowId!).hide();
-      rustDeskWinManager
-          .call(WindowType.Main, kWindowEventHide, {"id": windowId!});
+      // it's safe to hide the subwindow
+      await WindowController.fromWindowId(kWindowId!).hide();
+      await Future.wait([
+        rustDeskWinManager
+            .call(WindowType.Main, kWindowEventHide, {"id": kWindowId!}),
+        widget.onClose?.call() ?? Future.microtask(() => null)
+      ]);
     }
     super.onWindowClose();
   }
@@ -548,7 +555,7 @@ class WindowActionPanelState extends State<WindowActionPanel>
           child: Row(
             children: [
               Offstage(
-                  offstage: !widget.showMinimize,
+                  offstage: !widget.showMinimize || Platform.isMacOS,
                   child: ActionIcon(
                     message: 'Minimize',
                     icon: IconFont.min,
@@ -556,13 +563,13 @@ class WindowActionPanelState extends State<WindowActionPanel>
                       if (widget.isMainWindow) {
                         windowManager.minimize();
                       } else {
-                        WindowController.fromWindowId(windowId!).minimize();
+                        WindowController.fromWindowId(kWindowId!).minimize();
                       }
                     },
                     isClose: false,
                   )),
               Offstage(
-                  offstage: !widget.showMaximize,
+                  offstage: !widget.showMaximize || Platform.isMacOS,
                   child: Obx(() => ActionIcon(
                         message:
                             widget.isMaximized.value ? "Restore" : "Maximize",
@@ -573,7 +580,7 @@ class WindowActionPanelState extends State<WindowActionPanel>
                         isClose: false,
                       ))),
               Offstage(
-                  offstage: !widget.showClose,
+                  offstage: !widget.showClose || Platform.isMacOS,
                   child: ActionIcon(
                     message: 'Close',
                     icon: IconFont.close,
@@ -586,7 +593,7 @@ class WindowActionPanelState extends State<WindowActionPanel>
                           if (widget.isMainWindow) {
                             await windowManager.close();
                           } else {
-                            await WindowController.fromWindowId(windowId!)
+                            await WindowController.fromWindowId(kWindowId!)
                                 .close();
                           }
                         });
@@ -615,7 +622,7 @@ void startDragging(bool isMainWindow) {
   if (isMainWindow) {
     windowManager.startDragging();
   } else {
-    WindowController.fromWindowId(windowId!).startDragging();
+    WindowController.fromWindowId(kWindowId!).startDragging();
   }
 }
 
@@ -631,7 +638,7 @@ Future<bool> toggleMaximize(bool isMainWindow) async {
       return true;
     }
   } else {
-    final wc = WindowController.fromWindowId(windowId!);
+    final wc = WindowController.fromWindowId(kWindowId!);
     if (await wc.isMaximized()) {
       wc.unmaximize();
       return false;
@@ -680,8 +687,8 @@ Future<bool> closeConfirmDialog() async {
           ]),
       // confirm checkbox
       actions: [
-        TextButton(onPressed: close, child: Text(translate("Cancel"))),
-        ElevatedButton(onPressed: submit, child: Text(translate("OK"))),
+        dialogButton("Cancel", onPressed: close, isOutline: true),
+        dialogButton("OK", onPressed: submit),
       ],
       onSubmit: submit,
       onCancel: close,
@@ -824,7 +831,7 @@ class _TabState extends State<_Tab> with RestorationMixin {
       return ConstrainedBox(
           constraints: BoxConstraints(maxWidth: widget.maxLabelWidth ?? 200),
           child: Text(
-            translate(widget.label.value),
+            widget.label.value,
             textAlign: TextAlign.center,
             style: TextStyle(
                 color: isSelected
@@ -899,7 +906,7 @@ class _TabState extends State<_Tab> with RestorationMixin {
                       children: [
                         _buildTabContent(),
                         Obx((() => _CloseButton(
-                              visiable: hover.value && widget.closable,
+                              visible: hover.value && widget.closable,
                               tabSelected: isSelected,
                               onClose: () => widget.onClose(),
                             )))
@@ -931,13 +938,13 @@ class _TabState extends State<_Tab> with RestorationMixin {
 }
 
 class _CloseButton extends StatelessWidget {
-  final bool visiable;
+  final bool visible;
   final bool tabSelected;
   final Function onClose;
 
   const _CloseButton({
     Key? key,
-    required this.visiable,
+    required this.visible,
     required this.tabSelected,
     required this.onClose,
   }) : super(key: key);
@@ -947,7 +954,7 @@ class _CloseButton extends StatelessWidget {
     return SizedBox(
         width: _kIconSize,
         child: Offstage(
-          offstage: !visiable,
+          offstage: !visible,
           child: InkWell(
             customBorder: const RoundedRectangleBorder(),
             onTap: () => onClose(),
@@ -1033,8 +1040,8 @@ class AddButton extends StatelessWidget {
     return ActionIcon(
         message: 'New Connection',
         icon: IconFont.add,
-        onTap: () =>
-            rustDeskWinManager.call(WindowType.Main, "main_window_on_top", ""),
+        onTap: () => rustDeskWinManager.call(
+            WindowType.Main, kWindowMainWindowOnTop, ""),
         isClose: false);
   }
 }

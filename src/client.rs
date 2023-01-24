@@ -1,4 +1,5 @@
 pub use async_trait::async_trait;
+use bytes::Bytes;
 #[cfg(not(any(target_os = "android", target_os = "linux")))]
 use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
@@ -6,12 +7,11 @@ use cpal::{
 };
 use magnum_opus::{Channels::*, Decoder as AudioDecoder};
 use sha2::{Digest, Sha256};
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
-use std::sync::atomic::Ordering;
 use std::{
     collections::HashMap,
     net::SocketAddr,
     ops::{Deref, Not},
+    str::FromStr,
     sync::{atomic::AtomicBool, mpsc, Arc, Mutex, RwLock},
 };
 use uuid::Uuid;
@@ -25,7 +25,7 @@ use hbb_common::{
         Config, PeerConfig, PeerInfoSerde, CONNECT_TIMEOUT, READ_TIMEOUT, RELAY_PORT,
         RENDEZVOUS_TIMEOUT,
     },
-    log,
+    get_version_number, log,
     message_proto::{option_message::BoolOption, *},
     protobuf::Message as _,
     rand,
@@ -50,8 +50,8 @@ pub mod file_trait;
 pub mod helper;
 pub mod io_loop;
 use crate::{
+    common::{self, is_keyboard_mode_supported},
     server::video_service::{SCRAP_X11_REF_URL, SCRAP_X11_REQUIRED},
-    ui_session_interface::global_save_keyboard_mode,
 };
 pub static SERVER_KEYBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
 pub static SERVER_FILE_TRANSFER_ENABLED: AtomicBool = AtomicBool::new(true);
@@ -172,26 +172,30 @@ impl Client {
         interface: impl Interface,
     ) -> ResultType<(Stream, bool)> {
         // to-do: remember the port for each peer, so that we can retry easier
-        let any_addr = Config::get_any_listen_addr();
-        if crate::is_ip(peer) {
+        if hbb_common::is_ip_str(peer) {
             return Ok((
                 socket_client::connect_tcp(
                     crate::check_port(peer, RELAY_PORT + 1),
-                    any_addr,
                     RENDEZVOUS_TIMEOUT,
                 )
                 .await?,
                 true,
             ));
         }
+        // Allow connect to {domain}:{port}
+        if hbb_common::is_domain_port_str(peer) {
+            return Ok((
+                socket_client::connect_tcp(peer, RENDEZVOUS_TIMEOUT).await?,
+                true,
+            ));
+        }
         let (mut rendezvous_server, servers, contained) = crate::get_rendezvous_server(1_000).await;
-        let mut socket =
-            socket_client::connect_tcp(&*rendezvous_server, any_addr, RENDEZVOUS_TIMEOUT).await;
+        let mut socket = socket_client::connect_tcp(&*rendezvous_server, RENDEZVOUS_TIMEOUT).await;
         debug_assert!(!servers.contains(&rendezvous_server));
         if socket.is_err() && !servers.is_empty() {
             log::info!("try the other servers: {:?}", servers);
             for server in servers {
-                socket = socket_client::connect_tcp(&*server, any_addr, RENDEZVOUS_TIMEOUT).await;
+                socket = socket_client::connect_tcp(&*server, RENDEZVOUS_TIMEOUT).await;
                 if socket.is_ok() {
                     rendezvous_server = server;
                     break;
@@ -208,7 +212,7 @@ impl Client {
         let mut relay_server = "".to_owned();
 
         let start = std::time::Instant::now();
-        let mut peer_addr = any_addr;
+        let mut peer_addr = Config::get_any_listen_addr(true);
         let mut peer_nat_type = NatType::UNKNOWN_NAT;
         let my_nat_type = crate::get_nat_type(100).await;
         let mut is_local = false;
@@ -269,9 +273,15 @@ impl Client {
                                 rr.relay_server
                             );
                             signed_id_pk = rr.pk().into();
-                            let mut conn =
-                                Self::create_relay(peer, rr.uuid, rr.relay_server, key, conn_type)
-                                    .await?;
+                            let mut conn = Self::create_relay(
+                                peer,
+                                rr.uuid,
+                                rr.relay_server,
+                                key,
+                                conn_type,
+                                my_addr.is_ipv4(),
+                            )
+                            .await?;
                             Self::secure_connection(
                                 peer,
                                 signed_id_pk,
@@ -378,7 +388,8 @@ impl Client {
         log::info!("peer address: {}, timeout: {}", peer, connect_timeout);
         let start = std::time::Instant::now();
         // NOTICE: Socks5 is be used event in intranet. Which may be not a good way.
-        let mut conn = socket_client::connect_tcp(peer, local_addr, connect_timeout).await;
+        let mut conn =
+            socket_client::connect_tcp_local(peer, Some(local_addr), connect_timeout).await;
         let mut direct = !conn.is_err();
         if interface.is_force_relay() || conn.is_err() {
             if !relay_server.is_empty() {
@@ -422,7 +433,7 @@ impl Client {
         key: &str,
         conn: &mut Stream,
         direct: bool,
-        mut interface: impl Interface,
+        interface: impl Interface,
     ) -> ResultType<()> {
         let rs_pk = get_rs_pk(if key.is_empty() {
             hbb_common::config::RS_PUB_KEY
@@ -511,16 +522,16 @@ impl Client {
         token: &str,
         conn_type: ConnType,
     ) -> ResultType<Stream> {
-        let any_addr = Config::get_any_listen_addr();
         let mut succeed = false;
         let mut uuid = "".to_owned();
+        let mut ipv4 = true;
         for i in 1..=3 {
             // use different socket due to current hbbs implement requiring different nat address for each attempt
-            let mut socket =
-                socket_client::connect_tcp(rendezvous_server, any_addr, RENDEZVOUS_TIMEOUT)
-                    .await
-                    .with_context(|| "Failed to connect to rendezvous server")?;
+            let mut socket = socket_client::connect_tcp(rendezvous_server, RENDEZVOUS_TIMEOUT)
+                .await
+                .with_context(|| "Failed to connect to rendezvous server")?;
 
+            ipv4 = socket.local_addr().is_ipv4();
             let mut msg_out = RendezvousMessage::new();
             uuid = Uuid::new_v4().to_string();
             log::info!(
@@ -555,7 +566,7 @@ impl Client {
         if !succeed {
             bail!("Timeout");
         }
-        Self::create_relay(peer, uuid, relay_server, key, conn_type).await
+        Self::create_relay(peer, uuid, relay_server, key, conn_type, ipv4).await
     }
 
     /// Create a relay connection to the server.
@@ -565,10 +576,10 @@ impl Client {
         relay_server: String,
         key: &str,
         conn_type: ConnType,
+        ipv4: bool,
     ) -> ResultType<Stream> {
         let mut conn = socket_client::connect_tcp(
-            crate::check_port(relay_server, RELAY_PORT),
-            Config::get_any_listen_addr(),
+            socket_client::ipv4_to_ipv6(crate::check_port(relay_server, RELAY_PORT), ipv4),
             CONNECT_TIMEOUT,
         )
         .await
@@ -826,7 +837,7 @@ impl VideoHandler {
     /// Handle a new video frame.
     pub fn handle_frame(&mut self, vf: VideoFrame) -> ResultType<bool> {
         if vf.timestamp != 0 {
-            // Update the lantency controller with the latest timestamp.
+            // Update the latency controller with the latest timestamp.
             self.latency_controller
                 .lock()
                 .unwrap()
@@ -863,12 +874,14 @@ impl VideoHandler {
         self.record = false;
         if start {
             self.recorder = Recorder::new(RecorderContext {
+                server: false,
                 id,
                 default_dir: crate::ui_interface::default_video_save_directory(),
                 filename: "".to_owned(),
                 width: w as _,
                 height: h as _,
                 codec_id: scrap::record::RecordCodecID::VP9,
+                tx: None,
             })
             .map_or(Default::default(), |r| Arc::new(Mutex::new(Some(r))));
         } else {
@@ -895,6 +908,9 @@ pub struct LoginConfigHandler {
     pub supported_encoding: Option<(bool, bool)>,
     pub restarting_remote_device: bool,
     pub force_relay: bool,
+    pub direct: Option<bool>,
+    pub received: bool,
+    switch_uuid: Option<String>,
 }
 
 impl Deref for LoginConfigHandler {
@@ -922,7 +938,7 @@ impl LoginConfigHandler {
     ///
     /// * `id` - id of peer
     /// * `conn_type` - Connection type enum.
-    pub fn initialize(&mut self, id: String, conn_type: ConnType) {
+    pub fn initialize(&mut self, id: String, conn_type: ConnType, switch_uuid: Option<String>) {
         self.id = id;
         self.conn_type = conn_type;
         let config = self.load_config();
@@ -932,6 +948,9 @@ impl LoginConfigHandler {
         self.supported_encoding = None;
         self.restarting_remote_device = false;
         self.force_relay = !self.get_option("force-always-relay").is_empty();
+        self.direct = None;
+        self.received = false;
+        self.switch_uuid = switch_uuid;
     }
 
     /// Check if the client should auto login.
@@ -984,6 +1003,17 @@ impl LoginConfigHandler {
     pub fn save_view_style(&mut self, value: String) {
         let mut config = self.load_config();
         config.view_style = value;
+        self.save_config(config);
+    }
+
+    /// Save keyboard mode to the current config.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The view style to be saved.
+    pub fn save_keyboard_mode(&mut self, value: String) {
+        let mut config = self.load_config();
+        config.keyboard_mode = value;
         self.save_config(config);
     }
 
@@ -1330,32 +1360,6 @@ impl LoginConfigHandler {
         }
     }
 
-    /// Handle login error.
-    /// Return true if the password is wrong, return false if there's an actual error.
-    pub fn handle_login_error(&mut self, err: &str, interface: &impl Interface) -> bool {
-        if err == "Wrong Password" {
-            self.password = Default::default();
-            interface.msgbox("re-input-password", err, "Do you want to enter again?", "");
-            true
-        } else if err == "No Password Access" {
-            self.password = Default::default();
-            interface.msgbox(
-                "wait-remote-accept-nook",
-                "Prompt",
-                "Please wait for the remote side to accept your session request...",
-                "",
-            );
-            true
-        } else {
-            if err.contains(SCRAP_X11_REQUIRED) {
-                interface.msgbox("error", "Login Error", err, SCRAP_X11_REF_URL);
-            } else {
-                interface.msgbox("error", "Login Error", err, "");
-            }
-            false
-        }
-    }
-
     /// Get user name.
     /// Return the name of the given peer. If the peer has no name, return the name in the config.
     ///
@@ -1380,9 +1384,6 @@ impl LoginConfigHandler {
         if !pi.version.is_empty() {
             self.version = hbb_common::get_version_number(&pi.version);
         }
-        if hbb_common::get_version_number(&pi.version) < hbb_common::get_version_number("1.2.0") {
-            global_save_keyboard_mode("legacy".to_owned());
-        }
         self.features = pi.features.clone().into_option();
         let serde = PeerInfoSerde {
             username: pi.username.clone(),
@@ -1403,6 +1404,20 @@ impl LoginConfigHandler {
             if !password0.is_empty() {
                 config.password = Default::default();
                 log::debug!("remove password of {}", self.id);
+            }
+        }
+        if config.keyboard_mode.is_empty() {
+            if is_keyboard_mode_supported(&KeyboardMode::Map, get_version_number(&pi.version)) {
+                config.keyboard_mode = KeyboardMode::Map.to_string();
+            } else {
+                config.keyboard_mode = KeyboardMode::Legacy.to_string();
+            }
+        } else {
+            let keyboard_modes =
+                common::get_supported_keyboard_modes(get_version_number(&pi.version));
+            let current_mode = &KeyboardMode::from_str(&config.keyboard_mode).unwrap_or_default();
+            if !keyboard_modes.contains(current_mode) {
+                config.keyboard_mode = KeyboardMode::Legacy.to_string();
             }
         }
         self.conn_id = pi.conn_id;
@@ -1486,6 +1501,19 @@ impl LoginConfigHandler {
         let mut msg_out = Message::new();
         msg_out.set_misc(misc);
         msg_out
+    }
+
+    pub fn set_force_relay(&mut self, direct: bool, received: bool) {
+        self.force_relay = false;
+        if direct && !received {
+            let errno = errno::errno().0;
+            log::info!("errno is {}", errno);
+            // TODO: check mac and ios
+            if cfg!(windows) && errno == 10054 || !cfg!(windows) && errno == 104 {
+                self.force_relay = true;
+                self.set_option("force-always-relay".to_owned(), "Y".to_owned());
+            }
+        }
     }
 }
 
@@ -1654,7 +1682,7 @@ pub fn send_mouse(
     interface.send(Data::Message(msg_out));
 }
 
-/// Avtivate OS by sending mouse movement.
+/// Activate OS by sending mouse movement.
 ///
 /// # Arguments
 ///
@@ -1682,7 +1710,7 @@ fn activate_os(interface: &impl Interface) {
 /// # Arguments
 ///
 /// * `p` - The password.
-/// * `avtivate` - Whether to activate OS.
+/// * `activate` - Whether to activate OS.
 /// * `interface` - The interface for sending data.
 pub fn input_os_password(p: String, activate: bool, interface: impl Interface) {
     std::thread::spawn(move || {
@@ -1695,7 +1723,7 @@ pub fn input_os_password(p: String, activate: bool, interface: impl Interface) {
 /// # Arguments
 ///
 /// * `p` - The password.
-/// * `avtivate` - Whether to activate OS.
+/// * `activate` - Whether to activate OS.
 /// * `interface` - The interface for sending data.
 fn _input_os_password(p: String, activate: bool, interface: impl Interface) {
     if activate {
@@ -1711,6 +1739,36 @@ fn _input_os_password(p: String, activate: bool, interface: impl Interface) {
     key_event.set_control_key(ControlKey::Return);
     msg_out.set_key_event(key_event);
     interface.send(Data::Message(msg_out));
+}
+
+/// Handle login error.
+/// Return true if the password is wrong, return false if there's an actual error.
+pub fn handle_login_error(
+    lc: Arc<RwLock<LoginConfigHandler>>,
+    err: &str,
+    interface: &impl Interface,
+) -> bool {
+    if err == "Wrong Password" {
+        lc.write().unwrap().password = Default::default();
+        interface.msgbox("re-input-password", err, "Do you want to enter again?", "");
+        true
+    } else if err == "No Password Access" {
+        lc.write().unwrap().password = Default::default();
+        interface.msgbox(
+            "wait-remote-accept-nook",
+            "Prompt",
+            "Please wait for the remote side to accept your session request...",
+            "",
+        );
+        true
+    } else {
+        if err.contains(SCRAP_X11_REQUIRED) {
+            interface.msgbox("error", "Login Error", err, SCRAP_X11_REF_URL);
+        } else {
+            interface.msgbox("error", "Login Error", err, "");
+        }
+        false
+    }
 }
 
 /// Handle hash message sent by peer.
@@ -1729,6 +1787,14 @@ pub async fn handle_hash(
     interface: &impl Interface,
     peer: &mut Stream,
 ) {
+    lc.write().unwrap().hash = hash.clone();
+    let uuid = lc.read().unwrap().switch_uuid.clone();
+    if let Some(uuid) = uuid {
+        if let Ok(uuid) = uuid::Uuid::from_str(&uuid) {
+            send_switch_login_request(lc.clone(), peer, uuid).await;
+            return;
+        }
+    }
     let mut password = lc.read().unwrap().password.clone();
     if password.is_empty() {
         if !password_preset.is_empty() {
@@ -1793,6 +1859,26 @@ pub async fn handle_login_from_ui(
     send_login(lc.clone(), hasher2.finalize()[..].into(), peer).await;
 }
 
+async fn send_switch_login_request(
+    lc: Arc<RwLock<LoginConfigHandler>>,
+    peer: &mut Stream,
+    uuid: Uuid,
+) {
+    let mut msg_out = Message::new();
+    msg_out.set_switch_sides_response(SwitchSidesResponse {
+        uuid: Bytes::from(uuid.as_bytes().to_vec()),
+        lr: hbb_common::protobuf::MessageField::some(
+            lc.read()
+                .unwrap()
+                .create_login_msg(vec![])
+                .login_request()
+                .to_owned(),
+        ),
+        ..Default::default()
+    });
+    allow_err!(peer.send(&msg_out).await);
+}
+
 /// Interface for client to send data and commands.
 #[async_trait]
 pub trait Interface: Send + Clone + 'static + Sized {
@@ -1801,17 +1887,23 @@ pub trait Interface: Send + Clone + 'static + Sized {
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str);
     fn handle_login_error(&mut self, err: &str) -> bool;
     fn handle_peer_info(&mut self, pi: PeerInfo);
-    fn set_force_relay(&mut self, direct: bool, received: bool);
-    fn is_file_transfer(&self) -> bool;
-    fn is_port_forward(&self) -> bool;
-    fn is_rdp(&self) -> bool;
     fn on_error(&self, err: &str) {
         self.msgbox("error", "Error", err, "");
     }
-    fn is_force_relay(&self) -> bool;
     async fn handle_hash(&mut self, pass: &str, hash: Hash, peer: &mut Stream);
     async fn handle_login_from_ui(&mut self, password: String, remember: bool, peer: &mut Stream);
     async fn handle_test_delay(&mut self, t: TestDelay, peer: &mut Stream);
+
+    fn get_login_config_handler(&self) -> Arc<RwLock<LoginConfigHandler>>;
+    fn set_force_relay(&self, direct: bool, received: bool) {
+        self.get_login_config_handler()
+            .write()
+            .unwrap()
+            .set_force_relay(direct, received);
+    }
+    fn is_force_relay(&self) -> bool {
+        self.get_login_config_handler().read().unwrap().force_relay
+    }
 }
 
 /// Data used by the client interface.
@@ -1836,6 +1928,8 @@ pub enum Data {
     AddJob((i32, String, String, i32, bool, bool)),
     ResumeJob((i32, bool)),
     RecordScreen(bool, i32, i32, String),
+    ElevateDirect,
+    ElevateWithLogon(String, String),
 }
 
 /// Keycode for key events.
@@ -1977,11 +2071,10 @@ lazy_static::lazy_static! {
 /// * `title` - The title of the message.
 /// * `text` - The text of the message.
 #[inline]
-pub fn check_if_retry(msgtype: &str, title: &str, text: &str) -> bool {
+pub fn check_if_retry(msgtype: &str, title: &str, text: &str, retry_for_relay: bool) -> bool {
     msgtype == "error"
         && title == "Connection Error"
-        && (text.contains("10054")
-            || text.contains("104")
+        && ((text.contains("10054") || text.contains("104")) && retry_for_relay
             || (!text.to_lowercase().contains("offline")
                 && !text.to_lowercase().contains("exist")
                 && !text.to_lowercase().contains("handshake")
@@ -1989,7 +2082,8 @@ pub fn check_if_retry(msgtype: &str, title: &str, text: &str) -> bool {
                 && !text.to_lowercase().contains("resolve")
                 && !text.to_lowercase().contains("mismatch")
                 && !text.to_lowercase().contains("manually")
-                && !text.to_lowercase().contains("not allowed")))
+                && !text.to_lowercase().contains("not allowed")
+                && !text.to_lowercase().contains("reset by the peer")))
 }
 
 #[inline]
@@ -2021,9 +2115,4 @@ fn decode_id_pk(signed: &[u8], key: &sign::PublicKey) -> ResultType<(String, [u8
     } else {
         bail!("Wrong public length");
     }
-}
-
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
-pub fn disable_keyboard_listening() {
-    crate::ui_session_interface::KEYBOARD_HOOKED.store(true, Ordering::SeqCst);
 }

@@ -48,6 +48,7 @@ pub struct Client {
     pub file: bool,
     pub restart: bool,
     pub recording: bool,
+    pub from_switch: bool,
     #[serde(skip)]
     tx: UnboundedSender<Data>,
 }
@@ -118,6 +119,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         file: bool,
         restart: bool,
         recording: bool,
+        from_switch: bool,
         tx: mpsc::UnboundedSender<Data>,
     ) {
         let client = Client {
@@ -134,6 +136,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
             file,
             restart,
             recording,
+            from_switch,
             tx,
         };
         CLIENTS
@@ -241,6 +244,14 @@ pub fn get_clients_length() -> usize {
     clients.len()
 }
 
+#[inline]
+#[cfg(feature = "flutter")]
+pub fn switch_back(id: i32) {
+    if let Some(client) = CLIENTS.read().unwrap().get(&id) {
+        allow_err!(client.tx.send(Data::SwitchSidesBack));
+    };
+}
+
 impl<T: InvokeUiCM> IpcTaskRunner<T> {
     #[cfg(windows)]
     async fn enable_cliprdr_file_context(&mut self, conn_id: i32, enabled: bool) {
@@ -253,7 +264,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
         if !pre_enabled && ContextSend::is_enabled() {
             allow_err!(
                 self.stream
-                    .send(&Data::ClipbaordFile(clipboard::ClipbaordFile::MonitorReady))
+                    .send(&Data::ClipboardFile(clipboard::ClipboardFile::MonitorReady))
                     .await
             );
         }
@@ -288,7 +299,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
             rx_clip = rx_clip1.lock().await;
         } else {
             let rx_clip2;
-            (_tx_clip, rx_clip2) = unbounded_channel::<clipboard::ClipbaordFile>();
+            (_tx_clip, rx_clip2) = unbounded_channel::<clipboard::ClipboardFile>();
             rx_clip1 = Arc::new(TokioMutex::new(rx_clip2));
             rx_clip = rx_clip1.lock().await;
         }
@@ -308,9 +319,9 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                         }
                         Ok(Some(data)) => {
                             match data {
-                                Data::Login{id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled: _file_transfer_enabled, restart, recording} => {
+                                Data::Login{id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled: _file_transfer_enabled, restart, recording, from_switch} => {
                                     log::debug!("conn_id: {}", id);
-                                    self.cm.add_connection(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, self.tx.clone());
+                                    self.cm.add_connection(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, from_switch,self.tx.clone());
                                     self.authorized = authorized;
                                     self.conn_id = id;
                                     #[cfg(windows)]
@@ -354,7 +365,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                     }
                                 }
                                 #[cfg(windows)]
-                                Data::ClipbaordFile(_clip) => {
+                                Data::ClipboardFile(_clip) => {
                                     #[cfg(windows)]
                                     {
                                         let conn_id = self.conn_id;
@@ -394,7 +405,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                 clip_file = rx_clip.recv() => match clip_file {
                     Some(_clip) => {
                         #[cfg(windows)]
-                        allow_err!(self.tx.send(Data::ClipbaordFile(_clip)));
+                        allow_err!(self.tx.send(Data::ClipboardFile(_clip)));
                     }
                     None => {
                         //
@@ -498,6 +509,7 @@ pub async fn start_listen<T: InvokeUiCM>(
                 file,
                 restart,
                 recording,
+                from_switch,
                 ..
             }) => {
                 current_id = id;
@@ -514,6 +526,7 @@ pub async fn start_listen<T: InvokeUiCM>(
                     file,
                     restart,
                     recording,
+                    from_switch,
                     tx.clone(),
                 );
             }
@@ -594,6 +607,12 @@ async fn handle_fs(fs: ipc::FS, write_jobs: &mut Vec<fs::TransferJob>, tx: &Unbo
                 job.modify_time();
                 send_raw(fs::new_done(id, file_num), tx);
                 fs::remove_job(id, write_jobs);
+            }
+        }
+        ipc::FS::WriteError { id, file_num, err } => {
+            if let Some(job) = fs::get_job(id, write_jobs) {
+                send_raw(fs::new_error(job.id(), err, file_num), tx);
+                fs::remove_job(job.id(), write_jobs);
             }
         }
         ipc::FS::WriteBlock {
@@ -774,11 +793,7 @@ fn cm_inner_send(id: i32, data: Data) {
 pub fn can_elevate() -> bool {
     #[cfg(windows)]
     {
-        return !crate::platform::is_installed()
-            && !crate::portable_service::client::PORTABLE_SERVICE_RUNNING
-                .lock()
-                .unwrap()
-                .clone();
+        return !crate::platform::is_installed() && !crate::portable_service::client::running();
     }
     #[cfg(not(windows))]
     return false;

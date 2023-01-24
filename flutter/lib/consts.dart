@@ -5,15 +5,23 @@ import 'package:flutter_hbb/common.dart';
 
 const double kDesktopRemoteTabBarHeight = 28.0;
 
+const String kPeerPlatformWindows = "Windows";
+const String kPeerPlatformLinux = "Linux";
+const String kPeerPlatformMacOS = "Mac OS";
+const String kPeerPlatformAndroid = "Android";
+
 /// [kAppTypeMain] used by 'Desktop Main Page' , 'Mobile (Client and Server)' , 'Desktop CM Page', "Install Page"
 const String kAppTypeMain = "main";
 const String kAppTypeDesktopRemote = "remote";
 const String kAppTypeDesktopFileTransfer = "file transfer";
 const String kAppTypeDesktopPortForward = "port forward";
 
+const String kWindowMainWindowOnTop = "main_window_on_top";
+const String kWindowGetWindowInfo = "get_window_info";
 const String kWindowActionRebuild = "rebuild";
 const String kWindowEventHide = "hide";
 const String kWindowEventShow = "show";
+const String kWindowConnect = "connect";
 
 const String kUniLinksPrefix = "rustdesk://";
 const String kActionNewConnection = "connection/new/";
@@ -96,6 +104,8 @@ const kRemoteImageQualityLow = 'low';
 
 /// [kRemoteImageQualityCustom] Custom image quality.
 const kRemoteImageQualityCustom = 'custom';
+
+const kIgnoreDpi = true;
 
 /// flutter/packages/flutter/lib/src/services/keyboard_key.dart -> _keyLabels
 /// see [LogicalKeyboardKey.keyLabel]

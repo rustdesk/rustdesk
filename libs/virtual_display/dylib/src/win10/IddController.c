@@ -66,7 +66,7 @@ const char* GetLastMsg()
 
 BOOL InstallUpdate(LPCWSTR fullInfPath, PBOOL rebootRequired)
 {
-    SetLastMsg("Sucess");
+    SetLastMsg("Success");
 
     // UpdateDriverForPlugAndPlayDevicesW may return FALSE while driver was successfully installed...
     if (FALSE == UpdateDriverForPlugAndPlayDevicesW(
@@ -96,7 +96,7 @@ BOOL InstallUpdate(LPCWSTR fullInfPath, PBOOL rebootRequired)
 
 BOOL Uninstall(LPCWSTR fullInfPath, PBOOL rebootRequired)
 {
-    SetLastMsg("Sucess");
+    SetLastMsg("Success");
 
     if (FALSE == DiUninstallDriverW(
         NULL,
@@ -122,7 +122,7 @@ BOOL Uninstall(LPCWSTR fullInfPath, PBOOL rebootRequired)
 
 BOOL IsDeviceCreated(PBOOL created)
 {
-    SetLastMsg("Sucess");
+    SetLastMsg("Success");
 
     HDEVINFO hardwareDeviceInfo = SetupDiGetClassDevs(
         &GUID_DEVINTERFACE_IDD_DRIVER_DEVICE,
@@ -181,7 +181,7 @@ BOOL IsDeviceCreated(PBOOL created)
 
 BOOL DeviceCreate(PHSWDEVICE hSwDevice)
 {
-    SetLastMsg("Sucess");
+    SetLastMsg("Success");
 
     if (*hSwDevice != NULL)
     {
@@ -221,7 +221,7 @@ BOOL DeviceCreate(PHSWDEVICE hSwDevice)
     SW_DEVICE_CREATE_INFO createInfo = { 0 };
     PCWSTR description = L"RustDesk Idd Driver";
 
-    // These match the Pnp id's in the inf file so OS will load the driver when the device is created    
+    // These match the Pnp id's in the inf file so OS will load the driver when the device is created
     PCWSTR instanceId = L"RustDeskIddDriver";
     PCWSTR hardwareIds = L"RustDeskIddDriver\0\0";
     PCWSTR compatibleIds = L"RustDeskIddDriver\0\0";
@@ -274,7 +274,7 @@ BOOL DeviceCreate(PHSWDEVICE hSwDevice)
 
 VOID DeviceClose(HSWDEVICE hSwDevice)
 {
-    SetLastMsg("Sucess");
+    SetLastMsg("Success");
 
     if (hSwDevice != INVALID_HANDLE_VALUE && hSwDevice != NULL)
     {
@@ -284,7 +284,7 @@ VOID DeviceClose(HSWDEVICE hSwDevice)
 
 BOOL MonitorPlugIn(UINT index, UINT edid, INT retries)
 {
-    SetLastMsg("Sucess");
+    SetLastMsg("Success");
 
     if (retries < 0)
     {
@@ -359,7 +359,7 @@ BOOL MonitorPlugIn(UINT index, UINT edid, INT retries)
 
 BOOL MonitorPlugOut(UINT index)
 {
-    SetLastMsg("Sucess");
+    SetLastMsg("Success");
 
     HANDLE hDevice = DeviceOpenHandle();
     if (hDevice == INVALID_HANDLE_VALUE || hDevice == NULL)
@@ -400,7 +400,7 @@ BOOL MonitorPlugOut(UINT index)
 
 BOOL MonitorModesUpdate(UINT index, UINT modeCount, PMonitorMode modes)
 {
-    SetLastMsg("Sucess");
+    SetLastMsg("Success");
 
     HANDLE hDevice = DeviceOpenHandle();
     if (hDevice == INVALID_HANDLE_VALUE || hDevice == NULL)
@@ -721,7 +721,7 @@ Clean0:
 // https://stackoverflow.com/questions/67164846/createfile-fails-unless-i-disable-enable-my-device
 HANDLE DeviceOpenHandle()
 {
-    SetLastMsg("Sucess");
+    SetLastMsg("Success");
 
     // const int maxDevPathLen = 256;
     TCHAR devicePath[256] = { 0 };

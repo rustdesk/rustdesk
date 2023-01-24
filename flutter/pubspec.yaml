@@ -51,11 +51,7 @@ dependencies:
     image_picker: ^0.8.5
     image: ^3.1.3
     back_button_interceptor: ^6.0.1
-    flutter_rust_bridge:
-        git:
-            url: https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge
-            ref: master
-            path: frb_dart
+    flutter_rust_bridge: ^1.61.1
     window_manager:
         git:
             url: https://github.com/Kingtous/rustdesk_window_manager
@@ -63,16 +59,9 @@ dependencies:
     desktop_multi_window:
         git:
             url: https://github.com/Kingtous/rustdesk_desktop_multi_window
-            ref: cb086219bd4760a95a483cb14c1791d2a39ca5a0
+            ref: 057e6eb1bc7dcbcf9dafd1384274a611e4fe7124
     freezed_annotation: ^2.0.3
-    tray_manager:
-        git:
-            url: https://github.com/Kingtous/rustdesk_tray_manager
-            ref: 3aa37c86e47ea748e7b5507cbe59f2c54ebdb23a
-    flutter_custom_cursor:
-        git:
-            url: https://github.com/Kingtous/rustdesk_flutter_custom_cursor
-            ref: 74b1b314142b6775c1243067a3503ac568ebc74b
+    flutter_custom_cursor: ^0.0.2
     window_size:
         git:
             url: https://github.com/google/flutter-desktop-embedding.git
@@ -83,7 +72,7 @@ dependencies:
     contextmenu: ^3.0.0
     desktop_drop: ^0.3.3
     scroll_pos: ^0.3.0
-    rxdart: ^0.27.5
+    debounce_throttle: ^2.0.0
     file_picker: ^5.1.0
     flutter_svg: ^1.1.5
     flutter_improved_scrolling: ^0.0.3
@@ -95,14 +84,12 @@ dependencies:
         #     url: https://github.com/Kingtous/flutter_improved_scrolling
         #     ref: 62f09545149f320616467c306c8c5f71714a18e6
     uni_links: ^0.5.1
-    uni_links_desktop:
-        git:
-            url: https://github.com/fufesou/uni_links_desktop.git
-            ref: 5be5113d59c753989dbf1106241379e3fd4c9b18
+    uni_links_desktop: ^0.1.4
     path: ^1.8.1
     auto_size_text: ^3.0.0
     bot_toast: ^4.0.3
     win32: any
+    password_strength: ^0.2.0
 
 
 dev_dependencies:
@@ -112,6 +99,7 @@ dev_dependencies:
     build_runner: ^2.1.11
     freezed: ^2.0.3
     flutter_lints: ^2.0.0
+    ffigen: ^7.2.4
 
 # rerun: flutter pub run flutter_launcher_icons:main
 icons_launcher:
@@ -125,6 +113,7 @@ icons_launcher:
             enable: true
         macos:
             enable: true
+            image_path: "../res/mac-icon.png"
         linux:
             enable: true
 

@@ -46,7 +46,7 @@ var isWebDesktop = false;
 var version = "";
 int androidVersion = 0;
 
-/// only avaliable for Windows target
+/// only available for Windows target
 int windowsBuildNumber = 0;
 DesktopType? desktopType;
 
@@ -99,22 +99,28 @@ class IconFont {
 class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
   const ColorThemeExtension({
     required this.border,
+    required this.highlight,
   });
 
   final Color? border;
+  final Color? highlight;
 
   static const light = ColorThemeExtension(
     border: Color(0xFFCCCCCC),
+    highlight: Color(0xFFE5E5E5),
   );
 
   static const dark = ColorThemeExtension(
     border: Color(0xFF555555),
+    highlight: Color(0xFF3F3F3F),
   );
 
   @override
-  ThemeExtension<ColorThemeExtension> copyWith({Color? border}) {
+  ThemeExtension<ColorThemeExtension> copyWith(
+      {Color? border, Color? highlight}) {
     return ColorThemeExtension(
       border: border ?? this.border,
+      highlight: highlight ?? this.highlight,
     );
   }
 
@@ -126,6 +132,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
     }
     return ColorThemeExtension(
       border: Color.lerp(border, other.border, t),
+      highlight: Color.lerp(highlight, other.highlight, t),
     );
   }
 }
@@ -215,18 +222,15 @@ class MyTheme {
   }
 
   static void changeDarkMode(ThemeMode mode) {
-    final preference = getThemeModePreference();
-    if (preference != mode) {
+    Get.changeThemeMode(mode);
+    if (desktopType == DesktopType.main) {
       if (mode == ThemeMode.system) {
         bind.mainSetLocalOption(key: kCommConfKeyTheme, value: '');
       } else {
         bind.mainSetLocalOption(
             key: kCommConfKeyTheme, value: mode.toShortString());
       }
-      Get.changeThemeMode(mode);
-      if (desktopType == DesktopType.main) {
-        bind.mainChangeTheme(dark: currentThemeMode().toShortString());
-      }
+      bind.mainChangeTheme(dark: mode.toShortString());
     }
   }
 
@@ -545,6 +549,10 @@ class OverlayDialogManager {
       hideMobileActionsOverlay();
     }
   }
+
+  bool existing(String tag) {
+    return _dialogs.keys.contains(tag);
+  }
 }
 
 void showToast(String text, {Duration timeout = const Duration(seconds: 2)}) {
@@ -605,8 +613,9 @@ class CustomAlertDialog extends StatelessWidget {
     Future.delayed(Duration.zero, () {
       if (!focusNode.hasFocus) focusNode.requestFocus();
     });
-    return Focus(
-      focusNode: focusNode,
+    FocusScopeNode scopeNode = FocusScopeNode();
+    return FocusScope(
+      node: scopeNode,
       autofocus: true,
       onKey: (node, key) {
         if (key.logicalKey == LogicalKeyboardKey.escape) {
@@ -618,6 +627,11 @@ class CustomAlertDialog extends StatelessWidget {
             key.logicalKey == LogicalKeyboardKey.enter) {
           if (key is RawKeyDownEvent) onSubmit?.call();
           return KeyEventResult.handled;
+        } else if (key.logicalKey == LogicalKeyboardKey.tab) {
+          if (key is RawKeyDownEvent) {
+            scopeNode.nextFocus();
+          }
+          return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
       },
@@ -626,8 +640,14 @@ class CustomAlertDialog extends StatelessWidget {
         title: title,
         contentPadding: EdgeInsets.symmetric(
             horizontal: contentPadding ?? 25, vertical: 10),
-        content:
-            ConstrainedBox(constraints: contentBoxConstraints, child: content),
+        content: ConstrainedBox(
+            constraints: contentBoxConstraints,
+            child: Theme(
+                data: ThemeData(
+                  inputDecorationTheme: InputDecorationTheme(
+                      isDense: true, contentPadding: EdgeInsets.all(15)),
+                ),
+                child: content)),
         actions: actions,
       ),
     );
@@ -660,24 +680,25 @@ void msgBox(String id, String type, String title, String text, String link,
 
   if (type != "connecting" && type != "success" && !type.contains("nook")) {
     hasOk = true;
-    buttons.insert(0, msgBoxButton(translate('OK'), submit));
+    buttons.insert(0, dialogButton('OK', onPressed: submit));
   }
   hasCancel ??= !type.contains("error") &&
       !type.contains("nocancel") &&
       type != "restarting";
   if (hasCancel) {
-    buttons.insert(0, msgBoxButton(translate('Cancel'), cancel));
+    buttons.insert(
+        0, dialogButton('Cancel', onPressed: cancel, isOutline: true));
   }
   // TODO: test this button
   if (type.contains("hasclose")) {
     buttons.insert(
         0,
-        msgBoxButton(translate('Close'), () {
+        dialogButton('Close', onPressed: () {
           dialogManager.dismissAll();
         }));
   }
   if (link.isNotEmpty) {
-    buttons.insert(0, msgBoxButton(translate('JumpLink'), jumplink));
+    buttons.insert(0, dialogButton('JumpLink', onPressed: jumplink));
   }
   dialogManager.show(
     (setState, close) => CustomAlertDialog(
@@ -926,7 +947,8 @@ bool option2bool(String option, String value) {
   } else if (option.startsWith("allow-") ||
       option == "stop-service" ||
       option == "direct-server" ||
-      option == "stop-rendezvous-service") {
+      option == "stop-rendezvous-service" ||
+      option == "force-always-relay") {
     res = value == "Y";
   } else {
     assert(false);
@@ -942,7 +964,8 @@ String bool2option(String option, bool b) {
   } else if (option.startsWith('allow-') ||
       option == "stop-service" ||
       option == "direct-server" ||
-      option == "stop-rendezvous-service") {
+      option == "stop-rendezvous-service" ||
+      option == "force-always-relay") {
     res = b ? 'Y' : '';
   } else {
     assert(false);
@@ -971,11 +994,13 @@ Future<bool> matchPeer(String searchText, Peer peer) async {
 
 /// Get the image for the current [platform].
 Widget getPlatformImage(String platform, {double size = 50}) {
-  platform = platform.toLowerCase();
-  if (platform == 'mac os') {
+  if (platform == kPeerPlatformMacOS) {
     platform = 'mac';
-  } else if (platform != 'linux' && platform != 'android') {
+  } else if (platform != kPeerPlatformLinux &&
+      platform != kPeerPlatformAndroid) {
     platform = 'win';
+  } else {
+    platform = platform.toLowerCase();
   }
   return SvgPicture.asset('assets/$platform.svg', height: size, width: size);
 }
@@ -1014,7 +1039,7 @@ class LastWindowPosition {
       return LastWindowPosition(m["width"], m["height"], m["offsetWidth"],
           m["offsetHeight"], m["isMaximized"]);
     } catch (e) {
-      debugPrint(e.toString());
+      debugPrintStack(label: e.toString());
       return null;
     }
   }
@@ -1148,7 +1173,7 @@ Future<bool> restoreWindowPosition(WindowType type, {int? windowId}) async {
   final pos = bind.getLocalFlutterConfig(k: kWindowPrefix + type.name);
   var lpos = LastWindowPosition.loadFromString(pos);
   if (lpos == null) {
-    debugPrint("window position saved, but cannot be parsed");
+    debugPrint("no window position saved, ignoring position restoration");
     return false;
   }
 
@@ -1213,7 +1238,7 @@ Future<void> initUniLinks() async {
     }
     parseRustdeskUri(initialLink);
   } catch (err) {
-    debugPrint("$err");
+    debugPrintStack(label: "$err");
   }
 }
 
@@ -1236,23 +1261,28 @@ StreamSubscription? listenUniLinks() {
 
 /// Returns true if we successfully handle the startup arguments.
 bool checkArguments() {
+  // bootArgs:[--connect, 362587269, --switch_uuid, e3d531cc-5dce-41e0-bd06-5d4a2b1eec05]
   // check connect args
-  final connectIndex = bootArgs.indexOf("--connect");
+  final connectIndex = kBootArgs.indexOf("--connect");
   if (connectIndex == -1) {
     return false;
   }
-  String? arg =
-      bootArgs.length < connectIndex + 1 ? null : bootArgs[connectIndex + 1];
-  if (arg != null) {
-    if (arg.startsWith(kUniLinksPrefix)) {
-      return parseRustdeskUri(arg);
+  String? id =
+      kBootArgs.length < connectIndex + 1 ? null : kBootArgs[connectIndex + 1];
+  final switchUuidIndex = kBootArgs.indexOf("--switch_uuid");
+  String? switchUuid = kBootArgs.length < switchUuidIndex + 1
+      ? null
+      : kBootArgs[switchUuidIndex + 1];
+  if (id != null) {
+    if (id.startsWith(kUniLinksPrefix)) {
+      return parseRustdeskUri(id);
     } else {
       // remove "--connect xxx" in the `bootArgs` array
-      bootArgs.removeAt(connectIndex);
-      bootArgs.removeAt(connectIndex);
+      kBootArgs.removeAt(connectIndex);
+      kBootArgs.removeAt(connectIndex);
       // fallback to peer id
       Future.delayed(Duration.zero, () {
-        rustDeskWinManager.newRemoteDesktop(arg);
+        rustDeskWinManager.newRemoteDesktop(id, switch_uuid: switchUuid);
       });
       return true;
     }
@@ -1282,19 +1312,34 @@ bool callUniLinksUriHandler(Uri uri) {
   // new connection
   if (uri.authority == "connection" && uri.path.startsWith("/new/")) {
     final peerId = uri.path.substring("/new/".length);
+    var param = uri.queryParameters;
+    String? switch_uuid = param["switch_uuid"];
     Future.delayed(Duration.zero, () {
-      rustDeskWinManager.newRemoteDesktop(peerId);
+      rustDeskWinManager.newRemoteDesktop(peerId, switch_uuid: switch_uuid);
     });
-    return true;
+    return false;
   }
   return false;
+}
+
+connectMainDesktop(String id,
+    {required bool isFileTransfer,
+    required bool isTcpTunneling,
+    required bool isRDP}) async {
+  if (isFileTransfer) {
+    await rustDeskWinManager.newFileTransfer(id);
+  } else if (isTcpTunneling || isRDP) {
+    await rustDeskWinManager.newPortForward(id, isRDP);
+  } else {
+    await rustDeskWinManager.newRemoteDesktop(id);
+  }
 }
 
 /// Connect to a peer with [id].
 /// If [isFileTransfer], starts a session only for file transfer.
 /// If [isTcpTunneling], starts a session only for tcp tunneling.
 /// If [isRDP], starts a session only for rdp.
-void connect(BuildContext context, String id,
+connect(BuildContext context, String id,
     {bool isFileTransfer = false,
     bool isTcpTunneling = false,
     bool isRDP = false}) async {
@@ -1304,12 +1349,20 @@ void connect(BuildContext context, String id,
       "more than one connect type");
 
   if (isDesktop) {
-    if (isFileTransfer) {
-      await rustDeskWinManager.newFileTransfer(id);
-    } else if (isTcpTunneling || isRDP) {
-      await rustDeskWinManager.newPortForward(id, isRDP);
+    if (desktopType == DesktopType.main) {
+      await connectMainDesktop(
+        id,
+        isFileTransfer: isFileTransfer,
+        isTcpTunneling: isTcpTunneling,
+        isRDP: isRDP,
+      );
     } else {
-      await rustDeskWinManager.newRemoteDesktop(id);
+      await rustDeskWinManager.call(WindowType.Main, kWindowConnect, {
+        'id': id,
+        'isFileTransfer': isFileTransfer,
+        'isTcpTunneling': isTcpTunneling,
+        'isRDP': isRDP,
+      });
     }
   } else {
     if (isFileTransfer) {
@@ -1340,13 +1393,13 @@ void connect(BuildContext context, String id,
   }
 }
 
-Future<Map<String, String>> getHttpHeaders() async {
+Map<String, String> getHttpHeaders() {
   return {
     'Authorization': 'Bearer ${bind.mainGetLocalOption(key: 'access_token')}'
   };
 }
 
-// Simple wrapper of built-in types for refrence use.
+// Simple wrapper of built-in types for reference use.
 class SimpleWrapper<T> {
   T value;
   SimpleWrapper(this.value);
@@ -1382,7 +1435,7 @@ Future<void> reloadAllWindows() async {
 /// Indicate the flutter app is running in portable mode.
 ///
 /// [Note]
-/// Portable build is only avaliable on Windows.
+/// Portable build is only available on Windows.
 bool isRunningInPortableMode() {
   if (!Platform.isWindows) {
     return false;
@@ -1391,7 +1444,7 @@ bool isRunningInPortableMode() {
 }
 
 /// Window status callback
-void onActiveWindowChanged() async {
+Future<void> onActiveWindowChanged() async {
   print(
       "[MultiWindowHandler] active window changed: ${rustDeskWinManager.getActiveWindows()}");
   if (rustDeskWinManager.getActiveWindows().isEmpty) {
@@ -1402,7 +1455,7 @@ void onActiveWindowChanged() async {
         rustDeskWinManager.closeAllSubWindows()
       ]);
     } catch (err) {
-      debugPrint("$err");
+      debugPrintStack(label: "$err");
     } finally {
       await windowManager.setPreventClose(false);
       await windowManager.close();
@@ -1483,3 +1536,104 @@ Pointer<win32.OSVERSIONINFOEX> getOSVERSIONINFOEXPointer() {
 bool get kUseCompatibleUiMode =>
     Platform.isWindows &&
     const [WindowsTarget.w7].contains(windowsBuildNumber.windowsVersion);
+
+class ServerConfig {
+  late String idServer;
+  late String relayServer;
+  late String apiServer;
+  late String key;
+
+  ServerConfig(
+      {String? idServer, String? relayServer, String? apiServer, String? key}) {
+    this.idServer = idServer?.trim() ?? '';
+    this.relayServer = relayServer?.trim() ?? '';
+    this.apiServer = apiServer?.trim() ?? '';
+    this.key = key?.trim() ?? '';
+  }
+
+  /// decode from shared string (from user shared or rustdesk-server generated)
+  /// also see [encode]
+  /// throw when decoding failure
+  ServerConfig.decode(String msg) {
+    final input = msg.split('').reversed.join('');
+    final bytes = base64Decode(base64.normalize(input));
+    final json = jsonDecode(utf8.decode(bytes));
+
+    idServer = json['host'] ?? '';
+    relayServer = json['relay'] ?? '';
+    apiServer = json['api'] ?? '';
+    key = json['key'] ?? '';
+  }
+
+  /// encode to shared string
+  /// also see [ServerConfig.decode]
+  String encode() {
+    Map<String, String> config = {};
+    config['host'] = idServer.trim();
+    config['relay'] = relayServer.trim();
+    config['api'] = apiServer.trim();
+    config['key'] = key.trim();
+    return base64Encode(Uint8List.fromList(jsonEncode(config).codeUnits))
+        .split('')
+        .reversed
+        .join();
+  }
+
+  /// from local options
+  ServerConfig.fromOptions(Map<String, dynamic> options)
+      : idServer = options['custom-rendezvous-server'] ?? "",
+        relayServer = options['relay-server'] ?? "",
+        apiServer = options['api-server'] ?? "",
+        key = options['key'] ?? "";
+}
+
+Widget dialogButton(String text,
+    {required VoidCallback? onPressed,
+    bool isOutline = false,
+    TextStyle? style}) {
+  if (isDesktop) {
+    if (isOutline) {
+      return OutlinedButton(
+        onPressed: onPressed,
+        child: Text(translate(text), style: style),
+      );
+    } else {
+      return ElevatedButton(
+        style: ElevatedButton.styleFrom(elevation: 0),
+        onPressed: onPressed,
+        child: Text(translate(text), style: style),
+      );
+    }
+  } else {
+    return TextButton(
+        onPressed: onPressed,
+        child: Text(
+          translate(text),
+          style: style,
+        ));
+  }
+}
+
+int version_cmp(String v1, String v2) {
+  return bind.versionToNumber(v: v1) - bind.versionToNumber(v: v2);
+}
+
+String getWindowName({WindowType? overrideType}) {
+  switch (overrideType ?? kWindowType) {
+    case WindowType.Main:
+      return "RustDesk";
+    case WindowType.FileTransfer:
+      return "File Transfer - RustDesk";
+    case WindowType.PortForward:
+      return "Port Forward - RustDesk";
+    case WindowType.RemoteDesktop:
+      return "Remote Desktop - RustDesk";
+    default:
+      break;
+  }
+  return "RustDesk";
+}
+
+String getWindowNameWithId(String id, {WindowType? overrideType}) {
+  return "${DesktopTab.labelGetterAlias(id).value} - ${getWindowName(overrideType: overrideType)}";
+}

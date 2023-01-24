@@ -39,8 +39,7 @@ class ConnectionTabPage extends StatefulWidget {
 
 class _ConnectionTabPageState extends State<ConnectionTabPage> {
   final tabController = Get.put(DesktopTabController(
-      tabType: DesktopTabType.remoteScreen,
-      onSelected: (_, id) => bind.setCurSessionId(id: id)));
+      tabType: DesktopTabType.remoteScreen));
   static const IconData selectedIcon = Icons.desktop_windows_sharp;
   static const IconData unselectedIcon = Icons.desktop_windows_outlined;
 
@@ -54,6 +53,11 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     final peerId = params['id'];
     if (peerId != null) {
       ConnectionTypeState.init(peerId);
+      tabController.onSelected = (_, id) {
+        bind.setCurSessionId(id: id);
+        WindowController.fromWindowId(windowId())
+            .setTitle(getWindowNameWithId(id));
+      };
       tabController.add(TabInfo(
         key: peerId,
         label: peerId,
@@ -64,6 +68,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           key: ValueKey(peerId),
           id: peerId,
           menubarState: _menubarState,
+          switchUuid: params['switch_uuid'],
         ),
       ));
       _update_remote_count();
@@ -75,6 +80,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     super.initState();
 
     tabController.onRemoved = (_, id) => onRemoveId(id);
+   
 
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
       print(
@@ -84,6 +90,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       if (call.method == "new_remote_desktop") {
         final args = jsonDecode(call.arguments);
         final id = args['id'];
+        final switchUuid = args['switch_uuid'];
         window_on_top(windowId());
         ConnectionTypeState.init(id);
         tabController.add(TabInfo(
@@ -96,6 +103,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             key: ValueKey(id),
             id: id,
             menubarState: _menubarState,
+            switchUuid: switchUuid,
           ),
         ));
       } else if (call.method == "onDestroy") {
@@ -257,7 +265,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       ),
     ]);
 
-    if (!ffi.canvasModel.cursorEmbeded) {
+    if (!ffi.canvasModel.cursorEmbedded) {
       menu.add(MenuEntryDivider<String>());
       menu.add(() {
         final state = ShowRemoteCursorState.find(key);
@@ -308,7 +316,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         dismissOnClicked: true,
       ));
 
-      if (pi.platform == 'Linux' || pi.sasEnabled) {
+      if (pi.platform == kPeerPlatformLinux || pi.sasEnabled) {
         menu.add(MenuEntryButton<String>(
           childBuilder: (TextStyle? style) => Text(
             '${translate("Insert")} Ctrl + Alt + Del',

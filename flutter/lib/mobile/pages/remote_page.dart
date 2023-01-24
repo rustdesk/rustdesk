@@ -518,7 +518,7 @@ class _RemotePageState extends State<RemotePage> {
                     ),
             ),
           ];
-          if (!gFFI.canvasModel.cursorEmbeded) {
+          if (!gFFI.canvasModel.cursorEmbedded) {
             paints.add(CursorPaint());
           }
           return paints;
@@ -527,7 +527,7 @@ class _RemotePageState extends State<RemotePage> {
 
   Widget getBodyForDesktopWithListener(bool keyboard) {
     var paints = <Widget>[ImagePaint()];
-    if (!gFFI.canvasModel.cursorEmbeded) {
+    if (!gFFI.canvasModel.cursorEmbedded) {
       final cursor = bind.sessionGetToggleOptionSync(
           id: widget.id, arg: 'show-remote-cursor');
       if (keyboard || cursor) {
@@ -574,14 +574,14 @@ class _RemotePageState extends State<RemotePage> {
       more.add(PopupMenuItem<String>(
           child: Text(translate('Physical Keyboard Input Mode')),
           value: 'input-mode'));
-      if (pi.platform == 'Linux' || pi.sasEnabled) {
+      if (pi.platform == kPeerPlatformLinux || pi.sasEnabled) {
         more.add(PopupMenuItem<String>(
             child: Text('${translate('Insert')} Ctrl + Alt + Del'),
             value: 'cad'));
       }
       more.add(PopupMenuItem<String>(
           child: Text(translate('Insert Lock')), value: 'lock'));
-      if (pi.platform == 'Windows' &&
+      if (pi.platform == kPeerPlatformWindows &&
           await bind.sessionGetToggleOption(id: id, arg: 'privacy-mode') !=
               true) {
         more.add(PopupMenuItem<String>(
@@ -591,9 +591,9 @@ class _RemotePageState extends State<RemotePage> {
       }
     }
     if (perms["restart"] != false &&
-        (pi.platform == "Linux" ||
-            pi.platform == "Windows" ||
-            pi.platform == "Mac OS")) {
+        (pi.platform == kPeerPlatformLinux ||
+            pi.platform == kPeerPlatformWindows ||
+            pi.platform == kPeerPlatformMacOS)) {
       more.add(PopupMenuItem<String>(
           child: Text(translate('Restart Remote Device')), value: 'restart'));
     }
@@ -692,10 +692,11 @@ class _RemotePageState extends State<RemotePage> {
   }
 
   void changePhysicalKeyboardInputMode() async {
-    var current = await bind.sessionGetKeyboardName(id: widget.id);
+    var current = await bind.sessionGetKeyboardMode(id: widget.id) ?? "legacy";
     gFFI.dialogManager.show((setState, close) {
       void setMode(String? v) async {
-        await bind.sessionSetKeyboardMode(id: widget.id, keyboardMode: v ?? '');
+        await bind.sessionPeerOption(
+            id: widget.id, name: "keyboard-mode", value: v ?? "");
         setState(() => current = v ?? '');
         Future.delayed(Duration(milliseconds: 300), close);
       }
@@ -739,7 +740,7 @@ class _RemotePageState extends State<RemotePage> {
     }
 
     final pi = gFFI.ffiModel.pi;
-    final isMac = pi.platform == "Mac OS";
+    final isMac = pi.platform == kPeerPlatformMacOS;
     final modifiers = <Widget>[
       wrap('Ctrl ', () {
         setState(() => inputModel.ctrl = !inputModel.ctrl);
@@ -977,7 +978,9 @@ void showOptions(
       final h265 = codecsJson['h265'] ?? false;
       codecs.add(h264);
       codecs.add(h265);
-    } finally {}
+    } catch (e) {
+      debugPrint("Show Codec Preference err=$e");
+    }
   }
 
   dialogManager.show((setState, close) {
@@ -992,7 +995,7 @@ void showOptions(
       }
       more.add(getToggle(
           id, setState, 'lock-after-session-end', 'Lock after session end'));
-      if (pi.platform == 'Windows') {
+      if (pi.platform == kPeerPlatformWindows) {
         more.add(getToggle(id, setState, 'privacy-mode', 'Privacy mode'));
       }
     }
@@ -1055,7 +1058,7 @@ void showOptions(
     final toggles = [
       getToggle(id, setState, 'show-quality-monitor', 'Show quality monitor'),
     ];
-    if (!gFFI.canvasModel.cursorEmbeded) {
+    if (!gFFI.canvasModel.cursorEmbedded) {
       toggles.insert(0,
           getToggle(id, setState, 'show-remote-cursor', 'Show remote cursor'));
     }
@@ -1095,15 +1098,9 @@ void showSetOSPassword(
           ),
         ]),
         actions: [
-          TextButton(
-            style: flatButtonStyle,
-            onPressed: () {
-              close();
-            },
-            child: Text(translate('Cancel')),
-          ),
-          TextButton(
-            style: flatButtonStyle,
+          dialogButton('Cancel', onPressed: close, isOutline: true),
+          dialogButton(
+            'OK',
             onPressed: () {
               var text = controller.text.trim();
               bind.sessionPeerOption(id: id, name: "os-password", value: text);
@@ -1114,7 +1111,6 @@ void showSetOSPassword(
               }
               close();
             },
-            child: Text(translate('OK')),
           ),
         ]);
   });

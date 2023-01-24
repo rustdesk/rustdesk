@@ -28,6 +28,10 @@ mod fa;
 mod ca;
 mod gr;
 mod sv;
+mod sq;
+mod sr;
+mod th;
+mod sl;
 
 lazy_static::lazy_static! {
     pub static ref LANGS: Value =
@@ -58,6 +62,10 @@ lazy_static::lazy_static! {
             ("ca", "Català"),
             ("gr", "Ελληνικά"),
             ("sv", "Svenska"),
+            ("sq", "Shqip"),
+            ("sr", "Srpski"),
+            ("th", "ภาษาไทย"),
+            ("sl", "Slovenščina"),
             ("ro", "Română"),
         ]);
 }
@@ -113,6 +121,10 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "ca" => ca::T.deref(),
         "gr" => gr::T.deref(),
         "sv" => sv::T.deref(),
+        "sq" => sq::T.deref(),
+        "sr" => sr::T.deref(),
+        "th" => th::T.deref(),
+        "sl" => sl::T.deref(),
         "ro" => ro::T.deref(),
         _ => en::T.deref(),
     };

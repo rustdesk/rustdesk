@@ -107,6 +107,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 SERVER_CLIPBOARD_ENABLED.store(true, Ordering::SeqCst);
                 SERVER_FILE_TRANSFER_ENABLED.store(true, Ordering::SeqCst);
                 self.handler.set_connection_type(peer.is_secured(), direct); // flutter -> connection_ready
+                self.handler.set_connection_info(direct, false);
 
                 // just build for now
                 #[cfg(not(windows))]
@@ -144,7 +145,10 @@ impl<T: InvokeUiSession> Remote<T> {
                                     }
                                     Ok(ref bytes) => {
                                         last_recv_time = Instant::now();
-                                        received = true;
+                                        if !received {
+                                            received = true;
+                                            self.handler.set_connection_info(direct, true);
+                                        }
                                         self.data_count.fetch_add(bytes.len(), Ordering::Relaxed);
                                         if !self.handle_msg_from_peer(bytes, &mut peer).await {
                                             break
@@ -499,7 +503,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                         let mut msg = Message::new();
                         let mut file_action = FileAction::new();
-                        file_action.set_send_confirm(FileTransferSendConfirmRequest {
+                        let req = FileTransferSendConfirmRequest {
                             id,
                             file_num,
                             union: if need_override {
@@ -508,7 +512,9 @@ impl<T: InvokeUiSession> Remote<T> {
                                 Some(file_transfer_send_confirm_request::Union::Skip(true))
                             },
                             ..Default::default()
-                        });
+                        };
+                        job.confirm(&req);
+                        file_action.set_send_confirm(req);
                         msg.set_file_action(file_action);
                         allow_err!(peer.send(&msg).await);
                     }
@@ -626,6 +632,28 @@ impl<T: InvokeUiSession> Remote<T> {
                     .video_sender
                     .send(MediaData::RecordScreen(start, w, h, id));
             }
+            Data::ElevateDirect => {
+                let mut request = ElevationRequest::new();
+                request.set_direct(true);
+                let mut misc = Misc::new();
+                misc.set_elevation_request(request);
+                let mut msg = Message::new();
+                msg.set_misc(misc);
+                allow_err!(peer.send(&msg).await);
+            }
+            Data::ElevateWithLogon(username, password) => {
+                let mut request = ElevationRequest::new();
+                request.set_logon(ElevationRequestWithLogon {
+                    username,
+                    password,
+                    ..Default::default()
+                });
+                let mut misc = Misc::new();
+                misc.set_elevation_request(request);
+                let mut msg = Message::new();
+                msg.set_misc(misc);
+                allow_err!(peer.send(&msg).await);
+            }
             _ => {}
         }
         true
@@ -722,11 +750,11 @@ impl<T: InvokeUiSession> Remote<T> {
                         self.handler.adapt_size();
                         self.send_opts_after_login(peer).await;
                     }
-                    let incomming_format = CodecFormat::from(&vf);
-                    if self.video_format != incomming_format {
-                        self.video_format = incomming_format.clone();
+                    let incoming_format = CodecFormat::from(&vf);
+                    if self.video_format != incoming_format {
+                        self.video_format = incoming_format.clone();
                         self.handler.update_quality_status(QualityStatus {
-                            codec_format: Some(incomming_format),
+                            codec_format: Some(incoming_format),
                             ..Default::default()
                         })
                     };
@@ -862,28 +890,30 @@ impl<T: InvokeUiSession> Remote<T> {
                                         match fs::is_write_need_confirmation(&write_path, &digest) {
                                             Ok(res) => match res {
                                                 DigestCheckResult::IsSame => {
-                                                    let msg= new_send_confirm(FileTransferSendConfirmRequest {
+                                                    let req = FileTransferSendConfirmRequest {
                                                         id: digest.id,
                                                         file_num: digest.file_num,
                                                         union: Some(file_transfer_send_confirm_request::Union::Skip(true)),
                                                         ..Default::default()
-                                                    });
+                                                    };
+                                                    job.confirm(&req);
+                                                    let msg = new_send_confirm(req);
                                                     allow_err!(peer.send(&msg).await);
                                                 }
                                                 DigestCheckResult::NeedConfirm(digest) => {
                                                     if let Some(overwrite) = overwrite_strategy {
-                                                        let msg = new_send_confirm(
-                                                            FileTransferSendConfirmRequest {
-                                                                id: digest.id,
-                                                                file_num: digest.file_num,
-                                                                union: Some(if overwrite {
-                                                                    file_transfer_send_confirm_request::Union::OffsetBlk(0)
-                                                                } else {
-                                                                    file_transfer_send_confirm_request::Union::Skip(true)
-                                                                }),
-                                                                ..Default::default()
-                                                            },
-                                                        );
+                                                        let req = FileTransferSendConfirmRequest {
+                                                            id: digest.id,
+                                                            file_num: digest.file_num,
+                                                            union: Some(if overwrite {
+                                                                file_transfer_send_confirm_request::Union::OffsetBlk(0)
+                                                            } else {
+                                                                file_transfer_send_confirm_request::Union::Skip(true)
+                                                            }),
+                                                            ..Default::default()
+                                                        };
+                                                        job.confirm(&req);
+                                                        let msg = new_send_confirm(req);
                                                         allow_err!(peer.send(&msg).await);
                                                     } else {
                                                         self.handler.override_file_confirm(
@@ -895,19 +925,19 @@ impl<T: InvokeUiSession> Remote<T> {
                                                     }
                                                 }
                                                 DigestCheckResult::NoSuchFile => {
-                                                    let msg = new_send_confirm(
-                                                    FileTransferSendConfirmRequest {
+                                                    let req = FileTransferSendConfirmRequest {
                                                         id: digest.id,
                                                         file_num: digest.file_num,
                                                         union: Some(file_transfer_send_confirm_request::Union::OffsetBlk(0)),
                                                         ..Default::default()
-                                                    },
-                                                );
+                                                    };
+                                                    job.confirm(&req);
+                                                    let msg = new_send_confirm(req);
                                                     allow_err!(peer.send(&msg).await);
                                                 }
                                             },
                                             Err(err) => {
-                                                println!("error recving digest: {}", err);
+                                                println!("error receiving digest: {}", err);
                                             }
                                         }
                                     }
@@ -923,13 +953,18 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                         }
                         Some(file_response::Union::Done(d)) => {
+                            let mut err: Option<String> = None;
                             if let Some(job) = fs::get_job(d.id, &mut self.write_jobs) {
                                 job.modify_time();
+                                err = job.job_error();
                                 fs::remove_job(d.id, &mut self.write_jobs);
                             }
-                            self.handle_job_status(d.id, d.file_num, None);
+                            self.handle_job_status(d.id, d.file_num, err);
                         }
                         Some(file_response::Union::Error(e)) => {
+                            if let Some(_job) = fs::get_job(e.id, &mut self.write_jobs) {
+                                fs::remove_job(e.id, &mut self.write_jobs);
+                            }
                             self.handle_job_status(e.id, e.file_num, Some(e.error));
                         }
                         _ => {}
@@ -976,7 +1011,13 @@ impl<T: InvokeUiSession> Remote<T> {
                         self.handler.ui_handler.switch_display(&s);
                         self.video_sender.send(MediaData::Reset).ok();
                         if s.width > 0 && s.height > 0 {
-                            self.handler.set_display(s.x, s.y, s.width, s.height, s.cursor_embeded);
+                            self.handler.set_display(
+                                s.x,
+                                s.y,
+                                s.width,
+                                s.height,
+                                s.cursor_embedded,
+                            );
                         }
                     }
                     Some(misc::Union::CloseReason(c)) => {
@@ -989,32 +1030,90 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                     }
                     Some(misc::Union::Uac(uac)) => {
-                        let msgtype = "custom-uac-nocancel";
-                        let title = "Prompt";
-                        let text = "Please wait for confirmation of UAC...";
-                        let link = "";
-                        if uac {
-                            self.handler.msgbox(msgtype, title, text, link);
-                        } else {
-                            self.handler
-                                .cancel_msgbox(
-                                    &format!("{}-{}-{}-{}", msgtype, title, text, link,),
+                        #[cfg(feature = "flutter")]
+                        {
+                            if uac {
+                                self.handler.msgbox(
+                                    "on-uac",
+                                    "Prompt",
+                                    "Please wait for confirmation of UAC...",
+                                    "",
                                 );
+                            } else {
+                                self.handler.cancel_msgbox("on-uac");
+                                self.handler.cancel_msgbox("wait-uac");
+                                self.handler.cancel_msgbox("elevation-error");
+                            }
+                        }
+                        #[cfg(not(feature = "flutter"))]
+                        {
+                            let msgtype = "custom-uac-nocancel";
+                            let title = "Prompt";
+                            let text = "Please wait for confirmation of UAC...";
+                            let link = "";
+                            if uac {
+                                self.handler.msgbox(msgtype, title, text, link);
+                            } else {
+                                self.handler.cancel_msgbox(&format!(
+                                    "{}-{}-{}-{}",
+                                    msgtype, title, text, link,
+                                ));
+                            }
                         }
                     }
                     Some(misc::Union::ForegroundWindowElevated(elevated)) => {
-                        let msgtype = "custom-elevated-foreground-nocancel";
-                        let title = "Prompt";
-                        let text = "elevated_foreground_window_tip";
-                        let link = "";
-                        if elevated {
-                            self.handler.msgbox(msgtype, title, text, link);
+                        #[cfg(feature = "flutter")]
+                        {
+                            if elevated {
+                                self.handler.msgbox(
+                                    "on-foreground-elevated",
+                                    "Prompt",
+                                    "elevated_foreground_window_tip",
+                                    "",
+                                );
+                            } else {
+                                self.handler.cancel_msgbox("on-foreground-elevated");
+                                self.handler.cancel_msgbox("wait-uac");
+                                self.handler.cancel_msgbox("elevation-error");
+                            }
+                        }
+                        #[cfg(not(feature = "flutter"))]
+                        {
+                            let msgtype = "custom-elevated-foreground-nocancel";
+                            let title = "Prompt";
+                            let text = "elevated_foreground_window_tip";
+                            let link = "";
+                            if elevated {
+                                self.handler.msgbox(msgtype, title, text, link);
+                            } else {
+                                self.handler.cancel_msgbox(&format!(
+                                    "{}-{}-{}-{}",
+                                    msgtype, title, text, link,
+                                ));
+                            }
+                        }
+                    }
+                    Some(misc::Union::ElevationResponse(err)) => {
+                        if err.is_empty() {
+                            self.handler.msgbox("wait-uac", "", "", "");
                         } else {
                             self.handler
-                                .cancel_msgbox(
-                                    &format!("{}-{}-{}-{}", msgtype, title, text, link,),
-                                );
+                                .msgbox("elevation-error", "Elevation Error", &err, "");
                         }
+                    }
+                    Some(misc::Union::PortableServiceRunning(b)) => {
+                        if b {
+                            self.handler.msgbox(
+                                "custom-nocancel",
+                                "Successful",
+                                "Elevate successfully",
+                                "",
+                            );
+                        }
+                    }
+                    Some(misc::Union::SwitchBack(_)) => {
+                        #[cfg(feature = "flutter")]
+                        self.handler.switch_back(&self.handler.id);
                     }
                     _ => {}
                 },

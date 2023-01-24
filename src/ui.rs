@@ -9,18 +9,13 @@ use sciter::Value;
 
 use hbb_common::{
     allow_err,
-    config::{self, Config, PeerConfig, RENDEZVOUS_PORT, RENDEZVOUS_TIMEOUT},
-    futures::future::join_all,
+    config::{self, PeerConfig},
     log,
-    protobuf::Message as _,
-    rendezvous_proto::*,
-    tcp::FramedStream,
-    tokio,
 };
 
-use crate::common::get_app_name;
-use crate::ipc;
-use crate::ui_interface::*;
+#[cfg(not(any(feature = "flutter", feature = "cli")))]
+use crate::ui_session_interface::Session;
+use crate::{common::get_app_name, ipc, ui_interface::*};
 
 mod cm;
 #[cfg(feature = "inline")]
@@ -31,8 +26,6 @@ pub mod remote;
 #[cfg(target_os = "windows")]
 pub mod win_privacy;
 
-type Message = RendezvousMessage;
-
 pub type Children = Arc<Mutex<(bool, HashMap<(String, String), Child>)>>;
 #[allow(dead_code)]
 type Status = (i32, bool, i64, String);
@@ -40,6 +33,11 @@ type Status = (i32, bool, i64, String);
 lazy_static::lazy_static! {
     // stupid workaround for https://sciter.com/forums/topic/crash-on-latest-tis-mac-sdk-sometimes/
     static ref STUPID_VALUES: Mutex<Vec<Arc<Vec<Value>>>> = Default::default();
+}
+
+#[cfg(not(any(feature = "flutter", feature = "cli")))]
+lazy_static::lazy_static! {
+    pub static ref CUR_SESSION: Arc<Mutex<Option<Session<remote::SciterHandler>>>> = Default::default();
 }
 
 struct UIHostHandler;
@@ -124,12 +122,13 @@ pub fn start(args: &mut [String]) {
         let args: Vec<String> = iter.map(|x| x.clone()).collect();
         frame.set_title(&id);
         frame.register_behavior("native-remote", move || {
-            Box::new(remote::SciterSession::new(
-                cmd.clone(),
-                id.clone(),
-                pass.clone(),
-                args.clone(),
-            ))
+            let handler =
+                remote::SciterSession::new(cmd.clone(), id.clone(), pass.clone(), args.clone());
+            #[cfg(not(any(feature = "flutter", feature = "cli")))]
+            {
+                *CUR_SESSION.lock().unwrap() = Some(handler.inner());
+            }
+            Box::new(handler)
         });
         page = "remote.html";
     } else {
@@ -213,10 +212,6 @@ impl UI {
 
     fn show_run_without_install(&self) -> bool {
         show_run_without_install()
-    }
-
-    fn has_rendezvous_service(&self) -> bool {
-        has_rendezvous_service()
     }
 
     fn get_license(&self) -> String {
@@ -510,7 +505,7 @@ impl UI {
 
     fn change_id(&self, id: String) {
         let old_id = self.get_id();
-        change_id(id, old_id);
+        change_id_shared(id, old_id);
     }
 
     fn post_request(&self, url: String, body: String, header: String) {
@@ -606,7 +601,6 @@ impl sciter::EventHandler for UI {
         fn peer_has_password(String);
         fn forget_password(String);
         fn set_peer_option(String, String, String);
-        fn has_rendezvous_service();
         fn get_license();
         fn test_if_valid_server(String);
         fn get_sound_inputs();
@@ -688,101 +682,6 @@ fn get_sound_inputs() -> Vec<String> {
         .drain(..)
         .map(|x| x.1)
         .collect()
-}
-
-const INVALID_FORMAT: &'static str = "Invalid format";
-const UNKNOWN_ERROR: &'static str = "Unknown error";
-
-#[tokio::main(flavor = "current_thread")]
-async fn change_id(id: String, old_id: String) -> &'static str {
-    if !hbb_common::is_valid_custom_id(&id) {
-        return INVALID_FORMAT;
-    }
-    let uuid = machine_uid::get().unwrap_or("".to_owned());
-    if uuid.is_empty() {
-        return UNKNOWN_ERROR;
-    }
-    let rendezvous_servers = crate::ipc::get_rendezvous_servers(1_000).await;
-    let mut futs = Vec::new();
-    let err: Arc<Mutex<&str>> = Default::default();
-    for rendezvous_server in rendezvous_servers {
-        let err = err.clone();
-        let id = id.to_owned();
-        let uuid = uuid.clone();
-        let old_id = old_id.clone();
-        futs.push(tokio::spawn(async move {
-            let tmp = check_id(rendezvous_server, old_id, id, uuid).await;
-            if !tmp.is_empty() {
-                *err.lock().unwrap() = tmp;
-            }
-        }));
-    }
-    join_all(futs).await;
-    let err = *err.lock().unwrap();
-    if err.is_empty() {
-        crate::ipc::set_config_async("id", id.to_owned()).await.ok();
-    }
-    err
-}
-
-async fn check_id(
-    rendezvous_server: String,
-    old_id: String,
-    id: String,
-    uuid: String,
-) -> &'static str {
-    let any_addr = Config::get_any_listen_addr();
-    if let Ok(mut socket) = FramedStream::new(
-        crate::check_port(rendezvous_server, RENDEZVOUS_PORT),
-        any_addr,
-        RENDEZVOUS_TIMEOUT,
-    )
-    .await
-    {
-        let mut msg_out = Message::new();
-        msg_out.set_register_pk(RegisterPk {
-            old_id,
-            id,
-            uuid: uuid.into(),
-            ..Default::default()
-        });
-        let mut ok = false;
-        if socket.send(&msg_out).await.is_ok() {
-            if let Some(Ok(bytes)) = socket.next_timeout(3_000).await {
-                if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
-                    match msg_in.union {
-                        Some(rendezvous_message::Union::RegisterPkResponse(rpr)) => {
-                            match rpr.result.enum_value_or_default() {
-                                register_pk_response::Result::OK => {
-                                    ok = true;
-                                }
-                                register_pk_response::Result::ID_EXISTS => {
-                                    return "Not available";
-                                }
-                                register_pk_response::Result::TOO_FREQUENT => {
-                                    return "Too frequent";
-                                }
-                                register_pk_response::Result::NOT_SUPPORT => {
-                                    return "server_not_support";
-                                }
-                                register_pk_response::Result::INVALID_ID_FORMAT => {
-                                    return INVALID_FORMAT;
-                                }
-                                _ => {}
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-            }
-        }
-        if !ok {
-            return UNKNOWN_ERROR;
-        }
-    } else {
-        return "Failed to connect to rendezvous server";
-    }
-    ""
 }
 
 // sacrifice some memory

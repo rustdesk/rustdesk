@@ -21,26 +21,30 @@ class AbModel {
 
   AbModel(this.parent);
 
-  FFI? get _ffi => parent.target;
-
   Future<dynamic> pullAb() async {
-    if (_ffi!.userModel.userName.isEmpty) return;
+    if (gFFI.userModel.userName.isEmpty) return;
     abLoading.value = true;
     abError.value = "";
     final api = "${await bind.mainGetApiServer()}/api/ab/get";
     try {
-      final resp =
-          await http.post(Uri.parse(api), headers: await getHttpHeaders());
+      final resp = await http.post(Uri.parse(api), headers: getHttpHeaders());
       if (resp.body.isNotEmpty && resp.body.toLowerCase() != "null") {
         Map<String, dynamic> json = jsonDecode(resp.body);
         if (json.containsKey('error')) {
-          abError = json['error'];
+          abError.value = json['error'];
         } else if (json.containsKey('data')) {
           final data = jsonDecode(json['data']);
-          tags.value = data['tags'];
-          peers.clear();
-          for (final peer in data['peers']) {
-            peers.add(Peer.fromJson(peer));
+          if (data != null) {
+            tags.clear();
+            peers.clear();
+            if (data['tags'] is List) {
+              tags.value = data['tags'];
+            }
+            if (data['peers'] is List) {
+              for (final peer in data['peers']) {
+                peers.add(Peer.fromJson(peer));
+              }
+            }
           }
         }
         return resp.body;
@@ -56,16 +60,27 @@ class AbModel {
     return null;
   }
 
-  void reset() {
+  Future<void> reset() async {
+    await bind.mainSetLocalOption(key: "selected-tags", value: '');
     tags.clear();
     peers.clear();
   }
 
-  void addId(String id) async {
+  void addId(String id, String alias, List<dynamic> tags) {
     if (idContainBy(id)) {
       return;
     }
-    peers.add(Peer.fromJson({"id": id}));
+    final peer = Peer.fromJson({
+      'id': id,
+      'alias': alias,
+      'tags': tags,
+    });
+    peers.add(peer);
+  }
+
+  void addPeer(Peer peer) {
+    peers.removeWhere((e) => e.id == peer.id);
+    peers.add(peer);
   }
 
   void addTag(String tag) async {
@@ -86,7 +101,7 @@ class AbModel {
   Future<void> pushAb() async {
     abLoading.value = true;
     final api = "${await bind.mainGetApiServer()}/api/ab";
-    var authHeaders = await getHttpHeaders();
+    var authHeaders = getHttpHeaders();
     authHeaders['Content-Type'] = "application/json";
     final peersJsonData = peers.map((e) => e.toJson()).toList();
     final body = jsonEncode({
@@ -103,6 +118,10 @@ class AbModel {
     } finally {
       abLoading.value = false;
     }
+  }
+
+  Peer? find(String id) {
+    return peers.firstWhereOrNull((e) => e.id == id);
   }
 
   bool idContainBy(String id) {
@@ -143,18 +162,28 @@ class AbModel {
     }
   }
 
-  void setPeerAlias(String id, String value) {
+  Future<void> setPeerAlias(String id, String value) async {
     final it = peers.where((p0) => p0.id == id);
-    if (it.isEmpty) {
-      debugPrint("$id is not exists");
-      return;
-    } else {
+    if (it.isNotEmpty) {
       it.first.alias = value;
+      await pushAb();
     }
   }
 
-  void clear() {
-    peers.clear();
-    tags.clear();
+  Future<void> setPeerForceAlwaysRelay(String id, bool value) async {
+    final it = peers.where((p0) => p0.id == id);
+    if (it.isNotEmpty) {
+      it.first.forceAlwaysRelay = value;
+      await pushAb();
+    }
+  }
+
+  Future<void> setRdp(String id, String port, String username) async {
+    final it = peers.where((p0) => p0.id == id);
+    if (it.isNotEmpty) {
+      it.first.rdpPort = port;
+      it.first.rdpUsername = username;
+      await pushAb();
+    }
   }
 }

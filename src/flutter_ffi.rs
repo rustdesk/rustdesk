@@ -7,21 +7,23 @@ use std::{
 use flutter_rust_bridge::{StreamSink, SyncReturn, ZeroCopyBuffer};
 use serde_json::json;
 
+use crate::common::is_keyboard_mode_supported;
+use hbb_common::message_proto::KeyboardMode;
 use hbb_common::ResultType;
 use hbb_common::{
     config::{self, LocalConfig, PeerConfig, ONLINE},
     fs, log,
 };
+use std::str::FromStr;
 
 // use crate::hbbs_http::account::AuthResult;
 
 use crate::flutter::{self, SESSIONS};
 use crate::ui_interface::{self, *};
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::ui_session_interface::CUR_SESSION;
 use crate::{
     client::file_trait::FileManager,
-    flutter::{make_fd_to_json, session_add, session_start_},
+    common::make_fd_to_json,
+    flutter::{session_add, session_start_},
 };
 fn initialize(app_dir: &str) {
     *config::APP_DIR.write().unwrap() = app_dir.to_owned();
@@ -82,8 +84,9 @@ pub fn session_add_sync(
     id: String,
     is_file_transfer: bool,
     is_port_forward: bool,
+    switch_uuid: String,
 ) -> SyncReturn<String> {
-    if let Err(e) = session_add(&id, is_file_transfer, is_port_forward) {
+    if let Err(e) = session_add(&id, is_file_transfer, is_port_forward, &switch_uuid) {
         SyncReturn(format!("Failed to add session with id {}, {}", &id, e))
     } else {
         SyncReturn("".to_owned())
@@ -183,6 +186,14 @@ pub fn set_local_flutter_config(k: String, v: String) {
     ui_interface::set_local_flutter_config(k, v);
 }
 
+pub fn get_local_kb_layout_type() -> SyncReturn<String> {
+    SyncReturn(ui_interface::get_kb_layout_type())
+}
+
+pub fn set_local_kb_layout_type(kb_layout_type: String) {
+    ui_interface::set_kb_layout_type(kb_layout_type)
+}
+
 pub fn session_get_view_style(id: String) -> Option<String> {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
         Some(session.get_view_style())
@@ -225,11 +236,40 @@ pub fn session_set_image_quality(id: String, value: String) {
     }
 }
 
+pub fn session_get_keyboard_mode(id: String) -> Option<String> {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        Some(session.get_keyboard_mode())
+    } else {
+        None
+    }
+}
+
+pub fn session_set_keyboard_mode(id: String, value: String) {
+    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+        session.save_keyboard_mode(value);
+    }
+}
+
 pub fn session_get_custom_image_quality(id: String) -> Option<Vec<i32>> {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
         Some(session.get_custom_image_quality())
     } else {
         None
+    }
+}
+
+pub fn session_is_keyboard_mode_supported(id: String, mode: String) -> SyncReturn<bool> {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        if let Ok(mode) = KeyboardMode::from_str(&mode[..]) {
+            SyncReturn(is_keyboard_mode_supported(
+                &mode,
+                session.get_peer_version(),
+            ))
+        } else {
+            SyncReturn(false)
+        }
+    } else {
+        SyncReturn(false)
     }
 }
 
@@ -268,10 +308,11 @@ pub fn session_handle_flutter_key_event(
     name: String,
     keycode: i32,
     scancode: i32,
+    lock_modes: i32,
     down_or_up: bool,
 ) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.handle_flutter_key_event(&name, keycode, scancode, down_or_up);
+        session.handle_flutter_key_event(&name, keycode, scancode, lock_modes, down_or_up);
     }
 }
 
@@ -279,10 +320,8 @@ pub fn session_enter_or_leave(id: String, enter: bool) {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
         if enter {
-            *CUR_SESSION.lock().unwrap() = Some(session.clone());
             session.enter();
         } else {
-            *CUR_SESSION.lock().unwrap() = None;
             session.leave();
         }
     }
@@ -299,12 +338,14 @@ pub fn session_input_key(
     command: bool,
 ) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        // #[cfg(any(target_os = "android", target_os = "ios"))]
         session.input_key(&name, down, press, alt, ctrl, shift, command);
     }
 }
 
 pub fn session_input_string(id: String, value: String) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        // #[cfg(any(target_os = "android", target_os = "ios"))]
         session.input_string(&value);
     }
 }
@@ -327,19 +368,6 @@ pub fn session_get_peer_option(id: String, name: String) -> String {
         return session.get_option(name);
     }
     "".to_string()
-}
-
-pub fn session_get_keyboard_name(id: String) -> String {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        return session.get_keyboard_mode();
-    }
-    "legacy".to_string()
-}
-
-pub fn session_set_keyboard_mode(id: String, keyboard_mode: String) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.save_keyboard_mode(keyboard_mode);
-    }
 }
 
 pub fn session_input_os_password(id: String, value: String) {
@@ -464,6 +492,24 @@ pub fn session_resume_job(id: String, act_id: i32, is_remote: bool) {
     }
 }
 
+pub fn session_elevate_direct(id: String) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.elevate_direct();
+    }
+}
+
+pub fn session_elevate_with_logon(id: String, username: String, password: String) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.elevate_with_logon(username, password);
+    }
+}
+
+pub fn session_switch_sides(id: String) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.switch_sides();
+    }
+}
+
 pub fn main_get_sound_inputs() -> Vec<String> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     return get_sound_inputs();
@@ -529,6 +575,7 @@ pub fn main_get_app_name() -> String {
 pub fn main_get_app_name_sync() -> SyncReturn<String> {
     SyncReturn(get_app_name())
 }
+
 pub fn main_get_license() -> String {
     get_license()
 }
@@ -576,10 +623,6 @@ pub fn main_is_using_public_server() -> bool {
 
 pub fn main_discover() {
     discover();
-}
-
-pub fn main_has_rendezvous_service() -> bool {
-    has_rendezvous_service()
 }
 
 pub fn main_get_api_server() -> String {
@@ -640,45 +683,11 @@ pub fn main_peer_has_password(id: String) -> bool {
     peer_has_password(id)
 }
 
-pub fn main_get_recent_peers() -> String {
-    if !config::APP_DIR.read().unwrap().is_empty() {
-        let peers: Vec<HashMap<&str, String>> = PeerConfig::peers()
-            .drain(..)
-            .map(|(id, _, p)| {
-                HashMap::<&str, String>::from_iter([
-                    ("id", id),
-                    ("username", p.info.username.clone()),
-                    ("hostname", p.info.hostname.clone()),
-                    ("platform", p.info.platform.clone()),
-                    (
-                        "alias",
-                        p.options.get("alias").unwrap_or(&"".to_owned()).to_owned(),
-                    ),
-                ])
-            })
-            .collect();
-        serde_json::ser::to_string(&peers).unwrap_or("".to_owned())
-    } else {
-        String::new()
-    }
-}
-
 pub fn main_load_recent_peers() {
     if !config::APP_DIR.read().unwrap().is_empty() {
         let peers: Vec<HashMap<&str, String>> = PeerConfig::peers()
             .drain(..)
-            .map(|(id, _, p)| {
-                HashMap::<&str, String>::from_iter([
-                    ("id", id),
-                    ("username", p.info.username.clone()),
-                    ("hostname", p.info.hostname.clone()),
-                    ("platform", p.info.platform.clone()),
-                    (
-                        "alias",
-                        p.options.get("alias").unwrap_or(&"".to_owned()).to_owned(),
-                    ),
-                ])
-            })
+            .map(|(id, _, p)| peer_to_map(id, p))
             .collect();
         if let Some(s) = flutter::GLOBAL_EVENT_STREAM
             .read()
@@ -704,16 +713,7 @@ pub fn main_load_fav_peers() {
             .into_iter()
             .filter_map(|(id, _, p)| {
                 if favs.contains(&id) {
-                    Some(HashMap::<&str, String>::from_iter([
-                        ("id", id),
-                        ("username", p.info.username.clone()),
-                        ("hostname", p.info.hostname.clone()),
-                        ("platform", p.info.platform.clone()),
-                        (
-                            "alias",
-                            p.options.get("alias").unwrap_or(&"".to_owned()).to_owned(),
-                        ),
-                    ]))
+                    Some(peer_to_map(id, p))
                 } else {
                     None
                 }
@@ -918,9 +918,11 @@ pub fn session_send_mouse(id: String, msg: String) {
         }
         if let Some(buttons) = m.get("buttons") {
             mask |= match buttons.as_str() {
-                "left" => 1,
-                "right" => 2,
-                "wheel" => 4,
+                "left" => 0x01,
+                "right" => 0x02,
+                "wheel" => 0x04,
+                "back" => 0x08,
+                "forward" => 0x10,
                 _ => 0,
             } << 3;
         }
@@ -936,9 +938,9 @@ pub fn session_restart_remote_device(id: String) {
     }
 }
 
-pub fn session_get_audit_server_sync(id: String) -> SyncReturn<String> {
+pub fn session_get_audit_server_sync(id: String, typ: String) -> SyncReturn<String> {
     let res = if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.get_audit_server()
+        session.get_audit_server(typ)
     } else {
         "".to_owned()
     };
@@ -967,8 +969,22 @@ pub fn session_change_prefer_codec(id: String) {
     }
 }
 
-pub fn main_set_home_dir(home: String) {
-    *config::APP_HOME_DIR.write().unwrap() = home;
+pub fn main_set_home_dir(_home: String) {
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        *config::APP_HOME_DIR.write().unwrap() = _home;
+    }
+}
+
+// This is a temporary method to get data dir for ios
+pub fn main_get_data_dir_ios() -> SyncReturn<String> {
+    let data_dir = config::Config::path("data");
+    if !data_dir.exists() {
+        if let Err(e) = std::fs::create_dir_all(&data_dir) {
+            log::warn!("Failed to create data dir {}", e);
+        }
+    }
+    SyncReturn(data_dir.to_string_lossy().to_string())
 }
 
 pub fn main_stop_service() {
@@ -1056,6 +1072,10 @@ pub fn cm_elevate_portable(conn_id: i32) {
     crate::ui_cm_interface::elevate_portable(conn_id);
 }
 
+pub fn cm_switch_back(conn_id: i32) {
+    crate::ui_cm_interface::switch_back(conn_id);
+}
+
 pub fn main_get_icon() -> String {
     #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
     return ui_interface::get_icon();
@@ -1098,8 +1118,8 @@ pub fn query_onlines(ids: Vec<String>) {
     crate::rendezvous_mediator::query_online_states(ids, handle_query_onlines)
 }
 
-pub fn version_to_number(v: String) -> i64 {
-    hbb_common::get_version_number(&v)
+pub fn version_to_number(v: String) -> SyncReturn<i64> {
+    SyncReturn(hbb_common::get_version_number(&v))
 }
 
 pub fn option_synced() -> bool {
@@ -1110,9 +1130,13 @@ pub fn main_is_installed() -> SyncReturn<bool> {
     SyncReturn(is_installed())
 }
 
-pub fn main_start_grab_keyboard() {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    crate::ui_session_interface::global_grab_keyboard();
+pub fn main_start_grab_keyboard() -> SyncReturn<bool> {
+    #[cfg(target_os = "linux")]
+    if !*crate::common::IS_X11 {
+        return SyncReturn(false);
+    }
+    crate::keyboard::client::start_grab_loop();
+    SyncReturn(true)
 }
 
 pub fn main_is_installed_lower_version() -> SyncReturn<bool> {
@@ -1129,6 +1153,10 @@ pub fn main_is_process_trusted(prompt: bool) -> SyncReturn<bool> {
 
 pub fn main_is_can_screen_recording(prompt: bool) -> SyncReturn<bool> {
     SyncReturn(is_can_screen_recording(prompt))
+}
+
+pub fn main_is_can_input_monitoring(prompt: bool) -> SyncReturn<bool> {
+    SyncReturn(is_can_input_monitoring(prompt))
 }
 
 pub fn main_is_share_rdp() -> SyncReturn<bool> {
@@ -1191,6 +1219,14 @@ pub fn main_on_main_window_close() {
     // may called more than one times
     #[cfg(windows)]
     crate::portable_service::client::drop_portable_service_shared_memory();
+}
+
+pub fn main_current_is_wayland() -> SyncReturn<bool> {
+    SyncReturn(current_is_wayland())
+}
+
+pub fn main_is_login_wayland() -> SyncReturn<bool> {
+    SyncReturn(is_login_wayland())
 }
 
 #[cfg(target_os = "android")]

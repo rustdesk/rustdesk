@@ -56,6 +56,9 @@ class _PeerCardState extends State<_PeerCard>
 
   Widget _buildMobile() {
     final peer = super.widget.peer;
+    final name =
+        '${peer.username}${peer.username.isNotEmpty && peer.hostname.isNotEmpty ? '@' : ''}${peer.hostname}';
+
     return Card(
         margin: EdgeInsets.symmetric(horizontal: 2),
         child: GestureDetector(
@@ -90,7 +93,7 @@ class _PeerCardState extends State<_PeerCard>
                               ? formatID(peer.id)
                               : peer.alias)
                         ]),
-                        Text('${peer.username}@${peer.hostname}')
+                        Text(name)
                       ],
                     ).paddingOnly(left: 8.0),
                   ),
@@ -145,6 +148,8 @@ class _PeerCardState extends State<_PeerCard>
 
   Widget _buildPeerTile(
       BuildContext context, Peer peer, Rx<BoxDecoration?> deco) {
+    final name =
+        '${peer.username}${peer.username.isNotEmpty && peer.hostname.isNotEmpty ? '@' : ''}${peer.hostname}';
     final greyStyle = TextStyle(
         fontSize: 11,
         color: Theme.of(context).textTheme.titleLarge?.color?.withOpacity(0.6));
@@ -184,7 +189,7 @@ class _PeerCardState extends State<_PeerCard>
                           Align(
                             alignment: Alignment.centerLeft,
                             child: Text(
-                              '${peer.username}@${peer.hostname}',
+                              name,
                               style: greyStyle,
                               textAlign: TextAlign.start,
                               overflow: TextOverflow.ellipsis,
@@ -206,7 +211,8 @@ class _PeerCardState extends State<_PeerCard>
 
   Widget _buildPeerCard(
       BuildContext context, Peer peer, Rx<BoxDecoration?> deco) {
-    final name = '${peer.username}@${peer.hostname}';
+    final name =
+        '${peer.username}${peer.username.isNotEmpty && peer.hostname.isNotEmpty ? '@' : ''}${peer.hostname}';
     return Card(
       color: Colors.transparent,
       elevation: 0,
@@ -448,7 +454,7 @@ abstract class BasePeerCard extends StatelessWidget {
     );
   }
 
-  /// Only avaliable on Windows.
+  /// Only available on Windows.
   @protected
   MenuEntryBase<String> _createShortCutAction(String id) {
     return MenuEntryButton<String>(
@@ -465,23 +471,24 @@ abstract class BasePeerCard extends StatelessWidget {
   }
 
   @protected
+  Future<bool> _isForceAlwaysRelay(String id) async {
+    return (await bind.mainGetPeerOption(id: id, key: 'force-always-relay'))
+        .isNotEmpty;
+  }
+
+  @protected
   Future<MenuEntryBase<String>> _forceAlwaysRelayAction(String id) async {
     const option = 'force-always-relay';
     return MenuEntrySwitch<String>(
       switchType: SwitchType.scheckbox,
       text: translate('Always connect via relay'),
       getter: () async {
-        return (await bind.mainGetPeerOption(id: id, key: option)).isNotEmpty;
+        return await _isForceAlwaysRelay(id);
       },
       setter: (bool v) async {
-        String value;
-        String oldValue = await bind.mainGetPeerOption(id: id, key: option);
-        if (oldValue.isEmpty) {
-          value = 'Y';
-        } else {
-          value = '';
-        }
-        await bind.mainSetPeerOption(id: id, key: option, value: value);
+        gFFI.abModel.setPeerForceAlwaysRelay(id, v);
+        await bind.mainSetPeerOption(
+            id: id, key: option, value: bool2option(option, v));
       },
       padding: menuPadding,
       dismissOnClicked: true,
@@ -489,14 +496,14 @@ abstract class BasePeerCard extends StatelessWidget {
   }
 
   @protected
-  MenuEntryBase<String> _renameAction(String id, bool isAddressBook) {
+  MenuEntryBase<String> _renameAction(String id) {
     return MenuEntryButton<String>(
       childBuilder: (TextStyle? style) => Text(
         translate('Rename'),
         style: style,
       ),
       proc: () {
-        _rename(id, isAddressBook);
+        _rename(id);
       },
       padding: menuPadding,
       dismissOnClicked: true,
@@ -586,33 +593,41 @@ abstract class BasePeerCard extends StatelessWidget {
     );
   }
 
-  void _rename(String id, bool isAddressBook) async {
+  @protected
+  MenuEntryBase<String> _addToAb(Peer peer) {
+    return MenuEntryButton<String>(
+      childBuilder: (TextStyle? style) => Text(
+        translate('Add to Address Book'),
+        style: style,
+      ),
+      proc: () {
+        () async {
+          if (!gFFI.abModel.idContainBy(peer.id)) {
+            gFFI.abModel.addPeer(peer);
+            await gFFI.abModel.pushAb();
+          }
+        }();
+      },
+      padding: menuPadding,
+      dismissOnClicked: true,
+    );
+  }
+
+  @protected
+  Future<String> _getAlias(String id) async =>
+      await bind.mainGetPeerOption(id: id, key: 'alias');
+
+  void _rename(String id) async {
     RxBool isInProgress = false.obs;
-    var name = peer.alias;
+    String name = await _getAlias(id);
     var controller = TextEditingController(text: name);
-    if (isAddressBook) {
-      final peer = gFFI.abModel.peers.firstWhereOrNull((p) => id == p.id);
-      if (peer == null) {
-        // this should not happen
-      } else {
-        name = peer.alias;
-      }
-    }
     gFFI.dialogManager.show((setState, close) {
       submit() async {
         isInProgress.value = true;
-        name = controller.text;
+        String name = controller.text.trim();
         await bind.mainSetPeerAlias(id: id, alias: name);
-        if (isAddressBook) {
-          gFFI.abModel.setPeerAlias(id, name);
-          await gFFI.abModel.pushAb();
-        }
-        if (isAddressBook) {
-          gFFI.abModel.pullAb();
-        } else {
-          bind.mainLoadRecentPeers();
-          bind.mainLoadFavPeers();
-        }
+        gFFI.abModel.setPeerAlias(id, name);
+        _update();
         close();
         isInProgress.value = false;
       }
@@ -638,14 +653,17 @@ abstract class BasePeerCard extends StatelessWidget {
           ],
         ),
         actions: [
-          TextButton(onPressed: close, child: Text(translate("Cancel"))),
-          TextButton(onPressed: submit, child: Text(translate("OK"))),
+          dialogButton("Cancel", onPressed: close, isOutline: true),
+          dialogButton("OK", onPressed: submit),
         ],
         onSubmit: submit,
         onCancel: close,
       );
     });
   }
+
+  @protected
+  void _update();
 }
 
 class RecentPeerCard extends BasePeerCard {
@@ -671,7 +689,7 @@ class RecentPeerCard extends BasePeerCard {
       menuItems.add(_createShortCutAction(peer.id));
     }
     menuItems.add(MenuEntryDivider());
-    menuItems.add(_renameAction(peer.id, false));
+    menuItems.add(_renameAction(peer.id));
     menuItems.add(_removeAction(peer.id, () async {
       await bind.mainLoadRecentPeers();
     }));
@@ -679,8 +697,15 @@ class RecentPeerCard extends BasePeerCard {
       menuItems.add(_unrememberPasswordAction(peer.id));
     }
     menuItems.add(_addFavAction(peer.id));
+    if (!gFFI.abModel.idContainBy(peer.id)) {
+      menuItems.add(_addToAb(peer));
+    }
     return menuItems;
   }
+
+  @protected
+  @override
+  void _update() => bind.mainLoadRecentPeers();
 }
 
 class FavoritePeerCard extends BasePeerCard {
@@ -706,7 +731,7 @@ class FavoritePeerCard extends BasePeerCard {
       menuItems.add(_createShortCutAction(peer.id));
     }
     menuItems.add(MenuEntryDivider());
-    menuItems.add(_renameAction(peer.id, false));
+    menuItems.add(_renameAction(peer.id));
     menuItems.add(_removeAction(peer.id, () async {
       await bind.mainLoadFavPeers();
     }));
@@ -716,8 +741,15 @@ class FavoritePeerCard extends BasePeerCard {
     menuItems.add(_rmFavAction(peer.id, () async {
       await bind.mainLoadFavPeers();
     }));
+    if (!gFFI.abModel.idContainBy(peer.id)) {
+      menuItems.add(_addToAb(peer));
+    }
     return menuItems;
   }
+
+  @protected
+  @override
+  void _update() => bind.mainLoadFavPeers();
 }
 
 class DiscoveredPeerCard extends BasePeerCard {
@@ -744,8 +776,15 @@ class DiscoveredPeerCard extends BasePeerCard {
     }
     menuItems.add(MenuEntryDivider());
     menuItems.add(_removeAction(peer.id, () async {}));
+    if (!gFFI.abModel.idContainBy(peer.id)) {
+      menuItems.add(_addToAb(peer));
+    }
     return menuItems;
   }
+
+  @protected
+  @override
+  void _update() => bind.mainLoadLanPeers();
 }
 
 class AddressBookPeerCard extends BasePeerCard {
@@ -771,7 +810,7 @@ class AddressBookPeerCard extends BasePeerCard {
       menuItems.add(_createShortCutAction(peer.id));
     }
     menuItems.add(MenuEntryDivider());
-    menuItems.add(_renameAction(peer.id, false));
+    menuItems.add(_renameAction(peer.id));
     menuItems.add(_removeAction(peer.id, () async {}));
     if (await bind.mainPeerHasPassword(id: peer.id)) {
       menuItems.add(_unrememberPasswordAction(peer.id));
@@ -781,6 +820,20 @@ class AddressBookPeerCard extends BasePeerCard {
     }
     return menuItems;
   }
+
+  @protected
+  @override
+  Future<bool> _isForceAlwaysRelay(String id) async =>
+      gFFI.abModel.find(id)?.forceAlwaysRelay ?? false;
+
+  @protected
+  @override
+  Future<String> _getAlias(String id) async =>
+      gFFI.abModel.find(id)?.alias ?? '';
+
+  @protected
+  @override
+  void _update() => gFFI.abModel.pullAb();
 
   @protected
   @override
@@ -862,8 +915,8 @@ class AddressBookPeerCard extends BasePeerCard {
           ],
         ),
         actions: [
-          TextButton(onPressed: close, child: Text(translate("Cancel"))),
-          TextButton(onPressed: submit, child: Text(translate("OK"))),
+          dialogButton("Cancel", onPressed: close, isOutline: true),
+          dialogButton("OK", onPressed: submit),
         ],
         onSubmit: submit,
         onCancel: close,
@@ -872,23 +925,61 @@ class AddressBookPeerCard extends BasePeerCard {
   }
 }
 
+class MyGroupPeerCard extends BasePeerCard {
+  MyGroupPeerCard({required Peer peer, EdgeInsets? menuPadding, Key? key})
+      : super(peer: peer, menuPadding: menuPadding, key: key);
+
+  @override
+  Future<List<MenuEntryBase<String>>> _buildMenuItems(
+      BuildContext context) async {
+    final List<MenuEntryBase<String>> menuItems = [
+      _connectAction(context, peer),
+      _transferFileAction(context, peer.id),
+    ];
+    if (isDesktop && peer.platform != 'Android') {
+      menuItems.add(_tcpTunnelingAction(context, peer.id));
+    }
+    menuItems.add(await _forceAlwaysRelayAction(peer.id));
+    if (peer.platform == 'Windows') {
+      menuItems.add(_rdpAction(context, peer.id));
+    }
+    menuItems.add(_wolAction(peer.id));
+    if (Platform.isWindows) {
+      menuItems.add(_createShortCutAction(peer.id));
+    }
+    menuItems.add(MenuEntryDivider());
+    menuItems.add(_renameAction(peer.id));
+    if (await bind.mainPeerHasPassword(id: peer.id)) {
+      menuItems.add(_unrememberPasswordAction(peer.id));
+    }
+    return menuItems;
+  }
+
+  @protected
+  @override
+  void _update() => gFFI.groupModel.pull();
+}
+
 void _rdpDialog(String id) async {
-  final portController = TextEditingController(
-      text: await bind.mainGetPeerOption(id: id, key: 'rdp_port'));
-  final userController = TextEditingController(
-      text: await bind.mainGetPeerOption(id: id, key: 'rdp_username'));
+  final port = await bind.mainGetPeerOption(id: id, key: 'rdp_port');
+  final username = await bind.mainGetPeerOption(id: id, key: 'rdp_username');
+  final portController = TextEditingController(text: port);
+  final userController = TextEditingController(text: username);
   final passwordController = TextEditingController(
       text: await bind.mainGetPeerOption(id: id, key: 'rdp_password'));
   RxBool secure = true.obs;
 
   gFFI.dialogManager.show((setState, close) {
     submit() async {
+      String port = portController.text.trim();
+      String username = userController.text;
+      String password = passwordController.text;
+      await bind.mainSetPeerOption(id: id, key: 'rdp_port', value: port);
       await bind.mainSetPeerOption(
-          id: id, key: 'rdp_port', value: portController.text.trim());
+          id: id, key: 'rdp_username', value: username);
       await bind.mainSetPeerOption(
-          id: id, key: 'rdp_username', value: userController.text);
-      await bind.mainSetPeerOption(
-          id: id, key: 'rdp_password', value: passwordController.text);
+          id: id, key: 'rdp_password', value: password);
+      gFFI.abModel.setRdp(id, port, username);
       close();
     }
 
@@ -981,8 +1072,8 @@ void _rdpDialog(String id) async {
         ),
       ),
       actions: [
-        TextButton(onPressed: close, child: Text(translate("Cancel"))),
-        TextButton(onPressed: submit, child: Text(translate("OK"))),
+        dialogButton("Cancel", onPressed: close, isOutline: true),
+        dialogButton("OK", onPressed: submit),
       ],
       onSubmit: submit,
       onCancel: close,

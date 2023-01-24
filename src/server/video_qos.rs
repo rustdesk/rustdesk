@@ -198,7 +198,7 @@ impl VideoQoS {
 
         #[cfg(target_os = "android")]
         {
-            // fix when andorid screen shrinks
+            // fix when android screen shrinks
             let fix = scrap::Display::fix_quality() as u32;
             log::debug!("Android screen, fix quality:{}", fix);
             let base_bitrate = base_bitrate * fix;
