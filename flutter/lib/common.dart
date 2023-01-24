@@ -1263,23 +1263,23 @@ StreamSubscription? listenUniLinks() {
 bool checkArguments() {
   // bootArgs:[--connect, 362587269, --switch_uuid, e3d531cc-5dce-41e0-bd06-5d4a2b1eec05]
   // check connect args
-  final connectIndex = bootArgs.indexOf("--connect");
+  final connectIndex = kBootArgs.indexOf("--connect");
   if (connectIndex == -1) {
     return false;
   }
   String? id =
-      bootArgs.length < connectIndex + 1 ? null : bootArgs[connectIndex + 1];
-  final switchUuidIndex = bootArgs.indexOf("--switch_uuid");
-  String? switchUuid = bootArgs.length < switchUuidIndex + 1
+      kBootArgs.length < connectIndex + 1 ? null : kBootArgs[connectIndex + 1];
+  final switchUuidIndex = kBootArgs.indexOf("--switch_uuid");
+  String? switchUuid = kBootArgs.length < switchUuidIndex + 1
       ? null
-      : bootArgs[switchUuidIndex + 1];
+      : kBootArgs[switchUuidIndex + 1];
   if (id != null) {
     if (id.startsWith(kUniLinksPrefix)) {
       return parseRustdeskUri(id);
     } else {
       // remove "--connect xxx" in the `bootArgs` array
-      bootArgs.removeAt(connectIndex);
-      bootArgs.removeAt(connectIndex);
+      kBootArgs.removeAt(connectIndex);
+      kBootArgs.removeAt(connectIndex);
       // fallback to peer id
       Future.delayed(Duration.zero, () {
         rustDeskWinManager.newRemoteDesktop(id, switch_uuid: switchUuid);
@@ -1616,4 +1616,24 @@ Widget dialogButton(String text,
 
 int version_cmp(String v1, String v2) {
   return bind.versionToNumber(v: v1) - bind.versionToNumber(v: v2);
+}
+
+String getWindowName({WindowType? overrideType}) {
+  switch (overrideType ?? kWindowType) {
+    case WindowType.Main:
+      return "RustDesk";
+    case WindowType.FileTransfer:
+      return "File Transfer - RustDesk";
+    case WindowType.PortForward:
+      return "Port Forward - RustDesk";
+    case WindowType.RemoteDesktop:
+      return "Remote Desktop - RustDesk";
+    default:
+      break;
+  }
+  return "RustDesk";
+}
+
+String getWindowNameWithId(String id, {WindowType? overrideType}) {
+  return "${DesktopTab.labelGetterAlias(id).value} - ${getWindowName(overrideType: overrideType)}";
 }

@@ -31,6 +31,10 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
 
   _FileManagerTabPageState(Map<String, dynamic> params) {
     Get.put(DesktopTabController(tabType: DesktopTabType.fileTransfer));
+    tabController.onSelected = (_, id) {
+      WindowController.fromWindowId(windowId())
+          .setTitle(getWindowNameWithId(id));
+    };
     tabController.add(TabInfo(
         key: params['id'],
         label: params['id'],

@@ -486,7 +486,7 @@ class WindowActionPanelState extends State<WindowActionPanel>
           }
         });
       } else {
-        final wc = WindowController.fromWindowId(windowId!);
+        final wc = WindowController.fromWindowId(kWindowId!);
         wc.isMaximized().then((maximized) {
           debugPrint("isMaximized $maximized");
           if (widget.isMaximized.value != maximized) {
@@ -534,10 +534,10 @@ class WindowActionPanelState extends State<WindowActionPanel>
       await windowManager.hide();
     } else {
       // it's safe to hide the subwindow
-      await WindowController.fromWindowId(windowId!).hide();
+      await WindowController.fromWindowId(kWindowId!).hide();
       await Future.wait([
         rustDeskWinManager
-            .call(WindowType.Main, kWindowEventHide, {"id": windowId!}),
+            .call(WindowType.Main, kWindowEventHide, {"id": kWindowId!}),
         widget.onClose?.call() ?? Future.microtask(() => null)
       ]);
     }
@@ -563,7 +563,7 @@ class WindowActionPanelState extends State<WindowActionPanel>
                       if (widget.isMainWindow) {
                         windowManager.minimize();
                       } else {
-                        WindowController.fromWindowId(windowId!).minimize();
+                        WindowController.fromWindowId(kWindowId!).minimize();
                       }
                     },
                     isClose: false,
@@ -593,7 +593,7 @@ class WindowActionPanelState extends State<WindowActionPanel>
                           if (widget.isMainWindow) {
                             await windowManager.close();
                           } else {
-                            await WindowController.fromWindowId(windowId!)
+                            await WindowController.fromWindowId(kWindowId!)
                                 .close();
                           }
                         });
@@ -622,7 +622,7 @@ void startDragging(bool isMainWindow) {
   if (isMainWindow) {
     windowManager.startDragging();
   } else {
-    WindowController.fromWindowId(windowId!).startDragging();
+    WindowController.fromWindowId(kWindowId!).startDragging();
   }
 }
 
@@ -638,7 +638,7 @@ Future<bool> toggleMaximize(bool isMainWindow) async {
       return true;
     }
   } else {
-    final wc = WindowController.fromWindowId(windowId!);
+    final wc = WindowController.fromWindowId(kWindowId!);
     if (await wc.isMaximized()) {
       wc.unmaximize();
       return false;
