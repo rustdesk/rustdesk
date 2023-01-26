@@ -1028,10 +1028,17 @@ jobs:
             git config --global --add safe.directory "*"
             pushd /workspace
             # we use flutter-elinux to build our rustdesk
-            sed -i "s/flutter build linux --release/flutter-elinux build linux/g" ./build.py
-            # Setup flutter-elinux
             export PATH=/opt/flutter-elinux/bin:$PATH
+            sed -i "s/flutter build linux --release/flutter-elinux build linux/g" ./build.py
+            # Setup flutter-elinux. Run doctor to check if issues here.
             flutter-elinux doctor -v
+            # Patch arm64 engine for flutter 3.6.0+
+            flutter-elinux precache --linux
+            pushd /tmp
+            curl -O https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.7.0-stable.tar.xz
+            tar -xvf flutter_linux_3.7.0-stable.tar.xz flutter/bin/cache/artifacts/engine/linux-x64/shader_lib
+            cp -R flutter/bin/cache/artifacts/engine/linux-x64/shader_lib /opt/flutter-elinux/flutter/bin/cache/artifacts/engine/linux-arm64
+            popd
             # edit to corresponding arch
             case ${{ matrix.job.arch }} in
               aarch64)
