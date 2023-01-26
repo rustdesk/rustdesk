@@ -323,10 +323,10 @@ class ServerModel with ChangeNotifier {
     notifyListeners();
     parent.target?.ffiModel.updateEventListener("");
     await parent.target?.invokeMethod("init_service");
+    // ugly is here, because for desktop, below is useless
     await bind.mainStartService();
     updateClientState();
-    if (!Platform.isLinux) {
-      // current linux is not supported
+    if (Platform.isAndroid) {
       Wakelock.enable();
     }
   }

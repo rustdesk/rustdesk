@@ -113,6 +113,7 @@ icons_launcher:
             enable: true
         macos:
             enable: true
+            image_path: "../res/mac-icon.png"
         linux:
             enable: true
 

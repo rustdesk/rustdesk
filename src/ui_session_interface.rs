@@ -6,10 +6,11 @@ use crate::client::{
 };
 use crate::common::{self, GrabState};
 use crate::keyboard;
+use crate::ui_interface::using_public_server;
 use crate::{client::Data, client::Interface};
 use async_trait::async_trait;
 use bytes::Bytes;
-use hbb_common::config::{Config, LocalConfig, PeerConfig};
+use hbb_common::config::{Config, LocalConfig, PeerConfig, RS_PUB_KEY};
 use hbb_common::rendezvous_proto::ConnType;
 use hbb_common::tokio::{self, sync::mpsc};
 use hbb_common::{allow_err, message_proto::*};
@@ -834,6 +835,9 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>) {
     let token = LocalConfig::get_option("access_token");
     if key.is_empty() {
         key = crate::platform::get_license_key();
+    }
+    if key.is_empty() && !option_env!("RENDEZVOUS_SERVER").unwrap_or("").is_empty() {
+        key = RS_PUB_KEY.to_owned();
     }
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if handler.is_port_forward() {
