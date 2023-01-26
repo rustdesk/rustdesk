@@ -13,8 +13,7 @@ on:
 
 env:
   LLVM_VERSION: "10.0"
-  # Note: currently 3.0.5 does not support arm64 officially, we use latest stable version first.
-  FLUTTER_VERSION: "3.0.5"
+  FLUTTER_VERSION: "3.7.0"
   # vcpkg version: 2022.05.10
   # for multiarch gcc compatibility
   VCPKG_COMMIT_ID: "14e7bb4ae24616ec54ff6b2f6ef4e8659434ea44"
@@ -51,9 +50,9 @@ jobs:
         run: |
           flutter doctor -v
           flutter precache --windows
-          Invoke-WebRequest -Uri https://github.com/Kingtous/engine/releases/download/v3.0.5-rustdesk.2/windows-x64-flutter-release.zip -OutFile windows-x64-flutter-release.zip
+          Invoke-WebRequest -Uri https://github.com/Kingtous/engine/releases/download/v3.7.0-rustdesk/windows-x64-release-flutter.zip -OutFile windows-x64-flutter-release.zip
           Expand-Archive windows-x64-flutter-release.zip -DestinationPath engine
-          mv -Force engine/*  C:/hostedtoolcache/windows/flutter/stable-3.0.5-x64/bin/cache/artifacts/engine/windows-x64-release/
+          mv -Force engine/*  C:/hostedtoolcache/windows/flutter/stable-${{ env.FLUTTER_VERSION }}-x64/bin/cache/artifacts/engine/windows-x64-release/
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -853,12 +852,12 @@ jobs:
           # disable git safe.directory
           git config --global --add safe.directory "*"
           pushd /opt
-          # clone repo and reset to flutter 3.0.5
+          # clone repo and reset to flutter 3.7.0
           git clone https://github.com/sony/flutter-elinux.git || true
           pushd flutter-elinux
-            # reset to flutter 3.0.5
+            # reset to flutter 3.7.0
             git fetch
-            git reset --hard b09a90eee643859ce4e676839227edd9fd3feba8 
+            git reset --hard 51a1d685901f79fbac51665a967c3a1a789ecee5 
           popd
 
       - uses: Kingtous/run-on-arch-action@amd64-support
@@ -887,7 +886,6 @@ jobs:
             # Setup flutter-elinux
             export PATH=/opt/flutter-elinux/bin:$PATH
             flutter-elinux doctor -v
-            # edit to corresponding arch
             case ${{ matrix.job.arch }} in
               aarch64)
                 sed -i "s/Architecture: amd64/Architecture: arm64/g" ./build.py

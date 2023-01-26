@@ -31,7 +31,7 @@ dependencies:
     # Use with the CupertinoIcons class for iOS style icons.
     cupertino_icons: ^1.0.3
     ffi: ^2.0.1
-    path_provider: ^2.0.2
+    path_provider: ^2.0.12
     external_path: ^1.0.1
     provider: ^6.0.3
     tuple: ^2.0.0
