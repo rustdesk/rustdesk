@@ -236,7 +236,7 @@ pub fn set_peer_option(id: String, name: String, value: String) {
 
 #[inline]
 pub fn using_public_server() -> bool {
-    option_env!("RENDEZVOUS_SERVER").is_none()
+    option_env!("RENDEZVOUS_SERVER").unwrap_or("").is_empty()
         && crate::get_custom_rendezvous_server(get_option_("custom-rendezvous-server")).is_empty()
 }
 
