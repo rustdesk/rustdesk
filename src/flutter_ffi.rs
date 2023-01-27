@@ -245,8 +245,13 @@ pub fn session_get_keyboard_mode(id: String) -> Option<String> {
 }
 
 pub fn session_set_keyboard_mode(id: String, value: String) {
+    let mut mode_updated = false;
     if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
         session.save_keyboard_mode(value);
+        mode_updated = true;
+    }
+    if mode_updated {
+        crate::keyboard::update_grab_get_key_name();
     }
 }
 
@@ -1182,7 +1187,8 @@ pub fn main_update_me() -> SyncReturn<bool> {
 }
 
 pub fn set_cur_session_id(id: String) {
-    super::flutter::set_cur_session_id(id)
+    super::flutter::set_cur_session_id(id);
+    crate::keyboard::update_grab_get_key_name();
 }
 
 pub fn install_show_run_without_install() -> SyncReturn<bool> {
