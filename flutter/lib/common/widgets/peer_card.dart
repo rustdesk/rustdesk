@@ -1092,21 +1092,21 @@ Widget getOnline(double rightPadding, bool online) {
 }
 
 class ActionMore extends StatelessWidget {
-  final RxBool _iconMoreHover = false.obs;
+  final RxBool _hover = false.obs;
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-        onEnter: (_) => _iconMoreHover.value = true,
-        onExit: (_) => _iconMoreHover.value = false,
+    return InkWell(
+        onTap: () {},
+        onHover: (value) => _hover.value = value,
         child: Obx(() => CircleAvatar(
             radius: 14,
-            backgroundColor: _iconMoreHover.value
+            backgroundColor: _hover.value
                 ? Theme.of(context).scaffoldBackgroundColor
                 : Theme.of(context).backgroundColor,
             child: Icon(Icons.more_vert,
                 size: 18,
-                color: _iconMoreHover.value
+                color: _hover.value
                     ? Theme.of(context).textTheme.titleLarge?.color
                     : Theme.of(context)
                         .textTheme
