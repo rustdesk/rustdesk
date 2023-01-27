@@ -449,14 +449,11 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
     #[cfg(windows)]
     std::thread::spawn(move || {
         log::info!("try create privacy mode window");
-        #[cfg(windows)]
-        {
-            if let Err(e) = crate::platform::windows::check_update_broker_process() {
-                log::warn!(
-                    "Failed to check update broker process. Privacy mode may not work properly. {}",
-                    e
-                );
-            }
+        if let Err(e) = crate::platform::windows::check_update_broker_process() {
+            log::warn!(
+                "Failed to check update broker process. Privacy mode may not work properly. {}",
+                e
+            );
         }
         allow_err!(crate::ui::win_privacy::start());
     });

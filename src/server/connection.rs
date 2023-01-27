@@ -1274,7 +1274,7 @@ impl Connection {
                     .retain(|_, v| v.0.elapsed() < SWITCH_SIDES_TIMEOUT);
                 let uuid_old = SWITCH_SIDES_UUID.lock().unwrap().remove(&lr.my_id);
                 if let Ok(uuid) = uuid::Uuid::from_slice(_s.uuid.to_vec().as_ref()) {
-                    if let Some((instant, uuid_old)) = uuid_old {
+                    if let Some((_instant, uuid_old)) = uuid_old {
                         if uuid == uuid_old {
                             self.from_switch = true;
                             self.try_start_cm(lr.my_id.clone(), lr.my_name.clone(), true);
