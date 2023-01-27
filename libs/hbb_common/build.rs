@@ -8,10 +8,7 @@ fn main() {
         .out_dir(out_dir)
         .inputs(&["protos/rendezvous.proto", "protos/message.proto"])
         .include("protos")
-        .customize(
-            protobuf_codegen::Customize::default()
-            .tokio_bytes(true)
-        )
+        .customize(protobuf_codegen::Customize::default().tokio_bytes(true))
         .run()
         .expect("Codegen failed.");
 }
