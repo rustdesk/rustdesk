@@ -608,12 +608,11 @@ class CustomAlertDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    FocusNode focusNode = FocusNode();
-    // request focus if there is no focused FocusNode in the dialog
-    Future.delayed(Duration.zero, () {
-      if (!focusNode.hasFocus) focusNode.requestFocus();
-    });
+    // request focus
     FocusScopeNode scopeNode = FocusScopeNode();
+    Future.delayed(Duration.zero, () {
+      if (!scopeNode.hasFocus) scopeNode.requestFocus();
+    });
     return FocusScope(
       node: scopeNode,
       autofocus: true,
