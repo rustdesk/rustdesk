@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 env:
-  LLVM_VERSION: "10.0"
+  LLVM_VERSION: "15.0.6"
   FLUTTER_VERSION: "3.7.0"
   TAG_NAME: "nightly"
   # vcpkg version: 2022.05.10
@@ -648,14 +648,6 @@ jobs:
           key: ${{ matrix.job.target }}-${{ matrix.job.extra-build-features }}
           cache-directories: "/opt/rust-registry"
 
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: ${{ matrix.job.target }}
-          override: true
-          profile: minimal # minimal component installation (ie, no documentation)
-
       - name: Install local registry
         run: |
           mkdir -p /opt/rust-registry
@@ -805,14 +797,6 @@ jobs:
       - name: Free Space
         run: |
           df
-
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: ${{ matrix.job.target }}
-          override: true
-          profile: minimal # minimal component installation (ie, no documentation)
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
