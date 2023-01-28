@@ -1,4 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter_hbb/models/peer_model.dart';
+
+import '../../models/platform_model.dart';
 
 class HttpType {
   static const kAuthReqTypeAccount = "account";
@@ -48,6 +52,16 @@ class PeerPayload {
   }
 }
 
+class DeviceInfo {
+  static Map<String, dynamic> toJson() {
+    final Map<String, dynamic> data = <String, dynamic>{};
+    data['os'] = Platform.operatingSystem;
+    data['type'] = "client";
+    data['name'] = bind.mainGetHostname();
+    return data;
+  }
+}
+
 class LoginRequest {
   String? username;
   String? password;
@@ -56,7 +70,7 @@ class LoginRequest {
   bool? autoLogin;
   String? type;
   String? verificationCode;
-  String? deviceInfo;
+  Map<String, dynamic> deviceInfo = DeviceInfo.toJson();
 
   LoginRequest(
       {this.username,
@@ -65,19 +79,7 @@ class LoginRequest {
       this.uuid,
       this.autoLogin,
       this.type,
-      this.verificationCode,
-      this.deviceInfo});
-
-  LoginRequest.fromJson(Map<String, dynamic> json) {
-    username = json['username'];
-    password = json['password'];
-    id = json['id'];
-    uuid = json['uuid'];
-    autoLogin = json['autoLogin'];
-    type = json['type'];
-    verificationCode = json['verificationCode'];
-    deviceInfo = json['deviceInfo'];
-  }
+      this.verificationCode});
 
   Map<String, dynamic> toJson() {
     final Map<String, dynamic> data = <String, dynamic>{};
@@ -88,7 +90,7 @@ class LoginRequest {
     data['autoLogin'] = autoLogin ?? '';
     data['type'] = type ?? '';
     data['verificationCode'] = verificationCode ?? '';
-    data['deviceInfo'] = deviceInfo ?? '';
+    data['deviceInfo'] = deviceInfo;
     return data;
   }
 }
