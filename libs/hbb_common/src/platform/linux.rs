@@ -32,7 +32,7 @@ pub fn get_display_server() -> String {
         // loginctl has not given the expected output.  try something else.
         if let Ok(sid) = std::env::var("XDG_SESSION_ID") {
             // could also execute "cat /proc/self/sessionid"
-            session = sid.to_owned();
+            session = sid;
         }
         if session.is_empty() {
             session = run_cmds("cat /proc/self/sessionid".to_owned()).unwrap_or_default();
@@ -63,7 +63,7 @@ fn get_display_server_of_session(session: &str) -> String {
                 if let Ok(xorg_results) = run_cmds(format!("ps -e | grep \"{}.\\\\+Xorg\"", tty))
                 // And check if Xorg is running on that tty
                 {
-                    if xorg_results.trim_end().to_string() != "" {
+                    if xorg_results.trim_end() != "" {
                         // If it is, manually return "x11", otherwise return tty
                         return "x11".to_owned();
                     }
@@ -88,7 +88,7 @@ pub fn get_values_of_seat0(indices: Vec<usize>) -> Vec<String> {
     if let Ok(output) = run_loginctl(None) {
         for line in String::from_utf8_lossy(&output.stdout).lines() {
             if line.contains("seat0") {
-                if let Some(sid) = line.split_whitespace().nth(0) {
+                if let Some(sid) = line.split_whitespace().next() {
                     if is_active(sid) {
                         return indices
                             .into_iter()
@@ -103,7 +103,7 @@ pub fn get_values_of_seat0(indices: Vec<usize>) -> Vec<String> {
     // some case, there is no seat0 https://github.com/rustdesk/rustdesk/issues/73
     if let Ok(output) = run_loginctl(None) {
         for line in String::from_utf8_lossy(&output.stdout).lines() {
-            if let Some(sid) = line.split_whitespace().nth(0) {
+            if let Some(sid) = line.split_whitespace().next() {
                 let d = get_display_server_of_session(sid);
                 if is_active(sid) && d != "tty" {
                     return indices

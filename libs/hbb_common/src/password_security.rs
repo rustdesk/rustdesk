@@ -104,7 +104,7 @@ pub fn decrypt_str_or_original(s: &str, current_version: &str) -> (String, bool,
     if s.len() > VERSION_LEN {
         let version = &s[..VERSION_LEN];
         if version == "00" {
-            if let Ok(v) = decrypt(&s[VERSION_LEN..].as_bytes()) {
+            if let Ok(v) = decrypt(s[VERSION_LEN..].as_bytes()) {
                 return (
                     String::from_utf8_lossy(&v).to_string(),
                     true,
@@ -149,7 +149,7 @@ pub fn decrypt_vec_or_original(v: &[u8], current_version: &str) -> (Vec<u8>, boo
 }
 
 fn encrypt(v: &[u8]) -> Result<String, ()> {
-    if v.len() > 0 {
+    if !v.is_empty() {
         symmetric_crypt(v, true).map(|v| base64::encode(v, base64::Variant::Original))
     } else {
         Err(())
@@ -157,7 +157,7 @@ fn encrypt(v: &[u8]) -> Result<String, ()> {
 }
 
 fn decrypt(v: &[u8]) -> Result<Vec<u8>, ()> {
-    if v.len() > 0 {
+    if !v.is_empty() {
         base64::decode(v, base64::Variant::Original).and_then(|v| symmetric_crypt(&v, false))
     } else {
         Err(())

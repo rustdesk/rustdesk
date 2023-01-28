@@ -32,12 +32,7 @@ pub fn decompress(data: &[u8]) -> Vec<u8> {
             const MAX: usize = 1024 * 1024 * 64;
             const MIN: usize = 1024 * 1024;
             let mut n = 30 * data.len();
-            if n > MAX {
-                n = MAX;
-            }
-            if n < MIN {
-                n = MIN;
-            }
+            n = n.clamp(MIN, MAX);
             match d.decompress(data, n) {
                 Ok(res) => out = res,
                 Err(err) => {

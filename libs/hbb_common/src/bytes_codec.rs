@@ -15,6 +15,12 @@ enum DecodeState {
     Data(usize),
 }
 
+impl Default for BytesCodec {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BytesCodec {
     pub fn new() -> Self {
         Self {
@@ -56,7 +62,7 @@ impl BytesCodec {
         }
         src.advance(head_len);
         src.reserve(n);
-        return Ok(Some(n));
+        Ok(Some(n))
     }
 
     fn decode_data(&self, n: usize, src: &mut BytesMut) -> io::Result<Option<BytesMut>> {

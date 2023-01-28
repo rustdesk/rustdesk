@@ -839,6 +839,11 @@ pub fn check_update_broker_process() -> ResultType<()> {
     let cur_dir = exe_file.parent().unwrap();
     let cur_exe = cur_dir.join(process_exe);
 
+    if !std::path::Path::new(&cur_exe).exists() {
+        std::fs::copy(origin_process_exe, cur_exe)?;
+        return Ok(());
+    }
+
     let ori_modified = fs::metadata(origin_process_exe)?.modified()?;
     if let Ok(metadata) = fs::metadata(&cur_exe) {
         if let Ok(cur_modified) = metadata.modified() {

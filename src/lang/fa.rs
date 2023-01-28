@@ -407,7 +407,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Add to Address Book", "افزودن به دفترچه آدرس"),
         ("Group", "گروه"),
         ("Search", "جستجو"),
-        ("Closed manually by the web console", "به صورت دستی توسط کنسول وب بسته شد"),
+        ("Closed manually by web console", "به صورت دستی توسط کنسول وب بسته شد"),
         ("Local keyboard type", "نوع صفحه کلید محلی"),
         ("Select local keyboard type", "نوع صفحه کلید محلی را انتخاب کنید"),
         ("software_render_tip", "اگر کارت گرافیک Nvidia دارید و پنجره راه دور بلافاصله پس از اتصال بسته می شود، درایور nouveau را نصب نمایید و انتخاب گزینه استفاده از رندر نرم افزار می تواند کمک کننده باشد. راه اندازی مجدد نرم افزار مورد نیاز است."),
@@ -433,5 +433,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Strong", "قوی"),
         ("Switch Sides", "طرفین را عوض کنید"),
         ("Please confirm if you want to share your desktop?", "لطفاً تأیید کنید که آیا می خواهید دسکتاپ خود را به اشتراک بگذارید؟"),
+        ("Closed as expected", ""),
     ].iter().cloned().collect();
 }

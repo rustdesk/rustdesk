@@ -13,8 +13,7 @@ on:
 
 env:
   LLVM_VERSION: "15.0.6"
-  # Note: currently 3.0.5 does not support arm64 officially, we use latest stable version first.
-  FLUTTER_VERSION: "3.0.5"
+  FLUTTER_VERSION: "3.7.0"
   # vcpkg version: 2022.05.10
   # for multiarch gcc compatibility
   VCPKG_COMMIT_ID: "14e7bb4ae24616ec54ff6b2f6ef4e8659434ea44"
@@ -28,7 +27,7 @@ jobs:
       fail-fast: true
       matrix:
         job:
-          - { target: i686-pc-windows-msvc        , os: windows-2019                  }
+          # - { target: i686-pc-windows-msvc        , os: windows-2019                  }
           # - { target: x86_64-pc-windows-gnu       , os: windows-2019                  }
           - { target: x86_64-pc-windows-msvc, os: windows-2019 }
     steps:
@@ -51,9 +50,9 @@ jobs:
         run: |
           flutter doctor -v
           flutter precache --windows
-          Invoke-WebRequest -Uri https://github.com/Kingtous/engine/releases/download/v3.0.5-rustdesk.2/windows-x64-flutter-release.zip -OutFile windows-x64-flutter-release.zip
+          Invoke-WebRequest -Uri https://github.com/Kingtous/engine/releases/download/v3.7.0-rustdesk/windows-x64-release-flutter.zip -OutFile windows-x64-flutter-release.zip
           Expand-Archive windows-x64-flutter-release.zip -DestinationPath engine
-          mv -Force engine/*  C:/hostedtoolcache/windows/flutter/stable-3.0.5-x64/bin/cache/artifacts/engine/windows-x64-release/
+          mv -Force engine/*  C:/hostedtoolcache/windows/flutter/stable-${{ env.FLUTTER_VERSION }}-x64/bin/cache/artifacts/engine/windows-x64-release/
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -837,12 +836,12 @@ jobs:
           # disable git safe.directory
           git config --global --add safe.directory "*"
           pushd /opt
-          # clone repo and reset to flutter 3.0.5
+          # clone repo and reset to flutter 3.7.0
           git clone https://github.com/sony/flutter-elinux.git || true
           pushd flutter-elinux
-            # reset to flutter 3.0.5
+            # reset to flutter 3.7.0
             git fetch
-            git reset --hard b09a90eee643859ce4e676839227edd9fd3feba8 
+            git reset --hard 51a1d685901f79fbac51665a967c3a1a789ecee5 
           popd
 
       - uses: Kingtous/run-on-arch-action@amd64-support
@@ -867,11 +866,17 @@ jobs:
             git config --global --add safe.directory "*"
             pushd /workspace
             # we use flutter-elinux to build our rustdesk
-            sed -i "s/flutter build linux --release/flutter-elinux build linux/g" ./build.py
-            # Setup flutter-elinux
             export PATH=/opt/flutter-elinux/bin:$PATH
+            sed -i "s/flutter build linux --release/flutter-elinux build linux/g" ./build.py
+            # Setup flutter-elinux. Run doctor to check if issues here.
             flutter-elinux doctor -v
-            # edit to corresponding arch
+            # Patch arm64 engine for flutter 3.6.0+
+            flutter-elinux precache --linux
+            pushd /tmp
+            curl -O https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.7.0-stable.tar.xz
+            tar -xvf flutter_linux_3.7.0-stable.tar.xz flutter/bin/cache/artifacts/engine/linux-x64/shader_lib
+            cp -R flutter/bin/cache/artifacts/engine/linux-x64/shader_lib /opt/flutter-elinux/flutter/bin/cache/artifacts/engine/linux-arm64
+            popd
             case ${{ matrix.job.arch }} in
               aarch64)
                 sed -i "s/Architecture: amd64/Architecture: arm64/g" ./build.py

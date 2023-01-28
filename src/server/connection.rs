@@ -101,7 +101,6 @@ pub struct Connection {
     lr: LoginRequest,
     last_recv_time: Arc<Mutex<Instant>>,
     chat_unanswered: bool,
-    close_manually: bool,
     #[allow(unused)]
     elevation_requested: bool,
     from_switch: bool,
@@ -200,7 +199,6 @@ impl Connection {
             lr: Default::default(),
             last_recv_time: Arc::new(Mutex::new(Instant::now())),
             chat_unanswered: false,
-            close_manually: false,
             elevation_requested: false,
             from_switch: false,
         };
@@ -271,7 +269,9 @@ impl Connection {
                             }
                         }
                         ipc::Data::Close => {
-                            conn.on_close_manually("connection manager", "peer").await;
+                            conn.chat_unanswered = false; // seen
+                            conn.send_close_reason_no_retry("").await;
+                            conn.on_close("connection manager", true).await;
                             break;
                         }
                         ipc::Data::ChatMessage{text} => {
@@ -411,7 +411,8 @@ impl Connection {
                 }
                 Ok(conns) = hbbs_rx.recv() => {
                     if conns.contains(&id) {
-                        conn.on_close_manually("web console", "web console").await;
+                        conn.send_close_reason_no_retry("Closed manually by web console").await;
+                        conn.on_close("web console", true).await;
                         break;
                     }
                 }
@@ -441,7 +442,8 @@ impl Connection {
                         Some(message::Union::Misc(m)) => {
                             match &m.union {
                                 Some(misc::Union::StopService(_)) => {
-                                    conn.on_close_manually("stop service", "peer").await;
+                                    conn.send_close_reason_no_retry("").await;
+                                    conn.on_close("stop service", true).await;
                                     break;
                                 }
                                 _ => {},
@@ -540,6 +542,9 @@ impl Connection {
             "action": "close",
         }));
         ALIVE_CONNS.lock().unwrap().retain(|&c| c != id);
+        if let Some(s) = conn.server.upgrade() {
+            s.write().unwrap().remove_connection(&conn.inner);
+        }
         log::info!("#{} connection loop exited", id);
     }
 
@@ -1274,7 +1279,7 @@ impl Connection {
                     .retain(|_, v| v.0.elapsed() < SWITCH_SIDES_TIMEOUT);
                 let uuid_old = SWITCH_SIDES_UUID.lock().unwrap().remove(&lr.my_id);
                 if let Ok(uuid) = uuid::Uuid::from_slice(_s.uuid.to_vec().as_ref()) {
-                    if let Some((instant, uuid_old)) = uuid_old {
+                    if let Some((_instant, uuid_old)) = uuid_old {
                         if uuid == uuid_old {
                             self.from_switch = true;
                             self.try_start_cm(lr.my_id.clone(), lr.my_name.clone(), true);
@@ -1583,6 +1588,8 @@ impl Connection {
                                 uuid.to_string().as_ref(),
                             ])
                             .ok();
+                            self.send_close_reason_no_retry("Closed as expected");
+                            self.on_close("switch sides", false);
                             return false;
                         }
                     }
@@ -1756,16 +1763,13 @@ impl Connection {
     }
 
     async fn on_close(&mut self, reason: &str, lock: bool) {
-        if let Some(s) = self.server.upgrade() {
-            s.write().unwrap().remove_connection(&self.inner);
-        }
         log::info!("#{} Connection closed: {}", self.inner.id(), reason);
         if lock && self.lock_after_session_end && self.keyboard {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             lock_screen().await;
         }
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        let data = if self.chat_unanswered && !self.close_manually {
+        let data = if self.chat_unanswered {
             ipc::Data::Disconnected
         } else {
             ipc::Data::Close
@@ -1776,15 +1780,17 @@ impl Connection {
         self.port_forward_socket.take();
     }
 
-    async fn on_close_manually(&mut self, close_from: &str, close_by: &str) {
-        self.close_manually = true;
+    // The `reason` should be consistent with `check_if_retry` if not empty
+    async fn send_close_reason_no_retry(&mut self, reason: &str) {
         let mut misc = Misc::new();
-        misc.set_close_reason(format!("Closed manually by the {}", close_by));
+        if reason.is_empty() {
+            misc.set_close_reason("Closed manually by the peer".to_string());
+        } else {
+            misc.set_close_reason(reason.to_string());
+        }
         let mut msg_out = Message::new();
         msg_out.set_misc(misc);
         self.send(msg_out).await;
-        self.on_close(&format!("Close requested from {}", close_from), false)
-            .await;
         SESSIONS.lock().unwrap().remove(&self.lr.my_id);
     }
 

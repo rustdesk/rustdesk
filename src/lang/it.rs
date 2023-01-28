@@ -407,7 +407,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Add to Address Book", "Aggiungi alla rubrica"),
         ("Group", "Gruppo"),
         ("Search", "Cerca"),
-        ("Closed manually by the web console", "Chiudi manualmente dalla console Web"),
+        ("Closed manually by web console", "Chiudi manualmente dalla console Web"),
         ("Local keyboard type", "Tipo di tastiera locale"),
         ("Select local keyboard type", "Seleziona il tipo di tastiera locale"),
         ("software_render_tip", "Se si dispone di una scheda grafica Nvidia e la finestra remota si chiude immediatamente dopo la connessione, l'installazione del driver nouveau e la scelta di utilizzare il rendering software possono aiutare. È necessario un riavvio del software."),
@@ -433,5 +433,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Strong", "Forte"),
         ("Switch Sides", "Cambia lato"),
         ("Please confirm if you want to share your desktop?", "Vuoi condividere il tuo desktop?"),
+        ("Closed as expected", ""),
     ].iter().cloned().collect();
 }

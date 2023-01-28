@@ -64,6 +64,8 @@ pub mod client {
         match state {
             GrabState::Ready => {}
             GrabState::Run => {
+                #[cfg(windows)]
+                update_grab_get_key_name();
                 #[cfg(any(target_os = "windows", target_os = "macos"))]
                 KEYBOARD_HOOKED.swap(true, Ordering::SeqCst);
 
@@ -182,6 +184,15 @@ pub mod client {
     pub fn ctrl_alt_del() {
         send_key_event(&event_ctrl_alt_del());
     }
+}
+
+#[cfg(windows)]
+pub fn update_grab_get_key_name() {
+    match get_keyboard_mode_enum() {
+        KeyboardMode::Map => rdev::set_get_key_name(false),
+        KeyboardMode::Translate => rdev::set_get_key_name(true),
+        _ => {}
+    };
 }
 
 pub fn start_grab_loop() {
