@@ -473,7 +473,17 @@ fn request_screen_cast(
             args.insert("multiple".into(), Variant(Box::new(true)));
             args.insert("types".into(), Variant(Box::new(1u32))); //| 2u32)));
 
-            let cursor_mode = if capture_cursor { 2u32 } else { 1u32 };
+            let mut cursor_mode = 0u32;
+            let mut available_cursor_modes = 0u32;
+            if let Ok(modes) = portal.available_cursor_modes() {
+                available_cursor_modes = modes;
+            }
+            if capture_cursor {
+                cursor_mode = 2u32 & available_cursor_modes;
+            }
+            if cursor_mode == 0 {
+                cursor_mode = 1u32 & available_cursor_modes;
+            }
             let plasma = std::env::var("DESKTOP_SESSION").map_or(false, |s| s.contains("plasma"));
             if plasma && capture_cursor {
                 // Warn the user if capturing the cursor is tried on kde as this can crash
@@ -483,7 +493,9 @@ fn request_screen_cast(
                     desktop, see https://bugs.kde.org/show_bug.cgi?id=435042 for details! \
                     You have been warned.");
             }
-            args.insert("cursor_mode".into(), Variant(Box::new(cursor_mode)));
+            if cursor_mode > 0 {
+                args.insert("cursor_mode".into(), Variant(Box::new(cursor_mode)));
+            }
             let session: dbus::Path = r
                 .results
                 .get("session_handle")
