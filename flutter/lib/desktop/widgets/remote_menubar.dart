@@ -653,6 +653,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         ));
       }
       if (pi.platform != kPeerPlatformAndroid &&
+          pi.platform != kPeerPlatformMacOS && // unsupport yet
           version_cmp(peer_version, '1.2.0') >= 0) {
         displayMenu.add(MenuEntryButton<String>(
           childBuilder: (TextStyle? style) => Text(

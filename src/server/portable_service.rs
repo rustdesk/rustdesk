@@ -459,6 +459,7 @@ pub mod client {
         static ref RUNNING: Arc<Mutex<bool>> = Default::default();
         static ref SHMEM: Arc<Mutex<Option<SharedMemory>>> = Default::default();
         static ref SENDER : Mutex<mpsc::UnboundedSender<ipc::Data>> = Mutex::new(client::start_ipc_server());
+        static ref QUICK_SUPPORT: Arc<Mutex<bool>> = Default::default();
     }
 
     pub enum StartPara {
@@ -559,6 +560,10 @@ pub mod client {
     pub extern "C" fn drop_portable_service_shared_memory() {
         log::info!("drop shared memory");
         *SHMEM.lock().unwrap() = None;
+    }
+
+    pub fn set_quick_support(v: bool) {
+        *QUICK_SUPPORT.lock().unwrap() = v;
     }
 
     fn set_dir_permission(dir: &PathBuf) -> bool {
@@ -685,17 +690,7 @@ pub mod client {
         use DataPortableService::*;
         let rx = Arc::new(tokio::sync::Mutex::new(rx));
         let postfix = IPC_SUFFIX;
-        #[cfg(feature = "flutter")]
-        let quick_support = {
-            let args: Vec<_> = std::env::args().collect();
-            args.contains(&"--quick_support".to_string())
-        };
-        #[cfg(not(feature = "flutter"))]
-        let quick_support = std::env::current_exe()
-            .unwrap_or("".into())
-            .to_string_lossy()
-            .to_lowercase()
-            .ends_with("qs.exe");
+        let quick_support = QUICK_SUPPORT.lock().unwrap().clone();
 
         match new_listener(postfix).await {
             Ok(mut incoming) => loop {

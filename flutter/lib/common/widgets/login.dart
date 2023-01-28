@@ -666,6 +666,8 @@ Future<bool?> verificationCodeDialog(UserPayload? user) async {
                 child: const LinearProgressIndicator()),
           ],
         ),
+        onCancel: close,
+        onSubmit: onVerify,
         actions: [
           dialogButton("Cancel", onPressed: close, isOutline: true),
           dialogButton("Verify", onPressed: onVerify),

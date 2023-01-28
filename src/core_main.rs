@@ -54,11 +54,6 @@ pub fn core_main() -> Option<Vec<String>> {
         return core_main_invoke_new_connection(std::env::args());
     }
     let click_setup = cfg!(windows) && args.is_empty() && crate::common::is_setup(&arg_exe);
-    #[cfg(not(feature = "flutter"))]
-    {
-        _is_quick_support =
-            cfg!(windows) && args.is_empty() && arg_exe.to_lowercase().ends_with("qs.exe");
-    }
     if click_setup {
         args.push("--install".to_owned());
         flutter_args.push("--install".to_string());
@@ -69,6 +64,14 @@ pub fn core_main() -> Option<Vec<String>> {
     if args.len() > 0 && args[0] == "--version" {
         println!("{}", crate::VERSION);
         return None;
+    }
+    #[cfg(windows)]
+    {
+        _is_quick_support |= !crate::platform::is_installed()
+            && args.is_empty()
+            && (arg_exe.to_lowercase().ends_with("qs.exe")
+                || (!click_setup && crate::platform::is_elevated(None).unwrap_or(false)));
+        crate::portable_service::client::set_quick_support(_is_quick_support);
     }
     #[cfg(debug_assertions)]
     {
