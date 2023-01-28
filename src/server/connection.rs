@@ -1583,6 +1583,7 @@ impl Connection {
                                 uuid.to_string().as_ref(),
                             ])
                             .ok();
+                            self.on_close_manually("switch sides", "peer");
                             return false;
                         }
                     }

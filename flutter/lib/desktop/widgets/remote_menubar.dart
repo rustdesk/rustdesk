@@ -652,8 +652,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           dismissOnClicked: true,
         ));
       }
-      if (false &&
-          pi.platform != kPeerPlatformAndroid &&
+      if (pi.platform != kPeerPlatformAndroid &&
           version_cmp(peer_version, '1.2.0') >= 0) {
         displayMenu.add(MenuEntryButton<String>(
           childBuilder: (TextStyle? style) => Text(
