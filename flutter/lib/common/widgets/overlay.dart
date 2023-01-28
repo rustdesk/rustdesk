@@ -324,10 +324,8 @@ class QualityMonitor extends StatelessWidget {
   Widget build(BuildContext context) => ChangeNotifierProvider.value(
       value: qualityMonitorModel,
       child: Consumer<QualityMonitorModel>(
-          builder: (context, qualityMonitorModel, child) => Positioned(
-              top: 10,
-              right: 10,
-              child: qualityMonitorModel.show
+          builder: (context, qualityMonitorModel, child) =>
+              qualityMonitorModel.show
                   ? Container(
                       padding: const EdgeInsets.all(8),
                       color: MyTheme.canvasColor.withAlpha(120),
@@ -357,5 +355,5 @@ class QualityMonitor extends StatelessWidget {
                         ],
                       ),
                     )
-                  : const SizedBox.shrink())));
+                  : const SizedBox.shrink()));
 }

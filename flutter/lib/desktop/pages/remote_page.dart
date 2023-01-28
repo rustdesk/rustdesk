@@ -279,6 +279,34 @@ class _RemotePageState extends State<RemotePage>
     }
   }
 
+  Widget _buildRawPointerMouseRegion(
+    Widget child,
+    PointerEnterEventListener? onEnter,
+    PointerExitEventListener? onExit,
+  ) {
+    return RawPointerMouseRegion(
+      onEnter: enterView,
+      onExit: leaveView,
+      onPointerDown: (event) {
+        // A double check for blur status.
+        // Note: If there's an `onPointerDown` event is triggered, `_isWindowBlur` is expected being false.
+        // Sometimes the system does not send the necessary focus event to flutter. We should manually
+        // handle this inconsistent status by setting `_isWindowBlur` to false. So we can
+        // ensure the grab-key thread is running when our users are clicking the remote canvas.
+        if (_isWindowBlur) {
+          debugPrint(
+              "Unexpected status: onPointerDown is triggered while the remote window is in blur status");
+          _isWindowBlur = false;
+        }
+        if (!_rawKeyFocusNode.hasFocus) {
+          _rawKeyFocusNode.requestFocus();
+        }
+      },
+      inputModel: _ffi.inputModel,
+      child: child,
+    );
+  }
+
   Widget getBodyForDesktop(BuildContext context) {
     var paints = <Widget>[
       MouseRegion(onEnter: (evt) {
@@ -295,27 +323,8 @@ class _RemotePageState extends State<RemotePage>
           cursorOverImage: _cursorOverImage,
           keyboardEnabled: _keyboardEnabled,
           remoteCursorMoved: _remoteCursorMoved,
-          listenerBuilder: (child) => RawPointerMouseRegion(
-            onEnter: enterView,
-            onExit: leaveView,
-            onPointerDown: (event) {
-              // A double check for blur status.
-              // Note: If there's an `onPointerDown` event is triggered, `_isWindowBlur` is expected being false.
-              // Sometimes the system does not send the necessary focus event to flutter. We should manually
-              // handle this inconsistent status by setting `_isWindowBlur` to false. So we can
-              // ensure the grab-key thread is running when our users are clicking the remote canvas.
-              if (_isWindowBlur) {
-                debugPrint(
-                    "Unexpected status: onPointerDown is triggered while the remote window is in blur status");
-                _isWindowBlur = false;
-              }
-              if (!_rawKeyFocusNode.hasFocus) {
-                _rawKeyFocusNode.requestFocus();
-              }
-            },
-            inputModel: _ffi.inputModel,
-            child: child,
-          ),
+          listenerBuilder: (child) =>
+              _buildRawPointerMouseRegion(child, enterView, leaveView),
         );
       }))
     ];
@@ -328,7 +337,14 @@ class _RemotePageState extends State<RemotePage>
             zoomCursor: _zoomCursor,
           ))));
     }
-    paints.add(QualityMonitor(_ffi.qualityMonitorModel));
+    paints.add(
+      Positioned(
+        top: 10,
+        right: 10,
+        child: _buildRawPointerMouseRegion(
+            QualityMonitor(_ffi.qualityMonitorModel), null, null),
+      ),
+    );
     paints.add(RemoteMenubar(
       id: widget.id,
       ffi: _ffi,
