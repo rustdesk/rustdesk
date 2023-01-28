@@ -407,7 +407,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Add to Address Book", "Добавить в адресную книгу"),
         ("Group", "Группа"),
         ("Search", "Поиск"),
-        ("Closed manually by the web console", "Закрыто вручную через веб-консоль"),
+        ("Closed manually by web console", "Закрыто вручную через веб-консоль"),
         ("Local keyboard type", "Тип локальной клавиатуры"),
         ("Select local keyboard type", "Выберите тип локальной клавиатуры"),
         ("software_render_tip", "Если у вас видеокарта Nvidia и удалённое окно закрывается сразу после подключения, может помочь установка драйвера Nouveau и выбор использования программной визуализации. Потребуется перезапуск."),
@@ -433,5 +433,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Strong", "Стойкий"),
         ("Switch Sides", "Переключить стороны"),
         ("Please confirm if you want to share your desktop?", "Подтвердите, что хотите поделиться своим рабочим столом?"),
+        ("Closed as expected", ""),
     ].iter().cloned().collect();
 }

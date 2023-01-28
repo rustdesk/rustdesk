@@ -407,7 +407,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Add to Address Book", "添加到地址簿"),
         ("Group", "小組"),
         ("Search", "搜索"),
-        ("Closed manually by the web console", "被web控制台手動關閉"),
+        ("Closed manually by web console", "被web控制台手動關閉"),
         ("Local keyboard type", "本地鍵盤類型"),
         ("Select local keyboard type", "請選擇本地鍵盤類型"),
         ("software_render_tip", "如果你使用英偉達顯卡, 並且遠程窗口在會話建立後會立刻關閉, 那麼安裝nouveau驅動並且選擇使用軟件渲染可能會有幫助。重啟軟件後生效。"),
@@ -433,5 +433,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Strong", "強"),
         ("Switch Sides", ""),
         ("Please confirm if you want to share your desktop?", ""),
+        ("Closed as expected", "正常關閉"),
     ].iter().cloned().collect();
 }
