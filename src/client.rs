@@ -2083,6 +2083,7 @@ pub fn check_if_retry(msgtype: &str, title: &str, text: &str, retry_for_relay: b
                 && !text.to_lowercase().contains("mismatch")
                 && !text.to_lowercase().contains("manually")
                 && !text.to_lowercase().contains("not allowed")
+                && !text.to_lowercase().contains("as expected")
                 && !text.to_lowercase().contains("reset by the peer")))
 }
 
