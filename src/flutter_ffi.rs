@@ -523,6 +523,10 @@ pub fn main_get_sound_inputs() -> Vec<String> {
     vec![String::from("")]
 }
 
+pub fn main_get_hostname() -> SyncReturn<String> {
+    SyncReturn(crate::common::hostname())
+}
+
 pub fn main_change_id(new_id: String) {
     change_id(new_id)
 }
