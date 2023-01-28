@@ -1,6 +1,6 @@
 use super::*;
 use hbb_common::{allow_err, platform::linux::DISTRO};
-use scrap::{set_map_err, Capturer, Display, Frame, TraitCapturer};
+use scrap::{detect_cursor_embeded, set_map_err, Capturer, Display, Frame, TraitCapturer};
 use std::io;
 
 use super::video_service::{
@@ -12,7 +12,8 @@ lazy_static::lazy_static! {
     static ref LOG_SCRAP_COUNT: Mutex<u32> = Mutex::new(0);
 }
 
-pub fn set_wayland_scrap_map_err() {
+pub fn init() {
+    detect_cursor_embeded();
     set_map_err(map_err_scrap);
 }
 

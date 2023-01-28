@@ -12,7 +12,7 @@ cfg_if! {
         mod x11;
         pub use self::linux::*;
         pub use self::x11::Frame;
-        pub use self::wayland::set_map_err;
+        pub use self::wayland::{set_map_err, detect_cursor_embeded};
             } else {
                 mod x11;
                 pub use self::x11::*;
@@ -76,7 +76,7 @@ pub fn is_cursor_embedded() -> bool {
     if is_x11() {
         x11::IS_CURSOR_EMBEDDED
     } else {
-        wayland::IS_CURSOR_EMBEDDED
+        unsafe { wayland::IS_CURSOR_EMBEDDED }
     }
 }
 

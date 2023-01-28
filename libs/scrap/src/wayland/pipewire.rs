@@ -415,6 +415,12 @@ static mut INIT: bool = false;
 const RESTORE_TOKEN: &str = "restore_token";
 const RESTORE_TOKEN_CONF_KEY: &str = "wayland-restore-token";
 
+pub fn get_available_cursor_modes() -> Result<u32, dbus::Error> {
+    let conn = SyncConnection::new_session()?;
+    let portal = get_portal(&conn);
+    portal.available_cursor_modes()
+}
+
 // mostly inspired by https://gitlab.gnome.org/snippets/19
 fn request_screen_cast(
     capture_cursor: bool,

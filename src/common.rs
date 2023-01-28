@@ -52,7 +52,7 @@ pub fn global_init() -> bool {
     #[cfg(target_os = "linux")]
     {
         if !*IS_X11 {
-            crate::server::wayland::set_wayland_scrap_map_err();
+            crate::server::wayland::init();
         }
     }
     true
