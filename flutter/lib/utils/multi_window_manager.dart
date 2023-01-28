@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/foundation.dart';
@@ -64,6 +65,9 @@ class RustDeskMultiWindowManager {
         ..center()
         ..setTitle(getWindowNameWithId(remoteId,
             overrideType: WindowType.RemoteDesktop));
+      if (Platform.isMacOS) {
+        Future.microtask(() => remoteDesktopController.show());
+      }
       registerActiveWindow(remoteDesktopController.windowId);
       _remoteDesktopWindowId = remoteDesktopController.windowId;
     } else {
@@ -90,6 +94,9 @@ class RustDeskMultiWindowManager {
         ..center()
         ..setTitle(getWindowNameWithId(remoteId,
             overrideType: WindowType.FileTransfer));
+      if (Platform.isMacOS) {
+        Future.microtask(() => fileTransferController.show());
+      }
       registerActiveWindow(fileTransferController.windowId);
       _fileTransferWindowId = fileTransferController.windowId;
     } else {
@@ -116,6 +123,9 @@ class RustDeskMultiWindowManager {
         ..center()
         ..setTitle(getWindowNameWithId(remoteId,
             overrideType: WindowType.PortForward));
+      if (Platform.isMacOS) {
+        Future.microtask(() => portForwardController.show());
+      }
       registerActiveWindow(portForwardController.windowId);
       _portForwardWindowId = portForwardController.windowId;
     } else {
