@@ -63,8 +63,7 @@ class RustDeskMultiWindowManager {
         ..setFrame(const Offset(0, 0) & const Size(1280, 720))
         ..center()
         ..setTitle(getWindowNameWithId(remoteId,
-            overrideType: WindowType.RemoteDesktop))
-        ..show();
+            overrideType: WindowType.RemoteDesktop));
       registerActiveWindow(remoteDesktopController.windowId);
       _remoteDesktopWindowId = remoteDesktopController.windowId;
     } else {
@@ -90,8 +89,7 @@ class RustDeskMultiWindowManager {
         ..setFrame(const Offset(0, 0) & const Size(1280, 720))
         ..center()
         ..setTitle(getWindowNameWithId(remoteId,
-            overrideType: WindowType.FileTransfer))
-        ..show();
+            overrideType: WindowType.FileTransfer));
       registerActiveWindow(fileTransferController.windowId);
       _fileTransferWindowId = fileTransferController.windowId;
     } else {
@@ -116,9 +114,8 @@ class RustDeskMultiWindowManager {
       portForwardController
         ..setFrame(const Offset(0, 0) & const Size(1280, 720))
         ..center()
-        ..setTitle(
-            getWindowNameWithId(remoteId, overrideType: WindowType.PortForward))
-        ..show();
+        ..setTitle(getWindowNameWithId(remoteId,
+            overrideType: WindowType.PortForward));
       registerActiveWindow(portForwardController.windowId);
       _portForwardWindowId = portForwardController.windowId;
     } else {
