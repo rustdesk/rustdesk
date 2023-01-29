@@ -4,10 +4,31 @@ use std::{io, sync::RwLock, time::Duration};
 
 pub struct Capturer(Display, Box<dyn Recorder>, bool, Vec<u8>);
 
-pub const IS_CURSOR_EMBEDDED: bool = true;
+static mut IS_CURSOR_EMBEDDED: Option<bool> = None;
 
 lazy_static::lazy_static! {
     static ref MAP_ERR: RwLock<Option<fn(err: String)-> io::Error>> = Default::default();
+}
+
+pub fn is_cursor_embedded() -> bool {
+    unsafe {
+        if IS_CURSOR_EMBEDDED.is_none() {
+            init_cursor_embedded();
+        }
+        IS_CURSOR_EMBEDDED.unwrap_or(false)
+    }
+}
+
+unsafe fn init_cursor_embedded() {
+    use crate::common::wayland::pipewire::get_available_cursor_modes;
+    match get_available_cursor_modes() {
+        Ok(modes) => {
+            IS_CURSOR_EMBEDDED = Some((modes & 0x02) > 0);
+        }
+        Err(..) => {
+            IS_CURSOR_EMBEDDED = Some(false);
+        }
+    }
 }
 
 pub fn set_map_err(f: fn(err: String) -> io::Error) {
@@ -74,7 +95,7 @@ impl Display {
     }
 
     pub fn all() -> io::Result<Vec<Display>> {
-        Ok(pipewire::get_capturables(true)
+        Ok(pipewire::get_capturables(is_cursor_embedded())
             .map_err(map_err)?
             .drain(..)
             .map(|x| Display(x))
