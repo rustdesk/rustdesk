@@ -1745,3 +1745,13 @@ pub fn create_process_with_logon(user: &str, pwd: &str, exe: &str, arg: &str) ->
     }
     return Ok(());
 }
+
+pub fn set_path_permission(dir: &PathBuf, permission: &str) -> ResultType<()> {
+    std::process::Command::new("icacls")
+        .arg(dir.as_os_str())
+        .arg("/grant")
+        .arg(format!("Everyone:(OI)(CI){}", permission))
+        .arg("/T")
+        .spawn()?;
+    Ok(())
+}
