@@ -90,7 +90,6 @@ impl<T: InvokeUiSession> Remote<T> {
 
     pub async fn io_loop(&mut self, key: &str, token: &str) {
         let stop_clipboard = self.start_clipboard();
-        let stop_client_audio = self.start_client_audio();
         let mut last_recv_time = Instant::now();
         let mut received = false;
         let conn_type = if self.handler.is_file_transfer() {
@@ -114,6 +113,8 @@ impl<T: InvokeUiSession> Remote<T> {
                 SERVER_FILE_TRANSFER_ENABLED.store(true, Ordering::SeqCst);
                 self.handler.set_connection_type(peer.is_secured(), direct); // flutter -> connection_ready
                 self.handler.set_connection_info(direct, false);
+                // Start client audio when connection is established.
+                let stop_client_audio = self.start_client_audio();
 
                 // just build for now
                 #[cfg(not(windows))]
@@ -218,6 +219,10 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                 }
                 log::debug!("Exit io_loop of id={}", self.handler.id);
+                // Stop client audio server.
+                if let Some(stop) = stop_client_audio {
+                    stop.send(()).ok();
+                }
             }
             Err(err) => {
                 self.handler
@@ -225,9 +230,6 @@ impl<T: InvokeUiSession> Remote<T> {
             }
         }
         if let Some(stop) = stop_clipboard {
-            stop.send(()).ok();
-        }
-        if let Some(stop) = stop_client_audio {
             stop.send(()).ok();
         }
         SERVER_KEYBOARD_ENABLED.store(false, Ordering::SeqCst);
