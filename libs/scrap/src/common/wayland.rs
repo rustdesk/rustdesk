@@ -10,7 +10,7 @@ lazy_static::lazy_static! {
     static ref MAP_ERR: RwLock<Option<fn(err: String)-> io::Error>> = Default::default();
 }
 
-pub fn detect_cursor_embeded() {
+pub fn detect_cursor_embedded() {
     if unsafe { IS_CURSOR_EMBEDDED } {
         use crate::common::wayland::pipewire::get_available_cursor_modes;
         match get_available_cursor_modes() {
