@@ -138,7 +138,6 @@ const MILLI1: Duration = Duration::from_millis(1);
 const SEND_TIMEOUT_VIDEO: u64 = 12_000;
 const SEND_TIMEOUT_OTHER: u64 = SEND_TIMEOUT_VIDEO * 10;
 const SESSION_TIMEOUT: Duration = Duration::from_secs(30);
-const SWITCH_SIDES_TIMEOUT: Duration = Duration::from_secs(10);
 
 impl Connection {
     pub async fn start(
@@ -1231,7 +1230,7 @@ impl Connection {
                 SWITCH_SIDES_UUID
                     .lock()
                     .unwrap()
-                    .retain(|_, v| v.0.elapsed() < SWITCH_SIDES_TIMEOUT);
+                    .retain(|_, v| v.0.elapsed() < Duration::from_secs(10));
                 let uuid_old = SWITCH_SIDES_UUID.lock().unwrap().remove(&lr.my_id);
                 if let Ok(uuid) = uuid::Uuid::from_slice(_s.uuid.to_vec().as_ref()) {
                     if let Some((_instant, uuid_old)) = uuid_old {
@@ -1538,8 +1537,8 @@ impl Connection {
                                 uuid.to_string().as_ref(),
                             ])
                             .ok();
-                            self.send_close_reason_no_retry("Closed as expected");
-                            self.on_close("switch sides", false);
+                            self.send_close_reason_no_retry("Closed as expected").await;
+                            self.on_close("switch sides", false).await;
                             return false;
                         }
                     }
