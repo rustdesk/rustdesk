@@ -297,7 +297,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     _ => {}
                 }
                 match rx_audio_data.try_recv() {
-                    Ok((instant, msg)) => match &msg.union {
+                    Ok((_instant, msg)) => match &msg.union {
                         Some(message::Union::AudioFrame(frame)) => {
                             let mut msg = Message::new();
                             msg.set_audio_frame(frame.clone());
@@ -311,7 +311,6 @@ impl<T: InvokeUiSession> Remote<T> {
                             log::debug!("send audio misc {:?}", misc.audio_format());
                         }
                         _ => {}
-                        None => {}
                     },
                     Err(err) => {
                         if err == TryRecvError::Empty {

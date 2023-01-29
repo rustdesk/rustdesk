@@ -5,7 +5,7 @@ use crate::clipboard_file::*;
 use crate::common::update_clipboard;
 #[cfg(windows)]
 use crate::portable_service::client as portable_client;
-use crate::video_service;
+use crate::{video_service, client::{MediaSender, start_audio_thread, LatencyController, MediaData}};
 #[cfg(any(target_os = "android", target_os = "ios"))]
 use crate::{common::DEVICE_NAME, flutter::connection_manager::start_channel};
 use crate::{ipc, VERSION};
@@ -95,6 +95,7 @@ pub struct Connection {
     disable_clipboard: bool,                  // by peer
     disable_audio: bool,                      // by peer
     enable_file_transfer: bool,               // by peer
+    audio_sender: MediaSender,                // audio by the remote peer/client
     tx_input: std_mpsc::Sender<MessageInput>, // handle input messages
     video_ack_required: bool,
     peer_info: (String, String),
@@ -168,6 +169,9 @@ impl Connection {
         let mut hbbs_rx = crate::hbbs_http::sync::signal_receiver();
 
         let tx_cloned = tx.clone();
+        // Start a audio thread to play the audio sent by peer.
+        let latency_controller = LatencyController::new();
+        let audio_sender = start_audio_thread(Some(latency_controller));
         let mut conn = Self {
             inner: ConnInner {
                 id,
@@ -209,6 +213,7 @@ impl Connection {
             #[cfg(windows)]
             portable: Default::default(),
             from_switch: false,
+            audio_sender,
         };
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         tokio::spawn(async move {
@@ -1534,8 +1539,9 @@ impl Connection {
                         _ => {}
                     },
                     Some(misc::Union::AudioFormat(format)) => {
-                        // TODO: implement audio format handler
-                        println!("recv audio format");
+                        if !self.disable_audio  {
+                            allow_err!(self.audio_sender.send(MediaData::AudioFormat(format)));
+                        }
                     }
                     #[cfg(feature = "flutter")]
                     Some(misc::Union::SwitchSidesRequest(s)) => {
@@ -1554,9 +1560,10 @@ impl Connection {
                     }
                     _ => {}
                 },
-                Some(message::Union::AudioFrame(audio_frame)) => {
-                    // TODO: implement audio frame handler
-                    println!("recv audio frame");
+                Some(message::Union::AudioFrame(frame)) => {
+                    if !self.disable_audio  {
+                        allow_err!(self.audio_sender.send(MediaData::AudioFrame(frame)));
+                    }
                 }
                 _ => {}
             }
