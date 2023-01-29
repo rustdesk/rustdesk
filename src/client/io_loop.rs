@@ -44,6 +44,8 @@ pub struct Remote<T: InvokeUiSession> {
     audio_sender: MediaSender,
     receiver: mpsc::UnboundedReceiver<Data>,
     sender: mpsc::UnboundedSender<Data>,
+    // Stop sending local audio to remote client.
+    stop_local_audio_sender: Option<std::sync::mpsc::Sender<()>>,
     old_clipboard: Arc<Mutex<String>>,
     read_jobs: Vec<fs::TransferJob>,
     write_jobs: Vec<fs::TransferJob>,
@@ -85,6 +87,7 @@ impl<T: InvokeUiSession> Remote<T> {
             data_count: Arc::new(AtomicUsize::new(0)),
             frame_count,
             video_format: CodecFormat::Unknown,
+            stop_local_audio_sender: None,
         }
     }
 
@@ -113,8 +116,6 @@ impl<T: InvokeUiSession> Remote<T> {
                 SERVER_FILE_TRANSFER_ENABLED.store(true, Ordering::SeqCst);
                 self.handler.set_connection_type(peer.is_secured(), direct); // flutter -> connection_ready
                 self.handler.set_connection_info(direct, false);
-                // Start client audio when connection is established.
-                let stop_client_audio = self.start_client_audio();
 
                 // just build for now
                 #[cfg(not(windows))]
@@ -220,8 +221,8 @@ impl<T: InvokeUiSession> Remote<T> {
                 }
                 log::debug!("Exit io_loop of id={}", self.handler.id);
                 // Stop client audio server.
-                if let Some(stop) = stop_client_audio {
-                    stop.send(()).ok();
+                if let Some(s) = self.stop_local_audio_sender.take() {
+                    s.send(()).ok();
                 }
             }
             Err(err) => {
@@ -864,6 +865,15 @@ impl<T: InvokeUiSession> Remote<T> {
                                     sender.send(Data::Message(msg_out)).ok();
                                 });
                             }
+                        }
+                        // Start audio thread for playback
+                        if !self.handler.is_file_transfer() && !self.handler.is_port_forward() {
+                            // Cancel previous local audio session.
+                            if let Some(sender) = self.stop_local_audio_sender.take() {
+                                allow_err!(sender.send(()));
+                            }
+                            // Start client audio when connection is established.
+                            self.stop_local_audio_sender = self.start_client_audio();
                         }
 
                         if self.handler.is_file_transfer() {
