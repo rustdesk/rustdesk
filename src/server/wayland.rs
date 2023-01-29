@@ -1,9 +1,6 @@
 use super::*;
 use hbb_common::{allow_err, platform::linux::DISTRO};
-use scrap::{
-    detect_cursor_embedded, is_cursor_embedded, set_map_err, Capturer, Display, Frame,
-    TraitCapturer,
-};
+use scrap::{is_cursor_embedded, set_map_err, Capturer, Display, Frame, TraitCapturer};
 use std::io;
 
 use super::video_service::{
@@ -16,7 +13,6 @@ lazy_static::lazy_static! {
 }
 
 pub fn init() {
-    detect_cursor_embedded();
     set_map_err(map_err_scrap);
 }
 
