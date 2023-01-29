@@ -18,6 +18,7 @@ pub struct LatencyController {
     last_video_remote_ts: i64, // generated on remote device
     update_time: Instant,
     allow_audio: bool,
+    enabled: bool
 }
 
 impl Default for LatencyController {
@@ -26,6 +27,7 @@ impl Default for LatencyController {
             last_video_remote_ts: Default::default(),
             update_time: Instant::now(),
             allow_audio: Default::default(),
+            enabled: true
         }
     }
 }
@@ -36,6 +38,11 @@ impl LatencyController {
         Arc::new(Mutex::new(LatencyController::default()))
     }
 
+    /// Set whether this [LatencyController] should be enabled.
+    pub fn set_enabled(&mut self, enable: bool) {
+        self.enabled = enable;
+    }
+
     /// Update the latency controller with the latest video timestamp.
     pub fn update_video(&mut self, timestamp: i64) {
         self.last_video_remote_ts = timestamp;
@@ -44,6 +51,10 @@ impl LatencyController {
 
     /// Check if the audio should be played based on the current latency.
     pub fn check_audio(&mut self, timestamp: i64) -> bool {
+        if !self.enabled {
+            self.allow_audio = true;
+            return self.allow_audio;
+        }
         // Compute audio latency.
         let expected = self.update_time.elapsed().as_millis() as i64 + self.last_video_remote_ts;
         let latency = expected - timestamp;
