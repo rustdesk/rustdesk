@@ -765,7 +765,7 @@ class _ListView extends StatelessWidget {
                   tabBuilder: tabBuilder,
                   tabMenuBuilder: tabMenuBuilder,
                   maxLabelWidth: maxLabelWidth,
-                  selectedTabBackgroundColor: selectedTabBackgroundColor,
+                  selectedTabBackgroundColor: selectedTabBackgroundColor ?? MyTheme.tabbar(context).selectedTabBackgroundColor,
                   unSelectedTabBackgroundColor: unSelectedTabBackgroundColor,
                 );
               }).toList()));
@@ -910,7 +910,7 @@ class _TabState extends State<_Tab> with RestorationMixin {
                               tabSelected: isSelected,
                               onClose: () => widget.onClose(),
                             )))
-                      ])).paddingSymmetric(horizontal: 10),
+                      ])).paddingOnly(left: 10, right: 5),
               Offstage(
                 offstage: !showDivider,
                 child: VerticalDivider(
@@ -956,6 +956,7 @@ class _CloseButton extends StatelessWidget {
         child: Offstage(
           offstage: !visible,
           child: InkWell(
+            hoverColor: MyTheme.tabbar(context).closeHoverColor,
             customBorder: const RoundedRectangleBorder(),
             onTap: () => onClose(),
             child: Icon(
@@ -966,7 +967,7 @@ class _CloseButton extends StatelessWidget {
                   : MyTheme.tabbar(context).unSelectedIconColor,
             ),
           ),
-        )).paddingOnly(left: 5);
+        )).paddingOnly(left: 10);
   }
 }
 
@@ -1055,6 +1056,8 @@ class TabbarTheme extends ThemeExtension<TabbarTheme> {
   final Color? unSelectedIconColor;
   final Color? dividerColor;
   final Color? hoverColor;
+  final Color? closeHoverColor;
+  final Color? selectedTabBackgroundColor;
 
   const TabbarTheme(
       {required this.selectedTabIconColor,
@@ -1064,27 +1067,33 @@ class TabbarTheme extends ThemeExtension<TabbarTheme> {
       required this.selectedIconColor,
       required this.unSelectedIconColor,
       required this.dividerColor,
-      required this.hoverColor});
+      required this.hoverColor,
+      required this.closeHoverColor,
+      required this.selectedTabBackgroundColor});
 
   static const light = TabbarTheme(
       selectedTabIconColor: MyTheme.accent,
       unSelectedTabIconColor: Color.fromARGB(255, 162, 203, 241),
-      selectedTextColor: Color.fromARGB(255, 26, 26, 26),
-      unSelectedTextColor: Color.fromARGB(255, 96, 96, 96),
+      selectedTextColor: Colors.black,
+      unSelectedTextColor: Color.fromARGB(255, 112, 112, 112),
       selectedIconColor: Color.fromARGB(255, 26, 26, 26),
       unSelectedIconColor: Color.fromARGB(255, 96, 96, 96),
       dividerColor: Color.fromARGB(255, 238, 238, 238),
-      hoverColor: Color.fromARGB(51, 158, 158, 158));
+      hoverColor: Color.fromARGB(51, 158, 158, 158),
+      closeHoverColor: Colors.black,
+      selectedTabBackgroundColor: Color.fromARGB(255, 240, 240, 240));
 
   static const dark = TabbarTheme(
       selectedTabIconColor: MyTheme.accent,
       unSelectedTabIconColor: Color.fromARGB(255, 30, 65, 98),
       selectedTextColor: Color.fromARGB(255, 255, 255, 255),
-      unSelectedTextColor: Color.fromARGB(255, 207, 207, 207),
-      selectedIconColor: Color.fromARGB(255, 215, 215, 215),
+      unSelectedTextColor: Color.fromARGB(255, 192, 192, 192),
+      selectedIconColor: Color.fromARGB(255, 192, 192, 192),
       unSelectedIconColor: Color.fromARGB(255, 255, 255, 255),
       dividerColor: Color.fromARGB(255, 64, 64, 64),
-      hoverColor: Colors.black26);
+      hoverColor: Colors.black26,
+      closeHoverColor: Colors.black,
+      selectedTabBackgroundColor: Colors.black26);
 
   @override
   ThemeExtension<TabbarTheme> copyWith({
@@ -1096,6 +1105,8 @@ class TabbarTheme extends ThemeExtension<TabbarTheme> {
     Color? unSelectedIconColor,
     Color? dividerColor,
     Color? hoverColor,
+    Color? closeHoverColor,
+    Color? selectedTabBackgroundColor,
   }) {
     return TabbarTheme(
       selectedTabIconColor: selectedTabIconColor ?? this.selectedTabIconColor,
@@ -1107,6 +1118,8 @@ class TabbarTheme extends ThemeExtension<TabbarTheme> {
       unSelectedIconColor: unSelectedIconColor ?? this.unSelectedIconColor,
       dividerColor: dividerColor ?? this.dividerColor,
       hoverColor: hoverColor ?? this.hoverColor,
+      closeHoverColor: closeHoverColor ?? this.closeHoverColor,
+      selectedTabBackgroundColor: selectedTabBackgroundColor ?? this.selectedTabBackgroundColor,
     );
   }
 
@@ -1131,6 +1144,8 @@ class TabbarTheme extends ThemeExtension<TabbarTheme> {
           Color.lerp(unSelectedIconColor, other.unSelectedIconColor, t),
       dividerColor: Color.lerp(dividerColor, other.dividerColor, t),
       hoverColor: Color.lerp(hoverColor, other.hoverColor, t),
+      closeHoverColor: Color.lerp(closeHoverColor, other.closeHoverColor, t),
+      selectedTabBackgroundColor: Color.lerp(selectedTabBackgroundColor, other.selectedTabBackgroundColor, t),
     );
   }
 
