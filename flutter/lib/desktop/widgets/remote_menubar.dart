@@ -362,6 +362,9 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                         ),
                       )),
                   onPressed: () {
+                    if (Navigator.canPop(context)) {
+                      Navigator.pop(context);
+                    }
                     RxInt display = CurrentDisplayState.find(widget.id);
                     if (display.value != i) {
                       bind.sessionSwitchDisplay(id: widget.id, value: i);
