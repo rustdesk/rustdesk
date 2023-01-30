@@ -244,6 +244,7 @@ class FfiModel with ChangeNotifier {
       parent.target?.canvasModel.updateViewStyle();
     }
     parent.target?.recordingModel.onSwitchDisplay();
+    parent.target?.inputModel.refreshMousePos();
     notifyListeners();
   }
 

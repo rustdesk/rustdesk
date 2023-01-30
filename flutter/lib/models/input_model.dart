@@ -408,6 +408,13 @@ class InputModel {
     }
   }
 
+  void refreshMousePos() => handleMouse({
+        'x': lastMousePos.dx,
+        'y': lastMousePos.dy,
+        'buttons': 0,
+        'type': _kMouseEventMove,
+      });
+
   void handleMouse(Map<String, dynamic> evt) {
     double x = evt['x'];
     double y = max(0.0, evt['y']);
