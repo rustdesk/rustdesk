@@ -221,7 +221,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Logout", "登出"),
         ("Tags", "标签"),
         ("Search ID", "查找ID"),
-        ("Current Wayland display server is not supported", "不支持 Wayland 显示服务器"),
         ("whitelist_sep", "可以使用逗号，分号，空格或者换行符作为分隔符"),
         ("Add ID", "增加ID"),
         ("Add Tag", "增加标签"),

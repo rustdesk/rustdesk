@@ -221,7 +221,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Logout", "Αποσύνδεση"),
         ("Tags", "Ετικέτες"),
         ("Search ID", "Αναζήτηση ID"),
-        ("Current Wayland display server is not supported", "Ο τρέχων διακομιστής εμφάνισης Wayland δεν υποστηρίζεται"),
         ("whitelist_sep", "Διαχωρίζονται με κόμμα, ερωτηματικό, διάστημα ή νέα γραμμή"),
         ("Add ID", "Προσθήκη αναγνωριστικού ID"),
         ("Add Tag", "Προσθήκη ετικέτας"),

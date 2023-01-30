@@ -764,7 +764,7 @@ class ModifyDefaultLogin: Reactor.Component {
     function render() {
         return <div .trust-me>
             <div>{translate('Warning')}</div>
-            <div>{translate('Current Wayland display server is not supported')}</div>
+            <div>{translate('wayland_experiment_tip')}</div>
             <div #help-me .link>{translate('Help')}</div>
         </div>;
     }

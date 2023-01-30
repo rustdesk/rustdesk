@@ -218,7 +218,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Logout", "Deconectare"),
         ("Tags", "Etichetare"),
         ("Search ID", "Caută după ID"),
-        ("Current Wayland display server is not supported", "Serverul de afișaj Wayland nu este acceptat"),
         ("whitelist_sep", "Poți folosi ca separator virgula, punctul și virgula, spațiul sau linia nouă"),
         ("Add ID", "Adaugă ID"),
         ("Add Tag", "Adaugă etichetă"),

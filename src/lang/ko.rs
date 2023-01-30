@@ -221,7 +221,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Logout", "로그아웃"),
         ("Tags", "태그"),
         ("Search ID", "ID 검색"),
-        ("Current Wayland display server is not supported", "현재 Wayland 디스플레이 서버가 지원되지 않습니다"),
         ("whitelist_sep", "다음 글자로 구분합니다. ',(콤마) ;(세미콜론) 띄어쓰기 혹은 줄바꿈'"),
         ("Add ID", "ID 추가"),
         ("Add Tag", "태그 추가"),

@@ -221,7 +221,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Logout", "Đăng xuất"),
         ("Tags", "Tags"),
         ("Search ID", "Tìm ID"),
-        ("Current Wayland display server is not supported", "Máy chủ hình ảnh Wayland hiện không đuợc hỗ trợ"),
         ("whitelist_sep", "Đuợc cách nhau bởi dấu phẩy, dấu chấm phẩy, dấu cách hay dòng mới"),
         ("Add ID", "Thêm ID"),
         ("Add Tag", "Thêm Tag"),

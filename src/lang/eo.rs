@@ -221,7 +221,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Logout", "Malkonekti"),
         ("Tags", "Etikedi"),
         ("Search ID", "Serĉi ID"),
-        ("Current Wayland display server is not supported", "La aktuala bilda servilo Wayland ne estas subtenita"),
         ("whitelist_sep", "Vi povas uzi komon, punktokomon, spacon aŭ linsalton kiel apartigilo"),
         ("Add ID", "Aldoni identigilo"),
         ("Add Tag", "Aldoni etikedo"),

@@ -221,7 +221,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Logout", "Çıkış yap"),
         ("Tags", "Etiketler"),
         ("Search ID", "ID Arama"),
-        ("Current Wayland display server is not supported", "Mevcut Wayland görüntüleme sunucusu desteklenmiyor"),
         ("whitelist_sep", "Virgül, noktalı virgül, boşluk veya yeni satır ile ayrılmış"),
         ("Add ID", "ID Ekle"),
         ("Add Tag", "Etiket Ekle"),

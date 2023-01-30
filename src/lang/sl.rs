@@ -221,7 +221,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Logout", "Odjavi"),
         ("Tags", "Oznake"),
         ("Search ID", "Išči ID"),
-        ("Current Wayland display server is not supported", "Trenutni Wayland zaslonski strežnik ni podprt"),
         ("whitelist_sep", "Naslovi ločeni z vejico, podpičjem, presledkom ali novo vrstico"),
         ("Add ID", "Dodaj ID"),
         ("Add Tag", "Dodaj oznako"),

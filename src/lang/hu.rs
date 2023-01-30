@@ -221,7 +221,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Logout", "Kilépés"),
         ("Tags", "Tagok"),
         ("Search ID", "Azonosító keresése..."),
-        ("Current Wayland display server is not supported", "A Wayland display szerver nem támogatott"),
         ("whitelist_sep", "A címeket veszővel, pontosvesszővel, szóközzel, vagy új sorral válassza el"),
         ("Add ID", "Azonosító hozzáadása"),
         ("Add Tag", "Címke hozzáadása"),

@@ -221,7 +221,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Logout", "logger af"),
         ("Tags", "Nøgleord"),
         ("Search ID", "Søg ID"),
-        ("Current Wayland display server is not supported", "Den aktuelle Wayland-Anzege-server understøttes ikke"),
         ("whitelist_sep", "Adskilt af komma, semikolon, rum eller linjepaus"),
         ("Add ID", "Tilføj ID"),
         ("Add Tag", "Tilføj nøgleord"),
