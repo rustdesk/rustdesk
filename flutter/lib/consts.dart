@@ -109,8 +109,8 @@ const kRemoteImageQualityCustom = 'custom';
 /// [kRemoteAudioGuestToHost] Guest to host audio mode(default).
 const kRemoteAudioGuestToHost = 'guest-to-host';
 
-/// [kRemoteAudioTwoWay] two-way audio mode(default).
-const kRemoteAudioTwoWay = 'two-way';
+/// [kRemoteAudioDualWay] dual-way audio mode(default).
+const kRemoteAudioDualWay = 'dual-way';
 
 const kIgnoreDpi = true;
 

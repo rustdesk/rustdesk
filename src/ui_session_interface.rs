@@ -669,13 +669,6 @@ impl<T: InvokeUiSession> Session<T> {
             }
         }
     }
-
-    fn get_audio_transmission_mode(&self, id: &str) {
-
-    }
-    fn set_audio_transmission_mode(&self, id: &str, mode: String) {
-
-    }
 }
 
 pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {

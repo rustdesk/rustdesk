@@ -1262,8 +1262,8 @@ impl LoginConfigHandler {
     pub fn get_audio_mode_enum(q: &str, ignore_default: bool) -> Option<AudioMode> {
         if q == "guest-to-host" {
             Some(AudioMode::GuestToHost)
-        } else if q == "two-way" {
-            Some(AudioMode::TwoWay)
+        } else if q == "dual-way" {
+            Some(AudioMode::DualWay)
         } else {
             if ignore_default {
                 None

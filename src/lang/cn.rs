@@ -446,7 +446,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Auto", "自动"),
         ("Other Default Options", "其它默认选项"),
         ("Guest to Host", "被控到主机"),
-        ("Two way", "双向"),
+        ("Dual way", "双向"),
         ("Audio Transmission Mode", "音频传输模式"),
     ].iter().cloned().collect();
 }

@@ -446,7 +446,7 @@ enum ImageQuality {
 
 enum AudioMode {
   GuestToHost = 0;
-  TwoWay = 1;
+  DualWay = 1;
 }
 
 message VideoCodecState {

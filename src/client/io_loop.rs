@@ -393,7 +393,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             allow_err!(sender.send(()));
                         }
                     }
-                    AudioMode::TwoWay => {
+                    AudioMode::DualWay => {
                         // Start audio thread for playback.
                         // Cancel previous local audio session.
                         if let Some(sender) = self.stop_local_audio_sender.take() {
@@ -889,14 +889,15 @@ impl<T: InvokeUiSession> Remote<T> {
                             self.handler.load_last_jobs();
                         }
 
-                        // Start audio thread for playback if current audio mode is two-way transmission.
+                        // Start audio thread for playback if current audio mode is dual-way transmission.
                         if !self.handler.is_file_transfer() && !self.handler.is_port_forward() {
                             let audio_mode = LoginConfigHandler::get_audio_mode_enum(
                                 self.handler.load_config().audio_mode.as_str(),
                                 false,
                             )
                             .unwrap_or(AudioMode::GuestToHost);
-                            if audio_mode == AudioMode::TwoWay {
+                            log::debug!("current audio mode: {:?}", audio_mode);
+                            if audio_mode == AudioMode::DualWay {
                                 // Cancel previous local audio session.
                                 if let Some(sender) = self.stop_local_audio_sender.take() {
                                     allow_err!(sender.send(()));
