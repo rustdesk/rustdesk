@@ -205,6 +205,9 @@ class MyTheme {
     splashColor: Colors.transparent,
     highlightColor: Colors.transparent,
     splashFactory: isDesktop ? NoSplash.splashFactory : null,
+    outlinedButtonTheme: OutlinedButtonThemeData(
+        style:
+            OutlinedButton.styleFrom(side: BorderSide(color: Colors.white38))),
     textButtonTheme: isDesktop
         ? TextButtonThemeData(
             style: ButtonStyle(splashFactory: NoSplash.splashFactory),
@@ -641,13 +644,13 @@ class CustomAlertDialog extends StatelessWidget {
         contentPadding: EdgeInsets.fromLTRB(
             contentPadding ?? padding, 25, contentPadding ?? padding, 10),
         content: ConstrainedBox(
-            constraints: contentBoxConstraints,
-            child: Theme(
-                data: ThemeData(
+          constraints: contentBoxConstraints,
+          child: Theme(
+              data: Theme.of(context).copyWith(
                   inputDecorationTheme: InputDecorationTheme(
-                      isDense: true, contentPadding: EdgeInsets.all(15)),
-                ),
-                child: content)),
+                      isDense: true, contentPadding: EdgeInsets.all(15))),
+              child: content),
+        ),
         actions: actions,
         actionsPadding: EdgeInsets.fromLTRB(0, 0, padding, padding),
       ),
