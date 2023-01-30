@@ -263,19 +263,18 @@ class FfiModel with ChangeNotifier {
     final text = evt['text'];
     final link = evt['link'];
     if (type == 're-input-password') {
-      wrongPasswordDialog(id, dialogManager);
+      wrongPasswordDialog(id, dialogManager, type, title, text);
     } else if (type == 'input-password') {
       enterPasswordDialog(id, dialogManager);
     } else if (type == 'restarting') {
       showMsgBox(id, type, title, text, link, false, dialogManager,
           hasCancel: false);
     } else if (type == 'wait-remote-accept-nook') {
-      msgBoxCommon(dialogManager, title, Text(translate(text)),
-          [dialogButton("Cancel", onPressed: closeConnection)]);
+      showWaitAcceptDialog(id, type, title, text, dialogManager);
     } else if (type == 'on-uac' || type == 'on-foreground-elevated') {
       showOnBlockDialog(id, type, title, text, dialogManager);
     } else if (type == 'wait-uac') {
-      showWaitUacDialog(id, dialogManager);
+      showWaitUacDialog(id, dialogManager, type);
     } else if (type == 'elevation-error') {
       showElevationError(id, type, title, text, dialogManager);
     } else {

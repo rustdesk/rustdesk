@@ -613,6 +613,7 @@ class CustomAlertDialog extends StatelessWidget {
     Future.delayed(Duration.zero, () {
       if (!scopeNode.hasFocus) scopeNode.requestFocus();
     });
+    const double padding = 16;
     return FocusScope(
       node: scopeNode,
       autofocus: true,
@@ -637,8 +638,8 @@ class CustomAlertDialog extends StatelessWidget {
       child: AlertDialog(
         scrollable: true,
         title: title,
-        contentPadding: EdgeInsets.symmetric(
-            horizontal: contentPadding ?? 25, vertical: 10),
+        contentPadding: EdgeInsets.fromLTRB(
+            contentPadding ?? padding, 25, contentPadding ?? padding, 10),
         content: ConstrainedBox(
             constraints: contentBoxConstraints,
             child: Theme(
@@ -648,6 +649,7 @@ class CustomAlertDialog extends StatelessWidget {
                 ),
                 child: content)),
         actions: actions,
+        actionsPadding: EdgeInsets.fromLTRB(0, 0, padding, padding),
       ),
     );
   }
@@ -701,9 +703,8 @@ void msgBox(String id, String type, String title, String text, String link,
   }
   dialogManager.show(
     (setState, close) => CustomAlertDialog(
-      title: _msgBoxTitle(title),
-      content:
-          SelectableText(translate(text), style: const TextStyle(fontSize: 15)),
+      title: null,
+      content: msgboxContent(type, title, text),
       actions: buttons,
       onSubmit: hasOk ? submit : null,
       onCancel: hasCancel == true ? cancel : null,
@@ -712,30 +713,74 @@ void msgBox(String id, String type, String title, String text, String link,
   );
 }
 
-Widget msgBoxButton(String text, void Function() onPressed) {
-  return ButtonTheme(
-      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      //limits the touch area to the button area
-      minWidth: 0,
-      //wraps child's width
-      height: 0,
-      child: TextButton(
-          style: flatButtonStyle,
-          onPressed: onPressed,
-          child:
-              Text(translate(text), style: TextStyle(color: MyTheme.accent))));
+Color? _msgboxColor(String type) {
+  if (type == "input-password" || type == "custom-os-password") {
+    return Color(0xFFAD448E);
+  }
+  if (type.contains("success")) {
+    return Color(0xFF32bea6);
+  }
+  if (type.contains("error") || type == "re-input-password") {
+    return Color(0xFFE04F5F);
+  }
+  return Color(0xFF2C8CFF);
 }
 
-Widget _msgBoxTitle(String title) =>
-    Text(translate(title), style: TextStyle(fontSize: 21));
+Widget msgboxIcon(String type) {
+  IconData? iconData;
+  if (type.contains("error") || type == "re-input-password") {
+    iconData = Icons.cancel;
+  }
+  if (type.contains("success")) {
+    iconData = Icons.check_circle;
+  }
+  if (type == "wait-uac" || type == "wait-remote-accept-nook") {
+    iconData = Icons.hourglass_top;
+  }
+  if (type == 'on-uac' || type == 'on-foreground-elevated') {
+    iconData = Icons.admin_panel_settings;
+  }
+  if (type == "info") {
+    iconData = Icons.info;
+  }
+  if (iconData != null) {
+    return Icon(iconData, size: 50, color: _msgboxColor(type))
+        .marginOnly(right: 16);
+  }
+
+  return Offstage();
+}
+
+// title should be null
+Widget msgboxContent(String type, String title, String text) {
+  return Row(
+    children: [
+      msgboxIcon(type),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              translate(title),
+              style: TextStyle(fontSize: 21),
+            ).marginOnly(bottom: 10),
+            Text(translate(text), style: const TextStyle(fontSize: 15)),
+          ],
+        ),
+      ),
+    ],
+  );
+}
 
 void msgBoxCommon(OverlayDialogManager dialogManager, String title,
     Widget content, List<Widget> buttons,
     {bool hasCancel = true}) {
   dialogManager.dismissAll();
   dialogManager.show((setState, close) => CustomAlertDialog(
-        title: _msgBoxTitle(title),
+        title: Text(
+          translate(title),
+          style: TextStyle(fontSize: 21),
+        ),
         content: content,
         actions: buttons,
         onCancel: hasCancel ? close : null,
@@ -1589,7 +1634,8 @@ class ServerConfig {
 Widget dialogButton(String text,
     {required VoidCallback? onPressed,
     bool isOutline = false,
-    TextStyle? style}) {
+    TextStyle? style,
+    ButtonStyle? buttonStyle}) {
   if (isDesktop) {
     if (isOutline) {
       return OutlinedButton(
@@ -1598,7 +1644,7 @@ Widget dialogButton(String text,
       );
     } else {
       return ElevatedButton(
-        style: ElevatedButton.styleFrom(elevation: 0),
+        style: ElevatedButton.styleFrom(elevation: 0).merge(buttonStyle),
         onPressed: onPressed,
         child: Text(translate(text), style: style),
       );

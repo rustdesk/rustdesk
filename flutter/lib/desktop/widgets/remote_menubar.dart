@@ -1426,12 +1426,8 @@ void showConfirmSwitchSidesDialog(
     }
 
     return CustomAlertDialog(
-      title: Text(translate('Switch Sides')),
-      content: Column(
-        children: [
-          Text(translate('Please confirm if you want to share your desktop?')),
-        ],
-      ),
+      content: msgboxContent('info', 'Switch Sides',
+          'Please confirm if you want to share your desktop?'),
       actions: [
         dialogButton('Cancel', onPressed: close, isOutline: true),
         dialogButton('OK', onPressed: submit),

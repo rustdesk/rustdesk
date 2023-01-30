@@ -1104,7 +1104,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     Some(misc::Union::PortableServiceRunning(b)) => {
                         if b {
                             self.handler.msgbox(
-                                "custom-nocancel",
+                                "custom-nocancel-success",
                                 "Successful",
                                 "Elevate successfully",
                                 "",
