@@ -379,9 +379,15 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           mod_menu.PopupMenuItem<String>(
             height: _MenubarTheme.height,
             padding: EdgeInsets.zero,
-            child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: rowChildren),
+            child: Listener(
+              onPointerHover: (PointerHoverEvent e) =>
+                  widget.ffi.inputModel.lastMousePos = e.position,
+              child: MouseRegion(
+                child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: rowChildren),
+              ),
+            ),
           )
         ];
       },
