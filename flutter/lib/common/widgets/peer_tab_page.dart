@@ -419,7 +419,10 @@ class _PeerSearchBarState extends State<PeerSearchBar> {
   Widget _buildSearchBar() {
     RxBool focused = false.obs;
     FocusNode focusNode = FocusNode();
-    focusNode.addListener(() => focused.value = focusNode.hasFocus);
+    focusNode.addListener(() {
+      focused.value = focusNode.hasFocus;
+      peerSearchTextController.selection = TextSelection(baseOffset: 0, extentOffset: peerSearchTextController.value.text.length);
+    });
     return Container(
       width: 120,
       decoration: BoxDecoration(

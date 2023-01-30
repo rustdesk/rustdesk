@@ -64,6 +64,8 @@ class _ConnectionPageState extends State<ConnectionPage>
     });
     _idFocusNode.addListener(() {
       _idInputFocused.value = _idFocusNode.hasFocus;
+      // select all to faciliate removing text, just following the behavior of address input of chrome
+      _idController.selection = TextSelection(baseOffset: 0, extentOffset: _idController.value.text.length);
     });
     windowManager.addListener(this);
   }
