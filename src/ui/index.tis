@@ -558,6 +558,8 @@ class App: Reactor.Component
                     {is_can_screen_recording && !handler.is_process_trusted(false) ? <TrustMe /> : ""}
                     {!service_stopped && is_can_screen_recording && handler.is_process_trusted(false) && handler.is_installed() && !handler.is_installed_daemon(false) ? <InstallDaemon /> : ""}
                     {system_error ? <SystemError /> : ""}
+                    {!system_error && handler.is_login_wayland() && !handler.current_is_wayland() ? <FixWayland /> : ""}
+                    {!system_error && handler.current_is_wayland() ? <ModifyDefaultLogin /> : ""}
                 </div>
                 <div .right-pane>
                     <div .right-content>
@@ -741,6 +743,34 @@ class InstallDaemon: Reactor.Component {
 
     event click $(#install-me) {
         handler.is_installed_daemon(true);
+    }
+}
+
+class FixWayland: Reactor.Component {
+    function render() {
+        return <div .trust-me>
+            <div>{translate('Warning')}</div>
+            <div>{translate('Login screen using Wayland is not supported')}</div>
+            <div #help-me .link>{translate('Help')}</div>
+        </div>;
+    }
+
+    event click $(#help-me) {
+        handler.open_url(translate("doc_fix_wayland"));
+    }
+}
+
+class ModifyDefaultLogin: Reactor.Component {
+    function render() {
+        return <div .trust-me>
+            <div>{translate('Warning')}</div>
+            <div>{translate('Current Wayland display server is not supported')}</div>
+            <div #help-me .link>{translate('Help')}</div>
+        </div>;
+    }
+
+    event click $(#help-me) {
+        handler.open_url(translate("doc_fix_wayland"));
     }
 }
 
