@@ -183,6 +183,9 @@ class Header: Reactor.Component {
                 <li #balanced type="image-quality"><span>{svg_checkmark}</span>{translate('Balanced')}</li> 
                 <li #low type="image-quality"><span>{svg_checkmark}</span>{translate('Optimize reaction time')}</li> 
                 <li #custom type="image-quality"><span>{svg_checkmark}</span>{translate('Custom')}</li>
+                <div .separator />
+                <li #guest-to-host type="audio-mode"><span>{svg_checkmark}</span>{translate('Guest to Host')}</li> 
+                <li #dual-way type="audio-mode"><span>{svg_checkmark}</span>{translate('Dual way')}</li>
                 {show_codec ? <div>
                 <div .separator />
                 <li #auto type="codec-preference"><span>{svg_checkmark}</span>Auto</li>
@@ -378,7 +381,7 @@ class Header: Reactor.Component {
             togglePrivacyMode(me.id);
         } else if (me.id == "show-quality-monitor") {
             toggleQualityMonitor(me.id);
-        }else if (me.attributes.hasClass("toggle-option")) {
+        } else if (me.attributes.hasClass("toggle-option")) {
             handler.toggle_option(me.id);
             toggleMenuState();
         } else if (!me.attributes.hasClass("selected")) {
@@ -391,6 +394,8 @@ class Header: Reactor.Component {
             } else if (type == "codec-preference") {
                 handler.set_option("codec-preference", me.id);
                 handler.change_prefer_codec();
+            } else if (type == "audio-mode") {
+                handler.save_audio_mode(me.id);
             }
             toggleMenuState();
         }
@@ -434,6 +439,9 @@ function toggleMenuState() {
     var c = handler.get_option("codec-preference");
     if (!c) c = "auto";
     values.push(c);
+    var a = handler.get_audio_mode();
+    if (!a) a = "guest-to-host";
+    values.push(a);
     for (var el in $$(menu#display-options li)) {
         el.attributes.toggleClass("selected", values.indexOf(el.id) >= 0);
     }
