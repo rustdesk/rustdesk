@@ -434,16 +434,8 @@ impl UI {
         is_login_wayland()
     }
 
-    fn fix_login_wayland(&mut self) {
-        fix_login_wayland()
-    }
-
     fn current_is_wayland(&mut self) -> bool {
         current_is_wayland()
-    }
-
-    fn modify_default_login(&mut self) -> String {
-        modify_default_login()
     }
 
     fn get_software_update_url(&self) -> String {
@@ -590,9 +582,7 @@ impl sciter::EventHandler for UI {
         fn is_installed_daemon(bool);
         fn get_error();
         fn is_login_wayland();
-        fn fix_login_wayland();
         fn current_is_wayland();
-        fn modify_default_login();
         fn get_options();
         fn get_option(String);
         fn get_local_option(String);
