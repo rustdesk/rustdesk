@@ -89,6 +89,18 @@ impl<T: InvokeUiSession> Session<T> {
         self.lc.write().unwrap().save_keyboard_mode(value);
     }
 
+    pub fn get_audio_mode(&self) -> String {
+        self.lc.read().unwrap().audio_mode.clone()
+    }
+
+    pub fn save_audio_mode(&self, value: String) {
+        let msg = self.lc.write().unwrap().save_audio_mode(value);
+        // Notify remote guest that the audio mode has been changed.
+        if let Some(msg) = msg {
+            self.send(Data::Message(msg));
+        }
+    }
+
     pub fn save_view_style(&mut self, value: String) {
         self.lc.write().unwrap().save_view_style(value);
     }
@@ -652,6 +664,13 @@ impl<T: InvokeUiSession> Session<T> {
                 log::info!("server not started (will try to start): {}", err);
             }
         }
+    }
+
+    fn get_audio_transmission_mode(&self, id: &str) {
+
+    }
+    fn set_audio_transmission_mode(&self, id: &str, mode: String) {
+
     }
 }
 

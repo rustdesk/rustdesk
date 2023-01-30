@@ -445,5 +445,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("FPS", "fps"),
         ("Auto", "Automatisch"),
         ("Other Default Options", "Weitere Standardoptionen"),
+        ("Guest to Host", ""),
+        ("Two way", ""),
+        ("Audio Transmission Mode", ""),
     ].iter().cloned().collect();
 }

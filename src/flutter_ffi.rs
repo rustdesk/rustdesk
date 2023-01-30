@@ -233,6 +233,20 @@ pub fn session_set_image_quality(id: String, value: String) {
     }
 }
 
+pub fn session_get_audio_mode(id: String) -> Option<String> {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        Some(session.get_audio_mode())
+    } else {
+        None
+    }
+}
+
+pub fn session_set_audio_mode(id: String, value: String) {
+    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+        session.save_audio_mode(value);
+    }
+}
+
 pub fn session_get_keyboard_mode(id: String) -> Option<String> {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
         Some(session.get_keyboard_mode())

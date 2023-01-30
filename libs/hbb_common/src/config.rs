@@ -213,6 +213,11 @@ pub struct PeerConfig {
     )]
     pub image_quality: String,
     #[serde(
+        default = "PeerConfig::default_audio_mode",
+        deserialize_with = "PeerConfig::deserialize_audio_mode"
+    )]
+    pub audio_mode: String,
+    #[serde(
         default = "PeerConfig::default_custom_image_quality",
         deserialize_with = "PeerConfig::deserialize_custom_image_quality"
     )]
@@ -995,6 +1000,11 @@ impl PeerConfig {
         default_image_quality,
         deserialize_image_quality,
         UserDefaultConfig::load().get("image_quality")
+    );
+    serde_field_string!(
+        default_audio_mode,
+        deserialize_audio_mode,
+        "guest-to-host".to_owned()
     );
 
     fn default_custom_image_quality() -> Vec<i32> {

@@ -444,6 +444,11 @@ enum ImageQuality {
   Best = 4;
 }
 
+enum AudioMode {
+  GuestToHost = 0;
+  TwoWay = 1;
+}
+
 message VideoCodecState {
   enum PreferCodec {
     Auto = 0;
@@ -475,6 +480,7 @@ message OptionMessage {
   BoolOption enable_file_transfer = 9;
   VideoCodecState video_codec_state = 10;
   int32 custom_fps = 11;
+  AudioMode audio_mode = 12;
 }
 
 message TestDelay {

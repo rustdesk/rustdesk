@@ -1106,6 +1106,30 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         padding: padding,
       ),
       MenuEntryDivider<String>(),
+      MenuEntryRadios<String>(
+        text: translate('Audio Transmission Mode'),
+        optionsGetter: () => [
+          MenuEntryRadioOption(
+            text: translate('Guest to Host'),
+            value: kRemoteAudioGuestToHost,
+            dismissOnClicked: true,
+          ),
+          MenuEntryRadioOption(
+            text: translate('Two way'),
+            value: kRemoteAudioTwoWay,
+            dismissOnClicked: true,
+          ),
+        ],
+        curOptionGetter: () async =>
+            // null means peer id is not found, which there's no need to care about
+            await bind.sessionGetAudioMode(id: widget.id) ?? '',
+        optionSetter: (String oldValue, String newValue) async {
+          if (oldValue != newValue) {
+            await bind.sessionSetAudioMode(id: widget.id, value: newValue);
+          }
+        },
+        padding: padding,
+      ),
     ];
 
     if (widget.state.viewStyle.value == kRemoteViewStyleOriginal) {
@@ -1335,6 +1359,8 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     final pi = widget.ffi.ffiModel.pi;
 
     if (perms['audio'] != false) {
+      displayMenu
+          .add(_createSwitchMenuEntry('Mute', 'disable-audio', padding, true));
       displayMenu
           .add(_createSwitchMenuEntry('Mute', 'disable-audio', padding, true));
     }
