@@ -172,7 +172,7 @@ impl Connection {
         // Start a audio thread to play the audio sent by peer.
         let latency_controller = LatencyController::new();
         // No video frame will be sent here, so we need to disable latency controller, or audio check may fail.
-        latency_controller.lock().unwrap().set_enabled(false);
+        latency_controller.lock().unwrap().set_audio_only(true);
         let audio_sender = start_audio_thread(Some(latency_controller));
         let mut conn = Self {
             inner: ConnInner {
