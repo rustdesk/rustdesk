@@ -16,7 +16,7 @@ div#quality-monitor {
     padding: 5px;
     min-width: 150px;
     color: azure;
-    border: solid azure;
+    border: 0.5px solid azure;
 }
 
 video#handler {
