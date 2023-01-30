@@ -27,7 +27,7 @@ impl Default for LatencyController {
             last_video_remote_ts: Default::default(),
             update_time: Instant::now(),
             allow_audio: Default::default(),
-            audio_only: true
+            audio_only: false
         }
     }
 }
@@ -53,7 +53,11 @@ impl LatencyController {
     pub fn check_audio(&mut self, timestamp: i64) -> bool {
         // Compute audio latency.
         let expected = self.update_time.elapsed().as_millis() as i64 + self.last_video_remote_ts;
-        let latency = expected - timestamp;
+        let latency = if self.audio_only {
+            expected
+        } else {
+            expected - timestamp
+        };
         // Set MAX and MIN, avoid fixing too frequently.
         if self.allow_audio {
             if latency.abs() > MAX_LATENCY {
@@ -66,11 +70,9 @@ impl LatencyController {
                 self.allow_audio = true;
             }
         }
-        // No video frame here, which means the update time is not triggered.
+        // No video frame here, which means the update time is not up to date.
         // We manually update the time here.
-        if self.audio_only {
-            self.update_time = Instant::now();
-        }
+        self.update_time = Instant::now();
         self.allow_audio
     }
 }
