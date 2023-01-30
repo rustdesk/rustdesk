@@ -8,6 +8,7 @@ import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/scroll_wrapper.dart';
+import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:window_manager/window_manager.dart';
@@ -90,6 +91,18 @@ class _ConnectionPageState extends State<ConnectionPage>
       }
       isWindowMinimized = false;
     }
+  }
+
+  @override
+  void onWindowEnterFullScreen() {
+    // Remove edge border by setting the value to zero.
+    stateGlobal.resizeEdgeSize.value = 0;
+  }
+
+  @override
+  void onWindowLeaveFullScreen() {
+    // Restore edge border to default edge size.
+    stateGlobal.resizeEdgeSize.value = kWindowEdgeSize;
   }
 
   @override
