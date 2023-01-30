@@ -38,8 +38,9 @@ class ConnectionTabPage extends StatefulWidget {
 }
 
 class _ConnectionTabPageState extends State<ConnectionTabPage> {
-  final tabController = Get.put(DesktopTabController(
-      tabType: DesktopTabType.remoteScreen));
+  final tabController =
+      Get.put(DesktopTabController(tabType: DesktopTabType.remoteScreen));
+  final contentKey = UniqueKey();
   static const IconData selectedIcon = Icons.desktop_windows_sharp;
   static const IconData unselectedIcon = Icons.desktop_windows_outlined;
 
@@ -80,7 +81,6 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     super.initState();
 
     tabController.onRemoved = (_, id) => onRemoveId(id);
-   
 
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
       print(
@@ -197,11 +197,12 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     );
     return Platform.isMacOS
         ? tabWidget
-        : SubWindowDragToResizeArea(
-            child: tabWidget,
-            resizeEdgeSize: stateGlobal.resizeEdgeSize.value,
-            windowId: stateGlobal.windowId,
-          );
+        : Obx(() => SubWindowDragToResizeArea(
+              key: contentKey,
+              child: tabWidget,
+              resizeEdgeSize: stateGlobal.resizeEdgeSize.value,
+              windowId: stateGlobal.windowId,
+            ));
   }
 
   // Note: Some dup code to ../widgets/remote_menubar
