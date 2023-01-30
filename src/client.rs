@@ -1259,7 +1259,7 @@ impl LoginConfigHandler {
     ///
     /// * `q` - The audio mode option.
     /// * `ignore_default` - Ignore the default value.
-    fn get_audio_mode_enum(&self, q: &str, ignore_default: bool) -> Option<AudioMode> {
+    pub fn get_audio_mode_enum(q: &str, ignore_default: bool) -> Option<AudioMode> {
         if q == "guest-to-host" {
             Some(AudioMode::GuestToHost)
         } else if q == "two-way" {
@@ -1361,7 +1361,7 @@ impl LoginConfigHandler {
 
     pub fn save_audio_mode(&mut self, value: String) -> Option<Message> {
         let mut res = None;
-        if let Some(q) = self.get_audio_mode_enum(&value, false) {
+        if let Some(q) = LoginConfigHandler::get_audio_mode_enum(&value, false) {
             let mut misc = Misc::new();
             misc.set_option(OptionMessage {
                 audio_mode: q.into(),
@@ -1981,6 +1981,7 @@ pub enum Data {
     RemovePortForward(i32),
     AddPortForward((i32, String, i32)),
     ToggleClipboardFile,
+    ChangeAudioMode(AudioMode),
     NewRDP,
     SetConfirmOverrideFile((i32, i32, bool, bool, bool)),
     AddJob((i32, String, String, i32, bool, bool)),

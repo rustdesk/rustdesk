@@ -94,6 +94,10 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn save_audio_mode(&self, value: String) {
+        let mode = LoginConfigHandler::get_audio_mode_enum(value.as_str(), false);
+        if let Some(mode)= mode {
+            self.send(Data::ChangeAudioMode(mode));
+        }
         let msg = self.lc.write().unwrap().save_audio_mode(value);
         // Notify remote guest that the audio mode has been changed.
         if let Some(msg) = msg {
