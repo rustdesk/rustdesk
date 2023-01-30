@@ -118,8 +118,12 @@ class PlatformFFI {
         // Start a dbus service, no need to await
         _ffiBind.mainStartDbusServer();
       } else if (Platform.isMacOS && isMain) {
-        // Start an ipc server for handling url schemes.
-        _ffiBind.mainStartIpcUrlServer();
+        Future.wait([
+          // Start dbus service.
+          _ffiBind.mainStartDbusServer(),
+          // Start local audio pulseaudio server.
+          _ffiBind.mainStartPa()
+        ]);
       }
       _startListenEvent(_ffiBind); // global event
       try {
