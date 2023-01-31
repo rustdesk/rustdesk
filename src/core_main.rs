@@ -198,7 +198,7 @@ pub fn core_main() -> Option<Vec<String>> {
             {
                 std::thread::spawn(move || crate::start_server(true));
                 crate::platform::macos::hide_dock();
-                crate::tray::make_tray();
+                crate::ui::macos::make_tray();
                 return None;
             }
             #[cfg(target_os = "linux")]
