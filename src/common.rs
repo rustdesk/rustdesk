@@ -149,6 +149,12 @@ pub fn get_default_sound_input() -> Option<String> {
     }
 }
 
+#[inline]
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub fn get_default_sound_input() -> Option<String> {
+    None
+}
+
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn update_clipboard(clipboard: Clipboard, old: Option<&Arc<Mutex<String>>>) {
     let content = if clipboard.compress {

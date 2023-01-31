@@ -541,7 +541,7 @@ pub fn main_get_default_sound_input() -> Option<String> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     return get_default_sound_input();
     #[cfg(any(target_os = "android", target_os = "ios"))]
-    String::from("")
+    None
 }
 
 pub fn main_get_hostname() -> SyncReturn<String> {
