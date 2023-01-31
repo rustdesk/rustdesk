@@ -386,21 +386,22 @@ fn streams_from_response(response: OrgFreedesktopPortalRequestResponse) -> Vec<P
                             info.size.1 = v[1] as _;
                         }
                     }
-                    let v = attributes
-                        .get("position")?
-                        .as_iter()?
-                        .filter_map(|v| {
-                            Some(
-                                v.as_iter()?
-                                    .map(|x| x.as_i64().unwrap_or(0))
-                                    .collect::<Vec<i64>>(),
-                            )
-                        })
-                        .next();
-                    if let Some(v) = v {
-                        if v.len() == 2 {
-                            info.position.0 = v[0] as _;
-                            info.position.1 = v[1] as _;
+                    if let Some(pos) = attributes.get("position") {
+                        let v = pos
+                            .as_iter()?
+                            .filter_map(|v| {
+                                Some(
+                                    v.as_iter()?
+                                        .map(|x| x.as_i64().unwrap_or(0))
+                                        .collect::<Vec<i64>>(),
+                                )
+                            })
+                            .next();
+                        if let Some(v) = v {
+                            if v.len() == 2 {
+                                info.position.0 = v[0] as _;
+                                info.position.1 = v[1] as _;
+                            }
                         }
                     }
                     Some(info)
