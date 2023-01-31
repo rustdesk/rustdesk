@@ -415,6 +415,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("software_render_tip", "اگر کارت گرافیک Nvidia دارید و پنجره راه دور بلافاصله پس از اتصال بسته می شود، درایور nouveau را نصب نمایید و انتخاب گزینه استفاده از رندر نرم افزار می تواند کمک کننده باشد. راه اندازی مجدد نرم افزار مورد نیاز است."),
         ("Always use software rendering", "همیشه از رندر نرم افزاری استفاده کنید"),
         ("config_input", "برای کنترل دسکتاپ از راه دور با صفحه کلید، باید مجوز RustDesk \"Input Monitoring\" را بدهید."),
+        ("config_microphone", ""),
         ("request_elevation_tip", "همچنین می توانید در صورت وجود شخصی در سمت راه دور درخواست ارتفاع دهید."),
         ("Wait", "صبر کنید"),
         ("Elevation Error", "خطای ارتفاع"),

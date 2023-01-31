@@ -415,6 +415,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("software_render_tip", "如果你使用英伟达显卡, 并且远程窗口在会话建立后会立刻关闭, 那么安装 nouveau 驱动并且选择使用软件渲染可能会有帮助。重启软件后生效。"),
         ("Always use software rendering", "使用软件渲染"),
         ("config_input", "为了能够通过键盘控制远程桌面, 请给予 RustDesk \"输入监控\" 权限。"),
+        ("config_microphone", "为了支持通过麦克风进行音频传输，请给予 RustDesk \"录音\"权限。"),
         ("request_elevation_tip", "如果对面有人, 也可以请求提升权限。"),
         ("Wait", "等待"),
         ("Elevation Error", "提权失败"),

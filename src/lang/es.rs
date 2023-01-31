@@ -415,6 +415,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("software_render_tip", "Si tienes una gráfica Nvidia y la ventana remota se cierra inmediatamente, instalar el driver nouveau y elegir renderizado por software podría ayudar. Se requiere reiniciar la aplicación."),
         ("Always use software rendering", "Usar siempre renderizado por software"),
         ("config_input", "Para controlar el escritorio remoto con el teclado necesitas dar a RustDesk permisos de \"Monitorización de entrada\"."),
+        ("config_microphone", ""),
         ("request_elevation_tip", "También puedes solicitar elevación si hay alguien en el lado remoto."),
         ("Wait", "Esperar"),
         ("Elevation Error", "Error de elevación"),

@@ -44,6 +44,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   var watchIsCanScreenRecording = false;
   var watchIsProcessTrust = false;
   var watchIsInputMonitoring = false;
+  var watchIsCanRecordAudio = false;
   Timer? _updateTimer;
 
   @override
@@ -79,7 +80,16 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                 buildTip(context),
                 buildIDBoard(context),
                 buildPasswordBoard(context),
-                buildHelpCards(),
+                FutureBuilder<Widget>(
+                  future: buildHelpCards(),
+                  builder: (_, data) {
+                    if (data.hasData) {
+                      return data.data!;
+                    } else {
+                      return const Offstage();
+                    }
+                  },
+                ),
               ],
             ),
           ),
@@ -302,7 +312,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     );
   }
 
-  Widget buildHelpCards() {
+  Future<Widget> buildHelpCards() async {
     if (updateUrl.isNotEmpty) {
       return buildInstallCard(
           "Status",
@@ -347,6 +357,13 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           !bind.mainIsInstalledDaemon(prompt: false)) {
         return buildInstallCard("", "install_daemon_tip", "Install", () async {
           bind.mainIsInstalledDaemon(prompt: true);
+        });
+      } else if ((await osxCanRecordAudio() !=
+          PermissionAuthorizeType.authorized)) {
+        return buildInstallCard("Permissions", "config_microphone", "Configure",
+            () async {
+          osxRequestAudio();
+          watchIsCanRecordAudio = true;
         });
       }
     } else if (Platform.isLinux) {
@@ -478,6 +495,20 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       if (watchIsInputMonitoring) {
         if (bind.mainIsCanInputMonitoring(prompt: false)) {
           watchIsInputMonitoring = false;
+          setState(() {});
+        }
+      }
+      if (watchIsCanRecordAudio) {
+        if (Platform.isMacOS) {
+          Future.microtask(() async {
+            if ((await osxCanRecordAudio() ==
+                PermissionAuthorizeType.authorized)) {
+              watchIsCanRecordAudio = false;
+              setState(() {});
+            }
+          });
+        } else {
+          watchIsCanRecordAudio = false;
           setState(() {});
         }
       }

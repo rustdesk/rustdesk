@@ -415,6 +415,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("software_render_tip", ""),
         ("Always use software rendering", ""),
         ("config_input", ""),
+        ("config_microphone", ""),
         ("request_elevation_tip", ""),
         ("Wait", ""),
         ("Elevation Error", ""),
