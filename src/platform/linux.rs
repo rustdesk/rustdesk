@@ -534,6 +534,24 @@ pub fn get_pa_sources() -> Vec<(String, String)> {
     out
 }
 
+pub fn get_default_pa_source() -> Option<(String, String)> {
+    use pulsectl::controllers::*;
+    match SourceController::create() {
+        Ok(mut handler) => {
+            if let Ok(dev) = handler.get_default_device() {
+                return Some((
+                    dev.name.unwrap_or("".to_owned()),
+                    dev.description.unwrap_or("".to_owned()),
+                ));
+            }
+        }
+        Err(err) => {
+            log::error!("Failed to get_pa_source: {:?}", err);
+        }
+    }
+    None
+}
+
 pub fn lock_screen() {
     std::process::Command::new("xdg-screensaver")
         .arg("lock")

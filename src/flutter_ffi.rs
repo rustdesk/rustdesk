@@ -4,6 +4,9 @@ use std::str::FromStr;
 use flutter_rust_bridge::{StreamSink, SyncReturn, ZeroCopyBuffer};
 use serde_json::json;
 
+use crate::common::{is_keyboard_mode_supported, get_default_sound_input};
+use hbb_common::message_proto::KeyboardMode;
+use hbb_common::ResultType;
 use hbb_common::{
     config::{self, LocalConfig, ONLINE, PeerConfig},
     fs, log,
@@ -532,6 +535,13 @@ pub fn main_get_sound_inputs() -> Vec<String> {
     return get_sound_inputs();
     #[cfg(any(target_os = "android", target_os = "ios"))]
     vec![String::from("")]
+}
+
+pub fn main_get_default_sound_input() -> Option<String> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return get_default_sound_input();
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    String::from("")
 }
 
 pub fn main_get_hostname() -> SyncReturn<String> {

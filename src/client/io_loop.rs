@@ -2,13 +2,14 @@ use crate::client::{
     Client, CodecFormat, LoginConfigHandler, MediaData, MediaSender, QualityStatus, MILLI1, SEC30,
     SERVER_CLIPBOARD_ENABLED, SERVER_FILE_TRANSFER_ENABLED, SERVER_KEYBOARD_ENABLED,
 };
+use crate::common::{get_default_sound_input, set_sound_input};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::common::{check_clipboard, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL};
 use crate::{audio_service, common, ConnInner, CLIENT_SERVER};
 
 #[cfg(windows)]
 use clipboard::{cliprdr::CliprdrClientContext, ContextSend};
-use hbb_common::futures::channel::mpsc::unbounded;
+
 use hbb_common::tokio::sync::mpsc::error::TryRecvError;
 
 use crate::server::Service;
@@ -32,7 +33,7 @@ use hbb_common::tokio::{
 };
 use hbb_common::{allow_err, message_proto::*, sleep};
 use hbb_common::{fs, log, Stream};
-use std::borrow::Borrow;
+
 use std::collections::HashMap;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -269,6 +270,11 @@ impl<T: InvokeUiSession> Remote<T> {
     fn start_client_audio(&mut self) -> Option<std::sync::mpsc::Sender<()>> {
         if self.handler.is_file_transfer() || self.handler.is_port_forward() {
             return None;
+        }
+        // Switch to default input device
+        let default_sound_device = get_default_sound_input();
+        if let Some(device) = default_sound_device {
+            set_sound_input(device);
         }
         // Create a channel to receive error or closed message
         let (tx, rx) = std::sync::mpsc::channel();

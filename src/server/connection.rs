@@ -5,7 +5,7 @@ use crate::clipboard_file::*;
 use crate::common::update_clipboard;
 #[cfg(windows)]
 use crate::portable_service::client as portable_client;
-use crate::{video_service, client::{MediaSender, start_audio_thread, LatencyController, MediaData}};
+use crate::{video_service, client::{MediaSender, start_audio_thread, LatencyController, MediaData}, common::{get_default_sound_input, set_sound_input}};
 #[cfg(any(target_os = "android", target_os = "ios"))]
 use crate::{common::DEVICE_NAME, flutter::connection_manager::start_channel};
 use crate::{ipc, VERSION};
@@ -1542,6 +1542,11 @@ impl Connection {
                     },
                     Some(misc::Union::AudioFormat(format)) => {
                         if !self.disable_audio  {
+                            // Switch to default input device
+                            let default_sound_device = get_default_sound_input();
+                            if let Some(device) = default_sound_device {
+                                set_sound_input(device);
+                            }
                             allow_err!(self.audio_sender.send(MediaData::AudioFormat(format)));
                         }
                     }
