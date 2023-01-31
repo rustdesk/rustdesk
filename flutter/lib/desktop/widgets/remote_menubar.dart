@@ -884,7 +884,33 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       //     ));
       //   }
     }
-
+    displayMenu.addAll([
+      MenuEntryDivider<String>(),
+      MenuEntryRadios<String>(
+        text: translate('Audio Transmission Mode'),
+        optionsGetter: () => [
+          MenuEntryRadioOption(
+            text: translate('Guest to host audio transmission'),
+            value: kRemoteAudioGuestToHost,
+            dismissOnClicked: true,
+          ),
+          MenuEntryRadioOption(
+            text: translate('Dual-way audio transmission'),
+            value: kRemoteAudioDualWay,
+            dismissOnClicked: true,
+          ),
+        ],
+        curOptionGetter: () async =>
+            // null means peer id is not found, which there's no need to care about
+            await bind.sessionGetAudioMode(id: widget.id) ?? '',
+        optionSetter: (String oldValue, String newValue) async {
+          if (oldValue != newValue) {
+            await bind.sessionSetAudioMode(id: widget.id, value: newValue);
+          }
+        },
+        padding: padding,
+      ),
+    ]);
     return displayMenu;
   }
 
@@ -1101,31 +1127,6 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             );
             msgBoxCommon(widget.ffi.dialogManager, 'Custom Image Quality',
                 content, [btnClose]);
-          }
-        },
-        padding: padding,
-      ),
-      MenuEntryDivider<String>(),
-      MenuEntryRadios<String>(
-        text: translate('Audio Transmission Mode'),
-        optionsGetter: () => [
-          MenuEntryRadioOption(
-            text: translate('Guest to Host'),
-            value: kRemoteAudioGuestToHost,
-            dismissOnClicked: true,
-          ),
-          MenuEntryRadioOption(
-            text: translate('Dual way'),
-            value: kRemoteAudioDualWay,
-            dismissOnClicked: true,
-          ),
-        ],
-        curOptionGetter: () async =>
-            // null means peer id is not found, which there's no need to care about
-            await bind.sessionGetAudioMode(id: widget.id) ?? '',
-        optionSetter: (String oldValue, String newValue) async {
-          if (oldValue != newValue) {
-            await bind.sessionSetAudioMode(id: widget.id, value: newValue);
           }
         },
         padding: padding,

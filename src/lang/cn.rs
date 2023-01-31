@@ -448,6 +448,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Other Default Options", "其它默认选项"),
         ("Guest to Host", "被控到主机"),
         ("Dual way", "双向"),
+        ("Guest to host audio transmission", "被控到主机音频传输"),
+        ("Dual-way audio transmission", "双向音频传输"),
         ("Audio Transmission Mode", "音频传输模式"),
     ].iter().cloned().collect();
 }

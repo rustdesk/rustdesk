@@ -448,8 +448,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Other Default Options", "Другие параметры по умолчанию"),
         ("Please confirm if you want to share your desktop?", "Подтвердите, что хотите поделиться своим рабочим столом?"),
         ("Closed as expected", ""),
-        ("Guest to Host", ""),
-        ("Dual way", ""),
+        ("Guest to host audio transmission", ""),
+        ("Dual way audio transmission", ""),
         ("Audio Transmission Mode", ""),
     ].iter().cloned().collect();
 }
