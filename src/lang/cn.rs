@@ -450,6 +450,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Dual way", "双向"),
         ("Guest to host audio transmission", "被控到主机音频传输"),
         ("Dual-way audio transmission", "双向音频传输"),
+        ("Voice call", "语音通话"),
+        ("Text chat", "文字聊天"),
         ("Audio Transmission Mode", "音频传输模式"),
     ].iter().cloned().collect();
 }

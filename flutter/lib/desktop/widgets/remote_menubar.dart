@@ -9,6 +9,7 @@ import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:debounce_throttle/debounce_throttle.dart';
@@ -478,20 +479,6 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     );
   }
 
-  Widget _buildChat(BuildContext context) {
-    return IconButton(
-      tooltip: translate('Chat'),
-      onPressed: () {
-        widget.ffi.chatModel.changeCurrentID(ChatModel.clientModeID);
-        widget.ffi.chatModel.toggleChatOverlay();
-      },
-      icon: const Icon(
-        Icons.message,
-        color: _MenubarTheme.commonColor,
-      ),
-    );
-  }
-
   Widget _buildMonitor(BuildContext context) {
     final pi = widget.ffi.ffiModel.pi;
     return mod_menu.PopupMenuButton(
@@ -695,6 +682,60 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     );
   }
 
+  Widget _buildChat(BuildContext context) {
+    FfiModel ffiModel = Provider.of<FfiModel>(context);
+    return mod_menu.PopupMenuButton(
+      padding: EdgeInsets.zero,
+      icon: SvgPicture.asset(
+        "assets/chat.svg",
+        color: _MenubarTheme.commonColor,
+        width: Theme.of(context).iconTheme.size ?? 24.0,
+        height: Theme.of(context).iconTheme.size ?? 24.0,
+      ),
+      tooltip: translate('Chat'),
+      position: mod_menu.PopupMenuPosition.under,
+      itemBuilder: (BuildContext context) => _getChatMenu(context)
+          .map((entry) => entry.build(
+              context,
+              const MenuConfig(
+                commonColor: _MenubarTheme.commonColor,
+                height: _MenubarTheme.height,
+                dividerHeight: _MenubarTheme.dividerHeight,
+              )))
+          .expand((i) => i)
+          .toList(),
+    );
+  }
+
+  List<MenuEntryBase<String>> _getChatMenu(BuildContext context) {
+    final List<MenuEntryBase<String>> chatMenu = [];
+    const EdgeInsets padding = EdgeInsets.only(left: 14.0, right: 5.0);
+    chatMenu.addAll([
+      MenuEntryButton<String>(
+        childBuilder: (TextStyle? style) => Text(
+          translate('Text chat'),
+          style: style,
+        ),
+        proc: () {
+          widget.ffi.chatModel.changeCurrentID(ChatModel.clientModeID);
+          widget.ffi.chatModel.toggleChatOverlay();
+        },
+        padding: padding,
+        dismissOnClicked: true,
+      ),
+      MenuEntryButton<String>(
+        childBuilder: (TextStyle? style) => Text(
+          translate('Voice call'),
+          style: style,
+        ),
+        proc: () {},
+        padding: padding,
+        dismissOnClicked: true,
+      ),
+    ]);
+    return chatMenu;
+  }
+
   List<MenuEntryBase<String>> _getControlMenu(BuildContext context) {
     final pi = widget.ffi.ffiModel.pi;
     final perms = widget.ffi.ffiModel.permissions;
@@ -884,33 +925,6 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       //     ));
       //   }
     }
-    displayMenu.addAll([
-      MenuEntryDivider<String>(),
-      MenuEntryRadios<String>(
-        text: translate('Audio Transmission Mode'),
-        optionsGetter: () => [
-          MenuEntryRadioOption(
-            text: translate('Guest to host audio transmission'),
-            value: kRemoteAudioGuestToHost,
-            dismissOnClicked: true,
-          ),
-          MenuEntryRadioOption(
-            text: translate('Dual-way audio transmission'),
-            value: kRemoteAudioDualWay,
-            dismissOnClicked: true,
-          ),
-        ],
-        curOptionGetter: () async =>
-            // null means peer id is not found, which there's no need to care about
-            await bind.sessionGetAudioMode(id: widget.id) ?? '',
-        optionSetter: (String oldValue, String newValue) async {
-          if (oldValue != newValue) {
-            await bind.sessionSetAudioMode(id: widget.id, value: newValue);
-          }
-        },
-        padding: padding,
-      ),
-    ]);
     return displayMenu;
   }
 
