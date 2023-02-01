@@ -290,6 +290,9 @@ fn import_config(path: &str) {
 /// If it returns [`Some`], then the process will continue, and flutter gui will be started.
 #[cfg(feature = "flutter")]
 fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<String>> {
+    args.position(|element| {
+        return element == "--connect";
+    })?;
     let peer_id = args.next().unwrap_or("".to_string());
     if peer_id.is_empty() {
         eprintln!("please provide a valid peer id");
