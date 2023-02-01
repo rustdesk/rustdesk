@@ -88,7 +88,6 @@ Future<void> main(List<String> args) async {
     debugPrint("--cm started");
     desktopType = DesktopType.cm;
     await windowManager.ensureInitialized();
-    bind.mainHideDocker();
     runConnectionManagerScreen(args.contains('--hide'));
   } else if (args.contains('--install')) {
     runInstallPage();
@@ -224,6 +223,7 @@ void showCmWindow() {
   WindowOptions windowOptions =
       getHiddenTitleBarWindowOptions(size: kConnectionManagerWindowSize);
   windowManager.waitUntilReadyToShow(windowOptions, () async {
+    bind.mainHideDocker();
     await windowManager.show();
     await Future.wait([windowManager.focus(), windowManager.setOpacity(1)]);
     // ensure initial window size to be changed
@@ -237,6 +237,7 @@ void hideCmWindow() {
       getHiddenTitleBarWindowOptions(size: kConnectionManagerWindowSize);
   windowManager.setOpacity(0);
   windowManager.waitUntilReadyToShow(windowOptions, () async {
+    bind.mainHideDocker();
     await windowManager.hide();
   });
 }
