@@ -79,6 +79,9 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
         reloadCurrentWindow();
       }
     });
+    Future.delayed(Duration.zero, () {
+      restoreWindowPosition(WindowType.PortForward, windowId: windowId());
+    });
   }
 
   @override
