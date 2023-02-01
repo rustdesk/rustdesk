@@ -197,9 +197,6 @@ pub fn get_version_from_url(url: &str) -> String {
 }
 
 pub fn gen_version() {
-    if Ok("release".to_owned()) != std::env::var("PROFILE") {
-        return;
-    }
     println!("cargo:rerun-if-changed=Cargo.toml");
     use std::io::prelude::*;
     let mut file = File::create("./src/version.rs").unwrap();
