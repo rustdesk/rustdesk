@@ -1113,10 +1113,12 @@ class _AboutState extends State<_About> {
                   const SizedBox(
                     height: 8.0,
                   ),
-                  Text('${translate('Version')}: $version')
-                      .marginSymmetric(vertical: 4.0),
-                  Text('${translate('Build Date')}: $buildDate')
-                      .marginSymmetric(vertical: 4.0),
+                  SelectionArea(
+                      child: Text('${translate('Version')}: $version')
+                          .marginSymmetric(vertical: 4.0)),
+                  SelectionArea(
+                      child: Text('${translate('Build Date')}: $buildDate')
+                          .marginSymmetric(vertical: 4.0)),
                   InkWell(
                       onTap: () {
                         launchUrlString('https://rustdesk.com/privacy');
@@ -1137,7 +1139,8 @@ class _AboutState extends State<_About> {
                     decoration: const BoxDecoration(color: Color(0xFF2c8cff)),
                     padding:
                         const EdgeInsets.symmetric(vertical: 24, horizontal: 8),
-                    child: Row(
+                    child: SelectionArea(
+                        child: Row(
                       children: [
                         Expanded(
                           child: Column(
@@ -1157,7 +1160,7 @@ class _AboutState extends State<_About> {
                           ),
                         ),
                       ],
-                    ),
+                    )),
                   ).marginSymmetric(vertical: 4.0)
                 ],
               ).marginOnly(left: _kContentHMargin)

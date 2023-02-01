@@ -707,7 +707,8 @@ void msgBox(String id, String type, String title, String text, String link,
   dialogManager.show(
     (setState, close) => CustomAlertDialog(
       title: null,
-      content: msgboxContent(type, title, text),
+      content: SelectionArea(
+          child: msgboxContent(type, title, text).paddingOnly(bottom: 10)),
       actions: buttons,
       onSubmit: hasOk ? submit : null,
       onCancel: hasCancel == true ? cancel : null,
