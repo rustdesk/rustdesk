@@ -113,6 +113,9 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       }
       _update_remote_count();
     });
+    Future.delayed(Duration.zero, () {
+      restoreWindowPosition(WindowType.RemoteDesktop, windowId: windowId());
+    });
   }
 
   @override
