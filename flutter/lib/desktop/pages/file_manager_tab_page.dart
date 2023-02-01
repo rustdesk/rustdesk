@@ -71,9 +71,6 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
         reloadCurrentWindow();
       }
     });
-    Future.delayed(Duration.zero, () {
-      restoreWindowPosition(WindowType.FileTransfer, windowId: windowId());
-    });
   }
 
   @override

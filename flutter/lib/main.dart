@@ -122,20 +122,20 @@ void runMainApp(bool startService) async {
   }
   gFFI.userModel.refreshCurrentUser();
   runApp(App());
-  // restore the location of the main window before window hide or show
-  await restoreWindowPosition(WindowType.Main);
-  // check the startup argument, if we successfully handle the argument, we keep the main window hidden.
-  if (checkArguments()) {
-    windowManager.hide();
-  } else {
-    windowManager.show();
-    windowManager.focus();
-    // move registration of active main window here to prevent async visible check.
-    rustDeskWinManager.registerActiveWindow(kWindowMainId);
-  }
-  // set window option
+  // Set window option.
   WindowOptions windowOptions = getHiddenTitleBarWindowOptions();
   windowManager.waitUntilReadyToShow(windowOptions, () async {
+    // Restore the location of the main window before window hide or show.
+    await restoreWindowPosition(WindowType.Main);
+    // Check the startup argument, if we successfully handle the argument, we keep the main window hidden.
+    if (checkArguments()) {
+      windowManager.hide();
+    } else {
+      windowManager.show();
+      windowManager.focus();
+      // Move registration of active main window here to prevent from async visible check.
+      rustDeskWinManager.registerActiveWindow(kWindowMainId);
+    }
     windowManager.setOpacity(1);
   });
   windowManager.setTitle(getWindowName());
