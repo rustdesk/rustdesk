@@ -747,7 +747,7 @@ class CanvasModel with ChangeNotifier {
 class CursorData {
   final String peerId;
   final int id;
-  final img2.Image? image;
+  final img2.Image image;
   double scale;
   Uint8List? data;
   final double hotxOrigin;
@@ -788,14 +788,27 @@ class CursorData {
     }
 
     if (_doubleToInt(oldScale) != _doubleToInt(scale)) {
-      data = img2
-          .copyResize(
-            image!,
-            width: (width * scale).toInt(),
-            height: (height * scale).toInt(),
-            interpolation: img2.Interpolation.average,
-          )
-          .getBytes(format: img2.Format.bgra);
+      if (Platform.isWindows) {
+        data = img2
+            .copyResize(
+              image,
+              width: (width * scale).toInt(),
+              height: (height * scale).toInt(),
+              interpolation: img2.Interpolation.average,
+            )
+            .getBytes(format: img2.Format.bgra);
+      } else {
+        data = Uint8List.fromList(
+          img2.encodePng(
+            img2.copyResize(
+              image,
+              width: (width * scale).toInt(),
+              height: (height * scale).toInt(),
+              interpolation: img2.Interpolation.average,
+            ),
+          ),
+        );
+      }
     }
 
     this.scale = scale;
@@ -863,7 +876,7 @@ class PredefinedCursor {
         _cache = CursorData(
           peerId: '',
           id: id,
-          image: _image2?.clone(),
+          image: _image2!.clone(),
           scale: scale,
           data: data,
           hotxOrigin:
@@ -1063,9 +1076,9 @@ class CursorModel with ChangeNotifier {
   Future<bool> _updateCache(
       Uint8List rgba, ui.Image image, int id, int w, int h) async {
     Uint8List? data;
-    img2.Image? imgOrigin;
+    img2.Image imgOrigin =
+        img2.Image.fromBytes(w, h, rgba, format: img2.Format.rgba);
     if (Platform.isWindows) {
-      imgOrigin = img2.Image.fromBytes(w, h, rgba, format: img2.Format.rgba);
       data = imgOrigin.getBytes(format: img2.Format.bgra);
     } else {
       ByteData? imgBytes =
