@@ -88,6 +88,7 @@ Future<void> main(List<String> args) async {
     debugPrint("--cm started");
     desktopType = DesktopType.cm;
     await windowManager.ensureInitialized();
+    bind.mainHideDocker();
     runConnectionManagerScreen(args.contains('--hide'));
   } else if (args.contains('--install')) {
     runInstallPage();

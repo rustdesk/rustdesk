@@ -1241,6 +1241,12 @@ pub fn main_is_login_wayland() -> SyncReturn<bool> {
     SyncReturn(is_login_wayland())
 }
 
+pub fn main_hide_docker() -> SyncReturn<bool> {
+    #[cfg(target_os = "macos")]
+    crate::platform::macos::hide_dock();
+    SyncReturn(true)
+}
+
 #[cfg(target_os = "android")]
 pub mod server_side {
     use jni::{
