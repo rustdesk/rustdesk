@@ -320,20 +320,21 @@ class QualityMonitor extends StatelessWidget {
   final QualityMonitorModel qualityMonitorModel;
   QualityMonitor(this.qualityMonitorModel);
 
-  Widget _row(String info, String? value) {
+  Widget _row(String info, String? value, {Color? rightColor}) {
     return Row(
       children: [
         Expanded(
             flex: 8,
             child: AutoSizeText(info,
-                style: TextStyle(color: MyTheme.grayBg),
+                style: TextStyle(color: MyTheme.darkGray),
                 textAlign: TextAlign.right,
                 maxLines: 1)),
         Spacer(flex: 1),
         Expanded(
             flex: 8,
             child: AutoSizeText(value ?? '',
-                style: TextStyle(color: MyTheme.grayBg), maxLines: 1)),
+                style: TextStyle(color: rightColor ?? Colors.white),
+                maxLines: 1)),
       ],
     );
   }
@@ -351,13 +352,15 @@ class QualityMonitor extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _row("Speed", qualityMonitorModel.data.speed ?? ''),
-                      _row("FPS", qualityMonitorModel.data.fps ?? ''),
+                      _row("Speed", qualityMonitorModel.data.speed ?? '-'),
+                      _row("FPS", qualityMonitorModel.data.fps ?? '-'),
                       _row(
-                          "Delay", "${qualityMonitorModel.data.delay ?? ''}ms"),
+                          "Delay", "${qualityMonitorModel.data.delay ?? '-'}ms",
+                          rightColor: Colors.green),
                       _row("Target Bitrate",
-                          "${qualityMonitorModel.data.targetBitrate ?? ''}kb"),
-                      _row("Codec", qualityMonitorModel.data.codecFormat ?? ''),
+                          "${qualityMonitorModel.data.targetBitrate ?? '-'}kb"),
+                      _row(
+                          "Codec", qualityMonitorModel.data.codecFormat ?? '-'),
                     ],
                   ),
                 )
