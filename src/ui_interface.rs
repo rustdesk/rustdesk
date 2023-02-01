@@ -917,6 +917,18 @@ pub fn account_auth_result() -> String {
     serde_json::to_string(&account::OidcSession::get_result()).unwrap_or_default()
 }
 
+#[cfg(feature = "flutter")]
+pub fn set_user_default_option(key: String, value: String) {
+    use hbb_common::config::UserDefaultConfig;
+    UserDefaultConfig::load().set(key, value);
+}
+
+#[cfg(feature = "flutter")]
+pub fn get_user_default_option(key: String) -> String {
+    use hbb_common::config::UserDefaultConfig;
+    UserDefaultConfig::load().get(&key)
+}
+
 // notice: avoiding create ipc connection repeatedly,
 // because windows named pipe has serious memory leak issue.
 #[tokio::main(flavor = "current_thread")]

@@ -436,5 +436,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Switch Sides", "反转访问方向"),
         ("Please confirm if you want to share your desktop?", "请确认要让对方访问你的桌面?"),
         ("Closed as expected", "正常关闭"),
+        ("Display", "显示"),
+        ("Default View Style", "默认显示方式"),
+        ("Default Scroll Style", "默认滚动方式"),
+        ("Default Image Quality", "默认图像质量"),
+        ("Default Codec", "默认编解码"),
+        ("Bitrate", "波特率"),
+        ("FPS", "帧率"),
+        ("Auto", "自动"),
     ].iter().cloned().collect();
 }
