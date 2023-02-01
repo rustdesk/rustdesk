@@ -778,28 +778,24 @@ class CursorData {
       scale = 1.0;
     } else {
       // Update data if scale changed.
-      if (Platform.isWindows) {
-        final tgtWidth = (width * scale).toInt();
-        final tgtHeight = (width * scale).toInt();
-        if (tgtWidth < kMinCursorSize || tgtHeight < kMinCursorSize) {
-          double sw = kMinCursorSize.toDouble() / width;
-          double sh = kMinCursorSize.toDouble() / height;
-          scale = sw < sh ? sh : sw;
-        }
+      final tgtWidth = (width * scale).toInt();
+      final tgtHeight = (width * scale).toInt();
+      if (tgtWidth < kMinCursorSize || tgtHeight < kMinCursorSize) {
+        double sw = kMinCursorSize.toDouble() / width;
+        double sh = kMinCursorSize.toDouble() / height;
+        scale = sw < sh ? sh : sw;
       }
     }
 
-    if (Platform.isWindows) {
-      if (_doubleToInt(oldScale) != _doubleToInt(scale)) {
-        data = img2
-            .copyResize(
-              image!,
-              width: (width * scale).toInt(),
-              height: (height * scale).toInt(),
-              interpolation: img2.Interpolation.average,
-            )
-            .getBytes(format: img2.Format.bgra);
-      }
+    if (_doubleToInt(oldScale) != _doubleToInt(scale)) {
+      data = img2
+          .copyResize(
+            image!,
+            width: (width * scale).toInt(),
+            height: (height * scale).toInt(),
+            interpolation: img2.Interpolation.average,
+          )
+          .getBytes(format: img2.Format.bgra);
     }
 
     this.scale = scale;
