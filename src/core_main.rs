@@ -304,9 +304,13 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
             switch_uuid = args.next();
         }
     }
+    let mut param_array = vec![];
+    if switch_uuid.is_some() {
+        let switch_uuid = switch_uuid.map_or("".to_string(), |p| format!("switch_uuid={}", p));
+        param_array.push(switch_uuid);
+    }
 
-    let switch_uuid = switch_uuid.map_or("".to_string(), |p| format!("switch_uuid={}", p));
-    let params = vec![switch_uuid].join("&");
+    let params = param_array.join("&");
     let params_flag = if params.is_empty() { "" } else { "?" };
     #[allow(unused)]
     let uni_links = format!(
