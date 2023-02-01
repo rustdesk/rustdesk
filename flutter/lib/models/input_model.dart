@@ -310,7 +310,7 @@ class InputModel {
     }
   }
 
-/*
+
   int _signOrZero(num x) {
     if (x == 0) {
       return 0;
@@ -361,7 +361,7 @@ class InputModel {
 
     trackpadScrollDistance = Offset.zero;
   }
-*/
+
 
   void onPointDownImage(PointerDownEvent e) {
     debugPrint("onPointDownImage");
