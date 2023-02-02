@@ -1133,23 +1133,26 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       }());
     }
 
-    displayMenu.add(() {
-      final opt = 'zoom-cursor';
-      final state = PeerBoolOption.find(widget.id, opt);
-      return MenuEntrySwitch2<String>(
-        switchType: SwitchType.scheckbox,
-        text: translate('Zoom cursor'),
-        getter: () {
-          return state;
-        },
-        setter: (bool v) async {
-          state.value = v;
-          await bind.sessionToggleOption(id: widget.id, value: opt);
-        },
-        padding: padding,
-        dismissOnClicked: true,
-      );
-    }());
+    /// Show remote cursor scaling with image
+    if (widget.state.viewStyle.value != kRemoteViewStyleOriginal) {
+      displayMenu.add(() {
+        final opt = 'zoom-cursor';
+        final state = PeerBoolOption.find(widget.id, opt);
+        return MenuEntrySwitch2<String>(
+          switchType: SwitchType.scheckbox,
+          text: translate('Zoom cursor'),
+          getter: () {
+            return state;
+          },
+          setter: (bool v) async {
+            state.value = v;
+            await bind.sessionToggleOption(id: widget.id, value: opt);
+          },
+          padding: padding,
+          dismissOnClicked: true,
+        );
+      }());
+    }
 
     /// Show quality monitor
     displayMenu.add(MenuEntrySwitch<String>(

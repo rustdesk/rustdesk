@@ -362,10 +362,10 @@ class _RemotePageState extends State<RemotePage>
 
 class ImagePaint extends StatefulWidget {
   final String id;
-  final Rx<bool> zoomCursor;
-  final Rx<bool> cursorOverImage;
-  final Rx<bool> keyboardEnabled;
-  final Rx<bool> remoteCursorMoved;
+  final RxBool zoomCursor;
+  final RxBool cursorOverImage;
+  final RxBool keyboardEnabled;
+  final RxBool remoteCursorMoved;
   final Widget Function(Widget)? listenerBuilder;
 
   ImagePaint(
@@ -388,10 +388,10 @@ class _ImagePaintState extends State<ImagePaint> {
   final ScrollController _vertical = ScrollController();
 
   String get id => widget.id;
-  Rx<bool> get zoomCursor => widget.zoomCursor;
-  Rx<bool> get cursorOverImage => widget.cursorOverImage;
-  Rx<bool> get keyboardEnabled => widget.keyboardEnabled;
-  Rx<bool> get remoteCursorMoved => widget.remoteCursorMoved;
+  RxBool get zoomCursor => widget.zoomCursor;
+  RxBool get cursorOverImage => widget.cursorOverImage;
+  RxBool get keyboardEnabled => widget.keyboardEnabled;
+  RxBool get remoteCursorMoved => widget.remoteCursorMoved;
   Widget Function(Widget)? get listenerBuilder => widget.listenerBuilder;
 
   @override
@@ -466,7 +466,10 @@ class _ImagePaintState extends State<ImagePaint> {
     if (cache == null) {
       return MouseCursor.defer;
     } else {
-      final key = cache.updateGetKey(scale, zoomCursor.value);
+      final isViewAdaptive =
+          Provider.of<CanvasModel>(context, listen: false).viewStyle.style ==
+              kRemoteViewStyleAdaptive;
+      final key = cache.updateGetKey(scale, zoomCursor.value && isViewAdaptive);
       if (!cursor.cachedKeys.contains(key)) {
         debugPrint("Register custom cursor with key $key");
         // [Safety]
