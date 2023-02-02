@@ -644,15 +644,8 @@ class CursorPaint extends StatelessWidget {
     double x = (m.x - hotx) * c.scale + cx;
     double y = (m.y - hoty) * c.scale + cy;
     double scale = 1.0;
-    bool shouldScale = false;
-    if (Platform.isWindows) {
-      final isViewAdaptive = c.viewStyle.style == kRemoteViewStyleAdaptive;
-      shouldScale = zoomCursor.value && isViewAdaptive;
-    } else {
-      final isViewOriginal = c.viewStyle.style == kRemoteViewStyleOriginal;
-      shouldScale = zoomCursor.value || isViewOriginal;
-    }
-    if (shouldScale) {
+    final isViewOriginal = c.viewStyle.style == kRemoteViewStyleOriginal;
+    if (zoomCursor.value || isViewOriginal) {
       x = m.x - hotx + cx / c.scale;
       y = m.y - hoty + cy / c.scale;
       scale = c.scale;
