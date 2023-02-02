@@ -466,10 +466,19 @@ class _ImagePaintState extends State<ImagePaint> {
     if (cache == null) {
       return MouseCursor.defer;
     } else {
-      final isViewAdaptive =
-          Provider.of<CanvasModel>(context, listen: false).viewStyle.style ==
-              kRemoteViewStyleAdaptive;
-      final key = cache.updateGetKey(scale, zoomCursor.value && isViewAdaptive);
+      bool shouldScale = false;
+      if (Platform.isWindows) {
+        final isViewAdaptive =
+            Provider.of<CanvasModel>(context, listen: false).viewStyle.style ==
+                kRemoteViewStyleAdaptive;
+        shouldScale = zoomCursor.value && isViewAdaptive;
+      } else {
+        final isViewOriginal =
+            Provider.of<CanvasModel>(context, listen: false).viewStyle.style ==
+                kRemoteViewStyleOriginal;
+        shouldScale = zoomCursor.value || isViewOriginal;
+      }
+      final key = cache.updateGetKey(scale, shouldScale);
       if (!cursor.cachedKeys.contains(key)) {
         debugPrint("Register custom cursor with key $key");
         // [Safety]
@@ -635,8 +644,15 @@ class CursorPaint extends StatelessWidget {
     double x = (m.x - hotx) * c.scale + cx;
     double y = (m.y - hoty) * c.scale + cy;
     double scale = 1.0;
-    final isViewAdaptive = c.viewStyle.style == kRemoteViewStyleAdaptive;
-    if (zoomCursor.isTrue && isViewAdaptive) {
+    bool shouldScale = false;
+    if (Platform.isWindows) {
+      final isViewAdaptive = c.viewStyle.style == kRemoteViewStyleAdaptive;
+      shouldScale = zoomCursor.value && isViewAdaptive;
+    } else {
+      final isViewOriginal = c.viewStyle.style == kRemoteViewStyleOriginal;
+      shouldScale = zoomCursor.value || isViewOriginal;
+    }
+    if (shouldScale) {
       x = m.x - hotx + cx / c.scale;
       y = m.y - hoty + cy / c.scale;
       scale = c.scale;
