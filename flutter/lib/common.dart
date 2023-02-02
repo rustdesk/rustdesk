@@ -9,6 +9,7 @@ import 'package:back_button_interceptor/back_button_interceptor.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_hbb/utils/platform_channel.dart';
 import 'package:win32/win32.dart' as win32;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -234,6 +235,12 @@ class MyTheme {
             key: kCommConfKeyTheme, value: mode.toShortString());
       }
       bind.mainChangeTheme(dark: mode.toShortString());
+    }
+    // Synchronize the window theme of the system.
+    if (Platform.isMacOS) {
+      final isDark = mode == ThemeMode.dark;
+      RdPlatformChannel.instance.changeSystemWindowTheme(
+          isDark ? SystemWindowTheme.dark : SystemWindowTheme.light);
     }
   }
 
@@ -1685,4 +1692,17 @@ String getWindowName({WindowType? overrideType}) {
 
 String getWindowNameWithId(String id, {WindowType? overrideType}) {
   return "${DesktopTab.labelGetterAlias(id).value} - ${getWindowName(overrideType: overrideType)}";
+}
+
+void updateSystemWindowTheme() {
+  // Set system window theme for macOS
+  final userPreference = MyTheme.getThemeModePreference();
+  if (userPreference != ThemeMode.system) {
+    if (Platform.isMacOS) {
+      RdPlatformChannel.instance.changeSystemWindowTheme(
+          userPreference == ThemeMode.light
+              ? SystemWindowTheme.light
+              : SystemWindowTheme.dark);
+    }
+  }
 }
