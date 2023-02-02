@@ -540,6 +540,7 @@ class CanvasModel with ChangeNotifier {
   double _y = 0;
   // image scale
   double _scale = 1.0;
+  double _devicePixelRatio = 1.0;
   Size _size = Size.zero;
   // the tabbar over the image
   // double tabBarHeight = 0.0;
@@ -563,6 +564,7 @@ class CanvasModel with ChangeNotifier {
   double get x => _x;
   double get y => _y;
   double get scale => _scale;
+  double get devicePixelRatio => _devicePixelRatio;
   Size get size => _size;
   ScrollStyle get scrollStyle => _scrollStyle;
   ViewStyle get viewStyle => _lastViewStyle;
@@ -611,8 +613,9 @@ class CanvasModel with ChangeNotifier {
     _lastViewStyle = viewStyle;
     _scale = viewStyle.scale;
 
+    _devicePixelRatio = ui.window.devicePixelRatio;
     if (kIgnoreDpi && style == kRemoteViewStyleOriginal) {
-      _scale = 1.0 / ui.window.devicePixelRatio;
+      _scale = 1.0 / _devicePixelRatio;
     }
     _x = (size.width - displayWidth * _scale) / 2;
     _y = (size.height - displayHeight * _scale) / 2;
@@ -772,11 +775,9 @@ class CursorData {
 
   int _doubleToInt(double v) => (v * 10e6).round().toInt();
 
-  double _checkUpdateScale(double scale, bool shouldScale) {
+  double _checkUpdateScale(double scale) {
     double oldScale = this.scale;
-    if (!shouldScale) {
-      scale = 1.0;
-    } else {
+    if (scale != 1.0) {
       // Update data if scale changed.
       final tgtWidth = (width * scale).toInt();
       final tgtHeight = (width * scale).toInt();
@@ -817,8 +818,8 @@ class CursorData {
     return scale;
   }
 
-  String updateGetKey(double scale, bool shouldScale) {
-    scale = _checkUpdateScale(scale, shouldScale);
+  String updateGetKey(double scale) {
+    scale = _checkUpdateScale(scale);
     return '${peerId}_${id}_${_doubleToInt(width * scale)}_${_doubleToInt(height * scale)}';
   }
 }

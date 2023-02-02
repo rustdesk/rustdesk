@@ -399,6 +399,20 @@ class _ImagePaintState extends State<ImagePaint> {
     final m = Provider.of<ImageModel>(context);
     var c = Provider.of<CanvasModel>(context);
     final s = c.scale;
+    var cursorScale = 1.0;
+
+    if (Platform.isWindows) {
+      // debug win10
+      final isViewAdaptive = c.viewStyle.style == kRemoteViewStyleAdaptive;
+      if (zoomCursor.value && isViewAdaptive) {
+        cursorScale = s * c.devicePixelRatio;
+      }
+    } else {
+      final isViewOriginal = c.viewStyle.style == kRemoteViewStyleOriginal;
+      if (zoomCursor.value || isViewOriginal) {
+        cursorScale = s;
+      }
+    }
 
     mouseRegion({child}) => Obx(() => MouseRegion(
         cursor: cursorOverImage.isTrue
@@ -414,10 +428,10 @@ class _ImagePaintState extends State<ImagePaint> {
                             _lastRemoteCursorMoved = false;
                             _firstEnterImage.value = true;
                           }
-                          return _buildCustomCursor(context, s);
+                          return _buildCustomCursor(context, cursorScale);
                         }
                       }())
-                    : _buildDisabledCursor(context, s)
+                    : _buildDisabledCursor(context, cursorScale)
             : MouseCursor.defer,
         onHover: (evt) {},
         child: child));
@@ -466,19 +480,7 @@ class _ImagePaintState extends State<ImagePaint> {
     if (cache == null) {
       return MouseCursor.defer;
     } else {
-      bool shouldScale = false;
-      if (Platform.isWindows) {
-        final isViewAdaptive =
-            Provider.of<CanvasModel>(context, listen: false).viewStyle.style ==
-                kRemoteViewStyleAdaptive;
-        shouldScale = zoomCursor.value && isViewAdaptive;
-      } else {
-        final isViewOriginal =
-            Provider.of<CanvasModel>(context, listen: false).viewStyle.style ==
-                kRemoteViewStyleOriginal;
-        shouldScale = zoomCursor.value || isViewOriginal;
-      }
-      final key = cache.updateGetKey(scale, shouldScale);
+      final key = cache.updateGetKey(scale);
       if (!cursor.cachedKeys.contains(key)) {
         debugPrint("Register custom cursor with key $key");
         // [Safety]
