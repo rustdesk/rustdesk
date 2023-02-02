@@ -92,7 +92,8 @@ pub mod client {
         if is_long_press(&event) {
             return;
         }
-        if let Some(key_event) = event_to_key_event(&event, lock_modes) {
+
+        for key_event in event_to_key_events(&event, lock_modes) {
             send_key_event(&key_event);
         }
     }
@@ -341,7 +342,7 @@ fn update_modifiers_state(event: &Event) {
     };
 }
 
-pub fn event_to_key_event(event: &Event, lock_modes: Option<i32>) -> Option<KeyEvent> {
+pub fn event_to_key_events(event: &Event, lock_modes: Option<i32>) -> Vec<KeyEvent> {
     let mut key_event = KeyEvent::new();
     update_modifiers_state(event);
 
@@ -357,28 +358,38 @@ pub fn event_to_key_event(event: &Event, lock_modes: Option<i32>) -> Option<KeyE
 
     let keyboard_mode = get_keyboard_mode_enum();
     key_event.mode = keyboard_mode.into();
-    let mut key_event = match keyboard_mode {
-        KeyboardMode::Map => map_keyboard_mode(event, key_event)?,
-        KeyboardMode::Translate => translate_keyboard_mode(event, key_event)?,
+    let mut key_events = match keyboard_mode {
+        KeyboardMode::Map => match map_keyboard_mode(event, key_event) {
+            Some(event) => [event].to_vec(),
+            None => Vec::new(),
+        },
+        KeyboardMode::Translate => translate_keyboard_mode(event, key_event),
         _ => {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {
-                legacy_keyboard_mode(event, key_event)?
+                legacy_keyboard_mode(event, key_event)
             }
             #[cfg(any(target_os = "android", target_os = "ios"))]
             {
-                None?
+                Vec::new()
             }
         }
     };
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    if let Some(lock_modes) = lock_modes {
-        add_numlock_capslock_with_lock_modes(&mut key_event, lock_modes);
-    } else {
-        add_numlock_capslock_status(&mut key_event);
+
+    if keyboard_mode != KeyboardMode::Translate {
+        for key_event in &mut key_events {
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            if let Some(lock_modes) = lock_modes {
+                add_numlock_capslock_with_lock_modes(key_event, lock_modes);
+            } else {
+                add_numlock_capslock_status(key_event);
+            }
+        }
     }
 
-    return Some(key_event);
+    println!("REMOVE ME ========================= key_events {:?}", &key_events);
+
+    key_events
 }
 
 pub fn event_type_to_event(event_type: EventType) -> Event {
@@ -386,6 +397,7 @@ pub fn event_type_to_event(event_type: EventType) -> Event {
         event_type,
         time: SystemTime::now(),
         name: None,
+        unicode: Vec::new(),
         code: 0,
         scan_code: 0,
     }
@@ -423,13 +435,14 @@ pub fn get_peer_platform() -> String {
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn legacy_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Option<KeyEvent> {
+pub fn legacy_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Vec<KeyEvent> {
+    let mut events = Vec::new();
     // legacy mode(0): Generate characters locally, look for keycode on other side.
     let (mut key, down_or_up) = match event.event_type {
         EventType::KeyPress(key) => (key, true),
         EventType::KeyRelease(key) => (key, false),
         _ => {
-            return None;
+            return events;
         }
     };
 
@@ -475,7 +488,7 @@ pub fn legacy_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Option<Ke
                 unsafe {
                     IS_ALT_GR = true;
                 }
-                return None;
+                return events;
             }
             Some(ControlKey::Control)
         }
@@ -507,7 +520,7 @@ pub fn legacy_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Option<Ke
         Key::Delete => {
             if is_win && ctrl && alt {
                 client::ctrl_alt_del();
-                return None;
+                return events;
             }
             Some(ControlKey::Delete)
         }
@@ -545,7 +558,7 @@ pub fn legacy_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Option<Ke
         Key::KpMinus => Some(ControlKey::Subtract),
         Key::KpPlus => Some(ControlKey::Add),
         Key::CapsLock | Key::NumLock | Key::ScrollLock => {
-            return None;
+            return events;
         }
         Key::Home => Some(ControlKey::Home),
         Key::End => Some(ControlKey::End),
@@ -628,12 +641,12 @@ pub fn legacy_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Option<Ke
         if chr != '\0' {
             if chr == 'l' && is_win && command {
                 client::lock_screen();
-                return None;
+                return events;
             }
             key_event.set_chr(chr as _);
         } else {
             log::error!("Unknown key {:?}", &event);
-            return None;
+            return events;
         }
     }
     let (alt, ctrl, shift, command) = client::get_modifiers_state(alt, ctrl, shift, command);
@@ -642,7 +655,8 @@ pub fn legacy_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Option<Ke
     if down_or_up == true {
         key_event.down = true;
     }
-    Some(key_event)
+    events.push(key_event);
+    events
 }
 
 pub fn map_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Option<KeyEvent> {
@@ -703,6 +717,51 @@ pub fn map_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Option<KeyEv
     Some(key_event)
 }
 
-pub fn translate_keyboard_mode(_event: &Event, mut _key_event: KeyEvent) -> Option<KeyEvent> {
-    None
+#[cfg(target_os = "windows")]
+fn is_modifier_code(scan_code: u32) -> bool {
+    match scan_code {
+        // Alt | AltGr | ControlLeft | ControlRight | ShiftLeft | ShiftRight | MetaLeft | MetaRight
+        0x38 | 0xE038 | 0x1D | 0xE01D | 0x2A | 0x36 | 0xE05B | 0xE05C => true,
+        _ => false,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn is_modifier_code(key_code: u32) -> bool {
+    match scan_code {
+        64 | 108 | 37 | 105 | 50 | 62 | 133 | 134 => true,
+        _ => false,
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn is_modifier_code(key_code: u32) -> bool {
+    match scan_code {
+        0x3A | 0x3D | 0x3B | 0x3E | 0x38 | 0x3C | 0x37 | 0x36 => true,
+        _ => false,
+    }
+}
+
+pub fn translate_keyboard_mode(event: &Event, key_event: KeyEvent) -> Vec<KeyEvent> {
+    #[cfg(target_os = "windows")]
+    let is_modifier = is_modifier_code(event.scan_code);
+    #[cfg(target_os = "linux")]
+    let is_modifier = is_modifier_code(event.key_code);
+    #[cfg(target_os = "macos")]
+    let is_modifier = is_modifier_code(event.key_code);
+
+    let mut events: Vec<KeyEvent> = Vec::new();
+    if is_modifier {
+        if let Some(evt) = map_keyboard_mode(event, key_event) {
+            events.push(evt);
+        }
+        return events;
+    }
+
+    for unicode in &event.unicode {
+        let mut evt = key_event.clone();
+        evt.set_unicode(*unicode as _);
+        events.push(evt);
+    }
+    events
 }

@@ -1067,6 +1067,21 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
     release_keys(&mut en, &to_release);
 }
 
+fn translate_keyboard_mode(evt: &KeyEvent) {
+    match evt.union {
+        Some(key_event::Union::Unicode(unicode)) => {
+            println!("REMOVE ME ========================= simulate_unicode {}", unicode);
+            allow_err!(rdev::simulate_unicode(unicode as _));
+        },
+        Some(key_event::Union::Chr(..)) => {
+            map_keyboard_mode(evt)
+        }
+        _ => {
+            log::debug!("Unreachable. Unexpected key event {:?}", &evt);
+        }
+    }
+}
+
 pub fn handle_key_(evt: &KeyEvent) {
     if EXITING.load(Ordering::SeqCst) {
         return;
@@ -1080,7 +1095,7 @@ pub fn handle_key_(evt: &KeyEvent) {
             map_keyboard_mode(evt);
         }
         KeyboardMode::Translate => {
-            legacy_keyboard_mode(evt);
+            translate_keyboard_mode(evt);
         }
         _ => {
             legacy_keyboard_mode(evt);
