@@ -6,7 +6,7 @@ import 'package:flutter_hbb/main.dart';
 
 enum SystemWindowTheme { light, dark }
 
-/// The platform channel for RustDesk
+/// The platform channel for RustDesk.
 class RdPlatformChannel {
   RdPlatformChannel._();
 

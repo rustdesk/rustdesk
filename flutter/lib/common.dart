@@ -225,22 +225,18 @@ class MyTheme {
     return themeModeFromString(bind.mainGetLocalOption(key: kCommConfKeyTheme));
   }
 
-  static void changeDarkMode(ThemeMode mode) {
+  static void changeDarkMode(ThemeMode mode) async {
     Get.changeThemeMode(mode);
     if (desktopType == DesktopType.main) {
       if (mode == ThemeMode.system) {
-        bind.mainSetLocalOption(key: kCommConfKeyTheme, value: '');
+        await bind.mainSetLocalOption(key: kCommConfKeyTheme, value: '');
       } else {
-        bind.mainSetLocalOption(
+        await bind.mainSetLocalOption(
             key: kCommConfKeyTheme, value: mode.toShortString());
       }
-      bind.mainChangeTheme(dark: mode.toShortString());
-    }
-    // Synchronize the window theme of the system.
-    if (Platform.isMacOS) {
-      final isDark = mode == ThemeMode.dark;
-      RdPlatformChannel.instance.changeSystemWindowTheme(
-          isDark ? SystemWindowTheme.dark : SystemWindowTheme.light);
+      await bind.mainChangeTheme(dark: mode.toShortString());
+      // Synchronize the window theme of the system.
+      updateSystemWindowTheme();
     }
   }
 
@@ -1694,12 +1690,12 @@ String getWindowNameWithId(String id, {WindowType? overrideType}) {
   return "${DesktopTab.labelGetterAlias(id).value} - ${getWindowName(overrideType: overrideType)}";
 }
 
-void updateSystemWindowTheme() {
-  // Set system window theme for macOS
+Future<void> updateSystemWindowTheme() async {
+  // Set system window theme for macOS.
   final userPreference = MyTheme.getThemeModePreference();
   if (userPreference != ThemeMode.system) {
     if (Platform.isMacOS) {
-      RdPlatformChannel.instance.changeSystemWindowTheme(
+      await RdPlatformChannel.instance.changeSystemWindowTheme(
           userPreference == ThemeMode.light
               ? SystemWindowTheme.light
               : SystemWindowTheme.dark);
