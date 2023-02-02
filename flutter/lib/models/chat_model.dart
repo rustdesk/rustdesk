@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dash_chat_2/dash_chat_2.dart';
 import 'package:draggable_float_widget/draggable_float_widget.dart';
 import 'package:flutter/material.dart';
@@ -139,6 +141,7 @@ class ChatModel with ChangeNotifier {
     });
     overlayState.insert(overlay);
     chatWindowOverlayEntry = overlay;
+    requestChatInputFocus();
   }
 
   hideChatWindowOverlay() {
@@ -188,6 +191,7 @@ class ChatModel with ChangeNotifier {
       await windowManager.setSizeAlignment(
           kConnectionManagerWindowSize, Alignment.topRight);
     } else {
+      requestChatInputFocus();
       await windowManager.show();
       await windowManager.setSizeAlignment(Size(600, 400), Alignment.topRight);
       _isShowCMChatPage = !_isShowCMChatPage;
@@ -291,5 +295,13 @@ class ChatModel with ChangeNotifier {
 
   resetClientMode() {
     _messages[clientModeID]?.clear();
+  }
+
+  void requestChatInputFocus() {
+    Timer(Duration(milliseconds: 100), () {
+      if (inputNode.hasListeners && inputNode.canRequestFocus) {
+        inputNode.requestFocus();
+      }
+    });
   }
 }

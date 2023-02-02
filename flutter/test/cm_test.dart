@@ -16,7 +16,7 @@ final testClients = [
   Client(3, false, false, "UserDDDDDDDDDDDd", "441123123", true, false, false)
 ];
 
-/// -t lib/cm_main.dart to test cm
+/// flutter run -d {platform} -t lib/cm_test.dart to test cm
 void main(List<String> args) async {
   isTest = true;
   WidgetsFlutterBinding.ensureInitialized();
