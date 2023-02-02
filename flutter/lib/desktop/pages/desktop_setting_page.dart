@@ -1072,6 +1072,7 @@ class _DisplayState extends State<_Display> {
               scrollStyle(context),
               imageQuality(context),
               codec(context),
+              other(context),
             ]).marginOnly(bottom: _kListViewBottomMargin));
   }
 
@@ -1254,6 +1255,39 @@ class _DisplayState extends State<_Display> {
           groupValue: groupValue,
           label: 'H265',
           onChanged: onChanged),
+    ]);
+  }
+
+  Widget otherRow(String label, String key) {
+    final value = bind.mainGetUserDefaultOption(key: key) == 'Y';
+    onChanged(bool b) async {
+      await bind.mainSetUserDefaultOption(key: key, value: b ? 'Y' : '');
+      setState(() {});
+    }
+
+    return GestureDetector(
+        child: Row(
+          children: [
+            Checkbox(value: value, onChanged: (_) => onChanged(!value))
+                .marginOnly(right: 5),
+            Expanded(
+              child: Text(translate(label)),
+            )
+          ],
+        ).marginOnly(left: _kCheckBoxLeftMargin),
+        onTap: () => onChanged(!value));
+  }
+
+  Widget other(BuildContext context) {
+    return _Card(title: 'Other Default Options', children: [
+      otherRow('Show remote cursor', 'show_remote_cursor'),
+      otherRow('Zoom cursor', 'zoom-cursor'),
+      otherRow('Show quality monitor', 'show_quality_monitor'),
+      otherRow('Mute', 'disable_audio'),
+      otherRow('Allow file copy and paste', 'enable_file_transfer'),
+      otherRow('Disable clipboard', 'disable_clipboard'),
+      otherRow('Lock after session end', 'lock_after_session_end'),
+      otherRow('Privacy mode', 'privacy_mode'),
     ]);
   }
 }

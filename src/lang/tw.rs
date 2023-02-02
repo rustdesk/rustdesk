@@ -444,5 +444,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Bitrate", "波特率"),
         ("FPS", "幀率"),
         ("Auto", "自動"),
+        ("Other Default Options", "其它默認選項"),
     ].iter().cloned().collect();
 }

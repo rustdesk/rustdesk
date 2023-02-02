@@ -115,6 +115,26 @@ macro_rules! serde_field_string {
     };
 }
 
+macro_rules! serde_field_bool {
+    ($struct_name: ident, $field_name: literal, $func: ident) => {
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+        pub struct $struct_name {
+            #[serde(rename = $field_name)]
+            pub v: bool,
+        }
+        impl Default for $struct_name {
+            fn default() -> Self {
+                Self { v: Self::$func() }
+            }
+        }
+        impl $struct_name {
+            pub fn $func() -> bool {
+                UserDefaultConfig::load().get($field_name) == "Y"
+            }
+        }
+    };
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum NetworkType {
     Direct,
@@ -197,24 +217,24 @@ pub struct PeerConfig {
         deserialize_with = "PeerConfig::deserialize_custom_image_quality"
     )]
     pub custom_image_quality: Vec<i32>,
-    #[serde(default)]
-    pub show_remote_cursor: bool,
-    #[serde(default)]
-    pub lock_after_session_end: bool,
-    #[serde(default)]
-    pub privacy_mode: bool,
+    #[serde(flatten)]
+    pub show_remote_cursor: ShowRemoteCursor,
+    #[serde(flatten)]
+    pub lock_after_session_end: LockAfterSessionEnd,
+    #[serde(flatten)]
+    pub privacy_mode: PrivacyMode,
     #[serde(default)]
     pub port_forwards: Vec<(i32, String, i32)>,
     #[serde(default)]
     pub direct_failures: i32,
-    #[serde(default)]
-    pub disable_audio: bool,
-    #[serde(default)]
-    pub disable_clipboard: bool,
-    #[serde(default)]
-    pub enable_file_transfer: bool,
-    #[serde(default)]
-    pub show_quality_monitor: bool,
+    #[serde(flatten)]
+    pub disable_audio: DisableAudio,
+    #[serde(flatten)]
+    pub disable_clipboard: DisableClipboard,
+    #[serde(flatten)]
+    pub enable_file_transfer: EnableFileTransfer,
+    #[serde(flatten)]
+    pub show_quality_monitor: ShowQualityMonitor,
     #[serde(default)]
     pub keyboard_mode: String,
 
@@ -1010,9 +1030,41 @@ impl PeerConfig {
         if !mp.contains_key(key) {
             mp.insert(key.to_owned(), UserDefaultConfig::load().get(key));
         }
+        key = "zoom-cursor";
+        if !mp.contains_key(key) {
+            mp.insert(key.to_owned(), UserDefaultConfig::load().get(key));
+        }
         Ok(mp)
     }
 }
+
+serde_field_bool!(
+    ShowRemoteCursor,
+    "show_remote_cursor",
+    default_show_remote_cursor
+);
+serde_field_bool!(
+    ShowQualityMonitor,
+    "show_quality_monitor",
+    default_show_quality_monitor
+);
+serde_field_bool!(DisableAudio, "disable_audio", default_disable_audio);
+serde_field_bool!(
+    EnableFileTransfer,
+    "enable_file_transfer",
+    default_enable_file_transfer
+);
+serde_field_bool!(
+    DisableClipboard,
+    "disable_clipboard",
+    default_disable_clipboard
+);
+serde_field_bool!(
+    LockAfterSessionEnd,
+    "lock_after_session_end",
+    default_lock_after_session_end
+);
+serde_field_bool!(PrivacyMode, "privacy_mode", default_privacy_mode);
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct LocalConfig {

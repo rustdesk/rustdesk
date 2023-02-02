@@ -277,7 +277,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                     if !SERVER_CLIPBOARD_ENABLED.load(Ordering::SeqCst)
                         || !SERVER_KEYBOARD_ENABLED.load(Ordering::SeqCst)
-                        || lc.read().unwrap().disable_clipboard
+                        || lc.read().unwrap().disable_clipboard.v
                     {
                         continue;
                     }
@@ -778,7 +778,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             || self.handler.is_port_forward()
                             || !SERVER_CLIPBOARD_ENABLED.load(Ordering::SeqCst)
                             || !SERVER_KEYBOARD_ENABLED.load(Ordering::SeqCst)
-                            || self.handler.lc.read().unwrap().disable_clipboard)
+                            || self.handler.lc.read().unwrap().disable_clipboard.v)
                         {
                             let txt = self.old_clipboard.lock().unwrap().clone();
                             if !txt.is_empty() {
@@ -808,7 +808,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     self.handler.set_cursor_position(cp);
                 }
                 Some(message::Union::Clipboard(cb)) => {
-                    if !self.handler.lc.read().unwrap().disable_clipboard {
+                    if !self.handler.lc.read().unwrap().disable_clipboard.v {
                         #[cfg(not(any(target_os = "android", target_os = "ios")))]
                         update_clipboard(cb, Some(&self.old_clipboard));
                         #[cfg(any(target_os = "android", target_os = "ios"))]
@@ -1121,7 +1121,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     self.handler.handle_test_delay(t, peer).await;
                 }
                 Some(message::Union::AudioFrame(frame)) => {
-                    if !self.handler.lc.read().unwrap().disable_audio {
+                    if !self.handler.lc.read().unwrap().disable_audio.v {
                         self.audio_sender.send(MediaData::AudioFrame(frame)).ok();
                     }
                 }
@@ -1204,7 +1204,7 @@ impl<T: InvokeUiSession> Remote<T> {
     #[inline(always)]
     fn update_privacy_mode(&mut self, on: bool) {
         let mut config = self.handler.load_config();
-        config.privacy_mode = on;
+        config.privacy_mode.v = on;
         self.handler.save_config(config);
 
         self.handler.update_privacy_mode();
@@ -1278,14 +1278,14 @@ impl<T: InvokeUiSession> Remote<T> {
         #[cfg(windows)]
         {
             let enabled = SERVER_FILE_TRANSFER_ENABLED.load(Ordering::SeqCst)
-                && self.handler.lc.read().unwrap().enable_file_transfer;
+                && self.handler.lc.read().unwrap().enable_file_transfer.v;
             ContextSend::enable(enabled);
         }
     }
 
     #[cfg(windows)]
     fn handle_cliprdr_msg(&self, clip: hbb_common::message_proto::Cliprdr) {
-        if !self.handler.lc.read().unwrap().disable_clipboard {
+        if !self.handler.lc.read().unwrap().disable_clipboard.v {
             #[cfg(feature = "flutter")]
             if let Some(hbb_common::message_proto::cliprdr::Union::FormatList(_)) = &clip.union {
                 if self.client_conn_id
