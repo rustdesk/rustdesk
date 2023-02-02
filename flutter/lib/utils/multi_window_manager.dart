@@ -43,14 +43,11 @@ class RustDeskMultiWindowManager {
 
   Future<dynamic> newRemoteDesktop(String remoteId,
       {String? switch_uuid}) async {
-    var params = {
+    final msg = jsonEncode({
       "type": WindowType.RemoteDesktop.index,
       "id": remoteId,
-    };
-    if (switch_uuid != null) {
-      params['switch_uuid'] = switch_uuid;
-    }
-    final msg = jsonEncode(params);
+      "switch_uuid": switch_uuid ?? ""
+    });
 
     try {
       final ids = await DesktopMultiWindow.getAllSubWindowIds();
