@@ -61,7 +61,7 @@ dependencies:
             url: https://github.com/Kingtous/rustdesk_desktop_multi_window
             ref: bc8604a88e52b2b6e64d2661ae49a71450a47af8
     freezed_annotation: ^2.0.3
-    flutter_custom_cursor: ^0.0.2
+    flutter_custom_cursor: ^0.0.4
     window_size:
         git:
             url: https://github.com/google/flutter-desktop-embedding.git

@@ -108,6 +108,8 @@ Future<void> initEnv(String appType) async {
   await initGlobalFFI();
   // await Firebase.initializeApp();
   _registerEventHandler();
+  // Update the system theme.
+  updateSystemWindowTheme();
 }
 
 void runMainApp(bool startService) async {
@@ -327,6 +329,8 @@ class _AppState extends State<App> {
         to = ThemeMode.light;
       }
       Get.changeThemeMode(to);
+      // Synchronize the window theme of the system.
+      updateSystemWindowTheme();
       if (desktopType == DesktopType.main) {
         bind.mainChangeTheme(dark: to.toShortString());
       }
