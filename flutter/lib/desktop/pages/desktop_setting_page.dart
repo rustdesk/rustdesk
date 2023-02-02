@@ -33,6 +33,7 @@ const double _kContentFontSize = 15;
 const Color _accentColor = MyTheme.accent;
 const String _kSettingPageControllerTag = 'settingPageController';
 const String _kSettingPageIndexTag = 'settingPageIndex';
+const int _kPageCount = 6;
 
 class _TabInfo {
   late final String label;
@@ -51,7 +52,7 @@ class DesktopSettingPage extends StatefulWidget {
   State<DesktopSettingPage> createState() => _DesktopSettingPageState();
 
   static void switch2page(int page) {
-    if (page >= 5) return;
+    if (page >= _kPageCount) return;
     try {
       if (Get.isRegistered<PageController>(tag: _kSettingPageControllerTag)) {
         DesktopTabPage.onAddSetting(initialPage: page);
@@ -75,6 +76,7 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
     _TabInfo('Security', Icons.enhanced_encryption_outlined,
         Icons.enhanced_encryption),
     _TabInfo('Network', Icons.link_outlined, Icons.link),
+    _TabInfo('Display', Icons.desktop_windows_outlined, Icons.desktop_windows),
     _TabInfo('Account', Icons.person_outline, Icons.person),
     _TabInfo('About', Icons.info_outline, Icons.info)
   ];
@@ -88,7 +90,8 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
   @override
   void initState() {
     super.initState();
-    selectedIndex = (widget.initialPage < 5 ? widget.initialPage : 0).obs;
+    selectedIndex =
+        (widget.initialPage < _kPageCount ? widget.initialPage : 0).obs;
     Get.put<RxInt>(selectedIndex, tag: _kSettingPageIndexTag);
     controller = PageController(initialPage: widget.initialPage);
     Get.put<PageController>(controller, tag: _kSettingPageControllerTag);
@@ -130,6 +133,7 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
                       _General(),
                       _Safety(),
                       _Network(),
+                      _Display(),
                       _Account(),
                       _About(),
                     ],
@@ -1044,6 +1048,247 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
         )
       ]);
     });
+  }
+}
+
+class _Display extends StatefulWidget {
+  const _Display({Key? key}) : super(key: key);
+
+  @override
+  State<_Display> createState() => _DisplayState();
+}
+
+class _DisplayState extends State<_Display> {
+  @override
+  Widget build(BuildContext context) {
+    final scrollController = ScrollController();
+    return DesktopScrollWrapper(
+        scrollController: scrollController,
+        child: ListView(
+            controller: scrollController,
+            physics: NeverScrollableScrollPhysics(),
+            children: [
+              viewStyle(context),
+              scrollStyle(context),
+              imageQuality(context),
+              codec(context),
+              other(context),
+            ]).marginOnly(bottom: _kListViewBottomMargin));
+  }
+
+  Widget viewStyle(BuildContext context) {
+    final key = 'view_style';
+    onChanged(String value) async {
+      await bind.mainSetUserDefaultOption(key: key, value: value);
+      setState(() {});
+    }
+
+    final groupValue = bind.mainGetUserDefaultOption(key: key);
+    return _Card(title: 'Default View Style', children: [
+      _Radio(context,
+          value: kRemoteViewStyleOriginal,
+          groupValue: groupValue,
+          label: 'Scale original',
+          onChanged: onChanged),
+      _Radio(context,
+          value: kRemoteViewStyleAdaptive,
+          groupValue: groupValue,
+          label: 'Scale adaptive',
+          onChanged: onChanged),
+    ]);
+  }
+
+  Widget scrollStyle(BuildContext context) {
+    final key = 'scroll_style';
+    onChanged(String value) async {
+      await bind.mainSetUserDefaultOption(key: key, value: value);
+      setState(() {});
+    }
+
+    final groupValue = bind.mainGetUserDefaultOption(key: key);
+    return _Card(title: 'Default Scroll Style', children: [
+      _Radio(context,
+          value: kRemoteScrollStyleAuto,
+          groupValue: groupValue,
+          label: 'ScrollAuto',
+          onChanged: onChanged),
+      _Radio(context,
+          value: kRemoteScrollStyleBar,
+          groupValue: groupValue,
+          label: 'Scrollbar',
+          onChanged: onChanged),
+    ]);
+  }
+
+  Widget imageQuality(BuildContext context) {
+    final key = 'image_quality';
+    onChanged(String value) async {
+      await bind.mainSetUserDefaultOption(key: key, value: value);
+      setState(() {});
+    }
+
+    final groupValue = bind.mainGetUserDefaultOption(key: key);
+    final qualityKey = 'custom_image_quality';
+    final qualityValue =
+        (double.tryParse(bind.mainGetUserDefaultOption(key: qualityKey)) ??
+                50.0)
+            .obs;
+    final fpsKey = 'custom-fps';
+    final fpsValue =
+        (double.tryParse(bind.mainGetUserDefaultOption(key: fpsKey)) ?? 30.0)
+            .obs;
+    return _Card(title: 'Default Image Quality', children: [
+      _Radio(context,
+          value: kRemoteImageQualityBest,
+          groupValue: groupValue,
+          label: 'Good image quality',
+          onChanged: onChanged),
+      _Radio(context,
+          value: kRemoteImageQualityBalanced,
+          groupValue: groupValue,
+          label: 'Balanced',
+          onChanged: onChanged),
+      _Radio(context,
+          value: kRemoteImageQualityLow,
+          groupValue: groupValue,
+          label: 'Optimize reaction time',
+          onChanged: onChanged),
+      _Radio(context,
+          value: kRemoteImageQualityCustom,
+          groupValue: groupValue,
+          label: 'Custom',
+          onChanged: onChanged),
+      Offstage(
+        offstage: groupValue != kRemoteImageQualityCustom,
+        child: Column(
+          children: [
+            Obx(() => Row(
+                  children: [
+                    Slider(
+                      value: qualityValue.value,
+                      min: 10.0,
+                      max: 100.0,
+                      divisions: 18,
+                      onChanged: (double value) async {
+                        qualityValue.value = value;
+                        await bind.mainSetUserDefaultOption(
+                            key: qualityKey, value: value.toString());
+                      },
+                    ),
+                    SizedBox(
+                        width: 40,
+                        child: Text(
+                          '${qualityValue.value.round()}%',
+                          style: const TextStyle(fontSize: 15),
+                        )),
+                    SizedBox(
+                        width: 50,
+                        child: Text(
+                          translate('Bitrate'),
+                          style: const TextStyle(fontSize: 15),
+                        ))
+                  ],
+                )),
+            Obx(() => Row(
+                  children: [
+                    Slider(
+                      value: fpsValue.value,
+                      min: 10.0,
+                      max: 120.0,
+                      divisions: 22,
+                      onChanged: (double value) async {
+                        fpsValue.value = value;
+                        await bind.mainSetUserDefaultOption(
+                            key: fpsKey, value: value.toString());
+                      },
+                    ),
+                    SizedBox(
+                        width: 40,
+                        child: Text(
+                          '${fpsValue.value.round()}',
+                          style: const TextStyle(fontSize: 15),
+                        )),
+                    SizedBox(
+                        width: 50,
+                        child: Text(
+                          translate('FPS'),
+                          style: const TextStyle(fontSize: 15),
+                        ))
+                  ],
+                )),
+          ],
+        ),
+      )
+    ]);
+  }
+
+  Widget codec(BuildContext context) {
+    if (!bind.mainHasHwcodec()) {
+      return Offstage();
+    }
+    final key = 'codec-preference';
+    onChanged(String value) async {
+      await bind.mainSetUserDefaultOption(key: key, value: value);
+      setState(() {});
+    }
+
+    final groupValue = bind.mainGetUserDefaultOption(key: key);
+
+    return _Card(title: 'Default Codec', children: [
+      _Radio(context,
+          value: 'auto',
+          groupValue: groupValue,
+          label: 'Auto',
+          onChanged: onChanged),
+      _Radio(context,
+          value: 'vp9',
+          groupValue: groupValue,
+          label: 'VP9',
+          onChanged: onChanged),
+      _Radio(context,
+          value: 'h264',
+          groupValue: groupValue,
+          label: 'H264',
+          onChanged: onChanged),
+      _Radio(context,
+          value: 'h265',
+          groupValue: groupValue,
+          label: 'H265',
+          onChanged: onChanged),
+    ]);
+  }
+
+  Widget otherRow(String label, String key) {
+    final value = bind.mainGetUserDefaultOption(key: key) == 'Y';
+    onChanged(bool b) async {
+      await bind.mainSetUserDefaultOption(key: key, value: b ? 'Y' : '');
+      setState(() {});
+    }
+
+    return GestureDetector(
+        child: Row(
+          children: [
+            Checkbox(value: value, onChanged: (_) => onChanged(!value))
+                .marginOnly(right: 5),
+            Expanded(
+              child: Text(translate(label)),
+            )
+          ],
+        ).marginOnly(left: _kCheckBoxLeftMargin),
+        onTap: () => onChanged(!value));
+  }
+
+  Widget other(BuildContext context) {
+    return _Card(title: 'Other Default Options', children: [
+      otherRow('Show remote cursor', 'show_remote_cursor'),
+      otherRow('Zoom cursor', 'zoom-cursor'),
+      otherRow('Show quality monitor', 'show_quality_monitor'),
+      otherRow('Mute', 'disable_audio'),
+      otherRow('Allow file copy and paste', 'enable_file_transfer'),
+      otherRow('Disable clipboard', 'disable_clipboard'),
+      otherRow('Lock after session end', 'lock_after_session_end'),
+      otherRow('Privacy mode', 'privacy_mode'),
+    ]);
   }
 }
 

@@ -436,5 +436,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Switch Sides", "Seiten wechseln"),
         ("Please confirm if you want to share your desktop?", "Bitte bestätigen Sie, ob Sie Ihren Desktop freigeben möchten."),
         ("Closed as expected", "Wie erwartet geschlossen"),
+        ("Display", ""),
+        ("Default View Style", ""),
+        ("Default Scroll Style", ""),
+        ("Default Image Quality", ""),
+        ("Default Codec", ""),
+        ("Bitrate", ""),
+        ("FPS", ""),
+        ("Auto", ""),
+        ("Other Default Options", ""),
     ].iter().cloned().collect();
 }

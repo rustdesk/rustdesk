@@ -791,6 +791,14 @@ pub fn main_default_video_save_directory() -> String {
     default_video_save_directory()
 }
 
+pub fn main_set_user_default_option(key: String, value: String) {
+    set_user_default_option(key, value);
+}
+
+pub fn main_get_user_default_option(key: String) -> SyncReturn<String> {
+    SyncReturn(get_user_default_option(key))
+}
+
 pub fn session_add_port_forward(
     id: String,
     local_port: i32,
