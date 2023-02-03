@@ -475,10 +475,10 @@ packages:
     dependency: "direct main"
     description:
       name: flutter_custom_cursor
-      sha256: "6c5204cf6a16650355b8aa47a8402e79922c07641390a32021a1069b561909ec"
+      sha256: "3850a32ac6de351ccc5e4286b6d94ff70c10abecd44479ea6c5aaea17264285d"
       url: "https://pub.dev"
     source: hosted
-    version: "0.0.3"
+    version: "0.0.4"
   flutter_improved_scrolling:
     dependency: "direct main"
     description:

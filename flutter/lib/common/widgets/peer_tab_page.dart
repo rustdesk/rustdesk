@@ -284,7 +284,6 @@ class _PeerTabPageState extends State<PeerTabPage>
   }
 
   Widget _createSwitchBar(BuildContext context) {
-    final textColor = Theme.of(context).textTheme.titleLarge?.color;
     return Obx(() {
       var tabs = statePeerTab.visibleOrderedTabs;
       int indexCounter = -1;
@@ -326,8 +325,8 @@ class _PeerTabPageState extends State<PeerTabPage>
                             height: 1,
                             fontSize: 14,
                             color: statePeerTab.currentTab.value == t
-                                ? textColor
-                                : textColor
+                                ? MyTheme.tabbar(context).selectedTextColor
+                                : MyTheme.tabbar(context).unSelectedTextColor
                               ?..withOpacity(0.5)),
                       ),
                     )),
