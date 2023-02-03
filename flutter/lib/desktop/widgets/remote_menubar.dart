@@ -1157,8 +1157,9 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             return state;
           },
           setter: (bool v) async {
-            state.value = v;
             await bind.sessionToggleOption(id: widget.id, value: opt);
+            state.value =
+                bind.sessionGetToggleOptionSync(id: widget.id, arg: opt);
           },
           padding: padding,
           dismissOnClicked: true,

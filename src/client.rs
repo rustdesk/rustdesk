@@ -1117,8 +1117,12 @@ impl LoginConfigHandler {
         } else if name == "show-quality-monitor" {
             config.show_quality_monitor.v = !config.show_quality_monitor.v;
         } else {
-            let v = self.options.get(&name).is_some();
-            if v {
+            let is_set = self
+                .options
+                .get(&name)
+                .map(|o| !o.is_empty())
+                .unwrap_or(false);
+            if is_set {
                 self.config.options.remove(&name);
             } else {
                 self.config.options.insert(name, "Y".to_owned());
