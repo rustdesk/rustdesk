@@ -399,42 +399,51 @@ class _ImagePaintState extends State<ImagePaint> {
     final m = Provider.of<ImageModel>(context);
     var c = Provider.of<CanvasModel>(context);
     final s = c.scale;
-    var cursorScale = 1.0;
 
-    if (Platform.isWindows) {
-      // debug win10
-      final isViewAdaptive = c.viewStyle.style == kRemoteViewStyleAdaptive;
-      if (zoomCursor.value && isViewAdaptive) {
-        cursorScale = s * c.devicePixelRatio;
-      }
-    } else {
-      final isViewOriginal = c.viewStyle.style == kRemoteViewStyleOriginal;
-      if (zoomCursor.value || isViewOriginal) {
-        cursorScale = s;
-      }
-    }
+    mouseRegion({child}) => Obx(() {
+          double getCursorScale() {
+            var c = Provider.of<CanvasModel>(context);
+            var cursorScale = 1.0;
+            if (Platform.isWindows) {
+              // debug win10
+              final isViewAdaptive =
+                  c.viewStyle.style == kRemoteViewStyleAdaptive;
+              if (zoomCursor.value && isViewAdaptive) {
+                cursorScale = s * c.devicePixelRatio;
+              }
+            } else {
+              final isViewOriginal =
+                  c.viewStyle.style == kRemoteViewStyleOriginal;
+              if (zoomCursor.value || isViewOriginal) {
+                cursorScale = s;
+              }
+            }
+            return cursorScale;
+          }
 
-    mouseRegion({child}) => Obx(() => MouseRegion(
-        cursor: cursorOverImage.isTrue
-            ? c.cursorEmbedded
-                ? SystemMouseCursors.none
-                : keyboardEnabled.isTrue
-                    ? (() {
-                        if (remoteCursorMoved.isTrue) {
-                          _lastRemoteCursorMoved = true;
-                          return SystemMouseCursors.none;
-                        } else {
-                          if (_lastRemoteCursorMoved) {
-                            _lastRemoteCursorMoved = false;
-                            _firstEnterImage.value = true;
-                          }
-                          return _buildCustomCursor(context, cursorScale);
-                        }
-                      }())
-                    : _buildDisabledCursor(context, cursorScale)
-            : MouseCursor.defer,
-        onHover: (evt) {},
-        child: child));
+          return MouseRegion(
+              cursor: cursorOverImage.isTrue
+                  ? c.cursorEmbedded
+                      ? SystemMouseCursors.none
+                      : keyboardEnabled.isTrue
+                          ? (() {
+                              if (remoteCursorMoved.isTrue) {
+                                _lastRemoteCursorMoved = true;
+                                return SystemMouseCursors.none;
+                              } else {
+                                if (_lastRemoteCursorMoved) {
+                                  _lastRemoteCursorMoved = false;
+                                  _firstEnterImage.value = true;
+                                }
+                                return _buildCustomCursor(
+                                    context, getCursorScale());
+                              }
+                            }())
+                          : _buildDisabledCursor(context, getCursorScale())
+                  : MouseCursor.defer,
+              onHover: (evt) {},
+              child: child);
+        });
 
     if (c.imageOverflow.isTrue && c.scrollStyle == ScrollStyle.scrollbar) {
       final imageWidth = c.getDisplayWidth() * s;
