@@ -1,9 +1,10 @@
-import 'package:flutter/material.dart';
 import 'dart:io';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 
 const double kDesktopRemoteTabBarHeight = 28.0;
+const int kMainWindowId = 0;
 
 const String kPeerPlatformWindows = "Windows";
 const String kPeerPlatformLinux = "Linux";
