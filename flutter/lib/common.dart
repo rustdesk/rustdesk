@@ -1315,6 +1315,12 @@ StreamSubscription? listenUniLinks() {
 ///
 /// * Returns true if we successfully handle the startup arguments.
 bool checkArguments() {
+  if (kBootArgs.isNotEmpty) {
+    final ret = parseRustdeskUri(kBootArgs.first);
+    if (ret) {
+      return true;
+    }
+  }
   // bootArgs:[--connect, 362587269, --switch_uuid, e3d531cc-5dce-41e0-bd06-5d4a2b1eec05]
   // check connect args
   var connectIndex = kBootArgs.indexOf("--connect");
@@ -1352,7 +1358,7 @@ bool checkArguments() {
 bool parseRustdeskUri(String uriPath) {
   final uri = Uri.tryParse(uriPath);
   if (uri == null) {
-    print("uri is not valid: $uriPath");
+    debugPrint("uri is not valid: $uriPath");
     return false;
   }
   return callUniLinksUriHandler(uri);
