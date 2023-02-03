@@ -904,6 +904,7 @@ class CursorModel with ChangeNotifier {
   double _hoty = 0;
   double _displayOriginX = 0;
   double _displayOriginY = 0;
+  bool _firstUpdateMousePos = false;
   bool gotMouseControl = true;
   DateTime _lastPeerMouse = DateTime.now()
       .subtract(Duration(milliseconds: 2 * kMouseControlTimeoutMSec));
@@ -1121,7 +1122,11 @@ class CursorModel with ChangeNotifier {
 
   /// Update the cursor position.
   updateCursorPosition(Map<String, dynamic> evt, String id) async {
-    gotMouseControl = false;
+    if (!_firstUpdateMousePos) {
+      _firstUpdateMousePos = true;
+    } else {
+      gotMouseControl = false;
+    }
     _lastPeerMouse = DateTime.now();
     _x = double.parse(evt['x']);
     _y = double.parse(evt['y']);
