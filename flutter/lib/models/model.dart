@@ -904,10 +904,10 @@ class CursorModel with ChangeNotifier {
   double _hoty = 0;
   double _displayOriginX = 0;
   double _displayOriginY = 0;
-  bool _firstUpdateMousePos = false;
+  DateTime? _firstUpdateMouseTime;
   bool gotMouseControl = true;
   DateTime _lastPeerMouse = DateTime.now()
-      .subtract(Duration(milliseconds: 2 * kMouseControlTimeoutMSec));
+      .subtract(Duration(milliseconds: 3000 * kMouseControlTimeoutMSec));
   String id = '';
   WeakReference<FFI> parent;
 
@@ -925,6 +925,15 @@ class CursorModel with ChangeNotifier {
   bool get isPeerControlProtected =>
       DateTime.now().difference(_lastPeerMouse).inMilliseconds <
       kMouseControlTimeoutMSec;
+
+  bool isConnIn2Secs() {
+    if (_firstUpdateMouseTime == null) {
+      _firstUpdateMouseTime = DateTime.now();
+      return true;
+    } else {
+      return DateTime.now().difference(_firstUpdateMouseTime!).inSeconds < 2;
+    }
+  }
 
   CursorModel(this.parent);
 
@@ -1122,12 +1131,10 @@ class CursorModel with ChangeNotifier {
 
   /// Update the cursor position.
   updateCursorPosition(Map<String, dynamic> evt, String id) async {
-    if (!_firstUpdateMousePos) {
-      _firstUpdateMousePos = true;
-    } else {
+    if (!isConnIn2Secs()) {
       gotMouseControl = false;
+      _lastPeerMouse = DateTime.now();
     }
-    _lastPeerMouse = DateTime.now();
     _x = double.parse(evt['x']);
     _y = double.parse(evt['y']);
     try {
