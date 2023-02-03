@@ -221,6 +221,16 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     }
   }
 
+  Widget _buildPointerTrackWidget(Widget child) {
+    return Listener(
+      onPointerHover: (PointerHoverEvent e) =>
+          widget.ffi.inputModel.lastMousePos = e.position,
+      child: MouseRegion(
+        child: child,
+      ),
+    );
+  }
+
   Widget _buildMenubar(BuildContext context) {
     final List<Widget> menubarItems = [];
     if (!isWebDesktop) {
@@ -379,13 +389,10 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           mod_menu.PopupMenuItem<String>(
             height: _MenubarTheme.height,
             padding: EdgeInsets.zero,
-            child: Listener(
-              onPointerHover: (PointerHoverEvent e) =>
-                  widget.ffi.inputModel.lastMousePos = e.position,
-              child: MouseRegion(
-                child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: rowChildren),
+            child: _buildPointerTrackWidget(
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: rowChildren,
               ),
             ),
           )
@@ -435,6 +442,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             ),
             tooltip: translate('Display Settings'),
             position: mod_menu.PopupMenuPosition.under,
+            menuWrapper: _buildPointerTrackWidget,
             itemBuilder: (BuildContext context) =>
                 _getDisplayMenu(snapshot.data!, remoteCount)
                     .map((entry) => entry.build(

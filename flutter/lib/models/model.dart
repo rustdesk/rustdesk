@@ -244,7 +244,6 @@ class FfiModel with ChangeNotifier {
       parent.target?.canvasModel.updateViewStyle();
     }
     parent.target?.recordingModel.onSwitchDisplay();
-    parent.target?.inputModel.refreshMousePos();
     notifyListeners();
   }
 
@@ -621,6 +620,7 @@ class CanvasModel with ChangeNotifier {
     _y = (size.height - displayHeight * _scale) / 2;
     _imageOverflow.value = _x < 0 || y < 0;
     notifyListeners();
+    parent.target?.inputModel.refreshMousePos();
   }
 
   updateScrollStyle() async {
