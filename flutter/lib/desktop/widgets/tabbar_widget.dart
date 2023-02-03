@@ -1,23 +1,23 @@
-import 'dart:io';
 import 'dart:async';
+import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
 
+import 'package:bot_toast/bot_toast.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' hide TabBarTheme;
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/main.dart';
-import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 import 'package:get/get_rx/src/rx_workers/utils/debouncer.dart';
 import 'package:scroll_pos/scroll_pos.dart';
 import 'package:window_manager/window_manager.dart';
-import 'package:flutter_svg/flutter_svg.dart';
-import 'package:bot_toast/bot_toast.dart';
 
 import '../../utils/multi_window_manager.dart';
 
@@ -527,7 +527,9 @@ class WindowActionPanelState extends State<WindowActionPanel>
   void onWindowClose() async {
     // hide window on close
     if (widget.isMainWindow) {
-      await rustDeskWinManager.unregisterActiveWindow(0);
+      if (rustDeskWinManager.getActiveWindows().contains(kMainWindowId)) {
+        await rustDeskWinManager.unregisterActiveWindow(kMainWindowId);
+      }
       // `hide` must be placed after unregisterActiveWindow, because once all windows are hidden,
       // flutter closes the application on macOS. We should ensure the post-run logic has ran successfully.
       // e.g.: saving window position.
