@@ -3,28 +3,29 @@ use std::{
     ffi::{CStr, CString},
     os::raw::c_char,
 };
+use std::str::FromStr;
 
 use flutter_rust_bridge::{StreamSink, SyncReturn, ZeroCopyBuffer};
 use serde_json::json;
 
-use crate::common::is_keyboard_mode_supported;
-use hbb_common::message_proto::KeyboardMode;
-use hbb_common::ResultType;
 use hbb_common::{
-    config::{self, LocalConfig, PeerConfig, ONLINE},
+    config::{self, LocalConfig, ONLINE, PeerConfig},
     fs, log,
 };
-use std::str::FromStr;
+use hbb_common::message_proto::KeyboardMode;
+use hbb_common::ResultType;
 
-// use crate::hbbs_http::account::AuthResult;
-
-use crate::flutter::{self, SESSIONS};
-use crate::ui_interface::{self, *};
 use crate::{
     client::file_trait::FileManager,
     common::make_fd_to_json,
     flutter::{session_add, session_start_},
 };
+use crate::common::is_keyboard_mode_supported;
+use crate::flutter::{self, SESSIONS};
+use crate::ui_interface::{self, *};
+
+// use crate::hbbs_http::account::AuthResult;
+
 fn initialize(app_dir: &str) {
     *config::APP_DIR.write().unwrap() = app_dir.to_owned();
     #[cfg(target_os = "android")]
@@ -910,6 +911,11 @@ pub fn main_start_dbus_server() {
     }
 }
 
+pub fn osx_handle_uni_links(url: String) {
+    #![cfg(target_os = "macos")]
+    crate::ui::macos::handle_url_scheme(url);
+}
+
 pub fn session_send_mouse(id: String, msg: String) {
     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(&msg) {
         let alt = m.get("alt").is_some();
@@ -1257,13 +1263,12 @@ pub fn main_hide_docker() -> SyncReturn<bool> {
 
 #[cfg(target_os = "android")]
 pub mod server_side {
+    use hbb_common::log;
     use jni::{
+        JNIEnv,
         objects::{JClass, JString},
         sys::jstring,
-        JNIEnv,
-    };
-
-    use hbb_common::log;
+        };
 
     use crate::start_server;
 

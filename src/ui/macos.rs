@@ -181,11 +181,16 @@ extern "C" fn handle_menu_item(this: &mut Object, _: Sel, item: id) {
     }
 }
 
-extern fn handle_apple_event(this: &Object, _cmd: Sel, event: u64, _reply: u64) {
+/// The function to handle the url scheme sent by system.
+pub fn handle_url_scheme(url: String) {
+    unimplemented!();
+}
+
+extern fn handle_apple_event(_this: &Object, _cmd: Sel, event: u64, _reply: u64) {
     let event = event as *mut Object;
     let url = fruitbasket::parse_url_event(event);
     log::debug!("event found {}", url);
-    let _ = crate::run_me(vec![url]);
+    handle_url_scheme(url);
 }
 
 unsafe fn make_menu_item(title: &str, key: &str, tag: u32) -> *mut Object {
