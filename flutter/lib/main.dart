@@ -114,7 +114,6 @@ Future<void> initEnv(String appType) async {
 
 void runMainApp(bool startService) async {
   // register uni links
-  initUniLinks();
   await initEnv(kAppTypeMain);
   // trigger connection status updater
   await bind.mainCheckConnectStatus();
@@ -130,7 +129,11 @@ void runMainApp(bool startService) async {
     // Restore the location of the main window before window hide or show.
     await restoreWindowPosition(WindowType.Main);
     // Check the startup argument, if we successfully handle the argument, we keep the main window hidden.
-    if (checkArguments()) {
+    final handledByUniLinks = await initUniLinks();
+    final handledByCli = checkArguments();
+    debugPrint(
+        "handled by uni links: $handledByUniLinks, handled by cli: $handledByCli");
+    if (handledByUniLinks || handledByCli) {
       windowManager.hide();
     } else {
       windowManager.show();

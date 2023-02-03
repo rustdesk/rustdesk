@@ -1272,9 +1272,9 @@ Future<bool> restoreWindowPosition(WindowType type, {int? windowId}) async {
 /// [Availability]
 /// initUniLinks should only be used on macos/windows.
 /// we use dbus for linux currently.
-Future<void> initUniLinks() async {
+Future<bool> initUniLinks() async {
   if (Platform.isLinux) {
-    return;
+    return false;
   }
   // Register uni links for Windows. The required info of url scheme is already
   // declared in `Info.plist` for macOS.
@@ -1285,11 +1285,12 @@ Future<void> initUniLinks() async {
   try {
     final initialLink = await getInitialLink();
     if (initialLink == null) {
-      return;
+      return false;
     }
-    parseRustdeskUri(initialLink);
+    return parseRustdeskUri(initialLink);
   } catch (err) {
     debugPrintStack(label: "$err");
+    return false;
   }
 }
 
@@ -1310,11 +1311,13 @@ StreamSubscription? listenUniLinks() {
   return sub;
 }
 
-/// Returns true if we successfully handle the startup arguments.
+/// Handle command line arguments
+///
+/// * Returns true if we successfully handle the startup arguments.
 bool checkArguments() {
   // bootArgs:[--connect, 362587269, --switch_uuid, e3d531cc-5dce-41e0-bd06-5d4a2b1eec05]
   // check connect args
-  final connectIndex = kBootArgs.indexOf("--connect");
+  var connectIndex = kBootArgs.indexOf("--connect");
   if (connectIndex == -1) {
     return false;
   }
@@ -1368,7 +1371,7 @@ bool callUniLinksUriHandler(Uri uri) {
     Future.delayed(Duration.zero, () {
       rustDeskWinManager.newRemoteDesktop(peerId, switch_uuid: switch_uuid);
     });
-    return false;
+    return true;
   }
   return false;
 }
