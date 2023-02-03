@@ -1,3 +1,5 @@
+use std::{ffi::c_void, rc::Rc};
+
 #[cfg(target_os = "macos")]
 use cocoa::{
     appkit::{NSApp, NSApplication, NSApplicationActivationPolicy::*, NSMenu, NSMenuItem},
@@ -8,11 +10,14 @@ use objc::{
     class,
     declare::ClassDecl,
     msg_send,
-    runtime::{Object, Sel, BOOL},
+    runtime::{BOOL, Object, Sel},
     sel, sel_impl,
 };
-use sciter::{make_args, Host};
-use std::{ffi::c_void, rc::Rc};
+use objc::runtime::Class;
+use objc_id::WeakId;
+use sciter::{Host, make_args};
+
+use hbb_common::log;
 
 static APP_HANDLER_IVAR: &str = "GoDeskAppHandler";
 
@@ -98,12 +103,21 @@ unsafe fn set_delegate(handler: Option<Box<dyn AppHandler>>) {
         sel!(handleMenuItem:),
         handle_menu_item as extern "C" fn(&mut Object, Sel, id),
     );
+    decl.add_method(sel!(handleEvent:withReplyEvent:), handle_apple_event as extern fn(&Object, Sel, u64, u64));
     let decl = decl.register();
     let delegate: id = msg_send![decl, alloc];
     let () = msg_send![delegate, init];
     let state = DelegateState { handler };
     let handler_ptr = Box::into_raw(Box::new(state));
     (*delegate).set_ivar(APP_HANDLER_IVAR, handler_ptr as *mut c_void);
+    // Set the url scheme handler
+    let cls = Class::get("NSAppleEventManager").unwrap();
+    let manager: *mut Object = msg_send![cls, sharedAppleEventManager];
+    let _: () = msg_send![manager,
+                              setEventHandler: delegate
+                              andSelector: sel!(handleEvent:withReplyEvent:)
+                              forEventClass: fruitbasket::kInternetEventClass
+                              andEventID: fruitbasket::kAEGetURL];
     let () = msg_send![NSApp(), setDelegate: delegate];
 }
 
@@ -165,6 +179,13 @@ extern "C" fn handle_menu_item(this: &mut Object, _: Sel, item: id) {
             (*inner).command(tag as u32);
         }
     }
+}
+
+extern fn handle_apple_event(this: &Object, _cmd: Sel, event: u64, _reply: u64) {
+    let event = event as *mut Object;
+    let url = fruitbasket::parse_url_event(event);
+    log::debug!("event found {}", url);
+    let _ = crate::run_me(vec![url]);
 }
 
 unsafe fn make_menu_item(title: &str, key: &str, tag: u32) -> *mut Object {

@@ -1137,7 +1137,7 @@ checksum = "413487ef345ab5cdfbf23e66070741217a701bce70f2f397a54221b4f2b6056a"
 dependencies = [
  "dconf_rs",
  "detect-desktop-environment",
- "dirs",
+ "dirs 4.0.0",
  "objc",
  "rust-ini",
  "web-sys",
@@ -1399,6 +1399,16 @@ checksum = "339ee130d97a610ea5a5872d2bbb130fdf68884ff09d3028b81bec8a1ac23bbc"
 dependencies = [
  "cfg-if 1.0.0",
  "dirs-sys-next",
+]
+
+[[package]]
+name = "dirs"
+version = "2.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "13aea89a5c93364a98e9b37b2fa237effbb694d5cfe01c5b70941f7eb087d5e3"
+dependencies = [
+ "cfg-if 0.1.10",
+ "dirs-sys",
 ]
 
 [[package]]
@@ -1871,6 +1881,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a9c384f161156f5260c24a097c56119f9be8c798586aecc13afbcbe7b7e26bf8"
 dependencies = [
  "percent-encoding",
+]
+
+[[package]]
+name = "fruitbasket"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "898289b8e0528c84fb9b88f15ac9d5109bcaf23e0e49bb6f64deee0d86b6a351"
+dependencies = [
+ "dirs 2.0.2",
+ "objc",
+ "objc-foundation",
+ "objc_id",
+ "time 0.1.45",
 ]
 
 [[package]]
@@ -3657,6 +3680,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "915b1b472bc21c53464d6c8461c9d3af805ba1ef837e1cac254428f4a77177b1"
 dependencies = [
  "malloc_buf",
+ "objc_exception",
 ]
 
 [[package]]
@@ -3668,6 +3692,15 @@ dependencies = [
  "block",
  "objc",
  "objc_id",
+]
+
+[[package]]
+name = "objc_exception"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ad970fb455818ad6cba4c122ad012fae53ae8b4795f86378bce65e4f6bab2ca4"
+dependencies = [
+ "cc",
 ]
 
 [[package]]
@@ -4655,6 +4688,7 @@ dependencies = [
  "flexi_logger",
  "flutter_rust_bridge",
  "flutter_rust_bridge_codegen",
+ "fruitbasket",
  "glib 0.16.5",
  "gtk",
  "hbb_common",
@@ -4673,6 +4707,7 @@ dependencies = [
  "mouce",
  "num_cpus",
  "objc",
+ "objc_id",
  "parity-tokio-ipc",
  "rdev",
  "repng",
@@ -4713,7 +4748,7 @@ name = "rustdesk-portable-packer"
 version = "0.1.0"
 dependencies = [
  "brotli",
- "dirs",
+ "dirs 4.0.0",
  "embed-resource",
  "md5",
 ]
@@ -6591,7 +6626,7 @@ dependencies = [
  "async-trait",
  "byteorder",
  "derivative",
- "dirs",
+ "dirs 4.0.0",
  "enumflags2",
  "event-listener",
  "futures-core",
