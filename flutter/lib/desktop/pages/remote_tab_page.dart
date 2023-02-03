@@ -273,6 +273,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       menu.add(MenuEntryDivider<String>());
       menu.add(() {
         final state = ShowRemoteCursorState.find(key);
+        final optKey = 'show-remote-cursor';
         return MenuEntrySwitch2<String>(
           switchType: SwitchType.scheckbox,
           text: translate('Show remote cursor'),
@@ -280,9 +281,8 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             return state;
           },
           setter: (bool v) async {
-            state.value = v;
-            await bind.sessionToggleOption(
-                id: key, value: 'show-remote-cursor');
+            await bind.sessionToggleOption(id: key, value: optKey);
+            state.value = bind.sessionGetToggleOptionSync(id: key, arg: optKey);
             cancelFunc();
           },
           padding: padding,

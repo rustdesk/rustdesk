@@ -1160,6 +1160,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     if (!widget.ffi.canvasModel.cursorEmbedded) {
       displayMenu.add(() {
         final state = ShowRemoteCursorState.find(widget.id);
+        final optKey = 'show-remote-cursor';
         return MenuEntrySwitch2<String>(
           switchType: SwitchType.scheckbox,
           text: translate('Show remote cursor'),
@@ -1167,9 +1168,9 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             return state;
           },
           setter: (bool v) async {
-            state.value = v;
-            await bind.sessionToggleOption(
-                id: widget.id, value: 'show-remote-cursor');
+            await bind.sessionToggleOption(id: widget.id, value: optKey);
+            state.value =
+                bind.sessionGetToggleOptionSync(id: widget.id, arg: optKey);
           },
           padding: padding,
           dismissOnClicked: true,
