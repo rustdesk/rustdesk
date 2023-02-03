@@ -643,9 +643,9 @@ class _PasswordWidgetState extends State<PasswordWidget> {
         // Here is key idea
         suffixIcon: IconButton(
           icon: Icon(
-            // Based on passwordVisible state choose the icon
-            _passwordVisible ? Icons.visibility : Icons.visibility_off,
-          ),
+              // Based on passwordVisible state choose the icon
+              _passwordVisible ? Icons.visibility : Icons.visibility_off,
+              color: MyTheme.lightTheme.primaryColor),
           onPressed: () {
             // Update the state i.e. toggle the state of passwordVisible variable
             setState(() {
