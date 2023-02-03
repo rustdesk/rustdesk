@@ -540,6 +540,7 @@ class CanvasModel with ChangeNotifier {
   double _y = 0;
   // image scale
   double _scale = 1.0;
+  double _devicePixelRatio = 1.0;
   Size _size = Size.zero;
   // the tabbar over the image
   // double tabBarHeight = 0.0;
@@ -563,6 +564,7 @@ class CanvasModel with ChangeNotifier {
   double get x => _x;
   double get y => _y;
   double get scale => _scale;
+  double get devicePixelRatio => _devicePixelRatio;
   Size get size => _size;
   ScrollStyle get scrollStyle => _scrollStyle;
   ViewStyle get viewStyle => _lastViewStyle;
@@ -611,8 +613,9 @@ class CanvasModel with ChangeNotifier {
     _lastViewStyle = viewStyle;
     _scale = viewStyle.scale;
 
+    _devicePixelRatio = ui.window.devicePixelRatio;
     if (kIgnoreDpi && style == kRemoteViewStyleOriginal) {
-      _scale = 1.0 / ui.window.devicePixelRatio;
+      _scale = 1.0 / _devicePixelRatio;
     }
     _x = (size.width - displayWidth * _scale) / 2;
     _y = (size.height - displayHeight * _scale) / 2;
@@ -747,7 +750,7 @@ class CanvasModel with ChangeNotifier {
 class CursorData {
   final String peerId;
   final int id;
-  final img2.Image? image;
+  final img2.Image image;
   double scale;
   Uint8List? data;
   final double hotxOrigin;
@@ -772,33 +775,40 @@ class CursorData {
 
   int _doubleToInt(double v) => (v * 10e6).round().toInt();
 
-  double _checkUpdateScale(double scale, bool shouldScale) {
+  double _checkUpdateScale(double scale) {
     double oldScale = this.scale;
-    if (!shouldScale) {
-      scale = 1.0;
-    } else {
+    if (scale != 1.0) {
       // Update data if scale changed.
-      if (Platform.isWindows) {
-        final tgtWidth = (width * scale).toInt();
-        final tgtHeight = (width * scale).toInt();
-        if (tgtWidth < kMinCursorSize || tgtHeight < kMinCursorSize) {
-          double sw = kMinCursorSize.toDouble() / width;
-          double sh = kMinCursorSize.toDouble() / height;
-          scale = sw < sh ? sh : sw;
-        }
+      final tgtWidth = (width * scale).toInt();
+      final tgtHeight = (width * scale).toInt();
+      if (tgtWidth < kMinCursorSize || tgtHeight < kMinCursorSize) {
+        double sw = kMinCursorSize.toDouble() / width;
+        double sh = kMinCursorSize.toDouble() / height;
+        scale = sw < sh ? sh : sw;
       }
     }
 
-    if (Platform.isWindows) {
-      if (_doubleToInt(oldScale) != _doubleToInt(scale)) {
+    if (_doubleToInt(oldScale) != _doubleToInt(scale)) {
+      if (Platform.isWindows) {
         data = img2
             .copyResize(
-              image!,
+              image,
               width: (width * scale).toInt(),
               height: (height * scale).toInt(),
               interpolation: img2.Interpolation.average,
             )
             .getBytes(format: img2.Format.bgra);
+      } else {
+        data = Uint8List.fromList(
+          img2.encodePng(
+            img2.copyResize(
+              image,
+              width: (width * scale).toInt(),
+              height: (height * scale).toInt(),
+              interpolation: img2.Interpolation.average,
+            ),
+          ),
+        );
       }
     }
 
@@ -808,8 +818,8 @@ class CursorData {
     return scale;
   }
 
-  String updateGetKey(double scale, bool shouldScale) {
-    scale = _checkUpdateScale(scale, shouldScale);
+  String updateGetKey(double scale) {
+    scale = _checkUpdateScale(scale);
     return '${peerId}_${id}_${_doubleToInt(width * scale)}_${_doubleToInt(height * scale)}';
   }
 }
@@ -867,7 +877,7 @@ class PredefinedCursor {
         _cache = CursorData(
           peerId: '',
           id: id,
-          image: _image2?.clone(),
+          image: _image2!.clone(),
           scale: scale,
           data: data,
           hotxOrigin:
@@ -1067,9 +1077,9 @@ class CursorModel with ChangeNotifier {
   Future<bool> _updateCache(
       Uint8List rgba, ui.Image image, int id, int w, int h) async {
     Uint8List? data;
-    img2.Image? imgOrigin;
+    img2.Image imgOrigin =
+        img2.Image.fromBytes(w, h, rgba, format: img2.Format.rgba);
     if (Platform.isWindows) {
-      imgOrigin = img2.Image.fromBytes(w, h, rgba, format: img2.Format.rgba);
       data = imgOrigin.getBytes(format: img2.Format.bgra);
     } else {
       ByteData? imgBytes =
