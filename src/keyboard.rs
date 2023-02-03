@@ -387,7 +387,10 @@ pub fn event_to_key_events(event: &Event, lock_modes: Option<i32>) -> Vec<KeyEve
         }
     }
 
-    println!("REMOVE ME ========================= key_events {:?}", &key_events);
+    println!(
+        "REMOVE ME ========================= key_events {:?}",
+        &key_events
+    );
 
     key_events
 }
@@ -396,8 +399,7 @@ pub fn event_type_to_event(event_type: EventType) -> Event {
     Event {
         event_type,
         time: SystemTime::now(),
-        name: None,
-        unicode: Vec::new(),
+        unicode: None,
         code: 0,
         scan_code: 0,
     }
@@ -571,7 +573,8 @@ pub fn legacy_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Vec<KeyEv
     if let Some(k) = control_key {
         key_event.set_control_key(k);
     } else {
-        let mut chr = match event.name {
+        let name = event.unicode.as_ref().and_then(|unicode|unicode.name.clone());
+        let mut chr = match &name {
             Some(ref s) => {
                 if s.len() <= 2 {
                     // exclude chinese characters
@@ -717,51 +720,25 @@ pub fn map_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Option<KeyEv
     Some(key_event)
 }
 
-#[cfg(target_os = "windows")]
-fn is_modifier_code(scan_code: u32) -> bool {
-    match scan_code {
-        // Alt | AltGr | ControlLeft | ControlRight | ShiftLeft | ShiftRight | MetaLeft | MetaRight
-        0x38 | 0xE038 | 0x1D | 0xE01D | 0x2A | 0x36 | 0xE05B | 0xE05C => true,
-        _ => false,
-    }
-}
-
-#[cfg(target_os = "linux")]
-fn is_modifier_code(key_code: u32) -> bool {
-    match scan_code {
-        64 | 108 | 37 | 105 | 50 | 62 | 133 | 134 => true,
-        _ => false,
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn is_modifier_code(key_code: u32) -> bool {
-    match scan_code {
-        0x3A | 0x3D | 0x3B | 0x3E | 0x38 | 0x3C | 0x37 | 0x36 => true,
-        _ => false,
-    }
-}
-
 pub fn translate_keyboard_mode(event: &Event, key_event: KeyEvent) -> Vec<KeyEvent> {
-    #[cfg(target_os = "windows")]
-    let is_modifier = is_modifier_code(event.scan_code);
-    #[cfg(target_os = "linux")]
-    let is_modifier = is_modifier_code(event.key_code);
-    #[cfg(target_os = "macos")]
-    let is_modifier = is_modifier_code(event.key_code);
-
     let mut events: Vec<KeyEvent> = Vec::new();
-    if is_modifier {
+    match &event.unicode {
+        Some(unicode_info) => {
+            if !unicode_info.is_dead {
+                for code in &unicode_info.unicode {
+                    let mut evt = key_event.clone();
+                    evt.set_unicode(*code as _);
+                    events.push(evt);
+                }
+            }
+        }
+        None => {}
+    }
+    if events.is_empty() {
         if let Some(evt) = map_keyboard_mode(event, key_event) {
             events.push(evt);
         }
         return events;
-    }
-
-    for unicode in &event.unicode {
-        let mut evt = key_event.clone();
-        evt.set_unicode(*unicode as _);
-        events.push(evt);
     }
     events
 }

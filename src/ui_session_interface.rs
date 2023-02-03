@@ -423,7 +423,7 @@ impl<T: InvokeUiSession> Session<T> {
 
     pub fn handle_flutter_key_event(
         &self,
-        name: &str,
+        _name: &str,
         keycode: i32,
         scancode: i32,
         lock_modes: i32,
@@ -448,8 +448,7 @@ impl<T: InvokeUiSession> Session<T> {
         };
         let event = Event {
             time: std::time::SystemTime::now(),
-            name: Option::Some(name.to_owned()),
-            unicode: Vec::new(),
+            unicode: None,
             code: keycode as _,
             scan_code: scancode as _,
             event_type: event_type,
