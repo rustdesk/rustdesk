@@ -29,7 +29,6 @@ use service::{GenericService, Service, Subscriber};
 use service::ServiceTmpl;
 
 use crate::ipc::{connect, Data};
-use crate::ui_interface::SENDER;
 
 pub mod audio_service;
 cfg_if::cfg_if! {
