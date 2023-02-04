@@ -907,11 +907,6 @@ pub fn main_start_dbus_server() {
     }
 }
 
-pub fn osx_handle_uni_links(url: String) {
-    #![cfg(target_os = "macos")]
-    crate::ui::macos::handle_url_scheme(url);
-}
-
 pub fn session_send_mouse(id: String, msg: String) {
     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(&msg) {
         let alt = m.get("alt").is_some();
