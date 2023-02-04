@@ -17,7 +17,9 @@ use objc::runtime::Class;
 use objc_id::WeakId;
 use sciter::{Host, make_args};
 
-use hbb_common::log;
+use hbb_common::{log, tokio};
+
+use crate::ui_cm_interface::start_ipc;
 
 static APP_HANDLER_IVAR: &str = "GoDeskAppHandler";
 
@@ -181,16 +183,22 @@ extern "C" fn handle_menu_item(this: &mut Object, _: Sel, item: id) {
     }
 }
 
-/// The function to handle the url scheme sent by system.
+/// The function to handle the url scheme sent by the system.
+///
+/// 1. Try to send the url scheme from ipc.
+/// 2. If failed to send the url scheme, we open a new main window to handle this url scheme.
 pub fn handle_url_scheme(url: String) {
-    unimplemented!();
+    if let Err(err) = crate::ipc::send_url_scheme(url.clone()) {
+        log::debug!("Send the url to the existing flutter process failed, {}. Let's open a new program to handle this.", err);
+        let _ = crate::run_me(vec![url]);
+    }
 }
 
 extern fn handle_apple_event(_this: &Object, _cmd: Sel, event: u64, _reply: u64) {
     let event = event as *mut Object;
     let url = fruitbasket::parse_url_event(event);
-    log::debug!("event found {}", url);
-    handle_url_scheme(url);
+    log::debug!("an event was received: {}", url);
+    std::thread::spawn(move || handle_url_scheme(url));
 }
 
 unsafe fn make_menu_item(title: &str, key: &str, tag: u32) -> *mut Object {

@@ -11,8 +11,9 @@ const String kPeerPlatformLinux = "Linux";
 const String kPeerPlatformMacOS = "Mac OS";
 const String kPeerPlatformAndroid = "Android";
 
-/// [kAppTypeMain] used by 'Desktop Main Page' , 'Mobile (Client and Server)' , 'Desktop CM Page', "Install Page"
+/// [kAppTypeMain] used by 'Desktop Main Page' , 'Mobile (Client and Server)', "Install Page"
 const String kAppTypeMain = "main";
+const String kAppTypeConnectionManager = "cm";
 const String kAppTypeDesktopRemote = "remote";
 const String kAppTypeDesktopFileTransfer = "file transfer";
 const String kAppTypeDesktopPortForward = "port forward";

@@ -1,8 +1,4 @@
-use std::{
-    collections::HashMap,
-    ffi::{CStr, CString},
-    os::raw::c_char,
-};
+use std::{collections::HashMap, ffi::{CStr, CString}, os::raw::c_char, thread};
 use std::str::FromStr;
 
 use flutter_rust_bridge::{StreamSink, SyncReturn, ZeroCopyBuffer};
@@ -1261,6 +1257,23 @@ pub fn main_hide_docker() -> SyncReturn<bool> {
     SyncReturn(true)
 }
 
+/// Start an ipc server for receiving the url scheme.
+///
+/// * Should only be called in the main flutter window.
+/// * macOS only
+pub fn main_start_ipc_url_server() {
+    #[cfg(target_os = "macos")]
+    thread::spawn(move || crate::server::start_ipc_url_server());
+}
+
+/// Send a url scheme throught the ipc.
+///
+/// * macOS only
+pub fn send_url_scheme(url: String) {
+    #[cfg(target_os = "macos")]
+    thread::spawn(move || crate::ui::macos::handle_url_scheme(url));
+}
+
 #[cfg(target_os = "android")]
 pub mod server_side {
     use hbb_common::log;
@@ -1268,7 +1281,7 @@ pub mod server_side {
         JNIEnv,
         objects::{JClass, JString},
         sys::jstring,
-        };
+    };
 
     use crate::start_server;
 

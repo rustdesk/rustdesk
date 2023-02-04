@@ -16,10 +16,10 @@ use hbb_common::{
     config::{self, Config, Config2},
     futures::StreamExt as _,
     futures_util::sink::SinkExt,
-    log, password_security as password, timeout, tokio,
+    log, password_security as password, ResultType, timeout,
+    tokio,
     tokio::io::{AsyncRead, AsyncWrite},
     tokio_util::codec::Framed,
-    ResultType,
 };
 
 use crate::rendezvous_mediator::RendezvousMediator;
@@ -210,6 +210,7 @@ pub enum Data {
     DataPortableService(DataPortableService),
     SwitchSidesRequest(String),
     SwitchSidesBack,
+    UrlLink(String)
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -830,5 +831,11 @@ pub async fn set_socks(value: config::Socks5Server) -> ResultType<()> {
 pub async fn test_rendezvous_server() -> ResultType<()> {
     let mut c = connect(1000, "").await?;
     c.send(&Data::TestRendezvousServer).await?;
+    Ok(())
+}
+
+#[tokio::main(flavor = "current_thread")]
+pub async fn send_url_scheme(url: String) -> ResultType<()> {
+    connect(1_000, "_url").await?.send(&Data::UrlLink(url)).await?;
     Ok(())
 }

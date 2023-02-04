@@ -211,7 +211,7 @@ void runMultiWindow(
 }
 
 void runConnectionManagerScreen(bool hide) async {
-  await initEnv(kAppTypeMain);
+  await initEnv(kAppTypeConnectionManager);
   _runApp(
     '',
     const DesktopServerPage(),
