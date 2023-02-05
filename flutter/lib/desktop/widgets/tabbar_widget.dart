@@ -959,7 +959,7 @@ class _CloseButton extends StatelessWidget {
           offstage: !visible,
           child: InkWell(
             hoverColor: MyTheme.tabbar(context).closeHoverColor,
-            customBorder: const RoundedRectangleBorder(),
+            customBorder: const CircleBorder(),
             onTap: () => onClose(),
             child: Icon(
               Icons.close,
@@ -1082,7 +1082,7 @@ class TabbarTheme extends ThemeExtension<TabbarTheme> {
       unSelectedIconColor: Color.fromARGB(255, 96, 96, 96),
       dividerColor: Color.fromARGB(255, 238, 238, 238),
       hoverColor: Color.fromARGB(51, 158, 158, 158),
-      closeHoverColor: Colors.black,
+      closeHoverColor: Color.fromARGB(255, 224, 224, 224),
       selectedTabBackgroundColor: Color.fromARGB(255, 240, 240, 240));
 
   static const dark = TabbarTheme(
