@@ -26,7 +26,6 @@ const String kWindowEventShow = "show";
 const String kWindowConnect = "connect";
 
 const String kUniLinksPrefix = "rustdesk://";
-const String kActionNewConnection = "connection/new/";
 
 const String kTabLabelHomePage = "Home";
 const String kTabLabelSettingPage = "Settings";

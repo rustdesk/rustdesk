@@ -694,7 +694,6 @@ void msgBox(String id, String type, String title, String text, String link,
     buttons.insert(
         0, dialogButton('Cancel', onPressed: cancel, isOutline: true));
   }
-  // TODO: test this button
   if (type.contains("hasclose")) {
     buttons.insert(
         0,
@@ -708,8 +707,7 @@ void msgBox(String id, String type, String title, String text, String link,
   dialogManager.show(
     (setState, close) => CustomAlertDialog(
       title: null,
-      content: SelectionArea(
-          child: msgboxContent(type, title, text).paddingOnly(bottom: 10)),
+      content: SelectionArea(child: msgboxContent(type, title, text)),
       actions: buttons,
       onSubmit: hasOk ? submit : null,
       onCancel: hasCancel == true ? cancel : null,
@@ -774,7 +772,7 @@ Widget msgboxContent(String type, String title, String text) {
         ),
       ),
     ],
-  );
+  ).marginOnly(bottom: 12);
 }
 
 void msgBoxCommon(OverlayDialogManager dialogManager, String title,
