@@ -199,6 +199,9 @@ class FfiModel with ChangeNotifier {
         final peer_id = evt['peer_id'].toString();
         await bind.sessionSwitchSides(id: peer_id);
         closeConnection(id: peer_id);
+      } else if (name == "on_url_scheme_received") {
+        final url = evt['url'].toString();
+        parseRustdeskUri(url);
       }
     };
   }

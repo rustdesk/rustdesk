@@ -1,4 +1,6 @@
-use hbb_common::log;
+use std::future::Future;
+
+use hbb_common::{log, ResultType};
 
 /// shared by flutter and sciter main function
 ///
@@ -346,5 +348,11 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
         return if res { None } else { Some(Vec::new()) };
     }
     #[cfg(target_os = "macos")]
-    return Some(Vec::new());
+    {
+        return if let Err(_) = crate::ipc::send_url_scheme(uni_links) {
+            Some(Vec::new())
+        } else {
+            None
+        }
+    }
 }

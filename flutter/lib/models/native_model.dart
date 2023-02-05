@@ -8,6 +8,7 @@ import 'package:external_path/external_path.dart';
 import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:win32/win32.dart' as win32;
@@ -45,6 +46,8 @@ class PlatformFFI {
   RustdeskImpl get ffiBind => _ffiBind;
 
   static get localeName => Platform.localeName;
+
+  static get isMain => instance._appType == kAppTypeMain;
 
   static Future<String> getVersion() async {
     PackageInfo packageInfo = await PackageInfo.fromPlatform();
@@ -112,8 +115,11 @@ class PlatformFFI {
       }
       _ffiBind = RustdeskImpl(dylib);
       if (Platform.isLinux) {
-        // start dbus service, no need to await
-        await _ffiBind.mainStartDbusServer();
+        // Start a dbus service, no need to await
+        _ffiBind.mainStartDbusServer();
+      } else if (Platform.isMacOS) {
+        // Start an ipc server for handling url schemes.
+        _ffiBind.mainStartIpcUrlServer();
       }
       _startListenEvent(_ffiBind); // global event
       try {
