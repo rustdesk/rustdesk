@@ -1572,6 +1572,12 @@ impl Connection {
                         allow_err!(self.audio_sender.send(MediaData::AudioFrame(frame)));
                     }
                 }
+                Some(message::Union::VoiceCallRequest(request)) => {
+                    // TODO
+                }
+                Some(message::Union::VoiceCallResponse(response)) => {
+                    // TODO
+                }
                 _ => {}
             }
         }

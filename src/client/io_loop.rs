@@ -1,42 +1,38 @@
-use crate::client::{
-    Client, CodecFormat, LoginConfigHandler, MediaData, MediaSender, QualityStatus, MILLI1, SEC30,
-    SERVER_CLIPBOARD_ENABLED, SERVER_FILE_TRANSFER_ENABLED, SERVER_KEYBOARD_ENABLED,
-};
-use crate::common::{get_default_sound_input, set_sound_input};
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::common::{check_clipboard, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL};
-use crate::{audio_service, common, ConnInner, CLIENT_SERVER};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[cfg(windows)]
 use clipboard::{cliprdr::CliprdrClientContext, ContextSend};
-
-use hbb_common::tokio::sync::mpsc::error::TryRecvError;
-
-use crate::ui_session_interface::{InvokeUiSession, Session};
-use crate::{client::Data, client::Interface};
-
+use hbb_common::{allow_err, message_proto::*, sleep, get_time};
+use hbb_common::{fs, log, Stream};
 use hbb_common::config::{PeerConfig, TransferSerde};
 use hbb_common::fs::{
-    can_enable_overwrite_detection, get_job, get_string, new_send_confirm, DigestCheckResult,
+    can_enable_overwrite_detection, DigestCheckResult, get_job, get_string, new_send_confirm,
     RemoveJobMeta,
 };
 use hbb_common::message_proto::permission_info::Permission;
 use hbb_common::protobuf::Message as _;
 use hbb_common::rendezvous_proto::ConnType;
-#[cfg(windows)]
-use hbb_common::tokio::sync::Mutex as TokioMutex;
 use hbb_common::tokio::{
     self,
     sync::mpsc,
     time::{self, Duration, Instant, Interval},
 };
-use hbb_common::{allow_err, message_proto::*, sleep};
-use hbb_common::{fs, log, Stream};
+use hbb_common::tokio::sync::mpsc::error::TryRecvError;
+#[cfg(windows)]
+use hbb_common::tokio::sync::Mutex as TokioMutex;
 
-use std::collections::HashMap;
-
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use crate::{audio_service, CLIENT_SERVER, common, ConnInner};
+use crate::{client::Data, client::Interface};
+use crate::client::{
+    Client, CodecFormat, LoginConfigHandler, MediaData, MediaSender, MILLI1, QualityStatus, SEC30,
+    SERVER_CLIPBOARD_ENABLED, SERVER_FILE_TRANSFER_ENABLED, SERVER_KEYBOARD_ENABLED,
+};
+use crate::common::{get_default_sound_input, set_sound_input};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::common::{check_clipboard, CLIPBOARD_INTERVAL, ClipboardContext, update_clipboard};
+use crate::ui_session_interface::{InvokeUiSession, Session};
 
 pub struct Remote<T: InvokeUiSession> {
     handler: Session<T>,
@@ -752,6 +748,22 @@ impl<T: InvokeUiSession> Remote<T> {
                 msg.set_misc(misc);
                 allow_err!(peer.send(&msg).await);
             }
+            Data::NewVoiceCall => {
+                let mut request = VoiceCallRequest::new();
+                request.is_connect = true;
+                request.req_timestamp = get_time();
+                let mut msg = Message::new();
+                msg.set_voice_call_request(request);
+                allow_err!(peer.send(&msg).await);
+            }
+            Data::CloseVoiceCall => {
+                let mut request = VoiceCallRequest::new();
+                request.is_connect = false;
+                request.req_timestamp = get_time();
+                let mut msg = Message::new();
+                msg.set_voice_call_request(request);
+                allow_err!(peer.send(&msg).await);
+            }
             _ => {}
         }
         true
@@ -1261,6 +1273,12 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                     self.handler
                         .msgbox(&msgbox.msgtype, &msgbox.title, &msgbox.text, &link);
+                }
+                Some(message::Union::VoiceCallRequest(request)) => {
+                    // TODO
+                }
+                Some(message::Union::VoiceCallResponse(response)) => {
+                    // TODO
                 }
                 _ => {}
             }

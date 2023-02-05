@@ -4,19 +4,19 @@ use std::str::FromStr;
 use flutter_rust_bridge::{StreamSink, SyncReturn, ZeroCopyBuffer};
 use serde_json::json;
 
-use crate::common::{is_keyboard_mode_supported, get_default_sound_input};
-use hbb_common::message_proto::KeyboardMode;
-use hbb_common::ResultType;
 use hbb_common::{
     config::{self, LocalConfig, ONLINE, PeerConfig},
     fs, log,
 };
+use hbb_common::message_proto::KeyboardMode;
+use hbb_common::ResultType;
 
 use crate::{
     client::file_trait::FileManager,
     common::make_fd_to_json,
     flutter::{session_add, session_start_},
 };
+use crate::common::{get_default_sound_input, is_keyboard_mode_supported};
 use crate::flutter::{self, SESSIONS};
 use crate::ui_interface::{self, *};
 
@@ -837,6 +837,18 @@ pub fn session_remove_port_forward(id: String, local_port: i32) {
 pub fn session_new_rdp(id: String) {
     if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
         session.new_rdp();
+    }
+}
+
+pub fn session_request_voice_call(id: String) {
+    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+        session.request_voice_call();
+    }
+}
+
+pub fn session_close_voice_call(id: String) {
+    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+        session.close_voice_call();
     }
 }
 

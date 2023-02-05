@@ -6,12 +6,12 @@ use std::{
 
 use sciter::{
     dom::{
-        event::{EventReason, BEHAVIOR_EVENTS, EVENT_GROUPS, PHASE_MASK},
-        Element, HELEMENT,
+        Element,
+        event::{BEHAVIOR_EVENTS, EVENT_GROUPS, EventReason, PHASE_MASK}, HELEMENT,
     },
     make_args,
-    video::{video_destination, AssetPtr, COLOR_SPACE},
     Value,
+    video::{AssetPtr, COLOR_SPACE, video_destination},
 };
 
 use hbb_common::{
@@ -422,6 +422,8 @@ impl sciter::EventHandler for SciterSession {
         fn restart_remote_device();
         fn save_audio_mode(String);
         fn get_audio_mode();
+        fn request_voice_call();
+        fn close_voice_call();
     }
 }
 

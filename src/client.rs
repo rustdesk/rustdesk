@@ -1,47 +1,53 @@
-pub use async_trait::async_trait;
-use bytes::Bytes;
-#[cfg(not(any(target_os = "android", target_os = "linux")))]
-use cpal::{
-    traits::{DeviceTrait, HostTrait, StreamTrait},
-    Device, Host, StreamConfig,
-};
-use magnum_opus::{Channels::*, Decoder as AudioDecoder};
-use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
     net::SocketAddr,
     ops::{Deref, Not},
     str::FromStr,
-    sync::{atomic::AtomicBool, mpsc, Arc, Mutex, RwLock},
+    sync::{Arc, atomic::AtomicBool, mpsc, Mutex, RwLock},
 };
+
+pub use async_trait::async_trait;
+use bytes::Bytes;
+#[cfg(not(any(target_os = "android", target_os = "linux")))]
+use cpal::{
+    Device,
+    Host, StreamConfig, traits::{DeviceTrait, HostTrait, StreamTrait},
+};
+use magnum_opus::{Channels::*, Decoder as AudioDecoder};
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 pub use file_trait::FileManager;
 use hbb_common::{
+    AddrMangle,
     allow_err,
     anyhow::{anyhow, Context},
     bail,
     config::{
-        Config, PeerConfig, PeerInfoSerde, CONNECT_TIMEOUT, READ_TIMEOUT, RELAY_PORT,
+        Config, CONNECT_TIMEOUT, PeerConfig, PeerInfoSerde, READ_TIMEOUT, RELAY_PORT,
         RENDEZVOUS_TIMEOUT,
-    },
-    get_version_number, log,
-    message_proto::{option_message::BoolOption, *},
+    }, get_version_number,
+    log,
+    message_proto::{*, option_message::BoolOption},
     protobuf::Message as _,
     rand,
     rendezvous_proto::*,
+    ResultType,
     socket_client,
     sodiumoxide::crypto::{box_, secretbox, sign},
-    timeout,
-    tokio::time::Duration,
-    AddrMangle, ResultType, Stream,
+    Stream, timeout, tokio::time::Duration,
 };
-pub use helper::LatencyController;
 pub use helper::*;
+pub use helper::LatencyController;
 use scrap::{
     codec::{Decoder, DecoderCfg},
     record::{Recorder, RecorderContext},
     VpxDecoderConfig, VpxVideoCodecId,
+};
+
+use crate::{
+    common::{self, is_keyboard_mode_supported},
+    server::video_service::{SCRAP_X11_REF_URL, SCRAP_X11_REQUIRED},
 };
 
 pub use super::lang::*;
@@ -49,10 +55,7 @@ pub use super::lang::*;
 pub mod file_trait;
 pub mod helper;
 pub mod io_loop;
-use crate::{
-    common::{self, is_keyboard_mode_supported},
-    server::video_service::{SCRAP_X11_REF_URL, SCRAP_X11_REQUIRED},
-};
+
 pub static SERVER_KEYBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
 pub static SERVER_FILE_TRANSFER_ENABLED: AtomicBool = AtomicBool::new(true);
 pub static SERVER_CLIPBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
@@ -1989,6 +1992,8 @@ pub enum Data {
     RecordScreen(bool, i32, i32, String),
     ElevateDirect,
     ElevateWithLogon(String, String),
+    NewVoiceCall,
+    CloseVoiceCall,
 }
 
 /// Keycode for key events.
