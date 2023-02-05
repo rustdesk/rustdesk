@@ -12,7 +12,6 @@ use clipboard::{cliprdr::CliprdrClientContext, ContextSend};
 
 use hbb_common::tokio::sync::mpsc::error::TryRecvError;
 
-use crate::server::Service;
 use crate::ui_session_interface::{InvokeUiSession, Session};
 use crate::{client::Data, client::Interface};
 

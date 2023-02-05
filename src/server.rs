@@ -29,13 +29,6 @@ use service::{GenericService, Service, Subscriber};
 use service::ServiceTmpl;
 
 use crate::ipc::{connect, Data};
-pub use service::{GenericService, Service, ServiceTmpl, Subscriber};
-use std::{
-    collections::HashMap,
-    net::SocketAddr,
-    sync::{Arc, Mutex, RwLock, Weak},
-    time::Duration,
-};
 
 pub mod audio_service;
 cfg_if::cfg_if! {

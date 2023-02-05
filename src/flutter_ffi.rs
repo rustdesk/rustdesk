@@ -11,15 +11,12 @@ use hbb_common::{
     config::{self, LocalConfig, ONLINE, PeerConfig},
     fs, log,
 };
-use hbb_common::message_proto::KeyboardMode;
-use hbb_common::ResultType;
 
 use crate::{
     client::file_trait::FileManager,
     common::make_fd_to_json,
     flutter::{session_add, session_start_},
 };
-use crate::common::is_keyboard_mode_supported;
 use crate::flutter::{self, SESSIONS};
 use crate::ui_interface::{self, *};
 
