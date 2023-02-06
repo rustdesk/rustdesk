@@ -99,6 +99,175 @@ class _MenubarTheme {
   static const double dividerHeight = 12.0;
 }
 
+typedef DismissFunc = void Function();
+
+class RemoteMenuEntry {
+  static MenuEntryRadios<String> viewStyle(
+    String remoteId,
+    FFI ffi,
+    EdgeInsets padding, {
+    DismissFunc? dismissFunc,
+    DismissCallback? dismissCallback,
+    RxString? rxViewStyle,
+  }) {
+    return MenuEntryRadios<String>(
+      text: translate('Ratio'),
+      optionsGetter: () => [
+        MenuEntryRadioOption(
+          text: translate('Scale original'),
+          value: kRemoteViewStyleOriginal,
+          dismissOnClicked: true,
+          dismissCallback: dismissCallback,
+        ),
+        MenuEntryRadioOption(
+          text: translate('Scale adaptive'),
+          value: kRemoteViewStyleAdaptive,
+          dismissOnClicked: true,
+          dismissCallback: dismissCallback,
+        ),
+      ],
+      curOptionGetter: () async {
+        // null means peer id is not found, which there's no need to care about
+        final viewStyle = await bind.sessionGetViewStyle(id: remoteId) ?? '';
+        if (rxViewStyle != null) {
+          rxViewStyle.value = viewStyle;
+        }
+        return viewStyle;
+      },
+      optionSetter: (String oldValue, String newValue) async {
+        await bind.sessionSetViewStyle(id: remoteId, value: newValue);
+        if (rxViewStyle != null) {
+          rxViewStyle.value = newValue;
+        }
+        ffi.canvasModel.updateViewStyle();
+        if (dismissFunc != null) {
+          dismissFunc();
+        }
+      },
+      padding: padding,
+      dismissOnClicked: true,
+      dismissCallback: dismissCallback,
+    );
+  }
+
+  static MenuEntrySwitch2<String> showRemoteCursor(
+    String remoteId,
+    EdgeInsets padding, {
+    DismissFunc? dismissFunc,
+    DismissCallback? dismissCallback,
+  }) {
+    final state = ShowRemoteCursorState.find(remoteId);
+    final optKey = 'show-remote-cursor';
+    return MenuEntrySwitch2<String>(
+      switchType: SwitchType.scheckbox,
+      text: translate('Show remote cursor'),
+      getter: () {
+        return state;
+      },
+      setter: (bool v) async {
+        await bind.sessionToggleOption(id: remoteId, value: optKey);
+        state.value =
+            bind.sessionGetToggleOptionSync(id: remoteId, arg: optKey);
+        if (dismissFunc != null) {
+          dismissFunc();
+        }
+      },
+      padding: padding,
+      dismissOnClicked: true,
+      dismissCallback: dismissCallback,
+    );
+  }
+
+  static MenuEntrySwitch<String> disableClipboard(
+    String remoteId,
+    EdgeInsets? padding, {
+    DismissFunc? dismissFunc,
+    DismissCallback? dismissCallback,
+  }) {
+    return createSwitchMenuEntry(
+      remoteId,
+      'Disable clipboard',
+      'disable-clipboard',
+      padding,
+      true,
+      dismissCallback: dismissCallback,
+    );
+  }
+
+  static MenuEntrySwitch<String> createSwitchMenuEntry(
+    String remoteId,
+    String text,
+    String option,
+    EdgeInsets? padding,
+    bool dismissOnClicked, {
+    DismissFunc? dismissFunc,
+    DismissCallback? dismissCallback,
+  }) {
+    return MenuEntrySwitch<String>(
+      switchType: SwitchType.scheckbox,
+      text: translate(text),
+      getter: () async {
+        return bind.sessionGetToggleOptionSync(id: remoteId, arg: option);
+      },
+      setter: (bool v) async {
+        await bind.sessionToggleOption(id: remoteId, value: option);
+        if (dismissFunc != null) {
+          dismissFunc();
+        }
+      },
+      padding: padding,
+      dismissOnClicked: dismissOnClicked,
+      dismissCallback: dismissCallback,
+    );
+  }
+
+  static MenuEntryButton<String> insertLock(
+    String remoteId,
+    EdgeInsets? padding, {
+    DismissFunc? dismissFunc,
+    DismissCallback? dismissCallback,
+  }) {
+    return MenuEntryButton<String>(
+      childBuilder: (TextStyle? style) => Text(
+        translate('Insert Lock'),
+        style: style,
+      ),
+      proc: () {
+        bind.sessionLockScreen(id: remoteId);
+        if (dismissFunc != null) {
+          dismissFunc();
+        }
+      },
+      padding: padding,
+      dismissOnClicked: true,
+      dismissCallback: dismissCallback,
+    );
+  }
+
+  static insertCtrlAltDel(
+    String remoteId,
+    EdgeInsets? padding, {
+    DismissFunc? dismissFunc,
+    DismissCallback? dismissCallback,
+  }) {
+    return MenuEntryButton<String>(
+      childBuilder: (TextStyle? style) => Text(
+        '${translate("Insert")} Ctrl + Alt + Del',
+        style: style,
+      ),
+      proc: () {
+        bind.sessionCtrlAltDel(id: remoteId);
+        if (dismissFunc != null) {
+          dismissFunc();
+        }
+      },
+      padding: padding,
+      dismissOnClicked: true,
+      dismissCallback: dismissCallback,
+    );
+  }
+}
+
 class RemoteMenubar extends StatefulWidget {
   final String id;
   final FFI ffi;
@@ -616,18 +785,8 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     displayMenu.add(MenuEntryDivider());
     if (perms['keyboard'] != false) {
       if (pi.platform == kPeerPlatformLinux || pi.sasEnabled) {
-        displayMenu.add(MenuEntryButton<String>(
-          childBuilder: (TextStyle? style) => Text(
-            '${translate("Insert")} Ctrl + Alt + Del',
-            style: style,
-          ),
-          proc: () {
-            bind.sessionCtrlAltDel(id: widget.id);
-          },
-          padding: padding,
-          dismissOnClicked: true,
-          dismissCallback: _menuDismissCallback,
-        ));
+        displayMenu.add(RemoteMenuEntry.insertCtrlAltDel(widget.id, padding,
+            dismissCallback: _menuDismissCallback));
       }
     }
     if (perms['restart'] != false &&
@@ -649,18 +808,8 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     }
 
     if (perms['keyboard'] != false) {
-      displayMenu.add(MenuEntryButton<String>(
-        childBuilder: (TextStyle? style) => Text(
-          translate('Insert Lock'),
-          style: style,
-        ),
-        proc: () {
-          bind.sessionLockScreen(id: widget.id);
-        },
-        padding: padding,
-        dismissOnClicked: true,
-        dismissCallback: _menuDismissCallback,
-      ));
+      displayMenu.add(RemoteMenuEntry.insertLock(widget.id, padding,
+          dismissCallback: _menuDismissCallback));
 
       if (pi.platform == kPeerPlatformWindows) {
         displayMenu.add(MenuEntryButton<String>(
@@ -770,36 +919,12 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     const EdgeInsets padding = EdgeInsets.only(left: 18.0, right: 8.0);
     final peer_version = widget.ffi.ffiModel.pi.version;
     final displayMenu = [
-      MenuEntryRadios<String>(
-        text: translate('Ratio'),
-        optionsGetter: () => [
-          MenuEntryRadioOption(
-            text: translate('Scale original'),
-            value: kRemoteViewStyleOriginal,
-            dismissOnClicked: true,
-            dismissCallback: _menuDismissCallback,
-          ),
-          MenuEntryRadioOption(
-            text: translate('Scale adaptive'),
-            value: kRemoteViewStyleAdaptive,
-            dismissOnClicked: true,
-            dismissCallback: _menuDismissCallback,
-          ),
-        ],
-        curOptionGetter: () async {
-          // null means peer id is not found, which there's no need to care about
-          final viewStyle = await bind.sessionGetViewStyle(id: widget.id) ?? '';
-          widget.state.viewStyle.value = viewStyle;
-          return viewStyle;
-        },
-        optionSetter: (String oldValue, String newValue) async {
-          await bind.sessionSetViewStyle(id: widget.id, value: newValue);
-          widget.state.viewStyle.value = newValue;
-          widget.ffi.canvasModel.updateViewStyle();
-        },
-        padding: padding,
-        dismissOnClicked: true,
+      RemoteMenuEntry.viewStyle(
+        widget.id,
+        widget.ffi,
+        padding,
         dismissCallback: _menuDismissCallback,
+        rxViewStyle: widget.state.viewStyle,
       ),
       MenuEntryDivider<String>(),
       MenuEntryRadios<String>(
@@ -1158,25 +1283,11 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
 
     /// Show remote cursor
     if (!widget.ffi.canvasModel.cursorEmbedded) {
-      displayMenu.add(() {
-        final state = ShowRemoteCursorState.find(widget.id);
-        final optKey = 'show-remote-cursor';
-        return MenuEntrySwitch2<String>(
-          switchType: SwitchType.scheckbox,
-          text: translate('Show remote cursor'),
-          getter: () {
-            return state;
-          },
-          setter: (bool v) async {
-            await bind.sessionToggleOption(id: widget.id, value: optKey);
-            state.value =
-                bind.sessionGetToggleOptionSync(id: widget.id, arg: optKey);
-          },
-          padding: padding,
-          dismissOnClicked: true,
-          dismissCallback: _menuDismissCallback,
-        );
-      }());
+      displayMenu.add(RemoteMenuEntry.showRemoteCursor(
+        widget.id,
+        padding,
+        dismissCallback: _menuDismissCallback,
+      ));
     }
 
     /// Show remote cursor scaling with image
@@ -1237,8 +1348,11 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
 
     if (perms['keyboard'] != false) {
       if (perms['clipboard'] != false) {
-        displayMenu.add(_createSwitchMenuEntry(
-            'Disable clipboard', 'disable-clipboard', padding, true));
+        displayMenu.add(RemoteMenuEntry.disableClipboard(
+          widget.id,
+          padding,
+          dismissCallback: _menuDismissCallback,
+        ));
       }
       displayMenu.add(_createSwitchMenuEntry(
           'Lock after session end', 'lock-after-session-end', padding, true));
@@ -1349,19 +1463,9 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
 
   MenuEntrySwitch<String> _createSwitchMenuEntry(
       String text, String option, EdgeInsets? padding, bool dismissOnClicked) {
-    return MenuEntrySwitch<String>(
-      switchType: SwitchType.scheckbox,
-      text: translate(text),
-      getter: () async {
-        return bind.sessionGetToggleOptionSync(id: widget.id, arg: option);
-      },
-      setter: (bool v) async {
-        await bind.sessionToggleOption(id: widget.id, value: option);
-      },
-      padding: padding,
-      dismissOnClicked: dismissOnClicked,
-      dismissCallback: _menuDismissCallback,
-    );
+    return RemoteMenuEntry.createSwitchMenuEntry(
+        widget.id, text, option, padding, dismissOnClicked,
+        dismissCallback: _menuDismissCallback);
   }
 }
 
