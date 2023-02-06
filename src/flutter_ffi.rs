@@ -1288,6 +1288,7 @@ pub fn main_start_ipc_url_server() {
 /// Send a url scheme throught the ipc.
 ///
 /// * macOS only
+#[allow(unused_variables)]
 pub fn send_url_scheme(url: String) {
     #[cfg(target_os = "macos")]
     thread::spawn(move || crate::ui::macos::handle_url_scheme(url));

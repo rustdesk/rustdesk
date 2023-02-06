@@ -398,9 +398,7 @@ impl Connection {
                             conn.send(msg).await;
                         }
                         ipc::Data::VoiceCallResponse(accepted) => {
-                            if accepted {
-                                conn.start_voice_call().await;
-                            }
+                            conn.handle_voice_call(accepted).await;
                         }
                         ipc::Data::CloseVoiceCall(_reason) => {
                             conn.close_voice_call().await;
@@ -1613,17 +1611,19 @@ impl Connection {
         true
     }
 
-    pub async fn start_voice_call(&mut self) {
+    pub async fn handle_voice_call(&mut self, accepted: bool) {
         if let Some(ts) = self.voice_call_request_timestamp.take() {
             let msg = new_voice_call_response(ts.get(), accepted);
-            conn.send(msg).await;
-            // Backup the default input device.
-            let audio_input_device = Config::get_option("audio-input");
-            self.audio_input_device_before_voice_call = Some(audio_input_device);
-            // Switch to default input device
-            let default_sound_device = get_default_sound_input();
-            if let Some(device) = default_sound_device {
-                set_sound_input(device);
+            self.send(msg).await;
+            if accepted {
+                // Backup the default input device.
+                let audio_input_device = Config::get_option("audio-input");
+                self.audio_input_device_before_voice_call = Some(audio_input_device);
+                // Switch to default input device
+                let default_sound_device = get_default_sound_input();
+                if let Some(device) = default_sound_device {
+                    set_sound_input(device);
+                }
             }
         } else {
             log::warn!("Possible a voice call attack.");
