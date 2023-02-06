@@ -395,8 +395,8 @@ impl InvokeUiSession for FlutterHandler {
         self.push_event("switch_back", [("peer_id", peer_id)].into());
     }
 
-    fn on_voice_call_start(&self) {
-        self.push_event("on_voice_call_start", [].into());
+    fn on_voice_call_started(&self) {
+        self.push_event("on_voice_call_started", [].into());
     }
 
     fn on_voice_call_closed(&self, reason: &str) {

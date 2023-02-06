@@ -1259,7 +1259,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         } else {
                             if response.accepted {
                                 // The peer accepts the voice call.
-                                self.handler.on_voice_call_start();
+                                self.handler.on_voice_call_started();
                                 self.stop_voice_call_sender = self.start_voice_call();
                             } else {
                                 // The peer refused the voice call.
