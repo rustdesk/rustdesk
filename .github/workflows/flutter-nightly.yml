@@ -59,10 +59,9 @@ jobs:
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: "1.62"
+          toolchain: stable
           target: ${{ matrix.job.target }}
           override: true
-          components: rustfmt
           profile: minimal # minimal component installation (ie, no documentation)
 
       - uses: Swatinem/rust-cache@v2
