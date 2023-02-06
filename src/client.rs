@@ -1255,27 +1255,6 @@ impl LoginConfigHandler {
         }
     }
 
-    /// Parse the audio mode option.
-    /// Return [`AudioMode`] if the option is valid, otherwise return `None`.
-    ///
-    /// # Arguments
-    ///
-    /// * `q` - The audio mode option.
-    /// * `ignore_default` - Ignore the default value.
-    pub fn get_audio_mode_enum(q: &str, ignore_default: bool) -> Option<AudioMode> {
-        if q == "guest-to-host" {
-            Some(AudioMode::GuestToHost)
-        } else if q == "dual-way" {
-            Some(AudioMode::DualWay)
-        } else {
-            if ignore_default {
-                None
-            } else {
-                Some(AudioMode::GuestToHost)
-            }
-        }
-    }
-
     /// Get the status of a toggle option.
     ///
     /// # Arguments
@@ -1358,24 +1337,6 @@ impl LoginConfigHandler {
         }
         let mut config = self.load_config();
         config.image_quality = value;
-        self.save_config(config);
-        res
-    }
-
-    pub fn save_audio_mode(&mut self, value: String) -> Option<Message> {
-        let mut res = None;
-        if let Some(q) = LoginConfigHandler::get_audio_mode_enum(&value, false) {
-            let mut misc = Misc::new();
-            misc.set_option(OptionMessage {
-                audio_mode: q.into(),
-                ..Default::default()
-            });
-            let mut msg_out = Message::new();
-            msg_out.set_misc(misc);
-            res = Some(msg_out);
-        }
-        let mut config = self.load_config();
-        config.audio_mode = value;
         self.save_config(config);
         res
     }
@@ -1984,7 +1945,6 @@ pub enum Data {
     RemovePortForward(i32),
     AddPortForward((i32, String, i32)),
     ToggleClipboardFile,
-    ChangeAudioMode(AudioMode),
     NewRDP,
     SetConfirmOverrideFile((i32, i32, bool, bool, bool)),
     AddJob((i32, String, String, i32, bool, bool)),

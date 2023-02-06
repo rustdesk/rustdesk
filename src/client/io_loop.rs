@@ -387,24 +387,6 @@ impl<T: InvokeUiSession> Remote<T> {
             Data::ToggleClipboardFile => {
                 self.check_clipboard_file_context();
             }
-            Data::ChangeAudioMode(audio_mode) => {
-                match audio_mode {
-                    AudioMode::GuestToHost => {
-                        if let Some(sender) = self.stop_local_audio_sender.take() {
-                            allow_err!(sender.send(()));
-                        }
-                    }
-                    AudioMode::DualWay => {
-                        // Start audio thread for playback.
-                        // Cancel previous local audio session.
-                        if let Some(sender) = self.stop_local_audio_sender.take() {
-                            allow_err!(sender.send(()));
-                        }
-                        // Start client audio when connection is established.
-                        self.stop_local_audio_sender = self.start_client_audio();
-                    }
-                }
-            }
             Data::Message(msg) => {
                 allow_err!(peer.send(&msg).await);
             }
@@ -904,24 +886,6 @@ impl<T: InvokeUiSession> Remote<T> {
 
                         if self.handler.is_file_transfer() {
                             self.handler.load_last_jobs();
-                        }
-
-                        // Start audio thread for playback if current audio mode is dual-way transmission.
-                        if !self.handler.is_file_transfer() && !self.handler.is_port_forward() {
-                            let audio_mode = LoginConfigHandler::get_audio_mode_enum(
-                                self.handler.load_config().audio_mode.as_str(),
-                                false,
-                            )
-                            .unwrap_or(AudioMode::GuestToHost);
-                            log::debug!("current audio mode: {:?}", audio_mode);
-                            if audio_mode == AudioMode::DualWay {
-                                // Cancel previous local audio session.
-                                if let Some(sender) = self.stop_local_audio_sender.take() {
-                                    allow_err!(sender.send(()));
-                                }
-                                // Start client audio when connection is established.
-                                self.stop_local_audio_sender = self.start_client_audio();
-                            }
                         }
                     }
                     _ => {}

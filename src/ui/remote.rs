@@ -420,8 +420,6 @@ impl sciter::EventHandler for SciterSession {
         fn supported_hwcodec();
         fn change_prefer_codec();
         fn restart_remote_device();
-        fn save_audio_mode(String);
-        fn get_audio_mode();
         fn request_voice_call();
         fn close_voice_call();
     }
