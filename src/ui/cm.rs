@@ -55,6 +55,18 @@ impl InvokeUiCM for SciterHandler {
     fn show_elevation(&self, show: bool) {
         self.call("showElevation", &make_args!(show));
     }
+
+    fn voice_call_started(&self, id: i32) {
+        self.call("voice_call_started", &make_args!(id));
+    }
+
+    fn voice_call_incoming(&self, id: i32) {
+        self.call("voice_call_incoming", &make_args!(id));
+    }
+
+    fn voice_call_closed(&self, id: i32, reason: &str) {
+        self.call("voice_call_incoming", &make_args!(id, reason));
+    }
 }
 
 impl SciterHandler {

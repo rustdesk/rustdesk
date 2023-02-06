@@ -1624,6 +1624,7 @@ impl Connection {
                 if let Some(device) = default_sound_device {
                     set_sound_input(device);
                 }
+                self.send_to_cm(Data::StartVoiceCall);
             }
         } else {
             log::warn!("Possible a voice call attack.");

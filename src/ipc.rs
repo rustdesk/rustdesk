@@ -212,6 +212,7 @@ pub enum Data {
     SwitchSidesBack,
     UrlLink(String),
     VoiceCallIncoming,
+    StartVoiceCall,
     VoiceCallResponse(bool),
     CloseVoiceCall(String),
 }

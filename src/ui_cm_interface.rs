@@ -88,6 +88,12 @@ pub trait InvokeUiCM: Send + Clone + 'static + Sized {
     fn change_language(&self);
 
     fn show_elevation(&self, show: bool);
+
+    fn voice_call_started(&self, id: i32);
+
+    fn voice_call_incoming(&self, id: i32);
+
+    fn voice_call_closed(&self, id: i32, reason: &str);
 }
 
 impl<T: InvokeUiCM> Deref for ConnectionManager<T> {
@@ -179,6 +185,18 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
 
     fn show_elevation(&self, show: bool) {
         self.ui_handler.show_elevation(show);
+    }
+
+    fn voice_call_started(&self, id: i32) {
+        self.ui_handler.voice_call_started(id);
+    }
+
+    fn voice_call_incoming(&self, id: i32) {
+        self.ui_handler.voice_call_incoming(id);
+    }
+
+    fn voice_call_closed(&self, id: i32, reason: &str) {
+        self.ui_handler.voice_call_closed(id, reason);
     }
 }
 
@@ -388,6 +406,15 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                 }
                                 Data::DataPortableService(ipc::DataPortableService::CmShowElevation(show)) => {
                                     self.cm.show_elevation(show);
+                                }
+                                Data::StartVoiceCall => {
+                                    self.cm.voice_call_started(self.conn_id);
+                                }
+                                Data::VoiceCallIncoming => {
+                                    self.cm.voice_call_incoming(self.conn_id);
+                                }
+                                Data::CloseVoiceCall(reason) => {
+                                    self.cm.voice_call_closed(self.conn_id, reason.as_str());
                                 }
                                 _ => {
 

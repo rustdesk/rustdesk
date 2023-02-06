@@ -537,6 +537,18 @@ pub mod connection_manager {
         fn show_elevation(&self, show: bool) {
             self.push_event("show_elevation", vec![("show", &show.to_string())]);
         }
+
+        fn voice_call_started(&self, id: i32) {
+            self.push_event("voice_call_started", vec![("show", &id.to_string())]);
+        }
+
+        fn voice_call_incoming(&self, id: i32) {
+            self.push_event("voice_call_incoming", vec![("id", &id.to_string())]);
+        }
+
+        fn voice_call_closed(&self, id: i32, reason: &str) {
+            self.push_event("voice_call_closed", vec![("id", &id.to_string()), ("reason", &reason.to_string())]);
+        }
     }
 
     impl FlutterHandler {
