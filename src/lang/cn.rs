@@ -453,5 +453,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Voice call", "语音通话"),
         ("Text chat", "文字聊天"),
         ("Audio Transmission Mode", "音频传输模式"),
+        ("Refused", "已拒绝")
     ].iter().cloned().collect();
 }

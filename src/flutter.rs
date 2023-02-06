@@ -394,6 +394,22 @@ impl InvokeUiSession for FlutterHandler {
     fn switch_back(&self, peer_id: &str) {
         self.push_event("switch_back", [("peer_id", peer_id)].into());
     }
+
+    fn on_voice_call_start(&self) {
+        self.push_event("on_voice_call_start", [].into());
+    }
+
+    fn on_voice_call_stop(&self, reason: &str) {
+        self.push_event("on_voice_call_stop", [("reason", reason)].into())
+    }
+
+    fn on_voice_call_waiting(&self) {
+        self.push_event("on_voice_call_waiting", [].into());
+    }
+
+    fn on_voice_call_incoming(&self) {
+        self.push_event("on_voice_call_incoming", [].into());
+    }
 }
 
 /// Create a new remote session with the given id.

@@ -266,6 +266,22 @@ impl InvokeUiSession for SciterHandler {
     }
 
     fn switch_back(&self, _id: &str) {}
+
+    fn on_voice_call_start(&self) {
+        self.call("onVoiceCallStart", &make_args!());
+    }
+
+    fn on_voice_call_stop(&self, reason: &str) {
+        self.call("onVoiceCallStop", &make_args!(reason));
+    }
+
+    fn on_voice_call_waiting(&self) {
+        self.call("onVoiceCallWaiting", &make_args!());
+    }
+
+    fn on_voice_call_incoming(&self) {
+        self.call("onVoiceCallIncoming", &make_args!());
+    }
 }
 
 pub struct SciterSession(Session<SciterHandler>);
