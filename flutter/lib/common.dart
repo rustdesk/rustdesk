@@ -1294,7 +1294,7 @@ Future<bool> initUniLinks() async {
 
 /// Listen for uni links.
 ///
-/// * handleByFlutter: Should uni links being handled by Flutter.
+/// * handleByFlutter: Should uni links be handled by Flutter.
 ///
 /// Returns a [StreamSubscription] which can listen the uni links.
 StreamSubscription? listenUniLinks({handleByFlutter = true}) {

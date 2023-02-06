@@ -207,7 +207,7 @@ void runMultiWindow(
       await restoreWindowPosition(WindowType.PortForward, windowId: kWindowId!);
       break;
     default:
-    // no such appType
+      // no such appType
       exit(0);
   }
   // show window from hidden status
