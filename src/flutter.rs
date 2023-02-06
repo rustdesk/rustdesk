@@ -39,7 +39,8 @@ pub extern "C" fn rustdesk_core_main() -> bool {
 #[no_mangle]
 pub extern "C" fn handle_applicationShouldOpenUntitledFile() {
     hbb_common::log::debug!("icon clicked on finder");
-    if std::env::args().nth(1) == Some("--server".to_owned()) {
+    let x = std::env::args().nth(1).unwrap_or_default();
+    if x == "--server" || x == "--cm" {
         crate::platform::macos::check_main_window();
     }
 }
