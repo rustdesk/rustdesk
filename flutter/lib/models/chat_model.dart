@@ -4,6 +4,8 @@ import 'package:dash_chat_2/dash_chat_2.dart';
 import 'package:draggable_float_widget/draggable_float_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:get/get_rx/src/rx_types/rx_types.dart';
+import 'package:get/get_state_manager/src/rx_flutter/rx_obx_widget.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../consts.dart';
@@ -36,6 +38,8 @@ class ChatModel with ChangeNotifier {
   OverlayEntry? chatIconOverlayEntry;
   OverlayEntry? chatWindowOverlayEntry;
   bool isConnManager = false;
+
+  RxBool isWindowFocus = true.obs;
 
   final ChatUser me = ChatUser(
     id: "",
@@ -133,11 +137,28 @@ class ChatModel with ChangeNotifier {
     final overlayState = _getOverlayState();
     if (overlayState == null) return;
     final overlay = OverlayEntry(builder: (context) {
-      return DraggableChatWindow(
-          position: const Offset(20, 80),
-          width: 250,
-          height: 350,
-          chatModel: this);
+      bool innerClicked = false;
+      return Listener(
+          onPointerDown: (_) {
+            if (!innerClicked) {
+              isWindowFocus.value = false;
+            }
+            innerClicked = false;
+          },
+          child: Obx(() => Container(
+              color: isWindowFocus.value ? Colors.red.withOpacity(0.3) : null,
+              child: Listener(
+                  onPointerDown: (_) {
+                    innerClicked = true;
+                    if (!isWindowFocus.value) {
+                      isWindowFocus.value = true;
+                    }
+                  },
+                  child: DraggableChatWindow(
+                      position: const Offset(20, 80),
+                      width: 250,
+                      height: 350,
+                      chatModel: this)))));
     });
     overlayState.insert(overlay);
     chatWindowOverlayEntry = overlay;

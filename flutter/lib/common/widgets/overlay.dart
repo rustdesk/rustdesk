@@ -1,6 +1,7 @@
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:get/get_state_manager/src/rx_flutter/rx_obx_widget.dart';
 import 'package:provider/provider.dart';
 
 import '../../consts.dart';
@@ -91,28 +92,31 @@ class DraggableChatWindow extends StatelessWidget {
               bottom: BorderSide(
                   color: Theme.of(context).hintColor.withOpacity(0.4)))),
       height: 38,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
-              child: Row(children: [
-                Icon(Icons.chat_bubble_outline,
-                    size: 20, color: Theme.of(context).colorScheme.primary),
-                SizedBox(width: 6),
-                Text(translate("Chat"))
-              ])),
-          Padding(
-              padding: EdgeInsets.all(2),
-              child: ActionIcon(
-                message: 'Close',
-                icon: IconFont.close,
-                onTap: chatModel.hideChatWindowOverlay,
-                isClose: true,
-                boxSize: 32,
-              ))
-        ],
-      ),
+      child: Obx(() => Opacity(
+          opacity: chatModel.isWindowFocus.value ? 1.0 : 0.4,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+                  child: Row(children: [
+                    Icon(Icons.chat_bubble_outline,
+                        size: 20, color: Theme.of(context).colorScheme.primary),
+                    SizedBox(width: 6),
+                    Text(translate("Chat"))
+                  ])),
+              Padding(
+                  padding: EdgeInsets.all(2),
+                  child: ActionIcon(
+                    message: 'Close',
+                    icon: IconFont.close,
+                    onTap: chatModel.hideChatWindowOverlay,
+                    isClose: true,
+                    boxSize: 32,
+                  ))
+            ],
+          ))),
     );
   }
 }
@@ -304,15 +308,17 @@ class _DraggableState extends State<Draggable> {
     if (widget.checkKeyboard) {
       checkKeyboard();
     }
-    if (widget.checkKeyboard) {
+    if (widget.checkScreenSize) {
       checkScreenSize();
     }
-    return Positioned(
-        top: _position.dy,
-        left: _position.dx,
-        width: widget.width,
-        height: widget.height,
-        child: widget.builder(context, onPanUpdate));
+    return Stack(children: [
+      Positioned(
+          top: _position.dy,
+          left: _position.dx,
+          width: widget.width,
+          height: widget.height,
+          child: widget.builder(context, onPanUpdate))
+    ]);
   }
 }
 
