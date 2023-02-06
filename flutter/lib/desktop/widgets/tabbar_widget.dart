@@ -1,23 +1,23 @@
-import 'dart:io';
 import 'dart:async';
+import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
 
+import 'package:bot_toast/bot_toast.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' hide TabBarTheme;
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/main.dart';
-import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 import 'package:get/get_rx/src/rx_workers/utils/debouncer.dart';
 import 'package:scroll_pos/scroll_pos.dart';
 import 'package:window_manager/window_manager.dart';
-import 'package:flutter_svg/flutter_svg.dart';
-import 'package:bot_toast/bot_toast.dart';
 
 import '../../utils/multi_window_manager.dart';
 
@@ -527,7 +527,9 @@ class WindowActionPanelState extends State<WindowActionPanel>
   void onWindowClose() async {
     // hide window on close
     if (widget.isMainWindow) {
-      await rustDeskWinManager.unregisterActiveWindow(0);
+      if (rustDeskWinManager.getActiveWindows().contains(kMainWindowId)) {
+        await rustDeskWinManager.unregisterActiveWindow(kMainWindowId);
+      }
       // `hide` must be placed after unregisterActiveWindow, because once all windows are hidden,
       // flutter closes the application on macOS. We should ensure the post-run logic has ran successfully.
       // e.g.: saving window position.
@@ -765,7 +767,7 @@ class _ListView extends StatelessWidget {
                   tabBuilder: tabBuilder,
                   tabMenuBuilder: tabMenuBuilder,
                   maxLabelWidth: maxLabelWidth,
-                  selectedTabBackgroundColor: selectedTabBackgroundColor,
+                  selectedTabBackgroundColor: selectedTabBackgroundColor ?? MyTheme.tabbar(context).selectedTabBackgroundColor,
                   unSelectedTabBackgroundColor: unSelectedTabBackgroundColor,
                 );
               }).toList()));
@@ -910,7 +912,7 @@ class _TabState extends State<_Tab> with RestorationMixin {
                               tabSelected: isSelected,
                               onClose: () => widget.onClose(),
                             )))
-                      ])).paddingSymmetric(horizontal: 10),
+                      ])).paddingOnly(left: 10, right: 5),
               Offstage(
                 offstage: !showDivider,
                 child: VerticalDivider(
@@ -956,7 +958,8 @@ class _CloseButton extends StatelessWidget {
         child: Offstage(
           offstage: !visible,
           child: InkWell(
-            customBorder: const RoundedRectangleBorder(),
+            hoverColor: MyTheme.tabbar(context).closeHoverColor,
+            customBorder: const CircleBorder(),
             onTap: () => onClose(),
             child: Icon(
               Icons.close,
@@ -966,7 +969,7 @@ class _CloseButton extends StatelessWidget {
                   : MyTheme.tabbar(context).unSelectedIconColor,
             ),
           ),
-        )).paddingOnly(left: 5);
+        )).paddingOnly(left: 10);
   }
 }
 
@@ -1055,6 +1058,8 @@ class TabbarTheme extends ThemeExtension<TabbarTheme> {
   final Color? unSelectedIconColor;
   final Color? dividerColor;
   final Color? hoverColor;
+  final Color? closeHoverColor;
+  final Color? selectedTabBackgroundColor;
 
   const TabbarTheme(
       {required this.selectedTabIconColor,
@@ -1064,27 +1069,33 @@ class TabbarTheme extends ThemeExtension<TabbarTheme> {
       required this.selectedIconColor,
       required this.unSelectedIconColor,
       required this.dividerColor,
-      required this.hoverColor});
+      required this.hoverColor,
+      required this.closeHoverColor,
+      required this.selectedTabBackgroundColor});
 
   static const light = TabbarTheme(
       selectedTabIconColor: MyTheme.accent,
       unSelectedTabIconColor: Color.fromARGB(255, 162, 203, 241),
-      selectedTextColor: Color.fromARGB(255, 26, 26, 26),
-      unSelectedTextColor: Color.fromARGB(255, 96, 96, 96),
+      selectedTextColor: Colors.black,
+      unSelectedTextColor: Color.fromARGB(255, 112, 112, 112),
       selectedIconColor: Color.fromARGB(255, 26, 26, 26),
       unSelectedIconColor: Color.fromARGB(255, 96, 96, 96),
       dividerColor: Color.fromARGB(255, 238, 238, 238),
-      hoverColor: Color.fromARGB(51, 158, 158, 158));
+      hoverColor: Color.fromARGB(51, 158, 158, 158),
+      closeHoverColor: Color.fromARGB(255, 224, 224, 224),
+      selectedTabBackgroundColor: Color.fromARGB(255, 240, 240, 240));
 
   static const dark = TabbarTheme(
       selectedTabIconColor: MyTheme.accent,
       unSelectedTabIconColor: Color.fromARGB(255, 30, 65, 98),
       selectedTextColor: Color.fromARGB(255, 255, 255, 255),
-      unSelectedTextColor: Color.fromARGB(255, 207, 207, 207),
-      selectedIconColor: Color.fromARGB(255, 215, 215, 215),
+      unSelectedTextColor: Color.fromARGB(255, 192, 192, 192),
+      selectedIconColor: Color.fromARGB(255, 192, 192, 192),
       unSelectedIconColor: Color.fromARGB(255, 255, 255, 255),
       dividerColor: Color.fromARGB(255, 64, 64, 64),
-      hoverColor: Colors.black26);
+      hoverColor: Colors.black26,
+      closeHoverColor: Colors.black,
+      selectedTabBackgroundColor: Colors.black26);
 
   @override
   ThemeExtension<TabbarTheme> copyWith({
@@ -1096,6 +1107,8 @@ class TabbarTheme extends ThemeExtension<TabbarTheme> {
     Color? unSelectedIconColor,
     Color? dividerColor,
     Color? hoverColor,
+    Color? closeHoverColor,
+    Color? selectedTabBackgroundColor,
   }) {
     return TabbarTheme(
       selectedTabIconColor: selectedTabIconColor ?? this.selectedTabIconColor,
@@ -1107,6 +1120,8 @@ class TabbarTheme extends ThemeExtension<TabbarTheme> {
       unSelectedIconColor: unSelectedIconColor ?? this.unSelectedIconColor,
       dividerColor: dividerColor ?? this.dividerColor,
       hoverColor: hoverColor ?? this.hoverColor,
+      closeHoverColor: closeHoverColor ?? this.closeHoverColor,
+      selectedTabBackgroundColor: selectedTabBackgroundColor ?? this.selectedTabBackgroundColor,
     );
   }
 
@@ -1131,6 +1146,8 @@ class TabbarTheme extends ThemeExtension<TabbarTheme> {
           Color.lerp(unSelectedIconColor, other.unSelectedIconColor, t),
       dividerColor: Color.lerp(dividerColor, other.dividerColor, t),
       hoverColor: Color.lerp(hoverColor, other.hoverColor, t),
+      closeHoverColor: Color.lerp(closeHoverColor, other.closeHoverColor, t),
+      selectedTabBackgroundColor: Color.lerp(selectedTabBackgroundColor, other.selectedTabBackgroundColor, t),
     );
   }
 

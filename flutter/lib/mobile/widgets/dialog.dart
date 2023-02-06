@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/desktop/widgets/button.dart';
 import 'package:get/get.dart';
 
 import '../../common.dart';
@@ -9,7 +8,7 @@ import '../../models/model.dart';
 import '../../models/platform_model.dart';
 
 void clientClose(String id, OverlayDialogManager dialogManager) {
-  msgBox(id, '', 'Close', 'Are you sure to close the connection?', '',
+  msgBox(id, 'info', 'Close', 'Are you sure to close the connection?', '',
       dialogManager);
 }
 
@@ -33,8 +32,10 @@ void showRestartRemoteDevice(
             ]),
             content: Text(
                 "${translate('Are you sure you want to restart')} \n${pi.username}@${pi.hostname}($id) ?"),
+            onCancel: close,
+            onSubmit: () => close(true),
             actions: [
-              dialogButton("Cancel", onPressed: () => close(), isOutline: true),
+              dialogButton("Cancel", onPressed: close, isOutline: true),
               dialogButton("OK", onPressed: () => close(true)),
             ],
           ));
@@ -48,6 +49,18 @@ void setPermanentPasswordDialog(OverlayDialogManager dialogManager) async {
   var validateLength = false;
   var validateSame = false;
   dialogManager.show((setState, close) {
+    submit() async {
+      close();
+      dialogManager.showLoading(translate("Waiting"));
+      if (await gFFI.serverModel.setPermanentPassword(p0.text)) {
+        dialogManager.dismissAll();
+        showSuccess();
+      } else {
+        dialogManager.dismissAll();
+        showError();
+      }
+    }
+
     return CustomAlertDialog(
       title: Text(translate('Set your own password')),
       content: Form(
@@ -94,29 +107,17 @@ void setPermanentPasswordDialog(OverlayDialogManager dialogManager) async {
               },
             ),
           ])),
+      onCancel: close,
+      onSubmit: (validateLength && validateSame) ? submit : null,
       actions: [
         dialogButton(
           'Cancel',
-          onPressed: () {
-            close();
-          },
+          onPressed: close,
           isOutline: true,
         ),
         dialogButton(
           'OK',
-          onPressed: (validateLength && validateSame)
-              ? () async {
-                  close();
-                  dialogManager.showLoading(translate("Waiting"));
-                  if (await gFFI.serverModel.setPermanentPassword(p0.text)) {
-                    dialogManager.dismissAll();
-                    showSuccess();
-                  } else {
-                    dialogManager.dismissAll();
-                    showError();
-                  }
-                }
-              : null,
+          onPressed: (validateLength && validateSame) ? submit : null,
         ),
       ],
     );
@@ -205,26 +206,36 @@ void enterPasswordDialog(String id, OverlayDialogManager dialogManager) async {
   });
 }
 
-void wrongPasswordDialog(String id, OverlayDialogManager dialogManager) {
-  dialogManager.show((setState, close) => CustomAlertDialog(
-          title: Text(translate('Wrong Password')),
-          content: Text(translate('Do you want to enter again?')),
-          actions: [
-            dialogButton(
-              'Cancel',
-              onPressed: () {
-                close();
-                closeConnection();
-              },
-              isOutline: true,
-            ),
-            dialogButton(
-              'Retry',
-              onPressed: () {
-                enterPasswordDialog(id, dialogManager);
-              },
-            ),
-          ]));
+void wrongPasswordDialog(
+    String id, OverlayDialogManager dialogManager, type, title, text) {
+  dialogManager.dismissAll();
+  dialogManager.show((setState, close) {
+    cancel() {
+      close();
+      closeConnection();
+    }
+
+    submit() {
+      enterPasswordDialog(id, dialogManager);
+    }
+
+    return CustomAlertDialog(
+        title: null,
+        content: msgboxContent(type, title, text),
+        onSubmit: submit,
+        onCancel: cancel,
+        actions: [
+          dialogButton(
+            'Cancel',
+            onPressed: cancel,
+            isOutline: true,
+          ),
+          dialogButton(
+            'Retry',
+            onPressed: submit,
+          ),
+        ]);
+  });
 }
 
 void showServerSettingsWithValue(
@@ -352,13 +363,14 @@ void showServerSettingsWithValue(
   });
 }
 
-void showWaitUacDialog(String id, OverlayDialogManager dialogManager) {
+void showWaitUacDialog(
+    String id, OverlayDialogManager dialogManager, String type) {
   dialogManager.dismissAll();
   dialogManager.show(
       tag: '$id-wait-uac',
       (setState, close) => CustomAlertDialog(
-            title: Text(translate('Wait')),
-            content: Text(translate('wait_accept_uac_tip')).marginAll(10),
+            title: null,
+            content: msgboxContent(type, 'Wait', 'wait_accept_uac_tip'),
           ));
 }
 
@@ -516,16 +528,6 @@ void showOnBlockDialog(
       dialogManager.existing('$id-request-elevation')) {
     return;
   }
-  var content = Column(children: [
-    Align(
-      alignment: Alignment.centerLeft,
-      child: Text(
-        "${translate(text)}${type.contains('uac') ? '\n' : '\n\n'}${translate('request_elevation_tip')}",
-        textAlign: TextAlign.left,
-        style: TextStyle(fontWeight: FontWeight.w400),
-      ).marginSymmetric(vertical: 15),
-    ),
-  ]);
   dialogManager.show(tag: '$id-$type', (setState, close) {
     void submit() {
       close();
@@ -533,12 +535,11 @@ void showOnBlockDialog(
     }
 
     return CustomAlertDialog(
-      title: Text(translate(title)),
-      content: content,
+      title: null,
+      content: msgboxContent(type, title,
+          "${translate(text)}${type.contains('uac') ? '\n' : '\n\n'}${translate('request_elevation_tip')}"),
       actions: [
-        dialogButton('Wait', onPressed: () {
-          close();
-        }, isOutline: true),
+        dialogButton('Wait', onPressed: close, isOutline: true),
         dialogButton('Request Elevation', onPressed: submit),
       ],
       onSubmit: submit,
@@ -556,8 +557,8 @@ void showElevationError(String id, String type, String title, String text,
     }
 
     return CustomAlertDialog(
-      title: Text(translate(title)),
-      content: Text(translate(text)),
+      title: null,
+      content: msgboxContent(type, title, text),
       actions: [
         dialogButton('Cancel', onPressed: () {
           close();
@@ -566,6 +567,25 @@ void showElevationError(String id, String type, String title, String text,
       ],
       onSubmit: submit,
       onCancel: close,
+    );
+  });
+}
+
+void showWaitAcceptDialog(String id, String type, String title, String text,
+    OverlayDialogManager dialogManager) {
+  dialogManager.dismissAll();
+  dialogManager.show((setState, close) {
+    onCancel() {
+      closeConnection();
+    }
+
+    return CustomAlertDialog(
+      title: null,
+      content: msgboxContent(type, title, text),
+      actions: [
+        dialogButton('Cancel', onPressed: onCancel, isOutline: true),
+      ],
+      onCancel: onCancel,
     );
   });
 }
@@ -625,7 +645,6 @@ class _PasswordWidgetState extends State<PasswordWidget> {
           icon: Icon(
             // Based on passwordVisible state choose the icon
             _passwordVisible ? Icons.visibility : Icons.visibility_off,
-            color: Theme.of(context).primaryColorDark,
           ),
           onPressed: () {
             // Update the state i.e. toggle the state of passwordVisible variable

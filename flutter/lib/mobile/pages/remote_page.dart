@@ -497,7 +497,11 @@ class _RemotePageState extends State<RemotePage> {
         child: Stack(children: () {
           final paints = [
             ImagePaint(),
-            QualityMonitor(gFFI.qualityMonitorModel),
+            Positioned(
+              top: 10,
+              right: 10,
+              child: QualityMonitor(gFFI.qualityMonitorModel),
+            ),
             getHelpTools(),
             SizedBox(
               width: 0,

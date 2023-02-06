@@ -64,11 +64,9 @@ class RawPointerMouseRegion extends StatelessWidget {
         },
         onPointerMove: inputModel.onPointMoveImage,
         onPointerSignal: inputModel.onPointerSignalImage,
-        /*
         onPointerPanZoomStart: inputModel.onPointerPanZoomStart,
         onPointerPanZoomUpdate: inputModel.onPointerPanZoomUpdate,
         onPointerPanZoomEnd: inputModel.onPointerPanZoomEnd,
-        */
         child: MouseRegion(
             cursor: cursor ?? MouseCursor.defer,
             onEnter: onEnter,

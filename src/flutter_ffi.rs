@@ -1,30 +1,27 @@
-use std::{
-    collections::HashMap,
-    ffi::{CStr, CString},
-    os::raw::c_char,
-};
+use std::{collections::HashMap, ffi::{CStr, CString}, os::raw::c_char, thread};
+use std::str::FromStr;
 
 use flutter_rust_bridge::{StreamSink, SyncReturn, ZeroCopyBuffer};
 use serde_json::json;
 
-use crate::common::is_keyboard_mode_supported;
-use hbb_common::message_proto::KeyboardMode;
-use hbb_common::ResultType;
 use hbb_common::{
-    config::{self, LocalConfig, PeerConfig, ONLINE},
+    config::{self, LocalConfig, ONLINE, PeerConfig},
     fs, log,
 };
-use std::str::FromStr;
+use hbb_common::message_proto::KeyboardMode;
+use hbb_common::ResultType;
 
-// use crate::hbbs_http::account::AuthResult;
-
-use crate::flutter::{self, SESSIONS};
-use crate::ui_interface::{self, *};
 use crate::{
     client::file_trait::FileManager,
     common::make_fd_to_json,
     flutter::{session_add, session_start_},
 };
+use crate::common::is_keyboard_mode_supported;
+use crate::flutter::{self, SESSIONS};
+use crate::ui_interface::{self, *};
+
+// use crate::hbbs_http::account::AuthResult;
+
 fn initialize(app_dir: &str) {
     *config::APP_DIR.write().unwrap() = app_dir.to_owned();
     #[cfg(target_os = "android")]
@@ -523,6 +520,10 @@ pub fn main_get_sound_inputs() -> Vec<String> {
     vec![String::from("")]
 }
 
+pub fn main_get_hostname() -> SyncReturn<String> {
+    SyncReturn(crate::common::hostname())
+}
+
 pub fn main_change_id(new_id: String) {
     change_id(new_id)
 }
@@ -785,6 +786,14 @@ pub fn main_change_language(lang: String) {
 
 pub fn main_default_video_save_directory() -> String {
     default_video_save_directory()
+}
+
+pub fn main_set_user_default_option(key: String, value: String) {
+    set_user_default_option(key, value);
+}
+
+pub fn main_get_user_default_option(key: String) -> SyncReturn<String> {
+    SyncReturn(get_user_default_option(key))
 }
 
 pub fn session_add_port_forward(
@@ -1237,15 +1246,37 @@ pub fn main_is_login_wayland() -> SyncReturn<bool> {
     SyncReturn(is_login_wayland())
 }
 
+pub fn main_hide_docker() -> SyncReturn<bool> {
+    #[cfg(target_os = "macos")]
+    crate::platform::macos::hide_dock();
+    SyncReturn(true)
+}
+
+/// Start an ipc server for receiving the url scheme.
+///
+/// * Should only be called in the main flutter window.
+/// * macOS only
+pub fn main_start_ipc_url_server() {
+    #[cfg(target_os = "macos")]
+    thread::spawn(move || crate::server::start_ipc_url_server());
+}
+
+/// Send a url scheme throught the ipc.
+///
+/// * macOS only
+pub fn send_url_scheme(url: String) {
+    #[cfg(target_os = "macos")]
+    thread::spawn(move || crate::ui::macos::handle_url_scheme(url));
+}
+
 #[cfg(target_os = "android")]
 pub mod server_side {
+    use hbb_common::log;
     use jni::{
+        JNIEnv,
         objects::{JClass, JString},
         sys::jstring,
-        JNIEnv,
     };
-
-    use hbb_common::log;
 
     use crate::start_server;
 

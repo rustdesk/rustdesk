@@ -51,7 +51,7 @@ class ChatPage extends StatelessWidget implements PageShape {
               return Stack(
                 children: [
                   LayoutBuilder(builder: (context, constraints) {
-                    return DashChat(
+                    final chat = DashChat(
                       onSend: (chatMsg) {
                         chatModel.send(chatMsg);
                         chatModel.inputNode.requestFocus();
@@ -108,6 +108,7 @@ class ChatPage extends StatelessWidget implements PageShape {
                                 borderBottomLeft: 8,
                               )),
                     );
+                    return SelectionArea(child: chat);
                   }),
                   desktopType == DesktopType.cm ||
                           chatModel.currentID == ChatModel.clientModeID

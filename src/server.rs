@@ -1,8 +1,13 @@
-use crate::ipc::Data;
+use std::{
+    collections::HashMap,
+    net::SocketAddr,
+    sync::{Arc, Mutex, RwLock, Weak},
+    time::Duration,
+};
+
 use bytes::Bytes;
+
 pub use connection::*;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use hbb_common::config::Config2;
 use hbb_common::{
     allow_err,
     anyhow::{anyhow, Context},
@@ -12,19 +17,18 @@ use hbb_common::{
     message_proto::*,
     protobuf::{Enum, Message as _},
     rendezvous_proto::*,
+    ResultType,
     socket_client,
-    sodiumoxide::crypto::{box_, secretbox, sign},
-    timeout, tokio, ResultType, Stream,
+    sodiumoxide::crypto::{box_, secretbox, sign}, Stream, timeout, tokio,
 };
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use service::ServiceTmpl;
+use hbb_common::config::Config2;
+use hbb_common::tcp::new_listener;
 use service::{GenericService, Service, Subscriber};
-use std::{
-    collections::HashMap,
-    net::SocketAddr,
-    sync::{Arc, Mutex, RwLock, Weak},
-    time::Duration,
-};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use service::ServiceTmpl;
+
+use crate::ipc::{connect, Data};
 
 pub mod audio_service;
 cfg_if::cfg_if! {
@@ -54,8 +58,6 @@ pub mod portable_service;
 mod service;
 mod video_qos;
 pub mod video_service;
-
-use hbb_common::tcp::new_listener;
 
 pub type Childs = Arc<Mutex<Vec<std::process::Child>>>;
 type ConnMap = HashMap<i32, ConnInner>;
@@ -421,6 +423,50 @@ pub async fn start_server(is_server: bool) {
                 log::info!("server not started (will try to start): {}", err);
                 std::thread::spawn(|| start_server(true));
             }
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[tokio::main(flavor = "current_thread")]
+pub async fn start_ipc_url_server() {
+    log::debug!("Start an ipc server for listening to url schemes");
+    match crate::ipc::new_listener("_url").await {
+        Ok(mut incoming) => {
+            while let Some(Ok(conn)) = incoming.next().await {
+                let mut conn = crate::ipc::Connection::new(conn);
+                match conn.next_timeout(1000).await {
+                    Ok(Some(data)) => {
+                        match data {
+                            Data::UrlLink(url) => {
+                                #[cfg(feature = "flutter")]
+                                {
+                                    if let Some(stream) = crate::flutter::GLOBAL_EVENT_STREAM.read().unwrap().get(
+                                        crate::flutter::APP_TYPE_MAIN
+                                    ) {
+                                        let mut m = HashMap::new();
+                                        m.insert("name", "on_url_scheme_received");
+                                        m.insert("url", url.as_str());
+                                        stream.add(serde_json::to_string(&m).unwrap());
+                                    } else {
+                                        log::warn!("No main window app found!");
+                                    }
+                                }
+                            }
+                            _ => {
+                                log::warn!("An unexpected data was sent to the ipc url server.")
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        log::error!("{}", err);
+                    }
+                    _ => {}
+                }
+            }
+        }
+        Err(err) => {
+            log::error!("{}", err);
         }
     }
 }

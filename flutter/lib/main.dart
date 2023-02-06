@@ -1,22 +1,22 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:bot_toast/bot_toast.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
-import 'package:flutter_hbb/desktop/pages/server_page.dart';
 import 'package:flutter_hbb/desktop/pages/install_page.dart';
+import 'package:flutter_hbb/desktop/pages/server_page.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_file_transfer_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_port_forward_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_remote_screen.dart';
 import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
+import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
-import 'package:bot_toast/bot_toast.dart';
 
 // import 'package:window_manager/window_manager.dart';
 
@@ -108,11 +108,12 @@ Future<void> initEnv(String appType) async {
   await initGlobalFFI();
   // await Firebase.initializeApp();
   _registerEventHandler();
+  // Update the system theme.
+  updateSystemWindowTheme();
 }
 
 void runMainApp(bool startService) async {
   // register uni links
-  initUniLinks();
   await initEnv(kAppTypeMain);
   // trigger connection status updater
   await bind.mainCheckConnectStatus();
@@ -122,23 +123,27 @@ void runMainApp(bool startService) async {
   }
   gFFI.userModel.refreshCurrentUser();
   runApp(App());
-  // restore the location of the main window before window hide or show
-  await restoreWindowPosition(WindowType.Main);
-  // check the startup argument, if we successfully handle the argument, we keep the main window hidden.
-  if (checkArguments()) {
-    windowManager.hide();
-  } else {
-    windowManager.show();
-    windowManager.focus();
-    // move registration of active main window here to prevent async visible check.
-    rustDeskWinManager.registerActiveWindow(kWindowMainId);
-  }
-  // set window option
+  // Set window option.
   WindowOptions windowOptions = getHiddenTitleBarWindowOptions();
   windowManager.waitUntilReadyToShow(windowOptions, () async {
+    // Restore the location of the main window before window hide or show.
+    await restoreWindowPosition(WindowType.Main);
+    // Check the startup argument, if we successfully handle the argument, we keep the main window hidden.
+    final handledByUniLinks = await initUniLinks();
+    final handledByCli = checkArguments();
+    debugPrint(
+        "handled by uni links: $handledByUniLinks, handled by cli: $handledByCli");
+    if (handledByUniLinks || handledByCli) {
+      windowManager.hide();
+    } else {
+      windowManager.show();
+      windowManager.focus();
+      // Move registration of active main window here to prevent from async visible check.
+      rustDeskWinManager.registerActiveWindow(kWindowMainId);
+    }
     windowManager.setOpacity(1);
+    windowManager.setTitle(getWindowName());
   });
-  windowManager.setTitle(getWindowName());
 }
 
 void runMobileApp() async {
@@ -206,7 +211,7 @@ void runMultiWindow(
 }
 
 void runConnectionManagerScreen(bool hide) async {
-  await initEnv(kAppTypeMain);
+  await initEnv(kAppTypeConnectionManager);
   _runApp(
     '',
     const DesktopServerPage(),
@@ -223,6 +228,7 @@ void showCmWindow() {
   WindowOptions windowOptions =
       getHiddenTitleBarWindowOptions(size: kConnectionManagerWindowSize);
   windowManager.waitUntilReadyToShow(windowOptions, () async {
+    bind.mainHideDocker();
     await windowManager.show();
     await Future.wait([windowManager.focus(), windowManager.setOpacity(1)]);
     // ensure initial window size to be changed
@@ -236,6 +242,7 @@ void hideCmWindow() {
       getHiddenTitleBarWindowOptions(size: kConnectionManagerWindowSize);
   windowManager.setOpacity(0);
   windowManager.waitUntilReadyToShow(windowOptions, () async {
+    bind.mainHideDocker();
     await windowManager.hide();
   });
 }
@@ -325,6 +332,8 @@ class _AppState extends State<App> {
         to = ThemeMode.light;
       }
       Get.changeThemeMode(to);
+      // Synchronize the window theme of the system.
+      updateSystemWindowTheme();
       if (desktopType == DesktopType.main) {
         bind.mainChangeTheme(dark: to.toShortString());
       }

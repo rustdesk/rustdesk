@@ -956,7 +956,7 @@ impl LoginConfigHandler {
     /// Check if the client should auto login.
     /// Return password if the client should auto login, otherwise return empty string.
     pub fn should_auto_login(&self) -> String {
-        let l = self.lock_after_session_end;
+        let l = self.lock_after_session_end.v;
         let a = !self.get_option("auto-login").is_empty();
         let p = self.get_option("os-password");
         if !p.is_empty() && l && a {
@@ -1063,32 +1063,32 @@ impl LoginConfigHandler {
         let mut option = OptionMessage::default();
         let mut config = self.load_config();
         if name == "show-remote-cursor" {
-            config.show_remote_cursor = !config.show_remote_cursor;
-            option.show_remote_cursor = (if config.show_remote_cursor {
+            config.show_remote_cursor.v = !config.show_remote_cursor.v;
+            option.show_remote_cursor = (if config.show_remote_cursor.v {
                 BoolOption::Yes
             } else {
                 BoolOption::No
             })
             .into();
         } else if name == "disable-audio" {
-            config.disable_audio = !config.disable_audio;
-            option.disable_audio = (if config.disable_audio {
+            config.disable_audio.v = !config.disable_audio.v;
+            option.disable_audio = (if config.disable_audio.v {
                 BoolOption::Yes
             } else {
                 BoolOption::No
             })
             .into();
         } else if name == "disable-clipboard" {
-            config.disable_clipboard = !config.disable_clipboard;
-            option.disable_clipboard = (if config.disable_clipboard {
+            config.disable_clipboard.v = !config.disable_clipboard.v;
+            option.disable_clipboard = (if config.disable_clipboard.v {
                 BoolOption::Yes
             } else {
                 BoolOption::No
             })
             .into();
         } else if name == "lock-after-session-end" {
-            config.lock_after_session_end = !config.lock_after_session_end;
-            option.lock_after_session_end = (if config.lock_after_session_end {
+            config.lock_after_session_end.v = !config.lock_after_session_end.v;
+            option.lock_after_session_end = (if config.lock_after_session_end.v {
                 BoolOption::Yes
             } else {
                 BoolOption::No
@@ -1096,15 +1096,15 @@ impl LoginConfigHandler {
             .into();
         } else if name == "privacy-mode" {
             // try toggle privacy mode
-            option.privacy_mode = (if config.privacy_mode {
+            option.privacy_mode = (if config.privacy_mode.v {
                 BoolOption::No
             } else {
                 BoolOption::Yes
             })
             .into();
         } else if name == "enable-file-transfer" {
-            config.enable_file_transfer = !config.enable_file_transfer;
-            option.enable_file_transfer = (if config.enable_file_transfer {
+            config.enable_file_transfer.v = !config.enable_file_transfer.v;
+            option.enable_file_transfer = (if config.enable_file_transfer.v {
                 BoolOption::Yes
             } else {
                 BoolOption::No
@@ -1115,10 +1115,14 @@ impl LoginConfigHandler {
         } else if name == "unblock-input" {
             option.block_input = BoolOption::No.into();
         } else if name == "show-quality-monitor" {
-            config.show_quality_monitor = !config.show_quality_monitor;
+            config.show_quality_monitor.v = !config.show_quality_monitor.v;
         } else {
-            let v = self.options.get(&name).is_some();
-            if v {
+            let is_set = self
+                .options
+                .get(&name)
+                .map(|o| !o.is_empty())
+                .unwrap_or(false);
+            if is_set {
                 self.config.options.remove(&name);
             } else {
                 self.config.options.insert(name, "Y".to_owned());
@@ -1252,19 +1256,19 @@ impl LoginConfigHandler {
     /// * `name` - The name of the toggle option.
     pub fn get_toggle_option(&self, name: &str) -> bool {
         if name == "show-remote-cursor" {
-            self.config.show_remote_cursor
+            self.config.show_remote_cursor.v
         } else if name == "lock-after-session-end" {
-            self.config.lock_after_session_end
+            self.config.lock_after_session_end.v
         } else if name == "privacy-mode" {
-            self.config.privacy_mode
+            self.config.privacy_mode.v
         } else if name == "enable-file-transfer" {
-            self.config.enable_file_transfer
+            self.config.enable_file_transfer.v
         } else if name == "disable-audio" {
-            self.config.disable_audio
+            self.config.disable_audio.v
         } else if name == "disable-clipboard" {
-            self.config.disable_clipboard
+            self.config.disable_clipboard.v
         } else if name == "show-quality-monitor" {
-            self.config.show_quality_monitor
+            self.config.show_quality_monitor.v
         } else {
             !self.get_option(name).is_empty()
         }

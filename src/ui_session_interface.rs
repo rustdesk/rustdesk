@@ -6,7 +6,6 @@ use crate::client::{
 };
 use crate::common::{self, GrabState};
 use crate::keyboard;
-use crate::ui_interface::using_public_server;
 use crate::{client::Data, client::Interface};
 use async_trait::async_trait;
 use bytes::Bytes;

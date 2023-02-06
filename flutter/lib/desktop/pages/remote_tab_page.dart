@@ -38,8 +38,9 @@ class ConnectionTabPage extends StatefulWidget {
 }
 
 class _ConnectionTabPageState extends State<ConnectionTabPage> {
-  final tabController = Get.put(DesktopTabController(
-      tabType: DesktopTabType.remoteScreen));
+  final tabController =
+      Get.put(DesktopTabController(tabType: DesktopTabType.remoteScreen));
+  final contentKey = UniqueKey();
   static const IconData selectedIcon = Icons.desktop_windows_sharp;
   static const IconData unselectedIcon = Icons.desktop_windows_outlined;
 
@@ -80,7 +81,6 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     super.initState();
 
     tabController.onRemoved = (_, id) => onRemoveId(id);
-   
 
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
       print(
@@ -112,6 +112,9 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         reloadCurrentWindow();
       }
       _update_remote_count();
+    });
+    Future.delayed(Duration.zero, () {
+      restoreWindowPosition(WindowType.RemoteDesktop, windowId: windowId());
     });
   }
 
@@ -197,11 +200,12 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     );
     return Platform.isMacOS
         ? tabWidget
-        : SubWindowDragToResizeArea(
-            child: tabWidget,
-            resizeEdgeSize: stateGlobal.resizeEdgeSize.value,
-            windowId: stateGlobal.windowId,
-          );
+        : Obx(() => SubWindowDragToResizeArea(
+              key: contentKey,
+              child: tabWidget,
+              resizeEdgeSize: stateGlobal.resizeEdgeSize.value,
+              windowId: stateGlobal.windowId,
+            ));
   }
 
   // Note: Some dup code to ../widgets/remote_menubar
@@ -269,6 +273,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       menu.add(MenuEntryDivider<String>());
       menu.add(() {
         final state = ShowRemoteCursorState.find(key);
+        final optKey = 'show-remote-cursor';
         return MenuEntrySwitch2<String>(
           switchType: SwitchType.scheckbox,
           text: translate('Show remote cursor'),
@@ -276,9 +281,8 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             return state;
           },
           setter: (bool v) async {
-            state.value = v;
-            await bind.sessionToggleOption(
-                id: key, value: 'show-remote-cursor');
+            await bind.sessionToggleOption(id: key, value: optKey);
+            state.value = bind.sessionGetToggleOptionSync(id: key, arg: optKey);
             cancelFunc();
           },
           padding: padding,

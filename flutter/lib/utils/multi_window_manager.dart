@@ -43,11 +43,14 @@ class RustDeskMultiWindowManager {
 
   Future<dynamic> newRemoteDesktop(String remoteId,
       {String? switch_uuid}) async {
-    final msg = jsonEncode({
+    var params = {
       "type": WindowType.RemoteDesktop.index,
       "id": remoteId,
-      "switch_uuid": switch_uuid ?? ""
-    });
+    };
+    if (switch_uuid != null) {
+      params['switch_uuid'] = switch_uuid;
+    }
+    final msg = jsonEncode(params);
 
     try {
       final ids = await DesktopMultiWindow.getAllSubWindowIds();
@@ -157,6 +160,24 @@ class RustDeskMultiWindowManager {
     return null;
   }
 
+  void clearWindowType(WindowType type) {
+    switch (type) {
+      case WindowType.Main:
+        return;
+      case WindowType.RemoteDesktop:
+        _remoteDesktopWindowId = null;
+        break;
+      case WindowType.FileTransfer:
+        _fileTransferWindowId = null;
+        break;
+      case WindowType.PortForward:
+        _portForwardWindowId = null;
+        break;
+      case WindowType.Unknown:
+        break;
+    }
+  }
+
   void setMethodHandler(
       Future<dynamic> Function(MethodCall call, int fromWindowId)? handler) {
     DesktopMultiWindow.setMethodHandler(handler);
@@ -183,8 +204,11 @@ class RustDeskMultiWindowManager {
         }
         await WindowController.fromWindowId(wId).setPreventClose(false);
         await WindowController.fromWindowId(wId).close();
-      } on Error {
+      } catch (e) {
+        debugPrint("$e");
         return;
+      } finally {
+        clearWindowType(type);
       }
     }
   }

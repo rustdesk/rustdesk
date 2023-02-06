@@ -28,7 +28,7 @@ class ServerModel with ChangeNotifier {
   bool _inputOk = false;
   bool _audioOk = false;
   bool _fileOk = false;
-  bool _showElevation = true;
+  bool _showElevation = false;
   bool _hideCm = false;
   int _connectStatus = 0; // Rendezvous Server status
   String _verificationMethod = "";

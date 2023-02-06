@@ -498,7 +498,7 @@ fn run(sp: GenericService) -> ResultType<()> {
                 video_qos.target_bitrate,
                 video_qos.fps
             );
-            encoder.set_bitrate(video_qos.target_bitrate).unwrap();
+            allow_err!(encoder.set_bitrate(video_qos.target_bitrate));
             spf = video_qos.spf();
         }
         drop(video_qos);
@@ -956,15 +956,17 @@ fn start_uac_elevation_check() {
     START.call_once(|| {
         if !crate::platform::is_installed()
             && !crate::platform::is_root()
-            && !crate::platform::is_elevated(None).map_or(false, |b| b)
+            && !crate::portable_service::client::running()
         {
             std::thread::spawn(|| loop {
                 std::thread::sleep(std::time::Duration::from_secs(1));
                 if let Ok(uac) = crate::ui::win_privacy::is_process_consent_running() {
                     *IS_UAC_RUNNING.lock().unwrap() = uac;
                 }
-                if let Ok(elevated) = crate::platform::is_foreground_window_elevated() {
-                    *IS_FOREGROUND_WINDOW_ELEVATED.lock().unwrap() = elevated;
+                if !crate::platform::is_elevated(None).unwrap_or(false) {
+                    if let Ok(elevated) = crate::platform::is_foreground_window_elevated() {
+                        *IS_FOREGROUND_WINDOW_ELEVATED.lock().unwrap() = elevated;
+                    }
                 }
             });
         }

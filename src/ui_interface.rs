@@ -615,25 +615,11 @@ pub fn is_login_wayland() -> bool {
 }
 
 #[inline]
-pub fn fix_login_wayland() {
-    #[cfg(target_os = "linux")]
-    crate::platform::linux::fix_login_wayland();
-}
-
-#[inline]
 pub fn current_is_wayland() -> bool {
     #[cfg(target_os = "linux")]
     return crate::platform::linux::current_is_wayland();
     #[cfg(not(target_os = "linux"))]
     return false;
-}
-
-#[inline]
-pub fn modify_default_login() -> String {
-    #[cfg(target_os = "linux")]
-    return crate::platform::linux::modify_default_login();
-    #[cfg(not(target_os = "linux"))]
-    return "".to_owned();
 }
 
 #[inline]
@@ -929,6 +915,18 @@ pub fn account_auth_cancel() {
 #[cfg(feature = "flutter")]
 pub fn account_auth_result() -> String {
     serde_json::to_string(&account::OidcSession::get_result()).unwrap_or_default()
+}
+
+#[cfg(feature = "flutter")]
+pub fn set_user_default_option(key: String, value: String) {
+    use hbb_common::config::UserDefaultConfig;
+    UserDefaultConfig::load().set(key, value);
+}
+
+#[cfg(feature = "flutter")]
+pub fn get_user_default_option(key: String) -> String {
+    use hbb_common::config::UserDefaultConfig;
+    UserDefaultConfig::load().get(&key)
 }
 
 // notice: avoiding create ipc connection repeatedly,

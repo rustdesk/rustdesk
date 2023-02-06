@@ -2,9 +2,7 @@ use core::slice;
 use hbb_common::{
     allow_err,
     anyhow::anyhow,
-    bail,
-    config::Config,
-    log,
+    bail, log,
     message_proto::{KeyEvent, MouseEvent},
     protobuf::Message,
     tokio::{self, sync::mpsc},
@@ -15,6 +13,7 @@ use shared_memory::*;
 use std::{
     mem::size_of,
     ops::{Deref, DerefMut},
+    path::PathBuf,
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -25,6 +24,7 @@ use winapi::{
 
 use crate::{
     ipc::{self, new_listener, Connection, Data, DataPortableService},
+    platform::set_path_permission,
     video_service::get_current_display,
 };
 
@@ -72,7 +72,7 @@ impl DerefMut for SharedMemory {
 
 impl SharedMemory {
     pub fn create(name: &str, size: usize) -> ResultType<Self> {
-        let flink = Self::flink(name.to_string());
+        let flink = Self::flink(name.to_string())?;
         let shmem = match ShmemConf::new()
             .size(size)
             .flink(&flink)
@@ -91,12 +91,12 @@ impl SharedMemory {
             }
         };
         log::info!("Create shared memory, size:{}, flink:{}", size, flink);
-        Self::set_all_perm(&flink);
+        set_path_permission(&PathBuf::from(flink), "F").ok();
         Ok(SharedMemory { inner: shmem })
     }
 
     pub fn open_existing(name: &str) -> ResultType<Self> {
-        let flink = Self::flink(name.to_string());
+        let flink = Self::flink(name.to_string())?;
         let shmem = match ShmemConf::new().flink(&flink).allow_raw(true).open() {
             Ok(m) => m,
             Err(e) => {
@@ -116,30 +116,29 @@ impl SharedMemory {
         }
     }
 
-    fn flink(name: String) -> String {
-        let mut shmem_flink = format!("shared_memory{}", name);
-        if cfg!(windows) {
-            let df = "C:\\ProgramData";
-            let df = if std::path::Path::new(df).exists() {
-                df.to_owned()
-            } else {
-                std::env::var("TEMP").unwrap_or("C:\\Windows\\TEMP".to_owned())
-            };
-            let df = format!("{}\\{}", df, *hbb_common::config::APP_NAME.read().unwrap());
-            std::fs::create_dir(&df).ok();
-            shmem_flink = format!("{}\\{}", df, shmem_flink);
+    fn flink(name: String) -> ResultType<String> {
+        let disk = std::env::var("SystemDrive").unwrap_or("C:".to_string());
+        let mut dir = PathBuf::from(disk);
+        let dir1 = dir.join("ProgramData");
+        let dir2 = std::env::var("TEMP")
+            .map(|d| PathBuf::from(d))
+            .unwrap_or(dir.join("Windows").join("Temp"));
+        if dir1.exists() {
+            dir = dir1;
+        } else if dir2.exists() {
+            dir = dir2;
         } else {
-            shmem_flink = Config::ipc_path("").replace("ipc", "") + &shmem_flink;
+            bail!("no vaild flink directory");
         }
-        return shmem_flink;
-    }
-
-    fn set_all_perm(_p: &str) {
-        #[cfg(not(windows))]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(_p, std::fs::Permissions::from_mode(0o0777)).ok();
+        dir = dir.join(hbb_common::config::APP_NAME.read().unwrap().clone());
+        if !dir.exists() {
+            std::fs::create_dir(&dir)?;
+            set_path_permission(&dir, "F").ok();
         }
+        Ok(dir
+            .join(format!("shared_memory{}", name))
+            .to_string_lossy()
+            .to_string())
     }
 }
 
@@ -451,7 +450,6 @@ pub mod server {
 // functions called in main process.
 pub mod client {
     use hbb_common::anyhow::Context;
-    use std::path::PathBuf;
 
     use super::*;
 
@@ -459,6 +457,7 @@ pub mod client {
         static ref RUNNING: Arc<Mutex<bool>> = Default::default();
         static ref SHMEM: Arc<Mutex<Option<SharedMemory>>> = Default::default();
         static ref SENDER : Mutex<mpsc::UnboundedSender<ipc::Data>> = Mutex::new(client::start_ipc_server());
+        static ref QUICK_SUPPORT: Arc<Mutex<bool>> = Default::default();
     }
 
     pub enum StartPara {
@@ -514,7 +513,7 @@ pub mod client {
                 #[cfg(feature = "flutter")]
                 {
                     if let Some(dir) = PathBuf::from(&exe).parent() {
-                        if !set_dir_permission(&PathBuf::from(dir)) {
+                        if set_path_permission(&PathBuf::from(dir), "RX").is_err() {
                             *SHMEM.lock().unwrap() = None;
                             bail!("Failed to set permission of {:?}", dir);
                         }
@@ -532,7 +531,7 @@ pub mod client {
                             let dst = dir.join("rustdesk.exe");
                             if std::fs::copy(&exe, &dst).is_ok() {
                                 if dst.exists() {
-                                    if set_dir_permission(&dir) {
+                                    if set_path_permission(&dir, "RX").is_ok() {
                                         exe = dst.to_string_lossy().to_string();
                                     }
                                 }
@@ -561,16 +560,10 @@ pub mod client {
         *SHMEM.lock().unwrap() = None;
     }
 
-    fn set_dir_permission(dir: &PathBuf) -> bool {
-        // // give Everyone RX permission
-        std::process::Command::new("icacls")
-            .arg(dir.as_os_str())
-            .arg("/grant")
-            .arg("Everyone:(OI)(CI)RX")
-            .arg("/T")
-            .spawn()
-            .is_ok()
+    pub fn set_quick_support(v: bool) {
+        *QUICK_SUPPORT.lock().unwrap() = v;
     }
+
     pub struct CapturerPortable;
 
     impl CapturerPortable {
@@ -685,17 +678,7 @@ pub mod client {
         use DataPortableService::*;
         let rx = Arc::new(tokio::sync::Mutex::new(rx));
         let postfix = IPC_SUFFIX;
-        #[cfg(feature = "flutter")]
-        let quick_support = {
-            let args: Vec<_> = std::env::args().collect();
-            args.contains(&"--quick_support".to_string())
-        };
-        #[cfg(not(feature = "flutter"))]
-        let quick_support = std::env::current_exe()
-            .unwrap_or("".into())
-            .to_string_lossy()
-            .to_lowercase()
-            .ends_with("qs.exe");
+        let quick_support = QUICK_SUPPORT.lock().unwrap().clone();
 
         match new_listener(postfix).await {
             Ok(mut incoming) => loop {

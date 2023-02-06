@@ -310,7 +310,6 @@ class InputModel {
     }
   }
 
-/*
   int _signOrZero(num x) {
     if (x == 0) {
       return 0;
@@ -361,7 +360,6 @@ class InputModel {
 
     trackpadScrollDistance = Offset.zero;
   }
-*/
 
   void onPointDownImage(PointerDownEvent e) {
     debugPrint("onPointDownImage");
@@ -407,6 +405,13 @@ class InputModel {
           id: id, msg: '{"type": "wheel", "x": "$dx", "y": "$dy"}');
     }
   }
+
+  void refreshMousePos() => handleMouse({
+        'x': lastMousePos.dx,
+        'y': lastMousePos.dy,
+        'buttons': 0,
+        'type': _kMouseEventMove,
+      });
 
   void handleMouse(Map<String, dynamic> evt) {
     double x = evt['x'];
