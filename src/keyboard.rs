@@ -88,14 +88,17 @@ pub mod client {
         }
     }
 
-    pub fn process_event(event: &Event, lock_modes: Option<i32>) {
+    pub fn process_event(event: &Event, lock_modes: Option<i32>) -> KeyboardMode {
+        let keyboard_mode = get_keyboard_mode_enum();
+
         if is_long_press(&event) {
-            return;
+            return keyboard_mode;
         }
 
-        for key_event in event_to_key_events(&event, lock_modes) {
+        for key_event in event_to_key_events(&event, keyboard_mode, lock_modes) {
             send_key_event(&key_event);
         }
+        keyboard_mode
     }
 
     pub fn get_modifiers_state(
@@ -205,7 +208,14 @@ pub fn start_grab_loop() {
                 return Some(event);
             }
             if KEYBOARD_HOOKED.load(Ordering::SeqCst) {
-                client::process_event(&event, None);
+                let keyboard_mode = client::process_event(&event, None);
+                if keyboard_mode == KeyboardMode::Translate {
+                    // shift
+                    if event.scan_code == 0x2A {
+                        return Some(event);
+                    }
+                }
+                
                 if is_press {
                     return None;
                 } else {
@@ -342,7 +352,7 @@ fn update_modifiers_state(event: &Event) {
     };
 }
 
-pub fn event_to_key_events(event: &Event, lock_modes: Option<i32>) -> Vec<KeyEvent> {
+pub fn event_to_key_events(event: &Event, keyboard_mode: KeyboardMode, lock_modes: Option<i32>) ->  Vec<KeyEvent> {
     let mut key_event = KeyEvent::new();
     update_modifiers_state(event);
 
@@ -356,7 +366,6 @@ pub fn event_to_key_events(event: &Event, lock_modes: Option<i32>) -> Vec<KeyEve
         _ => {}
     }
 
-    let keyboard_mode = get_keyboard_mode_enum();
     key_event.mode = keyboard_mode.into();
     let mut key_events = match keyboard_mode {
         KeyboardMode::Map => match map_keyboard_mode(event, key_event) {
