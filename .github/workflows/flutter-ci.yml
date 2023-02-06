@@ -436,6 +436,15 @@ jobs:
           popd
           mkdir -p signed-apk; pushd signed-apk
           mv ../rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk .
+          ls -l .
+          
+      - name: Upload a Build Artifact
+        uses: actions/upload-artifact@v3.1.2
+        with:
+          # Artifact name
+          name: RustDeskApk
+          # A file, directory or wildcard pattern that describes what to upload
+          path: rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk
       
   build-rustdesk-lib-linux-amd64:
     needs: [generate-bridge-linux, build-vcpkg-deps-linux]
