@@ -210,8 +210,8 @@ pub fn start_grab_loop() {
             if KEYBOARD_HOOKED.load(Ordering::SeqCst) {
                 let keyboard_mode = client::process_event(&event, None);
                 if keyboard_mode == KeyboardMode::Translate {
-                    // shift
-                    if event.scan_code == 0x2A {
+                    // SHIFT(0x2A) RSHIFT(0x36)
+                    if event.scan_code == 0x2A || event.scan_code == 0x36 {
                         return Some(event);
                     }
                 }
@@ -395,11 +395,6 @@ pub fn event_to_key_events(event: &Event, keyboard_mode: KeyboardMode, lock_mode
             }
         }
     }
-
-    println!(
-        "REMOVE ME ========================= key_events {:?}",
-        &key_events
-    );
 
     key_events
 }

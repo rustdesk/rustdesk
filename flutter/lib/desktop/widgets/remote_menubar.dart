@@ -1391,6 +1391,12 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           for (KeyboardModeMenu mode in modes) {
             if (bind.sessionIsKeyboardModeSupported(
                 id: widget.id, mode: mode.key)) {
+              if (mode.key == 'translate') {
+                if (!Platform.isWindows ||
+                    widget.ffi.ffiModel.pi.platform != kPeerPlatformWindows) {
+                  continue;
+                }
+              }
               list.add(MenuEntryRadioOption(
                   text: translate(mode.menu), value: mode.key));
             }

@@ -1070,7 +1070,6 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
 fn translate_keyboard_mode(evt: &KeyEvent) {
     match evt.union {
         Some(key_event::Union::Unicode(unicode)) => {
-            println!("REMOVE ME ========================= simulate_unicode {}", unicode);
             allow_err!(rdev::simulate_unicode(unicode as _));
         },
         Some(key_event::Union::Chr(..)) => {

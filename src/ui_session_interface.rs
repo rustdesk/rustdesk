@@ -364,14 +364,8 @@ impl<T: InvokeUiSession> Session<T> {
         #[cfg(target_os = "windows")]
         {
             match &self.lc.read().unwrap().keyboard_mode as _ {
-                "legacy" => {
-                    println!("REMOVE ME =========================== enter legacy ");
-                    rdev::set_get_key_name(true);
-                }
-                "translate" => {
-                    println!("REMOVE ME =========================== enter translate ");
-                    rdev::set_get_key_name(true);
-                }
+                "legacy" => rdev::set_get_key_name(true),
+                "translate" => rdev::set_get_key_name(true),
                 _ => {}
             }
         }
@@ -383,7 +377,6 @@ impl<T: InvokeUiSession> Session<T> {
     pub fn leave(&self) {
         #[cfg(target_os = "windows")]
         {
-            println!("REMOVE ME =========================== leave ");
             rdev::set_get_key_name(false);
         }
         IS_IN.store(false, Ordering::SeqCst);
