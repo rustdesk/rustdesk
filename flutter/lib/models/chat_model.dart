@@ -5,7 +5,6 @@ import 'package:draggable_float_widget/draggable_float_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get_rx/src/rx_types/rx_types.dart';
-import 'package:get/get_state_manager/src/rx_flutter/rx_obx_widget.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../consts.dart';
@@ -30,16 +29,12 @@ class MessageBody {
 class ChatModel with ChangeNotifier {
   static final clientModeID = -1;
 
-  /// _overlayState:
-  /// Desktop: store session overlay by using [setOverlayState].
-  /// Mobile: always null, use global overlay.
-  /// see [_getOverlayState] in [showChatIconOverlay] or [showChatWindowOverlay]
-  OverlayState? _overlayState;
   OverlayEntry? chatIconOverlayEntry;
   OverlayEntry? chatWindowOverlayEntry;
   bool isConnManager = false;
 
   RxBool isWindowFocus = true.obs;
+  PenetrableOverlayState? pOverlayState;
 
   final ChatUser me = ChatUser(
     id: "",
@@ -58,6 +53,19 @@ class ChatModel with ChangeNotifier {
 
   bool get isShowCMChatPage => _isShowCMChatPage;
 
+  void setPenetrableOverlayState(PenetrableOverlayState state) {
+    pOverlayState = state;
+
+    pOverlayState!.addMiddleBlockedListener((v) {
+      if (!v) {
+        isWindowFocus.value = false;
+        if (isWindowFocus.value) {
+          isWindowFocus.toggle();
+        }
+      }
+    });
+  }
+
   final WeakReference<FFI> parent;
 
   ChatModel(this.parent);
@@ -74,20 +82,6 @@ class ChatModel with ChangeNotifier {
     }
   }
 
-  setOverlayState(OverlayState? os) {
-    _overlayState = os;
-  }
-
-  OverlayState? _getOverlayState() {
-    if (_overlayState == null) {
-      if (globalKey.currentState == null ||
-          globalKey.currentState!.overlay == null) return null;
-      return globalKey.currentState!.overlay;
-    } else {
-      return _overlayState;
-    }
-  }
-
   showChatIconOverlay({Offset offset = const Offset(200, 50)}) {
     if (chatIconOverlayEntry != null) {
       chatIconOverlayEntry!.remove();
@@ -100,7 +94,7 @@ class ChatModel with ChangeNotifier {
       }
     }
 
-    final overlayState = _getOverlayState();
+    final overlayState = pOverlayState?.getOverlayStateOrGlobal();
     if (overlayState == null) return;
 
     final overlay = OverlayEntry(builder: (context) {
@@ -132,33 +126,26 @@ class ChatModel with ChangeNotifier {
     }
   }
 
-  showChatWindowOverlay() {
+  showChatWindowOverlay({Offset? chatInitPos}) {
     if (chatWindowOverlayEntry != null) return;
-    final overlayState = _getOverlayState();
+    isWindowFocus.value = true;
+    pOverlayState?.setMiddleBlocked(true);
+
+    final overlayState = pOverlayState?.getOverlayStateOrGlobal();
     if (overlayState == null) return;
     final overlay = OverlayEntry(builder: (context) {
-      bool innerClicked = false;
       return Listener(
           onPointerDown: (_) {
-            if (!innerClicked) {
-              isWindowFocus.value = false;
+            if (!isWindowFocus.value) {
+              isWindowFocus.value = true;
+              pOverlayState?.setMiddleBlocked(true);
             }
-            innerClicked = false;
           },
-          child: Obx(() => Container(
-              color: isWindowFocus.value ? Colors.red.withOpacity(0.3) : null,
-              child: Listener(
-                  onPointerDown: (_) {
-                    innerClicked = true;
-                    if (!isWindowFocus.value) {
-                      isWindowFocus.value = true;
-                    }
-                  },
-                  child: DraggableChatWindow(
-                      position: const Offset(20, 80),
-                      width: 250,
-                      height: 350,
-                      chatModel: this)))));
+          child: DraggableChatWindow(
+              position: chatInitPos ?? Offset(20, 80),
+              width: 250,
+              height: 350,
+              chatModel: this));
     });
     overlayState.insert(overlay);
     chatWindowOverlayEntry = overlay;
@@ -167,6 +154,7 @@ class ChatModel with ChangeNotifier {
 
   hideChatWindowOverlay() {
     if (chatWindowOverlayEntry != null) {
+      pOverlayState?.setMiddleBlocked(false);
       chatWindowOverlayEntry!.remove();
       chatWindowOverlayEntry = null;
       return;
@@ -176,13 +164,13 @@ class ChatModel with ChangeNotifier {
   _isChatOverlayHide() => ((!isDesktop && chatIconOverlayEntry == null) ||
       chatWindowOverlayEntry == null);
 
-  toggleChatOverlay() {
+  toggleChatOverlay({Offset? chatInitPos}) {
     if (_isChatOverlayHide()) {
       gFFI.invokeMethod("enable_soft_keyboard", true);
       if (!isDesktop) {
         showChatIconOverlay();
       }
-      showChatWindowOverlay();
+      showChatWindowOverlay(chatInitPos: chatInitPos);
     } else {
       hideChatIconOverlay();
       hideChatWindowOverlay();
@@ -310,7 +298,6 @@ class ChatModel with ChangeNotifier {
   close() {
     hideChatIconOverlay();
     hideChatWindowOverlay();
-    _overlayState = null;
     notifyListeners();
   }
 

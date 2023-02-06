@@ -297,12 +297,23 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     );
   }
 
+  final _chatButtonKey = GlobalKey();
   Widget _buildChat(BuildContext context) {
     return IconButton(
+      key: _chatButtonKey,
       tooltip: translate('Chat'),
       onPressed: () {
+        RenderBox? renderBox =
+            _chatButtonKey.currentContext?.findRenderObject() as RenderBox?;
+
+        Offset? initPos;
+        if (renderBox != null) {
+          final pos = renderBox.localToGlobal(Offset.zero);
+          initPos = Offset(pos.dx, pos.dy + _MenubarTheme.dividerHeight);
+        }
+
         widget.ffi.chatModel.changeCurrentID(ChatModel.clientModeID);
-        widget.ffi.chatModel.toggleChatOverlay();
+        widget.ffi.chatModel.toggleChatOverlay(chatInitPos: initPos);
       },
       icon: const Icon(
         Icons.message,

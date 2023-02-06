@@ -1,7 +1,7 @@
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
-import 'package:get/get_state_manager/src/rx_flutter/rx_obx_widget.dart';
+import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 
 import '../../consts.dart';
@@ -92,31 +92,30 @@ class DraggableChatWindow extends StatelessWidget {
               bottom: BorderSide(
                   color: Theme.of(context).hintColor.withOpacity(0.4)))),
       height: 38,
-      child: Obx(() => Opacity(
-          opacity: chatModel.isWindowFocus.value ? 1.0 : 0.4,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+              child: Obx(() => Opacity(
+                  opacity: chatModel.isWindowFocus.value ? 1.0 : 0.4,
                   child: Row(children: [
                     Icon(Icons.chat_bubble_outline,
                         size: 20, color: Theme.of(context).colorScheme.primary),
                     SizedBox(width: 6),
                     Text(translate("Chat"))
-                  ])),
-              Padding(
-                  padding: EdgeInsets.all(2),
-                  child: ActionIcon(
-                    message: 'Close',
-                    icon: IconFont.close,
-                    onTap: chatModel.hideChatWindowOverlay,
-                    isClose: true,
-                    boxSize: 32,
-                  ))
-            ],
-          ))),
+                  ])))),
+          Padding(
+              padding: EdgeInsets.all(2),
+              child: ActionIcon(
+                message: 'Close',
+                icon: IconFont.close,
+                onTap: chatModel.hideChatWindowOverlay,
+                isClose: true,
+                boxSize: 32,
+              ))
+        ],
+      ),
     );
   }
 }
@@ -371,4 +370,69 @@ class QualityMonitor extends StatelessWidget {
                   ),
                 )
               : const SizedBox.shrink()));
+}
+
+class PenetrableOverlayState {
+  final _middleBlocked = false.obs;
+  final _overlayKey = GlobalKey<OverlayState>();
+
+  VoidCallback? onMiddleBlockedClick; // to-do use listener
+
+  RxBool get middleBlocked => _middleBlocked;
+  GlobalKey get overlayKey => _overlayKey;
+  OverlayState? get overlayState => _overlayKey.currentState;
+
+  OverlayState? getOverlayStateOrGlobal() {
+    if (overlayState == null) {
+      if (globalKey.currentState == null ||
+          globalKey.currentState!.overlay == null) return null;
+      return globalKey.currentState!.overlay;
+    } else {
+      return overlayState;
+    }
+  }
+
+  void addMiddleBlockedListener(void Function(bool) cb) {
+    _middleBlocked.listen(cb);
+  }
+
+  void setMiddleBlocked(bool blocked) {
+    if (blocked != _middleBlocked.value) {
+      _middleBlocked.value = blocked;
+    }
+  }
+}
+
+class PenetrableOverlay extends StatelessWidget {
+  final Widget underlying;
+  final List<OverlayEntry>? upperLayer;
+
+  final PenetrableOverlayState state;
+
+  PenetrableOverlay(
+      {required this.underlying, required this.state, this.upperLayer});
+
+  @override
+  Widget build(BuildContext context) {
+    final initialEntries = [
+      OverlayEntry(builder: (_) => underlying),
+
+      /// middle layer
+      OverlayEntry(
+          builder: (context) => Obx(() => Listener(
+              onPointerDown: (_) {
+                state.onMiddleBlockedClick?.call();
+              },
+              child: Container(
+                  color: state.middleBlocked.value
+                      ? Colors.red.withOpacity(0.3)
+                      : null)))),
+    ];
+
+    if (upperLayer != null) {
+      initialEntries.addAll(upperLayer!);
+    }
+
+    return Overlay(key: state.overlayKey, initialEntries: initialEntries);
+  }
 }
