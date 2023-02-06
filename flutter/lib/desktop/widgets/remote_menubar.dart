@@ -426,6 +426,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     menubarItems.add(_buildKeyboard(context));
     if (!isWeb) {
       menubarItems.add(_buildChat(context));
+      menubarItems.add(_buildVoiceCall(context));
     }
     menubarItems.add(_buildRecording(context));
     menubarItems.add(_buildClose(context));
@@ -707,6 +708,32 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     );
   }
 
+  Widget _buildVoiceCall(BuildContext context) {
+    return Obx(
+      () {
+        switch (widget.ffi.chatModel.voiceCallStatus.value) {
+          case VoiceCallStatus.waitingForResponse:
+            return SvgPicture.asset(
+              "assets/voice_call_waiting.svg",
+              color: _MenubarTheme.commonColor,
+              width: Theme.of(context).iconTheme.size ?? 24.0,
+              height: Theme.of(context).iconTheme.size ?? 24.0,
+            );
+            break;
+          case VoiceCallStatus.connected:
+            return SvgPicture.asset(
+              "assets/voice_call.svg",
+              color: Colors.red,
+              width: Theme.of(context).iconTheme.size ?? 24.0,
+              height: Theme.of(context).iconTheme.size ?? 24.0,
+            );
+          default:
+            return const Offstage();
+        }
+      },
+    );
+  }
+
   List<MenuEntryBase<String>> _getChatMenu(BuildContext context) {
     final List<MenuEntryBase<String>> chatMenu = [];
     const EdgeInsets padding = EdgeInsets.only(left: 14.0, right: 5.0);
@@ -728,7 +755,10 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           translate('Voice call'),
           style: style,
         ),
-        proc: () {},
+        proc: () {
+          // Request a voice call.
+          bind.sessionRequestVoiceCall(id: widget.id);
+        },
         padding: padding,
         dismissOnClicked: true,
       ),

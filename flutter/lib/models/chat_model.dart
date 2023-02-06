@@ -2,6 +2,7 @@ import 'package:dash_chat_2/dash_chat_2.dart';
 import 'package:draggable_float_widget/draggable_float_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:get/get.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../consts.dart';
@@ -33,7 +34,12 @@ class ChatModel with ChangeNotifier {
   OverlayState? _overlayState;
   OverlayEntry? chatIconOverlayEntry;
   OverlayEntry? chatWindowOverlayEntry;
+
   bool isConnManager = false;
+
+  final Rx<VoiceCallStatus> _voiceCallStatus = Rx(VoiceCallStatus.notStarted);
+
+  Rx<VoiceCallStatus> get voiceCallStatus => _voiceCallStatus;
 
   final ChatUser me = ChatUser(
     id: "",
@@ -292,4 +298,30 @@ class ChatModel with ChangeNotifier {
   resetClientMode() {
     _messages[clientModeID]?.clear();
   }
+
+  void onVoiceCallWaiting() {
+    _voiceCallStatus.value = VoiceCallStatus.waitingForResponse;
+  }
+
+  void onVoiceCallStarted() {
+    _voiceCallStatus.value = VoiceCallStatus.connected;
+  }
+
+  void onVoiceCallClosed(String reason) {
+    _voiceCallStatus.value = VoiceCallStatus.notStarted;
+  }
+
+  void onVoiceCallIncoming() {
+    if (isConnManager) {
+      _voiceCallStatus.value = VoiceCallStatus.incoming;
+    }
+  }
+}
+
+enum VoiceCallStatus {
+  notStarted,
+  waitingForResponse,
+  connected,
+  // Connection manager only.
+  incoming
 }

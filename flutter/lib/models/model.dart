@@ -203,6 +203,21 @@ class FfiModel with ChangeNotifier {
       } else if (name == "on_url_scheme_received") {
         final url = evt['url'].toString();
         parseRustdeskUri(url);
+      } else if (name == "on_voice_call_waiting") {
+        // Waiting for the response from the peer.
+        parent.target?.chatModel.onVoiceCallWaiting();
+      } else if (name == "on_voice_call_started") {
+        // Voice call is connected.
+        parent.target?.chatModel.onVoiceCallStarted();
+      } else if (name == "on_voice_call_closed") {
+        // Voice call is closed with reason.
+        final reason = evt['reason'].toString();
+        parent.target?.chatModel.onVoiceCallClosed(reason);
+      } else if (name == "on_voice_call_incoming") {
+        // Voice call is requested by the peer.
+        parent.target?.chatModel.onVoiceCallIncoming();
+      } else {
+        debugPrint("Unknown event name: $name");
       }
     };
   }
