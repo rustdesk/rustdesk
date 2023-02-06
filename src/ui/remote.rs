@@ -271,8 +271,8 @@ impl InvokeUiSession for SciterHandler {
         self.call("onVoiceCallStart", &make_args!());
     }
 
-    fn on_voice_call_stop(&self, reason: &str) {
-        self.call("onVoiceCallStop", &make_args!(reason));
+    fn on_voice_call_closed(&self, reason: &str) {
+        self.call("onVoiceCallClosed", &make_args!(reason));
     }
 
     fn on_voice_call_waiting(&self) {

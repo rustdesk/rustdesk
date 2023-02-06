@@ -706,7 +706,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn cancel_msgbox(&self, tag: &str);
     fn switch_back(&self, id: &str);
     fn on_voice_call_start(&self);
-    fn on_voice_call_stop(&self, reason: &str);
+    fn on_voice_call_closed(&self, reason: &str);
     fn on_voice_call_waiting(&self);
     fn on_voice_call_incoming(&self);
 }

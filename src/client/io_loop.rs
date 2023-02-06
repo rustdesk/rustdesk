@@ -749,6 +749,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         .unwrap_or(NonZeroI64::new(get_time()).unwrap()),
                 );
                 allow_err!(peer.send(&msg).await);
+                self.handler.on_voice_call_waiting();
             }
             Data::CloseVoiceCall => {
                 self.stop_voice_call();
@@ -1262,7 +1263,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                 self.stop_voice_call_sender = self.start_voice_call();
                             } else {
                                 // The peer refused the voice call.
-                                self.handler.on_voice_call_stop("Refused");
+                                self.handler.on_voice_call_closed("Refused");
                             }
                         }
                     }
