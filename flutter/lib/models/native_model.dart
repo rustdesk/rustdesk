@@ -117,7 +117,7 @@ class PlatformFFI {
       if (Platform.isLinux) {
         // Start a dbus service, no need to await
         _ffiBind.mainStartDbusServer();
-      } else if (Platform.isMacOS) {
+      } else if (Platform.isMacOS && isMain) {
         // Start an ipc server for handling url schemes.
         _ffiBind.mainStartIpcUrlServer();
       }
