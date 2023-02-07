@@ -118,11 +118,9 @@ impl SharedMemory {
 
     fn flink(name: String) -> ResultType<String> {
         let disk = std::env::var("SystemDrive").unwrap_or("C:".to_string());
-        let mut dir = PathBuf::from(disk);
-        let dir1 = dir.join("ProgramData");
-        let dir2 = std::env::var("TEMP")
-            .map(|d| PathBuf::from(d))
-            .unwrap_or(dir.join("Windows").join("Temp"));
+        let dir1 = PathBuf::from(format!("{}\\ProgramData", disk));
+        let dir2 = PathBuf::from(format!("{}\\Windows\\Temp", disk));
+        let mut dir;
         if dir1.exists() {
             dir = dir1;
         } else if dir2.exists() {

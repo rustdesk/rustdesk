@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -30,6 +31,9 @@ import 'models/platform_model.dart';
 int? kWindowId;
 WindowType? kWindowType;
 late List<String> kBootArgs;
+
+/// Uni links.
+StreamSubscription? _uniLinkSubscription;
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -222,6 +226,8 @@ void runConnectionManagerScreen(bool hide) async {
   } else {
     showCmWindow();
   }
+  // Start the uni links handler and redirect links to Native, not for Flutter.
+  _uniLinkSubscription = listenUniLinks(handleByFlutter: false);
 }
 
 void showCmWindow() {

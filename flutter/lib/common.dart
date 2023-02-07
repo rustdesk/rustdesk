@@ -1292,14 +1292,24 @@ Future<bool> initUniLinks() async {
   }
 }
 
-StreamSubscription? listenUniLinks() {
-  if (!(Platform.isWindows || Platform.isMacOS)) {
+/// Listen for uni links.
+///
+/// * handleByFlutter: Should uni links be handled by Flutter.
+///
+/// Returns a [StreamSubscription] which can listen the uni links.
+StreamSubscription? listenUniLinks({handleByFlutter = true}) {
+  if (Platform.isLinux) {
     return null;
   }
 
   final sub = uriLinkStream.listen((Uri? uri) {
+    debugPrint("A uri was received: $uri.");
     if (uri != null) {
-      callUniLinksUriHandler(uri);
+      if (handleByFlutter) {
+        callUniLinksUriHandler(uri);
+      } else {
+        bind.sendUrlScheme(url: uri.toString());
+      }
     } else {
       print("uni listen error: uri is empty.");
     }
