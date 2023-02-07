@@ -31,7 +31,7 @@ RustDesk welcomes contribution from everyone. See [`docs/CONTRIBUTING.md`](docs/
 
 ## Free Public Servers
 
-Below are the servers you are using for free, it may change along the time. If you are not close to one of these, your network may be slow.
+Below are the servers you are using for free, it may change over time. If you are not close to one of these, your network may be slow.
 | Location | Vendor | Specification |
 | --------- | ------------- | ------------------ |
 | Seoul | AWS lightsail | 1 vCPU / 0.5GB RAM |
