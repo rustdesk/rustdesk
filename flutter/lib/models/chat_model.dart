@@ -316,6 +316,10 @@ class ChatModel with ChangeNotifier {
       _voiceCallStatus.value = VoiceCallStatus.incoming;
     }
   }
+
+  void closeVoiceCall(String id) {
+    bind.sessionCloseVoiceCall(id: id);
+  }
 }
 
 enum VoiceCallStatus {

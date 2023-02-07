@@ -538,16 +538,9 @@ pub mod connection_manager {
             self.push_event("show_elevation", vec![("show", &show.to_string())]);
         }
 
-        fn voice_call_started(&self, id: i32) {
-            self.push_event("voice_call_started", vec![("show", &id.to_string())]);
-        }
-
-        fn voice_call_incoming(&self, id: i32) {
-            self.push_event("voice_call_incoming", vec![("id", &id.to_string())]);
-        }
-
-        fn voice_call_closed(&self, id: i32, reason: &str) {
-            self.push_event("voice_call_closed", vec![("id", &id.to_string()), ("reason", &reason.to_string())]);
+        fn update_voice_call_state(&self, client: &crate::ui_cm_interface::Client) {
+            let client_json = serde_json::to_string(&client).unwrap_or("".into());
+            self.push_event("update_voice_call_state", vec![("client", &client_json)]);
         }
     }
 

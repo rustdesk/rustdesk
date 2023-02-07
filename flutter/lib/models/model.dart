@@ -216,6 +216,8 @@ class FfiModel with ChangeNotifier {
       } else if (name == "on_voice_call_incoming") {
         // Voice call is requested by the peer.
         parent.target?.chatModel.onVoiceCallIncoming();
+      } else if (name == "update_voice_call_state") {
+        parent.target?.serverModel.updateVoiceCallState(evt);
       } else {
         debugPrint("Unknown event name: $name");
       }

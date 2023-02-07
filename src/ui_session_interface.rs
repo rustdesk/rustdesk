@@ -661,7 +661,7 @@ impl<T: InvokeUiSession> Session<T> {
     pub fn request_voice_call(&self) {
         self.send(Data::NewVoiceCall);
     }
-
+    
     pub fn close_voice_call(&self) {
         self.send(Data::CloseVoiceCall);
     }

@@ -56,16 +56,15 @@ impl InvokeUiCM for SciterHandler {
         self.call("showElevation", &make_args!(show));
     }
 
-    fn voice_call_started(&self, id: i32) {
-        self.call("voice_call_started", &make_args!(id));
-    }
-
-    fn voice_call_incoming(&self, id: i32) {
-        self.call("voice_call_incoming", &make_args!(id));
-    }
-
-    fn voice_call_closed(&self, id: i32, reason: &str) {
-        self.call("voice_call_incoming", &make_args!(id, reason));
+    fn update_voice_call_state(&self, client: &crate::ui_cm_interface::Client) {
+        self.call(
+            "updateVoiceCallState",
+            &make_args!(
+                client.id,
+                client.in_voice_call,
+                client.incoming_voice_call
+            ),
+        );
     }
 }
 

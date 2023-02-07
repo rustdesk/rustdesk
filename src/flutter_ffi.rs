@@ -838,6 +838,14 @@ pub fn session_close_voice_call(id: String) {
     }
 }
 
+pub fn cm_handle_incoming_voice_call(id: i32, accept: bool) {
+    crate::ui_cm_interface::handle_incoming_voice_call(id, accept);
+}
+
+pub fn cm_close_voice_call(id: i32) {
+    crate::ui_cm_interface::close_voice_call(id);
+}
+
 pub fn main_get_last_remote_id() -> String {
     LocalConfig::get_remote_id()
 }

@@ -713,19 +713,27 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       () {
         switch (widget.ffi.chatModel.voiceCallStatus.value) {
           case VoiceCallStatus.waitingForResponse:
-            return SvgPicture.asset(
-              "assets/voice_call_waiting.svg",
-              color: _MenubarTheme.commonColor,
-              width: Theme.of(context).iconTheme.size ?? 24.0,
-              height: Theme.of(context).iconTheme.size ?? 24.0,
-            );
-            break;
+            return IconButton(
+                onPressed: () {
+                  widget.ffi.chatModel.closeVoiceCall(widget.id);
+                },
+                icon: SvgPicture.asset(
+                  "assets/voice_call_waiting.svg",
+                  color: Colors.red,
+                  width: Theme.of(context).iconTheme.size ?? 24.0,
+                  height: Theme.of(context).iconTheme.size ?? 24.0,
+                ));
           case VoiceCallStatus.connected:
-            return SvgPicture.asset(
-              "assets/voice_call.svg",
-              color: Colors.red,
-              width: Theme.of(context).iconTheme.size ?? 24.0,
-              height: Theme.of(context).iconTheme.size ?? 24.0,
+            return IconButton(
+              onPressed: () {
+                widget.ffi.chatModel.closeVoiceCall(widget.id);
+              },
+              icon: SvgPicture.asset(
+                "assets/voice_call.svg",
+                color: Colors.red,
+                width: Theme.of(context).iconTheme.size ?? 24.0,
+                height: Theme.of(context).iconTheme.size ?? 24.0,
+              ),
             );
           default:
             return const Offstage();

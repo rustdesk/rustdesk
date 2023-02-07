@@ -579,6 +579,20 @@ class ServerModel with ChangeNotifier {
       notifyListeners();
     }
   }
+
+  void updateVoiceCallState(Map<String, dynamic> evt) {
+    try {
+      final client = Client.fromJson(jsonDecode(evt["client"]));
+      final index = _clients.indexWhere((element) => element.id == client.id);
+      if (index != -1) {
+        _clients[index].inVoiceCall = evt['in_voice_call'];
+        _clients[index].incomingVoiceCall = evt['incoming_voice_call'];
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint("updateVoiceCallState failed: $e");
+    }
+  }
 }
 
 enum ClientType {
@@ -602,6 +616,8 @@ class Client {
   bool recording = false;
   bool disconnected = false;
   bool fromSwitch = false;
+  bool inVoiceCall = false;
+  bool incomingVoiceCall = false;
 
   RxBool hasUnreadChatMessage = false.obs;
 
@@ -623,6 +639,8 @@ class Client {
     recording = json['recording'];
     disconnected = json['disconnected'];
     fromSwitch = json['from_switch'];
+    inVoiceCall = json['in_voice_call'];
+    incomingVoiceCall = json['incoming_voice_call'];
   }
 
   Map<String, dynamic> toJson() {

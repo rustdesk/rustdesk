@@ -1636,7 +1636,7 @@ impl Connection {
         if let Some(sound_input) = std::mem::replace(&mut self.audio_input_device_before_voice_call, None) {
             set_sound_input(sound_input);
             // Notify the connection manager.
-            self.send_to_cm(Data::CloseVoiceCall("Closed manually by the peer".to_owned()));
+            self.send_to_cm(Data::CloseVoiceCall("".to_owned()));
         }
     }
 

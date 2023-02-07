@@ -754,6 +754,7 @@ impl<T: InvokeUiSession> Remote<T> {
             Data::CloseVoiceCall => {
                 self.stop_voice_call();
                 let msg = new_voice_call_request(false);
+                self.handler.on_voice_call_closed("Closed manually by the peer");
                 allow_err!(peer.send(&msg).await);
             }
             _ => {}
