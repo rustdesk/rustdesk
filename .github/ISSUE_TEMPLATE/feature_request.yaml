@@ -2,6 +2,14 @@ name: 🛠️ Feature request
 description: Suggest an idea for RustDesk
 title: "[FR] "
 body:
+  - type: checkboxes
+    attributes:
+      label: Is there an existing issue for this?
+      description: Please search to see if an issue related to this already exists.
+      options:
+      - label: I have searched the existing issues
+        required: true
+        
   - type: textarea
     id: desc
     attributes:
