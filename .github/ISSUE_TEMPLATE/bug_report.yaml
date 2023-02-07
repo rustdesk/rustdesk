@@ -1,7 +1,14 @@
 name: Bug Report
-description: Create a bug report to help us improve
+description: Thanks for taking the time to fill out this bug report! Please fill the form in **English**
 title: "[Bug] "
 body:
+ - type: checkboxes
+   attributes:
+     label: Is there an existing issue for this?
+     description: Please search to see if an issue related to this already exists.
+     options:
+     - label: I have searched the existing issues
+       required: true
   - type: textarea
     id: desc
     attributes:
@@ -24,17 +31,12 @@ body:
     validations:
       required: true
   - type: input
-    id: os
-    attributes:
-      label: Operating System
-      description: What OS are you seeing this bug on? local side / remote side.
-    validations:
-      required: true
-  - type: input
     id: version
     attributes:
-      label: RustDesk Version(s)
-      description: What version(s) of RustDesk do you see this bug on? local side / remote side.
+      label: Operating System(s) and RustDesk Version(s) on local side and remote side
+      description: What Operatiing System(s) and version(s) of RustDesk do you see this bug on? local side / remote side.
+      placeholder: |
+        Windows 10, 1.1.9 / osx 13.1, 1.1.8
     validations:
       required: true
   - type: textarea

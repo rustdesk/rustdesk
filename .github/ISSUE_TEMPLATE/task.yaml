@@ -1,0 +1,20 @@
+name: 📝 Task
+description: Create a task for the team to work on
+title: "[Task]: "
+labels: [Task]
+body:
+- type: checkboxes
+  attributes:
+    label: Is there an existing issue for this?
+    description: Please search to see if an issue related to this already exists.
+    options:
+    - label: I have searched the existing issues
+      required: true
+- type: textarea
+  attributes:
+    label: SubTasks 
+    placeholder: |
+      - Sub Task 1
+      - Sub Task 2
+  validations:
+    required: false
