@@ -1285,6 +1285,7 @@ pub fn main_hide_docker() -> SyncReturn<bool> {
 }
 
 pub fn cm_start_listen_ipc_thread() {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     crate::flutter::connection_manager::start_listen_ipc_thread();
 }
 
