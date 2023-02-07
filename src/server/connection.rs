@@ -106,7 +106,7 @@ pub struct Connection {
     // by peer
     enable_file_transfer: bool,
     // by peer
-    audio_sender: MediaSender,
+    audio_sender: Option<MediaSender>,
     // audio by the remote peer/client
     tx_input: std_mpsc::Sender<MessageInput>,
     // handle input messages
@@ -184,11 +184,6 @@ impl Connection {
         let mut hbbs_rx = crate::hbbs_http::sync::signal_receiver();
 
         let tx_cloned = tx.clone();
-        // Start a audio thread to play the audio sent by peer.
-        let latency_controller = LatencyController::new();
-        // No video frame will be sent here, so we need to disable latency controller, or audio check may fail.
-        latency_controller.lock().unwrap().set_audio_only(true);
-        let audio_sender = start_audio_thread(Some(latency_controller));
         let mut conn = Self {
             inner: ConnInner {
                 id,
@@ -230,7 +225,7 @@ impl Connection {
             #[cfg(windows)]
             portable: Default::default(),
             from_switch: false,
-            audio_sender,
+            audio_sender: None,
             voice_call_request_timestamp: None,
             audio_input_device_before_voice_call: None,
         };
@@ -1569,7 +1564,14 @@ impl Connection {
                     },
                     Some(misc::Union::AudioFormat(format)) => {
                         if !self.disable_audio {
-                            allow_err!(self.audio_sender.send(MediaData::AudioFormat(format)));
+                            // Drop the audio sender previously.
+                            std::mem::replace(&mut self.audio_sender, None);
+                            // Start a audio thread to play the audio sent by peer.
+                            let latency_controller = LatencyController::new();
+                            // No video frame will be sent here, so we need to disable latency controller, or audio check may fail.
+                            latency_controller.lock().unwrap().set_audio_only(true);
+                            self.audio_sender = Some(start_audio_thread(Some(latency_controller)));
+                            allow_err!(self.audio_sender.unwrap().send(MediaData::AudioFormat(format)));
                         }
                     }
                     #[cfg(feature = "flutter")]

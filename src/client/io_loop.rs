@@ -1251,8 +1251,9 @@ impl<T: InvokeUiSession> Remote<T> {
                 }
                 Some(message::Union::VoiceCallRequest(request)) => {
                     if request.is_connect {
-                        // TODO: maybe we will do voice call from the peer in the future.
+                        // TODO: maybe we will do a voice call from the peer in the future.
                     } else {
+                        log::debug!("The remote has requested to close the voice call");
                         if let Some(sender) = self.stop_voice_call_sender.take() {
                             allow_err!(sender.send(()));
                             self.handler.on_voice_call_closed("");
