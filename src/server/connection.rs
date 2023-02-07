@@ -1614,7 +1614,6 @@ impl Connection {
     pub async fn handle_voice_call(&mut self, accepted: bool) {
         if let Some(ts) = self.voice_call_request_timestamp.take() {
             let msg = new_voice_call_response(ts.get(), accepted);
-            self.send(msg).await;
             if accepted {
                 // Backup the default input device.
                 let audio_input_device = Config::get_option("audio-input");
@@ -1625,7 +1624,10 @@ impl Connection {
                     set_sound_input(device);
                 }
                 self.send_to_cm(Data::StartVoiceCall);
+            } else {
+                self.send_to_cm(Data::CloseVoiceCall("".to_owned()));
             }
+            self.send(msg).await;
         } else {
             log::warn!("Possible a voice call attack.");
         }

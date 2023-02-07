@@ -1264,7 +1264,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                 self.stop_voice_call_sender = self.start_voice_call();
                             } else {
                                 // The peer refused the voice call.
-                                self.handler.on_voice_call_closed("Refused");
+                                self.handler.on_voice_call_closed("");
                             }
                         }
                     }
