@@ -358,14 +358,16 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         return buildInstallCard("", "install_daemon_tip", "Install", () async {
           bind.mainIsInstalledDaemon(prompt: true);
         });
-      } else if ((await osxCanRecordAudio() !=
-          PermissionAuthorizeType.authorized)) {
-        return buildInstallCard("Permissions", "config_microphone", "Configure",
-            () async {
-          osxRequestAudio();
-          watchIsCanRecordAudio = true;
-        });
       }
+      //// Disable microphone configuration for macOS. We will request the permission when needed.
+      // else if ((await osxCanRecordAudio() !=
+      //     PermissionAuthorizeType.authorized)) {
+      //   return buildInstallCard("Permissions", "config_microphone", "Configure",
+      //       () async {
+      //     osxRequestAudio();
+      //     watchIsCanRecordAudio = true;
+      //   });
+      // }
     } else if (Platform.isLinux) {
       if (bind.mainCurrentIsWayland()) {
         return buildInstallCard(

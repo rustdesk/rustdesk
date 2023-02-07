@@ -657,12 +657,17 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                       ? translate('Stop session recording')
                       : translate('Start session recording'),
                   onPressed: () => value.toggle(),
-                  icon: Icon(
-                    value.start
-                        ? Icons.pause_circle_filled
-                        : Icons.videocam_outlined,
-                    color: _MenubarTheme.commonColor,
-                  ),
+                  icon: value.start
+                      ? Icon(
+                          Icons.pause_circle_filled,
+                          color: _MenubarTheme.commonColor,
+                        )
+                      : SvgPicture.asset(
+                          "assets/record_screen.svg",
+                          color: _MenubarTheme.commonColor,
+                          width: Theme.of(context).iconTheme.size ?? 22.0,
+                          height: Theme.of(context).iconTheme.size ?? 22.0,
+                        ),
                 ));
       } else {
         return Offstage();
@@ -708,36 +713,58 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     );
   }
 
+  Widget _getVoiceCallIcon() {
+    switch (widget.ffi.chatModel.voiceCallStatus.value) {
+      case VoiceCallStatus.waitingForResponse:
+        return IconButton(
+            onPressed: () {
+              widget.ffi.chatModel.closeVoiceCall(widget.id);
+            },
+            icon: SvgPicture.asset(
+              "assets/voice_call_waiting.svg",
+              color: Colors.red,
+              width: Theme.of(context).iconTheme.size ?? 20.0,
+              height: Theme.of(context).iconTheme.size ?? 20.0,
+            ));
+      case VoiceCallStatus.connected:
+        return IconButton(
+          onPressed: () {
+            widget.ffi.chatModel.closeVoiceCall(widget.id);
+          },
+          icon: Icon(
+            Icons.phone_disabled_rounded,
+            color: Colors.red,
+            size: Theme.of(context).iconTheme.size ?? 22.0,
+          ),
+        );
+      default:
+        return const Offstage();
+    }
+  }
+
+  String? _getVoiceCallTooltip() {
+    switch (widget.ffi.chatModel.voiceCallStatus.value) {
+      case VoiceCallStatus.waitingForResponse:
+        return "Waiting";
+      case VoiceCallStatus.connected:
+        return "Disconnect";
+      default:
+        return null;
+    }
+  }
+
   Widget _buildVoiceCall(BuildContext context) {
     return Obx(
       () {
-        switch (widget.ffi.chatModel.voiceCallStatus.value) {
-          case VoiceCallStatus.waitingForResponse:
-            return IconButton(
-                onPressed: () {
-                  widget.ffi.chatModel.closeVoiceCall(widget.id);
-                },
-                icon: SvgPicture.asset(
-                  "assets/voice_call_waiting.svg",
-                  color: Colors.red,
-                  width: Theme.of(context).iconTheme.size ?? 24.0,
-                  height: Theme.of(context).iconTheme.size ?? 24.0,
-                ));
-          case VoiceCallStatus.connected:
-            return IconButton(
-              onPressed: () {
-                widget.ffi.chatModel.closeVoiceCall(widget.id);
-              },
-              icon: SvgPicture.asset(
-                "assets/voice_call.svg",
-                color: Colors.red,
-                width: Theme.of(context).iconTheme.size ?? 24.0,
-                height: Theme.of(context).iconTheme.size ?? 24.0,
-              ),
-            );
-          default:
-            return const Offstage();
-        }
+        final tooltipText = _getVoiceCallTooltip();
+        return tooltipText == null
+            ? const Offstage()
+            : IconButton(
+                padding: EdgeInsets.zero,
+                icon: _getVoiceCallIcon(),
+                tooltip: translate(tooltipText),
+                onPressed: () => bind.sessionRequestVoiceCall(id: widget.id),
+              );
       },
     );
   }
