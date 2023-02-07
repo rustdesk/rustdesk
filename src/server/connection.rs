@@ -402,6 +402,9 @@ impl Connection {
                         }
                         ipc::Data::CloseVoiceCall(_reason) => {
                             conn.close_voice_call().await;
+                            // Notify the peer that we closed the voice call.
+                            let req = new_voice_call_request(false);
+                            conn.send(req).await;
                         }
                         _ => {}
                     }
@@ -1639,6 +1642,7 @@ impl Connection {
         if let Some(sound_input) = std::mem::replace(&mut self.audio_input_device_before_voice_call, None) {
             set_sound_input(sound_input);
         }
+        // Notify the connection manager that the voice call has been closed.
         self.send_to_cm(Data::CloseVoiceCall("".to_owned()));
     }
 

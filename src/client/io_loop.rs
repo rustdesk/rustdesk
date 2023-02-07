@@ -1249,8 +1249,15 @@ impl<T: InvokeUiSession> Remote<T> {
                     self.handler
                         .msgbox(&msgbox.msgtype, &msgbox.title, &msgbox.text, &link);
                 }
-                Some(message::Union::VoiceCallRequest(_request)) => {
-                    // TODO: maybe we will do voice call from the peer.
+                Some(message::Union::VoiceCallRequest(request)) => {
+                    if request.is_connect {
+                        // TODO: maybe we will do voice call from the peer in the future.
+                    } else {
+                        if let Some(sender) = self.stop_voice_call_sender.take() {
+                            allow_err!(sender.send(()));
+                            self.handler.on_voice_call_closed("");
+                        }
+                    }
                 }
                 Some(message::Union::VoiceCallResponse(response)) => {
                     let ts = std::mem::replace(&mut self.voice_call_request_timestamp, None);
