@@ -438,13 +438,30 @@ jobs:
           mv ../rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk .
           ls -l .
           
-      - name: Upload a Build Artifact
-        uses: actions/upload-artifact@v3.1.2
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Build
+        run: echo ${{ github.sha }} > Release.txt
+
+      - name: Test
+        run: cat Release.txt
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
         with:
-          # Artifact name
-          name: RustDeskApk
-          # A file, directory or wildcard pattern that describes what to upload
-          path: rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk
+          files: ./rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk
+
+      - name: Upload artifact
+        run: |
+          mkdir artifact
+          cp rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk /artifact
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: apk-artifact
+          path: /artifact
       
   build-rustdesk-lib-linux-amd64:
     needs: [generate-bridge-linux, build-vcpkg-deps-linux]
