@@ -441,7 +441,7 @@ jobs:
       - name: Show files and directories
         run: |
           pwd
-          sudo apt install tree --y
+          sudo apt install -y tree
           tree
 
       - name: Release
