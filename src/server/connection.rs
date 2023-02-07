@@ -1565,13 +1565,13 @@ impl Connection {
                     Some(misc::Union::AudioFormat(format)) => {
                         if !self.disable_audio {
                             // Drop the audio sender previously.
-                            std::mem::replace(&mut self.audio_sender, None);
+                            drop(std::mem::replace(&mut self.audio_sender, None));
                             // Start a audio thread to play the audio sent by peer.
                             let latency_controller = LatencyController::new();
                             // No video frame will be sent here, so we need to disable latency controller, or audio check may fail.
                             latency_controller.lock().unwrap().set_audio_only(true);
                             self.audio_sender = Some(start_audio_thread(Some(latency_controller)));
-                            allow_err!(self.audio_sender.unwrap().send(MediaData::AudioFormat(format)));
+                            allow_err!(self.audio_sender.as_ref().unwrap().send(MediaData::AudioFormat(format)));
                         }
                     }
                     #[cfg(feature = "flutter")]
@@ -1593,7 +1593,11 @@ impl Connection {
                 },
                 Some(message::Union::AudioFrame(frame)) => {
                     if !self.disable_audio {
-                        allow_err!(self.audio_sender.send(MediaData::AudioFrame(frame)));
+                        if let Some(sender) = &self.audio_sender {
+                            allow_err!(sender.send(MediaData::AudioFrame(frame)));
+                        } else {
+                            log::warn!("Processing audio frame without the voice call audio sender.");
+                        }
                     }
                 }
                 Some(message::Union::VoiceCallRequest(request)) => {
