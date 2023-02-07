@@ -1,0 +1,25 @@
+name: Feature Request
+description: Suggest an idea for RustDesk
+title: "[FR] "
+body:
+  - type: textarea
+    id: desc
+    attributes:
+      label: Description
+      description: Describe your suggested feature and the main use cases
+    validations:
+      required: true
+      
+  - type: textarea
+    id: users
+    attributes:
+      label: Impact
+      description: What types of users can benefit from using the suggested feature?
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Add any additonal context about the feature here

@@ -1,0 +1,49 @@
+name: Bug Report
+description: Create a bug report to help us improve
+title: "[Bug] "
+body:
+  - type: textarea
+    id: desc
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to Reproduce
+      description: What steps can we take to reproduce this behavior?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: A clear and concise description of what you expected to happen
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating System
+      description: What OS are you seeing this bug on? local side / remote side.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: RustDesk Version(s)
+      description: What version(s) of RustDesk do you see this bug on? local side / remote side.
+    validations:
+      required: true
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: If applicable, please add screenshots to help explain your problem
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Add any additonal context about the problem here
