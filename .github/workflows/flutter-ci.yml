@@ -441,18 +441,19 @@ jobs:
       - name: Show files and directories
         run: |
           pwd
-          ls -l
+          sudo apt install tree --y
+          tree
 
       - name: Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: ./rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk
+          files: ./signed-apk/rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk
 
       - name: Upload artifact
         run: |
           mkdir artifact
-          cp rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk /artifact
+          cp ./signed-apk/rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk /artifact
 
       - uses: actions/upload-artifact@v3
         with:
