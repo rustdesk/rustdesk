@@ -446,13 +446,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("FPS", "帧率"),
         ("Auto", "自动"),
         ("Other Default Options", "其它默认选项"),
-        ("Guest to Host", "被控到主机"),
-        ("Dual way", "双向"),
-        ("Guest to host audio transmission", "被控到主机音频传输"),
-        ("Dual-way audio transmission", "双向音频传输"),
         ("Voice call", "语音通话"),
         ("Text chat", "文字聊天"),
-        ("Audio Transmission Mode", "音频传输模式"),
-        ("Refused", "已拒绝")
+        ("Stop voice call", "停止语音聊天"),
     ].iter().cloned().collect();
 }

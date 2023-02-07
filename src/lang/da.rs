@@ -437,9 +437,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Switch Sides", ""),
         ("Please confirm if you want to share your desktop?", ""),
         ("Closed as expected", ""),
-        ("Guest to host audio transmission", ""),
-        ("Dual way audio transmission", ""),
-        ("Audio Transmission Mode", ""),
         ("Display", ""),
         ("Default View Style", ""),
         ("Default Scroll Style", ""),
@@ -449,5 +446,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("FPS", ""),
         ("Auto", ""),
         ("Other Default Options", ""),
+        ("Voice call", ""),
+        ("Text chat", ""),
+        ("Stop voice call", ""),
     ].iter().cloned().collect();
 }

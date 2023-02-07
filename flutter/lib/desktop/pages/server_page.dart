@@ -526,7 +526,7 @@ class _CmControlPanel extends StatelessWidget {
           child: buildButton(context,
               color: Colors.red,
               onClick: () => closeVoiceCall(),
-              icon: Icon(Icons.reply, color: Colors.white),
+              icon: Icon(Icons.phone_disabled_rounded, color: Colors.white),
               text: "Stop voice call",
               textColor: Colors.white),
         ),
@@ -548,7 +548,7 @@ class _CmControlPanel extends StatelessWidget {
                     onClick: () => handleVoiceCall(false),
                     icon:
                         Icon(Icons.phone_disabled_rounded, color: Colors.white),
-                    text: "Deny",
+                    text: "Dismiss",
                     textColor: Colors.white),
               )
             ],
