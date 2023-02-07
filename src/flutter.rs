@@ -14,6 +14,7 @@ use std::{
 };
 
 pub(super) const APP_TYPE_MAIN: &str = "main";
+pub(super) const APP_TYPE_CM: &str = "cm";
 pub(super) const APP_TYPE_DESKTOP_REMOTE: &str = "remote";
 pub(super) const APP_TYPE_DESKTOP_FILE_TRANSFER: &str = "file transfer";
 pub(super) const APP_TYPE_DESKTOP_PORT_FORWARD: &str = "port forward";
@@ -528,11 +529,7 @@ pub mod connection_manager {
             assert!(h.get("name").is_none());
             h.insert("name", name);
 
-            if let Some(s) = GLOBAL_EVENT_STREAM
-                .read()
-                .unwrap()
-                .get(super::APP_TYPE_MAIN)
-            {
+            if let Some(s) = GLOBAL_EVENT_STREAM.read().unwrap().get(super::APP_TYPE_CM) {
                 s.add(serde_json::ser::to_string(&h).unwrap_or("".to_owned()));
             };
         }
