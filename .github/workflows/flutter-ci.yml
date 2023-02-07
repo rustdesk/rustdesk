@@ -438,27 +438,23 @@ jobs:
           mv ../rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk .
           ls -l .
 
-      - name: Show files and directories
+      - name: Copy files and directories
         run: |
           pwd
-          sudo apt install -y tree
-          tree
+          mkdir artifact
+          cp -R /signed-apk /artifact
+          ls -l /artifact
 
       - name: Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: ./signed-apk/rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk
-
-      - name: Upload artifact
-        run: |
-          mkdir artifact
-          cp ./signed-apk/rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk /artifact
+          files: ./artifact/signed-apk/rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk
 
       - uses: actions/upload-artifact@v3
         with:
-          name: apk-artifact
-          path: /artifact
+          name: apk-dir-artifact
+          path: /artifact/
       
   build-rustdesk-lib-linux-amd64:
     needs: [generate-bridge-linux, build-vcpkg-deps-linux]
