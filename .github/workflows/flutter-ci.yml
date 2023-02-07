@@ -437,15 +437,11 @@ jobs:
           mkdir -p signed-apk; pushd signed-apk
           mv ../rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk .
           ls -l .
-          
-      - name: Checkout
-        uses: actions/checkout@v3
 
-      - name: Build
-        run: echo ${{ github.sha }} > Release.txt
-
-      - name: Test
-        run: cat Release.txt
+      - name: Show files and directories
+        run: |
+          pwd
+          ls -l
 
       - name: Release
         uses: softprops/action-gh-release@v1
