@@ -401,10 +401,11 @@ impl Connection {
                             conn.handle_voice_call(accepted).await;
                         }
                         ipc::Data::CloseVoiceCall(_reason) => {
+                            log::debug!("Close the voice call from the ipc.");
                             conn.close_voice_call().await;
                             // Notify the peer that we closed the voice call.
-                            let req = new_voice_call_request(false);
-                            conn.send(req).await;
+                            let msg = new_voice_call_request(false);
+                            conn.send(msg).await;
                         }
                         _ => {}
                     }

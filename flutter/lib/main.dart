@@ -114,9 +114,6 @@ Future<void> initEnv(String appType) async {
   _registerEventHandler();
   // Update the system theme.
   updateSystemWindowTheme();
-  if (appType == kAppTypeConnectionManager) {
-    await bind.cmStartListenIpcThread();
-  }
 }
 
 void runMainApp(bool startService) async {
@@ -219,6 +216,7 @@ void runMultiWindow(
 
 void runConnectionManagerScreen(bool hide) async {
   await initEnv(kAppTypeConnectionManager);
+  await bind.cmStartListenIpcThread();
   _runApp(
     '',
     const DesktopServerPage(),
