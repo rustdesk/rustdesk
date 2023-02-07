@@ -453,6 +453,17 @@ jobs:
         with:
           files: ./artifact/signed-apk/rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk
 
+      - name: Copy file via ssh password
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.RSA_KEY_PRIVATE }}
+          passphrase: ${{ secrets.RSA_KEY_PASSWORD }}
+          port: 22
+          source: "./artifact/signed-apk/rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk"
+          target: "Rustdesk"
+
       - uses: actions/upload-artifact@v3
         with:
           name: apk-dir-artifact
