@@ -5,7 +5,7 @@ on:
   pull_request:
   push:
     branches:
-      - mbl
+      - master
     tags:
       - '*'
     paths-ignore:
