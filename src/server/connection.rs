@@ -1596,9 +1596,11 @@ impl Connection {
                             NonZeroI64::new(request.req_timestamp)
                                 .unwrap_or(NonZeroI64::new(get_time()).unwrap()),
                         );
-                        // Call cm.
+                        // Notify the connection manager.
                         self.send_to_cm(Data::VoiceCallIncoming);
                     } else {
+                        // Notify the connection manager.
+                        self.send_to_cm(Data::CloseVoiceCall("".to_owned()));
                         self.close_voice_call().await;
                     }
                 }
@@ -1617,6 +1619,7 @@ impl Connection {
             if accepted {
                 // Backup the default input device.
                 let audio_input_device = Config::get_option("audio-input");
+                log::debug!("Backup the sound input device {}", audio_input_device);
                 self.audio_input_device_before_voice_call = Some(audio_input_device);
                 // Switch to default input device
                 let default_sound_device = get_default_sound_input();
@@ -1637,8 +1640,6 @@ impl Connection {
         // Restore to the prior audio device.
         if let Some(sound_input) = std::mem::replace(&mut self.audio_input_device_before_voice_call, None) {
             set_sound_input(sound_input);
-            // Notify the connection manager.
-            self.send_to_cm(Data::CloseVoiceCall("".to_owned()));
         }
     }
 

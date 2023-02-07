@@ -1259,7 +1259,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             log::debug!("Possible encountering a voice call attack.");
                         } else {
                             if response.accepted {
-                                // The peer accepts the voice call.
+                                // The peer accepted the voice call.
                                 self.handler.on_voice_call_started();
                                 self.stop_voice_call_sender = self.start_voice_call();
                             } else {
