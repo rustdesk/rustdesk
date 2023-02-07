@@ -11,6 +11,7 @@ use std::io::prelude::*;
 use std::{
     ffi::OsString,
     fs, io, mem,
+    os::windows::process::CommandExt,
     path::PathBuf,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
@@ -1644,6 +1645,29 @@ pub fn is_elevated(process_id: Option<DWORD>) -> ResultType<bool> {
     }
 }
 
+#[inline]
+fn filter_foreground_window(process_id: DWORD) -> ResultType<bool> {
+    if let Ok(output) = std::process::Command::new("tasklist")
+        .args(vec![
+            "/SVC",
+            "/NH",
+            "/FI",
+            &format!("PID eq {}", process_id),
+        ])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+    {
+        let s = String::from_utf8_lossy(&output.stdout)
+            .to_string()
+            .to_lowercase();
+        Ok(["Taskmgr", "mmc", "regedit"]
+            .iter()
+            .any(|name| s.contains(&name.to_string().to_lowercase())))
+    } else {
+        bail!("run tasklist failed");
+    }
+}
+
 pub fn is_foreground_window_elevated() -> ResultType<bool> {
     unsafe {
         let mut process_id: DWORD = 0;
@@ -1651,7 +1675,12 @@ pub fn is_foreground_window_elevated() -> ResultType<bool> {
         if process_id == 0 {
             bail!("Failed to get processId, errno {}", GetLastError())
         }
-        is_elevated(Some(process_id))
+        let elevated = is_elevated(Some(process_id))?;
+        if elevated {
+            filter_foreground_window(process_id)
+        } else {
+            Ok(false)
+        }
     }
 }
 
