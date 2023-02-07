@@ -9,7 +9,7 @@ on:
   pull_request:
   push:
     branches:
-      - master
+      - mbl
     tags:
       - '*'
     paths-ignore:
