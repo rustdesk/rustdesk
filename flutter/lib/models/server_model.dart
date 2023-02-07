@@ -585,8 +585,8 @@ class ServerModel with ChangeNotifier {
       final client = Client.fromJson(jsonDecode(evt["client"]));
       final index = _clients.indexWhere((element) => element.id == client.id);
       if (index != -1) {
-        _clients[index].inVoiceCall = evt['in_voice_call'];
-        _clients[index].incomingVoiceCall = evt['incoming_voice_call'];
+        _clients[index].inVoiceCall = client.inVoiceCall;
+        _clients[index].incomingVoiceCall = client.incomingVoiceCall;
         notifyListeners();
       }
     } catch (e) {
