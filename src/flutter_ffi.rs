@@ -1284,6 +1284,10 @@ pub fn main_hide_docker() -> SyncReturn<bool> {
     SyncReturn(true)
 }
 
+pub fn cm_start_listen_ipc_thread() {
+    crate::flutter::connection_manager::start_listen_ipc_thread();
+}
+
 /// Start an ipc server for receiving the url scheme.
 ///
 /// * Should only be called in the main flutter window.

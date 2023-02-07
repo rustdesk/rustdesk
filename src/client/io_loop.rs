@@ -300,7 +300,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 // check if client is closed
                 match rx.try_recv() {
                     Ok(_) | Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                        log::debug!("Exit local audio service of client");
+                        log::debug!("Exit voice call audio service of client");
                         // unsubscribe
                         CLIENT_SERVER.write().unwrap().subscribe(
                             audio_service::NAME,

@@ -773,7 +773,6 @@ impl AudioHandler {
                         unsafe { std::slice::from_raw_parts::<u8>(buffer.as_ptr() as _, n * 4) };
                     self.simple.as_mut().map(|x| x.write(data_u8));
                 }
-                log::debug!("write Audio frame {} to system.", frame.timestamp);
             }
         });
     }
@@ -1595,7 +1594,6 @@ pub fn start_audio_thread(
             if let Ok(data) = audio_receiver.recv() {
                 match data {
                     MediaData::AudioFrame(af) => {
-                        log::debug!("recved audio frame={}", af.timestamp);
                         audio_handler.handle_frame(af);
                     }
                     MediaData::AudioFormat(f) => {
