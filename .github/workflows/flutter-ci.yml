@@ -464,9 +464,10 @@ jobs:
           source: "./artifact/signed-apk/rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk"
           target: "Rustdesk"
 
-      - uses: actions/upload-artifact@v3
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
         with:
-          name: apk-dir-artifact
+          name: apk_artifact
           path: /artifact/
       
   build-rustdesk-lib-linux-amd64:
