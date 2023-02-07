@@ -1,4 +1,4 @@
-name: cleanup caches by a branch
+name: Cache cleanup by branch
 on:
   pull_request:
     types:
