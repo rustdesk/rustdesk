@@ -1,0 +1,29 @@
+{
+    "name": "rustdesk",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "args": {
+            "BUILDKIT_INLINE_CACHE": "0"
+        }
+    },
+    "workspaceMount": "source=${localWorkspaceFolder},target=/home/user/rustdesk,type=bind,consistency=cache",
+    "workspaceFolder": "/home/user/rustdesk",
+    "postStartCommand": "./entrypoint",
+    "remoteUser": "user",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "vadimcn.vscode-lldb",
+                "mutantdino.resourcemonitor",
+                "rust-lang.rust-analyzer",
+                "tamasfe.even-better-toml",
+                "serayuzgur.crates"
+            ],
+            "settings": {
+                "files.watcherExclude": {
+                    "**/target/**": true
+                }
+            }
+        }
+    }
+}
