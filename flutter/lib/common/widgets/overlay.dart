@@ -411,9 +411,8 @@ class BlockableOverlay extends StatelessWidget {
                 state.onMiddleBlockedClick?.call();
               },
               child: Container(
-                  color: state.middleBlocked.value
-                      ? Colors.red.withOpacity(0.3)
-                      : null)))),
+                  color:
+                      state.middleBlocked.value ? Colors.transparent : null)))),
     ];
 
     if (upperLayer != null) {
