@@ -1,5 +1,8 @@
-use std::{collections::HashMap, ffi::{CStr, CString}, os::raw::c_char, thread};
+use std::{collections::HashMap, ffi::{CStr, CString}, os::raw::c_char};
 use std::str::FromStr;
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use std::thread;
 
 use flutter_rust_bridge::{StreamSink, SyncReturn, ZeroCopyBuffer};
 use serde_json::json;
