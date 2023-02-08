@@ -415,6 +415,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("software_render_tip", "Si tienes una gráfica Nvidia y la ventana remota se cierra inmediatamente, instalar el driver nouveau y elegir renderizado por software podría ayudar. Se requiere reiniciar la aplicación."),
         ("Always use software rendering", "Usar siempre renderizado por software"),
         ("config_input", "Para controlar el escritorio remoto con el teclado necesitas dar a RustDesk permisos de \"Monitorización de entrada\"."),
+        ("config_microphone", ""),
         ("request_elevation_tip", "También puedes solicitar elevación si hay alguien en el lado remoto."),
         ("Wait", "Esperar"),
         ("Elevation Error", "Error de elevación"),
@@ -435,7 +436,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Strong", "Fuerte"),
         ("Switch Sides", "Intercambiar lados"),
         ("Please confirm if you want to share your desktop?", "Por favor, confirma si quieres compartir tu escritorio"),
-        ("Closed as expected", "Cerrado como se esperaba"),
+        ("Closed as expected", ""),
         ("Display", "Pantalla"),
         ("Default View Style", "Estilo de vista predeterminado"),
         ("Default Scroll Style", "Estilo de desplazamiento predeterminado"),
@@ -445,5 +446,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("FPS", ""),
         ("Auto", ""),
         ("Other Default Options", "Otras opciones predeterminadas"),
+        ("Voice call", ""),
+        ("Text chat", ""),
+        ("Stop voice call", ""),
     ].iter().cloned().collect();
 }

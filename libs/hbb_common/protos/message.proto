@@ -598,6 +598,18 @@ message Misc {
   }
 }
 
+message VoiceCallRequest {
+  int64 req_timestamp = 1;
+  // Indicates whether the request is a connect action or a disconnect action.
+  bool is_connect = 2;
+}
+
+message VoiceCallResponse {
+  bool accepted = 1;
+  int64 req_timestamp = 2; // Should copy from [VoiceCallRequest::req_timestamp].
+  int64 ack_timestamp = 3;
+}
+
 message Message {
   oneof union {
     SignedId signed_id = 3;
@@ -620,5 +632,7 @@ message Message {
     Cliprdr cliprdr = 20;
     MessageBox message_box = 21;
     SwitchSidesResponse switch_sides_response = 22;
+    VoiceCallRequest voice_call_request = 23;
+    VoiceCallResponse voice_call_response = 24;
   }
 }

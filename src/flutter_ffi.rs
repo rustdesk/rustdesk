@@ -16,7 +16,7 @@ use crate::{
     common::make_fd_to_json,
     flutter::{session_add, session_start_},
 };
-use crate::common::is_keyboard_mode_supported;
+use crate::common::{get_default_sound_input, is_keyboard_mode_supported};
 use crate::flutter::{self, SESSIONS};
 use crate::ui_interface::{self, *};
 
@@ -520,6 +520,13 @@ pub fn main_get_sound_inputs() -> Vec<String> {
     vec![String::from("")]
 }
 
+pub fn main_get_default_sound_input() -> Option<String> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return get_default_sound_input();
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    None
+}
+
 pub fn main_get_hostname() -> SyncReturn<String> {
     SyncReturn(crate::common::hostname())
 }
@@ -817,6 +824,26 @@ pub fn session_new_rdp(id: String) {
     if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
         session.new_rdp();
     }
+}
+
+pub fn session_request_voice_call(id: String) {
+    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+        session.request_voice_call();
+    }
+}
+
+pub fn session_close_voice_call(id: String) {
+    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+        session.close_voice_call();
+    }
+}
+
+pub fn cm_handle_incoming_voice_call(id: i32, accept: bool) {
+    crate::ui_cm_interface::handle_incoming_voice_call(id, accept);
+}
+
+pub fn cm_close_voice_call(id: i32) {
+    crate::ui_cm_interface::close_voice_call(id);
 }
 
 pub fn main_get_last_remote_id() -> String {
@@ -1246,10 +1273,20 @@ pub fn main_is_login_wayland() -> SyncReturn<bool> {
     SyncReturn(is_login_wayland())
 }
 
+pub fn main_start_pa() {
+    #[cfg(target_os = "linux")]
+    std::thread::spawn(crate::ipc::start_pa);
+}
+
 pub fn main_hide_docker() -> SyncReturn<bool> {
     #[cfg(target_os = "macos")]
     crate::platform::macos::hide_dock();
     SyncReturn(true)
+}
+
+pub fn cm_start_listen_ipc_thread() {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    crate::flutter::connection_manager::start_listen_ipc_thread();
 }
 
 /// Start an ipc server for receiving the url scheme.
@@ -1264,6 +1301,7 @@ pub fn main_start_ipc_url_server() {
 /// Send a url scheme throught the ipc.
 ///
 /// * macOS only
+#[allow(unused_variables)]
 pub fn send_url_scheme(url: String) {
     #[cfg(target_os = "macos")]
     thread::spawn(move || crate::ui::macos::handle_url_scheme(url));

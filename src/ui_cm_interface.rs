@@ -49,6 +49,8 @@ pub struct Client {
     pub restart: bool,
     pub recording: bool,
     pub from_switch: bool,
+    pub in_voice_call: bool,
+    pub incoming_voice_call: bool,
     #[serde(skip)]
     tx: UnboundedSender<Data>,
 }
@@ -88,6 +90,8 @@ pub trait InvokeUiCM: Send + Clone + 'static + Sized {
     fn change_language(&self);
 
     fn show_elevation(&self, show: bool);
+
+    fn update_voice_call_state(&self, client: &Client);
 }
 
 impl<T: InvokeUiCM> Deref for ConnectionManager<T> {
@@ -138,6 +142,8 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
             recording,
             from_switch,
             tx,
+            in_voice_call: false,
+            incoming_voice_call: false
         };
         CLIENTS
             .write()
@@ -179,6 +185,30 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
 
     fn show_elevation(&self, show: bool) {
         self.ui_handler.show_elevation(show);
+    }
+
+    fn voice_call_started(&self, id: i32) {
+        if let Some(client) = CLIENTS.write().unwrap().get_mut(&id) {
+            client.incoming_voice_call = false;
+            client.in_voice_call = true;
+            self.ui_handler.update_voice_call_state(client);
+        }
+    }
+
+    fn voice_call_incoming(&self, id: i32) {
+        if let Some(client) = CLIENTS.write().unwrap().get_mut(&id) {
+            client.incoming_voice_call = true;
+            client.in_voice_call = false;
+            self.ui_handler.update_voice_call_state(client);
+        }
+    }
+
+    fn voice_call_closed(&self, id: i32, _reason: &str) {
+        if let Some(client) = CLIENTS.write().unwrap().get_mut(&id) {
+            client.incoming_voice_call = false;
+            client.in_voice_call = false;
+            self.ui_handler.update_voice_call_state(client);
+        }
     }
 }
 
@@ -388,6 +418,15 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                 }
                                 Data::DataPortableService(ipc::DataPortableService::CmShowElevation(show)) => {
                                     self.cm.show_elevation(show);
+                                }
+                                Data::StartVoiceCall => {
+                                    self.cm.voice_call_started(self.conn_id);
+                                }
+                                Data::VoiceCallIncoming => {
+                                    self.cm.voice_call_incoming(self.conn_id);
+                                }
+                                Data::CloseVoiceCall(reason) => {
+                                    self.cm.voice_call_closed(self.conn_id, reason.as_str());
                                 }
                                 _ => {
 
@@ -804,4 +843,18 @@ pub fn elevate_portable(_id: i32) {
             )));
         }
     }
+}
+
+#[inline]
+pub fn handle_incoming_voice_call(id: i32, accept: bool) {
+    if let Some(client) = CLIENTS.write().unwrap().get_mut(&id) {
+        allow_err!(client.tx.send(Data::VoiceCallResponse(accept)));
+    };
+}
+
+#[inline]
+pub fn close_voice_call(id: i32) {
+    if let Some(client) = CLIENTS.write().unwrap().get_mut(&id) {
+        allow_err!(client.tx.send(Data::CloseVoiceCall("".to_owned())));
+    };
 }

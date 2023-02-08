@@ -210,7 +210,11 @@ pub enum Data {
     DataPortableService(DataPortableService),
     SwitchSidesRequest(String),
     SwitchSidesBack,
-    UrlLink(String)
+    UrlLink(String),
+    VoiceCallIncoming,
+    StartVoiceCall,
+    VoiceCallResponse(bool),
+    CloseVoiceCall(String),
 }
 
 #[tokio::main(flavor = "current_thread")]

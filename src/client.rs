@@ -1,47 +1,53 @@
-pub use async_trait::async_trait;
-use bytes::Bytes;
-#[cfg(not(any(target_os = "android", target_os = "linux")))]
-use cpal::{
-    traits::{DeviceTrait, HostTrait, StreamTrait},
-    Device, Host, StreamConfig,
-};
-use magnum_opus::{Channels::*, Decoder as AudioDecoder};
-use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
     net::SocketAddr,
     ops::{Deref, Not},
     str::FromStr,
-    sync::{atomic::AtomicBool, mpsc, Arc, Mutex, RwLock},
+    sync::{Arc, atomic::AtomicBool, mpsc, Mutex, RwLock},
 };
+
+pub use async_trait::async_trait;
+use bytes::Bytes;
+#[cfg(not(any(target_os = "android", target_os = "linux")))]
+use cpal::{
+    Device,
+    Host, StreamConfig, traits::{DeviceTrait, HostTrait, StreamTrait},
+};
+use magnum_opus::{Channels::*, Decoder as AudioDecoder};
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 pub use file_trait::FileManager;
 use hbb_common::{
+    AddrMangle,
     allow_err,
     anyhow::{anyhow, Context},
     bail,
     config::{
-        Config, PeerConfig, PeerInfoSerde, CONNECT_TIMEOUT, READ_TIMEOUT, RELAY_PORT,
+        Config, CONNECT_TIMEOUT, PeerConfig, PeerInfoSerde, READ_TIMEOUT, RELAY_PORT,
         RENDEZVOUS_TIMEOUT,
-    },
-    get_version_number, log,
-    message_proto::{option_message::BoolOption, *},
+    }, get_version_number,
+    log,
+    message_proto::{*, option_message::BoolOption},
     protobuf::Message as _,
     rand,
     rendezvous_proto::*,
+    ResultType,
     socket_client,
     sodiumoxide::crypto::{box_, secretbox, sign},
-    timeout,
-    tokio::time::Duration,
-    AddrMangle, ResultType, Stream,
+    Stream, timeout, tokio::time::Duration,
 };
-pub use helper::LatencyController;
 pub use helper::*;
+pub use helper::LatencyController;
 use scrap::{
     codec::{Decoder, DecoderCfg},
     record::{Recorder, RecorderContext},
     VpxDecoderConfig, VpxVideoCodecId,
+};
+
+use crate::{
+    common::{self, is_keyboard_mode_supported},
+    server::video_service::{SCRAP_X11_REF_URL, SCRAP_X11_REQUIRED},
 };
 
 pub use super::lang::*;
@@ -49,10 +55,7 @@ pub use super::lang::*;
 pub mod file_trait;
 pub mod helper;
 pub mod io_loop;
-use crate::{
-    common::{self, is_keyboard_mode_supported},
-    server::video_service::{SCRAP_X11_REF_URL, SCRAP_X11_REQUIRED},
-};
+
 pub static SERVER_KEYBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
 pub static SERVER_FILE_TRANSFER_ENABLED: AtomicBool = AtomicBool::new(true);
 pub static SERVER_CLIPBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
@@ -714,6 +717,7 @@ impl AudioHandler {
                 .check_audio(frame.timestamp)
                 .not()
             {
+                log::debug!("audio frame {} is ignored", frame.timestamp);
                 return;
             }
         }
@@ -724,6 +728,7 @@ impl AudioHandler {
         }
         #[cfg(target_os = "linux")]
         if self.simple.is_none() {
+            log::debug!("PulseAudio simple binding does not exists");
             return;
         }
         #[cfg(target_os = "android")]
@@ -1543,7 +1548,6 @@ where
     F: 'static + FnMut(&[u8]) + Send,
 {
     let (video_sender, video_receiver) = mpsc::channel::<MediaData>();
-    let (audio_sender, audio_receiver) = mpsc::channel::<MediaData>();
     let mut video_callback = video_callback;
 
     let latency_controller = LatencyController::new();
@@ -1573,8 +1577,19 @@ where
         }
         log::info!("Video decoder loop exits");
     });
+    let audio_sender = start_audio_thread(Some(latency_controller_cl));
+    return (video_sender, audio_sender);
+}
+
+/// Start an audio thread
+/// Return a audio [`MediaSender`]
+pub fn start_audio_thread(
+    latency_controller: Option<Arc<Mutex<LatencyController>>>,
+) -> MediaSender {
+    let latency_controller = latency_controller.unwrap_or(LatencyController::new());
+    let (audio_sender, audio_receiver) = mpsc::channel::<MediaData>();
     std::thread::spawn(move || {
-        let mut audio_handler = AudioHandler::new(latency_controller_cl);
+        let mut audio_handler = AudioHandler::new(latency_controller);
         loop {
             if let Ok(data) = audio_receiver.recv() {
                 match data {
@@ -1582,6 +1597,7 @@ where
                         audio_handler.handle_frame(af);
                     }
                     MediaData::AudioFormat(f) => {
+                        log::debug!("recved audio format, sample rate={}", f.sample_rate);
                         audio_handler.handle_format(f);
                     }
                     _ => {}
@@ -1592,7 +1608,7 @@ where
         }
         log::info!("Audio decoder loop exits");
     });
-    return (video_sender, audio_sender);
+    audio_sender
 }
 
 /// Handle latency test.
@@ -1934,6 +1950,8 @@ pub enum Data {
     RecordScreen(bool, i32, i32, String),
     ElevateDirect,
     ElevateWithLogon(String, String),
+    NewVoiceCall,
+    CloseVoiceCall,
 }
 
 /// Keycode for key events.

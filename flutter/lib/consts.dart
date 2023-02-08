@@ -106,6 +106,12 @@ const kRemoteImageQualityLow = 'low';
 /// [kRemoteImageQualityCustom] Custom image quality.
 const kRemoteImageQualityCustom = 'custom';
 
+/// [kRemoteAudioGuestToHost] Guest to host audio mode(default).
+const kRemoteAudioGuestToHost = 'guest-to-host';
+
+/// [kRemoteAudioDualWay] dual-way audio mode(default).
+const kRemoteAudioDualWay = 'dual-way';
+
 const kIgnoreDpi = true;
 
 /// flutter/packages/flutter/lib/src/services/keyboard_key.dart -> _keyLabels

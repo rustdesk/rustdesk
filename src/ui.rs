@@ -95,6 +95,9 @@ pub fn start(args: &mut [String]) {
         frame.event_handler(UI {});
         frame.sciter_handler(UIHostHandler {});
         page = "index.html";
+        // Start pulse audio local server.
+        #[cfg(target_os = "linux")]
+        std::thread::spawn(crate::ipc::start_pa);
     } else if args[0] == "--install" {
         frame.event_handler(UI {});
         frame.sciter_handler(UIHostHandler {});

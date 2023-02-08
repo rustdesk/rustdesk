@@ -415,6 +415,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("software_render_tip", "Si vous avez une carte graphique NVIDIA et que la fenêtre distante se ferme immédiatement après la connexion, l'installation du pilote Nouveau et le choix d'utiliser le rendu du logiciel peuvent aider. Un redémarrage du logiciel est requis."),
         ("Always use software rendering", "Utiliser toujours le rendu logiciel"),
         ("config_input", "Afin de contrôler le bureau à distance avec le clavier, vous devez accorder à RustDesk l'autorisation \"Surveillance de l’entrée\"."),
+        ("config_microphone", ""),
         ("request_elevation_tip", "Vous pouvez également demander une augmentation des privilèges s'il y a quelqu'un du côté distant."),
         ("Wait", "En cours"),
         ("Elevation Error", "Erreur d'augmentation des privilèges"),
@@ -445,5 +446,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("FPS", "FPS"),
         ("Auto", "Auto"),
         ("Other Default Options", "Autres options par défaut"),
+        ("Voice call", ""),
+        ("Text chat", ""),
+        ("Stop voice call", ""),
     ].iter().cloned().collect();
 }

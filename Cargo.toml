@@ -59,7 +59,7 @@ base64 = "0.13"
 sysinfo = "0.24"
 num_cpus = "1.13"
 bytes = { version = "1.2", features = ["serde"] }
-default-net = { git = "https://github.com/Kingtous/default-net" }
+default-net = "0.12.0"
 wol-rs = "0.9.1"
 flutter_rust_bridge = { version = "1.61.1", optional = true }
 errno = "0.2.8"

@@ -415,6 +415,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("software_render_tip", "Jeżeli posiadasz kartę graficzną Nvidia i okno zamyka się natychmiast po nawiązaniu połączenia, instalacja sterownika nouveau i wybór renderowania programowego mogą pomóc. Restart aplikacji jest wymagany."),
         ("Always use software rendering", "Zawsze używaj renderowania programowego"),
         ("config_input", "By kontrolować zdalne urządzenie przy pomocy klawiatury, musisz udzielić aplikacji RustDesk uprawnień do \"Urządzeń Wejściowych\"."),
+        ("config_microphone", ""),
         ("request_elevation_tip", "Możesz poprosić o podniesienie uprawnień jeżeli ktoś posiada dostęp do zdalnego urządzenia."),
         ("Wait", "Czekaj"),
         ("Elevation Error", "Błąd przy podnoszeniu uprawnień"),
@@ -445,5 +446,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("FPS", "FPS"),
         ("Auto", "Auto"),
         ("Other Default Options", "Inne opcje domyślne"),
+        ("Voice call", ""),
+        ("Text chat", ""),
+        ("Stop voice call", ""),
     ].iter().cloned().collect();
 }

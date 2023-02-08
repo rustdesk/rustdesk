@@ -378,7 +378,7 @@ class Header: Reactor.Component {
             togglePrivacyMode(me.id);
         } else if (me.id == "show-quality-monitor") {
             toggleQualityMonitor(me.id);
-        }else if (me.attributes.hasClass("toggle-option")) {
+        } else if (me.attributes.hasClass("toggle-option")) {
             handler.toggle_option(me.id);
             toggleMenuState();
         } else if (!me.attributes.hasClass("selected")) {
@@ -434,6 +434,9 @@ function toggleMenuState() {
     var c = handler.get_option("codec-preference");
     if (!c) c = "auto";
     values.push(c);
+    var a = handler.get_audio_mode();
+    if (!a) a = "guest-to-host";
+    values.push(a);
     for (var el in $$(menu#display-options li)) {
         el.attributes.toggleClass("selected", values.indexOf(el.id) >= 0);
     }

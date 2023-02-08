@@ -41,6 +41,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("config_input", "In order to control remote desktop with keyboard, you need to grant RustDesk \"Input Monitoring\" permissions."),
         ("request_elevation_tip","You can also request elevation if there is someone on the remote side."),
         ("wait_accept_uac_tip","Please wait for the remote user to accept the UAC dialog."),
-        ("still_click_uac_tip", "Still requires the remote user to click OK on the UAC window of running RustDesk.")
+        ("still_click_uac_tip", "Still requires the remote user to click OK on the UAC window of running RustDesk."),
+        ("config_microphone", "In order to speak remotely, you need to grant RustDesk \"Record Audio\" permissions.")
         ].iter().cloned().collect();
 }
