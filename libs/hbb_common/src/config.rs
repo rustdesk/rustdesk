@@ -288,7 +288,7 @@ fn patch(path: PathBuf) -> PathBuf {
                         .trim()
                         .to_owned();
                     if user != "root" {
-                        return format!("/home/{}", user).into();
+                        return format!("/home/{user}").into();
                     }
                 }
             }
@@ -525,7 +525,7 @@ impl Config {
             let mut path: PathBuf = format!("/tmp/{}", *APP_NAME.read().unwrap()).into();
             fs::create_dir(&path).ok();
             fs::set_permissions(&path, fs::Permissions::from_mode(0o0777)).ok();
-            path.push(format!("ipc{}", postfix));
+            path.push(format!("ipc{postfix}"));
             path.to_str().unwrap_or("").to_owned()
         }
     }
@@ -562,7 +562,7 @@ impl Config {
                 .unwrap_or_default();
         }
         if !rendezvous_server.contains(':') {
-            rendezvous_server = format!("{}:{}", rendezvous_server, RENDEZVOUS_PORT);
+            rendezvous_server = format!("{rendezvous_server}:{RENDEZVOUS_PORT}");
         }
         rendezvous_server
     }
