@@ -212,7 +212,7 @@ pub fn start_grab_loop() {
             }
 
             let mut _keyboard_mode = KeyboardMode::Map;
-            let scan_code = event.scan_code;
+            let _scan_code = event.scan_code;
             let res = if KEYBOARD_HOOKED.load(Ordering::SeqCst) {
                 _keyboard_mode = client::process_event(&event, None);
                 if is_press {
@@ -225,7 +225,7 @@ pub fn start_grab_loop() {
             };
 
             #[cfg(target_os = "windows")]
-            match scan_code {
+            match _scan_code {
                 0x1D | 0x021D => rdev::set_modifier(Key::ControlLeft, is_press),
                 0xE01D => rdev::set_modifier(Key::ControlRight, is_press),
                 0x2A => rdev::set_modifier(Key::ShiftLeft, is_press),
@@ -241,7 +241,7 @@ pub fn start_grab_loop() {
             #[cfg(target_os = "windows")]
             unsafe {
                 // AltGr
-                if scan_code == 0x021D {
+                if _scan_code == 0x021D {
                     IS_0X021D_DOWN = is_press;
                 }
             }

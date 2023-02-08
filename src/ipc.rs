@@ -16,10 +16,10 @@ use hbb_common::{
     config::{self, Config, Config2},
     futures::StreamExt as _,
     futures_util::sink::SinkExt,
-    log, password_security as password, ResultType, timeout,
-    tokio,
+    log, password_security as password, timeout, tokio,
     tokio::io::{AsyncRead, AsyncWrite},
     tokio_util::codec::Framed,
+    ResultType,
 };
 
 use crate::rendezvous_mediator::RendezvousMediator;
@@ -190,7 +190,7 @@ pub enum Data {
     Socks(Option<config::Socks5Server>),
     FS(FS),
     Test,
-    SyncConfig(Option<(Config, Config2)>),
+    SyncConfig(Option<Box<(Config, Config2)>>),
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     ClipboardFile(ClipboardFile),
     ClipboardFileEnabled(bool),
@@ -419,7 +419,8 @@ async fn handle(data: Data, stream: &mut Connection) {
             let t = Config::get_nat_type();
             allow_err!(stream.send(&Data::NatType(Some(t))).await);
         }
-        Data::SyncConfig(Some((config, config2))) => {
+        Data::SyncConfig(Some(configs)) => {
+            let (config, config2) = *configs;
             let _chk = CheckIfRestart::new();
             Config::set(config);
             Config2::set(config2);
@@ -428,7 +429,9 @@ async fn handle(data: Data, stream: &mut Connection) {
         Data::SyncConfig(None) => {
             allow_err!(
                 stream
-                    .send(&Data::SyncConfig(Some((Config::get(), Config2::get()))))
+                    .send(&Data::SyncConfig(Some(
+                        (Config::get(), Config2::get()).into()
+                    )))
                     .await
             );
         }
@@ -840,6 +843,19 @@ pub async fn test_rendezvous_server() -> ResultType<()> {
 
 #[tokio::main(flavor = "current_thread")]
 pub async fn send_url_scheme(url: String) -> ResultType<()> {
-    connect(1_000, "_url").await?.send(&Data::UrlLink(url)).await?;
+    connect(1_000, "_url")
+        .await?
+        .send(&Data::UrlLink(url))
+        .await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn verify_ffi_enum_data_size() {
+        println!("{}", std::mem::size_of::<Data>());
+        assert!(std::mem::size_of::<Data>() < 96);
+    }
 }

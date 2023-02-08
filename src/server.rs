@@ -8,6 +8,9 @@ use std::{
 use bytes::Bytes;
 
 pub use connection::*;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use hbb_common::config::Config2;
+use hbb_common::tcp::new_listener;
 use hbb_common::{
     allow_err,
     anyhow::{anyhow, Context},
@@ -17,18 +20,15 @@ use hbb_common::{
     message_proto::*,
     protobuf::{Enum, Message as _},
     rendezvous_proto::*,
-    ResultType,
     socket_client,
-    sodiumoxide::crypto::{box_, secretbox, sign}, Stream, timeout, tokio,
+    sodiumoxide::crypto::{box_, secretbox, sign},
+    timeout, tokio, ResultType, Stream,
 };
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use hbb_common::config::Config2;
-use hbb_common::tcp::new_listener;
-use service::{GenericService, Service, Subscriber};
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use service::ServiceTmpl;
+use service::{GenericService, Service, Subscriber};
 
-use crate::ipc::{connect, Data};
+use crate::ipc::Data;
 
 pub mod audio_service;
 cfg_if::cfg_if! {
@@ -65,7 +65,7 @@ type ConnMap = HashMap<i32, ConnInner>;
 lazy_static::lazy_static! {
     pub static ref CHILD_PROCESS: Childs = Default::default();
     pub static ref CONN_COUNT: Arc<Mutex<usize>> = Default::default();
-    // A client server used to provide local services(audio, video, clipboard, etc.) 
+    // A client server used to provide local services(audio, video, clipboard, etc.)
     // for all initiative connections.
     //
     // [Note]
@@ -420,7 +420,8 @@ pub async fn start_server(is_server: bool) {
                 if conn.send(&Data::SyncConfig(None)).await.is_ok() {
                     if let Ok(Some(data)) = conn.next_timeout(1000).await {
                         match data {
-                            Data::SyncConfig(Some((config, config2))) => {
+                            Data::SyncConfig(Some(configs)) => {
+                                let (config, config2) = *configs;
                                 if Config::set(config) {
                                     log::info!("config synced");
                                 }
@@ -450,28 +451,26 @@ pub async fn start_ipc_url_server() {
             while let Some(Ok(conn)) = incoming.next().await {
                 let mut conn = crate::ipc::Connection::new(conn);
                 match conn.next_timeout(1000).await {
-                    Ok(Some(data)) => {
-                        match data {
-                            Data::UrlLink(url) => {
-                                #[cfg(feature = "flutter")]
-                                {
-                                    if let Some(stream) = crate::flutter::GLOBAL_EVENT_STREAM.read().unwrap().get(
-                                        crate::flutter::APP_TYPE_MAIN
-                                    ) {
-                                        let mut m = HashMap::new();
-                                        m.insert("name", "on_url_scheme_received");
-                                        m.insert("url", url.as_str());
-                                        stream.add(serde_json::to_string(&m).unwrap());
-                                    } else {
-                                        log::warn!("No main window app found!");
-                                    }
-                                }
-                            }
-                            _ => {
-                                log::warn!("An unexpected data was sent to the ipc url server.")
+                    Ok(Some(data)) => match data {
+                        #[cfg(feature = "flutter")]
+                        Data::UrlLink(url) => {
+                            if let Some(stream) = crate::flutter::GLOBAL_EVENT_STREAM
+                                .read()
+                                .unwrap()
+                                .get(crate::flutter::APP_TYPE_MAIN)
+                            {
+                                let mut m = HashMap::new();
+                                m.insert("name", "on_url_scheme_received");
+                                m.insert("url", url.as_str());
+                                stream.add(serde_json::to_string(&m).unwrap());
+                            } else {
+                                log::warn!("No main window app found!");
                             }
                         }
-                    }
+                        _ => {
+                            log::warn!("An unexpected data was sent to the ipc url server.")
+                        }
+                    },
                     Err(err) => {
                         log::error!("{}", err);
                     }
@@ -509,7 +508,8 @@ async fn sync_and_watch_config_dir() {
                     if conn.send(&Data::SyncConfig(None)).await.is_ok() {
                         if let Ok(Some(data)) = conn.next_timeout(1000).await {
                             match data {
-                                Data::SyncConfig(Some((config, config2))) => {
+                                Data::SyncConfig(Some(configs)) => {
+                                    let (config, config2) = *configs;
                                     let _chk = crate::ipc::CheckIfRestart::new();
                                     if cfg0.0 != config {
                                         cfg0.0 = config.clone();
@@ -534,7 +534,7 @@ async fn sync_and_watch_config_dir() {
                     let cfg = (Config::get(), Config2::get());
                     if cfg != cfg0 {
                         log::info!("config updated, sync to root");
-                        match conn.send(&Data::SyncConfig(Some(cfg.clone()))).await {
+                        match conn.send(&Data::SyncConfig(Some(cfg.clone().into()))).await {
                             Err(e) => {
                                 log::error!("sync config to root failed: {}", e);
                                 break;

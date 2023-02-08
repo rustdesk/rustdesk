@@ -25,7 +25,7 @@ use hbb_common::{allow_err, get_time, message_proto::*, sleep};
 use hbb_common::{fs, log, Stream};
 
 use crate::client::{
-    new_voice_call_request, Client, CodecFormat, LoginConfigHandler, MediaData, MediaSender,
+    new_voice_call_request, Client, CodecFormat, MediaData, MediaSender,
     QualityStatus, MILLI1, SEC30, SERVER_CLIPBOARD_ENABLED, SERVER_FILE_TRANSFER_ENABLED,
     SERVER_KEYBOARD_ENABLED,
 };
