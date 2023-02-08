@@ -1089,9 +1089,9 @@ fn translate_process_virtual_keycode(vk: u32, down: bool) {
 
 fn translate_keyboard_mode(evt: &KeyEvent) {
     match evt.union {
-        Some(key_event::Union::Unicode(unicode)) => {
+        Some(key_event::Union::Unicode(_unicode)) => {
             #[cfg(target_os = "windows")]
-            allow_err!(rdev::simulate_unicode(unicode as _));
+            allow_err!(rdev::simulate_unicode(_unicode as _));
         }
         Some(key_event::Union::Chr(..)) =>
         {
