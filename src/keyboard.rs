@@ -830,9 +830,12 @@ pub fn translate_keyboard_mode(event: &Event, key_event: KeyEvent) -> Vec<KeyEve
     }
 
     #[cfg(target_os = "windows")]
-    if unsafe {IS_0X021D_DOWN} || !is_hot_key_modifiers_down() {
+    if unsafe { IS_0X021D_DOWN } || !is_hot_key_modifiers_down() {
         try_fill_unicode(event, &key_event, &mut events);
     }
+
+    #[cfg(not(target_os = "windows"))]
+    try_fill_unicode(event, &key_event, &mut events);
 
     if events.is_empty() {
         if let Some(evt) = translate_virtual_keycode(event, key_event) {

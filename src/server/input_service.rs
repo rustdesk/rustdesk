@@ -204,7 +204,7 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 enum KeysDown {
     RdevKey(RawKey),
-    EnigoKey(u64)
+    EnigoKey(u64),
 }
 
 lazy_static::lazy_static! {
@@ -397,16 +397,14 @@ fn record_key_to_key(record_key: u64) -> Option<Key> {
 
 #[inline]
 fn release_record_key(record_key: KeysDown) {
-    let func = move || {
-        match record_key {
-            KeysDown::RdevKey(raw_key) => {
-                simulate_(&EventType::KeyRelease(RdevKey::RawKey(raw_key)));
-            }
-            KeysDown::EnigoKey(key) => {
-                if let Some(key) = record_key_to_key(key) {
-                    ENIGO.lock().unwrap().key_up(key);
-                    log::debug!("Fixed {:?} timeout", key);
-                }
+    let func = move || match record_key {
+        KeysDown::RdevKey(raw_key) => {
+            simulate_(&EventType::KeyRelease(RdevKey::RawKey(raw_key)));
+        }
+        KeysDown::EnigoKey(key) => {
+            if let Some(key) = record_key_to_key(key) {
+                ENIGO.lock().unwrap().key_up(key);
+                log::debug!("Fixed {:?} timeout", key);
             }
         }
     };
@@ -758,12 +756,10 @@ fn sim_rdev_rawkey_position(code: u32, keydown: bool) {
     simulate_(&event_type);
 }
 
+#[cfg(target_os = "windows")]
 fn sim_rdev_rawkey_virtual(code: u32, keydown: bool) {
-    #[cfg(target_os = "windows")]
     let rawkey = RawKey::WinVirtualKeycode(code);
-
     record_pressed_key(KeysDown::RdevKey(rawkey), keydown);
-
     let event_type = if keydown {
         EventType::KeyPress(RdevKey::RawKey(rawkey))
     } else {
@@ -941,10 +937,11 @@ fn release_unpressed_modifiers(en: &mut Enigo, key_event: &KeyEvent) {
 
 #[cfg(target_os = "linux")]
 fn is_altgr_pressed() -> bool {
+    let altgr_rawkey = RawKey::LinuxXorgKeycode(ControlKey::RAlt.value() as _);
     KEYS_DOWN
         .lock()
         .unwrap()
-        .get(&(ControlKey::RAlt.value() as _))
+        .get(&KeysDown::RdevKey(altgr_rawkey))
         .is_some()
 }
 
@@ -1093,9 +1090,11 @@ fn translate_process_virtual_keycode(vk: u32, down: bool) {
 fn translate_keyboard_mode(evt: &KeyEvent) {
     match evt.union {
         Some(key_event::Union::Unicode(unicode)) => {
+            #[cfg(target_os = "windows")]
             allow_err!(rdev::simulate_unicode(unicode as _));
-        },
-        Some(key_event::Union::Chr(..)) => {
+        }
+        Some(key_event::Union::Chr(..)) =>
+        {
             #[cfg(target_os = "windows")]
             translate_process_virtual_keycode(evt.chr(), evt.down)
         }
