@@ -68,26 +68,19 @@ class _DesktopServerPageState extends State<DesktopServerPage>
         ],
         child: Consumer<ServerModel>(
             builder: (context, serverModel, child) => Container(
-                  decoration: BoxDecoration(
-                      border:
-                          Border.all(color: MyTheme.color(context).border!)),
-                  child: Overlay(initialEntries: [
-                    OverlayEntry(builder: (context) {
-                      gFFI.dialogManager.setOverlayState(Overlay.of(context));
-                      return Scaffold(
-                        backgroundColor: Theme.of(context).backgroundColor,
-                        body: Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.start,
-                            children: [
-                              Expanded(child: ConnectionManager()),
-                            ],
-                          ),
-                        ),
-                      );
-                    })
-                  ]),
-                )));
+                decoration: BoxDecoration(
+                    border: Border.all(color: MyTheme.color(context).border!)),
+                child: Scaffold(
+                  backgroundColor: Theme.of(context).backgroundColor,
+                  body: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      children: [
+                        Expanded(child: ConnectionManager()),
+                      ],
+                    ),
+                  ),
+                ))));
   }
 
   @override
