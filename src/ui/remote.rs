@@ -443,10 +443,12 @@ impl sciter::EventHandler for SciterSession {
 
 impl SciterSession {
     pub fn new(cmd: String, id: String, password: String, args: Vec<String>) -> Self {
+        let allow_swap_key = hbb_common::config::Config::get_option("allow-swap-key") == "Y";
         let session: Session<SciterHandler> = Session {
             id: id.clone(),
             password: password.clone(),
             args,
+            allow_swap_key,
             ..Default::default()
         };
 

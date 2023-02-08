@@ -214,6 +214,7 @@ class Enhancements: Reactor.Component {
                 {has_hwcodec ? <li #enable-hwcodec><span>{svg_checkmark}</span>{translate("Hardware Codec")} (beta)</li> : ""}
                 <li #enable-abr><span>{svg_checkmark}</span>{translate("Adaptive Bitrate")} (beta)</li>
                 <li #screen-recording>{translate("Recording")}</li>
+                {is_osx ? <li #allow-swap-key><span>{svg_checkmark}</span>{translate("Swap control-command key")} </li> : "" }
             </menu>
         </li>;
     }

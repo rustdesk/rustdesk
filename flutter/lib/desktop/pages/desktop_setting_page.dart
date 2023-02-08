@@ -278,6 +278,8 @@ class _GeneralState extends State<_General> {
       _OptionCheckBox(context, 'Confirm before closing multiple tabs',
           'enable-confirm-closing-tabs'),
       _OptionCheckBox(context, 'Adaptive Bitrate', 'enable-abr'),
+      if (Platform.isMacOS)
+        _OptionCheckBox(context, 'Swap control-command key', 'allow-swap-key'),
       if (Platform.isLinux)
         Tooltip(
           message: translate('software_render_tip'),
