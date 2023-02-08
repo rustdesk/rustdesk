@@ -1489,25 +1489,29 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         text: translate('Ratio'),
         optionsGetter: () {
           List<MenuEntryRadioOption> list = [];
-          List<String> modes = ["legacy"];
+          List<KeyboardModeMenu> modes = [
+            KeyboardModeMenu(key: 'legacy', menu: 'Legacy mode'),
+            KeyboardModeMenu(key: 'map', menu: 'Map mode'),
+            KeyboardModeMenu(key: 'translate', menu: 'Translate mode'),
+          ];
 
-          if (bind.sessionIsKeyboardModeSupported(id: widget.id, mode: "map")) {
-            modes.add("map");
-          }
-
-          for (String mode in modes) {
-            if (mode == "legacy") {
+          for (KeyboardModeMenu mode in modes) {
+            if (bind.sessionIsKeyboardModeSupported(
+                id: widget.id, mode: mode.key)) {
+              if (mode.key == 'translate') {
+                if (!Platform.isWindows ||
+                    widget.ffi.ffiModel.pi.platform != kPeerPlatformWindows) {
+                  continue;
+                }
+              }
               list.add(MenuEntryRadioOption(
-                  text: translate('Legacy mode'), value: 'legacy'));
-            } else if (mode == "map") {
-              list.add(MenuEntryRadioOption(
-                  text: translate('Map mode'), value: 'map'));
+                  text: translate(mode.menu), value: mode.key));
             }
           }
           return list;
         },
         curOptionGetter: () async {
-          return await bind.sessionGetKeyboardMode(id: widget.id) ?? "legacy";
+          return await bind.sessionGetKeyboardMode(id: widget.id) ?? 'legacy';
         },
         optionSetter: (String oldValue, String newValue) async {
           await bind.sessionSetKeyboardMode(id: widget.id, value: newValue);
@@ -1795,4 +1799,11 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
       ),
     );
   }
+}
+
+class KeyboardModeMenu {
+  final String key;
+  final String menu;
+
+  KeyboardModeMenu({required this.key, required this.menu});
 }
