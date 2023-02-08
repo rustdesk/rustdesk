@@ -200,7 +200,7 @@ pub fn update_grab_get_key_name() {
 }
 
 #[cfg(target_os = "windows")]
-static mut IS_LAST_0X021D: bool = false;
+static mut IS_0X021D_DOWN: bool = false;
 
 pub fn start_grab_loop() {
     #[cfg(any(target_os = "windows", target_os = "macos"))]
@@ -210,33 +210,43 @@ pub fn start_grab_loop() {
             if key == Key::CapsLock || key == Key::NumLock {
                 return Some(event);
             }
-            if KEYBOARD_HOOKED.load(Ordering::SeqCst) {
-                let keyboard_mode = client::process_event(&event, None);
-                if keyboard_mode == KeyboardMode::Translate {
-                    #[cfg(target_os = "windows")]
-                    match event.scan_code {
-                        0x2A => rdev::set_modifier(Key::ShiftLeft, is_press),
-                        0x36 => rdev::set_modifier(Key::ShiftRight, is_press),
-                        0x38 => rdev::set_modifier(Key::Alt, is_press),
-                        0xE038 => rdev::set_modifier(Key::AltGr, is_press),
-                        0xE05B => rdev::set_modifier(Key::MetaLeft, is_press),
-                        0xE05C => rdev::set_modifier(Key::MetaRight, is_press),
-                        _ => {}
-                    }
-                    #[cfg(target_os = "windows")]
-                    unsafe {
-                        IS_LAST_0X021D = event.scan_code == 0x021D;
-                    }
-                }
 
+            let mut _keyboard_mode = KeyboardMode::Map;
+            let scan_code = event.scan_code;
+            let res = if KEYBOARD_HOOKED.load(Ordering::SeqCst) {
+                _keyboard_mode = client::process_event(&event, None);
                 if is_press {
-                    return None;
+                    None
                 } else {
-                    return Some(event);
+                    Some(event)
                 }
             } else {
-                return Some(event);
+                Some(event)
+            };
+
+            #[cfg(target_os = "windows")]
+            match scan_code {
+                0x1D | 0x021D => rdev::set_modifier(Key::ControlLeft, is_press),
+                0xE01D => rdev::set_modifier(Key::ControlRight, is_press),
+                0x2A => rdev::set_modifier(Key::ShiftLeft, is_press),
+                0x36 => rdev::set_modifier(Key::ShiftRight, is_press),
+                0x38 => rdev::set_modifier(Key::Alt, is_press),
+                // Right Alt
+                0xE038 => rdev::set_modifier(Key::AltGr, is_press),
+                0xE05B => rdev::set_modifier(Key::MetaLeft, is_press),
+                0xE05C => rdev::set_modifier(Key::MetaRight, is_press),
+                _ => {}
             }
+
+            #[cfg(target_os = "windows")]
+            unsafe {
+                // AltGr
+                if scan_code == 0x021D {
+                    IS_0X021D_DOWN = is_press;
+                }
+            }
+
+            return res;
         };
         let func = move |event: Event| match event.event_type {
             EventType::KeyPress(key) => try_handle_keyboard(event, key, true),
@@ -808,7 +818,11 @@ pub fn translate_keyboard_mode(event: &Event, key_event: KeyEvent) -> Vec<KeyEve
     let mut events: Vec<KeyEvent> = Vec::new();
     #[cfg(target_os = "windows")]
     unsafe {
-        if IS_LAST_0X021D {
+        if event.scan_code == 0x021D {
+            return events;
+        }
+
+        if IS_0X021D_DOWN {
             if event.scan_code == 0xE038 {
                 return events;
             }
@@ -816,7 +830,7 @@ pub fn translate_keyboard_mode(event: &Event, key_event: KeyEvent) -> Vec<KeyEve
     }
 
     #[cfg(target_os = "windows")]
-    if !is_hot_key_modifiers_down() {
+    if unsafe {IS_0X021D_DOWN} || !is_hot_key_modifiers_down() {
         try_fill_unicode(event, &key_event, &mut events);
     }
 
