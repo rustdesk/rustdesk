@@ -1,7 +1,7 @@
 use std::{collections::HashMap, ffi::{CStr, CString}, os::raw::c_char};
 use std::str::FromStr;
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "android"))]
 use std::thread;
 
 use flutter_rust_bridge::{StreamSink, SyncReturn, ZeroCopyBuffer};
