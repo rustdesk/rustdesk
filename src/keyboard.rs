@@ -840,6 +840,13 @@ pub fn translate_keyboard_mode(event: &Event, key_event: KeyEvent) -> Vec<KeyEve
         try_fill_unicode(event, &key_event, &mut events);
     }
 
+    #[cfg(target_os = "windows")]
+    unsafe {
+        if IS_0X021D_DOWN {
+            return events;
+        }
+    }
+
     #[cfg(not(target_os = "windows"))]
     try_fill_unicode(event, &key_event, &mut events);
 
@@ -847,7 +854,6 @@ pub fn translate_keyboard_mode(event: &Event, key_event: KeyEvent) -> Vec<KeyEve
         if let Some(evt) = translate_virtual_keycode(event, key_event) {
             events.push(evt);
         }
-        return events;
     }
     events
 }
