@@ -193,8 +193,8 @@ pub mod client {
 #[cfg(windows)]
 pub fn update_grab_get_key_name() {
     match get_keyboard_mode_enum() {
-        KeyboardMode::Map => rdev::set_get_key_name(false),
-        KeyboardMode::Translate => rdev::set_get_key_name(true),
+        KeyboardMode::Map => rdev::set_get_key_unicode(false),
+        KeyboardMode::Translate => rdev::set_get_key_unicode(true),
         _ => {}
     };
 }
@@ -256,6 +256,7 @@ pub fn start_grab_loop() {
         if let Err(error) = rdev::grab(func) {
             log::error!("rdev Error: {:?}", error)
         }
+        rdev::set_event_popup(false);
     });
 
     #[cfg(target_os = "linux")]
@@ -757,12 +758,10 @@ pub fn map_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Option<KeyEv
 fn try_fill_unicode(event: &Event, key_event: &KeyEvent, events: &mut Vec<KeyEvent>) {
     match &event.unicode {
         Some(unicode_info) => {
-            if !unicode_info.is_dead {
-                for code in &unicode_info.unicode {
-                    let mut evt = key_event.clone();
-                    evt.set_unicode(*code as _);
-                    events.push(evt);
-                }
+            for code in &unicode_info.unicode {
+                let mut evt = key_event.clone();
+                evt.set_unicode(*code as _);
+                events.push(evt);
             }
         }
         None => {}
@@ -816,6 +815,12 @@ pub fn translate_virtual_keycode(event: &Event, mut key_event: KeyEvent) -> Opti
 
 pub fn translate_keyboard_mode(event: &Event, key_event: KeyEvent) -> Vec<KeyEvent> {
     let mut events: Vec<KeyEvent> = Vec::new();
+    if let Some(unicode_info) = &event.unicode {
+        if unicode_info.is_dead {
+            return events;
+        }
+    }
+
     #[cfg(target_os = "windows")]
     unsafe {
         if event.scan_code == 0x021D {
