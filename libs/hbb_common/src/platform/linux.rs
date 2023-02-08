@@ -60,7 +60,7 @@ fn get_display_server_of_session(session: &str) -> String {
                     .replace("TTY=", "")
                     .trim_end()
                     .into();
-                if let Ok(xorg_results) = run_cmds(format!("ps -e | grep \"{}.\\\\+Xorg\"", tty))
+                if let Ok(xorg_results) = run_cmds(format!("ps -e | grep \"{tty}.\\\\+Xorg\""))
                 // And check if Xorg is running on that tty
                 {
                     if xorg_results.trim_end() != "" {

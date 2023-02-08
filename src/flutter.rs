@@ -14,6 +14,7 @@ use std::{
 };
 
 pub(super) const APP_TYPE_MAIN: &str = "main";
+pub(super) const APP_TYPE_CM: &str = "cm";
 pub(super) const APP_TYPE_DESKTOP_REMOTE: &str = "remote";
 pub(super) const APP_TYPE_DESKTOP_FILE_TRANSFER: &str = "file transfer";
 pub(super) const APP_TYPE_DESKTOP_PORT_FORWARD: &str = "port forward";
@@ -39,7 +40,8 @@ pub extern "C" fn rustdesk_core_main() -> bool {
 #[no_mangle]
 pub extern "C" fn handle_applicationShouldOpenUntitledFile() {
     hbb_common::log::debug!("icon clicked on finder");
-    if std::env::args().nth(1) == Some("--server".to_owned()) {
+    let x = std::env::args().nth(1).unwrap_or_default();
+    if x == "--server" || x == "--cm" {
         crate::platform::macos::check_main_window();
     }
 }
@@ -392,6 +394,22 @@ impl InvokeUiSession for FlutterHandler {
     fn switch_back(&self, peer_id: &str) {
         self.push_event("switch_back", [("peer_id", peer_id)].into());
     }
+
+    fn on_voice_call_started(&self) {
+        self.push_event("on_voice_call_started", [].into());
+    }
+
+    fn on_voice_call_closed(&self, reason: &str) {
+        self.push_event("on_voice_call_closed", [("reason", reason)].into())
+    }
+
+    fn on_voice_call_waiting(&self) {
+        self.push_event("on_voice_call_waiting", [].into());
+    }
+
+    fn on_voice_call_incoming(&self) {
+        self.push_event("on_voice_call_incoming", [].into());
+    }
 }
 
 /// Create a new remote session with the given id.
@@ -519,6 +537,11 @@ pub mod connection_manager {
         fn show_elevation(&self, show: bool) {
             self.push_event("show_elevation", vec![("show", &show.to_string())]);
         }
+
+        fn update_voice_call_state(&self, client: &crate::ui_cm_interface::Client) {
+            let client_json = serde_json::to_string(&client).unwrap_or("".into());
+            self.push_event("update_voice_call_state", vec![("client", &client_json)]);
+        }
     }
 
     impl FlutterHandler {
@@ -526,13 +549,11 @@ pub mod connection_manager {
             let mut h: HashMap<&str, &str> = event.iter().cloned().collect();
             assert!(h.get("name").is_none());
             h.insert("name", name);
-
-            if let Some(s) = GLOBAL_EVENT_STREAM
-                .read()
-                .unwrap()
-                .get(super::APP_TYPE_MAIN)
-            {
+        
+            if let Some(s) = GLOBAL_EVENT_STREAM.read().unwrap().get(super::APP_TYPE_CM) {
                 s.add(serde_json::ser::to_string(&h).unwrap_or("".to_owned()));
+            } else {
+                println!("Push event {} failed. No {} event stream found.", name, super::APP_TYPE_CM);
             };
         }
     }

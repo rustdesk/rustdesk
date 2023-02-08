@@ -6,12 +6,12 @@ use std::{
 
 use sciter::{
     dom::{
-        event::{EventReason, BEHAVIOR_EVENTS, EVENT_GROUPS, PHASE_MASK},
-        Element, HELEMENT,
+        Element,
+        event::{BEHAVIOR_EVENTS, EVENT_GROUPS, EventReason, PHASE_MASK}, HELEMENT,
     },
     make_args,
-    video::{video_destination, AssetPtr, COLOR_SPACE},
     Value,
+    video::{AssetPtr, COLOR_SPACE, video_destination},
 };
 
 use hbb_common::{
@@ -266,6 +266,22 @@ impl InvokeUiSession for SciterHandler {
     }
 
     fn switch_back(&self, _id: &str) {}
+
+    fn on_voice_call_started(&self) {
+        self.call("onVoiceCallStart", &make_args!());
+    }
+
+    fn on_voice_call_closed(&self, reason: &str) {
+        self.call("onVoiceCallClosed", &make_args!(reason));
+    }
+
+    fn on_voice_call_waiting(&self) {
+        self.call("onVoiceCallWaiting", &make_args!());
+    }
+
+    fn on_voice_call_incoming(&self) {
+        self.call("onVoiceCallIncoming", &make_args!());
+    }
 }
 
 pub struct SciterSession(Session<SciterHandler>);
@@ -420,6 +436,8 @@ impl sciter::EventHandler for SciterSession {
         fn supported_hwcodec();
         fn change_prefer_codec();
         fn restart_remote_device();
+        fn request_voice_call();
+        fn close_voice_call();
     }
 }
 

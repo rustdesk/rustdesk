@@ -59,10 +59,9 @@ jobs:
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: "1.62"
+          toolchain: stable
           target: ${{ matrix.job.target }}
           override: true
-          components: rustfmt
           profile: minimal # minimal component installation (ie, no documentation)
 
       - uses: Swatinem/rust-cache@v2
@@ -243,7 +242,6 @@ jobs:
           security unlock-keychain -p ${{ secrets.MACOS_P12_PASSWORD }} rustdesk.keychain
           # start sign the rustdesk.app and dmg
           rm rustdesk-${{ env.VERSION }}.dmg || true
-          mv ./flutter/build/macos/Build/Products/Release/rustdesk.app ./flutter/build/macos/Build/Products/Release/RustDesk.app
           codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep ./flutter/build/macos/Build/Products/Release/RustDesk.app -v
           create-dmg --icon "RustDesk.app" 200 190 --hide-extension "RustDesk.app" --window-size 800 400 --app-drop-link 600 185 rustdesk-${{ env.VERSION }}.dmg ./flutter/build/macos/Build/Products/Release/RustDesk.app
           codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep rustdesk-${{ env.VERSION }}.dmg -v

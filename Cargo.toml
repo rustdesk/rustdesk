@@ -59,7 +59,7 @@ base64 = "0.13"
 sysinfo = "0.24"
 num_cpus = "1.13"
 bytes = { version = "1.2", features = ["serde"] }
-default-net = { git = "https://github.com/Kingtous/default-net" }
+default-net = "0.12.0"
 wol-rs = "0.9.1"
 flutter_rust_bridge = { version = "1.61.1", optional = true }
 errno = "0.2.8"
@@ -106,6 +106,8 @@ core-graphics = "0.22"
 include_dir = "0.7.2"
 tray-item = "0.7" # looks better than trayicon
 dark-light = "0.2"
+fruitbasket = "0.10.0"
+objc_id = "0.1.1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 psimple = { package = "libpulse-simple-binding", version = "2.25" }

@@ -498,7 +498,7 @@ fn run(sp: GenericService) -> ResultType<()> {
                 video_qos.target_bitrate,
                 video_qos.fps
             );
-            encoder.set_bitrate(video_qos.target_bitrate).unwrap();
+            allow_err!(encoder.set_bitrate(video_qos.target_bitrate));
             spf = video_qos.spf();
         }
         drop(video_qos);
@@ -954,10 +954,7 @@ pub fn get_current_display() -> ResultType<(usize, usize, Display)> {
 fn start_uac_elevation_check() {
     static START: Once = Once::new();
     START.call_once(|| {
-        if !crate::platform::is_installed()
-            && !crate::platform::is_root()
-            && !crate::portable_service::client::running()
-        {
+        if !crate::platform::is_installed() && !crate::platform::is_root() {
             std::thread::spawn(|| loop {
                 std::thread::sleep(std::time::Duration::from_secs(1));
                 if let Ok(uac) = crate::ui::win_privacy::is_process_consent_running() {

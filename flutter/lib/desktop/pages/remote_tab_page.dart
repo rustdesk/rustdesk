@@ -243,96 +243,35 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         padding: padding,
       ),
       MenuEntryDivider<String>(),
-      MenuEntryRadios<String>(
-        text: translate('Ratio'),
-        optionsGetter: () => [
-          MenuEntryRadioOption(
-            text: translate('Scale original'),
-            value: kRemoteViewStyleOriginal,
-            dismissOnClicked: true,
-          ),
-          MenuEntryRadioOption(
-            text: translate('Scale adaptive'),
-            value: kRemoteViewStyleAdaptive,
-            dismissOnClicked: true,
-          ),
-        ],
-        curOptionGetter: () async =>
-            // null means peer id is not found, which there's no need to care about
-            await bind.sessionGetViewStyle(id: key) ?? '',
-        optionSetter: (String oldValue, String newValue) async {
-          await bind.sessionSetViewStyle(id: key, value: newValue);
-          ffi.canvasModel.updateViewStyle();
-          cancelFunc();
-        },
-        padding: padding,
+      RemoteMenuEntry.viewStyle(
+        key,
+        ffi,
+        padding,
+        dismissFunc: cancelFunc,
       ),
     ]);
 
     if (!ffi.canvasModel.cursorEmbedded) {
       menu.add(MenuEntryDivider<String>());
-      menu.add(() {
-        final state = ShowRemoteCursorState.find(key);
-        return MenuEntrySwitch2<String>(
-          switchType: SwitchType.scheckbox,
-          text: translate('Show remote cursor'),
-          getter: () {
-            return state;
-          },
-          setter: (bool v) async {
-            state.value = v;
-            await bind.sessionToggleOption(
-                id: key, value: 'show-remote-cursor');
-            cancelFunc();
-          },
-          padding: padding,
-        );
-      }());
+      menu.add(RemoteMenuEntry.showRemoteCursor(
+        key,
+        padding,
+        dismissFunc: cancelFunc,
+      ));
     }
 
     if (perms['keyboard'] != false) {
       if (perms['clipboard'] != false) {
-        menu.add(MenuEntrySwitch<String>(
-          switchType: SwitchType.scheckbox,
-          text: translate('Disable clipboard'),
-          getter: () async {
-            return bind.sessionGetToggleOptionSync(
-                id: key, arg: 'disable-clipboard');
-          },
-          setter: (bool v) async {
-            await bind.sessionToggleOption(id: key, value: 'disable-clipboard');
-            cancelFunc();
-          },
-          padding: padding,
-        ));
+        menu.add(RemoteMenuEntry.disableClipboard(key, padding,
+            dismissFunc: cancelFunc));
       }
 
-      menu.add(MenuEntryButton<String>(
-        childBuilder: (TextStyle? style) => Text(
-          translate('Insert Lock'),
-          style: style,
-        ),
-        proc: () {
-          bind.sessionLockScreen(id: key);
-          cancelFunc();
-        },
-        padding: padding,
-        dismissOnClicked: true,
-      ));
+      menu.add(
+          RemoteMenuEntry.insertLock(key, padding, dismissFunc: cancelFunc));
 
       if (pi.platform == kPeerPlatformLinux || pi.sasEnabled) {
-        menu.add(MenuEntryButton<String>(
-          childBuilder: (TextStyle? style) => Text(
-            '${translate("Insert")} Ctrl + Alt + Del',
-            style: style,
-          ),
-          proc: () {
-            bind.sessionCtrlAltDel(id: key);
-            cancelFunc();
-          },
-          padding: padding,
-          dismissOnClicked: true,
-        ));
+        menu.add(RemoteMenuEntry.insertCtrlAltDel(key, padding,
+            dismissFunc: cancelFunc));
       }
     }
 

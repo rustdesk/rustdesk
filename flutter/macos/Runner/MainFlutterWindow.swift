@@ -1,4 +1,5 @@
 import Cocoa
+import AVFoundation
 import FlutterMacOS
 import desktop_multi_window
 // import bitsdojo_window_macos
@@ -78,10 +79,29 @@ class MainFlutterWindow: NSWindow {
                     self.setWindowInterfaceMode(window: window,themeName: themeName ?? "light")
                     result(nil)
                     break;
+                case "terminate":
+                    NSApplication.shared.terminate(self)
+                    result(nil)
+                case "canRecordAudio":
+                    switch AVCaptureDevice.authorizationStatus(for: .audio) {
+                    case .authorized:
+                        result(1)
+                        break
+                    case .notDetermined:
+                        result(0)
+                        break
+                    default:
+                        result(-1)
+                        break
+                    }
+                case "requestRecordAudio":
+                    AVCaptureDevice.requestAccess(for: .audio, completionHandler: { granted in
+                        result(granted)
+                    })
+                    break
                 default:
                     result(FlutterMethodNotImplemented)
                 }
         })
     }
 }
-

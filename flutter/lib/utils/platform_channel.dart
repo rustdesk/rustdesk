@@ -31,4 +31,10 @@ class RdPlatformChannel {
     return _osxMethodChannel
         .invokeMethod("setWindowTheme", {"themeName": theme.name});
   }
+
+  /// Terminate .app manually.
+  Future<void> terminate() {
+    assert(Platform.isMacOS);
+    return _osxMethodChannel.invokeMethod("terminate");
+  }
 }

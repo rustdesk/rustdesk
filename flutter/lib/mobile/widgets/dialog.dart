@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/desktop/widgets/button.dart';
 import 'package:get/get.dart';
 
 import '../../common.dart';
@@ -371,8 +370,7 @@ void showWaitUacDialog(
       tag: '$id-wait-uac',
       (setState, close) => CustomAlertDialog(
             title: null,
-            content: msgboxContent(type, 'Wait', 'wait_accept_uac_tip')
-                .marginOnly(bottom: 10),
+            content: msgboxContent(type, 'Wait', 'wait_accept_uac_tip'),
           ));
 }
 
@@ -645,10 +643,9 @@ class _PasswordWidgetState extends State<PasswordWidget> {
         // Here is key idea
         suffixIcon: IconButton(
           icon: Icon(
-            // Based on passwordVisible state choose the icon
-            _passwordVisible ? Icons.visibility : Icons.visibility_off,
-            color: Theme.of(context).primaryColorDark,
-          ),
+              // Based on passwordVisible state choose the icon
+              _passwordVisible ? Icons.visibility : Icons.visibility_off,
+              color: MyTheme.lightTheme.primaryColor),
           onPressed: () {
             // Update the state i.e. toggle the state of passwordVisible variable
             setState(() {

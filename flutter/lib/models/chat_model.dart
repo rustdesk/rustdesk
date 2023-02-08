@@ -5,6 +5,7 @@ import 'package:draggable_float_widget/draggable_float_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get_rx/src/rx_types/rx_types.dart';
+import 'package:get/get.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../consts.dart';
@@ -31,10 +32,14 @@ class ChatModel with ChangeNotifier {
 
   OverlayEntry? chatIconOverlayEntry;
   OverlayEntry? chatWindowOverlayEntry;
+
   bool isConnManager = false;
 
   RxBool isWindowFocus = true.obs;
   BlockableOverlayState? _blockableOverlayState;
+  final Rx<VoiceCallStatus> _voiceCallStatus = Rx(VoiceCallStatus.notStarted);
+
+  Rx<VoiceCallStatus> get voiceCallStatus => _voiceCallStatus;
 
   final ChatUser me = ChatUser(
     id: "",
@@ -312,4 +317,34 @@ class ChatModel with ChangeNotifier {
       }
     });
   }
+
+  void onVoiceCallWaiting() {
+    _voiceCallStatus.value = VoiceCallStatus.waitingForResponse;
+  }
+
+  void onVoiceCallStarted() {
+    _voiceCallStatus.value = VoiceCallStatus.connected;
+  }
+
+  void onVoiceCallClosed(String reason) {
+    _voiceCallStatus.value = VoiceCallStatus.notStarted;
+  }
+
+  void onVoiceCallIncoming() {
+    if (isConnManager) {
+      _voiceCallStatus.value = VoiceCallStatus.incoming;
+    }
+  }
+
+  void closeVoiceCall(String id) {
+    bind.sessionCloseVoiceCall(id: id);
+  }
+}
+
+enum VoiceCallStatus {
+  notStarted,
+  waitingForResponse,
+  connected,
+  // Connection manager only.
+  incoming
 }

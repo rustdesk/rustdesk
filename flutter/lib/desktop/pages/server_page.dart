@@ -515,6 +515,39 @@ class _CmControlPanel extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
         Offstage(
+          offstage: !client.inVoiceCall,
+          child: buildButton(context,
+              color: Colors.red,
+              onClick: () => closeVoiceCall(),
+              icon: Icon(Icons.phone_disabled_rounded, color: Colors.white),
+              text: "Stop voice call",
+              textColor: Colors.white),
+        ),
+        Offstage(
+          offstage: !client.incomingVoiceCall,
+          child: Row(
+            children: [
+              Expanded(
+                child: buildButton(context,
+                    color: MyTheme.accent,
+                    onClick: () => handleVoiceCall(true),
+                    icon: Icon(Icons.phone_enabled, color: Colors.white),
+                    text: "Accept",
+                    textColor: Colors.white),
+              ),
+              Expanded(
+                child: buildButton(context,
+                    color: Colors.red,
+                    onClick: () => handleVoiceCall(false),
+                    icon:
+                        Icon(Icons.phone_disabled_rounded, color: Colors.white),
+                    text: "Dismiss",
+                    textColor: Colors.white),
+              )
+            ],
+          ),
+        ),
+        Offstage(
           offstage: !client.fromSwitch,
           child: buildButton(context,
               color: Colors.purple,
@@ -619,7 +652,7 @@ class _CmControlPanel extends StatelessWidget {
         .marginSymmetric(horizontal: showElevation ? 0 : bigMargin);
   }
 
-  buildButton(
+  Widget buildButton(
     BuildContext context, {
     required Color? color,
     required Function() onClick,
@@ -684,6 +717,14 @@ class _CmControlPanel extends StatelessWidget {
 
   void handleSwitchBack(BuildContext context) {
     bind.cmSwitchBack(connId: client.id);
+  }
+
+  void handleVoiceCall(bool accept) {
+    bind.cmHandleIncomingVoiceCall(id: client.id, accept: accept);
+  }
+
+  void closeVoiceCall() {
+    bind.cmCloseVoiceCall(id: client.id);
   }
 }
 

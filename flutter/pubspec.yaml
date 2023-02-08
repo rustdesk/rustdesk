@@ -90,6 +90,7 @@ dependencies:
     bot_toast: ^4.0.3
     win32: any
     password_strength: ^0.2.0
+    flutter_launcher_icons: ^0.11.0
 
 
 dev_dependencies:
@@ -101,21 +102,21 @@ dev_dependencies:
     flutter_lints: ^2.0.0
     ffigen: ^7.2.4
 
-# rerun: flutter pub run flutter_launcher_icons:main
-icons_launcher:
+# rerun: flutter pub run flutter_launcher_icons
+flutter_icons:
     image_path: "../res/icon.png"
-    platforms:
-        android:
-            enable: true
-        ios:
-            enable: true
-        windows:
-            enable: true
-        macos:
-            enable: true
-            image_path: "../res/mac-icon.png"
-        linux:
-            enable: true
+    remove_alpha_ios: true
+    android: true
+    ios: true
+    windows:
+        generate: true
+    macos:
+        image_path: "../res/mac-icon.png"
+        generate: true
+    linux: true
+    web:
+        generate: true
+
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

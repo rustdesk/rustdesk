@@ -1,17 +1,19 @@
-import 'package:flutter/material.dart';
 import 'dart:io';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 
 const double kDesktopRemoteTabBarHeight = 28.0;
+const int kMainWindowId = 0;
 
 const String kPeerPlatformWindows = "Windows";
 const String kPeerPlatformLinux = "Linux";
 const String kPeerPlatformMacOS = "Mac OS";
 const String kPeerPlatformAndroid = "Android";
 
-/// [kAppTypeMain] used by 'Desktop Main Page' , 'Mobile (Client and Server)' , 'Desktop CM Page', "Install Page"
+/// [kAppTypeMain] used by 'Desktop Main Page' , 'Mobile (Client and Server)', "Install Page"
 const String kAppTypeMain = "main";
+const String kAppTypeConnectionManager = "cm";
 const String kAppTypeDesktopRemote = "remote";
 const String kAppTypeDesktopFileTransfer = "file transfer";
 const String kAppTypeDesktopPortForward = "port forward";
@@ -24,7 +26,6 @@ const String kWindowEventShow = "show";
 const String kWindowConnect = "connect";
 
 const String kUniLinksPrefix = "rustdesk://";
-const String kActionNewConnection = "connection/new/";
 
 const String kTabLabelHomePage = "Home";
 const String kTabLabelSettingPage = "Settings";
@@ -104,6 +105,12 @@ const kRemoteImageQualityLow = 'low';
 
 /// [kRemoteImageQualityCustom] Custom image quality.
 const kRemoteImageQualityCustom = 'custom';
+
+/// [kRemoteAudioGuestToHost] Guest to host audio mode(default).
+const kRemoteAudioGuestToHost = 'guest-to-host';
+
+/// [kRemoteAudioDualWay] dual-way audio mode(default).
+const kRemoteAudioDualWay = 'dual-way';
 
 const kIgnoreDpi = true;
 

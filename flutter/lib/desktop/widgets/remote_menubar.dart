@@ -9,6 +9,7 @@ import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:debounce_throttle/debounce_throttle.dart';
@@ -97,6 +98,175 @@ class _MenubarTheme {
   // kMinInteractiveDimension
   static const double height = 20.0;
   static const double dividerHeight = 12.0;
+}
+
+typedef DismissFunc = void Function();
+
+class RemoteMenuEntry {
+  static MenuEntryRadios<String> viewStyle(
+    String remoteId,
+    FFI ffi,
+    EdgeInsets padding, {
+    DismissFunc? dismissFunc,
+    DismissCallback? dismissCallback,
+    RxString? rxViewStyle,
+  }) {
+    return MenuEntryRadios<String>(
+      text: translate('Ratio'),
+      optionsGetter: () => [
+        MenuEntryRadioOption(
+          text: translate('Scale original'),
+          value: kRemoteViewStyleOriginal,
+          dismissOnClicked: true,
+          dismissCallback: dismissCallback,
+        ),
+        MenuEntryRadioOption(
+          text: translate('Scale adaptive'),
+          value: kRemoteViewStyleAdaptive,
+          dismissOnClicked: true,
+          dismissCallback: dismissCallback,
+        ),
+      ],
+      curOptionGetter: () async {
+        // null means peer id is not found, which there's no need to care about
+        final viewStyle = await bind.sessionGetViewStyle(id: remoteId) ?? '';
+        if (rxViewStyle != null) {
+          rxViewStyle.value = viewStyle;
+        }
+        return viewStyle;
+      },
+      optionSetter: (String oldValue, String newValue) async {
+        await bind.sessionSetViewStyle(id: remoteId, value: newValue);
+        if (rxViewStyle != null) {
+          rxViewStyle.value = newValue;
+        }
+        ffi.canvasModel.updateViewStyle();
+        if (dismissFunc != null) {
+          dismissFunc();
+        }
+      },
+      padding: padding,
+      dismissOnClicked: true,
+      dismissCallback: dismissCallback,
+    );
+  }
+
+  static MenuEntrySwitch2<String> showRemoteCursor(
+    String remoteId,
+    EdgeInsets padding, {
+    DismissFunc? dismissFunc,
+    DismissCallback? dismissCallback,
+  }) {
+    final state = ShowRemoteCursorState.find(remoteId);
+    final optKey = 'show-remote-cursor';
+    return MenuEntrySwitch2<String>(
+      switchType: SwitchType.scheckbox,
+      text: translate('Show remote cursor'),
+      getter: () {
+        return state;
+      },
+      setter: (bool v) async {
+        await bind.sessionToggleOption(id: remoteId, value: optKey);
+        state.value =
+            bind.sessionGetToggleOptionSync(id: remoteId, arg: optKey);
+        if (dismissFunc != null) {
+          dismissFunc();
+        }
+      },
+      padding: padding,
+      dismissOnClicked: true,
+      dismissCallback: dismissCallback,
+    );
+  }
+
+  static MenuEntrySwitch<String> disableClipboard(
+    String remoteId,
+    EdgeInsets? padding, {
+    DismissFunc? dismissFunc,
+    DismissCallback? dismissCallback,
+  }) {
+    return createSwitchMenuEntry(
+      remoteId,
+      'Disable clipboard',
+      'disable-clipboard',
+      padding,
+      true,
+      dismissCallback: dismissCallback,
+    );
+  }
+
+  static MenuEntrySwitch<String> createSwitchMenuEntry(
+    String remoteId,
+    String text,
+    String option,
+    EdgeInsets? padding,
+    bool dismissOnClicked, {
+    DismissFunc? dismissFunc,
+    DismissCallback? dismissCallback,
+  }) {
+    return MenuEntrySwitch<String>(
+      switchType: SwitchType.scheckbox,
+      text: translate(text),
+      getter: () async {
+        return bind.sessionGetToggleOptionSync(id: remoteId, arg: option);
+      },
+      setter: (bool v) async {
+        await bind.sessionToggleOption(id: remoteId, value: option);
+        if (dismissFunc != null) {
+          dismissFunc();
+        }
+      },
+      padding: padding,
+      dismissOnClicked: dismissOnClicked,
+      dismissCallback: dismissCallback,
+    );
+  }
+
+  static MenuEntryButton<String> insertLock(
+    String remoteId,
+    EdgeInsets? padding, {
+    DismissFunc? dismissFunc,
+    DismissCallback? dismissCallback,
+  }) {
+    return MenuEntryButton<String>(
+      childBuilder: (TextStyle? style) => Text(
+        translate('Insert Lock'),
+        style: style,
+      ),
+      proc: () {
+        bind.sessionLockScreen(id: remoteId);
+        if (dismissFunc != null) {
+          dismissFunc();
+        }
+      },
+      padding: padding,
+      dismissOnClicked: true,
+      dismissCallback: dismissCallback,
+    );
+  }
+
+  static insertCtrlAltDel(
+    String remoteId,
+    EdgeInsets? padding, {
+    DismissFunc? dismissFunc,
+    DismissCallback? dismissCallback,
+  }) {
+    return MenuEntryButton<String>(
+      childBuilder: (TextStyle? style) => Text(
+        '${translate("Insert")} Ctrl + Alt + Del',
+        style: style,
+      ),
+      proc: () {
+        bind.sessionCtrlAltDel(id: remoteId);
+        if (dismissFunc != null) {
+          dismissFunc();
+        }
+      },
+      padding: padding,
+      dismissOnClicked: true,
+      dismissCallback: dismissCallback,
+    );
+  }
 }
 
 class RemoteMenubar extends StatefulWidget {
@@ -221,6 +391,18 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     }
   }
 
+  Widget _buildPointerTrackWidget(Widget child) {
+    return Listener(
+      onPointerHover: (PointerHoverEvent e) =>
+          widget.ffi.inputModel.lastMousePos = e.position,
+      child: MouseRegion(
+        child: child,
+      ),
+    );
+  }
+
+  _menuDismissCallback() => widget.ffi.inputModel.refreshMousePos();
+
   Widget _buildMenubar(BuildContext context) {
     final List<Widget> menubarItems = [];
     if (!isWebDesktop) {
@@ -244,6 +426,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     menubarItems.add(_buildKeyboard(context));
     if (!isWeb) {
       menubarItems.add(_buildChat(context));
+      menubarItems.add(_buildVoiceCall(context));
     }
     menubarItems.add(_buildRecording(context));
     menubarItems.add(_buildClose(context));
@@ -294,31 +477,6 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
               Icons.fullscreen,
               color: _MenubarTheme.commonColor,
             ),
-    );
-  }
-
-  final _chatButtonKey = GlobalKey();
-  Widget _buildChat(BuildContext context) {
-    return IconButton(
-      key: _chatButtonKey,
-      tooltip: translate('Chat'),
-      onPressed: () {
-        RenderBox? renderBox =
-            _chatButtonKey.currentContext?.findRenderObject() as RenderBox?;
-
-        Offset? initPos;
-        if (renderBox != null) {
-          final pos = renderBox.localToGlobal(Offset.zero);
-          initPos = Offset(pos.dx, pos.dy + _MenubarTheme.dividerHeight);
-        }
-
-        widget.ffi.chatModel.changeCurrentID(ChatModel.clientModeID);
-        widget.ffi.chatModel.toggleChatOverlay(chatInitPos: initPos);
-      },
-      icon: const Icon(
-        Icons.message,
-        color: _MenubarTheme.commonColor,
-      ),
     );
   }
 
@@ -375,6 +533,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                   onPressed: () {
                     if (Navigator.canPop(context)) {
                       Navigator.pop(context);
+                      _menuDismissCallback();
                     }
                     RxInt display = CurrentDisplayState.find(widget.id);
                     if (display.value != i) {
@@ -390,13 +549,10 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           mod_menu.PopupMenuItem<String>(
             height: _MenubarTheme.height,
             padding: EdgeInsets.zero,
-            child: Listener(
-              onPointerHover: (PointerHoverEvent e) =>
-                  widget.ffi.inputModel.lastMousePos = e.position,
-              child: MouseRegion(
-                child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: rowChildren),
+            child: _buildPointerTrackWidget(
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: rowChildren,
               ),
             ),
           )
@@ -446,6 +602,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             ),
             tooltip: translate('Display Settings'),
             position: mod_menu.PopupMenuPosition.under,
+            menuWrapper: _buildPointerTrackWidget,
             itemBuilder: (BuildContext context) =>
                 _getDisplayMenu(snapshot.data!, remoteCount)
                     .map((entry) => entry.build(
@@ -500,12 +657,17 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                       ? translate('Stop session recording')
                       : translate('Start session recording'),
                   onPressed: () => value.toggle(),
-                  icon: Icon(
-                    value.start
-                        ? Icons.pause_circle_filled
-                        : Icons.videocam_outlined,
-                    color: _MenubarTheme.commonColor,
-                  ),
+                  icon: value.start
+                      ? Icon(
+                          Icons.pause_circle_filled,
+                          color: _MenubarTheme.commonColor,
+                        )
+                      : SvgPicture.asset(
+                          "assets/record_screen.svg",
+                          color: _MenubarTheme.commonColor,
+                          width: Theme.of(context).iconTheme.size ?? 22.0,
+                          height: Theme.of(context).iconTheme.size ?? 22.0,
+                        ),
                 ));
       } else {
         return Offstage();
@@ -524,6 +686,130 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         color: _MenubarTheme.commonColor,
       ),
     );
+  }
+
+  final _chatButtonKey = GlobalKey();
+  Widget _buildChat(BuildContext context) {
+    FfiModel ffiModel = Provider.of<FfiModel>(context);
+    return mod_menu.PopupMenuButton(
+      key: _chatButtonKey,
+      padding: EdgeInsets.zero,
+      icon: SvgPicture.asset(
+        "assets/chat.svg",
+        color: _MenubarTheme.commonColor,
+        width: Theme.of(context).iconTheme.size ?? 24.0,
+        height: Theme.of(context).iconTheme.size ?? 24.0,
+      ),
+      tooltip: translate('Chat'),
+      position: mod_menu.PopupMenuPosition.under,
+      itemBuilder: (BuildContext context) => _getChatMenu(context)
+          .map((entry) => entry.build(
+              context,
+              const MenuConfig(
+                commonColor: _MenubarTheme.commonColor,
+                height: _MenubarTheme.height,
+                dividerHeight: _MenubarTheme.dividerHeight,
+              )))
+          .expand((i) => i)
+          .toList(),
+    );
+  }
+
+  Widget _getVoiceCallIcon() {
+    switch (widget.ffi.chatModel.voiceCallStatus.value) {
+      case VoiceCallStatus.waitingForResponse:
+        return IconButton(
+            onPressed: () {
+              widget.ffi.chatModel.closeVoiceCall(widget.id);
+            },
+            icon: SvgPicture.asset(
+              "assets/voice_call_waiting.svg",
+              color: Colors.red,
+              width: Theme.of(context).iconTheme.size ?? 20.0,
+              height: Theme.of(context).iconTheme.size ?? 20.0,
+            ));
+      case VoiceCallStatus.connected:
+        return IconButton(
+          onPressed: () {
+            widget.ffi.chatModel.closeVoiceCall(widget.id);
+          },
+          icon: Icon(
+            Icons.phone_disabled_rounded,
+            color: Colors.red,
+            size: Theme.of(context).iconTheme.size ?? 22.0,
+          ),
+        );
+      default:
+        return const Offstage();
+    }
+  }
+
+  String? _getVoiceCallTooltip() {
+    switch (widget.ffi.chatModel.voiceCallStatus.value) {
+      case VoiceCallStatus.waitingForResponse:
+        return "Waiting";
+      case VoiceCallStatus.connected:
+        return "Disconnect";
+      default:
+        return null;
+    }
+  }
+
+  Widget _buildVoiceCall(BuildContext context) {
+    return Obx(
+      () {
+        final tooltipText = _getVoiceCallTooltip();
+        return tooltipText == null
+            ? const Offstage()
+            : IconButton(
+                padding: EdgeInsets.zero,
+                icon: _getVoiceCallIcon(),
+                tooltip: translate(tooltipText),
+                onPressed: () => bind.sessionRequestVoiceCall(id: widget.id),
+              );
+      },
+    );
+  }
+
+  List<MenuEntryBase<String>> _getChatMenu(BuildContext context) {
+    final List<MenuEntryBase<String>> chatMenu = [];
+    const EdgeInsets padding = EdgeInsets.only(left: 14.0, right: 5.0);
+    chatMenu.addAll([
+      MenuEntryButton<String>(
+        childBuilder: (TextStyle? style) => Text(
+          translate('Text chat'),
+          style: style,
+        ),
+        proc: () {
+          RenderBox? renderBox =
+              _chatButtonKey.currentContext?.findRenderObject() as RenderBox?;
+
+          Offset? initPos;
+          if (renderBox != null) {
+            final pos = renderBox.localToGlobal(Offset.zero);
+            initPos = Offset(pos.dx, pos.dy + _MenubarTheme.dividerHeight);
+          }
+
+          widget.ffi.chatModel.changeCurrentID(ChatModel.clientModeID);
+          widget.ffi.chatModel.toggleChatOverlay(chatInitPos: initPos);
+        },
+        padding: padding,
+        dismissOnClicked: true,
+      ),
+      MenuEntryButton<String>(
+        childBuilder: (TextStyle? style) => Text(
+          translate('Voice call'),
+          style: style,
+        ),
+        proc: () {
+          // Request a voice call.
+          bind.sessionRequestVoiceCall(id: widget.id);
+        },
+        padding: padding,
+        dismissOnClicked: true,
+      ),
+    ]);
+    return chatMenu;
   }
 
   List<MenuEntryBase<String>> _getControlMenu(BuildContext context) {
@@ -554,6 +840,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                           onPressed: () {
                             if (Navigator.canPop(context)) {
                               Navigator.pop(context);
+                              _menuDismissCallback();
                             }
                             showSetOSPassword(
                                 widget.id, false, widget.ffi.dialogManager);
@@ -566,6 +853,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         },
         padding: padding,
         dismissOnClicked: true,
+        dismissCallback: _menuDismissCallback,
       ),
       MenuEntryButton<String>(
         childBuilder: (TextStyle? style) => Text(
@@ -577,6 +865,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         },
         padding: padding,
         dismissOnClicked: true,
+        dismissCallback: _menuDismissCallback,
       ),
       MenuEntryButton<String>(
         childBuilder: (TextStyle? style) => Text(
@@ -588,6 +877,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           connect(context, widget.id, isTcpTunneling: true);
         },
         dismissOnClicked: true,
+        dismissCallback: _menuDismissCallback,
       ),
     ]);
     // {handler.get_audit_server() && <li #note>{translate('Note')}</li>}
@@ -605,23 +895,15 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           },
           padding: padding,
           dismissOnClicked: true,
+          dismissCallback: _menuDismissCallback,
         ),
       );
     }
     displayMenu.add(MenuEntryDivider());
     if (perms['keyboard'] != false) {
       if (pi.platform == kPeerPlatformLinux || pi.sasEnabled) {
-        displayMenu.add(MenuEntryButton<String>(
-          childBuilder: (TextStyle? style) => Text(
-            '${translate("Insert")} Ctrl + Alt + Del',
-            style: style,
-          ),
-          proc: () {
-            bind.sessionCtrlAltDel(id: widget.id);
-          },
-          padding: padding,
-          dismissOnClicked: true,
-        ));
+        displayMenu.add(RemoteMenuEntry.insertCtrlAltDel(widget.id, padding,
+            dismissCallback: _menuDismissCallback));
       }
     }
     if (perms['restart'] != false &&
@@ -638,21 +920,13 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         },
         padding: padding,
         dismissOnClicked: true,
+        dismissCallback: _menuDismissCallback,
       ));
     }
 
     if (perms['keyboard'] != false) {
-      displayMenu.add(MenuEntryButton<String>(
-        childBuilder: (TextStyle? style) => Text(
-          translate('Insert Lock'),
-          style: style,
-        ),
-        proc: () {
-          bind.sessionLockScreen(id: widget.id);
-        },
-        padding: padding,
-        dismissOnClicked: true,
-      ));
+      displayMenu.add(RemoteMenuEntry.insertLock(widget.id, padding,
+          dismissCallback: _menuDismissCallback));
 
       if (pi.platform == kPeerPlatformWindows) {
         displayMenu.add(MenuEntryButton<String>(
@@ -670,6 +944,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           },
           padding: padding,
           dismissOnClicked: true,
+          dismissCallback: _menuDismissCallback,
         ));
       }
       if (pi.platform != kPeerPlatformAndroid &&
@@ -684,6 +959,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
               showConfirmSwitchSidesDialog(widget.id, widget.ffi.dialogManager),
           padding: padding,
           dismissOnClicked: true,
+          dismissCallback: _menuDismissCallback,
         ));
       }
     }
@@ -699,6 +975,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         },
         padding: padding,
         dismissOnClicked: true,
+        dismissCallback: _menuDismissCallback,
       ));
     }
 
@@ -720,10 +997,10 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       //       },
       //       padding: padding,
       //       dismissOnClicked: true,
+      //       dismissCallback: _menuDismissCallback,
       //     ));
       //   }
     }
-
     return displayMenu;
   }
 
@@ -758,33 +1035,12 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     const EdgeInsets padding = EdgeInsets.only(left: 18.0, right: 8.0);
     final peer_version = widget.ffi.ffiModel.pi.version;
     final displayMenu = [
-      MenuEntryRadios<String>(
-        text: translate('Ratio'),
-        optionsGetter: () => [
-          MenuEntryRadioOption(
-            text: translate('Scale original'),
-            value: kRemoteViewStyleOriginal,
-            dismissOnClicked: true,
-          ),
-          MenuEntryRadioOption(
-            text: translate('Scale adaptive'),
-            value: kRemoteViewStyleAdaptive,
-            dismissOnClicked: true,
-          ),
-        ],
-        curOptionGetter: () async {
-          // null means peer id is not found, which there's no need to care about
-          final viewStyle = await bind.sessionGetViewStyle(id: widget.id) ?? '';
-          widget.state.viewStyle.value = viewStyle;
-          return viewStyle;
-        },
-        optionSetter: (String oldValue, String newValue) async {
-          await bind.sessionSetViewStyle(id: widget.id, value: newValue);
-          widget.state.viewStyle.value = newValue;
-          widget.ffi.canvasModel.updateViewStyle();
-        },
-        padding: padding,
-        dismissOnClicked: true,
+      RemoteMenuEntry.viewStyle(
+        widget.id,
+        widget.ffi,
+        padding,
+        dismissCallback: _menuDismissCallback,
+        rxViewStyle: widget.state.viewStyle,
       ),
       MenuEntryDivider<String>(),
       MenuEntryRadios<String>(
@@ -794,21 +1050,26 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             text: translate('Good image quality'),
             value: kRemoteImageQualityBest,
             dismissOnClicked: true,
+            dismissCallback: _menuDismissCallback,
           ),
           MenuEntryRadioOption(
             text: translate('Balanced'),
             value: kRemoteImageQualityBalanced,
             dismissOnClicked: true,
+            dismissCallback: _menuDismissCallback,
           ),
           MenuEntryRadioOption(
             text: translate('Optimize reaction time'),
             value: kRemoteImageQualityLow,
             dismissOnClicked: true,
+            dismissCallback: _menuDismissCallback,
           ),
           MenuEntryRadioOption(
-              text: translate('Custom'),
-              value: kRemoteImageQualityCustom,
-              dismissOnClicked: true),
+            text: translate('Custom'),
+            value: kRemoteImageQualityCustom,
+            dismissOnClicked: true,
+            dismissCallback: _menuDismissCallback,
+          ),
         ],
         curOptionGetter: () async =>
             // null means peer id is not found, which there's no need to care about
@@ -973,12 +1234,14 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                 text: translate('ScrollAuto'),
                 value: kRemoteScrollStyleAuto,
                 dismissOnClicked: true,
+                dismissCallback: _menuDismissCallback,
                 enabled: widget.ffi.canvasModel.imageOverflow,
               ),
               MenuEntryRadioOption(
                 text: translate('Scrollbar'),
                 value: kRemoteScrollStyleBar,
                 dismissOnClicked: true,
+                dismissCallback: _menuDismissCallback,
                 enabled: widget.ffi.canvasModel.imageOverflow,
               ),
             ],
@@ -991,6 +1254,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             },
             padding: padding,
             dismissOnClicked: true,
+            dismissCallback: _menuDismissCallback,
           ));
       displayMenu.insert(3, MenuEntryDivider<String>());
 
@@ -1061,6 +1325,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             },
             padding: padding,
             dismissOnClicked: true,
+            dismissCallback: _menuDismissCallback,
           ),
         );
       }
@@ -1087,11 +1352,13 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                 text: translate('Auto'),
                 value: 'auto',
                 dismissOnClicked: true,
+                dismissCallback: _menuDismissCallback,
               ),
               MenuEntryRadioOption(
                 text: 'VP9',
                 value: 'vp9',
                 dismissOnClicked: true,
+                dismissCallback: _menuDismissCallback,
               ),
             ];
             if (codecs[0]) {
@@ -1099,6 +1366,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                 text: 'H264',
                 value: 'h264',
                 dismissOnClicked: true,
+                dismissCallback: _menuDismissCallback,
               ));
             }
             if (codecs[1]) {
@@ -1106,6 +1374,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                 text: 'H265',
                 value: 'h265',
                 dismissOnClicked: true,
+                dismissCallback: _menuDismissCallback,
               ));
             }
             return list;
@@ -1122,6 +1391,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           },
           padding: padding,
           dismissOnClicked: true,
+          dismissCallback: _menuDismissCallback,
         ));
       }
     }
@@ -1129,23 +1399,11 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
 
     /// Show remote cursor
     if (!widget.ffi.canvasModel.cursorEmbedded) {
-      displayMenu.add(() {
-        final state = ShowRemoteCursorState.find(widget.id);
-        return MenuEntrySwitch2<String>(
-          switchType: SwitchType.scheckbox,
-          text: translate('Show remote cursor'),
-          getter: () {
-            return state;
-          },
-          setter: (bool v) async {
-            state.value = v;
-            await bind.sessionToggleOption(
-                id: widget.id, value: 'show-remote-cursor');
-          },
-          padding: padding,
-          dismissOnClicked: true,
-        );
-      }());
+      displayMenu.add(RemoteMenuEntry.showRemoteCursor(
+        widget.id,
+        padding,
+        dismissCallback: _menuDismissCallback,
+      ));
     }
 
     /// Show remote cursor scaling with image
@@ -1160,11 +1418,13 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             return state;
           },
           setter: (bool v) async {
-            state.value = v;
             await bind.sessionToggleOption(id: widget.id, value: opt);
+            state.value =
+                bind.sessionGetToggleOptionSync(id: widget.id, arg: opt);
           },
           padding: padding,
           dismissOnClicked: true,
+          dismissCallback: _menuDismissCallback,
         );
       }());
     }
@@ -1184,12 +1444,15 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       },
       padding: padding,
       dismissOnClicked: true,
+      dismissCallback: _menuDismissCallback,
     ));
 
     final perms = widget.ffi.ffiModel.permissions;
     final pi = widget.ffi.ffiModel.pi;
 
     if (perms['audio'] != false) {
+      displayMenu
+          .add(_createSwitchMenuEntry('Mute', 'disable-audio', padding, true));
       displayMenu
           .add(_createSwitchMenuEntry('Mute', 'disable-audio', padding, true));
     }
@@ -1203,8 +1466,11 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
 
     if (perms['keyboard'] != false) {
       if (perms['clipboard'] != false) {
-        displayMenu.add(_createSwitchMenuEntry(
-            'Disable clipboard', 'disable-clipboard', padding, true));
+        displayMenu.add(RemoteMenuEntry.disableClipboard(
+          widget.id,
+          padding,
+          dismissCallback: _menuDismissCallback,
+        ));
       }
       displayMenu.add(_createSwitchMenuEntry(
           'Lock after session end', 'lock-after-session-end', padding, true));
@@ -1221,6 +1487,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           },
           padding: padding,
           dismissOnClicked: true,
+          dismissCallback: _menuDismissCallback,
         ));
       }
     }
@@ -1233,25 +1500,29 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         text: translate('Ratio'),
         optionsGetter: () {
           List<MenuEntryRadioOption> list = [];
-          List<String> modes = ["legacy"];
+          List<KeyboardModeMenu> modes = [
+            KeyboardModeMenu(key: 'legacy', menu: 'Legacy mode'),
+            KeyboardModeMenu(key: 'map', menu: 'Map mode'),
+            KeyboardModeMenu(key: 'translate', menu: 'Translate mode'),
+          ];
 
-          if (bind.sessionIsKeyboardModeSupported(id: widget.id, mode: "map")) {
-            modes.add("map");
-          }
-
-          for (String mode in modes) {
-            if (mode == "legacy") {
+          for (KeyboardModeMenu mode in modes) {
+            if (bind.sessionIsKeyboardModeSupported(
+                id: widget.id, mode: mode.key)) {
+              if (mode.key == 'translate') {
+                if (!Platform.isWindows ||
+                    widget.ffi.ffiModel.pi.platform != kPeerPlatformWindows) {
+                  continue;
+                }
+              }
               list.add(MenuEntryRadioOption(
-                  text: translate('Legacy mode'), value: 'legacy'));
-            } else if (mode == "map") {
-              list.add(MenuEntryRadioOption(
-                  text: translate('Map mode'), value: 'map'));
+                  text: translate(mode.menu), value: mode.key));
             }
           }
           return list;
         },
         curOptionGetter: () async {
-          return await bind.sessionGetKeyboardMode(id: widget.id) ?? "legacy";
+          return await bind.sessionGetKeyboardMode(id: widget.id) ?? 'legacy';
         },
         optionSetter: (String oldValue, String newValue) async {
           await bind.sessionSetKeyboardMode(id: widget.id, value: newValue);
@@ -1292,6 +1563,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                         onPressed: () {
                           if (Navigator.canPop(context)) {
                             Navigator.pop(context);
+                            _menuDismissCallback();
                           }
                           showKBLayoutTypeChooser(
                               localPlatform, widget.ffi.dialogManager);
@@ -1304,6 +1576,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           proc: () {},
           padding: EdgeInsets.zero,
           dismissOnClicked: false,
+          dismissCallback: _menuDismissCallback,
         ),
       );
     }
@@ -1312,18 +1585,9 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
 
   MenuEntrySwitch<String> _createSwitchMenuEntry(
       String text, String option, EdgeInsets? padding, bool dismissOnClicked) {
-    return MenuEntrySwitch<String>(
-      switchType: SwitchType.scheckbox,
-      text: translate(text),
-      getter: () async {
-        return bind.sessionGetToggleOptionSync(id: widget.id, arg: option);
-      },
-      setter: (bool v) async {
-        await bind.sessionToggleOption(id: widget.id, value: option);
-      },
-      padding: padding,
-      dismissOnClicked: dismissOnClicked,
-    );
+    return RemoteMenuEntry.createSwitchMenuEntry(
+        widget.id, text, option, padding, dismissOnClicked,
+        dismissCallback: _menuDismissCallback);
   }
 }
 
@@ -1546,4 +1810,11 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
       ),
     );
   }
+}
+
+class KeyboardModeMenu {
+  final String key;
+  final String menu;
+
+  KeyboardModeMenu({required this.key, required this.menu});
 }
