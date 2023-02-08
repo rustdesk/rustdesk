@@ -256,6 +256,7 @@ pub fn start_grab_loop() {
         if let Err(error) = rdev::grab(func) {
             log::error!("rdev Error: {:?}", error)
         }
+        #[cfg(target_os = "windows")]
         rdev::set_event_popup(false);
     });
 
