@@ -199,6 +199,9 @@ pub fn update_grab_get_key_name() {
     };
 }
 
+#[cfg(target_os = "windows")]
+static mut IS_LAST_0X021D: bool = false;
+
 pub fn start_grab_loop() {
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     std::thread::spawn(move || {
@@ -210,12 +213,22 @@ pub fn start_grab_loop() {
             if KEYBOARD_HOOKED.load(Ordering::SeqCst) {
                 let keyboard_mode = client::process_event(&event, None);
                 if keyboard_mode == KeyboardMode::Translate {
-                    // SHIFT(0x2A) RSHIFT(0x36)
-                    if event.scan_code == 0x2A || event.scan_code == 0x36 {
-                        return Some(event);
+                    #[cfg(target_os = "windows")]
+                    match event.scan_code {
+                        0x2A => rdev::set_modifier(Key::ShiftLeft, is_press),
+                        0x36 => rdev::set_modifier(Key::ShiftRight, is_press),
+                        0x38 => rdev::set_modifier(Key::Alt, is_press),
+                        0xE038 => rdev::set_modifier(Key::AltGr, is_press),
+                        0xE05B => rdev::set_modifier(Key::MetaLeft, is_press),
+                        0xE05C => rdev::set_modifier(Key::MetaRight, is_press),
+                        _ => {}
+                    }
+                    #[cfg(target_os = "windows")]
+                    unsafe {
+                        IS_LAST_0X021D = event.scan_code == 0x021D;
                     }
                 }
-                
+
                 if is_press {
                     return None;
                 } else {
@@ -352,7 +365,11 @@ fn update_modifiers_state(event: &Event) {
     };
 }
 
-pub fn event_to_key_events(event: &Event, keyboard_mode: KeyboardMode, lock_modes: Option<i32>) ->  Vec<KeyEvent> {
+pub fn event_to_key_events(
+    event: &Event,
+    keyboard_mode: KeyboardMode,
+    lock_modes: Option<i32>,
+) -> Vec<KeyEvent> {
     let mut key_event = KeyEvent::new();
     update_modifiers_state(event);
 
@@ -577,7 +594,10 @@ pub fn legacy_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Vec<KeyEv
     if let Some(k) = control_key {
         key_event.set_control_key(k);
     } else {
-        let name = event.unicode.as_ref().and_then(|unicode|unicode.name.clone());
+        let name = event
+            .unicode
+            .as_ref()
+            .and_then(|unicode| unicode.name.clone());
         let mut chr = match &name {
             Some(ref s) => {
                 if s.len() <= 2 {
@@ -724,8 +744,7 @@ pub fn map_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Option<KeyEv
     Some(key_event)
 }
 
-pub fn translate_keyboard_mode(event: &Event, key_event: KeyEvent) -> Vec<KeyEvent> {
-    let mut events: Vec<KeyEvent> = Vec::new();
+fn try_fill_unicode(event: &Event, key_event: &KeyEvent, events: &mut Vec<KeyEvent>) {
     match &event.unicode {
         Some(unicode_info) => {
             if !unicode_info.is_dead {
@@ -738,8 +757,71 @@ pub fn translate_keyboard_mode(event: &Event, key_event: KeyEvent) -> Vec<KeyEve
         }
         None => {}
     }
+}
+
+#[cfg(target_os = "windows")]
+fn is_hot_key_modifiers_down() -> bool {
+    if rdev::get_modifier(Key::ControlLeft) || rdev::get_modifier(Key::ControlRight) {
+        return true;
+    }
+    if rdev::get_modifier(Key::Alt) || rdev::get_modifier(Key::AltGr) {
+        return true;
+    }
+    if rdev::get_modifier(Key::MetaLeft) || rdev::get_modifier(Key::MetaRight) {
+        return true;
+    }
+    return false;
+}
+
+pub fn translate_virtual_keycode(event: &Event, mut key_event: KeyEvent) -> Option<KeyEvent> {
+    match event.event_type {
+        EventType::KeyPress(..) => {
+            key_event.down = true;
+        }
+        EventType::KeyRelease(..) => {
+            key_event.down = false;
+        }
+        _ => return None,
+    };
+
+    let mut peer = get_peer_platform().to_lowercase();
+    peer.retain(|c| !c.is_whitespace());
+
+    // #[cfg(target_os = "windows")]
+    // let keycode = match peer.as_str() {
+    //     "windows" => event.code,
+    //     "macos" => {
+    //         if hbb_common::config::LocalConfig::get_kb_layout_type() == "ISO" {
+    //             rdev::win_scancode_to_macos_iso_code(event.scan_code)?
+    //         } else {
+    //             rdev::win_scancode_to_macos_code(event.scan_code)?
+    //         }
+    //     }
+    //     _ => rdev::win_scancode_to_linux_code(event.scan_code)?,
+    // };
+
+    key_event.set_chr(event.code as _);
+    Some(key_event)
+}
+
+pub fn translate_keyboard_mode(event: &Event, key_event: KeyEvent) -> Vec<KeyEvent> {
+    let mut events: Vec<KeyEvent> = Vec::new();
+    #[cfg(target_os = "windows")]
+    unsafe {
+        if IS_LAST_0X021D {
+            if event.scan_code == 0xE038 {
+                return events;
+            }
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    if !is_hot_key_modifiers_down() {
+        try_fill_unicode(event, &key_event, &mut events);
+    }
+
     if events.is_empty() {
-        if let Some(evt) = map_keyboard_mode(event, key_event) {
+        if let Some(evt) = translate_virtual_keycode(event, key_event) {
             events.push(evt);
         }
         return events;

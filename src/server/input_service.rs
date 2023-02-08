@@ -1067,13 +1067,24 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
     release_keys(&mut en, &to_release);
 }
 
+#[cfg(target_os = "windows")]
+fn translate_process_virtual_keycode(vk: u32, down: bool) {
+    let scancode = rdev::vk_to_scancode(vk);
+    // map mode(1): Send keycode according to the peer platform.
+    record_pressed_key(scancode as u64 + KEY_CHAR_START, down);
+
+    crate::platform::windows::try_change_desktop();
+    sim_rdev_rawkey(scancode, down);
+}
+
 fn translate_keyboard_mode(evt: &KeyEvent) {
     match evt.union {
         Some(key_event::Union::Unicode(unicode)) => {
             allow_err!(rdev::simulate_unicode(unicode as _));
         },
         Some(key_event::Union::Chr(..)) => {
-            map_keyboard_mode(evt)
+            #[cfg(target_os = "windows")]
+            translate_process_virtual_keycode(evt.chr(), evt.down)
         }
         _ => {
             log::debug!("Unreachable. Unexpected key event {:?}", &evt);
