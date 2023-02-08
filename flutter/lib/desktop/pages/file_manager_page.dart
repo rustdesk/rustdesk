@@ -80,6 +80,7 @@ class _FileManagerPageState extends State<FileManagerPage>
   Entry? _lastClickEntry;
 
   final _dropMaskVisible = false.obs; // TODO impl drop mask
+  final _overlayKeyState = OverlayKeyState();
 
   ScrollController getBreadCrumbScrollController(bool isLocal) {
     return isLocal ? _breadCrumbScrollerLocal : _breadCrumbScrollerRemote;
@@ -115,6 +116,7 @@ class _FileManagerPageState extends State<FileManagerPage>
     // register location listener
     _locationNodeLocal.addListener(onLocalLocationFocusChanged);
     _locationNodeRemote.addListener(onRemoteLocationFocusChanged);
+    _ffi.dialogManager.setOverlayState(_overlayKeyState);
   }
 
   @override
@@ -137,9 +139,8 @@ class _FileManagerPageState extends State<FileManagerPage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return Overlay(initialEntries: [
-      OverlayEntry(builder: (context) {
-        _ffi.dialogManager.setOverlayState(Overlay.of(context));
+    return Overlay(key: _overlayKeyState.key, initialEntries: [
+      OverlayEntry(builder: (_) {
         return ChangeNotifierProvider.value(
             value: _ffi.fileModel,
             child: Consumer<FileModel>(builder: (context, model, child) {

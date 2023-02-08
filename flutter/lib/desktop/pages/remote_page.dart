@@ -61,6 +61,8 @@ class _RemotePageState extends State<RemotePage>
   late RxBool _remoteCursorMoved;
   late RxBool _keyboardEnabled;
 
+  final _blockableOverlayState = BlockableOverlayState();
+
   final FocusNode _rawKeyFocusNode = FocusNode(debugLabel: "rawkeyFocusNode");
 
   Function(bool)? _onEnterOrLeaveImage4Menubar;
@@ -132,6 +134,13 @@ class _RemotePageState extends State<RemotePage>
     //   });
     //   _isCustomCursorInited = true;
     // }
+
+    _ffi.dialogManager.setOverlayState(_blockableOverlayState);
+    _ffi.chatModel.setOverlayState(_blockableOverlayState);
+    // make remote page penetrable automatically, effective for chat over remote
+    _blockableOverlayState.onMiddleBlockedClick = () {
+      _blockableOverlayState.setMiddleBlocked(false);
+    };
   }
 
   @override
@@ -191,39 +200,50 @@ class _RemotePageState extends State<RemotePage>
 
   Widget buildBody(BuildContext context) {
     return Scaffold(
-        backgroundColor: Theme.of(context).backgroundColor,
-        body: Overlay(
-          initialEntries: [
-            OverlayEntry(builder: (context) {
-              _ffi.chatModel.setOverlayState(Overlay.of(context));
-              _ffi.dialogManager.setOverlayState(Overlay.of(context));
-              return Container(
-                  color: Colors.black,
-                  child: RawKeyFocusScope(
-                      focusNode: _rawKeyFocusNode,
-                      onFocusChange: (bool imageFocused) {
-                        debugPrint(
-                            "onFocusChange(window active:${!_isWindowBlur}) $imageFocused");
-                        // See [onWindowBlur].
-                        if (Platform.isWindows) {
-                          if (_isWindowBlur) {
-                            imageFocused = false;
-                            Future.delayed(Duration.zero, () {
-                              _rawKeyFocusNode.unfocus();
-                            });
-                          }
-                          if (imageFocused) {
-                            _ffi.inputModel.enterOrLeave(true);
-                          } else {
-                            _ffi.inputModel.enterOrLeave(false);
-                          }
-                        }
-                      },
-                      inputModel: _ffi.inputModel,
-                      child: getBodyForDesktop(context)));
-            })
-          ],
-        ));
+      backgroundColor: Theme.of(context).backgroundColor,
+
+      /// the Overlay key will be set with _blockableOverlayState in BlockableOverlay
+      /// see override build() in [BlockableOverlay]
+      body: BlockableOverlay(
+        state: _blockableOverlayState,
+        underlying: Container(
+            color: Colors.black,
+            child: RawKeyFocusScope(
+                focusNode: _rawKeyFocusNode,
+                onFocusChange: (bool imageFocused) {
+                  debugPrint(
+                      "onFocusChange(window active:${!_isWindowBlur}) $imageFocused");
+                  // See [onWindowBlur].
+                  if (Platform.isWindows) {
+                    if (_isWindowBlur) {
+                      imageFocused = false;
+                      Future.delayed(Duration.zero, () {
+                        _rawKeyFocusNode.unfocus();
+                      });
+                    }
+                    if (imageFocused) {
+                      _ffi.inputModel.enterOrLeave(true);
+                    } else {
+                      _ffi.inputModel.enterOrLeave(false);
+                    }
+                  }
+                },
+                inputModel: _ffi.inputModel,
+                child: getBodyForDesktop(context))),
+        upperLayer: [
+          OverlayEntry(
+              builder: (context) => RemoteMenubar(
+                    id: widget.id,
+                    ffi: _ffi,
+                    state: widget.menubarState,
+                    onEnterOrLeaveImageSetter: (func) =>
+                        _onEnterOrLeaveImage4Menubar = func,
+                    onEnterOrLeaveImageCleaner: () =>
+                        _onEnterOrLeaveImage4Menubar = null,
+                  ))
+        ],
+      ),
+    );
   }
 
   @override
@@ -344,13 +364,6 @@ class _RemotePageState extends State<RemotePage>
             QualityMonitor(_ffi.qualityMonitorModel), null, null),
       ),
     );
-    paints.add(RemoteMenubar(
-      id: widget.id,
-      ffi: _ffi,
-      state: widget.menubarState,
-      onEnterOrLeaveImageSetter: (func) => _onEnterOrLeaveImage4Menubar = func,
-      onEnterOrLeaveImageCleaner: () => _onEnterOrLeaveImage4Menubar = null,
-    ));
     return Stack(
       children: paints,
     );
