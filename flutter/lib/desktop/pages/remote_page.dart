@@ -62,7 +62,7 @@ class _RemotePageState extends State<RemotePage>
   late RxBool _remoteCursorMoved;
   late RxBool _keyboardEnabled;
 
-  final overlayState = PenetrableOverlayState();
+  final _blockableOverlayState = BlockableOverlayState();
 
   final FocusNode _rawKeyFocusNode = FocusNode(debugLabel: "rawkeyFocusNode");
 
@@ -136,10 +136,11 @@ class _RemotePageState extends State<RemotePage>
     //   _isCustomCursorInited = true;
     // }
 
-    _ffi.chatModel.setPenetrableOverlayState(overlayState);
+    _ffi.dialogManager.setOverlayState(_blockableOverlayState);
+    _ffi.chatModel.setOverlayState(_blockableOverlayState);
     // make remote page penetrable automatically, effective for chat over remote
-    overlayState.onMiddleBlockedClick = () {
-      overlayState.setMiddleBlocked(false);
+    _blockableOverlayState.onMiddleBlockedClick = () {
+      _blockableOverlayState.setMiddleBlocked(false);
     };
   }
 
@@ -201,8 +202,11 @@ class _RemotePageState extends State<RemotePage>
   Widget buildBody(BuildContext context) {
     return Scaffold(
       backgroundColor: Theme.of(context).backgroundColor,
-      body: PenetrableOverlay(
-        state: overlayState,
+
+      /// the Overlay key will be set with _blockableOverlayState in BlockableOverlay
+      /// see override build() in [BlockableOverlay]
+      body: BlockableOverlay(
+        state: _blockableOverlayState,
         underlying: Container(
             color: Colors.black,
             child: RawKeyFocusScope(

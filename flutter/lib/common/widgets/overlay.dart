@@ -372,25 +372,12 @@ class QualityMonitor extends StatelessWidget {
               : const SizedBox.shrink()));
 }
 
-class PenetrableOverlayState {
+class BlockableOverlayState extends OverlayKeyState {
   final _middleBlocked = false.obs;
-  final _overlayKey = GlobalKey<OverlayState>();
 
   VoidCallback? onMiddleBlockedClick; // to-do use listener
 
   RxBool get middleBlocked => _middleBlocked;
-  GlobalKey get overlayKey => _overlayKey;
-  OverlayState? get overlayState => _overlayKey.currentState;
-
-  OverlayState? getOverlayStateOrGlobal() {
-    if (overlayState == null) {
-      if (globalKey.currentState == null ||
-          globalKey.currentState!.overlay == null) return null;
-      return globalKey.currentState!.overlay;
-    } else {
-      return overlayState;
-    }
-  }
 
   void addMiddleBlockedListener(void Function(bool) cb) {
     _middleBlocked.listen(cb);
@@ -403,13 +390,13 @@ class PenetrableOverlayState {
   }
 }
 
-class PenetrableOverlay extends StatelessWidget {
+class BlockableOverlay extends StatelessWidget {
   final Widget underlying;
   final List<OverlayEntry>? upperLayer;
 
-  final PenetrableOverlayState state;
+  final BlockableOverlayState state;
 
-  PenetrableOverlay(
+  BlockableOverlay(
       {required this.underlying, required this.state, this.upperLayer});
 
   @override
@@ -433,6 +420,7 @@ class PenetrableOverlay extends StatelessWidget {
       initialEntries.addAll(upperLayer!);
     }
 
-    return Overlay(key: state.overlayKey, initialEntries: initialEntries);
+    /// set key
+    return Overlay(key: state.key, initialEntries: initialEntries);
   }
 }

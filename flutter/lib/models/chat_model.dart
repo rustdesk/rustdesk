@@ -34,7 +34,7 @@ class ChatModel with ChangeNotifier {
   bool isConnManager = false;
 
   RxBool isWindowFocus = true.obs;
-  PenetrableOverlayState? pOverlayState;
+  BlockableOverlayState? _blockableOverlayState;
 
   final ChatUser me = ChatUser(
     id: "",
@@ -53,10 +53,10 @@ class ChatModel with ChangeNotifier {
 
   bool get isShowCMChatPage => _isShowCMChatPage;
 
-  void setPenetrableOverlayState(PenetrableOverlayState state) {
-    pOverlayState = state;
+  void setOverlayState(BlockableOverlayState blockableOverlayState) {
+    _blockableOverlayState = blockableOverlayState;
 
-    pOverlayState!.addMiddleBlockedListener((v) {
+    _blockableOverlayState!.addMiddleBlockedListener((v) {
       if (!v) {
         isWindowFocus.value = false;
         if (isWindowFocus.value) {
@@ -94,7 +94,7 @@ class ChatModel with ChangeNotifier {
       }
     }
 
-    final overlayState = pOverlayState?.getOverlayStateOrGlobal();
+    final overlayState = _blockableOverlayState?.state;
     if (overlayState == null) return;
 
     final overlay = OverlayEntry(builder: (context) {
@@ -129,16 +129,16 @@ class ChatModel with ChangeNotifier {
   showChatWindowOverlay({Offset? chatInitPos}) {
     if (chatWindowOverlayEntry != null) return;
     isWindowFocus.value = true;
-    pOverlayState?.setMiddleBlocked(true);
+    _blockableOverlayState?.setMiddleBlocked(true);
 
-    final overlayState = pOverlayState?.getOverlayStateOrGlobal();
+    final overlayState = _blockableOverlayState?.state;
     if (overlayState == null) return;
     final overlay = OverlayEntry(builder: (context) {
       return Listener(
           onPointerDown: (_) {
             if (!isWindowFocus.value) {
               isWindowFocus.value = true;
-              pOverlayState?.setMiddleBlocked(true);
+              _blockableOverlayState?.setMiddleBlocked(true);
             }
           },
           child: DraggableChatWindow(
@@ -154,7 +154,7 @@ class ChatModel with ChangeNotifier {
 
   hideChatWindowOverlay() {
     if (chatWindowOverlayEntry != null) {
-      pOverlayState?.setMiddleBlocked(false);
+      _blockableOverlayState?.setMiddleBlocked(false);
       chatWindowOverlayEntry!.remove();
       chatWindowOverlayEntry = null;
       return;
