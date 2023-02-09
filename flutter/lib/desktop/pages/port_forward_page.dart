@@ -179,36 +179,33 @@ class _PortForwardPageState extends State<PortForwardPage>
         buildTunnelInputCell(context,
             controller: remotePortController,
             inputFormatters: portInputFormatter),
-        SizedBox(
-          width: _kColumn4Width,
-          child: ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                elevation: 0, side: const BorderSide(color: MyTheme.border)),
-            onPressed: () async {
-              int? localPort = int.tryParse(localPortController.text);
-              int? remotePort = int.tryParse(remotePortController.text);
-              if (localPort != null &&
-                  remotePort != null &&
-                  (remoteHostController.text.isEmpty ||
-                      remoteHostController.text.trim().isNotEmpty)) {
-                await bind.sessionAddPortForward(
-                    id: 'pf_${widget.id}',
-                    localPort: localPort,
-                    remoteHost: remoteHostController.text.trim().isEmpty
-                        ? 'localhost'
-                        : remoteHostController.text.trim(),
-                    remotePort: remotePort);
-                localPortController.clear();
-                remoteHostController.clear();
-                remotePortController.clear();
-                refreshTunnelConfig();
-              }
-            },
-            child: Text(
-              translate('Add'),
-            ),
-          ).marginAll(10),
-        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+              elevation: 0, side: const BorderSide(color: MyTheme.border)),
+          onPressed: () async {
+            int? localPort = int.tryParse(localPortController.text);
+            int? remotePort = int.tryParse(remotePortController.text);
+            if (localPort != null &&
+                remotePort != null &&
+                (remoteHostController.text.isEmpty ||
+                    remoteHostController.text.trim().isNotEmpty)) {
+              await bind.sessionAddPortForward(
+                  id: 'pf_${widget.id}',
+                  localPort: localPort,
+                  remoteHost: remoteHostController.text.trim().isEmpty
+                      ? 'localhost'
+                      : remoteHostController.text.trim(),
+                  remotePort: remotePort);
+              localPortController.clear();
+              remoteHostController.clear();
+              remotePortController.clear();
+              refreshTunnelConfig();
+            }
+          },
+          child: Text(
+            translate('Add'),
+          ),
+        ).marginAll(10),
       ]),
     );
   }
