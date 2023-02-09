@@ -123,6 +123,7 @@ pub struct Connection {
     #[cfg(windows)]
     portable: PortableState,
     from_switch: bool,
+    origin_resolution: HashMap<String, Resolution>,
     voice_call_request_timestamp: Option<NonZeroI64>,
     audio_input_device_before_voice_call: Option<String>,
 }
@@ -228,6 +229,7 @@ impl Connection {
             #[cfg(windows)]
             portable: Default::default(),
             from_switch: false,
+            origin_resolution: Default::default(),
             audio_sender: None,
             voice_call_request_timestamp: None,
             audio_input_device_before_voice_call: None,
@@ -533,6 +535,8 @@ impl Connection {
         conn.post_conn_audit(json!({
             "action": "close",
         }));
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        conn.reset_resolution();
         ALIVE_CONNS.lock().unwrap().retain(|&c| c != id);
         if let Some(s) = conn.server.upgrade() {
             s.write().unwrap().remove_connection(&conn.inner);
@@ -881,6 +885,16 @@ impl Connection {
             ..Default::default()
         })
         .into();
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        {
+            pi.resolutions = Some(SupportedResolutions {
+                resolutions: video_service::get_current_display_name()
+                    .map(|name| crate::platform::resolutions(&name))
+                    .unwrap_or(vec![]),
+                ..Default::default()
+            })
+            .into();
+        }
 
         let mut sub_service = false;
         if self.file_transfer.is_some() {
@@ -1597,6 +1611,26 @@ impl Connection {
                             return false;
                         }
                     }
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    Some(misc::Union::ChangeResolution(r)) => {
+                        if self.keyboard {
+                            if let Ok(name) = video_service::get_current_display_name() {
+                                if let Ok(current) = crate::platform::current_resolution(&name) {
+                                    if let Err(e) = crate::platform::change_resolution(
+                                        &name,
+                                        r.width as _,
+                                        r.height as _,
+                                    ) {
+                                        log::error!("change resolution failed:{:?}", e);
+                                    } else {
+                                        if !self.origin_resolution.contains_key(&name) {
+                                            self.origin_resolution.insert(name, current);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     _ => {}
                 },
                 Some(message::Union::AudioFrame(frame)) => {
@@ -1936,6 +1970,20 @@ impl Connection {
                 }
             }
         }
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    fn reset_resolution(&self) {
+        self.origin_resolution
+            .iter()
+            .map(|(name, r)| {
+                if let Err(e) =
+                    crate::platform::change_resolution(&name, r.width as _, r.height as _)
+                {
+                    log::error!("change resolution failed:{:?}", e);
+                }
+            })
+            .count();
     }
 }
 

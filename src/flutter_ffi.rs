@@ -529,7 +529,13 @@ pub fn session_switch_sides(id: String) {
     }
 }
 
-pub fn session_set_size(_id: String, _width: i32, _height: i32)  {
+pub fn session_change_resolution(id: String, width: i32, height: i32) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.change_resolution(width, height);
+    }
+}
+
+pub fn session_set_size(_id: String, _width: i32, _height: i32) {
     #[cfg(feature = "flutter_texture_render")]
     if let Some(session) = SESSIONS.write().unwrap().get_mut(&_id) {
         session.set_size(_width, _height);
