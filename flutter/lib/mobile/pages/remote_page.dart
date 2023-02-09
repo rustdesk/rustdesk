@@ -228,13 +228,18 @@ class _RemotePageState extends State<RemotePage> {
         return false;
       },
       child: getRawPointerAndKeyBody(Scaffold(
-          // resizeToAvoidBottomInset: true,
+          // workaround for https://github.com/rustdesk/rustdesk/issues/3131
+          floatingActionButtonLocation: hideKeyboard
+              ? FABLocation(FloatingActionButtonLocation.endFloat, 0, -35)
+              : null,
           floatingActionButton: !showActionButton
               ? null
               : FloatingActionButton(
                   mini: !hideKeyboard,
                   child: Icon(
-                      hideKeyboard ? Icons.expand_more : Icons.expand_less),
+                    hideKeyboard ? Icons.expand_more : Icons.expand_less,
+                    color: Colors.white,
+                  ),
                   backgroundColor: MyTheme.accent,
                   onPressed: () {
                     setState(() {
@@ -1132,5 +1137,18 @@ void sendPrompt(bool isMac, String key) {
     gFFI.inputModel.command = old;
   } else {
     gFFI.inputModel.ctrl = old;
+  }
+}
+
+class FABLocation extends FloatingActionButtonLocation {
+  FloatingActionButtonLocation location;
+  double offsetX;
+  double offsetY;
+  FABLocation(this.location, this.offsetX, this.offsetY);
+
+  @override
+  Offset getOffset(ScaffoldPrelayoutGeometry scaffoldGeometry) {
+    final offset = location.getOffset(scaffoldGeometry);
+    return Offset(offset.dx + offsetX, offset.dy + offsetY);
   }
 }
