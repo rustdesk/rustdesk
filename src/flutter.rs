@@ -42,7 +42,7 @@ pub extern "C" fn rustdesk_core_main() -> bool {
 #[cfg(target_os = "macos")]
 #[no_mangle]
 pub extern "C" fn handle_applicationShouldOpenUntitledFile() {
-    crate::platform::macos::handle_applicationShouldOpenUntitledFile();
+    crate::platform::macos::handle_application_should_open_untitled_file();
 }
 
 #[cfg(windows)]

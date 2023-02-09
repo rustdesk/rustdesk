@@ -141,7 +141,7 @@ extern "C" fn application_should_handle_open_untitled_file(
         if !LAUNCHED {
             return YES;
         }
-        crate::platform::macos::handle_applicationShouldOpenUntitledFile();
+        crate::platform::macos::handle_application_should_open_untitled_file();
         let inner: *mut c_void = *this.get_ivar(APP_HANDLER_IVAR);
         let inner = &mut *(inner as *mut DelegateState);
         (*inner).command(AWAKE);
@@ -257,11 +257,4 @@ pub fn show_dock() {
     unsafe {
         NSApp().setActivationPolicy_(NSApplicationActivationPolicyRegular);
     }
-}
-
-pub fn make_tray() {
-    unsafe {
-        set_delegate(None);
-    }
-    crate::tray::make_tray();
 }

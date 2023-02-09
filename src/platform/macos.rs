@@ -17,7 +17,7 @@ use core_graphics::{
     display::{kCGNullWindowID, kCGWindowListOptionOnScreenOnly, CGWindowListCopyWindowInfo},
     window::{kCGWindowName, kCGWindowOwnerPID},
 };
-use hbb_common::{bail, log};
+use hbb_common::{allow_err, bail, log};
 use include_dir::{include_dir, Dir};
 use objc::{class, msg_send, sel, sel_impl};
 use scrap::{libc::c_void, quartz::ffi::*};
@@ -578,12 +578,12 @@ fn check_main_window() -> bool {
     false
 }
 
-pub fn handle_applicationShouldOpenUntitledFile() {
+pub fn handle_application_should_open_untitled_file() {
     hbb_common::log::debug!("icon clicked on finder");
     let x = std::env::args().nth(1).unwrap_or_default();
-    if x == "--server" || x == "--cm" {
+    if x == "--server" || x == "--cm" || x == "--tray" {
         if crate::platform::macos::check_main_window() {
-            crate::ipc::send_url_scheme("rustdesk:".into());
+            allow_err!(crate::ipc::send_url_scheme("rustdesk:".into()));
         }
     }
 }
