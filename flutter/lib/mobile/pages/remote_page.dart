@@ -17,6 +17,7 @@ import '../../common/widgets/remote_input.dart';
 import '../../models/input_model.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
+import '../../utils/image.dart';
 import '../widgets/dialog.dart';
 import '../widgets/gestures.dart';
 
@@ -228,13 +229,18 @@ class _RemotePageState extends State<RemotePage> {
         return false;
       },
       child: getRawPointerAndKeyBody(Scaffold(
-          // resizeToAvoidBottomInset: true,
+          // workaround for https://github.com/rustdesk/rustdesk/issues/3131
+          floatingActionButtonLocation: hideKeyboard
+              ? FABLocation(FloatingActionButtonLocation.endFloat, 0, -35)
+              : null,
           floatingActionButton: !showActionButton
               ? null
               : FloatingActionButton(
                   mini: !hideKeyboard,
                   child: Icon(
-                      hideKeyboard ? Icons.expand_more : Icons.expand_less),
+                    hideKeyboard ? Icons.expand_more : Icons.expand_less,
+                    color: Colors.white,
+                  ),
                   backgroundColor: MyTheme.accent,
                   onPressed: () {
                     setState(() {
@@ -575,9 +581,10 @@ class _RemotePageState extends State<RemotePage> {
           child: Text(translate('Reset canvas')), value: 'reset_canvas'));
     }
     if (perms['keyboard'] != false) {
-      more.add(PopupMenuItem<String>(
-          child: Text(translate('Physical Keyboard Input Mode')),
-          value: 'input-mode'));
+      // * Currently mobile does not enable map mode
+      // more.add(PopupMenuItem<String>(
+      //     child: Text(translate('Physical Keyboard Input Mode')),
+      //     value: 'input-mode'));
       if (pi.platform == kPeerPlatformLinux || pi.sasEnabled) {
         more.add(PopupMenuItem<String>(
             child: Text('${translate('Insert')} Ctrl + Alt + Del'),
@@ -632,8 +639,9 @@ class _RemotePageState extends State<RemotePage> {
       );
       if (value == 'cad') {
         bind.sessionCtrlAltDel(id: widget.id);
-      } else if (value == 'input-mode') {
-        changePhysicalKeyboardInputMode();
+        // * Currently mobile does not enable map mode
+        // } else if (value == 'input-mode') {
+        //   changePhysicalKeyboardInputMode();
       } else if (value == 'lock') {
         bind.sessionLockScreen(id: widget.id);
       } else if (value == 'block-input') {
@@ -695,26 +703,26 @@ class _RemotePageState extends State<RemotePage> {
             }));
   }
 
-  void changePhysicalKeyboardInputMode() async {
-    var current = await bind.sessionGetKeyboardMode(id: widget.id) ?? "legacy";
-    gFFI.dialogManager.show((setState, close) {
-      void setMode(String? v) async {
-        await bind.sessionPeerOption(
-            id: widget.id, name: "keyboard-mode", value: v ?? "");
-        setState(() => current = v ?? '');
-        Future.delayed(Duration(milliseconds: 300), close);
-      }
-
-      return CustomAlertDialog(
-          title: Text(translate('Physical Keyboard Input Mode')),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            getRadio('Legacy mode', 'legacy', current, setMode,
-                contentPadding: EdgeInsets.zero),
-            getRadio('Map mode', 'map', current, setMode,
-                contentPadding: EdgeInsets.zero),
-          ]));
-    }, clickMaskDismiss: true);
-  }
+  // * Currently mobile does not enable map mode
+  // void changePhysicalKeyboardInputMode() async {
+  //   var current = await bind.sessionGetKeyboardMode(id: widget.id) ?? "legacy";
+  //   gFFI.dialogManager.show((setState, close) {
+  //     void setMode(String? v) async {
+  //       await bind.sessionSetKeyboardMode(id: widget.id, value: v ?? "");
+  //       setState(() => current = v ?? '');
+  //       Future.delayed(Duration(milliseconds: 300), close);
+  //     }
+  //
+  //     return CustomAlertDialog(
+  //         title: Text(translate('Physical Keyboard Input Mode')),
+  //         content: Column(mainAxisSize: MainAxisSize.min, children: [
+  //           getRadio('Legacy mode', 'legacy', current, setMode,
+  //               contentPadding: EdgeInsets.zero),
+  //           getRadio('Map mode', 'map', current, setMode,
+  //               contentPadding: EdgeInsets.zero),
+  //         ]));
+  //   }, clickMaskDismiss: true);
+  // }
 
   Widget getHelpTools() {
     final keyboard = isKeyboardShown();
@@ -806,6 +814,9 @@ class _RemotePageState extends State<RemotePage> {
       wrap('End', () {
         inputModel.inputKey('VK_END');
       }),
+      wrap('Ins', () {
+        inputModel.inputKey('VK_INSERT');
+      }),
       wrap('Del', () {
         inputModel.inputKey('VK_DELETE');
       }),
@@ -890,32 +901,6 @@ class CursorPaint extends StatelessWidget {
           y: m.y * s - hoty * s + c.y - adjust,
           scale: 1),
     );
-  }
-}
-
-class ImagePainter extends CustomPainter {
-  ImagePainter({
-    required this.image,
-    required this.x,
-    required this.y,
-    required this.scale,
-  });
-
-  ui.Image? image;
-  double x;
-  double y;
-  double scale;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (image == null) return;
-    canvas.scale(scale, scale);
-    canvas.drawImage(image!, Offset(x, y), Paint());
-  }
-
-  @override
-  bool shouldRepaint(CustomPainter oldDelegate) {
-    return oldDelegate != this;
   }
 }
 
@@ -1132,5 +1117,18 @@ void sendPrompt(bool isMac, String key) {
     gFFI.inputModel.command = old;
   } else {
     gFFI.inputModel.ctrl = old;
+  }
+}
+
+class FABLocation extends FloatingActionButtonLocation {
+  FloatingActionButtonLocation location;
+  double offsetX;
+  double offsetY;
+  FABLocation(this.location, this.offsetX, this.offsetY);
+
+  @override
+  Offset getOffset(ScaffoldPrelayoutGeometry scaffoldGeometry) {
+    final offset = location.getOffset(scaffoldGeometry);
+    return Offset(offset.dx + offsetX, offset.dy + offsetY);
   }
 }

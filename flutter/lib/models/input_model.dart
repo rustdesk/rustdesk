@@ -58,9 +58,12 @@ class InputModel {
   InputModel(this.parent);
 
   KeyEventResult handleRawKeyEvent(FocusNode data, RawKeyEvent e) {
-    bind.sessionGetKeyboardMode(id: id).then((result) {
-      keyboardMode = result.toString();
-    });
+    // * Currently mobile does not enable map mode
+    if (isDesktop) {
+      bind.sessionGetKeyboardMode(id: id).then((result) {
+        keyboardMode = result.toString();
+      });
+    }
 
     final key = e.logicalKey;
     if (e is RawKeyDownEvent) {
@@ -93,10 +96,9 @@ class InputModel {
       }
     }
 
-    if (keyboardMode == 'map') {
+    // * Currently mobile does not enable map mode
+    if (isDesktop && keyboardMode == 'map') {
       mapKeyboardMode(e);
-    } else if (keyboardMode == 'translate') {
-      legacyKeyboardMode(e);
     } else {
       legacyKeyboardMode(e);
     }

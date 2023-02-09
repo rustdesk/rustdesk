@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 
+import '../../common.dart';
 import '../../models/input_model.dart';
 
 class RawKeyFocusScope extends StatelessWidget {
@@ -19,6 +20,13 @@ class RawKeyFocusScope extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final FocusOnKeyCallback? onKey;
+    if (isAndroid) {
+      onKey = inputModel.handleRawKeyEvent;
+    } else {
+      onKey = stateGlobal.grabKeyboard ? inputModel.handleRawKeyEvent : null;
+    }
+
     return FocusScope(
         autofocus: true,
         child: Focus(
@@ -26,8 +34,7 @@ class RawKeyFocusScope extends StatelessWidget {
             canRequestFocus: true,
             focusNode: focusNode,
             onFocusChange: onFocusChange,
-            onKey:
-                stateGlobal.grabKeyboard ? inputModel.handleRawKeyEvent : null,
+            onKey: onKey,
             child: child));
   }
 }
