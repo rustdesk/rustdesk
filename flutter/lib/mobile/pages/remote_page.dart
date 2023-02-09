@@ -814,6 +814,9 @@ class _RemotePageState extends State<RemotePage> {
       wrap('End', () {
         inputModel.inputKey('VK_END');
       }),
+      wrap('Ins', () {
+        inputModel.inputKey('VK_INSERT');
+      }),
       wrap('Del', () {
         inputModel.inputKey('VK_DELETE');
       }),
