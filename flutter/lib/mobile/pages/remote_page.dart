@@ -581,9 +581,10 @@ class _RemotePageState extends State<RemotePage> {
           child: Text(translate('Reset canvas')), value: 'reset_canvas'));
     }
     if (perms['keyboard'] != false) {
-      more.add(PopupMenuItem<String>(
-          child: Text(translate('Physical Keyboard Input Mode')),
-          value: 'input-mode'));
+      // * Currently mobile does not enable map mode
+      // more.add(PopupMenuItem<String>(
+      //     child: Text(translate('Physical Keyboard Input Mode')),
+      //     value: 'input-mode'));
       if (pi.platform == kPeerPlatformLinux || pi.sasEnabled) {
         more.add(PopupMenuItem<String>(
             child: Text('${translate('Insert')} Ctrl + Alt + Del'),
@@ -638,8 +639,9 @@ class _RemotePageState extends State<RemotePage> {
       );
       if (value == 'cad') {
         bind.sessionCtrlAltDel(id: widget.id);
-      } else if (value == 'input-mode') {
-        changePhysicalKeyboardInputMode();
+        // * Currently mobile does not enable map mode
+        // } else if (value == 'input-mode') {
+        //   changePhysicalKeyboardInputMode();
       } else if (value == 'lock') {
         bind.sessionLockScreen(id: widget.id);
       } else if (value == 'block-input') {
@@ -701,26 +703,26 @@ class _RemotePageState extends State<RemotePage> {
             }));
   }
 
-  void changePhysicalKeyboardInputMode() async {
-    var current = await bind.sessionGetKeyboardMode(id: widget.id) ?? "legacy";
-    gFFI.dialogManager.show((setState, close) {
-      void setMode(String? v) async {
-        await bind.sessionPeerOption(
-            id: widget.id, name: "keyboard-mode", value: v ?? "");
-        setState(() => current = v ?? '');
-        Future.delayed(Duration(milliseconds: 300), close);
-      }
-
-      return CustomAlertDialog(
-          title: Text(translate('Physical Keyboard Input Mode')),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            getRadio('Legacy mode', 'legacy', current, setMode,
-                contentPadding: EdgeInsets.zero),
-            getRadio('Map mode', 'map', current, setMode,
-                contentPadding: EdgeInsets.zero),
-          ]));
-    }, clickMaskDismiss: true);
-  }
+  // * Currently mobile does not enable map mode
+  // void changePhysicalKeyboardInputMode() async {
+  //   var current = await bind.sessionGetKeyboardMode(id: widget.id) ?? "legacy";
+  //   gFFI.dialogManager.show((setState, close) {
+  //     void setMode(String? v) async {
+  //       await bind.sessionSetKeyboardMode(id: widget.id, value: v ?? "");
+  //       setState(() => current = v ?? '');
+  //       Future.delayed(Duration(milliseconds: 300), close);
+  //     }
+  //
+  //     return CustomAlertDialog(
+  //         title: Text(translate('Physical Keyboard Input Mode')),
+  //         content: Column(mainAxisSize: MainAxisSize.min, children: [
+  //           getRadio('Legacy mode', 'legacy', current, setMode,
+  //               contentPadding: EdgeInsets.zero),
+  //           getRadio('Map mode', 'map', current, setMode,
+  //               contentPadding: EdgeInsets.zero),
+  //         ]));
+  //   }, clickMaskDismiss: true);
+  // }
 
   Widget getHelpTools() {
     final keyboard = isKeyboardShown();
