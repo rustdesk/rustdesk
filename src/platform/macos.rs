@@ -557,7 +557,7 @@ pub fn hide_dock() {
     }
 }
 
-pub fn check_main_window() {
+fn check_main_window() -> bool {
     use sysinfo::{ProcessExt, System, SystemExt};
     let mut sys = System::new();
     sys.refresh_processes();
@@ -568,11 +568,22 @@ pub fn check_main_window() {
         .unwrap_or_default();
     for (_, p) in sys.processes().iter() {
         if p.cmd().len() == 1 && p.user_id() == my_uid && p.cmd()[0].contains(&app) {
-            return;
+            return true;
         }
     }
     std::process::Command::new("open")
         .args(["-n", &app])
         .status()
         .ok();
+    false
+}
+
+pub fn handle_applicationShouldOpenUntitledFile() {
+    hbb_common::log::debug!("icon clicked on finder");
+    let x = std::env::args().nth(1).unwrap_or_default();
+    if x == "--server" || x == "--cm" {
+        if crate::platform::macos::check_main_window() {
+            crate::ipc::send_url_scheme("rustdesk:".into());
+        }
+    }
 }

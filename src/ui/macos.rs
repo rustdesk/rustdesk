@@ -6,15 +6,15 @@ use cocoa::{
     base::{id, nil, YES},
     foundation::{NSAutoreleasePool, NSString},
 };
+use objc::runtime::Class;
 use objc::{
     class,
     declare::ClassDecl,
     msg_send,
-    runtime::{BOOL, Object, Sel},
+    runtime::{Object, Sel, BOOL},
     sel, sel_impl,
 };
-use objc::runtime::Class;
-use sciter::{Host, make_args};
+use sciter::{make_args, Host};
 
 use hbb_common::log;
 
@@ -102,7 +102,10 @@ unsafe fn set_delegate(handler: Option<Box<dyn AppHandler>>) {
         sel!(handleMenuItem:),
         handle_menu_item as extern "C" fn(&mut Object, Sel, id),
     );
-    decl.add_method(sel!(handleEvent:withReplyEvent:), handle_apple_event as extern fn(&Object, Sel, u64, u64));
+    decl.add_method(
+        sel!(handleEvent:withReplyEvent:),
+        handle_apple_event as extern "C" fn(&Object, Sel, u64, u64),
+    );
     let decl = decl.register();
     let delegate: id = msg_send![decl, alloc];
     let () = msg_send![delegate, init];
@@ -138,10 +141,7 @@ extern "C" fn application_should_handle_open_untitled_file(
         if !LAUNCHED {
             return YES;
         }
-        log::debug!("icon clicked on finder");
-        if std::env::args().nth(1) == Some("--server".to_owned()) {
-            crate::platform::macos::check_main_window();
-        }
+        crate::platform::macos::handle_applicationShouldOpenUntitledFile();
         let inner: *mut c_void = *this.get_ivar(APP_HANDLER_IVAR);
         let inner = &mut *(inner as *mut DelegateState);
         (*inner).command(AWAKE);
@@ -191,7 +191,7 @@ pub fn handle_url_scheme(url: String) {
     }
 }
 
-extern fn handle_apple_event(_this: &Object, _cmd: Sel, event: u64, _reply: u64) {
+extern "C" fn handle_apple_event(_this: &Object, _cmd: Sel, event: u64, _reply: u64) {
     let event = event as *mut Object;
     let url = fruitbasket::parse_url_event(event);
     log::debug!("an event was received: {}", url);
