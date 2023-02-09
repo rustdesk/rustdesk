@@ -17,6 +17,7 @@ import '../../common/widgets/remote_input.dart';
 import '../../models/input_model.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
+import '../../utils/image.dart';
 import '../widgets/dialog.dart';
 import '../widgets/gestures.dart';
 
@@ -895,32 +896,6 @@ class CursorPaint extends StatelessWidget {
           y: m.y * s - hoty * s + c.y - adjust,
           scale: 1),
     );
-  }
-}
-
-class ImagePainter extends CustomPainter {
-  ImagePainter({
-    required this.image,
-    required this.x,
-    required this.y,
-    required this.scale,
-  });
-
-  ui.Image? image;
-  double x;
-  double y;
-  double scale;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (image == null) return;
-    canvas.scale(scale, scale);
-    canvas.drawImage(image!, Offset(x, y), Paint());
-  }
-
-  @override
-  bool shouldRepaint(CustomPainter oldDelegate) {
-    return oldDelegate != this;
   }
 }
 
