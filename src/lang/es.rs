@@ -446,8 +446,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("FPS", ""),
         ("Auto", ""),
         ("Other Default Options", "Otras opciones predeterminadas"),
-        ("Voice call", ""),
-        ("Text chat", ""),
-        ("Stop voice call", ""),
+        ("Voice call", "Llamada de voz"),
+        ("Text chat", "Chat de texto"),
+        ("Stop voice call", "Detener llamada de voz"),
     ].iter().cloned().collect();
 }
