@@ -1,5 +1,8 @@
-use crate::ui_session_interface::{io_loop, InvokeUiSession, Session};
-use crate::{client::*, flutter_ffi::EventToUI};
+use crate::{
+    client::*,
+    flutter_ffi::EventToUI,
+    ui_session_interface::{io_loop, InvokeUiSession, Session},
+};
 use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
 use hbb_common::{
     bail, config::LocalConfig, get_version_number, message_proto::*, rendezvous_proto::ConnType,
@@ -549,11 +552,15 @@ pub mod connection_manager {
             let mut h: HashMap<&str, &str> = event.iter().cloned().collect();
             assert!(h.get("name").is_none());
             h.insert("name", name);
-        
+
             if let Some(s) = GLOBAL_EVENT_STREAM.read().unwrap().get(super::APP_TYPE_CM) {
                 s.add(serde_json::ser::to_string(&h).unwrap_or("".to_owned()));
             } else {
-                println!("Push event {} failed. No {} event stream found.", name, super::APP_TYPE_CM);
+                println!(
+                    "Push event {} failed. No {} event stream found.",
+                    name,
+                    super::APP_TYPE_CM
+                );
             };
         }
     }
