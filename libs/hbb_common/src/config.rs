@@ -223,6 +223,8 @@ pub struct PeerConfig {
     pub lock_after_session_end: LockAfterSessionEnd,
     #[serde(flatten)]
     pub privacy_mode: PrivacyMode,
+    #[serde(flatten)]
+    pub allow_swap_key: AllowSwapKey,
     #[serde(default)]
     pub port_forwards: Vec<(i32, String, i32)>,
     #[serde(default)]
@@ -1065,6 +1067,8 @@ serde_field_bool!(
     default_lock_after_session_end
 );
 serde_field_bool!(PrivacyMode, "privacy_mode", default_privacy_mode);
+
+serde_field_bool!(AllowSwapKey, "allow_swap_key", default_swap_key);
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct LocalConfig {

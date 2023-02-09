@@ -428,10 +428,8 @@ pub fn session_add(
     let session_id = get_session_id(id.to_owned());
     LocalConfig::set_remote_id(&session_id);
 
-    let allow_swap_key = hbb_common::config::Config::get_option("allow-swap-key") == "Y";
     let session: Session<FlutterHandler> = Session {
         id: session_id.clone(),
-        allow_swap_key,
         ..Default::default()
     };
 

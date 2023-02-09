@@ -1580,6 +1580,9 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         ),
       );
     }
+    keyboardMenu.add(_createSwitchMenuEntry(
+        'Swap Control-Command  Key', 'allow_swap_key', EdgeInsets.zero, true));
+
     return keyboardMenu;
   }
 

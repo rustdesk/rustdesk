@@ -36,7 +36,6 @@ pub struct Session<T: InvokeUiSession> {
     pub sender: Arc<RwLock<Option<mpsc::UnboundedSender<Data>>>>,
     pub thread: Arc<Mutex<Option<std::thread::JoinHandle<()>>>>,
     pub ui_handler: T,
-    pub allow_swap_key: bool,
 }
 
 impl<T: InvokeUiSession> Session<T> {
@@ -506,9 +505,8 @@ impl<T: InvokeUiSession> Session<T> {
         shift: bool,
         command: bool,
     ) {
-        #[cfg(target_os = "macos")]
         let (ctrl, command) = 
-        if self.allow_swap_key {
+        if self.get_toggle_option("allow_swap_key".to_string()) {
             (command, ctrl)
         }
         else {

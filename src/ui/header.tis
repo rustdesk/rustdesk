@@ -156,6 +156,7 @@ class Header: Reactor.Component {
             <menu.context #keyboard-options>
                 <li #legacy><span>{svg_checkmark}</span>{translate('Legacy mode')}</li> 
                 <li #map><span>{svg_checkmark}</span>{translate('Map mode')}</li> 
+                <li #allow_swap_key><span>{svg_checkmark}</span>{translate('Swap Control-Command Key')}</li>
             </menu>
         </popup>;
     }

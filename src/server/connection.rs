@@ -539,9 +539,6 @@ impl Connection {
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn handle_input(receiver: std_mpsc::Receiver<MessageInput>, tx: Sender) {
-	    #[cfg(target_os = "macos")] 
-        let allow_swap_key = hbb_common::config::Config::get_option("allow-swap-key") == "Y";
-
         let mut block_input_mode = false;
         #[cfg(target_os = "windows")]
         {
@@ -554,66 +551,9 @@ impl Connection {
             match receiver.recv_timeout(std::time::Duration::from_millis(500)) {
                 Ok(v) => match v {
                     MessageInput::Mouse((msg, id)) => {
-                        #[cfg(target_os = "macos")]
-                        let msg = {
-                            let mut msg = msg;
-                            if allow_swap_key {
-                                msg.modifiers = msg.modifiers.iter().map(|ck| {
-                                    let ck = ck.enum_value_or_default();
-                                    let ck = match ck {
-                                        ControlKey::Control => ControlKey::Meta,
-                                        ControlKey::Meta => ControlKey::Control,
-                                        ControlKey::RControl => ControlKey::Meta,
-                                        ControlKey::RWin => ControlKey::Control,
-                                        _ => ck,
-                                    };
-                                    hbb_common::protobuf::EnumOrUnknown::new(ck)
-                                }).collect();
-                            }
-                            msg
-                        };
-
                         handle_mouse(&msg, id);
                     }
                     MessageInput::Key((mut msg, press)) => {
-                        #[cfg(target_os = "macos")]
-                        if allow_swap_key {
-                            if let Some(key_event::Union::ControlKey(ck)) = msg.union {
-                                let ck = ck.enum_value_or_default();
-                                let ck = match ck {
-                                    ControlKey::Control => ControlKey::Meta,
-                                    ControlKey::Meta => ControlKey::Control,
-                                    ControlKey::RControl => ControlKey::Meta,
-                                    ControlKey::RWin => ControlKey::Control,
-                                    _ => ck,
-                                };
-                                msg.set_control_key(ck);
-                            }
-                            msg.modifiers = msg.modifiers.iter().map(|ck| {
-                                let ck = ck.enum_value_or_default();
-                                let ck = match ck {
-                                    ControlKey::Control => ControlKey::Meta,
-                                    ControlKey::Meta => ControlKey::Control,
-                                    ControlKey::RControl => ControlKey::Meta,
-                                    ControlKey::RWin => ControlKey::Control,
-                                    _ => ck,
-                                };
-                                hbb_common::protobuf::EnumOrUnknown::new(ck)
-                            }).collect();
-                            
-                            let code = msg.chr();
-                            if code != 0 {
-                                let key = rdev::key_from_code(code);
-                                let key = match key {
-                                    rdev::Key::ControlLeft => rdev::Key::MetaLeft,
-                                    rdev::Key::MetaLeft => rdev::Key::ControlLeft,
-                                    rdev::Key::ControlRight => rdev::Key::MetaLeft,
-                                    rdev::Key::MetaRight => rdev::Key::ControlLeft,
-                                    _ => key,
-                                };
-                                msg.set_chr(rdev::macos_keycode_from_key(key).unwrap_or_default());
-                            }
-                        }
                         // todo: press and down have similar meanings.
                         if press && msg.mode.unwrap() == KeyboardMode::Legacy {
                             msg.down = true;
