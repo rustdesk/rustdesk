@@ -1,5 +1,8 @@
-use std::{collections::HashMap, ffi::{CStr, CString}, os::raw::c_char, thread};
+use std::{collections::HashMap, ffi::{CStr, CString}, os::raw::c_char};
 use std::str::FromStr;
+
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "android"))]
+use std::thread;
 
 use flutter_rust_bridge::{StreamSink, SyncReturn, ZeroCopyBuffer};
 use serde_json::json;
@@ -928,7 +931,7 @@ pub fn main_start_dbus_server() {
     {
         use crate::dbus::start_dbus_server;
         // spawn new thread to start dbus server
-        std::thread::spawn(|| {
+        thread::spawn(|| {
             let _ = start_dbus_server();
         });
     }
@@ -1275,7 +1278,7 @@ pub fn main_is_login_wayland() -> SyncReturn<bool> {
 
 pub fn main_start_pa() {
     #[cfg(target_os = "linux")]
-    std::thread::spawn(crate::ipc::start_pa);
+    thread::spawn(crate::ipc::start_pa);
 }
 
 pub fn main_hide_docker() -> SyncReturn<bool> {
@@ -1302,9 +1305,9 @@ pub fn main_start_ipc_url_server() {
 ///
 /// * macOS only
 #[allow(unused_variables)]
-pub fn send_url_scheme(url: String) {
+pub fn send_url_scheme(_url: String) {
     #[cfg(target_os = "macos")]
-    thread::spawn(move || crate::ui::macos::handle_url_scheme(url));
+    thread::spawn(move || crate::ui::macos::handle_url_scheme(_url));
 }
 
 #[cfg(target_os = "android")]
@@ -1324,7 +1327,7 @@ pub mod server_side {
         _class: JClass,
     ) {
         log::debug!("startServer from java");
-        std::thread::spawn(move || start_server(true));
+        thread::spawn(move || start_server(true));
     }
 
     #[no_mangle]

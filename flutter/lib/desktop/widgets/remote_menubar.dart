@@ -688,9 +688,11 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     );
   }
 
+  final _chatButtonKey = GlobalKey();
   Widget _buildChat(BuildContext context) {
     FfiModel ffiModel = Provider.of<FfiModel>(context);
     return mod_menu.PopupMenuButton(
+      key: _chatButtonKey,
       padding: EdgeInsets.zero,
       icon: SvgPicture.asset(
         "assets/chat.svg",
@@ -779,8 +781,17 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           style: style,
         ),
         proc: () {
+          RenderBox? renderBox =
+              _chatButtonKey.currentContext?.findRenderObject() as RenderBox?;
+
+          Offset? initPos;
+          if (renderBox != null) {
+            final pos = renderBox.localToGlobal(Offset.zero);
+            initPos = Offset(pos.dx, pos.dy + _MenubarTheme.dividerHeight);
+          }
+
           widget.ffi.chatModel.changeCurrentID(ChatModel.clientModeID);
-          widget.ffi.chatModel.toggleChatOverlay();
+          widget.ffi.chatModel.toggleChatOverlay(chatInitPos: initPos);
         },
         padding: padding,
         dismissOnClicked: true,

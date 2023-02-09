@@ -14,12 +14,9 @@ use objc::{
     sel, sel_impl,
 };
 use objc::runtime::Class;
-use objc_id::WeakId;
 use sciter::{Host, make_args};
 
-use hbb_common::{log, tokio};
-
-use crate::ui_cm_interface::start_ipc;
+use hbb_common::log;
 
 static APP_HANDLER_IVAR: &str = "GoDeskAppHandler";
 
@@ -141,7 +138,7 @@ extern "C" fn application_should_handle_open_untitled_file(
         if !LAUNCHED {
             return YES;
         }
-        hbb_common::log::debug!("icon clicked on finder");
+        log::debug!("icon clicked on finder");
         if std::env::args().nth(1) == Some("--server".to_owned()) {
             crate::platform::macos::check_main_window();
         }

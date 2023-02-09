@@ -30,7 +30,7 @@ use hbb_common::{
 // #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 use hbb_common::{config::RENDEZVOUS_PORT, futures::future::join_all};
 
-use crate::ui_interface::{set_option, get_option};
+use crate::ui_interface::{get_option, set_option};
 
 pub type NotifyMessageBox = fn(String, String, String, String) -> dyn Future<Output = ()>;
 
@@ -761,9 +761,4 @@ pub fn make_fd_to_json(id: i32, path: String, entries: &Vec<FileEntry>) -> Strin
     }
     fd_json.insert("entries".into(), json!(entries_out));
     serde_json::to_string(&fd_json).unwrap_or("".into())
-}
-
-#[cfg(test)]
-mod test_common {
-    
 }

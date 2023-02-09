@@ -1,6 +1,4 @@
-use std::future::Future;
-
-use hbb_common::{log, ResultType};
+use hbb_common::log;
 
 /// shared by flutter and sciter main function
 ///
