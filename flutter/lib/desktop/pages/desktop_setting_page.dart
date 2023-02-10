@@ -1861,7 +1861,7 @@ void changeSocks5Proxy() async {
                         border: const OutlineInputBorder(),
                         errorText: proxyMsg.isNotEmpty ? proxyMsg : null),
                     controller: proxyController,
-                    focusNode: FocusNode()..requestFocus(),
+                    autofocus: true,
                   ),
                 ),
               ],
