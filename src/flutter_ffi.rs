@@ -1210,6 +1210,10 @@ pub fn main_is_rdp_service_open() -> SyncReturn<bool> {
     SyncReturn(is_rdp_service_open())
 }
 
+pub fn main_set_share_rdp(enable: bool) {
+    set_share_rdp(enable)
+}
+
 pub fn main_goto_install() -> SyncReturn<bool> {
     goto_install();
     SyncReturn(true)
