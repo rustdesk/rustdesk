@@ -448,9 +448,9 @@ class ImageModel with ChangeNotifier {
         parent.target?.ffiModel.display.width ?? 0,
         parent.target?.ffiModel.display.height ?? 0,
         isWeb ? ui.PixelFormat.rgba8888 : ui.PixelFormat.bgra8888, (image) {
+      decodeCount -= 1;
       if (parent.target?.id != pid) return;
       try {
-        decodeCount -= 1;
         // my throw exception, because the listener maybe already dispose
         update(image);
       } catch (e) {
