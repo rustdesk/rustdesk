@@ -415,6 +415,8 @@ class ImageModel with ChangeNotifier {
 
   String id = '';
 
+  int decodeCount = 0;
+
   WeakReference<FFI> parent;
 
   final List<Function(String)> _callbacksOnFirstImage = [];
@@ -434,7 +436,13 @@ class ImageModel with ChangeNotifier {
         }
       }
     }
+
+    if (decodeCount >= 1) {
+      return;
+    }
+
     final pid = parent.target?.id;
+    decodeCount += 1;
     ui.decodeImageFromPixels(
         rgba,
         parent.target?.ffiModel.display.width ?? 0,
@@ -442,6 +450,7 @@ class ImageModel with ChangeNotifier {
         isWeb ? ui.PixelFormat.rgba8888 : ui.PixelFormat.bgra8888, (image) {
       if (parent.target?.id != pid) return;
       try {
+        decodeCount -= 1;
         // my throw exception, because the listener maybe already dispose
         update(image);
       } catch (e) {
