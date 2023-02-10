@@ -234,7 +234,7 @@ class DesktopTab extends StatelessWidget {
     Key? key,
     required this.controller,
     this.showLogo = true,
-    this.showTitle = true,
+    this.showTitle = false,
     this.showMinimize = true,
     this.showMaximize = true,
     this.showClose = true,
