@@ -759,10 +759,12 @@ pub fn map_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Option<KeyEv
 fn try_fill_unicode(event: &Event, key_event: &KeyEvent, events: &mut Vec<KeyEvent>) {
     match &event.unicode {
         Some(unicode_info) => {
-            for code in &unicode_info.unicode {
-                let mut evt = key_event.clone();
-                evt.set_unicode(*code as _);
-                events.push(evt);
+            if let Some(name) = unicode_info.name {
+                if name.len() > 0 {
+                    let mut evt = key_event.clone();
+                    evt.set_seq(name);
+                    events.push(evt);
+                }
             }
         }
         None => {}

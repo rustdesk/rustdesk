@@ -1093,6 +1093,9 @@ fn translate_keyboard_mode(evt: &KeyEvent) {
             #[cfg(target_os = "windows")]
             allow_err!(rdev::simulate_unicode(_unicode as _));
         }
+        Some(key_event::Union::Seq(seq)) => {
+            ENIGO.lock().unwrap().key_sequence(&seq);
+        }
         Some(key_event::Union::Chr(..)) =>
         {
             #[cfg(target_os = "windows")]
