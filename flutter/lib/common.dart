@@ -648,8 +648,6 @@ class CustomAlertDialog extends StatelessWidget {
       child: AlertDialog(
         scrollable: true,
         title: title,
-        contentPadding: EdgeInsets.fromLTRB(
-            contentPadding ?? padding, 25, contentPadding ?? padding, 10),
         content: ConstrainedBox(
           constraints: contentBoxConstraints,
           child: Theme(
