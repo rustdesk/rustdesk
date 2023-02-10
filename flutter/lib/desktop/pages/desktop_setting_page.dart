@@ -1523,7 +1523,12 @@ Widget _OptionCheckBox(BuildContext context, String label, String key,
             () => Row(
               children: [
                 Checkbox(
-                        value: ref.value, onChanged: enabled ? onChanged : null)
+                        checkColor: 'light' ==
+                                MyTheme.getThemeModePreference().toShortString()
+                            ? Colors.white
+                            : Colors.black,
+                        value: ref.value,
+                        onChanged: enabled ? onChanged : null)
                     .marginOnly(right: 5),
                 Offstage(
                   offstage: !ref.value || checkedIcon == null,
