@@ -36,7 +36,7 @@ impl Session {
             .lc
             .write()
             .unwrap()
-            .initialize(id.to_owned(), ConnType::PORT_FORWARD);
+            .initialize(id.to_owned(), ConnType::PORT_FORWARD, None);
         session
     }
 }

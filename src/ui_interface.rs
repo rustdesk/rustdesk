@@ -2,7 +2,6 @@ use std::{
     collections::HashMap,
     process::Child,
     sync::{Arc, Mutex},
-    time::SystemTime,
 };
 
 #[cfg(any(target_os = "android", target_os = "ios"))]
@@ -31,7 +30,6 @@ pub type Children = Arc<Mutex<(bool, HashMap<(String, String), Child>)>>;
 type Status = (i32, bool, i64, String); // (status_num, key_confirmed, mouse_time, id)
 
 lazy_static::lazy_static! {
-    static ref CHILDREN : Children = Default::default();
     static ref UI_STATUS : Arc<Mutex<Status>> = Arc::new(Mutex::new((0, false, 0, "".to_owned())));
     static ref OPTIONS : Arc<Mutex<HashMap<String, String>>> = Arc::new(Mutex::new(Config::get_options()));
     static ref ASYNC_JOB_STATUS : Arc<Mutex<String>> = Default::default();
@@ -44,17 +42,6 @@ lazy_static::lazy_static! {
     pub static ref SENDER : Mutex<mpsc::UnboundedSender<ipc::Data>> = Mutex::new(check_connect_status(true));
 }
 
-#[inline]
-pub fn recent_sessions_updated() -> bool {
-    let mut children = CHILDREN.lock().unwrap();
-    if children.0 {
-        children.0 = false;
-        true
-    } else {
-        false
-    }
-}
-
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[inline]
 pub fn get_id() -> String {
@@ -62,16 +49,6 @@ pub fn get_id() -> String {
     return Config::get_id();
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     return ipc::get_id();
-}
-
-#[inline]
-pub fn get_remote_id() -> String {
-    LocalConfig::get_remote_id()
-}
-
-#[inline]
-pub fn set_remote_id(id: String) {
-    LocalConfig::set_remote_id(&id);
 }
 
 #[inline]
@@ -420,24 +397,6 @@ pub fn is_installed_lower_version() -> bool {
 }
 
 #[inline]
-pub fn closing(x: i32, y: i32, w: i32, h: i32) {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    crate::server::input_service::fix_key_down_timeout_at_exit();
-    LocalConfig::set_size(x, y, w, h);
-}
-
-#[inline]
-pub fn get_size() -> Vec<i32> {
-    let s = LocalConfig::get_size();
-    let mut v = Vec::new();
-    v.push(s.0);
-    v.push(s.1);
-    v.push(s.2);
-    v.push(s.3);
-    v
-}
-
-#[inline]
 pub fn get_mouse_time() -> f64 {
     let ui_status = UI_STATUS.lock().unwrap();
     let res = ui_status.2 as f64;
@@ -505,51 +464,6 @@ pub fn get_fav() -> Vec<String> {
 #[inline]
 pub fn store_fav(fav: Vec<String>) {
     LocalConfig::set_fav(fav);
-}
-
-#[inline]
-pub fn get_recent_sessions() -> Vec<(String, SystemTime, PeerConfig)> {
-    PeerConfig::peers()
-}
-
-#[inline]
-#[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
-pub fn get_icon() -> String {
-    crate::get_icon()
-}
-
-#[inline]
-pub fn remove_peer(id: String) {
-    PeerConfig::remove(&id);
-}
-
-#[inline]
-pub fn new_remote(id: String, remote_type: String) {
-    let mut lock = CHILDREN.lock().unwrap();
-    let args = vec![format!("--{}", remote_type), id.clone()];
-    let key = (id.clone(), remote_type.clone());
-    if let Some(c) = lock.1.get_mut(&key) {
-        if let Ok(Some(_)) = c.try_wait() {
-            lock.1.remove(&key);
-        } else {
-            if remote_type == "rdp" {
-                allow_err!(c.kill());
-                std::thread::sleep(std::time::Duration::from_millis(30));
-                c.try_wait().ok();
-                lock.1.remove(&key);
-            } else {
-                return;
-            }
-        }
-    }
-    match crate::run_me(args) {
-        Ok(child) => {
-            lock.1.insert(key, child);
-        }
-        Err(err) => {
-            log::error!("Failed to spawn remote: {}", err);
-        }
-    }
 }
 
 #[inline]
@@ -623,11 +537,6 @@ pub fn current_is_wayland() -> bool {
 }
 
 #[inline]
-pub fn get_software_update_url() -> String {
-    SOFTWARE_UPDATE_URL.lock().unwrap().clone()
-}
-
-#[inline]
 pub fn get_new_version() -> String {
     hbb_common::get_version_from_url(&*SOFTWARE_UPDATE_URL.lock().unwrap())
 }
@@ -643,36 +552,9 @@ pub fn get_app_name() -> String {
     crate::get_app_name()
 }
 
-#[inline]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn get_software_ext() -> String {
-    #[cfg(windows)]
-    let p = "exe";
-    #[cfg(target_os = "macos")]
-    let p = "dmg";
-    #[cfg(target_os = "linux")]
-    let p = "deb";
-    p.to_owned()
-}
-
-#[inline]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn get_software_store_path() -> String {
-    let mut p = std::env::temp_dir();
-    let name = SOFTWARE_UPDATE_URL
-        .lock()
-        .unwrap()
-        .split("/")
-        .last()
-        .map(|x| x.to_owned())
-        .unwrap_or(crate::get_app_name());
-    p.push(name);
-    format!("{}.{}", p.to_string_lossy(), get_software_ext())
-}
-
+#[cfg(windows)]
 #[inline]
 pub fn create_shortcut(_id: String) {
-    #[cfg(windows)]
     crate::platform::windows::create_shortcut(&_id).ok();
 }
 
@@ -719,22 +601,6 @@ pub fn get_uuid() -> String {
     base64::encode(hbb_common::get_uuid())
 }
 
-#[inline]
-#[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
-pub fn open_url(url: String) {
-    #[cfg(windows)]
-    let p = "explorer";
-    #[cfg(target_os = "macos")]
-    let p = "open";
-    #[cfg(target_os = "linux")]
-    let p = if std::path::Path::new("/usr/bin/firefox").exists() {
-        "firefox"
-    } else {
-        "xdg-open"
-    };
-    allow_err!(std::process::Command::new(p).arg(url).spawn());
-}
-
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[inline]
 pub fn change_id(id: String) {
@@ -757,20 +623,8 @@ pub fn post_request(url: String, body: String, header: String) {
 }
 
 #[inline]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn is_ok_change_id() -> bool {
-    machine_uid::get().is_ok()
-}
-
-#[inline]
 pub fn get_async_job_status() -> String {
     ASYNC_JOB_STATUS.lock().unwrap().clone()
-}
-
-#[inline]
-#[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
-pub fn t(name: String) -> String {
-    crate::client::translate(name)
 }
 
 #[inline]
@@ -814,11 +668,6 @@ pub fn default_video_save_directory() -> String {
 }
 
 #[inline]
-pub fn is_xfce() -> bool {
-    crate::platform::is_xfce()
-}
-
-#[inline]
 pub fn get_api_server() -> String {
     crate::get_api_server(
         get_option_("api-server"),
@@ -832,14 +681,6 @@ pub fn has_hwcodec() -> bool {
     return false;
     #[cfg(any(feature = "hwcodec", feature = "mediacodec"))]
     return true;
-}
-
-#[inline]
-pub fn is_release() -> bool {
-    #[cfg(not(debug_assertions))]
-    return true;
-    #[cfg(debug_assertions)]
-    return false;
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]

@@ -20,7 +20,7 @@ pub use self::rendezvous_mediator::*;
 pub mod common;
 #[cfg(not(any(target_os = "ios")))]
 pub mod ipc;
-#[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli", feature = "flutter")))]
 pub mod ui;
 mod version;
 pub use version::*;

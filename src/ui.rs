@@ -9,7 +9,7 @@ use sciter::Value;
 
 use hbb_common::{
     allow_err,
-    config::{self, PeerConfig},
+    config::{self, LocalConfig, PeerConfig},
     log,
 };
 
@@ -38,6 +38,7 @@ lazy_static::lazy_static! {
 #[cfg(not(any(feature = "flutter", feature = "cli")))]
 lazy_static::lazy_static! {
     pub static ref CUR_SESSION: Arc<Mutex<Option<Session<remote::SciterHandler>>>> = Default::default();
+    static ref CHILDREN : Children = Default::default();
 }
 
 struct UIHostHandler;
@@ -190,11 +191,11 @@ impl UI {
     }
 
     fn get_remote_id(&mut self) -> String {
-        get_remote_id()
+        LocalConfig::get_remote_id()
     }
 
     fn set_remote_id(&mut self, id: String) {
-        set_remote_id(id);
+        LocalConfig::set_remote_id(&id);
     }
 
     fn goto_install(&mut self) {
@@ -309,7 +310,10 @@ impl UI {
     }
 
     fn is_release(&self) -> bool {
-        is_release()
+        #[cfg(not(debug_assertions))]
+        return true;
+        #[cfg(debug_assertions)]
+        return false;
     }
 
     fn is_rdp_service_open(&self) -> bool {
@@ -329,11 +333,18 @@ impl UI {
     }
 
     fn closing(&mut self, x: i32, y: i32, w: i32, h: i32) {
-        closing(x, y, w, h)
+        crate::server::input_service::fix_key_down_timeout_at_exit();
+        LocalConfig::set_size(x, y, w, h);
     }
 
     fn get_size(&mut self) -> Value {
-        Value::from_iter(get_size())
+        let s = LocalConfig::get_size();
+        let mut v = Vec::new();
+        v.push(s.0);
+        v.push(s.1);
+        v.push(s.2);
+        v.push(s.3);
+        Value::from_iter(v)
     }
 
     fn get_mouse_time(&self) -> f64 {
@@ -388,7 +399,7 @@ impl UI {
 
     fn get_recent_sessions(&mut self) -> Value {
         // to-do: limit number of recent sessions, and remove old peer file
-        let peers: Vec<Value> = get_recent_sessions()
+        let peers: Vec<Value> = PeerConfig::peers()
             .drain(..)
             .map(|p| Self::get_peer_value(p.0, p.2))
             .collect();
@@ -396,11 +407,11 @@ impl UI {
     }
 
     fn get_icon(&mut self) -> String {
-        get_icon()
+        crate::get_icon()
     }
 
     fn remove_peer(&mut self, id: String) {
-        remove_peer(id)
+        PeerConfig::remove(&id);
     }
 
     fn remove_discovered(&mut self, id: String) {
@@ -442,7 +453,7 @@ impl UI {
     }
 
     fn get_software_update_url(&self) -> String {
-        get_software_update_url()
+        crate::SOFTWARE_UPDATE_URL.lock().unwrap().clone()
     }
 
     fn get_new_version(&self) -> String {
@@ -458,14 +469,30 @@ impl UI {
     }
 
     fn get_software_ext(&self) -> String {
-        get_software_ext()
+        #[cfg(windows)]
+        let p = "exe";
+        #[cfg(target_os = "macos")]
+        let p = "dmg";
+        #[cfg(target_os = "linux")]
+        let p = "deb";
+        p.to_owned()
     }
 
     fn get_software_store_path(&self) -> String {
-        get_software_store_path()
+        let mut p = std::env::temp_dir();
+        let name = crate::SOFTWARE_UPDATE_URL
+            .lock()
+            .unwrap()
+            .split("/")
+            .last()
+            .map(|x| x.to_owned())
+            .unwrap_or(crate::get_app_name());
+        p.push(name);
+        format!("{}.{}", p.to_string_lossy(), self.get_software_ext())
     }
 
     fn create_shortcut(&self, _id: String) {
+        #[cfg(windows)]
         create_shortcut(_id)
     }
 
@@ -495,7 +522,17 @@ impl UI {
     }
 
     fn open_url(&self, url: String) {
-        open_url(url)
+        #[cfg(windows)]
+        let p = "explorer";
+        #[cfg(target_os = "macos")]
+        let p = "open";
+        #[cfg(target_os = "linux")]
+        let p = if std::path::Path::new("/usr/bin/firefox").exists() {
+            "firefox"
+        } else {
+            "xdg-open"
+        };
+        allow_err!(std::process::Command::new(p).arg(url).spawn());
     }
 
     fn change_id(&self, id: String) {
@@ -508,7 +545,7 @@ impl UI {
     }
 
     fn is_ok_change_id(&self) -> bool {
-        is_ok_change_id()
+        machine_uid::get().is_ok()
     }
 
     fn get_async_job_status(&self) -> String {
@@ -516,11 +553,11 @@ impl UI {
     }
 
     fn t(&self, name: String) -> String {
-        t(name)
+        crate::client::translate(name)
     }
 
     fn is_xfce(&self) -> bool {
-        is_xfce()
+        crate::platform::is_xfce()
     }
 
     fn get_api_server(&self) -> String {
@@ -682,4 +719,44 @@ pub fn value_crash_workaround(values: &[Value]) -> Arc<Vec<Value>> {
     let persist = Arc::new(values.to_vec());
     STUPID_VALUES.lock().unwrap().push(persist.clone());
     persist
+}
+
+#[inline]
+pub fn new_remote(id: String, remote_type: String) {
+    let mut lock = CHILDREN.lock().unwrap();
+    let args = vec![format!("--{}", remote_type), id.clone()];
+    let key = (id.clone(), remote_type.clone());
+    if let Some(c) = lock.1.get_mut(&key) {
+        if let Ok(Some(_)) = c.try_wait() {
+            lock.1.remove(&key);
+        } else {
+            if remote_type == "rdp" {
+                allow_err!(c.kill());
+                std::thread::sleep(std::time::Duration::from_millis(30));
+                c.try_wait().ok();
+                lock.1.remove(&key);
+            } else {
+                return;
+            }
+        }
+    }
+    match crate::run_me(args) {
+        Ok(child) => {
+            lock.1.insert(key, child);
+        }
+        Err(err) => {
+            log::error!("Failed to spawn remote: {}", err);
+        }
+    }
+}
+
+#[inline]
+pub fn recent_sessions_updated() -> bool {
+    let mut children = CHILDREN.lock().unwrap();
+    if children.0 {
+        children.0 = false;
+        true
+    } else {
+        false
+    }
 }

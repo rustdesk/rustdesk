@@ -1119,13 +1119,6 @@ pub fn cm_switch_back(conn_id: i32) {
     crate::ui_cm_interface::switch_back(conn_id);
 }
 
-pub fn main_get_icon() -> String {
-    #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
-    return ui_interface::get_icon();
-    #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
-    return String::new();
-}
-
 pub fn main_get_build_date() -> String {
     crate::BUILD_DATE.to_string()
 }
@@ -1305,7 +1298,7 @@ pub fn main_start_ipc_url_server() {
 #[allow(unused_variables)]
 pub fn send_url_scheme(_url: String) {
     #[cfg(target_os = "macos")]
-    std::thread::spawn(move || crate::ui::macos::handle_url_scheme(_url));
+    std::thread::spawn(move || crate::handle_url_scheme(_url));
 }
 
 #[cfg(target_os = "android")]
