@@ -701,11 +701,39 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
         child: _OptionCheckBox(context, 'Enable RDP', 'enable-rdp',
             enabled: enabled),
       ),
+      shareRdp(context, enabled),
       _OptionCheckBox(context, 'Deny LAN Discovery', 'enable-lan-discovery',
           reverse: true, enabled: enabled),
       ...directIp(context),
       whitelist(),
     ]);
+  }
+
+  shareRdp(BuildContext context, bool enabled) {
+    onChanged(bool b) async {
+      await bind.mainSetShareRdp(enable: b);
+      setState(() {});
+    }
+
+    bool value = bind.mainIsShareRdp();
+    return Offstage(
+      offstage: !(Platform.isWindows && bind.mainIsRdpServiceOpen()),
+      child: GestureDetector(
+          child: Row(
+            children: [
+              Checkbox(
+                      value: value,
+                      onChanged: enabled ? (_) => onChanged(!value) : null)
+                  .marginOnly(right: 5),
+              Expanded(
+                child: Text(translate('Enable RDP session sharing'),
+                    style:
+                        TextStyle(color: _disabledTextColor(context, enabled))),
+              )
+            ],
+          ).marginOnly(left: _kCheckBoxLeftMargin),
+          onTap: enabled ? () => onChanged(!value) : null),
+    );
   }
 
   List<Widget> directIp(BuildContext context) {
