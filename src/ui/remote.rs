@@ -486,7 +486,7 @@ impl SciterSession {
     }
 
     pub fn get_icon(&self) -> String {
-        crate::get_icon()
+        super::get_icon()
     }
 
     fn supported_hwcodec(&self) -> Value {
