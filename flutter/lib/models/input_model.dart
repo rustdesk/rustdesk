@@ -485,10 +485,19 @@ class InputModel {
     y /= canvasModel.scale;
     x += d.x;
     y += d.y;
+
+    if (x < d.x || y < d.y || x > (d.x + d.width) || y > (d.y + d.height)) {
+      // If left mouse up, no early return.
+      if (evt['buttons'] != kPrimaryMouseButton || type != 'up') {
+        return;
+      }
+    }
+
     if (type != '') {
       x = 0;
       y = 0;
     }
+
     evt['x'] = '${x.round()}';
     evt['y'] = '${y.round()}';
     var buttons = '';
