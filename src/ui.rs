@@ -23,8 +23,6 @@ pub mod inline;
 #[cfg(target_os = "macos")]
 pub mod macos;
 pub mod remote;
-#[cfg(target_os = "windows")]
-pub mod win_privacy;
 
 pub type Children = Arc<Mutex<(bool, HashMap<(String, String), Child>)>>;
 #[allow(dead_code)]

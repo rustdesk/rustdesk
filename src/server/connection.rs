@@ -2045,7 +2045,7 @@ mod privacy_mode {
     pub(super) fn turn_off_privacy(_conn_id: i32) -> Message {
         #[cfg(windows)]
         {
-            use crate::ui::win_privacy::*;
+            use crate::win_privacy::*;
 
             let res = turn_off_privacy(_conn_id, None);
             match res {
@@ -2069,7 +2069,7 @@ mod privacy_mode {
     pub(super) fn turn_on_privacy(_conn_id: i32) -> ResultType<bool> {
         #[cfg(windows)]
         {
-            let plugin_exist = crate::ui::win_privacy::turn_on_privacy(_conn_id)?;
+            let plugin_exist = crate::win_privacy::turn_on_privacy(_conn_id)?;
             Ok(plugin_exist)
         }
         #[cfg(not(windows))]

@@ -2,10 +2,9 @@
 // Requires Rust 1.18.
 //#![windows_subsystem = "windows"]
 
-#[cfg(not(feature = "flutter"))]
 use librustdesk::*;
 
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 fn main() {
     if !common::global_init() {
         return;
@@ -31,11 +30,6 @@ fn main() {
         ui::start(args);
     }
     common::global_clean();
-}
-
-#[cfg(feature = "flutter")]
-fn main() {
-    hbb_common::log::info!("Hello world!");
 }
 
 #[cfg(feature = "cli")]

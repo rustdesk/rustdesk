@@ -833,8 +833,8 @@ fn get_default_install_path() -> String {
 
 pub fn check_update_broker_process() -> ResultType<()> {
     // let (_, path, _, _) = get_install_info();
-    let process_exe = crate::ui::win_privacy::INJECTED_PROCESS_EXE;
-    let origin_process_exe = crate::ui::win_privacy::ORIGIN_PROCESS_EXE;
+    let process_exe = crate::win_privacy::INJECTED_PROCESS_EXE;
+    let origin_process_exe = crate::win_privacy::ORIGIN_PROCESS_EXE;
 
     let exe_file = std::env::current_exe()?;
     if exe_file.parent().is_none() {
@@ -919,8 +919,8 @@ pub fn copy_exe_cmd(src_exe: &str, _exe: &str, path: &str) -> String {
         ",
         main_exe = main_exe,
         path = path,
-        ORIGIN_PROCESS_EXE = crate::ui::win_privacy::ORIGIN_PROCESS_EXE,
-        broker_exe = crate::ui::win_privacy::INJECTED_PROCESS_EXE,
+        ORIGIN_PROCESS_EXE = crate::win_privacy::ORIGIN_PROCESS_EXE,
+        broker_exe = crate::win_privacy::INJECTED_PROCESS_EXE,
     );
 }
 
@@ -938,7 +938,7 @@ pub fn update_me() -> ResultType<()> {
         {lic}
     ",
         copy_exe = copy_exe_cmd(&src_exe, &exe, &path),
-        broker_exe = crate::ui::win_privacy::INJECTED_PROCESS_EXE,
+        broker_exe = crate::win_privacy::INJECTED_PROCESS_EXE,
         app_name = crate::get_app_name(),
         lic = register_licence(),
         cur_pid = get_current_pid(),
@@ -1203,7 +1203,7 @@ fn get_before_uninstall() -> String {
     netsh advfirewall firewall delete rule name=\"{app_name} Service\"
     ",
         app_name = app_name,
-        broker_exe = crate::ui::win_privacy::INJECTED_PROCESS_EXE,
+        broker_exe = crate::win_privacy::INJECTED_PROCESS_EXE,
         ext = ext,
         cur_pid = get_current_pid(),
     )

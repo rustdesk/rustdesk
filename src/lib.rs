@@ -56,3 +56,5 @@ pub mod clipboard_file;
 
 #[cfg(all(windows, feature = "with_rc"))]
 pub mod rc;
+#[cfg(target_os = "windows")]
+pub mod win_privacy;

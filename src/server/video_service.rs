@@ -207,7 +207,7 @@ fn create_capturer(
     if privacy_mode_id > 0 {
         #[cfg(windows)]
         {
-            use crate::ui::win_privacy::*;
+            use crate::win_privacy::*;
 
             match scrap::CapturerMag::new(
                 display.origin(),
@@ -308,11 +308,11 @@ pub fn test_create_capturer(privacy_mode_id: i32, timeout_millis: u64) -> bool {
 fn check_uac_switch(privacy_mode_id: i32, capturer_privacy_mode_id: i32) -> ResultType<()> {
     if capturer_privacy_mode_id != 0 {
         if privacy_mode_id != capturer_privacy_mode_id {
-            if !crate::ui::win_privacy::is_process_consent_running()? {
+            if !crate::win_privacy::is_process_consent_running()? {
                 bail!("consent.exe is running");
             }
         }
-        if crate::ui::win_privacy::is_process_consent_running()? {
+        if crate::win_privacy::is_process_consent_running()? {
             bail!("consent.exe is running");
         }
     }
@@ -372,7 +372,7 @@ fn get_capturer(use_yuv: bool, portable_service_running: bool) -> ResultType<Cap
     let mut capturer_privacy_mode_id = privacy_mode_id;
     #[cfg(windows)]
     if capturer_privacy_mode_id != 0 {
-        if crate::ui::win_privacy::is_process_consent_running()? {
+        if crate::win_privacy::is_process_consent_running()? {
             capturer_privacy_mode_id = 0;
         }
     }
@@ -957,7 +957,7 @@ fn start_uac_elevation_check() {
         if !crate::platform::is_installed() && !crate::platform::is_root() {
             std::thread::spawn(|| loop {
                 std::thread::sleep(std::time::Duration::from_secs(1));
-                if let Ok(uac) = crate::ui::win_privacy::is_process_consent_running() {
+                if let Ok(uac) = crate::win_privacy::is_process_consent_running() {
                     *IS_UAC_RUNNING.lock().unwrap() = uac;
                 }
                 if !crate::platform::is_elevated(None).unwrap_or(false) {
