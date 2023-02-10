@@ -1,10 +1,7 @@
 {
     "name": "rustdesk",
     "build": {
-        "dockerfile": "Dockerfile",
-        "args": {
-            "BUILDKIT_INLINE_CACHE": "0"
-        }
+        "dockerfile": "Dockerfile"
     },
     "workspaceMount": "source=${localWorkspaceFolder},target=/home/user/rustdesk,type=bind,consistency=cache",
     "workspaceFolder": "/home/user/rustdesk",
