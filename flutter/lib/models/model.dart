@@ -1399,12 +1399,12 @@ class FFI {
       await setCanvasConfig(id, cursorModel.x, cursorModel.y, canvasModel.x,
           canvasModel.y, canvasModel.scale, ffiModel.pi.currentDisplay);
     }
-    bind.sessionClose(id: id);
     imageModel.update(null);
     cursorModel.clear();
     ffiModel.clear();
     canvasModel.clear();
     inputModel.resetModifiers();
+    await bind.sessionClose(id: id);
     debugPrint('model $id closed');
     id = '';
   }

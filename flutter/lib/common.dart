@@ -49,6 +49,11 @@ int androidVersion = 0;
 int windowsBuildNumber = 0;
 DesktopType? desktopType;
 
+/// Check if the app is running with single view mode.
+bool isSingleViewApp() {
+  return desktopType == DesktopType.cm;
+}
+
 /// * debug or test only, DO NOT enable in release build
 bool isTest = false;
 

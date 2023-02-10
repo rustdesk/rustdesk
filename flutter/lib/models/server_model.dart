@@ -560,10 +560,8 @@ class ServerModel with ChangeNotifier {
     }
   }
 
-  closeAll() {
-    for (var client in _clients) {
-      bind.cmCloseConnection(connId: client.id);
-    }
+  Future<void> closeAll() async {
+    await Future.wait(_clients.map((client) => bind.cmCloseConnection(connId: client.id)));
     _clients.clear();
     tabController.state.value.tabs.clear();
   }
