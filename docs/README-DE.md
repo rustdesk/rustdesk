@@ -6,24 +6,24 @@
   <a href="#dateistruktur">Dateistruktur</a> •
   <a href="#screenshots">Screenshots</a><br>
   [<a href="../README.md">English</a>] | [<a href="README-UA.md">Українська</a>] | [<a href="README-CS.md">česky</a>] | [<a href="README-ZH.md">中文</a>] | [<a href="README-HU.md">Magyar</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FA.md">فارسی</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-ID.md">Indonesian</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PTBR.md">Português (Brasil)</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">한국어</a>] | [<a href="README-AR.md">العربي</a>] | [<a href="README-VN.md">Tiếng Việt</a>]<br>
-  <b>Wir brauchen deine Hilfe um diese README Datei zu verbessern und aktualisieren</b>
+  <b>Wir brauchen deine Hilfe, um diese README Datei zu verbessern und zu aktualisieren</b>
 </p>
 
-Rede mit uns: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
+Rede mit uns auf: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Das hier ist ein Programm was, man nutzen kann, um einen Computer fernzusteuern, es wurde in Rust geschrieben. Es funktioniert ohne Konfiguration oder ähnliches, man kann es einfach direkt nutzen. Du hast volle Kontrolle über deine Daten und brauchst dir daher auch keine Sorgen um die Sicherheit dieser Daten zu machen. Du kannst unseren Rendezvous/Relay Server nutzen, [einen eigenen Server eröffnen](https://rustdesk.com/server) oder [einen neuen eigenen Server programmieren](https://github.com/rustdesk/rustdesk-server-demo).
+RustDesk ist eine in Rust geschriebene Remote-Desktop-Software, die out-of-the-box ohne besondere Konfiguration funktioniert. Du hast die volle Kontrolle über deine Daten und musst dir keine Sorgen um die Sicherheit machen. Du kannst unseren Rendezvous/Relay Server nutzen, [einen eigenen Server aufsetzen](https://rustdesk.com/server) oder [einen eigenen Server programmieren](https://github.com/rustdesk/rustdesk-server-demo).
 
-RustDesk heißt jegliche Mitarbeit willkommen. Schau dir [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) an, wenn du Hilfe brauchst für den Start.
+RustDesk heißt jegliche Mitarbeit willkommen. Schau dir [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) an, wenn du Unterstützung beim Start brauchst.
 
 [**PROGRAMM DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
 
 ## Kostenlose öffentliche Server
 
-Hier sind die Server, die du kostenlos nutzen kannst, es kann sein das sich diese Liste immer mal wieder ändert. Falls du nicht in der Nähe einer dieser Server bist, kann es sein, dass deine Verbindung langsam sein wird.
+Nachfolgend sind die Server gelistet, die du kostenlos nutzen kannst. Es kann sein, dass sich diese Liste immer mal wieder ändert. Falls du nicht in der Nähe einer dieser Server bist, kann es sein, dass deine Verbindung langsam sein wird.
 
-| Standort  | Serverart     | Spezifikationen    | Kommentare |
+| Standort  | Anbieter      | Spezifikationen    | Kommentar  |
 | --------- | ------------- | ------------------ | ---------- |
 | Seoul     | AWS lightsail | 1 vCPU / 0.5GB RAM |            |
 | Germany   | Codext        | 2 vCPU / 4GB RAM   |
@@ -33,7 +33,7 @@ Hier sind die Server, die du kostenlos nutzen kannst, es kann sein das sich dies
 
 ## Abhängigkeiten
 
-Die Desktop-Versionen nutzen [Sciter](https://sciter.com/) für die Oberfläche, bitte lade die dynamische Sciter Bibliothek selbst herunter.
+Die Desktop-Versionen nutzen [Sciter](https://sciter.com/) oder Flutter für die GUI. Bitte lade die dynamische Sciter Bibliothek selbst herunter.
 
 [Windows](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll) |
 [Linux](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so) |
@@ -41,7 +41,7 @@ Die Desktop-Versionen nutzen [Sciter](https://sciter.com/) für die Oberfläche,
 
 ## Die groben Schritte zum Kompilieren
 
-- Bereite deine Rust Entwicklungsumgebung und C++ Entwicklungsumgebung vor
+- Bereite deine Rust Entwicklungsumgebung und C++ Build-Umgebung vor
 
 - Installiere [vcpkg](https://github.com/microsoft/vcpkg) und füge die `VCPKG_ROOT` Systemumgebungsvariable hinzu
 
@@ -110,11 +110,11 @@ cargo run
 
 ### Ändere Wayland zu X11 (Xorg)
 
-RustDesk unterstützt "Wayland" nicht. Siehe [hier](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) um Xorg als Standard GNOME Session zu nutzen.
+RustDesk unterstützt "Wayland" nicht. Siehe [hier](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/), um Xorg als Standard GNOME Session zu nutzen.
 
-## Auf Docker Kompilieren
+## Auf Docker kompilieren
 
-Beginne damit das Repository zu klonen und den Docker Container zu bauen:
+Beginne damit, das Repository zu klonen und den Docker Container zu bauen:
 
 ```sh
 git clone https://github.com/rustdesk/rustdesk
@@ -122,13 +122,13 @@ cd rustdesk
 docker build -t "rustdesk-builder" .
 ```
 
-Jedes Mal, wenn du das Programm Kompilieren musst, nutze diesen Befehl:
+Jedes Mal, wenn du das Programm kompilieren musst, nutze diesen Befehl:
 
 ```sh
 docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
 ```
 
-Bedenke, dass das erste Mal Kompilieren länger dauern kann, da die Abhängigkeiten erst kompiliert werden müssen bevor sie zwischengespeichert werden können. Darauf folgende Kompiliervorgänge werden schneller sein. Falls du zusätzliche oder andere Argumente für den Kompilierbefehl angeben musst, kannst du diese am Ende des Befehls an der `<OPTIONAL-ARGS>` Position machen. Wenn du zum Beispiel eine optimierte Releaseversion kompilieren willst, kannst du das tun, indem du `--release` am Ende des Befehls anhängst. Das daraus entstehende Programm kannst du im “target” Ordner auf deinem System finden. Du kannst es mit folgenden Befehlen ausführen:
+Bedenke, dass das erste Mal Kompilieren länger dauern kann, da die Abhängigkeiten erst kompiliert werden müssen bevor sie zwischengespeichert werden können. Nachfolgende Kompiliervorgänge werden schneller sein. Falls du zusätzliche oder andere Argumente für den Kompilierbefehl angeben musst, kannst du diese am Ende des Befehls an der `<OPTIONAL-ARGS>` Position machen. Wenn du zum Beispiel eine optimierte Releaseversion kompilieren willst, kannst du das tun, indem du `--release` am Ende des Befehls anhängst. Das daraus entstehende Programm kannst du im “target” Ordner auf deinem System finden. Du kannst es mit folgenden Befehlen ausführen:
 
 ```sh
 target/debug/rustdesk
@@ -140,13 +140,13 @@ Oder, wenn du eine Releaseversion benutzt:
 target/release/rustdesk
 ```
 
-Bitte gehe sicher, dass du diese Befehle vom Stammverzeichnis vom RustDesk Repository nutzt, sonst kann es passieren, dass das Programm die Ressourcen nicht finden kann. Bitte bedenke auch, dass Unterbefehle von Cargo, wie z. B. `install` oder `run` aktuell noch nicht unterstützt werden, da sie das Programm innerhalb des Containers starten oder installieren würden, anstatt auf deinem eigentlichen System.
+Bitte stelle sicher, dass du diese Befehle vom Stammverzeichnis vom RustDesk Repository nutzt. Ansonsten kann es passieren, dass das Programm die Ressourcen nicht finden kann. Bitte bedenke auch, dass Unterbefehle von Cargo, wie z. B. `install` oder `run` aktuell noch nicht unterstützt werden, da sie das Programm innerhalb des Containers starten oder installieren würden, anstatt auf deinem eigentlichen System.
 
 ## Dateistruktur
 
-- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: Video Codec, Konfiguration, TCP/UDP Wrapper, Protokoll Puffer, fs Funktionen für Dateitransfer, und ein paar andere nützliche Funktionen
+- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: Video Codec, Konfiguration, TCP/UDP Wrapper, Protokoll Puffer, fs Funktionen für Dateitransfer und ein paar andere nützliche Funktionen
 - **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: Bildschirmaufnahme
-- **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: Plattformspezifische Maus und Tastatur Steuerung
+- **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: Plattformspezifische Maus- und Tastatur-Steuerung
 - **[src/ui](https://github.com/rustdesk/rustdesk/tree/master/src/ui)**: GUI
 - **[src/server](https://github.com/rustdesk/rustdesk/tree/master/src/server)**: Audio/Zwischenablage/Eingabe/Videodienste und Netzwerk Verbindungen
 - **[src/client.rs](https://github.com/rustdesk/rustdesk/tree/master/src/client.rs)**: Starten einer Peer-Verbindung
