@@ -282,6 +282,11 @@ impl InvokeUiSession for SciterHandler {
     fn on_voice_call_incoming(&self) {
         self.call("onVoiceCallIncoming", &make_args!());
     }
+
+    /// RGBA is directly rendered by [on_rgba]. No need to store the rgba for the sciter ui.
+    fn get_rgba(&self) -> Option<Vec<u8>> {
+        None
+    }
 }
 
 pub struct SciterSession(Session<SciterHandler>);

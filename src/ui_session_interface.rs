@@ -722,6 +722,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn on_voice_call_closed(&self, reason: &str);
     fn on_voice_call_waiting(&self);
     fn on_voice_call_incoming(&self);
+    fn get_rgba(&self) -> Option<Vec<u8>>;
 }
 
 impl<T: InvokeUiSession> Deref for Session<T> {

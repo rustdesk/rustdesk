@@ -1376,7 +1376,12 @@ class FFI {
             debugPrint('json.decode fail1(): $e, ${message.field0}');
           }
         } else if (message is EventToUI_Rgba) {
-          imageModel.onRgba(message.field0);
+          // Fetch the image buffer from rust codes.
+          bind.sessionGetRgba(id: id).then((rgba)  {
+            if (rgba != null) {
+              imageModel.onRgba(rgba);
+            }
+          });
         }
       }
     }();

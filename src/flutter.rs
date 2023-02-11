@@ -110,6 +110,7 @@ pub unsafe extern "C" fn free_c_args(ptr: *mut *mut c_char, len: c_int) {
 #[derive(Default, Clone)]
 pub struct FlutterHandler {
     pub event_stream: Arc<RwLock<Option<StreamSink<EventToUI>>>>,
+    pub rgba: Arc<RwLock<Option<Vec<u8>>>>
 }
 
 impl FlutterHandler {
@@ -290,7 +291,8 @@ impl InvokeUiSession for FlutterHandler {
 
     fn on_rgba(&self, data: &[u8]) {
         if let Some(stream) = &*self.event_stream.read().unwrap() {
-            stream.add(EventToUI::Rgba(ZeroCopyBuffer(data.to_owned())));
+            drop(self.rgba.write().unwrap().replace(data.to_owned()));
+            stream.add(EventToUI::Rgba);
         }
     }
 
@@ -408,6 +410,10 @@ impl InvokeUiSession for FlutterHandler {
 
     fn on_voice_call_incoming(&self) {
         self.push_event("on_voice_call_incoming", [].into());
+    }
+
+    fn get_rgba(&self) -> Option<Vec<u8>> {
+        self.rgba.write().unwrap().take()
     }
 }
 
