@@ -291,8 +291,12 @@ impl InvokeUiSession for FlutterHandler {
 
     fn on_rgba(&self, data: &[u8]) {
         if let Some(stream) = &*self.event_stream.read().unwrap() {
-            drop(self.rgba.write().unwrap().replace(data.to_owned()));
-            stream.add(EventToUI::Rgba);
+            let former_rgba = self.rgba.write().unwrap().replace(data.to_owned());
+            if former_rgba.is_none() {
+                // The [former_rgba] is none, which means the latest rgba had taken from flutter.
+                // We need to send a signal to flutter for notifying there's a new rgba buffer here.
+                stream.add(EventToUI::Rgba);
+            }
         }
     }
 
