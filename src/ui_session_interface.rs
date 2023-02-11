@@ -712,7 +712,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn update_block_input_state(&self, on: bool);
     fn job_progress(&self, id: i32, file_num: i32, speed: f64, finished_size: f64);
     fn adapt_size(&self);
-    fn on_rgba(&self, data: Vec<u8>);
+    fn on_rgba(&self, data: Arc<RwLock<Vec<u8>>>);
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool);
     #[cfg(any(target_os = "android", target_os = "ios"))]
     fn clipboard(&self, content: String);
@@ -722,7 +722,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn on_voice_call_closed(&self, reason: &str);
     fn on_voice_call_waiting(&self);
     fn on_voice_call_incoming(&self);
-    fn get_rgba(&self) -> Option<Vec<u8>>;
+    fn get_rgba(&mut self, buffer: *mut u8);
 }
 
 impl<T: InvokeUiSession> Deref for Session<T> {
@@ -957,7 +957,7 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>) {
     let frame_count = Arc::new(AtomicUsize::new(0));
     let frame_count_cl = frame_count.clone();
     let ui_handler = handler.ui_handler.clone();
-    let (video_sender, audio_sender) = start_video_audio_threads(move |data: Vec<u8>| {
+    let (video_sender, audio_sender) = start_video_audio_threads(move |data: Arc<RwLock<Vec<u8>>> | {
         frame_count_cl.fetch_add(1, Ordering::Relaxed);
         ui_handler.on_rgba(data);
     });

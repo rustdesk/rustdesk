@@ -104,16 +104,6 @@ pub fn session_get_remember(id: String) -> Option<bool> {
     }
 }
 
-pub fn session_get_rgba(id: String) -> Option<ZeroCopyBuffer<Vec<u8>>> {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        return match session.get_rgba() {
-            Some(buf) => Some(ZeroCopyBuffer(buf)),
-            _ => None
-        };
-    }
-    None
-}
-
 pub fn session_get_toggle_option(id: String, arg: String) -> Option<bool> {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
         Some(session.get_toggle_option(arg))

@@ -23,7 +23,10 @@ class RgbaFrame extends Struct {
 }
 
 typedef F2 = Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>);
-typedef F3 = void Function(Pointer<Utf8>, Pointer<Utf8>);
+typedef F3 = Void Function(Pointer<Utf8>, Pointer<Uint8>);
+typedef F3Dart = void Function(Pointer<Utf8>, Pointer<Uint8>);
+typedef F4 = Uint64 Function(Pointer<Utf8>);
+typedef F4Dart = int Function(Pointer<Utf8>);
 typedef HandleEvent = Future<void> Function(Map<String, dynamic> evt);
 
 /// FFI wrapper around the native Rust core.
@@ -44,6 +47,8 @@ class PlatformFFI {
   final _toAndroidChannel = const MethodChannel('mChannel');
 
   RustdeskImpl get ffiBind => _ffiBind;
+  F3Dart? _session_get_rgba;
+  F4Dart? _session_get_rgba_size;
 
   static get localeName => Platform.localeName;
 
@@ -92,6 +97,23 @@ class PlatformFFI {
     return res;
   }
 
+  Uint8List? getRgba(String id, Pointer<Uint8> buffer, int bufSize) {
+    if (_session_get_rgba == null) return null;
+    var a = id.toNativeUtf8();
+    _session_get_rgba!(a, buffer);
+    final data = buffer.asTypedList(bufSize);
+    malloc.free(a);
+    return data;
+  }
+
+  int? getRgbaSize(String id) {
+    if (_session_get_rgba_size == null) return null;
+    var a = id.toNativeUtf8();
+    final bufferSize = _session_get_rgba_size!(a);
+    malloc.free(a);
+    return bufferSize;
+  }
+
   /// Init the FFI class, loads the native Rust core library.
   Future<void> init(String appType) async {
     _appType = appType;
@@ -107,6 +129,8 @@ class PlatformFFI {
     debugPrint('initializing FFI $_appType');
     try {
       _translate = dylib.lookupFunction<F2, F2>('translate');
+      _session_get_rgba = dylib.lookupFunction<F3, F3Dart>("session_get_rgba");
+      _session_get_rgba_size = dylib.lookupFunction<F4, F4Dart>("session_get_rgba_size");
       try {
         // SYSTEM user failed
         _dir = (await getApplicationDocumentsDirectory()).path;

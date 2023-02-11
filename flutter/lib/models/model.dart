@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ffi' hide Size;
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:ffi/ffi.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/consts.dart';
@@ -1367,6 +1369,9 @@ class FFI {
     final stream = bind.sessionStart(id: id);
     final cb = ffiModel.startEventListener(id);
     () async {
+      // Preserved for the rgba data.
+      Pointer<Uint8>? buffer;
+      int? bufferSize;
       await for (final message in stream) {
         if (message is EventToUI_Event) {
           try {
@@ -1377,12 +1382,29 @@ class FFI {
           }
         } else if (message is EventToUI_Rgba) {
           // Fetch the image buffer from rust codes.
-          bind.sessionGetRgba(id: id).then((rgba)  {
-            if (rgba != null) {
-              imageModel.onRgba(rgba);
+          final sz = platformFFI.getRgbaSize(id);
+          if (sz == null) {
+            return;
+          }
+          // The buffer does not exists or the bufferSize is not
+          // equal to the required size.
+          if (buffer == null || bufferSize != sz) {
+            // reallocate buffer
+            if (buffer != null) {
+              malloc.free(buffer);
             }
-          });
+            buffer = malloc.allocate(sz);
+            bufferSize = sz;
+          }
+          final rgba = platformFFI.getRgba(id, buffer, bufferSize!);
+          if (rgba != null) {
+            imageModel.onRgba(rgba);
+          }
         }
+      }
+      // Free the buffer allocated on the heap.
+      if (buffer != null) {
+        malloc.free(buffer);
       }
     }();
     // every instance will bind a stream

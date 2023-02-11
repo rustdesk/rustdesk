@@ -3,6 +3,7 @@ use std::{
     ops::{Deref, DerefMut},
     sync::{Arc, Mutex},
 };
+use std::sync::RwLock;
 
 use sciter::{
     dom::{
@@ -17,6 +18,7 @@ use sciter::{
 use hbb_common::{
     allow_err, fs::TransferJobMeta, log, message_proto::*, rendezvous_proto::ConnType,
 };
+use hbb_common::tokio::io::AsyncReadExt;
 
 use crate::{
     client::*,
@@ -201,12 +203,12 @@ impl InvokeUiSession for SciterHandler {
         self.call("adaptSize", &make_args!());
     }
 
-    fn on_rgba(&self, data: Vec<u8>) {
+    fn on_rgba(&self, data: Arc<RwLock<Vec<u8>>>) {
         VIDEO
             .lock()
             .unwrap()
             .as_mut()
-            .map(|v| v.render_frame(&data).ok());
+            .map(|v| v.render_frame(data.read().unwrap().as_ref()).ok());
     }
 
     fn set_peer_info(&self, pi: &PeerInfo) {
@@ -284,9 +286,7 @@ impl InvokeUiSession for SciterHandler {
     }
 
     /// RGBA is directly rendered by [on_rgba]. No need to store the rgba for the sciter ui.
-    fn get_rgba(&self) -> Option<Vec<u8>> {
-        None
-    }
+    fn get_rgba(&mut self, _buffer: *mut u8)  {}
 }
 
 pub struct SciterSession(Session<SciterHandler>);
