@@ -1929,7 +1929,7 @@ pub trait Interface: Send + Clone + 'static + Sized {
     fn is_force_relay(&self) -> bool {
         self.get_login_config_handler().read().unwrap().force_relay
     }
-    fn swap_modifier_mouse(&self, msg : &mut hbb_common::protos::message::MouseEvent) {}
+    fn swap_modifier_mouse(&self, _msg : &mut hbb_common::protos::message::MouseEvent) {}
 }
 
 /// Data used by the client interface.
