@@ -1545,7 +1545,7 @@ pub type MediaSender = mpsc::Sender<MediaData>;
 /// * `video_callback` - The callback for video frame. Being called when a video frame is ready.
 pub fn start_video_audio_threads<F>(video_callback: F) -> (MediaSender, MediaSender)
 where
-    F: 'static + FnMut(&[u8]) + Send,
+    F: 'static + FnMut(Vec<u8>) + Send,
 {
     let (video_sender, video_receiver) = mpsc::channel::<MediaData>();
     let mut video_callback = video_callback;
@@ -1560,7 +1560,7 @@ where
                 match data {
                     MediaData::VideoFrame(vf) => {
                         if let Ok(true) = video_handler.handle_frame(vf) {
-                            video_callback(&video_handler.rgb);
+                            video_callback(std::mem::replace(&mut video_handler.rgb, vec![]));
                         }
                     }
                     MediaData::Reset => {

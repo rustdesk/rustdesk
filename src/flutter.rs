@@ -3,7 +3,7 @@ use crate::{
     flutter_ffi::EventToUI,
     ui_session_interface::{io_loop, InvokeUiSession, Session},
 };
-use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
+use flutter_rust_bridge::{StreamSink};
 use hbb_common::{
     bail, config::LocalConfig, get_version_number, message_proto::*, rendezvous_proto::ConnType,
     ResultType,
@@ -289,9 +289,9 @@ impl InvokeUiSession for FlutterHandler {
     // unused in flutter
     fn adapt_size(&self) {}
 
-    fn on_rgba(&self, data: &[u8]) {
+    fn on_rgba(&self, data: Vec<u8>) {
         if let Some(stream) = &*self.event_stream.read().unwrap() {
-            let former_rgba = self.rgba.write().unwrap().replace(data.to_owned());
+            let former_rgba = self.rgba.write().unwrap().replace(data);
             if former_rgba.is_none() {
                 // The [former_rgba] is none, which means the latest rgba had taken from flutter.
                 // We need to send a signal to flutter for notifying there's a new rgba buffer here.

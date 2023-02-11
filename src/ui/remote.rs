@@ -201,12 +201,12 @@ impl InvokeUiSession for SciterHandler {
         self.call("adaptSize", &make_args!());
     }
 
-    fn on_rgba(&self, data: &[u8]) {
+    fn on_rgba(&self, data: Vec<u8>) {
         VIDEO
             .lock()
             .unwrap()
             .as_mut()
-            .map(|v| v.render_frame(data).ok());
+            .map(|v| v.render_frame(&data).ok());
     }
 
     fn set_peer_info(&self, pi: &PeerInfo) {
