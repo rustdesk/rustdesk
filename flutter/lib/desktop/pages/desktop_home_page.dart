@@ -634,7 +634,7 @@ void setPasswordDialog() async {
                         border: const OutlineInputBorder(),
                         errorText: errMsg0.isNotEmpty ? errMsg0 : null),
                     controller: p0,
-                    focusNode: FocusNode()..requestFocus(),
+                    autofocus: true,
                     onChanged: (value) {
                       rxPass.value = value.trim();
                     },
