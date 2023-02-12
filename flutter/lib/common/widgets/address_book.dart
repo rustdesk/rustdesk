@@ -386,7 +386,7 @@ class _AddressBookState extends State<AddressBook> {
                       errorText: msg.isEmpty ? null : translate(msg),
                     ),
                     controller: controller,
-                    focusNode: FocusNode()..requestFocus(),
+                    autofocus: true,
                   ),
                 ),
               ],

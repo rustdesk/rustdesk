@@ -798,7 +798,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                                         "Please enter the folder name"),
                                   ),
                                   controller: name,
-                                  focusNode: FocusNode()..requestFocus(),
+                                  autofocus: true,
                                 ),
                               ],
                             ),

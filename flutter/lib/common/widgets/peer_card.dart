@@ -641,7 +641,7 @@ abstract class BasePeerCard extends StatelessWidget {
               child: Form(
                 child: TextFormField(
                   controller: controller,
-                  focusNode: FocusNode()..requestFocus(),
+                  autofocus: true,
                   decoration:
                       const InputDecoration(border: OutlineInputBorder()),
                 ),
@@ -1013,7 +1013,7 @@ void _rdpDialog(String id) async {
                     decoration: const InputDecoration(
                         border: OutlineInputBorder(), hintText: '3389'),
                     controller: portController,
-                    focusNode: FocusNode()..requestFocus(),
+                    autofocus: true,
                   ),
                 ),
               ],
