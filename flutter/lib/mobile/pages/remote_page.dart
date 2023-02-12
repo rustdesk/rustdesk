@@ -36,12 +36,13 @@ class RemotePage extends StatefulWidget {
 class _RemotePageState extends State<RemotePage> {
   Timer? _timer;
   bool _showBar = !isWebDesktop;
+  bool _showGestureHelp = false;
   String _value = '';
   double _scale = 1;
   double _mouseScrollIntegral = 0; // mouse scroll speed controller
   Orientation? _currentOrientation;
 
-  late final keyboardVisibilityController = KeyboardVisibilityController();
+  final keyboardVisibilityController = KeyboardVisibilityController();
   late final StreamSubscription<bool> keyboardSubscription;
   final FocusNode _mobileFocusNode = FocusNode();
   final FocusNode _physicalFocusNode = FocusNode();
@@ -197,9 +198,9 @@ class _RemotePageState extends State<RemotePage> {
   @override
   Widget build(BuildContext context) {
     final pi = Provider.of<FfiModel>(context).pi;
-    final isHideKeyboardFAB =
+    final keyboardIsVisible =
         keyboardVisibilityController.isVisible && _showEdit;
-    final showActionButton = !_showBar || isHideKeyboardFAB;
+    final showActionButton = !_showBar || keyboardIsVisible || _showGestureHelp;
     final keyboard = gFFI.ffiModel.permissions['keyboard'] != false;
 
     return WillPopScope(
@@ -209,33 +210,39 @@ class _RemotePageState extends State<RemotePage> {
       },
       child: getRawPointerAndKeyBody(Scaffold(
           // workaround for https://github.com/rustdesk/rustdesk/issues/3131
-          floatingActionButtonLocation: isHideKeyboardFAB
+          floatingActionButtonLocation: keyboardIsVisible
               ? FABLocation(FloatingActionButtonLocation.endFloat, 0, -35)
               : null,
           floatingActionButton: !showActionButton
               ? null
               : FloatingActionButton(
-                  mini: !isHideKeyboardFAB,
+                  mini: !keyboardIsVisible,
                   child: Icon(
-                    isHideKeyboardFAB ? Icons.expand_more : Icons.expand_less,
+                    (keyboardIsVisible || _showGestureHelp)
+                        ? Icons.expand_more
+                        : Icons.expand_less,
                     color: Colors.white,
                   ),
                   backgroundColor: MyTheme.accent,
                   onPressed: () {
                     setState(() {
-                      if (isHideKeyboardFAB) {
+                      if (keyboardIsVisible) {
                         _showEdit = false;
                         gFFI.invokeMethod("enable_soft_keyboard", false);
                         _mobileFocusNode.unfocus();
                         _physicalFocusNode.requestFocus();
+                      } else if (_showGestureHelp) {
+                        _showGestureHelp = false;
                       } else {
                         _showBar = !_showBar;
                       }
                     });
                   }),
-          bottomNavigationBar: _showBar && pi.displays.isNotEmpty
-              ? getBottomAppBar(keyboard)
-              : null,
+          bottomNavigationBar: _showGestureHelp
+              ? getGestureHelp()
+              : (_showBar && pi.displays.isNotEmpty
+                  ? getBottomAppBar(keyboard)
+                  : null),
           body: Overlay(
             initialEntries: [
               OverlayEntry(builder: (context) {
@@ -325,7 +332,8 @@ class _RemotePageState extends State<RemotePage> {
                                 icon: Icon(gFFI.ffiModel.touchMode
                                     ? Icons.touch_app
                                     : Icons.mouse),
-                                onPressed: changeTouchMode,
+                                onPressed: () => setState(
+                                    () => _showGestureHelp = !_showGestureHelp),
                               ),
                             ]) +
                   (isWeb
@@ -488,7 +496,7 @@ class _RemotePageState extends State<RemotePage> {
               right: 10,
               child: QualityMonitor(gFFI.qualityMonitorModel),
             ),
-            KeyHelpTools(requestShow: keyboardIsVisible),
+            KeyHelpTools(requestShow: (keyboardIsVisible || _showGestureHelp)),
             SizedBox(
               width: 0,
               height: 0,
@@ -658,29 +666,20 @@ class _RemotePageState extends State<RemotePage> {
     }();
   }
 
-  void changeTouchMode() {
-    setState(() => _showEdit = false);
-    showModalBottomSheet(
-        // backgroundColor: MyTheme.grayBg,
-        isScrollControlled: true,
-        context: context,
-        shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(5))),
-        builder: (context) => DraggableScrollableSheet(
-            expand: false,
-            builder: (context, scrollController) {
-              return SingleChildScrollView(
-                  controller: ScrollController(),
-                  padding: EdgeInsets.symmetric(vertical: 10),
-                  child: GestureHelp(
-                      touchMode: gFFI.ffiModel.touchMode,
-                      onTouchModeChange: (t) {
-                        gFFI.ffiModel.toggleTouchMode();
-                        final v = gFFI.ffiModel.touchMode ? 'Y' : '';
-                        bind.sessionPeerOption(
-                            id: widget.id, name: "touch", value: v);
-                      }));
-            }));
+  /// aka changeTouchMode
+  BottomAppBar getGestureHelp() {
+    return BottomAppBar(
+        child: SingleChildScrollView(
+            controller: ScrollController(),
+            padding: EdgeInsets.symmetric(vertical: 10),
+            child: GestureHelp(
+                touchMode: gFFI.ffiModel.touchMode,
+                onTouchModeChange: (t) {
+                  gFFI.ffiModel.toggleTouchMode();
+                  final v = gFFI.ffiModel.touchMode ? 'Y' : '';
+                  bind.sessionPeerOption(
+                      id: widget.id, name: "touch", value: v);
+                })));
   }
 
   // * Currently mobile does not enable map mode
@@ -719,6 +718,7 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
   var _more = true;
   var _fn = false;
   var _pin = false;
+  final _keyboardVisibilityController = KeyboardVisibilityController();
 
   InputModel get inputModel => gFFI.inputModel;
 
@@ -863,7 +863,8 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
     final space = size.width > 320 ? 4.0 : 2.0;
     return Container(
         color: Color(0xAA000000),
-        padding: EdgeInsets.only(top: widget.requestShow ? 24 : 4, bottom: 8),
+        padding: EdgeInsets.only(
+            top: _keyboardVisibilityController.isVisible ? 24 : 4, bottom: 8),
         child: Wrap(
           spacing: space,
           runSpacing: space,
