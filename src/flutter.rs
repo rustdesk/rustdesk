@@ -15,7 +15,7 @@ use std::{
     os::raw::{c_char, c_int},
     sync::{Arc, RwLock},
 };
-use libc::memcpy;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 pub(super) const APP_TYPE_MAIN: &str = "main";
 pub(super) const APP_TYPE_CM: &str = "cm";
@@ -111,8 +111,10 @@ pub unsafe extern "C" fn free_c_args(ptr: *mut *mut c_char, len: c_int) {
 #[derive(Default, Clone)]
 pub struct FlutterHandler {
     pub event_stream: Arc<RwLock<Option<StreamSink<EventToUI>>>>,
+    // SAFETY: [rgba] is guarded by [rgba_valid], and it's safe to reach [rgba] with `rgba_valid == true`.
+    // We must check the `rgba_valid` before reading [rgba].
     pub rgba: Arc<RwLock<Vec<u8>>>,
-    pub rgba_valid: Arc<RwLock<bool>>
+    pub rgba_valid: Arc<AtomicBool>
 }
 
 impl FlutterHandler {
@@ -291,18 +293,18 @@ impl InvokeUiSession for FlutterHandler {
     // unused in flutter
     fn adapt_size(&self) {}
 
-    fn on_rgba(&self, data: Arc<RwLock<Vec<u8>>>) {
+    fn on_rgba(&self, data: &mut Vec<u8>) {
         // If the current rgba is not fetched by flutter, i.e., is valid.
         // We give up sending a new event to flutter.
-        if *self.rgba_valid.read().unwrap() {
+        if self.rgba_valid.load(Ordering::Relaxed) {
             return;
         }
+        self.rgba_valid.store(true, Ordering::Relaxed);
         // Return the rgba buffer to the video handler for reusing allocated rgba buffer.
-        std::mem::swap::<Vec<u8>>(data.write().unwrap().as_mut(), self.rgba.write().unwrap().as_mut());
+        std::mem::swap::<Vec<u8>>(data, &mut *self.rgba.write().unwrap());
         if let Some(stream) = &*self.event_stream.read().unwrap() {
             stream.add(EventToUI::Rgba);
         }
-        let _ = std::mem::replace(&mut *self.rgba_valid.write().unwrap(), true);
     }
 
     fn set_peer_info(&self, pi: &PeerInfo) {
@@ -421,13 +423,17 @@ impl InvokeUiSession for FlutterHandler {
         self.push_event("on_voice_call_incoming", [].into());
     }
 
-    fn get_rgba(&mut self, buffer: *mut u8) {
-        // [Safety]
-        // * It must be ensures the buffer has enough space to place the whole rgba.
-        let max_len = self.rgba.read().unwrap().len();
-        unsafe { std::ptr::copy_nonoverlapping(self.rgba.read().unwrap().as_ptr(), buffer, max_len)};
-        // mark the rgba has been taken from flutter.
-        let _ = std::mem::replace(&mut *self.rgba_valid.write().unwrap(), false);
+    #[inline]
+    fn get_rgba(&self) -> *const u8 {
+        if self.rgba_valid.load(Ordering::Relaxed) {
+            return self.rgba.read().unwrap().as_ptr();
+        }
+        std::ptr::null_mut()
+    }
+
+    #[inline]
+    fn next_rgba(&mut self) {
+        self.rgba_valid.store(false, Ordering::Relaxed);
     }
 }
 
@@ -668,11 +674,22 @@ pub fn session_get_rgba_size(id: *const char) -> usize {
 }
 
 #[no_mangle]
-pub fn session_get_rgba(id: *const char, buffer: *mut u8) {
+pub fn session_get_rgba(id: *const char) -> *const u8 {
     let id = unsafe { std::ffi::CStr::from_ptr(id as _) };
     if let Ok(id) = id.to_str() {
         if let Some(session) = SESSIONS.write().unwrap().get_mut(id) {
-            return session.get_rgba(buffer);
+            return session.get_rgba();
+        }
+    }
+    std::ptr::null()
+}
+
+#[no_mangle]
+pub fn session_next_rgba(id: *const char) {
+    let id = unsafe { std::ffi::CStr::from_ptr(id as _) };
+    if let Ok(id) = id.to_str() {
+        if let Some(session) = SESSIONS.write().unwrap().get_mut(id) {
+            return session.next_rgba();
         }
     }
 }

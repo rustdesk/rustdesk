@@ -203,12 +203,12 @@ impl InvokeUiSession for SciterHandler {
         self.call("adaptSize", &make_args!());
     }
 
-    fn on_rgba(&self, data: Arc<RwLock<Vec<u8>>>) {
+    fn on_rgba(&self, data: &mut Vec<u8>) {
         VIDEO
             .lock()
             .unwrap()
             .as_mut()
-            .map(|v| v.render_frame(data.read().unwrap().as_ref()).ok());
+            .map(|v| v.render_frame(data).ok());
     }
 
     fn set_peer_info(&self, pi: &PeerInfo) {
@@ -286,7 +286,9 @@ impl InvokeUiSession for SciterHandler {
     }
 
     /// RGBA is directly rendered by [on_rgba]. No need to store the rgba for the sciter ui.
-    fn get_rgba(&mut self, _buffer: *mut u8)  {}
+    fn get_rgba(&self) -> *const u8  { std::ptr::null() }
+
+    fn next_rgba(&mut self) {}
 }
 
 pub struct SciterSession(Session<SciterHandler>);

@@ -817,7 +817,7 @@ impl AudioHandler {
 pub struct VideoHandler {
     decoder: Decoder,
     latency_controller: Arc<Mutex<LatencyController>>,
-    pub rgb: Arc<RwLock<Vec<u8>>>,
+    pub rgb: Vec<u8>,
     recorder: Arc<Mutex<Option<Recorder>>>,
     record: bool,
 }
@@ -850,7 +850,7 @@ impl VideoHandler {
         }
         match &vf.union {
             Some(frame) => {
-                let res = self.decoder.handle_video_frame(frame, &mut self.rgb.write().unwrap());
+                let res = self.decoder.handle_video_frame(frame, &mut self.rgb);
                 if self.record {
                     self.recorder
                         .lock()
@@ -1545,7 +1545,7 @@ pub type MediaSender = mpsc::Sender<MediaData>;
 /// * `video_callback` - The callback for video frame. Being called when a video frame is ready.
 pub fn start_video_audio_threads<F>(video_callback: F) -> (MediaSender, MediaSender)
 where
-    F: 'static + FnMut(Arc<RwLock<Vec<u8>>>) + Send,
+    F: 'static + FnMut(&mut Vec<u8>) + Send,
 {
     let (video_sender, video_receiver) = mpsc::channel::<MediaData>();
     let mut video_callback = video_callback;
@@ -1560,7 +1560,7 @@ where
                 match data {
                     MediaData::VideoFrame(vf) => {
                         if let Ok(true) = video_handler.handle_frame(vf) {
-                            video_callback(video_handler.rgb.clone());
+                            video_callback(&mut video_handler.rgb);
                         }
                     }
                     MediaData::Reset => {

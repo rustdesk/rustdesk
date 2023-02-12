@@ -417,8 +417,6 @@ class ImageModel with ChangeNotifier {
 
   String id = '';
 
-  int decodeCount = 0;
-
   WeakReference<FFI> parent;
 
   final List<Function(String)> _callbacksOnFirstImage = [];
@@ -439,20 +437,16 @@ class ImageModel with ChangeNotifier {
       }
     }
 
-    if (decodeCount >= 1) {
-      return;
-    }
-
     final pid = parent.target?.id;
-    decodeCount += 1;
     ui.decodeImageFromPixels(
         rgba,
         parent.target?.ffiModel.display.width ?? 0,
         parent.target?.ffiModel.display.height ?? 0,
         isWeb ? ui.PixelFormat.rgba8888 : ui.PixelFormat.bgra8888, (image) {
-      decodeCount -= 1;
       if (parent.target?.id != pid) return;
       try {
+        // Unlock the rgba memory from rust codes.
+        platformFFI.nextRgba(id);
         // my throw exception, because the listener maybe already dispose
         update(image);
       } catch (e) {
@@ -1370,8 +1364,6 @@ class FFI {
     final cb = ffiModel.startEventListener(id);
     () async {
       // Preserved for the rgba data.
-      Pointer<Uint8>? buffer;
-      int? bufferSize;
       await for (final message in stream) {
         if (message is EventToUI_Event) {
           try {
@@ -1383,28 +1375,14 @@ class FFI {
         } else if (message is EventToUI_Rgba) {
           // Fetch the image buffer from rust codes.
           final sz = platformFFI.getRgbaSize(id);
-          if (sz == null) {
+          if (sz == null || sz == 0) {
             return;
           }
-          // The buffer does not exists or the bufferSize is not
-          // equal to the required size.
-          if (buffer == null || bufferSize != sz) {
-            // reallocate buffer
-            if (buffer != null) {
-              malloc.free(buffer);
-            }
-            buffer = malloc.allocate(sz);
-            bufferSize = sz;
-          }
-          final rgba = platformFFI.getRgba(id, buffer, bufferSize!);
+          final rgba = platformFFI.getRgba(id, sz);
           if (rgba != null) {
             imageModel.onRgba(rgba);
           }
         }
-      }
-      // Free the buffer allocated on the heap.
-      if (buffer != null) {
-        malloc.free(buffer);
       }
     }();
     // every instance will bind a stream
