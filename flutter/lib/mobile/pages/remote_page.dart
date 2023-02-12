@@ -41,8 +41,6 @@ class _RemotePageState extends State<RemotePage> {
   double _mouseScrollIntegral = 0; // mouse scroll speed controller
   Orientation? _currentOrientation;
 
-  var _more = true;
-  var _fn = false;
   late final keyboardVisibilityController = KeyboardVisibilityController();
   late final StreamSubscription<bool> keyboardSubscription;
   final FocusNode _mobileFocusNode = FocusNode();
@@ -96,6 +94,8 @@ class _RemotePageState extends State<RemotePage> {
         gFFI.invokeMethod("enable_soft_keyboard", false);
       }
     }
+    // update for Scaffold
+    setState(() {});
   }
 
   // handle mobile virtual keyboard
@@ -478,6 +478,7 @@ class _RemotePageState extends State<RemotePage> {
   }
 
   Widget getBodyForMobile() {
+    final keyboardIsVisible = keyboardVisibilityController.isVisible;
     return Container(
         color: MyTheme.canvasColor,
         child: Stack(children: () {
@@ -488,7 +489,7 @@ class _RemotePageState extends State<RemotePage> {
               right: 10,
               child: QualityMonitor(gFFI.qualityMonitorModel),
             ),
-            getHelpTools(),
+            KeyHelpTools(requestShow: keyboardIsVisible),
             SizedBox(
               width: 0,
               height: 0,
@@ -703,33 +704,51 @@ class _RemotePageState extends State<RemotePage> {
   //         ]));
   //   }, clickMaskDismiss: true);
   // }
+}
 
-  Widget getHelpTools() {
-    final keyboard = keyboardVisibilityController.isVisible;
-    if (!keyboard) {
+class KeyHelpTools extends StatefulWidget {
+  /// need to show by external request, etc [keyboardIsVisible] or [changeTouchMode]
+  final bool requestShow;
+
+  KeyHelpTools({required this.requestShow});
+
+  @override
+  State<KeyHelpTools> createState() => _KeyHelpToolsState();
+}
+
+class _KeyHelpToolsState extends State<KeyHelpTools> {
+  var _more = true;
+  var _fn = false;
+
+  InputModel get inputModel => gFFI.inputModel;
+
+  Widget wrap(String text, void Function() onPressed,
+      [bool? active, IconData? icon]) {
+    return TextButton(
+        style: TextButton.styleFrom(
+          minimumSize: Size(0, 0),
+          padding: EdgeInsets.symmetric(vertical: 10, horizontal: 9.75),
+          //adds padding inside the button
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          //limits the touch area to the button area
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(5.0),
+          ),
+          backgroundColor: active == true ? MyTheme.accent80 : null,
+        ),
+        child: icon != null
+            ? Icon(icon, size: 17, color: Colors.white)
+            : Text(translate(text),
+                style: TextStyle(color: Colors.white, fontSize: 11)),
+        onPressed: onPressed);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.requestShow) {
       return SizedBox();
     }
     final size = MediaQuery.of(context).size;
-    wrap(String text, void Function() onPressed,
-        [bool? active, IconData? icon]) {
-      return TextButton(
-          style: TextButton.styleFrom(
-            minimumSize: Size(0, 0),
-            padding: EdgeInsets.symmetric(vertical: 10, horizontal: 9.75),
-            //adds padding inside the button
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            //limits the touch area to the button area
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(5.0),
-            ),
-            backgroundColor: active == true ? MyTheme.accent80 : null,
-          ),
-          child: icon != null
-              ? Icon(icon, size: 17, color: Colors.white)
-              : Text(translate(text),
-                  style: TextStyle(color: Colors.white, fontSize: 11)),
-          onPressed: onPressed);
-    }
 
     final pi = gFFI.ffiModel.pi;
     final isMac = pi.platform == kPeerPlatformMacOS;
@@ -832,8 +851,7 @@ class _RemotePageState extends State<RemotePage> {
     final space = size.width > 320 ? 4.0 : 2.0;
     return Container(
         color: Color(0xAA000000),
-        padding: EdgeInsets.only(
-            top: keyboard ? 24 : 4, left: 0, right: 0, bottom: 8),
+        padding: EdgeInsets.only(top: widget.requestShow ? 24 : 4, bottom: 8),
         child: Wrap(
           spacing: space,
           runSpacing: space,
