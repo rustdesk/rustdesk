@@ -650,7 +650,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                                   context, onChanged != null)),
                         ),
                       ],
-                    ).paddingSymmetric(horizontal: 10),
+                    ).paddingOnly(right: 10),
                     onTap: () => onChanged?.call(value),
                   ))
               .toList();
@@ -675,6 +675,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
             if (usePassword) radios[0],
             if (usePassword)
               _SubLabeledWidget(
+                  context,
                   'One-time password length',
                   Row(
                     children: [
@@ -756,9 +757,10 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
           controller.text = data['port'].toString();
           return Offstage(
             offstage: !enabled,
-            child: Row(children: [
-              _SubLabeledWidget(
-                'Port',
+            child: _SubLabeledWidget(
+              context,
+              'Port',
+              Row(children: [
                 SizedBox(
                   width: 80,
                   child: TextField(
@@ -772,28 +774,29 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                     textAlign: TextAlign.end,
                     decoration: const InputDecoration(
                       hintText: '21118',
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.only(right: 5),
+                      border: OutlineInputBorder(),
+                      contentPadding:
+                          EdgeInsets.only(bottom: 10, top: 10, right: 10),
                       isCollapsed: true,
                     ),
-                  ),
+                  ).marginOnly(right: 15),
                 ),
-                enabled: enabled && !locked,
-              ).marginOnly(left: 5),
-              Obx(() => ElevatedButton(
-                    onPressed: applyEnabled.value && enabled && !locked
-                        ? () async {
-                            applyEnabled.value = false;
-                            await bind.mainSetOption(
-                                key: 'direct-access-port',
-                                value: controller.text);
-                          }
-                        : null,
-                    child: Text(
-                      translate('Apply'),
-                    ),
-                  ).marginOnly(left: 20))
-            ]),
+                Obx(() => ElevatedButton(
+                      onPressed: applyEnabled.value && enabled && !locked
+                          ? () async {
+                              applyEnabled.value = false;
+                              await bind.mainSetOption(
+                                  key: 'direct-access-port',
+                                  value: controller.text);
+                            }
+                          : null,
+                      child: Text(
+                        translate('Apply'),
+                      ),
+                    ))
+              ]),
+              enabled: enabled && !locked,
+            ),
           );
         },
       ),
@@ -1614,43 +1617,18 @@ Widget _SubButton(String label, Function() onPressed, [bool enabled = true]) {
 }
 
 // ignore: non_constant_identifier_names
-Widget _SubLabeledWidget(String label, Widget child, {bool enabled = true}) {
-  RxBool hover = false.obs;
+Widget _SubLabeledWidget(BuildContext context, String label, Widget child,
+    {bool enabled = true}) {
   return Row(
     children: [
-      MouseRegion(
-          onEnter: (_) => hover.value = true,
-          onExit: (_) => hover.value = false,
-          child: Obx(
-            () {
-              return Container(
-                  height: 32,
-                  decoration: BoxDecoration(
-                      border: Border.all(
-                          color: hover.value && enabled
-                              ? const Color(0xFFD7D7D7)
-                              : const Color(0xFFCBCBCB),
-                          width: hover.value && enabled ? 2 : 1)),
-                  child: Row(
-                    children: [
-                      Container(
-                        height: 28,
-                        color: (hover.value && enabled)
-                            ? const Color(0xFFD7D7D7)
-                            : const Color(0xFFCBCBCB),
-                        alignment: Alignment.center,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 5, vertical: 2),
-                        child: Text(
-                          '${translate(label)}: ',
-                          style: const TextStyle(fontWeight: FontWeight.w300),
-                        ),
-                      ).paddingAll(2),
-                      child,
-                    ],
-                  ));
-            },
-          )),
+      Text(
+        '${translate(label)}: ',
+        style: TextStyle(color: _disabledTextColor(context, enabled)),
+      ),
+      SizedBox(
+        width: 10,
+      ),
+      child,
     ],
   ).marginOnly(left: _kContentHSubMargin);
 }
