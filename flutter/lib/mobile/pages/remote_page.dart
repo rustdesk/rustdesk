@@ -85,7 +85,6 @@ class _RemotePageState extends State<RemotePage> {
   }
 
   void onSoftKeyboardChanged(bool visible) {
-    inputModel.resetModifiers();
     if (!visible) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
       // [pi.version.isNotEmpty] -> check ready or not, avoid login without soft-keyboard
@@ -719,11 +718,12 @@ class KeyHelpTools extends StatefulWidget {
 class _KeyHelpToolsState extends State<KeyHelpTools> {
   var _more = true;
   var _fn = false;
+  var _pin = false;
 
   InputModel get inputModel => gFFI.inputModel;
 
   Widget wrap(String text, void Function() onPressed,
-      [bool? active, IconData? icon]) {
+      {bool? active, IconData? icon}) {
     return TextButton(
         style: TextButton.styleFrom(
           minimumSize: Size(0, 0),
@@ -737,7 +737,7 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
           backgroundColor: active == true ? MyTheme.accent80 : null,
         ),
         child: icon != null
-            ? Icon(icon, size: 17, color: Colors.white)
+            ? Icon(icon, size: 14, color: Colors.white)
             : Text(translate(text),
                 style: TextStyle(color: Colors.white, fontSize: 11)),
         onPressed: onPressed);
@@ -745,8 +745,13 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.requestShow) {
-      return SizedBox();
+    final hasModifierOn = inputModel.ctrl ||
+        inputModel.alt ||
+        inputModel.shift ||
+        inputModel.command;
+
+    if (!_pin && !hasModifierOn && !widget.requestShow) {
+      return Offstage();
     }
     final size = MediaQuery.of(context).size;
 
@@ -755,16 +760,16 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
     final modifiers = <Widget>[
       wrap('Ctrl ', () {
         setState(() => inputModel.ctrl = !inputModel.ctrl);
-      }, inputModel.ctrl),
+      }, active: inputModel.ctrl),
       wrap(' Alt ', () {
         setState(() => inputModel.alt = !inputModel.alt);
-      }, inputModel.alt),
+      }, active: inputModel.alt),
       wrap('Shift', () {
         setState(() => inputModel.shift = !inputModel.shift);
-      }, inputModel.shift),
+      }, active: inputModel.shift),
       wrap(isMac ? ' Cmd ' : ' Win ', () {
         setState(() => inputModel.command = !inputModel.command);
-      }, inputModel.command),
+      }, active: inputModel.command),
     ];
     final keys = <Widget>[
       wrap(
@@ -777,7 +782,14 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
                   }
                 },
               ),
-          _fn),
+          active: _fn),
+      wrap(
+          '',
+          () => setState(
+                () => _pin = !_pin,
+              ),
+          active: _pin,
+          icon: Icons.push_pin),
       wrap(
           ' ... ',
           () => setState(
@@ -788,7 +800,7 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
                   }
                 },
               ),
-          _more),
+          active: _more),
     ];
     final fn = <Widget>[
       SizedBox(width: 9999),
@@ -828,16 +840,16 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
       SizedBox(width: 9999),
       wrap('', () {
         inputModel.inputKey('VK_LEFT');
-      }, false, Icons.keyboard_arrow_left),
+      }, icon: Icons.keyboard_arrow_left),
       wrap('', () {
         inputModel.inputKey('VK_UP');
-      }, false, Icons.keyboard_arrow_up),
+      }, icon: Icons.keyboard_arrow_up),
       wrap('', () {
         inputModel.inputKey('VK_DOWN');
-      }, false, Icons.keyboard_arrow_down),
+      }, icon: Icons.keyboard_arrow_down),
       wrap('', () {
         inputModel.inputKey('VK_RIGHT');
-      }, false, Icons.keyboard_arrow_right),
+      }, icon: Icons.keyboard_arrow_right),
       wrap(isMac ? 'Cmd+C' : 'Ctrl+C', () {
         sendPrompt(isMac, 'VK_C');
       }),
