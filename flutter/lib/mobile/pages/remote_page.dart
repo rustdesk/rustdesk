@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/mobile/widgets/gesture_help.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
+import 'package:flutter_keyboard_visibility/flutter_keyboard_visibility.dart';
 import 'package:get/get_state_manager/src/rx_flutter/rx_obx_widget.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock/wakelock.dart';
@@ -33,10 +34,8 @@ class RemotePage extends StatefulWidget {
 }
 
 class _RemotePageState extends State<RemotePage> {
-  Timer? _interval;
   Timer? _timer;
   bool _showBar = !isWebDesktop;
-  double _bottom = 0;
   String _value = '';
   double _scale = 1;
   double _mouseScrollIntegral = 0; // mouse scroll speed controller
@@ -44,6 +43,8 @@ class _RemotePageState extends State<RemotePage> {
 
   var _more = true;
   var _fn = false;
+  late final keyboardVisibilityController = KeyboardVisibilityController();
+  late final StreamSubscription<bool> keyboardSubscription;
   final FocusNode _mobileFocusNode = FocusNode();
   final FocusNode _physicalFocusNode = FocusNode();
   var _showEdit = false; // use soft keyboard
@@ -58,14 +59,14 @@ class _RemotePageState extends State<RemotePage> {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
       gFFI.dialogManager
           .showLoading(translate('Connecting...'), onCancel: closeConnection);
-      _interval =
-          Timer.periodic(Duration(milliseconds: 30), (timer) => interval());
     });
     Wakelock.enable();
     _physicalFocusNode.requestFocus();
     gFFI.ffiModel.updateEventListener(widget.id);
     gFFI.inputModel.listenToMouse(true);
     gFFI.qualityMonitorModel.checkShowQualityMonitor(widget.id);
+    keyboardSubscription =
+        keyboardVisibilityController.onChange.listen(onSoftKeyboardChanged);
   }
 
   @override
@@ -76,47 +77,25 @@ class _RemotePageState extends State<RemotePage> {
     _mobileFocusNode.dispose();
     _physicalFocusNode.dispose();
     gFFI.close();
-    _interval?.cancel();
     _timer?.cancel();
     gFFI.dialogManager.dismissAll();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
         overlays: SystemUiOverlay.values);
     Wakelock.disable();
+    keyboardSubscription.cancel();
     super.dispose();
   }
 
-  void resetTool() {
+  void onSoftKeyboardChanged(bool visible) {
     inputModel.resetModifiers();
-  }
-
-  bool isKeyboardShown() {
-    return _bottom >= 100;
-  }
-
-  // crash on web before widget initiated.
-  void intervalUnsafe() {
-    var v = MediaQuery.of(context).viewInsets.bottom;
-    if (v != _bottom) {
-      resetTool();
-      setState(() {
-        _bottom = v;
-        if (v < 100) {
-          SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
-              overlays: []);
-          // [pi.version.isNotEmpty] -> check ready or not, avoid login without soft-keyboard
-          if (gFFI.chatModel.chatWindowOverlayEntry == null &&
-              gFFI.ffiModel.pi.version.isNotEmpty) {
-            gFFI.invokeMethod("enable_soft_keyboard", false);
-          }
-        }
-      });
+    if (!visible) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
+      // [pi.version.isNotEmpty] -> check ready or not, avoid login without soft-keyboard
+      if (gFFI.chatModel.chatWindowOverlayEntry == null &&
+          gFFI.ffiModel.pi.version.isNotEmpty) {
+        gFFI.invokeMethod("enable_soft_keyboard", false);
+      }
     }
-  }
-
-  void interval() {
-    try {
-      intervalUnsafe();
-    } catch (e) {}
   }
 
   // handle mobile virtual keyboard
@@ -219,8 +198,9 @@ class _RemotePageState extends State<RemotePage> {
   @override
   Widget build(BuildContext context) {
     final pi = Provider.of<FfiModel>(context).pi;
-    final hideKeyboard = isKeyboardShown() && _showEdit;
-    final showActionButton = !_showBar || hideKeyboard;
+    final isHideKeyboardFAB =
+        keyboardVisibilityController.isVisible && _showEdit;
+    final showActionButton = !_showBar || isHideKeyboardFAB;
     final keyboard = gFFI.ffiModel.permissions['keyboard'] != false;
 
     return WillPopScope(
@@ -230,21 +210,21 @@ class _RemotePageState extends State<RemotePage> {
       },
       child: getRawPointerAndKeyBody(Scaffold(
           // workaround for https://github.com/rustdesk/rustdesk/issues/3131
-          floatingActionButtonLocation: hideKeyboard
+          floatingActionButtonLocation: isHideKeyboardFAB
               ? FABLocation(FloatingActionButtonLocation.endFloat, 0, -35)
               : null,
           floatingActionButton: !showActionButton
               ? null
               : FloatingActionButton(
-                  mini: !hideKeyboard,
+                  mini: !isHideKeyboardFAB,
                   child: Icon(
-                    hideKeyboard ? Icons.expand_more : Icons.expand_less,
+                    isHideKeyboardFAB ? Icons.expand_more : Icons.expand_less,
                     color: Colors.white,
                   ),
                   backgroundColor: MyTheme.accent,
                   onPressed: () {
                     setState(() {
-                      if (hideKeyboard) {
+                      if (isHideKeyboardFAB) {
                         _showEdit = false;
                         gFFI.invokeMethod("enable_soft_keyboard", false);
                         _mobileFocusNode.unfocus();
@@ -725,7 +705,7 @@ class _RemotePageState extends State<RemotePage> {
   // }
 
   Widget getHelpTools() {
-    final keyboard = isKeyboardShown();
+    final keyboard = keyboardVisibilityController.isVisible;
     if (!keyboard) {
       return SizedBox();
     }
@@ -858,9 +838,10 @@ class _RemotePageState extends State<RemotePage> {
           spacing: space,
           runSpacing: space,
           children: <Widget>[SizedBox(width: 9999)] +
-              (keyboard
-                  ? modifiers + keys + (_fn ? fn : []) + (_more ? more : [])
-                  : modifiers),
+              modifiers +
+              keys +
+              (_fn ? fn : []) +
+              (_more ? more : []),
         ));
   }
 }
