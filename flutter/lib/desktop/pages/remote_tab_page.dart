@@ -70,6 +70,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           id: peerId,
           menubarState: _menubarState,
           switchUuid: params['switch_uuid'],
+          forceRelay: params['forceRelay'],
         ),
       ));
       _update_remote_count();
@@ -104,6 +105,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             id: id,
             menubarState: _menubarState,
             switchUuid: switchUuid,
+            forceRelay: args['forceRelay'],
           ),
         ));
       } else if (call.method == "onDestroy") {

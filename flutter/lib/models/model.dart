@@ -1339,7 +1339,8 @@ class FFI {
   void start(String id,
       {bool isFileTransfer = false,
       bool isPortForward = false,
-      String? switchUuid}) {
+      String? switchUuid,
+      bool? forceRelay}) {
     assert(!(isFileTransfer && isPortForward), 'more than one connect type');
     if (isFileTransfer) {
       connType = ConnType.fileTransfer;
@@ -1355,11 +1356,11 @@ class FFI {
     }
     // ignore: unused_local_variable
     final addRes = bind.sessionAddSync(
-      id: id,
-      isFileTransfer: isFileTransfer,
-      isPortForward: isPortForward,
-      switchUuid: switchUuid ?? "",
-    );
+        id: id,
+        isFileTransfer: isFileTransfer,
+        isPortForward: isPortForward,
+        switchUuid: switchUuid ?? "",
+        forceRelay: forceRelay ?? false);
     final stream = bind.sessionStart(id: id);
     final cb = ffiModel.startEventListener(id);
     () async {

@@ -1,3 +1,4 @@
+use crate::ui_session_interface::InvokeUiSession;
 use crate::{
     client::file_trait::FileManager,
     common::make_fd_to_json,
@@ -20,7 +21,6 @@ use std::{
     os::raw::c_char,
     str::FromStr,
 };
-use crate::ui_session_interface::InvokeUiSession;
 
 // use crate::hbbs_http::account::AuthResult;
 
@@ -84,8 +84,15 @@ pub fn session_add_sync(
     is_file_transfer: bool,
     is_port_forward: bool,
     switch_uuid: String,
+    force_relay: bool,
 ) -> SyncReturn<String> {
-    if let Err(e) = session_add(&id, is_file_transfer, is_port_forward, &switch_uuid) {
+    if let Err(e) = session_add(
+        &id,
+        is_file_transfer,
+        is_port_forward,
+        &switch_uuid,
+        force_relay,
+    ) {
         SyncReturn(format!("Failed to add session with id {}, {}", &id, e))
     } else {
         SyncReturn("".to_owned())

@@ -26,10 +26,12 @@ class _PortForward {
 }
 
 class PortForwardPage extends StatefulWidget {
-  const PortForwardPage({Key? key, required this.id, required this.isRDP})
+  const PortForwardPage(
+      {Key? key, required this.id, required this.isRDP, this.forceRelay})
       : super(key: key);
   final String id;
   final bool isRDP;
+  final bool? forceRelay;
 
   @override
   State<PortForwardPage> createState() => _PortForwardPageState();
@@ -47,7 +49,7 @@ class _PortForwardPageState extends State<PortForwardPage>
   void initState() {
     super.initState();
     _ffi = FFI();
-    _ffi.start(widget.id, isPortForward: true);
+    _ffi.start(widget.id, isPortForward: true, forceRelay: widget.forceRelay);
     Get.put(_ffi, tag: 'pf_${widget.id}');
     if (!Platform.isLinux) {
       Wakelock.enable();

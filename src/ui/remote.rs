@@ -1,24 +1,24 @@
+use std::sync::RwLock;
 use std::{
     collections::HashMap,
     ops::{Deref, DerefMut},
     sync::{Arc, Mutex},
 };
-use std::sync::RwLock;
 
 use sciter::{
     dom::{
-        Element,
-        event::{BEHAVIOR_EVENTS, EVENT_GROUPS, EventReason, PHASE_MASK}, HELEMENT,
+        event::{EventReason, BEHAVIOR_EVENTS, EVENT_GROUPS, PHASE_MASK},
+        Element, HELEMENT,
     },
     make_args,
+    video::{video_destination, AssetPtr, COLOR_SPACE},
     Value,
-    video::{AssetPtr, COLOR_SPACE, video_destination},
 };
 
+use hbb_common::tokio::io::AsyncReadExt;
 use hbb_common::{
     allow_err, fs::TransferJobMeta, log, message_proto::*, rendezvous_proto::ConnType,
 };
-use hbb_common::tokio::io::AsyncReadExt;
 
 use crate::{
     client::*,
@@ -286,7 +286,9 @@ impl InvokeUiSession for SciterHandler {
     }
 
     /// RGBA is directly rendered by [on_rgba]. No need to store the rgba for the sciter ui.
-    fn get_rgba(&self) -> *const u8  { std::ptr::null() }
+    fn get_rgba(&self) -> *const u8 {
+        std::ptr::null()
+    }
 
     fn next_rgba(&mut self) {}
 }
@@ -467,7 +469,11 @@ impl SciterSession {
             ConnType::DEFAULT_CONN
         };
 
-        session.lc.write().unwrap().initialize(id, conn_type, None);
+        session
+            .lc
+            .write()
+            .unwrap()
+            .initialize(id, conn_type, None, false);
 
         Self(session)
     }
