@@ -8,18 +8,31 @@ mod de;
 mod en;
 mod eo;
 mod es;
-mod hu;
 mod fr;
+mod hu;
 mod id;
 mod it;
+mod ja;
+mod ko;
 mod nl;
+mod pl;
 mod ptbr;
+mod ro;
 mod ru;
 mod sk;
 mod tr;
 mod tw;
 mod vn;
-mod pl;
+mod kz;
+mod ua;
+mod fa;
+mod ca;
+mod gr;
+mod sv;
+mod sq;
+mod sr;
+mod th;
+mod sl;
 
 lazy_static::lazy_static! {
     pub static ref LANGS: Value =
@@ -28,7 +41,7 @@ lazy_static::lazy_static! {
             ("it", "Italiano"),
             ("fr", "Français"),
             ("de", "Deutsch"),
-	    ("nl", "Nederlands"),
+	        ("nl", "Nederlands"),
             ("cn", "简体中文"),
             ("tw", "繁體中文"),
             ("pt", "Português"),
@@ -43,6 +56,19 @@ lazy_static::lazy_static! {
             ("tr", "Türkçe"),
             ("vn", "Tiếng Việt"),
             ("pl", "Polski"),
+            ("ja", "日本語"),
+            ("ko", "한국어"),
+            ("kz", "Қазақ"),
+            ("ua", "Українська"),
+            ("fa", "فارسی"),
+            ("ca", "Català"),
+            ("gr", "Ελληνικά"),
+            ("sv", "Svenska"),
+            ("sq", "Shqip"),
+            ("sr", "Srpski"),
+            ("th", "ภาษาไทย"),
+            ("sl", "Slovenščina"),
+            ("ro", "Română"),
         ]);
 }
 
@@ -71,9 +97,9 @@ pub fn translate_locale(name: String, locale: &str) -> String {
     let lang = lang.to_lowercase();
     let m = match lang.as_str() {
         "fr" => fr::T.deref(),
-	"nl" => nl::T.deref(),    
         "cn" => cn::T.deref(),
         "it" => it::T.deref(),
+        "nl" => nl::T.deref(),
         "tw" => tw::T.deref(),
         "de" => de::T.deref(),
         "es" => es::T.deref(),
@@ -90,16 +116,31 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "sk" => sk::T.deref(),
         "vn" => vn::T.deref(),
         "pl" => pl::T.deref(),
+        "ja" => ja::T.deref(),
+        "ko" => ko::T.deref(),
+        "kz" => kz::T.deref(),
+        "ua" => ua::T.deref(),
+        "fa" => fa::T.deref(),
+        "ca" => ca::T.deref(),
+        "gr" => gr::T.deref(),
+        "sv" => sv::T.deref(),
+        "sq" => sq::T.deref(),
+        "sr" => sr::T.deref(),
+        "th" => th::T.deref(),
+        "sl" => sl::T.deref(),
+        "ro" => ro::T.deref(),
         _ => en::T.deref(),
     };
     if let Some(v) = m.get(&name as &str) {
-        v.to_string()
-    } else {
-        if lang != "en" {
-            if let Some(v) = en::T.get(&name as &str) {
-                return v.to_string();
+        if v.is_empty() {
+            if lang != "en" {
+                if let Some(v) = en::T.get(&name as &str) {
+                    return v.to_string();
+                }
             }
+        } else {
+            return v.to_string();
         }
-        name
     }
+    name
 }
