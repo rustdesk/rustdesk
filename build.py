@@ -322,7 +322,6 @@ def build_flutter_dmg(version, features):
     os.system('sed -i "" "s/char \*\*rustdesk_core_main(int \*args_len);//" flutter/macos/Runner/bridge_generated.h')
     os.chdir('flutter')
     os.system('flutter build macos --release')
-    os.system('mv ./build/macos/Build/Products/Release/RustDesk.app/Contents/MacOS/RustDesk ./build/macos/Build/Products/Release/RustDesk.app/Contents/MacOS/rustdesk')
     os.system(
         "create-dmg rustdesk.dmg ./build/macos/Build/Products/Release/RustDesk.app")
     os.rename("rustdesk.dmg", f"../rustdesk-{version}.dmg")
