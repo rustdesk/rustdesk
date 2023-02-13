@@ -3,7 +3,7 @@ use crate::{
     flutter_ffi::EventToUI,
     ui_session_interface::{io_loop, InvokeUiSession, Session},
 };
-use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
+use flutter_rust_bridge::{StreamSink};
 use hbb_common::{
     bail, config::LocalConfig, get_version_number, message_proto::*, rendezvous_proto::ConnType,
     ResultType,
@@ -15,6 +15,7 @@ use std::{
     os::raw::{c_char, c_int},
     sync::{Arc, RwLock},
 };
+use std::sync::atomic::{AtomicBool, Ordering};
 
 pub(super) const APP_TYPE_MAIN: &str = "main";
 pub(super) const APP_TYPE_CM: &str = "cm";
@@ -110,6 +111,10 @@ pub unsafe extern "C" fn free_c_args(ptr: *mut *mut c_char, len: c_int) {
 #[derive(Default, Clone)]
 pub struct FlutterHandler {
     pub event_stream: Arc<RwLock<Option<StreamSink<EventToUI>>>>,
+    // SAFETY: [rgba] is guarded by [rgba_valid], and it's safe to reach [rgba] with `rgba_valid == true`.
+    // We must check the `rgba_valid` before reading [rgba].
+    pub rgba: Arc<RwLock<Vec<u8>>>,
+    pub rgba_valid: Arc<AtomicBool>
 }
 
 impl FlutterHandler {
@@ -288,9 +293,17 @@ impl InvokeUiSession for FlutterHandler {
     // unused in flutter
     fn adapt_size(&self) {}
 
-    fn on_rgba(&self, data: &[u8]) {
+    fn on_rgba(&self, data: &mut Vec<u8>) {
+        // If the current rgba is not fetched by flutter, i.e., is valid.
+        // We give up sending a new event to flutter.
+        if self.rgba_valid.load(Ordering::Relaxed) {
+            return;
+        }
+        self.rgba_valid.store(true, Ordering::Relaxed);
+        // Return the rgba buffer to the video handler for reusing allocated rgba buffer.
+        std::mem::swap::<Vec<u8>>(data, &mut *self.rgba.write().unwrap());
         if let Some(stream) = &*self.event_stream.read().unwrap() {
-            stream.add(EventToUI::Rgba(ZeroCopyBuffer(data.to_owned())));
+            stream.add(EventToUI::Rgba);
         }
     }
 
@@ -408,6 +421,19 @@ impl InvokeUiSession for FlutterHandler {
 
     fn on_voice_call_incoming(&self) {
         self.push_event("on_voice_call_incoming", [].into());
+    }
+
+    #[inline]
+    fn get_rgba(&self) -> *const u8 {
+        if self.rgba_valid.load(Ordering::Relaxed) {
+            return self.rgba.read().unwrap().as_ptr();
+        }
+        std::ptr::null_mut()
+    }
+
+    #[inline]
+    fn next_rgba(&mut self) {
+        self.rgba_valid.store(false, Ordering::Relaxed);
     }
 }
 
@@ -633,5 +659,37 @@ pub fn get_cur_session_id() -> String {
 pub fn set_cur_session_id(id: String) {
     if get_cur_session_id() != id {
         *CUR_SESSION_ID.write().unwrap() = id;
+    }
+}
+
+#[no_mangle]
+pub fn session_get_rgba_size(id: *const char) -> usize {
+    let id = unsafe { std::ffi::CStr::from_ptr(id as _) };
+    if let Ok(id) = id.to_str() {
+        if let Some(session) = SESSIONS.write().unwrap().get_mut(id) {
+           return session.rgba.read().unwrap().len();
+        }
+    }
+    0
+}
+
+#[no_mangle]
+pub fn session_get_rgba(id: *const char) -> *const u8 {
+    let id = unsafe { std::ffi::CStr::from_ptr(id as _) };
+    if let Ok(id) = id.to_str() {
+        if let Some(session) = SESSIONS.write().unwrap().get_mut(id) {
+            return session.get_rgba();
+        }
+    }
+    std::ptr::null()
+}
+
+#[no_mangle]
+pub fn session_next_rgba(id: *const char) {
+    let id = unsafe { std::ffi::CStr::from_ptr(id as _) };
+    if let Ok(id) = id.to_str() {
+        if let Some(session) = SESSIONS.write().unwrap().get_mut(id) {
+            return session.next_rgba();
+        }
     }
 }

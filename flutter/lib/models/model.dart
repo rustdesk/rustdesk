@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ffi' hide Size;
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:ffi/ffi.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/consts.dart';
@@ -415,8 +417,6 @@ class ImageModel with ChangeNotifier {
 
   String id = '';
 
-  int decodeCount = 0;
-
   WeakReference<FFI> parent;
 
   final List<Function(String)> _callbacksOnFirstImage = [];
@@ -437,20 +437,16 @@ class ImageModel with ChangeNotifier {
       }
     }
 
-    if (decodeCount >= 1) {
-      return;
-    }
-
     final pid = parent.target?.id;
-    decodeCount += 1;
     ui.decodeImageFromPixels(
         rgba,
         parent.target?.ffiModel.display.width ?? 0,
         parent.target?.ffiModel.display.height ?? 0,
         isWeb ? ui.PixelFormat.rgba8888 : ui.PixelFormat.bgra8888, (image) {
-      decodeCount -= 1;
       if (parent.target?.id != pid) return;
       try {
+        // Unlock the rgba memory from rust codes.
+        platformFFI.nextRgba(id);
         // my throw exception, because the listener maybe already dispose
         update(image);
       } catch (e) {
@@ -1367,6 +1363,7 @@ class FFI {
     final stream = bind.sessionStart(id: id);
     final cb = ffiModel.startEventListener(id);
     () async {
+      // Preserved for the rgba data.
       await for (final message in stream) {
         if (message is EventToUI_Event) {
           try {
@@ -1376,7 +1373,15 @@ class FFI {
             debugPrint('json.decode fail1(): $e, ${message.field0}');
           }
         } else if (message is EventToUI_Rgba) {
-          imageModel.onRgba(message.field0);
+          // Fetch the image buffer from rust codes.
+          final sz = platformFFI.getRgbaSize(id);
+          if (sz == null || sz == 0) {
+            return;
+          }
+          final rgba = platformFFI.getRgba(id, sz);
+          if (rgba != null) {
+            imageModel.onRgba(rgba);
+          }
         }
       }
     }();

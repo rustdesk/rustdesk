@@ -9,6 +9,7 @@ import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:get/get.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:win32/win32.dart' as win32;
@@ -23,7 +24,11 @@ class RgbaFrame extends Struct {
 }
 
 typedef F2 = Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>);
-typedef F3 = void Function(Pointer<Utf8>, Pointer<Utf8>);
+typedef F3 = Pointer<Uint8> Function(Pointer<Utf8>);
+typedef F4 = Uint64 Function(Pointer<Utf8>);
+typedef F4Dart = int Function(Pointer<Utf8>);
+typedef F5 = Void Function(Pointer<Utf8>);
+typedef F5Dart = void Function(Pointer<Utf8>);
 typedef HandleEvent = Future<void> Function(Map<String, dynamic> evt);
 
 /// FFI wrapper around the native Rust core.
@@ -44,6 +49,9 @@ class PlatformFFI {
   final _toAndroidChannel = const MethodChannel('mChannel');
 
   RustdeskImpl get ffiBind => _ffiBind;
+  F3? _session_get_rgba;
+  F4Dart? _session_get_rgba_size;
+  F5Dart? _session_next_rgba;
 
   static get localeName => Platform.localeName;
 
@@ -92,6 +100,36 @@ class PlatformFFI {
     return res;
   }
 
+  Uint8List? getRgba(String id, int bufSize) {
+    if (_session_get_rgba == null) return null;
+    var a = id.toNativeUtf8();
+    try {
+      final buffer = _session_get_rgba!(a);
+      if (buffer == nullptr) {
+        return null;
+      }
+      final data = buffer.asTypedList(bufSize);
+      return data;
+    } finally {
+      malloc.free(a);
+    }
+  }
+
+  int? getRgbaSize(String id) {
+    if (_session_get_rgba_size == null) return null;
+    var a = id.toNativeUtf8();
+    final bufferSize = _session_get_rgba_size!(a);
+    malloc.free(a);
+    return bufferSize;
+  }
+
+  void nextRgba(String id) {
+    if (_session_next_rgba == null) return;
+    final a = id.toNativeUtf8();
+    _session_next_rgba!(a);
+    malloc.free(a);
+  }
+
   /// Init the FFI class, loads the native Rust core library.
   Future<void> init(String appType) async {
     _appType = appType;
@@ -107,6 +145,11 @@ class PlatformFFI {
     debugPrint('initializing FFI $_appType');
     try {
       _translate = dylib.lookupFunction<F2, F2>('translate');
+      _session_get_rgba = dylib.lookupFunction<F3, F3>("session_get_rgba");
+      _session_get_rgba_size =
+          dylib.lookupFunction<F4, F4Dart>("session_get_rgba_size");
+      _session_next_rgba =
+          dylib.lookupFunction<F5, F5Dart>("session_next_rgba");
       try {
         // SYSTEM user failed
         _dir = (await getApplicationDocumentsDirectory()).path;

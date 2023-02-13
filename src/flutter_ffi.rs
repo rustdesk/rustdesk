@@ -20,6 +20,7 @@ use std::{
     os::raw::c_char,
     str::FromStr,
 };
+use crate::ui_session_interface::InvokeUiSession;
 
 // use crate::hbbs_http::account::AuthResult;
 
@@ -47,7 +48,7 @@ fn initialize(app_dir: &str) {
 
 pub enum EventToUI {
     Event(String),
-    Rgba(ZeroCopyBuffer<Vec<u8>>),
+    Rgba,
 }
 
 pub fn start_global_event_stream(s: StreamSink<String>, app_type: String) -> ResultType<()> {
