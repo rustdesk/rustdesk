@@ -785,34 +785,9 @@ fn is_hot_key_modifiers_down() -> bool {
     return false;
 }
 
-pub fn translate_virtual_keycode(event: &Event, mut key_event: KeyEvent) -> Option<KeyEvent> {
-    match event.event_type {
-        EventType::KeyPress(..) => {
-            key_event.down = true;
-        }
-        EventType::KeyRelease(..) => {
-            key_event.down = false;
-        }
-        _ => return None,
-    };
-
-    let mut peer = get_peer_platform().to_lowercase();
-    peer.retain(|c| !c.is_whitespace());
-
-    // #[cfg(target_os = "windows")]
-    // let keycode = match peer.as_str() {
-    //     "windows" => event.code,
-    //     "macos" => {
-    //         if hbb_common::config::LocalConfig::get_kb_layout_type() == "ISO" {
-    //             rdev::win_scancode_to_macos_iso_code(event.scan_code)?
-    //         } else {
-    //             rdev::win_scancode_to_macos_code(event.scan_code)?
-    //         }
-    //     }
-    //     _ => rdev::win_scancode_to_linux_code(event.scan_code)?,
-    // };
-
-    key_event.set_chr(event.code as _);
+pub fn translate_vk_scan_code(event: &Event, mut key_event: KeyEvent) -> Option<KeyEvent> {
+    let mut key_event = map_keyboard_mode(event, key_event)?;
+    key_event.set_chr((key_event.chr() & 0x0000FFFF) | ((event.code as u32) << 16));
     Some(key_event)
 }
 
@@ -853,7 +828,7 @@ pub fn translate_keyboard_mode(event: &Event, key_event: KeyEvent) -> Vec<KeyEve
     try_fill_unicode(event, &key_event, &mut events);
 
     if events.is_empty() {
-        if let Some(evt) = translate_virtual_keycode(event, key_event) {
+        if let Some(evt) = translate_vk_scan_code(event, key_event) {
             events.push(evt);
         }
     }

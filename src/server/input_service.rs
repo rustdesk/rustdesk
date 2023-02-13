@@ -1089,10 +1089,6 @@ fn translate_process_virtual_keycode(vk: u32, down: bool) {
 
 fn translate_keyboard_mode(evt: &KeyEvent) {
     match evt.union {
-        Some(key_event::Union::Unicode(_unicode)) => {
-            #[cfg(target_os = "windows")]
-            allow_err!(rdev::simulate_unicode(_unicode as _));
-        }
         Some(key_event::Union::Seq(seq)) => {
             ENIGO.lock().unwrap().key_sequence(&seq);
         }
@@ -1100,6 +1096,9 @@ fn translate_keyboard_mode(evt: &KeyEvent) {
         {
             #[cfg(target_os = "windows")]
             translate_process_virtual_keycode(evt.chr(), evt.down)
+        }
+        Some(key_event::Union::Unicode(..)) => {
+            // Do not handle unicode for now.
         }
         _ => {
             log::debug!("Unreachable. Unexpected key event {:?}", &evt);
