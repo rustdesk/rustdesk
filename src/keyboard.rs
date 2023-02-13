@@ -787,6 +787,7 @@ fn is_hot_key_modifiers_down() -> bool {
 
 pub fn translate_vk_scan_code(event: &Event, mut key_event: KeyEvent) -> Option<KeyEvent> {
     let mut key_event = map_keyboard_mode(event, key_event)?;
+    #[cfg(target_os = "windows")]
     key_event.set_chr((key_event.chr() & 0x0000FFFF) | ((event.code as u32) << 16));
     Some(key_event)
 }
