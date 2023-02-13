@@ -75,6 +75,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           scrollController: _leftPaneScrollController,
           child: SingleChildScrollView(
             controller: _leftPaneScrollController,
+            physics: DraggableNeverScrollableScrollPhysics(),
             child: Column(
               children: [
                 buildTip(context),

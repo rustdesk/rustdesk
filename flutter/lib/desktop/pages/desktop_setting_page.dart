@@ -128,7 +128,7 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
                   scrollController: controller,
                   child: PageView(
                     controller: controller,
-                    physics: NeverScrollableScrollPhysics(),
+                    physics: DraggableNeverScrollableScrollPhysics(),
                     children: const [
                       _General(),
                       _Safety(),
@@ -170,7 +170,7 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
     return DesktopScrollWrapper(
         scrollController: scrollController,
         child: ListView(
-          physics: NeverScrollableScrollPhysics(),
+          physics: DraggableNeverScrollableScrollPhysics(),
           controller: scrollController,
           children: tabs
               .asMap()
@@ -234,7 +234,7 @@ class _GeneralState extends State<_General> {
     return DesktopScrollWrapper(
         scrollController: scrollController,
         child: ListView(
-          physics: NeverScrollableScrollPhysics(),
+          physics: DraggableNeverScrollableScrollPhysics(),
           controller: scrollController,
           children: [
             theme(),
@@ -456,7 +456,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     return DesktopScrollWrapper(
         scrollController: scrollController,
         child: SingleChildScrollView(
-            physics: NeverScrollableScrollPhysics(),
+            physics: DraggableNeverScrollableScrollPhysics(),
             controller: scrollController,
             child: Column(
               children: [
@@ -908,7 +908,7 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
         scrollController: scrollController,
         child: ListView(
             controller: scrollController,
-            physics: NeverScrollableScrollPhysics(),
+            physics: DraggableNeverScrollableScrollPhysics(),
             children: [
               _lock(locked, 'Unlock Network Settings', () {
                 locked = false;
@@ -1094,7 +1094,7 @@ class _DisplayState extends State<_Display> {
         scrollController: scrollController,
         child: ListView(
             controller: scrollController,
-            physics: NeverScrollableScrollPhysics(),
+            physics: DraggableNeverScrollableScrollPhysics(),
             children: [
               viewStyle(context),
               scrollStyle(context),
@@ -1334,7 +1334,7 @@ class _AccountState extends State<_Account> {
     return DesktopScrollWrapper(
         scrollController: scrollController,
         child: ListView(
-          physics: NeverScrollableScrollPhysics(),
+          physics: DraggableNeverScrollableScrollPhysics(),
           controller: scrollController,
           children: [
             _Card(title: 'Account', children: [accountAction()]),
@@ -1378,7 +1378,7 @@ class _AboutState extends State<_About> {
           scrollController: scrollController,
           child: SingleChildScrollView(
             controller: scrollController,
-            physics: NeverScrollableScrollPhysics(),
+            physics: DraggableNeverScrollableScrollPhysics(),
             child: _Card(title: '${translate('About')} RustDesk', children: [
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
