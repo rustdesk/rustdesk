@@ -120,7 +120,7 @@ class _ConnectionPageState extends State<ConnectionPage>
             scrollController: _scrollController,
             child: CustomScrollView(
               controller: _scrollController,
-              physics: NeverScrollableScrollPhysics(),
+              physics: DraggableNeverScrollableScrollPhysics(),
               slivers: [
                 SliverList(
                     delegate: SliverChildListDelegate([
