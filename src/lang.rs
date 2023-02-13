@@ -41,7 +41,7 @@ lazy_static::lazy_static! {
             ("it", "Italiano"),
             ("fr", "Français"),
             ("de", "Deutsch"),
-	        ("nl", "Nederlands"),
+	    ("nl", "Nederlands"),
             ("cn", "简体中文"),
             ("tw", "繁體中文"),
             ("pt", "Português"),
