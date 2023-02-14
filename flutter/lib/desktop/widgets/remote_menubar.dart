@@ -1517,7 +1517,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
               }
               var text = translate(mode.menu);
               if (mode.key == 'translate') {
-                text = '$text beta legacy 2';
+                text = '$text beta';
               }
               list.add(MenuEntryRadioOption(text: text, value: mode.key));
             }
