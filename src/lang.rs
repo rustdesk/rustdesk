@@ -81,7 +81,7 @@ pub fn translate_locale(name: String, locale: &str) -> String {
     if lang.is_empty() {
         // zh_CN on Linux, zh-Hans-CN on mac, zh_CN_#Hans on Android
         if locale.starts_with("zh") {
-            lang = (if locale.contains("TW") { "tw" } else { "cn" }).to_owned();
+            lang = (if locale.contains("tw") { "tw" } else { "cn" }).to_owned();
         }
     }
     if lang.is_empty() {
