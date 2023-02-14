@@ -1515,8 +1515,11 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                   continue;
                 }
               }
-              list.add(MenuEntryRadioOption(
-                  text: translate(mode.menu), value: mode.key));
+              var text = translate(mode.menu);
+              if (mode.key == 'translate') {
+                text = '$text beta legacy 2';
+              }
+              list.add(MenuEntryRadioOption(text: text, value: mode.key));
             }
           }
           return list;
