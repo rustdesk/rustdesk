@@ -1084,8 +1084,6 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
 #[cfg(target_os = "windows")]
 fn translate_process_code(code: u32, down: bool) {
     crate::platform::windows::try_change_desktop();
-    let vk_code = 
-
     match code >> 16 {
         0 => sim_rdev_rawkey_position(code, down),
         vk_code => sim_rdev_rawkey_virtual(vk_code, down),

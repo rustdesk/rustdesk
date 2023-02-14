@@ -806,8 +806,8 @@ fn is_hot_key_modifiers_down() -> bool {
 
 #[inline]
 #[cfg(target_os = "windows")]
-pub fn translate_key_code(event: &Event, mut key_event: KeyEvent) -> Option<KeyEvent> {
-    let mut key_event = map_keyboard_mode(event, key_event)?;
+pub fn translate_key_code(peer: &str, event: &Event, key_event: KeyEvent) -> Option<KeyEvent> {
+    let mut key_event = map_keyboard_mode(peer, event, key_event)?;
     key_event.set_chr((key_event.chr() & 0x0000FFFF) | ((event.code as u32) << 16));
     Some(key_event)
 }
