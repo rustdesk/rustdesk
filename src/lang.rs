@@ -14,6 +14,7 @@ mod id;
 mod it;
 mod ja;
 mod ko;
+mod nl;
 mod pl;
 mod ptbr;
 mod ro;
@@ -40,6 +41,7 @@ lazy_static::lazy_static! {
             ("it", "Italiano"),
             ("fr", "Français"),
             ("de", "Deutsch"),
+            ("nl", "Nederlands"),
             ("cn", "简体中文"),
             ("tw", "繁體中文"),
             ("pt", "Português"),
@@ -99,6 +101,7 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "it" => it::T.deref(),
         "tw" => tw::T.deref(),
         "de" => de::T.deref(),
+        "nl" => nl::T.deref(),
         "es" => es::T.deref(),
         "hu" => hu::T.deref(),
         "ru" => ru::T.deref(),
