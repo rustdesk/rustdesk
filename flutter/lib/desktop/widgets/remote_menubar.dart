@@ -405,9 +405,10 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
 
   Widget _buildMenubar(BuildContext context) {
     final List<Widget> menubarItems = [];
+    final double iconSize = Theme.of(context).iconTheme.size ?? 30.0;
     if (!isWebDesktop) {
-      menubarItems.add(_buildPinMenubar(context));
-      menubarItems.add(_buildFullscreen(context));
+      menubarItems.add(_buildPinMenubar(context, iconSize));
+      menubarItems.add(_buildFullscreen(context, iconSize));
       if (widget.ffi.ffiModel.isPeerAndroid) {
         menubarItems.add(IconButton(
           tooltip: translate('Mobile Actions'),
@@ -420,77 +421,84 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         ));
       }
     }
-    menubarItems.add(_buildMonitor(context));
-    menubarItems.add(_buildControl(context));
-    menubarItems.add(_buildDisplay(context));
-    menubarItems.add(_buildKeyboard(context));
+    menubarItems.add(_buildMonitor(context, iconSize));
+    menubarItems.add(_buildControl(context, iconSize));
+    menubarItems.add(_buildDisplay(context, iconSize));
+    menubarItems.add(_buildKeyboard(context, iconSize));
     if (!isWeb) {
-      menubarItems.add(_buildChat(context));
-      menubarItems.add(_buildVoiceCall(context));
+      menubarItems.add(_buildChat(context, iconSize));
+      menubarItems.add(_buildVoiceCall(context, iconSize));
     }
-    menubarItems.add(_buildRecording(context));
-    menubarItems.add(_buildClose(context));
+    menubarItems.add(_buildRecording(context, iconSize));
+    menubarItems.add(_buildClose(context, iconSize));
     return PopupMenuTheme(
-        data: const PopupMenuThemeData(
-            textStyle: TextStyle(color: _MenubarTheme.commonColor)),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
+      data: const PopupMenuThemeData(
+          textStyle: TextStyle(color: _MenubarTheme.commonColor)),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
           Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border.all(color: MyTheme.border),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(
+                bottom: Radius.circular(10),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: menubarItems,
-              )),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: menubarItems,
+            ),
+          ),
           _buildDraggableShowHide(context),
-        ]));
+        ],
+      ),
+    );
   }
 
-  Widget _buildPinMenubar(BuildContext context) {
-    return Obx(() => IconButton(
-          tooltip: translate(pin ? 'Unpin menubar' : 'Pin menubar'),
-          onPressed: () {
-            widget.state.switchPin();
-          },
-          icon: Obx(() => Transform.rotate(
-              angle: pin ? math.pi / 4 : 0,
-              child: Icon(
-                Icons.push_pin,
-                color: pin ? _MenubarTheme.commonColor : Colors.grey,
-              ))),
-        ));
+  Widget _buildPinMenubar(BuildContext context, double iconSize) {
+    return Obx(
+      () => IconButton(
+        padding: EdgeInsets.zero,
+        iconSize: iconSize,
+        tooltip: translate(pin ? 'Unpin menubar' : 'Pin menubar'),
+        onPressed: () {
+          widget.state.switchPin();
+        },
+        icon: SvgPicture.asset(
+          pin ? "assets/pinned.svg" : "assets/unpinned.svg",
+          color: pin ? _MenubarTheme.commonColor : Colors.grey[800],
+        ),
+      ),
+    );
   }
 
-  Widget _buildFullscreen(BuildContext context) {
+  Widget _buildFullscreen(BuildContext context, double iconSize) {
     return IconButton(
+      padding: EdgeInsets.zero,
+      iconSize: iconSize,
       tooltip: translate(isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'),
       onPressed: () {
         _setFullscreen(!isFullscreen);
       },
-      icon: isFullscreen
-          ? const Icon(
-              Icons.fullscreen_exit,
-              color: _MenubarTheme.commonColor,
-            )
-          : const Icon(
-              Icons.fullscreen,
-              color: _MenubarTheme.commonColor,
-            ),
+      icon: SvgPicture.asset(
+        isFullscreen ? "assets/fullscreen_exit.svg" : "assets/fullscreen.svg",
+        color: _MenubarTheme.commonColor,
+      ),
     );
   }
 
-  Widget _buildMonitor(BuildContext context) {
+  Widget _buildMonitor(BuildContext context, double iconSize) {
     final pi = widget.ffi.ffiModel.pi;
     return mod_menu.PopupMenuButton(
+      iconSize: iconSize,
       tooltip: translate('Select Monitor'),
       padding: EdgeInsets.zero,
       position: mod_menu.PopupMenuPosition.under,
       icon: Stack(
         alignment: Alignment.center,
         children: [
-          const Icon(
-            Icons.personal_video,
+          SvgPicture.asset(
+            "assets/display.svg",
             color: _MenubarTheme.commonColor,
           ),
           Padding(
@@ -499,8 +507,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
               RxInt display = CurrentDisplayState.find(widget.id);
               return Text(
                 '${display.value + 1}/${pi.displays.length}',
-                style: const TextStyle(
-                    color: _MenubarTheme.commonColor, fontSize: 8),
+                style: const TextStyle(color: Colors.white, fontSize: 8),
               );
             }),
           )
@@ -513,23 +520,22 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             Stack(
               alignment: Alignment.center,
               children: [
-                const Icon(
-                  Icons.personal_video,
-                  color: _MenubarTheme.commonColor,
-                ),
+                SvgPicture.asset("assets/display.svg"),
                 TextButton(
                   child: Container(
-                      alignment: AlignmentDirectional.center,
-                      constraints:
-                          const BoxConstraints(minHeight: _MenubarTheme.height),
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 2.5),
-                        child: Text(
-                          (i + 1).toString(),
-                          style:
-                              const TextStyle(color: _MenubarTheme.commonColor),
+                    alignment: AlignmentDirectional.center,
+                    constraints:
+                        const BoxConstraints(minHeight: _MenubarTheme.height),
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 2.5),
+                      child: Text(
+                        (i + 1).toString(),
+                        style: TextStyle(
+                          color: Theme.of(context).scaffoldBackgroundColor,
                         ),
-                      )),
+                      ),
+                    ),
+                  ),
                   onPressed: () {
                     if (Navigator.canPop(context)) {
                       Navigator.pop(context);
@@ -561,11 +567,12 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     );
   }
 
-  Widget _buildControl(BuildContext context) {
+  Widget _buildControl(BuildContext context, double iconSize) {
     return mod_menu.PopupMenuButton(
+      iconSize: iconSize,
       padding: EdgeInsets.zero,
-      icon: const Icon(
-        Icons.bolt,
+      icon: SvgPicture.asset(
+        "assets/actions.svg",
         color: _MenubarTheme.commonColor,
       ),
       tooltip: translate('Control Actions'),
@@ -583,7 +590,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     );
   }
 
-  Widget _buildDisplay(BuildContext context) {
+  Widget _buildDisplay(BuildContext context, double iconSize) {
     return FutureBuilder(future: () async {
       widget.state.viewStyle.value =
           await bind.sessionGetViewStyle(id: widget.id) ?? '';
@@ -595,9 +602,10 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         return Obx(() {
           final remoteCount = RemoteCountState.find().value;
           return mod_menu.PopupMenuButton(
+            iconSize: iconSize,
             padding: EdgeInsets.zero,
-            icon: const Icon(
-              Icons.tv,
+            icon: SvgPicture.asset(
+              "assets/display.svg",
               color: _MenubarTheme.commonColor,
             ),
             tooltip: translate('Display Settings'),
@@ -622,15 +630,16 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     });
   }
 
-  Widget _buildKeyboard(BuildContext context) {
+  Widget _buildKeyboard(BuildContext context, double iconSize) {
     FfiModel ffiModel = Provider.of<FfiModel>(context);
     if (ffiModel.permissions['keyboard'] == false) {
       return Offstage();
     }
     return mod_menu.PopupMenuButton(
+      iconSize: iconSize,
       padding: EdgeInsets.zero,
-      icon: const Icon(
-        Icons.keyboard,
+      icon: SvgPicture.asset(
+        "assets/keyboard.svg",
         color: _MenubarTheme.commonColor,
       ),
       tooltip: translate('Keyboard Settings'),
@@ -648,57 +657,54 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     );
   }
 
-  Widget _buildRecording(BuildContext context) {
+  Widget _buildRecording(BuildContext context, double iconSize) {
     return Consumer<FfiModel>(builder: ((context, value, child) {
       if (value.permissions['recording'] != false) {
         return Consumer<RecordingModel>(
-            builder: (context, value, child) => IconButton(
-                  tooltip: value.start
-                      ? translate('Stop session recording')
-                      : translate('Start session recording'),
-                  onPressed: () => value.toggle(),
-                  icon: value.start
-                      ? Icon(
-                          Icons.pause_circle_filled,
-                          color: _MenubarTheme.commonColor,
-                        )
-                      : SvgPicture.asset(
-                          "assets/record_screen.svg",
-                          color: _MenubarTheme.commonColor,
-                          width: Theme.of(context).iconTheme.size ?? 22.0,
-                          height: Theme.of(context).iconTheme.size ?? 22.0,
-                        ),
-                ));
+          builder: (context, value, child) => IconButton(
+            padding: EdgeInsets.zero,
+            iconSize: iconSize,
+            tooltip: value.start
+                ? translate('Stop session recording')
+                : translate('Start session recording'),
+            onPressed: () => value.toggle(),
+            icon: SvgPicture.asset(
+              "assets/rec.svg",
+              color: value.start ? Colors.red : _MenubarTheme.commonColor,
+            ),
+          ),
+        );
       } else {
         return Offstage();
       }
     }));
   }
 
-  Widget _buildClose(BuildContext context) {
+  Widget _buildClose(BuildContext context, double iconSize) {
     return IconButton(
+      iconSize: iconSize,
+      padding: EdgeInsets.zero,
       tooltip: translate('Close'),
       onPressed: () {
         clientClose(widget.id, widget.ffi.dialogManager);
       },
-      icon: const Icon(
-        Icons.close,
-        color: _MenubarTheme.commonColor,
+      icon: SvgPicture.asset(
+        "assets/close.svg",
+        color: Colors.red,
       ),
     );
   }
 
   final _chatButtonKey = GlobalKey();
-  Widget _buildChat(BuildContext context) {
+  Widget _buildChat(BuildContext context, double iconSize) {
     FfiModel ffiModel = Provider.of<FfiModel>(context);
     return mod_menu.PopupMenuButton(
+      iconSize: iconSize,
       key: _chatButtonKey,
       padding: EdgeInsets.zero,
       icon: SvgPicture.asset(
         "assets/chat.svg",
         color: _MenubarTheme.commonColor,
-        width: Theme.of(context).iconTheme.size ?? 24.0,
-        height: Theme.of(context).iconTheme.size ?? 24.0,
       ),
       tooltip: translate('Chat'),
       position: mod_menu.PopupMenuPosition.under,
@@ -719,15 +725,14 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     switch (widget.ffi.chatModel.voiceCallStatus.value) {
       case VoiceCallStatus.waitingForResponse:
         return IconButton(
-            onPressed: () {
-              widget.ffi.chatModel.closeVoiceCall(widget.id);
-            },
-            icon: SvgPicture.asset(
-              "assets/voice_call_waiting.svg",
-              color: Colors.red,
-              width: Theme.of(context).iconTheme.size ?? 20.0,
-              height: Theme.of(context).iconTheme.size ?? 20.0,
-            ));
+          onPressed: () {
+            widget.ffi.chatModel.closeVoiceCall(widget.id);
+          },
+          icon: SvgPicture.asset(
+            "assets/voice_call_waiting.svg",
+            color: Colors.red,
+          ),
+        );
       case VoiceCallStatus.connected:
         return IconButton(
           onPressed: () {
@@ -736,7 +741,6 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           icon: Icon(
             Icons.phone_disabled_rounded,
             color: Colors.red,
-            size: Theme.of(context).iconTheme.size ?? 22.0,
           ),
         );
       default:
@@ -755,13 +759,14 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     }
   }
 
-  Widget _buildVoiceCall(BuildContext context) {
+  Widget _buildVoiceCall(BuildContext context, double iconSize) {
     return Obx(
       () {
         final tooltipText = _getVoiceCallTooltip();
         return tooltipText == null
             ? const Offstage()
             : IconButton(
+                iconSize: iconSize,
                 padding: EdgeInsets.zero,
                 icon: _getVoiceCallIcon(),
                 tooltip: translate(tooltipText),
@@ -1748,7 +1753,7 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
       child: Icon(
         Icons.drag_indicator,
         size: 20,
-        color: Colors.grey,
+        color: Colors.grey[800],
       ),
       feedback: widget,
       onDragStarted: (() {
@@ -1801,7 +1806,9 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
-          border: Border.all(color: MyTheme.border),
+          borderRadius: BorderRadius.vertical(
+            bottom: Radius.circular(5),
+          ),
         ),
         child: SizedBox(
           height: 20,
