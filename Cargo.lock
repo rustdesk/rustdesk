@@ -4554,12 +4554,13 @@ dependencies = [
 [[package]]
 name = "rdev"
 version = "0.5.0-2"
-source = "git+https://github.com/fufesou/rdev#cedc4e62744566775026af4b434ef799804c1130"
+source = "git+https://github.com/fufesou/rdev#593f0ba37139ed6f4f88a4120e972612ec4b1c6f"
 dependencies = [
  "cocoa",
  "core-foundation 0.9.3",
  "core-foundation-sys 0.8.3",
  "core-graphics 0.22.3",
+ "dispatch",
  "enum-map",
  "epoll",
  "inotify",

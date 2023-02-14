@@ -18,6 +18,13 @@ use std::{
 #[cfg(windows)]
 static mut IS_ALT_GR: bool = false;
 
+#[allow(dead_code)]
+const OS_LOWER_WINDOWS: &str = "windows";
+#[allow(dead_code)]
+const OS_LOWER_LINUX: &str = "linux";
+#[allow(dead_code)]
+const OS_LOWER_MACOS: &str = "macos";
+
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
 
@@ -202,6 +209,9 @@ pub fn update_grab_get_key_name() {
 #[cfg(target_os = "windows")]
 static mut IS_0X021D_DOWN: bool = false;
 
+#[cfg(target_os = "macos")]
+static mut IS_LEFT_OPTION_DOWN: bool = false;
+
 pub fn start_grab_loop() {
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     std::thread::spawn(move || {
@@ -213,6 +223,7 @@ pub fn start_grab_loop() {
 
             let mut _keyboard_mode = KeyboardMode::Map;
             let _scan_code = event.scan_code;
+            let _code = event.code;
             let res = if KEYBOARD_HOOKED.load(Ordering::SeqCst) {
                 _keyboard_mode = client::process_event(&event, None);
                 if is_press {
@@ -246,6 +257,13 @@ pub fn start_grab_loop() {
                 }
             }
 
+            #[cfg(target_os = "macos")]
+            unsafe {
+                if _code as u32 == rdev::kVK_Option {
+                    IS_LEFT_OPTION_DOWN = is_press;
+                }
+            }
+
             return res;
         };
         let func = move |event: Event| match event.event_type {
@@ -253,11 +271,13 @@ pub fn start_grab_loop() {
             EventType::KeyRelease(key) => try_handle_keyboard(event, key, false),
             _ => Some(event),
         };
+        #[cfg(target_os = "macos")]
+        rdev::set_is_main_thread(false);
+        #[cfg(target_os = "windows")]
+        rdev::set_event_popup(false);
         if let Err(error) = rdev::grab(func) {
             log::error!("rdev Error: {:?}", error)
         }
-        #[cfg(target_os = "windows")]
-        rdev::set_event_popup(false);
     });
 
     #[cfg(target_os = "linux")]
@@ -395,13 +415,16 @@ pub fn event_to_key_events(
         _ => {}
     }
 
+    let mut peer = get_peer_platform().to_lowercase();
+    peer.retain(|c| !c.is_whitespace());
+
     key_event.mode = keyboard_mode.into();
     let mut key_events = match keyboard_mode {
-        KeyboardMode::Map => match map_keyboard_mode(event, key_event) {
+        KeyboardMode::Map => match map_keyboard_mode(peer.as_str(), event, key_event) {
             Some(event) => [event].to_vec(),
             None => Vec::new(),
         },
-        KeyboardMode::Translate => translate_keyboard_mode(event, key_event),
+        KeyboardMode::Translate => translate_keyboard_mode(peer.as_str(), event, key_event),
         _ => {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {
@@ -424,7 +447,6 @@ pub fn event_to_key_events(
             }
         }
     }
-
     key_events
 }
 
@@ -698,7 +720,7 @@ pub fn legacy_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Vec<KeyEv
     events
 }
 
-pub fn map_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Option<KeyEvent> {
+pub fn map_keyboard_mode(peer: &str, event: &Event, mut key_event: KeyEvent) -> Option<KeyEvent> {
     match event.event_type {
         EventType::KeyPress(..) => {
             key_event.down = true;
@@ -709,12 +731,9 @@ pub fn map_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Option<KeyEv
         _ => return None,
     };
 
-    let mut peer = get_peer_platform().to_lowercase();
-    peer.retain(|c| !c.is_whitespace());
-
     #[cfg(target_os = "windows")]
-    let keycode = match peer.as_str() {
-        "windows" => {
+    let keycode = match peer {
+        OS_LOWER_WINDOWS => {
             // https://github.com/rustdesk/rustdesk/issues/1371
             // Filter scancodes that are greater than 255 and the hight word is not 0xE0.
             if event.scan_code > 255 && (event.scan_code >> 8) != 0xE0 {
@@ -722,7 +741,7 @@ pub fn map_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Option<KeyEv
             }
             event.scan_code
         }
-        "macos" => {
+        OS_LOWER_MACOS => {
             if hbb_common::config::LocalConfig::get_kb_layout_type() == "ISO" {
                 rdev::win_scancode_to_macos_iso_code(event.scan_code)?
             } else {
@@ -732,15 +751,15 @@ pub fn map_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Option<KeyEv
         _ => rdev::win_scancode_to_linux_code(event.scan_code)?,
     };
     #[cfg(target_os = "macos")]
-    let keycode = match peer.as_str() {
-        "windows" => rdev::macos_code_to_win_scancode(event.code as _)?,
-        "macos" => event.code as _,
+    let keycode = match peer {
+        OS_LOWER_WINDOWS => rdev::macos_code_to_win_scancode(event.code as _)?,
+        OS_LOWER_MACOS => event.code as _,
         _ => rdev::macos_code_to_linux_code(event.code as _)?,
     };
     #[cfg(target_os = "linux")]
-    let keycode = match peer.as_str() {
-        "windows" => rdev::linux_code_to_win_scancode(event.code as _)?,
-        "macos" => {
+    let keycode = match peer {
+        OS_LOWER_WINDOWS => rdev::linux_code_to_win_scancode(event.code as _)?,
+        OS_LOWER_MACOS => {
             if hbb_common::config::LocalConfig::get_kb_layout_type() == "ISO" {
                 rdev::linux_code_to_macos_iso_code(event.code as _)?
             } else {
@@ -759,10 +778,10 @@ pub fn map_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Option<KeyEv
 fn try_fill_unicode(event: &Event, key_event: &KeyEvent, events: &mut Vec<KeyEvent>) {
     match &event.unicode {
         Some(unicode_info) => {
-            if let Some(name) = unicode_info.name {
+            if let Some(name) = &unicode_info.name {
                 if name.len() > 0 {
                     let mut evt = key_event.clone();
-                    evt.set_seq(name);
+                    evt.set_seq(name.to_string());
                     events.push(evt);
                 }
             }
@@ -785,19 +804,40 @@ fn is_hot_key_modifiers_down() -> bool {
     return false;
 }
 
-pub fn translate_vk_scan_code(event: &Event, mut key_event: KeyEvent) -> Option<KeyEvent> {
+#[inline]
+#[cfg(target_os = "windows")]
+pub fn translate_key_code(event: &Event, mut key_event: KeyEvent) -> Option<KeyEvent> {
     let mut key_event = map_keyboard_mode(event, key_event)?;
-    #[cfg(target_os = "windows")]
     key_event.set_chr((key_event.chr() & 0x0000FFFF) | ((event.code as u32) << 16));
     Some(key_event)
 }
 
-pub fn translate_keyboard_mode(event: &Event, key_event: KeyEvent) -> Vec<KeyEvent> {
+#[inline]
+#[cfg(not(target_os = "windows"))]
+pub fn translate_key_code(peer: &str, event: &Event, key_event: KeyEvent) -> Option<KeyEvent> {
+    map_keyboard_mode(peer, event, key_event)
+}
+
+pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -> Vec<KeyEvent> {
     let mut events: Vec<KeyEvent> = Vec::new();
     if let Some(unicode_info) = &event.unicode {
         if unicode_info.is_dead {
+            #[cfg(target_os = "macos")]
+            if peer != OS_LOWER_MACOS && unsafe { IS_LEFT_OPTION_DOWN } {
+                // try clear dead key state
+                // rdev::clear_dead_key_state();
+            } else {
+                return events;
+            }
+            #[cfg(not(target_os = "macos"))]
             return events;
         }
+    }
+
+    #[cfg(target_os = "macos")]
+    // ignore right option key
+    if event.code as u32 == rdev::kVK_RightOption {
+        return events;
     }
 
     #[cfg(target_os = "windows")]
@@ -825,11 +865,16 @@ pub fn translate_keyboard_mode(event: &Event, key_event: KeyEvent) -> Vec<KeyEve
         }
     }
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "linux")]
     try_fill_unicode(event, &key_event, &mut events);
 
+    #[cfg(target_os = "macos")]
+    if !unsafe { IS_LEFT_OPTION_DOWN } {
+        try_fill_unicode(event, &key_event, &mut events);
+    }
+
     if events.is_empty() {
-        if let Some(evt) = translate_vk_scan_code(event, key_event) {
+        if let Some(evt) = translate_key_code(peer, event, key_event) {
             events.push(evt);
         }
     }

@@ -1093,16 +1093,16 @@ fn translate_process_code(code: u32, down: bool) {
 }
 
 fn translate_keyboard_mode(evt: &KeyEvent) {
-    match evt.union {
+    match &evt.union {
         Some(key_event::Union::Seq(seq)) => {
-            ENIGO.lock().unwrap().key_sequence(&seq);
+            ENIGO.lock().unwrap().key_sequence(seq);
         }
         Some(key_event::Union::Chr(..)) =>
         {
             #[cfg(target_os = "windows")]
             translate_process_code(evt.chr(), evt.down);
             #[cfg(not(target_os = "windows"))]
-            sim_rdev_rawkey_position(code, down);
+            sim_rdev_rawkey_position(evt.chr(), evt.down);
         }
         Some(key_event::Union::Unicode(..)) => {
             // Do not handle unicode for now.

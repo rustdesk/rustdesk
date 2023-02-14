@@ -1510,8 +1510,8 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             if (bind.sessionIsKeyboardModeSupported(
                 id: widget.id, mode: mode.key)) {
               if (mode.key == 'translate') {
-                if (!Platform.isWindows ||
-                    widget.ffi.ffiModel.pi.platform != kPeerPlatformWindows) {
+                if (Platform.isLinux ||
+                    widget.ffi.ffiModel.pi.platform == kPeerPlatformLinux) {
                   continue;
                 }
               }
