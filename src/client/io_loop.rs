@@ -25,9 +25,8 @@ use hbb_common::{allow_err, get_time, message_proto::*, sleep};
 use hbb_common::{fs, log, Stream};
 
 use crate::client::{
-    new_voice_call_request, Client, CodecFormat, MediaData, MediaSender,
-    QualityStatus, MILLI1, SEC30, SERVER_CLIPBOARD_ENABLED, SERVER_FILE_TRANSFER_ENABLED,
-    SERVER_KEYBOARD_ENABLED,
+    new_voice_call_request, Client, CodecFormat, MediaData, MediaSender, QualityStatus, MILLI1,
+    SEC30, SERVER_CLIPBOARD_ENABLED, SERVER_FILE_TRANSFER_ENABLED, SERVER_KEYBOARD_ENABLED,
 };
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::common::{check_clipboard, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL};
@@ -148,7 +147,15 @@ impl<T: InvokeUiSession> Remote<T> {
                                     Err(err) => {
                                         log::error!("Connection closed: {}", err);
                                         self.handler.set_force_relay(direct, received);
-                                        self.handler.msgbox("error", "Connection Error", &err.to_string(), "");
+                                        let msgtype = "error";
+                                        let title = "Connection Error";
+                                        let text = err.to_string();
+                                        let show_relay_hint = self.handler.show_relay_hint(last_recv_time, msgtype, title, &text);
+                                        if show_relay_hint{
+                                            self.handler.msgbox("relay-hint", title, &text, "");
+                                        } else {
+                                            self.handler.msgbox(msgtype, title, &text, "");
+                                        }
                                         break;
                                     }
                                     Ok(ref bytes) => {
@@ -754,7 +761,8 @@ impl<T: InvokeUiSession> Remote<T> {
             Data::CloseVoiceCall => {
                 self.stop_voice_call();
                 let msg = new_voice_call_request(false);
-                self.handler.on_voice_call_closed("Closed manually by the peer");
+                self.handler
+                    .on_voice_call_closed("Closed manually by the peer");
                 allow_err!(peer.send(&msg).await);
             }
             _ => {}

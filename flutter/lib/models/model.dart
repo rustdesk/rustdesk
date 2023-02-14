@@ -298,6 +298,8 @@ class FfiModel with ChangeNotifier {
       showWaitUacDialog(id, dialogManager, type);
     } else if (type == 'elevation-error') {
       showElevationError(id, type, title, text, dialogManager);
+    } else if (type == "relay-hint") {
+      showRelayHintDialog(id, type, title, text, dialogManager);
     } else {
       var hasRetry = evt['hasRetry'] == 'true';
       showMsgBox(id, type, title, text, link, hasRetry, dialogManager);
@@ -312,7 +314,7 @@ class FfiModel with ChangeNotifier {
     _timer?.cancel();
     if (hasRetry) {
       _timer = Timer(Duration(seconds: _reconnects), () {
-        bind.sessionReconnect(id: id);
+        bind.sessionReconnect(id: id, forceRelay: false);
         clearPermissions();
         dialogManager.showLoading(translate('Connecting...'),
             onCancel: closeConnection);
@@ -321,6 +323,44 @@ class FfiModel with ChangeNotifier {
     } else {
       _reconnects = 1;
     }
+  }
+
+  void showRelayHintDialog(String id, String type, String title, String text,
+      OverlayDialogManager dialogManager) {
+    dialogManager.show(tag: '$id-$type', (setState, close) {
+      onClose() {
+        closeConnection();
+        close();
+      }
+
+      reconnect(bool forceRelay) {
+        bind.sessionReconnect(id: id, forceRelay: forceRelay);
+        clearPermissions();
+        dialogManager.showLoading(translate('Connecting...'),
+            onCancel: closeConnection);
+      }
+
+      final style =
+          ElevatedButton.styleFrom(backgroundColor: Colors.green[700]);
+      return CustomAlertDialog(
+        title: null,
+        content: msgboxContent(type, title,
+            "${translate(text)}\n\n${translate('relay_hint_tip')}"),
+        actions: [
+          dialogButton('Close', onPressed: onClose, isOutline: true),
+          dialogButton('Retry', onPressed: () => reconnect(false)),
+          dialogButton('Connect via relay',
+              onPressed: () => reconnect(true), buttonStyle: style),
+          dialogButton('Always connect via relay', onPressed: () {
+            const option = 'force-always-relay';
+            bind.sessionPeerOption(
+                id: id, name: option, value: bool2option(option, true));
+            reconnect(true);
+          }, buttonStyle: style),
+        ],
+        onCancel: onClose,
+      );
+    });
   }
 
   /// Handle the peer info event based on [evt].

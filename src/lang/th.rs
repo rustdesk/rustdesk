@@ -209,7 +209,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Closed manually by the peer", "ถูกปิดโดยอีกฝั่งการการเชื่อมต่อ"),
         ("Enable remote configuration modification", "เปิดการใช้งานการแก้ไขการตั้งค่าปลายทาง"),
         ("Run without install", "ใช้งานโดยไม่ต้องติดตั้ง"),
-        ("Always connected via relay", "เชื่อมต่อผ่านรีเลย์เสมอ"),
+        ("Connect via relay", ""),
         ("Always connect via relay", "เชื่อมต่อผ่านรีเลย์เสมอ"),
         ("whitelist_tip", "อนุญาตเฉพาะการเชื่อมต่อจาก IP ที่ไวท์ลิสต์"),
         ("Login", "เข้าสู่ระบบ"),
@@ -449,5 +449,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Voice call", ""),
         ("Text chat", ""),
         ("Stop voice call", ""),
+        ("relay_hint_tip", ""),
     ].iter().cloned().collect();
 }

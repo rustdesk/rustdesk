@@ -916,6 +916,8 @@ pub struct LoginConfigHandler {
     pub direct: Option<bool>,
     pub received: bool,
     switch_uuid: Option<String>,
+    pub success_time: Option<hbb_common::tokio::time::Instant>,
+    pub direct_error_counter: usize,
 }
 
 impl Deref for LoginConfigHandler {
@@ -962,6 +964,8 @@ impl LoginConfigHandler {
         self.direct = None;
         self.received = false;
         self.switch_uuid = switch_uuid;
+        self.success_time = None;
+        self.direct_error_counter = 0;
     }
 
     /// Check if the client should auto login.

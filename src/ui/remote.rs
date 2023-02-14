@@ -1,4 +1,3 @@
-use std::sync::RwLock;
 use std::{
     collections::HashMap,
     ops::{Deref, DerefMut},
@@ -15,7 +14,6 @@ use sciter::{
     Value,
 };
 
-use hbb_common::tokio::io::AsyncReadExt;
 use hbb_common::{
     allow_err, fs::TransferJobMeta, log, message_proto::*, rendezvous_proto::ConnType,
 };
@@ -348,7 +346,7 @@ impl sciter::EventHandler for SciterSession {
                     let site = AssetPtr::adopt(ptr as *mut video_destination);
                     log::debug!("[video] start video");
                     *VIDEO.lock().unwrap() = Some(site);
-                    self.reconnect();
+                    self.reconnect(false);
                 }
             }
             BEHAVIOR_EVENTS::VIDEO_INITIALIZED => {
@@ -397,7 +395,7 @@ impl sciter::EventHandler for SciterSession {
         fn transfer_file();
         fn tunnel();
         fn lock_screen();
-        fn reconnect();
+        fn reconnect(bool);
         fn get_chatbox();
         fn get_icon();
         fn get_home_dir();

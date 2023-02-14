@@ -209,7 +209,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Closed manually by the peer", "A kapcsolatot a másik fél manuálisan bezárta"),
         ("Enable remote configuration modification", "Távoli konfiguráció módosítás engedélyezése"),
         ("Run without install", "Futtatás feltelepítés nélkül"),
-        ("Always connected via relay", "Mindig közvetítőn keresztül csatlakozik"),
+        ("Connect via relay", ""),
         ("Always connect via relay", "Mindig közvetítőn keresztüli csatlakozás"),
         ("whitelist_tip", "Csak az engedélyezési listán szereplő címek csatlakozhatnak"),
         ("Login", "Belépés"),
@@ -449,5 +449,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Voice call", ""),
         ("Text chat", ""),
         ("Stop voice call", ""),
+        ("relay_hint_tip", ""),
     ].iter().cloned().collect();
 }

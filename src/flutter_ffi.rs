@@ -1,4 +1,3 @@
-use crate::ui_session_interface::InvokeUiSession;
 use crate::{
     client::file_trait::FileManager,
     common::make_fd_to_json,
@@ -7,7 +6,7 @@ use crate::{
     flutter::{session_add, session_start_},
     ui_interface::{self, *},
 };
-use flutter_rust_bridge::{StreamSink, SyncReturn, ZeroCopyBuffer};
+use flutter_rust_bridge::{StreamSink, SyncReturn};
 use hbb_common::{
     config::{self, LocalConfig, PeerConfig, ONLINE},
     fs, log,
@@ -157,9 +156,9 @@ pub fn session_record_screen(id: String, start: bool, width: usize, height: usiz
     }
 }
 
-pub fn session_reconnect(id: String) {
+pub fn session_reconnect(id: String, force_relay: bool) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.reconnect();
+        session.reconnect(force_relay);
     }
 }
 
