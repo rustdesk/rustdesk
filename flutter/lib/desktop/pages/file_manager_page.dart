@@ -236,10 +236,7 @@ class _FileManagerPageState extends State<FileManagerPage>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: SingleChildScrollView(
-                  controller: scrollController,
-                  child: _buildDataTable(context, isLocal, scrollController),
-                ),
+                child: _buildFileList(context, isLocal, scrollController),
               )
             ],
           )),
@@ -248,25 +245,11 @@ class _FileManagerPageState extends State<FileManagerPage>
     );
   }
 
-  Widget _buildDataTable(
+  Widget _buildFileList(
       BuildContext context, bool isLocal, ScrollController scrollController) {
-    const rowHeight = 25.0;
     final fd = model.getCurrentDir(isLocal);
     final entries = fd.entries;
-    final sortIndex = (SortBy style) {
-      switch (style) {
-        case SortBy.name:
-          return 0;
-        case SortBy.type:
-          return 0;
-        case SortBy.modified:
-          return 1;
-        case SortBy.size:
-          return 2;
-      }
-    }(model.getSortStyle(isLocal));
-    final sortAscending =
-        isLocal ? model.localSortAscending : model.remoteSortAscending;
+    final selectedEntries = getSelectedItems(isLocal);
 
     return MouseRegion(
       onEnter: (evt) {
@@ -287,7 +270,6 @@ class _FileManagerPageState extends State<FileManagerPage>
         onNext: (buffer) {
           debugPrint("searching next for $buffer");
           assert(buffer.length == 1);
-          final selectedEntries = getSelectedItems(isLocal);
           assert(selectedEntries.length <= 1);
           var skipCount = 0;
           if (selectedEntries.items.isNotEmpty) {
@@ -312,7 +294,8 @@ class _FileManagerPageState extends State<FileManagerPage>
             return;
           }
           _jumpToEntry(
-              isLocal, searchResult.first, scrollController, rowHeight, buffer);
+              isLocal, searchResult.first, scrollController,
+              kDesktopFileTransferRowHeight, buffer);
         },
         onSearch: (buffer) {
           debugPrint("searching for $buffer");
@@ -327,7 +310,8 @@ class _FileManagerPageState extends State<FileManagerPage>
             return;
           }
           _jumpToEntry(
-              isLocal, searchResult.first, scrollController, rowHeight, buffer);
+              isLocal, searchResult.first, scrollController,
+              kDesktopFileTransferRowHeight, buffer);
         },
         child: ObxValue<RxString>(
           (searchText) {
@@ -336,118 +320,120 @@ class _FileManagerPageState extends State<FileManagerPage>
                     return element.name.contains(searchText.value);
                   }).toList(growable: false)
                 : entries;
-            return DataTable(
-              key: ValueKey(isLocal ? 0 : 1),
-              showCheckboxColumn: false,
-              dataRowHeight: rowHeight,
-              headingRowHeight: 30,
-              horizontalMargin: 8,
-              columnSpacing: 8,
-              showBottomBorder: true,
-              sortColumnIndex: sortIndex,
-              sortAscending: sortAscending,
-              columns: [
-                DataColumn(
-                    label: Text(
-                      translate("Name"),
-                    ).marginSymmetric(horizontal: 4),
-                    onSort: (columnIndex, ascending) {
-                      model.changeSortStyle(SortBy.name,
-                          isLocal: isLocal, ascending: ascending);
-                    }),
-                DataColumn(
-                    label: Text(
-                      translate("Modified"),
-                    ),
-                    onSort: (columnIndex, ascending) {
-                      model.changeSortStyle(SortBy.modified,
-                          isLocal: isLocal, ascending: ascending);
-                    }),
-                DataColumn(
-                    label: Text(translate("Size")),
-                    onSort: (columnIndex, ascending) {
-                      model.changeSortStyle(SortBy.size,
-                          isLocal: isLocal, ascending: ascending);
-                    }),
-              ],
-              rows: filteredEntries.map((entry) {
+            final rows = filteredEntries.map((entry) {
                 final sizeStr =
                     entry.isFile ? readableFileSize(entry.size.toDouble()) : "";
                 final lastModifiedStr = entry.isDrive
                     ? " "
                     : "${entry.lastModified().toString().replaceAll(".000", "")}   ";
-                return DataRow(
-                    key: ValueKey(entry.name),
-                    onSelectChanged: (s) {
-                      _onSelectedChanged(getSelectedItems(isLocal),
-                          filteredEntries, entry, isLocal);
-                    },
-                    selected: getSelectedItems(isLocal).contains(entry),
-                    cells: [
-                      DataCell(
-                        Container(
-                            width: 200,
-                            child: Tooltip(
-                              waitDuration: Duration(milliseconds: 500),
-                              message: entry.name,
-                              child: Row(children: [
-                                entry.isDrive
-                                    ? Image(
-                                            image: iconHardDrive,
-                                            fit: BoxFit.scaleDown,
-                                            color: Theme.of(context)
-                                                .iconTheme
-                                                .color
-                                                ?.withOpacity(0.7))
-                                        .paddingAll(4)
-                                    : Icon(
-                                        entry.isFile
-                                            ? Icons.feed_outlined
-                                            : Icons.folder,
-                                        size: 20,
-                                        color: Theme.of(context)
-                                            .iconTheme
-                                            .color
-                                            ?.withOpacity(0.7),
-                                      ).marginSymmetric(horizontal: 2),
-                                Expanded(
-                                    child: Text(entry.name,
-                                        overflow: TextOverflow.ellipsis))
-                              ]),
+              final isSelected = selectedEntries.contains(entry);
+              return SizedBox(
+                key: ValueKey(entry.name),
+                height: kDesktopFileTransferRowHeight,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    const Divider(
+                      height: 1,
+                    ),
+                    Expanded(
+                      child: Ink(
+                        decoration: isSelected
+                            ? BoxDecoration(color: Theme.of(context).hoverColor)
+                            : null,
+                        child: InkWell(
+                          child: Row(children: [
+                            GestureDetector(
+                              child: Container(
+                                  width: kDesktopFileTransferNameColWidth,
+                                  child: Tooltip(
+                                    waitDuration: Duration(milliseconds: 500),
+                                    message: entry.name,
+                                    child: Row(children: [
+                                      entry.isDrive
+                                          ? Image(
+                                                  image: iconHardDrive,
+                                                  fit: BoxFit.scaleDown,
+                                                  color: Theme.of(context)
+                                                      .iconTheme
+                                                      .color
+                                                      ?.withOpacity(0.7))
+                                              .paddingAll(4)
+                                          : Icon(
+                                              entry.isFile
+                                                  ? Icons.feed_outlined
+                                                  : Icons.folder,
+                                              size: 20,
+                                              color: Theme.of(context)
+                                                  .iconTheme
+                                                  .color
+                                                  ?.withOpacity(0.7),
+                                            ).marginSymmetric(horizontal: 2),
+                                      Expanded(
+                                          child: Text(entry.name.nonBreaking,
+                                              overflow: TextOverflow.ellipsis))
+                                    ]),
+                                  )),
+                              onTap: () {
+                                final items = getSelectedItems(isLocal);
+                                // handle double click
+                                if (_checkDoubleClick(entry)) {
+                                  openDirectory(entry.path, isLocal: isLocal);
+                                  items.clear();
+                                  return;
+                                }
+                                _onSelectedChanged(
+                                    items, filteredEntries, entry, isLocal);
+                              },
+                            ),
+                            GestureDetector(
+                                child: SizedBox(
+                              width: kDesktopFileTransferModifiedColWidth,
+                              child: Tooltip(
+                                  waitDuration: Duration(milliseconds: 500),
+                                  message: lastModifiedStr,
+                                  child: Text(
+                                    lastModifiedStr,
+                                    style: TextStyle(
+                                        fontSize: 12, color: MyTheme.darkGray),
+                                  )),
                             )),
-                        onTap: () {
-                          final items = getSelectedItems(isLocal);
-
-                          // handle double click
-                          if (_checkDoubleClick(entry)) {
-                            openDirectory(entry.path, isLocal: isLocal);
-                            items.clear();
-                            return;
-                          }
-                          _onSelectedChanged(
-                              items, filteredEntries, entry, isLocal);
-                        },
+                            GestureDetector(
+                                child: Tooltip(
+                                    waitDuration: Duration(milliseconds: 500),
+                                    message: sizeStr,
+                                    child: Text(
+                                      sizeStr,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                          fontSize: 10,
+                                          color: MyTheme.darkGray),
+                                    ))),
+                          ]),
+                        ),
                       ),
-                      DataCell(FittedBox(
-                          child: Tooltip(
-                              waitDuration: Duration(milliseconds: 500),
-                              message: lastModifiedStr,
-                              child: Text(
-                                lastModifiedStr,
-                                style: TextStyle(
-                                    fontSize: 12, color: MyTheme.darkGray),
-                              )))),
-                      DataCell(Tooltip(
-                          waitDuration: Duration(milliseconds: 500),
-                          message: sizeStr,
-                          child: Text(
-                            sizeStr,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                                fontSize: 10, color: MyTheme.darkGray),
-                          ))),
-                    ]);
-              }).toList(growable: false),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(growable: false);
+
+            return Column(
+              children: [
+                // Header
+                _buildFileBrowserHeader(context, isLocal),
+                // Body
+                Expanded(
+                  child: ListView.builder(
+                    controller: scrollController,
+                    itemExtent: kDesktopFileTransferRowHeight,
+                    itemBuilder: (context, index) {
+                      return rows[index];
+                    },
+                    itemCount: rows.length,
+                  ),
+                ),
+              ],
             );
           },
           isLocal ? _searchTextLocal : _searchTextRemote,
@@ -1132,5 +1118,61 @@ class _FileManagerPageState extends State<FileManagerPage>
         _keyboardNodeRemote.requestFocus();
       }
     });
+  }
+
+  Widget headerItemFunc(
+      double? width, SortBy sortBy, String name, bool isLocal) {
+    final headerTextStyle =
+        Theme.of(context).dataTableTheme.headingTextStyle ?? TextStyle();
+    return ObxValue<Rx<bool?>>(
+        (ascending) => InkWell(
+              onTap: () {
+                if (ascending.value == null) {
+                  ascending.value = true;
+                } else {
+                  ascending.value = !ascending.value!;
+                }
+                model.changeSortStyle(sortBy,
+                    isLocal: isLocal, ascending: ascending.value!);
+              },
+              child: SizedBox(
+                width: width,
+                height: kDesktopFileTransferHeaderHeight,
+                child: Row(
+                  children: [
+                    Text(
+                      name,
+                      style: headerTextStyle,
+                    ).marginSymmetric(
+                        horizontal: sortBy == SortBy.name ? 4 : 0.0),
+                    ascending.value != null
+                        ? Icon(ascending.value!
+                            ? Icons.arrow_upward
+                            : Icons.arrow_downward)
+                        : const Offstage()
+                  ],
+                ),
+              ),
+            ), () {
+      if (model.getSortStyle(isLocal) == sortBy) {
+        return model.getSortAscending(isLocal).obs;
+      } else {
+        return Rx<bool?>(null);
+      }
+    }());
+  }
+
+  Widget _buildFileBrowserHeader(BuildContext context, bool isLocal) {
+    return Row(
+      children: [
+        headerItemFunc(kDesktopFileTransferNameColWidth, SortBy.name,
+            translate("Name"), isLocal),
+        headerItemFunc(kDesktopFileTransferModifiedColWidth, SortBy.modified,
+            translate("Modified"), isLocal),
+        Expanded(
+            child:
+                headerItemFunc(null, SortBy.size, translate("Size"), isLocal))
+      ],
+    );
   }
 }

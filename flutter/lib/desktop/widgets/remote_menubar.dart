@@ -447,13 +447,16 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                 bottom: Radius.circular(10),
               ),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(width: 2.5),
-                ...menubarItems,
-                SizedBox(width: 2.5)
-              ],
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(width: 2.5),
+                  ...menubarItems,
+                  SizedBox(width: 2.5)
+                ],
+              ),
             ),
           ),
           _buildDraggableShowHide(context),
@@ -1513,13 +1516,16 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             if (bind.sessionIsKeyboardModeSupported(
                 id: widget.id, mode: mode.key)) {
               if (mode.key == 'translate') {
-                if (!Platform.isWindows ||
-                    widget.ffi.ffiModel.pi.platform != kPeerPlatformWindows) {
+                if (Platform.isLinux ||
+                    widget.ffi.ffiModel.pi.platform == kPeerPlatformLinux) {
                   continue;
                 }
               }
-              list.add(MenuEntryRadioOption(
-                  text: translate(mode.menu), value: mode.key));
+              var text = translate(mode.menu);
+              if (mode.key == 'translate') {
+                text = '$text beta';
+              }
+              list.add(MenuEntryRadioOption(text: text, value: mode.key));
             }
           }
           return list;

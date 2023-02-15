@@ -719,7 +719,7 @@ fn reset_input() {
         let _lock = VIRTUAL_INPUT_MTX.lock();
         VIRTUAL_INPUT = VirtualInput::new(
             CGEventSourceStateID::Private,
-            CGEventTapLocation::AnnotatedSession,
+            CGEventTapLocation::Session,
         )
         .ok();
     }
@@ -1082,21 +1082,28 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
 }
 
 #[cfg(target_os = "windows")]
-fn translate_process_virtual_keycode(vk: u32, down: bool) {
+fn translate_process_code(code: u32, down: bool) {
     crate::platform::windows::try_change_desktop();
-    sim_rdev_rawkey_virtual(vk, down);
+    match code >> 16 {
+        0 => sim_rdev_rawkey_position(code, down),
+        vk_code => sim_rdev_rawkey_virtual(vk_code, down),
+    };
 }
 
 fn translate_keyboard_mode(evt: &KeyEvent) {
-    match evt.union {
-        Some(key_event::Union::Unicode(_unicode)) => {
-            #[cfg(target_os = "windows")]
-            allow_err!(rdev::simulate_unicode(_unicode as _));
+    match &evt.union {
+        Some(key_event::Union::Seq(seq)) => {
+            ENIGO.lock().unwrap().key_sequence(seq);
         }
         Some(key_event::Union::Chr(..)) =>
         {
             #[cfg(target_os = "windows")]
-            translate_process_virtual_keycode(evt.chr(), evt.down)
+            translate_process_code(evt.chr(), evt.down);
+            #[cfg(not(target_os = "windows"))]
+            sim_rdev_rawkey_position(evt.chr(), evt.down);
+        }
+        Some(key_event::Union::Unicode(..)) => {
+            // Do not handle unicode for now.
         }
         _ => {
             log::debug!("Unreachable. Unexpected key event {:?}", &evt);
