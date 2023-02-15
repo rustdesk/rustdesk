@@ -5,6 +5,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/desktop/widgets/menu_button.dart';
 
 // Examples can assume:
 // enum Commands { heroAndScholar, hurricaneCame }
@@ -1391,22 +1393,20 @@ class PopupMenuButtonState<T> extends State<PopupMenuButton<T>> {
           onTap: widget.enabled ? showButtonMenu : null,
           onHover: widget.onHover,
           canRequestFocus: _canRequestFocus,
-          radius: widget.splashRadius,
           enableFeedback: enableFeedback,
           child: widget.child,
         ),
       );
     }
 
-    return IconButton(
+    return MenuButton(
       icon: widget.icon ?? Icon(Icons.adaptive.more),
-      padding: widget.padding,
-      splashRadius: widget.splashRadius,
-      iconSize: widget.iconSize ?? iconTheme.size ?? _kDefaultIconSize,
       tooltip:
           widget.tooltip ?? MaterialLocalizations.of(context).showMenuTooltip,
       onPressed: widget.enabled ? showButtonMenu : null,
       enableFeedback: enableFeedback,
+      color: MyTheme.button,
+      hoverColor: MyTheme.accent,
     );
   }
 }
