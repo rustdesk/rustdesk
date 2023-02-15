@@ -439,9 +439,12 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                 color: Colors.white,
                 border: Border.all(color: MyTheme.border),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: menubarItems,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: menubarItems,
+                ),
               )),
           _buildDraggableShowHide(context),
         ]));
