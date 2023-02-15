@@ -449,7 +449,11 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
-              children: menubarItems,
+              children: [
+                SizedBox(width: 2.5),
+                ...menubarItems,
+                SizedBox(width: 2.5)
+              ],
             ),
           ),
           _buildDraggableShowHide(context),

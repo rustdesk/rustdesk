@@ -17,7 +17,7 @@ class MenuButton extends StatefulWidget {
     required this.icon,
     this.splashColor,
     this.tooltip = "",
-    this.padding = const EdgeInsets.all(5),
+    this.padding = const EdgeInsets.symmetric(horizontal: 2.5, vertical: 5),
     this.enableFeedback = true,
   });
 
