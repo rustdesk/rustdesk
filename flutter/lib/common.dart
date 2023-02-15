@@ -500,12 +500,14 @@ class OverlayDialogManager {
                   Offstage(
                       offstage: !showCancel,
                       child: Center(
-                          child: TextButton(
-                              style: flatButtonStyle,
-                              onPressed: cancel,
-                              child: Text(translate('Cancel'),
-                                  style:
-                                      const TextStyle(color: MyTheme.accent)))))
+                          child: isDesktop
+                              ? dialogButton('Cancel', onPressed: cancel)
+                              : TextButton(
+                                  style: flatButtonStyle,
+                                  onPressed: cancel,
+                                  child: Text(translate('Cancel'),
+                                      style: const TextStyle(
+                                          color: MyTheme.accent)))))
                 ])),
         onCancel: showCancel ? cancel : null,
       );
