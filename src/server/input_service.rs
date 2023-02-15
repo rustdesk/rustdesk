@@ -719,7 +719,7 @@ fn reset_input() {
         let _lock = VIRTUAL_INPUT_MTX.lock();
         VIRTUAL_INPUT = VirtualInput::new(
             CGEventSourceStateID::Private,
-            CGEventTapLocation::AnnotatedSession,
+            CGEventTapLocation::Session,
         )
         .ok();
     }
