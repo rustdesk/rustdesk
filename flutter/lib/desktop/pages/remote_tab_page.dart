@@ -22,7 +22,10 @@ import 'package:bot_toast/bot_toast.dart';
 import '../../models/platform_model.dart';
 
 class _MenuTheme {
-  static const Color commonColor = MyTheme.accent;
+  static const Color blueColor = MyTheme.button;
+  static const Color hoverBlueColor = MyTheme.accent;
+  static const Color redColor = Colors.redAccent;
+  static const Color hoverRedColor = Colors.red;
   // kMinInteractiveDimension
   static const double height = 20.0;
   static const double dividerHeight = 12.0;
@@ -134,7 +137,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
               width: stateGlobal.windowBorderWidth.value),
         ),
         child: Scaffold(
-          backgroundColor: Theme.of(context).backgroundColor,
+          backgroundColor: Theme.of(context).colorScheme.background,
           body: DesktopTab(
             controller: tabController,
             onWindowCloseButton: handleWindowCloseButton,
@@ -280,7 +283,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           .map((entry) => entry.build(
               context,
               const MenuConfig(
-                commonColor: _MenuTheme.commonColor,
+                commonColor: _MenuTheme.blueColor,
                 height: _MenuTheme.height,
                 dividerHeight: _MenuTheme.dividerHeight,
               )))

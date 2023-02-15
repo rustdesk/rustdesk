@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hbb/desktop/widgets/menu_button.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/consts.dart';
@@ -94,7 +95,10 @@ class MenubarState {
 }
 
 class _MenubarTheme {
-  static const Color commonColor = MyTheme.accent;
+  static const Color blueColor = MyTheme.button;
+  static const Color hoverBlueColor = MyTheme.accent;
+  static const Color redColor = Colors.redAccent;
+  static const Color hoverRedColor = Colors.red;
   // kMinInteractiveDimension
   static const double height = 20.0;
   static const double dividerHeight = 12.0;
@@ -412,7 +416,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       if (widget.ffi.ffiModel.isPeerAndroid) {
         menubarItems.add(IconButton(
           tooltip: translate('Mobile Actions'),
-          color: _MenubarTheme.commonColor,
+          color: _MenubarTheme.blueColor,
           icon: const Icon(Icons.build),
           onPressed: () {
             widget.ffi.dialogManager
@@ -433,7 +437,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     menubarItems.add(_buildClose(context, iconSize));
     return PopupMenuTheme(
       data: const PopupMenuThemeData(
-          textStyle: TextStyle(color: _MenubarTheme.commonColor)),
+          textStyle: TextStyle(color: _MenubarTheme.blueColor)),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -457,8 +461,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
 
   Widget _buildPinMenubar(BuildContext context, double iconSize) {
     return Obx(
-      () => IconButton(
-        padding: EdgeInsets.zero,
+      () => MenuButton(
         iconSize: iconSize,
         tooltip: translate(pin ? 'Unpin menubar' : 'Pin menubar'),
         onPressed: () {
@@ -466,15 +469,16 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         },
         icon: SvgPicture.asset(
           pin ? "assets/pinned.svg" : "assets/unpinned.svg",
-          color: pin ? _MenubarTheme.commonColor : Colors.grey[800],
+          color: Colors.white,
         ),
+        color: pin ? _MenubarTheme.blueColor : Colors.grey[800]!,
+        hoverColor: pin ? _MenubarTheme.hoverBlueColor : Colors.grey[850]!,
       ),
     );
   }
 
   Widget _buildFullscreen(BuildContext context, double iconSize) {
-    return IconButton(
-      padding: EdgeInsets.zero,
+    return MenuButton(
       iconSize: iconSize,
       tooltip: translate(isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'),
       onPressed: () {
@@ -482,8 +486,10 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       },
       icon: SvgPicture.asset(
         isFullscreen ? "assets/fullscreen_exit.svg" : "assets/fullscreen.svg",
-        color: _MenubarTheme.commonColor,
+        color: Colors.white,
       ),
+      color: _MenubarTheme.blueColor,
+      hoverColor: _MenubarTheme.hoverBlueColor,
     );
   }
 
@@ -492,14 +498,13 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     return mod_menu.PopupMenuButton(
       iconSize: iconSize,
       tooltip: translate('Select Monitor'),
-      padding: EdgeInsets.zero,
       position: mod_menu.PopupMenuPosition.under,
       icon: Stack(
         alignment: Alignment.center,
         children: [
           SvgPicture.asset(
             "assets/display.svg",
-            color: _MenubarTheme.commonColor,
+            color: Colors.white,
           ),
           Padding(
             padding: const EdgeInsets.only(bottom: 3.9),
@@ -520,7 +525,10 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             Stack(
               alignment: Alignment.center,
               children: [
-                SvgPicture.asset("assets/display.svg"),
+                SvgPicture.asset(
+                  "assets/display.svg",
+                  color: Colors.white,
+                ),
                 TextButton(
                   child: Container(
                     alignment: AlignmentDirectional.center,
@@ -531,7 +539,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                       child: Text(
                         (i + 1).toString(),
                         style: TextStyle(
-                          color: Theme.of(context).scaffoldBackgroundColor,
+                          color: Colors.white,
                         ),
                       ),
                     ),
@@ -573,7 +581,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       padding: EdgeInsets.zero,
       icon: SvgPicture.asset(
         "assets/actions.svg",
-        color: _MenubarTheme.commonColor,
+        color: Colors.white,
       ),
       tooltip: translate('Control Actions'),
       position: mod_menu.PopupMenuPosition.under,
@@ -581,7 +589,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           .map((entry) => entry.build(
               context,
               const MenuConfig(
-                commonColor: _MenubarTheme.commonColor,
+                commonColor: _MenubarTheme.blueColor,
                 height: _MenubarTheme.height,
                 dividerHeight: _MenubarTheme.dividerHeight,
               )))
@@ -606,7 +614,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             padding: EdgeInsets.zero,
             icon: SvgPicture.asset(
               "assets/display.svg",
-              color: _MenubarTheme.commonColor,
+              color: Colors.white,
             ),
             tooltip: translate('Display Settings'),
             position: mod_menu.PopupMenuPosition.under,
@@ -616,7 +624,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                     .map((entry) => entry.build(
                         context,
                         const MenuConfig(
-                          commonColor: _MenubarTheme.commonColor,
+                          commonColor: _MenubarTheme.blueColor,
                           height: _MenubarTheme.height,
                           dividerHeight: _MenubarTheme.dividerHeight,
                         )))
@@ -640,7 +648,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       padding: EdgeInsets.zero,
       icon: SvgPicture.asset(
         "assets/keyboard.svg",
-        color: _MenubarTheme.commonColor,
+        color: Colors.white,
       ),
       tooltip: translate('Keyboard Settings'),
       position: mod_menu.PopupMenuPosition.under,
@@ -648,7 +656,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           .map((entry) => entry.build(
               context,
               const MenuConfig(
-                commonColor: _MenubarTheme.commonColor,
+                commonColor: _MenubarTheme.blueColor,
                 height: _MenubarTheme.height,
                 dividerHeight: _MenubarTheme.dividerHeight,
               )))
@@ -661,8 +669,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     return Consumer<FfiModel>(builder: ((context, value, child) {
       if (value.permissions['recording'] != false) {
         return Consumer<RecordingModel>(
-          builder: (context, value, child) => IconButton(
-            padding: EdgeInsets.zero,
+          builder: (context, value, child) => MenuButton(
             iconSize: iconSize,
             tooltip: value.start
                 ? translate('Stop session recording')
@@ -670,8 +677,13 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             onPressed: () => value.toggle(),
             icon: SvgPicture.asset(
               "assets/rec.svg",
-              color: value.start ? Colors.red : _MenubarTheme.commonColor,
+              color: Colors.white,
             ),
+            color:
+                value.start ? _MenubarTheme.redColor : _MenubarTheme.blueColor,
+            hoverColor: value.start
+                ? _MenubarTheme.hoverRedColor
+                : _MenubarTheme.hoverBlueColor,
           ),
         );
       } else {
@@ -681,17 +693,18 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   }
 
   Widget _buildClose(BuildContext context, double iconSize) {
-    return IconButton(
+    return MenuButton(
       iconSize: iconSize,
-      padding: EdgeInsets.zero,
       tooltip: translate('Close'),
       onPressed: () {
         clientClose(widget.id, widget.ffi.dialogManager);
       },
       icon: SvgPicture.asset(
         "assets/close.svg",
-        color: Colors.red,
+        color: Colors.white,
       ),
+      color: _MenubarTheme.redColor,
+      hoverColor: _MenubarTheme.hoverRedColor,
     );
   }
 
@@ -704,7 +717,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       padding: EdgeInsets.zero,
       icon: SvgPicture.asset(
         "assets/chat.svg",
-        color: _MenubarTheme.commonColor,
+        color: Colors.white,
       ),
       tooltip: translate('Chat'),
       position: mod_menu.PopupMenuPosition.under,
@@ -712,7 +725,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           .map((entry) => entry.build(
               context,
               const MenuConfig(
-                commonColor: _MenubarTheme.commonColor,
+                commonColor: _MenubarTheme.blueColor,
                 height: _MenubarTheme.height,
                 dividerHeight: _MenubarTheme.dividerHeight,
               )))
