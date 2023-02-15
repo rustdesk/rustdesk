@@ -452,9 +452,9 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  SizedBox(width: 2.5),
+                  SizedBox(width: 3),
                   ...menubarItems,
-                  SizedBox(width: 2.5)
+                  SizedBox(width: 3)
                 ],
               ),
             ),
