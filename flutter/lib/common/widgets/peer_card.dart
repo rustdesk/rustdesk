@@ -996,14 +996,11 @@ void _rdpDialog(String id) async {
             Row(
               children: [
                 ConstrainedBox(
-                    constraints: const BoxConstraints(minWidth: 100),
+                    constraints: const BoxConstraints(minWidth: 140),
                     child: Text(
                       "${translate('Port')}:",
-                      textAlign: TextAlign.start,
-                    ).marginOnly(bottom: 16.0)),
-                const SizedBox(
-                  width: 24.0,
-                ),
+                      textAlign: TextAlign.right,
+                    ).marginOnly(right: 10)),
                 Expanded(
                   child: TextField(
                     inputFormatters: [
@@ -1017,21 +1014,15 @@ void _rdpDialog(String id) async {
                   ),
                 ),
               ],
-            ),
-            const SizedBox(
-              height: 8.0,
-            ),
+            ).marginOnly(bottom: 8),
             Row(
               children: [
                 ConstrainedBox(
-                    constraints: const BoxConstraints(minWidth: 100),
+                    constraints: const BoxConstraints(minWidth: 140),
                     child: Text(
                       "${translate('Username')}:",
-                      textAlign: TextAlign.start,
-                    ).marginOnly(bottom: 16.0)),
-                const SizedBox(
-                  width: 24.0,
-                ),
+                      textAlign: TextAlign.right,
+                    ).marginOnly(right: 10)),
                 Expanded(
                   child: TextField(
                     decoration:
@@ -1040,19 +1031,15 @@ void _rdpDialog(String id) async {
                   ),
                 ),
               ],
-            ),
-            const SizedBox(
-              height: 8.0,
-            ),
+            ).marginOnly(bottom: 8),
             Row(
               children: [
                 ConstrainedBox(
-                    constraints: const BoxConstraints(minWidth: 100),
-                    child: Text("${translate('Password')}:")
-                        .marginOnly(bottom: 16.0)),
-                const SizedBox(
-                  width: 24.0,
-                ),
+                    constraints: const BoxConstraints(minWidth: 140),
+                    child: Text(
+                      "${translate('Password')}:",
+                      textAlign: TextAlign.right,
+                    ).marginOnly(right: 10)),
                 Expanded(
                   child: Obx(() => TextField(
                         obscureText: secure.value,
@@ -1067,7 +1054,7 @@ void _rdpDialog(String id) async {
                       )),
                 ),
               ],
-            ),
+            ).marginOnly(bottom: 8),
           ],
         ),
       ),
