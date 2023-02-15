@@ -11,6 +11,7 @@ Future<ui.Image> decodeImageFromPixels(
   int? rowBytes,
   int? targetWidth,
   int? targetHeight,
+  VoidCallback? onPixelsCopied,
   bool allowUpscaling = true,
 }) async {
   if (targetWidth != null) {
@@ -22,6 +23,7 @@ Future<ui.Image> decodeImageFromPixels(
 
   final ui.ImmutableBuffer buffer =
       await ui.ImmutableBuffer.fromUint8List(pixels);
+  onPixelsCopied?.call();
   final ui.ImageDescriptor descriptor = ui.ImageDescriptor.raw(
     buffer,
     width: width,

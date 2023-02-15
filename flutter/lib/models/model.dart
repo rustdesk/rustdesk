@@ -438,15 +438,17 @@ class ImageModel with ChangeNotifier {
     }
 
     final pid = parent.target?.id;
-    ui.decodeImageFromPixels(
+    img.decodeImageFromPixels(
         rgba,
         parent.target?.ffiModel.display.width ?? 0,
         parent.target?.ffiModel.display.height ?? 0,
-        isWeb ? ui.PixelFormat.rgba8888 : ui.PixelFormat.bgra8888, (image) {
+        isWeb ? ui.PixelFormat.rgba8888 : ui.PixelFormat.bgra8888,
+        onPixelsCopied: () {
+      // Unlock the rgba memory from rust codes.
+      platformFFI.nextRgba(id);
+    }).then((image) {
       if (parent.target?.id != pid) return;
       try {
-        // Unlock the rgba memory from rust codes.
-        platformFFI.nextRgba(id);
         // my throw exception, because the listener maybe already dispose
         update(image);
       } catch (e) {
