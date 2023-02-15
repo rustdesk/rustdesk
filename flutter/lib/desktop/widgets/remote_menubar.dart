@@ -409,10 +409,9 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
 
   Widget _buildMenubar(BuildContext context) {
     final List<Widget> menubarItems = [];
-    final double iconSize = Theme.of(context).iconTheme.size ?? 30.0;
     if (!isWebDesktop) {
-      menubarItems.add(_buildPinMenubar(context, iconSize));
-      menubarItems.add(_buildFullscreen(context, iconSize));
+      menubarItems.add(_buildPinMenubar(context));
+      menubarItems.add(_buildFullscreen(context));
       if (widget.ffi.ffiModel.isPeerAndroid) {
         menubarItems.add(IconButton(
           tooltip: translate('Mobile Actions'),
@@ -425,16 +424,16 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         ));
       }
     }
-    menubarItems.add(_buildMonitor(context, iconSize));
-    menubarItems.add(_buildControl(context, iconSize));
-    menubarItems.add(_buildDisplay(context, iconSize));
-    menubarItems.add(_buildKeyboard(context, iconSize));
+    menubarItems.add(_buildMonitor(context));
+    menubarItems.add(_buildControl(context));
+    menubarItems.add(_buildDisplay(context));
+    menubarItems.add(_buildKeyboard(context));
     if (!isWeb) {
-      menubarItems.add(_buildChat(context, iconSize));
-      menubarItems.add(_buildVoiceCall(context, iconSize));
+      menubarItems.add(_buildChat(context));
+      menubarItems.add(_buildVoiceCall(context));
     }
-    menubarItems.add(_buildRecording(context, iconSize));
-    menubarItems.add(_buildClose(context, iconSize));
+    menubarItems.add(_buildRecording(context));
+    menubarItems.add(_buildClose(context));
     return PopupMenuTheme(
       data: const PopupMenuThemeData(
           textStyle: TextStyle(color: _MenubarTheme.blueColor)),
@@ -459,10 +458,9 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     );
   }
 
-  Widget _buildPinMenubar(BuildContext context, double iconSize) {
+  Widget _buildPinMenubar(BuildContext context) {
     return Obx(
       () => MenuButton(
-        iconSize: iconSize,
         tooltip: translate(pin ? 'Unpin menubar' : 'Pin menubar'),
         onPressed: () {
           widget.state.switchPin();
@@ -477,9 +475,8 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     );
   }
 
-  Widget _buildFullscreen(BuildContext context, double iconSize) {
+  Widget _buildFullscreen(BuildContext context) {
     return MenuButton(
-      iconSize: iconSize,
       tooltip: translate(isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'),
       onPressed: () {
         _setFullscreen(!isFullscreen);
@@ -493,10 +490,9 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     );
   }
 
-  Widget _buildMonitor(BuildContext context, double iconSize) {
+  Widget _buildMonitor(BuildContext context) {
     final pi = widget.ffi.ffiModel.pi;
     return mod_menu.PopupMenuButton(
-      iconSize: iconSize,
       tooltip: translate('Select Monitor'),
       position: mod_menu.PopupMenuPosition.under,
       icon: Stack(
@@ -575,9 +571,8 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     );
   }
 
-  Widget _buildControl(BuildContext context, double iconSize) {
+  Widget _buildControl(BuildContext context) {
     return mod_menu.PopupMenuButton(
-      iconSize: iconSize,
       padding: EdgeInsets.zero,
       icon: SvgPicture.asset(
         "assets/actions.svg",
@@ -598,7 +593,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     );
   }
 
-  Widget _buildDisplay(BuildContext context, double iconSize) {
+  Widget _buildDisplay(BuildContext context) {
     return FutureBuilder(future: () async {
       widget.state.viewStyle.value =
           await bind.sessionGetViewStyle(id: widget.id) ?? '';
@@ -610,7 +605,6 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         return Obx(() {
           final remoteCount = RemoteCountState.find().value;
           return mod_menu.PopupMenuButton(
-            iconSize: iconSize,
             padding: EdgeInsets.zero,
             icon: SvgPicture.asset(
               "assets/display.svg",
@@ -638,13 +632,12 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     });
   }
 
-  Widget _buildKeyboard(BuildContext context, double iconSize) {
+  Widget _buildKeyboard(BuildContext context) {
     FfiModel ffiModel = Provider.of<FfiModel>(context);
     if (ffiModel.permissions['keyboard'] == false) {
       return Offstage();
     }
     return mod_menu.PopupMenuButton(
-      iconSize: iconSize,
       padding: EdgeInsets.zero,
       icon: SvgPicture.asset(
         "assets/keyboard.svg",
@@ -665,12 +658,11 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     );
   }
 
-  Widget _buildRecording(BuildContext context, double iconSize) {
+  Widget _buildRecording(BuildContext context) {
     return Consumer<FfiModel>(builder: ((context, value, child) {
       if (value.permissions['recording'] != false) {
         return Consumer<RecordingModel>(
           builder: (context, value, child) => MenuButton(
-            iconSize: iconSize,
             tooltip: value.start
                 ? translate('Stop session recording')
                 : translate('Start session recording'),
@@ -692,9 +684,8 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     }));
   }
 
-  Widget _buildClose(BuildContext context, double iconSize) {
+  Widget _buildClose(BuildContext context) {
     return MenuButton(
-      iconSize: iconSize,
       tooltip: translate('Close'),
       onPressed: () {
         clientClose(widget.id, widget.ffi.dialogManager);
@@ -709,10 +700,9 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   }
 
   final _chatButtonKey = GlobalKey();
-  Widget _buildChat(BuildContext context, double iconSize) {
+  Widget _buildChat(BuildContext context) {
     FfiModel ffiModel = Provider.of<FfiModel>(context);
     return mod_menu.PopupMenuButton(
-      iconSize: iconSize,
       key: _chatButtonKey,
       padding: EdgeInsets.zero,
       icon: SvgPicture.asset(
@@ -737,24 +727,15 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   Widget _getVoiceCallIcon() {
     switch (widget.ffi.chatModel.voiceCallStatus.value) {
       case VoiceCallStatus.waitingForResponse:
-        return IconButton(
-          onPressed: () {
-            widget.ffi.chatModel.closeVoiceCall(widget.id);
-          },
-          icon: SvgPicture.asset(
-            "assets/voice_call_waiting.svg",
-            color: Colors.red,
-          ),
+        return SvgPicture.asset(
+          "assets/call_wait.svg",
+          color: Colors.white,
         );
+
       case VoiceCallStatus.connected:
-        return IconButton(
-          onPressed: () {
-            widget.ffi.chatModel.closeVoiceCall(widget.id);
-          },
-          icon: Icon(
-            Icons.phone_disabled_rounded,
-            color: Colors.red,
-          ),
+        return SvgPicture.asset(
+          "assets/call_end.svg",
+          color: Colors.white,
         );
       default:
         return const Offstage();
@@ -772,18 +753,18 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     }
   }
 
-  Widget _buildVoiceCall(BuildContext context, double iconSize) {
+  Widget _buildVoiceCall(BuildContext context) {
     return Obx(
       () {
         final tooltipText = _getVoiceCallTooltip();
         return tooltipText == null
             ? const Offstage()
-            : IconButton(
-                iconSize: iconSize,
-                padding: EdgeInsets.zero,
+            : MenuButton(
                 icon: _getVoiceCallIcon(),
                 tooltip: translate(tooltipText),
                 onPressed: () => bind.sessionRequestVoiceCall(id: widget.id),
+                color: _MenubarTheme.redColor,
+                hoverColor: _MenubarTheme.hoverRedColor,
               );
       },
     );

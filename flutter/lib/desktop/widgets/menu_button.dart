@@ -6,8 +6,7 @@ class MenuButton extends StatefulWidget {
   final Color hoverColor;
   final Color? splashColor;
   final Widget icon;
-  final double iconSize;
-  final String tooltip;
+  final String? tooltip;
   final EdgeInsetsGeometry padding;
   final bool enableFeedback;
   const MenuButton({
@@ -16,9 +15,8 @@ class MenuButton extends StatefulWidget {
     required this.color,
     required this.hoverColor,
     required this.icon,
-    required this.iconSize,
-    required this.tooltip,
     this.splashColor,
+    this.tooltip = "",
     this.padding = const EdgeInsets.all(5),
     this.enableFeedback = true,
   });
