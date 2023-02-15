@@ -6,7 +6,7 @@ use crate::{
     flutter::{session_add, session_start_},
     ui_interface::{self, *},
 };
-use flutter_rust_bridge::{StreamSink, SyncReturn, ZeroCopyBuffer};
+use flutter_rust_bridge::{StreamSink, SyncReturn};
 use hbb_common::{
     config::{self, LocalConfig, PeerConfig, ONLINE},
     fs, log,
@@ -131,13 +131,10 @@ pub fn session_login(id: String, password: String, remember: bool) {
 }
 
 pub fn session_close(id: String) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        if let Some(stream) = &*session.event_stream.read().unwrap() {
-            stream.add(EventToUI::Event("close".to_owned()));
-        }
+    if let Some(mut session) = SESSIONS.write().unwrap().remove(&id) {
+        session.close_event_stream();
         session.close();
     }
-    let _ = SESSIONS.write().unwrap().remove(&id);
 }
 
 pub fn session_refresh(id: String) {
