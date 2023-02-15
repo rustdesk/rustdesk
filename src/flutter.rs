@@ -134,6 +134,14 @@ impl FlutterHandler {
             stream.add(EventToUI::Event(out));
         }
     }
+
+    pub fn close_event_stream(&mut self) {
+        let mut stream_lock = self.event_stream.write().unwrap();
+        if let Some(stream) = &*stream_lock {
+            stream.add(EventToUI::Event("close".to_owned()));
+        }
+        *stream_lock = None;
+    }
 }
 
 impl InvokeUiSession for FlutterHandler {

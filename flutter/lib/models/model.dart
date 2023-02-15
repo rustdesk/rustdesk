@@ -1389,6 +1389,7 @@ class FFI {
           }
         }
       }
+      debugPrint('Exit session event loop');
     }();
     // every instance will bind a stream
     this.id = id;
