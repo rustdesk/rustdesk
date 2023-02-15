@@ -1368,6 +1368,9 @@ class FFI {
       // Preserved for the rgba data.
       await for (final message in stream) {
         if (message is EventToUI_Event) {
+          if (message.field0 == "close") {
+            break;
+          }
           try {
             Map<String, dynamic> event = json.decode(message.field0);
             await cb(event);

@@ -132,6 +132,9 @@ pub fn session_login(id: String, password: String, remember: bool) {
 
 pub fn session_close(id: String) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        if let Some(stream) = &*session.event_stream.read().unwrap() {
+            stream.add(EventToUI::Event("close".to_owned()));
+        }
         session.close();
     }
     let _ = SESSIONS.write().unwrap().remove(&id);
