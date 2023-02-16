@@ -54,7 +54,6 @@ pub struct SessionPermissionConfig {
 
 impl SessionPermissionConfig {
     pub fn is_text_clipboard_required(&self) -> bool {
-        println!("REMOVE ME ==================== is_text_clipboard_required {} -{}-{}", *self.server_clipboard_enabled.read().unwrap(), *self.server_keyboard_enabled.read().unwrap(), !self.lc.read().unwrap().disable_clipboard.v);
         *self.server_clipboard_enabled.read().unwrap()
             && *self.server_keyboard_enabled.read().unwrap()
             && !self.lc.read().unwrap().disable_clipboard.v
