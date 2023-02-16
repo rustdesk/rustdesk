@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, RwLock};
-use std::time::Duration;
+use std::sync::{
+    atomic::{AtomicBool, AtomicUsize, Ordering},
+    Arc, Mutex, RwLock,
+};
+use std::time::{Duration, SystemTime};
 
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -37,9 +39,37 @@ pub struct Session<T: InvokeUiSession> {
     pub sender: Arc<RwLock<Option<mpsc::UnboundedSender<Data>>>>,
     pub thread: Arc<Mutex<Option<std::thread::JoinHandle<()>>>>,
     pub ui_handler: T,
+    pub server_keyboard_enabled: Arc<RwLock<bool>>,
+    pub server_file_transfer_enabled: Arc<RwLock<bool>>,
+    pub server_clipboard_enabled: Arc<RwLock<bool>>,
+}
+
+#[derive(Clone)]
+pub struct SessionPermissionConfig {
+    pub lc: Arc<RwLock<LoginConfigHandler>>,
+    pub server_keyboard_enabled: Arc<RwLock<bool>>,
+    pub server_file_transfer_enabled: Arc<RwLock<bool>>,
+    pub server_clipboard_enabled: Arc<RwLock<bool>>,
+}
+
+impl SessionPermissionConfig {
+    pub fn is_text_clipboard_required(&self) -> bool {
+        *self.server_clipboard_enabled.read().unwrap()
+            && *self.server_keyboard_enabled.read().unwrap()
+            && !self.lc.read().unwrap().disable_clipboard.v
+    }
 }
 
 impl<T: InvokeUiSession> Session<T> {
+    pub fn get_permission_config(&self) -> SessionPermissionConfig {
+        SessionPermissionConfig {
+            lc: self.lc.clone(),
+            server_keyboard_enabled: self.server_keyboard_enabled.clone(),
+            server_file_transfer_enabled: self.server_file_transfer_enabled.clone(),
+            server_clipboard_enabled: self.server_clipboard_enabled.clone(),
+        }
+    }
+
     pub fn is_file_transfer(&self) -> bool {
         self.lc
             .read()
@@ -126,6 +156,12 @@ impl<T: InvokeUiSession> Session<T> {
 
     pub fn is_privacy_mode_supported(&self) -> bool {
         self.lc.read().unwrap().is_privacy_mode_supported()
+    }
+
+    pub fn is_text_clipboard_required(&self) -> bool {
+        *self.server_clipboard_enabled.read().unwrap()
+            && *self.server_keyboard_enabled.read().unwrap()
+            && !self.lc.read().unwrap().disable_clipboard.v
     }
 
     pub fn refresh_video(&self) {
@@ -445,7 +481,7 @@ impl<T: InvokeUiSession> Session<T> {
             KeyRelease(key)
         };
         let event = Event {
-            time: std::time::SystemTime::now(),
+            time: SystemTime::now(),
             unicode: None,
             code: keycode as _,
             scan_code: scancode as _,
