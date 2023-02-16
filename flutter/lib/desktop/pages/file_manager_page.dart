@@ -46,8 +46,10 @@ enum MouseFocusScope {
 }
 
 class FileManagerPage extends StatefulWidget {
-  const FileManagerPage({Key? key, required this.id}) : super(key: key);
+  const FileManagerPage({Key? key, required this.id, this.forceRelay})
+      : super(key: key);
   final String id;
+  final bool? forceRelay;
 
   @override
   State<StatefulWidget> createState() => _FileManagerPageState();
@@ -102,7 +104,7 @@ class _FileManagerPageState extends State<FileManagerPage>
   void initState() {
     super.initState();
     _ffi = FFI();
-    _ffi.start(widget.id, isFileTransfer: true);
+    _ffi.start(widget.id, isFileTransfer: true, forceRelay: widget.forceRelay);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _ffi.dialogManager
           .showLoading(translate('Connecting...'), onCancel: closeConnection);

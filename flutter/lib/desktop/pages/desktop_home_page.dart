@@ -557,6 +557,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           isFileTransfer: call.arguments['isFileTransfer'],
           isTcpTunneling: call.arguments['isTcpTunneling'],
           isRDP: call.arguments['isRDP'],
+          forceRelay: call.arguments['forceRelay'],
         );
       }
     });

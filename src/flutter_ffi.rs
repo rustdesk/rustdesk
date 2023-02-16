@@ -83,8 +83,15 @@ pub fn session_add_sync(
     is_file_transfer: bool,
     is_port_forward: bool,
     switch_uuid: String,
+    force_relay: bool,
 ) -> SyncReturn<String> {
-    if let Err(e) = session_add(&id, is_file_transfer, is_port_forward, &switch_uuid) {
+    if let Err(e) = session_add(
+        &id,
+        is_file_transfer,
+        is_port_forward,
+        &switch_uuid,
+        force_relay,
+    ) {
         SyncReturn(format!("Failed to add session with id {}, {}", &id, e))
     } else {
         SyncReturn("".to_owned())
@@ -149,9 +156,9 @@ pub fn session_record_screen(id: String, start: bool, width: usize, height: usiz
     }
 }
 
-pub fn session_reconnect(id: String) {
+pub fn session_reconnect(id: String, force_relay: bool) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.reconnect();
+        session.reconnect(force_relay);
     }
 }
 

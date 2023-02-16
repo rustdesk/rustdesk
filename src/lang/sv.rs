@@ -209,7 +209,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Closed manually by the peer", "Stängd manuellt av klienten"),
         ("Enable remote configuration modification", "Tillåt fjärrkonfigurering"),
         ("Run without install", "Kör utan installation"),
-        ("Always connected via relay", "Anslut alltid via relay"),
+        ("Connect via relay", ""),
         ("Always connect via relay", "Anslut alltid via relay"),
         ("whitelist_tip", "Bara vitlistade IPs kan koppla upp till mig"),
         ("Login", "Logga in"),
@@ -449,5 +449,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Voice call", ""),
         ("Text chat", ""),
         ("Stop voice call", ""),
+        ("relay_hint_tip", ""),
     ].iter().cloned().collect();
 }

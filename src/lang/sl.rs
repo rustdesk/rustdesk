@@ -209,7 +209,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Closed manually by the peer", "Povezavo ročno prekinil odjemalec"),
         ("Enable remote configuration modification", "Omogoči oddaljeno spreminjanje nastavitev"),
         ("Run without install", "Zaženi brez namestitve"),
-        ("Always connected via relay", "Vedno povezan preko posrednika"),
+        ("Connect via relay", ""),
         ("Always connect via relay", "Vedno poveži preko posrednika"),
         ("whitelist_tip", "Dostop je možen samo iz dovoljenih IPjev"),
         ("Login", "Prijavi"),
@@ -449,5 +449,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Voice call", ""),
         ("Text chat", ""),
         ("Stop voice call", ""),
+        ("relay_hint_tip", ""),
     ].iter().cloned().collect();
 }

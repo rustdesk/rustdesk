@@ -3,15 +3,15 @@ use std::{
     net::SocketAddr,
     ops::{Deref, Not},
     str::FromStr,
-    sync::{Arc, atomic::AtomicBool, mpsc, Mutex, RwLock},
+    sync::{atomic::AtomicBool, mpsc, Arc, Mutex, RwLock},
 };
 
 pub use async_trait::async_trait;
 use bytes::Bytes;
 #[cfg(not(any(target_os = "android", target_os = "linux")))]
 use cpal::{
-    Device,
-    Host, StreamConfig, traits::{DeviceTrait, HostTrait, StreamTrait},
+    traits::{DeviceTrait, HostTrait, StreamTrait},
+    Device, Host, StreamConfig,
 };
 use magnum_opus::{Channels::*, Decoder as AudioDecoder};
 use sha2::{Digest, Sha256};
@@ -19,26 +19,26 @@ use uuid::Uuid;
 
 pub use file_trait::FileManager;
 use hbb_common::{
-    AddrMangle,
     allow_err,
     anyhow::{anyhow, Context},
     bail,
     config::{
-        Config, CONNECT_TIMEOUT, PeerConfig, PeerInfoSerde, READ_TIMEOUT, RELAY_PORT,
+        Config, PeerConfig, PeerInfoSerde, CONNECT_TIMEOUT, READ_TIMEOUT, RELAY_PORT,
         RENDEZVOUS_TIMEOUT,
-    }, get_version_number,
-    log,
-    message_proto::{*, option_message::BoolOption},
+    },
+    get_version_number, log,
+    message_proto::{option_message::BoolOption, *},
     protobuf::Message as _,
     rand,
     rendezvous_proto::*,
-    ResultType,
     socket_client,
     sodiumoxide::crypto::{box_, secretbox, sign},
-    Stream, timeout, tokio::time::Duration,
+    timeout,
+    tokio::time::Duration,
+    AddrMangle, ResultType, Stream,
 };
-pub use helper::*;
 pub use helper::LatencyController;
+pub use helper::*;
 use scrap::{
     codec::{Decoder, DecoderCfg},
     record::{Recorder, RecorderContext},
@@ -916,6 +916,8 @@ pub struct LoginConfigHandler {
     pub direct: Option<bool>,
     pub received: bool,
     switch_uuid: Option<String>,
+    pub success_time: Option<hbb_common::tokio::time::Instant>,
+    pub direct_error_counter: usize,
 }
 
 impl Deref for LoginConfigHandler {
@@ -943,7 +945,13 @@ impl LoginConfigHandler {
     ///
     /// * `id` - id of peer
     /// * `conn_type` - Connection type enum.
-    pub fn initialize(&mut self, id: String, conn_type: ConnType, switch_uuid: Option<String>) {
+    pub fn initialize(
+        &mut self,
+        id: String,
+        conn_type: ConnType,
+        switch_uuid: Option<String>,
+        force_relay: bool,
+    ) {
         self.id = id;
         self.conn_type = conn_type;
         let config = self.load_config();
@@ -952,10 +960,12 @@ impl LoginConfigHandler {
         self.session_id = rand::random();
         self.supported_encoding = None;
         self.restarting_remote_device = false;
-        self.force_relay = !self.get_option("force-always-relay").is_empty();
+        self.force_relay = !self.get_option("force-always-relay").is_empty() || force_relay;
         self.direct = None;
         self.received = false;
         self.switch_uuid = switch_uuid;
+        self.success_time = None;
+        self.direct_error_counter = 0;
     }
 
     /// Check if the client should auto login.

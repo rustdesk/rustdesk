@@ -3,19 +3,19 @@ use crate::{
     flutter_ffi::EventToUI,
     ui_session_interface::{io_loop, InvokeUiSession, Session},
 };
-use flutter_rust_bridge::{StreamSink};
+use flutter_rust_bridge::StreamSink;
 use hbb_common::{
     bail, config::LocalConfig, get_version_number, message_proto::*, rendezvous_proto::ConnType,
     ResultType,
 };
 use serde_json::json;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
     collections::HashMap,
     ffi::CString,
     os::raw::{c_char, c_int},
     sync::{Arc, RwLock},
 };
-use std::sync::atomic::{AtomicBool, Ordering};
 
 pub(super) const APP_TYPE_MAIN: &str = "main";
 pub(super) const APP_TYPE_CM: &str = "cm";
@@ -114,7 +114,7 @@ pub struct FlutterHandler {
     // SAFETY: [rgba] is guarded by [rgba_valid], and it's safe to reach [rgba] with `rgba_valid == true`.
     // We must check the `rgba_valid` before reading [rgba].
     pub rgba: Arc<RwLock<Vec<u8>>>,
-    pub rgba_valid: Arc<AtomicBool>
+    pub rgba_valid: Arc<AtomicBool>,
 }
 
 impl FlutterHandler {
@@ -457,6 +457,7 @@ pub fn session_add(
     is_file_transfer: bool,
     is_port_forward: bool,
     switch_uuid: &str,
+    force_relay: bool,
 ) -> ResultType<()> {
     let session_id = get_session_id(id.to_owned());
     LocalConfig::set_remote_id(&session_id);
@@ -485,7 +486,7 @@ pub fn session_add(
         .lc
         .write()
         .unwrap()
-        .initialize(session_id, conn_type, switch_uuid);
+        .initialize(session_id, conn_type, switch_uuid, force_relay);
 
     if let Some(same_id_session) = SESSIONS.write().unwrap().insert(id.to_owned(), session) {
         same_id_session.close();
@@ -675,7 +676,7 @@ pub fn session_get_rgba_size(id: *const char) -> usize {
     let id = unsafe { std::ffi::CStr::from_ptr(id as _) };
     if let Ok(id) = id.to_str() {
         if let Some(session) = SESSIONS.write().unwrap().get_mut(id) {
-           return session.rgba.read().unwrap().len();
+            return session.rgba.read().unwrap().len();
         }
     }
     0

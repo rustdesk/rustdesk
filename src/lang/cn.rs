@@ -209,7 +209,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Closed manually by the peer", "被对方手动关闭"),
         ("Enable remote configuration modification", "允许远程修改配置"),
         ("Run without install", "无安装运行"),
-        ("Always connected via relay", "强制走中继连接"),
+        ("Connect via relay", "中继连接"),
         ("Always connect via relay", "强制走中继连接"),
         ("whitelist_tip", "只有白名单里的ip才能访问我"),
         ("Login", "登录"),
@@ -449,5 +449,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Voice call", "语音通话"),
         ("Text chat", "文字聊天"),
         ("Stop voice call", "停止语音聊天"),
+        ("relay_hint_tip", "可能无法直连，可以尝试中继连接。\n另外，如果想直接使用中继连接，可以在ID后面添加/r，或者在卡片选项里选择强制走中继连接。"),
     ].iter().cloned().collect();
 }

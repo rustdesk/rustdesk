@@ -1405,13 +1405,14 @@ bool callUniLinksUriHandler(Uri uri) {
 connectMainDesktop(String id,
     {required bool isFileTransfer,
     required bool isTcpTunneling,
-    required bool isRDP}) async {
+    required bool isRDP,
+    bool? forceRelay}) async {
   if (isFileTransfer) {
-    await rustDeskWinManager.newFileTransfer(id);
+    await rustDeskWinManager.newFileTransfer(id, forceRelay: forceRelay);
   } else if (isTcpTunneling || isRDP) {
-    await rustDeskWinManager.newPortForward(id, isRDP);
+    await rustDeskWinManager.newPortForward(id, isRDP, forceRelay: forceRelay);
   } else {
-    await rustDeskWinManager.newRemoteDesktop(id);
+    await rustDeskWinManager.newRemoteDesktop(id, forceRelay: forceRelay);
   }
 }
 
@@ -1422,7 +1423,8 @@ connectMainDesktop(String id,
 connect(BuildContext context, String id,
     {bool isFileTransfer = false,
     bool isTcpTunneling = false,
-    bool isRDP = false}) async {
+    bool isRDP = false,
+    bool forceRelay = false}) async {
   if (id == '') return;
   id = id.replaceAll(' ', '');
   assert(!(isFileTransfer && isTcpTunneling && isRDP),
@@ -1430,18 +1432,18 @@ connect(BuildContext context, String id,
 
   if (isDesktop) {
     if (desktopType == DesktopType.main) {
-      await connectMainDesktop(
-        id,
-        isFileTransfer: isFileTransfer,
-        isTcpTunneling: isTcpTunneling,
-        isRDP: isRDP,
-      );
+      await connectMainDesktop(id,
+          isFileTransfer: isFileTransfer,
+          isTcpTunneling: isTcpTunneling,
+          isRDP: isRDP,
+          forceRelay: forceRelay);
     } else {
       await rustDeskWinManager.call(WindowType.Main, kWindowConnect, {
         'id': id,
         'isFileTransfer': isFileTransfer,
         'isTcpTunneling': isTcpTunneling,
         'isRDP': isRDP,
+        "forceRelay": forceRelay,
       });
     }
   } else {
