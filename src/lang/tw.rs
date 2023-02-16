@@ -446,9 +446,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("FPS", "幀率"),
         ("Auto", "自動"),
         ("Other Default Options", "其它默認選項"),
-        ("Voice call", ""),
-        ("Text chat", ""),
-        ("Stop voice call", ""),
-        ("relay_hint_tip", ""),
-    ].iter().cloned().collect();
+        ("Voice call", "語音通話"),
+        ("Text chat", "文字聊天"),
+        ("Stop voice call", "停止語音聊天"),
+        ("relay_hint_tip", "可能無法直連，可以嘗試中繼連接。 \n另外，如果想直接使用中繼連接，可以在ID後面添加/r，或者在卡片選項裡選擇強制走中繼連接。"),
+        ("Reconnect", "重連"),
+        ].iter().cloned().collect();
 }

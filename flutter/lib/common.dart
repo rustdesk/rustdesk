@@ -632,6 +632,7 @@ class CustomAlertDialog extends StatelessWidget {
       if (!scopeNode.hasFocus) scopeNode.requestFocus();
     });
     const double padding = 16;
+    bool tabTapped = false;
     return FocusScope(
       node: scopeNode,
       autofocus: true,
@@ -641,13 +642,15 @@ class CustomAlertDialog extends StatelessWidget {
             onCancel?.call();
           }
           return KeyEventResult.handled; // avoid TextField exception on escape
-        } else if (onSubmit != null &&
+        } else if (!tabTapped &&
+            onSubmit != null &&
             key.logicalKey == LogicalKeyboardKey.enter) {
           if (key is RawKeyDownEvent) onSubmit?.call();
           return KeyEventResult.handled;
         } else if (key.logicalKey == LogicalKeyboardKey.tab) {
           if (key is RawKeyDownEvent) {
             scopeNode.nextFocus();
+            tabTapped = true;
           }
           return KeyEventResult.handled;
         }
@@ -676,7 +679,7 @@ class CustomAlertDialog extends StatelessWidget {
 
 void msgBox(String id, String type, String title, String text, String link,
     OverlayDialogManager dialogManager,
-    {bool? hasCancel}) {
+    {bool? hasCancel, ReconnectHandle? reconnect}) {
   dialogManager.dismissAll();
   List<Widget> buttons = [];
   bool hasOk = false;
@@ -714,6 +717,13 @@ void msgBox(String id, String type, String title, String text, String link,
         0,
         dialogButton('Close', onPressed: () {
           dialogManager.dismissAll();
+        }));
+  }
+  if (reconnect != null && title == "Connection Error") {
+    buttons.insert(
+        0,
+        dialogButton('Reconnect', isOutline: true, onPressed: () {
+          reconnect(dialogManager, id, false);
         }));
   }
   if (link.isNotEmpty) {
