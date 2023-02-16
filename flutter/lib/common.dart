@@ -632,6 +632,7 @@ class CustomAlertDialog extends StatelessWidget {
       if (!scopeNode.hasFocus) scopeNode.requestFocus();
     });
     const double padding = 16;
+    bool tabTapped = false;
     return FocusScope(
       node: scopeNode,
       autofocus: true,
@@ -641,13 +642,15 @@ class CustomAlertDialog extends StatelessWidget {
             onCancel?.call();
           }
           return KeyEventResult.handled; // avoid TextField exception on escape
-        } else if (onSubmit != null &&
+        } else if (!tabTapped &&
+            onSubmit != null &&
             key.logicalKey == LogicalKeyboardKey.enter) {
           if (key is RawKeyDownEvent) onSubmit?.call();
           return KeyEventResult.handled;
         } else if (key.logicalKey == LogicalKeyboardKey.tab) {
           if (key is RawKeyDownEvent) {
             scopeNode.nextFocus();
+            tabTapped = true;
           }
           return KeyEventResult.handled;
         }
