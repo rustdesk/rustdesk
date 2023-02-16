@@ -336,6 +336,9 @@ closeConnection({String? id}) {
 }
 
 void window_on_top(int? id) {
+  if (!isDesktop) {
+    return;
+  }
   if (id == null) {
     // main window
     windowManager.restore();
