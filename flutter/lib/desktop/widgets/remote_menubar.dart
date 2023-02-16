@@ -769,7 +769,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             : MenuButton(
                 icon: _getVoiceCallIcon(),
                 tooltip: translate(tooltipText),
-                onPressed: () => bind.sessionRequestVoiceCall(id: widget.id),
+                onPressed: () => bind.sessionCloseVoiceCall(id: widget.id),
                 color: _MenubarTheme.redColor,
                 hoverColor: _MenubarTheme.hoverRedColor,
               );
