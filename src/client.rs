@@ -18,6 +18,8 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 pub use file_trait::FileManager;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use hbb_common::tokio::sync::mpsc::UnboundedSender;
 use hbb_common::{
     allow_err,
     anyhow::{anyhow, Context},
@@ -34,7 +36,7 @@ use hbb_common::{
     socket_client,
     sodiumoxide::crypto::{box_, secretbox, sign},
     timeout,
-    tokio::{sync::mpsc::UnboundedSender, time::Duration},
+    tokio::time::Duration,
     AddrMangle, ResultType, Stream,
 };
 pub use helper::LatencyController;
@@ -1240,6 +1242,7 @@ impl LoginConfigHandler {
             self.save_config(config);
         }
         #[cfg(feature = "flutter")]
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if name == "disable-clipboard" {
             crate::flutter::update_text_clipboard_required();
         }

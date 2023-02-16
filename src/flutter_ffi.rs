@@ -1,11 +1,13 @@
 use crate::{
     client::file_trait::FileManager,
     common::make_fd_to_json,
-    common::{get_default_sound_input, is_keyboard_mode_supported},
+    common::is_keyboard_mode_supported,
     flutter::{self, SESSIONS},
     flutter::{session_add, session_start_},
     ui_interface::{self, *},
 };
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::common::get_default_sound_input;
 use flutter_rust_bridge::{StreamSink, SyncReturn};
 use hbb_common::{
     config::{self, LocalConfig, PeerConfig, ONLINE},
