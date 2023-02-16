@@ -1832,6 +1832,7 @@ void changeSocks5Proxy() async {
   var proxyController = TextEditingController(text: proxy);
   var userController = TextEditingController(text: username);
   var pwdController = TextEditingController(text: password);
+  RxBool obscure = true.obs;
 
   var isInProgress = false;
   gFFI.dialogManager.show((setState, close) {
@@ -1929,12 +1930,17 @@ void changeSocks5Proxy() async {
                   width: 24.0,
                 ),
                 Expanded(
-                  child: TextField(
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                    ),
-                    controller: pwdController,
-                  ),
+                  child: Obx(() => TextField(
+                        obscureText: obscure.value,
+                        decoration: InputDecoration(
+                            border: const OutlineInputBorder(),
+                            suffixIcon: IconButton(
+                                onPressed: () => obscure.value = !obscure.value,
+                                icon: Icon(obscure.value
+                                    ? Icons.visibility_off
+                                    : Icons.visibility))),
+                        controller: pwdController,
+                      )),
                 ),
               ],
             ),
