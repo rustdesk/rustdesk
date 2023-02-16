@@ -324,13 +324,13 @@ class LoginWidgetUserPass extends StatelessWidget {
           children: [
             const SizedBox(height: 8.0),
             DialogTextField(
-                title: '${translate("Username")}:',
+                title: translate("Username"),
                 controller: username,
                 focusNode: userFocusNode,
                 prefixIcon: Icon(Icons.account_circle_outlined),
                 errorText: usernameMsg),
             DialogTextField(
-                title: '${translate("Password")}:',
+                title: translate("Password"),
                 obscureText: true,
                 controller: pass,
                 prefixIcon: Icon(Icons.lock_outline),
