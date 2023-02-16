@@ -3,7 +3,7 @@ use std::{
     net::SocketAddr,
     ops::{Deref, Not},
     str::FromStr,
-    sync::{atomic::AtomicBool, mpsc, Arc, Mutex, RwLock},
+    sync::{mpsc, Arc, Mutex, RwLock},
 };
 
 pub use async_trait::async_trait;
@@ -34,7 +34,7 @@ use hbb_common::{
     socket_client,
     sodiumoxide::crypto::{box_, secretbox, sign},
     timeout,
-    tokio::time::Duration,
+    tokio::{sync::mpsc::UnboundedSender, time::Duration},
     AddrMangle, ResultType, Stream,
 };
 pub use helper::LatencyController;
@@ -50,20 +50,29 @@ use crate::{
     server::video_service::{SCRAP_X11_REF_URL, SCRAP_X11_REQUIRED},
 };
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::{
+    common::{check_clipboard, ClipboardContext, CLIPBOARD_INTERVAL},
+    ui_session_interface::SessionPermissionConfig,
+};
+
 pub use super::lang::*;
 
 pub mod file_trait;
 pub mod helper;
 pub mod io_loop;
 
-pub static SERVER_KEYBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
-pub static SERVER_FILE_TRANSFER_ENABLED: AtomicBool = AtomicBool::new(true);
-pub static SERVER_CLIPBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
 pub const MILLI1: Duration = Duration::from_millis(1);
 pub const SEC30: Duration = Duration::from_secs(30);
 
 /// Client of the remote desktop.
 pub struct Client;
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+struct TextClipboardState {
+    is_required: bool,
+    running: bool,
+}
 
 #[cfg(not(any(target_os = "android", target_os = "linux")))]
 lazy_static::lazy_static! {
@@ -73,6 +82,8 @@ lazy_static::lazy_static! {
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 lazy_static::lazy_static! {
     static ref ENIGO: Arc<Mutex<enigo::Enigo>> = Arc::new(Mutex::new(enigo::Enigo::new()));
+    static ref OLD_CLIPBOARD_TEXT: Arc<Mutex<String>> = Default::default();
+    static ref TEXT_CLIPBOARD_STATE: Arc<Mutex<TextClipboardState>> = Arc::new(Mutex::new(TextClipboardState::new()));
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -597,6 +608,86 @@ impl Client {
         });
         conn.send(&msg_out).await?;
         Ok(conn)
+    }
+
+    #[inline]
+    #[cfg(feature = "flutter")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    pub fn set_is_text_clipboard_required(b: bool) {
+        TEXT_CLIPBOARD_STATE.lock().unwrap().is_required = b;
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    fn try_stop_clipboard(_self_id: &str) {
+        #[cfg(feature = "flutter")]
+        if crate::flutter::other_sessions_running(_self_id) {
+            return;
+        }
+        TEXT_CLIPBOARD_STATE.lock().unwrap().running = false;
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    fn try_start_clipboard(_conf_tx: Option<(SessionPermissionConfig, UnboundedSender<Data>)>) {
+        let mut clipboard_lock = TEXT_CLIPBOARD_STATE.lock().unwrap();
+        if clipboard_lock.running {
+            return;
+        }
+
+        match ClipboardContext::new() {
+            Ok(mut ctx) => {
+                clipboard_lock.running = true;
+                // ignore clipboard update before service start
+                check_clipboard(&mut ctx, Some(&OLD_CLIPBOARD_TEXT));
+                std::thread::spawn(move || {
+                    log::info!("Start text clipboard loop");
+                    loop {
+                        std::thread::sleep(Duration::from_millis(CLIPBOARD_INTERVAL));
+                        if !TEXT_CLIPBOARD_STATE.lock().unwrap().running {
+                            break;
+                        }
+
+                        if !TEXT_CLIPBOARD_STATE.lock().unwrap().is_required {
+                            continue;
+                        }
+
+                        if let Some(msg) = check_clipboard(&mut ctx, Some(&OLD_CLIPBOARD_TEXT)) {
+                            #[cfg(feature = "flutter")]
+                            crate::flutter::send_text_clipboard_msg(msg);
+                            #[cfg(not(feature = "flutter"))]
+                            if let Some((cfg, tx)) = &_conf_tx {
+                                if cfg.is_text_clipboard_required() {
+                                    let _ = tx.send(Data::Message(msg));
+                                }
+                            }
+                        }
+                    }
+                    log::info!("Stop text clipboard loop");
+                });
+            }
+            Err(err) => {
+                log::error!("Failed to start clipboard service of client: {}", err);
+            }
+        }
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    fn get_current_text_clipboard_msg() -> Option<Message> {
+        let txt = &*OLD_CLIPBOARD_TEXT.lock().unwrap();
+        if txt.is_empty() {
+            None
+        } else {
+            Some(crate::create_clipboard_msg(txt.clone()))
+        }
+    }
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+impl TextClipboardState {
+    fn new() -> Self {
+        Self {
+            is_required: true,
+            running: false,
+        }
     }
 }
 
@@ -1147,6 +1238,10 @@ impl LoginConfigHandler {
         }
         if !name.contains("block-input") {
             self.save_config(config);
+        }
+        #[cfg(feature = "flutter")]
+        if name == "disable-clipboard" {
+            crate::flutter::update_text_clipboard_required();
         }
         let mut misc = Misc::new();
         misc.set_option(option);

@@ -464,6 +464,9 @@ pub fn session_add(
 
     let session: Session<FlutterHandler> = Session {
         id: session_id.clone(),
+        server_keyboard_enabled: Arc::new(RwLock::new(true)),
+        server_file_transfer_enabled: Arc::new(RwLock::new(true)),
+        server_clipboard_enabled: Arc::new(RwLock::new(true)),
         ..Default::default()
     };
 
@@ -511,6 +514,31 @@ pub fn session_start_(id: &str, event_stream: StreamSink<EventToUI>) -> ResultTy
         Ok(())
     } else {
         bail!("No session with peer id {}", id)
+    }
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn update_text_clipboard_required() {
+    let is_required = SESSIONS
+        .read()
+        .unwrap()
+        .iter()
+        .any(|(_id, session)| session.is_text_clipboard_required());
+    Client::set_is_text_clipboard_required(is_required);
+}
+
+#[inline]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn other_sessions_running(id: &str) -> bool {
+    SESSIONS.read().unwrap().keys().filter(|k| *k != id).count() != 0
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn send_text_clipboard_msg(msg: Message) {
+    for (_id, session) in SESSIONS.read().unwrap().iter() {
+        if session.is_text_clipboard_required() {
+            session.send(Data::Message(msg.clone()));
+        }
     }
 }
 
