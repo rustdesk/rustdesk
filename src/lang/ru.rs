@@ -209,8 +209,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Closed manually by the peer", "Закрыто удалённым узлом вручную"),
         ("Enable remote configuration modification", "Разрешить удалённое изменение конфигурации"),
         ("Run without install", "Запустить без установки"),
-        ("Connect via relay", ""),
-        ("Always connect via relay", "Всегда подключаться через ретрансляционный сервер"),
+        ("Connect via relay", "Подключится через ретранслятор"),
+        ("Always connect via relay", "Всегда подключаться через ретранслятор"),
         ("whitelist_tip", "Только IP-адреса из белого списка могут получить доступ ко мне"),
         ("Login", "Войти"),
         ("Verify", "Проверить"),
@@ -449,7 +449,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Voice call", "Голосовой вызов"),
         ("Text chat", "Текстовый чат"),
         ("Stop voice call", "Завершить голосовой вызов"),
-        ("relay_hint_tip", ""),
-        ("Reconnect", ""),
+        ("relay_hint_tip", "Прямое подключение может оказаться невозможным. В этом случае можно попытаться подключиться через сервер ретрансляции. \nКроме того, если вы хотите сразу использовать сервер ретрансляции, можно добавить к ID суффикс  \"/r\" или включить \"Всегда подключаться через ретранслятор\" в настройках удалённого узла."),
+        ("Reconnect", "Переподключить"),
         ].iter().cloned().collect();
 }
