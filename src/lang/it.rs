@@ -450,5 +450,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Text chat", "Chat testuale"),
         ("Stop voice call", "Interrompi la chiamata vocale"),
         ("relay_hint_tip", ""),
-    ].iter().cloned().collect();
+        ("Reconnect", ""),
+        ].iter().cloned().collect();
 }

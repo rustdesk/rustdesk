@@ -33,6 +33,7 @@ import 'input_model.dart';
 import 'platform_model.dart';
 
 typedef HandleMsgBox = Function(Map<String, dynamic> evt, String id);
+typedef ReconnectHandle = Function(OverlayDialogManager, String, bool);
 final _waitForImage = <String, bool>{};
 
 class FfiModel with ChangeNotifier {
@@ -310,19 +311,25 @@ class FfiModel with ChangeNotifier {
   showMsgBox(String id, String type, String title, String text, String link,
       bool hasRetry, OverlayDialogManager dialogManager,
       {bool? hasCancel}) {
-    msgBox(id, type, title, text, link, dialogManager, hasCancel: hasCancel);
+    msgBox(id, type, title, text, link, dialogManager,
+        hasCancel: hasCancel, reconnect: reconnect);
     _timer?.cancel();
     if (hasRetry) {
       _timer = Timer(Duration(seconds: _reconnects), () {
-        bind.sessionReconnect(id: id, forceRelay: false);
-        clearPermissions();
-        dialogManager.showLoading(translate('Connecting...'),
-            onCancel: closeConnection);
+        reconnect(dialogManager, id, false);
       });
       _reconnects *= 2;
     } else {
       _reconnects = 1;
     }
+  }
+
+  void reconnect(
+      OverlayDialogManager dialogManager, String id, bool forceRelay) {
+    bind.sessionReconnect(id: id, forceRelay: forceRelay);
+    clearPermissions();
+    dialogManager.showLoading(translate('Connecting...'),
+        onCancel: closeConnection);
   }
 
   void showRelayHintDialog(String id, String type, String title, String text,
@@ -333,13 +340,6 @@ class FfiModel with ChangeNotifier {
         close();
       }
 
-      reconnect(bool forceRelay) {
-        bind.sessionReconnect(id: id, forceRelay: forceRelay);
-        clearPermissions();
-        dialogManager.showLoading(translate('Connecting...'),
-            onCancel: closeConnection);
-      }
-
       final style =
           ElevatedButton.styleFrom(backgroundColor: Colors.green[700]);
       return CustomAlertDialog(
@@ -348,14 +348,16 @@ class FfiModel with ChangeNotifier {
             "${translate(text)}\n\n${translate('relay_hint_tip')}"),
         actions: [
           dialogButton('Close', onPressed: onClose, isOutline: true),
-          dialogButton('Retry', onPressed: () => reconnect(false)),
+          dialogButton('Retry',
+              onPressed: () => reconnect(dialogManager, id, false)),
           dialogButton('Connect via relay',
-              onPressed: () => reconnect(true), buttonStyle: style),
+              onPressed: () => reconnect(dialogManager, id, true),
+              buttonStyle: style),
           dialogButton('Always connect via relay', onPressed: () {
             const option = 'force-always-relay';
             bind.sessionPeerOption(
                 id: id, name: option, value: bool2option(option, true));
-            reconnect(true);
+            reconnect(dialogManager, id, true);
           }, buttonStyle: style),
         ],
         onCancel: onClose,

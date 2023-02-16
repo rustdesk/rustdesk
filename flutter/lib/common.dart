@@ -676,7 +676,7 @@ class CustomAlertDialog extends StatelessWidget {
 
 void msgBox(String id, String type, String title, String text, String link,
     OverlayDialogManager dialogManager,
-    {bool? hasCancel}) {
+    {bool? hasCancel, ReconnectHandle? reconnect}) {
   dialogManager.dismissAll();
   List<Widget> buttons = [];
   bool hasOk = false;
@@ -714,6 +714,13 @@ void msgBox(String id, String type, String title, String text, String link,
         0,
         dialogButton('Close', onPressed: () {
           dialogManager.dismissAll();
+        }));
+  }
+  if (reconnect != null && title == "Connection Error") {
+    buttons.insert(
+        0,
+        dialogButton('Reconnect', isOutline: true, onPressed: () {
+          reconnect(dialogManager, id, false);
         }));
   }
   if (link.isNotEmpty) {
