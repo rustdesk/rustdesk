@@ -413,14 +413,18 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       menubarItems.add(_buildPinMenubar(context));
       menubarItems.add(_buildFullscreen(context));
       if (widget.ffi.ffiModel.isPeerAndroid) {
-        menubarItems.add(IconButton(
+        menubarItems.add(MenuButton(
           tooltip: translate('Mobile Actions'),
-          color: _MenubarTheme.blueColor,
-          icon: const Icon(Icons.build),
+          icon: SvgPicture.asset(
+            "assets/actions_mobile.svg",
+            color: Colors.white,
+          ),
           onPressed: () {
             widget.ffi.dialogManager
                 .toggleMobileActionsOverlay(ffi: widget.ffi);
           },
+          color: _MenubarTheme.blueColor,
+          hoverColor: _MenubarTheme.hoverBlueColor,
         ));
       }
     }
