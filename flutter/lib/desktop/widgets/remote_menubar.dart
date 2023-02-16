@@ -1459,8 +1459,6 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     if (perms['audio'] != false) {
       displayMenu
           .add(_createSwitchMenuEntry('Mute', 'disable-audio', padding, true));
-      displayMenu
-          .add(_createSwitchMenuEntry('Mute', 'disable-audio', padding, true));
     }
 
     if (Platform.isWindows &&
