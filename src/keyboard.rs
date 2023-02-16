@@ -5,7 +5,9 @@ use crate::common::GrabState;
 use crate::flutter::{CUR_SESSION_ID, SESSIONS};
 #[cfg(not(any(feature = "flutter", feature = "cli")))]
 use crate::ui::CUR_SESSION;
-use hbb_common::{log, message_proto::*};
+use hbb_common::message_proto::*;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use hbb_common::log;
 use rdev::{Event, EventType, Key};
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use std::sync::atomic::{AtomicBool, Ordering};

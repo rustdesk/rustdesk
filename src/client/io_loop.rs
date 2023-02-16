@@ -233,6 +233,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     .msgbox("error", "Connection Error", &err.to_string(), "");
             }
         }
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         Client::try_stop_clipboard(&self.handler.id);
     }
 
@@ -841,13 +842,16 @@ impl<T: InvokeUiSession> Remote<T> {
                             let permission_config = self.handler.get_permission_config();
 
                             #[cfg(feature = "flutter")]
+                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
                             Client::try_start_clipboard(None);
                             #[cfg(not(feature = "flutter"))]
+                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
                             Client::try_start_clipboard(Some((
                                 permission_config.clone(),
                                 sender.clone(),
                             )));
 
+                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
                             tokio::spawn(async move {
                                 // due to clipboard service interval time
                                 sleep(common::CLIPBOARD_INTERVAL as f32 / 1_000.).await;
@@ -1050,12 +1054,14 @@ impl<T: InvokeUiSession> Remote<T> {
                         match p.permission.enum_value_or_default() {
                             Permission::Keyboard => {
                                 #[cfg(feature = "flutter")]
+                                #[cfg(not(any(target_os = "android", target_os = "ios")))]
                                 crate::flutter::update_text_clipboard_required();
                                 *self.handler.server_keyboard_enabled.write().unwrap() = p.enabled;
                                 self.handler.set_permission("keyboard", p.enabled);
                             }
                             Permission::Clipboard => {
                                 #[cfg(feature = "flutter")]
+                                #[cfg(not(any(target_os = "android", target_os = "ios")))]
                                 crate::flutter::update_text_clipboard_required();
                                 *self.handler.server_clipboard_enabled.write().unwrap() = p.enabled;
                                 self.handler.set_permission("clipboard", p.enabled);
