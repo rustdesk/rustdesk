@@ -500,12 +500,14 @@ class OverlayDialogManager {
                   Offstage(
                       offstage: !showCancel,
                       child: Center(
-                          child: TextButton(
-                              style: flatButtonStyle,
-                              onPressed: cancel,
-                              child: Text(translate('Cancel'),
-                                  style:
-                                      const TextStyle(color: MyTheme.accent)))))
+                          child: isDesktop
+                              ? dialogButton('Cancel', onPressed: cancel)
+                              : TextButton(
+                                  style: flatButtonStyle,
+                                  onPressed: cancel,
+                                  child: Text(translate('Cancel'),
+                                      style: const TextStyle(
+                                          color: MyTheme.accent)))))
                 ])),
         onCancel: showCancel ? cancel : null,
       );
@@ -660,8 +662,8 @@ class CustomAlertDialog extends StatelessWidget {
         scrollable: true,
         title: title,
         titlePadding: EdgeInsets.fromLTRB(padding, 24, padding, 0),
-        contentPadding: EdgeInsets.fromLTRB(
-            contentPadding ?? padding, 25, contentPadding ?? padding, 10),
+        contentPadding: EdgeInsets.fromLTRB(contentPadding ?? padding, 25,
+            contentPadding ?? padding, actions is List ? 10 : padding),
         content: ConstrainedBox(
           constraints: contentBoxConstraints,
           child: Theme(
