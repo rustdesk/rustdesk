@@ -596,13 +596,13 @@ void setPasswordDialog() async {
       });
       final pass = p0.text.trim();
       if (pass.isNotEmpty) {
-        for (var r in rules) {
-          if (!r.validate(pass)) {
-            setState(() {
-              errMsg0 = '${translate('Prompt')}: ${r.name}';
-            });
-            return;
-          }
+        final Iterable violations = rules.where((r) => !r.validate(pass));
+        if (violations.isNotEmpty) {
+          setState(() {
+            errMsg0 =
+                '${translate('Prompt')}: ${violations.map((r) => r.name).join(', ')}';
+          });
+          return;
         }
       }
       if (p1.text.trim() != pass) {
@@ -639,6 +639,9 @@ void setPasswordDialog() async {
                     autofocus: true,
                     onChanged: (value) {
                       rxPass.value = value.trim();
+                      setState(() {
+                        errMsg0 = '';
+                      });
                     },
                   ),
                 ),
@@ -662,6 +665,11 @@ void setPasswordDialog() async {
                         labelText: translate('Confirmation'),
                         errorText: errMsg1.isNotEmpty ? errMsg1 : null),
                     controller: p1,
+                    onChanged: (value) {
+                      setState(() {
+                        errMsg1 = '';
+                      });
+                    },
                   ),
                 ),
               ],
