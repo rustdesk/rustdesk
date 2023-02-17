@@ -415,7 +415,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       if (widget.ffi.ffiModel.isPeerAndroid) {
         menubarItems.add(MenuButton(
           tooltip: translate('Mobile Actions'),
-          icon: SvgPicture.asset(
+          child: SvgPicture.asset(
             "assets/actions_mobile.svg",
             color: Colors.white,
           ),
