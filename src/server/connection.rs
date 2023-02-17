@@ -1833,8 +1833,8 @@ impl Connection {
 
     async fn update_options(&mut self, o: &OptionMessage) {
         log::info!("Option update: {:?}", o);
-        self.update_options_without_auth(o);
-        self.update_options_with_auth(o);
+        self.update_options_without_auth(o).await;
+        self.update_options_with_auth(o).await;
     }
 
     async fn on_close(&mut self, reason: &str, lock: bool) {
