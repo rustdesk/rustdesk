@@ -1092,7 +1092,8 @@ impl Connection {
     async fn handle_login_request_without_validation(&mut self, lr: &LoginRequest) {
         self.lr = lr.clone();
         if let Some(o) = lr.option.as_ref() {
-            self.update_option(o).await;
+            // It may not be a good practice to update all options here.
+            self.update_options(o).await;
             if let Some(q) = o.video_codec_state.clone().take() {
                 scrap::codec::Encoder::update_video_encoder(
                     self.inner.id(),
@@ -1496,7 +1497,7 @@ impl Connection {
                         self.chat_unanswered = true;
                     }
                     Some(misc::Union::Option(o)) => {
-                        self.update_option(&o).await;
+                        self.update_options(&o).await;
                     }
                     Some(misc::Union::RefreshVideo(r)) => {
                         if r {
@@ -1665,8 +1666,7 @@ impl Connection {
         self.send_to_cm(Data::CloseVoiceCall("".to_owned()));
     }
 
-    async fn update_option(&mut self, o: &OptionMessage) {
-        log::info!("Option update: {:?}", o);
+    async fn update_options_without_auth(&mut self, o: &OptionMessage) {
         if let Ok(q) = o.image_quality.enum_value() {
             let image_quality;
             if let ImageQuality::NotSet = q {
@@ -1691,7 +1691,18 @@ impl Connection {
                 .unwrap()
                 .update_user_fps(o.custom_fps as _);
         }
+        if let Some(q) = o.video_codec_state.clone().take() {
+            scrap::codec::Encoder::update_video_encoder(
+                self.inner.id(),
+                scrap::codec::EncoderUpdate::State(q),
+            );
+        }
+    }
 
+    async fn update_options_with_auth(&mut self, o: &OptionMessage) {
+        if !self.authorized {
+            return;
+        }
         if let Ok(q) = o.lock_after_session_end.enum_value() {
             if q != BoolOption::NotSet {
                 self.lock_after_session_end = q == BoolOption::Yes;
@@ -1818,12 +1829,12 @@ impl Connection {
                 }
             }
         }
-        if let Some(q) = o.video_codec_state.clone().take() {
-            scrap::codec::Encoder::update_video_encoder(
-                self.inner.id(),
-                scrap::codec::EncoderUpdate::State(q),
-            );
-        }
+    }
+
+    async fn update_options(&mut self, o: &OptionMessage) {
+        log::info!("Option update: {:?}", o);
+        self.update_options_without_auth(o);
+        self.update_options_with_auth(o);
     }
 
     async fn on_close(&mut self, reason: &str, lock: bool) {
