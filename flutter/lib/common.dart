@@ -217,6 +217,9 @@ class MyTheme {
             style: ButtonStyle(splashFactory: NoSplash.splashFactory),
           )
         : null,
+    checkboxTheme: const CheckboxThemeData(
+      checkColor: MaterialStatePropertyAll(dark)
+    ),
   ).copyWith(
     extensions: <ThemeExtension<dynamic>>[
       ColorThemeExtension.dark,
