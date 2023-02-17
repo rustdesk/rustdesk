@@ -449,7 +449,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Voice call", "Llamada de voz"),
         ("Text chat", "Chat de texto"),
         ("Stop voice call", "Detener llamada de voz"),
-        ("relay_hint_tip", ""),
-        ("Reconnect", ""),
+        ("relay_hint_tip", "Puede que no sea posible conectar directamente. Puedes tratar de conectar a través de relay. \nAdicionalmente, si quieres usar relay en el primer intento, puedes añadir el sufijo \"/r\" a la ID o seleccionar la opción \"Conectar siempre a través de relay\" en la tarjeta del par."),
+        ("Reconnect", "Reconectar"),
         ].iter().cloned().collect();
 }
