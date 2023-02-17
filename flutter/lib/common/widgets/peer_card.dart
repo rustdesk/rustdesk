@@ -565,9 +565,21 @@ abstract class BasePeerCard extends StatelessWidget {
   @protected
   MenuEntryBase<String> _addFavAction(String id) {
     return MenuEntryButton<String>(
-      childBuilder: (TextStyle? style) => Text(
-        translate('Add to Favorites'),
-        style: style,
+      childBuilder: (TextStyle? style) => Row(
+        children: [
+          Text(
+            translate('Add to Favorites'),
+            style: style,
+          ),
+          Expanded(
+              child: Align(
+            alignment: Alignment.centerRight,
+            child: Transform.scale(
+              scale: 0.8,
+              child: Icon(Icons.star_outline),
+            ),
+          ).marginOnly(right: 4)),
+        ],
       ),
       proc: () {
         () async {
@@ -587,9 +599,21 @@ abstract class BasePeerCard extends StatelessWidget {
   MenuEntryBase<String> _rmFavAction(
       String id, Future<void> Function() reloadFunc) {
     return MenuEntryButton<String>(
-      childBuilder: (TextStyle? style) => Text(
-        translate('Remove from Favorites'),
-        style: style,
+      childBuilder: (TextStyle? style) => Row(
+        children: [
+          Text(
+            translate('Remove from Favorites'),
+            style: style,
+          ),
+          Expanded(
+              child: Align(
+            alignment: Alignment.centerRight,
+            child: Transform.scale(
+              scale: 0.8,
+              child: Icon(Icons.star),
+            ),
+          ).marginOnly(right: 4)),
+        ],
       ),
       proc: () {
         () async {
