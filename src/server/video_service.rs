@@ -65,6 +65,7 @@ lazy_static::lazy_static! {
     pub static ref VIDEO_QOS: Arc<Mutex<VideoQoS>> = Default::default();
     pub static ref IS_UAC_RUNNING: Arc<Mutex<bool>> = Default::default();
     pub static ref IS_FOREGROUND_WINDOW_ELEVATED: Arc<Mutex<bool>> = Default::default();
+    pub static ref LAST_SYNC_DISPLAYS: Arc<RwLock<Vec<DisplayInfo>>> = Default::default();
 }
 
 fn is_capturer_mag_supported() -> bool {
@@ -407,6 +408,43 @@ fn get_capturer(use_yuv: bool, portable_service_running: bool) -> ResultType<Cap
     })
 }
 
+fn check_displays_new() -> Option<Vec<Display>> {
+    let displays = try_get_displays().ok()?;
+    let last_sync_displays = &*LAST_SYNC_DISPLAYS.read().unwrap();
+
+    if displays.len() != last_sync_displays.len() {
+        Some(displays)
+    } else {
+        for i in 0..displays.len() {
+            if displays[i].height() != (last_sync_displays[i].height as usize) {
+                return Some(displays);
+            }
+            if displays[i].width() != (last_sync_displays[i].width as usize) {
+                return Some(displays);
+            }
+            if displays[i].origin() != (last_sync_displays[i].x, last_sync_displays[i].y) {
+                return Some(displays);
+            }
+        }
+        None
+    }
+}
+
+fn check_displays_changed() -> Option<Message> {
+    let displays = check_displays_new()?;
+    let (current, displays) = get_displays_2(&displays);
+    let mut pi = PeerInfo {
+        conn_id: crate::SYNC_PEER_INFO_DISPLAYS,
+        ..Default::default()
+    };
+    pi.displays = displays.clone();
+    pi.current_display = current as _;
+    let mut msg_out = Message::new();
+    msg_out.set_peer_info(pi);
+    *LAST_SYNC_DISPLAYS.write().unwrap() = displays;
+    Some(msg_out)
+}
+
 fn run(sp: GenericService) -> ResultType<()> {
     #[cfg(windows)]
     ensure_close_virtual_device()?;
@@ -529,6 +567,11 @@ fn run(sp: GenericService) -> ResultType<()> {
         let now = time::Instant::now();
         if last_check_displays.elapsed().as_millis() > 1000 {
             last_check_displays = now;
+
+            if let Some(msg_out) = check_displays_changed() {
+                sp.send(msg_out);
+            }
+
             if c.ndisplay != get_display_num() {
                 log::info!("Displays changed");
                 *SWITCH.lock().unwrap() = true;
@@ -798,11 +841,7 @@ fn get_display_num() -> usize {
         }
     }
 
-    if let Ok(d) = try_get_displays() {
-        d.len()
-    } else {
-        0
-    }
+    LAST_SYNC_DISPLAYS.read().unwrap().len()
 }
 
 pub(super) fn get_displays_2(all: &Vec<Display>) -> (usize, Vec<DisplayInfo>) {
@@ -861,6 +900,7 @@ pub async fn switch_display(i: i32) {
     }
 }
 
+#[inline]
 pub fn refresh() {
     #[cfg(target_os = "android")]
     Display::refresh_size();
@@ -888,10 +928,12 @@ fn get_primary() -> usize {
     0
 }
 
+#[inline]
 pub async fn switch_to_primary() {
     switch_display(get_primary() as _).await;
 }
 
+#[inline]
 #[cfg(not(windows))]
 fn try_get_displays() -> ResultType<Vec<Display>> {
     Ok(Display::all()?)

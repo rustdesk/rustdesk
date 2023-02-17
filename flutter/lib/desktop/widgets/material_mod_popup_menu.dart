@@ -1400,7 +1400,7 @@ class PopupMenuButtonState<T> extends State<PopupMenuButton<T>> {
     }
 
     return MenuButton(
-      icon: widget.icon ?? Icon(Icons.adaptive.more),
+      child: widget.icon ?? Icon(Icons.adaptive.more),
       tooltip:
           widget.tooltip ?? MaterialLocalizations.of(context).showMenuTooltip,
       onPressed: widget.enabled ? showButtonMenu : null,

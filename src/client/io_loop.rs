@@ -1253,6 +1253,14 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                     }
                 }
+                Some(message::Union::PeerInfo(pi)) => {
+                    match pi.conn_id {
+                        crate::SYNC_PEER_INFO_DISPLAYS => {
+                            self.handler.set_displays(&pi.displays);
+                        }
+                        _ => {}
+                    }
+                }
                 _ => {}
             }
         }

@@ -480,6 +480,14 @@ handler.updatePi = function(v) {
     }
 }
 
+handler.updateDisplays = function(v) {
+    pi.displays = v;
+    header.update();
+    if (is_port_forward) {
+        view.windowState = View.WINDOW_MINIMIZED;
+    }
+}
+
 function updatePrivacyMode() {
     var el = $(li#privacy-mode);
     if (el) {

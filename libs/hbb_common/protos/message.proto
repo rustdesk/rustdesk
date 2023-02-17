@@ -636,5 +636,6 @@ message Message {
     SwitchSidesResponse switch_sides_response = 22;
     VoiceCallRequest voice_call_request = 23;
     VoiceCallResponse voice_call_response = 24;
+    PeerInfo peer_info = 25;
   }
 }

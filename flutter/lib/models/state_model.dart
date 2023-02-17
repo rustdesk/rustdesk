@@ -14,6 +14,7 @@ class StateGlobal {
   final RxDouble _resizeEdgeSize = RxDouble(kWindowEdgeSize);
   final RxDouble _windowBorderWidth = RxDouble(kWindowBorderWidth);
   final RxBool showRemoteMenuBar = false.obs;
+  final RxInt displaysCount = 0.obs;
 
   int get windowId => _windowId;
   bool get fullscreen => _fullscreen;

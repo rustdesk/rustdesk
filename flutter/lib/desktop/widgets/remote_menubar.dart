@@ -476,7 +476,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         onPressed: () {
           widget.state.switchPin();
         },
-        icon: SvgPicture.asset(
+        child: SvgPicture.asset(
           pin ? "assets/pinned.svg" : "assets/unpinned.svg",
           color: Colors.white,
         ),
@@ -492,7 +492,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       onPressed: () {
         _setFullscreen(!isFullscreen);
       },
-      icon: SvgPicture.asset(
+      child: SvgPicture.asset(
         isFullscreen ? "assets/fullscreen_exit.svg" : "assets/fullscreen.svg",
         color: Colors.white,
       ),
@@ -503,7 +503,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
 
   Widget _buildMonitor(BuildContext context) {
     final pi = widget.ffi.ffiModel.pi;
-    return mod_menu.PopupMenuButton(
+    final monitor = mod_menu.PopupMenuButton(
       tooltip: translate('Select Monitor'),
       position: mod_menu.PopupMenuPosition.under,
       icon: Stack(
@@ -528,43 +528,44 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       itemBuilder: (BuildContext context) {
         final List<Widget> rowChildren = [];
         for (int i = 0; i < pi.displays.length; i++) {
-          rowChildren.add(
-            Stack(
-              alignment: Alignment.center,
-              children: [
-                SvgPicture.asset(
-                  "assets/display.svg",
-                  color: Colors.white,
-                ),
-                TextButton(
-                  child: Container(
-                    alignment: AlignmentDirectional.center,
-                    constraints:
-                        const BoxConstraints(minHeight: _MenubarTheme.height),
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 2.5),
-                      child: Text(
-                        (i + 1).toString(),
-                        style: TextStyle(
-                          color: Colors.white,
-                        ),
+          rowChildren.add(MenuButton(
+            color: _MenubarTheme.blueColor,
+            hoverColor: _MenubarTheme.hoverBlueColor,
+            child: Container(
+              alignment: AlignmentDirectional.center,
+              constraints:
+                  const BoxConstraints(minHeight: _MenubarTheme.height),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  SvgPicture.asset(
+                    "assets/display.svg",
+                    color: Colors.white,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 2.5),
+                    child: Text(
+                      (i + 1).toString(),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
                       ),
                     ),
-                  ),
-                  onPressed: () {
-                    if (Navigator.canPop(context)) {
-                      Navigator.pop(context);
-                      _menuDismissCallback();
-                    }
-                    RxInt display = CurrentDisplayState.find(widget.id);
-                    if (display.value != i) {
-                      bind.sessionSwitchDisplay(id: widget.id, value: i);
-                    }
-                  },
-                )
-              ],
+                  )
+                ],
+              ),
             ),
-          );
+            onPressed: () {
+              if (Navigator.canPop(context)) {
+                Navigator.pop(context);
+                _menuDismissCallback();
+              }
+              RxInt display = CurrentDisplayState.find(widget.id);
+              if (display.value != i) {
+                bind.sessionSwitchDisplay(id: widget.id, value: i);
+              }
+            },
+          ));
         }
         return <mod_menu.PopupMenuEntry<String>>[
           mod_menu.PopupMenuItem<String>(
@@ -580,6 +581,11 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         ];
       },
     );
+
+    return Obx(() => Offstage(
+          offstage: stateGlobal.displaysCount.value < 2,
+          child: monitor,
+        ));
   }
 
   Widget _buildControl(BuildContext context) {
@@ -678,7 +684,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                 ? translate('Stop session recording')
                 : translate('Start session recording'),
             onPressed: () => value.toggle(),
-            icon: SvgPicture.asset(
+            child: SvgPicture.asset(
               "assets/rec.svg",
               color: Colors.white,
             ),
@@ -701,7 +707,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       onPressed: () {
         clientClose(widget.id, widget.ffi.dialogManager);
       },
-      icon: SvgPicture.asset(
+      child: SvgPicture.asset(
         "assets/close.svg",
         color: Colors.white,
       ),
@@ -771,7 +777,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         return tooltipText == null
             ? const Offstage()
             : MenuButton(
-                icon: _getVoiceCallIcon(),
+                child: _getVoiceCallIcon(),
                 tooltip: translate(tooltipText),
                 onPressed: () => bind.sessionCloseVoiceCall(id: widget.id),
                 color: _MenubarTheme.redColor,

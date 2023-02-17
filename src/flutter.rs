@@ -142,6 +142,20 @@ impl FlutterHandler {
         }
         *stream_lock = None;
     }
+
+    fn make_displays_msg(displays: &Vec<DisplayInfo>) -> String {
+        let mut msg_vec = Vec::new();
+        for ref d in displays.iter() {
+            let mut h: HashMap<&str, i32> = Default::default();
+            h.insert("x", d.x);
+            h.insert("y", d.y);
+            h.insert("width", d.width);
+            h.insert("height", d.height);
+            h.insert("cursor_embedded", if d.cursor_embedded { 1 } else { 0 });
+            msg_vec.push(h);
+        }
+        serde_json::ser::to_string(&msg_vec).unwrap_or("".to_owned())
+    }
 }
 
 impl InvokeUiSession for FlutterHandler {
@@ -316,17 +330,7 @@ impl InvokeUiSession for FlutterHandler {
     }
 
     fn set_peer_info(&self, pi: &PeerInfo) {
-        let mut displays = Vec::new();
-        for ref d in pi.displays.iter() {
-            let mut h: HashMap<&str, i32> = Default::default();
-            h.insert("x", d.x);
-            h.insert("y", d.y);
-            h.insert("width", d.width);
-            h.insert("height", d.height);
-            h.insert("cursor_embedded", if d.cursor_embedded { 1 } else { 0 });
-            displays.push(h);
-        }
-        let displays = serde_json::ser::to_string(&displays).unwrap_or("".to_owned());
+        let displays = Self::make_displays_msg(&pi.displays);
         let mut features: HashMap<&str, i32> = Default::default();
         for ref f in pi.features.iter() {
             features.insert("privacy_mode", if f.privacy_mode { 1 } else { 0 });
@@ -348,6 +352,13 @@ impl InvokeUiSession for FlutterHandler {
                 ("features", &features),
                 ("current_display", &pi.current_display.to_string()),
             ],
+        );
+    }
+
+    fn set_displays(&self, displays: &Vec<DisplayInfo>) {
+        self.push_event(
+            "sync_peer_info",
+            vec![("displays", &Self::make_displays_msg(displays))],
         );
     }
 
