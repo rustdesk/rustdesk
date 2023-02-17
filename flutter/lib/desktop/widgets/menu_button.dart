@@ -5,7 +5,7 @@ class MenuButton extends StatefulWidget {
   final Color color;
   final Color hoverColor;
   final Color? splashColor;
-  final Widget icon;
+  final Widget child;
   final String? tooltip;
   final EdgeInsetsGeometry padding;
   final bool enableFeedback;
@@ -14,7 +14,7 @@ class MenuButton extends StatefulWidget {
     required this.onPressed,
     required this.color,
     required this.hoverColor,
-    required this.icon,
+    required this.child,
     this.splashColor,
     this.tooltip = "",
     this.padding = const EdgeInsets.symmetric(horizontal: 3, vertical: 6),
@@ -51,7 +51,7 @@ class _MenuButtonState extends State<MenuButton> {
               splashColor: widget.splashColor,
               enableFeedback: widget.enableFeedback,
               onTap: widget.onPressed,
-              child: widget.icon,
+              child: widget.child,
             ),
           ),
         ),

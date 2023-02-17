@@ -6,7 +6,10 @@ use crate::common::update_clipboard;
 #[cfg(windows)]
 use crate::portable_service::client as portable_client;
 use crate::{
-    client::{start_audio_thread, LatencyController, MediaData, MediaSender, new_voice_call_request, new_voice_call_response},
+    client::{
+        new_voice_call_request, new_voice_call_response, start_audio_thread, LatencyController,
+        MediaData, MediaSender,
+    },
     common::{get_default_sound_input, set_sound_input},
     video_service,
 };
@@ -672,15 +675,15 @@ impl Connection {
             .collect();
         if !whitelist.is_empty()
             && whitelist
-            .iter()
-            .filter(|x| x == &"0.0.0.0")
-            .next()
-            .is_none()
+                .iter()
+                .filter(|x| x == &"0.0.0.0")
+                .next()
+                .is_none()
             && whitelist
-            .iter()
-            .filter(|x| IpCidr::from_str(x).map_or(false, |y| y.contains(addr.ip())))
-            .next()
-            .is_none()
+                .iter()
+                .filter(|x| IpCidr::from_str(x).map_or(false, |y| y.contains(addr.ip())))
+                .next()
+                .is_none()
         {
             self.send_login_error("Your ip is blocked by the peer")
                 .await;
@@ -806,7 +809,7 @@ impl Connection {
         };
         self.post_conn_audit(json!({"peer": self.peer_info, "type": conn_type}));
         #[allow(unused_mut)]
-            let mut username = crate::platform::get_active_username();
+        let mut username = crate::platform::get_active_username();
         let mut res = LoginResponse::new();
         let mut pi = PeerInfo {
             username: username.clone(),
@@ -833,7 +836,7 @@ impl Connection {
                 h265,
                 ..Default::default()
             })
-                .into();
+            .into();
         }
 
         if self.port_forward_socket.is_some() {
@@ -877,7 +880,7 @@ impl Connection {
             privacy_mode: video_service::is_privacy_mode_supported(),
             ..Default::default()
         })
-            .into();
+        .into();
 
         let mut sub_service = false;
         if self.file_transfer.is_some() {
@@ -893,10 +896,11 @@ impl Connection {
                     res.set_error(format!("{}", err));
                 }
                 Ok((current, displays)) => {
-                    pi.displays = displays.into();
+                    pi.displays = displays.clone();
                     pi.current_display = current as _;
                     res.set_peer_info(pi);
                     sub_service = true;
+                    *super::video_service::LAST_SYNC_DISPLAYS.write().unwrap() = displays;
                 }
             }
         }
@@ -1160,7 +1164,7 @@ impl Connection {
                                 "Failed to access remote {}, please make sure if it is open",
                                 addr
                             ))
-                                .await;
+                            .await;
                             return false;
                         }
                     }
@@ -1324,12 +1328,12 @@ impl Connection {
                     }
                 }
                 Some(message::Union::Clipboard(cb)) =>
-                    {
-                        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                        if self.clipboard {
-                            update_clipboard(cb, None);
-                        }
+                {
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    if self.clipboard {
+                        update_clipboard(cb, None);
                     }
+                }
                 Some(message::Union::Cliprdr(_clip)) => {
                     if self.file_transfer_enabled() {
                         #[cfg(windows)]
@@ -1512,15 +1516,15 @@ impl Connection {
                     }
 
                     Some(misc::Union::RestartRemoteDevice(_)) =>
-                        {
-                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                            if self.restart {
-                                match system_shutdown::reboot() {
-                                    Ok(_) => log::info!("Restart by the peer"),
-                                    Err(e) => log::error!("Failed to restart:{}", e),
-                                }
+                    {
+                        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                        if self.restart {
+                            match system_shutdown::reboot() {
+                                Ok(_) => log::info!("Restart by the peer"),
+                                Err(e) => log::error!("Failed to restart:{}", e),
                             }
                         }
+                    }
                     Some(misc::Union::ElevationRequest(r)) => match r.union {
                         Some(elevation_request::Union::Direct(_)) => {
                             #[cfg(windows)]
@@ -1530,8 +1534,8 @@ impl Connection {
                                     err = portable_client::start_portable_service(
                                         portable_client::StartPara::Direct,
                                     )
-                                        .err()
-                                        .map_or("".to_string(), |e| e.to_string());
+                                    .err()
+                                    .map_or("".to_string(), |e| e.to_string());
                                 }
                                 self.portable.elevation_requested = err.is_empty();
                                 let mut misc = Misc::new();
@@ -1549,8 +1553,8 @@ impl Connection {
                                     err = portable_client::start_portable_service(
                                         portable_client::StartPara::Logon(_r.username, _r.password),
                                     )
-                                        .err()
-                                        .map_or("".to_string(), |e| e.to_string());
+                                    .err()
+                                    .map_or("".to_string(), |e| e.to_string());
                                 }
                                 self.portable.elevation_requested = err.is_empty();
                                 let mut misc = Misc::new();
@@ -1571,7 +1575,11 @@ impl Connection {
                             // No video frame will be sent here, so we need to disable latency controller, or audio check may fail.
                             latency_controller.lock().unwrap().set_audio_only(true);
                             self.audio_sender = Some(start_audio_thread(Some(latency_controller)));
-                            allow_err!(self.audio_sender.as_ref().unwrap().send(MediaData::AudioFormat(format)));
+                            allow_err!(self
+                                .audio_sender
+                                .as_ref()
+                                .unwrap()
+                                .send(MediaData::AudioFormat(format)));
                         }
                     }
                     #[cfg(feature = "flutter")]
@@ -1583,7 +1591,7 @@ impl Connection {
                                 "--switch_uuid",
                                 uuid.to_string().as_ref(),
                             ])
-                                .ok();
+                            .ok();
                             self.send_close_reason_no_retry("Closed as expected").await;
                             self.on_close("switch sides", false).await;
                             return false;
@@ -1596,7 +1604,9 @@ impl Connection {
                         if let Some(sender) = &self.audio_sender {
                             allow_err!(sender.send(MediaData::AudioFrame(frame)));
                         } else {
-                            log::warn!("Processing audio frame without the voice call audio sender.");
+                            log::warn!(
+                                "Processing audio frame without the voice call audio sender."
+                            );
                         }
                     }
                 }
@@ -1646,7 +1656,9 @@ impl Connection {
 
     pub async fn close_voice_call(&mut self) {
         // Restore to the prior audio device.
-        if let Some(sound_input) = std::mem::replace(&mut self.audio_input_device_before_voice_call, None) {
+        if let Some(sound_input) =
+            std::mem::replace(&mut self.audio_input_device_before_voice_call, None)
+        {
             set_sound_input(sound_input);
         }
         // Notify the connection manager that the voice call has been closed.
@@ -1821,13 +1833,13 @@ impl Connection {
             lock_screen().await;
         }
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            let data = if self.chat_unanswered {
+        let data = if self.chat_unanswered {
             ipc::Data::Disconnected
         } else {
             ipc::Data::Close
         };
         #[cfg(any(target_os = "android", target_os = "ios"))]
-            let data = ipc::Data::Close;
+        let data = ipc::Data::Close;
         self.tx_to_cm.send(data).ok();
         self.port_forward_socket.take();
     }

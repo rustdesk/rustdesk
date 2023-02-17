@@ -140,6 +140,8 @@ class FfiModel with ChangeNotifier {
         handleMsgBox(evt, peerId);
       } else if (name == 'peer_info') {
         handlePeerInfo(evt, peerId);
+      } else if (name == 'sync_peer_info') {
+        handleSyncPeerInfo(evt, peerId);
       } else if (name == 'connection_ready') {
         setConnectionType(
             peerId, evt['secure'] == 'true', evt['direct'] == 'true');
@@ -415,6 +417,7 @@ class FfiModel with ChangeNotifier {
         d.cursorEmbedded = d0['cursor_embedded'] == 1;
         _pi.displays.add(d);
       }
+      stateGlobal.displaysCount.value = _pi.displays.length;
       if (_pi.currentDisplay < _pi.displays.length) {
         _display = _pi.displays[_pi.currentDisplay];
       }
@@ -427,6 +430,27 @@ class FfiModel with ChangeNotifier {
       }
       Map<String, dynamic> features = json.decode(evt['features']);
       _pi.features.privacyMode = features['privacy_mode'] == 1;
+    }
+    notifyListeners();
+  }
+
+  /// Handle the peer info synchronization event based on [evt].
+  handleSyncPeerInfo(Map<String, dynamic> evt, String peerId) async {
+    if (evt['displays'] != null) {
+      List<dynamic> displays = json.decode(evt['displays']);
+      List<Display> newDisplays = [];
+      for (int i = 0; i < displays.length; ++i) {
+        Map<String, dynamic> d0 = displays[i];
+        var d = Display();
+        d.x = d0['x'].toDouble();
+        d.y = d0['y'].toDouble();
+        d.width = d0['width'];
+        d.height = d0['height'];
+        d.cursorEmbedded = d0['cursor_embedded'] == 1;
+        newDisplays.add(d);
+      }
+      _pi.displays = newDisplays;
+      stateGlobal.displaysCount.value = _pi.displays.length;
     }
     notifyListeners();
   }

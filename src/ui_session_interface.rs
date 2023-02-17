@@ -761,6 +761,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn set_display(&self, x: i32, y: i32, w: i32, h: i32, cursor_embedded: bool);
     fn switch_display(&self, display: &SwitchDisplay);
     fn set_peer_info(&self, peer_info: &PeerInfo); // flutter
+    fn set_displays(&self, displays: &Vec<DisplayInfo>);
     fn on_connected(&self, conn_type: ConnType);
     fn update_privacy_mode(&self);
     fn set_permission(&self, name: &str, value: bool);

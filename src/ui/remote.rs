@@ -53,6 +53,20 @@ impl SciterHandler {
             allow_err!(e.call_method(func, &super::value_crash_workaround(args)[..]));
         }
     }
+
+    fn make_displays_array(displays: &Vec<DisplayInfo>) -> Value {
+        let mut displays_value = Value::array(0);
+        for d in displays.iter() {
+            let mut display = Value::map();
+            display.set_item("x", d.x);
+            display.set_item("y", d.y);
+            display.set_item("width", d.width);
+            display.set_item("height", d.height);
+            display.set_item("cursor_embedded", d.cursor_embedded);
+            displays_value.push(display);
+        }
+        displays_value
+    }
 }
 
 impl InvokeUiSession for SciterHandler {
@@ -215,20 +229,16 @@ impl InvokeUiSession for SciterHandler {
         pi_sciter.set_item("hostname", pi.hostname.clone());
         pi_sciter.set_item("platform", pi.platform.clone());
         pi_sciter.set_item("sas_enabled", pi.sas_enabled);
-
-        let mut displays = Value::array(0);
-        for ref d in pi.displays.iter() {
-            let mut display = Value::map();
-            display.set_item("x", d.x);
-            display.set_item("y", d.y);
-            display.set_item("width", d.width);
-            display.set_item("height", d.height);
-            display.set_item("cursor_embedded", d.cursor_embedded);
-            displays.push(display);
-        }
-        pi_sciter.set_item("displays", displays);
+        pi_sciter.set_item("displays", Self::make_displays_array(&pi.displays));
         pi_sciter.set_item("current_display", pi.current_display);
         self.call("updatePi", &make_args!(pi_sciter));
+    }
+
+    fn set_displays(&self, displays: &Vec<DisplayInfo>) {
+        self.call(
+            "updateDisplays",
+            &make_args!(Self::make_displays_array(displays)),
+        );
     }
 
     fn on_connected(&self, conn_type: ConnType) {
