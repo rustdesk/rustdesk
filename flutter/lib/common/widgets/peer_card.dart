@@ -690,9 +690,6 @@ class RecentPeerCard extends BasePeerCard {
     }
     menuItems.add(MenuEntryDivider());
     menuItems.add(_renameAction(peer.id));
-    menuItems.add(_removeAction(peer.id, () async {
-      await bind.mainLoadRecentPeers();
-    }));
     if (await bind.mainPeerHasPassword(id: peer.id)) {
       menuItems.add(_unrememberPasswordAction(peer.id));
     }
@@ -700,6 +697,9 @@ class RecentPeerCard extends BasePeerCard {
     if (!gFFI.abModel.idContainBy(peer.id)) {
       menuItems.add(_addToAb(peer));
     }
+    menuItems.add(_removeAction(peer.id, () async {
+      await bind.mainLoadRecentPeers();
+    }));
     return menuItems;
   }
 
@@ -732,9 +732,6 @@ class FavoritePeerCard extends BasePeerCard {
     }
     menuItems.add(MenuEntryDivider());
     menuItems.add(_renameAction(peer.id));
-    menuItems.add(_removeAction(peer.id, () async {
-      await bind.mainLoadFavPeers();
-    }));
     if (await bind.mainPeerHasPassword(id: peer.id)) {
       menuItems.add(_unrememberPasswordAction(peer.id));
     }
@@ -744,6 +741,9 @@ class FavoritePeerCard extends BasePeerCard {
     if (!gFFI.abModel.idContainBy(peer.id)) {
       menuItems.add(_addToAb(peer));
     }
+    menuItems.add(_removeAction(peer.id, () async {
+      await bind.mainLoadFavPeers();
+    }));
     return menuItems;
   }
 
@@ -775,10 +775,10 @@ class DiscoveredPeerCard extends BasePeerCard {
       menuItems.add(_createShortCutAction(peer.id));
     }
     menuItems.add(MenuEntryDivider());
-    menuItems.add(_removeAction(peer.id, () async {}));
     if (!gFFI.abModel.idContainBy(peer.id)) {
       menuItems.add(_addToAb(peer));
     }
+    menuItems.add(_removeAction(peer.id, () async {}));
     return menuItems;
   }
 
@@ -811,13 +811,13 @@ class AddressBookPeerCard extends BasePeerCard {
     }
     menuItems.add(MenuEntryDivider());
     menuItems.add(_renameAction(peer.id));
-    menuItems.add(_removeAction(peer.id, () async {}));
     if (await bind.mainPeerHasPassword(id: peer.id)) {
       menuItems.add(_unrememberPasswordAction(peer.id));
     }
     if (gFFI.abModel.tags.isNotEmpty) {
       menuItems.add(_editTagAction(peer.id));
     }
+    menuItems.add(_removeAction(peer.id, () async {}));
     return menuItems;
   }
 
