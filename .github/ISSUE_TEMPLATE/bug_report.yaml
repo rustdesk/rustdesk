@@ -1,5 +1,6 @@
 name: 🐞 Bug report
 description: Thanks for taking the time to fill out this bug report! Please fill the form in **English**
+body:
   - type: textarea
     id: desc
     attributes:
