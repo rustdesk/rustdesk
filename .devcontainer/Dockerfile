@@ -1,5 +1,4 @@
 FROM debian
-
 WORKDIR /
 RUN apt update -y && apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake unzip zip sudo libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
 
@@ -14,6 +13,11 @@ USER user
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs > rustup.sh
 RUN chmod +x rustup.sh
 RUN ./rustup.sh -y
+
+# Install Flutter
+RUN wget https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.7.3-stable.tar.xz
+RUN tar xf flutter_linux_3.7.3-stable.tar.xz
+RUN export PATH="$PATH:/home/user/flutter/bin"
 
 USER root
 ENV HOME=/home/user
