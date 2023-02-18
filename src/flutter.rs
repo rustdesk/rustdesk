@@ -9,7 +9,7 @@ use hbb_common::{
     ResultType,
 };
 use libc::c_void;
-use libloading::Library;
+use libloading::{Library, Symbol};
 use serde_json::json;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
@@ -29,6 +29,18 @@ lazy_static::lazy_static! {
     pub static ref CUR_SESSION_ID: RwLock<String> = Default::default();
     pub static ref SESSIONS: RwLock<HashMap<String, Session<FlutterHandler>>> = Default::default();
     pub static ref GLOBAL_EVENT_STREAM: RwLock<HashMap<String, StreamSink<String>>> = Default::default(); // rust to dart event channel
+    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    pub static ref TEXURE_RGBA_RENDERER_PLUGIN: Library = {
+        unsafe {
+            #[cfg(target_os = "windows")]
+            let lib = Library::new("texture_rgba_renderer_plugin.dll");
+            #[cfg(target_os = "macos")]
+            let lib = Library::new("texture_rgba_renderer_plugin.dylib");
+            #[cfg(target_os = "linux")]
+            let lib = Library::new("texture_rgba_renderer_plugin.so");
+            lib.expect("`libtexture_rgba_renderer_plugin` not found, please add `texture_rgba_renderer` in your flutter project")
+        }
+    };
 }
 
 /// FFI for rustdesk core's main entry.
@@ -117,35 +129,33 @@ pub struct FlutterHandler {
     // We must check the `rgba_valid` before reading [rgba].
     pub rgba: Arc<RwLock<Vec<u8>>>,
     pub rgba_valid: Arc<AtomicBool>,
-    pub renderer: Arc<RwLock<VideoRenderer>>
+    pub renderer: VideoRenderer,
 }
-// pub type FlutterRgbaRendererPluginOnRgba = unsafe extern "C" fn(texture_rgba: *mut c_void , buffer: *const u8 , width: c_int, height: c_int);
-
-extern "C" {
-    fn FlutterRgbaRendererPluginOnRgba(texture_rgba: *mut c_void , buffer: *const u8 , width: c_int, height: c_int);
-}
+pub type FlutterRgbaRendererPluginOnRgba =
+    unsafe extern "C" fn(texture_rgba: *mut c_void, buffer: *const u8, width: c_int, height: c_int);
 
 // Video Texture Renderer in Flutter
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct VideoRenderer {
     // TextureRgba pointer in flutter native.
     ptr: usize,
     width: i32,
     height: i32,
-    // on_rgba_func: FlutterRgbaRendererPluginOnRgba
+    on_rgba_func: Symbol<'static, FlutterRgbaRendererPluginOnRgba>,
 }
 
-// impl Default for VideoRenderer {
-//     fn default() -> Self {
-//         unsafe {
-//             let lib = Library::new("texture_rgba_renderer_plugin").expect("`libtexture_rgba_renderer_plugin` not found, please add `texture_rgba_renderer` in your project");
-//             let func = lib.get<FlutterRgbaRendererPluginOnRgba>(b"FlutterRgbaRendererPluginOnRgba");
-//         }
-        
-//     }
-// }
-
-
+impl Default for VideoRenderer {
+    fn default() -> Self {
+        unsafe {
+            Self {
+                on_rgba_func: TEXURE_RGBA_RENDERER_PLUGIN
+                    .get::<FlutterRgbaRendererPluginOnRgba>(b"FlutterRgbaRendererPluginOnRgba")
+                    .expect("Symbol FlutterRgbaRendererPluginOnRgba not found."),
+                ..Default::default()
+            }
+        }
+    }
+}
 
 impl VideoRenderer {
     pub fn new(ptr: usize) -> Self {
@@ -164,10 +174,8 @@ impl VideoRenderer {
         if self.ptr == usize::default() {
             return;
         }
-        #[cfg(target_os = "windows")]
-        unsafe {
-            FlutterRgbaRendererPluginOnRgba(self.ptr as _, rgba, self.width as _, self.height as _);
-        }
+        let func = self.on_rgba_func.clone();
+        unsafe {func(self.ptr as _, rgba, self.width as _, self.height as _)};
     }
 }
 
@@ -211,8 +219,8 @@ impl FlutterHandler {
         serde_json::ser::to_string(&msg_vec).unwrap_or("".to_owned())
     }
 
-    pub fn register_texture(&self, ptr: usize) {
-        self.renderer.write().unwrap().ptr = ptr;
+    pub fn register_texture(&mut self, ptr: usize) {
+        self.renderer.ptr = ptr;
     }
 }
 
@@ -382,12 +390,13 @@ impl InvokeUiSession for FlutterHandler {
         self.rgba_valid.store(true, Ordering::Relaxed);
         // Return the rgba buffer to the video handler for reusing allocated rgba buffer.
         std::mem::swap::<Vec<u8>>(data, &mut *self.rgba.write().unwrap());
-        #[cfg(not(any(target_os = "windows")))]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         if let Some(stream) = &*self.event_stream.read().unwrap() {
             stream.add(EventToUI::Rgba);
         }
-        #[cfg(any(target_os = "windows"))]
-        self.renderer.read().unwrap().on_rgba(self.rgba.read().unwrap().as_ptr());
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        self.renderer
+            .on_rgba(self.rgba.read().unwrap().as_ptr());
     }
 
     fn set_peer_info(&self, pi: &PeerInfo) {
