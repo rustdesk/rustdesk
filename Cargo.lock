@@ -4860,6 +4860,7 @@ dependencies = [
  "include_dir",
  "jni 0.19.0",
  "lazy_static",
+ "libloading",
  "libpulse-binding",
  "libpulse-simple-binding",
  "mac_address",

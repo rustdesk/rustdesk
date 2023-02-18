@@ -8,6 +8,8 @@ use hbb_common::{
     bail, config::LocalConfig, get_version_number, message_proto::*, rendezvous_proto::ConnType,
     ResultType,
 };
+use libc::c_void;
+use libloading::Library;
 use serde_json::json;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
@@ -115,6 +117,58 @@ pub struct FlutterHandler {
     // We must check the `rgba_valid` before reading [rgba].
     pub rgba: Arc<RwLock<Vec<u8>>>,
     pub rgba_valid: Arc<AtomicBool>,
+    pub renderer: Arc<RwLock<VideoRenderer>>
+}
+// pub type FlutterRgbaRendererPluginOnRgba = unsafe extern "C" fn(texture_rgba: *mut c_void , buffer: *const u8 , width: c_int, height: c_int);
+
+extern "C" {
+    fn FlutterRgbaRendererPluginOnRgba(texture_rgba: *mut c_void , buffer: *const u8 , width: c_int, height: c_int);
+}
+
+// Video Texture Renderer in Flutter
+#[derive(Default, Clone)]
+pub struct VideoRenderer {
+    // TextureRgba pointer in flutter native.
+    ptr: usize,
+    width: i32,
+    height: i32,
+    // on_rgba_func: FlutterRgbaRendererPluginOnRgba
+}
+
+// impl Default for VideoRenderer {
+//     fn default() -> Self {
+//         unsafe {
+//             let lib = Library::new("texture_rgba_renderer_plugin").expect("`libtexture_rgba_renderer_plugin` not found, please add `texture_rgba_renderer` in your project");
+//             let func = lib.get<FlutterRgbaRendererPluginOnRgba>(b"FlutterRgbaRendererPluginOnRgba");
+//         }
+        
+//     }
+// }
+
+
+
+impl VideoRenderer {
+    pub fn new(ptr: usize) -> Self {
+        Self {
+            ptr,
+            ..Default::default()
+        }
+    }
+
+    pub fn set_size(&mut self, width: i32, height: i32) {
+        self.width = width;
+        self.height = height;
+    }
+
+    pub fn on_rgba(&self, rgba: *const u8) {
+        if self.ptr == usize::default() {
+            return;
+        }
+        #[cfg(target_os = "windows")]
+        unsafe {
+            FlutterRgbaRendererPluginOnRgba(self.ptr as _, rgba, self.width as _, self.height as _);
+        }
+    }
 }
 
 impl FlutterHandler {
@@ -155,6 +209,10 @@ impl FlutterHandler {
             msg_vec.push(h);
         }
         serde_json::ser::to_string(&msg_vec).unwrap_or("".to_owned())
+    }
+
+    pub fn register_texture(&self, ptr: usize) {
+        self.renderer.write().unwrap().ptr = ptr;
     }
 }
 
@@ -324,9 +382,12 @@ impl InvokeUiSession for FlutterHandler {
         self.rgba_valid.store(true, Ordering::Relaxed);
         // Return the rgba buffer to the video handler for reusing allocated rgba buffer.
         std::mem::swap::<Vec<u8>>(data, &mut *self.rgba.write().unwrap());
+        #[cfg(not(any(target_os = "windows")))]
         if let Some(stream) = &*self.event_stream.read().unwrap() {
             stream.add(EventToUI::Rgba);
         }
+        #[cfg(any(target_os = "windows"))]
+        self.renderer.read().unwrap().on_rgba(self.rgba.read().unwrap().as_ptr());
     }
 
     fn set_peer_info(&self, pi: &PeerInfo) {
@@ -738,6 +799,16 @@ pub fn session_next_rgba(id: *const char) {
     if let Ok(id) = id.to_str() {
         if let Some(session) = SESSIONS.write().unwrap().get_mut(id) {
             return session.next_rgba();
+        }
+    }
+}
+
+#[no_mangle]
+pub fn session_register_texture(id: *const char, ptr: usize) {
+    let id = unsafe { std::ffi::CStr::from_ptr(id as _) };
+    if let Ok(id) = id.to_str() {
+        if let Some(session) = SESSIONS.write().unwrap().get_mut(id) {
+            return session.register_texture(ptr);
         }
     }
 }

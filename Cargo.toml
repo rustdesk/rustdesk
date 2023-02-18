@@ -9,7 +9,7 @@ default-run = "rustdesk"
 
 [lib]
 name = "librustdesk"
-crate-type = ["cdylib", "staticlib", "rlib"]
+crate-type = ["cdylib"]
 
 [[bin]]
 name = "naming"
@@ -67,6 +67,7 @@ url = { version = "2.1", features = ["serde"] }
 reqwest = { version = "0.11", features = ["blocking", "json", "rustls-tls"], default-features=false }
 chrono = "0.4.23"
 cidr-utils = "0.5.9"
+libloading = "0.7.4"
 
 [target.'cfg(not(any(target_os = "android", target_os = "linux")))'.dependencies]
 cpal = "0.13.5"
