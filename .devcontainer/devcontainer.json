@@ -1,7 +1,8 @@
 {
     "name": "rustdesk",
     "build": {
-        "dockerfile": "Dockerfile"
+        "dockerfile": "./Dockerfile",
+        "context": "."
     },
     "workspaceMount": "source=${localWorkspaceFolder},target=/home/user/rustdesk,type=bind,consistency=cache",
     "workspaceFolder": "/home/user/rustdesk",
