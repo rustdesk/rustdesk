@@ -1,8 +1,6 @@
-use libc;
-
 use crate::{Key, KeyboardControllable, MouseButton, MouseControllable};
 
-use self::libc::{c_char, c_int, c_void, useconds_t};
+use hbb_common::libc::{c_char, c_int, c_void, useconds_t};
 use std::{borrow::Cow, ffi::CString, ptr};
 
 const CURRENT_WINDOW: c_int = 0;

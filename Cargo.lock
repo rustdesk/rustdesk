@@ -1566,7 +1566,6 @@ version = "0.0.14"
 dependencies = [
  "core-graphics 0.22.3",
  "hbb_common",
- "libc",
  "log",
  "objc",
  "pkg-config",
@@ -2598,6 +2597,7 @@ name = "hbb_common"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "backtrace",
  "bytes",
  "chrono",
  "confy",
@@ -2608,6 +2608,7 @@ dependencies = [
  "futures",
  "futures-util",
  "lazy_static",
+ "libc",
  "log",
  "mac_address",
  "machine-uid",
@@ -4813,7 +4814,6 @@ dependencies = [
  "arboard",
  "async-process",
  "async-trait",
- "backtrace",
  "base64",
  "bytes",
  "cc",
@@ -4847,7 +4847,6 @@ dependencies = [
  "include_dir",
  "jni 0.19.0",
  "lazy_static",
- "libc",
  "libpulse-binding",
  "libpulse-simple-binding",
  "mac_address",
@@ -5046,7 +5045,6 @@ dependencies = [
  "hwcodec",
  "jni 0.19.0",
  "lazy_static",
- "libc",
  "log",
  "ndk 0.7.0",
  "num_cpus",

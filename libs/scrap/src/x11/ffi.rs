@@ -1,6 +1,6 @@
 #![allow(non_camel_case_types)]
 
-use libc::c_void;
+use hbb_common::libc::c_void;
 
 #[link(name = "xcb")]
 #[link(name = "xcb-shm")]

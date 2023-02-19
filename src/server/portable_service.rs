@@ -492,7 +492,7 @@ pub mod client {
         let mut option = SHMEM.lock().unwrap();
         let shmem = option.as_mut().unwrap();
         unsafe {
-            libc::memset(shmem.as_ptr() as _, 0, shmem.len() as _);
+            hbb_common::libc::memset(shmem.as_ptr() as _, 0, shmem.len() as _);
         }
         drop(option);
         match para {
