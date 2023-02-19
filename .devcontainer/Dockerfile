@@ -10,16 +10,33 @@ RUN git clone https://github.com/microsoft/vcpkg
 WORKDIR vcpkg
 RUN git checkout 134505003bb46e20fbace51ccfb69243fbbc5f82
 RUN /vcpkg/bootstrap-vcpkg.sh -disableMetrics
-RUN /vcpkg/vcpkg --disable-metrics install libvpx libyuv opus
+ENV VCPKG_ROOT=/vcpkg
+RUN $VCPKG_ROOT/vcpkg --disable-metrics install libvpx libyuv opus
+
+WORKDIR /
+RUN wget https://github.com/rustdesk/doc.rustdesk.com/releases/download/console/dep.tar.gz && tar xzf dep.tar.gz
+
 
 USER vscode
 WORKDIR $HOME
 RUN wget https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs > rustup.sh
 RUN chmod +x rustup.sh
-RUN ./rustup.sh -y
+RUN $HOME/rustup.sh -y
+RUN $HOME/.cargo/bin/rustup target add aarch64-linux-android
+RUN $HOME/.cargo/bin/cargo install cargo-ndk
 
 # Install Flutter
 RUN wget https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.7.3-stable.tar.xz
 RUN tar xf flutter_linux_3.7.3-stable.tar.xz
-RUN export PATH="$PATH:/home/user/flutter/bin"
+ENV PATH="$PATH:$HOME/flutter/bin"
+RUN dart pub global activate ffigen 5.0.1
+
+
+# Install packages
+RUN sudo apt-get install -y libclang-dev
+RUN sudo apt install -y gcc-multilib
+
+WORKDIR $WORKDIR
+ENV ANDROID_NDK_HOME=/opt/android/ndk/22.1.7171670
+# Somehow try to automate flutter pub get
