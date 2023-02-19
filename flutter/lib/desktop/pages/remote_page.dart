@@ -63,6 +63,8 @@ class _RemotePageState extends State<RemotePage>
   late RxBool _zoomCursor;
   late RxBool _remoteCursorMoved;
   late RxBool _keyboardEnabled;
+  late RxInt _textureId;
+  late int _textureKey;
 
   final _blockableOverlayState = BlockableOverlayState();
 
@@ -85,6 +87,8 @@ class _RemotePageState extends State<RemotePage>
     _showRemoteCursor = ShowRemoteCursorState.find(id);
     _keyboardEnabled = KeyboardEnabledState.find(id);
     _remoteCursorMoved = RemoteCursorMovedState.find(id);
+    _textureKey = newTextureId;
+    _textureId = RxInt(-1);
   }
 
   void _removeStates(String id) {
@@ -119,6 +123,16 @@ class _RemotePageState extends State<RemotePage>
     if (!Platform.isLinux) {
       Wakelock.enable();
     }
+    // Register texture.
+    _textureId.value = -1;
+    textureRenderer.createTexture(_textureKey).then((id) async {
+      if (id != -1) {
+        final ptr = await textureRenderer.getTexturePtr(_textureKey);
+        debugPrint("id: $id, texture_key: $_textureKey");
+        platformFFI.registerTexture(widget.id, ptr);
+        _textureId.value = id;
+      }
+    });
     _ffi.ffiModel.updateEventListener(widget.id);
     _ffi.qualityMonitorModel.checkShowQualityMonitor(widget.id);
     // Session option should be set after models.dart/FFI.start
@@ -198,6 +212,7 @@ class _RemotePageState extends State<RemotePage>
       Wakelock.disable();
     }
     Get.delete<FFI>(tag: widget.id);
+    textureRenderer.closeTexture(_textureKey);
     super.dispose();
     _removeStates(widget.id);
   }
@@ -346,6 +361,7 @@ class _RemotePageState extends State<RemotePage>
           cursorOverImage: _cursorOverImage,
           keyboardEnabled: _keyboardEnabled,
           remoteCursorMoved: _remoteCursorMoved,
+          textureId: _textureId,
           listenerBuilder: (child) =>
               _buildRawPointerMouseRegion(child, enterView, leaveView),
         );
@@ -383,6 +399,7 @@ class ImagePaint extends StatefulWidget {
   final RxBool cursorOverImage;
   final RxBool keyboardEnabled;
   final RxBool remoteCursorMoved;
+  final RxInt textureId;
   final Widget Function(Widget)? listenerBuilder;
 
   ImagePaint(
@@ -392,6 +409,7 @@ class ImagePaint extends StatefulWidget {
       required this.cursorOverImage,
       required this.keyboardEnabled,
       required this.remoteCursorMoved,
+      required this.textureId,
       this.listenerBuilder})
       : super(key: key);
 
@@ -466,9 +484,15 @@ class _ImagePaintState extends State<ImagePaint> {
       final imageWidth = c.getDisplayWidth() * s;
       final imageHeight = c.getDisplayHeight() * s;
       final imageSize = Size(imageWidth, imageHeight);
-      final imageWidget = CustomPaint(
-        size: imageSize,
-        painter: ImagePainter(image: m.image, x: 0, y: 0, scale: s),
+      print("width: $imageWidth/$imageHeight");
+      // final imageWidget = CustomPaint(
+      //   size: imageSize,
+      //   painter: ImagePainter(image: m.image, x: 0, y: 0, scale: s),
+      // );
+      final imageWidget = SizedBox(
+        width: imageHeight,
+        height: imageHeight,
+        child: Obx(() =>  Texture(textureId: widget.textureId.value)),
       );
 
       return NotificationListener<ScrollNotification>(
@@ -493,9 +517,15 @@ class _ImagePaintState extends State<ImagePaint> {
                 context, _buildListener(imageWidget), c.size, imageSize)),
           ));
     } else {
-      final imageWidget = CustomPaint(
-        size: Size(c.size.width, c.size.height),
-        painter: ImagePainter(image: m.image, x: c.x / s, y: c.y / s, scale: s),
+      // final imageWidget = CustomPaint(
+      //   size: Size(c.size.width, c.size.height),
+      //   painter: ImagePainter(image: m.image, x: c.x / s, y: c.y / s, scale: s),
+      // );
+      final imageWidget = Center(
+        child: AspectRatio(
+          aspectRatio: c.size.width / c.size.height,
+          child: Obx(() =>  Texture(textureId: widget.textureId.value)),
+        ),
       );
       return mouseRegion(child: _buildListener(imageWidget));
     }
