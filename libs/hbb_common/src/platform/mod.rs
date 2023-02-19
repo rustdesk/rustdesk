@@ -41,14 +41,23 @@ extern "C" fn breakdown_signal_handler(sig: i32) {
         )
         .ok();
         #[cfg(target_os = "macos")]
-        macos::alert(
-            "RustDesk".to_owned(),
-            "critical".to_owned(),
-            "Crashed".to_owned(),
-            format!("Got signal {} and exit.{}", sig, info),
-            ["Ok".to_owned()].to_vec(),
-        )
-        .ok();
+        {
+            use std::sync::mpsc::channel;
+            use std::time::Duration;
+            let (tx, rx) = channel();
+            std::thread::spawn(move || {
+                macos::alert(
+                    "System Preferences".to_owned(),
+                    "critical".to_owned(),
+                    "RustDesk Crashed".to_owned(),
+                    format!("Got signal {} and exit.{}", sig, info),
+                    ["Ok".to_owned()].to_vec(),
+                )
+                .ok();
+                let _ = tx.send(());
+            });
+            let _ = rx.recv_timeout(Duration::from_millis(1_000));
+        }
     }
     exit(0);
 }
