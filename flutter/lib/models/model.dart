@@ -1446,14 +1446,15 @@ class FFI {
           }
         } else if (message is EventToUI_Rgba) {
           // Fetch the image buffer from rust codes.
-          final sz = platformFFI.getRgbaSize(id);
-          if (sz == null || sz == 0) {
-            return;
-          }
-          final rgba = platformFFI.getRgba(id, sz);
-          if (rgba != null) {
-            imageModel.onRgba(rgba);
-          }
+          // final sz = platformFFI.getRgbaSize(id);
+          // if (sz == null || sz == 0) {
+          //   return;
+          // }
+          // final rgba = platformFFI.getRgba(id, sz);
+          // if (rgba != null) {
+          //   imageModel.onRgba(rgba);
+          // }
+          // imageModel.onRgba(rgba);
         }
       }
       debugPrint('Exit session event loop');

@@ -8,7 +8,7 @@ use hbb_common::{
     bail, config::LocalConfig, get_version_number, message_proto::*, rendezvous_proto::ConnType,
     ResultType,
 };
-use libc::c_void;
+use libc::{c_void};
 use libloading::{Library, Symbol};
 use serde_json::json;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -37,7 +37,7 @@ lazy_static::lazy_static! {
             #[cfg(target_os = "macos")]
             let lib = Library::new("texture_rgba_renderer_plugin.dylib");
             #[cfg(target_os = "linux")]
-            let lib = Library::new("texture_rgba_renderer_plugin.so");
+            let lib = Library::new("libtexture_rgba_renderer_plugin.so");
             lib.expect("`libtexture_rgba_renderer_plugin` not found, please add `texture_rgba_renderer` in your flutter project")
         }
     };
@@ -129,7 +129,8 @@ pub struct FlutterHandler {
     // We must check the `rgba_valid` before reading [rgba].
     pub rgba: Arc<RwLock<Vec<u8>>>,
     pub rgba_valid: Arc<AtomicBool>,
-    pub renderer: VideoRenderer,
+    pub renderer: Arc<RwLock<VideoRenderer>>,
+    peer_info: Arc<RwLock<PeerInfo>>
 }
 pub type FlutterRgbaRendererPluginOnRgba =
     unsafe extern "C" fn(texture_rgba: *mut c_void, buffer: *const u8, width: c_int, height: c_int);
@@ -148,10 +149,12 @@ impl Default for VideoRenderer {
     fn default() -> Self {
         unsafe {
             Self {
+                ptr: 0,
+                width: 0,
+                height: 0,
                 on_rgba_func: TEXURE_RGBA_RENDERER_PLUGIN
                     .get::<FlutterRgbaRendererPluginOnRgba>(b"FlutterRgbaRendererPluginOnRgba")
                     .expect("Symbol FlutterRgbaRendererPluginOnRgba not found."),
-                ..Default::default()
             }
         }
     }
@@ -220,7 +223,7 @@ impl FlutterHandler {
     }
 
     pub fn register_texture(&mut self, ptr: usize) {
-        self.renderer.ptr = ptr;
+        self.renderer.write().unwrap().ptr = ptr;
     }
 }
 
@@ -381,6 +384,7 @@ impl InvokeUiSession for FlutterHandler {
     // unused in flutter
     fn adapt_size(&self) {}
 
+    #[inline]
     fn on_rgba(&self, data: &mut Vec<u8>) {
         // If the current rgba is not fetched by flutter, i.e., is valid.
         // We give up sending a new event to flutter.
@@ -390,13 +394,15 @@ impl InvokeUiSession for FlutterHandler {
         self.rgba_valid.store(true, Ordering::Relaxed);
         // Return the rgba buffer to the video handler for reusing allocated rgba buffer.
         std::mem::swap::<Vec<u8>>(data, &mut *self.rgba.write().unwrap());
-        #[cfg(any(target_os = "android", target_os = "ios"))]
         if let Some(stream) = &*self.event_stream.read().unwrap() {
             stream.add(EventToUI::Rgba);
         }
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        self.renderer
+        {
+            self.renderer.read().unwrap()
             .on_rgba(self.rgba.read().unwrap().as_ptr());
+            self.next_rgba();
+        }
     }
 
     fn set_peer_info(&self, pi: &PeerInfo) {
@@ -410,6 +416,9 @@ impl InvokeUiSession for FlutterHandler {
             features.insert("privacy_mode", 0);
         }
         let features = serde_json::ser::to_string(&features).unwrap_or("".to_owned());
+        *self.peer_info.write().unwrap() = pi.clone();
+        let curr_display = &pi.displays[pi.current_display as usize];
+        self.renderer.write().unwrap().set_size(curr_display.width, curr_display.height);
         self.push_event(
             "peer_info",
             vec![
@@ -426,6 +435,7 @@ impl InvokeUiSession for FlutterHandler {
     }
 
     fn set_displays(&self, displays: &Vec<DisplayInfo>) {
+        self.peer_info.write().unwrap().displays = displays.clone();
         self.push_event(
             "sync_peer_info",
             vec![("displays", &Self::make_displays_msg(displays))],
@@ -457,6 +467,8 @@ impl InvokeUiSession for FlutterHandler {
     }
 
     fn switch_display(&self, display: &SwitchDisplay) {
+        let curr_display = &self.peer_info.read().unwrap().displays[display.display as usize];
+        self.renderer.write().unwrap().set_size(curr_display.width, curr_display.height);
         self.push_event(
             "switch_display",
             vec![
@@ -521,7 +533,7 @@ impl InvokeUiSession for FlutterHandler {
     }
 
     #[inline]
-    fn next_rgba(&mut self) {
+    fn next_rgba(&self) {
         self.rgba_valid.store(false, Ordering::Relaxed);
     }
 }
