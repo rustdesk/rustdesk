@@ -1,10 +1,9 @@
 use super::{CursorData, ResultType};
+use hbb_common::libc::{c_char, c_int, c_long, c_void};
 pub use hbb_common::platform::linux::*;
 use hbb_common::{allow_err, bail, log};
-use hbb_common::libc::{c_char, c_int, c_void};
 use std::{
     cell::RefCell,
-    collections::HashMap,
     path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -54,8 +53,8 @@ pub struct xcb_xfixes_get_cursor_image {
     pub height: u16,
     pub xhot: u16,
     pub yhot: u16,
-    pub cursor_serial: libc::c_long,
-    pub pixels: *const libc::c_long,
+    pub cursor_serial: c_long,
+    pub pixels: *const c_long,
 }
 
 pub fn get_cursor_pos() -> Option<(i32, i32)> {
@@ -637,7 +636,7 @@ pub fn get_double_click_time() -> u32 {
             settings,
             property.as_ptr(),
             &mut double_click_time as *mut u32,
-            0 as *const libc::c_void,
+            0 as *const c_void,
         );
         double_click_time
     }

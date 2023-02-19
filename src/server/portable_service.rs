@@ -2,7 +2,7 @@ use core::slice;
 use hbb_common::{
     allow_err,
     anyhow::anyhow,
-    bail, log,
+    bail, libc, log,
     message_proto::{KeyEvent, MouseEvent},
     protobuf::Message,
     tokio::{self, sync::mpsc},
@@ -492,7 +492,7 @@ pub mod client {
         let mut option = SHMEM.lock().unwrap();
         let shmem = option.as_mut().unwrap();
         unsafe {
-            hbb_common::libc::memset(shmem.as_ptr() as _, 0, shmem.len() as _);
+            libc::memset(shmem.as_ptr() as _, 0, shmem.len() as _);
         }
         drop(option);
         match para {

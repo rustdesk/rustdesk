@@ -128,7 +128,7 @@ pub fn get_license() -> String {
 }
 
 #[inline]
-#[cfg(any(target_os = "linux", target_os = "windows"))]
+#[cfg(target_os = "windows")]
 pub fn get_option_opt(key: &str) -> Option<String> {
     OPTIONS.lock().unwrap().get(key).map(|x| x.clone())
 }
