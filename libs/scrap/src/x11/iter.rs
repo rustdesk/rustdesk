@@ -1,7 +1,7 @@
 use std::ptr;
 use std::rc::Rc;
 
-use libc;
+use hbb_common::libc;
 
 use super::ffi::*;
 use super::{Display, Rect, Server};

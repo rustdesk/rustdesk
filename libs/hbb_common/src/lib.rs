@@ -39,6 +39,7 @@ pub use tokio_socks::IntoTargetAddr;
 pub use tokio_socks::TargetAddr;
 pub mod password_security;
 pub use chrono;
+pub use libc;
 pub use directories_next;
 pub mod keyboard;
 

@@ -1,4 +1,4 @@
-#[cfg(any(target_os = "windows"))]
+#[cfg(target_os = "windows")]
 use super::ui_interface::get_option_opt;
 #[cfg(target_os = "windows")]
 use std::sync::{Arc, Mutex};
@@ -80,7 +80,7 @@ pub fn start_tray() {
 /// Check if service is stoped.
 /// Return [`true`] if service is stoped, [`false`] otherwise.
 #[inline]
-#[cfg(any(target_os = "windows"))]
+#[cfg(target_os = "windows")]
 fn is_service_stopped() -> bool {
     if let Some(v) = get_option_opt("stop-service") {
         v == "Y"

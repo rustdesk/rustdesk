@@ -1,4 +1,6 @@
 use hbb_common::log;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use hbb_common::platform::register_breakdown_handler;
 
 /// shared by flutter and sciter main function
 ///
@@ -38,10 +40,11 @@ pub fn core_main() -> Option<Vec<String>> {
         }
         i += 1;
     }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    register_breakdown_handler();
     #[cfg(target_os = "linux")]
     #[cfg(feature = "flutter")]
     {
-        crate::platform::linux::register_breakdown_handler();
         let (k, v) = ("LIBGL_ALWAYS_SOFTWARE", "true");
         if !hbb_common::config::Config::get_option("allow-always-software-render").is_empty() {
             std::env::set_var(k, v);
