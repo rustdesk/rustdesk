@@ -39,4 +39,12 @@ RUN sudo apt install -y gcc-multilib
 
 WORKDIR $WORKDIR
 ENV ANDROID_NDK_HOME=/opt/android/ndk/22.1.7171670
+
 # Somehow try to automate flutter pub get
+# https://rustdesk.com/docs/en/dev/build/android/
+# Put below steps in entrypoint.sh
+# cd flutter
+# wget https://github.com/rustdesk/doc.rustdesk.com/releases/download/console/so.tar.gz
+# tar xzf so.tar.gz
+
+# own /opt/android
