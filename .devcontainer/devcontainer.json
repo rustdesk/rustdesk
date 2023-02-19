@@ -4,10 +4,15 @@
         "dockerfile": "./Dockerfile",
         "context": "."
     },
-    "workspaceMount": "source=${localWorkspaceFolder},target=/home/user/rustdesk,type=bind,consistency=cache",
-    "workspaceFolder": "/home/user/rustdesk",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/home/vscode/rustdesk,type=bind,consistency=cache",
+    "workspaceFolder": "/home/vscode/rustdesk",
     "postStartCommand": "./entrypoint",
-    "remoteUser": "user",
+    "features": {
+        "ghcr.io/devcontainers/features/java:1": {},
+        "ghcr.io/akhildevelops/devcontainer-features/android-cli:latest": {
+            "PACKAGES": "platform-tools,ndk;22.1.7171670"
+        }
+    },
     "customizations": {
         "vscode": {
             "extensions": [
