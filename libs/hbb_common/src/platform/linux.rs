@@ -1,4 +1,5 @@
 use crate::ResultType;
+use std::{collections::HashMap, process::Command};
 
 lazy_static::lazy_static! {
     pub static ref DISTRO: Distro = Distro::new();
@@ -154,4 +155,43 @@ fn run_loginctl(args: Option<Vec<&str>>) -> std::io::Result<std::process::Output
     std::process::Command::new("flatpak-spawn")
         .args(vec![String::from("--host"), l_args])
         .output()
+}
+
+/// forever: may not work
+#[cfg(target_os = "linux")]
+pub fn system_message(title: &str, msg: &str, forever: bool) -> ResultType<()> {
+    let cmds: HashMap<&str, Vec<&str>> = HashMap::from([
+        ("notify-send", [title, msg].to_vec()),
+        (
+            "zenity",
+            [
+                "--info",
+                "--timeout",
+                if forever { "0" } else { "3" },
+                "--title",
+                title,
+                "--text",
+                msg,
+            ]
+            .to_vec(),
+        ),
+        ("kdialog", ["--title", title, "--msgbox", msg].to_vec()),
+        (
+            "xmessage",
+            [
+                "-center",
+                "-timeout",
+                if forever { "0" } else { "3" },
+                title,
+                msg,
+            ]
+            .to_vec(),
+        ),
+    ]);
+    for (k, v) in cmds {
+        if Command::new(k).args(v).spawn().is_ok() {
+            return Ok(());
+        }
+    }
+    crate::bail!("failed to post system message");
 }

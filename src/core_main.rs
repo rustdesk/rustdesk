@@ -1,4 +1,6 @@
-use hbb_common::{log, platform::register_breakdown_handler};
+use hbb_common::log;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use hbb_common::platform::register_breakdown_handler;
 
 /// shared by flutter and sciter main function
 ///
@@ -38,6 +40,7 @@ pub fn core_main() -> Option<Vec<String>> {
         }
         i += 1;
     }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     register_breakdown_handler();
     #[cfg(target_os = "linux")]
     #[cfg(feature = "flutter")]

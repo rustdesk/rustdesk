@@ -1,8 +1,11 @@
 #[cfg(target_os = "linux")]
 pub mod linux;
 
-use crate::{log, config::Config, ResultType};
-use std::{collections::HashMap, process::{Command, exit}};
+#[cfg(target_os = "macos")]
+pub mod macos;
+
+use crate::{config::Config, log};
+use std::process::exit;
 
 extern "C" fn breakdown_signal_handler(sig: i32) {
     let mut stack = vec![];
@@ -30,52 +33,24 @@ extern "C" fn breakdown_signal_handler(sig: i32) {
         stack.join("\n").to_string()
     );
     if !info.is_empty() {
-        system_message(
+        #[cfg(target_os = "linux")]
+        linux::system_message(
             "RustDesk",
             &format!("Got signal {} and exit.{}", sig, info),
             true,
         )
         .ok();
+        #[cfg(target_os = "macos")]
+        macos::alert(
+            "RustDesk".to_owned(),
+            "critical".to_owned(),
+            "Crashed".to_owned(),
+            format!("Got signal {} and exit.{}", sig, info),
+            ["Ok".to_owned()].to_vec(),
+        )
+        .ok();
     }
     exit(0);
-}
-
-/// forever: may not work
-pub fn system_message(title: &str, msg: &str, forever: bool) -> ResultType<()> {
-    let cmds: HashMap<&str, Vec<&str>> = HashMap::from([
-        ("notify-send", [title, msg].to_vec()),
-        (
-            "zenity",
-            [
-                "--info",
-                "--timeout",
-                if forever { "0" } else { "3" },
-                "--title",
-                title,
-                "--text",
-                msg,
-            ]
-            .to_vec(),
-        ),
-        ("kdialog", ["--title", title, "--msgbox", msg].to_vec()),
-        (
-            "xmessage",
-            [
-                "-center",
-                "-timeout",
-                if forever { "0" } else { "3" },
-                title,
-                msg,
-            ]
-            .to_vec(),
-        ),
-    ]);
-    for (k, v) in cmds {
-        if Command::new(k).args(v).spawn().is_ok() {
-            return Ok(());
-        }
-    }
-    crate::bail!("failed to post system message");
 }
 
 pub fn register_breakdown_handler() {
