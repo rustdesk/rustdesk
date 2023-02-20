@@ -6,7 +6,7 @@
     },
     "workspaceMount": "source=${localWorkspaceFolder},target=/home/vscode/rustdesk,type=bind,consistency=cache",
     "workspaceFolder": "/home/vscode/rustdesk",
-    "postStartCommand": ".devcontainer/build",
+    "postStartCommand": ".devcontainer/build.sh",
     "features": {
         "ghcr.io/devcontainers/features/java:1": {},
         "ghcr.io/akhildevelops/devcontainer-features/android-cli:latest": {
