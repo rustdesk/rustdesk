@@ -31,12 +31,13 @@ key_gen(){
     then
         if [ ! -f $HOME/upload-keystore.jks ]
         then
-            echo "Remember the password you enter in keytool!"
+            echo -e "\n$HOME/upload-keystore.jks is not created.\nLet's create it.\nRemember the password you enter in keytool!"
             keytool -genkey -v -keystore $HOME/upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload
-        else
-            read -r -p "enter the password used to generate $HOME/upload-keystore.jks" password
-            echo -e "storePassword=${password}\nkeyPassword=${password}\nkeyAlias=upload\nstoreFile=$HOME/upload-keystore.jks" > $WORKDIR/flutter/android/key.properties
         fi
+        read -r -p "enter the password used to generate $HOME/upload-keystore.jks\n" password
+        echo -e "storePassword=${password}\nkeyPassword=${password}\nkeyAlias=upload\nstoreFile=$HOME/upload-keystore.jks" > $WORKDIR/flutter/android/key.properties
+    else
+        echo "Believing storeFile is created in $WORKDIR/flutter/android/key.properties"
     fi
 }
 
