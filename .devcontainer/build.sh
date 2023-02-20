@@ -14,6 +14,8 @@ build(){
 
 build_arm64(){
     CWD=$(pwd)
+    cd $WORKDIR/flutter
+    flutter pub get
     cd $WORKDIR
     $WORKDIR/flutter/ndk_arm64.sh
     cp $WORKDIR/target/aarch64-linux-android/release/liblibrustdesk.so $WORKDIR/flutter/android/app/src/main/jniLibs/arm64-v8a/librustdesk.so
@@ -31,13 +33,12 @@ key_gen(){
     then
         if [ ! -f $HOME/upload-keystore.jks ]
         then
-            echo -e "\n$HOME/upload-keystore.jks is not created.\nLet's create it.\nRemember the password you enter in keytool!"
-            keytool -genkey -v -keystore $HOME/upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+            $WORKDIR/.devcontainer/setup.sh key
         fi
         read -r -p "enter the password used to generate $HOME/upload-keystore.jks\n" password
         echo -e "storePassword=${password}\nkeyPassword=${password}\nkeyAlias=upload\nstoreFile=$HOME/upload-keystore.jks" > $WORKDIR/flutter/android/key.properties
     else
-        echo "Believing storeFile is created in $WORKDIR/flutter/android/key.properties"
+        echo "Believing storeFile is created ref: $WORKDIR/flutter/android/key.properties"
     fi
 }
 
