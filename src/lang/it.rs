@@ -440,7 +440,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Strong", "Forte"),
         ("Switch Sides", "Cambia lato"),
         ("Please confirm if you want to share your desktop?", "Vuoi condividere il tuo desktop?"),
-        ("Closed as expected", "Chiuso come previsto"),
         ("Display", "Visualizzazione"),
         ("Default View Style", "Stile Visualizzazione Predefinito"),
         ("Default Scroll Style", "Stile Scorrimento Predefinito"),
