@@ -448,6 +448,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Default Codec", "Codec Predefinito"),
         ("Bitrate", "Bitrate"),
         ("FPS", "FPS"),
+        ("Auto", "Auto"),
         ("Other Default Options", "Altre Opzioni Predefinite"),
         ("Voice call", "Chiamata vocale"),
         ("Text chat", "Chat testuale"),
