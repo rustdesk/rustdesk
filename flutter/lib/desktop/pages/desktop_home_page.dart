@@ -44,6 +44,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   var watchIsCanScreenRecording = false;
   var watchIsProcessTrust = false;
   var watchIsInputMonitoring = false;
+  var watchIsCanRecordAudio = false;
   Timer? _updateTimer;
 
   @override
@@ -74,12 +75,22 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           scrollController: _leftPaneScrollController,
           child: SingleChildScrollView(
             controller: _leftPaneScrollController,
+            physics: DraggableNeverScrollableScrollPhysics(),
             child: Column(
               children: [
                 buildTip(context),
                 buildIDBoard(context),
                 buildPasswordBoard(context),
-                buildHelpCards(),
+                FutureBuilder<Widget>(
+                  future: buildHelpCards(),
+                  builder: (_, data) {
+                    if (data.hasData) {
+                      return data.data!;
+                    } else {
+                      return const Offstage();
+                    }
+                  },
+                ),
               ],
             ),
           ),
@@ -302,7 +313,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     );
   }
 
-  Widget buildHelpCards() {
+  Future<Widget> buildHelpCards() async {
     if (updateUrl.isNotEmpty) {
       return buildInstallCard(
           "Status",
@@ -349,6 +360,15 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           bind.mainIsInstalledDaemon(prompt: true);
         });
       }
+      //// Disable microphone configuration for macOS. We will request the permission when needed.
+      // else if ((await osxCanRecordAudio() !=
+      //     PermissionAuthorizeType.authorized)) {
+      //   return buildInstallCard("Permissions", "config_microphone", "Configure",
+      //       () async {
+      //     osxRequestAudio();
+      //     watchIsCanRecordAudio = true;
+      //   });
+      // }
     } else if (Platform.isLinux) {
       if (bind.mainCurrentIsWayland()) {
         return buildInstallCard(
@@ -481,6 +501,20 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           setState(() {});
         }
       }
+      if (watchIsCanRecordAudio) {
+        if (Platform.isMacOS) {
+          Future.microtask(() async {
+            if ((await osxCanRecordAudio() ==
+                PermissionAuthorizeType.authorized)) {
+              watchIsCanRecordAudio = false;
+              setState(() {});
+            }
+          });
+        } else {
+          watchIsCanRecordAudio = false;
+          setState(() {});
+        }
+      }
     });
     Get.put<RxBool>(svcStopped, tag: 'stop-service');
     rustDeskWinManager.registerActiveWindowListener(onActiveWindowChanged);
@@ -523,6 +557,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           isFileTransfer: call.arguments['isFileTransfer'],
           isTcpTunneling: call.arguments['isTcpTunneling'],
           isRDP: call.arguments['isRDP'],
+          forceRelay: call.arguments['forceRelay'],
         );
       }
     });
@@ -561,13 +596,13 @@ void setPasswordDialog() async {
       });
       final pass = p0.text.trim();
       if (pass.isNotEmpty) {
-        for (var r in rules) {
-          if (!r.validate(pass)) {
-            setState(() {
-              errMsg0 = '${translate('Prompt')}: ${r.name}';
-            });
-            return;
-          }
+        final Iterable violations = rules.where((r) => !r.validate(pass));
+        if (violations.isNotEmpty) {
+          setState(() {
+            errMsg0 =
+                '${translate('Prompt')}: ${violations.map((r) => r.name).join(', ')}';
+          });
+          return;
         }
       }
       if (p1.text.trim() != pass) {
@@ -601,9 +636,12 @@ void setPasswordDialog() async {
                         border: const OutlineInputBorder(),
                         errorText: errMsg0.isNotEmpty ? errMsg0 : null),
                     controller: p0,
-                    focusNode: FocusNode()..requestFocus(),
+                    autofocus: true,
                     onChanged: (value) {
                       rxPass.value = value.trim();
+                      setState(() {
+                        errMsg0 = '';
+                      });
                     },
                   ),
                 ),
@@ -627,6 +665,11 @@ void setPasswordDialog() async {
                         labelText: translate('Confirmation'),
                         errorText: errMsg1.isNotEmpty ? errMsg1 : null),
                     controller: p1,
+                    onChanged: (value) {
+                      setState(() {
+                        errMsg1 = '';
+                      });
+                    },
                   ),
                 ),
               ],

@@ -2,7 +2,7 @@ use core::slice;
 use hbb_common::{
     allow_err,
     anyhow::anyhow,
-    bail, log,
+    bail, libc, log,
     message_proto::{KeyEvent, MouseEvent},
     protobuf::Message,
     tokio::{self, sync::mpsc},

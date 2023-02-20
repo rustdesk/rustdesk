@@ -16,6 +16,8 @@
     <application
         android:icon="@mipmap/ic_launcher"
         android:label="RustDesk"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:supportsRtl="true"
         android:requestLegacyExternalStorage="true">
 
         <receiver

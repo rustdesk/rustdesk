@@ -323,7 +323,7 @@ def build_flutter_dmg(version, features):
     os.chdir('flutter')
     os.system('flutter build macos --release')
     os.system(
-        "create-dmg rustdesk.dmg ./build/macos/Build/Products/Release/rustdesk.app")
+        "create-dmg rustdesk.dmg ./build/macos/Build/Products/Release/RustDesk.app")
     os.rename("rustdesk.dmg", f"../rustdesk-{version}.dmg")
     os.chdir("..")
 

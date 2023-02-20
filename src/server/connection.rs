@@ -5,7 +5,14 @@ use crate::clipboard_file::*;
 use crate::common::update_clipboard;
 #[cfg(windows)]
 use crate::portable_service::client as portable_client;
-use crate::video_service;
+use crate::{
+    client::{
+        new_voice_call_request, new_voice_call_response, start_audio_thread, LatencyController,
+        MediaData, MediaSender,
+    },
+    common::{get_default_sound_input, set_sound_input},
+    video_service,
+};
 #[cfg(any(target_os = "android", target_os = "ios"))]
 use crate::{common::DEVICE_NAME, flutter::connection_manager::start_channel};
 use crate::{ipc, VERSION};
@@ -32,7 +39,10 @@ use serde_json::{json, value::Value};
 use sha2::{Digest, Sha256};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use std::sync::atomic::Ordering;
-use std::sync::{atomic::AtomicI64, mpsc as std_mpsc};
+use std::{
+    num::NonZeroI64,
+    sync::{atomic::AtomicI64, mpsc as std_mpsc},
+};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use system_shutdown;
 
@@ -90,12 +100,19 @@ pub struct Connection {
     recording: bool,
     last_test_delay: i64,
     lock_after_session_end: bool,
-    show_remote_cursor: bool, // by peer
+    show_remote_cursor: bool,
+    // by peer
     ip: String,
-    disable_clipboard: bool,                  // by peer
-    disable_audio: bool,                      // by peer
-    enable_file_transfer: bool,               // by peer
-    tx_input: std_mpsc::Sender<MessageInput>, // handle input messages
+    disable_clipboard: bool,
+    // by peer
+    disable_audio: bool,
+    // by peer
+    enable_file_transfer: bool,
+    // by peer
+    audio_sender: Option<MediaSender>,
+    // audio by the remote peer/client
+    tx_input: std_mpsc::Sender<MessageInput>,
+    // handle input messages
     video_ack_required: bool,
     peer_info: (String, String),
     server_audit_conn: String,
@@ -106,6 +123,14 @@ pub struct Connection {
     #[cfg(windows)]
     portable: PortableState,
     from_switch: bool,
+    voice_call_request_timestamp: Option<NonZeroI64>,
+    audio_input_device_before_voice_call: Option<String>,
+}
+
+impl ConnInner {
+    pub fn new(id: i32, tx: Option<Sender>, tx_video: Option<Sender>) -> Self {
+        Self { id, tx, tx_video }
+    }
 }
 
 impl Subscriber for ConnInner {
@@ -203,6 +228,9 @@ impl Connection {
             #[cfg(windows)]
             portable: Default::default(),
             from_switch: false,
+            audio_sender: None,
+            voice_call_request_timestamp: None,
+            audio_input_device_before_voice_call: None,
         };
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         tokio::spawn(async move {
@@ -365,6 +393,16 @@ impl Connection {
                             misc.set_switch_back(SwitchBack::default());
                             let mut msg = Message::new();
                             msg.set_misc(misc);
+                            conn.send(msg).await;
+                        }
+                        ipc::Data::VoiceCallResponse(accepted) => {
+                            conn.handle_voice_call(accepted).await;
+                        }
+                        ipc::Data::CloseVoiceCall(_reason) => {
+                            log::debug!("Close the voice call from the ipc.");
+                            conn.close_voice_call().await;
+                            // Notify the peer that we closed the voice call.
+                            let msg = new_voice_call_request(false);
                             conn.send(msg).await;
                         }
                         _ => {}
@@ -858,10 +896,11 @@ impl Connection {
                     res.set_error(format!("{}", err));
                 }
                 Ok((current, displays)) => {
-                    pi.displays = displays.into();
+                    pi.displays = displays.clone();
                     pi.current_display = current as _;
                     res.set_peer_info(pi);
                     sub_service = true;
+                    *super::video_service::LAST_SYNC_DISPLAYS.write().unwrap() = displays;
                 }
             }
         }
@@ -1053,7 +1092,8 @@ impl Connection {
     async fn handle_login_request_without_validation(&mut self, lr: &LoginRequest) {
         self.lr = lr.clone();
         if let Some(o) = lr.option.as_ref() {
-            self.update_option(o).await;
+            // It may not be a good practice to update all options here.
+            self.update_options(o).await;
             if let Some(q) = o.video_codec_state.clone().take() {
                 scrap::codec::Encoder::update_video_encoder(
                     self.inner.id(),
@@ -1457,7 +1497,7 @@ impl Connection {
                         self.chat_unanswered = true;
                     }
                     Some(misc::Union::Option(o)) => {
-                        self.update_option(&o).await;
+                        self.update_options(&o).await;
                     }
                     Some(misc::Union::RefreshVideo(r)) => {
                         if r {
@@ -1527,6 +1567,22 @@ impl Connection {
                         }
                         _ => {}
                     },
+                    Some(misc::Union::AudioFormat(format)) => {
+                        if !self.disable_audio {
+                            // Drop the audio sender previously.
+                            drop(std::mem::replace(&mut self.audio_sender, None));
+                            // Start a audio thread to play the audio sent by peer.
+                            let latency_controller = LatencyController::new();
+                            // No video frame will be sent here, so we need to disable latency controller, or audio check may fail.
+                            latency_controller.lock().unwrap().set_audio_only(true);
+                            self.audio_sender = Some(start_audio_thread(Some(latency_controller)));
+                            allow_err!(self
+                                .audio_sender
+                                .as_ref()
+                                .unwrap()
+                                .send(MediaData::AudioFormat(format)));
+                        }
+                    }
                     #[cfg(feature = "flutter")]
                     Some(misc::Union::SwitchSidesRequest(s)) => {
                         if let Ok(uuid) = uuid::Uuid::from_slice(&s.uuid.to_vec()[..]) {
@@ -1537,21 +1593,79 @@ impl Connection {
                                 uuid.to_string().as_ref(),
                             ])
                             .ok();
-                            self.send_close_reason_no_retry("Closed as expected").await;
                             self.on_close("switch sides", false).await;
                             return false;
                         }
                     }
                     _ => {}
                 },
+                Some(message::Union::AudioFrame(frame)) => {
+                    if !self.disable_audio {
+                        if let Some(sender) = &self.audio_sender {
+                            allow_err!(sender.send(MediaData::AudioFrame(frame)));
+                        } else {
+                            log::warn!(
+                                "Processing audio frame without the voice call audio sender."
+                            );
+                        }
+                    }
+                }
+                Some(message::Union::VoiceCallRequest(request)) => {
+                    if request.is_connect {
+                        self.voice_call_request_timestamp = Some(
+                            NonZeroI64::new(request.req_timestamp)
+                                .unwrap_or(NonZeroI64::new(get_time()).unwrap()),
+                        );
+                        // Notify the connection manager.
+                        self.send_to_cm(Data::VoiceCallIncoming);
+                    } else {
+                        self.close_voice_call().await;
+                    }
+                }
+                Some(message::Union::VoiceCallResponse(_response)) => {
+                    // TODO: Maybe we can do a voice call from cm directly.
+                }
                 _ => {}
             }
         }
         true
     }
 
-    async fn update_option(&mut self, o: &OptionMessage) {
-        log::info!("Option update: {:?}", o);
+    pub async fn handle_voice_call(&mut self, accepted: bool) {
+        if let Some(ts) = self.voice_call_request_timestamp.take() {
+            let msg = new_voice_call_response(ts.get(), accepted);
+            if accepted {
+                // Backup the default input device.
+                let audio_input_device = Config::get_option("audio-input");
+                log::debug!("Backup the sound input device {}", audio_input_device);
+                self.audio_input_device_before_voice_call = Some(audio_input_device);
+                // Switch to default input device
+                let default_sound_device = get_default_sound_input();
+                if let Some(device) = default_sound_device {
+                    set_sound_input(device);
+                }
+                self.send_to_cm(Data::StartVoiceCall);
+            } else {
+                self.send_to_cm(Data::CloseVoiceCall("".to_owned()));
+            }
+            self.send(msg).await;
+        } else {
+            log::warn!("Possible a voice call attack.");
+        }
+    }
+
+    pub async fn close_voice_call(&mut self) {
+        // Restore to the prior audio device.
+        if let Some(sound_input) =
+            std::mem::replace(&mut self.audio_input_device_before_voice_call, None)
+        {
+            set_sound_input(sound_input);
+        }
+        // Notify the connection manager that the voice call has been closed.
+        self.send_to_cm(Data::CloseVoiceCall("".to_owned()));
+    }
+
+    async fn update_options_without_auth(&mut self, o: &OptionMessage) {
         if let Ok(q) = o.image_quality.enum_value() {
             let image_quality;
             if let ImageQuality::NotSet = q {
@@ -1576,7 +1690,18 @@ impl Connection {
                 .unwrap()
                 .update_user_fps(o.custom_fps as _);
         }
+        if let Some(q) = o.video_codec_state.clone().take() {
+            scrap::codec::Encoder::update_video_encoder(
+                self.inner.id(),
+                scrap::codec::EncoderUpdate::State(q),
+            );
+        }
+    }
 
+    async fn update_options_with_auth(&mut self, o: &OptionMessage) {
+        if !self.authorized {
+            return;
+        }
         if let Ok(q) = o.lock_after_session_end.enum_value() {
             if q != BoolOption::NotSet {
                 self.lock_after_session_end = q == BoolOption::Yes;
@@ -1703,12 +1828,12 @@ impl Connection {
                 }
             }
         }
-        if let Some(q) = o.video_codec_state.clone().take() {
-            scrap::codec::Encoder::update_video_encoder(
-                self.inner.id(),
-                scrap::codec::EncoderUpdate::State(q),
-            );
-        }
+    }
+
+    async fn update_options(&mut self, o: &OptionMessage) {
+        log::info!("Option update: {:?}", o);
+        self.update_options_without_auth(o).await;
+        self.update_options_with_auth(o).await;
     }
 
     async fn on_close(&mut self, reason: &str, lock: bool) {
@@ -1942,7 +2067,7 @@ mod privacy_mode {
     pub(super) fn turn_off_privacy(_conn_id: i32) -> Message {
         #[cfg(windows)]
         {
-            use crate::ui::win_privacy::*;
+            use crate::win_privacy::*;
 
             let res = turn_off_privacy(_conn_id, None);
             match res {
@@ -1966,7 +2091,7 @@ mod privacy_mode {
     pub(super) fn turn_on_privacy(_conn_id: i32) -> ResultType<bool> {
         #[cfg(windows)]
         {
-            let plugin_exist = crate::ui::win_privacy::turn_on_privacy(_conn_id)?;
+            let plugin_exist = crate::win_privacy::turn_on_privacy(_conn_id)?;
             Ok(plugin_exist)
         }
         #[cfg(not(windows))]

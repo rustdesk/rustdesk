@@ -6,20 +6,17 @@ use cocoa::{
     base::{id, nil, YES},
     foundation::{NSAutoreleasePool, NSString},
 };
+use objc::runtime::Class;
 use objc::{
     class,
     declare::ClassDecl,
     msg_send,
-    runtime::{BOOL, Object, Sel},
+    runtime::{Object, Sel, BOOL},
     sel, sel_impl,
 };
-use objc::runtime::Class;
-use objc_id::WeakId;
-use sciter::{Host, make_args};
+use sciter::{make_args, Host};
 
-use hbb_common::{log, tokio};
-
-use crate::ui_cm_interface::start_ipc;
+use hbb_common::log;
 
 static APP_HANDLER_IVAR: &str = "GoDeskAppHandler";
 
@@ -105,7 +102,10 @@ unsafe fn set_delegate(handler: Option<Box<dyn AppHandler>>) {
         sel!(handleMenuItem:),
         handle_menu_item as extern "C" fn(&mut Object, Sel, id),
     );
-    decl.add_method(sel!(handleEvent:withReplyEvent:), handle_apple_event as extern fn(&Object, Sel, u64, u64));
+    decl.add_method(
+        sel!(handleEvent:withReplyEvent:),
+        handle_apple_event as extern "C" fn(&Object, Sel, u64, u64),
+    );
     let decl = decl.register();
     let delegate: id = msg_send![decl, alloc];
     let () = msg_send![delegate, init];
@@ -141,10 +141,7 @@ extern "C" fn application_should_handle_open_untitled_file(
         if !LAUNCHED {
             return YES;
         }
-        hbb_common::log::debug!("icon clicked on finder");
-        if std::env::args().nth(1) == Some("--server".to_owned()) {
-            crate::platform::macos::check_main_window();
-        }
+        crate::platform::macos::handle_application_should_open_untitled_file();
         let inner: *mut c_void = *this.get_ivar(APP_HANDLER_IVAR);
         let inner = &mut *(inner as *mut DelegateState);
         (*inner).command(AWAKE);
@@ -183,22 +180,11 @@ extern "C" fn handle_menu_item(this: &mut Object, _: Sel, item: id) {
     }
 }
 
-/// The function to handle the url scheme sent by the system.
-///
-/// 1. Try to send the url scheme from ipc.
-/// 2. If failed to send the url scheme, we open a new main window to handle this url scheme.
-pub fn handle_url_scheme(url: String) {
-    if let Err(err) = crate::ipc::send_url_scheme(url.clone()) {
-        log::debug!("Send the url to the existing flutter process failed, {}. Let's open a new program to handle this.", err);
-        let _ = crate::run_me(vec![url]);
-    }
-}
-
-extern fn handle_apple_event(_this: &Object, _cmd: Sel, event: u64, _reply: u64) {
+extern "C" fn handle_apple_event(_this: &Object, _cmd: Sel, event: u64, _reply: u64) {
     let event = event as *mut Object;
     let url = fruitbasket::parse_url_event(event);
     log::debug!("an event was received: {}", url);
-    std::thread::spawn(move || handle_url_scheme(url));
+    std::thread::spawn(move || crate::handle_url_scheme(url));
 }
 
 unsafe fn make_menu_item(title: &str, key: &str, tag: u32) -> *mut Object {
@@ -260,11 +246,4 @@ pub fn show_dock() {
     unsafe {
         NSApp().setActivationPolicy_(NSApplicationActivationPolicyRegular);
     }
-}
-
-pub fn make_tray() {
-    unsafe {
-        set_delegate(None);
-    }
-    crate::tray::make_tray();
 }

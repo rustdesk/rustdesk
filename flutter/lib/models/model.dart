@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ffi' hide Size;
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:ffi/ffi.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/consts.dart';
@@ -18,7 +20,6 @@ import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/models/user_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
-import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:tuple/tuple.dart';
 import 'package:image/image.dart' as img2;
 import 'package:flutter_custom_cursor/cursor_manager.dart';
@@ -26,13 +27,13 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 
 import '../common.dart';
-import '../common/shared_state.dart';
 import '../utils/image.dart' as img;
 import '../mobile/widgets/dialog.dart';
 import 'input_model.dart';
 import 'platform_model.dart';
 
 typedef HandleMsgBox = Function(Map<String, dynamic> evt, String id);
+typedef ReconnectHandle = Function(OverlayDialogManager, String, bool);
 final _waitForImage = <String, bool>{};
 
 class FfiModel with ChangeNotifier {
@@ -139,6 +140,8 @@ class FfiModel with ChangeNotifier {
         handleMsgBox(evt, peerId);
       } else if (name == 'peer_info') {
         handlePeerInfo(evt, peerId);
+      } else if (name == 'sync_peer_info') {
+        handleSyncPeerInfo(evt, peerId);
       } else if (name == 'connection_ready') {
         setConnectionType(
             peerId, evt['secure'] == 'true', evt['direct'] == 'true');
@@ -203,6 +206,23 @@ class FfiModel with ChangeNotifier {
       } else if (name == "on_url_scheme_received") {
         final url = evt['url'].toString();
         parseRustdeskUri(url);
+      } else if (name == "on_voice_call_waiting") {
+        // Waiting for the response from the peer.
+        parent.target?.chatModel.onVoiceCallWaiting();
+      } else if (name == "on_voice_call_started") {
+        // Voice call is connected.
+        parent.target?.chatModel.onVoiceCallStarted();
+      } else if (name == "on_voice_call_closed") {
+        // Voice call is closed with reason.
+        final reason = evt['reason'].toString();
+        parent.target?.chatModel.onVoiceCallClosed(reason);
+      } else if (name == "on_voice_call_incoming") {
+        // Voice call is requested by the peer.
+        parent.target?.chatModel.onVoiceCallIncoming();
+      } else if (name == "update_voice_call_state") {
+        parent.target?.serverModel.updateVoiceCallState(evt);
+      } else {
+        debugPrint("Unknown event name: $name");
       }
     };
   }
@@ -281,6 +301,8 @@ class FfiModel with ChangeNotifier {
       showWaitUacDialog(id, dialogManager, type);
     } else if (type == 'elevation-error') {
       showElevationError(id, type, title, text, dialogManager);
+    } else if (type == "relay-hint") {
+      showRelayHintDialog(id, type, title, text, dialogManager);
     } else {
       var hasRetry = evt['hasRetry'] == 'true';
       showMsgBox(id, type, title, text, link, hasRetry, dialogManager);
@@ -291,19 +313,58 @@ class FfiModel with ChangeNotifier {
   showMsgBox(String id, String type, String title, String text, String link,
       bool hasRetry, OverlayDialogManager dialogManager,
       {bool? hasCancel}) {
-    msgBox(id, type, title, text, link, dialogManager, hasCancel: hasCancel);
+    msgBox(id, type, title, text, link, dialogManager,
+        hasCancel: hasCancel, reconnect: reconnect);
     _timer?.cancel();
     if (hasRetry) {
       _timer = Timer(Duration(seconds: _reconnects), () {
-        bind.sessionReconnect(id: id);
-        clearPermissions();
-        dialogManager.showLoading(translate('Connecting...'),
-            onCancel: closeConnection);
+        reconnect(dialogManager, id, false);
       });
       _reconnects *= 2;
     } else {
       _reconnects = 1;
     }
+  }
+
+  void reconnect(
+      OverlayDialogManager dialogManager, String id, bool forceRelay) {
+    bind.sessionReconnect(id: id, forceRelay: forceRelay);
+    clearPermissions();
+    dialogManager.showLoading(translate('Connecting...'),
+        onCancel: closeConnection);
+  }
+
+  void showRelayHintDialog(String id, String type, String title, String text,
+      OverlayDialogManager dialogManager) {
+    dialogManager.show(tag: '$id-$type', (setState, close) {
+      onClose() {
+        closeConnection();
+        close();
+      }
+
+      final style =
+          ElevatedButton.styleFrom(backgroundColor: Colors.green[700]);
+      return CustomAlertDialog(
+        title: null,
+        content: msgboxContent(type, title,
+            "${translate(text)}\n\n${translate('relay_hint_tip')}"),
+        actions: [
+          dialogButton('Close', onPressed: onClose, isOutline: true),
+          dialogButton('Retry',
+              onPressed: () => reconnect(dialogManager, id, false)),
+          dialogButton('Connect via relay',
+              onPressed: () => reconnect(dialogManager, id, true),
+              buttonStyle: style),
+          dialogButton('Always connect via relay', onPressed: () {
+            const option = 'force-always-relay';
+            bind.sessionPeerOption(
+                id: id, name: option, value: bool2option(option, true));
+            reconnect(dialogManager, id, true);
+          }, buttonStyle: style),
+        ],
+        onCancel: onClose,
+      );
+    });
   }
 
   /// Handle the peer info event based on [evt].
@@ -356,6 +417,7 @@ class FfiModel with ChangeNotifier {
         d.cursorEmbedded = d0['cursor_embedded'] == 1;
         _pi.displays.add(d);
       }
+      stateGlobal.displaysCount.value = _pi.displays.length;
       if (_pi.currentDisplay < _pi.displays.length) {
         _display = _pi.displays[_pi.currentDisplay];
       }
@@ -368,6 +430,27 @@ class FfiModel with ChangeNotifier {
       }
       Map<String, dynamic> features = json.decode(evt['features']);
       _pi.features.privacyMode = features['privacy_mode'] == 1;
+    }
+    notifyListeners();
+  }
+
+  /// Handle the peer info synchronization event based on [evt].
+  handleSyncPeerInfo(Map<String, dynamic> evt, String peerId) async {
+    if (evt['displays'] != null) {
+      List<dynamic> displays = json.decode(evt['displays']);
+      List<Display> newDisplays = [];
+      for (int i = 0; i < displays.length; ++i) {
+        Map<String, dynamic> d0 = displays[i];
+        var d = Display();
+        d.x = d0['x'].toDouble();
+        d.y = d0['y'].toDouble();
+        d.width = d0['width'];
+        d.height = d0['height'];
+        d.cursorEmbedded = d0['cursor_embedded'] == 1;
+        newDisplays.add(d);
+      }
+      _pi.displays = newDisplays;
+      stateGlobal.displaysCount.value = _pi.displays.length;
     }
     notifyListeners();
   }
@@ -419,12 +502,17 @@ class ImageModel with ChangeNotifier {
         }
       }
     }
+
     final pid = parent.target?.id;
-    ui.decodeImageFromPixels(
+    img.decodeImageFromPixels(
         rgba,
         parent.target?.ffiModel.display.width ?? 0,
         parent.target?.ffiModel.display.height ?? 0,
-        isWeb ? ui.PixelFormat.rgba8888 : ui.PixelFormat.bgra8888, (image) {
+        isWeb ? ui.PixelFormat.rgba8888 : ui.PixelFormat.bgra8888,
+        onPixelsCopied: () {
+      // Unlock the rgba memory from rust codes.
+      platformFFI.nextRgba(id);
+    }).then((image) {
       if (parent.target?.id != pid) return;
       try {
         // my throw exception, because the listener maybe already dispose
@@ -1319,7 +1407,8 @@ class FFI {
   void start(String id,
       {bool isFileTransfer = false,
       bool isPortForward = false,
-      String? switchUuid}) {
+      String? switchUuid,
+      bool? forceRelay}) {
     assert(!(isFileTransfer && isPortForward), 'more than one connect type');
     if (isFileTransfer) {
       connType = ConnType.fileTransfer;
@@ -1335,16 +1424,20 @@ class FFI {
     }
     // ignore: unused_local_variable
     final addRes = bind.sessionAddSync(
-      id: id,
-      isFileTransfer: isFileTransfer,
-      isPortForward: isPortForward,
-      switchUuid: switchUuid ?? "",
-    );
+        id: id,
+        isFileTransfer: isFileTransfer,
+        isPortForward: isPortForward,
+        switchUuid: switchUuid ?? "",
+        forceRelay: forceRelay ?? false);
     final stream = bind.sessionStart(id: id);
     final cb = ffiModel.startEventListener(id);
     () async {
+      // Preserved for the rgba data.
       await for (final message in stream) {
         if (message is EventToUI_Event) {
+          if (message.field0 == "close") {
+            break;
+          }
           try {
             Map<String, dynamic> event = json.decode(message.field0);
             await cb(event);
@@ -1352,9 +1445,18 @@ class FFI {
             debugPrint('json.decode fail1(): $e, ${message.field0}');
           }
         } else if (message is EventToUI_Rgba) {
-          imageModel.onRgba(message.field0);
+          // Fetch the image buffer from rust codes.
+          final sz = platformFFI.getRgbaSize(id);
+          if (sz == null || sz == 0) {
+            return;
+          }
+          final rgba = platformFFI.getRgba(id, sz);
+          if (rgba != null) {
+            imageModel.onRgba(rgba);
+          }
         }
       }
+      debugPrint('Exit session event loop');
     }();
     // every instance will bind a stream
     this.id = id;
@@ -1375,14 +1477,14 @@ class FFI {
       await setCanvasConfig(id, cursorModel.x, cursorModel.y, canvasModel.x,
           canvasModel.y, canvasModel.scale, ffiModel.pi.currentDisplay);
     }
-    bind.sessionClose(id: id);
-    id = '';
     imageModel.update(null);
     cursorModel.clear();
     ffiModel.clear();
     canvasModel.clear();
     inputModel.resetModifiers();
+    await bind.sessionClose(id: id);
     debugPrint('model $id closed');
+    id = '';
   }
 
   void setMethodCallHandler(FMethod callback) {

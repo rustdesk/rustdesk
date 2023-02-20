@@ -26,10 +26,12 @@ class _PortForward {
 }
 
 class PortForwardPage extends StatefulWidget {
-  const PortForwardPage({Key? key, required this.id, required this.isRDP})
+  const PortForwardPage(
+      {Key? key, required this.id, required this.isRDP, this.forceRelay})
       : super(key: key);
   final String id;
   final bool isRDP;
+  final bool? forceRelay;
 
   @override
   State<PortForwardPage> createState() => _PortForwardPageState();
@@ -47,7 +49,7 @@ class _PortForwardPageState extends State<PortForwardPage>
   void initState() {
     super.initState();
     _ffi = FFI();
-    _ffi.start(widget.id, isPortForward: true);
+    _ffi.start(widget.id, isPortForward: true, forceRelay: widget.forceRelay);
     Get.put(_ffi, tag: 'pf_${widget.id}');
     if (!Platform.isLinux) {
       Wakelock.enable();
@@ -179,36 +181,33 @@ class _PortForwardPageState extends State<PortForwardPage>
         buildTunnelInputCell(context,
             controller: remotePortController,
             inputFormatters: portInputFormatter),
-        SizedBox(
-          width: _kColumn4Width,
-          child: ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                elevation: 0, side: const BorderSide(color: MyTheme.border)),
-            onPressed: () async {
-              int? localPort = int.tryParse(localPortController.text);
-              int? remotePort = int.tryParse(remotePortController.text);
-              if (localPort != null &&
-                  remotePort != null &&
-                  (remoteHostController.text.isEmpty ||
-                      remoteHostController.text.trim().isNotEmpty)) {
-                await bind.sessionAddPortForward(
-                    id: 'pf_${widget.id}',
-                    localPort: localPort,
-                    remoteHost: remoteHostController.text.trim().isEmpty
-                        ? 'localhost'
-                        : remoteHostController.text.trim(),
-                    remotePort: remotePort);
-                localPortController.clear();
-                remoteHostController.clear();
-                remotePortController.clear();
-                refreshTunnelConfig();
-              }
-            },
-            child: Text(
-              translate('Add'),
-            ),
-          ).marginAll(10),
-        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+              elevation: 0, side: const BorderSide(color: MyTheme.border)),
+          onPressed: () async {
+            int? localPort = int.tryParse(localPortController.text);
+            int? remotePort = int.tryParse(remotePortController.text);
+            if (localPort != null &&
+                remotePort != null &&
+                (remoteHostController.text.isEmpty ||
+                    remoteHostController.text.trim().isNotEmpty)) {
+              await bind.sessionAddPortForward(
+                  id: 'pf_${widget.id}',
+                  localPort: localPort,
+                  remoteHost: remoteHostController.text.trim().isEmpty
+                      ? 'localhost'
+                      : remoteHostController.text.trim(),
+                  remotePort: remotePort);
+              localPortController.clear();
+              remoteHostController.clear();
+              remotePortController.clear();
+              refreshTunnelConfig();
+            }
+          },
+          child: Text(
+            translate('Add'),
+          ),
+        ).marginAll(10),
       ]),
     );
   }

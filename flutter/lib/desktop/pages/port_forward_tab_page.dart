@@ -44,6 +44,7 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
           key: ValueKey(params['id']),
           id: params['id'],
           isRDP: isRDP,
+          forceRelay: params['forceRelay'],
         )));
   }
 
@@ -72,7 +73,12 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
             label: id,
             selectedIcon: selectedIcon,
             unselectedIcon: unselectedIcon,
-            page: PortForwardPage(id: id, isRDP: isRDP)));
+            page: PortForwardPage(
+              key: ValueKey(args['id']),
+              id: id,
+              isRDP: isRDP,
+              forceRelay: args['forceRelay'],
+            )));
       } else if (call.method == "onDestroy") {
         tabController.clear();
       } else if (call.method == kWindowActionRebuild) {

@@ -1,24 +1,27 @@
-use std::{collections::HashMap, ffi::{CStr, CString}, os::raw::c_char, thread};
-use std::str::FromStr;
-
-use flutter_rust_bridge::{StreamSink, SyncReturn, ZeroCopyBuffer};
-use serde_json::json;
-
-use hbb_common::{
-    config::{self, LocalConfig, ONLINE, PeerConfig},
-    fs, log,
-};
-use hbb_common::message_proto::KeyboardMode;
-use hbb_common::ResultType;
-
 use crate::{
     client::file_trait::FileManager,
     common::make_fd_to_json,
+    common::is_keyboard_mode_supported,
+    flutter::{self, SESSIONS},
     flutter::{session_add, session_start_},
+    ui_interface::{self, *},
 };
-use crate::common::is_keyboard_mode_supported;
-use crate::flutter::{self, SESSIONS};
-use crate::ui_interface::{self, *};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::common::get_default_sound_input;
+use flutter_rust_bridge::{StreamSink, SyncReturn};
+use hbb_common::{
+    config::{self, LocalConfig, PeerConfig, ONLINE},
+    fs, log,
+    message_proto::KeyboardMode,
+    ResultType,
+};
+use serde_json::json;
+use std::{
+    collections::HashMap,
+    ffi::{CStr, CString},
+    os::raw::c_char,
+    str::FromStr,
+};
 
 // use crate::hbbs_http::account::AuthResult;
 
@@ -46,7 +49,7 @@ fn initialize(app_dir: &str) {
 
 pub enum EventToUI {
     Event(String),
-    Rgba(ZeroCopyBuffer<Vec<u8>>),
+    Rgba,
 }
 
 pub fn start_global_event_stream(s: StreamSink<String>, app_type: String) -> ResultType<()> {
@@ -82,8 +85,15 @@ pub fn session_add_sync(
     is_file_transfer: bool,
     is_port_forward: bool,
     switch_uuid: String,
+    force_relay: bool,
 ) -> SyncReturn<String> {
-    if let Err(e) = session_add(&id, is_file_transfer, is_port_forward, &switch_uuid) {
+    if let Err(e) = session_add(
+        &id,
+        is_file_transfer,
+        is_port_forward,
+        &switch_uuid,
+        force_relay,
+    ) {
         SyncReturn(format!("Failed to add session with id {}, {}", &id, e))
     } else {
         SyncReturn("".to_owned())
@@ -130,10 +140,10 @@ pub fn session_login(id: String, password: String, remember: bool) {
 }
 
 pub fn session_close(id: String) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+    if let Some(mut session) = SESSIONS.write().unwrap().remove(&id) {
+        session.close_event_stream();
         session.close();
     }
-    let _ = SESSIONS.write().unwrap().remove(&id);
 }
 
 pub fn session_refresh(id: String) {
@@ -148,9 +158,9 @@ pub fn session_record_screen(id: String, start: bool, width: usize, height: usiz
     }
 }
 
-pub fn session_reconnect(id: String) {
+pub fn session_reconnect(id: String, force_relay: bool) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.reconnect();
+        session.reconnect(force_relay);
     }
 }
 
@@ -520,6 +530,13 @@ pub fn main_get_sound_inputs() -> Vec<String> {
     vec![String::from("")]
 }
 
+pub fn main_get_default_sound_input() -> Option<String> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return get_default_sound_input();
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    None
+}
+
 pub fn main_get_hostname() -> SyncReturn<String> {
     SyncReturn(crate::common::hostname())
 }
@@ -819,6 +836,26 @@ pub fn session_new_rdp(id: String) {
     }
 }
 
+pub fn session_request_voice_call(id: String) {
+    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+        session.request_voice_call();
+    }
+}
+
+pub fn session_close_voice_call(id: String) {
+    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+        session.close_voice_call();
+    }
+}
+
+pub fn cm_handle_incoming_voice_call(id: i32, accept: bool) {
+    crate::ui_cm_interface::handle_incoming_voice_call(id, accept);
+}
+
+pub fn cm_close_voice_call(id: i32) {
+    crate::ui_cm_interface::close_voice_call(id);
+}
+
 pub fn main_get_last_remote_id() -> String {
     LocalConfig::get_remote_id()
 }
@@ -1091,13 +1128,6 @@ pub fn cm_switch_back(conn_id: i32) {
     crate::ui_cm_interface::switch_back(conn_id);
 }
 
-pub fn main_get_icon() -> String {
-    #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
-    return ui_interface::get_icon();
-    #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
-    return String::new();
-}
-
 pub fn main_get_build_date() -> String {
     crate::BUILD_DATE.to_string()
 }
@@ -1182,6 +1212,10 @@ pub fn main_is_rdp_service_open() -> SyncReturn<bool> {
     SyncReturn(is_rdp_service_open())
 }
 
+pub fn main_set_share_rdp(enable: bool) {
+    set_share_rdp(enable)
+}
+
 pub fn main_goto_install() -> SyncReturn<bool> {
     goto_install();
     SyncReturn(true)
@@ -1246,10 +1280,20 @@ pub fn main_is_login_wayland() -> SyncReturn<bool> {
     SyncReturn(is_login_wayland())
 }
 
+pub fn main_start_pa() {
+    #[cfg(target_os = "linux")]
+    std::thread::spawn(crate::ipc::start_pa);
+}
+
 pub fn main_hide_docker() -> SyncReturn<bool> {
     #[cfg(target_os = "macos")]
     crate::platform::macos::hide_dock();
     SyncReturn(true)
+}
+
+pub fn cm_start_listen_ipc_thread() {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    crate::flutter::connection_manager::start_listen_ipc_thread();
 }
 
 /// Start an ipc server for receiving the url scheme.
@@ -1258,24 +1302,25 @@ pub fn main_hide_docker() -> SyncReturn<bool> {
 /// * macOS only
 pub fn main_start_ipc_url_server() {
     #[cfg(target_os = "macos")]
-    thread::spawn(move || crate::server::start_ipc_url_server());
+    std::thread::spawn(move || crate::server::start_ipc_url_server());
 }
 
 /// Send a url scheme throught the ipc.
 ///
 /// * macOS only
-pub fn send_url_scheme(url: String) {
+#[allow(unused_variables)]
+pub fn send_url_scheme(_url: String) {
     #[cfg(target_os = "macos")]
-    thread::spawn(move || crate::ui::macos::handle_url_scheme(url));
+    std::thread::spawn(move || crate::handle_url_scheme(_url));
 }
 
 #[cfg(target_os = "android")]
 pub mod server_side {
     use hbb_common::log;
     use jni::{
-        JNIEnv,
         objects::{JClass, JString},
         sys::jstring,
+        JNIEnv,
     };
 
     use crate::start_server;

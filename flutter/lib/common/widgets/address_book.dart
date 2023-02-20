@@ -43,13 +43,10 @@ class _AddressBookState extends State<AddressBook> {
     return Obx(() {
       if (gFFI.userModel.userName.value.isEmpty) {
         return Center(
-          child: InkWell(
-            onTap: loginDialog,
-            child: Text(
-              translate("Login"),
-              style: const TextStyle(decoration: TextDecoration.underline),
-            ),
-          ),
+          child: ElevatedButton(
+            onPressed: loginDialog,
+            child: Text(translate("Login"))
+          )
         );
       } else {
         if (gFFI.abModel.abLoading.value) {
@@ -389,7 +386,7 @@ class _AddressBookState extends State<AddressBook> {
                       errorText: msg.isEmpty ? null : translate(msg),
                     ),
                     controller: controller,
-                    focusNode: FocusNode()..requestFocus(),
+                    autofocus: true,
                   ),
                 ),
               ],

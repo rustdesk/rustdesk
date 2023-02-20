@@ -16,7 +16,6 @@ mediacodec = ["ndk"]
 [dependencies]
 block = "0.1"
 cfg-if = "1.0"
-libc = "0.2"
 num_cpus = "1.13"
 lazy_static = "1.4"
 hbb_common = { path = "../hbb_common" }

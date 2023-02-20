@@ -5,10 +5,12 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hbb/desktop/widgets/menu_button.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:debounce_throttle/debounce_throttle.dart';
@@ -93,7 +95,10 @@ class MenubarState {
 }
 
 class _MenubarTheme {
-  static const Color commonColor = MyTheme.accent;
+  static const Color blueColor = MyTheme.button;
+  static const Color hoverBlueColor = MyTheme.accent;
+  static const Color redColor = Colors.redAccent;
+  static const Color hoverRedColor = Colors.red;
   // kMinInteractiveDimension
   static const double height = 20.0;
   static const double dividerHeight = 12.0;
@@ -408,14 +413,18 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       menubarItems.add(_buildPinMenubar(context));
       menubarItems.add(_buildFullscreen(context));
       if (widget.ffi.ffiModel.isPeerAndroid) {
-        menubarItems.add(IconButton(
+        menubarItems.add(MenuButton(
           tooltip: translate('Mobile Actions'),
-          color: _MenubarTheme.commonColor,
-          icon: const Icon(Icons.build),
+          child: SvgPicture.asset(
+            "assets/actions_mobile.svg",
+            color: Colors.white,
+          ),
           onPressed: () {
             widget.ffi.dialogManager
                 .toggleMobileActionsOverlay(ffi: widget.ffi);
           },
+          color: _MenubarTheme.blueColor,
+          hoverColor: _MenubarTheme.hoverBlueColor,
         ));
       }
     }
@@ -425,85 +434,84 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     menubarItems.add(_buildKeyboard(context));
     if (!isWeb) {
       menubarItems.add(_buildChat(context));
+      menubarItems.add(_buildVoiceCall(context));
     }
     menubarItems.add(_buildRecording(context));
     menubarItems.add(_buildClose(context));
     return PopupMenuTheme(
-        data: const PopupMenuThemeData(
-            textStyle: TextStyle(color: _MenubarTheme.commonColor)),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
+      data: const PopupMenuThemeData(
+          textStyle: TextStyle(color: _MenubarTheme.blueColor)),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
           Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border.all(color: MyTheme.border),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(
+                bottom: Radius.circular(10),
               ),
+            ),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
-                children: menubarItems,
-              )),
+                children: [
+                  SizedBox(width: 3),
+                  ...menubarItems,
+                  SizedBox(width: 3)
+                ],
+              ),
+            ),
+          ),
           _buildDraggableShowHide(context),
-        ]));
+        ],
+      ),
+    );
   }
 
   Widget _buildPinMenubar(BuildContext context) {
-    return Obx(() => IconButton(
-          tooltip: translate(pin ? 'Unpin menubar' : 'Pin menubar'),
-          onPressed: () {
-            widget.state.switchPin();
-          },
-          icon: Obx(() => Transform.rotate(
-              angle: pin ? math.pi / 4 : 0,
-              child: Icon(
-                Icons.push_pin,
-                color: pin ? _MenubarTheme.commonColor : Colors.grey,
-              ))),
-        ));
+    return Obx(
+      () => MenuButton(
+        tooltip: translate(pin ? 'Unpin menubar' : 'Pin menubar'),
+        onPressed: () {
+          widget.state.switchPin();
+        },
+        child: SvgPicture.asset(
+          pin ? "assets/pinned.svg" : "assets/unpinned.svg",
+          color: Colors.white,
+        ),
+        color: pin ? _MenubarTheme.blueColor : Colors.grey[800]!,
+        hoverColor: pin ? _MenubarTheme.hoverBlueColor : Colors.grey[850]!,
+      ),
+    );
   }
 
   Widget _buildFullscreen(BuildContext context) {
-    return IconButton(
+    return MenuButton(
       tooltip: translate(isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'),
       onPressed: () {
         _setFullscreen(!isFullscreen);
       },
-      icon: isFullscreen
-          ? const Icon(
-              Icons.fullscreen_exit,
-              color: _MenubarTheme.commonColor,
-            )
-          : const Icon(
-              Icons.fullscreen,
-              color: _MenubarTheme.commonColor,
-            ),
-    );
-  }
-
-  Widget _buildChat(BuildContext context) {
-    return IconButton(
-      tooltip: translate('Chat'),
-      onPressed: () {
-        widget.ffi.chatModel.changeCurrentID(ChatModel.clientModeID);
-        widget.ffi.chatModel.toggleChatOverlay();
-      },
-      icon: const Icon(
-        Icons.message,
-        color: _MenubarTheme.commonColor,
+      child: SvgPicture.asset(
+        isFullscreen ? "assets/fullscreen_exit.svg" : "assets/fullscreen.svg",
+        color: Colors.white,
       ),
+      color: _MenubarTheme.blueColor,
+      hoverColor: _MenubarTheme.hoverBlueColor,
     );
   }
 
   Widget _buildMonitor(BuildContext context) {
     final pi = widget.ffi.ffiModel.pi;
-    return mod_menu.PopupMenuButton(
+    final monitor = mod_menu.PopupMenuButton(
       tooltip: translate('Select Monitor'),
-      padding: EdgeInsets.zero,
       position: mod_menu.PopupMenuPosition.under,
       icon: Stack(
         alignment: Alignment.center,
         children: [
-          const Icon(
-            Icons.personal_video,
-            color: _MenubarTheme.commonColor,
+          SvgPicture.asset(
+            "assets/display.svg",
+            color: Colors.white,
           ),
           Padding(
             padding: const EdgeInsets.only(bottom: 3.9),
@@ -511,8 +519,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
               RxInt display = CurrentDisplayState.find(widget.id);
               return Text(
                 '${display.value + 1}/${pi.displays.length}',
-                style: const TextStyle(
-                    color: _MenubarTheme.commonColor, fontSize: 8),
+                style: const TextStyle(color: Colors.white, fontSize: 8),
               );
             }),
           )
@@ -521,41 +528,44 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       itemBuilder: (BuildContext context) {
         final List<Widget> rowChildren = [];
         for (int i = 0; i < pi.displays.length; i++) {
-          rowChildren.add(
-            Stack(
-              alignment: Alignment.center,
-              children: [
-                const Icon(
-                  Icons.personal_video,
-                  color: _MenubarTheme.commonColor,
-                ),
-                TextButton(
-                  child: Container(
-                      alignment: AlignmentDirectional.center,
-                      constraints:
-                          const BoxConstraints(minHeight: _MenubarTheme.height),
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 2.5),
-                        child: Text(
-                          (i + 1).toString(),
-                          style:
-                              const TextStyle(color: _MenubarTheme.commonColor),
-                        ),
-                      )),
-                  onPressed: () {
-                    if (Navigator.canPop(context)) {
-                      Navigator.pop(context);
-                      _menuDismissCallback();
-                    }
-                    RxInt display = CurrentDisplayState.find(widget.id);
-                    if (display.value != i) {
-                      bind.sessionSwitchDisplay(id: widget.id, value: i);
-                    }
-                  },
-                )
-              ],
+          rowChildren.add(MenuButton(
+            color: _MenubarTheme.blueColor,
+            hoverColor: _MenubarTheme.hoverBlueColor,
+            child: Container(
+              alignment: AlignmentDirectional.center,
+              constraints:
+                  const BoxConstraints(minHeight: _MenubarTheme.height),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  SvgPicture.asset(
+                    "assets/display.svg",
+                    color: Colors.white,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 2.5),
+                    child: Text(
+                      (i + 1).toString(),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                      ),
+                    ),
+                  )
+                ],
+              ),
             ),
-          );
+            onPressed: () {
+              if (Navigator.canPop(context)) {
+                Navigator.pop(context);
+                _menuDismissCallback();
+              }
+              RxInt display = CurrentDisplayState.find(widget.id);
+              if (display.value != i) {
+                bind.sessionSwitchDisplay(id: widget.id, value: i);
+              }
+            },
+          ));
         }
         return <mod_menu.PopupMenuEntry<String>>[
           mod_menu.PopupMenuItem<String>(
@@ -571,14 +581,19 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         ];
       },
     );
+
+    return Obx(() => Offstage(
+          offstage: stateGlobal.displaysCount.value < 2,
+          child: monitor,
+        ));
   }
 
   Widget _buildControl(BuildContext context) {
     return mod_menu.PopupMenuButton(
       padding: EdgeInsets.zero,
-      icon: const Icon(
-        Icons.bolt,
-        color: _MenubarTheme.commonColor,
+      icon: SvgPicture.asset(
+        "assets/actions.svg",
+        color: Colors.white,
       ),
       tooltip: translate('Control Actions'),
       position: mod_menu.PopupMenuPosition.under,
@@ -586,7 +601,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           .map((entry) => entry.build(
               context,
               const MenuConfig(
-                commonColor: _MenubarTheme.commonColor,
+                commonColor: _MenubarTheme.blueColor,
                 height: _MenubarTheme.height,
                 dividerHeight: _MenubarTheme.dividerHeight,
               )))
@@ -608,9 +623,9 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           final remoteCount = RemoteCountState.find().value;
           return mod_menu.PopupMenuButton(
             padding: EdgeInsets.zero,
-            icon: const Icon(
-              Icons.tv,
-              color: _MenubarTheme.commonColor,
+            icon: SvgPicture.asset(
+              "assets/display.svg",
+              color: Colors.white,
             ),
             tooltip: translate('Display Settings'),
             position: mod_menu.PopupMenuPosition.under,
@@ -620,7 +635,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                     .map((entry) => entry.build(
                         context,
                         const MenuConfig(
-                          commonColor: _MenubarTheme.commonColor,
+                          commonColor: _MenubarTheme.blueColor,
                           height: _MenubarTheme.height,
                           dividerHeight: _MenubarTheme.dividerHeight,
                         )))
@@ -641,9 +656,9 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     }
     return mod_menu.PopupMenuButton(
       padding: EdgeInsets.zero,
-      icon: const Icon(
-        Icons.keyboard,
-        color: _MenubarTheme.commonColor,
+      icon: SvgPicture.asset(
+        "assets/keyboard.svg",
+        color: Colors.white,
       ),
       tooltip: translate('Keyboard Settings'),
       position: mod_menu.PopupMenuPosition.under,
@@ -651,7 +666,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           .map((entry) => entry.build(
               context,
               const MenuConfig(
-                commonColor: _MenubarTheme.commonColor,
+                commonColor: _MenubarTheme.blueColor,
                 height: _MenubarTheme.height,
                 dividerHeight: _MenubarTheme.dividerHeight,
               )))
@@ -664,18 +679,22 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     return Consumer<FfiModel>(builder: ((context, value, child) {
       if (value.permissions['recording'] != false) {
         return Consumer<RecordingModel>(
-            builder: (context, value, child) => IconButton(
-                  tooltip: value.start
-                      ? translate('Stop session recording')
-                      : translate('Start session recording'),
-                  onPressed: () => value.toggle(),
-                  icon: Icon(
-                    value.start
-                        ? Icons.pause_circle_filled
-                        : Icons.videocam_outlined,
-                    color: _MenubarTheme.commonColor,
-                  ),
-                ));
+          builder: (context, value, child) => MenuButton(
+            tooltip: value.start
+                ? translate('Stop session recording')
+                : translate('Start session recording'),
+            onPressed: () => value.toggle(),
+            child: SvgPicture.asset(
+              "assets/rec.svg",
+              color: Colors.white,
+            ),
+            color:
+                value.start ? _MenubarTheme.redColor : _MenubarTheme.blueColor,
+            hoverColor: value.start
+                ? _MenubarTheme.hoverRedColor
+                : _MenubarTheme.hoverBlueColor,
+          ),
+        );
       } else {
         return Offstage();
       }
@@ -683,16 +702,130 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   }
 
   Widget _buildClose(BuildContext context) {
-    return IconButton(
+    return MenuButton(
       tooltip: translate('Close'),
       onPressed: () {
         clientClose(widget.id, widget.ffi.dialogManager);
       },
-      icon: const Icon(
-        Icons.close,
-        color: _MenubarTheme.commonColor,
+      child: SvgPicture.asset(
+        "assets/close.svg",
+        color: Colors.white,
       ),
+      color: _MenubarTheme.redColor,
+      hoverColor: _MenubarTheme.hoverRedColor,
     );
+  }
+
+  final _chatButtonKey = GlobalKey();
+  Widget _buildChat(BuildContext context) {
+    FfiModel ffiModel = Provider.of<FfiModel>(context);
+    return mod_menu.PopupMenuButton(
+      key: _chatButtonKey,
+      padding: EdgeInsets.zero,
+      icon: SvgPicture.asset(
+        "assets/chat.svg",
+        color: Colors.white,
+      ),
+      tooltip: translate('Chat'),
+      position: mod_menu.PopupMenuPosition.under,
+      itemBuilder: (BuildContext context) => _getChatMenu(context)
+          .map((entry) => entry.build(
+              context,
+              const MenuConfig(
+                commonColor: _MenubarTheme.blueColor,
+                height: _MenubarTheme.height,
+                dividerHeight: _MenubarTheme.dividerHeight,
+              )))
+          .expand((i) => i)
+          .toList(),
+    );
+  }
+
+  Widget _getVoiceCallIcon() {
+    switch (widget.ffi.chatModel.voiceCallStatus.value) {
+      case VoiceCallStatus.waitingForResponse:
+        return SvgPicture.asset(
+          "assets/call_wait.svg",
+          color: Colors.white,
+        );
+
+      case VoiceCallStatus.connected:
+        return SvgPicture.asset(
+          "assets/call_end.svg",
+          color: Colors.white,
+        );
+      default:
+        return const Offstage();
+    }
+  }
+
+  String? _getVoiceCallTooltip() {
+    switch (widget.ffi.chatModel.voiceCallStatus.value) {
+      case VoiceCallStatus.waitingForResponse:
+        return "Waiting";
+      case VoiceCallStatus.connected:
+        return "Disconnect";
+      default:
+        return null;
+    }
+  }
+
+  Widget _buildVoiceCall(BuildContext context) {
+    return Obx(
+      () {
+        final tooltipText = _getVoiceCallTooltip();
+        return tooltipText == null
+            ? const Offstage()
+            : MenuButton(
+                child: _getVoiceCallIcon(),
+                tooltip: translate(tooltipText),
+                onPressed: () => bind.sessionCloseVoiceCall(id: widget.id),
+                color: _MenubarTheme.redColor,
+                hoverColor: _MenubarTheme.hoverRedColor,
+              );
+      },
+    );
+  }
+
+  List<MenuEntryBase<String>> _getChatMenu(BuildContext context) {
+    final List<MenuEntryBase<String>> chatMenu = [];
+    const EdgeInsets padding = EdgeInsets.only(left: 14.0, right: 5.0);
+    chatMenu.addAll([
+      MenuEntryButton<String>(
+        childBuilder: (TextStyle? style) => Text(
+          translate('Text chat'),
+          style: style,
+        ),
+        proc: () {
+          RenderBox? renderBox =
+              _chatButtonKey.currentContext?.findRenderObject() as RenderBox?;
+
+          Offset? initPos;
+          if (renderBox != null) {
+            final pos = renderBox.localToGlobal(Offset.zero);
+            initPos = Offset(pos.dx, pos.dy + _MenubarTheme.dividerHeight);
+          }
+
+          widget.ffi.chatModel.changeCurrentID(ChatModel.clientModeID);
+          widget.ffi.chatModel.toggleChatOverlay(chatInitPos: initPos);
+        },
+        padding: padding,
+        dismissOnClicked: true,
+      ),
+      MenuEntryButton<String>(
+        childBuilder: (TextStyle? style) => Text(
+          translate('Voice call'),
+          style: style,
+        ),
+        proc: () {
+          // Request a voice call.
+          bind.sessionRequestVoiceCall(id: widget.id);
+        },
+        padding: padding,
+        dismissOnClicked: true,
+      ),
+    ]);
+    return chatMenu;
   }
 
   List<MenuEntryBase<String>> _getControlMenu(BuildContext context) {
@@ -884,7 +1017,6 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       //     ));
       //   }
     }
-
     return displayMenu;
   }
 
@@ -1382,25 +1514,32 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         text: translate('Ratio'),
         optionsGetter: () {
           List<MenuEntryRadioOption> list = [];
-          List<String> modes = ["legacy"];
+          List<KeyboardModeMenu> modes = [
+            KeyboardModeMenu(key: 'legacy', menu: 'Legacy mode'),
+            KeyboardModeMenu(key: 'map', menu: 'Map mode'),
+            KeyboardModeMenu(key: 'translate', menu: 'Translate mode'),
+          ];
 
-          if (bind.sessionIsKeyboardModeSupported(id: widget.id, mode: "map")) {
-            modes.add("map");
-          }
-
-          for (String mode in modes) {
-            if (mode == "legacy") {
-              list.add(MenuEntryRadioOption(
-                  text: translate('Legacy mode'), value: 'legacy'));
-            } else if (mode == "map") {
-              list.add(MenuEntryRadioOption(
-                  text: translate('Map mode'), value: 'map'));
+          for (KeyboardModeMenu mode in modes) {
+            if (bind.sessionIsKeyboardModeSupported(
+                id: widget.id, mode: mode.key)) {
+              if (mode.key == 'translate') {
+                if (Platform.isLinux ||
+                    widget.ffi.ffiModel.pi.platform == kPeerPlatformLinux) {
+                  continue;
+                }
+              }
+              var text = translate(mode.menu);
+              if (mode.key == 'translate') {
+                text = '$text beta';
+              }
+              list.add(MenuEntryRadioOption(text: text, value: mode.key));
             }
           }
           return list;
         },
         curOptionGetter: () async {
-          return await bind.sessionGetKeyboardMode(id: widget.id) ?? "legacy";
+          return await bind.sessionGetKeyboardMode(id: widget.id) ?? 'legacy';
         },
         optionSetter: (String oldValue, String newValue) async {
           await bind.sessionSetKeyboardMode(id: widget.id, value: newValue);
@@ -1626,7 +1765,7 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
       child: Icon(
         Icons.drag_indicator,
         size: 20,
-        color: Colors.grey,
+        color: Colors.grey[800],
       ),
       feedback: widget,
       onDragStarted: (() {
@@ -1679,7 +1818,9 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
-          border: Border.all(color: MyTheme.border),
+          borderRadius: BorderRadius.vertical(
+            bottom: Radius.circular(5),
+          ),
         ),
         child: SizedBox(
           height: 20,
@@ -1688,4 +1829,11 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
       ),
     );
   }
+}
+
+class KeyboardModeMenu {
+  final String key;
+  final String menu;
+
+  KeyboardModeMenu({required this.key, required this.menu});
 }

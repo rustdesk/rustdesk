@@ -201,6 +201,8 @@ message KeyEvent {
   bool press = 2;
   oneof union {
     ControlKey control_key = 3;
+    // high word, sym key code. win: virtual-key code, linux: keysym ?, macos: 
+    // low word, position key code. win: scancode, linux: key code, macos: key code
     uint32 chr = 4;
     uint32 unicode = 5;
     string seq = 6;
@@ -598,6 +600,18 @@ message Misc {
   }
 }
 
+message VoiceCallRequest {
+  int64 req_timestamp = 1;
+  // Indicates whether the request is a connect action or a disconnect action.
+  bool is_connect = 2;
+}
+
+message VoiceCallResponse {
+  bool accepted = 1;
+  int64 req_timestamp = 2; // Should copy from [VoiceCallRequest::req_timestamp].
+  int64 ack_timestamp = 3;
+}
+
 message Message {
   oneof union {
     SignedId signed_id = 3;
@@ -620,5 +634,8 @@ message Message {
     Cliprdr cliprdr = 20;
     MessageBox message_box = 21;
     SwitchSidesResponse switch_sides_response = 22;
+    VoiceCallRequest voice_call_request = 23;
+    VoiceCallResponse voice_call_response = 24;
+    PeerInfo peer_info = 25;
   }
 }

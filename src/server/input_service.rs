@@ -71,7 +71,6 @@ struct Input {
     y: i32,
 }
 
-const KEY_RDEV_START: u64 = 999;
 const KEY_CHAR_START: u64 = 9999;
 
 #[derive(Clone, Default)]
@@ -202,11 +201,17 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
     Ok(())
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+enum KeysDown {
+    RdevKey(RawKey),
+    EnigoKey(u64),
+}
+
 lazy_static::lazy_static! {
     static ref ENIGO: Arc<Mutex<Enigo>> = {
         Arc::new(Mutex::new(Enigo::new()))
     };
-    static ref KEYS_DOWN: Arc<Mutex<HashMap<u64, Instant>>> = Default::default();
+    static ref KEYS_DOWN: Arc<Mutex<HashMap<KeysDown, Instant>>> = Default::default();
     static ref LATEST_PEER_INPUT_CURSOR: Arc<Mutex<Input>> = Default::default();
     static ref LATEST_SYS_CURSOR_POS: Arc<Mutex<(Instant, (i32, i32))>> = Arc::new(Mutex::new((Instant::now().sub(MOUSE_MOVE_PROTECTION_TIMEOUT), (0, 0))));
 }
@@ -375,12 +380,7 @@ fn record_key_is_control_key(record_key: u64) -> bool {
 
 #[inline]
 fn record_key_is_chr(record_key: u64) -> bool {
-    KEY_RDEV_START <= record_key && record_key < KEY_CHAR_START
-}
-
-#[inline]
-fn record_key_is_rdev_layout(record_key: u64) -> bool {
-    KEY_CHAR_START <= record_key
+    record_key < KEY_CHAR_START
 }
 
 #[inline]
@@ -396,15 +396,16 @@ fn record_key_to_key(record_key: u64) -> Option<Key> {
 }
 
 #[inline]
-fn release_record_key(record_key: u64) {
-    let func = move || {
-        if record_key_is_rdev_layout(record_key) {
-            simulate_(&EventType::KeyRelease(RdevKey::Unknown(
-                (record_key - KEY_RDEV_START) as _,
-            )));
-        } else if let Some(key) = record_key_to_key(record_key) {
-            ENIGO.lock().unwrap().key_up(key);
-            log::debug!("Fixed {:?} timeout", key);
+fn release_record_key(record_key: KeysDown) {
+    let func = move || match record_key {
+        KeysDown::RdevKey(raw_key) => {
+            simulate_(&EventType::KeyRelease(RdevKey::RawKey(raw_key)));
+        }
+        KeysDown::EnigoKey(key) => {
+            if let Some(key) = record_key_to_key(key) {
+                ENIGO.lock().unwrap().key_up(key);
+                log::debug!("Fixed {:?} timeout", key);
+            }
         }
     };
 
@@ -718,7 +719,7 @@ fn reset_input() {
         let _lock = VIRTUAL_INPUT_MTX.lock();
         VIRTUAL_INPUT = VirtualInput::new(
             CGEventSourceStateID::Private,
-            CGEventTapLocation::AnnotatedSession,
+            CGEventTapLocation::Session,
         )
         .ok();
     }
@@ -733,7 +734,7 @@ pub fn reset_input_ondisconn() {
     }
 }
 
-fn sim_rdev_rawkey(code: u32, keydown: bool) {
+fn sim_rdev_rawkey_position(code: u32, keydown: bool) {
     #[cfg(target_os = "windows")]
     let rawkey = RawKey::ScanCode(code);
     #[cfg(target_os = "linux")]
@@ -744,6 +745,21 @@ fn sim_rdev_rawkey(code: u32, keydown: bool) {
     #[cfg(target_os = "macos")]
     let rawkey = RawKey::MacVirtualKeycode(code);
 
+    // map mode(1): Send keycode according to the peer platform.
+    record_pressed_key(KeysDown::RdevKey(rawkey), keydown);
+
+    let event_type = if keydown {
+        EventType::KeyPress(RdevKey::RawKey(rawkey))
+    } else {
+        EventType::KeyRelease(RdevKey::RawKey(rawkey))
+    };
+    simulate_(&event_type);
+}
+
+#[cfg(target_os = "windows")]
+fn sim_rdev_rawkey_virtual(code: u32, keydown: bool) {
+    let rawkey = RawKey::WinVirtualKeycode(code);
+    record_pressed_key(KeysDown::RdevKey(rawkey), keydown);
     let event_type = if keydown {
         EventType::KeyPress(RdevKey::RawKey(rawkey))
     } else {
@@ -874,9 +890,6 @@ fn sync_numlock_capslock_status(key_event: &KeyEvent) {
 }
 
 fn map_keyboard_mode(evt: &KeyEvent) {
-    // map mode(1): Send keycode according to the peer platform.
-    record_pressed_key(evt.chr() as u64 + KEY_CHAR_START, evt.down);
-
     #[cfg(windows)]
     crate::platform::windows::try_change_desktop();
 
@@ -894,7 +907,7 @@ fn map_keyboard_mode(evt: &KeyEvent) {
         return;
     }
 
-    sim_rdev_rawkey(evt.chr(), evt.down);
+    sim_rdev_rawkey_position(evt.chr(), evt.down);
 }
 
 #[cfg(target_os = "macos")]
@@ -924,10 +937,11 @@ fn release_unpressed_modifiers(en: &mut Enigo, key_event: &KeyEvent) {
 
 #[cfg(target_os = "linux")]
 fn is_altgr_pressed() -> bool {
+    let altgr_rawkey = RawKey::LinuxXorgKeycode(ControlKey::RAlt.value() as _);
     KEYS_DOWN
         .lock()
         .unwrap()
-        .get(&(ControlKey::RAlt.value() as _))
+        .get(&KeysDown::RdevKey(altgr_rawkey))
         .is_some()
 }
 
@@ -1011,7 +1025,7 @@ fn release_keys(en: &mut Enigo, to_release: &Vec<Key>) {
     }
 }
 
-fn record_pressed_key(record_key: u64, down: bool) {
+fn record_pressed_key(record_key: KeysDown, down: bool) {
     let mut key_down = KEYS_DOWN.lock().unwrap();
     if down {
         key_down.insert(record_key, Instant::now());
@@ -1050,12 +1064,12 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
                 return;
             }
             let record_key = ck.value() as u64;
-            record_pressed_key(record_key, down);
+            record_pressed_key(KeysDown::EnigoKey(record_key), down);
             process_control_key(&mut en, &ck, down)
         }
         Some(key_event::Union::Chr(chr)) => {
             let record_key = chr as u64 + KEY_CHAR_START;
-            record_pressed_key(record_key, down);
+            record_pressed_key(KeysDown::EnigoKey(record_key), down);
             process_chr(&mut en, chr, down)
         }
         Some(key_event::Union::Unicode(chr)) => process_unicode(&mut en, chr),
@@ -1065,6 +1079,36 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
 
     #[cfg(not(target_os = "macos"))]
     release_keys(&mut en, &to_release);
+}
+
+#[cfg(target_os = "windows")]
+fn translate_process_code(code: u32, down: bool) {
+    crate::platform::windows::try_change_desktop();
+    match code >> 16 {
+        0 => sim_rdev_rawkey_position(code, down),
+        vk_code => sim_rdev_rawkey_virtual(vk_code, down),
+    };
+}
+
+fn translate_keyboard_mode(evt: &KeyEvent) {
+    match &evt.union {
+        Some(key_event::Union::Seq(seq)) => {
+            ENIGO.lock().unwrap().key_sequence(seq);
+        }
+        Some(key_event::Union::Chr(..)) =>
+        {
+            #[cfg(target_os = "windows")]
+            translate_process_code(evt.chr(), evt.down);
+            #[cfg(not(target_os = "windows"))]
+            sim_rdev_rawkey_position(evt.chr(), evt.down);
+        }
+        Some(key_event::Union::Unicode(..)) => {
+            // Do not handle unicode for now.
+        }
+        _ => {
+            log::debug!("Unreachable. Unexpected key event {:?}", &evt);
+        }
+    }
 }
 
 pub fn handle_key_(evt: &KeyEvent) {
@@ -1080,7 +1124,7 @@ pub fn handle_key_(evt: &KeyEvent) {
             map_keyboard_mode(evt);
         }
         KeyboardMode::Translate => {
-            legacy_keyboard_mode(evt);
+            translate_keyboard_mode(evt);
         }
         _ => {
             legacy_keyboard_mode(evt);

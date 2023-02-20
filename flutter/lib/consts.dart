@@ -50,6 +50,18 @@ const int kMobileMaxDisplayHeight = 1280;
 const int kDesktopMaxDisplayWidth = 1920;
 const int kDesktopMaxDisplayHeight = 1080;
 
+const double kDesktopFileTransferNameColWidth = 200;
+const double kDesktopFileTransferModifiedColWidth = 120;
+const double kDesktopFileTransferRowHeight = 25.0;
+const double kDesktopFileTransferHeaderHeight = 25.0;
+
+// https://en.wikipedia.org/wiki/Non-breaking_space
+const int $nbsp = 0x00A0;
+
+extension StringExtension on String {
+  String get nonBreaking => replaceAll(' ', String.fromCharCode($nbsp));
+}
+
 const Size kConnectionManagerWindowSize = Size(300, 400);
 // Tabbar transition duration, now we remove the duration
 const Duration kTabTransitionDuration = Duration.zero;
@@ -105,6 +117,12 @@ const kRemoteImageQualityLow = 'low';
 
 /// [kRemoteImageQualityCustom] Custom image quality.
 const kRemoteImageQualityCustom = 'custom';
+
+/// [kRemoteAudioGuestToHost] Guest to host audio mode(default).
+const kRemoteAudioGuestToHost = 'guest-to-host';
+
+/// [kRemoteAudioDualWay] dual-way audio mode(default).
+const kRemoteAudioDualWay = 'dual-way';
 
 const kIgnoreDpi = true;
 

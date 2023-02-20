@@ -1,11 +1,13 @@
 // original cm window in Sciter version.
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
+import 'package:flutter_hbb/utils/platform_channel.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
@@ -47,8 +49,17 @@ class _DesktopServerPageState extends State<DesktopServerPage>
 
   @override
   void onWindowClose() {
-    gFFI.serverModel.closeAll();
-    gFFI.close();
+    Future.wait([
+      gFFI.serverModel.closeAll(),
+      gFFI.close()
+    ]).then((_)  {
+      if (Platform.isMacOS) {
+        RdPlatformChannel.instance.terminate();
+      } else {
+        windowManager.setPreventClose(false);
+        windowManager.close();
+      }
+    });
     super.onWindowClose();
   }
 
@@ -68,26 +79,19 @@ class _DesktopServerPageState extends State<DesktopServerPage>
         ],
         child: Consumer<ServerModel>(
             builder: (context, serverModel, child) => Container(
-                  decoration: BoxDecoration(
-                      border:
-                          Border.all(color: MyTheme.color(context).border!)),
-                  child: Overlay(initialEntries: [
-                    OverlayEntry(builder: (context) {
-                      gFFI.dialogManager.setOverlayState(Overlay.of(context));
-                      return Scaffold(
-                        backgroundColor: Theme.of(context).backgroundColor,
-                        body: Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.start,
-                            children: [
-                              Expanded(child: ConnectionManager()),
-                            ],
-                          ),
-                        ),
-                      );
-                    })
-                  ]),
-                )));
+                decoration: BoxDecoration(
+                    border: Border.all(color: MyTheme.color(context).border!)),
+                child: Scaffold(
+                  backgroundColor: Theme.of(context).backgroundColor,
+                  body: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      children: [
+                        Expanded(child: ConnectionManager()),
+                      ],
+                    ),
+                  ),
+                ))));
   }
 
   @override
@@ -522,6 +526,39 @@ class _CmControlPanel extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
         Offstage(
+          offstage: !client.inVoiceCall,
+          child: buildButton(context,
+              color: Colors.red,
+              onClick: () => closeVoiceCall(),
+              icon: Icon(Icons.phone_disabled_rounded, color: Colors.white),
+              text: "Stop voice call",
+              textColor: Colors.white),
+        ),
+        Offstage(
+          offstage: !client.incomingVoiceCall,
+          child: Row(
+            children: [
+              Expanded(
+                child: buildButton(context,
+                    color: MyTheme.accent,
+                    onClick: () => handleVoiceCall(true),
+                    icon: Icon(Icons.phone_enabled, color: Colors.white),
+                    text: "Accept",
+                    textColor: Colors.white),
+              ),
+              Expanded(
+                child: buildButton(context,
+                    color: Colors.red,
+                    onClick: () => handleVoiceCall(false),
+                    icon:
+                        Icon(Icons.phone_disabled_rounded, color: Colors.white),
+                    text: "Dismiss",
+                    textColor: Colors.white),
+              )
+            ],
+          ),
+        ),
+        Offstage(
           offstage: !client.fromSwitch,
           child: buildButton(context,
               color: Colors.purple,
@@ -626,7 +663,7 @@ class _CmControlPanel extends StatelessWidget {
         .marginSymmetric(horizontal: showElevation ? 0 : bigMargin);
   }
 
-  buildButton(
+  Widget buildButton(
     BuildContext context, {
     required Color? color,
     required Function() onClick,
@@ -691,6 +728,14 @@ class _CmControlPanel extends StatelessWidget {
 
   void handleSwitchBack(BuildContext context) {
     bind.cmSwitchBack(connId: client.id);
+  }
+
+  void handleVoiceCall(bool accept) {
+    bind.cmHandleIncomingVoiceCall(id: client.id, accept: accept);
+  }
+
+  void closeVoiceCall() {
+    bind.cmCloseVoiceCall(id: client.id);
   }
 }
 

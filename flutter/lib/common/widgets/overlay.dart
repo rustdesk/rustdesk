@@ -1,6 +1,7 @@
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 
 import '../../consts.dart';
@@ -96,12 +97,14 @@ class DraggableChatWindow extends StatelessWidget {
         children: [
           Padding(
               padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
-              child: Row(children: [
-                Icon(Icons.chat_bubble_outline,
-                    size: 20, color: Theme.of(context).colorScheme.primary),
-                SizedBox(width: 6),
-                Text(translate("Chat"))
-              ])),
+              child: Obx(() => Opacity(
+                  opacity: chatModel.isWindowFocus.value ? 1.0 : 0.4,
+                  child: Row(children: [
+                    Icon(Icons.chat_bubble_outline,
+                        size: 20, color: Theme.of(context).colorScheme.primary),
+                    SizedBox(width: 6),
+                    Text(translate("Chat"))
+                  ])))),
           Padding(
               padding: EdgeInsets.all(2),
               child: ActionIcon(
@@ -304,15 +307,17 @@ class _DraggableState extends State<Draggable> {
     if (widget.checkKeyboard) {
       checkKeyboard();
     }
-    if (widget.checkKeyboard) {
+    if (widget.checkScreenSize) {
       checkScreenSize();
     }
-    return Positioned(
-        top: _position.dy,
-        left: _position.dx,
-        width: widget.width,
-        height: widget.height,
-        child: widget.builder(context, onPanUpdate));
+    return Stack(children: [
+      Positioned(
+          top: _position.dy,
+          left: _position.dx,
+          width: widget.width,
+          height: widget.height,
+          child: widget.builder(context, onPanUpdate))
+    ]);
   }
 }
 
@@ -365,4 +370,56 @@ class QualityMonitor extends StatelessWidget {
                   ),
                 )
               : const SizedBox.shrink()));
+}
+
+class BlockableOverlayState extends OverlayKeyState {
+  final _middleBlocked = false.obs;
+
+  VoidCallback? onMiddleBlockedClick; // to-do use listener
+
+  RxBool get middleBlocked => _middleBlocked;
+
+  void addMiddleBlockedListener(void Function(bool) cb) {
+    _middleBlocked.listen(cb);
+  }
+
+  void setMiddleBlocked(bool blocked) {
+    if (blocked != _middleBlocked.value) {
+      _middleBlocked.value = blocked;
+    }
+  }
+}
+
+class BlockableOverlay extends StatelessWidget {
+  final Widget underlying;
+  final List<OverlayEntry>? upperLayer;
+
+  final BlockableOverlayState state;
+
+  BlockableOverlay(
+      {required this.underlying, required this.state, this.upperLayer});
+
+  @override
+  Widget build(BuildContext context) {
+    final initialEntries = [
+      OverlayEntry(builder: (_) => underlying),
+
+      /// middle layer
+      OverlayEntry(
+          builder: (context) => Obx(() => Listener(
+              onPointerDown: (_) {
+                state.onMiddleBlockedClick?.call();
+              },
+              child: Container(
+                  color:
+                      state.middleBlocked.value ? Colors.transparent : null)))),
+    ];
+
+    if (upperLayer != null) {
+      initialEntries.addAll(upperLayer!);
+    }
+
+    /// set key
+    return Overlay(key: state.key, initialEntries: initialEntries);
+  }
 }

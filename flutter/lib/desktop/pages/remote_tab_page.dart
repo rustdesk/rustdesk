@@ -22,7 +22,10 @@ import 'package:bot_toast/bot_toast.dart';
 import '../../models/platform_model.dart';
 
 class _MenuTheme {
-  static const Color commonColor = MyTheme.accent;
+  static const Color blueColor = MyTheme.button;
+  static const Color hoverBlueColor = MyTheme.accent;
+  static const Color redColor = Colors.redAccent;
+  static const Color hoverRedColor = Colors.red;
   // kMinInteractiveDimension
   static const double height = 20.0;
   static const double dividerHeight = 12.0;
@@ -70,6 +73,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           id: peerId,
           menubarState: _menubarState,
           switchUuid: params['switch_uuid'],
+          forceRelay: params['forceRelay'],
         ),
       ));
       _update_remote_count();
@@ -104,6 +108,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             id: id,
             menubarState: _menubarState,
             switchUuid: switchUuid,
+            forceRelay: args['forceRelay'],
           ),
         ));
       } else if (call.method == "onDestroy") {
@@ -280,7 +285,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           .map((entry) => entry.build(
               context,
               const MenuConfig(
-                commonColor: _MenuTheme.commonColor,
+                commonColor: _MenuTheme.blueColor,
                 height: _MenuTheme.height,
                 dividerHeight: _MenuTheme.dividerHeight,
               )))

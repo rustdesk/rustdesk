@@ -20,7 +20,7 @@ pub use self::rendezvous_mediator::*;
 pub mod common;
 #[cfg(not(any(target_os = "ios")))]
 pub mod ipc;
-#[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli", feature = "flutter")))]
 pub mod ui;
 mod version;
 pub use version::*;
@@ -56,3 +56,5 @@ pub mod clipboard_file;
 
 #[cfg(all(windows, feature = "with_rc"))]
 pub mod rc;
+#[cfg(target_os = "windows")]
+pub mod win_privacy;

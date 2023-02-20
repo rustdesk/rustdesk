@@ -95,10 +95,31 @@ class ChatPage extends StatelessWidget implements PageShape {
                               color: Theme.of(context).colorScheme.primary)),
                       messageOptions: MessageOptions(
                           showOtherUsersAvatar: false,
-                          showTime: true,
-                          currentUserTextColor: Colors.white,
                           textColor: Colors.white,
                           maxWidth: constraints.maxWidth * 0.7,
+                          messageTextBuilder: (message, _, __) {
+                            final isOwnMessage =
+                                message.user.id == currentUser.id;
+                            return Column(
+                              crossAxisAlignment: isOwnMessage
+                                  ? CrossAxisAlignment.end
+                                  : CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Text(message.text,
+                                    style: TextStyle(color: Colors.white)),
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 5),
+                                  child: Text(
+                                    "${message.createdAt.hour}:${message.createdAt.minute}",
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
                           messageDecorationBuilder: (_, __, ___) =>
                               defaultMessageDecoration(
                                 color: MyTheme.accent80,

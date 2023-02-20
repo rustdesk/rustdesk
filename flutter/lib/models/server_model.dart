@@ -560,10 +560,8 @@ class ServerModel with ChangeNotifier {
     }
   }
 
-  closeAll() {
-    for (var client in _clients) {
-      bind.cmCloseConnection(connId: client.id);
-    }
+  Future<void> closeAll() async {
+    await Future.wait(_clients.map((client) => bind.cmCloseConnection(connId: client.id)));
     _clients.clear();
     tabController.state.value.tabs.clear();
   }
@@ -577,6 +575,26 @@ class ServerModel with ChangeNotifier {
     if (_showElevation != show) {
       _showElevation = show;
       notifyListeners();
+    }
+  }
+
+  void updateVoiceCallState(Map<String, dynamic> evt) {
+    try {
+      final client = Client.fromJson(jsonDecode(evt["client"]));
+      final index = _clients.indexWhere((element) => element.id == client.id);
+      if (index != -1) {
+        _clients[index].inVoiceCall = client.inVoiceCall;
+        _clients[index].incomingVoiceCall = client.incomingVoiceCall;
+        if (client.incomingVoiceCall) {
+          // Has incoming phone call, let's set the window on top.
+          Future.delayed(Duration.zero, () {
+            window_on_top(null);
+          });
+        }
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint("updateVoiceCallState failed: $e");
     }
   }
 }
@@ -602,6 +620,8 @@ class Client {
   bool recording = false;
   bool disconnected = false;
   bool fromSwitch = false;
+  bool inVoiceCall = false;
+  bool incomingVoiceCall = false;
 
   RxBool hasUnreadChatMessage = false.obs;
 
@@ -623,6 +643,8 @@ class Client {
     recording = json['recording'];
     disconnected = json['disconnected'];
     fromSwitch = json['from_switch'];
+    inVoiceCall = json['in_voice_call'];
+    incomingVoiceCall = json['incoming_voice_call'];
   }
 
   Map<String, dynamic> toJson() {

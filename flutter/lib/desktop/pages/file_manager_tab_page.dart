@@ -41,7 +41,11 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
         selectedIcon: selectedIcon,
         unselectedIcon: unselectedIcon,
         onTabCloseButton: () => () => tabController.closeBy(params['id']),
-        page: FileManagerPage(key: ValueKey(params['id']), id: params['id'])));
+        page: FileManagerPage(
+          key: ValueKey(params['id']),
+          id: params['id'],
+          forceRelay: params['forceRelay'],
+        )));
   }
 
   @override
@@ -64,7 +68,11 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
             selectedIcon: selectedIcon,
             unselectedIcon: unselectedIcon,
             onTabCloseButton: () => tabController.closeBy(id),
-            page: FileManagerPage(key: ValueKey(id), id: id)));
+            page: FileManagerPage(
+              key: ValueKey(id),
+              id: id,
+              forceRelay: args['forceRelay'],
+            )));
       } else if (call.method == "onDestroy") {
         tabController.clear();
       } else if (call.method == kWindowActionRebuild) {

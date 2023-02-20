@@ -378,7 +378,7 @@ class Header: Reactor.Component {
             togglePrivacyMode(me.id);
         } else if (me.id == "show-quality-monitor") {
             toggleQualityMonitor(me.id);
-        }else if (me.attributes.hasClass("toggle-option")) {
+        } else if (me.attributes.hasClass("toggle-option")) {
             handler.toggle_option(me.id);
             toggleMenuState();
         } else if (!me.attributes.hasClass("selected")) {
@@ -474,6 +474,14 @@ if (!(is_file_transfer || is_port_forward)) {
 
 handler.updatePi = function(v) {
     pi = v;
+    header.update();
+    if (is_port_forward) {
+        view.windowState = View.WINDOW_MINIMIZED;
+    }
+}
+
+handler.updateDisplays = function(v) {
+    pi.displays = v;
     header.update();
     if (is_port_forward) {
         view.windowState = View.WINDOW_MINIMIZED;

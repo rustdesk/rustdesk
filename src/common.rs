@@ -30,10 +30,14 @@ use hbb_common::{
 // #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 use hbb_common::{config::RENDEZVOUS_PORT, futures::future::join_all};
 
+use crate::ui_interface::{get_option, set_option};
+
 pub type NotifyMessageBox = fn(String, String, String, String) -> dyn Future<Output = ()>;
 
 pub const CLIPBOARD_NAME: &'static str = "clipboard";
 pub const CLIPBOARD_INTERVAL: u64 = 333;
+
+pub const SYNC_PEER_INFO_DISPLAYS: i32 = 1;
 
 // the executable name of the portable version
 pub const PORTABLE_APPNAME_RUNTIME_ENV_KEY: &str = "RUSTDESK_APPNAME";
@@ -102,6 +106,54 @@ pub fn check_clipboard(
             }
         }
     }
+    None
+}
+
+/// Set sound input device.
+pub fn set_sound_input(device: String) {
+    let prior_device = get_option("audio-input".to_owned());
+    if prior_device != device {
+        log::info!("switch to audio input device {}", device);
+        std::thread::spawn(move || {
+            set_option("audio-input".to_owned(), device);
+        });
+    } else {
+        log::info!("audio input is already set to {}", device);
+    }
+}
+
+/// Get system's default sound input device name.
+#[inline]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn get_default_sound_input() -> Option<String> {
+    #[cfg(not(target_os = "linux"))]
+    {
+        use cpal::traits::{DeviceTrait, HostTrait};
+        let host = cpal::default_host();
+        let dev = host.default_input_device();
+        return if let Some(dev) = dev {
+            match dev.name() {
+                Ok(name) => Some(name),
+                Err(_) => None,
+            }
+        } else {
+            None
+        };
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let input = crate::platform::linux::get_default_pa_source();
+        return if let Some(input) = input {
+            Some(input.1)
+        } else {
+            None
+        };
+    }
+}
+
+#[inline]
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub fn get_default_sound_input() -> Option<String> {
     None
 }
 
@@ -538,11 +590,6 @@ async fn check_software_update_() -> hbb_common::ResultType<()> {
     Ok(())
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
-pub fn get_icon() -> String {
-    hbb_common::config::ICON.to_owned()
-}
-
 pub fn get_app_name() -> String {
     hbb_common::config::APP_NAME.read().unwrap().clone()
 }
@@ -671,8 +718,8 @@ pub fn is_keyboard_mode_supported(keyboard_mode: &KeyboardMode, version_number: 
     match keyboard_mode {
         KeyboardMode::Legacy => true,
         KeyboardMode::Map => version_number >= hbb_common::get_version_number("1.2.0"),
-        KeyboardMode::Translate => false,
-        KeyboardMode::Auto => false,
+        KeyboardMode::Translate => version_number >= hbb_common::get_version_number("1.2.0"),
+        KeyboardMode::Auto => version_number >= hbb_common::get_version_number("1.2.0"),
     }
 }
 
@@ -713,7 +760,13 @@ pub fn make_fd_to_json(id: i32, path: String, entries: &Vec<FileEntry>) -> Strin
     serde_json::to_string(&fd_json).unwrap_or("".into())
 }
 
-#[cfg(test)]
-mod test_common {
-    use super::*;
+/// The function to handle the url scheme sent by the system.
+///
+/// 1. Try to send the url scheme from ipc.
+/// 2. If failed to send the url scheme, we open a new main window to handle this url scheme.
+pub fn handle_url_scheme(url: String) {
+    if let Err(err) = crate::ipc::send_url_scheme(url.clone()) {
+        log::debug!("Send the url to the existing flutter process failed, {}. Let's open a new program to handle this.", err);
+        let _ = crate::run_me(vec![url]);
+    }
 }

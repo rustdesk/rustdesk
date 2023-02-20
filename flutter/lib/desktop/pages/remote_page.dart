@@ -21,6 +21,7 @@ import '../../mobile/widgets/dialog.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
+import '../../utils/image.dart';
 import '../widgets/remote_menubar.dart';
 import '../widgets/kb_layout_type_chooser.dart';
 
@@ -33,11 +34,13 @@ class RemotePage extends StatefulWidget {
     required this.id,
     required this.menubarState,
     this.switchUuid,
+    this.forceRelay,
   }) : super(key: key);
 
   final String id;
   final MenubarState menubarState;
   final String? switchUuid;
+  final bool? forceRelay;
   final SimpleWrapper<State<RemotePage>?> _lastState = SimpleWrapper(null);
 
   FFI get ffi => (_lastState.value! as _RemotePageState)._ffi;
@@ -60,6 +63,8 @@ class _RemotePageState extends State<RemotePage>
   late RxBool _zoomCursor;
   late RxBool _remoteCursorMoved;
   late RxBool _keyboardEnabled;
+
+  final _blockableOverlayState = BlockableOverlayState();
 
   final FocusNode _rawKeyFocusNode = FocusNode(debugLabel: "rawkeyFocusNode");
 
@@ -104,6 +109,7 @@ class _RemotePageState extends State<RemotePage>
     _ffi.start(
       widget.id,
       switchUuid: widget.switchUuid,
+      forceRelay: widget.forceRelay,
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
@@ -132,6 +138,13 @@ class _RemotePageState extends State<RemotePage>
     //   });
     //   _isCustomCursorInited = true;
     // }
+
+    _ffi.dialogManager.setOverlayState(_blockableOverlayState);
+    _ffi.chatModel.setOverlayState(_blockableOverlayState);
+    // make remote page penetrable automatically, effective for chat over remote
+    _blockableOverlayState.onMiddleBlockedClick = () {
+      _blockableOverlayState.setMiddleBlocked(false);
+    };
   }
 
   @override
@@ -191,39 +204,50 @@ class _RemotePageState extends State<RemotePage>
 
   Widget buildBody(BuildContext context) {
     return Scaffold(
-        backgroundColor: Theme.of(context).backgroundColor,
-        body: Overlay(
-          initialEntries: [
-            OverlayEntry(builder: (context) {
-              _ffi.chatModel.setOverlayState(Overlay.of(context));
-              _ffi.dialogManager.setOverlayState(Overlay.of(context));
-              return Container(
-                  color: Colors.black,
-                  child: RawKeyFocusScope(
-                      focusNode: _rawKeyFocusNode,
-                      onFocusChange: (bool imageFocused) {
-                        debugPrint(
-                            "onFocusChange(window active:${!_isWindowBlur}) $imageFocused");
-                        // See [onWindowBlur].
-                        if (Platform.isWindows) {
-                          if (_isWindowBlur) {
-                            imageFocused = false;
-                            Future.delayed(Duration.zero, () {
-                              _rawKeyFocusNode.unfocus();
-                            });
-                          }
-                          if (imageFocused) {
-                            _ffi.inputModel.enterOrLeave(true);
-                          } else {
-                            _ffi.inputModel.enterOrLeave(false);
-                          }
-                        }
-                      },
-                      inputModel: _ffi.inputModel,
-                      child: getBodyForDesktop(context)));
-            })
-          ],
-        ));
+      backgroundColor: Theme.of(context).backgroundColor,
+
+      /// the Overlay key will be set with _blockableOverlayState in BlockableOverlay
+      /// see override build() in [BlockableOverlay]
+      body: BlockableOverlay(
+        state: _blockableOverlayState,
+        underlying: Container(
+            color: Colors.black,
+            child: RawKeyFocusScope(
+                focusNode: _rawKeyFocusNode,
+                onFocusChange: (bool imageFocused) {
+                  debugPrint(
+                      "onFocusChange(window active:${!_isWindowBlur}) $imageFocused");
+                  // See [onWindowBlur].
+                  if (Platform.isWindows) {
+                    if (_isWindowBlur) {
+                      imageFocused = false;
+                      Future.delayed(Duration.zero, () {
+                        _rawKeyFocusNode.unfocus();
+                      });
+                    }
+                    if (imageFocused) {
+                      _ffi.inputModel.enterOrLeave(true);
+                    } else {
+                      _ffi.inputModel.enterOrLeave(false);
+                    }
+                  }
+                },
+                inputModel: _ffi.inputModel,
+                child: getBodyForDesktop(context))),
+        upperLayer: [
+          OverlayEntry(
+              builder: (context) => RemoteMenubar(
+                    id: widget.id,
+                    ffi: _ffi,
+                    state: widget.menubarState,
+                    onEnterOrLeaveImageSetter: (func) =>
+                        _onEnterOrLeaveImage4Menubar = func,
+                    onEnterOrLeaveImageCleaner: () =>
+                        _onEnterOrLeaveImage4Menubar = null,
+                  ))
+        ],
+      ),
+    );
   }
 
   @override
@@ -344,13 +368,6 @@ class _RemotePageState extends State<RemotePage>
             QualityMonitor(_ffi.qualityMonitorModel), null, null),
       ),
     );
-    paints.add(RemoteMenubar(
-      id: widget.id,
-      ffi: _ffi,
-      state: widget.menubarState,
-      onEnterOrLeaveImageSetter: (func) => _onEnterOrLeaveImage4Menubar = func,
-      onEnterOrLeaveImageCleaner: () => _onEnterOrLeaveImage4Menubar = null,
-    ));
     return Stack(
       children: paints,
     );
@@ -670,42 +687,5 @@ class CursorPaint extends StatelessWidget {
         scale: scale,
       ),
     );
-  }
-}
-
-class ImagePainter extends CustomPainter {
-  ImagePainter({
-    required this.image,
-    required this.x,
-    required this.y,
-    required this.scale,
-  });
-
-  ui.Image? image;
-  double x;
-  double y;
-  double scale;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (image == null) return;
-    if (x.isNaN || y.isNaN) return;
-    canvas.scale(scale, scale);
-    // https://github.com/flutter/flutter/issues/76187#issuecomment-784628161
-    // https://api.flutter-io.cn/flutter/dart-ui/FilterQuality.html
-    var paint = Paint();
-    if ((scale - 1.0).abs() > 0.001) {
-      paint.filterQuality = FilterQuality.medium;
-      if (scale > 10.00000) {
-        paint.filterQuality = FilterQuality.high;
-      }
-    }
-    canvas.drawImage(
-        image!, Offset(x.toInt().toDouble(), y.toInt().toDouble()), paint);
-  }
-
-  @override
-  bool shouldRepaint(CustomPainter oldDelegate) {
-    return oldDelegate != this;
   }
 }

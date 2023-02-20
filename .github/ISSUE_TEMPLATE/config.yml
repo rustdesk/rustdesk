@@ -1,3 +1,4 @@
+blank_issues_enabled: false
 contact_links:
   - name: Ask a question
     url: https://github.com/rustdesk/rustdesk/discussions/category_choices
