@@ -689,6 +689,9 @@ class RecentPeerCard extends BasePeerCard {
       _connectAction(context, peer),
       _transferFileAction(context, peer.id),
     ];
+
+    final List favs = (await bind.mainGetFav()).toList();
+
     if (isDesktop && peer.platform != 'Android') {
       menuItems.add(_tcpTunnelingAction(context, peer.id));
     }
@@ -705,7 +708,13 @@ class RecentPeerCard extends BasePeerCard {
     if (await bind.mainPeerHasPassword(id: peer.id)) {
       menuItems.add(_unrememberPasswordAction(peer.id));
     }
-    menuItems.add(_addFavAction(peer.id));
+
+    if (!favs.contains(peer.id)) {
+      menuItems.add(_addFavAction(peer.id));
+    } else {
+      menuItems.add(_rmFavAction(peer.id, () async {}));
+    }
+
     if (!gFFI.abModel.idContainBy(peer.id)) {
       menuItems.add(_addToAb(peer));
     }
