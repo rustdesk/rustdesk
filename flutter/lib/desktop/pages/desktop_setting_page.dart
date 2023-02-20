@@ -1074,7 +1074,7 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [_Button('Apply', submit, enabled: enabled)],
-            ).marginOnly(top: 15),
+            ).marginOnly(top: 10),
           ],
         )
       ]);
@@ -1697,33 +1697,30 @@ _LabeledTextField(
     bool secure) {
   return Row(
     children: [
-      Spacer(flex: 1),
+      ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 140),
+          child: Text(
+            '${translate(label)}:',
+            textAlign: TextAlign.right,
+            style: TextStyle(
+                fontSize: 16, color: _disabledTextColor(context, enabled)),
+          ).marginOnly(right: 10)),
       Expanded(
-        flex: 4,
-        child: Text(
-          '${translate(label)}:',
-          textAlign: TextAlign.right,
-          style: TextStyle(color: _disabledTextColor(context, enabled)),
-        ),
-      ),
-      Spacer(flex: 1),
-      Expanded(
-        flex: 10,
         child: TextField(
             controller: controller,
             enabled: enabled,
             obscureText: secure,
             decoration: InputDecoration(
                 isDense: true,
-                contentPadding: EdgeInsets.symmetric(vertical: 15),
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.fromLTRB(14, 15, 14, 15),
                 errorText: errorText.isNotEmpty ? errorText : null),
             style: TextStyle(
               color: _disabledTextColor(context, enabled),
             )),
       ),
-      Spacer(flex: 1),
     ],
-  );
+  ).marginOnly(bottom: 8);
 }
 
 // ignore: must_be_immutable
@@ -1856,12 +1853,11 @@ void changeSocks5Proxy() async {
             Row(
               children: [
                 ConstrainedBox(
-                    constraints: const BoxConstraints(minWidth: 100),
-                    child: Text('${translate("Hostname")}:')
-                        .marginOnly(bottom: 16.0)),
-                const SizedBox(
-                  width: 24.0,
-                ),
+                    constraints: const BoxConstraints(minWidth: 140),
+                    child: Text(
+                      '${translate("Hostname")}:',
+                      textAlign: TextAlign.right,
+                    ).marginOnly(right: 10)),
                 Expanded(
                   child: TextField(
                     decoration: InputDecoration(
@@ -1872,19 +1868,15 @@ void changeSocks5Proxy() async {
                   ),
                 ),
               ],
-            ),
-            const SizedBox(
-              height: 8.0,
-            ),
+            ).marginOnly(bottom: 8),
             Row(
               children: [
                 ConstrainedBox(
-                    constraints: const BoxConstraints(minWidth: 100),
-                    child: Text('${translate("Username")}:')
-                        .marginOnly(bottom: 16.0)),
-                const SizedBox(
-                  width: 24.0,
-                ),
+                    constraints: const BoxConstraints(minWidth: 140),
+                    child: Text(
+                      '${translate("Username")}:',
+                      textAlign: TextAlign.right,
+                    ).marginOnly(right: 10)),
                 Expanded(
                   child: TextField(
                     decoration: const InputDecoration(
@@ -1894,19 +1886,15 @@ void changeSocks5Proxy() async {
                   ),
                 ),
               ],
-            ),
-            const SizedBox(
-              height: 8.0,
-            ),
+            ).marginOnly(bottom: 8),
             Row(
               children: [
                 ConstrainedBox(
-                    constraints: const BoxConstraints(minWidth: 100),
-                    child: Text('${translate("Password")}:')
-                        .marginOnly(bottom: 16.0)),
-                const SizedBox(
-                  width: 24.0,
-                ),
+                    constraints: const BoxConstraints(minWidth: 140),
+                    child: Text(
+                      '${translate("Password")}:',
+                      textAlign: TextAlign.right,
+                    ).marginOnly(right: 10)),
                 Expanded(
                   child: Obx(() => TextField(
                         obscureText: obscure.value,
@@ -1921,10 +1909,7 @@ void changeSocks5Proxy() async {
                       )),
                 ),
               ],
-            ),
-            const SizedBox(
-              height: 8.0,
-            ),
+            ).marginOnly(bottom: 8),
             Offstage(
                 offstage: !isInProgress, child: const LinearProgressIndicator())
           ],
