@@ -536,6 +536,10 @@ abstract class BasePeerCard extends StatelessWidget {
           if (isLan) {
             // TODO
           } else {
+            final favs = (await bind.mainGetFav()).toList();
+            if (favs.remove(id)) {
+              await bind.mainStoreFav(favs: favs);
+            }
             await bind.mainRemovePeer(id: id);
           }
           removePreference(id);
