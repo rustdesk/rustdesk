@@ -1593,7 +1593,6 @@ impl Connection {
                                 uuid.to_string().as_ref(),
                             ])
                             .ok();
-                            self.send_close_reason_no_retry("Closed as expected").await;
                             self.on_close("switch sides", false).await;
                             return false;
                         }
