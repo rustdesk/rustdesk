@@ -16,7 +16,7 @@ struct AlertResult {
     button: String,
 }
 
-/// Alert dialog, return the clicked button value.
+/// Firstly run the specified app, then alert a dialog. Return the clicked button value.
 ///
 /// # Arguments
 ///
