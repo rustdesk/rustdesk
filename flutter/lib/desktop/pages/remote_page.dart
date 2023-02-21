@@ -65,6 +65,7 @@ class _RemotePageState extends State<RemotePage>
   late RxBool _keyboardEnabled;
   late RxInt _textureId;
   late int _textureKey;
+  final useTextureRender = bind.mainUseTextureRender();
 
   final _blockableOverlayState = BlockableOverlayState();
 
@@ -363,6 +364,7 @@ class _RemotePageState extends State<RemotePage>
           keyboardEnabled: _keyboardEnabled,
           remoteCursorMoved: _remoteCursorMoved,
           textureId: _textureId,
+          useTextureRender: useTextureRender,
           listenerBuilder: (child) =>
               _buildRawPointerMouseRegion(child, enterView, leaveView),
         );
@@ -401,6 +403,7 @@ class ImagePaint extends StatefulWidget {
   final RxBool keyboardEnabled;
   final RxBool remoteCursorMoved;
   final RxInt textureId;
+  final bool useTextureRender;
   final Widget Function(Widget)? listenerBuilder;
 
   ImagePaint(
@@ -411,6 +414,7 @@ class ImagePaint extends StatefulWidget {
       required this.keyboardEnabled,
       required this.remoteCursorMoved,
       required this.textureId,
+      required this.useTextureRender,
       this.listenerBuilder})
       : super(key: key);
 
@@ -485,15 +489,19 @@ class _ImagePaintState extends State<ImagePaint> {
       final imageWidth = c.getDisplayWidth() * s;
       final imageHeight = c.getDisplayHeight() * s;
       final imageSize = Size(imageWidth, imageHeight);
-      // final imageWidget = CustomPaint(
-      //   size: imageSize,
-      //   painter: ImagePainter(image: m.image, x: 0, y: 0, scale: s),
-      // );
-      final imageWidget = SizedBox(
-        width: imageWidth,
-        height: imageHeight,
-        child: Obx(() => Texture(textureId: widget.textureId.value)),
-      );
+      late final Widget imageWidget;
+      if (widget.useTextureRender) {
+        imageWidget = SizedBox(
+          width: imageWidth,
+          height: imageHeight,
+          child: Obx(() => Texture(textureId: widget.textureId.value)),
+        );
+      } else {
+        imageWidget = CustomPaint(
+          size: imageSize,
+          painter: ImagePainter(image: m.image, x: 0, y: 0, scale: s),
+        );
+      }
 
       return NotificationListener<ScrollNotification>(
           onNotification: (notification) {
@@ -517,22 +525,27 @@ class _ImagePaintState extends State<ImagePaint> {
                 context, _buildListener(imageWidget), c.size, imageSize)),
           ));
     } else {
-      // final imageWidget = CustomPaint(
-      //   size: Size(c.size.width, c.size.height),
-      //   painter: ImagePainter(image: m.image, x: c.x / s, y: c.y / s, scale: s),
-      // );
+      late final Widget imageWidget;
       if (c.size.width > 0 && c.size.height > 0) {
-        final imageWidget = Stack(
-          children: [
-            Positioned(
-              left: c.x,
-              top: c.y,
-              width: c.getDisplayWidth() * s,
-              height: c.getDisplayHeight() * s,
-              child: Texture(textureId: widget.textureId.value),
-            )
-          ],
-        );
+        if (widget.useTextureRender) {
+          imageWidget = Stack(
+            children: [
+              Positioned(
+                left: c.x,
+                top: c.y,
+                width: c.getDisplayWidth() * s,
+                height: c.getDisplayHeight() * s,
+                child: Texture(textureId: widget.textureId.value),
+              )
+            ],
+          );
+        } else {
+          imageWidget = CustomPaint(
+            size: Size(c.size.width, c.size.height),
+            painter:
+                ImagePainter(image: m.image, x: c.x / s, y: c.y / s, scale: s),
+          );
+        }
         return mouseRegion(child: _buildListener(imageWidget));
       } else {
         return Container();

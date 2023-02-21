@@ -45,6 +45,7 @@ use scrap::{
     codec::{Decoder, DecoderCfg},
     record::{Recorder, RecorderContext},
     VpxDecoderConfig, VpxVideoCodecId,
+    ImageFormat,
 };
 
 use crate::{
@@ -943,7 +944,11 @@ impl VideoHandler {
         }
         match &vf.union {
             Some(frame) => {
-                let res = self.decoder.handle_video_frame(frame, &mut self.rgb);
+                #[cfg(feature = "flutter_texture_render")]
+                let fmt = ImageFormat::ARGB;
+                #[cfg(not(feature = "flutter_texture_render"))]
+                let fmt = ImageFormat::ABGR;
+                let res = self.decoder.handle_video_frame(frame, fmt, &mut self.rgb);
                 if self.record {
                     self.recorder
                         .lock()

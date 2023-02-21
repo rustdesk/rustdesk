@@ -8,9 +8,10 @@ use std::{
     time::Duration,
 };
 
+use crate::ImageFormat;
 use crate::{
     codec::{EncoderApi, EncoderCfg},
-    I420ToARGB,
+    I420ToABGR, I420ToARGB,
 };
 
 /// MediaCodec mime type name
@@ -50,7 +51,7 @@ impl MediaCodecDecoder {
         MediaCodecDecoders { h264, h265 }
     }
 
-    pub fn decode(&mut self, data: &[u8], rgb: &mut Vec<u8>) -> ResultType<bool> {
+    pub fn decode(&mut self, data: &[u8], fmt: ImageFormat, raw: &mut Vec<u8>) -> ResultType<bool> {
         match self.dequeue_input_buffer(Duration::from_millis(10))? {
             Some(mut input_buffer) => {
                 let mut buf = input_buffer.buffer_mut();
@@ -83,23 +84,44 @@ impl MediaCodecDecoder {
                 let bps = 4;
                 let u = buf.len() * 2 / 3;
                 let v = buf.len() * 5 / 6;
-                rgb.resize(h * w * bps, 0);
+                raw.resize(h * w * bps, 0);
                 let y_ptr = buf.as_ptr();
                 let u_ptr = buf[u..].as_ptr();
                 let v_ptr = buf[v..].as_ptr();
                 unsafe {
-                    I420ToARGB(
-                        y_ptr,
-                        stride,
-                        u_ptr,
-                        stride / 2,
-                        v_ptr,
-                        stride / 2,
-                        rgb.as_mut_ptr(),
-                        (w * bps) as _,
-                        w as _,
-                        h as _,
-                    );
+                    match fmt {
+                        ImageFormat::ARGB => {
+                            I420ToARGB(
+                                y_ptr,
+                                stride,
+                                u_ptr,
+                                stride / 2,
+                                v_ptr,
+                                stride / 2,
+                                raw.as_mut_ptr(),
+                                (w * bps) as _,
+                                w as _,
+                                h as _,
+                            );
+                        }
+                        ImageFormat::ARGB => {
+                            I420ToABGR(
+                                y_ptr,
+                                stride,
+                                u_ptr,
+                                stride / 2,
+                                v_ptr,
+                                stride / 2,
+                                raw.as_mut_ptr(),
+                                (w * bps) as _,
+                                w as _,
+                                h as _,
+                            );
+                        }
+                        _ => {
+                            bail!("Unsupported image format");
+                        }
+                    }
                 }
                 self.release_output_buffer(output_buffer, false)?;
                 Ok(true)

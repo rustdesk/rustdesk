@@ -1438,6 +1438,7 @@ class FFI {
     final stream = bind.sessionStart(id: id);
     final cb = ffiModel.startEventListener(id);
     () async {
+      final useTextureRender = bind.mainUseTextureRender();
       // Preserved for the rgba data.
       await for (final message in stream) {
         if (message is EventToUI_Event) {
@@ -1451,17 +1452,7 @@ class FFI {
             debugPrint('json.decode fail1(): $e, ${message.field0}');
           }
         } else if (message is EventToUI_Rgba) {
-          if (Platform.isAndroid || Platform.isIOS) {
-            // Fetch the image buffer from rust codes.
-            final sz = platformFFI.getRgbaSize(id);
-            if (sz == null || sz == 0) {
-              return;
-            }
-            final rgba = platformFFI.getRgba(id, sz);
-            if (rgba != null) {
-              imageModel.onRgba(rgba);
-            }
-          } else {
+          if (useTextureRender) {
             if (_waitForImage[id]!) {
               _waitForImage[id] = false;
               dialogManager.dismissAll();
@@ -1470,6 +1461,16 @@ class FFI {
               }
               await canvasModel.updateViewStyle();
               await canvasModel.updateScrollStyle();
+            }
+          } else {
+            // Fetch the image buffer from rust codes.
+            final sz = platformFFI.getRgbaSize(id);
+            if (sz == null || sz == 0) {
+              return;
+            }
+            final rgba = platformFFI.getRgba(id, sz);
+            if (rgba != null) {
+              imageModel.onRgba(rgba);
             }
           }
         }

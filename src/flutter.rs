@@ -128,19 +128,21 @@ pub struct FlutterHandler {
     pub event_stream: Arc<RwLock<Option<StreamSink<EventToUI>>>>,
     // SAFETY: [rgba] is guarded by [rgba_valid], and it's safe to reach [rgba] with `rgba_valid == true`.
     // We must check the `rgba_valid` before reading [rgba].
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(not(feature = "flutter_texture_render"))]
     pub rgba: Arc<RwLock<Vec<u8>>>,
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(not(feature = "flutter_texture_render"))]
     pub rgba_valid: Arc<AtomicBool>,
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(feature = "flutter_texture_render")]
     notify_rendered: Arc<RwLock<bool>>,
     renderer: Arc<RwLock<VideoRenderer>>,
     peer_info: Arc<RwLock<PeerInfo>>,
 }
+#[cfg(feature = "flutter_texture_render")]
 pub type FlutterRgbaRendererPluginOnRgba =
     unsafe extern "C" fn(texture_rgba: *mut c_void, buffer: *const u8, width: c_int, height: c_int);
 
 // Video Texture Renderer in Flutter
+#[cfg(feature = "flutter_texture_render")]
 #[derive(Clone)]
 struct VideoRenderer {
     // TextureRgba pointer in flutter native.
@@ -151,6 +153,7 @@ struct VideoRenderer {
     on_rgba_func: Symbol<'static, FlutterRgbaRendererPluginOnRgba>,
 }
 
+#[cfg(feature = "flutter_texture_render")]
 impl Default for VideoRenderer {
     fn default() -> Self {
         unsafe {
@@ -167,6 +170,7 @@ impl Default for VideoRenderer {
     }
 }
 
+#[cfg(feature = "flutter_texture_render")]
 impl VideoRenderer {
     #[inline]
     pub fn set_size(&mut self, width: i32, height: i32) {
@@ -236,11 +240,13 @@ impl FlutterHandler {
     }
 
     #[inline]
+    #[cfg(feature = "flutter_texture_render")]
     pub fn register_texture(&mut self, ptr: usize) {
         self.renderer.write().unwrap().ptr = ptr;
     }
 
     #[inline]
+    #[cfg(feature = "flutter_texture_render")]
     pub fn set_size(&mut self, width: i32, height: i32) {
         *self.notify_rendered.write().unwrap() = false;
         self.renderer.write().unwrap().set_size(width, height);
@@ -405,7 +411,7 @@ impl InvokeUiSession for FlutterHandler {
     fn adapt_size(&self) {}
 
     #[inline]
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(not(feature = "flutter_texture_render"))]
     fn on_rgba(&self, data: &mut Vec<u8>) {
         // If the current rgba is not fetched by flutter, i.e., is valid.
         // We give up sending a new event to flutter.
@@ -421,7 +427,7 @@ impl InvokeUiSession for FlutterHandler {
     }
 
     #[inline]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(feature = "flutter_texture_render")]
     fn on_rgba(&self, data: &mut Vec<u8>) {
         self.renderer.read().unwrap().on_rgba(data);
         if *self.notify_rendered.read().unwrap() {

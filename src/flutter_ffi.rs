@@ -1306,6 +1306,17 @@ pub fn main_hide_docker() -> SyncReturn<bool> {
     SyncReturn(true)
 }
 
+pub fn main_use_texture_render() -> SyncReturn<bool> {
+    #[cfg(not(feature = "flutter_texture_render"))]
+    {
+        SyncReturn(false)
+    }
+    #[cfg(feature = "flutter_texture_render")]
+    {
+        SyncReturn(true)
+    }
+}
+
 pub fn cm_start_listen_ipc_thread() {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     crate::flutter::connection_manager::start_listen_ipc_thread();
