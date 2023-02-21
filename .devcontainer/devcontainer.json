@@ -1,15 +1,18 @@
 {
     "name": "rustdesk",
     "build": {
-        "dockerfile": "Dockerfile",
-        "args": {
-            "BUILDKIT_INLINE_CACHE": "0"
+        "dockerfile": "./Dockerfile",
+        "context": "."
+    },
+    "workspaceMount": "source=${localWorkspaceFolder},target=/home/vscode/rustdesk,type=bind,consistency=cache",
+    "workspaceFolder": "/home/vscode/rustdesk",
+    "postStartCommand": ".devcontainer/build.sh",
+    "features": {
+        "ghcr.io/devcontainers/features/java:1": {},
+        "ghcr.io/akhildevelops/devcontainer-features/android-cli:latest": {
+            "PACKAGES": "platform-tools,ndk;22.1.7171670"
         }
     },
-    "workspaceMount": "source=${localWorkspaceFolder},target=/home/user/rustdesk,type=bind,consistency=cache",
-    "workspaceFolder": "/home/user/rustdesk",
-    "postStartCommand": "./entrypoint",
-    "remoteUser": "user",
     "customizations": {
         "vscode": {
             "extensions": [
@@ -17,7 +20,9 @@
                 "mutantdino.resourcemonitor",
                 "rust-lang.rust-analyzer",
                 "tamasfe.even-better-toml",
-                "serayuzgur.crates"
+                "serayuzgur.crates",
+                "mhutchie.git-graph",
+                "eamodio.gitlens"
             ],
             "settings": {
                 "files.watcherExclude": {
