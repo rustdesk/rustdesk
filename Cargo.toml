@@ -55,7 +55,6 @@ uuid = { version = "1.0", features = ["v4"] }
 clap = "3.0"
 rpassword = "7.0"
 base64 = "0.13"
-sysinfo = "0.24"
 num_cpus = "1.13"
 bytes = { version = "1.2", features = ["serde"] }
 default-net = "0.12.0"

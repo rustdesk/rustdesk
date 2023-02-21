@@ -558,7 +558,7 @@ pub fn hide_dock() {
 }
 
 fn check_main_window() -> bool {
-    use sysinfo::{ProcessExt, System, SystemExt};
+    use hbb_common::sysinfo::{ProcessExt, System, SystemExt};
     let mut sys = System::new();
     sys.refresh_processes();
     let app = format!("/Applications/{}.app", crate::get_app_name());
