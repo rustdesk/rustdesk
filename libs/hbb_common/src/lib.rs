@@ -42,6 +42,7 @@ pub use chrono;
 pub use libc;
 pub use directories_next;
 pub mod keyboard;
+pub use sysinfo;
 
 #[cfg(feature = "quic")]
 pub type Stream = quic::Connection;

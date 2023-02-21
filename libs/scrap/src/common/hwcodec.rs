@@ -317,16 +317,30 @@ pub fn check_config() {
 }
 
 pub fn check_config_process(force_reset: bool) {
-    if force_reset {
-        HwCodecConfig::remove();
-    }
-    if let Ok(exe) = std::env::current_exe() {
-        std::thread::spawn(move || {
-            std::process::Command::new(exe)
-                .arg("--check-hwcodec-config")
-                .status()
-                .ok();
-            HwCodecConfig::refresh();
-        });
-    };
+    use hbb_common::sysinfo::{ProcessExt, System, SystemExt};
+
+    std::thread::spawn(move || {
+        if force_reset {
+            HwCodecConfig::remove();
+        }
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(file_name) = exe.file_name().to_owned() {
+                let s = System::new_all();
+                let arg = "--check-hwcodec-config";
+                for process in s.processes_by_name(&file_name.to_string_lossy().to_string()) {
+                    if process.cmd().iter().any(|cmd| cmd.contains(arg)) {
+                        log::warn!("already have process {}", arg);
+                        return;
+                    }
+                }
+                if let Ok(mut child) = std::process::Command::new(exe).arg(arg).spawn() {
+                    let second = 3;
+                    std::thread::sleep(std::time::Duration::from_secs(second));
+                    // kill: Different platforms have different results
+                    child.kill().ok();
+                    HwCodecConfig::refresh();
+                }
+            }
+        };
+    });
 }
