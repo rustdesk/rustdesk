@@ -529,6 +529,12 @@ pub fn session_switch_sides(id: String) {
     }
 }
 
+pub fn session_set_size(id: String, width: i32, height: i32)  {
+    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+        session.set_size(width, height);
+    }
+}
+
 pub fn main_get_sound_inputs() -> Vec<String> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     return get_sound_inputs();

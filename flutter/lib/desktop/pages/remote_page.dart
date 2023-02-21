@@ -126,9 +126,9 @@ class _RemotePageState extends State<RemotePage>
     // Register texture.
     _textureId.value = -1;
     textureRenderer.createTexture(_textureKey).then((id) async {
+      debugPrint("id: $id, texture_key: $_textureKey");
       if (id != -1) {
         final ptr = await textureRenderer.getTexturePtr(_textureKey);
-        debugPrint("id: $id, texture_key: $_textureKey");
         platformFFI.registerTexture(widget.id, ptr);
         _textureId.value = id;
       }
@@ -197,6 +197,8 @@ class _RemotePageState extends State<RemotePage>
   @override
   void dispose() {
     debugPrint("REMOTE PAGE dispose ${widget.id}");
+    platformFFI.registerTexture(widget.id, 0);
+    textureRenderer.closeTexture(_textureKey);
     // ensure we leave this session, this is a double check
     bind.sessionEnterOrLeave(id: widget.id, enter: false);
     DesktopMultiWindow.removeListener(this);
@@ -212,7 +214,6 @@ class _RemotePageState extends State<RemotePage>
       Wakelock.disable();
     }
     Get.delete<FFI>(tag: widget.id);
-    textureRenderer.closeTexture(_textureKey);
     super.dispose();
     _removeStates(widget.id);
   }
@@ -484,15 +485,14 @@ class _ImagePaintState extends State<ImagePaint> {
       final imageWidth = c.getDisplayWidth() * s;
       final imageHeight = c.getDisplayHeight() * s;
       final imageSize = Size(imageWidth, imageHeight);
-      print("width: $imageWidth/$imageHeight");
       // final imageWidget = CustomPaint(
       //   size: imageSize,
       //   painter: ImagePainter(image: m.image, x: 0, y: 0, scale: s),
       // );
       final imageWidget = SizedBox(
-        width: imageHeight,
+        width: imageWidth,
         height: imageHeight,
-        child: Obx(() =>  Texture(textureId: widget.textureId.value)),
+        child: Obx(() => Texture(textureId: widget.textureId.value)),
       );
 
       return NotificationListener<ScrollNotification>(
@@ -521,13 +521,22 @@ class _ImagePaintState extends State<ImagePaint> {
       //   size: Size(c.size.width, c.size.height),
       //   painter: ImagePainter(image: m.image, x: c.x / s, y: c.y / s, scale: s),
       // );
-      final imageWidget = Center(
-        child: AspectRatio(
-          aspectRatio: c.size.width / c.size.height,
-          child: Obx(() =>  Texture(textureId: widget.textureId.value)),
-        ),
-      );
-      return mouseRegion(child: _buildListener(imageWidget));
+      if (c.size.width > 0 && c.size.height > 0) {
+        final imageWidget = Stack(
+          children: [
+            Positioned(
+              left: c.x,
+              top: c.y,
+              width: c.getDisplayWidth() * s,
+              height: c.getDisplayHeight() * s,
+              child: Texture(textureId: widget.textureId.value),
+            )
+          ],
+        );
+        return mouseRegion(child: _buildListener(imageWidget));
+      } else {
+        return Container();
+      }
     }
   }
 

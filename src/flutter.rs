@@ -5,12 +5,13 @@ use crate::{
 };
 use flutter_rust_bridge::StreamSink;
 use hbb_common::{
-    bail, config::LocalConfig, get_version_number, message_proto::*, rendezvous_proto::ConnType,
-    ResultType,
+    bail, config::LocalConfig, get_version_number, libc::c_void, message_proto::*,
+    rendezvous_proto::ConnType, ResultType,
 };
-use libc::{c_void};
 use libloading::{Library, Symbol};
 use serde_json::json;
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
     collections::HashMap,
@@ -30,7 +31,7 @@ lazy_static::lazy_static! {
     pub static ref SESSIONS: RwLock<HashMap<String, Session<FlutterHandler>>> = Default::default();
     pub static ref GLOBAL_EVENT_STREAM: RwLock<HashMap<String, StreamSink<String>>> = Default::default(); // rust to dart event channel
     #[cfg(not(any(target_os = "ios", target_os = "android")))]
-    pub static ref TEXURE_RGBA_RENDERER_PLUGIN: Library = {
+    pub static ref TEXTURE_RGBA_RENDERER_PLUGIN: Library = {
         unsafe {
             #[cfg(target_os = "windows")]
             let lib = Library::new("texture_rgba_renderer_plugin.dll");
@@ -127,21 +128,26 @@ pub struct FlutterHandler {
     pub event_stream: Arc<RwLock<Option<StreamSink<EventToUI>>>>,
     // SAFETY: [rgba] is guarded by [rgba_valid], and it's safe to reach [rgba] with `rgba_valid == true`.
     // We must check the `rgba_valid` before reading [rgba].
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     pub rgba: Arc<RwLock<Vec<u8>>>,
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     pub rgba_valid: Arc<AtomicBool>,
-    pub renderer: Arc<RwLock<VideoRenderer>>,
-    peer_info: Arc<RwLock<PeerInfo>>
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    notify_rendered: Arc<RwLock<bool>>,
+    renderer: Arc<RwLock<VideoRenderer>>,
+    peer_info: Arc<RwLock<PeerInfo>>,
 }
 pub type FlutterRgbaRendererPluginOnRgba =
     unsafe extern "C" fn(texture_rgba: *mut c_void, buffer: *const u8, width: c_int, height: c_int);
 
 // Video Texture Renderer in Flutter
 #[derive(Clone)]
-pub struct VideoRenderer {
+struct VideoRenderer {
     // TextureRgba pointer in flutter native.
     ptr: usize,
     width: i32,
     height: i32,
+    data_len: usize,
     on_rgba_func: Symbol<'static, FlutterRgbaRendererPluginOnRgba>,
 }
 
@@ -152,7 +158,8 @@ impl Default for VideoRenderer {
                 ptr: 0,
                 width: 0,
                 height: 0,
-                on_rgba_func: TEXURE_RGBA_RENDERER_PLUGIN
+                data_len: 0,
+                on_rgba_func: TEXTURE_RGBA_RENDERER_PLUGIN
                     .get::<FlutterRgbaRendererPluginOnRgba>(b"FlutterRgbaRendererPluginOnRgba")
                     .expect("Symbol FlutterRgbaRendererPluginOnRgba not found."),
             }
@@ -161,24 +168,30 @@ impl Default for VideoRenderer {
 }
 
 impl VideoRenderer {
-    pub fn new(ptr: usize) -> Self {
-        Self {
-            ptr,
-            ..Default::default()
-        }
-    }
-
+    #[inline]
     pub fn set_size(&mut self, width: i32, height: i32) {
         self.width = width;
         self.height = height;
+        self.data_len = if width > 0 && height > 0 {
+            (width * height * 4) as usize
+        } else {
+            0
+        };
     }
 
-    pub fn on_rgba(&self, rgba: *const u8) {
-        if self.ptr == usize::default() {
+    pub fn on_rgba(&self, rgba: &Vec<u8>) {
+        if self.ptr == usize::default() || rgba.len() != self.data_len {
             return;
         }
         let func = self.on_rgba_func.clone();
-        unsafe {func(self.ptr as _, rgba, self.width as _, self.height as _)};
+        unsafe {
+            func(
+                self.ptr as _,
+                rgba.as_ptr() as _,
+                self.width as _,
+                self.height as _,
+            )
+        };
     }
 }
 
@@ -222,8 +235,15 @@ impl FlutterHandler {
         serde_json::ser::to_string(&msg_vec).unwrap_or("".to_owned())
     }
 
+    #[inline]
     pub fn register_texture(&mut self, ptr: usize) {
         self.renderer.write().unwrap().ptr = ptr;
+    }
+
+    #[inline]
+    pub fn set_size(&mut self, width: i32, height: i32) {
+        *self.notify_rendered.write().unwrap() = false;
+        self.renderer.write().unwrap().set_size(width, height);
     }
 }
 
@@ -385,6 +405,7 @@ impl InvokeUiSession for FlutterHandler {
     fn adapt_size(&self) {}
 
     #[inline]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     fn on_rgba(&self, data: &mut Vec<u8>) {
         // If the current rgba is not fetched by flutter, i.e., is valid.
         // We give up sending a new event to flutter.
@@ -397,11 +418,18 @@ impl InvokeUiSession for FlutterHandler {
         if let Some(stream) = &*self.event_stream.read().unwrap() {
             stream.add(EventToUI::Rgba);
         }
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        {
-            self.renderer.read().unwrap()
-            .on_rgba(self.rgba.read().unwrap().as_ptr());
-            self.next_rgba();
+    }
+
+    #[inline]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    fn on_rgba(&self, data: &mut Vec<u8>) {
+        self.renderer.read().unwrap().on_rgba(data);
+        if *self.notify_rendered.read().unwrap() {
+            return;
+        }
+        if let Some(stream) = &*self.event_stream.read().unwrap() {
+            stream.add(EventToUI::Rgba);
+            *self.notify_rendered.write().unwrap() = true;
         }
     }
 
@@ -417,8 +445,6 @@ impl InvokeUiSession for FlutterHandler {
         }
         let features = serde_json::ser::to_string(&features).unwrap_or("".to_owned());
         *self.peer_info.write().unwrap() = pi.clone();
-        let curr_display = &pi.displays[pi.current_display as usize];
-        self.renderer.write().unwrap().set_size(curr_display.width, curr_display.height);
         self.push_event(
             "peer_info",
             vec![
@@ -467,8 +493,6 @@ impl InvokeUiSession for FlutterHandler {
     }
 
     fn switch_display(&self, display: &SwitchDisplay) {
-        let curr_display = &self.peer_info.read().unwrap().displays[display.display as usize];
-        self.renderer.write().unwrap().set_size(curr_display.width, curr_display.height);
         self.push_event(
             "switch_display",
             vec![
@@ -526,6 +550,7 @@ impl InvokeUiSession for FlutterHandler {
 
     #[inline]
     fn get_rgba(&self) -> *const u8 {
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         if self.rgba_valid.load(Ordering::Relaxed) {
             return self.rgba.read().unwrap().as_ptr();
         }
@@ -534,6 +559,7 @@ impl InvokeUiSession for FlutterHandler {
 
     #[inline]
     fn next_rgba(&self) {
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         self.rgba_valid.store(false, Ordering::Relaxed);
     }
 }
@@ -793,8 +819,10 @@ pub fn set_cur_session_id(id: String) {
 }
 
 #[no_mangle]
-pub fn session_get_rgba_size(id: *const char) -> usize {
-    let id = unsafe { std::ffi::CStr::from_ptr(id as _) };
+pub fn session_get_rgba_size(_id: *const char) -> usize {
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let id = unsafe { std::ffi::CStr::from_ptr(_id as _) };
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     if let Ok(id) = id.to_str() {
         if let Some(session) = SESSIONS.write().unwrap().get_mut(id) {
             return session.rgba.read().unwrap().len();
