@@ -44,7 +44,9 @@ body:
     id: screenshots
     attributes:
       label: Screenshots
-      description: If applicable, please add screenshots to help explain your problem
+      description: Please add screenshots to help explain your problem, if applicable, please upload video.
+    validations:
+      required: true
   - type: textarea
     id: context
     attributes:
