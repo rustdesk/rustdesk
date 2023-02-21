@@ -682,8 +682,9 @@ abstract class BasePeerCard extends StatelessWidget {
                 child: TextFormField(
                   controller: controller,
                   autofocus: true,
-                  decoration:
-                      const InputDecoration(border: OutlineInputBorder()),
+                  decoration: InputDecoration(
+                      border: OutlineInputBorder(),
+                      labelText: translate('Name')),
                 ),
               ),
             ),
