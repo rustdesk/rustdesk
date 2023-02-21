@@ -827,6 +827,9 @@ class DiscoveredPeerCard extends BasePeerCard {
       _connectAction(context, peer),
       _transferFileAction(context, peer.id),
     ];
+
+    final List favs = (await bind.mainGetFav()).toList();
+
     if (isDesktop && peer.platform != 'Android') {
       menuItems.add(_tcpTunnelingAction(context, peer.id));
     }
@@ -837,6 +840,12 @@ class DiscoveredPeerCard extends BasePeerCard {
     menuItems.add(_wolAction(peer.id));
     if (Platform.isWindows) {
       menuItems.add(_createShortCutAction(peer.id));
+    }
+
+    if (!favs.contains(peer.id)) {
+      menuItems.add(_addFavAction(peer.id));
+    } else {
+      menuItems.add(_rmFavAction(peer.id, () async {}));
     }
 
     if (gFFI.userModel.userName.isNotEmpty) {
