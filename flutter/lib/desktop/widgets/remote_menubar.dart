@@ -650,6 +650,12 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   }
 
   Widget _buildKeyboard(BuildContext context) {
+    // Do not support peer 1.1.9.
+    if (Platform.isMacOS && stateGlobal.grabKeyboard) {
+      bind.sessionSetKeyboardMode(id: widget.id, value: 'map');
+      return Offstage();
+    }
+
     FfiModel ffiModel = Provider.of<FfiModel>(context);
     if (ffiModel.permissions['keyboard'] == false) {
       return Offstage();

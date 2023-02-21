@@ -111,6 +111,8 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             forceRelay: args['forceRelay'],
           ),
         ));
+      } else if (call.method == kWindowDisableGrabKeyboard) {
+        stateGlobal.grabKeyboard = false;
       } else if (call.method == "onDestroy") {
         tabController.clear();
       } else if (call.method == kWindowActionRebuild) {

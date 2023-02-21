@@ -58,6 +58,10 @@ class InputModel {
   InputModel(this.parent);
 
   KeyEventResult handleRawKeyEvent(FocusNode data, RawKeyEvent e) {
+    if (!stateGlobal.grabKeyboard) {
+      return KeyEventResult.handled;
+    }
+
     // * Currently mobile does not enable map mode
     if (isDesktop) {
       bind.sessionGetKeyboardMode(id: id).then((result) {
