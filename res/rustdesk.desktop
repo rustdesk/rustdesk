@@ -1,5 +1,5 @@
 [Desktop Entry]
-Version=1.2.0
+Version=1.5.0
 Name=RustDesk
 GenericName=Remote Desktop
 Comment=Remote Desktop
@@ -16,4 +16,4 @@ X-Desktop-File-Install-Version=0.23
 
 [Desktop Action new-window]
 Name=Open a New Window
-
+Exec=rustdesk %u
