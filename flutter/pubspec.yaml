@@ -59,7 +59,7 @@ dependencies:
     desktop_multi_window:
         git:
             url: https://github.com/Kingtous/rustdesk_desktop_multi_window
-            ref: 84a027ac2eed31e1b7c0ad11de47ed846501824e
+            ref: f37357ed98a10717576eb9ed8413e92b2ec5d13a
     freezed_annotation: ^2.0.3
     flutter_custom_cursor: ^0.0.4
     window_size:
@@ -92,6 +92,7 @@ dependencies:
     password_strength: ^0.2.0
     flutter_launcher_icons: ^0.11.0
     flutter_keyboard_visibility: ^5.4.0
+    texture_rgba_renderer: ^0.0.8
 
 
 dev_dependencies:

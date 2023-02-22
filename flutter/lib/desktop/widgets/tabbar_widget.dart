@@ -548,7 +548,7 @@ class WindowActionPanelState extends State<WindowActionPanel>
       if (rustDeskWinManager.getActiveWindows().contains(kMainWindowId)) {
         await rustDeskWinManager.unregisterActiveWindow(kMainWindowId);
       }
-      // macOS specific workaround, the windows is not hiding when in fullscreen.
+      // macOS specific workaround, the window is not hiding when in fullscreen.
       if (Platform.isMacOS && await windowManager.isFullScreen()) {
         await windowManager.setFullScreen(false);
         await Future.delayed(Duration(seconds: 1));
