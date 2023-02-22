@@ -27,6 +27,7 @@ class MenuButton extends StatefulWidget {
 
 class _MenuButtonState extends State<MenuButton> {
   bool _isHover = false;
+  final double _borderRadius = 8.0;
 
   @override
   Widget build(BuildContext context) {
@@ -38,16 +39,17 @@ class _MenuButtonState extends State<MenuButton> {
           type: MaterialType.transparency,
           child: Ink(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(5),
+              borderRadius: BorderRadius.circular(_borderRadius),
               color: _isHover ? widget.hoverColor : widget.color,
             ),
             child: InkWell(
+              hoverColor: widget.hoverColor,
               onHover: (val) {
                 setState(() {
                   _isHover = val;
                 });
               },
-              borderRadius: BorderRadius.circular(5),
+              borderRadius: BorderRadius.circular(_borderRadius),
               splashColor: widget.splashColor,
               enableFeedback: widget.enableFeedback,
               onTap: widget.onPressed,

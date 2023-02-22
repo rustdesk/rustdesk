@@ -86,18 +86,14 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
 
   @override
   Widget build(BuildContext context) {
-    final tabWidget = Container(
-      decoration: BoxDecoration(
-          border: Border.all(color: MyTheme.color(context).border!)),
-      child: Scaffold(
-          backgroundColor: Theme.of(context).backgroundColor,
-          body: DesktopTab(
-            controller: tabController,
-            onWindowCloseButton: handleWindowCloseButton,
-            tail: const AddButton().paddingOnly(left: 10),
-            labelGetter: DesktopTab.labelGetterAlias,
-          )),
-    );
+    final tabWidget = Scaffold(
+        backgroundColor: Theme.of(context).cardColor,
+        body: DesktopTab(
+          controller: tabController,
+          onWindowCloseButton: handleWindowCloseButton,
+          tail: const AddButton().paddingOnly(left: 10),
+          labelGetter: DesktopTab.labelGetterAlias,
+        ));
     return Platform.isMacOS
         ? tabWidget
         : SubWindowDragToResizeArea(
