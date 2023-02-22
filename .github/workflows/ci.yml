@@ -7,6 +7,9 @@ name: CI
 on:
   workflow_dispatch:
   pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "README.md"
   push:
     branches:
       - master
@@ -14,6 +17,8 @@ on:
       - '*'
     paths-ignore:
       - ".github/**"
+      - "docs/**"
+      - "README.md"
 
 jobs:
   # ensure_cargo_fmt:
