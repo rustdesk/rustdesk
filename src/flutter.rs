@@ -4,14 +4,17 @@ use crate::{
     ui_session_interface::{io_loop, InvokeUiSession, Session},
 };
 use flutter_rust_bridge::StreamSink;
+#[cfg(feature = "flutter_texture_render")]
+use hbb_common::libc::c_void;
 use hbb_common::{
-    bail, config::LocalConfig, get_version_number, libc::c_void, message_proto::*,
-    rendezvous_proto::ConnType, ResultType,
+    bail, config::LocalConfig, get_version_number, message_proto::*, rendezvous_proto::ConnType,
+    ResultType,
 };
+#[cfg(feature = "flutter_texture_render")]
 use libloading::{Library, Symbol};
 use serde_json::json;
 
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(not(feature = "flutter_texture_render"))]
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
     collections::HashMap,
@@ -30,7 +33,10 @@ lazy_static::lazy_static! {
     pub static ref CUR_SESSION_ID: RwLock<String> = Default::default();
     pub static ref SESSIONS: RwLock<HashMap<String, Session<FlutterHandler>>> = Default::default();
     pub static ref GLOBAL_EVENT_STREAM: RwLock<HashMap<String, StreamSink<String>>> = Default::default(); // rust to dart event channel
-    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+}
+
+#[cfg(feature = "flutter_texture_render")]
+lazy_static::lazy_static! {
     pub static ref TEXTURE_RGBA_RENDERER_PLUGIN: Library = {
         unsafe {
             #[cfg(target_os = "windows")]
@@ -134,6 +140,7 @@ pub struct FlutterHandler {
     pub rgba_valid: Arc<AtomicBool>,
     #[cfg(feature = "flutter_texture_render")]
     notify_rendered: Arc<RwLock<bool>>,
+    #[cfg(feature = "flutter_texture_render")]
     renderer: Arc<RwLock<VideoRenderer>>,
     peer_info: Arc<RwLock<PeerInfo>>,
 }
@@ -556,7 +563,7 @@ impl InvokeUiSession for FlutterHandler {
 
     #[inline]
     fn get_rgba(&self) -> *const u8 {
-        #[cfg(any(target_os = "android", target_os = "ios"))]
+        #[cfg(not(feature = "flutter_texture_render"))]
         if self.rgba_valid.load(Ordering::Relaxed) {
             return self.rgba.read().unwrap().as_ptr();
         }
@@ -565,7 +572,7 @@ impl InvokeUiSession for FlutterHandler {
 
     #[inline]
     fn next_rgba(&self) {
-        #[cfg(any(target_os = "android", target_os = "ios"))]
+        #[cfg(not(feature = "flutter_texture_render"))]
         self.rgba_valid.store(false, Ordering::Relaxed);
     }
 }
@@ -825,12 +832,11 @@ pub fn set_cur_session_id(id: String) {
 }
 
 #[no_mangle]
-pub fn session_get_rgba_size(_id: *const char) -> usize {
-    #[cfg(any(target_os = "android", target_os = "ios"))]
-    let id = unsafe { std::ffi::CStr::from_ptr(_id as _) };
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(not(feature = "flutter_texture_render"))]
+pub fn session_get_rgba_size(id: *const char) -> usize {
+    let id = unsafe { std::ffi::CStr::from_ptr(id as _) };
     if let Ok(id) = id.to_str() {
-        if let Some(session) = SESSIONS.write().unwrap().get_mut(id) {
+        if let Some(session) = SESSIONS.read().unwrap().get(id) {
             return session.rgba.read().unwrap().len();
         }
     }
@@ -838,10 +844,16 @@ pub fn session_get_rgba_size(_id: *const char) -> usize {
 }
 
 #[no_mangle]
+#[cfg(feature = "flutter_texture_render")]
+pub fn session_get_rgba_size(_id: *const char) -> usize {
+    0
+}
+
+#[no_mangle]
 pub fn session_get_rgba(id: *const char) -> *const u8 {
     let id = unsafe { std::ffi::CStr::from_ptr(id as _) };
     if let Ok(id) = id.to_str() {
-        if let Some(session) = SESSIONS.write().unwrap().get_mut(id) {
+        if let Some(session) = SESSIONS.read().unwrap().get(id) {
             return session.get_rgba();
         }
     }
@@ -852,18 +864,23 @@ pub fn session_get_rgba(id: *const char) -> *const u8 {
 pub fn session_next_rgba(id: *const char) {
     let id = unsafe { std::ffi::CStr::from_ptr(id as _) };
     if let Ok(id) = id.to_str() {
-        if let Some(session) = SESSIONS.write().unwrap().get_mut(id) {
+        if let Some(session) = SESSIONS.read().unwrap().get(id) {
             return session.next_rgba();
         }
     }
 }
 
 #[no_mangle]
+#[cfg(feature = "flutter_texture_render")]
 pub fn session_register_texture(id: *const char, ptr: usize) {
     let id = unsafe { std::ffi::CStr::from_ptr(id as _) };
     if let Ok(id) = id.to_str() {
-        if let Some(session) = SESSIONS.write().unwrap().get_mut(id) {
+        if let Some(session) = SESSIONS.read().unwrap().get(id) {
             return session.register_texture(ptr);
         }
     }
 }
+
+#[no_mangle]
+#[cfg(not(feature = "flutter_texture_render"))]
+pub fn session_register_texture(_id: *const char, _ptr: usize) {}

@@ -1,5 +1,4 @@
-use hbb_common::anyhow::Error;
-use hbb_common::{bail, ResultType};
+use hbb_common::{log, anyhow::Error, bail, ResultType};
 use ndk::media::media_codec::{MediaCodec, MediaCodecDirection, MediaFormat};
 use std::ops::Deref;
 use std::{
