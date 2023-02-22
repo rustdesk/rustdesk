@@ -48,6 +48,7 @@ Below are the servers you are using for free, they may change over time. If you 
 If you already have VS Code and Docker installed, you can click the badge above to get started. Clicking will cause VS Code to automatically install the Dev Containers extension if needed, clone the source code into a container volume, and spin up a dev container for use.
 
 Go through [DEVCONTAINER.md](docs/DEVCONTAINER.md) for more info.
+
 ## Dependencies
 
 Desktop versions use [sciter](https://sciter.com/) or Flutter for GUI, this tutorial is for Sciter only.
