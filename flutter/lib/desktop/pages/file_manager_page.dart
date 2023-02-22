@@ -406,23 +406,20 @@ class _FileManagerPageState extends State<FileManagerPage>
                                         items, filteredEntries, entry, isLocal);
                                   },
                                 ),
-                                Expanded(
-                                  child: GestureDetector(
-                                    child: SizedBox(
-                                      width:
-                                          kDesktopFileTransferModifiedColWidth,
-                                      child: Tooltip(
-                                          waitDuration:
-                                              Duration(milliseconds: 500),
-                                          message: lastModifiedStr,
-                                          child: Text(
-                                            lastModifiedStr,
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: MyTheme.darkGray,
-                                            ),
-                                          )),
-                                    ),
+                                GestureDetector(
+                                  child: SizedBox(
+                                    width: kDesktopFileTransferModifiedColWidth,
+                                    child: Tooltip(
+                                        waitDuration:
+                                            Duration(milliseconds: 500),
+                                        message: lastModifiedStr,
+                                        child: Text(
+                                          lastModifiedStr,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: MyTheme.darkGray,
+                                          ),
+                                        )),
                                   ),
                                 ),
                                 SizedBox(
