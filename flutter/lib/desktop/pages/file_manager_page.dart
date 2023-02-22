@@ -567,7 +567,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                           decoration: BoxDecoration(
                             color: Theme.of(context).cardColor,
                             borderRadius: BorderRadius.all(
-                              Radius.circular(8.0),
+                              Radius.circular(15.0),
                             ),
                           ),
                           child: Column(
@@ -584,7 +584,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                                           .tabBarTheme
                                           .labelColor,
                                     ),
-                                  ),
+                                  ).paddingOnly(left: 15),
                                   const SizedBox(
                                     width: 16.0,
                                   ),
@@ -602,44 +602,57 @@ class _FileManagerPageState extends State<FileManagerPage>
                                             item.jobName,
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
+                                          ).paddingSymmetric(vertical: 10),
+                                        ),
+                                        Text(
+                                          '${translate("Total")} ${readableFileSize(item.totalSize.toDouble())}',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: MyTheme.darkGray,
                                           ),
                                         ),
-                                        Wrap(
-                                          children: [
-                                            Text(
-                                                '${item.display()} ${max(0, item.fileNum)}/${item.fileCount} '),
-                                            Text(
-                                                '${translate("files")} ${readableFileSize(item.totalSize.toDouble())} '),
-                                            Offstage(
-                                              offstage: item.state !=
-                                                  JobState.inProgress,
-                                              child: Text(
-                                                  '${"${readableFileSize(item.speed)}/s"} '),
+                                        Offstage(
+                                          offstage:
+                                              item.state != JobState.inProgress,
+                                          child: Text(
+                                            '${translate("Speed")} ${readableFileSize(item.speed)}/s',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: MyTheme.darkGray,
                                             ),
-                                            Offstage(
-                                              offstage: item.state !=
-                                                  JobState.inProgress,
-                                              child: LinearPercentIndicator(
-                                                padding: EdgeInsets.all(0),
-                                                width: MediaQuery.of(context)
-                                                        .size
-                                                        .width *
-                                                    0.15,
-                                                animateFromLastPercent: true,
-                                                center: Text(
-                                                  '${(item.finishedSize / item.totalSize * 100).toStringAsFixed(0)}%',
-                                                ),
-                                                barRadius: Radius.circular(15),
-                                                percent: item.finishedSize /
-                                                    item.totalSize,
-                                                progressColor: MyTheme.accent,
-                                                backgroundColor:
-                                                    Color(0xFF4C4F62),
-                                                lineHeight:
-                                                    kDesktopFileTransferRowHeight,
-                                              ).paddingSymmetric(vertical: 15),
+                                          ),
+                                        ),
+                                        Offstage(
+                                          offstage:
+                                              item.state == JobState.inProgress,
+                                          child: Text(
+                                            translate(
+                                              item.display(),
                                             ),
-                                          ],
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: MyTheme.darkGray,
+                                            ),
+                                          ),
+                                        ),
+                                        Offstage(
+                                          offstage:
+                                              item.state != JobState.inProgress,
+                                          child: LinearPercentIndicator(
+                                            padding: EdgeInsets.only(right: 15),
+                                            animateFromLastPercent: true,
+                                            center: Text(
+                                              '${(item.finishedSize / item.totalSize * 100).toStringAsFixed(0)}%',
+                                            ),
+                                            barRadius: Radius.circular(15),
+                                            percent: item.finishedSize /
+                                                item.totalSize,
+                                            progressColor: MyTheme.accent,
+                                            backgroundColor:
+                                                Theme.of(context).hoverColor,
+                                            lineHeight:
+                                                kDesktopFileTransferRowHeight,
+                                          ).paddingSymmetric(vertical: 15),
                                         ),
                                       ],
                                     ),
@@ -655,9 +668,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                                           },
                                           child: SvgPicture.asset(
                                             "assets/refresh.svg",
-                                            color: Theme.of(context)
-                                                .tabBarTheme
-                                                .labelColor,
+                                            color: Colors.white,
                                           ),
                                           color: MyTheme.accent,
                                           hoverColor: MyTheme.accent80,
@@ -667,9 +678,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                                         padding: EdgeInsets.only(right: 15),
                                         child: SvgPicture.asset(
                                           "assets/close.svg",
-                                          color: Theme.of(context)
-                                              .tabBarTheme
-                                              .labelColor,
+                                          color: Colors.white,
                                         ),
                                         onPressed: () {
                                           model.jobTable.removeAt(index);
