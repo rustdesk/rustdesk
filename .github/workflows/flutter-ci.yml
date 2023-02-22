@@ -3,6 +3,9 @@ name: Full Flutter CI
 on:
   workflow_dispatch:
   pull_request:
+    paths-ignore:
+    - "docs/**"
+    - "README.md"
   push:
     branches:
       - master
@@ -10,6 +13,8 @@ on:
       - '*'
     paths-ignore:
       - ".github/**"
+      - "docs/**"
+      - "README.md"
 
 env:
   LLVM_VERSION: "15.0.6"

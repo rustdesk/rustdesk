@@ -19,156 +19,153 @@ publish_to: "none" # Remove this line if you wish to publish to pub.dev
 version: 1.2.0
 
 environment:
-    sdk: ">=2.17.0"
+  sdk: ">=2.17.0"
 
 dependencies:
-    flutter:
-        sdk: flutter
-    flutter_localizations:
-        sdk: flutter
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
 
-    # The following adds the Cupertino Icons font to your application.
-    # Use with the CupertinoIcons class for iOS style icons.
-    cupertino_icons: ^1.0.3
-    ffi: ^2.0.1
-    path_provider: ^2.0.12
-    external_path: ^1.0.1
-    provider: ^6.0.3
-    tuple: ^2.0.0
-    wakelock: ^0.6.2
-    device_info_plus: ^4.1.2
-    #firebase_analytics: ^9.1.5
-    package_info_plus: ^1.4.2
-    url_launcher: ^6.0.9
-    toggle_switch: ^1.4.0
-    dash_chat_2: ^0.0.14
-    draggable_float_widget: ^0.0.2
-    settings_ui: ^2.0.2
-    flutter_breadcrumb: ^1.0.1
-    http: ^0.13.4
-    qr_code_scanner: ^1.0.0
-    zxing2: ^0.1.0
-    image_picker: ^0.8.5
-    image: ^3.1.3
-    back_button_interceptor: ^6.0.1
-    flutter_rust_bridge: ^1.61.1
-    window_manager:
-        git:
-            url: https://github.com/Kingtous/rustdesk_window_manager
-            ref: 32b24c66151b72bba033ef8b954486aa9351d97b 
-    desktop_multi_window:
-        git:
-            url: https://github.com/Kingtous/rustdesk_desktop_multi_window
-            ref: bc8604a88e52b2b6e64d2661ae49a71450a47af8
-    freezed_annotation: ^2.0.3
-    flutter_custom_cursor: ^0.0.4
-    window_size:
-        git:
-            url: https://github.com/google/flutter-desktop-embedding.git
-            path: plugins/window_size
-            ref: a738913c8ce2c9f47515382d40827e794a334274
-    get: ^4.6.5
-    visibility_detector: ^0.3.3
-    contextmenu: ^3.0.0
-    desktop_drop: ^0.3.3
-    scroll_pos: ^0.3.0
-    debounce_throttle: ^2.0.0
-    file_picker: ^5.1.0
-    flutter_svg: ^1.1.5
-    flutter_improved_scrolling: 
-        # currently, we use flutter 3.0.5 for windows build, latest for other builds.
-        #
-        # for flutter 3.0.5, please use official version(just comment code below).
-        # if build rustdesk by flutter >=3.3, please use our custom pub below (uncomment code below).
-        git:
-            url: https://github.com/Kingtous/flutter_improved_scrolling
-            ref: 62f09545149f320616467c306c8c5f71714a18e6
-    uni_links: ^0.5.1
-    uni_links_desktop: ^0.1.4
-    path: ^1.8.1
-    auto_size_text: ^3.0.0
-    bot_toast: ^4.0.3
-    win32: any
-    password_strength: ^0.2.0
-    flutter_launcher_icons: ^0.11.0
-    flutter_keyboard_visibility: ^5.4.0
-    percent_indicator: ^4.2.2
-
+  # The following adds the Cupertino Icons font to your application.
+  # Use with the CupertinoIcons class for iOS style icons.
+  cupertino_icons: ^1.0.3
+  ffi: ^2.0.1
+  path_provider: ^2.0.12
+  external_path: ^1.0.1
+  provider: ^6.0.3
+  tuple: ^2.0.0
+  wakelock: ^0.6.2
+  device_info_plus: ^4.1.2
+  #firebase_analytics: ^9.1.5
+  package_info_plus: ^1.4.2
+  url_launcher: ^6.0.9
+  toggle_switch: ^1.4.0
+  dash_chat_2: ^0.0.14
+  draggable_float_widget: ^0.0.2
+  settings_ui: ^2.0.2
+  flutter_breadcrumb: ^1.0.1
+  http: ^0.13.4
+  qr_code_scanner: ^1.0.0
+  zxing2: ^0.1.0
+  image_picker: ^0.8.5
+  image: ^3.1.3
+  back_button_interceptor: ^6.0.1
+  flutter_rust_bridge: ^1.61.1
+  window_manager:
+    git:
+      url: https://github.com/Kingtous/rustdesk_window_manager
+      ref: 32b24c66151b72bba033ef8b954486aa9351d97b
+  desktop_multi_window:
+    git:
+      url: https://github.com/Kingtous/rustdesk_desktop_multi_window
+      ref: f37357ed98a10717576eb9ed8413e92b2ec5d13a
+  freezed_annotation: ^2.0.3
+  flutter_custom_cursor: ^0.0.4
+  window_size:
+    git:
+      url: https://github.com/google/flutter-desktop-embedding.git
+      path: plugins/window_size
+      ref: a738913c8ce2c9f47515382d40827e794a334274
+  get: ^4.6.5
+  visibility_detector: ^0.3.3
+  contextmenu: ^3.0.0
+  desktop_drop: ^0.3.3
+  scroll_pos: ^0.3.0
+  debounce_throttle: ^2.0.0
+  file_picker: ^5.1.0
+  flutter_svg: ^1.1.5
+  flutter_improved_scrolling:
+    # currently, we use flutter 3.0.5 for windows build, latest for other builds.
+    #
+    # for flutter 3.0.5, please use official version(just comment code below).
+    # if build rustdesk by flutter >=3.3, please use our custom pub below (uncomment code below).
+    git:
+      url: https://github.com/Kingtous/flutter_improved_scrolling
+      ref: 62f09545149f320616467c306c8c5f71714a18e6
+  uni_links: ^0.5.1
+  uni_links_desktop: ^0.1.4
+  path: ^1.8.1
+  auto_size_text: ^3.0.0
+  bot_toast: ^4.0.3
+  win32: any
+  password_strength: ^0.2.0
+  flutter_launcher_icons: ^0.11.0
+  flutter_keyboard_visibility: ^5.4.0
+  percent_indicator: ^4.2.2
+  texture_rgba_renderer: ^0.0.8
 
 dev_dependencies:
-    icons_launcher: ^2.0.4
-    #flutter_test:
-        #sdk: flutter
-    build_runner: ^2.1.11
-    freezed: ^2.0.3
-    flutter_lints: ^2.0.0
-    ffigen: ^7.2.4
+  icons_launcher: ^2.0.4
+  #flutter_test:
+  #sdk: flutter
+  build_runner: ^2.1.11
+  freezed: ^2.0.3
+  flutter_lints: ^2.0.0
+  ffigen: ^7.2.4
 
 # rerun: flutter pub run flutter_launcher_icons
 flutter_icons:
-    image_path: "../res/icon.png"
-    remove_alpha_ios: true
-    android: true
-    ios: true
-    windows:
-        generate: true
-    macos:
-        image_path: "../res/mac-icon.png"
-        generate: true
-    linux: true
-    web:
-        generate: true
-
+  image_path: "../res/icon.png"
+  remove_alpha_ios: true
+  android: true
+  ios: true
+  windows:
+    generate: true
+  macos:
+    image_path: "../res/mac-icon.png"
+    generate: true
+  linux: true
+  web:
+    generate: true
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
 # The following section is specific to Flutter.
 flutter:
-    # The following line ensures that the Material Icons font is
-    # included with your application, so that you can use the icons in
-    # the material Icons class.
-    uses-material-design: true
+  # The following line ensures that the Material Icons font is
+  # included with your application, so that you can use the icons in
+  # the material Icons class.
+  uses-material-design: true
 
-    # To add assets to your application, add an assets section, like this:
-    assets:
-        - assets/
+  # To add assets to your application, add an assets section, like this:
+  assets:
+    - assets/
 
-    fonts:
-        - family: GestureIcons
-          fonts:
-              - asset: assets/gestures.ttf
-        - family: Tabbar
-          fonts:
-              - asset: assets/tabbar.ttf
-        - family: PeerSearchbar
-          fonts:
-              - asset: assets/peer_searchbar.ttf
+  fonts:
+    - family: GestureIcons
+      fonts:
+        - asset: assets/gestures.ttf
+    - family: Tabbar
+      fonts:
+        - asset: assets/tabbar.ttf
+    - family: PeerSearchbar
+      fonts:
+        - asset: assets/peer_searchbar.ttf
 
-              
+  # An image asset can refer to one or more resolution-specific "variants", see
+  # https://flutter.dev/assets-and-images/#resolution-aware.
 
-    # An image asset can refer to one or more resolution-specific "variants", see
-    # https://flutter.dev/assets-and-images/#resolution-aware.
+  # For details regarding adding assets from package dependencies, see
+  # https://flutter.dev/assets-and-images/#from-packages
 
-    # For details regarding adding assets from package dependencies, see
-    # https://flutter.dev/assets-and-images/#from-packages
-
-    # To add custom fonts to your application, add a fonts section here,
-    # in this "flutter" section. Each entry in this list should have a
-    # "family" key with the font family name, and a "fonts" key with a
-    # list giving the asset and other descriptors for the font. For
-    # example:
-    # fonts:
-    #   - family: Schyler
-    #     fonts:
-    #       - asset: fonts/Schyler-Regular.ttf
-    #       - asset: fonts/Schyler-Italic.ttf
-    #         style: italic
-    #   - family: Trajan Pro
-    #     fonts:
-    #       - asset: fonts/TrajanPro.ttf
-    #       - asset: fonts/TrajanPro_Bold.ttf
-    #         weight: 700
-    #
-    # For details regarding fonts from package dependencies,
-    # see https://flutter.dev/custom-fonts/#from-packages
+  # To add custom fonts to your application, add a fonts section here,
+  # in this "flutter" section. Each entry in this list should have a
+  # "family" key with the font family name, and a "fonts" key with a
+  # list giving the asset and other descriptors for the font. For
+  # example:
+  # fonts:
+  #   - family: Schyler
+  #     fonts:
+  #       - asset: fonts/Schyler-Regular.ttf
+  #       - asset: fonts/Schyler-Italic.ttf
+  #         style: italic
+  #   - family: Trajan Pro
+  #     fonts:
+  #       - asset: fonts/TrajanPro.ttf
+  #       - asset: fonts/TrajanPro_Bold.ttf
+  #         weight: 700
+  #
+  # For details regarding fonts from package dependencies,
+  # see https://flutter.dev/custom-fonts/#from-packages

@@ -549,7 +549,7 @@ async fn check_pid(postfix: &str) {
         file.read_to_string(&mut content).ok();
         let pid = content.parse::<i32>().unwrap_or(0);
         if pid > 0 {
-            use sysinfo::{ProcessExt, System, SystemExt};
+            use hbb_common::sysinfo::{ProcessExt, System, SystemExt};
             let mut sys = System::new();
             sys.refresh_processes();
             if let Some(p) = sys.process(pid.into()) {

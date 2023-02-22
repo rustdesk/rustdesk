@@ -442,7 +442,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Please confirm if you want to share your desktop?", "لطفاً تأیید کنید که آیا می خواهید دسکتاپ خود را به اشتراک بگذارید؟"),
         ("Display", "نمایش دادن"),
         ("Default View Style", "سبک نمایش پیش فرض"),
-        ("Default Scroll Style", "سبک پیش‌فرض اسکرول"),
+        ("Default Scroll Style", "سبک پیش‌ فرض اسکرول"),
         ("Default Image Quality", "کیفیت تصویر پیش فرض"),
         ("Default Codec", "کدک پیش فرض"),
         ("Bitrate", "میزان بیت صفحه نمایش"),
@@ -452,7 +452,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Voice call", "تماس صوتی"),
         ("Text chat", "گفتگو متنی (چت متنی)"),
         ("Stop voice call", "توقف تماس صوتی"),
-        ("relay_hint_tip", ""),
-        ("Reconnect", ""),
+        ("relay_hint_tip", " را به شناسه اضافه کنید یا گزینه \"همیشه از طریق رله متصل شوید\" را در کارت همتا انتخاب کنید. همچنین، اگر می‌خواهید فوراً از سرور رله استفاده کنید، می‌توانید پسوند \"/r\".\n اتصال مستقیم ممکن است امکان پذیر نباشد. در این صورت می توانید سعی کنید از طریق سرور رله متصل شوید"),
+        ("Reconnect", "اتصال مجدد"),
         ].iter().cloned().collect();
 }
