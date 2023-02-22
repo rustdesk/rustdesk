@@ -21,8 +21,6 @@ RustDesk welcomes contribution from everyone. See [`docs/CONTRIBUTING.md`](docs/
 
 [**FAQ**](https://github.com/rustdesk/rustdesk/wiki/FAQ)
 
-[**How does RustDesk work?**](https://github.com/rustdesk/rustdesk/wiki/How-does-RustDesk-work%3F)
-
 [**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
 
 [**NIGHTLY BUILD**](https://github.com/rustdesk/rustdesk/releases/tag/nightly)
