@@ -126,6 +126,17 @@ extern "C" {
         width: c_int,
         height: c_int,
     ) -> c_int;
+
+    pub fn NV12ToABGR(
+        src_y: *const u8,
+        src_stride_y: c_int,
+        src_uv: *const u8,
+        src_stride_uv: c_int,
+        dst_rgba: *mut u8,
+        dst_stride_rgba: c_int,
+        width: c_int,
+        height: c_int,
+    ) -> c_int;
 }
 
 // https://github.com/webmproject/libvpx/blob/master/vpx/src/vpx_image.c
@@ -456,7 +467,7 @@ pub mod hw {
                     }
                 }
                 _ => {
-                    Err(anyhow!("unsupported image format"));
+                    Err(anyhow!("unsupported image format"))
                 }
             }
         }
