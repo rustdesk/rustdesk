@@ -3,15 +3,22 @@ use crate::{
     flutter_ffi::EventToUI,
     ui_session_interface::{io_loop, InvokeUiSession, Session},
 };
+#[cfg(feature = "flutter_texture_render")]
+#[cfg(target_os = "macos")]
+use dlopen::{
+    symbor::{Library, Symbol},
+    Error as LibError,
+};
 use flutter_rust_bridge::StreamSink;
 #[cfg(feature = "flutter_texture_render")]
 use hbb_common::libc::c_void;
 use hbb_common::{
-    bail, config::LocalConfig, get_version_number, message_proto::*, rendezvous_proto::ConnType,
-    ResultType,
+    bail, config::LocalConfig, get_version_number, log, message_proto::*,
+    rendezvous_proto::ConnType, ResultType,
 };
 #[cfg(feature = "flutter_texture_render")]
-use libloading::{Library, Symbol};
+#[cfg(not(target_os = "macos"))]
+use libloading::{Error as LibError, Library, Symbol};
 use serde_json::json;
 
 #[cfg(not(feature = "flutter_texture_render"))]
@@ -37,16 +44,16 @@ lazy_static::lazy_static! {
 
 #[cfg(feature = "flutter_texture_render")]
 lazy_static::lazy_static! {
-    pub static ref TEXTURE_RGBA_RENDERER_PLUGIN: Library = {
+    pub static ref TEXTURE_RGBA_RENDERER_PLUGIN: Result<Library, LibError> = {
+        #[cfg(not(target_os = "macos"))]
         unsafe {
             #[cfg(target_os = "windows")]
-            let lib = Library::new("texture_rgba_renderer_plugin.dll");
-            #[cfg(target_os = "macos")]
-            let lib = Library::new("texture_rgba_renderer_plugin.dylib");
+            Library::new("texture_rgba_renderer_plugin.dll");
             #[cfg(target_os = "linux")]
-            let lib = Library::new("libtexture_rgba_renderer_plugin.so");
-            lib.expect("`libtexture_rgba_renderer_plugin` not found, please add `texture_rgba_renderer` in your flutter project")
+            Library::new("libtexture_rgba_renderer_plugin.so");
         }
+        #[cfg(target_os = "macos")]
+        Library::open_self()
     };
 }
 
@@ -157,22 +164,40 @@ struct VideoRenderer {
     width: i32,
     height: i32,
     data_len: usize,
-    on_rgba_func: Symbol<'static, FlutterRgbaRendererPluginOnRgba>,
+    on_rgba_func: Option<Symbol<'static, FlutterRgbaRendererPluginOnRgba>>,
 }
 
 #[cfg(feature = "flutter_texture_render")]
 impl Default for VideoRenderer {
     fn default() -> Self {
-        unsafe {
-            Self {
-                ptr: 0,
-                width: 0,
-                height: 0,
-                data_len: 0,
-                on_rgba_func: TEXTURE_RGBA_RENDERER_PLUGIN
-                    .get::<FlutterRgbaRendererPluginOnRgba>(b"FlutterRgbaRendererPluginOnRgba")
-                    .expect("Symbol FlutterRgbaRendererPluginOnRgba not found."),
+        let on_rgba_func = match &*TEXTURE_RGBA_RENDERER_PLUGIN {
+            Ok(lib) => {
+                #[cfg(not(target_os = "macos"))]
+                let find_sym_res =
+                    lib.get::<FlutterRgbaRendererPluginOnRgba>(b"FlutterRgbaRendererPluginOnRgba");
+                #[cfg(target_os = "macos")]
+                let find_sym_res = unsafe {
+                    lib.symbol::<FlutterRgbaRendererPluginOnRgba>("FlutterRgbaRendererPluginOnRgba")
+                };
+                match find_sym_res {
+                    Ok(sym) => Some(sym),
+                    Err(e) => {
+                        log::error!("Failed to find symbol FlutterRgbaRendererPluginOnRgba, {e}");
+                        None
+                    }
+                }
             }
+            Err(e) => {
+                log::error!("Failed to load texture rgba renderer plugin, {e}");
+                None
+            }
+        };
+        Self {
+            ptr: 0,
+            width: 0,
+            height: 0,
+            data_len: 0,
+            on_rgba_func,
         }
     }
 }
@@ -194,15 +219,16 @@ impl VideoRenderer {
         if self.ptr == usize::default() || rgba.len() != self.data_len {
             return;
         }
-        let func = self.on_rgba_func.clone();
-        unsafe {
-            func(
-                self.ptr as _,
-                rgba.as_ptr() as _,
-                self.width as _,
-                self.height as _,
-            )
-        };
+        if let Some(func) = &self.on_rgba_func {
+            unsafe {
+                func(
+                    self.ptr as _,
+                    rgba.as_ptr() as _,
+                    self.width as _,
+                    self.height as _,
+                )
+            };
+        }
     }
 }
 

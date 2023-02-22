@@ -64,6 +64,7 @@ flutter_rust_bridge = { version = "1.61.1", optional = true }
 errno = "0.2.8"
 rdev = { git = "https://github.com/fufesou/rdev" }
 url = { version = "2.1", features = ["serde"] }
+dlopen = "0.1"
 
 reqwest = { version = "0.11", features = ["blocking", "json", "rustls-tls"], default-features=false }
 chrono = "0.4.23"
