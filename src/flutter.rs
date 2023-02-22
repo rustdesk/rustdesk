@@ -875,7 +875,7 @@ pub fn session_next_rgba(id: *const char) {
 pub fn session_register_texture(id: *const char, ptr: usize) {
     let id = unsafe { std::ffi::CStr::from_ptr(id as _) };
     if let Ok(id) = id.to_str() {
-        if let Some(session) = SESSIONS.read().unwrap().get(id) {
+        if let Some(session) = SESSIONS.write().unwrap().get_mut(id) {
             return session.register_texture(ptr);
         }
     }
