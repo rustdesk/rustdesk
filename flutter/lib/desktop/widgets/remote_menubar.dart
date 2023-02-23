@@ -1351,6 +1351,14 @@ class _DisplayMenuState extends State<_DisplayMenu> {
         if (w != null && h != null) {
           await bind.sessionChangeResolution(
               id: widget.id, width: w, height: h);
+          Future.delayed(Duration(seconds: 3), () async {
+            final display = widget.ffi.ffiModel.display;
+            if (w == display.width && h == display.height) {
+              if (_isWindowCanBeAdjusted()) {
+                _doAdjustWindow();
+              }
+            }
+          });
         }
       }
     }
