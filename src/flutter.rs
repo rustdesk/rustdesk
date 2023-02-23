@@ -4,18 +4,17 @@ use crate::{
     ui_session_interface::{io_loop, InvokeUiSession, Session},
 };
 #[cfg(feature = "flutter_texture_render")]
-// #[cfg(target_os = "macos")]
 use dlopen::{
     symbor::{Library, Symbol},
     Error as LibError,
 };
 use flutter_rust_bridge::StreamSink;
-use hbb_common::{
-    bail, config::LocalConfig, get_version_number, message_proto::*, rendezvous_proto::ConnType,
-    ResultType,
-};
 #[cfg(feature = "flutter_texture_render")]
-use hbb_common::{libc::c_void, log};
+use hbb_common::libc::c_void;
+use hbb_common::{
+    bail, config::LocalConfig, get_version_number, log, message_proto::*,
+    rendezvous_proto::ConnType, ResultType,
+};
 use serde_json::json;
 
 #[cfg(not(feature = "flutter_texture_render"))]
@@ -665,6 +664,13 @@ pub fn session_start_(id: &str, event_stream: StreamSink<EventToUI>) -> ResultTy
         *session.event_stream.write().unwrap() = Some(event_stream);
         let session = session.clone();
         std::thread::spawn(move || {
+            #[cfg(feature = "flutter_texture_render")]
+            log::info!(
+                "Session {} start, render by flutter texture rgba plugin",
+                id
+            );
+            #[cfg(not(feature = "flutter_texture_render"))]
+            log::info!("Session {} start, render by flutter paint widget", id);
             io_loop(session);
         });
         Ok(())
