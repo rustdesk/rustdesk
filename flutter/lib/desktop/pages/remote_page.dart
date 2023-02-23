@@ -126,14 +126,16 @@ class _RemotePageState extends State<RemotePage>
     }
     // Register texture.
     _textureId.value = -1;
-    textureRenderer.createTexture(_textureKey).then((id) async {
-      debugPrint("id: $id, texture_key: $_textureKey");
-      if (id != -1) {
-        final ptr = await textureRenderer.getTexturePtr(_textureKey);
-        platformFFI.registerTexture(widget.id, ptr);
-        _textureId.value = id;
-      }
-    });
+    if (useTextureRender) {
+      textureRenderer.createTexture(_textureKey).then((id) async {
+        debugPrint("id: $id, texture_key: $_textureKey");
+        if (id != -1) {
+          final ptr = await textureRenderer.getTexturePtr(_textureKey);
+          platformFFI.registerTexture(widget.id, ptr);
+          _textureId.value = id;
+        }
+      });
+    }
     _ffi.ffiModel.updateEventListener(widget.id);
     _ffi.qualityMonitorModel.checkShowQualityMonitor(widget.id);
     // Session option should be set after models.dart/FFI.start
@@ -198,8 +200,10 @@ class _RemotePageState extends State<RemotePage>
   @override
   void dispose() {
     debugPrint("REMOTE PAGE dispose ${widget.id}");
-    platformFFI.registerTexture(widget.id, 0);
-    textureRenderer.closeTexture(_textureKey);
+    if (useTextureRender) {
+      platformFFI.registerTexture(widget.id, 0);
+      textureRenderer.closeTexture(_textureKey);
+    }
     // ensure we leave this session, this is a double check
     bind.sessionEnterOrLeave(id: widget.id, enter: false);
     DesktopMultiWindow.removeListener(this);
