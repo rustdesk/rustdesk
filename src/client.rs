@@ -1241,11 +1241,6 @@ impl LoginConfigHandler {
         if !name.contains("block-input") {
             self.save_config(config);
         }
-        #[cfg(feature = "flutter")]
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        if name == "disable-clipboard" {
-            crate::flutter::update_text_clipboard_required();
-        }
         let mut misc = Misc::new();
         misc.set_option(option);
         let mut msg_out = Message::new();
