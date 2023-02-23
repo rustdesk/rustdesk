@@ -661,16 +661,16 @@ pub fn session_add(
 /// * `events2ui` - The events channel to ui.
 pub fn session_start_(id: &str, event_stream: StreamSink<EventToUI>) -> ResultType<()> {
     if let Some(session) = SESSIONS.write().unwrap().get_mut(id) {
+        #[cfg(feature = "flutter_texture_render")]
+        log::info!(
+            "Session {} start, render by flutter texture rgba plugin",
+            id
+        );
+        #[cfg(not(feature = "flutter_texture_render"))]
+        log::info!("Session {} start, render by flutter paint widget", id);
         *session.event_stream.write().unwrap() = Some(event_stream);
         let session = session.clone();
         std::thread::spawn(move || {
-            #[cfg(feature = "flutter_texture_render")]
-            log::info!(
-                "Session {} start, render by flutter texture rgba plugin",
-                id
-            );
-            #[cfg(not(feature = "flutter_texture_render"))]
-            log::info!("Session {} start, render by flutter paint widget", id);
             io_loop(session);
         });
         Ok(())
