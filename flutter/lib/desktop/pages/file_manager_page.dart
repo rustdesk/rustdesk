@@ -752,9 +752,12 @@ class _FileManagerPageState extends State<FileManagerPage>
                     padding: EdgeInsets.only(
                       right: 3,
                     ),
-                    child: SvgPicture.asset(
-                      "assets/arrow.svg",
-                      color: Theme.of(context).tabBarTheme.labelColor,
+                    child: RotatedBox(
+                      quarterTurns: 2,
+                      child: SvgPicture.asset(
+                        "assets/arrow.svg",
+                        color: Theme.of(context).tabBarTheme.labelColor,
+                      ),
                     ),
                     color: Theme.of(context).cardColor,
                     hoverColor: Theme.of(context).hoverColor,
