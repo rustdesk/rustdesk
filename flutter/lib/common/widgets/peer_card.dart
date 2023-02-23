@@ -515,9 +515,21 @@ abstract class BasePeerCard extends StatelessWidget {
       String id, Future<void> Function() reloadFunc,
       {bool isLan = false}) {
     return MenuEntryButton<String>(
-      childBuilder: (TextStyle? style) => Text(
-        translate('Remove'),
-        style: style,
+      childBuilder: (TextStyle? style) => Row(
+        children: [
+          Text(
+            translate('Remove'),
+            style: style?.copyWith(color: Colors.red),
+          ),
+          Expanded(
+              child: Align(
+            alignment: Alignment.centerRight,
+            child: Transform.scale(
+              scale: 0.8,
+              child: Icon(Icons.delete_forever, color: Colors.red),
+            ),
+          ).marginOnly(right: 4)),
+        ],
       ),
       proc: () {
         () async {
@@ -697,6 +709,7 @@ class RecentPeerCard extends BasePeerCard {
     if (!gFFI.abModel.idContainBy(peer.id)) {
       menuItems.add(_addToAb(peer));
     }
+    menuItems.add(MenuEntryDivider());
     menuItems.add(_removeAction(peer.id, () async {
       await bind.mainLoadRecentPeers();
     }));
@@ -741,6 +754,7 @@ class FavoritePeerCard extends BasePeerCard {
     if (!gFFI.abModel.idContainBy(peer.id)) {
       menuItems.add(_addToAb(peer));
     }
+    menuItems.add(MenuEntryDivider());
     menuItems.add(_removeAction(peer.id, () async {
       await bind.mainLoadFavPeers();
     }));
@@ -778,6 +792,7 @@ class DiscoveredPeerCard extends BasePeerCard {
     if (!gFFI.abModel.idContainBy(peer.id)) {
       menuItems.add(_addToAb(peer));
     }
+    menuItems.add(MenuEntryDivider());
     menuItems.add(_removeAction(peer.id, () async {}));
     return menuItems;
   }
@@ -817,6 +832,7 @@ class AddressBookPeerCard extends BasePeerCard {
     if (gFFI.abModel.tags.isNotEmpty) {
       menuItems.add(_editTagAction(peer.id));
     }
+    menuItems.add(MenuEntryDivider());
     menuItems.add(_removeAction(peer.id, () async {}));
     return menuItems;
   }
