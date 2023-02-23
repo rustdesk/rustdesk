@@ -141,7 +141,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
               width: stateGlobal.windowBorderWidth.value),
         ),
         child: Scaffold(
-          backgroundColor: Theme.of(context).backgroundColor,
+          backgroundColor: Theme.of(context).colorScheme.background,
           body: DesktopTab(
             controller: tabController,
             onWindowCloseButton: handleWindowCloseButton,

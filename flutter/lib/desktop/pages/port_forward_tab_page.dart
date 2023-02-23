@@ -96,7 +96,7 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
       decoration: BoxDecoration(
           border: Border.all(color: MyTheme.color(context).border!)),
       child: Scaffold(
-          backgroundColor: Theme.of(context).backgroundColor,
+          backgroundColor: Theme.of(context).colorScheme.background,
           body: DesktopTab(
             controller: tabController,
             onWindowCloseButton: () async {

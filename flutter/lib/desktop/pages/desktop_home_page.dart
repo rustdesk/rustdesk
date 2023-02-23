@@ -71,7 +71,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       value: gFFI.serverModel,
       child: Container(
         width: 200,
-        color: Theme.of(context).backgroundColor,
+        color: Theme.of(context).colorScheme.background,
         child: DesktopScrollWrapper(
           scrollController: _leftPaneScrollController,
           child: SingleChildScrollView(
@@ -185,7 +185,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           radius: 15,
           backgroundColor: hover.value
               ? Theme.of(context).scaffoldBackgroundColor
-              : Theme.of(context).backgroundColor,
+              : Theme.of(context).colorScheme.background,
           child: Icon(
             Icons.more_vert_outlined,
             size: 20,
