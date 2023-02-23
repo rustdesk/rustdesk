@@ -518,7 +518,7 @@ abstract class BasePeerCard extends StatelessWidget {
       childBuilder: (TextStyle? style) => Row(
         children: [
           Text(
-            translate('Remove'),
+            translate('Delete'),
             style: style?.copyWith(color: Colors.red),
           ),
           Expanded(
