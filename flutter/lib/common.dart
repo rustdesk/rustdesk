@@ -152,7 +152,7 @@ class MyTheme {
   static const Color canvasColor = Color(0xFF212121);
   static const Color border = Color(0xFFCCCCCC);
   static const Color idColor = Color(0xFF00B6F0);
-  static const Color darkGray = Color(0xFFB9BABC);
+  static const Color darkGray = Color.fromARGB(255, 148, 148, 148);
   static const Color cmIdColor = Color(0xFF21790B);
   static const Color dark = Colors.black87;
   static const Color button = Color(0xFF2C8CFF);
@@ -160,8 +160,9 @@ class MyTheme {
 
   static ThemeData lightTheme = ThemeData(
     brightness: Brightness.light,
-    backgroundColor: Color(0xFFFFFFFF),
-    scaffoldBackgroundColor: Color(0xFFEEEEEE),
+    backgroundColor: Color(0xFFEEEEEE),
+    hoverColor: Color.fromARGB(255, 224, 224, 224),
+    scaffoldBackgroundColor: Color(0xFFFFFFFF),
     textTheme: const TextTheme(
         titleLarge: TextStyle(fontSize: 19, color: Colors.black87),
         titleSmall: TextStyle(fontSize: 14, color: Colors.black87),
@@ -169,6 +170,7 @@ class MyTheme {
         bodyMedium:
             TextStyle(fontSize: 14, color: Colors.black87, height: 1.25),
         labelLarge: TextStyle(fontSize: 16.0, color: MyTheme.accent80)),
+    cardColor: Color(0xFFEEEEEE),
     hintColor: Color(0xFFAAAAAA),
     primarySwatch: Colors.blue,
     visualDensity: VisualDensity.adaptivePlatformDensity,
@@ -191,8 +193,9 @@ class MyTheme {
   );
   static ThemeData darkTheme = ThemeData(
     brightness: Brightness.dark,
-    backgroundColor: Color(0xFF252525),
-    scaffoldBackgroundColor: Color(0xFF141414),
+    backgroundColor: Color(0xFF24252B),
+    hoverColor: Color.fromARGB(255, 45, 46, 53),
+    scaffoldBackgroundColor: Color(0xFF18191E),
     textTheme: const TextTheme(
         titleLarge: TextStyle(fontSize: 19),
         titleSmall: TextStyle(fontSize: 14),
@@ -200,7 +203,7 @@ class MyTheme {
         bodyMedium: TextStyle(fontSize: 14, height: 1.25),
         labelLarge: TextStyle(
             fontSize: 16.0, fontWeight: FontWeight.bold, color: accent80)),
-    cardColor: Color(0xFF252525),
+    cardColor: Color(0xFF24252B),
     primarySwatch: Colors.blue,
     visualDensity: VisualDensity.adaptivePlatformDensity,
     tabBarTheme: const TabBarTheme(
@@ -217,9 +220,8 @@ class MyTheme {
             style: ButtonStyle(splashFactory: NoSplash.splashFactory),
           )
         : null,
-    checkboxTheme: const CheckboxThemeData(
-      checkColor: MaterialStatePropertyAll(dark)
-    ),
+    checkboxTheme:
+        const CheckboxThemeData(checkColor: MaterialStatePropertyAll(dark)),
   ).copyWith(
     extensions: <ThemeExtension<dynamic>>[
       ColorThemeExtension.dark,

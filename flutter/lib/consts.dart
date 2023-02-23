@@ -53,7 +53,7 @@ const int kDesktopMaxDisplayHeight = 1080;
 
 const double kDesktopFileTransferNameColWidth = 200;
 const double kDesktopFileTransferModifiedColWidth = 120;
-const double kDesktopFileTransferRowHeight = 25.0;
+const double kDesktopFileTransferRowHeight = 30.0;
 const double kDesktopFileTransferHeaderHeight = 25.0;
 
 // https://en.wikipedia.org/wiki/Non-breaking_space
