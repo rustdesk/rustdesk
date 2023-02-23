@@ -454,5 +454,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Stop voice call", "停止语音通话"),
         ("relay_hint_tip", "可能无法直连，可以尝试中继连接。\n另外，如果想直接使用中继连接，可以在 ID 后面添加/r，或者在卡片选项里选择强制走中继连接。"),
         ("Reconnect", "重连"),
+        ("Codec", "编解码"),
+        ("Resolution", "分辨率"),
         ].iter().cloned().collect();
 }
