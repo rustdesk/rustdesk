@@ -4,21 +4,18 @@ use crate::{
     ui_session_interface::{io_loop, InvokeUiSession, Session},
 };
 #[cfg(feature = "flutter_texture_render")]
-#[cfg(target_os = "macos")]
+// #[cfg(target_os = "macos")]
 use dlopen::{
     symbor::{Library, Symbol},
     Error as LibError,
 };
 use flutter_rust_bridge::StreamSink;
-#[cfg(feature = "flutter_texture_render")]
-use hbb_common::libc::c_void;
 use hbb_common::{
-    bail, config::LocalConfig, get_version_number, log, message_proto::*,
-    rendezvous_proto::ConnType, ResultType,
+    bail, config::LocalConfig, get_version_number, message_proto::*, rendezvous_proto::ConnType,
+    ResultType,
 };
 #[cfg(feature = "flutter_texture_render")]
-#[cfg(not(target_os = "macos"))]
-use libloading::{Error as LibError, Library, Symbol};
+use hbb_common::{libc::c_void, log};
 use serde_json::json;
 
 #[cfg(not(feature = "flutter_texture_render"))]
@@ -42,19 +39,19 @@ lazy_static::lazy_static! {
     pub static ref GLOBAL_EVENT_STREAM: RwLock<HashMap<String, StreamSink<String>>> = Default::default(); // rust to dart event channel
 }
 
-#[cfg(feature = "flutter_texture_render")]
+#[cfg(all(target_os = "windows", feature = "flutter_texture_render"))]
 lazy_static::lazy_static! {
-    pub static ref TEXTURE_RGBA_RENDERER_PLUGIN: Result<Library, LibError> = {
-        #[cfg(not(target_os = "macos"))]
-        unsafe {
-            #[cfg(target_os = "windows")]
-            Library::new("texture_rgba_renderer_plugin.dll");
-            #[cfg(target_os = "linux")]
-            Library::new("libtexture_rgba_renderer_plugin.so");
-        }
-        #[cfg(target_os = "macos")]
-        Library::open_self()
-    };
+    pub static ref TEXTURE_RGBA_RENDERER_PLUGIN: Result<Library, LibError> = Library::open("texture_rgba_renderer_plugin.dll");
+}
+
+#[cfg(all(target_os = "linux", feature = "flutter_texture_render"))]
+lazy_static::lazy_static! {
+    pub static ref TEXTURE_RGBA_RENDERER_PLUGIN: Result<Library, LibError> = Library::open("libtexture_rgba_renderer_plugin.so");
+}
+
+#[cfg(all(target_os = "macos", feature = "flutter_texture_render"))]
+lazy_static::lazy_static! {
+    pub static ref TEXTURE_RGBA_RENDERER_PLUGIN: Result<Library, LibError> = Library::open_self();
 }
 
 /// FFI for rustdesk core's main entry.
@@ -136,21 +133,26 @@ pub unsafe extern "C" fn free_c_args(ptr: *mut *mut c_char, len: c_int) {
     // Afterwards the vector will be dropped and thus freed.
 }
 
+#[cfg(feature = "flutter_texture_render")]
+#[derive(Default, Clone)]
+pub struct FlutterHandler {
+    pub event_stream: Arc<RwLock<Option<StreamSink<EventToUI>>>>,
+    notify_rendered: Arc<RwLock<bool>>,
+    renderer: Arc<RwLock<VideoRenderer>>,
+    peer_info: Arc<RwLock<PeerInfo>>,
+}
+
+#[cfg(not(feature = "flutter_texture_render"))]
 #[derive(Default, Clone)]
 pub struct FlutterHandler {
     pub event_stream: Arc<RwLock<Option<StreamSink<EventToUI>>>>,
     // SAFETY: [rgba] is guarded by [rgba_valid], and it's safe to reach [rgba] with `rgba_valid == true`.
     // We must check the `rgba_valid` before reading [rgba].
-    #[cfg(not(feature = "flutter_texture_render"))]
     pub rgba: Arc<RwLock<Vec<u8>>>,
-    #[cfg(not(feature = "flutter_texture_render"))]
     pub rgba_valid: Arc<AtomicBool>,
-    #[cfg(feature = "flutter_texture_render")]
-    notify_rendered: Arc<RwLock<bool>>,
-    #[cfg(feature = "flutter_texture_render")]
-    renderer: Arc<RwLock<VideoRenderer>>,
     peer_info: Arc<RwLock<PeerInfo>>,
 }
+
 #[cfg(feature = "flutter_texture_render")]
 pub type FlutterRgbaRendererPluginOnRgba =
     unsafe extern "C" fn(texture_rgba: *mut c_void, buffer: *const u8, width: c_int, height: c_int);
@@ -172,10 +174,6 @@ impl Default for VideoRenderer {
     fn default() -> Self {
         let on_rgba_func = match &*TEXTURE_RGBA_RENDERER_PLUGIN {
             Ok(lib) => {
-                #[cfg(not(target_os = "macos"))]
-                let find_sym_res =
-                    lib.get::<FlutterRgbaRendererPluginOnRgba>(b"FlutterRgbaRendererPluginOnRgba");
-                #[cfg(target_os = "macos")]
                 let find_sym_res = unsafe {
                     lib.symbol::<FlutterRgbaRendererPluginOnRgba>("FlutterRgbaRendererPluginOnRgba")
                 };
