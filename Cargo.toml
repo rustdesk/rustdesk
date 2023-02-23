@@ -9,7 +9,7 @@ default-run = "rustdesk"
 
 [lib]
 name = "librustdesk"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "staticlib", "rlib"]
 
 [[bin]]
 name = "naming"
