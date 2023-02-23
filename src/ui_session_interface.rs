@@ -798,7 +798,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn on_voice_call_waiting(&self);
     fn on_voice_call_incoming(&self);
     fn get_rgba(&self) -> *const u8;
-    fn next_rgba(&mut self);
+    fn next_rgba(&self);
 }
 
 impl<T: InvokeUiSession> Deref for Session<T> {

@@ -529,6 +529,13 @@ pub fn session_switch_sides(id: String) {
     }
 }
 
+pub fn session_set_size(_id: String, _width: i32, _height: i32)  {
+    #[cfg(feature = "flutter_texture_render")]
+    if let Some(session) = SESSIONS.write().unwrap().get_mut(&_id) {
+        session.set_size(_width, _height);
+    }
+}
+
 pub fn main_get_sound_inputs() -> Vec<String> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     return get_sound_inputs();
@@ -1298,6 +1305,17 @@ pub fn main_hide_docker() -> SyncReturn<bool> {
     #[cfg(target_os = "macos")]
     crate::platform::macos::hide_dock();
     SyncReturn(true)
+}
+
+pub fn main_use_texture_render() -> SyncReturn<bool> {
+    #[cfg(not(feature = "flutter_texture_render"))]
+    {
+        SyncReturn(false)
+    }
+    #[cfg(feature = "flutter_texture_render")]
+    {
+        SyncReturn(true)
+    }
 }
 
 pub fn cm_start_listen_ipc_thread() {

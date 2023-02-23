@@ -298,7 +298,7 @@ impl InvokeUiSession for SciterHandler {
         std::ptr::null()
     }
 
-    fn next_rgba(&mut self) {}
+    fn next_rgba(&self) {}
 }
 
 pub struct SciterSession(Session<SciterHandler>);

@@ -1,6 +1,6 @@
 use crate::{
     codec::{EncoderApi, EncoderCfg},
-    hw, HW_STRIDE_ALIGN,
+    hw, ImageFormat, HW_STRIDE_ALIGN,
 };
 use hbb_common::{
     anyhow::{anyhow, Context},
@@ -236,22 +236,24 @@ pub struct HwDecoderImage<'a> {
 }
 
 impl HwDecoderImage<'_> {
-    pub fn bgra(&self, bgra: &mut Vec<u8>, i420: &mut Vec<u8>) -> ResultType<()> {
+    pub fn to_fmt(&self, fmt: ImageFormat, fmt_data: &mut Vec<u8>, i420: &mut Vec<u8>) -> ResultType<()> {
         let frame = self.frame;
         match frame.pixfmt {
-            AVPixelFormat::AV_PIX_FMT_NV12 => hw::hw_nv12_to_bgra(
+            AVPixelFormat::AV_PIX_FMT_NV12 => hw::hw_nv12_to(
+                fmt,
                 frame.width as _,
                 frame.height as _,
                 &frame.data[0],
                 &frame.data[1],
                 frame.linesize[0] as _,
                 frame.linesize[1] as _,
-                bgra,
+                fmt_data,
                 i420,
                 HW_STRIDE_ALIGN,
             ),
             AVPixelFormat::AV_PIX_FMT_YUV420P => {
-                hw::hw_i420_to_bgra(
+                hw::hw_i420_to(
+                    fmt,
                     frame.width as _,
                     frame.height as _,
                     &frame.data[0],
@@ -260,11 +262,19 @@ impl HwDecoderImage<'_> {
                     frame.linesize[0] as _,
                     frame.linesize[1] as _,
                     frame.linesize[2] as _,
-                    bgra,
+                    fmt_data,
                 );
                 return Ok(());
             }
         }
+    }
+
+    pub fn bgra(&self, bgra: &mut Vec<u8>, i420: &mut Vec<u8>) -> ResultType<()> {
+        self.to_fmt(ImageFormat::ARGB, bgra, i420)
+    }
+
+    pub fn rgba(&self, rgba: &mut Vec<u8>, i420: &mut Vec<u8>) -> ResultType<()> {
+        self.to_fmt(ImageFormat::ABGR, rgba, i420)
     }
 }
 
