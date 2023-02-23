@@ -408,16 +408,30 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           ),
           child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
-              child: MenuBar(
-                children: [
-                  SizedBox(width: _MenubarTheme.buttonHMargin),
-                  ...menubarItems,
-                  SizedBox(width: _MenubarTheme.buttonHMargin)
-                ],
+              child: Theme(
+                data: themeData(),
+                child: MenuBar(
+                  children: [
+                    SizedBox(width: _MenubarTheme.buttonHMargin),
+                    ...menubarItems,
+                    SizedBox(width: _MenubarTheme.buttonHMargin)
+                  ],
+                ),
               )),
         ),
         _buildDraggableShowHide(context),
       ],
+    );
+  }
+
+  ThemeData themeData() {
+    return Theme.of(context).copyWith(
+      menuButtonTheme: MenuButtonThemeData(
+          style: ButtonStyle(
+              minimumSize: MaterialStatePropertyAll(Size(64, 36)),
+              textStyle: MaterialStatePropertyAll(
+                  TextStyle(fontWeight: FontWeight.normal)))),
+      dividerTheme: DividerThemeData(space: 4),
     );
   }
 }
