@@ -739,9 +739,15 @@ class RecentPeerCard extends BasePeerCard {
       menuItems.add(_rmFavAction(peer.id, () async {}));
     }
 
-    if (!gFFI.abModel.idContainBy(peer.id)) {
+    if (gFFI.userModel.userName.isNotEmpty) {
+      // if (!gFFI.abModel.idContainBy(peer.id)) {
+      //   menuItems.add(_addToAb(peer));
+      // } else {
+      //   menuItems.add(_removeFromAb(peer));
+      // }
       menuItems.add(_addToAb(peer));
     }
+
     menuItems.add(MenuEntryDivider());
     menuItems.add(_removeAction(peer.id, () async {
       await bind.mainLoadRecentPeers();
@@ -784,9 +790,16 @@ class FavoritePeerCard extends BasePeerCard {
     menuItems.add(_rmFavAction(peer.id, () async {
       await bind.mainLoadFavPeers();
     }));
-    if (!gFFI.abModel.idContainBy(peer.id)) {
+
+    if (gFFI.userModel.userName.isNotEmpty) {
+      // if (!gFFI.abModel.idContainBy(peer.id)) {
+      //   menuItems.add(_addToAb(peer));
+      // } else {
+      //   menuItems.add(_removeFromAb(peer));
+      // }
       menuItems.add(_addToAb(peer));
     }
+
     menuItems.add(MenuEntryDivider());
     menuItems.add(_removeAction(peer.id, () async {
       await bind.mainLoadFavPeers();
@@ -821,10 +834,16 @@ class DiscoveredPeerCard extends BasePeerCard {
     if (Platform.isWindows) {
       menuItems.add(_createShortCutAction(peer.id));
     }
-    menuItems.add(MenuEntryDivider());
-    if (!gFFI.abModel.idContainBy(peer.id)) {
+
+    if (gFFI.userModel.userName.isNotEmpty) {
+      // if (!gFFI.abModel.idContainBy(peer.id)) {
+      //   menuItems.add(_addToAb(peer));
+      // } else {
+      //   menuItems.add(_removeFromAb(peer));
+      // }
       menuItems.add(_addToAb(peer));
     }
+
     menuItems.add(MenuEntryDivider());
     menuItems.add(_removeAction(peer.id, () async {}));
     return menuItems;
@@ -865,6 +884,7 @@ class AddressBookPeerCard extends BasePeerCard {
     if (gFFI.abModel.tags.isNotEmpty) {
       menuItems.add(_editTagAction(peer.id));
     }
+
     menuItems.add(MenuEntryDivider());
     menuItems.add(_removeAction(peer.id, () async {}));
     return menuItems;
