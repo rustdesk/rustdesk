@@ -252,6 +252,8 @@ class FfiModel with ChangeNotifier {
       parent.target?.cursorModel.updateDisplayOrigin(_display.x, _display.y);
     }
 
+    _updateSessionWidthHeight(peerId, display.width, display.height);
+
     try {
       CurrentDisplayState.find(peerId).value = _pi.currentDisplay;
     } catch (e) {
@@ -367,6 +369,10 @@ class FfiModel with ChangeNotifier {
     });
   }
 
+  _updateSessionWidthHeight(String id, int width, int height) {
+    bind.sessionSetSize(id: id, width: display.width, height: display.height);
+  }
+
   /// Handle the peer info event based on [evt].
   handlePeerInfo(Map<String, dynamic> evt, String peerId) async {
     // recent peer updated by handle_peer_info(ui_session_interface.rs) --> handle_peer_info(client.rs) --> save_config(client.rs)
@@ -420,6 +426,7 @@ class FfiModel with ChangeNotifier {
       stateGlobal.displaysCount.value = _pi.displays.length;
       if (_pi.currentDisplay < _pi.displays.length) {
         _display = _pi.displays[_pi.currentDisplay];
+        _updateSessionWidthHeight(peerId, display.width, display.height);
       }
       if (displays.isNotEmpty) {
         parent.target?.dialogManager.showLoading(
@@ -485,19 +492,18 @@ class ImageModel with ChangeNotifier {
 
   WeakReference<FFI> parent;
 
-  final List<Function(String)> _callbacksOnFirstImage = [];
+  final List<Function(String)> callbacksOnFirstImage = [];
 
   ImageModel(this.parent);
 
-  addCallbackOnFirstImage(Function(String) cb) =>
-      _callbacksOnFirstImage.add(cb);
+  addCallbackOnFirstImage(Function(String) cb) => callbacksOnFirstImage.add(cb);
 
   onRgba(Uint8List rgba) {
     if (_waitForImage[id]!) {
       _waitForImage[id] = false;
       parent.target?.dialogManager.dismissAll();
       if (isDesktop) {
-        for (final cb in _callbacksOnFirstImage) {
+        for (final cb in callbacksOnFirstImage) {
           cb(id);
         }
       }
@@ -1432,6 +1438,7 @@ class FFI {
     final stream = bind.sessionStart(id: id);
     final cb = ffiModel.startEventListener(id);
     () async {
+      final useTextureRender = bind.mainUseTextureRender();
       // Preserved for the rgba data.
       await for (final message in stream) {
         if (message is EventToUI_Event) {
@@ -1445,14 +1452,26 @@ class FFI {
             debugPrint('json.decode fail1(): $e, ${message.field0}');
           }
         } else if (message is EventToUI_Rgba) {
-          // Fetch the image buffer from rust codes.
-          final sz = platformFFI.getRgbaSize(id);
-          if (sz == null || sz == 0) {
-            return;
-          }
-          final rgba = platformFFI.getRgba(id, sz);
-          if (rgba != null) {
-            imageModel.onRgba(rgba);
+          if (useTextureRender) {
+            if (_waitForImage[id]!) {
+              _waitForImage[id] = false;
+              dialogManager.dismissAll();
+              for (final cb in imageModel.callbacksOnFirstImage) {
+                cb(id);
+              }
+              await canvasModel.updateViewStyle();
+              await canvasModel.updateScrollStyle();
+            }
+          } else {
+            // Fetch the image buffer from rust codes.
+            final sz = platformFFI.getRgbaSize(id);
+            if (sz == null || sz == 0) {
+              return;
+            }
+            final rgba = platformFFI.getRgba(id, sz);
+            if (rgba != null) {
+              imageModel.onRgba(rgba);
+            }
           }
         }
       }

@@ -30,6 +30,9 @@ typedef F4Dart = int Function(Pointer<Utf8>);
 typedef F5 = Void Function(Pointer<Utf8>);
 typedef F5Dart = void Function(Pointer<Utf8>);
 typedef HandleEvent = Future<void> Function(Map<String, dynamic> evt);
+// pub fn session_register_texture(id: *const char, ptr: usize) 
+typedef F6 = Void Function(Pointer<Utf8>, Uint64);
+typedef F6Dart = void Function(Pointer<Utf8>, int);
 
 /// FFI wrapper around the native Rust core.
 /// Hides the platform differences.
@@ -52,6 +55,8 @@ class PlatformFFI {
   F3? _session_get_rgba;
   F4Dart? _session_get_rgba_size;
   F5Dart? _session_next_rgba;
+  F6Dart? _session_register_texture;
+  
 
   static get localeName => Platform.localeName;
 
@@ -130,6 +135,13 @@ class PlatformFFI {
     malloc.free(a);
   }
 
+  void registerTexture(String id, int ptr) {
+    if (_session_register_texture == null) return;
+    final a = id.toNativeUtf8();
+    _session_register_texture!(a, ptr);
+    malloc.free(a);
+  }
+
   /// Init the FFI class, loads the native Rust core library.
   Future<void> init(String appType) async {
     _appType = appType;
@@ -150,6 +162,7 @@ class PlatformFFI {
           dylib.lookupFunction<F4, F4Dart>("session_get_rgba_size");
       _session_next_rgba =
           dylib.lookupFunction<F5, F5Dart>("session_next_rgba");
+      _session_register_texture = dylib.lookupFunction<F6, F6Dart>("session_register_texture");
       try {
         // SYSTEM user failed
         _dir = (await getApplicationDocumentsDirectory()).path;

@@ -112,8 +112,8 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
     const LIGHT: &[u8] = include_bytes!("../res/mac-tray-light-x2.png");
     const DARK: &[u8] = include_bytes!("../res/mac-tray-dark-x2.png");
     let icon = match mode {
-        dark_light::Mode::Dark => DARK,
-        _ => LIGHT,
+        dark_light::Mode::Dark => LIGHT,
+        _ => DARK,
     };
     let (icon_rgba, icon_width, icon_height) = {
         let image = image::load_from_memory(icon)
@@ -147,7 +147,7 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
             crate::platform::macos::hide_dock();
             docker_hiden = true;
         }
-        *control_flow = ControlFlow::Poll;
+        *control_flow = ControlFlow::Wait;
 
         if tray_channel.try_recv().is_ok() {
             crate::platform::macos::handle_application_should_open_untitled_file();

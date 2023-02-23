@@ -239,6 +239,7 @@ def get_features(args):
         features.append('hwcodec')
     if args.flutter:
         features.append('flutter')
+        features.append('flutter_texture_render')
     if args.flatpak:
         features.append('flatpak')
     if args.appimage:
