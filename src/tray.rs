@@ -107,7 +107,10 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
     // https://github.com/tauri-apps/tray-icon/blob/dev/examples/tao.rs
     use hbb_common::anyhow::Context;
     use tao::event_loop::{ControlFlow, EventLoopBuilder};
-    use tray_icon::{TrayEvent, TrayIconBuilder};
+    use tray_icon::{
+        menu::{Menu, MenuEvent, MenuItem},
+        ClickEvent, TrayEvent, TrayIconBuilder,
+    };
     let mode = dark_light::detect();
     const LIGHT: &[u8] = include_bytes!("../res/mac-tray-light-x2.png");
     const DARK: &[u8] = include_bytes!("../res/mac-tray-dark-x2.png");
@@ -128,8 +131,13 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
 
     let event_loop = EventLoopBuilder::new().build();
 
+    let tray_menu = Menu::new();
+    let quit_i = MenuItem::new(crate::client::translate("Exit".to_owned()), true, None);
+    tray_menu.append_items(&[&quit_i]);
+
     let _tray_icon = Some(
         TrayIconBuilder::new()
+            .with_menu(Box::new(tray_menu))
             .with_tooltip(format!(
                 "{} {}",
                 crate::get_app_name(),
@@ -139,6 +147,7 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
             .build()?,
     );
 
+    let menu_channel = MenuEvent::receiver();
     let tray_channel = TrayEvent::receiver();
     let mut docker_hiden = false;
 
@@ -149,8 +158,17 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
         }
         *control_flow = ControlFlow::Wait;
 
-        if tray_channel.try_recv().is_ok() {
-            crate::platform::macos::handle_application_should_open_untitled_file();
+        if let Ok(event) = menu_channel.try_recv() {
+            if event.id == quit_i.id() {
+                crate::platform::macos::uninstall(false);
+            }
+            println!("{event:?}");
+        }
+
+        if let Ok(event) = tray_channel.try_recv() {
+            if event.event == ClickEvent::Double {
+                crate::platform::macos::handle_application_should_open_untitled_file();
+            }
         }
     });
 }

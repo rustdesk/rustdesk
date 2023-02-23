@@ -171,7 +171,7 @@ pub fn is_installed_daemon(prompt: bool) -> bool {
     false
 }
 
-pub fn uninstall() -> bool {
+pub fn uninstall(show_new_window: bool) -> bool {
     // to-do: do together with win/linux about refactory start/stop service
     if !is_installed_daemon(false) {
         return false;
@@ -206,14 +206,21 @@ pub fn uninstall() -> bool {
                         .args(&["remove", &format!("{}_server", crate::get_full_name())])
                         .status()
                         .ok();
-                    std::process::Command::new("sh")
-                        .arg("-c")
-                        .arg(&format!(
-                            "sleep 0.5; open /Applications/{}.app",
-                            crate::get_app_name(),
-                        ))
-                        .spawn()
-                        .ok();
+                    if show_new_window {
+                        std::process::Command::new("sh")
+                            .arg("-c")
+                            .arg(&format!(
+                                "sleep 0.5; open /Applications/{}.app",
+                                crate::get_app_name(),
+                            ))
+                            .spawn()
+                            .ok();
+                    } else {
+                        std::process::Command::new("pkill")
+                            .arg(crate::get_app_name())
+                            .status()
+                            .ok();
+                    }
                     quit_gui();
                 }
             }
