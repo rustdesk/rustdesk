@@ -56,6 +56,7 @@ pub struct Remote<T: InvokeUiSession> {
     data_count: Arc<AtomicUsize>,
     frame_count: Arc<AtomicUsize>,
     video_format: CodecFormat,
+    elevation_requested: bool,
 }
 
 impl<T: InvokeUiSession> Remote<T> {
@@ -87,6 +88,7 @@ impl<T: InvokeUiSession> Remote<T> {
             video_format: CodecFormat::Unknown,
             stop_voice_call_sender: None,
             voice_call_request_timestamp: None,
+            elevation_requested: false,
         }
     }
 
@@ -686,6 +688,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 let mut msg = Message::new();
                 msg.set_misc(misc);
                 allow_err!(peer.send(&msg).await);
+                self.elevation_requested = true;
             }
             Data::ElevateWithLogon(username, password) => {
                 let mut request = ElevationRequest::new();
@@ -699,6 +702,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 let mut msg = Message::new();
                 msg.set_misc(misc);
                 allow_err!(peer.send(&msg).await);
+                self.elevation_requested = true;
             }
             Data::NewVoiceCall => {
                 let msg = new_voice_call_request(true);
@@ -1181,7 +1185,8 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                     }
                     Some(misc::Union::PortableServiceRunning(b)) => {
-                        if b {
+                        self.handler.portable_service_running(b);
+                        if self.elevation_requested && b {
                             self.handler.msgbox(
                                 "custom-nocancel-success",
                                 "Successful",
@@ -1253,14 +1258,12 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                     }
                 }
-                Some(message::Union::PeerInfo(pi)) => {
-                    match pi.conn_id {
-                        crate::SYNC_PEER_INFO_DISPLAYS => {
-                            self.handler.set_displays(&pi.displays);
-                        }
-                        _ => {}
+                Some(message::Union::PeerInfo(pi)) => match pi.conn_id {
+                    crate::SYNC_PEER_INFO_DISPLAYS => {
+                        self.handler.set_displays(&pi.displays);
                     }
-                }
+                    _ => {}
+                },
                 _ => {}
             }
         }

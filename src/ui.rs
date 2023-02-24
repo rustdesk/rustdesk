@@ -413,9 +413,7 @@ impl UI {
     }
 
     fn remove_discovered(&mut self, id: String) {
-        let mut peers = config::LanPeers::load().peers;
-        peers.retain(|x| x.id != id);
-        config::LanPeers::store(&peers);
+        remove_discovered(id);
     }
 
     fn send_wol(&mut self, id: String) {

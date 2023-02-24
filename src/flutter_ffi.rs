@@ -726,6 +726,10 @@ pub fn main_peer_has_password(id: String) -> bool {
     peer_has_password(id)
 }
 
+pub fn main_is_in_recent_peers(id: String) -> bool {
+    PeerConfig::peers().iter().any(|e| e.0 == id)
+}
+
 pub fn main_load_recent_peers() {
     if !config::APP_DIR.read().unwrap().is_empty() {
         let peers: Vec<HashMap<&str, String>> = PeerConfig::peers()
@@ -794,6 +798,10 @@ pub fn main_load_lan_peers() {
         ]);
         s.add(serde_json::ser::to_string(&data).unwrap_or("".to_owned()));
     };
+}
+
+pub fn main_remove_discovered(id: String) {
+    remove_discovered(id);
 }
 
 fn main_broadcast_message(data: &HashMap<&str, &str>) {

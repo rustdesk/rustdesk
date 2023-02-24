@@ -1552,7 +1552,6 @@ impl Connection {
                                     .err()
                                     .map_or("".to_string(), |e| e.to_string());
                                 }
-                                self.portable.elevation_requested = err.is_empty();
                                 let mut misc = Misc::new();
                                 misc.set_elevation_response(err);
                                 let mut msg = Message::new();
@@ -1571,7 +1570,6 @@ impl Connection {
                                     .err()
                                     .map_or("".to_string(), |e| e.to_string());
                                 }
-                                self.portable.elevation_requested = err.is_empty();
                                 let mut misc = Misc::new();
                                 misc.set_elevation_response(err);
                                 let mut msg = Message::new();
@@ -1936,13 +1934,11 @@ impl Connection {
             let p = &mut self.portable;
             if running != p.last_running {
                 p.last_running = running;
-                if running && p.elevation_requested {
-                    let mut misc = Misc::new();
-                    misc.set_portable_service_running(running);
-                    let mut msg = Message::new();
-                    msg.set_misc(misc);
-                    self.inner.send(msg.into());
-                }
+                let mut misc = Misc::new();
+                misc.set_portable_service_running(running);
+                let mut msg = Message::new();
+                msg.set_misc(misc);
+                self.inner.send(msg.into());
             }
             let uac = crate::video_service::IS_UAC_RUNNING.lock().unwrap().clone();
             if p.last_uac != uac {
@@ -2166,7 +2162,6 @@ pub struct PortableState {
     pub last_foreground_window_elevated: bool,
     pub last_running: bool,
     pub is_installed: bool,
-    pub elevation_requested: bool,
 }
 
 #[cfg(windows)]
@@ -2177,7 +2172,6 @@ impl Default for PortableState {
             last_uac: Default::default(),
             last_foreground_window_elevated: Default::default(),
             last_running: Default::default(),
-            elevation_requested: Default::default(),
         }
     }
 }
