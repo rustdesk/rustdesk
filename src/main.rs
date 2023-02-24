@@ -1,4 +1,4 @@
-i// Specify the Windows subsystem to eliminate console window.
+// Specify the Windows subsystem to eliminate console window.
 // Requires Rust 1.18.
 //#![windows_subsystem = "windows"]
 
