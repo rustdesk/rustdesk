@@ -316,7 +316,7 @@ class _FileManagerPageState extends State<FileManagerPage>
             return;
           }
           _jumpToEntry(isLocal, searchResult.first, scrollController,
-              kDesktopFileTransferRowHeight, buffer);
+              kDesktopFileTransferRowHeight);
         },
         onSearch: (buffer) {
           debugPrint("searching for $buffer");
@@ -331,7 +331,7 @@ class _FileManagerPageState extends State<FileManagerPage>
             return;
           }
           _jumpToEntry(isLocal, searchResult.first, scrollController,
-              kDesktopFileTransferRowHeight, buffer);
+              kDesktopFileTransferRowHeight);
         },
         child: ObxValue<RxString>(
           (searchText) {
@@ -471,7 +471,11 @@ class _FileManagerPageState extends State<FileManagerPage>
             return Column(
               children: [
                 // Header
-                _buildFileBrowserHeader(context, isLocal),
+                Row(
+                  children: [
+                    Expanded(child: _buildFileBrowserHeader(context, isLocal)),
+                  ],
+                ),
                 // Body
                 Expanded(
                   child: ListView.builder(
@@ -493,7 +497,7 @@ class _FileManagerPageState extends State<FileManagerPage>
   }
 
   void _jumpToEntry(bool isLocal, Entry entry,
-      ScrollController scrollController, double rowHeight, String buffer) {
+      ScrollController scrollController, double rowHeight) {
     final entries = model.getCurrentDir(isLocal).entries;
     final index = entries.indexOf(entry);
     if (index == -1) {
@@ -501,7 +505,7 @@ class _FileManagerPageState extends State<FileManagerPage>
     }
     final selectedEntries = getSelectedItems(isLocal);
     final searchResult =
-        entries.where((element) => element.name.startsWith(buffer));
+        entries.where((element) => element == entry);
     selectedEntries.clear();
     if (searchResult.isEmpty) {
       return;
@@ -1380,18 +1384,23 @@ class _FileManagerPageState extends State<FileManagerPage>
                 height: kDesktopFileTransferHeaderHeight,
                 child: Row(
                   children: [
-                    Text(
-                      name,
-                      style: headerTextStyle,
-                      overflow: TextOverflow.ellipsis,
-                    ).marginSymmetric(horizontal: 4),
-                    ascending.value != null
+                    Flexible(
+                      flex: 2,
+                      child: Text(
+                        name,
+                        style: headerTextStyle,
+                        overflow: TextOverflow.ellipsis,
+                      ).marginSymmetric(horizontal: 4),
+                    ),
+                    Flexible(
+                      flex: 1,
+                      child: ascending.value != null
                         ? Icon(
                             ascending.value!
                                 ? Icons.keyboard_arrow_up_rounded
                                 : Icons.keyboard_arrow_down_rounded,
                           )
-                        : const Offstage()
+                        : const Offstage())
                   ],
                 ),
               ),
