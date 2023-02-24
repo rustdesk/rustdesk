@@ -606,6 +606,7 @@ class _ControlMenu extends StatelessWidget {
           Divider(),
           ctrlAltDel(),
           restart(),
+          insertLock(),
           blockUserInput(),
           switchSides(),
           refresh(),
@@ -787,6 +788,16 @@ class _ControlMenu extends StatelessWidget {
         child: Text(translate('Restart Remote Device')),
         ffi: ffi,
         onPressed: () => showRestartRemoteDevice(pi, id, ffi.dialogManager));
+  }
+
+  insertLock() {
+    final perms = ffi.ffiModel.permissions;
+    final visible = perms['keyboard'] != false;
+    if (!visible) return Offstage();
+    return _MenuItemButton(
+        child: Text(translate('Insert Lock')),
+        ffi: ffi,
+        onPressed: () => bind.sessionLockScreen(id: id));
   }
 
   blockUserInput() {
