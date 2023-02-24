@@ -1,8 +1,8 @@
 [package]
 name = "UoWM helpdesk"
 version = "1.2.0"
-authors = ["rustdesk <noc@uowm.gr>"]
-edition = "2023"
+authors = ["rustdesk <info@rustdesk.com>"]
+edition = "2021"
 build= "build.rs"
 description = "A remote control software compiled by UoWM."
 default-run = "UoWM helpdesk"
