@@ -270,6 +270,7 @@ class FfiModel with ChangeNotifier {
       parent.target?.canvasModel.updateViewStyle();
     }
     parent.target?.recordingModel.onSwitchDisplay();
+    handleResolutions(peerId, evt["resolutions"]);
     notifyListeners();
   }
 
@@ -437,8 +438,33 @@ class FfiModel with ChangeNotifier {
       }
       Map<String, dynamic> features = json.decode(evt['features']);
       _pi.features.privacyMode = features['privacy_mode'] == 1;
+      handleResolutions(peerId, evt["resolutions"]);
     }
     notifyListeners();
+  }
+
+  handleResolutions(String id, dynamic resolutions) {
+    try {
+      final List<dynamic> dynamicArray = jsonDecode(resolutions as String);
+      List<Resolution> arr = List.empty(growable: true);
+      for (int i = 0; i < dynamicArray.length; i++) {
+        var width = dynamicArray[i]["width"];
+        var height = dynamicArray[i]["height"];
+        if (width is int && width > 0 && height is int && height > 0) {
+          arr.add(Resolution(width, height));
+        }
+      }
+      arr.sort((a, b) {
+        if (b.width != a.width) {
+          return b.width - a.width;
+        } else {
+          return b.height - a.height;
+        }
+      });
+      _pi.resolutions = arr;
+    } catch (e) {
+      debugPrint("Failed to parse resolutions:$e");
+    }
   }
 
   /// Handle the peer info synchronization event based on [evt].
@@ -458,6 +484,9 @@ class FfiModel with ChangeNotifier {
       }
       _pi.displays = newDisplays;
       stateGlobal.displaysCount.value = _pi.displays.length;
+      if (_pi.currentDisplay >= 0 && _pi.currentDisplay < _pi.displays.length) {
+        _display = _pi.displays[_pi.currentDisplay];
+      }
     }
     notifyListeners();
   }
@@ -1532,6 +1561,17 @@ class Display {
   }
 }
 
+class Resolution {
+  int width = 0;
+  int height = 0;
+  Resolution(this.width, this.height);
+
+  @override
+  String toString() {
+    return 'Resolution($width,$height)';
+  }
+}
+
 class Features {
   bool privacyMode = false;
 }
@@ -1545,6 +1585,7 @@ class PeerInfo {
   int currentDisplay = 0;
   List<Display> displays = [];
   Features features = Features();
+  List<Resolution> resolutions = [];
 }
 
 const canvasKey = 'canvas';

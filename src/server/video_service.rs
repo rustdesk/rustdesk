@@ -356,7 +356,7 @@ fn get_capturer(use_yuv: bool, portable_service_running: bool) -> ResultType<Cap
     let (ndisplay, current, display) = get_current_display()?;
     let (origin, width, height) = (display.origin(), display.width(), display.height());
     log::debug!(
-        "#displays={}, current={}, origin: {:?}, width={}, height={}, cpus={}/{}",
+        "#displays={}, current={}, origin: {:?}, width={}, height={}, cpus={}/{}, name:{}",
         ndisplay,
         current,
         &origin,
@@ -364,6 +364,7 @@ fn get_capturer(use_yuv: bool, portable_service_running: bool) -> ResultType<Cap
         height,
         num_cpus::get_physical(),
         num_cpus::get(),
+        display.name(),
     );
 
     let privacy_mode_id = *PRIVACY_MODE_CONN_ID.lock().unwrap();
@@ -501,6 +502,14 @@ fn run(sp: GenericService) -> ResultType<()> {
             width: c.width as _,
             height: c.height as _,
             cursor_embedded: capture_cursor_embedded(),
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            resolutions: Some(SupportedResolutions {
+                resolutions: get_current_display_name()
+                    .map(|name| crate::platform::resolutions(&name))
+                    .unwrap_or(vec![]),
+                ..SupportedResolutions::default()
+            })
+            .into(),
             ..Default::default()
         });
         let mut msg_out = Message::new();
@@ -990,6 +999,10 @@ pub(super) fn get_current_display_2(mut all: Vec<Display>) -> ResultType<(usize,
 
 pub fn get_current_display() -> ResultType<(usize, usize, Display)> {
     get_current_display_2(try_get_displays()?)
+}
+
+pub fn get_current_display_name() -> ResultType<String> {
+    Ok(get_current_display_2(try_get_displays()?)?.2.name())
 }
 
 #[cfg(windows)]

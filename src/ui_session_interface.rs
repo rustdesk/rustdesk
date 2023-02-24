@@ -713,6 +713,18 @@ impl<T: InvokeUiSession> Session<T> {
         }
     }
 
+    pub fn change_resolution(&self, width: i32, height: i32) {
+        let mut misc = Misc::new();
+        misc.set_change_resolution(Resolution {
+            width,
+            height,
+            ..Default::default()
+        });
+        let mut msg = Message::new();
+        msg.set_misc(misc);
+        self.send(Data::Message(msg));
+    }
+
     pub fn request_voice_call(&self) {
         self.send(Data::NewVoiceCall);
     }

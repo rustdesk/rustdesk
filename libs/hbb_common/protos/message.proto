@@ -90,6 +90,7 @@ message PeerInfo {
   int32 conn_id = 8;
   Features features = 9;
   SupportedEncoding encoding = 10;
+  SupportedResolutions resolutions = 11;
 }
 
 message LoginResponse {
@@ -416,6 +417,13 @@ message Cliprdr {
   }
 }
 
+message Resolution {
+  int32 width = 1;
+  int32 height = 2;
+}
+
+message SupportedResolutions { repeated Resolution resolutions = 1; }
+
 message SwitchDisplay {
   int32 display = 1;
   sint32 x = 2;
@@ -423,6 +431,7 @@ message SwitchDisplay {
   int32 width = 4;
   int32 height = 5;
   bool cursor_embedded = 6;
+  SupportedResolutions resolutions = 7;
 }
 
 message PermissionInfo {
@@ -597,6 +606,7 @@ message Misc {
     bool portable_service_running = 20;
     SwitchSidesRequest switch_sides_request = 21;
     SwitchBack switch_back = 22;
+    Resolution change_resolution = 24;
   }
 }
 

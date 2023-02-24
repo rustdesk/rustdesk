@@ -1814,3 +1814,19 @@ class DraggableNeverScrollableScrollPhysics extends ScrollPhysics {
   @override
   bool get allowImplicitScrolling => false;
 }
+
+Widget futureBuilder(
+    {required Future? future, required Widget Function(dynamic data) hasData}) {
+  return FutureBuilder(
+      future: future,
+      builder: (BuildContext context, AsyncSnapshot snapshot) {
+        if (snapshot.hasData) {
+          return hasData(snapshot.data!);
+        } else {
+          if (snapshot.hasError) {
+            debugPrint(snapshot.error.toString());
+          }
+          return Container();
+        }
+      });
+}
