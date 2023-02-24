@@ -745,12 +745,9 @@ class RecentPeerCard extends BasePeerCard {
     }
 
     if (gFFI.userModel.userName.isNotEmpty) {
-      // if (!gFFI.abModel.idContainBy(peer.id)) {
-      //   menuItems.add(_addToAb(peer));
-      // } else {
-      //   menuItems.add(_removeFromAb(peer));
-      // }
-      menuItems.add(_addToAb(peer));
+      if (!gFFI.abModel.idContainBy(peer.id)) {
+        menuItems.add(_addToAb(peer));
+      }
     }
 
     menuItems.add(MenuEntryDivider());
@@ -797,12 +794,9 @@ class FavoritePeerCard extends BasePeerCard {
     }));
 
     if (gFFI.userModel.userName.isNotEmpty) {
-      // if (!gFFI.abModel.idContainBy(peer.id)) {
-      //   menuItems.add(_addToAb(peer));
-      // } else {
-      //   menuItems.add(_removeFromAb(peer));
-      // }
-      menuItems.add(_addToAb(peer));
+      if (!gFFI.abModel.idContainBy(peer.id)) {
+        menuItems.add(_addToAb(peer));
+      }
     }
 
     menuItems.add(MenuEntryDivider());
@@ -843,19 +837,19 @@ class DiscoveredPeerCard extends BasePeerCard {
       menuItems.add(_createShortCutAction(peer.id));
     }
 
-    if (!favs.contains(peer.id)) {
-      menuItems.add(_addFavAction(peer.id));
-    } else {
-      menuItems.add(_rmFavAction(peer.id, () async {}));
+    final inRecent = await bind.mainIsInRecentPeers(id: peer.id);
+    if (inRecent) {
+      if (!favs.contains(peer.id)) {
+        menuItems.add(_addFavAction(peer.id));
+      } else {
+        menuItems.add(_rmFavAction(peer.id, () async {}));
+      }
     }
 
     if (gFFI.userModel.userName.isNotEmpty) {
-      // if (!gFFI.abModel.idContainBy(peer.id)) {
-      //   menuItems.add(_addToAb(peer));
-      // } else {
-      //   menuItems.add(_removeFromAb(peer));
-      // }
-      menuItems.add(_addToAb(peer));
+      if (!gFFI.abModel.idContainBy(peer.id)) {
+        menuItems.add(_addToAb(peer));
+      }
     }
 
     menuItems.add(MenuEntryDivider());
