@@ -597,6 +597,13 @@ pub fn get_lan_peers() -> Vec<HashMap<&'static str, String>> {
 }
 
 #[inline]
+pub fn remove_discovered(id: String) {
+    let mut peers = config::LanPeers::load().peers;
+    peers.retain(|x| x.id != id);
+    config::LanPeers::store(&peers);
+}
+
+#[inline]
 pub fn get_uuid() -> String {
     base64::encode(hbb_common::get_uuid())
 }

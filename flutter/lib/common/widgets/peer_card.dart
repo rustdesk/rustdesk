@@ -534,7 +534,7 @@ abstract class BasePeerCard extends StatelessWidget {
       proc: () {
         () async {
           if (isLan) {
-            // TODO
+            bind.mainRemoveDiscovered(id: id);
           } else {
             final favs = (await bind.mainGetFav()).toList();
             if (favs.remove(id)) {
@@ -859,7 +859,11 @@ class DiscoveredPeerCard extends BasePeerCard {
     }
 
     menuItems.add(MenuEntryDivider());
-    menuItems.add(_removeAction(peer.id, () async {}));
+    menuItems.add(
+      _removeAction(peer.id, () async {
+        await bind.mainLoadLanPeers();
+      }, isLan: true),
+    );
     return menuItems;
   }
 

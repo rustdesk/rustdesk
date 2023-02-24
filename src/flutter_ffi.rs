@@ -796,6 +796,10 @@ pub fn main_load_lan_peers() {
     };
 }
 
+pub fn main_remove_discovered(id: String) {
+    remove_discovered(id);
+}
+
 fn main_broadcast_message(data: &HashMap<&str, &str>) {
     let apps = vec![
         flutter::APP_TYPE_DESKTOP_REMOTE,
