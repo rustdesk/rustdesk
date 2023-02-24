@@ -1,5 +1,5 @@
 [package]
-name = "UoWMdesk"
+name = "UoWM_desk"
 version = "1.2.0"
 authors = ["rustdesk <noc@uowm.gr>"]
 edition = "2023"
