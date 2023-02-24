@@ -156,7 +156,7 @@ class _PeerTabPageState extends State<PeerTabPage>
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                       decoration: BoxDecoration(
                         color: model.currentTab == t
-                            ? Theme.of(context).backgroundColor
+                            ? Theme.of(context).colorScheme.background
                             : null,
                         borderRadius: BorderRadius.circular(isDesktop ? 2 : 6),
                       ),
@@ -231,7 +231,8 @@ class _PeerTabPageState extends State<PeerTabPage>
 
   Widget _createPeerViewTypeSwitch(BuildContext context) {
     final textColor = Theme.of(context).textTheme.titleLarge?.color;
-    final activeDeco = BoxDecoration(color: Theme.of(context).backgroundColor);
+    final activeDeco =
+        BoxDecoration(color: Theme.of(context).colorScheme.background);
     return Row(
       children: [PeerUiType.grid, PeerUiType.list]
           .map((type) => Obx(
@@ -351,7 +352,7 @@ class _PeerSearchBarState extends State<PeerSearchBar> {
     return Container(
       width: 120,
       decoration: BoxDecoration(
-        color: Theme.of(context).backgroundColor,
+        color: Theme.of(context).colorScheme.background,
         borderRadius: BorderRadius.circular(6),
       ),
       child: Obx(() => Row(

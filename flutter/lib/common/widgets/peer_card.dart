@@ -170,8 +170,8 @@ class _PeerCardState extends State<_PeerCard>
             ),
             Expanded(
               child: Container(
-                decoration:
-                    BoxDecoration(color: Theme.of(context).backgroundColor),
+                decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.background),
                 child: Row(
                   children: [
                     Expanded(
@@ -266,7 +266,7 @@ class _PeerCardState extends State<_PeerCard>
                   ),
                 ),
                 Container(
-                  color: Theme.of(context).backgroundColor,
+                  color: Theme.of(context).colorScheme.background,
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -1173,7 +1173,7 @@ class ActionMore extends StatelessWidget {
             radius: 14,
             backgroundColor: _hover.value
                 ? Theme.of(context).scaffoldBackgroundColor
-                : Theme.of(context).backgroundColor,
+                : Theme.of(context).colorScheme.background,
             child: Icon(Icons.more_vert,
                 size: 18,
                 color: _hover.value

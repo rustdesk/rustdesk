@@ -225,7 +225,7 @@ class _RemotePageState extends State<RemotePage>
 
   Widget buildBody(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).backgroundColor,
+      backgroundColor: Theme.of(context).colorScheme.background,
 
       /// the Overlay key will be set with _blockableOverlayState in BlockableOverlay
       /// see override build() in [BlockableOverlay]

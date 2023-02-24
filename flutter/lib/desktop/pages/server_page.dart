@@ -49,10 +49,7 @@ class _DesktopServerPageState extends State<DesktopServerPage>
 
   @override
   void onWindowClose() {
-    Future.wait([
-      gFFI.serverModel.closeAll(),
-      gFFI.close()
-    ]).then((_)  {
+    Future.wait([gFFI.serverModel.closeAll(), gFFI.close()]).then((_) {
       if (Platform.isMacOS) {
         RdPlatformChannel.instance.terminate();
       } else {
@@ -82,7 +79,7 @@ class _DesktopServerPageState extends State<DesktopServerPage>
                 decoration: BoxDecoration(
                     border: Border.all(color: MyTheme.color(context).border!)),
                 child: Scaffold(
-                  backgroundColor: Theme.of(context).backgroundColor,
+                  backgroundColor: Theme.of(context).colorScheme.background,
                   body: Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.start,
@@ -189,7 +186,7 @@ class ConnectionManagerState extends State<ConnectionManager> {
                 windowManager.startDragging();
               },
               child: Container(
-                color: Theme.of(context).backgroundColor,
+                color: Theme.of(context).colorScheme.background,
               ),
             ),
           ),

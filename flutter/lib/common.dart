@@ -45,9 +45,10 @@ var isWeb = false;
 var isWebDesktop = false;
 var version = "";
 int androidVersion = 0;
+
 /// Incriment count for textureId.
 int _textureId = 0;
-int get newTextureId => _textureId ++;
+int get newTextureId => _textureId++;
 final textureRenderer = TextureRgbaRenderer();
 
 /// only available for Windows target
@@ -165,7 +166,6 @@ class MyTheme {
 
   static ThemeData lightTheme = ThemeData(
     brightness: Brightness.light,
-    backgroundColor: Color(0xFFEEEEEE),
     hoverColor: Color.fromARGB(255, 224, 224, 224),
     scaffoldBackgroundColor: Color(0xFFFFFFFF),
     textTheme: const TextTheme(
@@ -177,7 +177,6 @@ class MyTheme {
         labelLarge: TextStyle(fontSize: 16.0, color: MyTheme.accent80)),
     cardColor: Color(0xFFEEEEEE),
     hintColor: Color(0xFFAAAAAA),
-    primarySwatch: Colors.blue,
     visualDensity: VisualDensity.adaptivePlatformDensity,
     tabBarTheme: const TabBarTheme(
       labelColor: Colors.black87,
@@ -190,6 +189,10 @@ class MyTheme {
             style: ButtonStyle(splashFactory: NoSplash.splashFactory),
           )
         : null,
+    colorScheme: ColorScheme.fromSwatch(primarySwatch: Colors.blue).copyWith(
+      brightness: Brightness.light,
+      background: Color(0xFFEEEEEE),
+    ),
   ).copyWith(
     extensions: <ThemeExtension<dynamic>>[
       ColorThemeExtension.light,
@@ -198,7 +201,6 @@ class MyTheme {
   );
   static ThemeData darkTheme = ThemeData(
     brightness: Brightness.dark,
-    backgroundColor: Color(0xFF24252B),
     hoverColor: Color.fromARGB(255, 45, 46, 53),
     scaffoldBackgroundColor: Color(0xFF18191E),
     textTheme: const TextTheme(
@@ -209,7 +211,6 @@ class MyTheme {
         labelLarge: TextStyle(
             fontSize: 16.0, fontWeight: FontWeight.bold, color: accent80)),
     cardColor: Color(0xFF24252B),
-    primarySwatch: Colors.blue,
     visualDensity: VisualDensity.adaptivePlatformDensity,
     tabBarTheme: const TabBarTheme(
       labelColor: Colors.white70,
@@ -227,6 +228,10 @@ class MyTheme {
         : null,
     checkboxTheme:
         const CheckboxThemeData(checkColor: MaterialStatePropertyAll(dark)),
+    colorScheme: ColorScheme.fromSwatch(
+      brightness: Brightness.dark,
+      primarySwatch: Colors.blue,
+    ).copyWith(background: Color(0xFF24252B)),
   ).copyWith(
     extensions: <ThemeExtension<dynamic>>[
       ColorThemeExtension.dark,
