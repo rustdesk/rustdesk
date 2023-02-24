@@ -598,6 +598,7 @@ class _ControlMenu extends StatelessWidget {
         hoverColor: _MenubarTheme.hoverBlueColor,
         ffi: ffi,
         menuChildren: [
+          requestElevation(),
           osPassword(),
           transferFile(context),
           tcpTunneling(context),
@@ -609,6 +610,15 @@ class _ControlMenu extends StatelessWidget {
           switchSides(),
           refresh(),
         ]);
+  }
+
+  requestElevation() {
+    final visible = ffi.elevationModel.showRequestMenu;
+    if (!visible) return Offstage();
+    return _MenuItemButton(
+        child: Text(translate('Request Elevation')),
+        ffi: ffi,
+        onPressed: () => showRequestElevationDialog(id, ffi.dialogManager));
   }
 
   osPassword() {

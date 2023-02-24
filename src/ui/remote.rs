@@ -277,6 +277,8 @@ impl InvokeUiSession for SciterHandler {
 
     fn switch_back(&self, _id: &str) {}
 
+    fn portable_service_running(&self, _running: bool) {}
+
     fn on_voice_call_started(&self) {
         self.call("onVoiceCallStart", &make_args!());
     }
