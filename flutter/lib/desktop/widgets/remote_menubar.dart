@@ -1101,7 +1101,8 @@ class _DisplayMenuState extends State<_DisplayMenu> {
         await bind.sessionSetImageQuality(id: widget.id, value: value);
       }
 
-      return SubmenuButton(
+      return _SubmenuButton(
+        ffi: widget.ffi,
         child: Text(translate('Image Quality')),
         menuChildren: [
           _RadioMenuButton<String>(
@@ -1135,7 +1136,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
             },
             ffi: widget.ffi,
           ),
-        ].map((e) => _buildPointerTrackWidget(e, widget.ffi)).toList(),
+        ],
       );
     });
   }
@@ -1310,7 +1311,8 @@ class _DisplayMenuState extends State<_DisplayMenu> {
         bind.sessionChangePreferCodec(id: widget.id);
       }
 
-      return SubmenuButton(
+      return _SubmenuButton(
+          ffi: widget.ffi,
           child: Text(translate('Codec')),
           menuChildren: [
             _RadioMenuButton<String>(
@@ -1341,7 +1343,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
               onChanged: onChanged,
               ffi: widget.ffi,
             ),
-          ].map((e) => _buildPointerTrackWidget(e, widget.ffi)).toList());
+          ]);
     });
   }
 
@@ -1373,7 +1375,8 @@ class _DisplayMenuState extends State<_DisplayMenu> {
       }
     }
 
-    return SubmenuButton(
+    return _SubmenuButton(
+        ffi: widget.ffi,
         menuChildren: resolutions
             .map((e) => _RadioMenuButton(
                 value: '${e.width}x${e.height}',
@@ -1381,8 +1384,6 @@ class _DisplayMenuState extends State<_DisplayMenu> {
                 onChanged: onChanged,
                 ffi: widget.ffi,
                 child: Text('${e.width}x${e.height}')))
-            .toList()
-            .map((e) => _buildPointerTrackWidget(e, widget.ffi))
             .toList(),
         child: Text(translate("Resolution")));
   }
@@ -1866,6 +1867,28 @@ class _IconSubmenuButtonState extends State<_IconSubmenuButton> {
         .marginSymmetric(
             horizontal: _MenubarTheme.buttonHMargin,
             vertical: _MenubarTheme.buttonVMargin);
+  }
+}
+
+class _SubmenuButton extends StatelessWidget {
+  final List<Widget> menuChildren;
+  final Widget? child;
+  final FFI ffi;
+  const _SubmenuButton({
+    Key? key,
+    required this.menuChildren,
+    required this.child,
+    required this.ffi,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return SubmenuButton(
+      key: key,
+      child: child,
+      menuChildren:
+          menuChildren.map((e) => _buildPointerTrackWidget(e, ffi)).toList(),
+    );
   }
 }
 
