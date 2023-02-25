@@ -23,6 +23,10 @@ import '../../common/shared_state.dart';
 import './popup_menu.dart';
 import './kb_layout_type_chooser.dart';
 
+const _kKeyLegacyMode = 'legacy';
+const _kKeyMapMode = 'map';
+const _kKeyTranslateMode = 'translate';
+
 class MenubarState {
   final kStoreKey = 'remoteMenubarState';
   late RxBool show;
@@ -1538,11 +1542,16 @@ class _KeyboardMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var ffiModel = Provider.of<FfiModel>(context);
-    if (ffiModel.permissions['keyboard'] == false) return Offstage();
-    // Do not support peer 1.1.9.
+    // Do not check permission here?
+    // var ffiModel = Provider.of<FfiModel>(context);
+    // if (ffiModel.permissions['keyboard'] == false) return Offstage();
     if (stateGlobal.grabKeyboard) {
-      bind.sessionSetKeyboardMode(id: id, value: 'map');
+      if (bind.sessionIsKeyboardModeSupported(id: id, mode: _kKeyMapMode)) {
+        bind.sessionSetKeyboardMode(id: id, value: _kKeyMapMode);
+      } else if (bind.sessionIsKeyboardModeSupported(
+          id: id, mode: _kKeyLegacyMode)) {
+        bind.sessionSetKeyboardMode(id: id, value: _kKeyLegacyMode);
+      }
       return Offstage();
     }
     return _IconSubmenuButton(
@@ -1555,13 +1564,13 @@ class _KeyboardMenu extends StatelessWidget {
 
   mode() {
     return futureBuilder(future: () async {
-      return await bind.sessionGetKeyboardMode(id: id) ?? 'legacy';
+      return await bind.sessionGetKeyboardMode(id: id) ?? _kKeyLegacyMode;
     }(), hasData: (data) {
       final groupValue = data as String;
       List<KeyboardModeMenu> modes = [
-        KeyboardModeMenu(key: 'legacy', menu: 'Legacy mode'),
-        KeyboardModeMenu(key: 'map', menu: 'Map mode'),
-        KeyboardModeMenu(key: 'translate', menu: 'Translate mode'),
+        KeyboardModeMenu(key: _kKeyLegacyMode, menu: 'Legacy mode'),
+        KeyboardModeMenu(key: _kKeyMapMode, menu: 'Map mode'),
+        KeyboardModeMenu(key: _kKeyTranslateMode, menu: 'Translate mode'),
       ];
       List<_RadioMenuButton> list = [];
       onChanged(String? value) async {
@@ -1571,13 +1580,13 @@ class _KeyboardMenu extends StatelessWidget {
 
       for (KeyboardModeMenu mode in modes) {
         if (bind.sessionIsKeyboardModeSupported(id: id, mode: mode.key)) {
-          if (mode.key == 'translate') {
+          if (mode.key == _kKeyTranslateMode) {
             if (Platform.isLinux || pi.platform == kPeerPlatformLinux) {
               continue;
             }
           }
           var text = translate(mode.menu);
-          if (mode.key == 'translate') {
+          if (mode.key == _kKeyTranslateMode) {
             text = '$text beta';
           }
           list.add(_RadioMenuButton<String>(
