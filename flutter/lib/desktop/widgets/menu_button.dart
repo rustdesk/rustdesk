@@ -37,7 +37,7 @@ class _MenuButtonState extends State<MenuButton> {
         message: widget.tooltip,
         child: Material(
           type: MaterialType.transparency,
-          child: Ink(
+          child: Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(_borderRadius),
               color: _isHover ? widget.hoverColor : widget.color,

@@ -678,7 +678,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                                   model.cancelJob(item.id);
                                 },
                                 color: MyTheme.accent,
-                                hoverColor: MyTheme.accent80,
+                                hoverColor: MyTheme.button,
                               ),
                             ],
                           ),
