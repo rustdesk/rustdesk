@@ -407,6 +407,12 @@ jobs:
             ;;
           esac
 
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@master
+        with:
+          name: librustdesk-${{ matrix.job.target }}.so
+          path: ./target/${{ matrix.job.target }}/release/liblibrustdesk.so
+
       - name: Build rustdesk
         shell: bash
         env:
