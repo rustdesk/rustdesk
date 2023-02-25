@@ -1,27 +1,27 @@
-use std::{collections::HashMap, ffi::{CStr, CString}, os::raw::c_char};
-use std::str::FromStr;
-
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "android"))]
-use std::thread;
-
-use flutter_rust_bridge::{StreamSink, SyncReturn, ZeroCopyBuffer};
-use serde_json::json;
-
-use hbb_common::{
-    config::{self, LocalConfig, ONLINE, PeerConfig},
-    fs, log,
-};
-use hbb_common::message_proto::KeyboardMode;
-use hbb_common::ResultType;
-
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::common::get_default_sound_input;
 use crate::{
     client::file_trait::FileManager,
+    common::is_keyboard_mode_supported,
     common::make_fd_to_json,
+    flutter::{self, SESSIONS},
     flutter::{session_add, session_start_},
+    ui_interface::{self, *},
 };
-use crate::common::{get_default_sound_input, is_keyboard_mode_supported};
-use crate::flutter::{self, SESSIONS};
-use crate::ui_interface::{self, *};
+use flutter_rust_bridge::{StreamSink, SyncReturn};
+use hbb_common::{
+    config::{self, LocalConfig, PeerConfig, ONLINE},
+    fs, log,
+    message_proto::KeyboardMode,
+    ResultType,
+};
+use serde_json::json;
+use std::{
+    collections::HashMap,
+    ffi::{CStr, CString},
+    os::raw::c_char,
+    str::FromStr,
+};
 
 // use crate::hbbs_http::account::AuthResult;
 
@@ -49,7 +49,7 @@ fn initialize(app_dir: &str) {
 
 pub enum EventToUI {
     Event(String),
-    Rgba(ZeroCopyBuffer<Vec<u8>>),
+    Rgba,
 }
 
 pub fn start_global_event_stream(s: StreamSink<String>, app_type: String) -> ResultType<()> {
@@ -85,8 +85,15 @@ pub fn session_add_sync(
     is_file_transfer: bool,
     is_port_forward: bool,
     switch_uuid: String,
+    force_relay: bool,
 ) -> SyncReturn<String> {
-    if let Err(e) = session_add(&id, is_file_transfer, is_port_forward, &switch_uuid) {
+    if let Err(e) = session_add(
+        &id,
+        is_file_transfer,
+        is_port_forward,
+        &switch_uuid,
+        force_relay,
+    ) {
         SyncReturn(format!("Failed to add session with id {}, {}", &id, e))
     } else {
         SyncReturn("".to_owned())
@@ -133,10 +140,10 @@ pub fn session_login(id: String, password: String, remember: bool) {
 }
 
 pub fn session_close(id: String) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+    if let Some(mut session) = SESSIONS.write().unwrap().remove(&id) {
+        session.close_event_stream();
         session.close();
     }
-    let _ = SESSIONS.write().unwrap().remove(&id);
 }
 
 pub fn session_refresh(id: String) {
@@ -151,16 +158,22 @@ pub fn session_record_screen(id: String, start: bool, width: usize, height: usiz
     }
 }
 
-pub fn session_reconnect(id: String) {
+pub fn session_reconnect(id: String, force_relay: bool) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.reconnect();
+        session.reconnect(force_relay);
     }
 }
 
 pub fn session_toggle_option(id: String, value: String) {
+    let mut is_found = false;
     if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
-        log::warn!("toggle option {}", value);
-        session.toggle_option(value);
+        is_found = true;
+        log::warn!("toggle option {}", &value);
+        session.toggle_option(value.clone());
+    }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    if is_found && value == "disable-clipboard" {
+        crate::flutter::update_text_clipboard_required();
     }
 }
 
@@ -513,6 +526,19 @@ pub fn session_elevate_with_logon(id: String, username: String, password: String
 pub fn session_switch_sides(id: String) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
         session.switch_sides();
+    }
+}
+
+pub fn session_change_resolution(id: String, width: i32, height: i32) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.change_resolution(width, height);
+    }
+}
+
+pub fn session_set_size(_id: String, _width: i32, _height: i32) {
+    #[cfg(feature = "flutter_texture_render")]
+    if let Some(session) = SESSIONS.write().unwrap().get_mut(&_id) {
+        session.set_size(_width, _height);
     }
 }
 
@@ -931,7 +957,7 @@ pub fn main_start_dbus_server() {
     {
         use crate::dbus::start_dbus_server;
         // spawn new thread to start dbus server
-        thread::spawn(|| {
+        std::thread::spawn(|| {
             let _ = start_dbus_server();
         });
     }
@@ -1121,13 +1147,6 @@ pub fn cm_switch_back(conn_id: i32) {
     crate::ui_cm_interface::switch_back(conn_id);
 }
 
-pub fn main_get_icon() -> String {
-    #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
-    return ui_interface::get_icon();
-    #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
-    return String::new();
-}
-
 pub fn main_get_build_date() -> String {
     crate::BUILD_DATE.to_string()
 }
@@ -1181,6 +1200,9 @@ pub fn main_start_grab_keyboard() -> SyncReturn<bool> {
         return SyncReturn(false);
     }
     crate::keyboard::client::start_grab_loop();
+    if !is_can_input_monitoring(false) {
+        return SyncReturn(false);
+    }
     SyncReturn(true)
 }
 
@@ -1210,6 +1232,10 @@ pub fn main_is_share_rdp() -> SyncReturn<bool> {
 
 pub fn main_is_rdp_service_open() -> SyncReturn<bool> {
     SyncReturn(is_rdp_service_open())
+}
+
+pub fn main_set_share_rdp(enable: bool) {
+    set_share_rdp(enable)
 }
 
 pub fn main_goto_install() -> SyncReturn<bool> {
@@ -1278,13 +1304,24 @@ pub fn main_is_login_wayland() -> SyncReturn<bool> {
 
 pub fn main_start_pa() {
     #[cfg(target_os = "linux")]
-    thread::spawn(crate::ipc::start_pa);
+    std::thread::spawn(crate::ipc::start_pa);
 }
 
 pub fn main_hide_docker() -> SyncReturn<bool> {
     #[cfg(target_os = "macos")]
     crate::platform::macos::hide_dock();
     SyncReturn(true)
+}
+
+pub fn main_use_texture_render() -> SyncReturn<bool> {
+    #[cfg(not(feature = "flutter_texture_render"))]
+    {
+        SyncReturn(false)
+    }
+    #[cfg(feature = "flutter_texture_render")]
+    {
+        SyncReturn(true)
+    }
 }
 
 pub fn cm_start_listen_ipc_thread() {
@@ -1298,7 +1335,7 @@ pub fn cm_start_listen_ipc_thread() {
 /// * macOS only
 pub fn main_start_ipc_url_server() {
     #[cfg(target_os = "macos")]
-    thread::spawn(move || crate::server::start_ipc_url_server());
+    std::thread::spawn(move || crate::server::start_ipc_url_server());
 }
 
 /// Send a url scheme throught the ipc.
@@ -1307,16 +1344,16 @@ pub fn main_start_ipc_url_server() {
 #[allow(unused_variables)]
 pub fn send_url_scheme(_url: String) {
     #[cfg(target_os = "macos")]
-    thread::spawn(move || crate::ui::macos::handle_url_scheme(_url));
+    std::thread::spawn(move || crate::handle_url_scheme(_url));
 }
 
 #[cfg(target_os = "android")]
 pub mod server_side {
     use hbb_common::log;
     use jni::{
-        JNIEnv,
         objects::{JClass, JString},
         sys::jstring,
+        JNIEnv,
     };
 
     use crate::start_server;
@@ -1327,7 +1364,7 @@ pub mod server_side {
         _class: JClass,
     ) {
         log::debug!("startServer from java");
-        thread::spawn(move || start_server(true));
+        std::thread::spawn(move || start_server(true));
     }
 
     #[no_mangle]

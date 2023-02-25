@@ -435,9 +435,6 @@ function toggleMenuState() {
     var c = handler.get_option("codec-preference");
     if (!c) c = "auto";
     values.push(c);
-    var a = handler.get_audio_mode();
-    if (!a) a = "guest-to-host";
-    values.push(a);
     for (var el in $$(menu#display-options li)) {
         el.attributes.toggleClass("selected", values.indexOf(el.id) >= 0);
     }
@@ -478,6 +475,14 @@ if (!(is_file_transfer || is_port_forward)) {
 
 handler.updatePi = function(v) {
     pi = v;
+    header.update();
+    if (is_port_forward) {
+        view.windowState = View.WINDOW_MINIMIZED;
+    }
+}
+
+handler.updateDisplays = function(v) {
+    pi.displays = v;
     header.update();
     if (is_port_forward) {
         view.windowState = View.WINDOW_MINIMIZED;

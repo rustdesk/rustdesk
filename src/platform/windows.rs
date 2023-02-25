@@ -5,7 +5,9 @@ use crate::license::*;
 use hbb_common::{
     allow_err, bail,
     config::{self, Config},
-    log, sleep, timeout, tokio,
+    log,
+    message_proto::Resolution,
+    sleep, timeout, tokio,
 };
 use std::io::prelude::*;
 use std::{
@@ -833,8 +835,8 @@ fn get_default_install_path() -> String {
 
 pub fn check_update_broker_process() -> ResultType<()> {
     // let (_, path, _, _) = get_install_info();
-    let process_exe = crate::ui::win_privacy::INJECTED_PROCESS_EXE;
-    let origin_process_exe = crate::ui::win_privacy::ORIGIN_PROCESS_EXE;
+    let process_exe = crate::win_privacy::INJECTED_PROCESS_EXE;
+    let origin_process_exe = crate::win_privacy::ORIGIN_PROCESS_EXE;
 
     let exe_file = std::env::current_exe()?;
     if exe_file.parent().is_none() {
@@ -919,8 +921,8 @@ pub fn copy_exe_cmd(src_exe: &str, _exe: &str, path: &str) -> String {
         ",
         main_exe = main_exe,
         path = path,
-        ORIGIN_PROCESS_EXE = crate::ui::win_privacy::ORIGIN_PROCESS_EXE,
-        broker_exe = crate::ui::win_privacy::INJECTED_PROCESS_EXE,
+        ORIGIN_PROCESS_EXE = crate::win_privacy::ORIGIN_PROCESS_EXE,
+        broker_exe = crate::win_privacy::INJECTED_PROCESS_EXE,
     );
 }
 
@@ -938,7 +940,7 @@ pub fn update_me() -> ResultType<()> {
         {lic}
     ",
         copy_exe = copy_exe_cmd(&src_exe, &exe, &path),
-        broker_exe = crate::ui::win_privacy::INJECTED_PROCESS_EXE,
+        broker_exe = crate::win_privacy::INJECTED_PROCESS_EXE,
         app_name = crate::get_app_name(),
         lic = register_licence(),
         cur_pid = get_current_pid(),
@@ -1203,7 +1205,7 @@ fn get_before_uninstall() -> String {
     netsh advfirewall firewall delete rule name=\"{app_name} Service\"
     ",
         app_name = app_name,
-        broker_exe = crate::ui::win_privacy::INJECTED_PROCESS_EXE,
+        broker_exe = crate::win_privacy::INJECTED_PROCESS_EXE,
         ext = ext,
         cur_pid = get_current_pid(),
     )
@@ -1783,4 +1785,90 @@ pub fn set_path_permission(dir: &PathBuf, permission: &str) -> ResultType<()> {
         .arg("/T")
         .spawn()?;
     Ok(())
+}
+
+pub fn resolutions(name: &str) -> Vec<Resolution> {
+    unsafe {
+        let mut dm: DEVMODEW = std::mem::zeroed();
+        let wname = wide_string(name);
+        let len = if wname.len() <= dm.dmDeviceName.len() {
+            wname.len()
+        } else {
+            dm.dmDeviceName.len()
+        };
+        std::ptr::copy_nonoverlapping(wname.as_ptr(), dm.dmDeviceName.as_mut_ptr(), len);
+        dm.dmSize = std::mem::size_of::<DEVMODEW>() as _;
+        let mut v = vec![];
+        let mut num = 0;
+        loop {
+            if EnumDisplaySettingsW(NULL as _, num, &mut dm) == 0 {
+                break;
+            }
+            let r = Resolution {
+                width: dm.dmPelsWidth as _,
+                height: dm.dmPelsHeight as _,
+                ..Default::default()
+            };
+            if !v.contains(&r) {
+                v.push(r);
+            }
+            num += 1;
+        }
+        v
+    }
+}
+
+pub fn current_resolution(name: &str) -> ResultType<Resolution> {
+    unsafe {
+        let mut dm: DEVMODEW = std::mem::zeroed();
+        dm.dmSize = std::mem::size_of::<DEVMODEW>() as _;
+        let wname = wide_string(name);
+        if EnumDisplaySettingsW(wname.as_ptr(), ENUM_CURRENT_SETTINGS, &mut dm) == 0 {
+            bail!(
+                "failed to get currrent resolution, errno={}",
+                GetLastError()
+            );
+        }
+        let r = Resolution {
+            width: dm.dmPelsWidth as _,
+            height: dm.dmPelsHeight as _,
+            ..Default::default()
+        };
+        Ok(r)
+    }
+}
+
+pub fn change_resolution(name: &str, width: usize, height: usize) -> ResultType<()> {
+    unsafe {
+        let mut dm: DEVMODEW = std::mem::zeroed();
+        if FALSE == EnumDisplaySettingsW(NULL as _, ENUM_CURRENT_SETTINGS, &mut dm) {
+            bail!("EnumDisplaySettingsW failed, errno={}", GetLastError());
+        }
+        let wname = wide_string(name);
+        let len = if wname.len() <= dm.dmDeviceName.len() {
+            wname.len()
+        } else {
+            dm.dmDeviceName.len()
+        };
+        std::ptr::copy_nonoverlapping(wname.as_ptr(), dm.dmDeviceName.as_mut_ptr(), len);
+        dm.dmSize = std::mem::size_of::<DEVMODEW>() as _;
+        dm.dmPelsWidth = width as _;
+        dm.dmPelsHeight = height as _;
+        dm.dmFields = DM_PELSHEIGHT | DM_PELSWIDTH;
+        let res = ChangeDisplaySettingsExW(
+            wname.as_ptr(),
+            &mut dm,
+            NULL as _,
+            CDS_UPDATEREGISTRY | CDS_GLOBAL | CDS_RESET,
+            NULL,
+        );
+        if res != DISP_CHANGE_SUCCESSFUL {
+            bail!(
+                "ChangeDisplaySettingsExW failed, res={}, errno={}",
+                res,
+                GetLastError()
+            );
+        }
+        Ok(())
+    }
 }

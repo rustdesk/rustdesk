@@ -1,4 +1,6 @@
 use hbb_common::log;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use hbb_common::platform::register_breakdown_handler;
 
 /// shared by flutter and sciter main function
 ///
@@ -38,10 +40,11 @@ pub fn core_main() -> Option<Vec<String>> {
         }
         i += 1;
     }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    register_breakdown_handler();
     #[cfg(target_os = "linux")]
     #[cfg(feature = "flutter")]
     {
-        crate::platform::linux::register_breakdown_handler();
         let (k, v) = ("LIBGL_ALWAYS_SOFTWARE", "true");
         if !hbb_common::config::Config::get_option("allow-always-software-render").is_empty() {
             std::env::set_var(k, v);
@@ -164,9 +167,6 @@ pub fn core_main() -> Option<Vec<String>> {
                 #[cfg(feature = "with_rc")]
                 hbb_common::allow_err!(crate::rc::extract_resources(&args[1]));
                 return None;
-            } else if args[0] == "--tray" {
-                crate::tray::start_tray();
-                return None;
             } else if args[0] == "--portable-service" {
                 crate::platform::elevate_or_run_as_system(
                     click_setup,
@@ -183,34 +183,24 @@ pub fn core_main() -> Option<Vec<String>> {
                 std::fs::remove_file(&args[1]).ok();
                 return None;
             }
+        } else if args[0] == "--tray" {
+            crate::tray::start_tray();
+            return None;
         } else if args[0] == "--service" {
             log::info!("start --service");
             crate::start_os_service();
             return None;
         } else if args[0] == "--server" {
             log::info!("start --server with user {}", crate::username());
-            #[cfg(target_os = "windows")]
+            #[cfg(any(target_os = "linux", target_os = "windows"))]
             {
                 crate::start_server(true);
                 return None;
             }
             #[cfg(target_os = "macos")]
             {
-                std::thread::spawn(move || crate::start_server(true));
-                crate::platform::macos::hide_dock();
-                crate::ui::macos::make_tray();
-                return None;
-            }
-            #[cfg(target_os = "linux")]
-            {
                 let handler = std::thread::spawn(move || crate::start_server(true));
-                // Show the tray in linux only when current user is a normal user
-                // [Note]
-                // As for GNOME, the tray cannot be shown in user's status bar.
-                // As for KDE, the tray can be shown without user's theme.
-                if !crate::platform::is_root() {
-                    crate::tray::start_tray();
-                }
+                crate::tray::start_tray();
                 // prevent server exit when encountering errors from tray
                 hbb_common::allow_err!(handler.join());
             }
@@ -349,6 +339,6 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
             Some(Vec::new())
         } else {
             None
-        }
+        };
     }
 }

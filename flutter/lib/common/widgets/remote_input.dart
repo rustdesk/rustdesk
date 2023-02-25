@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_hbb/models/state_model.dart';
 
 import '../../models/input_model.dart';
 
@@ -26,8 +25,7 @@ class RawKeyFocusScope extends StatelessWidget {
             canRequestFocus: true,
             focusNode: focusNode,
             onFocusChange: onFocusChange,
-            onKey:
-                stateGlobal.grabKeyboard ? inputModel.handleRawKeyEvent : null,
+            onKey: inputModel.handleRawKeyEvent,
             child: child));
   }
 }

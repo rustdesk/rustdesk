@@ -1,16 +1,16 @@
 use super::{CursorData, ResultType};
+use hbb_common::libc::{c_char, c_int, c_long, c_void};
 pub use hbb_common::platform::linux::*;
-use hbb_common::{allow_err, bail, log};
-use libc::{c_char, c_int, c_void};
+use hbb_common::{allow_err, anyhow::anyhow, bail, log, message_proto::Resolution};
 use std::{
     cell::RefCell,
-    collections::HashMap,
     path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
 };
+use xrandr_parser::Parser;
 
 type Xdo = *const c_void;
 
@@ -54,8 +54,8 @@ pub struct xcb_xfixes_get_cursor_image {
     pub height: u16,
     pub xhot: u16,
     pub yhot: u16,
-    pub cursor_serial: libc::c_long,
-    pub pixels: *const libc::c_long,
+    pub cursor_serial: c_long,
+    pub pixels: *const c_long,
 }
 
 pub fn get_cursor_pos() -> Option<(i32, i32)> {
@@ -637,91 +637,60 @@ pub fn get_double_click_time() -> u32 {
             settings,
             property.as_ptr(),
             &mut double_click_time as *mut u32,
-            0 as *const libc::c_void,
+            0 as *const c_void,
         );
         double_click_time
     }
 }
 
-/// forever: may not work
-pub fn system_message(title: &str, msg: &str, forever: bool) -> ResultType<()> {
-    let cmds: HashMap<&str, Vec<&str>> = HashMap::from([
-        ("notify-send", [title, msg].to_vec()),
-        (
-            "zenity",
-            [
-                "--info",
-                "--timeout",
-                if forever { "0" } else { "3" },
-                "--title",
-                title,
-                "--text",
-                msg,
-            ]
-            .to_vec(),
-        ),
-        ("kdialog", ["--title", title, "--msgbox", msg].to_vec()),
-        (
-            "xmessage",
-            [
-                "-center",
-                "-timeout",
-                if forever { "0" } else { "3" },
-                title,
-                msg,
-            ]
-            .to_vec(),
-        ),
-    ]);
-    for (k, v) in cmds {
-        if std::process::Command::new(k).args(v).spawn().is_ok() {
-            return Ok(());
+pub fn resolutions(name: &str) -> Vec<Resolution> {
+    let mut v = vec![];
+    let mut parser = Parser::new();
+    if parser.parse().is_ok() {
+        if let Ok(connector) = parser.get_connector(name) {
+            if let Ok(resolutions) = &connector.available_resolutions() {
+                for r in resolutions {
+                    if let Ok(width) = r.horizontal.parse::<i32>() {
+                        if let Ok(height) = r.vertical.parse::<i32>() {
+                            let resolution = Resolution {
+                                width,
+                                height,
+                                ..Default::default()
+                            };
+                            if !v.contains(&resolution) {
+                                v.push(resolution);
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
-    bail!("failed to post system message");
+    v
 }
 
-extern "C" fn breakdown_signal_handler(sig: i32) {
-    let mut stack = vec![];
-    backtrace::trace(|frame| {
-        backtrace::resolve_frame(frame, |symbol| {
-            if let Some(name) = symbol.name() {
-                stack.push(name.to_string());
-            }
-        });
-        true // keep going to the next frame
-    });
-    let mut info = String::default();
-    if stack.iter().any(|s| {
-        s.contains(&"nouveau_pushbuf_kick")
-            || s.to_lowercase().contains("nvidia")
-            || s.contains("gdk_window_end_draw_frame")
-    }) {
-        hbb_common::config::Config::set_option(
-            "allow-always-software-render".to_string(),
-            "Y".to_string(),
-        );
-        info = "Always use software rendering will be set.".to_string();
-        log::info!("{}", info);
-    }
-    log::error!(
-        "Got signal {} and exit. stack:\n{}",
-        sig,
-        stack.join("\n").to_string()
-    );
-    if !info.is_empty() {
-        system_message(
-            "RustDesk",
-            &format!("Got signal {} and exit.{}", sig, info),
-            true,
-        )
-        .ok();
-    }
-    std::process::exit(0);
+pub fn current_resolution(name: &str) -> ResultType<Resolution> {
+    let mut parser = Parser::new();
+    parser.parse().map_err(|e| anyhow!(e))?;
+    let connector = parser.get_connector(name).map_err(|e| anyhow!(e))?;
+    let r = connector.current_resolution();
+    let width = r.horizontal.parse::<i32>()?;
+    let height = r.vertical.parse::<i32>()?;
+    Ok(Resolution {
+        width,
+        height,
+        ..Default::default()
+    })
 }
 
-pub fn register_breakdown_handler() {
-    unsafe {
-        libc::signal(libc::SIGSEGV, breakdown_signal_handler as _);
-    }
+pub fn change_resolution(name: &str, width: usize, height: usize) -> ResultType<()> {
+    std::process::Command::new("xrandr")
+        .args(vec![
+            "--output",
+            name,
+            "--mode",
+            &format!("{}x{}", width, height),
+        ])
+        .spawn()?;
+    Ok(())
 }

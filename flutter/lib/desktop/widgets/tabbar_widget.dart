@@ -234,7 +234,7 @@ class DesktopTab extends StatelessWidget {
     Key? key,
     required this.controller,
     this.showLogo = true,
-    this.showTitle = true,
+    this.showTitle = false,
     this.showMinimize = true,
     this.showMaximize = true,
     this.showClose = true,
@@ -548,13 +548,20 @@ class WindowActionPanelState extends State<WindowActionPanel>
       if (rustDeskWinManager.getActiveWindows().contains(kMainWindowId)) {
         await rustDeskWinManager.unregisterActiveWindow(kMainWindowId);
       }
-      // `hide` must be placed after unregisterActiveWindow, because once all windows are hidden,
-      // flutter closes the application on macOS. We should ensure the post-run logic has ran successfully.
-      // e.g.: saving window position.
+      // macOS specific workaround, the window is not hiding when in fullscreen.
+      if (Platform.isMacOS && await windowManager.isFullScreen()) {
+        await windowManager.setFullScreen(false);
+        await Future.delayed(Duration(seconds: 1));
+      }
       await windowManager.hide();
     } else {
       // it's safe to hide the subwindow
-      await WindowController.fromWindowId(kWindowId!).hide();
+      final controller = WindowController.fromWindowId(kWindowId!);
+      if (Platform.isMacOS && await controller.isFullScreen()) {
+        await controller.setFullscreen(false);
+        await Future.delayed(Duration(seconds: 1));
+      }
+      await controller.hide();
       await Future.wait([
         rustDeskWinManager
             .call(WindowType.Main, kWindowEventHide, {"id": kWindowId!}),

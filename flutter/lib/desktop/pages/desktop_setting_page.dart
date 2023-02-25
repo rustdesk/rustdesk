@@ -108,7 +108,7 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
   Widget build(BuildContext context) {
     super.build(context);
     return Scaffold(
-      backgroundColor: Theme.of(context).backgroundColor,
+      backgroundColor: Theme.of(context).colorScheme.background,
       body: Row(
         children: <Widget>[
           SizedBox(
@@ -128,7 +128,7 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
                   scrollController: controller,
                   child: PageView(
                     controller: controller,
-                    physics: NeverScrollableScrollPhysics(),
+                    physics: DraggableNeverScrollableScrollPhysics(),
                     children: const [
                       _General(),
                       _Safety(),
@@ -170,7 +170,7 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
     return DesktopScrollWrapper(
         scrollController: scrollController,
         child: ListView(
-          physics: NeverScrollableScrollPhysics(),
+          physics: DraggableNeverScrollableScrollPhysics(),
           controller: scrollController,
           children: tabs
               .asMap()
@@ -234,7 +234,7 @@ class _GeneralState extends State<_General> {
     return DesktopScrollWrapper(
         scrollController: scrollController,
         child: ListView(
-          physics: NeverScrollableScrollPhysics(),
+          physics: DraggableNeverScrollableScrollPhysics(),
           controller: scrollController,
           children: [
             theme(),
@@ -319,7 +319,7 @@ class _GeneralState extends State<_General> {
       bind.mainSetOption(key: 'audio-input', value: device);
     }
 
-    return _futureBuilder(future: () async {
+    return futureBuilder(future: () async {
       List<String> devices = (await bind.mainGetSoundInputs()).toList();
       if (Platform.isWindows) {
         devices.insert(0, 'System Sound');
@@ -346,7 +346,7 @@ class _GeneralState extends State<_General> {
   }
 
   Widget record(BuildContext context) {
-    return _futureBuilder(future: () async {
+    return futureBuilder(future: () async {
       String customDirectory =
           await bind.mainGetOption(key: 'video-save-directory');
       String defaultDirectory = await bind.mainDefaultVideoSaveDirectory();
@@ -399,7 +399,7 @@ class _GeneralState extends State<_General> {
   }
 
   Widget language() {
-    return _futureBuilder(future: () async {
+    return futureBuilder(future: () async {
       String langs = await bind.mainGetLangs();
       String lang = bind.mainGetLocalOption(key: kCommConfKeyLang);
       return {'langs': langs, 'lang': lang};
@@ -456,7 +456,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     return DesktopScrollWrapper(
         scrollController: scrollController,
         child: SingleChildScrollView(
-            physics: NeverScrollableScrollPhysics(),
+            physics: DraggableNeverScrollableScrollPhysics(),
             controller: scrollController,
             child: Column(
               children: [
@@ -487,7 +487,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
 
   Widget _permissions(context, bool stopService) {
     bool enabled = !locked;
-    return _futureBuilder(future: () async {
+    return futureBuilder(future: () async {
       return await bind.mainGetOption(key: 'access-mode');
     }(), hasData: (data) {
       String accessMode = data! as String;
@@ -650,7 +650,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                                   context, onChanged != null)),
                         ),
                       ],
-                    ).paddingSymmetric(horizontal: 10),
+                    ).paddingOnly(right: 10),
                     onTap: () => onChanged?.call(value),
                   ))
               .toList();
@@ -675,6 +675,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
             if (usePassword) radios[0],
             if (usePassword)
               _SubLabeledWidget(
+                  context,
                   'One-time password length',
                   Row(
                     children: [
@@ -701,11 +702,39 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
         child: _OptionCheckBox(context, 'Enable RDP', 'enable-rdp',
             enabled: enabled),
       ),
+      shareRdp(context, enabled),
       _OptionCheckBox(context, 'Deny LAN Discovery', 'enable-lan-discovery',
           reverse: true, enabled: enabled),
       ...directIp(context),
       whitelist(),
     ]);
+  }
+
+  shareRdp(BuildContext context, bool enabled) {
+    onChanged(bool b) async {
+      await bind.mainSetShareRdp(enable: b);
+      setState(() {});
+    }
+
+    bool value = bind.mainIsShareRdp();
+    return Offstage(
+      offstage: !(Platform.isWindows && bind.mainIsRdpServiceOpen()),
+      child: GestureDetector(
+          child: Row(
+            children: [
+              Checkbox(
+                      value: value,
+                      onChanged: enabled ? (_) => onChanged(!value) : null)
+                  .marginOnly(right: 5),
+              Expanded(
+                child: Text(translate('Enable RDP session sharing'),
+                    style:
+                        TextStyle(color: _disabledTextColor(context, enabled))),
+              )
+            ],
+          ).marginOnly(left: _kCheckBoxLeftMargin),
+          onTap: enabled ? () => onChanged(!value) : null),
+    );
   }
 
   List<Widget> directIp(BuildContext context) {
@@ -715,7 +744,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     return [
       _OptionCheckBox(context, 'Enable Direct IP Access', 'direct-server',
           update: update, enabled: !locked),
-      _futureBuilder(
+      futureBuilder(
         future: () async {
           String enabled = await bind.mainGetOption(key: 'direct-server');
           String port = await bind.mainGetOption(key: 'direct-access-port');
@@ -728,9 +757,10 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
           controller.text = data['port'].toString();
           return Offstage(
             offstage: !enabled,
-            child: Row(children: [
-              _SubLabeledWidget(
-                'Port',
+            child: _SubLabeledWidget(
+              context,
+              'Port',
+              Row(children: [
                 SizedBox(
                   width: 80,
                   child: TextField(
@@ -744,28 +774,29 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                     textAlign: TextAlign.end,
                     decoration: const InputDecoration(
                       hintText: '21118',
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.only(right: 5),
+                      border: OutlineInputBorder(),
+                      contentPadding:
+                          EdgeInsets.only(bottom: 10, top: 10, right: 10),
                       isCollapsed: true,
                     ),
-                  ),
+                  ).marginOnly(right: 15),
                 ),
-                enabled: enabled && !locked,
-              ).marginOnly(left: 5),
-              Obx(() => ElevatedButton(
-                    onPressed: applyEnabled.value && enabled && !locked
-                        ? () async {
-                            applyEnabled.value = false;
-                            await bind.mainSetOption(
-                                key: 'direct-access-port',
-                                value: controller.text);
-                          }
-                        : null,
-                    child: Text(
-                      translate('Apply'),
-                    ),
-                  ).marginOnly(left: 20))
-            ]),
+                Obx(() => ElevatedButton(
+                      onPressed: applyEnabled.value && enabled && !locked
+                          ? () async {
+                              applyEnabled.value = false;
+                              await bind.mainSetOption(
+                                  key: 'direct-access-port',
+                                  value: controller.text);
+                            }
+                          : null,
+                      child: Text(
+                        translate('Apply'),
+                      ),
+                    ))
+              ]),
+              enabled: enabled && !locked,
+            ),
           );
         },
       ),
@@ -774,7 +805,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
 
   Widget whitelist() {
     bool enabled = !locked;
-    return _futureBuilder(future: () async {
+    return futureBuilder(future: () async {
       return await bind.mainGetOption(key: 'whitelist');
     }(), hasData: (data) {
       RxBool hasWhitelist = (data as String).isNotEmpty.obs;
@@ -880,7 +911,7 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
         scrollController: scrollController,
         child: ListView(
             controller: scrollController,
-            physics: NeverScrollableScrollPhysics(),
+            physics: DraggableNeverScrollableScrollPhysics(),
             children: [
               _lock(locked, 'Unlock Network Settings', () {
                 locked = false;
@@ -900,7 +931,7 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
   }
 
   server(bool enabled) {
-    return _futureBuilder(future: () async {
+    return futureBuilder(future: () async {
       return await bind.mainGetOptions();
     }(), hasData: (data) {
       // Setting page is not modal, oldOptions should only be used when getting options, never when setting.
@@ -1043,7 +1074,7 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [_Button('Apply', submit, enabled: enabled)],
-            ).marginOnly(top: 15),
+            ).marginOnly(top: 10),
           ],
         )
       ]);
@@ -1066,7 +1097,7 @@ class _DisplayState extends State<_Display> {
         scrollController: scrollController,
         child: ListView(
             controller: scrollController,
-            physics: NeverScrollableScrollPhysics(),
+            physics: DraggableNeverScrollableScrollPhysics(),
             children: [
               viewStyle(context),
               scrollStyle(context),
@@ -1306,7 +1337,7 @@ class _AccountState extends State<_Account> {
     return DesktopScrollWrapper(
         scrollController: scrollController,
         child: ListView(
-          physics: NeverScrollableScrollPhysics(),
+          physics: DraggableNeverScrollableScrollPhysics(),
           controller: scrollController,
           children: [
             _Card(title: 'Account', children: [accountAction()]),
@@ -1335,7 +1366,7 @@ class _About extends StatefulWidget {
 class _AboutState extends State<_About> {
   @override
   Widget build(BuildContext context) {
-    return _futureBuilder(future: () async {
+    return futureBuilder(future: () async {
       final license = await bind.mainGetLicense();
       final version = await bind.mainGetVersion();
       final buildDate = await bind.mainGetBuildDate();
@@ -1350,7 +1381,7 @@ class _AboutState extends State<_About> {
           scrollController: scrollController,
           child: SingleChildScrollView(
             controller: scrollController,
-            physics: NeverScrollableScrollPhysics(),
+            physics: DraggableNeverScrollableScrollPhysics(),
             child: _Card(title: '${translate('About')} RustDesk', children: [
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1469,7 +1500,7 @@ Widget _OptionCheckBox(BuildContext context, String label, String key,
     bool enabled = true,
     Icon? checkedIcon,
     bool? fakeValue}) {
-  return _futureBuilder(
+  return futureBuilder(
       future: bind.mainGetOption(key: key),
       hasData: (data) {
         bool value = option2bool(key, data.toString());
@@ -1586,61 +1617,20 @@ Widget _SubButton(String label, Function() onPressed, [bool enabled = true]) {
 }
 
 // ignore: non_constant_identifier_names
-Widget _SubLabeledWidget(String label, Widget child, {bool enabled = true}) {
-  RxBool hover = false.obs;
+Widget _SubLabeledWidget(BuildContext context, String label, Widget child,
+    {bool enabled = true}) {
   return Row(
     children: [
-      MouseRegion(
-          onEnter: (_) => hover.value = true,
-          onExit: (_) => hover.value = false,
-          child: Obx(
-            () {
-              return Container(
-                  height: 32,
-                  decoration: BoxDecoration(
-                      border: Border.all(
-                          color: hover.value && enabled
-                              ? const Color(0xFFD7D7D7)
-                              : const Color(0xFFCBCBCB),
-                          width: hover.value && enabled ? 2 : 1)),
-                  child: Row(
-                    children: [
-                      Container(
-                        height: 28,
-                        color: (hover.value && enabled)
-                            ? const Color(0xFFD7D7D7)
-                            : const Color(0xFFCBCBCB),
-                        alignment: Alignment.center,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 5, vertical: 2),
-                        child: Text(
-                          '${translate(label)}: ',
-                          style: const TextStyle(fontWeight: FontWeight.w300),
-                        ),
-                      ).paddingAll(2),
-                      child,
-                    ],
-                  ));
-            },
-          )),
+      Text(
+        '${translate(label)}: ',
+        style: TextStyle(color: _disabledTextColor(context, enabled)),
+      ),
+      SizedBox(
+        width: 10,
+      ),
+      child,
     ],
   ).marginOnly(left: _kContentHSubMargin);
-}
-
-Widget _futureBuilder(
-    {required Future? future, required Widget Function(dynamic data) hasData}) {
-  return FutureBuilder(
-      future: future,
-      builder: (BuildContext context, AsyncSnapshot snapshot) {
-        if (snapshot.hasData) {
-          return hasData(snapshot.data!);
-        } else {
-          if (snapshot.hasError) {
-            debugPrint(snapshot.error.toString());
-          }
-          return Container();
-        }
-      });
 }
 
 Widget _lock(
@@ -1691,33 +1681,30 @@ _LabeledTextField(
     bool secure) {
   return Row(
     children: [
-      Spacer(flex: 1),
+      ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 140),
+          child: Text(
+            '${translate(label)}:',
+            textAlign: TextAlign.right,
+            style: TextStyle(
+                fontSize: 16, color: _disabledTextColor(context, enabled)),
+          ).marginOnly(right: 10)),
       Expanded(
-        flex: 4,
-        child: Text(
-          '${translate(label)}:',
-          textAlign: TextAlign.right,
-          style: TextStyle(color: _disabledTextColor(context, enabled)),
-        ),
-      ),
-      Spacer(flex: 1),
-      Expanded(
-        flex: 10,
         child: TextField(
             controller: controller,
             enabled: enabled,
             obscureText: secure,
             decoration: InputDecoration(
                 isDense: true,
-                contentPadding: EdgeInsets.symmetric(vertical: 15),
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.fromLTRB(14, 15, 14, 15),
                 errorText: errorText.isNotEmpty ? errorText : null),
             style: TextStyle(
               color: _disabledTextColor(context, enabled),
             )),
       ),
-      Spacer(flex: 1),
     ],
-  );
+  ).marginOnly(bottom: 8);
 }
 
 // ignore: must_be_immutable
@@ -1804,6 +1791,7 @@ void changeSocks5Proxy() async {
   var proxyController = TextEditingController(text: proxy);
   var userController = TextEditingController(text: username);
   var pwdController = TextEditingController(text: password);
+  RxBool obscure = true.obs;
 
   var isInProgress = false;
   gFFI.dialogManager.show((setState, close) {
@@ -1849,35 +1837,30 @@ void changeSocks5Proxy() async {
             Row(
               children: [
                 ConstrainedBox(
-                    constraints: const BoxConstraints(minWidth: 100),
-                    child: Text('${translate("Hostname")}:')
-                        .marginOnly(bottom: 16.0)),
-                const SizedBox(
-                  width: 24.0,
-                ),
+                    constraints: const BoxConstraints(minWidth: 140),
+                    child: Text(
+                      '${translate("Hostname")}:',
+                      textAlign: TextAlign.right,
+                    ).marginOnly(right: 10)),
                 Expanded(
                   child: TextField(
                     decoration: InputDecoration(
                         border: const OutlineInputBorder(),
                         errorText: proxyMsg.isNotEmpty ? proxyMsg : null),
                     controller: proxyController,
-                    focusNode: FocusNode()..requestFocus(),
+                    autofocus: true,
                   ),
                 ),
               ],
-            ),
-            const SizedBox(
-              height: 8.0,
-            ),
+            ).marginOnly(bottom: 8),
             Row(
               children: [
                 ConstrainedBox(
-                    constraints: const BoxConstraints(minWidth: 100),
-                    child: Text('${translate("Username")}:')
-                        .marginOnly(bottom: 16.0)),
-                const SizedBox(
-                  width: 24.0,
-                ),
+                    constraints: const BoxConstraints(minWidth: 140),
+                    child: Text(
+                      '${translate("Username")}:',
+                      textAlign: TextAlign.right,
+                    ).marginOnly(right: 10)),
                 Expanded(
                   child: TextField(
                     decoration: const InputDecoration(
@@ -1887,32 +1870,30 @@ void changeSocks5Proxy() async {
                   ),
                 ),
               ],
-            ),
-            const SizedBox(
-              height: 8.0,
-            ),
+            ).marginOnly(bottom: 8),
             Row(
               children: [
                 ConstrainedBox(
-                    constraints: const BoxConstraints(minWidth: 100),
-                    child: Text('${translate("Password")}:')
-                        .marginOnly(bottom: 16.0)),
-                const SizedBox(
-                  width: 24.0,
-                ),
+                    constraints: const BoxConstraints(minWidth: 140),
+                    child: Text(
+                      '${translate("Password")}:',
+                      textAlign: TextAlign.right,
+                    ).marginOnly(right: 10)),
                 Expanded(
-                  child: TextField(
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                    ),
-                    controller: pwdController,
-                  ),
+                  child: Obx(() => TextField(
+                        obscureText: obscure.value,
+                        decoration: InputDecoration(
+                            border: const OutlineInputBorder(),
+                            suffixIcon: IconButton(
+                                onPressed: () => obscure.value = !obscure.value,
+                                icon: Icon(obscure.value
+                                    ? Icons.visibility_off
+                                    : Icons.visibility))),
+                        controller: pwdController,
+                      )),
                 ),
               ],
-            ),
-            const SizedBox(
-              height: 8.0,
-            ),
+            ).marginOnly(bottom: 8),
             Offstage(
                 offstage: !isInProgress, child: const LinearProgressIndicator())
           ],

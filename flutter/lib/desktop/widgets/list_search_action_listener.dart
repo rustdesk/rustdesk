@@ -55,6 +55,7 @@ class TimeoutStringBuffer {
   }
 
   ListSearchAction input(String ch) {
+    ch = ch.toLowerCase();
     final curr = DateTime.now();
     try {
       if (curr.difference(_duration).inMilliseconds > timeoutMilliSec) {

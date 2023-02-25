@@ -21,6 +21,8 @@ PODS:
   - sqflite (0.0.2):
     - FlutterMacOS
     - FMDB (>= 2.7.5)
+  - texture_rgba_renderer (0.0.1):
+    - FlutterMacOS
   - uni_links_desktop (0.0.1):
     - FlutterMacOS
   - url_launcher_macos (0.0.1):
@@ -42,6 +44,7 @@ DEPENDENCIES:
   - path_provider_foundation (from `Flutter/ephemeral/.symlinks/plugins/path_provider_foundation/macos`)
   - screen_retriever (from `Flutter/ephemeral/.symlinks/plugins/screen_retriever/macos`)
   - sqflite (from `Flutter/ephemeral/.symlinks/plugins/sqflite/macos`)
+  - texture_rgba_renderer (from `Flutter/ephemeral/.symlinks/plugins/texture_rgba_renderer/macos`)
   - uni_links_desktop (from `Flutter/ephemeral/.symlinks/plugins/uni_links_desktop/macos`)
   - url_launcher_macos (from `Flutter/ephemeral/.symlinks/plugins/url_launcher_macos/macos`)
   - wakelock_macos (from `Flutter/ephemeral/.symlinks/plugins/wakelock_macos/macos`)
@@ -71,6 +74,8 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/screen_retriever/macos
   sqflite:
     :path: Flutter/ephemeral/.symlinks/plugins/sqflite/macos
+  texture_rgba_renderer:
+    :path: Flutter/ephemeral/.symlinks/plugins/texture_rgba_renderer/macos
   uni_links_desktop:
     :path: Flutter/ephemeral/.symlinks/plugins/uni_links_desktop/macos
   url_launcher_macos:
@@ -93,6 +98,7 @@ SPEC CHECKSUMS:
   path_provider_foundation: 37748e03f12783f9de2cb2c4eadfaa25fe6d4852
   screen_retriever: 59634572a57080243dd1bf715e55b6c54f241a38
   sqflite: a5789cceda41d54d23f31d6de539d65bb14100ea
+  texture_rgba_renderer: cbed959a3c127122194a364e14b8577bd62dc8f2
   uni_links_desktop: 45900fb319df48fcdea2df0756e9c2626696b026
   url_launcher_macos: c04e4fa86382d4f94f6b38f14625708be3ae52e2
   wakelock_macos: bc3f2a9bd8d2e6c89fee1e1822e7ddac3bd004a9

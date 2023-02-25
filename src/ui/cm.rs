@@ -100,7 +100,7 @@ impl SciterConnectionManager {
     }
 
     fn get_icon(&mut self) -> String {
-        crate::get_icon()
+        super::get_icon()
     }
 
     fn check_click_time(&mut self, id: i32) {

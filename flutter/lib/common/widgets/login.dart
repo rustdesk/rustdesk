@@ -197,24 +197,25 @@ class _WidgetOPState extends State<WidgetOP> {
             _failedMsg = '';
           }
           return Offstage(
-              offstage:
-                  _failedMsg.isEmpty && widget.curOP.value != widget.config.op,
-              child: Row(
-                children: [
-                  Text(
-                    _stateMsg,
-                    style: TextStyle(fontSize: 12),
-                  ),
-                  SizedBox(width: 8),
-                  Text(
-                    _failedMsg,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.red,
-                    ),
+            offstage:
+                _failedMsg.isEmpty && widget.curOP.value != widget.config.op,
+            child: RichText(
+              text: TextSpan(
+                text: '$_stateMsg  ',
+                style:
+                    DefaultTextStyle.of(context).style.copyWith(fontSize: 12),
+                children: <TextSpan>[
+                  TextSpan(
+                    text: _failedMsg,
+                    style: DefaultTextStyle.of(context).style.copyWith(
+                          fontSize: 14,
+                          color: Colors.red,
+                        ),
                   ),
                 ],
-              ));
+              ),
+            ),
+          );
         }),
         Obx(
           () => Offstage(
@@ -323,13 +324,13 @@ class LoginWidgetUserPass extends StatelessWidget {
           children: [
             const SizedBox(height: 8.0),
             DialogTextField(
-                title: '${translate("Username")}:',
+                title: translate("Username"),
                 controller: username,
                 focusNode: userFocusNode,
                 prefixIcon: Icon(Icons.account_circle_outlined),
                 errorText: usernameMsg),
             DialogTextField(
-                title: '${translate("Password")}:',
+                title: translate("Password"),
                 obscureText: true,
                 controller: pass,
                 prefixIcon: Icon(Icons.lock_outline),

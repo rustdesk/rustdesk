@@ -75,6 +75,10 @@ class FileModel extends ChangeNotifier {
     return isLocal ? _localSortStyle : _remoteSortStyle;
   }
 
+  bool getSortAscending(bool isLocal) {
+    return isLocal ? _localSortAscending : _remoteSortAscending;
+  }
+
   FileDirectory _currentLocalDir = FileDirectory();
 
   FileDirectory get currentLocalDir => _currentLocalDir;

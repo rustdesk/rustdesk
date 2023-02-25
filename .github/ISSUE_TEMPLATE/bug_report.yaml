@@ -1,14 +1,6 @@
 name: 🐞 Bug report
 description: Thanks for taking the time to fill out this bug report! Please fill the form in **English**
-title: "[Bug] "
 body:
-  - type: checkboxes
-    attributes:
-      label: Is there an existing issue for this?
-      description: Please search to see if an issue related to this already exists.
-      options:
-      - label: I have searched the existing issues
-        required: true
   - type: textarea
     id: desc
     attributes:
@@ -52,7 +44,9 @@ body:
     id: screenshots
     attributes:
       label: Screenshots
-      description: If applicable, please add screenshots to help explain your problem
+      description: Please add screenshots to help explain your problem, if applicable, please upload video.
+    validations:
+      required: true
   - type: textarea
     id: context
     attributes:

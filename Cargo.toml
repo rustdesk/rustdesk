@@ -20,6 +20,7 @@ inline = []
 hbbs = []
 cli = []
 with_rc = ["simple_rc"]
+flutter_texture_render = []
 appimage = []
 flatpak = []
 use_samplerate = ["samplerate"]
@@ -43,7 +44,6 @@ cfg-if = "1.0"
 lazy_static = "1.4"
 sha2 = "0.10"
 repng = "0.2"
-libc = "0.2"
 parity-tokio-ipc = { git = "https://github.com/open-trade/parity-tokio-ipc" }
 flexi_logger = { version = "0.22", features = ["async", "use_chrono_for_offset"] }
 runas = "0.2"
@@ -56,7 +56,6 @@ uuid = { version = "1.0", features = ["v4"] }
 clap = "3.0"
 rpassword = "7.0"
 base64 = "0.13"
-sysinfo = "0.24"
 num_cpus = "1.13"
 bytes = { version = "1.2", features = ["serde"] }
 default-net = "0.12.0"
@@ -65,6 +64,7 @@ flutter_rust_bridge = { version = "1.61.1", optional = true }
 errno = "0.2.8"
 rdev = { git = "https://github.com/fufesou/rdev" }
 url = { version = "2.1", features = ["serde"] }
+dlopen = "0.1"
 
 reqwest = { version = "0.11", features = ["blocking", "json", "rustls-tls"], default-features=false }
 chrono = "0.4.23"
@@ -86,7 +86,6 @@ arboard = "2.0"
 system_shutdown = "3.0.0"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-#systray = { git = "https://github.com/open-trade/systray-rs" }
 trayicon = { git = "https://github.com/open-trade/trayicon-rs", features = ["winit"] }
 winit = "0.26"
 winapi = { version = "0.3", features = ["winuser"] }
@@ -104,10 +103,14 @@ dispatch = "0.2"
 core-foundation = "0.9"
 core-graphics = "0.22"
 include_dir = "0.7.2"
-tray-item = "0.7" # looks better than trayicon
-dark-light = "0.2"
+dark-light = "1.0"
 fruitbasket = "0.10.0"
 objc_id = "0.1.1"
+
+[target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
+tray-icon = "0.4"
+tao = { git = "https://github.com/tauri-apps/tao", branch = "muda" }
+image = "0.24"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 psimple = { package = "libpulse-simple-binding", version = "2.25" }
@@ -118,10 +121,7 @@ mouce = { git="https://github.com/fufesou/mouce.git" }
 evdev = { git="https://github.com/fufesou/evdev" }
 dbus = "0.9"
 dbus-crossroads = "0.5"
-gtk = "0.15"
-libappindicator = "0.7"
-glib = "0.16.5"
-backtrace = "0.3"
+xrandr-parser = "0.3.0"
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.11"
@@ -157,7 +157,6 @@ identifier = "com.carriez.rustdesk"
 icon = ["res/32x32.png", "res/128x128.png", "res/128x128@2x.png"]
 deb_depends = ["libgtk-3-0", "libxcb-randr0", "libxdo3", "libxfixes3", "libxcb-shape0", "libxcb-xfixes0", "libasound2", "libsystemd0", "curl", "libvdpau1", "libva2"]
 osx_minimum_system_version = "10.14"
-resources = ["res/mac-tray-light.png","res/mac-tray-dark.png", "res/mac-tray-light-x2.png","res/mac-tray-dark-x2.png"]
 
 #https://github.com/johnthagen/min-sized-rust
 [profile.release]

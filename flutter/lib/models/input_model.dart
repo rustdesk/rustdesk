@@ -58,9 +58,16 @@ class InputModel {
   InputModel(this.parent);
 
   KeyEventResult handleRawKeyEvent(FocusNode data, RawKeyEvent e) {
-    bind.sessionGetKeyboardMode(id: id).then((result) {
-      keyboardMode = result.toString();
-    });
+    if (!stateGlobal.grabKeyboard) {
+      return KeyEventResult.handled;
+    }
+
+    // * Currently mobile does not enable map mode
+    if (isDesktop) {
+      bind.sessionGetKeyboardMode(id: id).then((result) {
+        keyboardMode = result.toString();
+      });
+    }
 
     final key = e.logicalKey;
     if (e is RawKeyDownEvent) {
@@ -93,10 +100,9 @@ class InputModel {
       }
     }
 
-    if (keyboardMode == 'map') {
+    // * Currently mobile does not enable map mode
+    if (isDesktop && keyboardMode == 'map') {
       mapKeyboardMode(e);
-    } else if (keyboardMode == 'translate') {
-      legacyKeyboardMode(e);
     } else {
       legacyKeyboardMode(e);
     }
@@ -483,10 +489,19 @@ class InputModel {
     y /= canvasModel.scale;
     x += d.x;
     y += d.y;
+
+    if (x < d.x || y < d.y || x > (d.x + d.width) || y > (d.y + d.height)) {
+      // If left mouse up, no early return.
+      if (evt['buttons'] != kPrimaryMouseButton || type != 'up') {
+        return;
+      }
+    }
+
     if (type != '') {
       x = 0;
       y = 0;
     }
+
     evt['x'] = '${x.round()}';
     evt['y'] = '${y.round()}';
     var buttons = '';
