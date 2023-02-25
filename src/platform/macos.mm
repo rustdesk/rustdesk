@@ -1,6 +1,9 @@
 #import <AVFoundation/AVFoundation.h>
 #import <AppKit/AppKit.h>
 #import <IOKit/hidsystem/IOHIDLib.h>
+#include <Security/Authorization.h>
+#include <Security/AuthorizationTags.h>
+
 
 // https://github.com/codebytere/node-mac-permissions/blob/main/permissions.mm
 
@@ -33,6 +36,33 @@ extern "C" bool InputMonitoringAuthStatus(bool prompt) {
         return true;
     }
     return false;
+}
+
+extern "C" bool MacCheckAdminAuthorization() {
+  AuthorizationRef authRef;
+  OSStatus status;
+
+  status = AuthorizationCreate(NULL, kAuthorizationEmptyEnvironment,
+                               kAuthorizationFlagDefaults, &authRef);
+  if (status != errAuthorizationSuccess) {
+    printf("Failed to create AuthorizationRef\n");
+    return false;
+  }
+
+  AuthorizationItem authItem = {kAuthorizationRightExecute, 0, NULL, 0};
+  AuthorizationRights authRights = {1, &authItem};
+  AuthorizationFlags flags = kAuthorizationFlagDefaults |
+                             kAuthorizationFlagInteractionAllowed |
+                             kAuthorizationFlagPreAuthorize |
+                             kAuthorizationFlagExtendRights;
+  status = AuthorizationCopyRights(authRef, &authRights, kAuthorizationEmptyEnvironment, flags, NULL);
+  if (status != errAuthorizationSuccess) {
+    printf("Failed to authorize\n");
+    return false;
+  }
+
+  AuthorizationFree(authRef, kAuthorizationFlagDefaults);
+  return true;
 }
 
 extern "C" float BackingScaleFactor() {

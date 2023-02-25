@@ -707,10 +707,10 @@ pub fn is_root() -> bool {
 pub fn check_super_user_permission() -> bool {
     #[cfg(feature = "flatpak")]
     return true;
-    #[cfg(any(windows, target_os = "linux"))]
+    #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
     return crate::platform::check_super_user_permission().unwrap_or(false);
-    #[cfg(not(any(windows, target_os = "linux")))]
-    true
+    #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+    return true;
 }
 
 #[allow(dead_code)]
