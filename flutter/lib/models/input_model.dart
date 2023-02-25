@@ -459,17 +459,22 @@ class InputModel {
     }
     evt['type'] = type;
     if (isDesktop) {
-      y = y - stateGlobal.tabBarHeight;
+      y = y - stateGlobal.tabBarHeight - stateGlobal.windowBorderWidth.value;
+      x -= stateGlobal.windowBorderWidth.value;
     }
     final canvasModel = parent.target!.canvasModel;
+    final nearThr = 3;
+    var nearRight = (canvasModel.size.width - x) < nearThr;
+    var nearBottom = (canvasModel.size.height - y) < nearThr;
+
     final ffiModel = parent.target!.ffiModel;
     if (isMove) {
       canvasModel.moveDesktopMouse(x, y);
     }
     final d = ffiModel.display;
+    final imageWidth = d.width * canvasModel.scale;
+    final imageHeight = d.height * canvasModel.scale;
     if (canvasModel.scrollStyle == ScrollStyle.scrollbar) {
-      final imageWidth = d.width * canvasModel.scale;
-      final imageHeight = d.height * canvasModel.scale;
       x += imageWidth * canvasModel.scrollX;
       y += imageHeight * canvasModel.scrollY;
 
@@ -487,6 +492,15 @@ class InputModel {
 
     x /= canvasModel.scale;
     y /= canvasModel.scale;
+    if (canvasModel.scale > 0 && canvasModel.scale < 1) {
+      final step = 1.0 / canvasModel.scale - 1;
+      if (nearRight) {
+        x += step;
+      }
+      if (nearBottom) {
+        y += step;
+      }
+    }
     x += d.x;
     y += d.y;
 
