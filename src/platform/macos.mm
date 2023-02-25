@@ -74,6 +74,33 @@ extern "C" float BackingScaleFactor() {
 // https://github.com/jhford/screenresolution/blob/master/cg_utils.c
 // https://github.com/jdoupe/screenres/blob/master/setgetscreen.m
 
+size_t bitDepth(CGDisplayModeRef mode) {	
+    size_t depth = 0;
+    // Deprecated, same display same bpp? 
+    // https://stackoverflow.com/questions/8210824/how-to-avoid-cgdisplaymodecopypixelencoding-to-get-bpp
+    // https://github.com/libsdl-org/SDL/pull/6628
+	CFStringRef pixelEncoding = CGDisplayModeCopyPixelEncoding(mode);	
+    // my numerical representation for kIO16BitFloatPixels and kIO32bitFloatPixels	
+    // are made up and possibly non-sensical	
+    if (kCFCompareEqualTo == CFStringCompare(pixelEncoding, CFSTR(kIO32BitFloatPixels), kCFCompareCaseInsensitive)) {	
+        depth = 96;	
+    } else if (kCFCompareEqualTo == CFStringCompare(pixelEncoding, CFSTR(kIO64BitDirectPixels), kCFCompareCaseInsensitive)) {	
+        depth = 64;	
+    } else if (kCFCompareEqualTo == CFStringCompare(pixelEncoding, CFSTR(kIO16BitFloatPixels), kCFCompareCaseInsensitive)) {	
+        depth = 48;	
+    } else if (kCFCompareEqualTo == CFStringCompare(pixelEncoding, CFSTR(IO32BitDirectPixels), kCFCompareCaseInsensitive)) {	
+        depth = 32;	
+    } else if (kCFCompareEqualTo == CFStringCompare(pixelEncoding, CFSTR(kIO30BitDirectPixels), kCFCompareCaseInsensitive)) {	
+        depth = 30;	
+    } else if (kCFCompareEqualTo == CFStringCompare(pixelEncoding, CFSTR(IO16BitDirectPixels), kCFCompareCaseInsensitive)) {	
+        depth = 16;	
+    } else if (kCFCompareEqualTo == CFStringCompare(pixelEncoding, CFSTR(IO8BitIndexedPixels), kCFCompareCaseInsensitive)) {	
+        depth = 8;	
+    }	
+    CFRelease(pixelEncoding);	
+    return depth;	
+}
+
 extern "C" bool MacGetModeNum(CGDirectDisplayID display, uint32_t *numModes) {
     CFArrayRef allModes = CGDisplayCopyAllDisplayModes(display, NULL);
     if (allModes == NULL) {
@@ -85,16 +112,28 @@ extern "C" bool MacGetModeNum(CGDirectDisplayID display, uint32_t *numModes) {
 }
 
 extern "C" bool MacGetModes(CGDirectDisplayID display, uint32_t *widths, uint32_t *heights, uint32_t max, uint32_t *numModes) {
-    CFArrayRef allModes = CGDisplayCopyAllDisplayModes(display, NULL);
-    if (allModes == NULL) {
+    CGDisplayModeRef currentMode = CGDisplayCopyDisplayMode(display);
+    if (currentMode == NULL) {
         return false;
     }
-    *numModes = CFArrayGetCount(allModes);
-    for (uint32_t i = 0; i < *numModes && i < max; i++) {
-        CGDisplayModeRef mode = (CGDisplayModeRef)CFArrayGetValueAtIndex(allModes, i);
-        widths[i] = (uint32_t)CGDisplayModeGetWidth(mode);
-        heights[i] = (uint32_t)CGDisplayModeGetHeight(mode);
+    CFArrayRef allModes = CGDisplayCopyAllDisplayModes(display, NULL);
+    if (allModes == NULL) {
+        CGDisplayModeRelease(currentMode);
+        return false;
     }
+    uint32_t allModeCount = CFArrayGetCount(allModes);
+    uint32_t realNum = 0;
+    for (uint32_t i = 0; i < allModeCount && realNum < max; i++) {
+        CGDisplayModeRef mode = (CGDisplayModeRef)CFArrayGetValueAtIndex(allModes, i);
+        if (CGDisplayModeGetRefreshRate(currentMode) == CGDisplayModeGetRefreshRate(mode) &&
+            bitDepth(currentMode) == bitDepth(mode)) {
+            widths[realNum] = (uint32_t)CGDisplayModeGetWidth(mode);
+            heights[realNum] = (uint32_t)CGDisplayModeGetHeight(mode);
+            realNum++;
+        }
+    }
+    *numModes = realNum;
+    CGDisplayModeRelease(currentMode);
     CFRelease(allModes);
     return true;
 }
@@ -110,31 +149,8 @@ extern "C" bool MacGetMode(CGDirectDisplayID display, uint32_t *width, uint32_t 
     return true;
 }
 
-size_t bitDepth(CGDisplayModeRef mode) {
-    size_t depth = 0;
-	CFStringRef pixelEncoding = CGDisplayModeCopyPixelEncoding(mode);
-    // my numerical representation for kIO16BitFloatPixels and kIO32bitFloatPixels
-    // are made up and possibly non-sensical
-    if (kCFCompareEqualTo == CFStringCompare(pixelEncoding, CFSTR(kIO32BitFloatPixels), kCFCompareCaseInsensitive)) {
-        depth = 96;
-    } else if (kCFCompareEqualTo == CFStringCompare(pixelEncoding, CFSTR(kIO64BitDirectPixels), kCFCompareCaseInsensitive)) {
-        depth = 64;
-    } else if (kCFCompareEqualTo == CFStringCompare(pixelEncoding, CFSTR(kIO16BitFloatPixels), kCFCompareCaseInsensitive)) {
-        depth = 48;
-    } else if (kCFCompareEqualTo == CFStringCompare(pixelEncoding, CFSTR(IO32BitDirectPixels), kCFCompareCaseInsensitive)) {
-        depth = 32;
-    } else if (kCFCompareEqualTo == CFStringCompare(pixelEncoding, CFSTR(kIO30BitDirectPixels), kCFCompareCaseInsensitive)) {
-        depth = 30;
-    } else if (kCFCompareEqualTo == CFStringCompare(pixelEncoding, CFSTR(IO16BitDirectPixels), kCFCompareCaseInsensitive)) {
-        depth = 16;
-    } else if (kCFCompareEqualTo == CFStringCompare(pixelEncoding, CFSTR(IO8BitIndexedPixels), kCFCompareCaseInsensitive)) {
-        depth = 8;
-    }
-    CFRelease(pixelEncoding);
-    return depth;
-}
 
-bool setDisplayToMode(CGDirectDisplayID display, CGDisplayModeRef mode) {
+static bool setDisplayToMode(CGDirectDisplayID display, CGDisplayModeRef mode) {
     CGError rc;
     CGDisplayConfigRef config;
     rc = CGBeginDisplayConfiguration(&config);
@@ -151,7 +167,6 @@ bool setDisplayToMode(CGDirectDisplayID display, CGDisplayModeRef mode) {
     }
     return true;
 }
-
 
 extern "C" bool MacSetMode(CGDirectDisplayID display, uint32_t width, uint32_t height)
 {
@@ -170,8 +185,8 @@ extern "C" bool MacSetMode(CGDirectDisplayID display, uint32_t width, uint32_t h
         CGDisplayModeRef mode = (CGDisplayModeRef)CFArrayGetValueAtIndex(allModes, i);
         if (width == CGDisplayModeGetWidth(mode) &&
             height == CGDisplayModeGetHeight(mode) && 
-            bitDepth(currentMode) == bitDepth(mode) &&
-            CGDisplayModeGetRefreshRate(currentMode) == CGDisplayModeGetRefreshRate(mode)) {
+            CGDisplayModeGetRefreshRate(currentMode) == CGDisplayModeGetRefreshRate(mode) &&
+            bitDepth(currentMode) == bitDepth(mode)) {
             ret = setDisplayToMode(display, mode);
             break;
         }
