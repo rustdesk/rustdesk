@@ -1542,11 +1542,15 @@ class _KeyboardMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var ffiModel = Provider.of<FfiModel>(context);
-    if (ffiModel.permissions['keyboard'] == false) return Offstage();
+    // Do not check permission here?
+    // var ffiModel = Provider.of<FfiModel>(context);
+    // if (ffiModel.permissions['keyboard'] == false) return Offstage();
     if (stateGlobal.grabKeyboard) {
       if (bind.sessionIsKeyboardModeSupported(id: id, mode: _kKeyMapMode)) {
         bind.sessionSetKeyboardMode(id: id, value: _kKeyMapMode);
+      } else if (bind.sessionIsKeyboardModeSupported(
+          id: id, mode: _kKeyLegacyMode)) {
+        bind.sessionSetKeyboardMode(id: id, value: _kKeyLegacyMode);
       }
       return Offstage();
     }
