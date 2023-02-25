@@ -1010,6 +1010,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
             handle_test_delay(t, peer).await;
         }
     }
+    
     fn swap_modifier_mouse(&self, msg : &mut hbb_common::protos::message::MouseEvent) {
         let allow_swap_key = self.get_toggle_option("allow_swap_key".to_string());
         if allow_swap_key  {

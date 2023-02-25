@@ -156,7 +156,6 @@ class Header: Reactor.Component {
             <menu.context #keyboard-options>
                 <li #legacy><span>{svg_checkmark}</span>{translate('Legacy mode')}</li> 
                 <li #map><span>{svg_checkmark}</span>{translate('Map mode')}</li> 
-                <li #allow_swap_key><span>{svg_checkmark}</span>{translate('Swap Control-Command Key')}</li>
             </menu>
         </popup>;
     }
@@ -199,6 +198,7 @@ class Header: Reactor.Component {
                 {keyboard_enabled && clipboard_enabled ? <li #disable-clipboard .toggle-option><span>{svg_checkmark}</span>{translate('Disable clipboard')}</li> : ""} 
                 {keyboard_enabled ? <li #lock-after-session-end .toggle-option><span>{svg_checkmark}</span>{translate('Lock after session end')}</li> : ""} 
                 {keyboard_enabled && pi.platform == "Windows" ? <li #privacy-mode><span>{svg_checkmark}</span>{translate('Privacy mode')}</li> : ""}
+                {keyboard_enabled && ((is_osx && pi.platform != "Mac OS") || (!is_osx && pi.platform == "Mac OS")) ? <li #allow_swap_key  .toggle-option><span>{svg_checkmark}</span>{translate('Swap control-command key')}</li> : ""}
             </menu>
         </popup>;
     }
@@ -441,7 +441,7 @@ function toggleMenuState() {
     for (var el in $$(menu#keyboard-options>li)) {
         el.attributes.toggleClass("selected", values.indexOf(el.id) >= 0);
     }
-    for (var id in ["show-remote-cursor", "show-quality-monitor", "disable-audio", "enable-file-transfer", "disable-clipboard", "lock-after-session-end"]) {
+    for (var id in ["show-remote-cursor", "show-quality-monitor", "disable-audio", "enable-file-transfer", "disable-clipboard", "lock-after-session-end", "allow_swap_key"]) {
         var el = self.select('#' + id);
         if (el) {
             var value = handler.get_toggle_option(id);
