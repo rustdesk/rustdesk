@@ -577,6 +577,14 @@ fn run(sp: GenericService) -> ResultType<()> {
         if last_check_displays.elapsed().as_millis() > 1000 {
             last_check_displays = now;
 
+            // Capturer on macos does not return Err event the solution is changed.
+            #[cfg(target_os = "macos")]
+            if check_display_changed(c.ndisplay, c.current, c.width, c.height) {
+                log::info!("Displays changed");
+                *SWITCH.lock().unwrap() = true;
+                bail!("SWITCH");
+            }
+
             if let Some(msg_out) = check_displays_changed() {
                 sp.send(msg_out);
             }

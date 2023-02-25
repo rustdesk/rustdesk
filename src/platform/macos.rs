@@ -612,18 +612,18 @@ pub fn resolutions(name: &str) -> Vec<Resolution> {
         unsafe {
             if YES == MacGetModeNum(display, &mut num) {
                 let (mut widths, mut heights) = (vec![0; num as _], vec![0; num as _]);
-                let mut realNum = 0;
+                let mut real_num = 0;
                 if YES
                     == MacGetModes(
                         display,
                         widths.as_mut_ptr(),
                         heights.as_mut_ptr(),
                         num,
-                        &mut realNum,
+                        &mut real_num,
                     )
                 {
-                    if realNum <= num {
-                        for i in 0..realNum {
+                    if real_num <= num {
+                        for i in 0..real_num {
                             let resolution = Resolution {
                                 width: widths[i as usize] as _,
                                 height: heights[i as usize] as _,
