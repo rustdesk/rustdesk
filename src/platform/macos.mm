@@ -60,7 +60,7 @@ extern "C" bool MacGetModes(CGDirectDisplayID display, uint32_t *widths, uint32_
         return false;
     }
     *numModes = CFArrayGetCount(allModes);
-    for (int i = 0; i < *numModes && i < max; i++) {
+    for (uint32_t i = 0; i < *numModes && i < max; i++) {
         CGDisplayModeRef mode = (CGDisplayModeRef)CFArrayGetValueAtIndex(allModes, i);
         widths[i] = (uint32_t)CGDisplayModeGetWidth(mode);
         heights[i] = (uint32_t)CGDisplayModeGetHeight(mode);
@@ -136,7 +136,6 @@ extern "C" bool MacSetMode(CGDirectDisplayID display, uint32_t width, uint32_t h
         return ret;
     }
     int numModes = CFArrayGetCount(allModes);
-    CGDisplayModeRef bestMode = NULL;
     for (int i = 0; i < numModes; i++) {
         CGDisplayModeRef mode = (CGDisplayModeRef)CFArrayGetValueAtIndex(allModes, i);
         if (width == CGDisplayModeGetWidth(mode) &&

@@ -9,7 +9,7 @@ use sciter::Value;
 
 use hbb_common::{
     allow_err,
-    config::{self, LocalConfig, PeerConfig},
+    config::{LocalConfig, PeerConfig},
     log,
 };
 
