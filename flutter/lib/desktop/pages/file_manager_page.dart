@@ -1000,7 +1000,9 @@ class _FileManagerPageState extends State<FileManagerPage>
                         textAlign: TextAlign.right,
                         style: TextStyle(
                           color: selectedItems.length == 0
-                              ? MyTheme.darkGray
+                              ? Theme.of(context).brightness == Brightness.light
+                                  ? MyTheme.grayBg
+                                  : MyTheme.darkGray
                               : Colors.white,
                         ),
                       )
@@ -1009,7 +1011,9 @@ class _FileManagerPageState extends State<FileManagerPage>
                         child: SvgPicture.asset(
                           "assets/arrow.svg",
                           color: selectedItems.length == 0
-                              ? MyTheme.darkGray
+                              ? Theme.of(context).brightness == Brightness.light
+                                  ? MyTheme.grayBg
+                                  : MyTheme.darkGray
                               : Colors.white,
                           alignment: Alignment.bottomRight,
                         ),
@@ -1018,14 +1022,18 @@ class _FileManagerPageState extends State<FileManagerPage>
                     ? SvgPicture.asset(
                         "assets/arrow.svg",
                         color: selectedItems.length == 0
-                            ? MyTheme.darkGray
+                            ? Theme.of(context).brightness == Brightness.light
+                                ? MyTheme.grayBg
+                                : MyTheme.darkGray
                             : Colors.white,
                       )
                     : Text(
                         translate('Receive'),
                         style: TextStyle(
                           color: selectedItems.length == 0
-                              ? MyTheme.darkGray
+                              ? Theme.of(context).brightness == Brightness.light
+                                  ? MyTheme.grayBg
+                                  : MyTheme.darkGray
                               : Colors.white,
                         ),
                       ),
