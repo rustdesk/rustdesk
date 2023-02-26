@@ -456,5 +456,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Reconnect", "重连"),
         ("Codec", "编解码"),
         ("Resolution", "分辨率"),
+        ("No transfers in progress", ""),
         ].iter().cloned().collect();
 }
