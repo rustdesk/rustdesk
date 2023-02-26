@@ -506,8 +506,8 @@ class InputModel {
     var evtX = 0;
     var evtY = 0;
     try {
-      x.round();
-      y.round();
+      evtX = x.round();
+      evtY = y.round();
     } catch (e) {
       debugPrintStack(
           label: 'canvasModel.scale value ${canvasModel.scale}, $e');
