@@ -1453,10 +1453,12 @@ connectMainDesktop(String id,
 connect(BuildContext context, String id,
     {bool isFileTransfer = false,
     bool isTcpTunneling = false,
-    bool isRDP = false,
-    bool forceRelay = false}) async {
+    bool isRDP = false}) async {
   if (id == '') return;
   id = id.replaceAll(' ', '');
+  final oldId = id;
+  id = await bind.mainHandleRelayId(id: id);
+  final forceRelay = id != oldId;
   assert(!(isFileTransfer && isTcpTunneling && isRDP),
       "more than one connect type");
 
