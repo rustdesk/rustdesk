@@ -44,5 +44,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("still_click_uac_tip", "Still requires the remote user to click OK on the UAC window of running RustDesk."),
         ("config_microphone", "In order to speak remotely, you need to grant RustDesk \"Record Audio\" permissions."),
         ("relay_hint_tip", "It may not be possible to connect directly, you can try to connect via relay. \nIn addition, if you want to use relay on your first try, you can add the \"/r\" suffix to the ID, or select the option \"Always connect via relay\" in the peer card."),
+        ("No transfers in progress", ""),
         ].iter().cloned().collect();
 }
