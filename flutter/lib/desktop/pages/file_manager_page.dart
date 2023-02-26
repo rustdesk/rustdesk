@@ -153,17 +153,9 @@ class _FileManagerPageState extends State<FileManagerPage>
                 backgroundColor: Theme.of(context).scaffoldBackgroundColor,
                 body: Row(
                   children: [
-                    Flexible(
-                      flex: 3,
-                      child: body(isLocal: true),
-                    ),
-                    Flexible(
-                      flex: 3,
-                      child: body(isLocal: false),
-                    ),
-                    model.jobTable.isEmpty
-                        ? SizedBox()
-                        : Flexible(flex: 2, child: statusList())
+                    Flexible(flex: 3, child: body(isLocal: true)),
+                    Flexible(flex: 3, child: body(isLocal: false)),
+                    Flexible(flex: 2, child: statusList())
                   ],
                 ),
               );
@@ -550,6 +542,18 @@ class _FileManagerPageState extends State<FileManagerPage>
     return false;
   }
 
+  Widget generateCard(Widget child) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.all(
+          Radius.circular(15.0),
+        ),
+      ),
+      child: child,
+    );
+  }
+
   /// transfer status list
   /// watch transfer status
   Widget statusList() {
@@ -558,140 +562,165 @@ class _FileManagerPageState extends State<FileManagerPage>
       child: Container(
         margin: const EdgeInsets.only(top: 16.0, bottom: 16.0, right: 16.0),
         padding: const EdgeInsets.all(8.0),
-        child: Obx(
-          () => ListView.builder(
-            controller: ScrollController(),
-            itemBuilder: (BuildContext context, int index) {
-              final item = model.jobTable[index];
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 5),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).cardColor,
-                    borderRadius: BorderRadius.all(
-                      Radius.circular(15.0),
-                    ),
-                  ),
+        child: model.jobTable.isEmpty
+            ? generateCard(
+                Center(
                   child: Column(
-                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Transform.rotate(
-                            angle: item.isRemote ? pi : 0,
-                            child: SvgPicture.asset(
-                              "assets/arrow.svg",
-                              color: Theme.of(context).tabBarTheme.labelColor,
-                            ),
-                          ).paddingOnly(left: 15),
-                          const SizedBox(
-                            width: 16.0,
-                          ),
-                          Expanded(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                      SvgPicture.asset(
+                        "assets/transfer.svg",
+                        color: Theme.of(context).tabBarTheme.labelColor,
+                        height: 40,
+                      ).paddingOnly(bottom: 10),
+                      Text(
+                        translate("No transfers in progress"),
+                        textAlign: TextAlign.center,
+                        textScaleFactor: 1.20,
+                        style: TextStyle(
+                            color: Theme.of(context).tabBarTheme.labelColor),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            : Obx(
+                () => ListView.builder(
+                  controller: ScrollController(),
+                  itemBuilder: (BuildContext context, int index) {
+                    final item = model.jobTable[index];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 5),
+                      child: generateCard(
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
-                                Tooltip(
-                                  waitDuration: Duration(milliseconds: 500),
-                                  message: item.jobName,
-                                  child: Text(
-                                    item.jobName,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ).paddingSymmetric(vertical: 10),
+                                Transform.rotate(
+                                  angle: item.isRemote ? pi : 0,
+                                  child: SvgPicture.asset(
+                                    "assets/arrow.svg",
+                                    color: Theme.of(context)
+                                        .tabBarTheme
+                                        .labelColor,
+                                  ),
+                                ).paddingOnly(left: 15),
+                                const SizedBox(
+                                  width: 16.0,
                                 ),
-                                Text(
-                                  '${translate("Total")} ${readableFileSize(item.totalSize.toDouble())}',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: MyTheme.darkGray,
+                                Expanded(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Tooltip(
+                                        waitDuration:
+                                            Duration(milliseconds: 500),
+                                        message: item.jobName,
+                                        child: Text(
+                                          item.jobName,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ).paddingSymmetric(vertical: 10),
+                                      ),
+                                      Text(
+                                        '${translate("Total")} ${readableFileSize(item.totalSize.toDouble())}',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: MyTheme.darkGray,
+                                        ),
+                                      ),
+                                      Offstage(
+                                        offstage:
+                                            item.state != JobState.inProgress,
+                                        child: Text(
+                                          '${translate("Speed")} ${readableFileSize(item.speed)}/s',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: MyTheme.darkGray,
+                                          ),
+                                        ),
+                                      ),
+                                      Offstage(
+                                        offstage:
+                                            item.state == JobState.inProgress,
+                                        child: Text(
+                                          translate(
+                                            item.display(),
+                                          ),
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: MyTheme.darkGray,
+                                          ),
+                                        ),
+                                      ),
+                                      Offstage(
+                                        offstage:
+                                            item.state != JobState.inProgress,
+                                        child: LinearPercentIndicator(
+                                          padding: EdgeInsets.only(right: 15),
+                                          animateFromLastPercent: true,
+                                          center: Text(
+                                            '${(item.finishedSize / item.totalSize * 100).toStringAsFixed(0)}%',
+                                          ),
+                                          barRadius: Radius.circular(15),
+                                          percent: item.finishedSize /
+                                              item.totalSize,
+                                          progressColor: MyTheme.accent,
+                                          backgroundColor:
+                                              Theme.of(context).hoverColor,
+                                          lineHeight:
+                                              kDesktopFileTransferRowHeight,
+                                        ).paddingSymmetric(vertical: 15),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                Offstage(
-                                  offstage: item.state != JobState.inProgress,
-                                  child: Text(
-                                    '${translate("Speed")} ${readableFileSize(item.speed)}/s',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: MyTheme.darkGray,
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    Offstage(
+                                      offstage: item.state != JobState.paused,
+                                      child: MenuButton(
+                                        onPressed: () {
+                                          model.resumeJob(item.id);
+                                        },
+                                        child: SvgPicture.asset(
+                                          "assets/refresh.svg",
+                                          color: Colors.white,
+                                        ),
+                                        color: MyTheme.accent,
+                                        hoverColor: MyTheme.accent80,
+                                      ),
                                     ),
-                                  ),
-                                ),
-                                Offstage(
-                                  offstage: item.state == JobState.inProgress,
-                                  child: Text(
-                                    translate(
-                                      item.display(),
+                                    MenuButton(
+                                      padding: EdgeInsets.only(right: 15),
+                                      child: SvgPicture.asset(
+                                        "assets/close.svg",
+                                        color: Colors.white,
+                                      ),
+                                      onPressed: () {
+                                        model.jobTable.removeAt(index);
+                                        model.cancelJob(item.id);
+                                      },
+                                      color: MyTheme.accent,
+                                      hoverColor: MyTheme.accent80,
                                     ),
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: MyTheme.darkGray,
-                                    ),
-                                  ),
-                                ),
-                                Offstage(
-                                  offstage: item.state != JobState.inProgress,
-                                  child: LinearPercentIndicator(
-                                    padding: EdgeInsets.only(right: 15),
-                                    animateFromLastPercent: true,
-                                    center: Text(
-                                      '${(item.finishedSize / item.totalSize * 100).toStringAsFixed(0)}%',
-                                    ),
-                                    barRadius: Radius.circular(15),
-                                    percent: item.finishedSize / item.totalSize,
-                                    progressColor: MyTheme.accent,
-                                    backgroundColor:
-                                        Theme.of(context).hoverColor,
-                                    lineHeight: kDesktopFileTransferRowHeight,
-                                  ).paddingSymmetric(vertical: 15),
+                                  ],
                                 ),
                               ],
                             ),
-                          ),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              Offstage(
-                                offstage: item.state != JobState.paused,
-                                child: MenuButton(
-                                  onPressed: () {
-                                    model.resumeJob(item.id);
-                                  },
-                                  child: SvgPicture.asset(
-                                    "assets/refresh.svg",
-                                    color: Colors.white,
-                                  ),
-                                  color: MyTheme.accent,
-                                  hoverColor: MyTheme.accent80,
-                                ),
-                              ),
-                              MenuButton(
-                                padding: EdgeInsets.only(right: 15),
-                                child: SvgPicture.asset(
-                                  "assets/close.svg",
-                                  color: Colors.white,
-                                ),
-                                onPressed: () {
-                                  model.jobTable.removeAt(index);
-                                  model.cancelJob(item.id);
-                                },
-                                color: MyTheme.accent,
-                                hoverColor: MyTheme.button,
-                              ),
-                            ],
-                          ),
-                        ],
+                          ],
+                        ).paddingSymmetric(vertical: 10),
                       ),
-                    ],
-                  ).paddingSymmetric(vertical: 10),
+                    );
+                  },
+                  itemCount: model.jobTable.length,
                 ),
-              );
-            },
-            itemCount: model.jobTable.length,
-          ),
-        ),
+              ),
       ),
     );
   }
