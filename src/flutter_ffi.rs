@@ -840,6 +840,10 @@ pub fn main_get_user_default_option(key: String) -> SyncReturn<String> {
     SyncReturn(get_user_default_option(key))
 }
 
+pub fn main_handle_relay_id(id: String) -> String {
+    handle_relay_id(id)
+}
+
 pub fn session_add_port_forward(
     id: String,
     local_port: i32,

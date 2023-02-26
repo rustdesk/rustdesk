@@ -970,3 +970,12 @@ async fn check_id(
     }
     ""
 }
+
+// if it's relay id, return id processed, otherwise return original id
+pub fn handle_relay_id(id: String) -> String {
+    if id.ends_with(r"\r") || id.ends_with(r"/r") {
+        id[0..id.len() - 2].to_string()
+    } else {
+        id
+    }
+}
