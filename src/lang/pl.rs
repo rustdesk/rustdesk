@@ -458,7 +458,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Resolution", "Rozdzielczość"),
         ("Use temporary password", "Użyj hasła tymczasowego"),
         ("Set temporary password length", "Ustaw długość hasła tymczasowego"),
-        ("Key", "Klucz")
+        ("Key", "Klucz"),
         ("No transfers in progress", ""),
         ].iter().cloned().collect();
 }
