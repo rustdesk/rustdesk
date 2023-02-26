@@ -189,7 +189,9 @@ class MyTheme {
             style: ButtonStyle(splashFactory: NoSplash.splashFactory),
           )
         : null,
-    colorScheme: ColorScheme.fromSwatch(primarySwatch: Colors.blue).copyWith(
+    colorScheme: ColorScheme.fromSwatch(
+      primarySwatch: Colors.blue,
+    ).copyWith(
       brightness: Brightness.light,
       background: Color(0xFFEEEEEE),
     ),
@@ -229,9 +231,11 @@ class MyTheme {
     checkboxTheme:
         const CheckboxThemeData(checkColor: MaterialStatePropertyAll(dark)),
     colorScheme: ColorScheme.fromSwatch(
-      brightness: Brightness.dark,
       primarySwatch: Colors.blue,
-    ).copyWith(background: Color(0xFF24252B)),
+    ).copyWith(
+      brightness: Brightness.dark,
+      background: Color(0xFF24252B),
+    ),
   ).copyWith(
     extensions: <ThemeExtension<dynamic>>[
       ColorThemeExtension.dark,
