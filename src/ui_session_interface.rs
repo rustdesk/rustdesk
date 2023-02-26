@@ -713,6 +713,18 @@ impl<T: InvokeUiSession> Session<T> {
         }
     }
 
+    pub fn change_resolution(&self, width: i32, height: i32) {
+        let mut misc = Misc::new();
+        misc.set_change_resolution(Resolution {
+            width,
+            height,
+            ..Default::default()
+        });
+        let mut msg = Message::new();
+        msg.set_misc(misc);
+        self.send(Data::Message(msg));
+    }
+
     pub fn request_voice_call(&self) {
         self.send(Data::NewVoiceCall);
     }
@@ -793,6 +805,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn clipboard(&self, content: String);
     fn cancel_msgbox(&self, tag: &str);
     fn switch_back(&self, id: &str);
+    fn portable_service_running(&self, running: bool);
     fn on_voice_call_started(&self);
     fn on_voice_call_closed(&self, reason: &str);
     fn on_voice_call_waiting(&self);

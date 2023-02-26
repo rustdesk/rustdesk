@@ -1453,10 +1453,12 @@ connectMainDesktop(String id,
 connect(BuildContext context, String id,
     {bool isFileTransfer = false,
     bool isTcpTunneling = false,
-    bool isRDP = false,
-    bool forceRelay = false}) async {
+    bool isRDP = false}) async {
   if (id == '') return;
   id = id.replaceAll(' ', '');
+  final oldId = id;
+  id = await bind.mainHandleRelayId(id: id);
+  final forceRelay = id != oldId;
   assert(!(isFileTransfer && isTcpTunneling && isRDP),
       "more than one connect type");
 
@@ -1818,4 +1820,20 @@ class DraggableNeverScrollableScrollPhysics extends ScrollPhysics {
 
   @override
   bool get allowImplicitScrolling => false;
+}
+
+Widget futureBuilder(
+    {required Future? future, required Widget Function(dynamic data) hasData}) {
+  return FutureBuilder(
+      future: future,
+      builder: (BuildContext context, AsyncSnapshot snapshot) {
+        if (snapshot.hasData) {
+          return hasData(snapshot.data!);
+        } else {
+          if (snapshot.hasError) {
+            debugPrint(snapshot.error.toString());
+          }
+          return Container();
+        }
+      });
 }

@@ -62,12 +62,15 @@ function createNewConnect(id, type) {
     id = id.replace(/\s/g, "");
     app.remote_id.value = formatId(id);
     if (!id) return;
+    var old_id = id;
+    id = handler.handle_relay_id(id);
+    var force_relay = old_id != id; 
     if (id == my_id) {
         msgbox("custom-error", "Error", "You cannot connect to your own computer");
         return;
     }
     handler.set_remote_id(id);
-    handler.new_remote(id, type);
+    handler.new_remote(id, type, force_relay);
 }
 
 class ShareRdp: Reactor.Component {

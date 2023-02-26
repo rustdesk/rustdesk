@@ -515,15 +515,31 @@ abstract class BasePeerCard extends StatelessWidget {
       String id, Future<void> Function() reloadFunc,
       {bool isLan = false}) {
     return MenuEntryButton<String>(
-      childBuilder: (TextStyle? style) => Text(
-        translate('Remove'),
-        style: style,
+      childBuilder: (TextStyle? style) => Row(
+        children: [
+          Text(
+            translate('Delete'),
+            style: style?.copyWith(color: Colors.red),
+          ),
+          Expanded(
+              child: Align(
+            alignment: Alignment.centerRight,
+            child: Transform.scale(
+              scale: 0.8,
+              child: Icon(Icons.delete_forever, color: Colors.red),
+            ),
+          ).marginOnly(right: 4)),
+        ],
       ),
       proc: () {
         () async {
           if (isLan) {
-            // TODO
+            bind.mainRemoveDiscovered(id: id);
           } else {
+            final favs = (await bind.mainGetFav()).toList();
+            if (favs.remove(id)) {
+              await bind.mainStoreFav(favs: favs);
+            }
             await bind.mainRemovePeer(id: id);
           }
           removePreference(id);
@@ -553,9 +569,21 @@ abstract class BasePeerCard extends StatelessWidget {
   @protected
   MenuEntryBase<String> _addFavAction(String id) {
     return MenuEntryButton<String>(
-      childBuilder: (TextStyle? style) => Text(
-        translate('Add to Favorites'),
-        style: style,
+      childBuilder: (TextStyle? style) => Row(
+        children: [
+          Text(
+            translate('Add to Favorites'),
+            style: style,
+          ),
+          Expanded(
+              child: Align(
+            alignment: Alignment.centerRight,
+            child: Transform.scale(
+              scale: 0.8,
+              child: Icon(Icons.star_outline),
+            ),
+          ).marginOnly(right: 4)),
+        ],
       ),
       proc: () {
         () async {
@@ -575,9 +603,21 @@ abstract class BasePeerCard extends StatelessWidget {
   MenuEntryBase<String> _rmFavAction(
       String id, Future<void> Function() reloadFunc) {
     return MenuEntryButton<String>(
-      childBuilder: (TextStyle? style) => Text(
-        translate('Remove from Favorites'),
-        style: style,
+      childBuilder: (TextStyle? style) => Row(
+        children: [
+          Text(
+            translate('Remove from Favorites'),
+            style: style,
+          ),
+          Expanded(
+              child: Align(
+            alignment: Alignment.centerRight,
+            child: Transform.scale(
+              scale: 0.8,
+              child: Icon(Icons.star),
+            ),
+          ).marginOnly(right: 4)),
+        ],
       ),
       proc: () {
         () async {
@@ -642,8 +682,9 @@ abstract class BasePeerCard extends StatelessWidget {
                 child: TextFormField(
                   controller: controller,
                   autofocus: true,
-                  decoration:
-                      const InputDecoration(border: OutlineInputBorder()),
+                  decoration: InputDecoration(
+                      border: OutlineInputBorder(),
+                      labelText: translate('Name')),
                 ),
               ),
             ),
@@ -677,6 +718,9 @@ class RecentPeerCard extends BasePeerCard {
       _connectAction(context, peer),
       _transferFileAction(context, peer.id),
     ];
+
+    final List favs = (await bind.mainGetFav()).toList();
+
     if (isDesktop && peer.platform != 'Android') {
       menuItems.add(_tcpTunnelingAction(context, peer.id));
     }
@@ -690,16 +734,26 @@ class RecentPeerCard extends BasePeerCard {
     }
     menuItems.add(MenuEntryDivider());
     menuItems.add(_renameAction(peer.id));
-    menuItems.add(_removeAction(peer.id, () async {
-      await bind.mainLoadRecentPeers();
-    }));
     if (await bind.mainPeerHasPassword(id: peer.id)) {
       menuItems.add(_unrememberPasswordAction(peer.id));
     }
-    menuItems.add(_addFavAction(peer.id));
-    if (!gFFI.abModel.idContainBy(peer.id)) {
-      menuItems.add(_addToAb(peer));
+
+    if (!favs.contains(peer.id)) {
+      menuItems.add(_addFavAction(peer.id));
+    } else {
+      menuItems.add(_rmFavAction(peer.id, () async {}));
     }
+
+    if (gFFI.userModel.userName.isNotEmpty) {
+      if (!gFFI.abModel.idContainBy(peer.id)) {
+        menuItems.add(_addToAb(peer));
+      }
+    }
+
+    menuItems.add(MenuEntryDivider());
+    menuItems.add(_removeAction(peer.id, () async {
+      await bind.mainLoadRecentPeers();
+    }));
     return menuItems;
   }
 
@@ -732,18 +786,23 @@ class FavoritePeerCard extends BasePeerCard {
     }
     menuItems.add(MenuEntryDivider());
     menuItems.add(_renameAction(peer.id));
-    menuItems.add(_removeAction(peer.id, () async {
-      await bind.mainLoadFavPeers();
-    }));
     if (await bind.mainPeerHasPassword(id: peer.id)) {
       menuItems.add(_unrememberPasswordAction(peer.id));
     }
     menuItems.add(_rmFavAction(peer.id, () async {
       await bind.mainLoadFavPeers();
     }));
-    if (!gFFI.abModel.idContainBy(peer.id)) {
-      menuItems.add(_addToAb(peer));
+
+    if (gFFI.userModel.userName.isNotEmpty) {
+      if (!gFFI.abModel.idContainBy(peer.id)) {
+        menuItems.add(_addToAb(peer));
+      }
     }
+
+    menuItems.add(MenuEntryDivider());
+    menuItems.add(_removeAction(peer.id, () async {
+      await bind.mainLoadFavPeers();
+    }));
     return menuItems;
   }
 
@@ -763,6 +822,9 @@ class DiscoveredPeerCard extends BasePeerCard {
       _connectAction(context, peer),
       _transferFileAction(context, peer.id),
     ];
+
+    final List favs = (await bind.mainGetFav()).toList();
+
     if (isDesktop && peer.platform != 'Android') {
       menuItems.add(_tcpTunnelingAction(context, peer.id));
     }
@@ -774,11 +836,28 @@ class DiscoveredPeerCard extends BasePeerCard {
     if (Platform.isWindows) {
       menuItems.add(_createShortCutAction(peer.id));
     }
-    menuItems.add(MenuEntryDivider());
-    menuItems.add(_removeAction(peer.id, () async {}));
-    if (!gFFI.abModel.idContainBy(peer.id)) {
-      menuItems.add(_addToAb(peer));
+
+    final inRecent = await bind.mainIsInRecentPeers(id: peer.id);
+    if (inRecent) {
+      if (!favs.contains(peer.id)) {
+        menuItems.add(_addFavAction(peer.id));
+      } else {
+        menuItems.add(_rmFavAction(peer.id, () async {}));
+      }
     }
+
+    if (gFFI.userModel.userName.isNotEmpty) {
+      if (!gFFI.abModel.idContainBy(peer.id)) {
+        menuItems.add(_addToAb(peer));
+      }
+    }
+
+    menuItems.add(MenuEntryDivider());
+    menuItems.add(
+      _removeAction(peer.id, () async {
+        await bind.mainLoadLanPeers();
+      }, isLan: true),
+    );
     return menuItems;
   }
 
@@ -811,13 +890,15 @@ class AddressBookPeerCard extends BasePeerCard {
     }
     menuItems.add(MenuEntryDivider());
     menuItems.add(_renameAction(peer.id));
-    menuItems.add(_removeAction(peer.id, () async {}));
     if (await bind.mainPeerHasPassword(id: peer.id)) {
       menuItems.add(_unrememberPasswordAction(peer.id));
     }
     if (gFFI.abModel.tags.isNotEmpty) {
       menuItems.add(_editTagAction(peer.id));
     }
+
+    menuItems.add(MenuEntryDivider());
+    menuItems.add(_removeAction(peer.id, () async {}));
     return menuItems;
   }
 

@@ -156,7 +156,7 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'clipboard') {
         Clipboard.setData(ClipboardData(text: evt['content']));
       } else if (name == 'permission') {
-        parent.target?.ffiModel.updatePermission(evt, peerId);
+        updatePermission(evt, peerId);
       } else if (name == 'chat_client_mode') {
         parent.target?.chatModel
             .receive(ChatModel.clientModeID, evt['text'] ?? '');
@@ -203,6 +203,8 @@ class FfiModel with ChangeNotifier {
         final peer_id = evt['peer_id'].toString();
         await bind.sessionSwitchSides(id: peer_id);
         closeConnection(id: peer_id);
+      } else if (name == 'portable_service_running') {
+        parent.target?.elevationModel.onPortableServiceRunning(evt);
       } else if (name == "on_url_scheme_received") {
         final url = evt['url'].toString();
         parseRustdeskUri(url);
@@ -239,37 +241,35 @@ class FfiModel with ChangeNotifier {
     }
   }
 
-  handleSwitchDisplay(Map<String, dynamic> evt, String peerId) {
-    final oldOrientation = _display.width > _display.height;
-    var old = _pi.currentDisplay;
-    _pi.currentDisplay = int.parse(evt['display']);
-    _display.x = double.parse(evt['x']);
-    _display.y = double.parse(evt['y']);
-    _display.width = int.parse(evt['width']);
-    _display.height = int.parse(evt['height']);
-    _display.cursorEmbedded = int.parse(evt['cursor_embedded']) == 1;
-    if (old != _pi.currentDisplay) {
-      parent.target?.cursorModel.updateDisplayOrigin(_display.x, _display.y);
+  _updateCurDisplay(String peerId, Display newDisplay) {
+    if (newDisplay != _display) {
+      if (newDisplay.x != _display.x || newDisplay.y != _display.y) {
+        parent.target?.cursorModel
+            .updateDisplayOrigin(newDisplay.x, newDisplay.y);
+      }
+      _display = newDisplay;
+      _updateSessionWidthHeight(peerId);
     }
+  }
 
-    _updateSessionWidthHeight(peerId, display.width, display.height);
+  handleSwitchDisplay(Map<String, dynamic> evt, String peerId) {
+    _pi.currentDisplay = int.parse(evt['display']);
+    var newDisplay = Display();
+    newDisplay.x = double.parse(evt['x']);
+    newDisplay.y = double.parse(evt['y']);
+    newDisplay.width = int.parse(evt['width']);
+    newDisplay.height = int.parse(evt['height']);
+    newDisplay.cursorEmbedded = int.parse(evt['cursor_embedded']) == 1;
+
+    _updateCurDisplay(peerId, newDisplay);
 
     try {
       CurrentDisplayState.find(peerId).value = _pi.currentDisplay;
     } catch (e) {
       //
     }
-
-    // remote is mobile, and orientation changed
-    if ((_display.width > _display.height) != oldOrientation) {
-      gFFI.canvasModel.updateViewStyle();
-    }
-    if (_pi.platform == kPeerPlatformLinux ||
-        _pi.platform == kPeerPlatformWindows ||
-        _pi.platform == kPeerPlatformMacOS) {
-      parent.target?.canvasModel.updateViewStyle();
-    }
     parent.target?.recordingModel.onSwitchDisplay();
+    handleResolutions(peerId, evt["resolutions"]);
     notifyListeners();
   }
 
@@ -369,7 +369,8 @@ class FfiModel with ChangeNotifier {
     });
   }
 
-  _updateSessionWidthHeight(String id, int width, int height) {
+  _updateSessionWidthHeight(String id) {
+    parent.target?.canvasModel.updateViewStyle();
     bind.sessionSetSize(id: id, width: display.width, height: display.height);
   }
 
@@ -426,7 +427,7 @@ class FfiModel with ChangeNotifier {
       stateGlobal.displaysCount.value = _pi.displays.length;
       if (_pi.currentDisplay < _pi.displays.length) {
         _display = _pi.displays[_pi.currentDisplay];
-        _updateSessionWidthHeight(peerId, display.width, display.height);
+        _updateSessionWidthHeight(peerId);
       }
       if (displays.isNotEmpty) {
         parent.target?.dialogManager.showLoading(
@@ -437,8 +438,34 @@ class FfiModel with ChangeNotifier {
       }
       Map<String, dynamic> features = json.decode(evt['features']);
       _pi.features.privacyMode = features['privacy_mode'] == 1;
+      handleResolutions(peerId, evt["resolutions"]);
+      parent.target?.elevationModel.onPeerInfo(_pi);
     }
     notifyListeners();
+  }
+
+  handleResolutions(String id, dynamic resolutions) {
+    try {
+      final List<dynamic> dynamicArray = jsonDecode(resolutions as String);
+      List<Resolution> arr = List.empty(growable: true);
+      for (int i = 0; i < dynamicArray.length; i++) {
+        var width = dynamicArray[i]["width"];
+        var height = dynamicArray[i]["height"];
+        if (width is int && width > 0 && height is int && height > 0) {
+          arr.add(Resolution(width, height));
+        }
+      }
+      arr.sort((a, b) {
+        if (b.width != a.width) {
+          return b.width - a.width;
+        } else {
+          return b.height - a.height;
+        }
+      });
+      _pi.resolutions = arr;
+    } catch (e) {
+      debugPrint("Failed to parse resolutions:$e");
+    }
   }
 
   /// Handle the peer info synchronization event based on [evt].
@@ -458,6 +485,9 @@ class FfiModel with ChangeNotifier {
       }
       _pi.displays = newDisplays;
       stateGlobal.displaysCount.value = _pi.displays.length;
+      if (_pi.currentDisplay >= 0 && _pi.currentDisplay < _pi.displays.length) {
+        _updateCurDisplay(peerId, _pi.displays[_pi.currentDisplay]);
+      }
     }
     notifyListeners();
   }
@@ -765,12 +795,18 @@ class CanvasModel with ChangeNotifier {
     final dh = getDisplayHeight() * _scale;
     var dxOffset = 0;
     var dyOffset = 0;
-    if (dw > size.width) {
-      dxOffset = (x - dw * (x / size.width) - _x).toInt();
+    try {
+      if (dw > size.width) {
+        dxOffset = (x - dw * (x / size.width) - _x).toInt();
+      }
+      if (dh > size.height) {
+        dyOffset = (y - dh * (y / size.height) - _y).toInt();
+      }
+    } catch (e) {
+      // Unhandled Exception: Unsupported operation: Infinity or NaN toInt
+      return;
     }
-    if (dh > size.height) {
-      dyOffset = (y - dh * (y / size.height) - _y).toInt();
-    }
+
     _x += dxOffset;
     _y += dyOffset;
     if (dxOffset != 0 || dyOffset != 0) {
@@ -1366,6 +1402,21 @@ class RecordingModel with ChangeNotifier {
   }
 }
 
+class ElevationModel with ChangeNotifier {
+  WeakReference<FFI> parent;
+  ElevationModel(this.parent);
+  bool _running = false;
+  bool _canElevate = false;
+  bool get showRequestMenu => _canElevate && !_running;
+  onPeerInfo(PeerInfo pi) {
+    _canElevate = pi.platform == kPeerPlatformWindows && pi.sasEnabled == false;
+  }
+
+  onPortableServiceRunning(Map<String, dynamic> evt) {
+    _running = evt['running'] == 'true';
+  }
+}
+
 enum ConnType { defaultConn, fileTransfer, portForward, rdp }
 
 /// Flutter state manager and data communication with the Rust core.
@@ -1391,6 +1442,7 @@ class FFI {
   late final QualityMonitorModel qualityMonitorModel; // session
   late final RecordingModel recordingModel; // session
   late final InputModel inputModel; // session
+  late final ElevationModel elevationModel; // session
 
   FFI() {
     imageModel = ImageModel(WeakReference(this));
@@ -1407,6 +1459,7 @@ class FFI {
     qualityMonitorModel = QualityMonitorModel(WeakReference(this));
     recordingModel = RecordingModel(WeakReference(this));
     inputModel = InputModel(WeakReference(this));
+    elevationModel = ElevationModel(WeakReference(this));
   }
 
   /// Start with the given [id]. Only transfer file if [isFileTransfer], only port forward if [isPortForward].
@@ -1530,6 +1583,30 @@ class Display {
         ? kDesktopDefaultDisplayHeight
         : kMobileDefaultDisplayHeight;
   }
+
+  @override
+  bool operator ==(Object other) =>
+      other is Display &&
+      other.runtimeType == runtimeType &&
+      _innerEqual(other);
+
+  bool _innerEqual(Display other) =>
+      other.x == x &&
+      other.y == y &&
+      other.width == width &&
+      other.height == height &&
+      other.cursorEmbedded == cursorEmbedded;
+}
+
+class Resolution {
+  int width = 0;
+  int height = 0;
+  Resolution(this.width, this.height);
+
+  @override
+  String toString() {
+    return 'Resolution($width,$height)';
+  }
 }
 
 class Features {
@@ -1545,6 +1622,7 @@ class PeerInfo {
   int currentDisplay = 0;
   List<Display> displays = [];
   Features features = Features();
+  List<Resolution> resolutions = [];
 }
 
 const canvasKey = 'canvas';
