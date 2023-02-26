@@ -480,6 +480,7 @@ impl InvokeUiSession for FlutterHandler {
             features.insert("privacy_mode", 0);
         }
         let features = serde_json::ser::to_string(&features).unwrap_or("".to_owned());
+        let resolutions = serialize_resolutions(&pi.resolutions.resolutions);
         *self.peer_info.write().unwrap() = pi.clone();
         self.push_event(
             "peer_info",
@@ -492,6 +493,7 @@ impl InvokeUiSession for FlutterHandler {
                 ("version", &pi.version),
                 ("features", &features),
                 ("current_display", &pi.current_display.to_string()),
+                ("resolutions", &resolutions),
             ],
         );
     }
@@ -529,6 +531,7 @@ impl InvokeUiSession for FlutterHandler {
     }
 
     fn switch_display(&self, display: &SwitchDisplay) {
+        let resolutions = serialize_resolutions(&display.resolutions.resolutions);
         self.push_event(
             "switch_display",
             vec![
@@ -548,6 +551,7 @@ impl InvokeUiSession for FlutterHandler {
                     }
                     .to_string(),
                 ),
+                ("resolutions", &resolutions),
             ],
         );
     }
@@ -566,6 +570,13 @@ impl InvokeUiSession for FlutterHandler {
 
     fn switch_back(&self, peer_id: &str) {
         self.push_event("switch_back", [("peer_id", peer_id)].into());
+    }
+
+    fn portable_service_running(&self, running: bool) {
+        self.push_event(
+            "portable_service_running",
+            [("running", running.to_string().as_str())].into(),
+        );
     }
 
     fn on_voice_call_started(&self) {
@@ -859,6 +870,27 @@ pub fn set_cur_session_id(id: String) {
     if get_cur_session_id() != id {
         *CUR_SESSION_ID.write().unwrap() = id;
     }
+}
+
+#[inline]
+fn serialize_resolutions(resolutions: &Vec<Resolution>) -> String {
+    #[derive(Debug, serde::Serialize)]
+    struct ResolutionSerde {
+        width: i32,
+        height: i32,
+    }
+
+    let mut v = vec![];
+    resolutions
+        .iter()
+        .map(|r| {
+            v.push(ResolutionSerde {
+                width: r.width,
+                height: r.height,
+            })
+        })
+        .count();
+    serde_json::ser::to_string(&v).unwrap_or("".to_string())
 }
 
 #[no_mangle]

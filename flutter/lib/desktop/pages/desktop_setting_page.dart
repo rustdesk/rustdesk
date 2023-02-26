@@ -319,7 +319,7 @@ class _GeneralState extends State<_General> {
       bind.mainSetOption(key: 'audio-input', value: device);
     }
 
-    return _futureBuilder(future: () async {
+    return futureBuilder(future: () async {
       List<String> devices = (await bind.mainGetSoundInputs()).toList();
       if (Platform.isWindows) {
         devices.insert(0, 'System Sound');
@@ -346,7 +346,7 @@ class _GeneralState extends State<_General> {
   }
 
   Widget record(BuildContext context) {
-    return _futureBuilder(future: () async {
+    return futureBuilder(future: () async {
       String customDirectory =
           await bind.mainGetOption(key: 'video-save-directory');
       String defaultDirectory = await bind.mainDefaultVideoSaveDirectory();
@@ -399,7 +399,7 @@ class _GeneralState extends State<_General> {
   }
 
   Widget language() {
-    return _futureBuilder(future: () async {
+    return futureBuilder(future: () async {
       String langs = await bind.mainGetLangs();
       String lang = bind.mainGetLocalOption(key: kCommConfKeyLang);
       return {'langs': langs, 'lang': lang};
@@ -487,7 +487,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
 
   Widget _permissions(context, bool stopService) {
     bool enabled = !locked;
-    return _futureBuilder(future: () async {
+    return futureBuilder(future: () async {
       return await bind.mainGetOption(key: 'access-mode');
     }(), hasData: (data) {
       String accessMode = data! as String;
@@ -744,7 +744,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     return [
       _OptionCheckBox(context, 'Enable Direct IP Access', 'direct-server',
           update: update, enabled: !locked),
-      _futureBuilder(
+      futureBuilder(
         future: () async {
           String enabled = await bind.mainGetOption(key: 'direct-server');
           String port = await bind.mainGetOption(key: 'direct-access-port');
@@ -805,7 +805,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
 
   Widget whitelist() {
     bool enabled = !locked;
-    return _futureBuilder(future: () async {
+    return futureBuilder(future: () async {
       return await bind.mainGetOption(key: 'whitelist');
     }(), hasData: (data) {
       RxBool hasWhitelist = (data as String).isNotEmpty.obs;
@@ -931,7 +931,7 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
   }
 
   server(bool enabled) {
-    return _futureBuilder(future: () async {
+    return futureBuilder(future: () async {
       return await bind.mainGetOptions();
     }(), hasData: (data) {
       // Setting page is not modal, oldOptions should only be used when getting options, never when setting.
@@ -1366,7 +1366,7 @@ class _About extends StatefulWidget {
 class _AboutState extends State<_About> {
   @override
   Widget build(BuildContext context) {
-    return _futureBuilder(future: () async {
+    return futureBuilder(future: () async {
       final license = await bind.mainGetLicense();
       final version = await bind.mainGetVersion();
       final buildDate = await bind.mainGetBuildDate();
@@ -1500,7 +1500,7 @@ Widget _OptionCheckBox(BuildContext context, String label, String key,
     bool enabled = true,
     Icon? checkedIcon,
     bool? fakeValue}) {
-  return _futureBuilder(
+  return futureBuilder(
       future: bind.mainGetOption(key: key),
       hasData: (data) {
         bool value = option2bool(key, data.toString());
@@ -1631,22 +1631,6 @@ Widget _SubLabeledWidget(BuildContext context, String label, Widget child,
       child,
     ],
   ).marginOnly(left: _kContentHSubMargin);
-}
-
-Widget _futureBuilder(
-    {required Future? future, required Widget Function(dynamic data) hasData}) {
-  return FutureBuilder(
-      future: future,
-      builder: (BuildContext context, AsyncSnapshot snapshot) {
-        if (snapshot.hasData) {
-          return hasData(snapshot.data!);
-        } else {
-          if (snapshot.hasError) {
-            debugPrint(snapshot.error.toString());
-          }
-          return Container();
-        }
-      });
 }
 
 Widget _lock(

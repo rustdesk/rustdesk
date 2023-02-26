@@ -53,6 +53,8 @@ const int kDesktopMaxDisplayHeight = 1080;
 
 const double kDesktopFileTransferNameColWidth = 200;
 const double kDesktopFileTransferModifiedColWidth = 120;
+const double kDesktopFileTransferMinimumWidth = 100;
+const double kDesktopFileTransferMaximumWidth = 300;
 const double kDesktopFileTransferRowHeight = 30.0;
 const double kDesktopFileTransferHeaderHeight = 25.0;
 

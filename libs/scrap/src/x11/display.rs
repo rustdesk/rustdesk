@@ -9,6 +9,7 @@ pub struct Display {
     default: bool,
     rect: Rect,
     root: xcb_window_t,
+    name: String,
 }
 
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
@@ -25,12 +26,14 @@ impl Display {
         default: bool,
         rect: Rect,
         root: xcb_window_t,
+        name: String,
     ) -> Display {
         Display {
             server,
             default,
             rect,
             root,
+            name,
         }
     }
 
@@ -51,5 +54,9 @@ impl Display {
     }
     pub fn root(&self) -> xcb_window_t {
         self.root
+    }
+
+    pub fn name(&self) -> String {
+        self.name.clone()
     }
 }

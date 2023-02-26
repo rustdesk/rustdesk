@@ -65,6 +65,21 @@ extern "C" {
     ) -> xcb_randr_monitor_info_iterator_t;
 
     pub fn xcb_randr_monitor_info_next(i: *mut xcb_randr_monitor_info_iterator_t);
+
+    pub fn xcb_get_atom_name(
+        c: *mut xcb_connection_t,
+        atom: xcb_atom_t,
+    ) -> xcb_get_atom_name_cookie_t;
+
+    pub fn xcb_get_atom_name_reply(
+        c: *mut xcb_connection_t,
+        cookie: xcb_get_atom_name_cookie_t,
+        e: *mut *mut xcb_generic_error_t,
+    ) -> *const xcb_get_atom_name_reply_t;
+
+    pub fn xcb_get_atom_name_name(reply: *const xcb_get_atom_name_request_t) -> *const u8;
+
+    pub fn xcb_get_atom_name_name_length(reply: *const xcb_get_atom_name_reply_t) -> i32;
 }
 
 pub const XCB_IMAGE_FORMAT_Z_PIXMAP: u8 = 2;
@@ -78,6 +93,9 @@ pub type xcb_timestamp_t = u32;
 pub type xcb_colormap_t = u32;
 pub type xcb_shm_seg_t = u32;
 pub type xcb_drawable_t = u32;
+pub type xcb_get_atom_name_cookie_t = u32;
+pub type xcb_get_atom_name_reply_t = u32;
+pub type xcb_get_atom_name_request_t = xcb_get_atom_name_reply_t;
 
 #[repr(C)]
 pub struct xcb_setup_t {

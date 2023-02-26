@@ -1,0 +1,27 @@
+{
+    "name": "rustdesk",
+    "build": {
+        "dockerfile": "./Dockerfile",
+        "context": "."
+    },
+    "workspaceMount": "source=${localWorkspaceFolder},target=/home/vscode/rustdesk,type=bind,consistency=cache",
+    "workspaceFolder": "/home/vscode/rustdesk",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "vadimcn.vscode-lldb",
+                "mutantdino.resourcemonitor",
+                "rust-lang.rust-analyzer",
+                "tamasfe.even-better-toml",
+                "serayuzgur.crates",
+                "mhutchie.git-graph",
+                "eamodio.gitlens"
+            ],
+            "settings": {
+                "files.watcherExclude": {
+                    "**/target/**": true
+                }
+            }
+        }
+    }
+}
