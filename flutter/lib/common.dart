@@ -168,6 +168,22 @@ class MyTheme {
     brightness: Brightness.light,
     hoverColor: Color.fromARGB(255, 224, 224, 224),
     scaffoldBackgroundColor: Color(0xFFFFFFFF),
+    dialogBackgroundColor: Color(0xFFFFFFFF),
+    dialogTheme: DialogTheme(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18.0),
+      ),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      fillColor: Color(0xFFEEEEEE),
+      filled: true,
+      isDense: true,
+      contentPadding: EdgeInsets.all(15),
+      border: UnderlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: BorderSide.none,
+      ),
+    ),
     textTheme: const TextTheme(
         titleLarge: TextStyle(fontSize: 19, color: Colors.black87),
         titleSmall: TextStyle(fontSize: 14, color: Colors.black87),
@@ -205,6 +221,22 @@ class MyTheme {
     brightness: Brightness.dark,
     hoverColor: Color.fromARGB(255, 45, 46, 53),
     scaffoldBackgroundColor: Color(0xFF18191E),
+    dialogBackgroundColor: Color(0xFF18191E),
+    dialogTheme: DialogTheme(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18.0),
+      ),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      fillColor: Color(0xFF24252B),
+      filled: true,
+      isDense: true,
+      contentPadding: EdgeInsets.all(15),
+      border: UnderlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: BorderSide.none,
+      ),
+    ),
     textTheme: const TextTheme(
         titleLarge: TextStyle(fontSize: 19),
         titleSmall: TextStyle(fontSize: 14),
@@ -681,18 +713,19 @@ class CustomAlertDialog extends StatelessWidget {
         scrollable: true,
         title: title,
         titlePadding: EdgeInsets.fromLTRB(padding, 24, padding, 0),
-        contentPadding: EdgeInsets.fromLTRB(contentPadding ?? padding, 25,
-            contentPadding ?? padding, actions is List ? 10 : padding),
+        contentPadding: EdgeInsets.fromLTRB(
+          contentPadding ?? padding,
+          25,
+          contentPadding ?? padding,
+          actions is List ? 10 : padding,
+        ),
         content: ConstrainedBox(
           constraints: contentBoxConstraints,
-          child: Theme(
-              data: Theme.of(context).copyWith(
-                  inputDecorationTheme: InputDecorationTheme(
-                      isDense: true, contentPadding: EdgeInsets.all(15))),
-              child: content),
+          child: content,
         ),
         actions: actions,
         actionsPadding: EdgeInsets.fromLTRB(padding, 0, padding, padding),
+        actionsAlignment: MainAxisAlignment.center,
       ),
     );
   }
