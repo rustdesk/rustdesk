@@ -803,7 +803,9 @@ class CanvasModel with ChangeNotifier {
         dyOffset = (y - dh * (y / size.height) - _y).toInt();
       }
     } catch (e) {
-      // Unhandled Exception: Unsupported operation: Infinity or NaN toInt
+      debugPrintStack(
+          label:
+              '(x,y) ($x,$y), (_x,_y) ($_x,$_y), _scale $_scale, display size (${getDisplayWidth()},${getDisplayHeight()}), size $size, , $e');
       return;
     }
 
