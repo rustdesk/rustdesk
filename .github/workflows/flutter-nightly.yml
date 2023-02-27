@@ -732,7 +732,7 @@ jobs:
               x86_64)
                 # no need mock on x86_64
                 export VCPKG_ROOT=/opt/artifacts/vcpkg
-                cargo build --lib --features hwcodec,flutter,flutter_texture_render,${{ matrix.job.extra-build-features }} --release
+                cargo build --lib --features hwcodec,flutter,${{ matrix.job.extra-build-features }} --release
                 ;;
             esac
 
@@ -900,7 +900,7 @@ jobs:
                 ln -s /usr/include /vcpkg/installed/arm64-linux/include
                 export VCPKG_ROOT=/vcpkg
                 # disable hwcodec for compilation
-                cargo build --lib --features flutter,flutter_texture_render,${{ matrix.job.extra-build-features }} --release
+                cargo build --lib --features flutter,${{ matrix.job.extra-build-features }} --release
                 ;;
               armv7)
                 cp -r /opt/artifacts/vcpkg/installed/lib/* /usr/lib/arm-linux-gnueabihf/
@@ -910,7 +910,7 @@ jobs:
                 ln -s /usr/include /vcpkg/installed/arm-linux/include
                 export VCPKG_ROOT=/vcpkg
                 # disable hwcodec for compilation
-                cargo build --lib --features flutter,flutter_texture_render,${{ matrix.job.extra-build-features }} --release
+                cargo build --lib --features flutter,${{ matrix.job.extra-build-features }} --release
                 ;;
             esac
 
