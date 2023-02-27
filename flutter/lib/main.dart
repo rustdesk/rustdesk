@@ -291,7 +291,7 @@ void _runApp(
 void runInstallPage() async {
   await windowManager.ensureInitialized();
   await initEnv(kAppTypeMain);
-  _runApp('', const InstallPage(), ThemeMode.light);
+  _runApp('', const InstallPage(), MyTheme.currentThemeMode());
   windowManager.waitUntilReadyToShow(
       WindowOptions(size: Size(800, 600), center: true), () async {
     windowManager.show();
