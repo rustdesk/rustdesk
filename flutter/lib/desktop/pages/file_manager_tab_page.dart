@@ -98,7 +98,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
             labelGetter: DesktopTab.labelGetterAlias,
           )),
     );
-    return Platform.isMacOS
+    return Platform.isMacOS || kUseCompatibleUiMode
         ? tabWidget
         : SubWindowDragToResizeArea(
             child: tabWidget,

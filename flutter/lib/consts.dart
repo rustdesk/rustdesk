@@ -59,10 +59,10 @@ const double kDesktopFileTransferMaximumWidth = 300;
 const double kDesktopFileTransferRowHeight = 30.0;
 const double kDesktopFileTransferHeaderHeight = 25.0;
 
-EdgeInsets get kDragToResizeAreaPadding => Platform.isLinux
+EdgeInsets get kDragToResizeAreaPadding => !kUseCompatibleUiMode && Platform.isLinux
     ? stateGlobal.fullscreen || stateGlobal.maximize
         ? EdgeInsets.zero
-        : EdgeInsets.all(4.0)
+        : EdgeInsets.all(5.0)
     : EdgeInsets.zero;
 // https://en.wikipedia.org/wiki/Non-breaking_space
 const int $nbsp = 0x00A0;
