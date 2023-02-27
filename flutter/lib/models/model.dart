@@ -617,12 +617,27 @@ class ViewStyle {
   final int displayWidth;
   final int displayHeight;
   ViewStyle({
-    this.style = '',
-    this.width = 0.0,
-    this.height = 0.0,
-    this.displayWidth = 0,
-    this.displayHeight = 0,
+    required this.style,
+    required this.width,
+    required this.height,
+    required this.displayWidth,
+    required this.displayHeight,
   });
+
+  static defaultViewStyle() {
+    final desktop = (isDesktop || isWebDesktop);
+    final w =
+        desktop ? kDesktopDefaultDisplayWidth : kMobileDefaultDisplayWidth;
+    final h =
+        desktop ? kDesktopDefaultDisplayHeight : kMobileDefaultDisplayHeight;
+    return ViewStyle(
+      style: '',
+      width: w.toDouble(),
+      height: h.toDouble(),
+      displayWidth: w,
+      displayHeight: h,
+    );
+  }
 
   static int _double2Int(double v) => (v * 100).round().toInt();
 
@@ -652,9 +667,14 @@ class ViewStyle {
   double get scale {
     double s = 1.0;
     if (style == kRemoteViewStyleAdaptive) {
-      final s1 = width / displayWidth;
-      final s2 = height / displayHeight;
-      s = s1 < s2 ? s1 : s2;
+      if (width != 0 &&
+          height != 0 &&
+          displayWidth != 0 &&
+          displayHeight != 0) {
+        final s1 = width / displayWidth;
+        final s2 = height / displayHeight;
+        s = s1 < s2 ? s1 : s2;
+      }
     }
     return s;
   }
@@ -680,7 +700,7 @@ class CanvasModel with ChangeNotifier {
   // scroll offset y percent
   double _scrollY = 0.0;
   ScrollStyle _scrollStyle = ScrollStyle.scrollauto;
-  ViewStyle _lastViewStyle = ViewStyle();
+  ViewStyle _lastViewStyle = ViewStyle.defaultViewStyle();
 
   final _imageOverflow = false.obs;
 
