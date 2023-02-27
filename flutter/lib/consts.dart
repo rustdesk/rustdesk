@@ -59,11 +59,12 @@ const double kDesktopFileTransferMaximumWidth = 300;
 const double kDesktopFileTransferRowHeight = 30.0;
 const double kDesktopFileTransferHeaderHeight = 25.0;
 
-EdgeInsets get kDragToResizeAreaPadding => !kUseCompatibleUiMode && Platform.isLinux
-    ? stateGlobal.fullscreen || stateGlobal.maximize
-        ? EdgeInsets.zero
-        : EdgeInsets.all(5.0)
-    : EdgeInsets.zero;
+EdgeInsets get kDragToResizeAreaPadding =>
+    !kUseCompatibleUiMode && Platform.isLinux
+        ? stateGlobal.fullscreen || stateGlobal.maximize
+            ? EdgeInsets.zero
+            : EdgeInsets.all(5.0)
+        : EdgeInsets.zero;
 // https://en.wikipedia.org/wiki/Non-breaking_space
 const int $nbsp = 0x00A0;
 
@@ -135,6 +136,21 @@ const kRemoteAudioGuestToHost = 'guest-to-host';
 const kRemoteAudioDualWay = 'dual-way';
 
 const kIgnoreDpi = true;
+
+/// Android constants
+const kActionApplicationDetailsSettings =
+    "android.settings.APPLICATION_DETAILS_SETTINGS";
+const kActionRequestIgnoreBatteryOptimizations =
+    "android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS";
+const kRecordAudio = "android.permission.RECORD_AUDIO";
+const kManageExternalStorage = "android.permission.MANAGE_EXTERNAL_STORAGE";
+const kSystemAlertWindow = "android.permission.SYSTEM_ALERT_WINDOW";
+
+/// [kIgnoreBatteryOptimizations] not a Android Permission, it is a custom key, used in `ignore battery optimizations` check
+const kIgnoreBatteryOptimizations = "ignore_battery_optimizations";
+
+/// Android channel invoke type key
+const kStartAction = "start_action";
 
 /// flutter/packages/flutter/lib/src/services/keyboard_key.dart -> _keyLabels
 /// see [LogicalKeyboardKey.keyLabel]

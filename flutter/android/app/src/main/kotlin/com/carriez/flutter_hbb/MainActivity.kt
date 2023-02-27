@@ -88,6 +88,14 @@ class MainActivity : FlutterActivity() {
                             result.success(false)
                         }
                     }
+                    START_ACTION -> {
+                        if (call.arguments is String) {
+                            startAction(context, call.arguments as String)
+                            result.success(true)
+                        } else {
+                            result.success(false)
+                        }
+                    }
                     "check_video_permission" -> {
                         mainService?.let {
                             result.success(it.checkMediaPermission())

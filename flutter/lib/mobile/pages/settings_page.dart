@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../common.dart';
 import '../../common/widgets/dialog.dart';
 import '../../common/widgets/login.dart';
+import '../../consts.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../widgets/dialog.dart';
@@ -133,7 +134,8 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   }
 
   Future<bool> updateIgnoreBatteryStatus() async {
-    final res = await PermissionManager.check("ignore_battery_optimizations");
+    final res =
+        await AndroidPermissionManager.check(kIgnoreBatteryOptimizations);
     if (_ignoreBatteryOpt != res) {
       _ignoreBatteryOpt = res;
       return true;
@@ -265,7 +267,8 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                   ]),
               onToggle: (v) async {
                 if (v) {
-                  PermissionManager.request("ignore_battery_optimizations");
+                  gFFI.invokeMethod(
+                      kStartAction, kActionRequestIgnoreBatteryOptimizations);
                 } else {
                   final res = await gFFI.dialogManager
                       .show<bool>((setState, close) => CustomAlertDialog(
@@ -282,7 +285,8 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                             ],
                           ));
                   if (res == true) {
-                    PermissionManager.request("application_details_settings");
+                    gFFI.invokeMethod(
+                        kStartAction, kActionApplicationDetailsSettings);
                   }
                 }
               }));

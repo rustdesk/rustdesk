@@ -907,21 +907,14 @@ class AccessibilityListener extends StatelessWidget {
   }
 }
 
-class PermissionManager {
+class AndroidPermissionManager {
   static Completer<bool>? _completer;
   static Timer? _timer;
   static var _current = "";
 
-  static final permissions = [
-    "audio",
-    "file",
-    "ignore_battery_optimizations",
-    "application_details_settings"
-  ];
-
   static bool isWaitingFile() {
     if (_completer != null) {
-      return !_completer!.isCompleted && _current == "file";
+      return !_completer!.isCompleted && _current == kManageExternalStorage;
     }
     return false;
   }
@@ -930,9 +923,6 @@ class PermissionManager {
     if (isDesktop) {
       return Future.value(true);
     }
-    if (!permissions.contains(type)) {
-      return Future.error("Wrong permission!$type");
-    }
     return gFFI.invokeMethod("check_permission", type);
   }
 
@@ -940,17 +930,16 @@ class PermissionManager {
     if (isDesktop) {
       return Future.value(true);
     }
-    if (!permissions.contains(type)) {
-      return Future.error("Wrong permission!$type");
-    }
 
     gFFI.invokeMethod("request_permission", type);
-    if (type == "ignore_battery_optimizations") {
+
+    // kIgnoreBatteryOptimizations permission doesn't depend on callback result, the result will be checked and updated on page resume
+    if (type == kIgnoreBatteryOptimizations) {
       return Future.value(false);
     }
+
     _current = type;
     _completer = Completer<bool>();
-    gFFI.invokeMethod("request_permission", type);
 
     // timeout
     _timer?.cancel();
@@ -1484,8 +1473,8 @@ connect(BuildContext context, String id,
     }
   } else {
     if (isFileTransfer) {
-      if (!await PermissionManager.check("file")) {
-        if (!await PermissionManager.request("file")) {
+      if (!await AndroidPermissionManager.check(kManageExternalStorage)) {
+        if (!await AndroidPermissionManager.request(kManageExternalStorage)) {
           return;
         }
       }
