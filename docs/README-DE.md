@@ -17,9 +17,9 @@ RustDesk ist eine in Rust geschriebene Remote-Desktop-Software, die out of the b
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
-RustDesk heißt jegliche Mitarbeit willkommen. Schau dir [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) an, wenn du Unterstützung beim Start brauchst.
+RustDesk heißt jegliche Mitarbeit willkommen. Schau dir [CONTRIBUTING-DE.md](CONTRIBUTING-DE.md) an, wenn du Unterstützung beim Start brauchst.
 
-[**Wie arbeitet RustDesk?**](https://github.com/rustdesk/rustdesk/wiki/How-does-RustDesk-work%3F)
+[**FAQ**](https://github.com/rustdesk/rustdesk/wiki/FAQ)
 
 [**Programm herunterladen**](https://github.com/rustdesk/rustdesk/releases)
 
@@ -40,6 +40,14 @@ Nachfolgend sind die Server gelistet, die du kostenlos nutzen kannst. Es kann se
 | Finnland (Helsinki) | 0x101 Cyber Security | 4 vCPU / 8 GB RAM |
 | USA (Ashburn) | 0x101 Cyber Security | 4 vCPU / 8 GB RAM |
 | Ukraine (Kiew) | dc.volia (2VM) | 2 vCPU / 4 GB RAM |
+
+## Dev-Container
+
+[![In Dev-Containern öffnen](https://img.shields.io/static/v1?label=Dev%20Container&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/rustdesk/rustdesk)
+
+Wenn du VS Code und Docker bereits installiert hast, kannst du auf das Abzeichen oben klicken, um loszulegen. Wenn du darauf klickst, wird VS Code automatisch die Dev-Container-Erweiterung installieren, den Quellcode in ein Container-Volume klonen und einen Dev-Container für die Verwendung aufsetzen.
+
+Weitere Informationen findest du in [DEVCONTAINER-DE.md](DEVCONTAINER-DE.md).
 
 ## Abhängigkeiten
 
