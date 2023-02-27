@@ -59,7 +59,7 @@ const double kDesktopFileTransferMaximumWidth = 300;
 const double kDesktopFileTransferRowHeight = 30.0;
 const double kDesktopFileTransferHeaderHeight = 25.0;
 
-EdgeInsets get kDragToResizeAreaPadding => Platform.isLinux
+EdgeInsets get kDragToResizeAreaPadding => !kUseCompatibleUiMode && Platform.isLinux
     ? stateGlobal.fullscreen || stateGlobal.maximize
         ? EdgeInsets.zero
         : EdgeInsets.all(4.0)

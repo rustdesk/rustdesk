@@ -107,7 +107,7 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
             labelGetter: DesktopTab.labelGetterAlias,
           )),
     );
-    return Platform.isMacOS
+    return Platform.isMacOS || kUseCompatibleUiMode
         ? tabWidget
         : Obx(
           () => SubWindowDragToResizeArea(

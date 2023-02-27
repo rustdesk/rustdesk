@@ -29,7 +29,6 @@ class StateGlobal {
   setWindowId(int id) => _windowId = id;
   setMaximize(bool v) {
     if (_maximize != v) {
-      print("set maximize");
       _maximize = v;
       _resizeEdgeSize.value =
           _maximize ? kMaximizeEdgeSize : kWindowEdgeSize;
