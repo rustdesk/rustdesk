@@ -1236,6 +1236,15 @@ pub fn uninstall_me() -> ResultType<()> {
 
 fn write_cmds(cmds: String, ext: &str, tip: &str) -> ResultType<std::path::PathBuf> {
     let mut tmp = std::env::temp_dir();
+    // When dir contains these characters, the bat file will not execute in elevated mode.
+    if vec!["&", "@", "^"]
+        .drain(..)
+        .any(|s| tmp.to_string_lossy().to_string().contains(s))
+    {
+        if let Ok(dir) = user_accessible_folder() {
+            tmp = dir;
+        }
+    }
     tmp.push(format!("{}_{}.{}", crate::get_app_name(), tip, ext));
     let mut file = std::fs::File::create(&tmp)?;
     // in case cmds mixed with \r\n and \n, make sure all ending with \r\n
@@ -1871,4 +1880,20 @@ pub fn change_resolution(name: &str, width: usize, height: usize) -> ResultType<
         }
         Ok(())
     }
+}
+
+pub fn user_accessible_folder() -> ResultType<PathBuf> {
+    let disk = std::env::var("SystemDrive").unwrap_or("C:".to_string());
+    let dir1 = PathBuf::from(format!("{}\\ProgramData", disk));
+    // NOTICE: "C:\Windows\Temp" requires permanent authorization.
+    let dir2 = PathBuf::from(format!("{}\\Windows\\Temp", disk));
+    let dir;
+    if dir1.exists() {
+        dir = dir1;
+    } else if dir2.exists() {
+        dir = dir2;
+    } else {
+        bail!("no vaild user accessible folder");
+    }
+    Ok(dir)
 }
