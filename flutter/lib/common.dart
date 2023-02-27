@@ -202,9 +202,43 @@ class MyTheme {
     splashFactory: isDesktop ? NoSplash.splashFactory : null,
     textButtonTheme: isDesktop
         ? TextButtonThemeData(
-            style: ButtonStyle(splashFactory: NoSplash.splashFactory),
+            style: ButtonStyle(
+              splashFactory: NoSplash.splashFactory,
+              shape: MaterialStateProperty.all<RoundedRectangleBorder>(
+                RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18.0),
+                ),
+              ),
+            ),
           )
         : null,
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ButtonStyle(
+        backgroundColor: MaterialStateProperty.all(
+          MyTheme.accent,
+        ),
+        shape: MaterialStateProperty.all<RoundedRectangleBorder>(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18.0),
+          ),
+        ),
+      ),
+    ),
+    checkboxTheme: const CheckboxThemeData(
+      splashRadius: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(
+          Radius.circular(5),
+        ),
+      ),
+    ),
+    listTileTheme: ListTileThemeData(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(
+          Radius.circular(5),
+        ),
+      ),
+    ),
     colorScheme: ColorScheme.fromSwatch(
       primarySwatch: Colors.blue,
     ).copyWith(
@@ -257,11 +291,44 @@ class MyTheme {
             OutlinedButton.styleFrom(side: BorderSide(color: Colors.white38))),
     textButtonTheme: isDesktop
         ? TextButtonThemeData(
-            style: ButtonStyle(splashFactory: NoSplash.splashFactory),
+            style: ButtonStyle(
+              splashFactory: NoSplash.splashFactory,
+              shape: MaterialStateProperty.all<RoundedRectangleBorder>(
+                RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18.0),
+                ),
+              ),
+            ),
           )
         : null,
-    checkboxTheme:
-        const CheckboxThemeData(checkColor: MaterialStatePropertyAll(dark)),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ButtonStyle(
+        backgroundColor: MaterialStateProperty.all(
+          MyTheme.accent,
+        ),
+        shape: MaterialStateProperty.all<RoundedRectangleBorder>(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18.0),
+          ),
+        ),
+      ),
+    ),
+    checkboxTheme: const CheckboxThemeData(
+      checkColor: MaterialStatePropertyAll(dark),
+      splashRadius: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(
+          Radius.circular(5),
+        ),
+      ),
+    ),
+    listTileTheme: ListTileThemeData(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(
+          Radius.circular(5),
+        ),
+      ),
+    ),
     colorScheme: ColorScheme.fromSwatch(
       primarySwatch: Colors.blue,
     ).copyWith(
@@ -684,7 +751,7 @@ class CustomAlertDialog extends StatelessWidget {
     Future.delayed(Duration.zero, () {
       if (!scopeNode.hasFocus) scopeNode.requestFocus();
     });
-    const double padding = 16;
+    const double padding = 30;
     bool tabTapped = false;
     return FocusScope(
       node: scopeNode,

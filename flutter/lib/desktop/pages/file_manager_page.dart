@@ -1010,25 +1010,11 @@ class _FileManagerPageState extends State<FileManagerPage>
                                           MainAxisAlignment.spaceBetween,
                                       children: [
                                         ElevatedButton.icon(
-                                          style: ButtonStyle(
-                                            backgroundColor:
-                                                MaterialStateProperty.all(
-                                              MyTheme.accent,
-                                            ),
-                                            shape: buttonShape,
-                                          ),
                                           icon: Icon(Icons.close_rounded),
                                           label: Text(translate("Cancel")),
                                           onPressed: cancel,
                                         ),
                                         ElevatedButton.icon(
-                                          style: ButtonStyle(
-                                            backgroundColor:
-                                                MaterialStateProperty.all(
-                                              MyTheme.accent,
-                                            ),
-                                            shape: buttonShape,
-                                          ),
                                           icon: Icon(Icons.done_rounded),
                                           label: Text(translate("Ok")),
                                           onPressed: submit,
