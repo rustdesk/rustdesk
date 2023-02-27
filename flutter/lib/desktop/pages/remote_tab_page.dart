@@ -210,6 +210,8 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         : Obx(() => SubWindowDragToResizeArea(
               key: contentKey,
               child: tabWidget,
+              // Specially configured for a better resize area and remote control.
+              childPadding: kDragToResizeAreaPadding,
               resizeEdgeSize: stateGlobal.resizeEdgeSize.value,
               windowId: stateGlobal.windowId,
             ));

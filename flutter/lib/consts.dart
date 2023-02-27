@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/models/state_model.dart';
 
 const double kDesktopRemoteTabBarHeight = 28.0;
 const int kMainWindowId = 0;
@@ -58,6 +59,11 @@ const double kDesktopFileTransferMaximumWidth = 300;
 const double kDesktopFileTransferRowHeight = 30.0;
 const double kDesktopFileTransferHeaderHeight = 25.0;
 
+EdgeInsets get kDragToResizeAreaPadding => Platform.isLinux
+    ? stateGlobal.fullscreen || stateGlobal.maximize
+        ? EdgeInsets.zero
+        : EdgeInsets.all(4.0)
+    : EdgeInsets.zero;
 // https://en.wikipedia.org/wiki/Non-breaking_space
 const int $nbsp = 0x00A0;
 
@@ -79,6 +85,7 @@ const kDefaultScrollAmountMultiplier = 5.0;
 const kDefaultScrollDuration = Duration(milliseconds: 50);
 const kDefaultMouseWheelThrottleDuration = Duration(milliseconds: 50);
 const kFullScreenEdgeSize = 0.0;
+const kMaximizeEdgeSize = 0.0;
 var kWindowEdgeSize = Platform.isWindows ? 1.0 : 5.0;
 const kWindowBorderWidth = 1.0;
 const kDesktopMenuPadding = EdgeInsets.only(left: 12.0, right: 3.0);
