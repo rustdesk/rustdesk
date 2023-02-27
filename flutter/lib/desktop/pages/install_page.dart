@@ -46,15 +46,19 @@ class _InstallPageState extends State<InstallPage> with WindowListener {
     final double em = 13;
     final btnFontSize = 0.9 * em;
     final double button_radius = 6;
+    final isDarkTheme = MyTheme.currentThemeMode() == ThemeMode.dark;
     final buttonStyle = OutlinedButton.styleFrom(
         shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.all(Radius.circular(button_radius)),
     ));
     final inputBorder = OutlineInputBorder(
         borderRadius: BorderRadius.zero,
-        borderSide: BorderSide(color: Colors.black12));
+        borderSide:
+            BorderSide(color: isDarkTheme ? Colors.white70 : Colors.black12));
+    final textColor = isDarkTheme ? null : Colors.black87;
+    final dividerColor = isDarkTheme ? Colors.white70 : Colors.black87;
     return Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: null,
         body: SingleChildScrollView(
           child: Column(
             children: [
@@ -91,8 +95,7 @@ class _InstallPageState extends State<InstallPage> with WindowListener {
                           style: buttonStyle,
                           child: Text(translate('Change Path'),
                               style: TextStyle(
-                                  color: Colors.black87,
-                                  fontSize: btnFontSize)))
+                                  color: textColor, fontSize: btnFontSize)))
                       .marginOnly(left: em))
                 ],
               ).marginSymmetric(vertical: 2 * em),
@@ -127,8 +130,7 @@ class _InstallPageState extends State<InstallPage> with WindowListener {
                   )).marginOnly(top: 2 * em),
               Row(children: [Text(translate('agreement_tip'))])
                   .marginOnly(top: em),
-              Divider(color: Colors.black87)
-                  .marginSymmetric(vertical: 0.5 * em),
+              Divider(color: dividerColor).marginSymmetric(vertical: 0.5 * em),
               Row(
                 children: [
                   Expanded(
@@ -143,8 +145,7 @@ class _InstallPageState extends State<InstallPage> with WindowListener {
                           style: buttonStyle,
                           child: Text(translate('Cancel'),
                               style: TextStyle(
-                                  color: Colors.black87,
-                                  fontSize: btnFontSize)))
+                                  color: textColor, fontSize: btnFontSize)))
                       .marginOnly(right: 2 * em)),
                   Obx(() => ElevatedButton(
                       onPressed: btnEnabled.value ? install : null,
@@ -167,8 +168,7 @@ class _InstallPageState extends State<InstallPage> with WindowListener {
                             style: buttonStyle,
                             child: Text(translate('Run without install'),
                                 style: TextStyle(
-                                    color: Colors.black87,
-                                    fontSize: btnFontSize)))
+                                    color: textColor, fontSize: btnFontSize)))
                         .marginOnly(left: 2 * em)),
                   ),
                 ],
