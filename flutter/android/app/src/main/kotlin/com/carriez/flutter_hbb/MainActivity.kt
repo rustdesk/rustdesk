@@ -7,12 +7,10 @@ package com.carriez.flutter_hbb
  * Inspired by [droidVNC-NG] https://github.com/bk138/droidVNC-NG
  */
 
-import android.app.Activity
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
-import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
@@ -23,7 +21,6 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
-const val MEDIA_REQUEST_CODE = 42
 
 class MainActivity : FlutterActivity() {
     companion object {
@@ -32,7 +29,6 @@ class MainActivity : FlutterActivity() {
 
     private val channelTag = "mChannel"
     private val logTag = "mMainActivity"
-    private var mediaProjectionResultIntent: Intent? = null
     private var mainService: MainService? = null
 
     @RequiresApi(Build.VERSION_CODES.M)
@@ -58,7 +54,7 @@ class MainActivity : FlutterActivity() {
                             result.success(false)
                             return@setMethodCallHandler
                         }
-                        getMediaProjection()
+                        requestMediaProjection()
                         result.success(true)
                     }
                     "start_capture" -> {
@@ -153,35 +149,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun getMediaProjection() {
-        val mMediaProjectionManager =
-            getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-        val mIntent = mMediaProjectionManager.createScreenCaptureIntent()
-        startActivityForResult(mIntent, MEDIA_REQUEST_CODE)
-    }
-
-    private fun initService() {
-        if (mediaProjectionResultIntent == null) {
-            Log.w(logTag, "initService fail,mediaProjectionResultIntent is null")
-            return
-        }
-        Log.d(logTag, "Init service")
-        val serviceIntent = Intent(this, MainService::class.java)
-        serviceIntent.action = INIT_SERVICE
-        serviceIntent.putExtra(EXTRA_MP_DATA, mediaProjectionResultIntent)
-
-        launchMainService(serviceIntent)
-    }
-
-    private fun launchMainService(intent: Intent) {
-        // TEST api < O
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
-        }
-    }
-
     private fun initInput() {
         val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
         if (intent.resolveActivity(packageManager) != null) {
@@ -200,15 +167,17 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun requestMediaProjection() {
+        val intent = Intent(this, PermissionRequestTransparentActivity::class.java).apply {
+            action = ACT_REQUEST_MEDIA_PROJECTION
+        }
+        startActivityForResult(intent, REQ_INVOKE_PERMISSION_ACTIVITY_MEDIA_PROJECTION)
+    }
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == MEDIA_REQUEST_CODE) {
-            if (resultCode == Activity.RESULT_OK && data != null) {
-                mediaProjectionResultIntent = data
-                initService()
-            } else {
-                flutterMethodChannel.invokeMethod("on_media_projection_canceled", null)
-            }
+        if (requestCode == REQ_INVOKE_PERMISSION_ACTIVITY_MEDIA_PROJECTION && resultCode == RES_FAILED) {
+            flutterMethodChannel.invokeMethod("on_media_projection_canceled", null)
         }
     }
 

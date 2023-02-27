@@ -43,10 +43,6 @@ import java.nio.ByteBuffer
 import kotlin.math.max
 import kotlin.math.min
 
-const val EXTRA_MP_DATA = "mp_intent"
-const val INIT_SERVICE = "init_service"
-const val ACTION_LOGIN_REQ_NOTIFY = "ACTION_LOGIN_REQ_NOTIFY"
-const val EXTRA_LOGIN_REQ_NOTIFY = "EXTRA_LOGIN_REQ_NOTIFY"
 
 const val DEFAULT_NOTIFY_TITLE = "RustDesk"
 const val DEFAULT_NOTIFY_TEXT = "Service is running"
@@ -195,6 +191,7 @@ class MainService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        Log.d(logTag,"MainService onCreate")
         HandlerThread("Service", Process.THREAD_PRIORITY_BACKGROUND).apply {
             start()
             serviceLooper = looper
@@ -203,6 +200,7 @@ class MainService : Service() {
         updateScreenInfo(resources.configuration.orientation)
         initNotification()
         startServer()
+        createForegroundNotification()
     }
 
     override fun onDestroy() {
@@ -277,27 +275,38 @@ class MainService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d("whichService", "this service:${Thread.currentThread()}")
+        Log.d("whichService", "this service: ${Thread.currentThread()}")
         super.onStartCommand(intent, flags, startId)
-        if (intent?.action == INIT_SERVICE) {
-            Log.d(logTag, "service starting:${startId}:${Thread.currentThread()}")
-            createForegroundNotification()
-            val mMediaProjectionManager =
+        if (intent?.action == ACT_INIT_MEDIA_PROJECTION_AND_SERVICE) {
+            Log.d(logTag, "service starting: ${startId}:${Thread.currentThread()}")
+            val mediaProjectionManager =
                 getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-            intent.getParcelableExtra<Intent>(EXTRA_MP_DATA)?.let {
+
+            intent.getParcelableExtra<Intent>(EXT_MEDIA_PROJECTION_RES_INTENT)?.let {
                 mediaProjection =
-                    mMediaProjectionManager.getMediaProjection(Activity.RESULT_OK, it)
+                    mediaProjectionManager.getMediaProjection(Activity.RESULT_OK, it)
                 checkMediaPermission()
                 init(this)
                 _isReady = true
+            } ?: let {
+                Log.d(logTag, "getParcelableExtra intent null, invoke requestMediaProjection")
+                requestMediaProjection()
             }
         }
-        return START_NOT_STICKY // don't use sticky (auto restart),the new service (from auto restart) will lose control
+        return START_NOT_STICKY // don't use sticky (auto restart), the new service (from auto restart) will lose control
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         updateScreenInfo(newConfig.orientation)
+    }
+
+    private fun requestMediaProjection() {
+        val intent = Intent(this, PermissionRequestTransparentActivity::class.java).apply {
+            action = ACT_REQUEST_MEDIA_PROJECTION
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        startActivity(intent)
     }
 
     @SuppressLint("WrongConstant")
@@ -653,8 +662,8 @@ class MainService : Service() {
     @SuppressLint("UnspecifiedImmutableFlag")
     private fun genLoginRequestPendingIntent(res: Boolean): PendingIntent {
         val intent = Intent(this, MainService::class.java).apply {
-            action = ACTION_LOGIN_REQ_NOTIFY
-            putExtra(EXTRA_LOGIN_REQ_NOTIFY, res)
+            action = ACT_LOGIN_REQ_NOTIFY
+            putExtra(EXT_LOGIN_REQ_NOTIFY, res)
         }
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             PendingIntent.getService(this, 111, intent, FLAG_IMMUTABLE)
