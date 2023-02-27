@@ -34,6 +34,7 @@ extern "C" {
     static kAXTrustedCheckOptionPrompt: CFStringRef;
     fn AXIsProcessTrustedWithOptions(options: CFDictionaryRef) -> BOOL;
     fn InputMonitoringAuthStatus(_: BOOL) -> BOOL;
+    fn MacCheckAdminAuthorization() -> BOOL;
     fn MacGetModeNum(display: u32, numModes: *mut u32) -> BOOL;
     fn MacGetModes(
         display: u32,
@@ -664,4 +665,11 @@ pub fn change_resolution(name: &str, width: usize, height: usize) -> ResultType<
         }
     }
     Ok(())
+}
+
+
+pub fn check_super_user_permission() -> ResultType<bool> {
+    unsafe {
+        Ok(MacCheckAdminAuthorization() == YES)
+    }
 }
