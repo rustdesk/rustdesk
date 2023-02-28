@@ -166,8 +166,3 @@ panic = 'abort'
 strip = true
 #opt-level = 'z' # only have smaller size after strip
 rpath = true
-
-[patch."https://github.com/fufesou/rdev"]
-#rdev = { path = "../rdev" }
-rdev = { git = "https://github.com/sj6219/rdev", branch = "sigma" }
-
