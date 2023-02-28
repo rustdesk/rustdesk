@@ -655,7 +655,13 @@ class _ControlMenu extends StatelessWidget {
       }
 
       return CustomAlertDialog(
-        title: Text(translate('OS Password')),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.password_rounded, color: MyTheme.accent),
+            Text(translate('OS Password')).paddingOnly(left: 10),
+          ],
+        ),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           PasswordWidget(controller: controller),
           CheckboxListTile(
@@ -671,11 +677,22 @@ class _ControlMenu extends StatelessWidget {
               setState(() => autoLogin = v);
             },
           ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              ElevatedButton.icon(
+                icon: Icon(Icons.close_rounded),
+                label: Text(translate("Cancel")),
+                onPressed: close,
+              ),
+              ElevatedButton.icon(
+                icon: Icon(Icons.done_rounded),
+                label: Text(translate("Ok")),
+                onPressed: submit,
+              ),
+            ],
+          ).paddingOnly(top: 20)
         ]),
-        actions: [
-          dialogButton('Cancel', onPressed: close, isOutline: true),
-          dialogButton('OK', onPressed: submit),
-        ],
         onSubmit: submit,
         onCancel: close,
       );

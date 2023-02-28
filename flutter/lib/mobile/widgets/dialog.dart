@@ -75,64 +75,83 @@ void setPermanentPasswordDialog(OverlayDialogManager dialogManager) async {
     }
 
     return CustomAlertDialog(
-      title: Text(translate('Set your own password')),
-      content: Form(
-          autovalidateMode: AutovalidateMode.onUserInteraction,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextFormField(
-              autofocus: true,
-              obscureText: true,
-              keyboardType: TextInputType.visiblePassword,
-              decoration: InputDecoration(
-                labelText: translate('Password'),
-              ),
-              controller: p0,
-              validator: (v) {
-                if (v == null) return null;
-                final val = v.trim().length > 5;
-                if (validateLength != val) {
-                  // use delay to make setState success
-                  Future.delayed(Duration(microseconds: 1),
-                      () => setState(() => validateLength = val));
-                }
-                return val
-                    ? null
-                    : translate('Too short, at least 6 characters.');
-              },
+      title: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.password_rounded, color: MyTheme.accent),
+          Text(translate('Set your own password')).paddingOnly(left: 10),
+        ],
+      ),
+      content: Column(
+        children: [
+          Form(
+            autovalidateMode: AutovalidateMode.onUserInteraction,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  autofocus: true,
+                  obscureText: true,
+                  keyboardType: TextInputType.visiblePassword,
+                  decoration: InputDecoration(
+                    labelText: translate('Password'),
+                  ),
+                  controller: p0,
+                  validator: (v) {
+                    if (v == null) return null;
+                    final val = v.trim().length > 5;
+                    if (validateLength != val) {
+                      // use delay to make setState success
+                      Future.delayed(Duration(microseconds: 1),
+                          () => setState(() => validateLength = val));
+                    }
+                    return val
+                        ? null
+                        : translate('Too short, at least 6 characters.');
+                  },
+                ),
+                TextFormField(
+                  obscureText: true,
+                  keyboardType: TextInputType.visiblePassword,
+                  decoration: InputDecoration(
+                    labelText: translate('Confirmation'),
+                  ),
+                  controller: p1,
+                  validator: (v) {
+                    if (v == null) return null;
+                    final val = p0.text == v;
+                    if (validateSame != val) {
+                      Future.delayed(Duration(microseconds: 1),
+                          () => setState(() => validateSame = val));
+                    }
+                    return val
+                        ? null
+                        : translate('The confirmation is not identical.');
+                  },
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    ElevatedButton.icon(
+                      icon: Icon(Icons.close_rounded),
+                      label: Text(translate("Cancel")),
+                      onPressed: close,
+                    ),
+                    ElevatedButton.icon(
+                      icon: Icon(Icons.done_rounded),
+                      label: Text(translate("Ok")),
+                      onPressed:
+                          (validateLength && validateSame) ? submit : null,
+                    ),
+                  ],
+                ).paddingOnly(top: 20)
+              ],
             ),
-            TextFormField(
-              obscureText: true,
-              keyboardType: TextInputType.visiblePassword,
-              decoration: InputDecoration(
-                labelText: translate('Confirmation'),
-              ),
-              controller: p1,
-              validator: (v) {
-                if (v == null) return null;
-                final val = p0.text == v;
-                if (validateSame != val) {
-                  Future.delayed(Duration(microseconds: 1),
-                      () => setState(() => validateSame = val));
-                }
-                return val
-                    ? null
-                    : translate('The confirmation is not identical.');
-              },
-            ),
-          ])),
+          ),
+        ],
+      ),
       onCancel: close,
       onSubmit: (validateLength && validateSame) ? submit : null,
-      actions: [
-        dialogButton(
-          'Cancel',
-          onPressed: close,
-          isOutline: true,
-        ),
-        dialogButton(
-          'OK',
-          onPressed: (validateLength && validateSame) ? submit : null,
-        ),
-      ],
     );
   });
 }
@@ -191,7 +210,13 @@ void enterPasswordDialog(String id, OverlayDialogManager dialogManager) async {
     }
 
     return CustomAlertDialog(
-      title: Text(translate('Password Required')),
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.password_rounded, color: MyTheme.accent),
+          Text(translate('Password Required')).paddingOnly(left: 10),
+        ],
+      ),
       content: Column(mainAxisSize: MainAxisSize.min, children: [
         PasswordWidget(controller: controller),
         CheckboxListTile(
@@ -208,11 +233,22 @@ void enterPasswordDialog(String id, OverlayDialogManager dialogManager) async {
             }
           },
         ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            ElevatedButton.icon(
+              icon: Icon(Icons.close_rounded),
+              label: Text(translate("Cancel")),
+              onPressed: close,
+            ),
+            ElevatedButton.icon(
+              icon: Icon(Icons.done_rounded),
+              label: Text(translate("Ok")),
+              onPressed: submit,
+            ),
+          ],
+        ).paddingOnly(top: 20)
       ]),
-      actions: [
-        dialogButton('Cancel', onPressed: cancel, isOutline: true),
-        dialogButton('OK', onPressed: submit),
-      ],
       onSubmit: submit,
       onCancel: cancel,
     );
