@@ -65,7 +65,6 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         update = true;
       }
 
-      // TODO need input
       // start on boot depends on ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS and SYSTEM_ALERT_WINDOW
       var enableStartOnBoot =
           await gFFI.invokeMethod(AndroidChannel.kGetStartOnBootOpt);
@@ -162,8 +161,8 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   }
 
   Future<bool> checkAndUpdateIgnoreBatteryStatus() async {
-    final res =
-        await AndroidPermissionManager.check(kIgnoreBatteryOptimizations);
+    final res = await AndroidPermissionManager.check(
+        kRequestIgnoreBatteryOptimizations);
     if (_ignoreBatteryOpt != res) {
       _ignoreBatteryOpt = res;
       return true;
@@ -305,8 +304,8 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                   ]),
               onToggle: (v) async {
                 if (v) {
-                  AndroidPermissionManager.startAction(
-                      kActionRequestIgnoreBatteryOptimizations);
+                  await AndroidPermissionManager.request(
+                      kRequestIgnoreBatteryOptimizations);
                 } else {
                   final res = await gFFI.dialogManager
                       .show<bool>((setState, close) => CustomAlertDialog(
@@ -332,17 +331,34 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     enhancementsTiles.add(SettingsTile.switchTile(
         initialValue: _enableStartOnBoot,
         title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text("$translate('Start on Boot') (beta)"),
+          Text("${translate('Start on Boot')} (beta)"),
           Text(
               '* ${translate('Start the screen recording service on boot, which requires special permissions')}',
               style: Theme.of(context).textTheme.bodySmall),
         ]),
-        onToggle: (v) async {
-          if (v) {
-            // TODO
-          } else {
-            gFFI.invokeMethod(AndroidChannel.kSetStartOnBootOpt, false);
+        onToggle: (toValue) async {
+          if (toValue) {
+            // 1. request kIgnoreBatteryOptimizations
+            if (!await AndroidPermissionManager.check(
+                kRequestIgnoreBatteryOptimizations)) {
+              if (!await AndroidPermissionManager.request(
+                  kRequestIgnoreBatteryOptimizations)) {
+                return;
+              }
+            }
+
+            // 2. request kSystemAlertWindow
+            if (!await AndroidPermissionManager.check(kSystemAlertWindow)) {
+              if (!await AndroidPermissionManager.request(kSystemAlertWindow)) {
+                return;
+              }
+            }
+
+            // (Optional) 3. request input permission
           }
+          setState(() => _enableStartOnBoot = toValue);
+
+          gFFI.invokeMethod(AndroidChannel.kSetStartOnBootOpt, toValue);
         }));
 
     return SettingsList(
@@ -446,7 +462,6 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   }
 
   bool canStartOnBoot() {
-    // TODO need input
     // start on boot depends on ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS and SYSTEM_ALERT_WINDOW
     if (_hasIgnoreBattery && !_ignoreBatteryOpt) {
       return false;

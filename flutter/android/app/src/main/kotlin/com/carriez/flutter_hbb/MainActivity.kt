@@ -18,6 +18,7 @@ import android.provider.Settings
 import android.util.Log
 import android.view.WindowManager
 import androidx.annotation.RequiresApi
+import com.hjq.permissions.XXPermissions
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -76,7 +77,7 @@ class MainActivity : FlutterActivity() {
                     }
                     "check_permission" -> {
                         if (call.arguments is String) {
-                            result.success(checkPermission(context, call.arguments as String))
+                            result.success(XXPermissions.isGranted(context, call.arguments as String))
                         } else {
                             result.success(false)
                         }
@@ -113,10 +114,6 @@ class MainActivity : FlutterActivity() {
                             "on_state_changed",
                             mapOf("name" to "media", "value" to MainService.isReady.toString())
                         )
-                        result.success(true)
-                    }
-                    "init_input" -> {
-                        initInput()
                         result.success(true)
                     }
                     "stop_input" -> {
@@ -174,13 +171,6 @@ class MainActivity : FlutterActivity() {
                     }
                 }
             }
-        }
-    }
-
-    private fun initInput() {
-        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-        if (intent.resolveActivity(packageManager) != null) {
-            startActivity(intent)
         }
     }
 

@@ -13,6 +13,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
+import android.provider.Settings
 import android.provider.Settings.*
 import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat.getSystemService
@@ -40,8 +41,6 @@ const val RES_FAILED = -100
 const val START_ACTION = "start_action"
 const val GET_START_ON_BOOT_OPT = "get_start_on_boot_opt"
 const val SET_START_ON_BOOT_OPT = "set_start_on_boot_opt"
-
-const val IGNORE_BATTERY_OPTIMIZATIONS = "ignore_battery_optimizations"
 
 const val KEY_SHARED_PREFERENCES = "KEY_SHARED_PREFERENCES"
 const val KEY_START_ON_BOOT_OPT = "KEY_START_ON_BOOT_OPT"
@@ -71,20 +70,14 @@ fun requestPermission(context: Context, type: String) {
 }
 
 @RequiresApi(Build.VERSION_CODES.M)
-fun checkPermission(context: Context, type: String): Boolean {
-    if (IGNORE_BATTERY_OPTIMIZATIONS == type) {
-        val pw = context.getSystemService(Context.POWER_SERVICE) as PowerManager
-        return pw.isIgnoringBatteryOptimizations(context.packageName)
-    }
-    return XXPermissions.isGranted(context, type)
-}
-
-@RequiresApi(Build.VERSION_CODES.M)
 fun startAction(context: Context, action: String) {
     try {
         context.startActivity(Intent(action).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            data = Uri.parse("package:" + context.packageName)
+            // don't pass package name when launch ACTION_ACCESSIBILITY_SETTINGS
+            if (ACTION_ACCESSIBILITY_SETTINGS != action) {
+                data = Uri.parse("package:" + context.packageName)
+            }
         })
     } catch (e: Exception) {
         e.printStackTrace()

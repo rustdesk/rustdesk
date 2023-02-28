@@ -931,6 +931,8 @@ class AndroidPermissionManager {
     gFFI.invokeMethod(AndroidChannel.kStartAction, action);
   }
 
+  /// We use XXPermissions to request permissions,
+  /// for supported types, see https://github.com/getActivity/XXPermissions/blob/e46caea32a64ad7819df62d448fb1c825481cd28/library/src/main/java/com/hjq/permissions/Permission.java
   static Future<bool> request(String type) {
     if (isDesktop) {
       return Future.value(true);
@@ -938,17 +940,16 @@ class AndroidPermissionManager {
 
     gFFI.invokeMethod("request_permission", type);
 
-    // kIgnoreBatteryOptimizations permission doesn't depend on callback result, the result will be checked and updated on page resume
-    if (type == kIgnoreBatteryOptimizations) {
-      return Future.value(false);
+    // clear last task
+    if (_completer?.isCompleted == false) {
+      _completer?.complete(false);
     }
+    _timer?.cancel();
 
     _current = type;
     _completer = Completer<bool>();
 
-    // timeout
-    _timer?.cancel();
-    _timer = Timer(Duration(seconds: 60), () {
+    _timer = Timer(Duration(seconds: 120), () {
       if (_completer == null) return;
       if (!_completer!.isCompleted) {
         _completer!.complete(false);
