@@ -217,6 +217,9 @@ class MyTheme {
     tabBarTheme: const TabBarTheme(
       labelColor: Colors.white70,
     ),
+    scrollbarTheme: ScrollbarThemeData(
+      thumbColor: MaterialStateProperty.all(Colors.grey[500])
+    ),
     splashColor: Colors.transparent,
     highlightColor: Colors.transparent,
     splashFactory: isDesktop ? NoSplash.splashFactory : null,
