@@ -315,13 +315,10 @@ def build_flutter_dmg(version, features):
     # copy dylib
     system2(
         "cp target/release/liblibrustdesk.dylib target/release/librustdesk.dylib")
-    # ffi_bindgen_function_refactor()
-    # limitations from flutter rust bridge
-    system2('sed -i "" "s/char \*\*rustdesk_core_main(int \*args_len);//" flutter/macos/Runner/bridge_generated.h')
     os.chdir('flutter')
     system2('flutter build macos --release')
     system2(
-        "create-dmg rustdesk.dmg ./build/macos/Build/Products/Release/RustDesk.app")
+        "create-dmg --volname \"RustDesk Installer\" --window-pos 200 120 --window-size 800 400 --icon-size 100 --app-drop-link 600 185 --icon RustDesk.app 200 190 --hide-extension RustDesk.app rustdesk.dmg ./build/macos/Build/Products/Release/RustDesk.app")
     os.rename("rustdesk.dmg", f"../rustdesk-{version}.dmg")
     os.chdir("..")
 

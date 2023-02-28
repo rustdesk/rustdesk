@@ -19,7 +19,7 @@ import 'package:flutter_hbb/desktop/widgets/scroll_wrapper.dart';
 import '../../common/widgets/dialog.dart';
 import '../../common/widgets/login.dart';
 
-const double _kTabWidth = 235;
+const double _kTabWidth = 200;
 const double _kTabHeight = 42;
 const double _kCardFixedWidth = 540;
 const double _kCardLeftMargin = 15;

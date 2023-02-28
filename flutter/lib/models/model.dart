@@ -727,12 +727,25 @@ class CanvasModel with ChangeNotifier {
   double get scrollX => _scrollX;
   double get scrollY => _scrollY;
 
+  static double get leftToEdge => (isDesktop || isWebDesktop)
+      ? windowBorderWidth + kDragToResizeAreaPadding.left
+      : 0;
+  static double get rightToEdge => (isDesktop || isWebDesktop)
+      ? windowBorderWidth + kDragToResizeAreaPadding.right
+      : 0;
+  static double get topToEdge => (isDesktop || isWebDesktop)
+      ? tabBarHeight + windowBorderWidth + kDragToResizeAreaPadding.top
+      : 0;
+  static double get bottomToEdge => (isDesktop || isWebDesktop)
+      ? windowBorderWidth + kDragToResizeAreaPadding.bottom
+      : 0;
+
   updateViewStyle() async {
     Size getSize() {
       final size = MediaQueryData.fromWindow(ui.window).size;
       // If minimized, w or h may be negative here.
-      double w = size.width - windowBorderWidth * 2;
-      double h = size.height - tabBarHeight - windowBorderWidth * 2;
+      double w = size.width - leftToEdge - rightToEdge;
+      double h = size.height - topToEdge - bottomToEdge;
       return Size(w < 0 ? 0 : w, h < 0 ? 0 : h);
     }
 
@@ -806,10 +819,14 @@ class CanvasModel with ChangeNotifier {
     return parent.target?.ffiModel.display.height ?? defaultHeight;
   }
 
-  double get windowBorderWidth => stateGlobal.windowBorderWidth.value;
-  double get tabBarHeight => stateGlobal.tabBarHeight;
+  static double get windowBorderWidth => stateGlobal.windowBorderWidth.value;
+  static double get tabBarHeight => stateGlobal.tabBarHeight;
 
   moveDesktopMouse(double x, double y) {
+    if (size.width == 0 || size.height == 0) {
+      return;
+    }
+
     // On mobile platforms, move the canvas with the cursor.
     final dw = getDisplayWidth() * _scale;
     final dh = getDisplayHeight() * _scale;

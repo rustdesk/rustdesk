@@ -1230,6 +1230,8 @@ impl LoginConfigHandler {
             option.block_input = BoolOption::No.into();
         } else if name == "show-quality-monitor" {
             config.show_quality_monitor.v = !config.show_quality_monitor.v;
+        } else if name == "allow_swap_key" {
+            config.allow_swap_key.v = !config.allow_swap_key.v;
         } else {
             let is_set = self
                 .options
@@ -1383,6 +1385,8 @@ impl LoginConfigHandler {
             self.config.disable_clipboard.v
         } else if name == "show-quality-monitor" {
             self.config.show_quality_monitor.v
+        } else if name == "allow_swap_key" {
+            self.config.allow_swap_key.v
         } else {
             !self.get_option(name).is_empty()
         }
@@ -1807,6 +1811,7 @@ pub fn send_mouse(
     if check_scroll_on_mac(mask, x, y) {
         mouse_event.modifiers.push(ControlKey::Scroll.into());
     }
+    interface.swap_modifier_mouse(&mut mouse_event);
     msg_out.set_mouse_event(mouse_event);
     interface.send(Data::Message(msg_out));
 }
@@ -2033,6 +2038,7 @@ pub trait Interface: Send + Clone + 'static + Sized {
     fn is_force_relay(&self) -> bool {
         self.get_login_config_handler().read().unwrap().force_relay
     }
+    fn swap_modifier_mouse(&self, _msg : &mut hbb_common::protos::message::MouseEvent) {}
 }
 
 /// Data used by the client interface.

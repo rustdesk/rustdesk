@@ -920,6 +920,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
           disableClipboard(),
           lockAfterSessionEnd(),
           privacyMode(),
+          swapKey(),
         ]);
   }
 
@@ -953,12 +954,13 @@ class _DisplayMenuState extends State<_DisplayMenu> {
 
       final canvasModel = widget.ffi.canvasModel;
       final width = (canvasModel.getDisplayWidth() * canvasModel.scale +
-                  canvasModel.windowBorderWidth * 2) *
+                  CanvasModel.leftToEdge +
+                  CanvasModel.rightToEdge) *
               scale +
           magicWidth;
       final height = (canvasModel.getDisplayHeight() * canvasModel.scale +
-                  canvasModel.tabBarHeight +
-                  canvasModel.windowBorderWidth * 2) *
+                  CanvasModel.topToEdge +
+                  CanvasModel.bottomToEdge) *
               scale +
           magicHeight;
       double left = wndRect.left + (wndRect.width - width) / 2;
@@ -1027,10 +1029,10 @@ class _DisplayMenuState extends State<_DisplayMenu> {
     final canvasModel = widget.ffi.canvasModel;
     final displayWidth = canvasModel.getDisplayWidth();
     final displayHeight = canvasModel.getDisplayHeight();
-    final requiredWidth = displayWidth +
-        (canvasModel.tabBarHeight + canvasModel.windowBorderWidth * 2);
-    final requiredHeight = displayHeight +
-        (canvasModel.tabBarHeight + canvasModel.windowBorderWidth * 2);
+    final requiredWidth =
+        CanvasModel.leftToEdge + displayWidth + CanvasModel.rightToEdge;
+    final requiredHeight =
+        CanvasModel.topToEdge + displayHeight + CanvasModel.bottomToEdge;
     return selfWidth > (requiredWidth * scale) &&
         selfHeight > (requiredHeight * scale);
   }
@@ -1526,6 +1528,23 @@ class _DisplayMenuState extends State<_DisplayMenu> {
         },
         ffi: widget.ffi,
         child: Text(translate('Privacy mode')));
+  }
+
+  swapKey() {
+    final visible = perms['keyboard'] != false &&
+        ((Platform.isMacOS && pi.platform != kPeerPlatformMacOS) ||
+            (!Platform.isMacOS && pi.platform == kPeerPlatformMacOS));
+    if (!visible) return Offstage();
+    final option = 'allow_swap_key';
+    final value = bind.sessionGetToggleOptionSync(id: widget.id, arg: option);
+    return _CheckboxMenuButton(
+        value: value,
+        onChanged: (value) {
+          if (value == null) return;
+          bind.sessionToggleOption(id: widget.id, value: option);
+        },
+        ffi: widget.ffi,
+        child: Text(translate('Swap control-command key')));
   }
 }
 
