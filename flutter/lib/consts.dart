@@ -150,7 +150,11 @@ const kSystemAlertWindow = "android.permission.SYSTEM_ALERT_WINDOW";
 const kIgnoreBatteryOptimizations = "ignore_battery_optimizations";
 
 /// Android channel invoke type key
-const kStartAction = "start_action";
+class AndroidChannel {
+  static final kStartAction = "start_action";
+  static final kGetStartOnBootOpt = "get_start_on_boot_opt";
+  static final kSetStartOnBootOpt = "set_start_on_boot_opt";
+}
 
 /// flutter/packages/flutter/lib/src/services/keyboard_key.dart -> _keyLabels
 /// see [LogicalKeyboardKey.keyLabel]

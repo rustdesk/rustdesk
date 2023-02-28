@@ -13,6 +13,7 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.os.Build
 import android.os.IBinder
+import android.preference.PreferenceManager
 import android.provider.Settings
 import android.util.Log
 import android.view.WindowManager
@@ -147,6 +148,25 @@ class MainActivity : FlutterActivity() {
                             }
                         } finally {
                             result.success(true)
+                        }
+                    }
+                    GET_START_ON_BOOT_OPT -> {
+                        val prefs = getSharedPreferences(KEY_SHARED_PREFERENCES, MODE_PRIVATE)
+                        result.success(prefs.getBoolean(KEY_START_ON_BOOT_OPT, false))
+                    }
+                    SET_START_ON_BOOT_OPT -> {
+                        try {
+                            if (call.arguments is Boolean) {
+                                val prefs = getSharedPreferences(KEY_SHARED_PREFERENCES, MODE_PRIVATE)
+                                val edit = prefs.edit()
+                                edit.putBoolean(KEY_START_ON_BOOT_OPT, call.arguments as Boolean)
+                                edit.apply()
+                                result.success(true)
+                            } else {
+                                result.success(false)
+                            }
+                        } finally {
+                            result.success(false)
                         }
                     }
                     else -> {
