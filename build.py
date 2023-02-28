@@ -315,9 +315,6 @@ def build_flutter_dmg(version, features):
     # copy dylib
     system2(
         "cp target/release/liblibrustdesk.dylib target/release/librustdesk.dylib")
-    # ffi_bindgen_function_refactor()
-    # limitations from flutter rust bridge
-    system2('sed -i "s/char \*\*rustdesk_core_main(int \*args_len);//" flutter/macos/Runner/bridge_generated.h')
     os.chdir('flutter')
     system2('flutter build macos --release')
     system2(
