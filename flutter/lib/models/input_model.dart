@@ -458,10 +458,8 @@ class InputModel {
         return;
     }
     evt['type'] = type;
-    if (isDesktop) {
-      y -= CanvasModel.topToEdge;
-      x -= CanvasModel.leftToEdge;
-    }
+    y -= CanvasModel.topToEdge;
+    x -= CanvasModel.leftToEdge;
     final canvasModel = parent.target!.canvasModel;
     final nearThr = 3;
     var nearRight = (canvasModel.size.width - x) < nearThr;

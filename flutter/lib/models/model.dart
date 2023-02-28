@@ -727,14 +727,18 @@ class CanvasModel with ChangeNotifier {
   double get scrollX => _scrollX;
   double get scrollY => _scrollY;
 
-  static double get leftToEdge =>
-      windowBorderWidth + kDragToResizeAreaPadding.left;
-  static double get rightToEdge =>
-      windowBorderWidth + kDragToResizeAreaPadding.right;
-  static double get topToEdge =>
-      tabBarHeight + windowBorderWidth + kDragToResizeAreaPadding.top;
-  static double get bottomToEdge =>
-      windowBorderWidth + kDragToResizeAreaPadding.bottom;
+  static double get leftToEdge => (isDesktop || isWebDesktop)
+      ? windowBorderWidth + kDragToResizeAreaPadding.left
+      : 0;
+  static double get rightToEdge => (isDesktop || isWebDesktop)
+      ? windowBorderWidth + kDragToResizeAreaPadding.right
+      : 0;
+  static double get topToEdge => (isDesktop || isWebDesktop)
+      ? tabBarHeight + windowBorderWidth + kDragToResizeAreaPadding.top
+      : 0;
+  static double get bottomToEdge => (isDesktop || isWebDesktop)
+      ? windowBorderWidth + kDragToResizeAreaPadding.bottom
+      : 0;
 
   updateViewStyle() async {
     Size getSize() {
