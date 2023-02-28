@@ -731,8 +731,15 @@ class CanvasModel with ChangeNotifier {
     Size getSize() {
       final size = MediaQueryData.fromWindow(ui.window).size;
       // If minimized, w or h may be negative here.
-      double w = size.width - windowBorderWidth * 2;
-      double h = size.height - tabBarHeight - windowBorderWidth * 2;
+      double w = size.width -
+          windowBorderWidth * 2 -
+          kDragToResizeAreaPadding.left -
+          kDragToResizeAreaPadding.right;
+      double h = size.height -
+          tabBarHeight -
+          windowBorderWidth * 2 -
+          kDragToResizeAreaPadding.top -
+          kDragToResizeAreaPadding.bottom;
       return Size(w < 0 ? 0 : w, h < 0 ? 0 : h);
     }
 
