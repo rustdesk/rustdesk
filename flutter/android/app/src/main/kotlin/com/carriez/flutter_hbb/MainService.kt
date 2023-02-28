@@ -409,13 +409,13 @@ class MainService : Service() {
 
     fun checkMediaPermission(): Boolean {
         Handler(Looper.getMainLooper()).post {
-            MainActivity.flutterMethodChannel.invokeMethod(
+            MainActivity.flutterMethodChannel?.invokeMethod(
                 "on_state_changed",
                 mapOf("name" to "media", "value" to isReady.toString())
             )
         }
         Handler(Looper.getMainLooper()).post {
-            MainActivity.flutterMethodChannel.invokeMethod(
+            MainActivity.flutterMethodChannel?.invokeMethod(
                 "on_state_changed",
                 mapOf("name" to "input", "value" to InputService.isOpen.toString())
             )

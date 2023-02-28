@@ -36,7 +36,6 @@ const url = 'https://rustdesk.com/';
 class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   final _hasIgnoreBattery = androidVersion >= 26;
   var _ignoreBatteryOpt = false;
-  var _systemAlertWindow = false;
   var _enableStartOnBoot = false;
   var _enableAbr = false;
   var _denyLANDiscovery = false;
@@ -61,7 +60,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         }
       }
 
-      if (await checkAndUpdateSystemAlertWindow()) {
+      if (await checkAndUpdateStartOnBoot()) {
         update = true;
       }
 
@@ -69,7 +68,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
       var enableStartOnBoot =
           await gFFI.invokeMethod(AndroidChannel.kGetStartOnBootOpt);
       if (enableStartOnBoot) {
-        if (!canStartOnBoot()) {
+        if (!await canStartOnBoot()) {
           enableStartOnBoot = false;
           gFFI.invokeMethod(AndroidChannel.kSetStartOnBootOpt, false);
         }
@@ -152,8 +151,9 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       () async {
-        if (await checkAndUpdateIgnoreBatteryStatus() ||
-            await checkAndUpdateSystemAlertWindow()) {
+        final ibs = await checkAndUpdateIgnoreBatteryStatus();
+        final sob = await checkAndUpdateStartOnBoot();
+        if (ibs || sob) {
           setState(() {});
         }
       }();
@@ -171,10 +171,12 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     }
   }
 
-  Future<bool> checkAndUpdateSystemAlertWindow() async {
-    final res = await AndroidPermissionManager.check(kSystemAlertWindow);
-    if (_systemAlertWindow != res) {
-      _systemAlertWindow = res;
+  Future<bool> checkAndUpdateStartOnBoot() async {
+    if (!await canStartOnBoot() && _enableStartOnBoot) {
+      _enableStartOnBoot = false;
+      debugPrint(
+          "checkAndUpdateStartOnBoot and set _enableStartOnBoot -> false");
+      gFFI.invokeMethod(AndroidChannel.kSetStartOnBootOpt, false);
       return true;
     } else {
       return false;
@@ -461,12 +463,12 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     );
   }
 
-  bool canStartOnBoot() {
+  Future<bool> canStartOnBoot() async {
     // start on boot depends on ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS and SYSTEM_ALERT_WINDOW
     if (_hasIgnoreBattery && !_ignoreBatteryOpt) {
       return false;
     }
-    if (!_systemAlertWindow) {
+    if (!await AndroidPermissionManager.check(kSystemAlertWindow)) {
       return false;
     }
     return true;

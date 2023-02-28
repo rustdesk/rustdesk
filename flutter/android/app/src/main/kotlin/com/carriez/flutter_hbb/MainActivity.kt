@@ -24,7 +24,7 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     companion object {
-        lateinit var flutterMethodChannel: MethodChannel
+        var flutterMethodChannel: MethodChannel? = null
     }
 
     private val channelTag = "mChannel"
@@ -43,14 +43,14 @@ class MainActivity : FlutterActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             channelTag
         )
-        initFlutterChannel(flutterMethodChannel)
+        initFlutterChannel(flutterMethodChannel!!)
     }
 
     override fun onResume() {
         super.onResume()
         val inputPer = InputService.isOpen
         activity.runOnUiThread {
-            flutterMethodChannel.invokeMethod(
+            flutterMethodChannel?.invokeMethod(
                 "on_state_changed",
                 mapOf("name" to "input", "value" to inputPer.toString())
             )
@@ -67,7 +67,7 @@ class MainActivity : FlutterActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQ_INVOKE_PERMISSION_ACTIVITY_MEDIA_PROJECTION && resultCode == RES_FAILED) {
-            flutterMethodChannel.invokeMethod("on_media_projection_canceled", null)
+            flutterMethodChannel?.invokeMethod("on_media_projection_canceled", null)
         }
     }
 
@@ -154,11 +154,11 @@ class MainActivity : FlutterActivity() {
                     }
                 }
                 "check_service" -> {
-                    Companion.flutterMethodChannel.invokeMethod(
+                    Companion.flutterMethodChannel?.invokeMethod(
                         "on_state_changed",
                         mapOf("name" to "input", "value" to InputService.isOpen.toString())
                     )
-                    Companion.flutterMethodChannel.invokeMethod(
+                    Companion.flutterMethodChannel?.invokeMethod(
                         "on_state_changed",
                         mapOf("name" to "media", "value" to MainService.isReady.toString())
                     )
@@ -169,7 +169,7 @@ class MainActivity : FlutterActivity() {
                         InputService.ctx?.disableSelf()
                     }
                     InputService.ctx = null
-                    Companion.flutterMethodChannel.invokeMethod(
+                    Companion.flutterMethodChannel?.invokeMethod(
                         "on_state_changed",
                         mapOf("name" to "input", "value" to InputService.isOpen.toString())
                     )

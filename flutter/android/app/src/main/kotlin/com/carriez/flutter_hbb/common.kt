@@ -59,7 +59,7 @@ fun requestPermission(context: Context, type: String) {
         .request { _, all ->
             if (all) {
                 Handler(Looper.getMainLooper()).post {
-                    MainActivity.flutterMethodChannel.invokeMethod(
+                    MainActivity.flutterMethodChannel?.invokeMethod(
                         "on_android_permission_result",
                         mapOf("type" to type, "result" to all)
                     )
