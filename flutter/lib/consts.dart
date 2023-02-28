@@ -153,6 +153,7 @@ class AndroidChannel {
   static final kStartAction = "start_action";
   static final kGetStartOnBootOpt = "get_start_on_boot_opt";
   static final kSetStartOnBootOpt = "set_start_on_boot_opt";
+  static final kSyncAppDirConfigPath = "sync_app_dir";
 }
 
 /// flutter/packages/flutter/lib/src/services/keyboard_key.dart -> _keyLabels

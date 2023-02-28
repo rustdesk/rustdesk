@@ -15,7 +15,6 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import android.view.WindowManager
-import androidx.annotation.RequiresApi
 import com.hjq.permissions.XXPermissions
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -31,7 +30,6 @@ class MainActivity : FlutterActivity() {
     private val logTag = "mMainActivity"
     private var mainService: MainService? = null
 
-    @RequiresApi(Build.VERSION_CODES.M)
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         if (MainService.isReady) {
@@ -202,6 +200,17 @@ class MainActivity : FlutterActivity() {
                         val prefs = getSharedPreferences(KEY_SHARED_PREFERENCES, MODE_PRIVATE)
                         val edit = prefs.edit()
                         edit.putBoolean(KEY_START_ON_BOOT_OPT, call.arguments as Boolean)
+                        edit.apply()
+                        result.success(true)
+                    } else {
+                        result.success(false)
+                    }
+                }
+                SYNC_APP_DIR_CONFIG_PATH -> {
+                    if (call.arguments is String) {
+                        val prefs = getSharedPreferences(KEY_SHARED_PREFERENCES, MODE_PRIVATE)
+                        val edit = prefs.edit()
+                        edit.putString(KEY_APP_DIR_CONFIG_PATH, call.arguments as String)
                         edit.apply()
                         result.success(true)
                     } else {

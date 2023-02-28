@@ -1361,7 +1361,7 @@ pub fn send_url_scheme(_url: String) {
 
 #[cfg(target_os = "android")]
 pub mod server_side {
-    use hbb_common::log;
+    use hbb_common::{log, config};
     use jni::{
         objects::{JClass, JString},
         sys::jstring,
@@ -1374,9 +1374,23 @@ pub mod server_side {
     pub unsafe extern "system" fn Java_com_carriez_flutter_1hbb_MainService_startServer(
         env: JNIEnv,
         _class: JClass,
+        app_dir: JString,
     ) {
-        log::debug!("startServer from java");
+        log::debug!("startServer from jvm");
+        if let Ok(app_dir) = env.get_string(app_dir) {
+            *config::APP_DIR.write().unwrap() = app_dir.into();
+        }
         std::thread::spawn(move || start_server(true));
+    }
+
+    #[no_mangle]
+    pub unsafe extern "system" fn Java_com_carriez_flutter_1hbb_MainService_startService(
+        env: JNIEnv,
+        _class: JClass,
+    ) {
+        log::debug!("startService from jvm");
+        config::Config::set_option("stop-service".into(), "".into());
+        crate::rendezvous_mediator::RendezvousMediator::restart();
     }
 
     #[no_mangle]

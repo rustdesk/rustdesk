@@ -35,6 +35,7 @@ import androidx.annotation.RequiresApi
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import io.flutter.embedding.android.FlutterActivity
 import java.util.concurrent.Executors
 import kotlin.concurrent.thread
 import org.json.JSONException
@@ -143,7 +144,11 @@ class MainService : Service() {
 
     // jvm call rust
     private external fun init(ctx: Context)
-    private external fun startServer()
+
+    /// When app start on boot, app_dir will not be passed from flutter
+    /// so pass a app_dir here to rust server
+    private external fun startServer(app_dir: String)
+    private external fun startService()
     private external fun onVideoFrameUpdate(buf: ByteBuffer)
     private external fun onAudioFrameUpdate(buf: ByteBuffer)
     private external fun translateLocale(localeName: String, input: String): String
@@ -199,7 +204,12 @@ class MainService : Service() {
         }
         updateScreenInfo(resources.configuration.orientation)
         initNotification()
-        startServer()
+
+        // keep the config dir same with flutter
+        val prefs = applicationContext.getSharedPreferences(KEY_SHARED_PREFERENCES, FlutterActivity.MODE_PRIVATE)
+        val configPath = prefs.getString(KEY_APP_DIR_CONFIG_PATH, "") ?: ""
+        startServer(configPath)
+
         createForegroundNotification()
     }
 
@@ -279,6 +289,10 @@ class MainService : Service() {
         super.onStartCommand(intent, flags, startId)
         if (intent?.action == ACT_INIT_MEDIA_PROJECTION_AND_SERVICE) {
             createForegroundNotification()
+
+            if (intent.getBooleanExtra(EXT_INIT_FROM_BOOT, false)) {
+                startService()
+            }
             Log.d(logTag, "service starting: ${startId}:${Thread.currentThread()}")
             val mediaProjectionManager =
                 getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
