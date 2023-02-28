@@ -920,6 +920,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
           disableClipboard(),
           lockAfterSessionEnd(),
           privacyMode(),
+          swapKey(),
         ]);
   }
 
@@ -1527,6 +1528,23 @@ class _DisplayMenuState extends State<_DisplayMenu> {
         },
         ffi: widget.ffi,
         child: Text(translate('Privacy mode')));
+  }
+
+  swapKey() {
+    final visible = perms['keyboard'] != false &&
+        ((Platform.isMacOS && pi.platform != kPeerPlatformMacOS) ||
+            (!Platform.isMacOS && pi.platform == kPeerPlatformMacOS));
+    if (!visible) return Offstage();
+    final option = 'allow_swap_key';
+    final value = bind.sessionGetToggleOptionSync(id: widget.id, arg: option);
+    return _CheckboxMenuButton(
+        value: value,
+        onChanged: (value) {
+          if (value == null) return;
+          bind.sessionToggleOption(id: widget.id, value: option);
+        },
+        ffi: widget.ffi,
+        child: Text(translate('Swap control-command key')));
   }
 }
 
