@@ -13,8 +13,6 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.os.Build
 import android.os.IBinder
-import android.preference.PreferenceManager
-import android.provider.Settings
 import android.util.Log
 import android.view.WindowManager
 import androidx.annotation.RequiresApi
@@ -44,134 +42,8 @@ class MainActivity : FlutterActivity() {
         flutterMethodChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             channelTag
-        ).apply {
-            // make sure result is set, otherwise flutter will await forever
-            setMethodCallHandler { call, result ->
-                when (call.method) {
-                    "init_service" -> {
-                        Intent(activity, MainService::class.java).also {
-                            bindService(it, serviceConnection, Context.BIND_AUTO_CREATE)
-                        }
-                        if (MainService.isReady) {
-                            result.success(false)
-                            return@setMethodCallHandler
-                        }
-                        requestMediaProjection()
-                        result.success(true)
-                    }
-                    "start_capture" -> {
-                        mainService?.let {
-                            result.success(it.startCapture())
-                        } ?: let {
-                            result.success(false)
-                        }
-                    }
-                    "stop_service" -> {
-                        Log.d(logTag, "Stop service")
-                        mainService?.let {
-                            it.destroy()
-                            result.success(true)
-                        } ?: let {
-                            result.success(false)
-                        }
-                    }
-                    "check_permission" -> {
-                        if (call.arguments is String) {
-                            result.success(XXPermissions.isGranted(context, call.arguments as String))
-                        } else {
-                            result.success(false)
-                        }
-                    }
-                    "request_permission" -> {
-                        if (call.arguments is String) {
-                            requestPermission(context, call.arguments as String)
-                            result.success(true)
-                        } else {
-                            result.success(false)
-                        }
-                    }
-                    START_ACTION -> {
-                        if (call.arguments is String) {
-                            startAction(context, call.arguments as String)
-                            result.success(true)
-                        } else {
-                            result.success(false)
-                        }
-                    }
-                    "check_video_permission" -> {
-                        mainService?.let {
-                            result.success(it.checkMediaPermission())
-                        } ?: let {
-                            result.success(false)
-                        }
-                    }
-                    "check_service" -> {
-                        flutterMethodChannel.invokeMethod(
-                            "on_state_changed",
-                            mapOf("name" to "input", "value" to InputService.isOpen.toString())
-                        )
-                        flutterMethodChannel.invokeMethod(
-                            "on_state_changed",
-                            mapOf("name" to "media", "value" to MainService.isReady.toString())
-                        )
-                        result.success(true)
-                    }
-                    "stop_input" -> {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                            InputService.ctx?.disableSelf()
-                        }
-                        InputService.ctx = null
-                        flutterMethodChannel.invokeMethod(
-                            "on_state_changed",
-                            mapOf("name" to "input", "value" to InputService.isOpen.toString())
-                        )
-                        result.success(true)
-                    }
-                    "cancel_notification" -> {
-                        try {
-                            val id = call.arguments as Int
-                            mainService?.cancelNotification(id)
-                        } finally {
-                            result.success(true)
-                        }
-                    }
-                    "enable_soft_keyboard" -> {
-                        // https://blog.csdn.net/hanye2020/article/details/105553780
-                        try {
-                            if (call.arguments as Boolean) {
-                                window.clearFlags(WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM)
-                            } else {
-                                window.addFlags(WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM)
-                            }
-                        } finally {
-                            result.success(true)
-                        }
-                    }
-                    GET_START_ON_BOOT_OPT -> {
-                        val prefs = getSharedPreferences(KEY_SHARED_PREFERENCES, MODE_PRIVATE)
-                        result.success(prefs.getBoolean(KEY_START_ON_BOOT_OPT, false))
-                    }
-                    SET_START_ON_BOOT_OPT -> {
-                        try {
-                            if (call.arguments is Boolean) {
-                                val prefs = getSharedPreferences(KEY_SHARED_PREFERENCES, MODE_PRIVATE)
-                                val edit = prefs.edit()
-                                edit.putBoolean(KEY_START_ON_BOOT_OPT, call.arguments as Boolean)
-                                edit.apply()
-                                result.success(true)
-                            } else {
-                                result.success(false)
-                            }
-                        } finally {
-                            result.success(false)
-                        }
-                    }
-                    else -> {
-                        result.error("-1", "No such method", null)
-                    }
-                }
-            }
-        }
+        )
+        initFlutterChannel(flutterMethodChannel)
     }
 
     override fun onResume() {
@@ -217,6 +89,129 @@ class MainActivity : FlutterActivity() {
         override fun onServiceDisconnected(name: ComponentName?) {
             Log.d(logTag, "onServiceDisconnected")
             mainService = null
+        }
+    }
+
+    private fun initFlutterChannel(flutterMethodChannel: MethodChannel) {
+        flutterMethodChannel.setMethodCallHandler { call, result ->
+            // make sure result will be invoked, otherwise flutter will await forever
+            when (call.method) {
+                "init_service" -> {
+                    Intent(activity, MainService::class.java).also {
+                        bindService(it, serviceConnection, Context.BIND_AUTO_CREATE)
+                    }
+                    if (MainService.isReady) {
+                        result.success(false)
+                        return@setMethodCallHandler
+                    }
+                    requestMediaProjection()
+                    result.success(true)
+                }
+                "start_capture" -> {
+                    mainService?.let {
+                        result.success(it.startCapture())
+                    } ?: let {
+                        result.success(false)
+                    }
+                }
+                "stop_service" -> {
+                    Log.d(logTag, "Stop service")
+                    mainService?.let {
+                        it.destroy()
+                        result.success(true)
+                    } ?: let {
+                        result.success(false)
+                    }
+                }
+                "check_permission" -> {
+                    if (call.arguments is String) {
+                        result.success(XXPermissions.isGranted(context, call.arguments as String))
+                    } else {
+                        result.success(false)
+                    }
+                }
+                "request_permission" -> {
+                    if (call.arguments is String) {
+                        requestPermission(context, call.arguments as String)
+                        result.success(true)
+                    } else {
+                        result.success(false)
+                    }
+                }
+                START_ACTION -> {
+                    if (call.arguments is String) {
+                        startAction(context, call.arguments as String)
+                        result.success(true)
+                    } else {
+                        result.success(false)
+                    }
+                }
+                "check_video_permission" -> {
+                    mainService?.let {
+                        result.success(it.checkMediaPermission())
+                    } ?: let {
+                        result.success(false)
+                    }
+                }
+                "check_service" -> {
+                    Companion.flutterMethodChannel.invokeMethod(
+                        "on_state_changed",
+                        mapOf("name" to "input", "value" to InputService.isOpen.toString())
+                    )
+                    Companion.flutterMethodChannel.invokeMethod(
+                        "on_state_changed",
+                        mapOf("name" to "media", "value" to MainService.isReady.toString())
+                    )
+                    result.success(true)
+                }
+                "stop_input" -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                        InputService.ctx?.disableSelf()
+                    }
+                    InputService.ctx = null
+                    Companion.flutterMethodChannel.invokeMethod(
+                        "on_state_changed",
+                        mapOf("name" to "input", "value" to InputService.isOpen.toString())
+                    )
+                    result.success(true)
+                }
+                "cancel_notification" -> {
+                    if (call.arguments is Int) {
+                        val id = call.arguments as Int
+                        mainService?.cancelNotification(id)
+                    } else {
+                        result.success(true)
+                    }
+                }
+                "enable_soft_keyboard" -> {
+                    // https://blog.csdn.net/hanye2020/article/details/105553780
+                    if (call.arguments as Boolean) {
+                        window.clearFlags(WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM)
+                    } else {
+                        window.addFlags(WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM)
+                    }
+                    result.success(true)
+
+                }
+                GET_START_ON_BOOT_OPT -> {
+                    val prefs = getSharedPreferences(KEY_SHARED_PREFERENCES, MODE_PRIVATE)
+                    result.success(prefs.getBoolean(KEY_START_ON_BOOT_OPT, false))
+                }
+                SET_START_ON_BOOT_OPT -> {
+                    if (call.arguments is Boolean) {
+                        val prefs = getSharedPreferences(KEY_SHARED_PREFERENCES, MODE_PRIVATE)
+                        val edit = prefs.edit()
+                        edit.putBoolean(KEY_START_ON_BOOT_OPT, call.arguments as Boolean)
+                        edit.apply()
+                        result.success(true)
+                    } else {
+                        result.success(false)
+                    }
+                }
+                else -> {
+                    result.error("-1", "No such method", null)
+                }
+            }
         }
     }
 }

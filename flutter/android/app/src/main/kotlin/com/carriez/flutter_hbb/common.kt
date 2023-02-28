@@ -53,7 +53,6 @@ data class Info(
     var width: Int, var height: Int, var scale: Int, var dpi: Int
 )
 
-@RequiresApi(Build.VERSION_CODES.M)
 fun requestPermission(context: Context, type: String) {
     XXPermissions.with(context)
         .permission(type)
@@ -69,7 +68,6 @@ fun requestPermission(context: Context, type: String) {
         }
 }
 
-@RequiresApi(Build.VERSION_CODES.M)
 fun startAction(context: Context, action: String) {
     try {
         context.startActivity(Intent(action).apply {
