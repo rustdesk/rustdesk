@@ -459,8 +459,8 @@ class InputModel {
     }
     evt['type'] = type;
     if (isDesktop) {
-      y = y - stateGlobal.tabBarHeight - stateGlobal.windowBorderWidth.value;
-      x -= stateGlobal.windowBorderWidth.value;
+      y -= CanvasModel.topToEdge;
+      x -= CanvasModel.leftToEdge;
     }
     final canvasModel = parent.target!.canvasModel;
     final nearThr = 3;
