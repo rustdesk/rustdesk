@@ -312,6 +312,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Keep RustDesk background service", "Manter o serviço RustDesk em funcionamento"),
         ("Ignore Battery Optimizations", "Ignorar optimizações de Bateria"),
         ("android_open_battery_optimizations_tip", ""),
+        ("Start on Boot", ""),
+        ("Start the screen sharing service on boot, requires special permissions", ""),
         ("Connection not allowed", "Ligação não autorizada"),
         ("Legacy mode", ""),
         ("Map mode", ""),
@@ -454,8 +456,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Stop voice call", ""),
         ("relay_hint_tip", ""),
         ("Reconnect", ""),
-        ("No transfers in progress", ""),
         ("Codec", ""),
         ("Resolution", ""),
+        ("No transfers in progress", ""),
         ].iter().cloned().collect();
 }

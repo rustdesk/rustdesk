@@ -335,7 +335,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text("${translate('Start on Boot')} (beta)"),
           Text(
-              '* ${translate('Start the screen recording service on boot, which requires special permissions')}',
+              '* ${translate('Start the screen sharing service on boot, requires special permissions')}',
               style: Theme.of(context).textTheme.bodySmall),
         ]),
         onToggle: (toValue) async {
