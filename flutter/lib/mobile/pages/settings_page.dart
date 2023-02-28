@@ -305,7 +305,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                   ]),
               onToggle: (v) async {
                 if (v) {
-                  gFFI.invokeMethod(AndroidChannel.kStartAction,
+                  AndroidPermissionManager.startAction(
                       kActionRequestIgnoreBatteryOptimizations);
                 } else {
                   final res = await gFFI.dialogManager
@@ -323,7 +323,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                             ],
                           ));
                   if (res == true) {
-                    gFFI.invokeMethod(AndroidChannel.kStartAction,
+                    AndroidPermissionManager.startAction(
                         kActionApplicationDetailsSettings);
                   }
                 }

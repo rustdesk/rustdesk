@@ -142,6 +142,8 @@ const kActionApplicationDetailsSettings =
     "android.settings.APPLICATION_DETAILS_SETTINGS";
 const kActionRequestIgnoreBatteryOptimizations =
     "android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS";
+const kActionAccessibilitySettings = "android.settings.ACCESSIBILITY_SETTINGS";
+
 const kRecordAudio = "android.permission.RECORD_AUDIO";
 const kManageExternalStorage = "android.permission.MANAGE_EXTERNAL_STORAGE";
 const kSystemAlertWindow = "android.permission.SYSTEM_ALERT_WINDOW";

@@ -234,7 +234,7 @@ class ServerModel with ChangeNotifier {
     if (!_audioOk && !await AndroidPermissionManager.check(kRecordAudio)) {
       final res = await AndroidPermissionManager.request(kRecordAudio);
       if (!res) {
-        // TODO handle fail
+        showToast(translate('Failed'));
         return;
       }
     }
@@ -250,7 +250,7 @@ class ServerModel with ChangeNotifier {
       final res =
           await AndroidPermissionManager.request(kManageExternalStorage);
       if (!res) {
-        // TODO handle fail
+        showToast(translate('Failed'));
         return;
       }
     }
@@ -346,10 +346,6 @@ class ServerModel with ChangeNotifier {
       // current linux is not supported
       Wakelock.disable();
     }
-  }
-
-  Future<void> initInput() async {
-    await parent.target?.invokeMethod("init_input");
   }
 
   Future<bool> setPermanentPassword(String newPW) async {
@@ -689,7 +685,7 @@ String getLoginDialogTag(int id) {
 showInputWarnAlert(FFI ffi) {
   ffi.dialogManager.show((setState, close) {
     submit() {
-      ffi.serverModel.initInput();
+      AndroidPermissionManager.startAction(kActionAccessibilitySettings);
       close();
     }
 

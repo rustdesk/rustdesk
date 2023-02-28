@@ -926,6 +926,11 @@ class AndroidPermissionManager {
     return gFFI.invokeMethod("check_permission", type);
   }
 
+  // startActivity goto Android Setting's page to request permission manually by user
+  static void startAction(String action) {
+    gFFI.invokeMethod(AndroidChannel.kStartAction, action);
+  }
+
   static Future<bool> request(String type) {
     if (isDesktop) {
       return Future.value(true);
