@@ -532,19 +532,7 @@ abstract class BasePeerCard extends StatelessWidget {
         ],
       ),
       proc: () {
-        () async {
-          if (isLan) {
-            bind.mainRemoveDiscovered(id: id);
-          } else {
-            final favs = (await bind.mainGetFav()).toList();
-            if (favs.remove(id)) {
-              await bind.mainStoreFav(favs: favs);
-            }
-            await bind.mainRemovePeer(id: id);
-          }
-          removePreference(id);
-          await reloadFunc();
-        }();
+        _delete(id, isLan, reloadFunc);
       },
       padding: menuPadding,
       dismissOnClicked: true,
@@ -714,6 +702,53 @@ abstract class BasePeerCard extends StatelessWidget {
 
   @protected
   void _update();
+
+  void _delete(String id, bool isLan, Function reloadFunc) async {
+    gFFI.dialogManager.show(
+      (setState, close) {
+        submit() async {
+          if (isLan) {
+            bind.mainRemoveDiscovered(id: id);
+          } else {
+            final favs = (await bind.mainGetFav()).toList();
+            if (favs.remove(id)) {
+              await bind.mainStoreFav(favs: favs);
+            }
+            await bind.mainRemovePeer(id: id);
+          }
+          removePreference(id);
+          await reloadFunc();
+          close();
+        }
+
+        return CustomAlertDialog(
+          title: Text(translate('Delete')),
+          content: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  ElevatedButton.icon(
+                    icon: Icon(Icons.close_rounded),
+                    label: Text(translate("Cancel")),
+                    onPressed: close,
+                  ),
+                  ElevatedButton.icon(
+                    icon: Icon(Icons.done_rounded),
+                    label: Text(translate("Ok")),
+                    onPressed: submit,
+                  ),
+                ],
+              ).paddingOnly(top: 20)
+            ],
+          ),
+          onSubmit: submit,
+          onCancel: close,
+        );
+      },
+    );
+  }
 }
 
 class RecentPeerCard extends BasePeerCard {
