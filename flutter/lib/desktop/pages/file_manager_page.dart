@@ -49,11 +49,6 @@ enum MouseFocusScope {
   none
 }
 
-final buttonShape =
-    MaterialStateProperty.all<RoundedRectangleBorder>(RoundedRectangleBorder(
-  borderRadius: BorderRadius.circular(18.0),
-));
-
 class FileManagerPage extends StatefulWidget {
   const FileManagerPage({Key? key, required this.id, this.forceRelay})
       : super(key: key);
@@ -1066,7 +1061,6 @@ class _FileManagerPageState extends State<FileManagerPage>
                         ? MyTheme.accent80
                         : MyTheme.accent,
                   ),
-                  shape: buttonShape,
                 ),
                 onPressed: validItems(selectedItems)
                     ? () {
