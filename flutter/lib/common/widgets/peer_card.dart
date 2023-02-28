@@ -661,7 +661,13 @@ abstract class BasePeerCard extends StatelessWidget {
       }
 
       return CustomAlertDialog(
-        title: Text(translate('Rename')),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.edit_rounded, color: MyTheme.accent),
+            Text(translate('Rename')).paddingOnly(left: 10),
+          ],
+        ),
         content: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -722,7 +728,18 @@ abstract class BasePeerCard extends StatelessWidget {
         }
 
         return CustomAlertDialog(
-          title: Text(translate('Delete')),
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.delete_rounded,
+                color: Colors.red,
+              ),
+              Text(translate('Delete')).paddingOnly(
+                left: 10,
+              ),
+            ],
+          ),
           content: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

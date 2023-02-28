@@ -25,19 +25,32 @@ void showRestartRemoteDevice(
   final res =
       await dialogManager.show<bool>((setState, close) => CustomAlertDialog(
             title: Row(children: [
-              Icon(Icons.warning_amber_sharp,
-                  color: Colors.redAccent, size: 28),
-              SizedBox(width: 10),
-              Text(translate("Restart Remote Device")),
+              Icon(Icons.warning_rounded, color: Colors.redAccent, size: 28),
+              Text(translate("Restart Remote Device")).paddingOnly(left: 10),
             ]),
-            content: Text(
-                "${translate('Are you sure you want to restart')} \n${pi.username}@${pi.hostname}($id) ?"),
+            content: Column(
+              children: [
+                Text(
+                    "${translate('Are you sure you want to restart')} \n${pi.username}@${pi.hostname}($id) ?"),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    ElevatedButton.icon(
+                      icon: Icon(Icons.close_rounded),
+                      label: Text(translate("Cancel")),
+                      onPressed: close,
+                    ),
+                    ElevatedButton.icon(
+                      icon: Icon(Icons.done_rounded),
+                      label: Text(translate("Ok")),
+                      onPressed: () => close(true),
+                    ),
+                  ],
+                ).paddingOnly(top: 20)
+              ],
+            ),
             onCancel: close,
             onSubmit: () => close(true),
-            actions: [
-              dialogButton("Cancel", onPressed: close, isOutline: true),
-              dialogButton("OK", onPressed: () => close(true)),
-            ],
           ));
   if (res == true) bind.sessionRestartRemoteDevice(id: id);
 }
