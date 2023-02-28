@@ -444,7 +444,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Default View Style", "Standaard Weergave Stijl"),
         ("Default Scroll Style", "Standaard Scroll Stijl"),
         ("Default Image Quality", "Standaard Beeldkwaliteit"),
-        ("Default Codec", "tandaard Codec"),
+        ("Default Codec", "Standaard Codec"),
         ("Bitrate", "Bitrate"),
         ("FPS", "FPS"),
         ("Auto", "Auto"),
@@ -456,5 +456,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Reconnect", ""),
         ("Codec", ""),
         ("Resolution", ""),
+        ("No transfers in progress", ""),
         ].iter().cloned().collect();
 }

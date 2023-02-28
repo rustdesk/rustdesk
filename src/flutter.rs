@@ -572,6 +572,13 @@ impl InvokeUiSession for FlutterHandler {
         self.push_event("switch_back", [("peer_id", peer_id)].into());
     }
 
+    fn portable_service_running(&self, running: bool) {
+        self.push_event(
+            "portable_service_running",
+            [("running", running.to_string().as_str())].into(),
+        );
+    }
+
     fn on_voice_call_started(&self) {
         self.push_event("on_voice_call_started", [].into());
     }

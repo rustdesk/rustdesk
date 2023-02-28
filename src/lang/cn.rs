@@ -38,7 +38,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Stop service", "停止服务"),
         ("Change ID", "更改 ID"),
         ("Your new ID", "你的新 ID"),
-        ("length %min% to %max%", "长度在 %min 与 %max 之间"),
+        ("length %min% to %max%", "长度在 %min% 与 %max% 之间"),
         ("starts with a letter", "以字母开头"),
         ("allowed characters", "使用允许的字符"),
         ("id_change_tip", "只可以使用字母 a-z, A-Z, 0-9, _ (下划线)。首字母必须是 a-z, A-Z。长度在 6 与 16 之间。"),
@@ -137,7 +137,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Failed to connect to rendezvous server", "连接注册服务器失败"),
         ("Please try later", "请稍后再试"),
         ("Remote desktop is offline", "远程电脑处于离线状态"),
-        ("Key mismatch", "密钥不匹配"),
+        ("Key mismatch", "Key 不匹配"),
         ("Timeout", "连接超时"),
         ("Failed to connect to relay server", "无法连接到中继服务器"),
         ("Failed to connect via rendezvous server", "无法通过注册服务器建立连接"),
@@ -456,5 +456,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Reconnect", "重连"),
         ("Codec", "编解码"),
         ("Resolution", "分辨率"),
+        ("No transfers in progress", ""),
         ].iter().cloned().collect();
 }

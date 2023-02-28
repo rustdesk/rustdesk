@@ -454,7 +454,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Stop voice call", "Interrompi la chiamata vocale"),
         ("relay_hint_tip", "Se non è possibile connettersi direttamente, si può provare a farlo tramite relay.\nInoltre, se si desidera utilizzare il relay al primo tentativo, è possibile aggiungere il suffisso \"/r\" all'ID o selezionare l'opzione \"Collegati sempre tramite relay\" nella scheda peer."),
         ("Reconnect", "Riconnetti"),
-        ("Codec", ""),
-        ("Resolution", ""),
+        ("No transfers in progress", "Nessun trasferimento in corso"),
+        ("Codec", "Codec"),
+        ("Resolution", "Risoluzione"),
         ].iter().cloned().collect();
 }

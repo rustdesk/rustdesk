@@ -534,7 +534,7 @@ abstract class BasePeerCard extends StatelessWidget {
       proc: () {
         () async {
           if (isLan) {
-            // TODO
+            bind.mainRemoveDiscovered(id: id);
           } else {
             final favs = (await bind.mainGetFav()).toList();
             if (favs.remove(id)) {
@@ -745,12 +745,9 @@ class RecentPeerCard extends BasePeerCard {
     }
 
     if (gFFI.userModel.userName.isNotEmpty) {
-      // if (!gFFI.abModel.idContainBy(peer.id)) {
-      //   menuItems.add(_addToAb(peer));
-      // } else {
-      //   menuItems.add(_removeFromAb(peer));
-      // }
-      menuItems.add(_addToAb(peer));
+      if (!gFFI.abModel.idContainBy(peer.id)) {
+        menuItems.add(_addToAb(peer));
+      }
     }
 
     menuItems.add(MenuEntryDivider());
@@ -797,12 +794,9 @@ class FavoritePeerCard extends BasePeerCard {
     }));
 
     if (gFFI.userModel.userName.isNotEmpty) {
-      // if (!gFFI.abModel.idContainBy(peer.id)) {
-      //   menuItems.add(_addToAb(peer));
-      // } else {
-      //   menuItems.add(_removeFromAb(peer));
-      // }
-      menuItems.add(_addToAb(peer));
+      if (!gFFI.abModel.idContainBy(peer.id)) {
+        menuItems.add(_addToAb(peer));
+      }
     }
 
     menuItems.add(MenuEntryDivider());
@@ -843,23 +837,27 @@ class DiscoveredPeerCard extends BasePeerCard {
       menuItems.add(_createShortCutAction(peer.id));
     }
 
-    if (!favs.contains(peer.id)) {
-      menuItems.add(_addFavAction(peer.id));
-    } else {
-      menuItems.add(_rmFavAction(peer.id, () async {}));
+    final inRecent = await bind.mainIsInRecentPeers(id: peer.id);
+    if (inRecent) {
+      if (!favs.contains(peer.id)) {
+        menuItems.add(_addFavAction(peer.id));
+      } else {
+        menuItems.add(_rmFavAction(peer.id, () async {}));
+      }
     }
 
     if (gFFI.userModel.userName.isNotEmpty) {
-      // if (!gFFI.abModel.idContainBy(peer.id)) {
-      //   menuItems.add(_addToAb(peer));
-      // } else {
-      //   menuItems.add(_removeFromAb(peer));
-      // }
-      menuItems.add(_addToAb(peer));
+      if (!gFFI.abModel.idContainBy(peer.id)) {
+        menuItems.add(_addToAb(peer));
+      }
     }
 
     menuItems.add(MenuEntryDivider());
-    menuItems.add(_removeAction(peer.id, () async {}));
+    menuItems.add(
+      _removeAction(peer.id, () async {
+        await bind.mainLoadLanPeers();
+      }, isLan: true),
+    );
     return menuItems;
   }
 

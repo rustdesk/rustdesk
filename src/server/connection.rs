@@ -126,6 +126,7 @@ pub struct Connection {
     origin_resolution: HashMap<String, Resolution>,
     voice_call_request_timestamp: Option<NonZeroI64>,
     audio_input_device_before_voice_call: Option<String>,
+    options_in_login: Option<OptionMessage>,
 }
 
 impl ConnInner {
@@ -233,6 +234,7 @@ impl Connection {
             audio_sender: None,
             voice_call_request_timestamp: None,
             audio_input_device_before_voice_call: None,
+            options_in_login: None,
         };
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         tokio::spawn(async move {
@@ -921,6 +923,9 @@ impl Connection {
         let mut msg_out = Message::new();
         msg_out.set_login_response(res);
         self.send(msg_out).await;
+        if let Some(o) = self.options_in_login.take() {
+            self.update_options(&o).await;
+        }
         if let Some((dir, show_hidden)) = self.file_transfer.clone() {
             let dir = if !dir.is_empty() && std::path::Path::new(&dir).is_dir() {
                 &dir
@@ -1106,8 +1111,7 @@ impl Connection {
     async fn handle_login_request_without_validation(&mut self, lr: &LoginRequest) {
         self.lr = lr.clone();
         if let Some(o) = lr.option.as_ref() {
-            // It may not be a good practice to update all options here.
-            self.update_options(o).await;
+            self.options_in_login = Some(o.clone());
             if let Some(q) = o.video_codec_state.clone().take() {
                 scrap::codec::Encoder::update_video_encoder(
                     self.inner.id(),
@@ -1552,7 +1556,6 @@ impl Connection {
                                     .err()
                                     .map_or("".to_string(), |e| e.to_string());
                                 }
-                                self.portable.elevation_requested = err.is_empty();
                                 let mut misc = Misc::new();
                                 misc.set_elevation_response(err);
                                 let mut msg = Message::new();
@@ -1571,7 +1574,6 @@ impl Connection {
                                     .err()
                                     .map_or("".to_string(), |e| e.to_string());
                                 }
-                                self.portable.elevation_requested = err.is_empty();
                                 let mut misc = Misc::new();
                                 misc.set_elevation_response(err);
                                 let mut msg = Message::new();
@@ -1699,7 +1701,8 @@ impl Connection {
         self.send_to_cm(Data::CloseVoiceCall("".to_owned()));
     }
 
-    async fn update_options_without_auth(&mut self, o: &OptionMessage) {
+    async fn update_options(&mut self, o: &OptionMessage) {
+        log::info!("Option update: {:?}", o);
         if let Ok(q) = o.image_quality.enum_value() {
             let image_quality;
             if let ImageQuality::NotSet = q {
@@ -1729,12 +1732,6 @@ impl Connection {
                 self.inner.id(),
                 scrap::codec::EncoderUpdate::State(q),
             );
-        }
-    }
-
-    async fn update_options_with_auth(&mut self, o: &OptionMessage) {
-        if !self.authorized {
-            return;
         }
         if let Ok(q) = o.lock_after_session_end.enum_value() {
             if q != BoolOption::NotSet {
@@ -1864,12 +1861,6 @@ impl Connection {
         }
     }
 
-    async fn update_options(&mut self, o: &OptionMessage) {
-        log::info!("Option update: {:?}", o);
-        self.update_options_without_auth(o).await;
-        self.update_options_with_auth(o).await;
-    }
-
     async fn on_close(&mut self, reason: &str, lock: bool) {
         log::info!("#{} Connection closed: {}", self.inner.id(), reason);
         if lock && self.lock_after_session_end && self.keyboard {
@@ -1936,13 +1927,11 @@ impl Connection {
             let p = &mut self.portable;
             if running != p.last_running {
                 p.last_running = running;
-                if running && p.elevation_requested {
-                    let mut misc = Misc::new();
-                    misc.set_portable_service_running(running);
-                    let mut msg = Message::new();
-                    msg.set_misc(misc);
-                    self.inner.send(msg.into());
-                }
+                let mut misc = Misc::new();
+                misc.set_portable_service_running(running);
+                let mut msg = Message::new();
+                msg.set_misc(misc);
+                self.inner.send(msg.into());
             }
             let uac = crate::video_service::IS_UAC_RUNNING.lock().unwrap().clone();
             if p.last_uac != uac {
@@ -2166,7 +2155,6 @@ pub struct PortableState {
     pub last_foreground_window_elevated: bool,
     pub last_running: bool,
     pub is_installed: bool,
-    pub elevation_requested: bool,
 }
 
 #[cfg(windows)]
@@ -2177,7 +2165,6 @@ impl Default for PortableState {
             last_uac: Default::default(),
             last_foreground_window_elevated: Default::default(),
             last_running: Default::default(),
-            elevation_requested: Default::default(),
         }
     }
 }

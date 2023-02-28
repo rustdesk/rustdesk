@@ -726,6 +726,10 @@ pub fn main_peer_has_password(id: String) -> bool {
     peer_has_password(id)
 }
 
+pub fn main_is_in_recent_peers(id: String) -> bool {
+    PeerConfig::peers().iter().any(|e| e.0 == id)
+}
+
 pub fn main_load_recent_peers() {
     if !config::APP_DIR.read().unwrap().is_empty() {
         let peers: Vec<HashMap<&str, String>> = PeerConfig::peers()
@@ -796,6 +800,10 @@ pub fn main_load_lan_peers() {
     };
 }
 
+pub fn main_remove_discovered(id: String) {
+    remove_discovered(id);
+}
+
 fn main_broadcast_message(data: &HashMap<&str, &str>) {
     let apps = vec![
         flutter::APP_TYPE_DESKTOP_REMOTE,
@@ -830,6 +838,10 @@ pub fn main_set_user_default_option(key: String, value: String) {
 
 pub fn main_get_user_default_option(key: String) -> SyncReturn<String> {
     SyncReturn(get_user_default_option(key))
+}
+
+pub fn main_handle_relay_id(id: String) -> String {
+    handle_relay_id(id)
 }
 
 pub fn session_add_port_forward(

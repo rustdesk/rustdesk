@@ -9,7 +9,7 @@ use sciter::Value;
 
 use hbb_common::{
     allow_err,
-    config::{self, LocalConfig, PeerConfig},
+    config::{LocalConfig, PeerConfig},
     log,
 };
 
@@ -413,17 +413,15 @@ impl UI {
     }
 
     fn remove_discovered(&mut self, id: String) {
-        let mut peers = config::LanPeers::load().peers;
-        peers.retain(|x| x.id != id);
-        config::LanPeers::store(&peers);
+        remove_discovered(id);
     }
 
     fn send_wol(&mut self, id: String) {
         crate::lan::send_wol(id)
     }
 
-    fn new_remote(&mut self, id: String, remote_type: String) {
-        new_remote(id, remote_type)
+    fn new_remote(&mut self, id: String, remote_type: String, force_relay: bool) {
+        new_remote(id, remote_type, force_relay)
     }
 
     fn is_process_trusted(&mut self, _prompt: bool) -> bool {
@@ -573,6 +571,10 @@ impl UI {
     fn default_video_save_directory(&self) -> String {
         default_video_save_directory()
     }
+
+    fn handle_relay_id(&self, id: String) -> String {
+        handle_relay_id(id)
+    }
 }
 
 impl sciter::EventHandler for UI {
@@ -590,7 +592,7 @@ impl sciter::EventHandler for UI {
         fn set_remote_id(String);
         fn closing(i32, i32, i32, i32);
         fn get_size();
-        fn new_remote(String, bool);
+        fn new_remote(String, String, bool);
         fn send_wol(String);
         fn remove_peer(String);
         fn remove_discovered(String);
@@ -655,6 +657,7 @@ impl sciter::EventHandler for UI {
         fn has_hwcodec();
         fn get_langs();
         fn default_video_save_directory();
+        fn handle_relay_id(String);
     }
 }
 
@@ -720,9 +723,13 @@ pub fn value_crash_workaround(values: &[Value]) -> Arc<Vec<Value>> {
 }
 
 #[inline]
-pub fn new_remote(id: String, remote_type: String) {
+pub fn new_remote(id: String, remote_type: String, force_relay: bool) {
     let mut lock = CHILDREN.lock().unwrap();
-    let args = vec![format!("--{}", remote_type), id.clone()];
+    let mut args = vec![format!("--{}", remote_type), id.clone()];
+    if force_relay {
+        args.push("".to_string()); // password
+        args.push("--relay".to_string());
+    }
     let key = (id.clone(), remote_type.clone());
     if let Some(c) = lock.1.get_mut(&key) {
         if let Ok(Some(_)) = c.try_wait() {

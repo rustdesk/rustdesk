@@ -523,12 +523,18 @@ class WindowActionPanelState extends State<WindowActionPanel>
     super.dispose();
   }
 
+  void _setMaximize(bool maximize) {
+     stateGlobal.setMaximize(maximize);
+     setState(() {});
+  }
+
   @override
   void onWindowMaximize() {
     // catch maximize from system
     if (!widget.isMaximized.value) {
       widget.isMaximized.value = true;
     }
+    _setMaximize(true);
     super.onWindowMaximize();
   }
 
@@ -538,6 +544,7 @@ class WindowActionPanelState extends State<WindowActionPanel>
     if (widget.isMaximized.value) {
       widget.isMaximized.value = false;
     }
+    _setMaximize(false);
     super.onWindowUnmaximize();
   }
 

@@ -18,7 +18,7 @@ on:
 
 env:
   LLVM_VERSION: "15.0.6"
-  FLUTTER_VERSION: "3.7.0"
+  FLUTTER_VERSION: "3.7.5"
   # vcpkg version: 2022.05.10
   # for multiarch gcc compatibility
   VCPKG_COMMIT_ID: "14e7bb4ae24616ec54ff6b2f6ef4e8659434ea44"
@@ -260,7 +260,7 @@ jobs:
         job:
           - {
               target: x86_64-unknown-linux-gnu,
-              os: ubuntu-18.04,
+              os: ubuntu-20.04,
               extra-build-args: "",
             }
     steps:
@@ -330,13 +330,13 @@ jobs:
           - {
               arch: x86_64,
               target: aarch64-linux-android,
-              os: ubuntu-18.04,
+              os: ubuntu-20.04,
               extra-build-features: "",
             }
           # - {
           #     arch: x86_64,
           #     target: armv7-linux-androideabi,
-          #     os: ubuntu-18.04,
+          #     os: ubuntu-20.04,
           #     extra-build-features: "",
           #   }
     steps:
@@ -907,19 +907,19 @@ jobs:
           - {
               arch: x86_64,
               target: x86_64-unknown-linux-gnu,
-              os: ubuntu-18.04,
+              os: ubuntu-20.04,
               extra-build-features: "",
             }
           - {
               arch: x86_64,
               target: x86_64-unknown-linux-gnu,
-              os: ubuntu-18.04,
+              os: ubuntu-20.04,
               extra-build-features: "flatpak",
             }
           - {
               arch: x86_64,
               target: x86_64-unknown-linux-gnu,
-              os: ubuntu-18.04,
+              os: ubuntu-20.04,
               extra-build-features: "appimage",
             }
           # - { target: x86_64-unknown-linux-musl   , os: ubuntu-20.04, use-cross: true }

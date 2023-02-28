@@ -59,7 +59,7 @@ dependencies:
   desktop_multi_window:
     git:
       url: https://github.com/Kingtous/rustdesk_desktop_multi_window
-      ref: f37357ed98a10717576eb9ed8413e92b2ec5d13a
+      ref: e383fffb5c4529c9e0a710f1025a0c590b99ee08
   freezed_annotation: ^2.0.3
   flutter_custom_cursor: ^0.0.4
   window_size:
@@ -76,7 +76,7 @@ dependencies:
   file_picker: ^5.1.0
   flutter_svg: ^1.1.5
   flutter_improved_scrolling:
-    # currently, we use flutter 3.0.5 for windows build, latest for other builds.
+    # currently, we use flutter 3.7.0+.
     #
     # for flutter 3.0.5, please use official version(just comment code below).
     # if build rustdesk by flutter >=3.3, please use our custom pub below (uncomment code below).

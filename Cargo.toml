@@ -132,6 +132,7 @@ flutter_rust_bridge = "1.61.1"
 
 [workspace]
 members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/virtual_display/dylib", "libs/simple_rc", "libs/portable"]
+exclude = ["vdi/host"]
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2022 Purslane, Inc."

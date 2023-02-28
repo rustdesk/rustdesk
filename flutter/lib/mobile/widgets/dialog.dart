@@ -374,8 +374,7 @@ void showWaitUacDialog(
           ));
 }
 
-void _showRequestElevationDialog(
-    String id, OverlayDialogManager dialogManager) {
+void showRequestElevationDialog(String id, OverlayDialogManager dialogManager) {
   RxString groupValue = ''.obs;
   RxString errUser = ''.obs;
   RxString errPwd = ''.obs;
@@ -531,7 +530,7 @@ void showOnBlockDialog(
   dialogManager.show(tag: '$id-$type', (setState, close) {
     void submit() {
       close();
-      _showRequestElevationDialog(id, dialogManager);
+      showRequestElevationDialog(id, dialogManager);
     }
 
     return CustomAlertDialog(
@@ -553,7 +552,7 @@ void showElevationError(String id, String type, String title, String text,
   dialogManager.show(tag: '$id-$type', (setState, close) {
     void submit() {
       close();
-      _showRequestElevationDialog(id, dialogManager);
+      showRequestElevationDialog(id, dialogManager);
     }
 
     return CustomAlertDialog(

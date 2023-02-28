@@ -277,6 +277,8 @@ impl InvokeUiSession for SciterHandler {
 
     fn switch_back(&self, _id: &str) {}
 
+    fn portable_service_running(&self, _running: bool) {}
+
     fn on_voice_call_started(&self) {
         self.call("onVoiceCallStart", &make_args!());
     }
@@ -460,6 +462,7 @@ impl sciter::EventHandler for SciterSession {
 
 impl SciterSession {
     pub fn new(cmd: String, id: String, password: String, args: Vec<String>) -> Self {
+        let force_relay = args.contains(&"--relay".to_string());
         let session: Session<SciterHandler> = Session {
             id: id.clone(),
             password: password.clone(),
@@ -484,7 +487,7 @@ impl SciterSession {
             .lc
             .write()
             .unwrap()
-            .initialize(id, conn_type, None, false);
+            .initialize(id, conn_type, None, force_relay);
 
         Self(session)
     }

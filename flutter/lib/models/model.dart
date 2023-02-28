@@ -156,7 +156,7 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'clipboard') {
         Clipboard.setData(ClipboardData(text: evt['content']));
       } else if (name == 'permission') {
-        parent.target?.ffiModel.updatePermission(evt, peerId);
+        updatePermission(evt, peerId);
       } else if (name == 'chat_client_mode') {
         parent.target?.chatModel
             .receive(ChatModel.clientModeID, evt['text'] ?? '');
@@ -203,6 +203,8 @@ class FfiModel with ChangeNotifier {
         final peer_id = evt['peer_id'].toString();
         await bind.sessionSwitchSides(id: peer_id);
         closeConnection(id: peer_id);
+      } else if (name == 'portable_service_running') {
+        parent.target?.elevationModel.onPortableServiceRunning(evt);
       } else if (name == "on_url_scheme_received") {
         final url = evt['url'].toString();
         parseRustdeskUri(url);
@@ -239,35 +241,32 @@ class FfiModel with ChangeNotifier {
     }
   }
 
-  handleSwitchDisplay(Map<String, dynamic> evt, String peerId) {
-    final oldOrientation = _display.width > _display.height;
-    var old = _pi.currentDisplay;
-    _pi.currentDisplay = int.parse(evt['display']);
-    _display.x = double.parse(evt['x']);
-    _display.y = double.parse(evt['y']);
-    _display.width = int.parse(evt['width']);
-    _display.height = int.parse(evt['height']);
-    _display.cursorEmbedded = int.parse(evt['cursor_embedded']) == 1;
-    if (old != _pi.currentDisplay) {
-      parent.target?.cursorModel.updateDisplayOrigin(_display.x, _display.y);
+  _updateCurDisplay(String peerId, Display newDisplay) {
+    if (newDisplay != _display) {
+      if (newDisplay.x != _display.x || newDisplay.y != _display.y) {
+        parent.target?.cursorModel
+            .updateDisplayOrigin(newDisplay.x, newDisplay.y);
+      }
+      _display = newDisplay;
+      _updateSessionWidthHeight(peerId);
     }
+  }
 
-    _updateSessionWidthHeight(peerId, display.width, display.height);
+  handleSwitchDisplay(Map<String, dynamic> evt, String peerId) {
+    _pi.currentDisplay = int.parse(evt['display']);
+    var newDisplay = Display();
+    newDisplay.x = double.parse(evt['x']);
+    newDisplay.y = double.parse(evt['y']);
+    newDisplay.width = int.parse(evt['width']);
+    newDisplay.height = int.parse(evt['height']);
+    newDisplay.cursorEmbedded = int.parse(evt['cursor_embedded']) == 1;
+
+    _updateCurDisplay(peerId, newDisplay);
 
     try {
       CurrentDisplayState.find(peerId).value = _pi.currentDisplay;
     } catch (e) {
       //
-    }
-
-    // remote is mobile, and orientation changed
-    if ((_display.width > _display.height) != oldOrientation) {
-      gFFI.canvasModel.updateViewStyle();
-    }
-    if (_pi.platform == kPeerPlatformLinux ||
-        _pi.platform == kPeerPlatformWindows ||
-        _pi.platform == kPeerPlatformMacOS) {
-      parent.target?.canvasModel.updateViewStyle();
     }
     parent.target?.recordingModel.onSwitchDisplay();
     handleResolutions(peerId, evt["resolutions"]);
@@ -370,7 +369,8 @@ class FfiModel with ChangeNotifier {
     });
   }
 
-  _updateSessionWidthHeight(String id, int width, int height) {
+  _updateSessionWidthHeight(String id) {
+    parent.target?.canvasModel.updateViewStyle();
     bind.sessionSetSize(id: id, width: display.width, height: display.height);
   }
 
@@ -427,7 +427,7 @@ class FfiModel with ChangeNotifier {
       stateGlobal.displaysCount.value = _pi.displays.length;
       if (_pi.currentDisplay < _pi.displays.length) {
         _display = _pi.displays[_pi.currentDisplay];
-        _updateSessionWidthHeight(peerId, display.width, display.height);
+        _updateSessionWidthHeight(peerId);
       }
       if (displays.isNotEmpty) {
         parent.target?.dialogManager.showLoading(
@@ -439,6 +439,7 @@ class FfiModel with ChangeNotifier {
       Map<String, dynamic> features = json.decode(evt['features']);
       _pi.features.privacyMode = features['privacy_mode'] == 1;
       handleResolutions(peerId, evt["resolutions"]);
+      parent.target?.elevationModel.onPeerInfo(_pi);
     }
     notifyListeners();
   }
@@ -485,7 +486,7 @@ class FfiModel with ChangeNotifier {
       _pi.displays = newDisplays;
       stateGlobal.displaysCount.value = _pi.displays.length;
       if (_pi.currentDisplay >= 0 && _pi.currentDisplay < _pi.displays.length) {
-        _display = _pi.displays[_pi.currentDisplay];
+        _updateCurDisplay(peerId, _pi.displays[_pi.currentDisplay]);
       }
     }
     notifyListeners();
@@ -616,12 +617,27 @@ class ViewStyle {
   final int displayWidth;
   final int displayHeight;
   ViewStyle({
-    this.style = '',
-    this.width = 0.0,
-    this.height = 0.0,
-    this.displayWidth = 0,
-    this.displayHeight = 0,
+    required this.style,
+    required this.width,
+    required this.height,
+    required this.displayWidth,
+    required this.displayHeight,
   });
+
+  static defaultViewStyle() {
+    final desktop = (isDesktop || isWebDesktop);
+    final w =
+        desktop ? kDesktopDefaultDisplayWidth : kMobileDefaultDisplayWidth;
+    final h =
+        desktop ? kDesktopDefaultDisplayHeight : kMobileDefaultDisplayHeight;
+    return ViewStyle(
+      style: '',
+      width: w.toDouble(),
+      height: h.toDouble(),
+      displayWidth: w,
+      displayHeight: h,
+    );
+  }
 
   static int _double2Int(double v) => (v * 100).round().toInt();
 
@@ -651,9 +667,14 @@ class ViewStyle {
   double get scale {
     double s = 1.0;
     if (style == kRemoteViewStyleAdaptive) {
-      final s1 = width / displayWidth;
-      final s2 = height / displayHeight;
-      s = s1 < s2 ? s1 : s2;
+      if (width != 0 &&
+          height != 0 &&
+          displayWidth != 0 &&
+          displayHeight != 0) {
+        final s1 = width / displayWidth;
+        final s2 = height / displayHeight;
+        s = s1 < s2 ? s1 : s2;
+      }
     }
     return s;
   }
@@ -679,7 +700,7 @@ class CanvasModel with ChangeNotifier {
   // scroll offset y percent
   double _scrollY = 0.0;
   ScrollStyle _scrollStyle = ScrollStyle.scrollauto;
-  ViewStyle _lastViewStyle = ViewStyle();
+  ViewStyle _lastViewStyle = ViewStyle.defaultViewStyle();
 
   final _imageOverflow = false.obs;
 
@@ -710,8 +731,15 @@ class CanvasModel with ChangeNotifier {
     Size getSize() {
       final size = MediaQueryData.fromWindow(ui.window).size;
       // If minimized, w or h may be negative here.
-      double w = size.width - windowBorderWidth * 2;
-      double h = size.height - tabBarHeight - windowBorderWidth * 2;
+      double w = size.width -
+          windowBorderWidth * 2 -
+          kDragToResizeAreaPadding.left -
+          kDragToResizeAreaPadding.right;
+      double h = size.height -
+          tabBarHeight -
+          windowBorderWidth * 2 -
+          kDragToResizeAreaPadding.top -
+          kDragToResizeAreaPadding.bottom;
       return Size(w < 0 ? 0 : w, h < 0 ? 0 : h);
     }
 
@@ -789,17 +817,29 @@ class CanvasModel with ChangeNotifier {
   double get tabBarHeight => stateGlobal.tabBarHeight;
 
   moveDesktopMouse(double x, double y) {
+    if (size.width == 0 || size.height == 0) {
+      return;
+    }
+
     // On mobile platforms, move the canvas with the cursor.
     final dw = getDisplayWidth() * _scale;
     final dh = getDisplayHeight() * _scale;
     var dxOffset = 0;
     var dyOffset = 0;
-    if (dw > size.width) {
-      dxOffset = (x - dw * (x / size.width) - _x).toInt();
+    try {
+      if (dw > size.width) {
+        dxOffset = (x - dw * (x / size.width) - _x).toInt();
+      }
+      if (dh > size.height) {
+        dyOffset = (y - dh * (y / size.height) - _y).toInt();
+      }
+    } catch (e) {
+      debugPrintStack(
+          label:
+              '(x,y) ($x,$y), (_x,_y) ($_x,$_y), _scale $_scale, display size (${getDisplayWidth()},${getDisplayHeight()}), size $size, , $e');
+      return;
     }
-    if (dh > size.height) {
-      dyOffset = (y - dh * (y / size.height) - _y).toInt();
-    }
+
     _x += dxOffset;
     _y += dyOffset;
     if (dxOffset != 0 || dyOffset != 0) {
@@ -1395,6 +1435,21 @@ class RecordingModel with ChangeNotifier {
   }
 }
 
+class ElevationModel with ChangeNotifier {
+  WeakReference<FFI> parent;
+  ElevationModel(this.parent);
+  bool _running = false;
+  bool _canElevate = false;
+  bool get showRequestMenu => _canElevate && !_running;
+  onPeerInfo(PeerInfo pi) {
+    _canElevate = pi.platform == kPeerPlatformWindows && pi.sasEnabled == false;
+  }
+
+  onPortableServiceRunning(Map<String, dynamic> evt) {
+    _running = evt['running'] == 'true';
+  }
+}
+
 enum ConnType { defaultConn, fileTransfer, portForward, rdp }
 
 /// Flutter state manager and data communication with the Rust core.
@@ -1420,6 +1475,7 @@ class FFI {
   late final QualityMonitorModel qualityMonitorModel; // session
   late final RecordingModel recordingModel; // session
   late final InputModel inputModel; // session
+  late final ElevationModel elevationModel; // session
 
   FFI() {
     imageModel = ImageModel(WeakReference(this));
@@ -1436,6 +1492,7 @@ class FFI {
     qualityMonitorModel = QualityMonitorModel(WeakReference(this));
     recordingModel = RecordingModel(WeakReference(this));
     inputModel = InputModel(WeakReference(this));
+    elevationModel = ElevationModel(WeakReference(this));
   }
 
   /// Start with the given [id]. Only transfer file if [isFileTransfer], only port forward if [isPortForward].
@@ -1559,6 +1616,19 @@ class Display {
         ? kDesktopDefaultDisplayHeight
         : kMobileDefaultDisplayHeight;
   }
+
+  @override
+  bool operator ==(Object other) =>
+      other is Display &&
+      other.runtimeType == runtimeType &&
+      _innerEqual(other);
+
+  bool _innerEqual(Display other) =>
+      other.x == x &&
+      other.y == y &&
+      other.width == width &&
+      other.height == height &&
+      other.cursorEmbedded == cursorEmbedded;
 }
 
 class Resolution {

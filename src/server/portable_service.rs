@@ -117,17 +117,7 @@ impl SharedMemory {
     }
 
     fn flink(name: String) -> ResultType<String> {
-        let disk = std::env::var("SystemDrive").unwrap_or("C:".to_string());
-        let dir1 = PathBuf::from(format!("{}\\ProgramData", disk));
-        let dir2 = PathBuf::from(format!("{}\\Windows\\Temp", disk));
-        let mut dir;
-        if dir1.exists() {
-            dir = dir1;
-        } else if dir2.exists() {
-            dir = dir2;
-        } else {
-            bail!("no vaild flink directory");
-        }
+        let mut dir = crate::platform::user_accessible_folder()?;
         dir = dir.join(hbb_common::config::APP_NAME.read().unwrap().clone());
         if !dir.exists() {
             std::fs::create_dir(&dir)?;
