@@ -170,8 +170,13 @@ class MyTheme {
     scaffoldBackgroundColor: Color(0xFFFFFFFF),
     dialogBackgroundColor: Color(0xFFFFFFFF),
     dialogTheme: DialogTheme(
+      elevation: 15,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18.0),
+        side: BorderSide(
+          width: 1,
+          color: Color(0xFFEEEEEE),
+        ),
       ),
     ),
     inputDecorationTheme: InputDecorationTheme(
@@ -257,8 +262,13 @@ class MyTheme {
     scaffoldBackgroundColor: Color(0xFF18191E),
     dialogBackgroundColor: Color(0xFF18191E),
     dialogTheme: DialogTheme(
+      elevation: 15,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18.0),
+        side: BorderSide(
+          width: 1,
+          color: Color(0xFF24252B),
+        ),
       ),
     ),
     inputDecorationTheme: InputDecorationTheme(
@@ -559,7 +569,7 @@ class OverlayDialogManager {
       BackButtonInterceptor.removeByName(dialogTag);
     }
 
-    dialog.entry = OverlayEntry(builder: (_) {
+    dialog.entry = OverlayEntry(builder: (context) {
       bool innerClicked = false;
       return Listener(
           onPointerUp: (_) {
@@ -569,7 +579,9 @@ class OverlayDialogManager {
             innerClicked = false;
           },
           child: Container(
-              color: Colors.black12,
+              color: Theme.of(context).brightness == Brightness.light
+                  ? Colors.black12
+                  : Colors.black45,
               child: StatefulBuilder(builder: (context, setState) {
                 return Listener(
                   onPointerUp: (_) => innerClicked = true,
