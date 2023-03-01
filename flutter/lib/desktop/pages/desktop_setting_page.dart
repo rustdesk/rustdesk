@@ -1738,7 +1738,10 @@ class _ComboBox extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
           border: Border.all(
-              color: _disabledTextColor(context, enabled) ?? MyTheme.border)),
+        color: enabled
+            ? MyTheme.color(context).border2 ?? MyTheme.border
+            : MyTheme.border,
+      )),
       height: 30,
       child: Obx(() => DropdownButton<String>(
             isExpanded: true,
@@ -1747,7 +1750,10 @@ class _ComboBox extends StatelessWidget {
             underline: Container(
               height: 25,
             ),
-            style: TextStyle(color: _disabledTextColor(context, enabled)),
+            style: TextStyle(
+                color: enabled
+                    ? Theme.of(context).textTheme.titleMedium?.color
+                    : _disabledTextColor(context, enabled)),
             icon: const Icon(
               Icons.expand_more_sharp,
               size: 20,
