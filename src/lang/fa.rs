@@ -312,6 +312,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Keep RustDesk background service", "را در پس زمینه نگه دارید RustDesk سرویس"),
         ("Ignore Battery Optimizations", "بهینه سازی باتری نادیده گرفته شود"),
         ("android_open_battery_optimizations_tip", "به صفحه تنظیمات بعدی بروید"),
+        ("Start on Boot", ""),
+        ("Start the screen sharing service on boot, requires special permissions", ""),
         ("Connection not allowed", "اتصال مجاز نیست"),
         ("Legacy mode", "legacy حالت"),
         ("Map mode", "map حالت"),
@@ -454,8 +456,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Stop voice call", "توقف تماس صوتی"),
         ("relay_hint_tip", " را به شناسه اضافه کنید یا گزینه \"همیشه از طریق رله متصل شوید\" را در کارت همتا انتخاب کنید. همچنین، اگر می‌خواهید فوراً از سرور رله استفاده کنید، می‌توانید پسوند \"/r\".\n اتصال مستقیم ممکن است امکان پذیر نباشد. در این صورت می توانید سعی کنید از طریق سرور رله متصل شوید"),
         ("Reconnect", "اتصال مجدد"),
-        ("No transfers in progress", ""),
-        ("Codec", ""),
-        ("Resolution", ""),
+        ("Codec", "کدک"),
+        ("Resolution", "وضوح"),
+        ("No transfers in progress", "هیچ انتقالی در حال انجام نیست"),
         ].iter().cloned().collect();
 }

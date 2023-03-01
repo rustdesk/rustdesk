@@ -1,7 +1,9 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:window_manager/window_manager.dart';
@@ -13,7 +15,51 @@ class InstallPage extends StatefulWidget {
   State<InstallPage> createState() => _InstallPageState();
 }
 
-class _InstallPageState extends State<InstallPage> with WindowListener {
+class _InstallPageState extends State<InstallPage> {
+  final tabController = DesktopTabController(tabType: DesktopTabType.main);
+
+  @override
+  void initState() {
+    super.initState();
+    Get.put<DesktopTabController>(tabController);
+    const lable = "install";
+    tabController.add(TabInfo(
+        key: lable,
+        label: lable,
+        closable: false,
+        page: _InstallPageBody(
+          key: const ValueKey(lable),
+        )));
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+    Get.delete<DesktopTabController>();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DragToResizeArea(
+      resizeEdgeSize: stateGlobal.resizeEdgeSize.value,
+      child: Container(
+        child: Scaffold(
+            backgroundColor: Theme.of(context).colorScheme.background,
+            body: DesktopTab(controller: tabController)),
+      ),
+    );
+  }
+}
+
+class _InstallPageBody extends StatefulWidget {
+  const _InstallPageBody({Key? key}) : super(key: key);
+
+  @override
+  State<_InstallPageBody> createState() => _InstallPageBodyState();
+}
+
+class _InstallPageBodyState extends State<_InstallPageBody>
+    with WindowListener {
   late final TextEditingController controller;
   final RxBool startmenu = true.obs;
   final RxBool desktopicon = true.obs;
@@ -46,15 +92,19 @@ class _InstallPageState extends State<InstallPage> with WindowListener {
     final double em = 13;
     final btnFontSize = 0.9 * em;
     final double button_radius = 6;
+    final isDarkTheme = MyTheme.currentThemeMode() == ThemeMode.dark;
     final buttonStyle = OutlinedButton.styleFrom(
         shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.all(Radius.circular(button_radius)),
     ));
     final inputBorder = OutlineInputBorder(
         borderRadius: BorderRadius.zero,
-        borderSide: BorderSide(color: Colors.black12));
+        borderSide:
+            BorderSide(color: isDarkTheme ? Colors.white70 : Colors.black12));
+    final textColor = isDarkTheme ? null : Colors.black87;
+    final dividerColor = isDarkTheme ? Colors.white70 : Colors.black87;
     return Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: null,
         body: SingleChildScrollView(
           child: Column(
             children: [
@@ -91,8 +141,7 @@ class _InstallPageState extends State<InstallPage> with WindowListener {
                           style: buttonStyle,
                           child: Text(translate('Change Path'),
                               style: TextStyle(
-                                  color: Colors.black87,
-                                  fontSize: btnFontSize)))
+                                  color: textColor, fontSize: btnFontSize)))
                       .marginOnly(left: em))
                 ],
               ).marginSymmetric(vertical: 2 * em),
@@ -127,8 +176,7 @@ class _InstallPageState extends State<InstallPage> with WindowListener {
                   )).marginOnly(top: 2 * em),
               Row(children: [Text(translate('agreement_tip'))])
                   .marginOnly(top: em),
-              Divider(color: Colors.black87)
-                  .marginSymmetric(vertical: 0.5 * em),
+              Divider(color: dividerColor).marginSymmetric(vertical: 0.5 * em),
               Row(
                 children: [
                   Expanded(
@@ -143,8 +191,7 @@ class _InstallPageState extends State<InstallPage> with WindowListener {
                           style: buttonStyle,
                           child: Text(translate('Cancel'),
                               style: TextStyle(
-                                  color: Colors.black87,
-                                  fontSize: btnFontSize)))
+                                  color: textColor, fontSize: btnFontSize)))
                       .marginOnly(right: 2 * em)),
                   Obx(() => ElevatedButton(
                       onPressed: btnEnabled.value ? install : null,
@@ -167,8 +214,7 @@ class _InstallPageState extends State<InstallPage> with WindowListener {
                             style: buttonStyle,
                             child: Text(translate('Run without install'),
                                 style: TextStyle(
-                                    color: Colors.black87,
-                                    fontSize: btnFontSize)))
+                                    color: textColor, fontSize: btnFontSize)))
                         .marginOnly(left: 2 * em)),
                   ),
                 ],

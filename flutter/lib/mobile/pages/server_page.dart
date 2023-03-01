@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../../common.dart';
 import '../../common/widgets/dialog.dart';
+import '../../consts.dart';
 import '../../models/platform_model.dart';
 import '../../models/server_model.dart';
 import 'home_page.dart';
@@ -40,14 +41,14 @@ class ServerPage extends StatefulWidget implements PageShape {
               value: "setTemporaryPasswordLength",
               enabled:
                   gFFI.serverModel.verificationMethod != kUsePermanentPassword,
-              child: Text(translate("Set temporary password length")),
+              child: Text(translate("One-time password length")),
             ),
             const PopupMenuDivider(),
             PopupMenuItem(
               padding: const EdgeInsets.symmetric(horizontal: 0.0),
               value: kUseTemporaryPassword,
               child: ListTile(
-                  title: Text(translate("Use temporary password")),
+                  title: Text(translate("Use one-time password")),
                   trailing: Icon(
                     Icons.check,
                     color: gFFI.serverModel.verificationMethod ==
@@ -150,10 +151,11 @@ class _ServerPageState extends State<ServerPage> {
 }
 
 void checkService() async {
-  gFFI.invokeMethod("check_service"); // jvm
-  // for Android 10/11,MANAGE_EXTERNAL_STORAGE permission from a system setting page
-  if (PermissionManager.isWaitingFile() && !gFFI.serverModel.fileOk) {
-    PermissionManager.complete("file", await PermissionManager.check("file"));
+  gFFI.invokeMethod("check_service");
+  // for Android 10/11, request MANAGE_EXTERNAL_STORAGE permission from system setting page
+  if (AndroidPermissionManager.isWaitingFile() && !gFFI.serverModel.fileOk) {
+    AndroidPermissionManager.complete(kManageExternalStorage,
+        await AndroidPermissionManager.check(kManageExternalStorage));
     debugPrint("file permission finished");
   }
 }
@@ -567,7 +569,7 @@ void androidChannelInit() {
           {
             var type = arguments["type"] as String;
             var result = arguments["result"] as bool;
-            PermissionManager.complete(type, result);
+            AndroidPermissionManager.complete(type, result);
             break;
           }
         case "on_media_projection_canceled":

@@ -4,8 +4,8 @@
         "dockerfile": "./Dockerfile",
         "context": "."
     },
-    "workspaceMount": "source=${localWorkspaceFolder},target=/home/vscode/rustdesk,type=bind,consistency=cache",
-    "workspaceFolder": "/home/vscode/rustdesk",
+    "workspaceMount": "source=${localWorkspaceFolder}/../..,target=/home/vscode/rustdesk,type=bind,consistency=cache",
+    "workspaceFolder": "/home/vscode/rustdesk/vdi/host",
     "customizations": {
         "vscode": {
             "extensions": [
@@ -15,6 +15,7 @@
                 "tamasfe.even-better-toml",
                 "serayuzgur.crates",
                 "mhutchie.git-graph",
+                "formulahendry.terminal",
                 "eamodio.gitlens"
             ],
             "settings": {

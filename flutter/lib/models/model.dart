@@ -617,12 +617,27 @@ class ViewStyle {
   final int displayWidth;
   final int displayHeight;
   ViewStyle({
-    this.style = '',
-    this.width = 0.0,
-    this.height = 0.0,
-    this.displayWidth = 0,
-    this.displayHeight = 0,
+    required this.style,
+    required this.width,
+    required this.height,
+    required this.displayWidth,
+    required this.displayHeight,
   });
+
+  static defaultViewStyle() {
+    final desktop = (isDesktop || isWebDesktop);
+    final w =
+        desktop ? kDesktopDefaultDisplayWidth : kMobileDefaultDisplayWidth;
+    final h =
+        desktop ? kDesktopDefaultDisplayHeight : kMobileDefaultDisplayHeight;
+    return ViewStyle(
+      style: '',
+      width: w.toDouble(),
+      height: h.toDouble(),
+      displayWidth: w,
+      displayHeight: h,
+    );
+  }
 
   static int _double2Int(double v) => (v * 100).round().toInt();
 
@@ -652,9 +667,14 @@ class ViewStyle {
   double get scale {
     double s = 1.0;
     if (style == kRemoteViewStyleAdaptive) {
-      final s1 = width / displayWidth;
-      final s2 = height / displayHeight;
-      s = s1 < s2 ? s1 : s2;
+      if (width != 0 &&
+          height != 0 &&
+          displayWidth != 0 &&
+          displayHeight != 0) {
+        final s1 = width / displayWidth;
+        final s2 = height / displayHeight;
+        s = s1 < s2 ? s1 : s2;
+      }
     }
     return s;
   }
@@ -680,7 +700,7 @@ class CanvasModel with ChangeNotifier {
   // scroll offset y percent
   double _scrollY = 0.0;
   ScrollStyle _scrollStyle = ScrollStyle.scrollauto;
-  ViewStyle _lastViewStyle = ViewStyle();
+  ViewStyle _lastViewStyle = ViewStyle.defaultViewStyle();
 
   final _imageOverflow = false.obs;
 
@@ -707,12 +727,25 @@ class CanvasModel with ChangeNotifier {
   double get scrollX => _scrollX;
   double get scrollY => _scrollY;
 
+  static double get leftToEdge => (isDesktop || isWebDesktop)
+      ? windowBorderWidth + kDragToResizeAreaPadding.left
+      : 0;
+  static double get rightToEdge => (isDesktop || isWebDesktop)
+      ? windowBorderWidth + kDragToResizeAreaPadding.right
+      : 0;
+  static double get topToEdge => (isDesktop || isWebDesktop)
+      ? tabBarHeight + windowBorderWidth + kDragToResizeAreaPadding.top
+      : 0;
+  static double get bottomToEdge => (isDesktop || isWebDesktop)
+      ? windowBorderWidth + kDragToResizeAreaPadding.bottom
+      : 0;
+
   updateViewStyle() async {
     Size getSize() {
       final size = MediaQueryData.fromWindow(ui.window).size;
       // If minimized, w or h may be negative here.
-      double w = size.width - windowBorderWidth * 2;
-      double h = size.height - tabBarHeight - windowBorderWidth * 2;
+      double w = size.width - leftToEdge - rightToEdge;
+      double h = size.height - topToEdge - bottomToEdge;
       return Size(w < 0 ? 0 : w, h < 0 ? 0 : h);
     }
 
@@ -786,10 +819,14 @@ class CanvasModel with ChangeNotifier {
     return parent.target?.ffiModel.display.height ?? defaultHeight;
   }
 
-  double get windowBorderWidth => stateGlobal.windowBorderWidth.value;
-  double get tabBarHeight => stateGlobal.tabBarHeight;
+  static double get windowBorderWidth => stateGlobal.windowBorderWidth.value;
+  static double get tabBarHeight => stateGlobal.tabBarHeight;
 
   moveDesktopMouse(double x, double y) {
+    if (size.width == 0 || size.height == 0) {
+      return;
+    }
+
     // On mobile platforms, move the canvas with the cursor.
     final dw = getDisplayWidth() * _scale;
     final dh = getDisplayHeight() * _scale;
@@ -803,7 +840,9 @@ class CanvasModel with ChangeNotifier {
         dyOffset = (y - dh * (y / size.height) - _y).toInt();
       }
     } catch (e) {
-      // Unhandled Exception: Unsupported operation: Infinity or NaN toInt
+      debugPrintStack(
+          label:
+              '(x,y) ($x,$y), (_x,_y) ($_x,$_y), _scale $_scale, display size (${getDisplayWidth()},${getDisplayHeight()}), size $size, , $e');
       return;
     }
 

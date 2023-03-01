@@ -312,6 +312,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Keep RustDesk background service", "Ohrani RustDeskovo storitev v ozadju"),
         ("Ignore Battery Optimizations", "Prezri optimizacije baterije"),
         ("android_open_battery_optimizations_tip", "Če želite izklopiti to možnost, pojdite v nastavitve aplikacije RustDesk, poiščite »Baterija« in izklopite »Neomejeno«"),
+        ("Start on Boot", ""),
+        ("Start the screen sharing service on boot, requires special permissions", ""),
         ("Connection not allowed", "Povezava ni dovoljena"),
         ("Legacy mode", "Stari način"),
         ("Map mode", "Način preslikave"),

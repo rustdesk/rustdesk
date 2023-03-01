@@ -312,6 +312,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Keep RustDesk background service", "Держать в фоне службу RustDesk"),
         ("Ignore Battery Optimizations", "Игнорировать оптимизацию батареи"),
         ("android_open_battery_optimizations_tip", "Перейдите на следующую страницу настроек"),
+        ("Start on Boot", ""),
+        ("Start the screen sharing service on boot, requires special permissions", ""),
         ("Connection not allowed", "Подключение не разрешено"),
         ("Legacy mode", "Устаревший режим"),
         ("Map mode", "Режим сопоставления"),
@@ -454,8 +456,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Stop voice call", "Завершить голосовой вызов"),
         ("relay_hint_tip", "Прямое подключение может оказаться невозможным. В этом случае можно попытаться подключиться через сервер ретрансляции. \nКроме того, если вы хотите сразу использовать сервер ретрансляции, можно добавить к ID суффикс  \"/r\" или включить \"Всегда подключаться через ретранслятор\" в настройках удалённого узла."),
         ("Reconnect", "Переподключить"),
-        ("Codec", ""),
-        ("Resolution", ""),
-        ("No transfers in progress", ""),
+        ("Codec", "Кодек"),
+        ("Resolution", "Разрешение"),
+        ("No transfers in progress", "Передача не осуществляется"),
         ].iter().cloned().collect();
 }

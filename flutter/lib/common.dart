@@ -109,27 +109,32 @@ class IconFont {
 class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
   const ColorThemeExtension({
     required this.border,
+    required this.border2,
     required this.highlight,
   });
 
   final Color? border;
+  final Color? border2;
   final Color? highlight;
 
   static const light = ColorThemeExtension(
     border: Color(0xFFCCCCCC),
+    border2: Color(0xFFBBBBBB),
     highlight: Color(0xFFE5E5E5),
   );
 
   static const dark = ColorThemeExtension(
     border: Color(0xFF555555),
+    border2: Color(0xFFE5E5E5),
     highlight: Color(0xFF3F3F3F),
   );
 
   @override
   ThemeExtension<ColorThemeExtension> copyWith(
-      {Color? border, Color? highlight}) {
+      {Color? border, Color? border2, Color? highlight}) {
     return ColorThemeExtension(
       border: border ?? this.border,
+      border2: border2 ?? this.border2,
       highlight: highlight ?? this.highlight,
     );
   }
@@ -142,6 +147,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
     }
     return ColorThemeExtension(
       border: Color.lerp(border, other.border, t),
+      border2: Color.lerp(border2, other.border2, t),
       highlight: Color.lerp(highlight, other.highlight, t),
     );
   }
@@ -207,38 +213,30 @@ class MyTheme {
     splashFactory: isDesktop ? NoSplash.splashFactory : null,
     textButtonTheme: isDesktop
         ? TextButtonThemeData(
-            style: ButtonStyle(
+            style: TextButton.styleFrom(
               splashFactory: NoSplash.splashFactory,
-              shape: MaterialStatePropertyAll<RoundedRectangleBorder>(
-                RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18.0),
-                ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18.0),
               ),
             ),
           )
         : null,
     elevatedButtonTheme: ElevatedButtonThemeData(
-      style: ButtonStyle(
-        backgroundColor: MaterialStatePropertyAll(
-          MyTheme.accent,
-        ),
-        shape: MaterialStatePropertyAll<RoundedRectangleBorder>(
-          RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8.0),
-          ),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: MyTheme.accent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8.0),
         ),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
-      style: ButtonStyle(
-        backgroundColor: MaterialStatePropertyAll(
-          Color(0xFFEEEEEE),
+      style: OutlinedButton.styleFrom(
+        backgroundColor: Color(
+          0xFFEEEEEE,
         ),
-        foregroundColor: MaterialStatePropertyAll(Colors.black87),
-        shape: MaterialStatePropertyAll<RoundedRectangleBorder>(
-          RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8.0),
-          ),
+        foregroundColor: Colors.black87,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8.0),
         ),
       ),
     ),
@@ -306,46 +304,42 @@ class MyTheme {
     tabBarTheme: const TabBarTheme(
       labelColor: Colors.white70,
     ),
+    scrollbarTheme: ScrollbarThemeData(
+      thumbColor: MaterialStateProperty.all(Colors.grey[500]),
+    ),
     splashColor: Colors.transparent,
     highlightColor: Colors.transparent,
     splashFactory: isDesktop ? NoSplash.splashFactory : null,
     textButtonTheme: isDesktop
         ? TextButtonThemeData(
-            style: ButtonStyle(
+            style: TextButton.styleFrom(
               splashFactory: NoSplash.splashFactory,
-              shape: MaterialStatePropertyAll<RoundedRectangleBorder>(
-                RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18.0),
-                ),
+              disabledForegroundColor: Colors.white70,
+              foregroundColor: Colors.white70,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18.0),
               ),
             ),
           )
         : null,
     elevatedButtonTheme: ElevatedButtonThemeData(
-      style: ButtonStyle(
-        backgroundColor: MaterialStatePropertyAll(
-          MyTheme.accent,
-        ),
-        shape: MaterialStatePropertyAll<RoundedRectangleBorder>(
-          RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8.0),
-          ),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: MyTheme.accent,
+        disabledForegroundColor: Colors.white70,
+        disabledBackgroundColor: Colors.white10,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8.0),
         ),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
-      style: ButtonStyle(
-        backgroundColor: MaterialStatePropertyAll(
-          Color(0xFF24252B),
-        ),
-        side: MaterialStatePropertyAll(
-          BorderSide(color: Colors.white12, width: 0.5),
-        ),
-        foregroundColor: MaterialStatePropertyAll(Colors.white70),
-        shape: MaterialStatePropertyAll<RoundedRectangleBorder>(
-          RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8.0),
-          ),
+      style: OutlinedButton.styleFrom(
+        backgroundColor: Color(0xFF24252B),
+        side: BorderSide(color: Colors.white12, width: 0.5),
+        disabledForegroundColor: Colors.white70,
+        foregroundColor: Colors.white70,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8.0),
         ),
       ),
     ),
@@ -1045,21 +1039,14 @@ class AccessibilityListener extends StatelessWidget {
   }
 }
 
-class PermissionManager {
+class AndroidPermissionManager {
   static Completer<bool>? _completer;
   static Timer? _timer;
   static var _current = "";
 
-  static final permissions = [
-    "audio",
-    "file",
-    "ignore_battery_optimizations",
-    "application_details_settings"
-  ];
-
   static bool isWaitingFile() {
     if (_completer != null) {
-      return !_completer!.isCompleted && _current == "file";
+      return !_completer!.isCompleted && _current == kManageExternalStorage;
     }
     return false;
   }
@@ -1068,31 +1055,33 @@ class PermissionManager {
     if (isDesktop) {
       return Future.value(true);
     }
-    if (!permissions.contains(type)) {
-      return Future.error("Wrong permission!$type");
-    }
     return gFFI.invokeMethod("check_permission", type);
   }
 
+  // startActivity goto Android Setting's page to request permission manually by user
+  static void startAction(String action) {
+    gFFI.invokeMethod(AndroidChannel.kStartAction, action);
+  }
+
+  /// We use XXPermissions to request permissions,
+  /// for supported types, see https://github.com/getActivity/XXPermissions/blob/e46caea32a64ad7819df62d448fb1c825481cd28/library/src/main/java/com/hjq/permissions/Permission.java
   static Future<bool> request(String type) {
     if (isDesktop) {
       return Future.value(true);
     }
-    if (!permissions.contains(type)) {
-      return Future.error("Wrong permission!$type");
-    }
 
     gFFI.invokeMethod("request_permission", type);
-    if (type == "ignore_battery_optimizations") {
-      return Future.value(false);
+
+    // clear last task
+    if (_completer?.isCompleted == false) {
+      _completer?.complete(false);
     }
+    _timer?.cancel();
+
     _current = type;
     _completer = Completer<bool>();
-    gFFI.invokeMethod("request_permission", type);
 
-    // timeout
-    _timer?.cancel();
-    _timer = Timer(Duration(seconds: 60), () {
+    _timer = Timer(Duration(seconds: 120), () {
       if (_completer == null) return;
       if (!_completer!.isCompleted) {
         _completer!.complete(false);
@@ -1622,8 +1611,8 @@ connect(BuildContext context, String id,
     }
   } else {
     if (isFileTransfer) {
-      if (!await PermissionManager.check("file")) {
-        if (!await PermissionManager.request("file")) {
+      if (!await AndroidPermissionManager.check(kManageExternalStorage)) {
+        if (!await AndroidPermissionManager.request(kManageExternalStorage)) {
           return;
         }
       }

@@ -976,7 +976,7 @@ fn get_after_install(exe: &str) -> String {
 }
 
 pub fn install_me(options: &str, path: String, silent: bool, debug: bool) -> ResultType<()> {
-    let uninstall_str = get_uninstall();
+    let uninstall_str = get_uninstall(false);
     let mut path = path.trim_end_matches('\\').to_owned();
     let (subkey, _path, start_menu, exe) = get_default_install_info();
     let mut exe = exe;
@@ -1188,30 +1188,35 @@ pub fn run_after_install() -> ResultType<()> {
 }
 
 pub fn run_before_uninstall() -> ResultType<()> {
-    run_cmds(get_before_uninstall(), true, "before_install")
+    run_cmds(get_before_uninstall(true), true, "before_install")
 }
 
-fn get_before_uninstall() -> String {
+fn get_before_uninstall(kill_self: bool) -> String {
     let app_name = crate::get_app_name();
     let ext = app_name.to_lowercase();
+    let filter = if kill_self {
+        "".to_string()
+    } else {
+        format!(" /FI \"PID ne {}\"", get_current_pid())
+    };
     format!(
         "
     chcp 65001
     sc stop {app_name}
     sc delete {app_name}
     taskkill /F /IM {broker_exe}
-    taskkill /F /IM {app_name}.exe /FI \"PID ne {cur_pid}\"
+    taskkill /F /IM {app_name}.exe{filter}
     reg delete HKEY_CLASSES_ROOT\\.{ext} /f
     netsh advfirewall firewall delete rule name=\"{app_name} Service\"
     ",
         app_name = app_name,
         broker_exe = crate::win_privacy::INJECTED_PROCESS_EXE,
         ext = ext,
-        cur_pid = get_current_pid(),
+        filter = filter,
     )
 }
 
-fn get_uninstall() -> String {
+fn get_uninstall(kill_self: bool) -> String {
     let (subkey, path, start_menu, _) = get_install_info();
     format!(
         "
@@ -1222,7 +1227,7 @@ fn get_uninstall() -> String {
     if exist \"%PUBLIC%\\Desktop\\{app_name}.lnk\" del /f /q \"%PUBLIC%\\Desktop\\{app_name}.lnk\"
     if exist \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{app_name} Tray.lnk\" del /f /q \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{app_name} Tray.lnk\"
     ",
-        before_uninstall=get_before_uninstall(),
+        before_uninstall=get_before_uninstall(kill_self),
         subkey=subkey,
         app_name = crate::get_app_name(),
         path = path,
@@ -1231,11 +1236,20 @@ fn get_uninstall() -> String {
 }
 
 pub fn uninstall_me() -> ResultType<()> {
-    run_cmds(get_uninstall(), true, "uninstall")
+    run_cmds(get_uninstall(true), true, "uninstall")
 }
 
 fn write_cmds(cmds: String, ext: &str, tip: &str) -> ResultType<std::path::PathBuf> {
     let mut tmp = std::env::temp_dir();
+    // When dir contains these characters, the bat file will not execute in elevated mode.
+    if vec!["&", "@", "^"]
+        .drain(..)
+        .any(|s| tmp.to_string_lossy().to_string().contains(s))
+    {
+        if let Ok(dir) = user_accessible_folder() {
+            tmp = dir;
+        }
+    }
     tmp.push(format!("{}_{}.{}", crate::get_app_name(), tip, ext));
     let mut file = std::fs::File::create(&tmp)?;
     // in case cmds mixed with \r\n and \n, make sure all ending with \r\n
@@ -1871,4 +1885,20 @@ pub fn change_resolution(name: &str, width: usize, height: usize) -> ResultType<
         }
         Ok(())
     }
+}
+
+pub fn user_accessible_folder() -> ResultType<PathBuf> {
+    let disk = std::env::var("SystemDrive").unwrap_or("C:".to_string());
+    let dir1 = PathBuf::from(format!("{}\\ProgramData", disk));
+    // NOTICE: "C:\Windows\Temp" requires permanent authorization.
+    let dir2 = PathBuf::from(format!("{}\\Windows\\Temp", disk));
+    let dir;
+    if dir1.exists() {
+        dir = dir1;
+    } else if dir2.exists() {
+        dir = dir2;
+    } else {
+        bail!("no vaild user accessible folder");
+    }
+    Ok(dir)
 }

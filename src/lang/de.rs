@@ -312,6 +312,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Keep RustDesk background service", "RustDesk im Hintergrund ausführen"),
         ("Ignore Battery Optimizations", "Akkuoptimierung ignorieren"),
         ("android_open_battery_optimizations_tip", "Möchten Sie die Einstellungen zur Akkuoptimierung öffnen?"),
+        ("Start on Boot", ""),
+        ("Start the screen sharing service on boot, requires special permissions", ""),
         ("Connection not allowed", "Verbindung abgelehnt"),
         ("Legacy mode", "Kompatibilitätsmodus"),
         ("Map mode", "Kartenmodus"),
@@ -454,8 +456,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Stop voice call", "Sprachanruf beenden"),
         ("relay_hint_tip", "Wenn eine direkte Verbindung nicht möglich ist, können Sie versuchen, eine Verbindung über einen Relay-Server herzustellen. \nWenn Sie eine Relay-Verbindung beim ersten Versuch herstellen möchten, können Sie das Suffix \"/r\" an die ID anhängen oder die Option \"Immer über Relay-Server verbinden\" auf der Gegenstelle auswählen."),
         ("Reconnect", "Erneut verbinden"),
-        ("Codec", ""),
-        ("Resolution", ""),
-        ("No transfers in progress", ""),
+        ("Codec", "Codec"),
+        ("Resolution", "Auflösung"),
+        ("No transfers in progress", "Keine Übertragungen im Gange"),
         ].iter().cloned().collect();
 }

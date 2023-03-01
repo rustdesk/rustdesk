@@ -14,6 +14,7 @@ class DesktopScrollWrapper extends StatelessWidget {
     return ImprovedScrolling(
       scrollController: scrollController,
       enableCustomMouseWheelScrolling: true,
+      // enableKeyboardScrolling: true, // strange behavior on mac
       customMouseWheelScrollConfig: CustomMouseWheelScrollConfig(
           scrollDuration: kDefaultScrollDuration,
           scrollCurve: Curves.linearToEaseOut,

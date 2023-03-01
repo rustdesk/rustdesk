@@ -312,6 +312,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Keep RustDesk background service", "Εκτέλεση του RustDesk στο παρασκήνιο"),
         ("Ignore Battery Optimizations", "Παράβλεψη βελτιστοποιήσεων μπαταρίας"),
         ("android_open_battery_optimizations_tip", "Θέλετε να ανοίξετε τις ρυθμίσεις βελτιστοποίησης μπαταρίας;"),
+        ("Start on Boot", ""),
+        ("Start the screen sharing service on boot, requires special permissions", ""),
         ("Connection not allowed", "Η σύνδεση απορρίφθηκε"),
         ("Legacy mode", "Λειτουργία συμβατότητας"),
         ("Map mode", "Map mode"),
