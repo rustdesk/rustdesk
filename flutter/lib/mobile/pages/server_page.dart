@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/mobile/widgets/dialog.dart';
+import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 
 import '../../common.dart';
@@ -264,70 +265,73 @@ class _PermissionCheckerState extends State<PermissionChecker> {
     } else {
       status = 'Ready';
     }
+
+    // @todo Theming
+    Widget ServerStateMessage() {
+      if (!serverModel.mediaOk) {
+        return Row(children: [
+          const Icon(Icons.warning_amber_outlined,
+                  color: Colors.redAccent, size: 24)
+              .marginOnly(right: 10),
+          Expanded(child: Text(translate('Service is not running')))
+        ]);
+      }
+
+      if (serverModel.connectStatus == -1) {
+        return Row(children: [
+          const Icon(Icons.warning_amber_sharp,
+                  color: Colors.redAccent, size: 24)
+              .marginOnly(right: 10),
+          Expanded(child: Text(translate('not_ready_status')))
+        ]);
+      } else if (serverModel.connectStatus == 0) {
+        return Row(children: [
+          SizedBox(width: 20, height: 20, child: CircularProgressIndicator())
+              .marginOnly(left: 4, right: 10),
+          Expanded(child: Text(translate('connecting_status')))
+        ]);
+      } else {
+        return Row(children: [
+          const Icon(Icons.check, color: Colors.greenAccent, size: 24)
+              .marginOnly(right: 10),
+          Expanded(child: Text(translate('Ready')))
+        ]);
+      }
+    }
+
     return PaddingCard(
         title: translate("Permissions"),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            PermissionRow(translate("Screen Capture"), serverModel.mediaOk,
-                serverModel.toggleService),
-            PermissionRow(translate("Input Control"), serverModel.inputOk,
-                serverModel.toggleInput),
-            PermissionRow(translate("Transfer File"), serverModel.fileOk,
-                serverModel.toggleFile),
-            hasAudioPermission
-                ? PermissionRow(translate("Audio Capture"), serverModel.audioOk,
-                    serverModel.toggleAudio)
-                : Text(
-                    "* ${translate("android_version_audio_tip")}",
-                    style: const TextStyle(color: MyTheme.darkGray),
-                  ),
-            const SizedBox(height: 8),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(
-                    flex: 0,
-                    child: serverModel.mediaOk
-                        ? ElevatedButton.icon(
-                            style: ButtonStyle(
-                                backgroundColor:
-                                    MaterialStateProperty.all(Colors.red)),
-                            icon: const Icon(Icons.stop),
-                            onPressed: serverModel.toggleService,
-                            label: Text(translate("Stop service")))
-                        : ElevatedButton.icon(
-                            icon: const Icon(Icons.play_arrow),
-                            onPressed: serverModel.toggleService,
-                            label: Text(translate("Start Service")))),
-                Expanded(
-                    child: serverModel.mediaOk
-                        ? Row(
-                            children: [
-                              Expanded(
-                                  flex: 0,
-                                  child: Padding(
-                                      padding: const EdgeInsets.only(
-                                          left: 20, right: 5),
-                                      child: Icon(Icons.circle,
-                                          color: serverModel.connectStatus > 0
-                                              ? Colors.greenAccent
-                                              : Colors.deepOrangeAccent,
-                                          size: 10))),
-                              Expanded(
-                                  child: Text(translate(status),
-                                      softWrap: true,
-                                      style: const TextStyle(
-                                          fontSize: 14.0,
-                                          fontWeight: FontWeight.w500,
-                                          color: MyTheme.accent80)))
-                            ],
-                          )
-                        : const SizedBox.shrink())
-              ],
-            ),
-          ],
-        ));
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          PermissionRow(translate("Screen Capture"), serverModel.mediaOk,
+              serverModel.toggleService),
+          PermissionRow(translate("Input Control"), serverModel.inputOk,
+              serverModel.toggleInput),
+          PermissionRow(translate("Transfer File"), serverModel.fileOk,
+              serverModel.toggleFile),
+          hasAudioPermission
+              ? PermissionRow(translate("Audio Capture"), serverModel.audioOk,
+                  serverModel.toggleAudio)
+              : Text(
+                  "* ${translate("android_version_audio_tip")}",
+                  style: const TextStyle(color: MyTheme.darkGray),
+                ),
+          const SizedBox(height: 8),
+          serverModel.mediaOk
+              ? ElevatedButton.icon(
+                      style: ButtonStyle(
+                          backgroundColor:
+                              MaterialStateProperty.all(Colors.red)),
+                      icon: const Icon(Icons.stop),
+                      onPressed: serverModel.toggleService,
+                      label: Text(translate("Stop service")))
+                  .marginOnly(bottom: 8)
+              : ElevatedButton.icon(
+                      icon: const Icon(Icons.play_arrow),
+                      onPressed: serverModel.toggleService,
+                      label: Text(translate("Start Service")))
+                  .marginOnly(bottom: 8),
+          ServerStateMessage()
+        ]));
   }
 }
 
