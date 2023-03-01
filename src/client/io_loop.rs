@@ -1344,7 +1344,7 @@ impl<T: InvokeUiSession> Remote<T> {
             }
             back_notification::PrivacyModeState::PrvNotSupported => {
                 self.handler
-                    .msgbox("custom-error", "Privacy mode", "Unsupported. 1 Multi-screen is unsupported, 2 Confirm the license is activated", "");
+                    .msgbox("custom-error", "Privacy mode", "Unsupported. 1 Multi-screen is unsupported, 2 Please confirm the license is activated", "");
                 self.update_privacy_mode(false);
             }
             back_notification::PrivacyModeState::PrvOnSucceeded => {

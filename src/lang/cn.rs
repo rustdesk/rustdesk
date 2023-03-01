@@ -300,7 +300,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Failed", "失败"),
         ("Succeeded", "成功"),
         ("Someone turns on privacy mode, exit", "其他用户使用隐私模式，退出"),
-        ("Unsupported. 1 Multi-screen is unsupported, 2 Confirm the license is activated", "不支持。1. 不支持多屏幕 2. 请确认license已激活"),
+        ("Unsupported. 1 Multi-screen is unsupported, 2 Please confirm the license is activated", "不支持。1. 不支持多屏幕 2. 请确认license已激活"),
         ("Peer denied", "被控端拒绝"),
         ("Please install plugins", "请安装插件"),
         ("Peer exit", "被控端退出"),
