@@ -963,7 +963,6 @@ impl PeerConfig {
                         };
 
                         let c = PeerConfig::load(&id_decoded_string);
-                        log::info!("REMOVE ME ============================== peer config {:?}", &c);
                         if c.info.platform.is_empty() {
                             fs::remove_file(p).ok();
                         }
