@@ -456,7 +456,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Stop voice call", "Stop spraakoproep"),
         ("relay_hint_tip", "Indien een directe verbinding niet mogelijk is, kunt u proberen verbinding te maken via een Relay Server. \nAls u bij de eerste poging een relaisverbinding tot stand wilt brengen, kunt u het achtervoegsel \"/r\" toevoegen aan het ID of de optie \"Altijd verbinden via relaisserver\" selecteren op de externe terminal."),
         ("Reconnect", "Herverbinden"),
-        ("Codec", "odec"),
+        ("Codec", "Codec"),
         ("Resolution", "Resolutie"),
         ("No transfers in progress", "Geen overdrachten in uitvoering"),
         ].iter().cloned().collect();
