@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
@@ -154,7 +155,8 @@ class ServerModel with ChangeNotifier {
   /// file true by default (if permission on)
   checkAndroidPermission() async {
     // audio
-    if (androidVersion < 30 || !await PermissionManager.check("audio")) {
+    if (androidVersion < 30 ||
+        !await AndroidPermissionManager.check(kRecordAudio)) {
       _audioOk = false;
       bind.mainSetOption(key: "enable-audio", value: "N");
     } else {
@@ -163,7 +165,7 @@ class ServerModel with ChangeNotifier {
     }
 
     // file
-    if (!await PermissionManager.check("file")) {
+    if (!await AndroidPermissionManager.check(kManageExternalStorage)) {
       _fileOk = false;
       bind.mainSetOption(key: "enable-file-transfer", value: "N");
     } else {
@@ -229,10 +231,10 @@ class ServerModel with ChangeNotifier {
   }
 
   toggleAudio() async {
-    if (!_audioOk && !await PermissionManager.check("audio")) {
-      final res = await PermissionManager.request("audio");
+    if (!_audioOk && !await AndroidPermissionManager.check(kRecordAudio)) {
+      final res = await AndroidPermissionManager.request(kRecordAudio);
       if (!res) {
-        // TODO handle fail
+        showToast(translate('Failed'));
         return;
       }
     }
@@ -243,10 +245,12 @@ class ServerModel with ChangeNotifier {
   }
 
   toggleFile() async {
-    if (!_fileOk && !await PermissionManager.check("file")) {
-      final res = await PermissionManager.request("file");
+    if (!_fileOk &&
+        !await AndroidPermissionManager.check(kManageExternalStorage)) {
+      final res =
+          await AndroidPermissionManager.request(kManageExternalStorage);
       if (!res) {
-        // TODO handle fail
+        showToast(translate('Failed'));
         return;
       }
     }
@@ -342,10 +346,6 @@ class ServerModel with ChangeNotifier {
       // current linux is not supported
       Wakelock.disable();
     }
-  }
-
-  Future<void> initInput() async {
-    await parent.target?.invokeMethod("init_input");
   }
 
   Future<bool> setPermanentPassword(String newPW) async {
@@ -561,7 +561,8 @@ class ServerModel with ChangeNotifier {
   }
 
   Future<void> closeAll() async {
-    await Future.wait(_clients.map((client) => bind.cmCloseConnection(connId: client.id)));
+    await Future.wait(
+        _clients.map((client) => bind.cmCloseConnection(connId: client.id)));
     _clients.clear();
     tabController.state.value.tabs.clear();
   }
@@ -684,7 +685,7 @@ String getLoginDialogTag(int id) {
 showInputWarnAlert(FFI ffi) {
   ffi.dialogManager.show((setState, close) {
     submit() {
-      ffi.serverModel.initInput();
+      AndroidPermissionManager.startAction(kActionAccessibilitySettings);
       close();
     }
 

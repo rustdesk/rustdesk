@@ -312,6 +312,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Keep RustDesk background service", "Артжақтағы RustDesk сербесін сақтап тұру"),
         ("Ignore Battery Optimizations", "Бәтері Оңтайландыруларын Елемеу"),
         ("android_open_battery_optimizations_tip", "Егер де бұл ерекшелікті өшіруді қаласаңыз, келесі RustDesk апылқат орнатпалары бетіне барып, [Бәтері]'ні тауып кіріңіз де [Шектеусіз]'ден құсбелгіні алып тастауды өтінеміз"),
+        ("Start on Boot", ""),
+        ("Start the screen sharing service on boot, requires special permissions", ""),
         ("Connection not allowed", "Қосылу рұқсат етілмеген"),
         ("Legacy mode", ""),
         ("Map mode", ""),

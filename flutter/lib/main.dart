@@ -153,6 +153,7 @@ void runMainApp(bool startService) async {
 void runMobileApp() async {
   await initEnv(kAppTypeMain);
   if (isAndroid) androidChannelInit();
+  platformFFI.syncAndroidServiceAppDirConfigPath();
   runApp(App());
 }
 

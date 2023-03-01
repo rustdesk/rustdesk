@@ -910,21 +910,14 @@ class AccessibilityListener extends StatelessWidget {
   }
 }
 
-class PermissionManager {
+class AndroidPermissionManager {
   static Completer<bool>? _completer;
   static Timer? _timer;
   static var _current = "";
 
-  static final permissions = [
-    "audio",
-    "file",
-    "ignore_battery_optimizations",
-    "application_details_settings"
-  ];
-
   static bool isWaitingFile() {
     if (_completer != null) {
-      return !_completer!.isCompleted && _current == "file";
+      return !_completer!.isCompleted && _current == kManageExternalStorage;
     }
     return false;
   }
@@ -933,31 +926,33 @@ class PermissionManager {
     if (isDesktop) {
       return Future.value(true);
     }
-    if (!permissions.contains(type)) {
-      return Future.error("Wrong permission!$type");
-    }
     return gFFI.invokeMethod("check_permission", type);
   }
 
+  // startActivity goto Android Setting's page to request permission manually by user
+  static void startAction(String action) {
+    gFFI.invokeMethod(AndroidChannel.kStartAction, action);
+  }
+
+  /// We use XXPermissions to request permissions,
+  /// for supported types, see https://github.com/getActivity/XXPermissions/blob/e46caea32a64ad7819df62d448fb1c825481cd28/library/src/main/java/com/hjq/permissions/Permission.java
   static Future<bool> request(String type) {
     if (isDesktop) {
       return Future.value(true);
     }
-    if (!permissions.contains(type)) {
-      return Future.error("Wrong permission!$type");
-    }
 
     gFFI.invokeMethod("request_permission", type);
-    if (type == "ignore_battery_optimizations") {
-      return Future.value(false);
+
+    // clear last task
+    if (_completer?.isCompleted == false) {
+      _completer?.complete(false);
     }
+    _timer?.cancel();
+
     _current = type;
     _completer = Completer<bool>();
-    gFFI.invokeMethod("request_permission", type);
 
-    // timeout
-    _timer?.cancel();
-    _timer = Timer(Duration(seconds: 60), () {
+    _timer = Timer(Duration(seconds: 120), () {
       if (_completer == null) return;
       if (!_completer!.isCompleted) {
         _completer!.complete(false);
@@ -1487,8 +1482,8 @@ connect(BuildContext context, String id,
     }
   } else {
     if (isFileTransfer) {
-      if (!await PermissionManager.check("file")) {
-        if (!await PermissionManager.request("file")) {
+      if (!await AndroidPermissionManager.check(kManageExternalStorage)) {
+        if (!await AndroidPermissionManager.request(kManageExternalStorage)) {
           return;
         }
       }

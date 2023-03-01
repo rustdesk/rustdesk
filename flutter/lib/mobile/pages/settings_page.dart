@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../common.dart';
 import '../../common/widgets/dialog.dart';
 import '../../common/widgets/login.dart';
+import '../../consts.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../widgets/dialog.dart';
@@ -31,18 +32,20 @@ class SettingsPage extends StatefulWidget implements PageShape {
 }
 
 const url = 'https://rustdesk.com/';
-final _hasIgnoreBattery = androidVersion >= 26;
-var _ignoreBatteryOpt = false;
-var _enableAbr = false;
-var _denyLANDiscovery = false;
-var _onlyWhiteList = false;
-var _enableDirectIPAccess = false;
-var _enableRecordSession = false;
-var _autoRecordIncomingSession = false;
-var _localIP = "";
-var _directAccessPort = "";
 
 class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
+  final _hasIgnoreBattery = androidVersion >= 26;
+  var _ignoreBatteryOpt = false;
+  var _enableStartOnBoot = false;
+  var _enableAbr = false;
+  var _denyLANDiscovery = false;
+  var _onlyWhiteList = false;
+  var _enableDirectIPAccess = false;
+  var _enableRecordSession = false;
+  var _autoRecordIncomingSession = false;
+  var _localIP = "";
+  var _directAccessPort = "";
+
   @override
   void initState() {
     super.initState();
@@ -50,11 +53,34 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
 
     () async {
       var update = false;
+
       if (_hasIgnoreBattery) {
-        update = await updateIgnoreBatteryStatus();
+        if (await checkAndUpdateIgnoreBatteryStatus()) {
+          update = true;
+        }
       }
 
-      final enableAbrRes = await bind.mainGetOption(key: "enable-abr") != "N";
+      if (await checkAndUpdateStartOnBoot()) {
+        update = true;
+      }
+
+      // start on boot depends on ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS and SYSTEM_ALERT_WINDOW
+      var enableStartOnBoot =
+          await gFFI.invokeMethod(AndroidChannel.kGetStartOnBootOpt);
+      if (enableStartOnBoot) {
+        if (!await canStartOnBoot()) {
+          enableStartOnBoot = false;
+          gFFI.invokeMethod(AndroidChannel.kSetStartOnBootOpt, false);
+        }
+      }
+
+      if (enableStartOnBoot != _enableStartOnBoot) {
+        update = true;
+        _enableStartOnBoot = enableStartOnBoot;
+      }
+
+      final enableAbrRes = option2bool(
+          "enable-abr", await bind.mainGetOption(key: "enable-abr"));
       if (enableAbrRes != _enableAbr) {
         update = true;
         _enableAbr = enableAbrRes;
@@ -125,17 +151,32 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       () async {
-        if (await updateIgnoreBatteryStatus()) {
+        final ibs = await checkAndUpdateIgnoreBatteryStatus();
+        final sob = await checkAndUpdateStartOnBoot();
+        if (ibs || sob) {
           setState(() {});
         }
       }();
     }
   }
 
-  Future<bool> updateIgnoreBatteryStatus() async {
-    final res = await PermissionManager.check("ignore_battery_optimizations");
+  Future<bool> checkAndUpdateIgnoreBatteryStatus() async {
+    final res = await AndroidPermissionManager.check(
+        kRequestIgnoreBatteryOptimizations);
     if (_ignoreBatteryOpt != res) {
       _ignoreBatteryOpt = res;
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  Future<bool> checkAndUpdateStartOnBoot() async {
+    if (!await canStartOnBoot() && _enableStartOnBoot) {
+      _enableStartOnBoot = false;
+      debugPrint(
+          "checkAndUpdateStartOnBoot and set _enableStartOnBoot -> false");
+      gFFI.invokeMethod(AndroidChannel.kSetStartOnBootOpt, false);
       return true;
     } else {
       return false;
@@ -265,7 +306,8 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                   ]),
               onToggle: (v) async {
                 if (v) {
-                  PermissionManager.request("ignore_battery_optimizations");
+                  await AndroidPermissionManager.request(
+                      kRequestIgnoreBatteryOptimizations);
                 } else {
                   final res = await gFFI.dialogManager
                       .show<bool>((setState, close) => CustomAlertDialog(
@@ -282,11 +324,44 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                             ],
                           ));
                   if (res == true) {
-                    PermissionManager.request("application_details_settings");
+                    AndroidPermissionManager.startAction(
+                        kActionApplicationDetailsSettings);
                   }
                 }
               }));
     }
+    enhancementsTiles.add(SettingsTile.switchTile(
+        initialValue: _enableStartOnBoot,
+        title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text("${translate('Start on Boot')} (beta)"),
+          Text(
+              '* ${translate('Start the screen sharing service on boot, requires special permissions')}',
+              style: Theme.of(context).textTheme.bodySmall),
+        ]),
+        onToggle: (toValue) async {
+          if (toValue) {
+            // 1. request kIgnoreBatteryOptimizations
+            if (!await AndroidPermissionManager.check(
+                kRequestIgnoreBatteryOptimizations)) {
+              if (!await AndroidPermissionManager.request(
+                  kRequestIgnoreBatteryOptimizations)) {
+                return;
+              }
+            }
+
+            // 2. request kSystemAlertWindow
+            if (!await AndroidPermissionManager.check(kSystemAlertWindow)) {
+              if (!await AndroidPermissionManager.request(kSystemAlertWindow)) {
+                return;
+              }
+            }
+
+            // (Optional) 3. request input permission
+          }
+          setState(() => _enableStartOnBoot = toValue);
+
+          gFFI.invokeMethod(AndroidChannel.kSetStartOnBootOpt, toValue);
+        }));
 
     return SettingsList(
       sections: [
@@ -386,6 +461,17 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         ),
       ],
     );
+  }
+
+  Future<bool> canStartOnBoot() async {
+    // start on boot depends on ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS and SYSTEM_ALERT_WINDOW
+    if (_hasIgnoreBattery && !_ignoreBatteryOpt) {
+      return false;
+    }
+    if (!await AndroidPermissionManager.check(kSystemAlertWindow)) {
+      return false;
+    }
+    return true;
   }
 }
 
