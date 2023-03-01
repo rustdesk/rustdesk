@@ -312,8 +312,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Keep RustDesk background service", "Zachowaj usługę RustDesk w tle"),
         ("Ignore Battery Optimizations", "Ignoruj optymalizację baterii"),
         ("android_open_battery_optimizations_tip", "Jeśli chcesz wyłączyć tę funkcję, przejdź do następnej strony ustawień aplikacji RustDesk, znajdź i wprowadź [Bateria], odznacz [Bez ograniczeń]"),
-        ("Start on Boot", ""),
-        ("Start the screen sharing service on boot, requires special permissions", ""),
+        ("Start on Boot", "Autostart"),
+        ("Start the screen sharing service on boot, requires special permissions", "Uruchom usługę udostępniania ekranu podczas startu, wymaga specjalnych uprawnień"),
         ("Connection not allowed", "Połączenie niedozwolone"),
         ("Legacy mode", "Tryb kompatybilności wstecznej (legacy)"),
         ("Map mode", "Tryb mapowania"),
@@ -458,6 +458,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Reconnect", "Połącz ponownie"),
         ("Codec", "Kodek"),
         ("Resolution", "Rozdzielczość"),
-        ("No transfers in progress", ""),
+        ("Key", "Klucz"),
+        ("No transfers in progress", "Brak transferów w toku"),
         ].iter().cloned().collect();
 }
