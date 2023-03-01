@@ -41,14 +41,14 @@ class ServerPage extends StatefulWidget implements PageShape {
               value: "setTemporaryPasswordLength",
               enabled:
                   gFFI.serverModel.verificationMethod != kUsePermanentPassword,
-              child: Text(translate("Set temporary password length")),
+              child: Text(translate("One-time password length")),
             ),
             const PopupMenuDivider(),
             PopupMenuItem(
               padding: const EdgeInsets.symmetric(horizontal: 0.0),
               value: kUseTemporaryPassword,
               child: ListTile(
-                  title: Text(translate("Use temporary password")),
+                  title: Text(translate("Use one-time password")),
                   trailing: Icon(
                     Icons.check,
                     color: gFFI.serverModel.verificationMethod ==
