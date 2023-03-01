@@ -683,23 +683,21 @@ abstract class BasePeerCard extends StatelessWidget {
             Obx(() => Offstage(
                 offstage: isInProgress.isFalse,
                 child: const LinearProgressIndicator())),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                ElevatedButton.icon(
-                  icon: Icon(Icons.close_rounded),
-                  label: Text(translate("Cancel")),
-                  onPressed: close,
-                ),
-                ElevatedButton.icon(
-                  icon: Icon(Icons.done_rounded),
-                  label: Text(translate("Ok")),
-                  onPressed: submit,
-                ),
-              ],
-            ).paddingOnly(top: 20)
           ],
         ),
+        actions: [
+          dialogButton(
+            "Cancel",
+            icon: Icon(Icons.close_rounded),
+            onPressed: close,
+            isOutline: true,
+          ),
+          dialogButton(
+            "OK",
+            icon: Icon(Icons.done_rounded),
+            onPressed: submit,
+          ),
+        ],
         onSubmit: submit,
         onCancel: close,
       );
@@ -740,26 +738,20 @@ abstract class BasePeerCard extends StatelessWidget {
               ),
             ],
           ),
-          content: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  ElevatedButton.icon(
-                    icon: Icon(Icons.close_rounded),
-                    label: Text(translate("Cancel")),
-                    onPressed: close,
-                  ),
-                  ElevatedButton.icon(
-                    icon: Icon(Icons.done_rounded),
-                    label: Text(translate("Ok")),
-                    onPressed: submit,
-                  ),
-                ],
-              ).paddingOnly(top: 20)
-            ],
-          ),
+          content: SizedBox.shrink(),
+          actions: [
+            dialogButton(
+              "Cancel",
+              icon: Icon(Icons.close_rounded),
+              onPressed: close,
+              isOutline: true,
+            ),
+            dialogButton(
+              "OK",
+              icon: Icon(Icons.done_rounded),
+              onPressed: submit,
+            ),
+          ],
           onSubmit: submit,
           onCancel: close,
         );

@@ -28,27 +28,21 @@ void showRestartRemoteDevice(
               Icon(Icons.warning_rounded, color: Colors.redAccent, size: 28),
               Text(translate("Restart Remote Device")).paddingOnly(left: 10),
             ]),
-            content: Column(
-              children: [
-                Text(
-                    "${translate('Are you sure you want to restart')} \n${pi.username}@${pi.hostname}($id) ?"),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    ElevatedButton.icon(
-                      icon: Icon(Icons.close_rounded),
-                      label: Text(translate("Cancel")),
-                      onPressed: close,
-                    ),
-                    ElevatedButton.icon(
-                      icon: Icon(Icons.done_rounded),
-                      label: Text(translate("Ok")),
-                      onPressed: () => close(true),
-                    ),
-                  ],
-                ).paddingOnly(top: 20)
-              ],
-            ),
+            content: Text(
+                "${translate('Are you sure you want to restart')} \n${pi.username}@${pi.hostname}($id) ?"),
+            actions: [
+              dialogButton(
+                "Cancel",
+                icon: Icon(Icons.close_rounded),
+                onPressed: close,
+                isOutline: true,
+              ),
+              dialogButton(
+                "OK",
+                icon: Icon(Icons.done_rounded),
+                onPressed: () => close(true),
+              ),
+            ],
             onCancel: close,
             onSubmit: () => close(true),
           ));
@@ -82,76 +76,65 @@ void setPermanentPasswordDialog(OverlayDialogManager dialogManager) async {
           Text(translate('Set your own password')).paddingOnly(left: 10),
         ],
       ),
-      content: Column(
-        children: [
-          Form(
-            autovalidateMode: AutovalidateMode.onUserInteraction,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  autofocus: true,
-                  obscureText: true,
-                  keyboardType: TextInputType.visiblePassword,
-                  decoration: InputDecoration(
-                    labelText: translate('Password'),
-                  ),
-                  controller: p0,
-                  validator: (v) {
-                    if (v == null) return null;
-                    final val = v.trim().length > 5;
-                    if (validateLength != val) {
-                      // use delay to make setState success
-                      Future.delayed(Duration(microseconds: 1),
-                          () => setState(() => validateLength = val));
-                    }
-                    return val
-                        ? null
-                        : translate('Too short, at least 6 characters.');
-                  },
-                ),
-                TextFormField(
-                  obscureText: true,
-                  keyboardType: TextInputType.visiblePassword,
-                  decoration: InputDecoration(
-                    labelText: translate('Confirmation'),
-                  ),
-                  controller: p1,
-                  validator: (v) {
-                    if (v == null) return null;
-                    final val = p0.text == v;
-                    if (validateSame != val) {
-                      Future.delayed(Duration(microseconds: 1),
-                          () => setState(() => validateSame = val));
-                    }
-                    return val
-                        ? null
-                        : translate('The confirmation is not identical.');
-                  },
-                ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    ElevatedButton.icon(
-                      icon: Icon(Icons.close_rounded),
-                      label: Text(translate("Cancel")),
-                      onPressed: close,
-                    ),
-                    ElevatedButton.icon(
-                      icon: Icon(Icons.done_rounded),
-                      label: Text(translate("Ok")),
-                      onPressed:
-                          (validateLength && validateSame) ? submit : null,
-                    ),
-                  ],
-                ).paddingOnly(top: 20)
-              ],
+      content: Form(
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextFormField(
+              autofocus: true,
+              obscureText: true,
+              keyboardType: TextInputType.visiblePassword,
+              decoration: InputDecoration(
+                labelText: translate('Password'),
+              ),
+              controller: p0,
+              validator: (v) {
+                if (v == null) return null;
+                final val = v.trim().length > 5;
+                if (validateLength != val) {
+                  // use delay to make setState success
+                  Future.delayed(Duration(microseconds: 1),
+                      () => setState(() => validateLength = val));
+                }
+                return val
+                    ? null
+                    : translate('Too short, at least 6 characters.');
+              },
             ),
-          ),
-        ],
-      ),
+            TextFormField(
+              obscureText: true,
+              keyboardType: TextInputType.visiblePassword,
+              decoration: InputDecoration(
+                labelText: translate('Confirmation'),
+              ),
+              controller: p1,
+              validator: (v) {
+                if (v == null) return null;
+                final val = p0.text == v;
+                if (validateSame != val) {
+                  Future.delayed(Duration(microseconds: 1),
+                      () => setState(() => validateSame = val));
+                }
+                return val
+                    ? null
+                    : translate('The confirmation is not identical.');
+              },
+            ),
+          ])),
       onCancel: close,
       onSubmit: (validateLength && validateSame) ? submit : null,
+      actions: [
+        dialogButton(
+          'Cancel',
+          icon: Icon(Icons.close_rounded),
+          onPressed: close,
+          isOutline: true,
+        ),
+        dialogButton(
+          'OK',
+          icon: Icon(Icons.done_rounded),
+          onPressed: (validateLength && validateSame) ? submit : null,
+        ),
+      ],
     );
   });
 }
@@ -233,22 +216,20 @@ void enterPasswordDialog(String id, OverlayDialogManager dialogManager) async {
             }
           },
         ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            ElevatedButton.icon(
-              icon: Icon(Icons.close_rounded),
-              label: Text(translate("Cancel")),
-              onPressed: close,
-            ),
-            ElevatedButton.icon(
-              icon: Icon(Icons.done_rounded),
-              label: Text(translate("Ok")),
-              onPressed: submit,
-            ),
-          ],
-        ).paddingOnly(top: 20)
       ]),
+      actions: [
+        dialogButton(
+          'Cancel',
+          icon: Icon(Icons.close_rounded),
+          onPressed: cancel,
+          isOutline: true,
+        ),
+        dialogButton(
+          'OK',
+          icon: Icon(Icons.done_rounded),
+          onPressed: submit,
+        ),
+      ],
       onSubmit: submit,
       onCancel: cancel,
     );

@@ -595,9 +595,10 @@ class FileModel extends ChangeNotifier {
         final count = entries.length > 1 ? "${i + 1}/${entries.length}" : "";
         content = "$dirShow\n\n${entries[i].path}".trim();
         final confirm = await showRemoveDialog(
-            count.isEmpty ? title : "$title ($count)",
-            content,
-            item.isDirectory);
+          count.isEmpty ? title : "$title ($count)",
+          content,
+          item.isDirectory,
+        );
         try {
           if (confirm == true) {
             sendRemoveFile(entries[i].path, i, items.isLocal!);
@@ -647,7 +648,7 @@ class FileModel extends ChangeNotifier {
           ],
         ),
         contentBoxConstraints:
-            BoxConstraints(minHeight: 80, minWidth: 400, maxWidth: 400),
+            BoxConstraints(minHeight: 100, minWidth: 400, maxWidth: 400),
         content: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -673,24 +674,22 @@ class FileModel extends ChangeNotifier {
                       setState(() => removeCheckboxRemember = v);
                     },
                   )
-                : const SizedBox.shrink(),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                ElevatedButton.icon(
-                  icon: Icon(Icons.close_rounded),
-                  label: Text(translate("Cancel")),
-                  onPressed: cancel,
-                ),
-                ElevatedButton.icon(
-                  icon: Icon(Icons.done_rounded),
-                  label: Text(translate("Ok")),
-                  onPressed: submit,
-                ),
-              ],
-            ).paddingOnly(top: 20)
+                : const SizedBox.shrink()
           ],
         ),
+        actions: [
+          dialogButton(
+            "Cancel",
+            icon: Icon(Icons.close_rounded),
+            onPressed: cancel,
+            isOutline: true,
+          ),
+          dialogButton(
+            "OK",
+            icon: Icon(Icons.done_rounded),
+            onPressed: submit,
+          ),
+        ],
         onSubmit: submit,
         onCancel: cancel,
       );

@@ -989,37 +989,30 @@ class _FileManagerPageState extends State<FileManagerPage>
                             content: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Column(
-                                  children: [
-                                    TextFormField(
-                                      decoration: InputDecoration(
-                                        labelText: translate(
-                                          "Please enter the folder name",
-                                        ),
-                                      ),
-                                      controller: name,
-                                      autofocus: true,
+                                TextFormField(
+                                  decoration: InputDecoration(
+                                    labelText: translate(
+                                      "Please enter the folder name",
                                     ),
-                                    Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        ElevatedButton.icon(
-                                          icon: Icon(Icons.close_rounded),
-                                          label: Text(translate("Cancel")),
-                                          onPressed: cancel,
-                                        ),
-                                        ElevatedButton.icon(
-                                          icon: Icon(Icons.done_rounded),
-                                          label: Text(translate("Ok")),
-                                          onPressed: submit,
-                                        ),
-                                      ],
-                                    ).paddingOnly(top: 20)
-                                  ],
+                                  ),
+                                  controller: name,
+                                  autofocus: true,
                                 ),
                               ],
                             ),
+                            actions: [
+                              dialogButton(
+                                "Cancel",
+                                icon: Icon(Icons.close_rounded),
+                                onPressed: cancel,
+                                isOutline: true,
+                              ),
+                              dialogButton(
+                                "Ok",
+                                icon: Icon(Icons.done_rounded),
+                                onPressed: submit,
+                              ),
+                            ],
                             onSubmit: submit,
                             onCancel: cancel,
                           );

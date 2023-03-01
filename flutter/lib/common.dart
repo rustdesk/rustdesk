@@ -224,7 +224,20 @@ class MyTheme {
         ),
         shape: MaterialStateProperty.all<RoundedRectangleBorder>(
           RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18.0),
+            borderRadius: BorderRadius.circular(8.0),
+          ),
+        ),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: ButtonStyle(
+        backgroundColor: MaterialStateProperty.all(
+          Color(0xFFEEEEEE),
+        ),
+        foregroundColor: MaterialStateProperty.all(Colors.black87),
+        shape: MaterialStateProperty.all<RoundedRectangleBorder>(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8.0),
           ),
         ),
       ),
@@ -296,9 +309,6 @@ class MyTheme {
     splashColor: Colors.transparent,
     highlightColor: Colors.transparent,
     splashFactory: isDesktop ? NoSplash.splashFactory : null,
-    outlinedButtonTheme: OutlinedButtonThemeData(
-        style:
-            OutlinedButton.styleFrom(side: BorderSide(color: Colors.white38))),
     textButtonTheme: isDesktop
         ? TextButtonThemeData(
             style: ButtonStyle(
@@ -318,7 +328,23 @@ class MyTheme {
         ),
         shape: MaterialStateProperty.all<RoundedRectangleBorder>(
           RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18.0),
+            borderRadius: BorderRadius.circular(8.0),
+          ),
+        ),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: ButtonStyle(
+        backgroundColor: MaterialStatePropertyAll(
+          Color(0xFF24252B),
+        ),
+        side: MaterialStatePropertyAll(
+          BorderSide(color: Colors.white12, width: 0.5),
+        ),
+        foregroundColor: MaterialStateProperty.all(Colors.white70),
+        shape: MaterialStateProperty.all<RoundedRectangleBorder>(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8.0),
           ),
         ),
       ),
@@ -1824,28 +1850,43 @@ class ServerConfig {
 Widget dialogButton(String text,
     {required VoidCallback? onPressed,
     bool isOutline = false,
+    Widget? icon,
     TextStyle? style,
     ButtonStyle? buttonStyle}) {
   if (isDesktop) {
     if (isOutline) {
-      return OutlinedButton(
-        onPressed: onPressed,
-        child: Text(translate(text), style: style),
-      );
+      return icon == null
+          ? OutlinedButton(
+              onPressed: onPressed,
+              child: Text(translate(text), style: style),
+            )
+          : OutlinedButton.icon(
+              icon: icon,
+              onPressed: onPressed,
+              label: Text(translate(text), style: style),
+            );
     } else {
-      return ElevatedButton(
-        style: ElevatedButton.styleFrom(elevation: 0).merge(buttonStyle),
-        onPressed: onPressed,
-        child: Text(translate(text), style: style),
-      );
+      return icon == null
+          ? ElevatedButton(
+              style: ElevatedButton.styleFrom(elevation: 0).merge(buttonStyle),
+              onPressed: onPressed,
+              child: Text(translate(text), style: style),
+            )
+          : ElevatedButton.icon(
+              icon: icon,
+              style: ElevatedButton.styleFrom(elevation: 0).merge(buttonStyle),
+              onPressed: onPressed,
+              label: Text(translate(text), style: style),
+            );
     }
   } else {
     return TextButton(
-        onPressed: onPressed,
-        child: Text(
-          translate(text),
-          style: style,
-        ));
+      onPressed: onPressed,
+      child: Text(
+        translate(text),
+        style: style,
+      ),
+    );
   }
 }
 
