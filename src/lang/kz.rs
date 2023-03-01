@@ -300,7 +300,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Failed", "Сәтсіз"),
         ("Succeeded", "Сәтті"),
         ("Someone turns on privacy mode, exit", "Біреу құпиялылық модасын қосты, шығу"),
-        ("Unsupported", "Қолдаусыз"),
+        ("Unsupported. 1 Multi-screen is unsupported, 2 Please confirm the license is activated", ""),
         ("Peer denied", "Пир қабылдамады"),
         ("Please install plugins", "Плагиндерді орнатуды өтінеміз"),
         ("Peer exit", "Пирдің шығуы"),

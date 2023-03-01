@@ -300,7 +300,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Failed", "Απέτυχε"),
         ("Succeeded", "Επιτυχής"),
         ("Someone turns on privacy mode, exit", "Κάποιος ενεργοποιεί τη λειτουργία απορρήτου, έξοδος"),
-        ("Unsupported", "Δεν υποστηρίζεται"),
+        ("Unsupported. 1 Multi-screen is unsupported, 2 Please confirm the license is activated", ""),
         ("Peer denied", "Ο απομακρυσμένος σταθμός απέρριψε τη σύνδεση"),
         ("Please install plugins", "Παρακαλώ εγκαταστήστε πρόσθετα"),
         ("Peer exit", "Ο απομακρυσμένος σταθμός έχει αποσυνδεθεί"),

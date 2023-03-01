@@ -300,7 +300,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Failed", "Niepowodzenie"),
         ("Succeeded", "Udało się"),
         ("Someone turns on privacy mode, exit", "Ktoś włącza tryb prywatności, wyjdź"),
-        ("Unsupported", "Niewspierane"),
+        ("Unsupported. 1 Multi-screen is unsupported, 2 Please confirm the license is activated", ""),
         ("Peer denied", "Odmowa dostępu"),
         ("Please install plugins", "Zainstaluj wtyczkę"),
         ("Peer exit", "Wyjście peer"),
@@ -458,7 +458,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Reconnect", "Połącz ponownie"),
         ("Codec", "Kodek"),
         ("Resolution", "Rozdzielczość"),
-        ("Key", "Klucz"),
         ("No transfers in progress", "Brak transferów w toku"),
         ].iter().cloned().collect();
 }

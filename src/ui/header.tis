@@ -511,7 +511,7 @@ handler.updatePrivacyMode = updatePrivacyMode;
 function togglePrivacyMode(privacy_id) {
     var supported = handler.is_privacy_mode_supported();
     if (!supported) {
-        msgbox("nocancel", translate("Privacy mode"), translate("Unsupported"), "", function() { });
+        msgbox("nocancel", translate("Privacy mode"), translate("Unsupported. 1 Multi-screen is unsupported, 2 Confirm the license is activated"), "", function() { });
     } else {
         handler.toggle_option(privacy_id);
     }

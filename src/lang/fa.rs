@@ -300,7 +300,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Failed", "ناموفق"),
         ("Succeeded", "موفقیت آمیز"),
         ("Someone turns on privacy mode, exit", "اگر شخصی حالت حریم خصوصی را روشن کرد، خارج شوید"),
-        ("Unsupported", "پشتیبانی نشده"),
+        ("Unsupported. 1 Multi-screen is unsupported, 2 Please confirm the license is activated", ""),
         ("Peer denied", "توسط میزبان راه دور رد شد"),
         ("Please install plugins", "لطفا افزونه ها را نصب کنید"),
         ("Peer exit", "میزبان خارج شد"),
