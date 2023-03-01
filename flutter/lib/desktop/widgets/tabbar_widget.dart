@@ -53,6 +53,7 @@ enum DesktopTabType {
   remoteScreen,
   fileTransfer,
   portForward,
+  install,
 }
 
 class DesktopTabState {
@@ -249,8 +250,9 @@ class DesktopTab extends StatelessWidget {
     this.unSelectedTabBackgroundColor,
   }) : super(key: key) {
     tabType = controller.tabType;
-    isMainWindow =
-        tabType == DesktopTabType.main || tabType == DesktopTabType.cm;
+    isMainWindow = tabType == DesktopTabType.main ||
+        tabType == DesktopTabType.cm ||
+        tabType == DesktopTabType.install;
   }
 
   static RxString labelGetterAlias(String peerId) {
@@ -361,7 +363,8 @@ class DesktopTab extends StatelessWidget {
   /// - hide single item when only has one item (home) on [DesktopTabPage].
   bool isHideSingleItem() {
     return state.value.tabs.length == 1 &&
-        controller.tabType == DesktopTabType.main;
+        (controller.tabType == DesktopTabType.main ||
+            controller.tabType == DesktopTabType.install);
   }
 
   Widget _buildBar() {
@@ -524,8 +527,8 @@ class WindowActionPanelState extends State<WindowActionPanel>
   }
 
   void _setMaximize(bool maximize) {
-     stateGlobal.setMaximize(maximize);
-     setState(() {});
+    stateGlobal.setMaximize(maximize);
+    setState(() {});
   }
 
   @override
@@ -759,7 +762,8 @@ class _ListView extends StatelessWidget {
   /// - hide single item when only has one item (home) on [DesktopTabPage].
   bool isHideSingleItem() {
     return state.value.tabs.length == 1 &&
-        controller.tabType == DesktopTabType.main;
+            controller.tabType == DesktopTabType.main ||
+        controller.tabType == DesktopTabType.install;
   }
 
   @override

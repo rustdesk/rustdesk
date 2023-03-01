@@ -218,19 +218,30 @@ class MyTheme {
       labelColor: Colors.white70,
     ),
     scrollbarTheme: ScrollbarThemeData(
-      thumbColor: MaterialStateProperty.all(Colors.grey[500])
+      thumbColor: MaterialStateProperty.all(Colors.grey[500]),
     ),
     splashColor: Colors.transparent,
     highlightColor: Colors.transparent,
     splashFactory: isDesktop ? NoSplash.splashFactory : null,
     outlinedButtonTheme: OutlinedButtonThemeData(
-        style:
-            OutlinedButton.styleFrom(side: BorderSide(color: Colors.white38))),
+      style: OutlinedButton.styleFrom(
+        side: BorderSide(color: Colors.white38),
+        disabledForegroundColor: Colors.white70,
+      ),
+    ),
     textButtonTheme: isDesktop
         ? TextButtonThemeData(
-            style: ButtonStyle(splashFactory: NoSplash.splashFactory),
-          )
+            style: TextButton.styleFrom(
+            splashFactory: NoSplash.splashFactory,
+            disabledForegroundColor: Colors.white70,
+          ))
         : null,
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        disabledForegroundColor: Colors.white70,
+        disabledBackgroundColor: Colors.white10,
+      ),
+    ),
     checkboxTheme:
         const CheckboxThemeData(checkColor: MaterialStatePropertyAll(dark)),
     colorScheme: ColorScheme.fromSwatch(
