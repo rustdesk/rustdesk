@@ -538,6 +538,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
               translate('Screen Share'),
               translate('Deny remote access'),
             ],
+            enabled: enabled,
             initialKey: initialKey,
             onChanged: (mode) async {
               String modeValue;
@@ -667,6 +668,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
 
           return _Card(title: 'Password', children: [
             _ComboBox(
+              enabled: !locked,
               keys: modeKeys,
               values: modeValues,
               initialKey: modeInitialKey,
@@ -1722,7 +1724,6 @@ class _ComboBox extends StatelessWidget {
     required this.values,
     required this.initialKey,
     required this.onChanged,
-    // ignore: unused_element
     this.enabled = true,
   }) : super(key: key);
 
@@ -1735,7 +1736,9 @@ class _ComboBox extends StatelessWidget {
     var ref = values[index].obs;
     current = keys[index];
     return Container(
-      decoration: BoxDecoration(border: Border.all(color: MyTheme.border)),
+      decoration: BoxDecoration(
+          border: Border.all(
+              color: _disabledTextColor(context, enabled) ?? MyTheme.border)),
       height: 30,
       child: Obx(() => DropdownButton<String>(
             isExpanded: true,
@@ -1744,6 +1747,7 @@ class _ComboBox extends StatelessWidget {
             underline: Container(
               height: 25,
             ),
+            style: TextStyle(color: _disabledTextColor(context, enabled)),
             icon: const Icon(
               Icons.expand_more_sharp,
               size: 20,
