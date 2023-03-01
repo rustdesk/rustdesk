@@ -1,7 +1,9 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:window_manager/window_manager.dart';
@@ -13,7 +15,51 @@ class InstallPage extends StatefulWidget {
   State<InstallPage> createState() => _InstallPageState();
 }
 
-class _InstallPageState extends State<InstallPage> with WindowListener {
+class _InstallPageState extends State<InstallPage> {
+  final tabController = DesktopTabController(tabType: DesktopTabType.main);
+
+  @override
+  void initState() {
+    super.initState();
+    Get.put<DesktopTabController>(tabController);
+    const lable = "install";
+    tabController.add(TabInfo(
+        key: lable,
+        label: lable,
+        closable: false,
+        page: _InstallPageBody(
+          key: const ValueKey(lable),
+        )));
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+    Get.delete<DesktopTabController>();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DragToResizeArea(
+      resizeEdgeSize: stateGlobal.resizeEdgeSize.value,
+      child: Container(
+        child: Scaffold(
+            backgroundColor: Theme.of(context).colorScheme.background,
+            body: DesktopTab(controller: tabController)),
+      ),
+    );
+  }
+}
+
+class _InstallPageBody extends StatefulWidget {
+  const _InstallPageBody({Key? key}) : super(key: key);
+
+  @override
+  State<_InstallPageBody> createState() => _InstallPageBodyState();
+}
+
+class _InstallPageBodyState extends State<_InstallPageBody>
+    with WindowListener {
   late final TextEditingController controller;
   final RxBool startmenu = true.obs;
   final RxBool desktopicon = true.obs;

@@ -293,16 +293,19 @@ void runInstallPage() async {
   await windowManager.ensureInitialized();
   await initEnv(kAppTypeMain);
   _runApp('', const InstallPage(), MyTheme.currentThemeMode());
-  windowManager.waitUntilReadyToShow(
-      WindowOptions(size: Size(800, 600), center: true), () async {
+  WindowOptions windowOptions =
+      getHiddenTitleBarWindowOptions(size: Size(800, 600), center: true);
+  windowManager.waitUntilReadyToShow(windowOptions, () async {
     windowManager.show();
     windowManager.focus();
     windowManager.setOpacity(1);
     windowManager.setAlignment(Alignment.center); // ensure
+    windowManager.setTitle(getWindowName());
   });
 }
 
-WindowOptions getHiddenTitleBarWindowOptions({Size? size}) {
+WindowOptions getHiddenTitleBarWindowOptions(
+    {Size? size, bool center = false}) {
   var defaultTitleBarStyle = TitleBarStyle.hidden;
   // we do not hide titlebar on win7 because of the frame overflow.
   if (kUseCompatibleUiMode) {
@@ -310,7 +313,7 @@ WindowOptions getHiddenTitleBarWindowOptions({Size? size}) {
   }
   return WindowOptions(
     size: size,
-    center: false,
+    center: center,
     backgroundColor: Colors.transparent,
     skipTaskbar: false,
     titleBarStyle: defaultTitleBarStyle,
