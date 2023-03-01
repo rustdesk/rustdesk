@@ -411,17 +411,18 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             borderRadius: BorderRadius.all(Radius.circular(10)),
           ),
           child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Theme(
-                data: themeData(),
-                child: MenuBar(
-                  children: [
-                    SizedBox(width: _MenubarTheme.buttonHMargin),
-                    ...menubarItems,
-                    SizedBox(width: _MenubarTheme.buttonHMargin)
-                  ],
-                ),
-              )),
+            scrollDirection: Axis.horizontal,
+            child: Theme(
+              data: themeData(),
+              child: MenuBar(
+                children: [
+                  SizedBox(width: _MenubarTheme.buttonHMargin),
+                  ...menubarItems,
+                  SizedBox(width: _MenubarTheme.buttonHMargin)
+                ],
+              ),
+            ),
+          ),
         ),
         _buildDraggableShowHide(context),
       ],
@@ -431,10 +432,13 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   ThemeData themeData() {
     return Theme.of(context).copyWith(
       menuButtonTheme: MenuButtonThemeData(
-          style: ButtonStyle(
-              minimumSize: MaterialStatePropertyAll(Size(64, 36)),
-              textStyle: MaterialStatePropertyAll(
-                  TextStyle(fontWeight: FontWeight.normal)))),
+        style: ButtonStyle(
+          minimumSize: MaterialStatePropertyAll(Size(64, 36)),
+          textStyle: MaterialStatePropertyAll(
+            TextStyle(fontWeight: FontWeight.normal),
+          ),
+        ),
+      ),
       dividerTheme: DividerThemeData(space: 4),
     );
   }
@@ -662,37 +666,38 @@ class _ControlMenu extends StatelessWidget {
             Text(translate('OS Password')).paddingOnly(left: 10),
           ],
         ),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          PasswordWidget(controller: controller),
-          CheckboxListTile(
-            contentPadding: const EdgeInsets.all(0),
-            dense: true,
-            controlAffinity: ListTileControlAffinity.leading,
-            title: Text(
-              translate('Auto Login'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            PasswordWidget(controller: controller),
+            CheckboxListTile(
+              contentPadding: const EdgeInsets.all(0),
+              dense: true,
+              controlAffinity: ListTileControlAffinity.leading,
+              title: Text(
+                translate('Auto Login'),
+              ),
+              value: autoLogin,
+              onChanged: (v) {
+                if (v == null) return;
+                setState(() => autoLogin = v);
+              },
             ),
-            value: autoLogin,
-            onChanged: (v) {
-              if (v == null) return;
-              setState(() => autoLogin = v);
-            },
+          ],
+        ),
+        actions: [
+          dialogButton(
+            "Cancel",
+            icon: Icon(Icons.close_rounded),
+            onPressed: close,
+            isOutline: true,
           ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              ElevatedButton.icon(
-                icon: Icon(Icons.close_rounded),
-                label: Text(translate("Cancel")),
-                onPressed: close,
-              ),
-              ElevatedButton.icon(
-                icon: Icon(Icons.done_rounded),
-                label: Text(translate("Ok")),
-                onPressed: submit,
-              ),
-            ],
-          ).paddingOnly(top: 20)
-        ]),
+          dialogButton(
+            "OK",
+            icon: Icon(Icons.done_rounded),
+            onPressed: submit,
+          ),
+        ],
         onSubmit: submit,
         onCancel: close,
       );

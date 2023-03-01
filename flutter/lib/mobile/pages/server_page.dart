@@ -427,7 +427,7 @@ class ConnectionManager extends StatelessWidget {
                         ? ElevatedButton.icon(
                             style: ButtonStyle(
                                 backgroundColor:
-                                    MaterialStateProperty.all(Colors.red)),
+                                    MaterialStatePropertyAll(Colors.red)),
                             icon: const Icon(Icons.close),
                             onPressed: () {
                               bind.cmCloseConnection(connId: client.id);

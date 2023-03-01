@@ -209,7 +209,7 @@ class MyTheme {
         ? TextButtonThemeData(
             style: ButtonStyle(
               splashFactory: NoSplash.splashFactory,
-              shape: MaterialStateProperty.all<RoundedRectangleBorder>(
+              shape: MaterialStatePropertyAll<RoundedRectangleBorder>(
                 RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(18.0),
                 ),
@@ -219,10 +219,10 @@ class MyTheme {
         : null,
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ButtonStyle(
-        backgroundColor: MaterialStateProperty.all(
+        backgroundColor: MaterialStatePropertyAll(
           MyTheme.accent,
         ),
-        shape: MaterialStateProperty.all<RoundedRectangleBorder>(
+        shape: MaterialStatePropertyAll<RoundedRectangleBorder>(
           RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8.0),
           ),
@@ -231,11 +231,11 @@ class MyTheme {
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: ButtonStyle(
-        backgroundColor: MaterialStateProperty.all(
+        backgroundColor: MaterialStatePropertyAll(
           Color(0xFFEEEEEE),
         ),
-        foregroundColor: MaterialStateProperty.all(Colors.black87),
-        shape: MaterialStateProperty.all<RoundedRectangleBorder>(
+        foregroundColor: MaterialStatePropertyAll(Colors.black87),
+        shape: MaterialStatePropertyAll<RoundedRectangleBorder>(
           RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8.0),
           ),
@@ -313,7 +313,7 @@ class MyTheme {
         ? TextButtonThemeData(
             style: ButtonStyle(
               splashFactory: NoSplash.splashFactory,
-              shape: MaterialStateProperty.all<RoundedRectangleBorder>(
+              shape: MaterialStatePropertyAll<RoundedRectangleBorder>(
                 RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(18.0),
                 ),
@@ -323,10 +323,10 @@ class MyTheme {
         : null,
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ButtonStyle(
-        backgroundColor: MaterialStateProperty.all(
+        backgroundColor: MaterialStatePropertyAll(
           MyTheme.accent,
         ),
-        shape: MaterialStateProperty.all<RoundedRectangleBorder>(
+        shape: MaterialStatePropertyAll<RoundedRectangleBorder>(
           RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8.0),
           ),
@@ -341,8 +341,8 @@ class MyTheme {
         side: MaterialStatePropertyAll(
           BorderSide(color: Colors.white12, width: 0.5),
         ),
-        foregroundColor: MaterialStateProperty.all(Colors.white70),
-        shape: MaterialStateProperty.all<RoundedRectangleBorder>(
+        foregroundColor: MaterialStatePropertyAll(Colors.white70),
+        shape: MaterialStatePropertyAll<RoundedRectangleBorder>(
           RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8.0),
           ),

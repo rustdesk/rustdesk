@@ -708,9 +708,10 @@ class FileModel extends ChangeNotifier {
       return CustomAlertDialog(
         title: Row(
           children: [
-            const Icon(Icons.warning, color: Colors.red),
-            const SizedBox(width: 20),
-            Text(title)
+            const Icon(Icons.warning_rounded, color: Colors.red),
+            Text(title).paddingOnly(
+              left: 10,
+            ),
           ],
         ),
         contentBoxConstraints:
@@ -740,9 +741,23 @@ class FileModel extends ChangeNotifier {
                   : const SizedBox.shrink()
             ]),
         actions: [
-          dialogButton("Cancel", onPressed: cancel, isOutline: true),
-          dialogButton("Skip", onPressed: () => close(null), isOutline: true),
-          dialogButton("OK", onPressed: submit),
+          dialogButton(
+            "Cancel",
+            icon: Icon(Icons.close_rounded),
+            onPressed: cancel,
+            isOutline: true,
+          ),
+          dialogButton(
+            "Skip",
+            icon: Icon(Icons.navigate_next_rounded),
+            onPressed: () => close(null),
+            isOutline: true,
+          ),
+          dialogButton(
+            "OK",
+            icon: Icon(Icons.done_rounded),
+            onPressed: submit,
+          ),
         ],
         onSubmit: submit,
         onCancel: cancel,
