@@ -227,7 +227,7 @@ pub fn core_main() -> Option<Vec<String>> {
                 }
             }
             return None;
-        } else if args[0] == "--id" {
+        } else if args[0] == "--get-id" {
             if crate::platform::is_root() {
                 println!("{}", crate::ipc::get_id());
             } else {
