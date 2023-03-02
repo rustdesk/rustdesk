@@ -25,19 +25,26 @@ void showRestartRemoteDevice(
   final res =
       await dialogManager.show<bool>((setState, close) => CustomAlertDialog(
             title: Row(children: [
-              Icon(Icons.warning_amber_sharp,
-                  color: Colors.redAccent, size: 28),
-              SizedBox(width: 10),
-              Text(translate("Restart Remote Device")),
+              Icon(Icons.warning_rounded, color: Colors.redAccent, size: 28),
+              Text(translate("Restart Remote Device")).paddingOnly(left: 10),
             ]),
             content: Text(
                 "${translate('Are you sure you want to restart')} \n${pi.username}@${pi.hostname}($id) ?"),
+            actions: [
+              dialogButton(
+                "Cancel",
+                icon: Icon(Icons.close_rounded),
+                onPressed: close,
+                isOutline: true,
+              ),
+              dialogButton(
+                "OK",
+                icon: Icon(Icons.done_rounded),
+                onPressed: () => close(true),
+              ),
+            ],
             onCancel: close,
             onSubmit: () => close(true),
-            actions: [
-              dialogButton("Cancel", onPressed: close, isOutline: true),
-              dialogButton("OK", onPressed: () => close(true)),
-            ],
           ));
   if (res == true) bind.sessionRestartRemoteDevice(id: id);
 }
@@ -62,7 +69,13 @@ void setPermanentPasswordDialog(OverlayDialogManager dialogManager) async {
     }
 
     return CustomAlertDialog(
-      title: Text(translate('Set your own password')),
+      title: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.password_rounded, color: MyTheme.accent),
+          Text(translate('Set your own password')).paddingOnly(left: 10),
+        ],
+      ),
       content: Form(
           autovalidateMode: AutovalidateMode.onUserInteraction,
           child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -112,11 +125,13 @@ void setPermanentPasswordDialog(OverlayDialogManager dialogManager) async {
       actions: [
         dialogButton(
           'Cancel',
+          icon: Icon(Icons.close_rounded),
           onPressed: close,
           isOutline: true,
         ),
         dialogButton(
           'OK',
+          icon: Icon(Icons.done_rounded),
           onPressed: (validateLength && validateSame) ? submit : null,
         ),
       ],
@@ -178,7 +193,13 @@ void enterPasswordDialog(String id, OverlayDialogManager dialogManager) async {
     }
 
     return CustomAlertDialog(
-      title: Text(translate('Password Required')),
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.password_rounded, color: MyTheme.accent),
+          Text(translate('Password Required')).paddingOnly(left: 10),
+        ],
+      ),
       content: Column(mainAxisSize: MainAxisSize.min, children: [
         PasswordWidget(controller: controller),
         CheckboxListTile(
@@ -197,8 +218,17 @@ void enterPasswordDialog(String id, OverlayDialogManager dialogManager) async {
         ),
       ]),
       actions: [
-        dialogButton('Cancel', onPressed: cancel, isOutline: true),
-        dialogButton('OK', onPressed: submit),
+        dialogButton(
+          'Cancel',
+          icon: Icon(Icons.close_rounded),
+          onPressed: cancel,
+          isOutline: true,
+        ),
+        dialogButton(
+          'OK',
+          icon: Icon(Icons.done_rounded),
+          onPressed: submit,
+        ),
       ],
       onSubmit: submit,
       onCancel: cancel,

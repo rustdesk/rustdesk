@@ -593,9 +593,12 @@ class FileModel extends ChangeNotifier {
             ? "${translate("Are you sure you want to delete the file of this directory?")}\n"
             : "";
         final count = entries.length > 1 ? "${i + 1}/${entries.length}" : "";
-        content = "$dirShow$count \n${entries[i].path}";
-        final confirm =
-            await showRemoveDialog(title, content, item.isDirectory);
+        content = "$dirShow\n\n${entries[i].path}".trim();
+        final confirm = await showRemoveDialog(
+          count.isEmpty ? title : "$title ($count)",
+          content,
+          item.isDirectory,
+        );
         try {
           if (confirm == true) {
             sendRemoveFile(entries[i].path, i, items.isLocal!);
@@ -636,41 +639,56 @@ class FileModel extends ChangeNotifier {
       submit() => close(true);
       return CustomAlertDialog(
         title: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.warning, color: Colors.red),
-            const SizedBox(width: 20),
-            Text(title)
+            const Icon(Icons.warning_rounded, color: Colors.red),
+            Text(title).paddingOnly(
+              left: 10,
+            ),
           ],
         ),
         contentBoxConstraints:
             BoxConstraints(minHeight: 100, minWidth: 400, maxWidth: 400),
         content: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(content),
-              const SizedBox(height: 5),
-              Text(translate("This is irreversible!"),
-                  style: const TextStyle(fontWeight: FontWeight.bold)),
-              showCheckbox
-                  ? CheckboxListTile(
-                      contentPadding: const EdgeInsets.all(0),
-                      dense: true,
-                      controlAffinity: ListTileControlAffinity.leading,
-                      title: Text(
-                        translate("Do this for all conflicts"),
-                      ),
-                      value: removeCheckboxRemember,
-                      onChanged: (v) {
-                        if (v == null) return;
-                        setState(() => removeCheckboxRemember = v);
-                      },
-                    )
-                  : const SizedBox.shrink()
-            ]),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(content),
+            Text(
+              translate("This is irreversible!"),
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.red,
+              ),
+            ).paddingOnly(top: 20),
+            showCheckbox
+                ? CheckboxListTile(
+                    contentPadding: const EdgeInsets.all(0),
+                    dense: true,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: Text(
+                      translate("Do this for all conflicts"),
+                    ),
+                    value: removeCheckboxRemember,
+                    onChanged: (v) {
+                      if (v == null) return;
+                      setState(() => removeCheckboxRemember = v);
+                    },
+                  )
+                : const SizedBox.shrink()
+          ],
+        ),
         actions: [
-          dialogButton("Cancel", onPressed: cancel, isOutline: true),
-          dialogButton("OK", onPressed: submit),
+          dialogButton(
+            "Cancel",
+            icon: Icon(Icons.close_rounded),
+            onPressed: cancel,
+            isOutline: true,
+          ),
+          dialogButton(
+            "OK",
+            icon: Icon(Icons.done_rounded),
+            onPressed: submit,
+          ),
         ],
         onSubmit: submit,
         onCancel: cancel,
@@ -690,9 +708,10 @@ class FileModel extends ChangeNotifier {
       return CustomAlertDialog(
         title: Row(
           children: [
-            const Icon(Icons.warning, color: Colors.red),
-            const SizedBox(width: 20),
-            Text(title)
+            const Icon(Icons.warning_rounded, color: Colors.red),
+            Text(title).paddingOnly(
+              left: 10,
+            ),
           ],
         ),
         contentBoxConstraints:
@@ -722,9 +741,23 @@ class FileModel extends ChangeNotifier {
                   : const SizedBox.shrink()
             ]),
         actions: [
-          dialogButton("Cancel", onPressed: cancel, isOutline: true),
-          dialogButton("Skip", onPressed: () => close(null), isOutline: true),
-          dialogButton("OK", onPressed: submit),
+          dialogButton(
+            "Cancel",
+            icon: Icon(Icons.close_rounded),
+            onPressed: cancel,
+            isOutline: true,
+          ),
+          dialogButton(
+            "Skip",
+            icon: Icon(Icons.navigate_next_rounded),
+            onPressed: () => close(null),
+            isOutline: true,
+          ),
+          dialogButton(
+            "OK",
+            icon: Icon(Icons.done_rounded),
+            onPressed: submit,
+          ),
         ],
         onSubmit: submit,
         onCancel: cancel,

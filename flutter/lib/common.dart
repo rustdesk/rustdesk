@@ -174,6 +174,27 @@ class MyTheme {
     brightness: Brightness.light,
     hoverColor: Color.fromARGB(255, 224, 224, 224),
     scaffoldBackgroundColor: Color(0xFFFFFFFF),
+    dialogBackgroundColor: Color(0xFFFFFFFF),
+    dialogTheme: DialogTheme(
+      elevation: 15,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18.0),
+        side: BorderSide(
+          width: 1,
+          color: Color(0xFFEEEEEE),
+        ),
+      ),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      fillColor: Color(0xFFEEEEEE),
+      filled: true,
+      isDense: true,
+      contentPadding: EdgeInsets.all(15),
+      border: UnderlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: BorderSide.none,
+      ),
+    ),
     textTheme: const TextTheme(
         titleLarge: TextStyle(fontSize: 19, color: Colors.black87),
         titleSmall: TextStyle(fontSize: 14, color: Colors.black87),
@@ -192,9 +213,48 @@ class MyTheme {
     splashFactory: isDesktop ? NoSplash.splashFactory : null,
     textButtonTheme: isDesktop
         ? TextButtonThemeData(
-            style: ButtonStyle(splashFactory: NoSplash.splashFactory),
+            style: TextButton.styleFrom(
+              splashFactory: NoSplash.splashFactory,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18.0),
+              ),
+            ),
           )
         : null,
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: MyTheme.accent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8.0),
+        ),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        backgroundColor: Color(
+          0xFFEEEEEE,
+        ),
+        foregroundColor: Colors.black87,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8.0),
+        ),
+      ),
+    ),
+    checkboxTheme: const CheckboxThemeData(
+      splashRadius: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(
+          Radius.circular(5),
+        ),
+      ),
+    ),
+    listTileTheme: ListTileThemeData(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(
+          Radius.circular(5),
+        ),
+      ),
+    ),
     colorScheme: ColorScheme.fromSwatch(
       primarySwatch: Colors.blue,
     ).copyWith(
@@ -211,6 +271,27 @@ class MyTheme {
     brightness: Brightness.dark,
     hoverColor: Color.fromARGB(255, 45, 46, 53),
     scaffoldBackgroundColor: Color(0xFF18191E),
+    dialogBackgroundColor: Color(0xFF18191E),
+    dialogTheme: DialogTheme(
+      elevation: 15,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18.0),
+        side: BorderSide(
+          width: 1,
+          color: Color(0xFF24252B),
+        ),
+      ),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      fillColor: Color(0xFF24252B),
+      filled: true,
+      isDense: true,
+      contentPadding: EdgeInsets.all(15),
+      border: UnderlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: BorderSide.none,
+      ),
+    ),
     textTheme: const TextTheme(
         titleLarge: TextStyle(fontSize: 19),
         titleSmall: TextStyle(fontSize: 14),
@@ -229,27 +310,55 @@ class MyTheme {
     splashColor: Colors.transparent,
     highlightColor: Colors.transparent,
     splashFactory: isDesktop ? NoSplash.splashFactory : null,
-    outlinedButtonTheme: OutlinedButtonThemeData(
-      style: OutlinedButton.styleFrom(
-        side: BorderSide(color: Colors.white38),
-        disabledForegroundColor: Colors.white70,
-      ),
-    ),
     textButtonTheme: isDesktop
         ? TextButtonThemeData(
             style: TextButton.styleFrom(
-            splashFactory: NoSplash.splashFactory,
-            disabledForegroundColor: Colors.white70,
-          ))
+              splashFactory: NoSplash.splashFactory,
+              disabledForegroundColor: Colors.white70,
+              foregroundColor: Colors.white70,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18.0),
+              ),
+            ),
+          )
         : null,
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
+        backgroundColor: MyTheme.accent,
         disabledForegroundColor: Colors.white70,
         disabledBackgroundColor: Colors.white10,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8.0),
+        ),
       ),
     ),
-    checkboxTheme:
-        const CheckboxThemeData(checkColor: MaterialStatePropertyAll(dark)),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        backgroundColor: Color(0xFF24252B),
+        side: BorderSide(color: Colors.white12, width: 0.5),
+        disabledForegroundColor: Colors.white70,
+        foregroundColor: Colors.white70,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8.0),
+        ),
+      ),
+    ),
+    checkboxTheme: const CheckboxThemeData(
+      checkColor: MaterialStatePropertyAll(dark),
+      splashRadius: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(
+          Radius.circular(5),
+        ),
+      ),
+    ),
+    listTileTheme: ListTileThemeData(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(
+          Radius.circular(5),
+        ),
+      ),
+    ),
     colorScheme: ColorScheme.fromSwatch(
       primarySwatch: Colors.blue,
     ).copyWith(
@@ -480,7 +589,7 @@ class OverlayDialogManager {
       BackButtonInterceptor.removeByName(dialogTag);
     }
 
-    dialog.entry = OverlayEntry(builder: (_) {
+    dialog.entry = OverlayEntry(builder: (context) {
       bool innerClicked = false;
       return Listener(
           onPointerUp: (_) {
@@ -490,7 +599,9 @@ class OverlayDialogManager {
             innerClicked = false;
           },
           child: Container(
-              color: Colors.black12,
+              color: Theme.of(context).brightness == Brightness.light
+                  ? Colors.black12
+                  : Colors.black45,
               child: StatefulBuilder(builder: (context, setState) {
                 return Listener(
                   onPointerUp: (_) => innerClicked = true,
@@ -672,7 +783,7 @@ class CustomAlertDialog extends StatelessWidget {
     Future.delayed(Duration.zero, () {
       if (!scopeNode.hasFocus) scopeNode.requestFocus();
     });
-    const double padding = 16;
+    const double padding = 30;
     bool tabTapped = false;
     return FocusScope(
       node: scopeNode,
@@ -701,18 +812,19 @@ class CustomAlertDialog extends StatelessWidget {
         scrollable: true,
         title: title,
         titlePadding: EdgeInsets.fromLTRB(padding, 24, padding, 0),
-        contentPadding: EdgeInsets.fromLTRB(contentPadding ?? padding, 25,
-            contentPadding ?? padding, actions is List ? 10 : padding),
+        contentPadding: EdgeInsets.fromLTRB(
+          contentPadding ?? padding,
+          25,
+          contentPadding ?? padding,
+          actions is List ? 10 : padding,
+        ),
         content: ConstrainedBox(
           constraints: contentBoxConstraints,
-          child: Theme(
-              data: Theme.of(context).copyWith(
-                  inputDecorationTheme: InputDecorationTheme(
-                      isDense: true, contentPadding: EdgeInsets.all(15))),
-              child: content),
+          child: content,
         ),
         actions: actions,
         actionsPadding: EdgeInsets.fromLTRB(padding, 0, padding, padding),
+        actionsAlignment: MainAxisAlignment.center,
       ),
     );
   }
@@ -1727,28 +1839,43 @@ class ServerConfig {
 Widget dialogButton(String text,
     {required VoidCallback? onPressed,
     bool isOutline = false,
+    Widget? icon,
     TextStyle? style,
     ButtonStyle? buttonStyle}) {
   if (isDesktop) {
     if (isOutline) {
-      return OutlinedButton(
-        onPressed: onPressed,
-        child: Text(translate(text), style: style),
-      );
+      return icon == null
+          ? OutlinedButton(
+              onPressed: onPressed,
+              child: Text(translate(text), style: style),
+            )
+          : OutlinedButton.icon(
+              icon: icon,
+              onPressed: onPressed,
+              label: Text(translate(text), style: style),
+            );
     } else {
-      return ElevatedButton(
-        style: ElevatedButton.styleFrom(elevation: 0).merge(buttonStyle),
-        onPressed: onPressed,
-        child: Text(translate(text), style: style),
-      );
+      return icon == null
+          ? ElevatedButton(
+              style: ElevatedButton.styleFrom(elevation: 0).merge(buttonStyle),
+              onPressed: onPressed,
+              child: Text(translate(text), style: style),
+            )
+          : ElevatedButton.icon(
+              icon: icon,
+              style: ElevatedButton.styleFrom(elevation: 0).merge(buttonStyle),
+              onPressed: onPressed,
+              label: Text(translate(text), style: style),
+            );
     }
   } else {
     return TextButton(
-        onPressed: onPressed,
-        child: Text(
-          translate(text),
-          style: style,
-        ));
+      onPressed: onPressed,
+      child: Text(
+        translate(text),
+        style: style,
+      ),
+    );
   }
 }
 

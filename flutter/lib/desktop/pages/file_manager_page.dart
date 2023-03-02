@@ -300,14 +300,13 @@ class _FileManagerPageState extends State<FileManagerPage>
             }
             skipCount = index + 1;
           }
-          var searchResult = entries
-              .skip(skipCount)
-              .where((element) => element.name.toLowerCase().startsWith(buffer));
+          var searchResult = entries.skip(skipCount).where(
+              (element) => element.name.toLowerCase().startsWith(buffer));
           if (searchResult.isEmpty) {
             // cannot find next, lets restart search from head
             debugPrint("restart search from head");
-            searchResult =
-                entries.where((element) => element.name.toLowerCase().startsWith(buffer));
+            searchResult = entries.where(
+                (element) => element.name.toLowerCase().startsWith(buffer));
           }
           if (searchResult.isEmpty) {
             setState(() {
@@ -321,8 +320,8 @@ class _FileManagerPageState extends State<FileManagerPage>
         onSearch: (buffer) {
           debugPrint("searching for $buffer");
           final selectedEntries = getSelectedItems(isLocal);
-          final searchResult =
-              entries.where((element) => element.name.toLowerCase().startsWith(buffer));
+          final searchResult = entries.where(
+              (element) => element.name.toLowerCase().startsWith(buffer));
           selectedEntries.clear();
           if (searchResult.isEmpty) {
             setState(() {
@@ -504,8 +503,7 @@ class _FileManagerPageState extends State<FileManagerPage>
       debugPrint("entry is not valid: ${entry.path}");
     }
     final selectedEntries = getSelectedItems(isLocal);
-    final searchResult =
-        entries.where((element) => element == entry);
+    final searchResult = entries.where((element) => element == entry);
     selectedEntries.clear();
     if (searchResult.isEmpty) {
       return;
@@ -976,14 +974,26 @@ class _FileManagerPageState extends State<FileManagerPage>
 
                           cancel() => close(false);
                           return CustomAlertDialog(
-                            title: Text(translate("Create Folder")),
+                            title: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                SvgPicture.asset("assets/folder_new.svg",
+                                    color: MyTheme.accent),
+                                Text(
+                                  translate("Create Folder"),
+                                ).paddingOnly(
+                                  left: 10,
+                                ),
+                              ],
+                            ),
                             content: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 TextFormField(
                                   decoration: InputDecoration(
                                     labelText: translate(
-                                        "Please enter the folder name"),
+                                      "Please enter the folder name",
+                                    ),
                                   ),
                                   controller: name,
                                   autofocus: true,
@@ -991,9 +1001,17 @@ class _FileManagerPageState extends State<FileManagerPage>
                               ],
                             ),
                             actions: [
-                              dialogButton("Cancel",
-                                  onPressed: cancel, isOutline: true),
-                              dialogButton("OK", onPressed: submit)
+                              dialogButton(
+                                "Cancel",
+                                icon: Icon(Icons.close_rounded),
+                                onPressed: cancel,
+                                isOutline: true,
+                              ),
+                              dialogButton(
+                                "Ok",
+                                icon: Icon(Icons.done_rounded),
+                                onPressed: submit,
+                              ),
                             ],
                             onSubmit: submit,
                             onCancel: cancel,
@@ -1035,11 +1053,6 @@ class _FileManagerPageState extends State<FileManagerPage>
                     selectedItems.length == 0
                         ? MyTheme.accent80
                         : MyTheme.accent,
-                  ),
-                  shape: MaterialStateProperty.all<RoundedRectangleBorder>(
-                    RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(18.0),
-                    ),
                   ),
                 ),
                 onPressed: validItems(selectedItems)
@@ -1430,14 +1443,14 @@ class _FileManagerPageState extends State<FileManagerPage>
                       ).marginSymmetric(horizontal: 4),
                     ),
                     Flexible(
-                      flex: 1,
-                      child: ascending.value != null
-                        ? Icon(
-                            ascending.value!
-                                ? Icons.keyboard_arrow_up_rounded
-                                : Icons.keyboard_arrow_down_rounded,
-                          )
-                        : const Offstage())
+                        flex: 1,
+                        child: ascending.value != null
+                            ? Icon(
+                                ascending.value!
+                                    ? Icons.keyboard_arrow_up_rounded
+                                    : Icons.keyboard_arrow_down_rounded,
+                              )
+                            : const Offstage())
                   ],
                 ),
               ),
@@ -1467,10 +1480,8 @@ class _FileManagerPageState extends State<FileManagerPage>
             axis: Axis.vertical,
             onPointerMove: (dx) {
               nameColWidth.value += dx;
-              nameColWidth.value = min(
-                    kDesktopFileTransferMaximumWidth,
-                    max(kDesktopFileTransferMinimumWidth,
-                        nameColWidth.value));
+              nameColWidth.value = min(kDesktopFileTransferMaximumWidth,
+                  max(kDesktopFileTransferMinimumWidth, nameColWidth.value));
             },
             padding: padding,
           ),
