@@ -170,6 +170,35 @@ class ServerInfo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isPermanent = model.verificationMethod == kUsePermanentPassword;
+    final serverModel = Provider.of<ServerModel>(context);
+
+    // @todo Theming
+    Widget Notification() {
+      const Color colorPositive = Colors.greenAccent;
+      const Color colorNegative = Colors.redAccent;
+      const double paddingRight = 15;
+
+      if (serverModel.connectStatus == -1) {
+        return Row(children: [
+          const Icon(Icons.warning_amber_sharp, color: colorNegative, size: 24)
+              .marginOnly(right: paddingRight),
+          Expanded(child: Text(translate('not_ready_status')))
+        ]);
+      } else if (serverModel.connectStatus == 0) {
+        return Row(children: [
+          SizedBox(width: 20, height: 20, child: CircularProgressIndicator())
+              .marginOnly(left: 4, right: paddingRight),
+          Expanded(child: Text(translate('connecting_status')))
+        ]);
+      } else {
+        return Row(children: [
+          const Icon(Icons.check, color: colorPositive, size: 24)
+              .marginOnly(right: paddingRight),
+          Expanded(child: Text(translate('Ready')))
+        ]);
+      }
+    }
+
     return model.isStart
         ? PaddingCard(
             child: Column(
@@ -210,14 +239,14 @@ class ServerInfo extends StatelessWidget {
                                 bind.mainUpdateTemporaryPassword())),
                 onSaved: (String? value) {},
               ),
+              Notification().marginOnly(top: 20)
             ],
           ))
         : PaddingCard(
             child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Center(
-                  child: Row(
+              Row(
                 children: [
                   const Icon(Icons.warning_amber_sharp,
                       color: Colors.redAccent, size: 24),
@@ -229,17 +258,18 @@ class ServerInfo extends StatelessWidget {
                       fontFamily: 'WorkSans',
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
-                      color: MyTheme.accent,
                     ),
                   ))
                 ],
-              )),
-              const SizedBox(height: 5),
-              Center(
-                  child: Text(
-                translate("android_start_service_tip"),
-                style: const TextStyle(fontSize: 12, color: MyTheme.darkGray),
-              ))
+              ).marginOnly(bottom: 8),
+              Text(translate("android_start_service_tip"),
+                      style: const TextStyle(
+                          fontSize: 12, color: MyTheme.darkGray))
+                  .marginOnly(bottom: 8),
+              ElevatedButton.icon(
+                  icon: const Icon(Icons.play_arrow),
+                  onPressed: serverModel.toggleService,
+                  label: Text(translate("Start Service")))
             ],
           ));
   }
@@ -257,51 +287,19 @@ class _PermissionCheckerState extends State<PermissionChecker> {
   Widget build(BuildContext context) {
     final serverModel = Provider.of<ServerModel>(context);
     final hasAudioPermission = androidVersion >= 30;
-    final String status;
-    if (serverModel.connectStatus == -1) {
-      status = 'not_ready_status';
-    } else if (serverModel.connectStatus == 0) {
-      status = 'connecting_status';
-    } else {
-      status = 'Ready';
-    }
-
-    // @todo Theming
-    Widget ServerStateMessage() {
-      if (!serverModel.mediaOk) {
-        return Row(children: [
-          const Icon(Icons.warning_amber_outlined,
-                  color: Colors.redAccent, size: 24)
-              .marginOnly(right: 10),
-          Expanded(child: Text(translate('Service is not running')))
-        ]);
-      }
-
-      if (serverModel.connectStatus == -1) {
-        return Row(children: [
-          const Icon(Icons.warning_amber_sharp,
-                  color: Colors.redAccent, size: 24)
-              .marginOnly(right: 10),
-          Expanded(child: Text(translate('not_ready_status')))
-        ]);
-      } else if (serverModel.connectStatus == 0) {
-        return Row(children: [
-          SizedBox(width: 20, height: 20, child: CircularProgressIndicator())
-              .marginOnly(left: 4, right: 10),
-          Expanded(child: Text(translate('connecting_status')))
-        ]);
-      } else {
-        return Row(children: [
-          const Icon(Icons.check, color: Colors.greenAccent, size: 24)
-              .marginOnly(right: 10),
-          Expanded(child: Text(translate('Ready')))
-        ]);
-      }
-    }
-
     return PaddingCard(
         title: translate("Permissions"),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          serverModel.mediaOk
+              ? ElevatedButton.icon(
+                      style: ButtonStyle(
+                          backgroundColor:
+                              MaterialStateProperty.all(Colors.red)),
+                      icon: const Icon(Icons.stop),
+                      onPressed: serverModel.toggleService,
+                      label: Text(translate("Stop service")))
+                  .marginOnly(bottom: 8)
+              : SizedBox.shrink(),
           PermissionRow(translate("Screen Capture"), serverModel.mediaOk,
               serverModel.toggleService),
           PermissionRow(translate("Input Control"), serverModel.inputOk,
@@ -314,23 +312,7 @@ class _PermissionCheckerState extends State<PermissionChecker> {
               : Text(
                   "* ${translate("android_version_audio_tip")}",
                   style: const TextStyle(color: MyTheme.darkGray),
-                ),
-          const SizedBox(height: 8),
-          serverModel.mediaOk
-              ? ElevatedButton.icon(
-                      style: ButtonStyle(
-                          backgroundColor:
-                              MaterialStateProperty.all(Colors.red)),
-                      icon: const Icon(Icons.stop),
-                      onPressed: serverModel.toggleService,
-                      label: Text(translate("Stop service")))
-                  .marginOnly(bottom: 8)
-              : ElevatedButton.icon(
-                      icon: const Icon(Icons.play_arrow),
-                      onPressed: serverModel.toggleService,
-                      label: Text(translate("Start Service")))
-                  .marginOnly(bottom: 8),
-          ServerStateMessage()
+                )
         ]));
   }
 }
