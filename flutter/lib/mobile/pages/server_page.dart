@@ -141,8 +141,8 @@ class _ServerPageState extends State<ServerPage> {
                       mainAxisAlignment: MainAxisAlignment.start,
                       children: [
                         ServerInfo(),
-                        const PermissionChecker(),
                         const ConnectionManager(),
+                        const PermissionChecker(),
                         SizedBox.fromSize(size: const Size(0, 15.0)),
                       ],
                     ),
