@@ -49,7 +49,7 @@ use scrap::{
 };
 
 use crate::{
-    common::{self, is_keyboard_mode_supported},
+    common::{self, is_keyboard_mode_supported, STRIDE_ALIGN},
     server::video_service::{SCRAP_X11_REF_URL, SCRAP_X11_REQUIRED},
 };
 
@@ -949,7 +949,7 @@ impl VideoHandler {
                 let fmt = ImageFormat::ABGR;
                 #[cfg(not(all(target_os = "windows", feature = "flutter_texture_render")))]
                 let fmt = ImageFormat::ARGB;
-                let res = self.decoder.handle_video_frame(frame, fmt, &mut self.rgb);
+                let res = self.decoder.handle_video_frame(frame, STRIDE_ALIGN, fmt, &mut self.rgb);
                 if self.record {
                     self.recorder
                         .lock()

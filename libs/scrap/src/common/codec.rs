@@ -306,12 +306,13 @@ impl Decoder {
     pub fn handle_video_frame(
         &mut self,
         frame: &video_frame::Union,
+        stride_align: usize,
         fmt: ImageFormat,
         rgb: &mut Vec<u8>,
     ) -> ResultType<bool> {
         match frame {
             video_frame::Union::Vp9s(vp9s) => {
-                Decoder::handle_vp9s_video_frame(&mut self.vpx, vp9s, fmt, rgb)
+                Decoder::handle_vp9s_video_frame(&mut self.vpx, vp9s, stride_align, fmt, rgb)
             }
             #[cfg(feature = "hwcodec")]
             video_frame::Union::H264s(h264s) => {
@@ -352,6 +353,7 @@ impl Decoder {
     fn handle_vp9s_video_frame(
         decoder: &mut VpxDecoder,
         vp9s: &EncodedVideoFrames,
+        stride_align: usize,
         fmt: ImageFormat,
         rgb: &mut Vec<u8>,
     ) -> ResultType<bool> {
@@ -369,7 +371,7 @@ impl Decoder {
         if last_frame.is_null() {
             Ok(false)
         } else {
-            last_frame.to(fmt, 1, rgb);
+            last_frame.to(fmt, stride_align, rgb);
             Ok(true)
         }
     }
