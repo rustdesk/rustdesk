@@ -207,30 +207,26 @@ class ServerInfo extends StatelessWidget {
               TextFormField(
                 readOnly: true,
                 style: const TextStyle(
-                    fontSize: 25.0,
-                    fontWeight: FontWeight.bold,
-                    color: MyTheme.accent),
+                    fontSize: 25.0, fontWeight: FontWeight.bold),
                 controller: model.serverId,
                 decoration: InputDecoration(
                   icon: const Icon(Icons.perm_identity),
                   labelText: translate("ID"),
-                  labelStyle: const TextStyle(
-                      fontWeight: FontWeight.bold, color: MyTheme.accent80),
+                  labelStyle: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 onSaved: (String? value) {},
               ),
               TextFormField(
                 readOnly: true,
                 style: const TextStyle(
-                    fontSize: 25.0,
-                    fontWeight: FontWeight.bold,
-                    color: MyTheme.accent),
+                    fontSize: 25.0, fontWeight: FontWeight.bold),
                 controller: isPermanent ? emptyController : model.serverPasswd,
                 decoration: InputDecoration(
                     icon: const Icon(Icons.lock),
                     labelText: translate("Password"),
                     labelStyle: const TextStyle(
-                        fontWeight: FontWeight.bold, color: MyTheme.accent80),
+                      fontWeight: FontWeight.bold,
+                    ),
                     suffix: isPermanent
                         ? null
                         : IconButton(
