@@ -1235,8 +1235,8 @@ fn get_uninstall(kill_self: bool) -> String {
     )
 }
 
-pub fn uninstall_me() -> ResultType<()> {
-    run_cmds(get_uninstall(true), true, "uninstall")
+pub fn uninstall_me(kill_self: bool) -> ResultType<()> {
+    run_cmds(get_uninstall(kill_self), true, "uninstall")
 }
 
 fn write_cmds(cmds: String, ext: &str, tip: &str) -> ResultType<std::path::PathBuf> {
