@@ -8,6 +8,7 @@ import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/scroll_wrapper.dart';
+import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:window_manager/window_manager.dart';
@@ -44,7 +45,7 @@ class _ConnectionPageState extends State<ConnectionPage>
   var svcStatusCode = 0.obs;
   var svcIsUsingPublicServer = true.obs;
 
-  bool isWindowMinisized = false;
+  bool isWindowMinimized = false;
 
   @override
   void initState() {
@@ -64,6 +65,9 @@ class _ConnectionPageState extends State<ConnectionPage>
     });
     _idFocusNode.addListener(() {
       _idInputFocused.value = _idFocusNode.hasFocus;
+      // select all to faciliate removing text, just following the behavior of address input of chrome
+      _idController.selection = TextSelection(
+          baseOffset: 0, extentOffset: _idController.value.text.length);
     });
     windowManager.addListener(this);
   }
@@ -80,14 +84,26 @@ class _ConnectionPageState extends State<ConnectionPage>
   void onWindowEvent(String eventName) {
     super.onWindowEvent(eventName);
     if (eventName == 'minimize') {
-      isWindowMinisized = true;
+      isWindowMinimized = true;
     } else if (eventName == 'maximize' || eventName == 'restore') {
-      if (isWindowMinisized && Platform.isWindows) {
-        // windows can't update when minisized.
+      if (isWindowMinimized && Platform.isWindows) {
+        // windows can't update when minimized.
         Get.forceAppUpdate();
       }
-      isWindowMinisized = false;
+      isWindowMinimized = false;
     }
+  }
+
+  @override
+  void onWindowEnterFullScreen() {
+    // Remove edge border by setting the value to zero.
+    stateGlobal.resizeEdgeSize.value = 0;
+  }
+
+  @override
+  void onWindowLeaveFullScreen() {
+    // Restore edge border to default edge size.
+    stateGlobal.resizeEdgeSize.value = kWindowEdgeSize;
   }
 
   @override
@@ -105,7 +121,7 @@ class _ConnectionPageState extends State<ConnectionPage>
             scrollController: _scrollController,
             child: CustomScrollView(
               controller: _scrollController,
-              physics: NeverScrollableScrollPhysics(),
+              physics: DraggableNeverScrollableScrollPhysics(),
               slivers: [
                 SliverList(
                     delegate: SliverChildListDelegate([
@@ -134,7 +150,7 @@ class _ConnectionPageState extends State<ConnectionPage>
   /// Callback for the connect button.
   /// Connects to the selected peer.
   void onConnect({bool isFileTransfer = false}) {
-    final id = _idController.id;
+    var id = _idController.id;
     connect(context, id, isFileTransfer: isFileTransfer);
   }
 
@@ -145,7 +161,7 @@ class _ConnectionPageState extends State<ConnectionPage>
       width: 320 + 20 * 2,
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 22),
       decoration: BoxDecoration(
-        color: Theme.of(context).backgroundColor,
+        color: Theme.of(context).colorScheme.background,
         borderRadius: const BorderRadius.all(Radius.circular(13)),
       ),
       child: Ink(

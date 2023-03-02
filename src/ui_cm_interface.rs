@@ -48,6 +48,9 @@ pub struct Client {
     pub file: bool,
     pub restart: bool,
     pub recording: bool,
+    pub from_switch: bool,
+    pub in_voice_call: bool,
+    pub incoming_voice_call: bool,
     #[serde(skip)]
     tx: UnboundedSender<Data>,
 }
@@ -87,6 +90,8 @@ pub trait InvokeUiCM: Send + Clone + 'static + Sized {
     fn change_language(&self);
 
     fn show_elevation(&self, show: bool);
+
+    fn update_voice_call_state(&self, client: &Client);
 }
 
 impl<T: InvokeUiCM> Deref for ConnectionManager<T> {
@@ -118,6 +123,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         file: bool,
         restart: bool,
         recording: bool,
+        from_switch: bool,
         tx: mpsc::UnboundedSender<Data>,
     ) {
         let client = Client {
@@ -134,7 +140,10 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
             file,
             restart,
             recording,
+            from_switch,
             tx,
+            in_voice_call: false,
+            incoming_voice_call: false
         };
         CLIENTS
             .write()
@@ -176,6 +185,30 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
 
     fn show_elevation(&self, show: bool) {
         self.ui_handler.show_elevation(show);
+    }
+
+    fn voice_call_started(&self, id: i32) {
+        if let Some(client) = CLIENTS.write().unwrap().get_mut(&id) {
+            client.incoming_voice_call = false;
+            client.in_voice_call = true;
+            self.ui_handler.update_voice_call_state(client);
+        }
+    }
+
+    fn voice_call_incoming(&self, id: i32) {
+        if let Some(client) = CLIENTS.write().unwrap().get_mut(&id) {
+            client.incoming_voice_call = true;
+            client.in_voice_call = false;
+            self.ui_handler.update_voice_call_state(client);
+        }
+    }
+
+    fn voice_call_closed(&self, id: i32, _reason: &str) {
+        if let Some(client) = CLIENTS.write().unwrap().get_mut(&id) {
+            client.incoming_voice_call = false;
+            client.in_voice_call = false;
+            self.ui_handler.update_voice_call_state(client);
+        }
     }
 }
 
@@ -241,6 +274,14 @@ pub fn get_clients_length() -> usize {
     clients.len()
 }
 
+#[inline]
+#[cfg(feature = "flutter")]
+pub fn switch_back(id: i32) {
+    if let Some(client) = CLIENTS.read().unwrap().get(&id) {
+        allow_err!(client.tx.send(Data::SwitchSidesBack));
+    };
+}
+
 impl<T: InvokeUiCM> IpcTaskRunner<T> {
     #[cfg(windows)]
     async fn enable_cliprdr_file_context(&mut self, conn_id: i32, enabled: bool) {
@@ -253,7 +294,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
         if !pre_enabled && ContextSend::is_enabled() {
             allow_err!(
                 self.stream
-                    .send(&Data::ClipbaordFile(clipboard::ClipbaordFile::MonitorReady))
+                    .send(&Data::ClipboardFile(clipboard::ClipboardFile::MonitorReady))
                     .await
             );
         }
@@ -288,7 +329,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
             rx_clip = rx_clip1.lock().await;
         } else {
             let rx_clip2;
-            (_tx_clip, rx_clip2) = unbounded_channel::<clipboard::ClipbaordFile>();
+            (_tx_clip, rx_clip2) = unbounded_channel::<clipboard::ClipboardFile>();
             rx_clip1 = Arc::new(TokioMutex::new(rx_clip2));
             rx_clip = rx_clip1.lock().await;
         }
@@ -308,9 +349,9 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                         }
                         Ok(Some(data)) => {
                             match data {
-                                Data::Login{id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled: _file_transfer_enabled, restart, recording} => {
+                                Data::Login{id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled: _file_transfer_enabled, restart, recording, from_switch} => {
                                     log::debug!("conn_id: {}", id);
-                                    self.cm.add_connection(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, self.tx.clone());
+                                    self.cm.add_connection(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, from_switch,self.tx.clone());
                                     self.authorized = authorized;
                                     self.conn_id = id;
                                     #[cfg(windows)]
@@ -354,7 +395,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                     }
                                 }
                                 #[cfg(windows)]
-                                Data::ClipbaordFile(_clip) => {
+                                Data::ClipboardFile(_clip) => {
                                     #[cfg(windows)]
                                     {
                                         let conn_id = self.conn_id;
@@ -378,6 +419,15 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                 Data::DataPortableService(ipc::DataPortableService::CmShowElevation(show)) => {
                                     self.cm.show_elevation(show);
                                 }
+                                Data::StartVoiceCall => {
+                                    self.cm.voice_call_started(self.conn_id);
+                                }
+                                Data::VoiceCallIncoming => {
+                                    self.cm.voice_call_incoming(self.conn_id);
+                                }
+                                Data::CloseVoiceCall(reason) => {
+                                    self.cm.voice_call_closed(self.conn_id, reason.as_str());
+                                }
                                 _ => {
 
                                 }
@@ -394,7 +444,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                 clip_file = rx_clip.recv() => match clip_file {
                     Some(_clip) => {
                         #[cfg(windows)]
-                        allow_err!(self.tx.send(Data::ClipbaordFile(_clip)));
+                        allow_err!(self.tx.send(Data::ClipboardFile(_clip)));
                     }
                     None => {
                         //
@@ -438,16 +488,13 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
     #[cfg(windows)]
     std::thread::spawn(move || {
         log::info!("try create privacy mode window");
-        #[cfg(windows)]
-        {
-            if let Err(e) = crate::platform::windows::check_update_broker_process() {
-                log::warn!(
-                    "Failed to check update broker process. Privacy mode may not work properly. {}",
-                    e
-                );
-            }
+        if let Err(e) = crate::platform::windows::check_update_broker_process() {
+            log::warn!(
+                "Failed to check update broker process. Privacy mode may not work properly. {}",
+                e
+            );
         }
-        allow_err!(crate::ui::win_privacy::start());
+        allow_err!(crate::win_privacy::start());
     });
 
     match ipc::new_listener("_cm").await {
@@ -498,6 +545,7 @@ pub async fn start_listen<T: InvokeUiCM>(
                 file,
                 restart,
                 recording,
+                from_switch,
                 ..
             }) => {
                 current_id = id;
@@ -514,6 +562,7 @@ pub async fn start_listen<T: InvokeUiCM>(
                     file,
                     restart,
                     recording,
+                    from_switch,
                     tx.clone(),
                 );
             }
@@ -779,13 +828,7 @@ fn cm_inner_send(id: i32, data: Data) {
 
 pub fn can_elevate() -> bool {
     #[cfg(windows)]
-    {
-        return !crate::platform::is_installed()
-            && !crate::portable_service::client::PORTABLE_SERVICE_RUNNING
-                .lock()
-                .unwrap()
-                .clone();
-    }
+    return !crate::platform::is_installed();
     #[cfg(not(windows))]
     return false;
 }
@@ -800,4 +843,20 @@ pub fn elevate_portable(_id: i32) {
             )));
         }
     }
+}
+
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+#[inline]
+pub fn handle_incoming_voice_call(id: i32, accept: bool) {
+    if let Some(client) = CLIENTS.write().unwrap().get_mut(&id) {
+        allow_err!(client.tx.send(Data::VoiceCallResponse(accept)));
+    };
+}
+
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+#[inline]
+pub fn close_voice_call(id: i32) {
+    if let Some(client) = CLIENTS.write().unwrap().get_mut(&id) {
+        allow_err!(client.tx.send(Data::CloseVoiceCall("".to_owned())));
+    };
 }

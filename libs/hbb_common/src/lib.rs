@@ -39,7 +39,10 @@ pub use tokio_socks::IntoTargetAddr;
 pub use tokio_socks::TargetAddr;
 pub mod password_security;
 pub use chrono;
+pub use libc;
 pub use directories_next;
+pub mod keyboard;
+pub use sysinfo;
 
 #[cfg(feature = "quic")]
 pub type Stream = quic::Connection;
@@ -95,8 +98,24 @@ pub type ResultType<F, E = anyhow::Error> = anyhow::Result<F, E>;
 
 pub struct AddrMangle();
 
+#[inline]
+pub fn try_into_v4(addr: SocketAddr) -> SocketAddr {
+    match addr {
+        SocketAddr::V6(v6) if !addr.ip().is_loopback() => {
+            if let Some(v4) = v6.ip().to_ipv4() {
+                SocketAddr::new(IpAddr::V4(v4), addr.port())
+            } else {
+                addr
+            }
+        }
+        _ => addr,
+    }
+}
+
 impl AddrMangle {
     pub fn encode(addr: SocketAddr) -> Vec<u8> {
+        // not work with [:1]:<port>
+        let addr = try_into_v4(addr);
         match addr {
             SocketAddr::V4(addr_v4) => {
                 let tm = (SystemTime::now()
@@ -128,22 +147,20 @@ impl AddrMangle {
     }
 
     pub fn decode(bytes: &[u8]) -> SocketAddr {
+        use std::convert::TryInto;
+
         if bytes.len() > 16 {
             if bytes.len() != 18 {
                 return Config::get_any_listen_addr(false);
             }
-            #[allow(invalid_value)]
-            let mut tmp: [u8; 2] = unsafe { std::mem::MaybeUninit::uninit().assume_init() };
-            tmp.copy_from_slice(&bytes[16..]);
+            let tmp: [u8; 2] = bytes[16..].try_into().unwrap();
             let port = u16::from_le_bytes(tmp);
-            #[allow(invalid_value)]
-            let mut tmp: [u8; 16] = unsafe { std::mem::MaybeUninit::uninit().assume_init() };
-            tmp.copy_from_slice(&bytes[..16]);
+            let tmp: [u8; 16] = bytes[..16].try_into().unwrap();
             let ip = std::net::Ipv6Addr::from(tmp);
             return SocketAddr::new(IpAddr::V6(ip), port);
         }
         let mut padded = [0u8; 16];
-        padded[..bytes.len()].copy_from_slice(&bytes);
+        padded[..bytes.len()].copy_from_slice(bytes);
         let number = u128::from_le_bytes(padded);
         let tm = (number >> 17) & (u32::max_value() as u128);
         let ip = (((number >> 49) - tm) as u32).to_le_bytes();
@@ -157,21 +174,9 @@ impl AddrMangle {
 
 pub fn get_version_from_url(url: &str) -> String {
     let n = url.chars().count();
-    let a = url
-        .chars()
-        .rev()
-        .enumerate()
-        .filter(|(_, x)| x == &'-')
-        .next()
-        .map(|(i, _)| i);
+    let a = url.chars().rev().position(|x| x == '-');
     if let Some(a) = a {
-        let b = url
-            .chars()
-            .rev()
-            .enumerate()
-            .filter(|(_, x)| x == &'.')
-            .next()
-            .map(|(i, _)| i);
+        let b = url.chars().rev().position(|x| x == '.');
         if let Some(b) = b {
             if a > b {
                 if url
@@ -194,22 +199,23 @@ pub fn get_version_from_url(url: &str) -> String {
 }
 
 pub fn gen_version() {
+    println!("cargo:rerun-if-changed=Cargo.toml");
     use std::io::prelude::*;
     let mut file = File::create("./src/version.rs").unwrap();
-    for line in read_lines("Cargo.toml").unwrap() {
-        if let Ok(line) = line {
-            let ab: Vec<&str> = line.split("=").map(|x| x.trim()).collect();
-            if ab.len() == 2 && ab[0] == "version" {
-                file.write_all(format!("pub const VERSION: &str = {};\n", ab[1]).as_bytes())
-                    .ok();
-                break;
-            }
+    for line in read_lines("Cargo.toml").unwrap().flatten() {
+        let ab: Vec<&str> = line.split('=').map(|x| x.trim()).collect();
+        if ab.len() == 2 && ab[0] == "version" {
+            file.write_all(format!("pub const VERSION: &str = {};\n", ab[1]).as_bytes())
+                .ok();
+            break;
         }
     }
     // generate build date
     let build_date = format!("{}", chrono::Local::now().format("%Y-%m-%d %H:%M"));
-    file.write_all(format!("pub const BUILD_DATE: &str = \"{}\";", build_date).as_bytes())
-        .ok();
+    file.write_all(
+        format!("#[allow(dead_code)]\npub const BUILD_DATE: &str = \"{build_date}\";\n").as_bytes(),
+    )
+    .ok();
     file.sync_all().ok();
 }
 
@@ -229,20 +235,20 @@ pub fn is_valid_custom_id(id: &str) -> bool {
 
 pub fn get_version_number(v: &str) -> i64 {
     let mut n = 0;
-    for x in v.split(".") {
+    for x in v.split('.') {
         n = n * 1000 + x.parse::<i64>().unwrap_or(0);
     }
     n
 }
 
 pub fn get_modified_time(path: &std::path::Path) -> SystemTime {
-    std::fs::metadata(&path)
+    std::fs::metadata(path)
         .map(|m| m.modified().unwrap_or(UNIX_EPOCH))
         .unwrap_or(UNIX_EPOCH)
 }
 
 pub fn get_created_time(path: &std::path::Path) -> SystemTime {
-    std::fs::metadata(&path)
+    std::fs::metadata(path)
         .map(|m| m.created().unwrap_or(UNIX_EPOCH))
         .unwrap_or(UNIX_EPOCH)
 }
@@ -275,9 +281,41 @@ pub fn get_time() -> i64 {
         .unwrap_or(0) as _
 }
 
+#[inline]
+pub fn is_ipv4_str(id: &str) -> bool {
+    regex::Regex::new(r"^\d+\.\d+\.\d+\.\d+(:\d+)?$")
+        .unwrap()
+        .is_match(id)
+}
+
+#[inline]
+pub fn is_ipv6_str(id: &str) -> bool {
+    regex::Regex::new(r"^((([a-fA-F0-9]{1,4}:{1,2})+[a-fA-F0-9]{1,4})|(\[([a-fA-F0-9]{1,4}:{1,2})+[a-fA-F0-9]{1,4}\]:\d+))$")
+        .unwrap()
+        .is_match(id)
+}
+
+#[inline]
+pub fn is_ip_str(id: &str) -> bool {
+    is_ipv4_str(id) || is_ipv6_str(id)
+}
+
+#[inline]
+pub fn is_domain_port_str(id: &str) -> bool {
+    // modified regex for RFC1123 hostname. check https://stackoverflow.com/a/106223 for original version for hostname.
+    // according to [TLD List](https://data.iana.org/TLD/tlds-alpha-by-domain.txt) version 2023011700,
+    // there is no digits in TLD, and length is 2~63.
+    regex::Regex::new(
+        r"(?i)^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z-]{0,61}[a-z]:\d{1,5}$",
+    )
+    .unwrap()
+    .is_match(id)
+}
+
 #[cfg(test)]
-mod tests {
+mod test {
     use super::*;
+
     #[test]
     fn test_mangle() {
         let addr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(192, 168, 16, 32), 21116));
@@ -299,44 +337,57 @@ mod tests {
             "failed"
         );
     }
-}
-
-#[inline]
-pub fn is_ipv4_str(id: &str) -> bool {
-    regex::Regex::new(r"^\d+\.\d+\.\d+\.\d+(:\d+)?$")
-        .unwrap()
-        .is_match(id)
-}
-
-#[inline]
-pub fn is_ipv6_str(id: &str) -> bool {
-    regex::Regex::new(r"^((([a-fA-F0-9]{1,4}:{1,2})+[a-fA-F0-9]{1,4})|(\[([a-fA-F0-9]{1,4}:{1,2})+[a-fA-F0-9]{1,4}\]:\d+))$")
-        .unwrap()
-        .is_match(id)
-}
-
-#[inline]
-pub fn is_ip_str(id: &str) -> bool {
-    is_ipv4_str(id) || is_ipv6_str(id)
-}
-
-#[cfg(test)]
-mod test_lib {
-    use super::*;
 
     #[test]
     fn test_ipv6() {
-        assert_eq!(is_ipv6_str("1:2:3"), true);
-        assert_eq!(is_ipv6_str("[ab:2:3]:12"), true);
-        assert_eq!(is_ipv6_str("[ABEF:2a:3]:12"), true);
-        assert_eq!(is_ipv6_str("[ABEG:2a:3]:12"), false);
-        assert_eq!(is_ipv6_str("1[ab:2:3]:12"), false);
-        assert_eq!(is_ipv6_str("1.1.1.1"), false);
-        assert_eq!(is_ip_str("1.1.1.1"), true);
-        assert_eq!(is_ipv6_str("1:2:"), false);
-        assert_eq!(is_ipv6_str("1:2::0"), true);
-        assert_eq!(is_ipv6_str("[1:2::0]:1"), true);
-        assert_eq!(is_ipv6_str("[1:2::0]:"), false);
-        assert_eq!(is_ipv6_str("1:2::0]:1"), false);
+        assert!(is_ipv6_str("1:2:3"));
+        assert!(is_ipv6_str("[ab:2:3]:12"));
+        assert!(is_ipv6_str("[ABEF:2a:3]:12"));
+        assert!(!is_ipv6_str("[ABEG:2a:3]:12"));
+        assert!(!is_ipv6_str("1[ab:2:3]:12"));
+        assert!(!is_ipv6_str("1.1.1.1"));
+        assert!(is_ip_str("1.1.1.1"));
+        assert!(!is_ipv6_str("1:2:"));
+        assert!(is_ipv6_str("1:2::0"));
+        assert!(is_ipv6_str("[1:2::0]:1"));
+        assert!(!is_ipv6_str("[1:2::0]:"));
+        assert!(!is_ipv6_str("1:2::0]:1"));
+    }
+
+    #[test]
+    fn test_hostname_port() {
+        assert!(!is_domain_port_str("a:12"));
+        assert!(!is_domain_port_str("a.b.c:12"));
+        assert!(is_domain_port_str("test.com:12"));
+        assert!(is_domain_port_str("test-UPPER.com:12"));
+        assert!(is_domain_port_str("some-other.domain.com:12"));
+        assert!(!is_domain_port_str("under_score:12"));
+        assert!(!is_domain_port_str("a@bc:12"));
+        assert!(!is_domain_port_str("1.1.1.1:12"));
+        assert!(!is_domain_port_str("1.2.3:12"));
+        assert!(!is_domain_port_str("1.2.3.45:12"));
+        assert!(!is_domain_port_str("a.b.c:123456"));
+        assert!(!is_domain_port_str("---:12"));
+        assert!(!is_domain_port_str(".:12"));
+        // todo: should we also check for these edge cases?
+        // out-of-range port
+        assert!(is_domain_port_str("test.com:0"));
+        assert!(is_domain_port_str("test.com:98989"));
+    }
+
+    #[test]
+    fn test_mangle2() {
+        let addr = "[::ffff:127.0.0.1]:8080".parse().unwrap();
+        let addr_v4 = "127.0.0.1:8080".parse().unwrap();
+        assert_eq!(AddrMangle::decode(&AddrMangle::encode(addr)), addr_v4);
+        assert_eq!(
+            AddrMangle::decode(&AddrMangle::encode("[::127.0.0.1]:8080".parse().unwrap())),
+            addr_v4
+        );
+        assert_eq!(AddrMangle::decode(&AddrMangle::encode(addr_v4)), addr_v4);
+        let addr_v6 = "[ef::fe]:8080".parse().unwrap();
+        assert_eq!(AddrMangle::decode(&AddrMangle::encode(addr_v6)), addr_v6);
+        let addr_v6 = "[::1]:8080".parse().unwrap();
+        assert_eq!(AddrMangle::decode(&AddrMangle::encode(addr_v6)), addr_v6);
     }
 }

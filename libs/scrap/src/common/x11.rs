@@ -1,4 +1,4 @@
-use crate::{x11, common::TraitCapturer};
+use crate::{common::TraitCapturer, x11};
 use std::{io, ops, time::Duration};
 
 pub struct Capturer(x11::Capturer);
@@ -90,6 +90,6 @@ impl Display {
     }
 
     pub fn name(&self) -> String {
-        "".to_owned()
+        self.0.name()
     }
 }

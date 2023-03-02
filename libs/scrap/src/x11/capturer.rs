@@ -1,6 +1,6 @@
 use std::{io, ptr, slice};
 
-use libc;
+use hbb_common::libc;
 
 use super::ffi::*;
 use super::Display;

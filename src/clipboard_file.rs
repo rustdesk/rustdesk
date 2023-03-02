@@ -1,9 +1,9 @@
-use clipboard::ClipbaordFile;
+use clipboard::ClipboardFile;
 use hbb_common::message_proto::*;
 
-pub fn clip_2_msg(clip: ClipbaordFile) -> Message {
+pub fn clip_2_msg(clip: ClipboardFile) -> Message {
     match clip {
-        ClipbaordFile::MonitorReady => Message {
+        ClipboardFile::MonitorReady => Message {
             union: Some(message::Union::Cliprdr(Cliprdr {
                 union: Some(cliprdr::Union::Ready(CliprdrMonitorReady {
                     ..Default::default()
@@ -12,7 +12,7 @@ pub fn clip_2_msg(clip: ClipbaordFile) -> Message {
             })),
             ..Default::default()
         },
-        ClipbaordFile::FormatList { format_list } => {
+        ClipboardFile::FormatList { format_list } => {
             let mut formats: Vec<CliprdrFormat> = Vec::new();
             for v in format_list.iter() {
                 formats.push(CliprdrFormat {
@@ -32,7 +32,7 @@ pub fn clip_2_msg(clip: ClipbaordFile) -> Message {
                 ..Default::default()
             }
         }
-        ClipbaordFile::FormatListResponse { msg_flags } => Message {
+        ClipboardFile::FormatListResponse { msg_flags } => Message {
             union: Some(message::Union::Cliprdr(Cliprdr {
                 union: Some(cliprdr::Union::FormatListResponse(
                     CliprdrServerFormatListResponse {
@@ -44,7 +44,7 @@ pub fn clip_2_msg(clip: ClipbaordFile) -> Message {
             })),
             ..Default::default()
         },
-        ClipbaordFile::FormatDataRequest {
+        ClipboardFile::FormatDataRequest {
             requested_format_id,
         } => Message {
             union: Some(message::Union::Cliprdr(Cliprdr {
@@ -58,7 +58,7 @@ pub fn clip_2_msg(clip: ClipbaordFile) -> Message {
             })),
             ..Default::default()
         },
-        ClipbaordFile::FormatDataResponse {
+        ClipboardFile::FormatDataResponse {
             msg_flags,
             format_data,
         } => Message {
@@ -74,7 +74,7 @@ pub fn clip_2_msg(clip: ClipbaordFile) -> Message {
             })),
             ..Default::default()
         },
-        ClipbaordFile::FileContentsRequest {
+        ClipboardFile::FileContentsRequest {
             stream_id,
             list_index,
             dw_flags,
@@ -102,7 +102,7 @@ pub fn clip_2_msg(clip: ClipbaordFile) -> Message {
             })),
             ..Default::default()
         },
-        ClipbaordFile::FileContentsResponse {
+        ClipboardFile::FileContentsResponse {
             msg_flags,
             stream_id,
             requested_data,
@@ -123,28 +123,28 @@ pub fn clip_2_msg(clip: ClipbaordFile) -> Message {
     }
 }
 
-pub fn msg_2_clip(msg: Cliprdr) -> Option<ClipbaordFile> {
+pub fn msg_2_clip(msg: Cliprdr) -> Option<ClipboardFile> {
     match msg.union {
-        Some(cliprdr::Union::Ready(_)) => Some(ClipbaordFile::MonitorReady),
+        Some(cliprdr::Union::Ready(_)) => Some(ClipboardFile::MonitorReady),
         Some(cliprdr::Union::FormatList(data)) => {
             let mut format_list: Vec<(i32, String)> = Vec::new();
             for v in data.formats.iter() {
                 format_list.push((v.id, v.format.clone()));
             }
-            Some(ClipbaordFile::FormatList { format_list })
+            Some(ClipboardFile::FormatList { format_list })
         }
-        Some(cliprdr::Union::FormatListResponse(data)) => Some(ClipbaordFile::FormatListResponse {
+        Some(cliprdr::Union::FormatListResponse(data)) => Some(ClipboardFile::FormatListResponse {
             msg_flags: data.msg_flags,
         }),
-        Some(cliprdr::Union::FormatDataRequest(data)) => Some(ClipbaordFile::FormatDataRequest {
+        Some(cliprdr::Union::FormatDataRequest(data)) => Some(ClipboardFile::FormatDataRequest {
             requested_format_id: data.requested_format_id,
         }),
-        Some(cliprdr::Union::FormatDataResponse(data)) => Some(ClipbaordFile::FormatDataResponse {
+        Some(cliprdr::Union::FormatDataResponse(data)) => Some(ClipboardFile::FormatDataResponse {
             msg_flags: data.msg_flags,
             format_data: data.format_data.into(),
         }),
         Some(cliprdr::Union::FileContentsRequest(data)) => {
-            Some(ClipbaordFile::FileContentsRequest {
+            Some(ClipboardFile::FileContentsRequest {
                 stream_id: data.stream_id,
                 list_index: data.list_index,
                 dw_flags: data.dw_flags,
@@ -156,7 +156,7 @@ pub fn msg_2_clip(msg: Cliprdr) -> Option<ClipbaordFile> {
             })
         }
         Some(cliprdr::Union::FileContentsResponse(data)) => {
-            Some(ClipbaordFile::FileContentsResponse {
+            Some(ClipboardFile::FileContentsResponse {
                 msg_flags: data.msg_flags,
                 stream_id: data.stream_id,
                 requested_data: data.requested_data.into(),

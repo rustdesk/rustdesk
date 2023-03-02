@@ -2,9 +2,7 @@ use core::slice;
 use hbb_common::{
     allow_err,
     anyhow::anyhow,
-    bail,
-    config::Config,
-    log,
+    bail, libc, log,
     message_proto::{KeyEvent, MouseEvent},
     protobuf::Message,
     tokio::{self, sync::mpsc},
@@ -15,6 +13,7 @@ use shared_memory::*;
 use std::{
     mem::size_of,
     ops::{Deref, DerefMut},
+    path::PathBuf,
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -25,6 +24,7 @@ use winapi::{
 
 use crate::{
     ipc::{self, new_listener, Connection, Data, DataPortableService},
+    platform::set_path_permission,
     video_service::get_current_display,
 };
 
@@ -72,7 +72,7 @@ impl DerefMut for SharedMemory {
 
 impl SharedMemory {
     pub fn create(name: &str, size: usize) -> ResultType<Self> {
-        let flink = Self::flink(name.to_string());
+        let flink = Self::flink(name.to_string())?;
         let shmem = match ShmemConf::new()
             .size(size)
             .flink(&flink)
@@ -91,12 +91,12 @@ impl SharedMemory {
             }
         };
         log::info!("Create shared memory, size:{}, flink:{}", size, flink);
-        Self::set_all_perm(&flink);
+        set_path_permission(&PathBuf::from(flink), "F").ok();
         Ok(SharedMemory { inner: shmem })
     }
 
     pub fn open_existing(name: &str) -> ResultType<Self> {
-        let flink = Self::flink(name.to_string());
+        let flink = Self::flink(name.to_string())?;
         let shmem = match ShmemConf::new().flink(&flink).allow_raw(true).open() {
             Ok(m) => m,
             Err(e) => {
@@ -116,30 +116,17 @@ impl SharedMemory {
         }
     }
 
-    fn flink(name: String) -> String {
-        let mut shmem_flink = format!("shared_memory{}", name);
-        if cfg!(windows) {
-            let df = "C:\\ProgramData";
-            let df = if std::path::Path::new(df).exists() {
-                df.to_owned()
-            } else {
-                std::env::var("TEMP").unwrap_or("C:\\Windows\\TEMP".to_owned())
-            };
-            let df = format!("{}\\{}", df, *hbb_common::config::APP_NAME.read().unwrap());
-            std::fs::create_dir(&df).ok();
-            shmem_flink = format!("{}\\{}", df, shmem_flink);
-        } else {
-            shmem_flink = Config::ipc_path("").replace("ipc", "") + &shmem_flink;
+    fn flink(name: String) -> ResultType<String> {
+        let mut dir = crate::platform::user_accessible_folder()?;
+        dir = dir.join(hbb_common::config::APP_NAME.read().unwrap().clone());
+        if !dir.exists() {
+            std::fs::create_dir(&dir)?;
+            set_path_permission(&dir, "F").ok();
         }
-        return shmem_flink;
-    }
-
-    fn set_all_perm(_p: &str) {
-        #[cfg(not(windows))]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(_p, std::fs::Permissions::from_mode(0o0777)).ok();
-        }
+        Ok(dir
+            .join(format!("shared_memory{}", name))
+            .to_string_lossy()
+            .to_string())
     }
 }
 
@@ -203,7 +190,7 @@ mod utils {
     }
 }
 
-// functions called in seperate SYSTEM user process.
+// functions called in separate SYSTEM user process.
 pub mod server {
     use super::*;
 
@@ -407,7 +394,7 @@ pub mod server {
                                     }
                                     ConnCount(Some(n)) => {
                                         if n == 0 {
-                                            log::info!("Connnection count equals 0, exit");
+                                            log::info!("Connection count equals 0, exit");
                                             stream.send(&Data::DataPortableService(WillClose)).await.ok();
                                             break;
                                         }
@@ -455,14 +442,20 @@ pub mod client {
     use super::*;
 
     lazy_static::lazy_static! {
-        pub static ref PORTABLE_SERVICE_RUNNING: Arc<Mutex<bool>> = Default::default();
+        static ref RUNNING: Arc<Mutex<bool>> = Default::default();
         static ref SHMEM: Arc<Mutex<Option<SharedMemory>>> = Default::default();
         static ref SENDER : Mutex<mpsc::UnboundedSender<ipc::Data>> = Mutex::new(client::start_ipc_server());
+        static ref QUICK_SUPPORT: Arc<Mutex<bool>> = Default::default();
     }
 
-    pub(crate) fn start_portable_service() -> ResultType<()> {
+    pub enum StartPara {
+        Direct,
+        Logon(String, String),
+    }
+
+    pub(crate) fn start_portable_service(para: StartPara) -> ResultType<()> {
         log::info!("start portable service");
-        if PORTABLE_SERVICE_RUNNING.lock().unwrap().clone() {
+        if RUNNING.lock().unwrap().clone() {
             bail!("already running");
         }
         if SHMEM.lock().unwrap().is_none() {
@@ -491,14 +484,60 @@ pub mod client {
         unsafe {
             libc::memset(shmem.as_ptr() as _, 0, shmem.len() as _);
         }
-        if crate::platform::run_background(
-            &std::env::current_exe()?.to_string_lossy().to_string(),
-            "--portable-service",
-        )
-        .is_err()
-        {
-            *SHMEM.lock().unwrap() = None;
-            bail!("Failed to run portable service process");
+        drop(option);
+        match para {
+            StartPara::Direct => {
+                if let Err(e) = crate::platform::run_background(
+                    &std::env::current_exe()?.to_string_lossy().to_string(),
+                    "--portable-service",
+                ) {
+                    *SHMEM.lock().unwrap() = None;
+                    bail!("Failed to run portable service process:{}", e);
+                }
+            }
+            StartPara::Logon(username, password) => {
+                #[allow(unused_mut)]
+                let mut exe = std::env::current_exe()?.to_string_lossy().to_string();
+                #[cfg(feature = "flutter")]
+                {
+                    if let Some(dir) = PathBuf::from(&exe).parent() {
+                        if set_path_permission(&PathBuf::from(dir), "RX").is_err() {
+                            *SHMEM.lock().unwrap() = None;
+                            bail!("Failed to set permission of {:?}", dir);
+                        }
+                    }
+                }
+                #[cfg(not(feature = "flutter"))]
+                match hbb_common::directories_next::UserDirs::new() {
+                    Some(user_dir) => {
+                        let dir = user_dir
+                            .home_dir()
+                            .join("AppData")
+                            .join("Local")
+                            .join("rustdesk-sciter");
+                        if std::fs::create_dir_all(&dir).is_ok() {
+                            let dst = dir.join("rustdesk.exe");
+                            if std::fs::copy(&exe, &dst).is_ok() {
+                                if dst.exists() {
+                                    if set_path_permission(&dir, "RX").is_ok() {
+                                        exe = dst.to_string_lossy().to_string();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    None => {}
+                }
+                if let Err(e) = crate::platform::windows::create_process_with_logon(
+                    username.as_str(),
+                    password.as_str(),
+                    &exe,
+                    "--portable-service",
+                ) {
+                    *SHMEM.lock().unwrap() = None;
+                    bail!("Failed to run portable service process:{}", e);
+                }
+            }
         }
         let _sender = SENDER.lock().unwrap();
         Ok(())
@@ -507,6 +546,10 @@ pub mod client {
     pub extern "C" fn drop_portable_service_shared_memory() {
         log::info!("drop shared memory");
         *SHMEM.lock().unwrap() = None;
+    }
+
+    pub fn set_quick_support(v: bool) {
+        *QUICK_SUPPORT.lock().unwrap() = v;
     }
 
     pub struct CapturerPortable;
@@ -623,17 +666,7 @@ pub mod client {
         use DataPortableService::*;
         let rx = Arc::new(tokio::sync::Mutex::new(rx));
         let postfix = IPC_SUFFIX;
-        #[cfg(feature = "flutter")]
-        let quick_support = {
-            let args: Vec<_> = std::env::args().collect();
-            args.contains(&"--quick_support".to_string())
-        };
-        #[cfg(not(feature = "flutter"))]
-        let quick_support = std::env::current_exe()
-            .unwrap_or("".into())
-            .to_string_lossy()
-            .to_lowercase()
-            .ends_with("qs.exe");
+        let quick_support = QUICK_SUPPORT.lock().unwrap().clone();
 
         match new_listener(postfix).await {
             Ok(mut incoming) => loop {
@@ -668,7 +701,7 @@ pub mod client {
                                                             }
                                                             Pong => {
                                                                 nack = 0;
-                                                                *PORTABLE_SERVICE_RUNNING.lock().unwrap() = true;
+                                                                *RUNNING.lock().unwrap() = true;
                                                             },
                                                             ConnCount(None) => {
                                                                 if !quick_support {
@@ -699,7 +732,7 @@ pub mod client {
                                                 }
                                             }
                                         }
-                                        *PORTABLE_SERVICE_RUNNING.lock().unwrap() = false;
+                                        *RUNNING.lock().unwrap() = false;
                                     });
                                 }
                                 Err(err) => {
@@ -752,11 +785,11 @@ pub mod client {
         use_yuv: bool,
         portable_service_running: bool,
     ) -> ResultType<Box<dyn TraitCapturer>> {
-        if portable_service_running != PORTABLE_SERVICE_RUNNING.lock().unwrap().clone() {
+        if portable_service_running != RUNNING.lock().unwrap().clone() {
             log::info!("portable service status mismatch");
         }
         if portable_service_running {
-            log::info!("Create shared memeory capturer");
+            log::info!("Create shared memory capturer");
             return Ok(Box::new(CapturerPortable::new(current_display, use_yuv)));
         } else {
             log::debug!("Create capturer dxgi|gdi");
@@ -767,7 +800,7 @@ pub mod client {
     }
 
     pub fn get_cursor_info(pci: PCURSORINFO) -> BOOL {
-        if PORTABLE_SERVICE_RUNNING.lock().unwrap().clone() {
+        if RUNNING.lock().unwrap().clone() {
             get_cursor_info_(&mut SHMEM.lock().unwrap().as_mut().unwrap(), pci)
         } else {
             unsafe { winuser::GetCursorInfo(pci) }
@@ -775,7 +808,7 @@ pub mod client {
     }
 
     pub fn handle_mouse(evt: &MouseEvent) {
-        if PORTABLE_SERVICE_RUNNING.lock().unwrap().clone() {
+        if RUNNING.lock().unwrap().clone() {
             handle_mouse_(evt).ok();
         } else {
             crate::input_service::handle_mouse_(evt);
@@ -783,11 +816,15 @@ pub mod client {
     }
 
     pub fn handle_key(evt: &KeyEvent) {
-        if PORTABLE_SERVICE_RUNNING.lock().unwrap().clone() {
+        if RUNNING.lock().unwrap().clone() {
             handle_key_(evt).ok();
         } else {
             crate::input_service::handle_key_(evt);
         }
+    }
+
+    pub fn running() -> bool {
+        RUNNING.lock().unwrap().clone()
     }
 }
 

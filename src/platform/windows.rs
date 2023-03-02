@@ -5,12 +5,15 @@ use crate::license::*;
 use hbb_common::{
     allow_err, bail,
     config::{self, Config},
-    log, sleep, timeout, tokio,
+    log,
+    message_proto::Resolution,
+    sleep, timeout, tokio,
 };
 use std::io::prelude::*;
 use std::{
     ffi::OsString,
     fs, io, mem,
+    os::windows::process::CommandExt,
     path::PathBuf,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
@@ -24,7 +27,7 @@ use winapi::{
         minwinbase::STILL_ACTIVE,
         processthreadsapi::{
             GetCurrentProcess, GetCurrentProcessId, GetExitCodeProcess, OpenProcess,
-            OpenProcessToken,
+            OpenProcessToken, PROCESS_INFORMATION, STARTUPINFOW,
         },
         securitybaseapi::GetTokenInformation,
         shellapi::ShellExecuteW,
@@ -49,6 +52,7 @@ use winreg::RegKey;
 
 pub fn get_cursor_pos() -> Option<(i32, i32)> {
     unsafe {
+        #[allow(invalid_value)]
         let mut out = mem::MaybeUninit::uninit().assume_init();
         if GetCursorPos(&mut out) == FALSE {
             return None;
@@ -61,6 +65,7 @@ pub fn reset_input_cache() {}
 
 pub fn get_cursor() -> ResultType<Option<u64>> {
     unsafe {
+        #[allow(invalid_value)]
         let mut ci: CURSORINFO = mem::MaybeUninit::uninit().assume_init();
         ci.cbSize = std::mem::size_of::<CURSORINFO>() as _;
         if crate::portable_service::client::get_cursor_info(&mut ci) == FALSE {
@@ -79,6 +84,7 @@ struct IconInfo(ICONINFO);
 impl IconInfo {
     fn new(icon: HICON) -> ResultType<Self> {
         unsafe {
+            #[allow(invalid_value)]
             let mut ii = mem::MaybeUninit::uninit().assume_init();
             if GetIconInfo(icon, &mut ii) == FALSE {
                 Err(io::Error::last_os_error().into())
@@ -829,8 +835,8 @@ fn get_default_install_path() -> String {
 
 pub fn check_update_broker_process() -> ResultType<()> {
     // let (_, path, _, _) = get_install_info();
-    let process_exe = crate::ui::win_privacy::INJECTED_PROCESS_EXE;
-    let origin_process_exe = crate::ui::win_privacy::ORIGIN_PROCESS_EXE;
+    let process_exe = crate::win_privacy::INJECTED_PROCESS_EXE;
+    let origin_process_exe = crate::win_privacy::ORIGIN_PROCESS_EXE;
 
     let exe_file = std::env::current_exe()?;
     if exe_file.parent().is_none() {
@@ -838,6 +844,11 @@ pub fn check_update_broker_process() -> ResultType<()> {
     }
     let cur_dir = exe_file.parent().unwrap();
     let cur_exe = cur_dir.join(process_exe);
+
+    if !std::path::Path::new(&cur_exe).exists() {
+        std::fs::copy(origin_process_exe, cur_exe)?;
+        return Ok(());
+    }
 
     let ori_modified = fs::metadata(origin_process_exe)?.modified()?;
     if let Ok(metadata) = fs::metadata(&cur_exe) {
@@ -910,8 +921,8 @@ pub fn copy_exe_cmd(src_exe: &str, _exe: &str, path: &str) -> String {
         ",
         main_exe = main_exe,
         path = path,
-        ORIGIN_PROCESS_EXE = crate::ui::win_privacy::ORIGIN_PROCESS_EXE,
-        broker_exe = crate::ui::win_privacy::INJECTED_PROCESS_EXE,
+        ORIGIN_PROCESS_EXE = crate::win_privacy::ORIGIN_PROCESS_EXE,
+        broker_exe = crate::win_privacy::INJECTED_PROCESS_EXE,
     );
 }
 
@@ -929,7 +940,7 @@ pub fn update_me() -> ResultType<()> {
         {lic}
     ",
         copy_exe = copy_exe_cmd(&src_exe, &exe, &path),
-        broker_exe = crate::ui::win_privacy::INJECTED_PROCESS_EXE,
+        broker_exe = crate::win_privacy::INJECTED_PROCESS_EXE,
         app_name = crate::get_app_name(),
         lic = register_licence(),
         cur_pid = get_current_pid(),
@@ -965,7 +976,7 @@ fn get_after_install(exe: &str) -> String {
 }
 
 pub fn install_me(options: &str, path: String, silent: bool, debug: bool) -> ResultType<()> {
-    let uninstall_str = get_uninstall();
+    let uninstall_str = get_uninstall(false);
     let mut path = path.trim_end_matches('\\').to_owned();
     let (subkey, _path, start_menu, exe) = get_default_install_info();
     let mut exe = exe;
@@ -1177,30 +1188,35 @@ pub fn run_after_install() -> ResultType<()> {
 }
 
 pub fn run_before_uninstall() -> ResultType<()> {
-    run_cmds(get_before_uninstall(), true, "before_install")
+    run_cmds(get_before_uninstall(true), true, "before_install")
 }
 
-fn get_before_uninstall() -> String {
+fn get_before_uninstall(kill_self: bool) -> String {
     let app_name = crate::get_app_name();
     let ext = app_name.to_lowercase();
+    let filter = if kill_self {
+        "".to_string()
+    } else {
+        format!(" /FI \"PID ne {}\"", get_current_pid())
+    };
     format!(
         "
     chcp 65001
     sc stop {app_name}
     sc delete {app_name}
     taskkill /F /IM {broker_exe}
-    taskkill /F /IM {app_name}.exe /FI \"PID ne {cur_pid}\"
+    taskkill /F /IM {app_name}.exe{filter}
     reg delete HKEY_CLASSES_ROOT\\.{ext} /f
     netsh advfirewall firewall delete rule name=\"{app_name} Service\"
     ",
         app_name = app_name,
-        broker_exe = crate::ui::win_privacy::INJECTED_PROCESS_EXE,
+        broker_exe = crate::win_privacy::INJECTED_PROCESS_EXE,
         ext = ext,
-        cur_pid = get_current_pid(),
+        filter = filter,
     )
 }
 
-fn get_uninstall() -> String {
+fn get_uninstall(kill_self: bool) -> String {
     let (subkey, path, start_menu, _) = get_install_info();
     format!(
         "
@@ -1211,7 +1227,7 @@ fn get_uninstall() -> String {
     if exist \"%PUBLIC%\\Desktop\\{app_name}.lnk\" del /f /q \"%PUBLIC%\\Desktop\\{app_name}.lnk\"
     if exist \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{app_name} Tray.lnk\" del /f /q \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{app_name} Tray.lnk\"
     ",
-        before_uninstall=get_before_uninstall(),
+        before_uninstall=get_before_uninstall(kill_self),
         subkey=subkey,
         app_name = crate::get_app_name(),
         path = path,
@@ -1220,11 +1236,20 @@ fn get_uninstall() -> String {
 }
 
 pub fn uninstall_me() -> ResultType<()> {
-    run_cmds(get_uninstall(), true, "uninstall")
+    run_cmds(get_uninstall(true), true, "uninstall")
 }
 
 fn write_cmds(cmds: String, ext: &str, tip: &str) -> ResultType<std::path::PathBuf> {
     let mut tmp = std::env::temp_dir();
+    // When dir contains these characters, the bat file will not execute in elevated mode.
+    if vec!["&", "@", "^"]
+        .drain(..)
+        .any(|s| tmp.to_string_lossy().to_string().contains(s))
+    {
+        if let Ok(dir) = user_accessible_folder() {
+            tmp = dir;
+        }
+    }
     tmp.push(format!("{}_{}.{}", crate::get_app_name(), tip, ext));
     let mut file = std::fs::File::create(&tmp)?;
     // in case cmds mixed with \r\n and \n, make sure all ending with \r\n
@@ -1368,22 +1393,6 @@ pub fn get_license() -> Option<License> {
 pub fn bootstrap() {
     if let Some(lic) = get_license() {
         *config::PROD_RENDEZVOUS_SERVER.write().unwrap() = lic.host.clone();
-        #[cfg(feature = "hbbs")]
-        {
-            if !is_win_server() {
-                return;
-            }
-            crate::hbbs::bootstrap(&lic.key, &lic.host);
-            std::thread::spawn(move || loop {
-                let tmp = Config::get_option("stop-rendezvous-service");
-                if tmp.is_empty() {
-                    crate::hbbs::start();
-                } else {
-                    crate::hbbs::stop();
-                }
-                std::thread::sleep(std::time::Duration::from_millis(100));
-            });
-        }
     }
 }
 
@@ -1652,6 +1661,29 @@ pub fn is_elevated(process_id: Option<DWORD>) -> ResultType<bool> {
     }
 }
 
+#[inline]
+fn filter_foreground_window(process_id: DWORD) -> ResultType<bool> {
+    if let Ok(output) = std::process::Command::new("tasklist")
+        .args(vec![
+            "/SVC",
+            "/NH",
+            "/FI",
+            &format!("PID eq {}", process_id),
+        ])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+    {
+        let s = String::from_utf8_lossy(&output.stdout)
+            .to_string()
+            .to_lowercase();
+        Ok(["Taskmgr", "mmc", "regedit"]
+            .iter()
+            .any(|name| s.contains(&name.to_string().to_lowercase())))
+    } else {
+        bail!("run tasklist failed");
+    }
+}
+
 pub fn is_foreground_window_elevated() -> ResultType<bool> {
     unsafe {
         let mut process_id: DWORD = 0;
@@ -1659,7 +1691,12 @@ pub fn is_foreground_window_elevated() -> ResultType<bool> {
         if process_id == 0 {
             bail!("Failed to get processId, errno {}", GetLastError())
         }
-        is_elevated(Some(process_id))
+        let elevated = is_elevated(Some(process_id))?;
+        if elevated {
+            filter_foreground_window(process_id)
+        } else {
+            Ok(false)
+        }
     }
 }
 
@@ -1713,4 +1750,155 @@ pub fn send_message_to_hnwd(
         }
     }
     return true;
+}
+
+pub fn create_process_with_logon(user: &str, pwd: &str, exe: &str, arg: &str) -> ResultType<()> {
+    unsafe {
+        let wuser = wide_string(user);
+        let wpc = wide_string("");
+        let wpwd = wide_string(pwd);
+        let cmd = if arg.is_empty() {
+            format!("\"{}\"", exe)
+        } else {
+            format!("\"{}\" {}", exe, arg)
+        };
+        let mut wcmd = wide_string(&cmd);
+        let mut si: STARTUPINFOW = mem::zeroed();
+        si.wShowWindow = SW_HIDE as _;
+        si.lpDesktop = NULL as _;
+        si.cb = std::mem::size_of::<STARTUPINFOW>() as _;
+        si.dwFlags = STARTF_USESHOWWINDOW;
+        let mut pi: PROCESS_INFORMATION = mem::zeroed();
+        let wexe = wide_string(exe);
+        if FALSE
+            == CreateProcessWithLogonW(
+                wuser.as_ptr(),
+                wpc.as_ptr(),
+                wpwd.as_ptr(),
+                LOGON_WITH_PROFILE,
+                wexe.as_ptr(),
+                wcmd.as_mut_ptr(),
+                CREATE_UNICODE_ENVIRONMENT,
+                NULL,
+                NULL as _,
+                &mut si as *mut STARTUPINFOW,
+                &mut pi as *mut PROCESS_INFORMATION,
+            )
+        {
+            bail!("CreateProcessWithLogonW failed, errno={}", GetLastError());
+        }
+    }
+    return Ok(());
+}
+
+pub fn set_path_permission(dir: &PathBuf, permission: &str) -> ResultType<()> {
+    std::process::Command::new("icacls")
+        .arg(dir.as_os_str())
+        .arg("/grant")
+        .arg(format!("Everyone:(OI)(CI){}", permission))
+        .arg("/T")
+        .spawn()?;
+    Ok(())
+}
+
+pub fn resolutions(name: &str) -> Vec<Resolution> {
+    unsafe {
+        let mut dm: DEVMODEW = std::mem::zeroed();
+        let wname = wide_string(name);
+        let len = if wname.len() <= dm.dmDeviceName.len() {
+            wname.len()
+        } else {
+            dm.dmDeviceName.len()
+        };
+        std::ptr::copy_nonoverlapping(wname.as_ptr(), dm.dmDeviceName.as_mut_ptr(), len);
+        dm.dmSize = std::mem::size_of::<DEVMODEW>() as _;
+        let mut v = vec![];
+        let mut num = 0;
+        loop {
+            if EnumDisplaySettingsW(NULL as _, num, &mut dm) == 0 {
+                break;
+            }
+            let r = Resolution {
+                width: dm.dmPelsWidth as _,
+                height: dm.dmPelsHeight as _,
+                ..Default::default()
+            };
+            if !v.contains(&r) {
+                v.push(r);
+            }
+            num += 1;
+        }
+        v
+    }
+}
+
+pub fn current_resolution(name: &str) -> ResultType<Resolution> {
+    unsafe {
+        let mut dm: DEVMODEW = std::mem::zeroed();
+        dm.dmSize = std::mem::size_of::<DEVMODEW>() as _;
+        let wname = wide_string(name);
+        if EnumDisplaySettingsW(wname.as_ptr(), ENUM_CURRENT_SETTINGS, &mut dm) == 0 {
+            bail!(
+                "failed to get currrent resolution, errno={}",
+                GetLastError()
+            );
+        }
+        let r = Resolution {
+            width: dm.dmPelsWidth as _,
+            height: dm.dmPelsHeight as _,
+            ..Default::default()
+        };
+        Ok(r)
+    }
+}
+
+pub fn change_resolution(name: &str, width: usize, height: usize) -> ResultType<()> {
+    unsafe {
+        let mut dm: DEVMODEW = std::mem::zeroed();
+        if FALSE == EnumDisplaySettingsW(NULL as _, ENUM_CURRENT_SETTINGS, &mut dm) {
+            bail!("EnumDisplaySettingsW failed, errno={}", GetLastError());
+        }
+        let wname = wide_string(name);
+        let len = if wname.len() <= dm.dmDeviceName.len() {
+            wname.len()
+        } else {
+            dm.dmDeviceName.len()
+        };
+        std::ptr::copy_nonoverlapping(wname.as_ptr(), dm.dmDeviceName.as_mut_ptr(), len);
+        dm.dmSize = std::mem::size_of::<DEVMODEW>() as _;
+        dm.dmPelsWidth = width as _;
+        dm.dmPelsHeight = height as _;
+        dm.dmFields = DM_PELSHEIGHT | DM_PELSWIDTH;
+        let res = ChangeDisplaySettingsExW(
+            wname.as_ptr(),
+            &mut dm,
+            NULL as _,
+            CDS_UPDATEREGISTRY | CDS_GLOBAL | CDS_RESET,
+            NULL,
+        );
+        if res != DISP_CHANGE_SUCCESSFUL {
+            bail!(
+                "ChangeDisplaySettingsExW failed, res={}, errno={}",
+                res,
+                GetLastError()
+            );
+        }
+        Ok(())
+    }
+}
+
+pub fn user_accessible_folder() -> ResultType<PathBuf> {
+    let disk = std::env::var("SystemDrive").unwrap_or("C:".to_string());
+    let dir1 = PathBuf::from(format!("{}\\ProgramData", disk));
+    // NOTICE: "C:\Windows\Temp" requires permanent authorization.
+    let dir2 = PathBuf::from(format!("{}\\Windows\\Temp", disk));
+    let dir;
+    if dir1.exists() {
+        dir = dir1;
+    } else if dir2.exists() {
+        dir = dir2;
+    } else {
+        bail!("no vaild user accessible folder");
+    }
+    Ok(dir)
 }

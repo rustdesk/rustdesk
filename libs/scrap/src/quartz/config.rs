@@ -1,6 +1,6 @@
 use std::ptr;
 
-use libc::c_void;
+use hbb_common::libc::c_void;
 
 use super::ffi::*;
 

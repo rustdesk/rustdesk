@@ -3,13 +3,11 @@ import 'dart:convert';
 import 'dart:ffi' hide Size;
 import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:back_button_interceptor/back_button_interceptor.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
-import 'package:win32/win32.dart' as win32;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -18,22 +16,24 @@ import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/models/peer_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
+import 'package:flutter_hbb/utils/platform_channel.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
+import 'package:texture_rgba_renderer/texture_rgba_renderer.dart';
 import 'package:uni_links/uni_links.dart';
 import 'package:uni_links_desktop/uni_links_desktop.dart';
-import 'package:window_manager/window_manager.dart';
-import 'package:flutter_svg/flutter_svg.dart';
-import 'package:window_size/window_size.dart' as window_size;
 import 'package:url_launcher/url_launcher.dart';
+import 'package:win32/win32.dart' as win32;
+import 'package:window_manager/window_manager.dart';
+import 'package:window_size/window_size.dart' as window_size;
 
+import '../consts.dart';
 import 'common/widgets/overlay.dart';
 import 'mobile/pages/file_manager_page.dart';
 import 'mobile/pages/remote_page.dart';
 import 'models/input_model.dart';
 import 'models/model.dart';
 import 'models/platform_model.dart';
-
-import '../consts.dart';
 
 final globalKey = GlobalKey<NavigatorState>();
 final navigationBarKey = GlobalKey();
@@ -46,9 +46,19 @@ var isWebDesktop = false;
 var version = "";
 int androidVersion = 0;
 
+/// Incriment count for textureId.
+int _textureId = 0;
+int get newTextureId => _textureId++;
+final textureRenderer = TextureRgbaRenderer();
+
 /// only available for Windows target
 int windowsBuildNumber = 0;
 DesktopType? desktopType;
+
+/// Check if the app is running with single view mode.
+bool isSingleViewApp() {
+  return desktopType == DesktopType.cm;
+}
 
 /// * debug or test only, DO NOT enable in release build
 bool isTest = false;
@@ -99,27 +109,32 @@ class IconFont {
 class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
   const ColorThemeExtension({
     required this.border,
+    required this.border2,
     required this.highlight,
   });
 
   final Color? border;
+  final Color? border2;
   final Color? highlight;
 
   static const light = ColorThemeExtension(
     border: Color(0xFFCCCCCC),
+    border2: Color(0xFFBBBBBB),
     highlight: Color(0xFFE5E5E5),
   );
 
   static const dark = ColorThemeExtension(
     border: Color(0xFF555555),
+    border2: Color(0xFFE5E5E5),
     highlight: Color(0xFF3F3F3F),
   );
 
   @override
   ThemeExtension<ColorThemeExtension> copyWith(
-      {Color? border, Color? highlight}) {
+      {Color? border, Color? border2, Color? highlight}) {
     return ColorThemeExtension(
       border: border ?? this.border,
+      border2: border2 ?? this.border2,
       highlight: highlight ?? this.highlight,
     );
   }
@@ -132,6 +147,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
     }
     return ColorThemeExtension(
       border: Color.lerp(border, other.border, t),
+      border2: Color.lerp(border2, other.border2, t),
       highlight: Color.lerp(highlight, other.highlight, t),
     );
   }
@@ -148,7 +164,7 @@ class MyTheme {
   static const Color canvasColor = Color(0xFF212121);
   static const Color border = Color(0xFFCCCCCC);
   static const Color idColor = Color(0xFF00B6F0);
-  static const Color darkGray = Color(0xFFB9BABC);
+  static const Color darkGray = Color.fromARGB(255, 148, 148, 148);
   static const Color cmIdColor = Color(0xFF21790B);
   static const Color dark = Colors.black87;
   static const Color button = Color(0xFF2C8CFF);
@@ -156,8 +172,29 @@ class MyTheme {
 
   static ThemeData lightTheme = ThemeData(
     brightness: Brightness.light,
-    backgroundColor: Color(0xFFFFFFFF),
-    scaffoldBackgroundColor: Color(0xFFEEEEEE),
+    hoverColor: Color.fromARGB(255, 224, 224, 224),
+    scaffoldBackgroundColor: Color(0xFFFFFFFF),
+    dialogBackgroundColor: Color(0xFFFFFFFF),
+    dialogTheme: DialogTheme(
+      elevation: 15,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18.0),
+        side: BorderSide(
+          width: 1,
+          color: Color(0xFFEEEEEE),
+        ),
+      ),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      fillColor: Color(0xFFEEEEEE),
+      filled: true,
+      isDense: true,
+      contentPadding: EdgeInsets.all(15),
+      border: UnderlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: BorderSide.none,
+      ),
+    ),
     textTheme: const TextTheme(
         titleLarge: TextStyle(fontSize: 19, color: Colors.black87),
         titleSmall: TextStyle(fontSize: 14, color: Colors.black87),
@@ -165,8 +202,8 @@ class MyTheme {
         bodyMedium:
             TextStyle(fontSize: 14, color: Colors.black87, height: 1.25),
         labelLarge: TextStyle(fontSize: 16.0, color: MyTheme.accent80)),
+    cardColor: Color(0xFFEEEEEE),
     hintColor: Color(0xFFAAAAAA),
-    primarySwatch: Colors.blue,
     visualDensity: VisualDensity.adaptivePlatformDensity,
     tabBarTheme: const TabBarTheme(
       labelColor: Colors.black87,
@@ -176,9 +213,54 @@ class MyTheme {
     splashFactory: isDesktop ? NoSplash.splashFactory : null,
     textButtonTheme: isDesktop
         ? TextButtonThemeData(
-            style: ButtonStyle(splashFactory: NoSplash.splashFactory),
+            style: TextButton.styleFrom(
+              splashFactory: NoSplash.splashFactory,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18.0),
+              ),
+            ),
           )
         : null,
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: MyTheme.accent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8.0),
+        ),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        backgroundColor: Color(
+          0xFFEEEEEE,
+        ),
+        foregroundColor: Colors.black87,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8.0),
+        ),
+      ),
+    ),
+    checkboxTheme: const CheckboxThemeData(
+      splashRadius: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(
+          Radius.circular(5),
+        ),
+      ),
+    ),
+    listTileTheme: ListTileThemeData(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(
+          Radius.circular(5),
+        ),
+      ),
+    ),
+    colorScheme: ColorScheme.fromSwatch(
+      primarySwatch: Colors.blue,
+    ).copyWith(
+      brightness: Brightness.light,
+      background: Color(0xFFEEEEEE),
+    ),
   ).copyWith(
     extensions: <ThemeExtension<dynamic>>[
       ColorThemeExtension.light,
@@ -187,8 +269,29 @@ class MyTheme {
   );
   static ThemeData darkTheme = ThemeData(
     brightness: Brightness.dark,
-    backgroundColor: Color(0xFF252525),
-    scaffoldBackgroundColor: Color(0xFF141414),
+    hoverColor: Color.fromARGB(255, 45, 46, 53),
+    scaffoldBackgroundColor: Color(0xFF18191E),
+    dialogBackgroundColor: Color(0xFF18191E),
+    dialogTheme: DialogTheme(
+      elevation: 15,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18.0),
+        side: BorderSide(
+          width: 1,
+          color: Color(0xFF24252B),
+        ),
+      ),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      fillColor: Color(0xFF24252B),
+      filled: true,
+      isDense: true,
+      contentPadding: EdgeInsets.all(15),
+      border: UnderlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: BorderSide.none,
+      ),
+    ),
     textTheme: const TextTheme(
         titleLarge: TextStyle(fontSize: 19),
         titleSmall: TextStyle(fontSize: 14),
@@ -196,20 +299,72 @@ class MyTheme {
         bodyMedium: TextStyle(fontSize: 14, height: 1.25),
         labelLarge: TextStyle(
             fontSize: 16.0, fontWeight: FontWeight.bold, color: accent80)),
-    cardColor: Color(0xFF252525),
-    primarySwatch: Colors.blue,
+    cardColor: Color(0xFF24252B),
     visualDensity: VisualDensity.adaptivePlatformDensity,
     tabBarTheme: const TabBarTheme(
       labelColor: Colors.white70,
+    ),
+    scrollbarTheme: ScrollbarThemeData(
+      thumbColor: MaterialStateProperty.all(Colors.grey[500]),
     ),
     splashColor: Colors.transparent,
     highlightColor: Colors.transparent,
     splashFactory: isDesktop ? NoSplash.splashFactory : null,
     textButtonTheme: isDesktop
         ? TextButtonThemeData(
-            style: ButtonStyle(splashFactory: NoSplash.splashFactory),
+            style: TextButton.styleFrom(
+              splashFactory: NoSplash.splashFactory,
+              disabledForegroundColor: Colors.white70,
+              foregroundColor: Colors.white70,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18.0),
+              ),
+            ),
           )
         : null,
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: MyTheme.accent,
+        disabledForegroundColor: Colors.white70,
+        disabledBackgroundColor: Colors.white10,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8.0),
+        ),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        backgroundColor: Color(0xFF24252B),
+        side: BorderSide(color: Colors.white12, width: 0.5),
+        disabledForegroundColor: Colors.white70,
+        foregroundColor: Colors.white70,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8.0),
+        ),
+      ),
+    ),
+    checkboxTheme: const CheckboxThemeData(
+      checkColor: MaterialStatePropertyAll(dark),
+      splashRadius: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(
+          Radius.circular(5),
+        ),
+      ),
+    ),
+    listTileTheme: ListTileThemeData(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(
+          Radius.circular(5),
+        ),
+      ),
+    ),
+    colorScheme: ColorScheme.fromSwatch(
+      primarySwatch: Colors.blue,
+    ).copyWith(
+      brightness: Brightness.dark,
+      background: Color(0xFF24252B),
+    ),
   ).copyWith(
     extensions: <ThemeExtension<dynamic>>[
       ColorThemeExtension.dark,
@@ -221,16 +376,18 @@ class MyTheme {
     return themeModeFromString(bind.mainGetLocalOption(key: kCommConfKeyTheme));
   }
 
-  static void changeDarkMode(ThemeMode mode) {
+  static void changeDarkMode(ThemeMode mode) async {
     Get.changeThemeMode(mode);
     if (desktopType == DesktopType.main) {
       if (mode == ThemeMode.system) {
-        bind.mainSetLocalOption(key: kCommConfKeyTheme, value: '');
+        await bind.mainSetLocalOption(key: kCommConfKeyTheme, value: '');
       } else {
-        bind.mainSetLocalOption(
+        await bind.mainSetLocalOption(
             key: kCommConfKeyTheme, value: mode.toShortString());
       }
-      bind.mainChangeTheme(dark: mode.toShortString());
+      await bind.mainChangeTheme(dark: mode.toShortString());
+      // Synchronize the window theme of the system.
+      updateSystemWindowTheme();
     }
   }
 
@@ -327,6 +484,9 @@ closeConnection({String? id}) {
 }
 
 void window_on_top(int? id) {
+  if (!isDesktop) {
+    return;
+  }
   if (id == null) {
     // main window
     windowManager.restore();
@@ -363,20 +523,25 @@ class Dialog<T> {
   }
 }
 
+class OverlayKeyState {
+  final _overlayKey = GlobalKey<OverlayState>();
+
+  /// use global overlay by default
+  OverlayState? get state =>
+      _overlayKey.currentState ?? globalKey.currentState?.overlay;
+
+  GlobalKey<OverlayState>? get key => _overlayKey;
+}
+
 class OverlayDialogManager {
-  OverlayState? _overlayState;
   final Map<String, Dialog> _dialogs = {};
+  var _overlayKeyState = OverlayKeyState();
   int _tagCount = 0;
 
   OverlayEntry? _mobileActionsOverlayEntry;
 
-  /// By default OverlayDialogManager use global overlay
-  OverlayDialogManager() {
-    _overlayState = globalKey.currentState?.overlay;
-  }
-
-  void setOverlayState(OverlayState? overlayState) {
-    _overlayState = overlayState;
+  void setOverlayState(OverlayKeyState overlayKeyState) {
+    _overlayKeyState = overlayKeyState;
   }
 
   void dismissAll() {
@@ -400,7 +565,7 @@ class OverlayDialogManager {
       bool useAnimation = true,
       bool forceGlobal = false}) {
     final overlayState =
-        forceGlobal ? globalKey.currentState?.overlay : _overlayState;
+        forceGlobal ? globalKey.currentState?.overlay : _overlayKeyState.state;
 
     if (overlayState == null) {
       return Future.error(
@@ -424,7 +589,7 @@ class OverlayDialogManager {
       BackButtonInterceptor.removeByName(dialogTag);
     }
 
-    dialog.entry = OverlayEntry(builder: (_) {
+    dialog.entry = OverlayEntry(builder: (context) {
       bool innerClicked = false;
       return Listener(
           onPointerUp: (_) {
@@ -434,7 +599,9 @@ class OverlayDialogManager {
             innerClicked = false;
           },
           child: Container(
-              color: Colors.black12,
+              color: Theme.of(context).brightness == Brightness.light
+                  ? Colors.black12
+                  : Colors.black45,
               child: StatefulBuilder(builder: (context, setState) {
                 return Listener(
                   onPointerUp: (_) => innerClicked = true,
@@ -483,12 +650,14 @@ class OverlayDialogManager {
                   Offstage(
                       offstage: !showCancel,
                       child: Center(
-                          child: TextButton(
-                              style: flatButtonStyle,
-                              onPressed: cancel,
-                              child: Text(translate('Cancel'),
-                                  style:
-                                      const TextStyle(color: MyTheme.accent)))))
+                          child: isDesktop
+                              ? dialogButton('Cancel', onPressed: cancel)
+                              : TextButton(
+                                  style: flatButtonStyle,
+                                  onPressed: cancel,
+                                  child: Text(translate('Cancel'),
+                                      style: const TextStyle(
+                                          color: MyTheme.accent)))))
                 ])),
         onCancel: showCancel ? cancel : null,
       );
@@ -504,7 +673,8 @@ class OverlayDialogManager {
 
   void showMobileActionsOverlay({FFI? ffi}) {
     if (_mobileActionsOverlayEntry != null) return;
-    if (_overlayState == null) return;
+    final overlayState = _overlayKeyState.state;
+    if (overlayState == null) return;
 
     // compute overlay position
     final screenW = MediaQuery.of(globalKey.currentContext!).size.width;
@@ -530,7 +700,7 @@ class OverlayDialogManager {
         onHidePressed: () => hideMobileActionsOverlay(),
       );
     });
-    _overlayState!.insert(overlay);
+    overlayState.insert(overlay);
     _mobileActionsOverlayEntry = overlay;
   }
 
@@ -548,6 +718,10 @@ class OverlayDialogManager {
     } else {
       hideMobileActionsOverlay();
     }
+  }
+
+  bool existing(String tag) {
+    return _dialogs.keys.contains(tag);
   }
 }
 
@@ -604,13 +778,15 @@ class CustomAlertDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    FocusNode focusNode = FocusNode();
-    // request focus if there is no focused FocusNode in the dialog
+    // request focus
+    FocusScopeNode scopeNode = FocusScopeNode();
     Future.delayed(Duration.zero, () {
-      if (!focusNode.hasFocus) focusNode.requestFocus();
+      if (!scopeNode.hasFocus) scopeNode.requestFocus();
     });
-    return Focus(
-      focusNode: focusNode,
+    const double padding = 30;
+    bool tabTapped = false;
+    return FocusScope(
+      node: scopeNode,
       autofocus: true,
       onKey: (node, key) {
         if (key.logicalKey == LogicalKeyboardKey.escape) {
@@ -618,9 +794,16 @@ class CustomAlertDialog extends StatelessWidget {
             onCancel?.call();
           }
           return KeyEventResult.handled; // avoid TextField exception on escape
-        } else if (onSubmit != null &&
+        } else if (!tabTapped &&
+            onSubmit != null &&
             key.logicalKey == LogicalKeyboardKey.enter) {
           if (key is RawKeyDownEvent) onSubmit?.call();
+          return KeyEventResult.handled;
+        } else if (key.logicalKey == LogicalKeyboardKey.tab) {
+          if (key is RawKeyDownEvent) {
+            scopeNode.nextFocus();
+            tabTapped = true;
+          }
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
@@ -628,11 +811,20 @@ class CustomAlertDialog extends StatelessWidget {
       child: AlertDialog(
         scrollable: true,
         title: title,
-        contentPadding: EdgeInsets.symmetric(
-            horizontal: contentPadding ?? 25, vertical: 10),
-        content:
-            ConstrainedBox(constraints: contentBoxConstraints, child: content),
+        titlePadding: EdgeInsets.fromLTRB(padding, 24, padding, 0),
+        contentPadding: EdgeInsets.fromLTRB(
+          contentPadding ?? padding,
+          25,
+          contentPadding ?? padding,
+          actions is List ? 10 : padding,
+        ),
+        content: ConstrainedBox(
+          constraints: contentBoxConstraints,
+          child: content,
+        ),
         actions: actions,
+        actionsPadding: EdgeInsets.fromLTRB(padding, 0, padding, padding),
+        actionsAlignment: MainAxisAlignment.center,
       ),
     );
   }
@@ -640,7 +832,7 @@ class CustomAlertDialog extends StatelessWidget {
 
 void msgBox(String id, String type, String title, String text, String link,
     OverlayDialogManager dialogManager,
-    {bool? hasCancel}) {
+    {bool? hasCancel, ReconnectHandle? reconnect}) {
   dialogManager.dismissAll();
   List<Widget> buttons = [];
   bool hasOk = false;
@@ -664,30 +856,36 @@ void msgBox(String id, String type, String title, String text, String link,
 
   if (type != "connecting" && type != "success" && !type.contains("nook")) {
     hasOk = true;
-    buttons.insert(0, msgBoxButton(translate('OK'), submit));
+    buttons.insert(0, dialogButton('OK', onPressed: submit));
   }
   hasCancel ??= !type.contains("error") &&
       !type.contains("nocancel") &&
       type != "restarting";
   if (hasCancel) {
-    buttons.insert(0, msgBoxButton(translate('Cancel'), cancel));
+    buttons.insert(
+        0, dialogButton('Cancel', onPressed: cancel, isOutline: true));
   }
-  // TODO: test this button
   if (type.contains("hasclose")) {
     buttons.insert(
         0,
-        msgBoxButton(translate('Close'), () {
+        dialogButton('Close', onPressed: () {
           dialogManager.dismissAll();
         }));
   }
+  if (reconnect != null && title == "Connection Error") {
+    buttons.insert(
+        0,
+        dialogButton('Reconnect', isOutline: true, onPressed: () {
+          reconnect(dialogManager, id, false);
+        }));
+  }
   if (link.isNotEmpty) {
-    buttons.insert(0, msgBoxButton(translate('JumpLink'), jumplink));
+    buttons.insert(0, dialogButton('JumpLink', onPressed: jumplink));
   }
   dialogManager.show(
     (setState, close) => CustomAlertDialog(
-      title: _msgBoxTitle(title),
-      content:
-          SelectableText(translate(text), style: const TextStyle(fontSize: 15)),
+      title: null,
+      content: SelectionArea(child: msgboxContent(type, title, text)),
       actions: buttons,
       onSubmit: hasOk ? submit : null,
       onCancel: hasCancel == true ? cancel : null,
@@ -696,30 +894,74 @@ void msgBox(String id, String type, String title, String text, String link,
   );
 }
 
-Widget msgBoxButton(String text, void Function() onPressed) {
-  return ButtonTheme(
-      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      //limits the touch area to the button area
-      minWidth: 0,
-      //wraps child's width
-      height: 0,
-      child: TextButton(
-          style: flatButtonStyle,
-          onPressed: onPressed,
-          child:
-              Text(translate(text), style: TextStyle(color: MyTheme.accent))));
+Color? _msgboxColor(String type) {
+  if (type == "input-password" || type == "custom-os-password") {
+    return Color(0xFFAD448E);
+  }
+  if (type.contains("success")) {
+    return Color(0xFF32bea6);
+  }
+  if (type.contains("error") || type == "re-input-password") {
+    return Color(0xFFE04F5F);
+  }
+  return Color(0xFF2C8CFF);
 }
 
-Widget _msgBoxTitle(String title) =>
-    Text(translate(title), style: TextStyle(fontSize: 21));
+Widget msgboxIcon(String type) {
+  IconData? iconData;
+  if (type.contains("error") || type == "re-input-password") {
+    iconData = Icons.cancel;
+  }
+  if (type.contains("success")) {
+    iconData = Icons.check_circle;
+  }
+  if (type == "wait-uac" || type == "wait-remote-accept-nook") {
+    iconData = Icons.hourglass_top;
+  }
+  if (type == 'on-uac' || type == 'on-foreground-elevated') {
+    iconData = Icons.admin_panel_settings;
+  }
+  if (type == "info") {
+    iconData = Icons.info;
+  }
+  if (iconData != null) {
+    return Icon(iconData, size: 50, color: _msgboxColor(type))
+        .marginOnly(right: 16);
+  }
+
+  return Offstage();
+}
+
+// title should be null
+Widget msgboxContent(String type, String title, String text) {
+  return Row(
+    children: [
+      msgboxIcon(type),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              translate(title),
+              style: TextStyle(fontSize: 21),
+            ).marginOnly(bottom: 10),
+            Text(translate(text), style: const TextStyle(fontSize: 15)),
+          ],
+        ),
+      ),
+    ],
+  ).marginOnly(bottom: 12);
+}
 
 void msgBoxCommon(OverlayDialogManager dialogManager, String title,
     Widget content, List<Widget> buttons,
     {bool hasCancel = true}) {
   dialogManager.dismissAll();
   dialogManager.show((setState, close) => CustomAlertDialog(
-        title: _msgBoxTitle(title),
+        title: Text(
+          translate(title),
+          style: TextStyle(fontSize: 21),
+        ),
         content: content,
         actions: buttons,
         onCancel: hasCancel ? close : null,
@@ -797,21 +1039,14 @@ class AccessibilityListener extends StatelessWidget {
   }
 }
 
-class PermissionManager {
+class AndroidPermissionManager {
   static Completer<bool>? _completer;
   static Timer? _timer;
   static var _current = "";
 
-  static final permissions = [
-    "audio",
-    "file",
-    "ignore_battery_optimizations",
-    "application_details_settings"
-  ];
-
   static bool isWaitingFile() {
     if (_completer != null) {
-      return !_completer!.isCompleted && _current == "file";
+      return !_completer!.isCompleted && _current == kManageExternalStorage;
     }
     return false;
   }
@@ -820,31 +1055,33 @@ class PermissionManager {
     if (isDesktop) {
       return Future.value(true);
     }
-    if (!permissions.contains(type)) {
-      return Future.error("Wrong permission!$type");
-    }
     return gFFI.invokeMethod("check_permission", type);
   }
 
+  // startActivity goto Android Setting's page to request permission manually by user
+  static void startAction(String action) {
+    gFFI.invokeMethod(AndroidChannel.kStartAction, action);
+  }
+
+  /// We use XXPermissions to request permissions,
+  /// for supported types, see https://github.com/getActivity/XXPermissions/blob/e46caea32a64ad7819df62d448fb1c825481cd28/library/src/main/java/com/hjq/permissions/Permission.java
   static Future<bool> request(String type) {
     if (isDesktop) {
       return Future.value(true);
     }
-    if (!permissions.contains(type)) {
-      return Future.error("Wrong permission!$type");
-    }
 
     gFFI.invokeMethod("request_permission", type);
-    if (type == "ignore_battery_optimizations") {
-      return Future.value(false);
+
+    // clear last task
+    if (_completer?.isCompleted == false) {
+      _completer?.complete(false);
     }
+    _timer?.cancel();
+
     _current = type;
     _completer = Completer<bool>();
-    gFFI.invokeMethod("request_permission", type);
 
-    // timeout
-    _timer?.cancel();
-    _timer = Timer(Duration(seconds: 60), () {
+    _timer = Timer(Duration(seconds: 120), () {
       if (_completer == null) return;
       if (!_completer!.isCompleted) {
         _completer!.complete(false);
@@ -977,11 +1214,13 @@ Future<bool> matchPeer(String searchText, Peer peer) async {
 
 /// Get the image for the current [platform].
 Widget getPlatformImage(String platform, {double size = 50}) {
-  platform = platform.toLowerCase();
-  if (platform == 'mac os') {
+  if (platform == kPeerPlatformMacOS) {
     platform = 'mac';
-  } else if (platform != 'linux' && platform != 'android') {
+  } else if (platform != kPeerPlatformLinux &&
+      platform != kPeerPlatformAndroid) {
     platform = 'win';
+  } else {
+    platform = platform.toLowerCase();
   }
   return SvgPicture.asset('assets/$platform.svg', height: size, width: size);
 }
@@ -1204,10 +1443,12 @@ Future<bool> restoreWindowPosition(WindowType type, {int? windowId}) async {
 /// [Availability]
 /// initUniLinks should only be used on macos/windows.
 /// we use dbus for linux currently.
-Future<void> initUniLinks() async {
-  if (!Platform.isWindows && !Platform.isMacOS) {
-    return;
+Future<bool> initUniLinks() async {
+  if (Platform.isLinux) {
+    return false;
   }
+  // Register uni links for Windows. The required info of url scheme is already
+  // declared in `Info.plist` for macOS.
   if (Platform.isWindows) {
     registerProtocol('rustdesk');
   }
@@ -1215,22 +1456,33 @@ Future<void> initUniLinks() async {
   try {
     final initialLink = await getInitialLink();
     if (initialLink == null) {
-      return;
+      return false;
     }
-    parseRustdeskUri(initialLink);
+    return parseRustdeskUri(initialLink);
   } catch (err) {
     debugPrintStack(label: "$err");
+    return false;
   }
 }
 
-StreamSubscription? listenUniLinks() {
-  if (!(Platform.isWindows || Platform.isMacOS)) {
+/// Listen for uni links.
+///
+/// * handleByFlutter: Should uni links be handled by Flutter.
+///
+/// Returns a [StreamSubscription] which can listen the uni links.
+StreamSubscription? listenUniLinks({handleByFlutter = true}) {
+  if (Platform.isLinux) {
     return null;
   }
 
   final sub = uriLinkStream.listen((Uri? uri) {
+    debugPrint("A uri was received: $uri.");
     if (uri != null) {
-      callUniLinksUriHandler(uri);
+      if (handleByFlutter) {
+        callUniLinksUriHandler(uri);
+      } else {
+        bind.sendUrlScheme(url: uri.toString());
+      }
     } else {
       print("uni listen error: uri is empty.");
     }
@@ -1240,25 +1492,38 @@ StreamSubscription? listenUniLinks() {
   return sub;
 }
 
-/// Returns true if we successfully handle the startup arguments.
+/// Handle command line arguments
+///
+/// * Returns true if we successfully handle the startup arguments.
 bool checkArguments() {
+  if (kBootArgs.isNotEmpty) {
+    final ret = parseRustdeskUri(kBootArgs.first);
+    if (ret) {
+      return true;
+    }
+  }
+  // bootArgs:[--connect, 362587269, --switch_uuid, e3d531cc-5dce-41e0-bd06-5d4a2b1eec05]
   // check connect args
-  final connectIndex = bootArgs.indexOf("--connect");
+  var connectIndex = kBootArgs.indexOf("--connect");
   if (connectIndex == -1) {
     return false;
   }
-  String? arg =
-      bootArgs.length < connectIndex + 1 ? null : bootArgs[connectIndex + 1];
-  if (arg != null) {
-    if (arg.startsWith(kUniLinksPrefix)) {
-      return parseRustdeskUri(arg);
+  String? id =
+      kBootArgs.length < connectIndex + 1 ? null : kBootArgs[connectIndex + 1];
+  final switchUuidIndex = kBootArgs.indexOf("--switch_uuid");
+  String? switchUuid = kBootArgs.length < switchUuidIndex + 1
+      ? null
+      : kBootArgs[switchUuidIndex + 1];
+  if (id != null) {
+    if (id.startsWith(kUniLinksPrefix)) {
+      return parseRustdeskUri(id);
     } else {
       // remove "--connect xxx" in the `bootArgs` array
-      bootArgs.removeAt(connectIndex);
-      bootArgs.removeAt(connectIndex);
+      kBootArgs.removeAt(connectIndex);
+      kBootArgs.removeAt(connectIndex);
       // fallback to peer id
       Future.delayed(Duration.zero, () {
-        rustDeskWinManager.newRemoteDesktop(arg);
+        rustDeskWinManager.newRemoteDesktop(id, switch_uuid: switchUuid);
       });
       return true;
     }
@@ -1274,7 +1539,7 @@ bool checkArguments() {
 bool parseRustdeskUri(String uriPath) {
   final uri = Uri.tryParse(uriPath);
   if (uri == null) {
-    print("uri is not valid: $uriPath");
+    debugPrint("uri is not valid: $uriPath");
     return false;
   }
   return callUniLinksUriHandler(uri);
@@ -1288,8 +1553,10 @@ bool callUniLinksUriHandler(Uri uri) {
   // new connection
   if (uri.authority == "connection" && uri.path.startsWith("/new/")) {
     final peerId = uri.path.substring("/new/".length);
+    var param = uri.queryParameters;
+    String? switch_uuid = param["switch_uuid"];
     Future.delayed(Duration.zero, () {
-      rustDeskWinManager.newRemoteDesktop(peerId);
+      rustDeskWinManager.newRemoteDesktop(peerId, switch_uuid: switch_uuid);
     });
     return true;
   }
@@ -1299,13 +1566,14 @@ bool callUniLinksUriHandler(Uri uri) {
 connectMainDesktop(String id,
     {required bool isFileTransfer,
     required bool isTcpTunneling,
-    required bool isRDP}) async {
+    required bool isRDP,
+    bool? forceRelay}) async {
   if (isFileTransfer) {
-    await rustDeskWinManager.newFileTransfer(id);
+    await rustDeskWinManager.newFileTransfer(id, forceRelay: forceRelay);
   } else if (isTcpTunneling || isRDP) {
-    await rustDeskWinManager.newPortForward(id, isRDP);
+    await rustDeskWinManager.newPortForward(id, isRDP, forceRelay: forceRelay);
   } else {
-    await rustDeskWinManager.newRemoteDesktop(id);
+    await rustDeskWinManager.newRemoteDesktop(id, forceRelay: forceRelay);
   }
 }
 
@@ -1319,29 +1587,32 @@ connect(BuildContext context, String id,
     bool isRDP = false}) async {
   if (id == '') return;
   id = id.replaceAll(' ', '');
+  final oldId = id;
+  id = await bind.mainHandleRelayId(id: id);
+  final forceRelay = id != oldId;
   assert(!(isFileTransfer && isTcpTunneling && isRDP),
       "more than one connect type");
 
   if (isDesktop) {
     if (desktopType == DesktopType.main) {
-      await connectMainDesktop(
-        id,
-        isFileTransfer: isFileTransfer,
-        isTcpTunneling: isTcpTunneling,
-        isRDP: isRDP,
-      );
+      await connectMainDesktop(id,
+          isFileTransfer: isFileTransfer,
+          isTcpTunneling: isTcpTunneling,
+          isRDP: isRDP,
+          forceRelay: forceRelay);
     } else {
       await rustDeskWinManager.call(WindowType.Main, kWindowConnect, {
         'id': id,
         'isFileTransfer': isFileTransfer,
         'isTcpTunneling': isTcpTunneling,
         'isRDP': isRDP,
+        "forceRelay": forceRelay,
       });
     }
   } else {
     if (isFileTransfer) {
-      if (!await PermissionManager.check("file")) {
-        if (!await PermissionManager.request("file")) {
+      if (!await AndroidPermissionManager.check(kManageExternalStorage)) {
+        if (!await AndroidPermissionManager.request(kManageExternalStorage)) {
           return;
         }
       }
@@ -1431,8 +1702,12 @@ Future<void> onActiveWindowChanged() async {
     } catch (err) {
       debugPrintStack(label: "$err");
     } finally {
+      debugPrint("Start closing RustDesk...");
       await windowManager.setPreventClose(false);
       await windowManager.close();
+      if (Platform.isMacOS) {
+        RdPlatformChannel.instance.terminate();
+      }
     }
   }
 }
@@ -1559,4 +1834,152 @@ class ServerConfig {
         relayServer = options['relay-server'] ?? "",
         apiServer = options['api-server'] ?? "",
         key = options['key'] ?? "";
+}
+
+Widget dialogButton(String text,
+    {required VoidCallback? onPressed,
+    bool isOutline = false,
+    Widget? icon,
+    TextStyle? style,
+    ButtonStyle? buttonStyle}) {
+  if (isDesktop) {
+    if (isOutline) {
+      return icon == null
+          ? OutlinedButton(
+              onPressed: onPressed,
+              child: Text(translate(text), style: style),
+            )
+          : OutlinedButton.icon(
+              icon: icon,
+              onPressed: onPressed,
+              label: Text(translate(text), style: style),
+            );
+    } else {
+      return icon == null
+          ? ElevatedButton(
+              style: ElevatedButton.styleFrom(elevation: 0).merge(buttonStyle),
+              onPressed: onPressed,
+              child: Text(translate(text), style: style),
+            )
+          : ElevatedButton.icon(
+              icon: icon,
+              style: ElevatedButton.styleFrom(elevation: 0).merge(buttonStyle),
+              onPressed: onPressed,
+              label: Text(translate(text), style: style),
+            );
+    }
+  } else {
+    return TextButton(
+      onPressed: onPressed,
+      child: Text(
+        translate(text),
+        style: style,
+      ),
+    );
+  }
+}
+
+int version_cmp(String v1, String v2) {
+  return bind.versionToNumber(v: v1) - bind.versionToNumber(v: v2);
+}
+
+String getWindowName({WindowType? overrideType}) {
+  switch (overrideType ?? kWindowType) {
+    case WindowType.Main:
+      return "RustDesk";
+    case WindowType.FileTransfer:
+      return "File Transfer - RustDesk";
+    case WindowType.PortForward:
+      return "Port Forward - RustDesk";
+    case WindowType.RemoteDesktop:
+      return "Remote Desktop - RustDesk";
+    default:
+      break;
+  }
+  return "RustDesk";
+}
+
+String getWindowNameWithId(String id, {WindowType? overrideType}) {
+  return "${DesktopTab.labelGetterAlias(id).value} - ${getWindowName(overrideType: overrideType)}";
+}
+
+Future<void> updateSystemWindowTheme() async {
+  // Set system window theme for macOS.
+  final userPreference = MyTheme.getThemeModePreference();
+  if (userPreference != ThemeMode.system) {
+    if (Platform.isMacOS) {
+      await RdPlatformChannel.instance.changeSystemWindowTheme(
+          userPreference == ThemeMode.light
+              ? SystemWindowTheme.light
+              : SystemWindowTheme.dark);
+    }
+  }
+}
+
+/// macOS only
+///
+/// Note: not found a general solution for rust based AVFoundation bingding.
+/// [AVFoundation] crate has compile error.
+const kMacOSPermChannel = MethodChannel("org.rustdesk.rustdesk/macos");
+
+enum PermissionAuthorizeType {
+  undetermined,
+  authorized,
+  denied, // and restricted
+}
+
+Future<PermissionAuthorizeType> osxCanRecordAudio() async {
+  int res = await kMacOSPermChannel.invokeMethod("canRecordAudio");
+  print(res);
+  if (res > 0) {
+    return PermissionAuthorizeType.authorized;
+  } else if (res == 0) {
+    return PermissionAuthorizeType.undetermined;
+  } else {
+    return PermissionAuthorizeType.denied;
+  }
+}
+
+Future<bool> osxRequestAudio() async {
+  return await kMacOSPermChannel.invokeMethod("requestRecordAudio");
+}
+
+class DraggableNeverScrollableScrollPhysics extends ScrollPhysics {
+  /// Creates scroll physics that does not let the user scroll.
+  const DraggableNeverScrollableScrollPhysics({super.parent});
+
+  @override
+  DraggableNeverScrollableScrollPhysics applyTo(ScrollPhysics? ancestor) {
+    return DraggableNeverScrollableScrollPhysics(parent: buildParent(ancestor));
+  }
+
+  @override
+  bool shouldAcceptUserOffset(ScrollMetrics position) {
+    // TODO: find a better solution to check if the offset change is caused by the scrollbar.
+    // Workaround: when dragging with the scrollbar, it always triggers an [IdleScrollActivity].
+    if (position is ScrollPositionWithSingleContext) {
+      // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
+      return position.activity is IdleScrollActivity;
+    }
+    return false;
+  }
+
+  @override
+  bool get allowImplicitScrolling => false;
+}
+
+Widget futureBuilder(
+    {required Future? future, required Widget Function(dynamic data) hasData}) {
+  return FutureBuilder(
+      future: future,
+      builder: (BuildContext context, AsyncSnapshot snapshot) {
+        if (snapshot.hasData) {
+          return hasData(snapshot.data!);
+        } else {
+          if (snapshot.hasError) {
+            debugPrint(snapshot.error.toString());
+          }
+          return Container();
+        }
+      });
 }

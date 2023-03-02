@@ -62,7 +62,7 @@ class UserModel {
     await gFFI.groupModel.reset();
     userName.value = '';
     groupName.value = '';
-    statePeerTab.check();
+    gFFI.peerTabModel.check_dynamic_tabs();
   }
 
   Future<void> _parseAndUpdateUser(UserPayload user) async {
@@ -80,13 +80,15 @@ class UserModel {
     final tag = gFFI.dialogManager.showLoading(translate('Waiting'));
     try {
       final url = await bind.mainGetApiServer();
+      final authHeaders = getHttpHeaders();
+      authHeaders['Content-Type'] = "application/json";
       await http
           .post(Uri.parse('$url/api/logout'),
-              body: {
+              body: jsonEncode({
                 'id': await bind.mainGetMyId(),
                 'uuid': await bind.mainGetUuid(),
-              },
-              headers: getHttpHeaders())
+              }),
+              headers: authHeaders)
           .timeout(Duration(seconds: 2));
     } catch (e) {
       print("request /api/logout failed: err=$e");

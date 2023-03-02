@@ -30,10 +30,14 @@ use hbb_common::{
 // #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 use hbb_common::{config::RENDEZVOUS_PORT, futures::future::join_all};
 
+use crate::ui_interface::{get_option, set_option};
+
 pub type NotifyMessageBox = fn(String, String, String, String) -> dyn Future<Output = ()>;
 
 pub const CLIPBOARD_NAME: &'static str = "clipboard";
 pub const CLIPBOARD_INTERVAL: u64 = 333;
+
+pub const SYNC_PEER_INFO_DISPLAYS: i32 = 1;
 
 // the executable name of the portable version
 pub const PORTABLE_APPNAME_RUNTIME_ENV_KEY: &str = "RUSTDESK_APPNAME";
@@ -48,11 +52,16 @@ lazy_static::lazy_static! {
     pub static ref DEVICE_NAME: Arc<Mutex<String>> = Default::default();
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+lazy_static::lazy_static! {
+    static ref ARBOARD_MTX: Arc<Mutex<()>> = Arc::new(Mutex::new(()));
+}
+
 pub fn global_init() -> bool {
     #[cfg(target_os = "linux")]
     {
-        if !scrap::is_x11() {
-            crate::server::wayland::set_wayland_scrap_map_err();
+        if !*IS_X11 {
+            crate::server::wayland::init();
         }
     }
     true
@@ -92,7 +101,11 @@ pub fn check_clipboard(
 ) -> Option<Message> {
     let side = if old.is_none() { "host" } else { "client" };
     let old = if let Some(old) = old { old } else { &CONTENT };
-    if let Ok(content) = ctx.get_text() {
+    let content = {
+        let _lock = ARBOARD_MTX.lock().unwrap();
+        ctx.get_text()
+    };
+    if let Ok(content) = content {
         if content.len() < 2_000_000 && !content.is_empty() {
             let changed = content != *old.lock().unwrap();
             if changed {
@@ -102,6 +115,54 @@ pub fn check_clipboard(
             }
         }
     }
+    None
+}
+
+/// Set sound input device.
+pub fn set_sound_input(device: String) {
+    let prior_device = get_option("audio-input".to_owned());
+    if prior_device != device {
+        log::info!("switch to audio input device {}", device);
+        std::thread::spawn(move || {
+            set_option("audio-input".to_owned(), device);
+        });
+    } else {
+        log::info!("audio input is already set to {}", device);
+    }
+}
+
+/// Get system's default sound input device name.
+#[inline]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn get_default_sound_input() -> Option<String> {
+    #[cfg(not(target_os = "linux"))]
+    {
+        use cpal::traits::{DeviceTrait, HostTrait};
+        let host = cpal::default_host();
+        let dev = host.default_input_device();
+        return if let Some(dev) = dev {
+            match dev.name() {
+                Ok(name) => Some(name),
+                Err(_) => None,
+            }
+        } else {
+            None
+        };
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let input = crate::platform::linux::get_default_pa_source();
+        return if let Some(input) = input {
+            Some(input.1)
+        } else {
+            None
+        };
+    }
+}
+
+#[inline]
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub fn get_default_sound_input() -> Option<String> {
     None
 }
 
@@ -122,6 +183,7 @@ pub fn update_clipboard(clipboard: Clipboard, old: Option<&Arc<Mutex<String>>>) 
                 let side = if old.is_none() { "host" } else { "client" };
                 let old = if let Some(old) = old { old } else { &CONTENT };
                 *old.lock().unwrap() = content.clone();
+                let _lock = ARBOARD_MTX.lock().unwrap();
                 allow_err!(ctx.set_text(content));
                 log::debug!("{} updated on {}", CLIPBOARD_NAME, side);
             }
@@ -451,10 +513,19 @@ pub fn run_me<T: AsRef<std::ffi::OsStr>>(args: Vec<T>) -> std::io::Result<std::p
     }
 }
 
+#[inline]
 pub fn username() -> String {
     // fix bug of whoami
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     return whoami::username().trim_end_matches('\0').to_owned();
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    return DEVICE_NAME.lock().unwrap().clone();
+}
+
+#[inline]
+pub fn hostname() -> String {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return whoami::hostname();
     #[cfg(any(target_os = "android", target_os = "ios"))]
     return DEVICE_NAME.lock().unwrap().clone();
 }
@@ -529,11 +600,6 @@ async fn check_software_update_() -> hbb_common::ResultType<()> {
     Ok(())
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
-pub fn get_icon() -> String {
-    hbb_common::config::ICON.to_owned()
-}
-
 pub fn get_app_name() -> String {
     hbb_common::config::APP_NAME.read().unwrap().clone()
 }
@@ -581,9 +647,9 @@ pub fn get_api_server(api: String, custom: String) -> String {
     if !s0.is_empty() {
         let s = crate::increase_port(&s0, -2);
         if s == s0 {
-            format!("http://{}:{}", s, config::RENDEZVOUS_PORT - 2);
+            return format!("http://{}:{}", s, config::RENDEZVOUS_PORT - 2);
         } else {
-            format!("http://{}", s);
+            return format!("http://{}", s);
         }
     }
     "https://admin.rustdesk.com".to_owned()
@@ -658,15 +724,31 @@ pub fn make_privacy_mode_msg(state: back_notification::PrivacyModeState) -> Mess
     msg_out
 }
 
+pub fn is_keyboard_mode_supported(keyboard_mode: &KeyboardMode, version_number: i64) -> bool {
+    match keyboard_mode {
+        KeyboardMode::Legacy => true,
+        KeyboardMode::Map => version_number >= hbb_common::get_version_number("1.2.0"),
+        KeyboardMode::Translate => version_number >= hbb_common::get_version_number("1.2.0"),
+        KeyboardMode::Auto => version_number >= hbb_common::get_version_number("1.2.0"),
+    }
+}
+
+pub fn get_supported_keyboard_modes(version: i64) -> Vec<KeyboardMode> {
+    KeyboardMode::iter()
+        .filter(|&mode| is_keyboard_mode_supported(mode, version))
+        .map(|&mode| mode)
+        .collect::<Vec<_>>()
+}
+
 #[cfg(not(target_os = "linux"))]
 lazy_static::lazy_static! {
-    pub static ref IS_X11: Mutex<bool> = Mutex::new(false);
+    pub static ref IS_X11: bool = false;
 
 }
 
 #[cfg(target_os = "linux")]
 lazy_static::lazy_static! {
-    pub static ref IS_X11: Mutex<bool> = Mutex::new("x11" == hbb_common::platform::linux::get_display_server());
+    pub static ref IS_X11: bool = "x11" == hbb_common::platform::linux::get_display_server();
 }
 
 pub fn make_fd_to_json(id: i32, path: String, entries: &Vec<FileEntry>) -> String {
@@ -688,7 +770,13 @@ pub fn make_fd_to_json(id: i32, path: String, entries: &Vec<FileEntry>) -> Strin
     serde_json::to_string(&fd_json).unwrap_or("".into())
 }
 
-#[cfg(test)]
-mod test_common {
-    use super::*;
+/// The function to handle the url scheme sent by the system.
+///
+/// 1. Try to send the url scheme from ipc.
+/// 2. If failed to send the url scheme, we open a new main window to handle this url scheme.
+pub fn handle_url_scheme(url: String) {
+    if let Err(err) = crate::ipc::send_url_scheme(url.clone()) {
+        log::debug!("Send the url to the existing flutter process failed, {}. Let's open a new program to handle this.", err);
+        let _ = crate::run_me(vec![url]);
+    }
 }

@@ -7,14 +7,19 @@ on:
   workflow_dispatch:
 
 env:
-  LLVM_VERSION: "10.0"
-  # Note: currently 3.0.5 does not support arm64 officially, we use latest stable version first.
-  FLUTTER_VERSION: "3.0.5"
+  LLVM_VERSION: "15.0.6"
+  FLUTTER_VERSION: "3.7.0"
   TAG_NAME: "nightly"
   # vcpkg version: 2022.05.10
   # for multiarch gcc compatibility
   VCPKG_COMMIT_ID: "14e7bb4ae24616ec54ff6b2f6ef4e8659434ea44"
   VERSION: "1.2.0"
+  #signing keys env variable checks
+  ANDROID_SIGNING_KEY: '${{ secrets.ANDROID_SIGNING_KEY }}'
+  MACOS_P12_BASE64: '${{ secrets.MACOS_P12_BASE64 }}'
+  # To make a custom build with your own servers set the below secret values
+  RS_PUB_KEY: '${{ secrets.RS_PUB_KEY }}'
+  RENDEZVOUS_SERVER: '${{ secrets.RENDEZVOUS_SERVER }}'
 
 jobs:
   build-for-windows:
@@ -47,17 +52,16 @@ jobs:
         run: |
           flutter doctor -v
           flutter precache --windows
-          Invoke-WebRequest -Uri https://github.com/Kingtous/engine/releases/download/v3.0.5-rustdesk.2/windows-x64-flutter-release.zip -OutFile windows-x64-flutter-release.zip
+          Invoke-WebRequest -Uri https://github.com/Kingtous/engine/releases/download/v3.7.0-rustdesk/windows-x64-release-flutter.zip -OutFile windows-x64-flutter-release.zip
           Expand-Archive windows-x64-flutter-release.zip -DestinationPath engine
-          mv -Force engine/*  C:/hostedtoolcache/windows/flutter/stable-3.0.5-x64/bin/cache/artifacts/engine/windows-x64-release/
+          mv -Force engine/*  C:/hostedtoolcache/windows/flutter/stable-${{ env.FLUTTER_VERSION }}-x64/bin/cache/artifacts/engine/windows-x64-release/
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: "1.62"
+          toolchain: stable
           target: ${{ matrix.job.target }}
           override: true
-          components: rustfmt
           profile: minimal # minimal component installation (ie, no documentation)
 
       - uses: Swatinem/rust-cache@v2
@@ -66,12 +70,7 @@ jobs:
 
       - name: Install flutter rust bridge deps
         run: |
-          dart pub global activate ffigen --version 5.0.1
-          $exists = Test-Path ~/.cargo/bin/flutter_rust_bridge_codegen.exe
-          Push-Location ..
-          git clone https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge --depth=1
-          Push-Location flutter_rust_bridge/frb_codegen ; cargo install --path . ; Pop-Location
-          Pop-Location
+          cargo install flutter_rust_bridge_codegen
           Push-Location flutter ; flutter pub get ; Pop-Location
           ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart
 
@@ -150,6 +149,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Import the codesign cert
+        if: env.MACOS_P12_BASE64 != null
         uses: apple-actions/import-codesign-certs@v1
         with: 
           p12-file-base64: ${{ secrets.MACOS_P12_BASE64 }}
@@ -157,11 +157,13 @@ jobs:
           keychain: rustdesk
       
       - name: Check sign and import sign key
+        if: env.MACOS_P12_BASE64 != null
         run: |
           security default-keychain -s rustdesk.keychain
           security find-identity -v
 
       - name: Import notarize key
+        if: env.MACOS_P12_BASE64 != null
         uses: timheuer/base64-to-file@v1.2
         with:
           # https://gregoryszorc.com/docs/apple-codesign/stable/apple_codesign_rcodesign.html#notarizing-and-stapling
@@ -170,6 +172,7 @@ jobs:
           encodedString: ${{ secrets.MACOS_NOTARIZE_JSON }}
           
       - name: Install rcodesign tool
+        if: env.MACOS_P12_BASE64 != null
         shell: bash
         run: | 
           pushd /tmp
@@ -180,7 +183,7 @@ jobs:
 
       - name: Install build runtime
         run: |
-          brew install llvm create-dmg nasm yasm cmake gcc wget ninja
+          brew install llvm create-dmg nasm yasm cmake gcc wget ninja pkg-config
 
       - name: Install flutter
         uses: subosito/flutter-action@v2
@@ -203,14 +206,7 @@ jobs:
       - name: Install flutter rust bridge deps
         shell: bash
         run: |
-          dart pub global activate ffigen --version 5.0.1
-          # flutter_rust_bridge
-          pushd /tmp
-            wget https://github.com/Kingtous/flutter_rust_bridge/releases/download/1.32.0-rustdesk/flutter_rust_bridge_codegen-x86_64-darwin.tgz
-            tar -zxvf flutter_rust_bridge_codegen-x86_64-darwin.tgz
-            mkdir -p ~/.cargo/bin
-            mv flutter_rust_bridge_codegen ~/.cargo/bin; chmod +x ~/.cargo/bin/flutter_rust_bridge_codegen
-          popd
+          cargo install flutter_rust_bridge_codegen
           pushd flutter && flutter pub get && popd
           ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart
 
@@ -240,21 +236,22 @@ jobs:
           ./build.py --flutter ${{ matrix.job.extra-build-args }}
 
       - name: Codesign app and create signed dmg
+        if: env.MACOS_P12_BASE64 != null
         run: |
           security default-keychain -s rustdesk.keychain
           security unlock-keychain -p ${{ secrets.MACOS_P12_PASSWORD }} rustdesk.keychain
           # start sign the rustdesk.app and dmg
           rm rustdesk-${{ env.VERSION }}.dmg || true
-          codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep ./flutter/build/macos/Build/Products/Release/rustdesk.app -v
-          create-dmg --icon "rustdesk.app" 200 190 --hide-extension "rustdesk.app" --window-size 800 400 --app-drop-link 600 185 rustdesk-${{ env.VERSION }}.dmg ./flutter/build/macos/Build/Products/Release/rustdesk.app
-          codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep rustdesk-${{ env.VERSION }}.dmg -v
+          codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep --strict ./flutter/build/macos/Build/Products/Release/RustDesk.app -vvv
+          create-dmg --icon "RustDesk.app" 200 190 --hide-extension "RustDesk.app" --window-size 800 400 --app-drop-link 600 185 rustdesk-${{ env.VERSION }}.dmg ./flutter/build/macos/Build/Products/Release/RustDesk.app
+          codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep --strict rustdesk-${{ env.VERSION }}.dmg -vvv
           # notarize the rustdesk-${{ env.VERSION }}.dmg
           rcodesign notary-submit --api-key-path ${{ github.workspace }}/rustdesk.json  --staple rustdesk-${{ env.VERSION }}.dmg
 
       - name: Rename rustdesk
         run: |
           for name in rustdesk*??.dmg; do
-              mv "$name" "${name%%.dmg}-untested-${{ matrix.job.target }}.dmg"
+              mv "$name" "${name%%.dmg}-${{ matrix.job.target }}.dmg"
           done
 
       - name: Publish DMG package
@@ -402,15 +399,10 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
-      - name: Install ffigen
-        run: |
-          dart pub global activate ffigen --version 5.0.1
-
       - name: Install flutter rust bridge deps
         shell: bash
         run: |
-          pushd /tmp && git clone https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge --depth=1 || true && popd
-          pushd /tmp/flutter_rust_bridge/frb_codegen && cargo install --path . && popd
+          cargo install flutter_rust_bridge_codegen
           pushd flutter && flutter pub get && popd
 
       - name: Run flutter rust bridge
@@ -423,6 +415,7 @@ jobs:
           name: bridge-artifact
           path: |
             ./src/bridge_generated.rs
+            ./src/bridge_generated.io.rs
             ./flutter/lib/generated_bridge.dart 
             ./flutter/lib/generated_bridge.freezed.dart
 
@@ -551,6 +544,7 @@ jobs:
       
       - uses: r0adkll/sign-android-release@v1
         name: Sign app APK
+        if: env.ANDROID_SIGNING_KEY != null
         id: sign-rustdesk
         with:
           releaseDirectory: ./signed-apk
@@ -563,18 +557,29 @@ jobs:
           BUILD_TOOLS_VERSION: "30.0.2"
 
       - name: Upload Artifacts
+        if: env.ANDROID_SIGNING_KEY != null
         uses: actions/upload-artifact@master
         with:
           name: rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release-signed.apk
           path: ${{steps.sign-rustdesk.outputs.signedReleaseFile}}
 
-      - name: Publish apk package
+      - name: Publish signed apk package
+        if: env.ANDROID_SIGNING_KEY != null
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
             ${{steps.sign-rustdesk.outputs.signedReleaseFile}}
+
+      - name: Publish unsigned apk package
+        if: env.ANDROID_SIGNING_KEY == null
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            signed-apk/rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-release.apk
 
   build-rustdesk-lib-linux-amd64:
     needs: [generate-bridge-linux, build-vcpkg-deps-linux]
@@ -640,14 +645,6 @@ jobs:
           prefix-key: rustdesk-lib-cache
           key: ${{ matrix.job.target }}-${{ matrix.job.extra-build-features }}
           cache-directories: "/opt/rust-registry"
-
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: ${{ matrix.job.target }}
-          override: true
-          profile: minimal # minimal component installation (ie, no documentation)
 
       - name: Install local registry
         run: |
@@ -761,6 +758,13 @@ jobs:
               use-cross: true,
               extra-build-features: "",
             }
+          - {
+              arch: aarch64,
+              target: aarch64-unknown-linux-gnu,
+              os: ubuntu-18.04, # just for naming package, not running host
+              use-cross: true,
+              extra-build-features: "appimage",
+            }
           # - { arch: aarch64, target: aarch64-unknown-linux-gnu   , os: ubuntu-20.04, use-cross: true, extra-build-features: "flatpak" }
           # - {
           #     arch: armv7,
@@ -791,14 +795,6 @@ jobs:
       - name: Free Space
         run: |
           df
-
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: ${{ matrix.job.target }}
-          override: true
-          profile: minimal # minimal component installation (ie, no documentation)
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -939,6 +935,13 @@ jobs:
               use-cross: true,
               extra-build-features: "",
             }
+          - {
+              arch: aarch64,
+              target: aarch64-unknown-linux-gnu,
+              os: ubuntu-18.04, # just for naming package, not running host
+              use-cross: true,
+              extra-build-features: "appimage",
+            }
           # - {
           #     arch: aarch64,
           #     target: aarch64-unknown-linux-gnu,
@@ -962,7 +965,7 @@ jobs:
       - name: Prepare env
         run: |
           sudo apt update -y
-          sudo apt-get -qq install -y git curl wget nasm yasm libgtk-3-dev
+          sudo apt-get -qq install -y git curl wget nasm yasm libgtk-3-dev libarchive-tools
           mkdir -p ./target/release/
 
       - name: Restore the rustdesk lib file
@@ -977,12 +980,12 @@ jobs:
           # disable git safe.directory
           git config --global --add safe.directory "*"
           pushd /opt
-          # clone repo and reset to flutter 3.0.5
+          # clone repo and reset to flutter 3.7.0
           git clone https://github.com/sony/flutter-elinux.git || true
           pushd flutter-elinux
-            # reset to flutter 3.0.5
+            # reset to flutter 3.7.0
             git fetch
-            git reset --hard b09a90eee643859ce4e676839227edd9fd3feba8 
+            git reset --hard 51a1d685901f79fbac51665a967c3a1a789ecee5 
           popd
 
       - uses: Kingtous/run-on-arch-action@amd64-support
@@ -1007,10 +1010,17 @@ jobs:
             git config --global --add safe.directory "*"
             pushd /workspace
             # we use flutter-elinux to build our rustdesk
-            sed -i "s/flutter build linux --release/flutter-elinux build linux/g" ./build.py
-            # Setup flutter-elinux
             export PATH=/opt/flutter-elinux/bin:$PATH
+            sed -i "s/flutter build linux --release/flutter-elinux build linux/g" ./build.py
+            # Setup flutter-elinux. Run doctor to check if issues here.
             flutter-elinux doctor -v
+            # Patch arm64 engine for flutter 3.6.0+
+            flutter-elinux precache --linux
+            pushd /tmp
+            curl -O https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.7.0-stable.tar.xz
+            tar -xvf flutter_linux_3.7.0-stable.tar.xz flutter/bin/cache/artifacts/engine/linux-x64/shader_lib
+            cp -R flutter/bin/cache/artifacts/engine/linux-x64/shader_lib /opt/flutter-elinux/flutter/bin/cache/artifacts/engine/linux-arm64
+            popd
             # edit to corresponding arch
             case ${{ matrix.job.arch }} in
               aarch64)
@@ -1024,7 +1034,7 @@ jobs:
             esac
             python3 ./build.py --flutter --hwcodec --skip-cargo
             # rpm package
-            echo -e "start packaging"
+            echo -e "start packaging fedora package"
             pushd /workspace
             case ${{ matrix.job.arch }} in
               armv7)
@@ -1041,12 +1051,30 @@ jobs:
             for name in rustdesk*??.rpm; do
                 mv "$name" "/opt/artifacts/rpm/${name%%.rpm}-fedora28-centos8.rpm" 
             done
+            # rpm suse package
+            echo -e "start packaging suse package"
+            pushd /workspace
+            case ${{ matrix.job.arch }} in
+              armv7)
+                sed -i "s/64bit/32bit/g" ./res/rpm-flutter-suse.spec
+                sed -i "s/linux\/x64/linux\/arm/g" ./res/rpm-flutter-suse.spec
+                ;;
+              aarch64)
+                sed -i "s/linux\/x64/linux\/arm64/g" ./res/rpm-flutter-suse.spec
+                ;;
+            esac
+            HBB=`pwd` rpmbuild ./res/rpm-flutter.spec -bb
+            pushd ~/rpmbuild/RPMS/${{ matrix.job.arch }}
+            mkdir -p /opt/artifacts/rpm
+            for name in rustdesk*??.rpm; do
+                mv "$name" "/opt/artifacts/rpm/${name%%.rpm}-suse.rpm" 
+            done
 
       - name: Rename rustdesk
         shell: bash
         run: |
           for name in rustdesk*??.deb; do
-              mv "$name" "${name%%.deb}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb"
+              cp "$name" "${name%%.deb}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb"
           done
 
       - name: Publish debian package
@@ -1057,6 +1085,29 @@ jobs:
           tag_name: ${{ env.TAG_NAME }}
           files: |
             rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb
+      
+      - name: Build appimage package
+        if: ${{ matrix.job.extra-build-features == 'appimage' }}
+        shell: bash
+        run: |
+          # set-up appimage-builder
+          pushd /tmp
+          wget -O appimage-builder-x86_64.AppImage https://github.com/AppImageCrafters/appimage-builder/releases/download/v1.1.0/appimage-builder-1.1.0-x86_64.AppImage
+          chmod +x appimage-builder-x86_64.AppImage
+          sudo mv appimage-builder-x86_64.AppImage /usr/local/bin/appimage-builder
+          popd
+          # run appimage-builder
+          pushd appimage
+          sudo appimage-builder --skip-tests --recipe ./AppImageBuilder-${{ matrix.job.arch }}.yml
+
+      - name: Publish appimage package
+        if: ${{ matrix.job.extra-build-features == 'appimage' }}
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            ./appimage/rustdesk-${{ env.VERSION }}-*.AppImage
 
       - name: Upload Artifact
         uses: actions/upload-artifact@master
@@ -1224,6 +1275,19 @@ jobs:
             for name in rustdesk*??.rpm; do
                 mv "$name" "/opt/artifacts/rpm/${name%%.rpm}-fedora28-centos8.rpm" 
             done
+            # rpm suse package
+            pushd /workspace
+            case ${{ matrix.job.arch }} in
+              armv7)
+                sed -i "s/64bit/32bit/g" ./res/rpm-flutter-suse.spec
+                ;;
+            esac
+            HBB=`pwd` rpmbuild ./res/rpm-flutter-suse.spec -bb
+            pushd ~/rpmbuild/RPMS/${{ matrix.job.arch }}
+            mkdir -p /opt/artifacts/rpm
+            for name in rustdesk*??.rpm; do
+                mv "$name" "/opt/artifacts/rpm/${name%%.rpm}-suse.rpm" 
+            done
 
       - name: Rename rustdesk
         shell: bash
@@ -1310,7 +1374,7 @@ jobs:
           popd
           # run appimage-builder
           pushd appimage
-          sudo appimage-builder --skip-tests
+          sudo appimage-builder --skip-tests --recipe ./AppImageBuilder-x86_64.yml
 
       - name: Publish appimage package
         if: ${{ matrix.job.extra-build-features == 'appimage' }}

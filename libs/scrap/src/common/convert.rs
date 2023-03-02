@@ -103,7 +103,31 @@ extern "C" {
         height: c_int,
     ) -> c_int;
 
+    pub fn I420ToABGR(
+        src_y: *const u8,
+        src_stride_y: c_int,
+        src_u: *const u8,
+        src_stride_u: c_int,
+        src_v: *const u8,
+        src_stride_v: c_int,
+        dst_rgba: *mut u8,
+        dst_stride_rgba: c_int,
+        width: c_int,
+        height: c_int,
+    ) -> c_int;
+
     pub fn NV12ToARGB(
+        src_y: *const u8,
+        src_stride_y: c_int,
+        src_uv: *const u8,
+        src_stride_uv: c_int,
+        dst_rgba: *mut u8,
+        dst_stride_rgba: c_int,
+        width: c_int,
+        height: c_int,
+    ) -> c_int;
+
+    pub fn NV12ToABGR(
         src_y: *const u8,
         src_stride_y: c_int,
         src_uv: *const u8,
@@ -246,6 +270,7 @@ pub unsafe fn nv12_to_i420(
 #[cfg(feature = "hwcodec")]
 pub mod hw {
     use hbb_common::{anyhow::anyhow, ResultType};
+    use crate::ImageFormat;
     #[cfg(target_os = "windows")]
     use hwcodec::{ffmpeg::ffmpeg_linesize_offset_length, AVPixelFormat};
 
@@ -315,7 +340,8 @@ pub mod hw {
     }
 
     #[cfg(target_os = "windows")]
-    pub fn hw_nv12_to_bgra(
+    pub fn hw_nv12_to(
+        fmt: ImageFormat,
         width: usize,
         height: usize,
         src_y: &[u8],
@@ -355,18 +381,39 @@ pub mod hw {
                     width as _,
                     height as _,
                 );
-                super::I420ToARGB(
-                    i420_offset_y,
-                    i420_stride_y,
-                    i420_offset_u,
-                    i420_stride_u,
-                    i420_offset_v,
-                    i420_stride_v,
-                    dst.as_mut_ptr(),
-                    (width * 4) as _,
-                    width as _,
-                    height as _,
-                );
+                match fmt {
+                    ImageFormat::ARGB => {
+                        super::I420ToARGB(
+                            i420_offset_y,
+                            i420_stride_y,
+                            i420_offset_u,
+                            i420_stride_u,
+                            i420_offset_v,
+                            i420_stride_v,
+                            dst.as_mut_ptr(),
+                            (width * 4) as _,
+                            width as _,
+                            height as _,
+                        );
+                    }
+                    ImageFormat::ABGR => {
+                        super::I420ToABGR(
+                            i420_offset_y,
+                            i420_stride_y,
+                            i420_offset_u,
+                            i420_stride_u,
+                            i420_offset_v,
+                            i420_stride_v,
+                            dst.as_mut_ptr(),
+                            (width * 4) as _,
+                            width as _,
+                            height as _,
+                        );
+                    }
+                    _ => {
+                        return Err(anyhow!("unsupported image format"));
+                    }
+                }
                 return Ok(());
             };
         }
@@ -374,7 +421,8 @@ pub mod hw {
     }
 
     #[cfg(not(target_os = "windows"))]
-    pub fn hw_nv12_to_bgra(
+    pub fn hw_nv12_to(
+        fmt: ImageFormat,
         width: usize,
         height: usize,
         src_y: &[u8],
@@ -387,23 +435,46 @@ pub mod hw {
     ) -> ResultType<()> {
         dst.resize(width * height * 4, 0);
         unsafe {
-            match super::NV12ToARGB(
-                src_y.as_ptr(),
-                src_stride_y as _,
-                src_uv.as_ptr(),
-                src_stride_uv as _,
-                dst.as_mut_ptr(),
-                (width * 4) as _,
-                width as _,
-                height as _,
-            ) {
-                0 => Ok(()),
-                _ => Err(anyhow!("NV12ToARGB failed")),
+            match fmt {
+                ImageFormat::ARGB => {
+                    match super::NV12ToARGB(
+                        src_y.as_ptr(),
+                        src_stride_y as _,
+                        src_uv.as_ptr(),
+                        src_stride_uv as _,
+                        dst.as_mut_ptr(),
+                        (width * 4) as _,
+                        width as _,
+                        height as _,
+                    ) {
+                        0 => Ok(()),
+                        _ => Err(anyhow!("NV12ToARGB failed")),
+                    }
+                }
+                ImageFormat::ABGR => {
+                    match super::NV12ToABGR(
+                        src_y.as_ptr(),
+                        src_stride_y as _,
+                        src_uv.as_ptr(),
+                        src_stride_uv as _,
+                        dst.as_mut_ptr(),
+                        (width * 4) as _,
+                        width as _,
+                        height as _,
+                    ) {
+                        0 => Ok(()),
+                        _ => Err(anyhow!("NV12ToABGR failed")),
+                    }
+                }
+                _ => {
+                    Err(anyhow!("unsupported image format"))
+                }
             }
         }
     }
 
-    pub fn hw_i420_to_bgra(
+    pub fn hw_i420_to(
+        fmt: ImageFormat,
         width: usize,
         height: usize,
         src_y: &[u8],
@@ -419,18 +490,38 @@ pub mod hw {
         let src_v = src_v.as_ptr();
         dst.resize(width * height * 4, 0);
         unsafe {
-            super::I420ToARGB(
-                src_y,
-                src_stride_y as _,
-                src_u,
-                src_stride_u as _,
-                src_v,
-                src_stride_v as _,
-                dst.as_mut_ptr(),
-                (width * 4) as _,
-                width as _,
-                height as _,
-            );
+            match fmt {
+                ImageFormat::ARGB => {
+                    super::I420ToARGB(
+                        src_y,
+                        src_stride_y as _,
+                        src_u,
+                        src_stride_u as _,
+                        src_v,
+                        src_stride_v as _,
+                        dst.as_mut_ptr(),
+                        (width * 4) as _,
+                        width as _,
+                        height as _,
+                    );
+                }
+                ImageFormat::ABGR => {
+                    super::I420ToABGR(
+                        src_y,
+                        src_stride_y as _,
+                        src_u,
+                        src_stride_u as _,
+                        src_v,
+                        src_stride_v as _,
+                        dst.as_mut_ptr(),
+                        (width * 4) as _,
+                        width as _,
+                        height as _,
+                    );
+                }
+                _ => {
+                }
+            }
         };
     }
 }

@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_custom_cursor/cursor_manager.dart'
@@ -22,6 +21,7 @@ import '../../mobile/widgets/dialog.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
+import '../../utils/image.dart';
 import '../widgets/remote_menubar.dart';
 import '../widgets/kb_layout_type_chooser.dart';
 
@@ -33,10 +33,14 @@ class RemotePage extends StatefulWidget {
     Key? key,
     required this.id,
     required this.menubarState,
+    this.switchUuid,
+    this.forceRelay,
   }) : super(key: key);
 
   final String id;
   final MenubarState menubarState;
+  final String? switchUuid;
+  final bool? forceRelay;
   final SimpleWrapper<State<RemotePage>?> _lastState = SimpleWrapper(null);
 
   FFI get ffi => (_lastState.value! as _RemotePageState)._ffi;
@@ -59,6 +63,11 @@ class _RemotePageState extends State<RemotePage>
   late RxBool _zoomCursor;
   late RxBool _remoteCursorMoved;
   late RxBool _keyboardEnabled;
+  late RxInt _textureId;
+  late int _textureKey;
+  final useTextureRender = bind.mainUseTextureRender();
+
+  final _blockableOverlayState = BlockableOverlayState();
 
   final FocusNode _rawKeyFocusNode = FocusNode(debugLabel: "rawkeyFocusNode");
 
@@ -79,6 +88,8 @@ class _RemotePageState extends State<RemotePage>
     _showRemoteCursor = ShowRemoteCursorState.find(id);
     _keyboardEnabled = KeyboardEnabledState.find(id);
     _remoteCursorMoved = RemoteCursorMovedState.find(id);
+    _textureKey = newTextureId;
+    _textureId = RxInt(-1);
   }
 
   void _removeStates(String id) {
@@ -100,7 +111,11 @@ class _RemotePageState extends State<RemotePage>
       showKBLayoutTypeChooserIfNeeded(
           _ffi.ffiModel.pi.platform, _ffi.dialogManager);
     });
-    _ffi.start(widget.id);
+    _ffi.start(
+      widget.id,
+      switchUuid: widget.switchUuid,
+      forceRelay: widget.forceRelay,
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
       _ffi.dialogManager
@@ -108,6 +123,18 @@ class _RemotePageState extends State<RemotePage>
     });
     if (!Platform.isLinux) {
       Wakelock.enable();
+    }
+    // Register texture.
+    _textureId.value = -1;
+    if (useTextureRender) {
+      textureRenderer.createTexture(_textureKey).then((id) async {
+        debugPrint("id: $id, texture_key: $_textureKey");
+        if (id != -1) {
+          final ptr = await textureRenderer.getTexturePtr(_textureKey);
+          platformFFI.registerTexture(widget.id, ptr);
+          _textureId.value = id;
+        }
+      });
     }
     _ffi.ffiModel.updateEventListener(widget.id);
     _ffi.qualityMonitorModel.checkShowQualityMonitor(widget.id);
@@ -128,6 +155,13 @@ class _RemotePageState extends State<RemotePage>
     //   });
     //   _isCustomCursorInited = true;
     // }
+
+    _ffi.dialogManager.setOverlayState(_blockableOverlayState);
+    _ffi.chatModel.setOverlayState(_blockableOverlayState);
+    // make remote page penetrable automatically, effective for chat over remote
+    _blockableOverlayState.onMiddleBlockedClick = () {
+      _blockableOverlayState.setMiddleBlocked(false);
+    };
   }
 
   @override
@@ -166,6 +200,10 @@ class _RemotePageState extends State<RemotePage>
   @override
   void dispose() {
     debugPrint("REMOTE PAGE dispose ${widget.id}");
+    if (useTextureRender) {
+      platformFFI.registerTexture(widget.id, 0);
+      textureRenderer.closeTexture(_textureKey);
+    }
     // ensure we leave this session, this is a double check
     bind.sessionEnterOrLeave(id: widget.id, enter: false);
     DesktopMultiWindow.removeListener(this);
@@ -187,39 +225,50 @@ class _RemotePageState extends State<RemotePage>
 
   Widget buildBody(BuildContext context) {
     return Scaffold(
-        backgroundColor: Theme.of(context).backgroundColor,
-        body: Overlay(
-          initialEntries: [
-            OverlayEntry(builder: (context) {
-              _ffi.chatModel.setOverlayState(Overlay.of(context));
-              _ffi.dialogManager.setOverlayState(Overlay.of(context));
-              return Container(
-                  color: Colors.black,
-                  child: RawKeyFocusScope(
-                      focusNode: _rawKeyFocusNode,
-                      onFocusChange: (bool imageFocused) {
-                        debugPrint(
-                            "onFocusChange(window active:${!_isWindowBlur}) $imageFocused");
-                        // See [onWindowBlur].
-                        if (Platform.isWindows) {
-                          if (_isWindowBlur) {
-                            imageFocused = false;
-                            Future.delayed(Duration.zero, () {
-                              _rawKeyFocusNode.unfocus();
-                            });
-                          }
-                          if (imageFocused) {
-                            _ffi.inputModel.enterOrLeave(true);
-                          } else {
-                            _ffi.inputModel.enterOrLeave(false);
-                          }
-                        }
-                      },
-                      inputModel: _ffi.inputModel,
-                      child: getBodyForDesktop(context)));
-            })
-          ],
-        ));
+      backgroundColor: Theme.of(context).colorScheme.background,
+
+      /// the Overlay key will be set with _blockableOverlayState in BlockableOverlay
+      /// see override build() in [BlockableOverlay]
+      body: BlockableOverlay(
+        state: _blockableOverlayState,
+        underlying: Container(
+            color: Colors.black,
+            child: RawKeyFocusScope(
+                focusNode: _rawKeyFocusNode,
+                onFocusChange: (bool imageFocused) {
+                  debugPrint(
+                      "onFocusChange(window active:${!_isWindowBlur}) $imageFocused");
+                  // See [onWindowBlur].
+                  if (Platform.isWindows) {
+                    if (_isWindowBlur) {
+                      imageFocused = false;
+                      Future.delayed(Duration.zero, () {
+                        _rawKeyFocusNode.unfocus();
+                      });
+                    }
+                    if (imageFocused) {
+                      _ffi.inputModel.enterOrLeave(true);
+                    } else {
+                      _ffi.inputModel.enterOrLeave(false);
+                    }
+                  }
+                },
+                inputModel: _ffi.inputModel,
+                child: getBodyForDesktop(context))),
+        upperLayer: [
+          OverlayEntry(
+              builder: (context) => RemoteMenubar(
+                    id: widget.id,
+                    ffi: _ffi,
+                    state: widget.menubarState,
+                    onEnterOrLeaveImageSetter: (func) =>
+                        _onEnterOrLeaveImage4Menubar = func,
+                    onEnterOrLeaveImageCleaner: () =>
+                        _onEnterOrLeaveImage4Menubar = null,
+                  ))
+        ],
+      ),
+    );
   }
 
   @override
@@ -274,6 +323,34 @@ class _RemotePageState extends State<RemotePage>
     }
   }
 
+  Widget _buildRawPointerMouseRegion(
+    Widget child,
+    PointerEnterEventListener? onEnter,
+    PointerExitEventListener? onExit,
+  ) {
+    return RawPointerMouseRegion(
+      onEnter: enterView,
+      onExit: leaveView,
+      onPointerDown: (event) {
+        // A double check for blur status.
+        // Note: If there's an `onPointerDown` event is triggered, `_isWindowBlur` is expected being false.
+        // Sometimes the system does not send the necessary focus event to flutter. We should manually
+        // handle this inconsistent status by setting `_isWindowBlur` to false. So we can
+        // ensure the grab-key thread is running when our users are clicking the remote canvas.
+        if (_isWindowBlur) {
+          debugPrint(
+              "Unexpected status: onPointerDown is triggered while the remote window is in blur status");
+          _isWindowBlur = false;
+        }
+        if (!_rawKeyFocusNode.hasFocus) {
+          _rawKeyFocusNode.requestFocus();
+        }
+      },
+      inputModel: _ffi.inputModel,
+      child: child,
+    );
+  }
+
   Widget getBodyForDesktop(BuildContext context) {
     var paints = <Widget>[
       MouseRegion(onEnter: (evt) {
@@ -290,27 +367,10 @@ class _RemotePageState extends State<RemotePage>
           cursorOverImage: _cursorOverImage,
           keyboardEnabled: _keyboardEnabled,
           remoteCursorMoved: _remoteCursorMoved,
-          listenerBuilder: (child) => RawPointerMouseRegion(
-            onEnter: enterView,
-            onExit: leaveView,
-            onPointerDown: (event) {
-              // A double check for blur status.
-              // Note: If there's an `onPointerDown` event is triggered, `_isWindowBlur` is expected being false.
-              // Sometimes the system does not send the necessary focus event to flutter. We should manually
-              // handle this inconsistent status by setting `_isWindowBlur` to false. So we can
-              // ensure the grab-key thread is running when our users are clicking the remote canvas.
-              if (_isWindowBlur) {
-                debugPrint(
-                    "Unexpected status: onPointerDown is triggered while the remote window is in blur status");
-                _isWindowBlur = false;
-              }
-              if (!_rawKeyFocusNode.hasFocus) {
-                _rawKeyFocusNode.requestFocus();
-              }
-            },
-            inputModel: _ffi.inputModel,
-            child: child,
-          ),
+          textureId: _textureId,
+          useTextureRender: useTextureRender,
+          listenerBuilder: (child) =>
+              _buildRawPointerMouseRegion(child, enterView, leaveView),
         );
       }))
     ];
@@ -323,14 +383,14 @@ class _RemotePageState extends State<RemotePage>
             zoomCursor: _zoomCursor,
           ))));
     }
-    paints.add(QualityMonitor(_ffi.qualityMonitorModel));
-    paints.add(RemoteMenubar(
-      id: widget.id,
-      ffi: _ffi,
-      state: widget.menubarState,
-      onEnterOrLeaveImageSetter: (func) => _onEnterOrLeaveImage4Menubar = func,
-      onEnterOrLeaveImageCleaner: () => _onEnterOrLeaveImage4Menubar = null,
-    ));
+    paints.add(
+      Positioned(
+        top: 10,
+        right: 10,
+        child: _buildRawPointerMouseRegion(
+            QualityMonitor(_ffi.qualityMonitorModel), null, null),
+      ),
+    );
     return Stack(
       children: paints,
     );
@@ -342,10 +402,12 @@ class _RemotePageState extends State<RemotePage>
 
 class ImagePaint extends StatefulWidget {
   final String id;
-  final Rx<bool> zoomCursor;
-  final Rx<bool> cursorOverImage;
-  final Rx<bool> keyboardEnabled;
-  final Rx<bool> remoteCursorMoved;
+  final RxBool zoomCursor;
+  final RxBool cursorOverImage;
+  final RxBool keyboardEnabled;
+  final RxBool remoteCursorMoved;
+  final RxInt textureId;
+  final bool useTextureRender;
   final Widget Function(Widget)? listenerBuilder;
 
   ImagePaint(
@@ -355,6 +417,8 @@ class ImagePaint extends StatefulWidget {
       required this.cursorOverImage,
       required this.keyboardEnabled,
       required this.remoteCursorMoved,
+      required this.textureId,
+      required this.useTextureRender,
       this.listenerBuilder})
       : super(key: key);
 
@@ -368,10 +432,10 @@ class _ImagePaintState extends State<ImagePaint> {
   final ScrollController _vertical = ScrollController();
 
   String get id => widget.id;
-  Rx<bool> get zoomCursor => widget.zoomCursor;
-  Rx<bool> get cursorOverImage => widget.cursorOverImage;
-  Rx<bool> get keyboardEnabled => widget.keyboardEnabled;
-  Rx<bool> get remoteCursorMoved => widget.remoteCursorMoved;
+  RxBool get zoomCursor => widget.zoomCursor;
+  RxBool get cursorOverImage => widget.cursorOverImage;
+  RxBool get keyboardEnabled => widget.keyboardEnabled;
+  RxBool get remoteCursorMoved => widget.remoteCursorMoved;
   Widget Function(Widget)? get listenerBuilder => widget.listenerBuilder;
 
   @override
@@ -380,36 +444,68 @@ class _ImagePaintState extends State<ImagePaint> {
     var c = Provider.of<CanvasModel>(context);
     final s = c.scale;
 
-    mouseRegion({child}) => Obx(() => MouseRegion(
-        cursor: cursorOverImage.isTrue
-            ? c.cursorEmbedded
-                ? SystemMouseCursors.none
-                : keyboardEnabled.isTrue
-                    ? (() {
-                        if (remoteCursorMoved.isTrue) {
-                          _lastRemoteCursorMoved = true;
-                          return SystemMouseCursors.none;
-                        } else {
-                          if (_lastRemoteCursorMoved) {
-                            _lastRemoteCursorMoved = false;
-                            _firstEnterImage.value = true;
-                          }
-                          return _buildCustomCursor(context, s);
-                        }
-                      }())
-                    : _buildDisabledCursor(context, s)
-            : MouseCursor.defer,
-        onHover: (evt) {},
-        child: child));
+    mouseRegion({child}) => Obx(() {
+          double getCursorScale() {
+            var c = Provider.of<CanvasModel>(context);
+            var cursorScale = 1.0;
+            if (Platform.isWindows) {
+              // debug win10
+              final isViewAdaptive =
+                  c.viewStyle.style == kRemoteViewStyleAdaptive;
+              if (zoomCursor.value && isViewAdaptive) {
+                cursorScale = s * c.devicePixelRatio;
+              }
+            } else {
+              final isViewOriginal =
+                  c.viewStyle.style == kRemoteViewStyleOriginal;
+              if (zoomCursor.value || isViewOriginal) {
+                cursorScale = s;
+              }
+            }
+            return cursorScale;
+          }
+
+          return MouseRegion(
+              cursor: cursorOverImage.isTrue
+                  ? c.cursorEmbedded
+                      ? SystemMouseCursors.none
+                      : keyboardEnabled.isTrue
+                          ? (() {
+                              if (remoteCursorMoved.isTrue) {
+                                _lastRemoteCursorMoved = true;
+                                return SystemMouseCursors.none;
+                              } else {
+                                if (_lastRemoteCursorMoved) {
+                                  _lastRemoteCursorMoved = false;
+                                  _firstEnterImage.value = true;
+                                }
+                                return _buildCustomCursor(
+                                    context, getCursorScale());
+                              }
+                            }())
+                          : _buildDisabledCursor(context, getCursorScale())
+                  : MouseCursor.defer,
+              onHover: (evt) {},
+              child: child);
+        });
 
     if (c.imageOverflow.isTrue && c.scrollStyle == ScrollStyle.scrollbar) {
       final imageWidth = c.getDisplayWidth() * s;
       final imageHeight = c.getDisplayHeight() * s;
       final imageSize = Size(imageWidth, imageHeight);
-      final imageWidget = CustomPaint(
-        size: imageSize,
-        painter: ImagePainter(image: m.image, x: 0, y: 0, scale: s),
-      );
+      late final Widget imageWidget;
+      if (widget.useTextureRender) {
+        imageWidget = SizedBox(
+          width: imageWidth,
+          height: imageHeight,
+          child: Obx(() => Texture(textureId: widget.textureId.value)),
+        );
+      } else {
+        imageWidget = CustomPaint(
+          size: imageSize,
+          painter: ImagePainter(image: m.image, x: 0, y: 0, scale: s),
+        );
+      }
 
       return NotificationListener<ScrollNotification>(
           onNotification: (notification) {
@@ -433,11 +529,31 @@ class _ImagePaintState extends State<ImagePaint> {
                 context, _buildListener(imageWidget), c.size, imageSize)),
           ));
     } else {
-      final imageWidget = CustomPaint(
-        size: Size(c.size.width, c.size.height),
-        painter: ImagePainter(image: m.image, x: c.x / s, y: c.y / s, scale: s),
-      );
-      return mouseRegion(child: _buildListener(imageWidget));
+      late final Widget imageWidget;
+      if (c.size.width > 0 && c.size.height > 0) {
+        if (widget.useTextureRender) {
+          imageWidget = Stack(
+            children: [
+              Positioned(
+                left: c.x,
+                top: c.y,
+                width: c.getDisplayWidth() * s,
+                height: c.getDisplayHeight() * s,
+                child: Texture(textureId: widget.textureId.value),
+              )
+            ],
+          );
+        } else {
+          imageWidget = CustomPaint(
+            size: Size(c.size.width, c.size.height),
+            painter:
+                ImagePainter(image: m.image, x: c.x / s, y: c.y / s, scale: s),
+          );
+        }
+        return mouseRegion(child: _buildListener(imageWidget));
+      } else {
+        return Container();
+      }
     }
   }
 
@@ -446,7 +562,7 @@ class _ImagePaintState extends State<ImagePaint> {
     if (cache == null) {
       return MouseCursor.defer;
     } else {
-      final key = cache.updateGetKey(scale, zoomCursor.value);
+      final key = cache.updateGetKey(scale);
       if (!cursor.cachedKeys.contains(key)) {
         debugPrint("Register custom cursor with key $key");
         // [Safety]
@@ -612,7 +728,8 @@ class CursorPaint extends StatelessWidget {
     double x = (m.x - hotx) * c.scale + cx;
     double y = (m.y - hoty) * c.scale + cy;
     double scale = 1.0;
-    if (zoomCursor.isTrue) {
+    final isViewOriginal = c.viewStyle.style == kRemoteViewStyleOriginal;
+    if (zoomCursor.value || isViewOriginal) {
       x = m.x - hotx + cx / c.scale;
       y = m.y - hoty + cy / c.scale;
       scale = c.scale;
@@ -626,42 +743,5 @@ class CursorPaint extends StatelessWidget {
         scale: scale,
       ),
     );
-  }
-}
-
-class ImagePainter extends CustomPainter {
-  ImagePainter({
-    required this.image,
-    required this.x,
-    required this.y,
-    required this.scale,
-  });
-
-  ui.Image? image;
-  double x;
-  double y;
-  double scale;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (image == null) return;
-    if (x.isNaN || y.isNaN) return;
-    canvas.scale(scale, scale);
-    // https://github.com/flutter/flutter/issues/76187#issuecomment-784628161
-    // https://api.flutter-io.cn/flutter/dart-ui/FilterQuality.html
-    var paint = Paint();
-    if ((scale - 1.0).abs() > 0.001) {
-      paint.filterQuality = FilterQuality.medium;
-      if (scale > 10.00000) {
-        paint.filterQuality = FilterQuality.high;
-      }
-    }
-    canvas.drawImage(
-        image!, Offset(x.toInt().toDouble(), y.toInt().toDouble()), paint);
-  }
-
-  @override
-  bool shouldRepaint(CustomPainter oldDelegate) {
-    return oldDelegate != this;
   }
 }

@@ -1,4 +1,3 @@
 /target
 **/*.rs.bk
 Cargo.lock
-src/protos/

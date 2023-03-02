@@ -51,7 +51,7 @@ class ChatPage extends StatelessWidget implements PageShape {
               return Stack(
                 children: [
                   LayoutBuilder(builder: (context, constraints) {
-                    return DashChat(
+                    final chat = DashChat(
                       onSend: (chatMsg) {
                         chatModel.send(chatMsg);
                         chatModel.inputNode.requestFocus();
@@ -75,7 +75,8 @@ class ChatPage extends StatelessWidget implements PageShape {
                                   hintText:
                                       "${translate('Write a message')}...",
                                   filled: true,
-                                  fillColor: Theme.of(context).backgroundColor,
+                                  fillColor:
+                                      Theme.of(context).colorScheme.background,
                                   contentPadding: EdgeInsets.all(10),
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(6),
@@ -88,17 +89,39 @@ class ChatPage extends StatelessWidget implements PageShape {
                               : defaultInputDecoration(
                                   hintText:
                                       "${translate('Write a message')}...",
-                                  fillColor: Theme.of(context).backgroundColor),
+                                  fillColor:
+                                      Theme.of(context).colorScheme.background),
                           sendButtonBuilder: defaultSendButton(
                               padding: EdgeInsets.symmetric(
                                   horizontal: 6, vertical: 0),
                               color: Theme.of(context).colorScheme.primary)),
                       messageOptions: MessageOptions(
                           showOtherUsersAvatar: false,
-                          showTime: true,
-                          currentUserTextColor: Colors.white,
                           textColor: Colors.white,
                           maxWidth: constraints.maxWidth * 0.7,
+                          messageTextBuilder: (message, _, __) {
+                            final isOwnMessage =
+                                message.user.id == currentUser.id;
+                            return Column(
+                              crossAxisAlignment: isOwnMessage
+                                  ? CrossAxisAlignment.end
+                                  : CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Text(message.text,
+                                    style: TextStyle(color: Colors.white)),
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 5),
+                                  child: Text(
+                                    "${message.createdAt.hour}:${message.createdAt.minute}",
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
                           messageDecorationBuilder: (_, __, ___) =>
                               defaultMessageDecoration(
                                 color: MyTheme.accent80,
@@ -108,6 +131,7 @@ class ChatPage extends StatelessWidget implements PageShape {
                                 borderBottomLeft: 8,
                               )),
                     );
+                    return SelectionArea(child: chat);
                   }),
                   desktopType == DesktopType.cm ||
                           chatModel.currentID == ChatModel.clientModeID

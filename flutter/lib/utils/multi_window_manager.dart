@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/foundation.dart';
@@ -40,9 +41,20 @@ class RustDeskMultiWindowManager {
   int? _fileTransferWindowId;
   int? _portForwardWindowId;
 
-  Future<dynamic> newRemoteDesktop(String remoteId) async {
-    final msg =
-        jsonEncode({"type": WindowType.RemoteDesktop.index, "id": remoteId});
+  Future<dynamic> newRemoteDesktop(
+    String remoteId, {
+    String? switch_uuid,
+    bool? forceRelay,
+  }) async {
+    var params = {
+      "type": WindowType.RemoteDesktop.index,
+      "id": remoteId,
+      "forceRelay": forceRelay
+    };
+    if (switch_uuid != null) {
+      params['switch_uuid'] = switch_uuid;
+    }
+    final msg = jsonEncode(params);
 
     try {
       final ids = await DesktopMultiWindow.getAllSubWindowIds();
@@ -58,8 +70,11 @@ class RustDeskMultiWindowManager {
       remoteDesktopController
         ..setFrame(const Offset(0, 0) & const Size(1280, 720))
         ..center()
-        ..setTitle("rustdesk - remote desktop")
-        ..show();
+        ..setTitle(getWindowNameWithId(remoteId,
+            overrideType: WindowType.RemoteDesktop));
+      if (Platform.isMacOS) {
+        Future.microtask(() => remoteDesktopController.show());
+      }
       registerActiveWindow(remoteDesktopController.windowId);
       _remoteDesktopWindowId = remoteDesktopController.windowId;
     } else {
@@ -67,9 +82,12 @@ class RustDeskMultiWindowManager {
     }
   }
 
-  Future<dynamic> newFileTransfer(String remoteId) async {
-    final msg =
-        jsonEncode({"type": WindowType.FileTransfer.index, "id": remoteId});
+  Future<dynamic> newFileTransfer(String remoteId, {bool? forceRelay}) async {
+    var msg = jsonEncode({
+      "type": WindowType.FileTransfer.index,
+      "id": remoteId,
+      "forceRelay": forceRelay,
+    });
 
     try {
       final ids = await DesktopMultiWindow.getAllSubWindowIds();
@@ -84,8 +102,11 @@ class RustDeskMultiWindowManager {
       fileTransferController
         ..setFrame(const Offset(0, 0) & const Size(1280, 720))
         ..center()
-        ..setTitle("rustdesk - file transfer")
-        ..show();
+        ..setTitle(getWindowNameWithId(remoteId,
+            overrideType: WindowType.FileTransfer));
+      if (Platform.isMacOS) {
+        Future.microtask(() => fileTransferController.show());
+      }
       registerActiveWindow(fileTransferController.windowId);
       _fileTransferWindowId = fileTransferController.windowId;
     } else {
@@ -93,9 +114,14 @@ class RustDeskMultiWindowManager {
     }
   }
 
-  Future<dynamic> newPortForward(String remoteId, bool isRDP) async {
-    final msg = jsonEncode(
-        {"type": WindowType.PortForward.index, "id": remoteId, "isRDP": isRDP});
+  Future<dynamic> newPortForward(String remoteId, bool isRDP,
+      {bool? forceRelay}) async {
+    final msg = jsonEncode({
+      "type": WindowType.PortForward.index,
+      "id": remoteId,
+      "isRDP": isRDP,
+      "forceRelay": forceRelay,
+    });
 
     try {
       final ids = await DesktopMultiWindow.getAllSubWindowIds();
@@ -110,8 +136,11 @@ class RustDeskMultiWindowManager {
       portForwardController
         ..setFrame(const Offset(0, 0) & const Size(1280, 720))
         ..center()
-        ..setTitle("rustdesk - port forward")
-        ..show();
+        ..setTitle(getWindowNameWithId(remoteId,
+            overrideType: WindowType.PortForward));
+      if (Platform.isMacOS) {
+        Future.microtask(() => portForwardController.show());
+      }
       registerActiveWindow(portForwardController.windowId);
       _portForwardWindowId = portForwardController.windowId;
     } else {
@@ -143,6 +172,24 @@ class RustDeskMultiWindowManager {
     return null;
   }
 
+  void clearWindowType(WindowType type) {
+    switch (type) {
+      case WindowType.Main:
+        return;
+      case WindowType.RemoteDesktop:
+        _remoteDesktopWindowId = null;
+        break;
+      case WindowType.FileTransfer:
+        _fileTransferWindowId = null;
+        break;
+      case WindowType.PortForward:
+        _portForwardWindowId = null;
+        break;
+      case WindowType.Unknown:
+        break;
+    }
+  }
+
   void setMethodHandler(
       Future<dynamic> Function(MethodCall call, int fromWindowId)? handler) {
     DesktopMultiWindow.setMethodHandler(handler);
@@ -169,8 +216,11 @@ class RustDeskMultiWindowManager {
         }
         await WindowController.fromWindowId(wId).setPreventClose(false);
         await WindowController.fromWindowId(wId).close();
-      } on Error {
+      } catch (e) {
+        debugPrint("$e");
         return;
+      } finally {
+        clearWindowType(type);
       }
     }
   }
@@ -208,7 +258,7 @@ class RustDeskMultiWindowManager {
   }
 
   /// Remove active window which has [`windowId`]
-  /// 
+  ///
   /// [Availability]
   /// This function should only be called from main window.
   /// For other windows, please post a unregister(hide) event to main window handler:

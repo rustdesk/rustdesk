@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="res/logo-header.svg" alt="RustDesk - Dit fjernskrivebord"><br>
+  <img src="res/logo-header.svg" alt="RustDesk - Your remote desktop"><br>
   <a href="#free-public-servers">Servers</a> •
   <a href="#raw-steps-to-build">Build</a> •
   <a href="#how-to-build-with-docker">Docker</a> •
@@ -19,7 +19,7 @@ Yet another remote desktop software, written in Rust. Works out of the box, no c
 
 RustDesk welcomes contribution from everyone. See [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) for help getting started.
 
-[**How does RustDesk work?**](https://github.com/rustdesk/rustdesk/wiki/How-does-RustDesk-work%3F)
+[**FAQ**](https://github.com/rustdesk/rustdesk/wiki/FAQ)
 
 [**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
 
@@ -31,7 +31,7 @@ RustDesk welcomes contribution from everyone. See [`docs/CONTRIBUTING.md`](docs/
 
 ## Free Public Servers
 
-Below are the servers you are using for free, it may change along the time. If you are not close to one of these, your network may be slow.
+Below are the servers you are using for free, they may change over time. If you are not close to one of these, your network may be slow.
 | Location | Vendor | Specification |
 | --------- | ------------- | ------------------ |
 | Seoul | AWS lightsail | 1 vCPU / 0.5GB RAM |
@@ -40,6 +40,14 @@ Below are the servers you are using for free, it may change along the time. If y
 | Finland (Helsinki) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
 | USA (Ashburn) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
 | Ukraine (Kyiv) | dc.volia (2VM) | 2 vCPU / 4GB RAM |
+
+## Dev Container
+
+[![Open in Dev Containers](https://img.shields.io/static/v1?label=Dev%20Container&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/rustdesk/rustdesk)
+
+If you already have VS Code and Docker installed, you can click the badge above to get started. Clicking will cause VS Code to automatically install the Dev Containers extension if needed, clone the source code into a container volume, and spin up a dev container for use.
+
+Go through [DEVCONTAINER.md](docs/DEVCONTAINER.md) for more info.
 
 ## Dependencies
 
@@ -198,7 +206,7 @@ Please ensure that you are running these commands from the root of the RustDesk 
 - **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: Communicate with [rustdesk-server](https://github.com/rustdesk/rustdesk-server), wait for remote direct (TCP hole punching) or relayed connection
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: platform specific code
 - **[flutter](https://github.com/rustdesk/rustdesk/tree/master/flutter)**: Flutter code for mobile
-- **[flutter/web/js](https://github.com/rustdesk/rustdesk/tree/master/flutter/web/js)**: Javascript for Flutter web client
+- **[flutter/web/js](https://github.com/rustdesk/rustdesk/tree/master/flutter/web/js)**: JavaScript for Flutter web client
 
 ## Snapshot
 

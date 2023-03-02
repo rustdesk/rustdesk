@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:dash_chat_2/dash_chat_2.dart';
 import 'package:draggable_float_widget/draggable_float_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:get/get_rx/src/rx_types/rx_types.dart';
+import 'package:get/get.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../consts.dart';
@@ -26,14 +30,16 @@ class MessageBody {
 class ChatModel with ChangeNotifier {
   static final clientModeID = -1;
 
-  /// _overlayState:
-  /// Desktop: store session overlay by using [setOverlayState].
-  /// Mobile: always null, use global overlay.
-  /// see [_getOverlayState] in [showChatIconOverlay] or [showChatWindowOverlay]
-  OverlayState? _overlayState;
   OverlayEntry? chatIconOverlayEntry;
   OverlayEntry? chatWindowOverlayEntry;
+
   bool isConnManager = false;
+
+  RxBool isWindowFocus = true.obs;
+  BlockableOverlayState? _blockableOverlayState;
+  final Rx<VoiceCallStatus> _voiceCallStatus = Rx(VoiceCallStatus.notStarted);
+
+  Rx<VoiceCallStatus> get voiceCallStatus => _voiceCallStatus;
 
   final ChatUser me = ChatUser(
     id: "",
@@ -52,6 +58,19 @@ class ChatModel with ChangeNotifier {
 
   bool get isShowCMChatPage => _isShowCMChatPage;
 
+  void setOverlayState(BlockableOverlayState blockableOverlayState) {
+    _blockableOverlayState = blockableOverlayState;
+
+    _blockableOverlayState!.addMiddleBlockedListener((v) {
+      if (!v) {
+        isWindowFocus.value = false;
+        if (isWindowFocus.value) {
+          isWindowFocus.toggle();
+        }
+      }
+    });
+  }
+
   final WeakReference<FFI> parent;
 
   ChatModel(this.parent);
@@ -68,20 +87,6 @@ class ChatModel with ChangeNotifier {
     }
   }
 
-  setOverlayState(OverlayState? os) {
-    _overlayState = os;
-  }
-
-  OverlayState? _getOverlayState() {
-    if (_overlayState == null) {
-      if (globalKey.currentState == null ||
-          globalKey.currentState!.overlay == null) return null;
-      return globalKey.currentState!.overlay;
-    } else {
-      return _overlayState;
-    }
-  }
-
   showChatIconOverlay({Offset offset = const Offset(200, 50)}) {
     if (chatIconOverlayEntry != null) {
       chatIconOverlayEntry!.remove();
@@ -94,7 +99,7 @@ class ChatModel with ChangeNotifier {
       }
     }
 
-    final overlayState = _getOverlayState();
+    final overlayState = _blockableOverlayState?.state;
     if (overlayState == null) return;
 
     final overlay = OverlayEntry(builder: (context) {
@@ -126,23 +131,35 @@ class ChatModel with ChangeNotifier {
     }
   }
 
-  showChatWindowOverlay() {
+  showChatWindowOverlay({Offset? chatInitPos}) {
     if (chatWindowOverlayEntry != null) return;
-    final overlayState = _getOverlayState();
+    isWindowFocus.value = true;
+    _blockableOverlayState?.setMiddleBlocked(true);
+
+    final overlayState = _blockableOverlayState?.state;
     if (overlayState == null) return;
     final overlay = OverlayEntry(builder: (context) {
-      return DraggableChatWindow(
-          position: const Offset(20, 80),
-          width: 250,
-          height: 350,
-          chatModel: this);
+      return Listener(
+          onPointerDown: (_) {
+            if (!isWindowFocus.value) {
+              isWindowFocus.value = true;
+              _blockableOverlayState?.setMiddleBlocked(true);
+            }
+          },
+          child: DraggableChatWindow(
+              position: chatInitPos ?? Offset(20, 80),
+              width: 250,
+              height: 350,
+              chatModel: this));
     });
     overlayState.insert(overlay);
     chatWindowOverlayEntry = overlay;
+    requestChatInputFocus();
   }
 
   hideChatWindowOverlay() {
     if (chatWindowOverlayEntry != null) {
+      _blockableOverlayState?.setMiddleBlocked(false);
       chatWindowOverlayEntry!.remove();
       chatWindowOverlayEntry = null;
       return;
@@ -152,13 +169,13 @@ class ChatModel with ChangeNotifier {
   _isChatOverlayHide() => ((!isDesktop && chatIconOverlayEntry == null) ||
       chatWindowOverlayEntry == null);
 
-  toggleChatOverlay() {
+  toggleChatOverlay({Offset? chatInitPos}) {
     if (_isChatOverlayHide()) {
       gFFI.invokeMethod("enable_soft_keyboard", true);
       if (!isDesktop) {
         showChatIconOverlay();
       }
-      showChatWindowOverlay();
+      showChatWindowOverlay(chatInitPos: chatInitPos);
     } else {
       hideChatIconOverlay();
       hideChatWindowOverlay();
@@ -188,6 +205,7 @@ class ChatModel with ChangeNotifier {
       await windowManager.setSizeAlignment(
           kConnectionManagerWindowSize, Alignment.topRight);
     } else {
+      requestChatInputFocus();
       await windowManager.show();
       await windowManager.setSizeAlignment(Size(600, 400), Alignment.topRight);
       _isShowCMChatPage = !_isShowCMChatPage;
@@ -285,11 +303,48 @@ class ChatModel with ChangeNotifier {
   close() {
     hideChatIconOverlay();
     hideChatWindowOverlay();
-    _overlayState = null;
     notifyListeners();
   }
 
   resetClientMode() {
     _messages[clientModeID]?.clear();
   }
+
+  void requestChatInputFocus() {
+    Timer(Duration(milliseconds: 100), () {
+      if (inputNode.hasListeners && inputNode.canRequestFocus) {
+        inputNode.requestFocus();
+      }
+    });
+  }
+
+  void onVoiceCallWaiting() {
+    _voiceCallStatus.value = VoiceCallStatus.waitingForResponse;
+  }
+
+  void onVoiceCallStarted() {
+    _voiceCallStatus.value = VoiceCallStatus.connected;
+  }
+
+  void onVoiceCallClosed(String reason) {
+    _voiceCallStatus.value = VoiceCallStatus.notStarted;
+  }
+
+  void onVoiceCallIncoming() {
+    if (isConnManager) {
+      _voiceCallStatus.value = VoiceCallStatus.incoming;
+    }
+  }
+
+  void closeVoiceCall(String id) {
+    bind.sessionCloseVoiceCall(id: id);
+  }
+}
+
+enum VoiceCallStatus {
+  notStarted,
+  waitingForResponse,
+  connected,
+  // Connection manager only.
+  incoming
 }

@@ -22,7 +22,10 @@ import 'package:bot_toast/bot_toast.dart';
 import '../../models/platform_model.dart';
 
 class _MenuTheme {
-  static const Color commonColor = MyTheme.accent;
+  static const Color blueColor = MyTheme.button;
+  static const Color hoverBlueColor = MyTheme.accent;
+  static const Color redColor = Colors.redAccent;
+  static const Color hoverRedColor = Colors.red;
   // kMinInteractiveDimension
   static const double height = 20.0;
   static const double dividerHeight = 12.0;
@@ -38,9 +41,9 @@ class ConnectionTabPage extends StatefulWidget {
 }
 
 class _ConnectionTabPageState extends State<ConnectionTabPage> {
-  final tabController = Get.put(DesktopTabController(
-      tabType: DesktopTabType.remoteScreen,
-      onSelected: (_, id) => bind.setCurSessionId(id: id)));
+  final tabController =
+      Get.put(DesktopTabController(tabType: DesktopTabType.remoteScreen));
+  final contentKey = UniqueKey();
   static const IconData selectedIcon = Icons.desktop_windows_sharp;
   static const IconData unselectedIcon = Icons.desktop_windows_outlined;
 
@@ -54,6 +57,11 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     final peerId = params['id'];
     if (peerId != null) {
       ConnectionTypeState.init(peerId);
+      tabController.onSelected = (_, id) {
+        bind.setCurSessionId(id: id);
+        WindowController.fromWindowId(windowId())
+            .setTitle(getWindowNameWithId(id));
+      };
       tabController.add(TabInfo(
         key: peerId,
         label: peerId,
@@ -64,6 +72,8 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           key: ValueKey(peerId),
           id: peerId,
           menubarState: _menubarState,
+          switchUuid: params['switch_uuid'],
+          forceRelay: params['forceRelay'],
         ),
       ));
       _update_remote_count();
@@ -84,6 +94,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       if (call.method == "new_remote_desktop") {
         final args = jsonDecode(call.arguments);
         final id = args['id'];
+        final switchUuid = args['switch_uuid'];
         window_on_top(windowId());
         ConnectionTypeState.init(id);
         tabController.add(TabInfo(
@@ -96,14 +107,21 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             key: ValueKey(id),
             id: id,
             menubarState: _menubarState,
+            switchUuid: switchUuid,
+            forceRelay: args['forceRelay'],
           ),
         ));
+      } else if (call.method == kWindowDisableGrabKeyboard) {
+        stateGlobal.grabKeyboard = false;
       } else if (call.method == "onDestroy") {
         tabController.clear();
       } else if (call.method == kWindowActionRebuild) {
         reloadCurrentWindow();
       }
       _update_remote_count();
+    });
+    Future.delayed(Duration.zero, () {
+      restoreWindowPosition(WindowType.RemoteDesktop, windowId: windowId());
     });
   }
 
@@ -123,7 +141,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
               width: stateGlobal.windowBorderWidth.value),
         ),
         child: Scaffold(
-          backgroundColor: Theme.of(context).backgroundColor,
+          backgroundColor: Theme.of(context).colorScheme.background,
           body: DesktopTab(
             controller: tabController,
             onWindowCloseButton: handleWindowCloseButton,
@@ -187,13 +205,16 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         ),
       ),
     );
-    return Platform.isMacOS
+    return Platform.isMacOS || kUseCompatibleUiMode
         ? tabWidget
-        : SubWindowDragToResizeArea(
-            child: tabWidget,
-            resizeEdgeSize: stateGlobal.resizeEdgeSize.value,
-            windowId: stateGlobal.windowId,
-          );
+        : Obx(() => SubWindowDragToResizeArea(
+              key: contentKey,
+              child: tabWidget,
+              // Specially configured for a better resize area and remote control.
+              childPadding: kDragToResizeAreaPadding,
+              resizeEdgeSize: stateGlobal.resizeEdgeSize.value,
+              windowId: stateGlobal.windowId,
+            ));
   }
 
   // Note: Some dup code to ../widgets/remote_menubar
@@ -231,96 +252,35 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         padding: padding,
       ),
       MenuEntryDivider<String>(),
-      MenuEntryRadios<String>(
-        text: translate('Ratio'),
-        optionsGetter: () => [
-          MenuEntryRadioOption(
-            text: translate('Scale original'),
-            value: kRemoteViewStyleOriginal,
-            dismissOnClicked: true,
-          ),
-          MenuEntryRadioOption(
-            text: translate('Scale adaptive'),
-            value: kRemoteViewStyleAdaptive,
-            dismissOnClicked: true,
-          ),
-        ],
-        curOptionGetter: () async =>
-            // null means peer id is not found, which there's no need to care about
-            await bind.sessionGetViewStyle(id: key) ?? '',
-        optionSetter: (String oldValue, String newValue) async {
-          await bind.sessionSetViewStyle(id: key, value: newValue);
-          ffi.canvasModel.updateViewStyle();
-          cancelFunc();
-        },
-        padding: padding,
+      RemoteMenuEntry.viewStyle(
+        key,
+        ffi,
+        padding,
+        dismissFunc: cancelFunc,
       ),
     ]);
 
     if (!ffi.canvasModel.cursorEmbedded) {
       menu.add(MenuEntryDivider<String>());
-      menu.add(() {
-        final state = ShowRemoteCursorState.find(key);
-        return MenuEntrySwitch2<String>(
-          switchType: SwitchType.scheckbox,
-          text: translate('Show remote cursor'),
-          getter: () {
-            return state;
-          },
-          setter: (bool v) async {
-            state.value = v;
-            await bind.sessionToggleOption(
-                id: key, value: 'show-remote-cursor');
-            cancelFunc();
-          },
-          padding: padding,
-        );
-      }());
+      menu.add(RemoteMenuEntry.showRemoteCursor(
+        key,
+        padding,
+        dismissFunc: cancelFunc,
+      ));
     }
 
     if (perms['keyboard'] != false) {
       if (perms['clipboard'] != false) {
-        menu.add(MenuEntrySwitch<String>(
-          switchType: SwitchType.scheckbox,
-          text: translate('Disable clipboard'),
-          getter: () async {
-            return bind.sessionGetToggleOptionSync(
-                id: key, arg: 'disable-clipboard');
-          },
-          setter: (bool v) async {
-            await bind.sessionToggleOption(id: key, value: 'disable-clipboard');
-            cancelFunc();
-          },
-          padding: padding,
-        ));
+        menu.add(RemoteMenuEntry.disableClipboard(key, padding,
+            dismissFunc: cancelFunc));
       }
 
-      menu.add(MenuEntryButton<String>(
-        childBuilder: (TextStyle? style) => Text(
-          translate('Insert Lock'),
-          style: style,
-        ),
-        proc: () {
-          bind.sessionLockScreen(id: key);
-          cancelFunc();
-        },
-        padding: padding,
-        dismissOnClicked: true,
-      ));
+      menu.add(
+          RemoteMenuEntry.insertLock(key, padding, dismissFunc: cancelFunc));
 
-      if (pi.platform == 'Linux' || pi.sasEnabled) {
-        menu.add(MenuEntryButton<String>(
-          childBuilder: (TextStyle? style) => Text(
-            '${translate("Insert")} Ctrl + Alt + Del',
-            style: style,
-          ),
-          proc: () {
-            bind.sessionCtrlAltDel(id: key);
-            cancelFunc();
-          },
-          padding: padding,
-          dismissOnClicked: true,
-        ));
+      if (pi.platform == kPeerPlatformLinux || pi.sasEnabled) {
+        menu.add(RemoteMenuEntry.insertCtrlAltDel(key, padding,
+            dismissFunc: cancelFunc));
       }
     }
 
@@ -329,7 +289,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           .map((entry) => entry.build(
               context,
               const MenuConfig(
-                commonColor: _MenuTheme.commonColor,
+                commonColor: _MenuTheme.blueColor,
                 height: _MenuTheme.height,
                 dividerHeight: _MenuTheme.dividerHeight,
               )))

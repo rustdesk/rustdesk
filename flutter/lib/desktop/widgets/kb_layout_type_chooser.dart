@@ -1,12 +1,13 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 
 import '../../common.dart';
 
-typedef KBChoosedCallback = Future<bool> Function(String);
+typedef KBChosenCallback = Future<bool> Function(String);
 
 const double _kImageMarginVertical = 6.0;
 const double _kImageMarginHorizontal = 10.0;
@@ -25,12 +26,12 @@ const _kKBLayoutImageMap = {
 class _KBImage extends StatelessWidget {
   final String kbLayoutType;
   final double imageWidth;
-  final RxString choosedType;
+  final RxString chosenType;
   const _KBImage({
     Key? key,
     required this.kbLayoutType,
     required this.imageWidth,
-    required this.choosedType,
+    required this.chosenType,
   }) : super(key: key);
 
   @override
@@ -40,7 +41,7 @@ class _KBImage extends StatelessWidget {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(_kBorderRadius),
           border: Border.all(
-            color: choosedType.value == kbLayoutType
+            color: chosenType.value == kbLayoutType
                 ? _kImageBorderColor
                 : Colors.transparent,
             width: _kImageBoarderWidth,
@@ -66,13 +67,13 @@ class _KBImage extends StatelessWidget {
 class _KBChooser extends StatelessWidget {
   final String kbLayoutType;
   final double imageWidth;
-  final RxString choosedType;
-  final KBChoosedCallback cb;
+  final RxString chosenType;
+  final KBChosenCallback cb;
   const _KBChooser({
     Key? key,
     required this.kbLayoutType,
     required this.imageWidth,
-    required this.choosedType,
+    required this.chosenType,
     required this.cb,
   }) : super(key: key);
 
@@ -81,7 +82,7 @@ class _KBChooser extends StatelessWidget {
     onChanged(String? v) async {
       if (v != null) {
         if (await cb(v)) {
-          choosedType.value = v;
+          chosenType.value = v;
         }
       }
     }
@@ -95,7 +96,7 @@ class _KBChooser extends StatelessWidget {
           child: _KBImage(
             kbLayoutType: kbLayoutType,
             imageWidth: imageWidth,
-            choosedType: choosedType,
+            chosenType: chosenType,
           ),
           style: TextButton.styleFrom(padding: EdgeInsets.zero),
         ),
@@ -105,7 +106,7 @@ class _KBChooser extends StatelessWidget {
               Obx(() => Radio(
                     splashRadius: 0,
                     value: kbLayoutType,
-                    groupValue: choosedType.value,
+                    groupValue: chosenType.value,
                     onChanged: onChanged,
                   )),
               Text(kbLayoutType),
@@ -121,14 +122,14 @@ class _KBChooser extends StatelessWidget {
 }
 
 class KBLayoutTypeChooser extends StatelessWidget {
-  final RxString choosedType;
+  final RxString chosenType;
   final double width;
   final double height;
   final double dividerWidth;
-  final KBChoosedCallback cb;
+  final KBChosenCallback cb;
   KBLayoutTypeChooser({
     Key? key,
-    required this.choosedType,
+    required this.chosenType,
     required this.width,
     required this.height,
     required this.dividerWidth,
@@ -147,7 +148,7 @@ class KBLayoutTypeChooser extends StatelessWidget {
             _KBChooser(
               kbLayoutType: _kKBLayoutTypeISO,
               imageWidth: imageWidth,
-              choosedType: choosedType,
+              chosenType: chosenType,
               cb: cb,
             ),
             VerticalDivider(
@@ -156,7 +157,7 @@ class KBLayoutTypeChooser extends StatelessWidget {
             _KBChooser(
               kbLayoutType: _kKBLayoutTypeNotISO,
               imageWidth: imageWidth,
-              choosedType: choosedType,
+              chosenType: chosenType,
               cb: cb,
             ),
           ],
@@ -170,14 +171,14 @@ RxString KBLayoutType = ''.obs;
 
 String getLocalPlatformForKBLayoutType(String peerPlatform) {
   String localPlatform = '';
-  if (peerPlatform != 'Mac OS') {
+  if (peerPlatform != kPeerPlatformMacOS) {
     return localPlatform;
   }
 
   if (Platform.isWindows) {
-    localPlatform = 'Windows';
+    localPlatform = kPeerPlatformWindows;
   } else if (Platform.isLinux) {
-    localPlatform = 'Linux';
+    localPlatform = kPeerPlatformLinux;
   }
   // to-do: web desktop support ?
   return localPlatform;
@@ -208,7 +209,7 @@ showKBLayoutTypeChooser(
       title:
           Text('${translate('Select local keyboard type')} ($localPlatform)'),
       content: KBLayoutTypeChooser(
-          choosedType: KBLayoutType,
+          chosenType: KBLayoutType,
           width: 360,
           height: 200,
           dividerWidth: 4.0,
@@ -217,7 +218,7 @@ showKBLayoutTypeChooser(
             KBLayoutType.value = bind.getLocalKbLayoutType();
             return v == KBLayoutType.value;
           }),
-      actions: [msgBoxButton(translate('Close'), close)],
+      actions: [dialogButton('Close', onPressed: close)],
       onCancel: close,
     );
   });

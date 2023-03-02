@@ -14,8 +14,10 @@ mod id;
 mod it;
 mod ja;
 mod ko;
+mod nl;
 mod pl;
 mod ptbr;
+mod ro;
 mod ru;
 mod sk;
 mod tr;
@@ -39,6 +41,7 @@ lazy_static::lazy_static! {
             ("it", "Italiano"),
             ("fr", "Français"),
             ("de", "Deutsch"),
+            ("nl", "Nederlands"),
             ("cn", "简体中文"),
             ("tw", "繁體中文"),
             ("pt", "Português"),
@@ -65,6 +68,7 @@ lazy_static::lazy_static! {
             ("sr", "Srpski"),
             ("th", "ภาษาไทย"),
             ("sl", "Slovenščina"),
+            ("ro", "Română"),
         ]);
 }
 
@@ -79,7 +83,7 @@ pub fn translate_locale(name: String, locale: &str) -> String {
     if lang.is_empty() {
         // zh_CN on Linux, zh-Hans-CN on mac, zh_CN_#Hans on Android
         if locale.starts_with("zh") {
-            lang = (if locale.contains("TW") { "tw" } else { "cn" }).to_owned();
+            lang = (if locale.contains("tw") { "tw" } else { "cn" }).to_owned();
         }
     }
     if lang.is_empty() {
@@ -97,6 +101,7 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "it" => it::T.deref(),
         "tw" => tw::T.deref(),
         "de" => de::T.deref(),
+        "nl" => nl::T.deref(),
         "es" => es::T.deref(),
         "hu" => hu::T.deref(),
         "ru" => ru::T.deref(),
@@ -123,6 +128,7 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "sr" => sr::T.deref(),
         "th" => th::T.deref(),
         "sl" => sl::T.deref(),
+        "ro" => ro::T.deref(),
         _ => en::T.deref(),
     };
     if let Some(v) = m.get(&name as &str) {

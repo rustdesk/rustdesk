@@ -109,13 +109,17 @@ class MenuConfig {
       this.boxWidth});
 }
 
+typedef DismissCallback = Function();
+
 abstract class MenuEntryBase<T> {
   bool dismissOnClicked;
+  DismissCallback? dismissCallback;
   RxBool? enabled;
 
   MenuEntryBase({
     this.dismissOnClicked = false,
     this.enabled,
+    this.dismissCallback,
   });
   List<mod_menu.PopupMenuEntry<T>> build(BuildContext context, MenuConfig conf);
 
@@ -146,12 +150,14 @@ class MenuEntryRadioOption {
   String value;
   bool dismissOnClicked;
   RxBool? enabled;
+  DismissCallback? dismissCallback;
 
   MenuEntryRadioOption({
     required this.text,
     required this.value,
     this.dismissOnClicked = false,
     this.enabled,
+    this.dismissCallback,
   });
 }
 
@@ -177,8 +183,13 @@ class MenuEntryRadios<T> extends MenuEntryBase<T> {
     required this.optionSetter,
     this.padding,
     dismissOnClicked = false,
+    dismissCallback,
     RxBool? enabled,
-  }) : super(dismissOnClicked: dismissOnClicked, enabled: enabled) {
+  }) : super(
+          dismissOnClicked: dismissOnClicked,
+          enabled: enabled,
+          dismissCallback: dismissCallback,
+        ) {
     () async {
       _curOption.value = await curOptionGetter();
     }();
@@ -249,6 +260,9 @@ class MenuEntryRadios<T> extends MenuEntryBase<T> {
     onPressed() {
       if (opt.dismissOnClicked && Navigator.canPop(context)) {
         Navigator.pop(context);
+        if (opt.dismissCallback != null) {
+          opt.dismissCallback!();
+        }
       }
       setOption(opt.value);
     }
@@ -360,6 +374,9 @@ class MenuEntrySubRadios<T> extends MenuEntryBase<T> {
             onPressed: () {
               if (opt.dismissOnClicked && Navigator.canPop(context)) {
                 Navigator.pop(context);
+                if (opt.dismissCallback != null) {
+                  opt.dismissCallback!();
+                }
               }
               setOption(opt.value);
             },
@@ -421,7 +438,12 @@ abstract class MenuEntrySwitchBase<T> extends MenuEntryBase<T> {
     this.textStyle,
     this.padding,
     RxBool? enabled,
-  }) : super(dismissOnClicked: dismissOnClicked, enabled: enabled);
+    dismissCallback,
+  }) : super(
+          dismissOnClicked: dismissOnClicked,
+          enabled: enabled,
+          dismissCallback: dismissCallback,
+        );
 
   RxBool get curOption;
   Future<void> setOption(bool? option);
@@ -463,6 +485,9 @@ abstract class MenuEntrySwitchBase<T> extends MenuEntryBase<T> {
                                   if (super.dismissOnClicked &&
                                       Navigator.canPop(context)) {
                                     Navigator.pop(context);
+                                    if (super.dismissCallback != null) {
+                                      super.dismissCallback!();
+                                    }
                                   }
                                   setOption(v);
                                 },
@@ -474,6 +499,9 @@ abstract class MenuEntrySwitchBase<T> extends MenuEntryBase<T> {
                                   if (super.dismissOnClicked &&
                                       Navigator.canPop(context)) {
                                     Navigator.pop(context);
+                                    if (super.dismissCallback != null) {
+                                      super.dismissCallback!();
+                                    }
                                   }
                                   setOption(v);
                                 },
@@ -485,6 +513,9 @@ abstract class MenuEntrySwitchBase<T> extends MenuEntryBase<T> {
               onPressed: () {
                 if (super.dismissOnClicked && Navigator.canPop(context)) {
                   Navigator.pop(context);
+                  if (super.dismissCallback != null) {
+                    super.dismissCallback!();
+                  }
                 }
                 setOption(!curOption.value);
               },
@@ -508,6 +539,7 @@ class MenuEntrySwitch<T> extends MenuEntrySwitchBase<T> {
     EdgeInsets? padding,
     dismissOnClicked = false,
     RxBool? enabled,
+    dismissCallback,
   }) : super(
           switchType: switchType,
           text: text,
@@ -515,6 +547,7 @@ class MenuEntrySwitch<T> extends MenuEntrySwitchBase<T> {
           padding: padding,
           dismissOnClicked: dismissOnClicked,
           enabled: enabled,
+          dismissCallback: dismissCallback,
         ) {
     () async {
       _curOption.value = await getter();
@@ -551,12 +584,15 @@ class MenuEntrySwitch2<T> extends MenuEntrySwitchBase<T> {
     EdgeInsets? padding,
     dismissOnClicked = false,
     RxBool? enabled,
+    dismissCallback,
   }) : super(
-            switchType: switchType,
-            text: text,
-            textStyle: textStyle,
-            padding: padding,
-            dismissOnClicked: dismissOnClicked);
+          switchType: switchType,
+          text: text,
+          textStyle: textStyle,
+          padding: padding,
+          dismissOnClicked: dismissOnClicked,
+          dismissCallback: dismissCallback,
+        );
 
   @override
   RxBool get curOption => getter();
@@ -627,9 +663,11 @@ class MenuEntryButton<T> extends MenuEntryBase<T> {
     this.padding,
     dismissOnClicked = false,
     RxBool? enabled,
+    dismissCallback,
   }) : super(
           dismissOnClicked: dismissOnClicked,
           enabled: enabled,
+          dismissCallback: dismissCallback,
         );
 
   Widget _buildChild(BuildContext context, MenuConfig conf) {
@@ -641,6 +679,9 @@ class MenuEntryButton<T> extends MenuEntryBase<T> {
               ? () {
                   if (super.dismissOnClicked && Navigator.canPop(context)) {
                     Navigator.pop(context);
+                    if (super.dismissCallback != null) {
+                      super.dismissCallback!();
+                    }
                   }
                   proc();
                 }

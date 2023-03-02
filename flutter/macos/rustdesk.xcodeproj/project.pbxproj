@@ -84,7 +84,7 @@
 				"CARGO_XCODE_TARGET_OS[sdk=iphonesimulator*]" = "ios-sim";
 				"CARGO_XCODE_TARGET_OS[sdk=macosx*]" = darwin;
 				ONLY_ACTIVE_ARCH = YES;
-				PRODUCT_NAME = rustdesk;
+				PRODUCT_NAME = RustDesk;
 				SDKROOT = macosx;
 				SUPPORTS_MACCATALYST = YES;
 			};
@@ -105,7 +105,7 @@
 				"CARGO_XCODE_TARGET_OS[sdk=iphoneos*]" = ios;
 				"CARGO_XCODE_TARGET_OS[sdk=iphonesimulator*]" = "ios-sim";
 				"CARGO_XCODE_TARGET_OS[sdk=macosx*]" = darwin;
-				PRODUCT_NAME = rustdesk;
+				PRODUCT_NAME = RustDesk;
 				SDKROOT = macosx;
 				SUPPORTS_MACCATALYST = YES;
 				OTHER_LDFLAGS = (

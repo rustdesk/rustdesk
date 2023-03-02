@@ -1,4 +1,5 @@
 use crate::{bail, bytes_codec::BytesCodec, ResultType};
+use anyhow::Context as AnyhowCtx;
 use bytes::{BufMut, Bytes, BytesMut};
 use futures::{SinkExt, StreamExt};
 use protobuf::Message;
@@ -99,7 +100,7 @@ impl FramedStream {
                 }
             }
         }
-        bail!(format!("Failed to connect to {}", remote_addr));
+        bail!(format!("Failed to connect to {remote_addr}"));
     }
 
     pub async fn connect<'a, 't, P, T>(
@@ -209,7 +210,7 @@ impl FramedStream {
             if let Some(Ok(bytes)) = res.as_mut() {
                 key.2 += 1;
                 let nonce = Self::get_nonce(key.2);
-                match secretbox::open(&bytes, &nonce, &key.0) {
+                match secretbox::open(bytes, &nonce, &key.0) {
                     Ok(res) => {
                         bytes.clear();
                         bytes.put_slice(&res);
@@ -245,16 +246,17 @@ impl FramedStream {
 
 const DEFAULT_BACKLOG: u32 = 128;
 
-#[allow(clippy::never_loop)]
 pub async fn new_listener<T: ToSocketAddrs>(addr: T, reuse: bool) -> ResultType<TcpListener> {
     if !reuse {
         Ok(TcpListener::bind(addr).await?)
     } else {
-        for addr in lookup_host(&addr).await? {
-            let socket = new_socket(addr, true)?;
-            return Ok(socket.listen(DEFAULT_BACKLOG)?);
-        }
-        bail!("could not resolve to any address");
+        let addr = lookup_host(&addr)
+            .await?
+            .next()
+            .context("could not resolve to any address")?;
+        new_socket(addr, true)?
+            .listen(DEFAULT_BACKLOG)
+            .map_err(anyhow::Error::msg)
     }
 }
 

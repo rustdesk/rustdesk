@@ -43,6 +43,13 @@ pub const HW_STRIDE_ALIGN: usize = 0; // recommended by av_frame_get_buffer
 pub mod record;
 mod vpx;
 
+#[derive(Copy, Clone)]
+pub enum ImageFormat {
+    Raw,
+    ABGR,
+    ARGB,
+}
+
 #[inline]
 pub fn would_block_if_equal(old: &mut Vec<u8>, b: &[u8]) -> std::io::Result<()> {
     // does this really help?
@@ -76,7 +83,7 @@ pub fn is_cursor_embedded() -> bool {
     if is_x11() {
         x11::IS_CURSOR_EMBEDDED
     } else {
-        wayland::IS_CURSOR_EMBEDDED
+        wayland::is_cursor_embedded()
     }
 }
 

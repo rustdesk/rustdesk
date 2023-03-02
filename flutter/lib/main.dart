@@ -1,22 +1,23 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:bot_toast/bot_toast.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
-import 'package:flutter_hbb/desktop/pages/server_page.dart';
 import 'package:flutter_hbb/desktop/pages/install_page.dart';
+import 'package:flutter_hbb/desktop/pages/server_page.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_file_transfer_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_port_forward_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_remote_screen.dart';
 import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
+import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
-import 'package:bot_toast/bot_toast.dart';
 
 // import 'package:window_manager/window_manager.dart';
 
@@ -26,13 +27,18 @@ import 'mobile/pages/home_page.dart';
 import 'mobile/pages/server_page.dart';
 import 'models/platform_model.dart';
 
-int? windowId;
-late List<String> bootArgs;
+/// Basic window and launch properties.
+int? kWindowId;
+WindowType? kWindowType;
+late List<String> kBootArgs;
+
+/// Uni links.
+StreamSubscription? _uniLinkSubscription;
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   debugPrint("launch args: $args");
-  bootArgs = List.from(args);
+  kBootArgs = List.from(args);
 
   if (!isDesktop) {
     runMobileApp();
@@ -40,10 +46,10 @@ Future<void> main(List<String> args) async {
   }
   // main window
   if (args.isNotEmpty && args.first == 'multi_window') {
-    windowId = int.parse(args[1]);
-    stateGlobal.setWindowId(windowId!);
+    kWindowId = int.parse(args[1]);
+    stateGlobal.setWindowId(kWindowId!);
     if (!Platform.isMacOS) {
-      WindowController.fromWindowId(windowId!).showTitleBar(false);
+      WindowController.fromWindowId(kWindowId!).showTitleBar(false);
     }
     final argument = args[2].isEmpty
         ? <String, dynamic>{}
@@ -51,15 +57,16 @@ Future<void> main(List<String> args) async {
     int type = argument['type'] ?? -1;
     // to-do: No need to parse window id ?
     // Because stateGlobal.windowId is a global value.
-    argument['windowId'] = windowId;
-    WindowType wType = type.windowType;
-    switch (wType) {
+    argument['windowId'] = kWindowId;
+    kWindowType = type.windowType;
+    final windowName = getWindowName();
+    switch (kWindowType) {
       case WindowType.RemoteDesktop:
         desktopType = DesktopType.remote;
         runMultiWindow(
           argument,
           kAppTypeDesktopRemote,
-          'RustDesk - Remote Desktop',
+          windowName,
         );
         break;
       case WindowType.FileTransfer:
@@ -67,7 +74,7 @@ Future<void> main(List<String> args) async {
         runMultiWindow(
           argument,
           kAppTypeDesktopFileTransfer,
-          'RustDesk - File Transfer',
+          windowName,
         );
         break;
       case WindowType.PortForward:
@@ -75,7 +82,7 @@ Future<void> main(List<String> args) async {
         runMultiWindow(
           argument,
           kAppTypeDesktopPortForward,
-          'RustDesk - Port Forward',
+          windowName,
         );
         break;
       default:
@@ -105,11 +112,12 @@ Future<void> initEnv(String appType) async {
   await initGlobalFFI();
   // await Firebase.initializeApp();
   _registerEventHandler();
+  // Update the system theme.
+  updateSystemWindowTheme();
 }
 
 void runMainApp(bool startService) async {
   // register uni links
-  initUniLinks();
   await initEnv(kAppTypeMain);
   // trigger connection status updater
   await bind.mainCheckConnectStatus();
@@ -119,27 +127,33 @@ void runMainApp(bool startService) async {
   }
   gFFI.userModel.refreshCurrentUser();
   runApp(App());
-  // restore the location of the main window before window hide or show
-  await restoreWindowPosition(WindowType.Main);
-  // check the startup argument, if we successfully handle the argument, we keep the main window hidden.
-  if (checkArguments()) {
-    windowManager.hide();
-  } else {
-    windowManager.show();
-    windowManager.focus();
-    // move registration of active main window here to prevent async visible check.
-    rustDeskWinManager.registerActiveWindow(kWindowMainId);
-  }
-  // set window option
+  // Set window option.
   WindowOptions windowOptions = getHiddenTitleBarWindowOptions();
   windowManager.waitUntilReadyToShow(windowOptions, () async {
+    // Restore the location of the main window before window hide or show.
+    await restoreWindowPosition(WindowType.Main);
+    // Check the startup argument, if we successfully handle the argument, we keep the main window hidden.
+    final handledByUniLinks = await initUniLinks();
+    final handledByCli = checkArguments();
+    debugPrint(
+        "handled by uni links: $handledByUniLinks, handled by cli: $handledByCli");
+    if (handledByUniLinks || handledByCli) {
+      windowManager.hide();
+    } else {
+      windowManager.show();
+      windowManager.focus();
+      // Move registration of active main window here to prevent from async visible check.
+      rustDeskWinManager.registerActiveWindow(kWindowMainId);
+    }
     windowManager.setOpacity(1);
+    windowManager.setTitle(getWindowName());
   });
 }
 
 void runMobileApp() async {
   await initEnv(kAppTypeMain);
   if (isAndroid) androidChannelInit();
+  platformFFI.syncAndroidServiceAppDirConfigPath();
   runApp(App());
 }
 
@@ -150,7 +164,7 @@ void runMultiWindow(
 ) async {
   await initEnv(appType);
   // set prevent close to true, we handle close event manually
-  WindowController.fromWindowId(windowId!).setPreventClose(true);
+  WindowController.fromWindowId(kWindowId!).setPreventClose(true);
   late Widget widget;
   switch (appType) {
     case kAppTypeDesktopRemote:
@@ -179,29 +193,31 @@ void runMultiWindow(
   );
   // we do not hide titlebar on win7 because of the frame overflow.
   if (kUseCompatibleUiMode) {
-    WindowController.fromWindowId(windowId!).showTitleBar(true);
+    WindowController.fromWindowId(kWindowId!).showTitleBar(true);
   }
   switch (appType) {
     case kAppTypeDesktopRemote:
       await restoreWindowPosition(WindowType.RemoteDesktop,
-          windowId: windowId!);
+          windowId: kWindowId!);
       break;
     case kAppTypeDesktopFileTransfer:
-      await restoreWindowPosition(WindowType.FileTransfer, windowId: windowId!);
+      await restoreWindowPosition(WindowType.FileTransfer,
+          windowId: kWindowId!);
       break;
     case kAppTypeDesktopPortForward:
-      await restoreWindowPosition(WindowType.PortForward, windowId: windowId!);
+      await restoreWindowPosition(WindowType.PortForward, windowId: kWindowId!);
       break;
     default:
       // no such appType
       exit(0);
   }
   // show window from hidden status
-  WindowController.fromWindowId(windowId!).show();
+  WindowController.fromWindowId(kWindowId!).show();
 }
 
 void runConnectionManagerScreen(bool hide) async {
-  await initEnv(kAppTypeMain);
+  await initEnv(kAppTypeConnectionManager);
+  await bind.cmStartListenIpcThread();
   _runApp(
     '',
     const DesktopServerPage(),
@@ -212,12 +228,15 @@ void runConnectionManagerScreen(bool hide) async {
   } else {
     showCmWindow();
   }
+  // Start the uni links handler and redirect links to Native, not for Flutter.
+  _uniLinkSubscription = listenUniLinks(handleByFlutter: false);
 }
 
 void showCmWindow() {
   WindowOptions windowOptions =
       getHiddenTitleBarWindowOptions(size: kConnectionManagerWindowSize);
   windowManager.waitUntilReadyToShow(windowOptions, () async {
+    bind.mainHideDocker();
     await windowManager.show();
     await Future.wait([windowManager.focus(), windowManager.setOpacity(1)]);
     // ensure initial window size to be changed
@@ -231,6 +250,7 @@ void hideCmWindow() {
       getHiddenTitleBarWindowOptions(size: kConnectionManagerWindowSize);
   windowManager.setOpacity(0);
   windowManager.waitUntilReadyToShow(windowOptions, () async {
+    bind.mainHideDocker();
     await windowManager.hide();
   });
 }
@@ -272,17 +292,20 @@ void _runApp(
 void runInstallPage() async {
   await windowManager.ensureInitialized();
   await initEnv(kAppTypeMain);
-  _runApp('', const InstallPage(), ThemeMode.light);
-  windowManager.waitUntilReadyToShow(
-      WindowOptions(size: Size(800, 600), center: true), () async {
+  _runApp('', const InstallPage(), MyTheme.currentThemeMode());
+  WindowOptions windowOptions =
+      getHiddenTitleBarWindowOptions(size: Size(800, 600), center: true);
+  windowManager.waitUntilReadyToShow(windowOptions, () async {
     windowManager.show();
     windowManager.focus();
     windowManager.setOpacity(1);
     windowManager.setAlignment(Alignment.center); // ensure
+    windowManager.setTitle(getWindowName());
   });
 }
 
-WindowOptions getHiddenTitleBarWindowOptions({Size? size}) {
+WindowOptions getHiddenTitleBarWindowOptions(
+    {Size? size, bool center = false}) {
   var defaultTitleBarStyle = TitleBarStyle.hidden;
   // we do not hide titlebar on win7 because of the frame overflow.
   if (kUseCompatibleUiMode) {
@@ -290,7 +313,7 @@ WindowOptions getHiddenTitleBarWindowOptions({Size? size}) {
   }
   return WindowOptions(
     size: size,
-    center: false,
+    center: center,
     backgroundColor: Colors.transparent,
     skipTaskbar: false,
     titleBarStyle: defaultTitleBarStyle,
@@ -320,6 +343,8 @@ class _AppState extends State<App> {
         to = ThemeMode.light;
       }
       Get.changeThemeMode(to);
+      // Synchronize the window theme of the system.
+      updateSystemWindowTheme();
       if (desktopType == DesktopType.main) {
         bind.mainChangeTheme(dark: to.toShortString());
       }
@@ -339,6 +364,7 @@ class _AppState extends State<App> {
           ChangeNotifierProvider.value(value: gFFI.imageModel),
           ChangeNotifierProvider.value(value: gFFI.cursorModel),
           ChangeNotifierProvider.value(value: gFFI.canvasModel),
+          ChangeNotifierProvider.value(value: gFFI.peerTabModel),
         ],
         child: GetMaterialApp(
           navigatorKey: globalKey,

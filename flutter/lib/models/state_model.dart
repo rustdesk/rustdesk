@@ -9,19 +9,31 @@ import '../consts.dart';
 class StateGlobal {
   int _windowId = -1;
   bool _fullscreen = false;
+  bool _maximize = false;
+  bool grabKeyboard = false;
   final RxBool _showTabBar = true.obs;
+  final RxBool _showResizeEdge = true.obs;
   final RxDouble _resizeEdgeSize = RxDouble(kWindowEdgeSize);
   final RxDouble _windowBorderWidth = RxDouble(kWindowBorderWidth);
   final RxBool showRemoteMenuBar = false.obs;
+  final RxInt displaysCount = 0.obs;
 
   int get windowId => _windowId;
   bool get fullscreen => _fullscreen;
+  bool get maximize => _maximize;
   double get tabBarHeight => fullscreen ? 0 : kDesktopRemoteTabBarHeight;
   RxBool get showTabBar => _showTabBar;
   RxDouble get resizeEdgeSize => _resizeEdgeSize;
   RxDouble get windowBorderWidth => _windowBorderWidth;
 
   setWindowId(int id) => _windowId = id;
+  setMaximize(bool v) {
+    if (_maximize != v) {
+      _maximize = v;
+      _resizeEdgeSize.value =
+          _maximize ? kMaximizeEdgeSize : kWindowEdgeSize;
+    }
+  }
   setFullscreen(bool v) {
     if (_fullscreen != v) {
       _fullscreen = v;

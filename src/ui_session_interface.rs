@@ -1,23 +1,34 @@
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use std::collections::HashMap;
+use std::ops::{Deref, DerefMut};
+use std::str::FromStr;
+use std::sync::{
+    atomic::{AtomicBool, AtomicUsize, Ordering},
+    Arc, Mutex, RwLock,
+};
+use std::time::{Duration, SystemTime};
+
+use async_trait::async_trait;
+use bytes::Bytes;
+use rdev::{Event, EventType::*};
+use uuid::Uuid;
+
+use hbb_common::config::{Config, LocalConfig, PeerConfig, RS_PUB_KEY};
+use hbb_common::rendezvous_proto::ConnType;
+use hbb_common::tokio::{self, sync::mpsc};
+use hbb_common::{allow_err, message_proto::*};
+use hbb_common::{fs, get_version_number, log, Stream};
+
 use crate::client::io_loop::Remote;
 use crate::client::{
     check_if_retry, handle_hash, handle_login_error, handle_login_from_ui, handle_test_delay,
     input_os_password, load_config, send_mouse, start_video_audio_threads, FileManager, Key,
     LoginConfigHandler, QualityStatus, KEY_MAP,
 };
-use crate::common::GrabState;
+use crate::common::{self, GrabState};
 use crate::keyboard;
 use crate::{client::Data, client::Interface};
-use async_trait::async_trait;
-use hbb_common::config::{Config, LocalConfig, PeerConfig};
-use hbb_common::rendezvous_proto::ConnType;
-use hbb_common::tokio::{self, sync::mpsc};
-use hbb_common::{allow_err, message_proto::*};
-use hbb_common::{fs, get_version_number, log, Stream};
-use rdev::{Event, EventType::*};
-use std::collections::HashMap;
-use std::ops::{Deref, DerefMut};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, RwLock};
+
 pub static IS_IN: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone, Default)]
@@ -29,9 +40,37 @@ pub struct Session<T: InvokeUiSession> {
     pub sender: Arc<RwLock<Option<mpsc::UnboundedSender<Data>>>>,
     pub thread: Arc<Mutex<Option<std::thread::JoinHandle<()>>>>,
     pub ui_handler: T,
+    pub server_keyboard_enabled: Arc<RwLock<bool>>,
+    pub server_file_transfer_enabled: Arc<RwLock<bool>>,
+    pub server_clipboard_enabled: Arc<RwLock<bool>>,
+}
+
+#[derive(Clone)]
+pub struct SessionPermissionConfig {
+    pub lc: Arc<RwLock<LoginConfigHandler>>,
+    pub server_keyboard_enabled: Arc<RwLock<bool>>,
+    pub server_file_transfer_enabled: Arc<RwLock<bool>>,
+    pub server_clipboard_enabled: Arc<RwLock<bool>>,
+}
+
+impl SessionPermissionConfig {
+    pub fn is_text_clipboard_required(&self) -> bool {
+        *self.server_clipboard_enabled.read().unwrap()
+            && *self.server_keyboard_enabled.read().unwrap()
+            && !self.lc.read().unwrap().disable_clipboard.v
+    }
 }
 
 impl<T: InvokeUiSession> Session<T> {
+    pub fn get_permission_config(&self) -> SessionPermissionConfig {
+        SessionPermissionConfig {
+            lc: self.lc.clone(),
+            server_keyboard_enabled: self.server_keyboard_enabled.clone(),
+            server_file_transfer_enabled: self.server_file_transfer_enabled.clone(),
+            server_clipboard_enabled: self.server_clipboard_enabled.clone(),
+        }
+    }
+
     pub fn is_file_transfer(&self) -> bool {
         self.lc
             .read()
@@ -74,6 +113,10 @@ impl<T: InvokeUiSession> Session<T> {
         self.lc.read().unwrap().custom_image_quality.clone()
     }
 
+    pub fn get_peer_version(&self) -> i64 {
+        self.lc.read().unwrap().version.clone()
+    }
+
     pub fn get_keyboard_mode(&self) -> String {
         self.lc.read().unwrap().keyboard_mode.clone()
     }
@@ -114,6 +157,12 @@ impl<T: InvokeUiSession> Session<T> {
 
     pub fn is_privacy_mode_supported(&self) -> bool {
         self.lc.read().unwrap().is_privacy_mode_supported()
+    }
+
+    pub fn is_text_clipboard_required(&self) -> bool {
+        *self.server_clipboard_enabled.read().unwrap()
+            && *self.server_keyboard_enabled.read().unwrap()
+            && !self.lc.read().unwrap().disable_clipboard.v
     }
 
     pub fn refresh_video(&self) {
@@ -225,6 +274,11 @@ impl<T: InvokeUiSession> Session<T> {
         crate::platform::is_xfce()
     }
 
+    pub fn get_supported_keyboard_modes(&self) -> Vec<KeyboardMode> {
+        let version = self.get_peer_version();
+        common::get_supported_keyboard_modes(version)
+    }
+
     pub fn remove_port_forward(&self, port: i32) {
         let mut config = self.load_config();
         config.port_forwards = config
@@ -319,10 +373,87 @@ impl<T: InvokeUiSession> Session<T> {
         return "".to_owned();
     }
 
+    pub fn swab_modifier_key(&self, msg: &mut KeyEvent) {
+
+        let allow_swap_key = self.get_toggle_option("allow_swap_key".to_string());
+        if allow_swap_key {
+            if let Some(key_event::Union::ControlKey(ck)) = msg.union {
+                let ck = ck.enum_value_or_default();
+                let ck = match ck {
+                    ControlKey::Control => ControlKey::Meta,
+                    ControlKey::Meta => ControlKey::Control,
+                    ControlKey::RControl => ControlKey::Meta,
+                    ControlKey::RWin => ControlKey::Control,
+                    _ => ck,
+                };
+                msg.set_control_key(ck);
+            }
+            msg.modifiers = msg.modifiers.iter().map(|ck| {
+                let ck = ck.enum_value_or_default();
+                let ck = match ck {
+                    ControlKey::Control => ControlKey::Meta,
+                    ControlKey::Meta => ControlKey::Control,
+                    ControlKey::RControl => ControlKey::Meta,
+                    ControlKey::RWin => ControlKey::Control,
+                    _ => ck,
+                };
+                hbb_common::protobuf::EnumOrUnknown::new(ck)
+            }).collect();
+            
+        
+            let code = msg.chr();
+            if code != 0 {
+                let mut peer = self.peer_platform().to_lowercase();
+                peer.retain(|c| !c.is_whitespace());
+
+                let key = match peer.as_str() {
+                    "windows" => {
+                        let key = rdev::win_key_from_scancode(code);
+                        let key = match key {
+                            rdev::Key::ControlLeft => rdev::Key::MetaLeft,
+                            rdev::Key::MetaLeft => rdev::Key::ControlLeft,
+                            rdev::Key::ControlRight => rdev::Key::MetaLeft,
+                            rdev::Key::MetaRight => rdev::Key::ControlLeft,
+                            _ => key,
+                        };
+                        rdev::win_scancode_from_key(key).unwrap_or_default()
+                    }
+                    "macos" => {
+                        let key = rdev::macos_key_from_code(code);
+                        let key = match key {
+                            rdev::Key::ControlLeft => rdev::Key::MetaLeft,
+                            rdev::Key::MetaLeft => rdev::Key::ControlLeft,
+                            rdev::Key::ControlRight => rdev::Key::MetaLeft,
+                            rdev::Key::MetaRight => rdev::Key::ControlLeft,
+                            _ => key,
+                        };
+                        rdev::macos_keycode_from_key(key).unwrap_or_default()
+                    }
+                    _ => {
+                        let key = rdev::linux_key_from_code(code);
+                        let key = match key {
+                            rdev::Key::ControlLeft => rdev::Key::MetaLeft,
+                            rdev::Key::MetaLeft => rdev::Key::ControlLeft,
+                            rdev::Key::ControlRight => rdev::Key::MetaLeft,
+                            rdev::Key::MetaRight => rdev::Key::ControlLeft,
+                            _ => key,
+                        };
+                        rdev::linux_keycode_from_key(key).unwrap_or_default()
+                    }
+                };
+                msg.set_chr(key);
+            }
+        }
+
+    }
+
     pub fn send_key_event(&self, evt: &KeyEvent) {
         // mode: legacy(0), map(1), translate(2), auto(3)
+
+        let mut msg = evt.clone();
+        self.swab_modifier_key(&mut msg);
         let mut msg_out = Message::new();
-        msg_out.set_key_event(evt.clone());
+        msg_out.set_key_event(msg);
         self.send(Data::Message(msg_out));
     }
 
@@ -349,11 +480,24 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn enter(&self) {
+        #[cfg(target_os = "windows")]
+        {
+            match &self.lc.read().unwrap().keyboard_mode as _ {
+                "legacy" => rdev::set_get_key_unicode(true),
+                "translate" => rdev::set_get_key_unicode(true),
+                _ => {}
+            }
+        }
+
         IS_IN.store(true, Ordering::SeqCst);
         keyboard::client::change_grab_status(GrabState::Run);
     }
 
     pub fn leave(&self) {
+        #[cfg(target_os = "windows")]
+        {
+            rdev::set_get_key_unicode(false);
+        }
         IS_IN.store(false, Ordering::SeqCst);
         keyboard::client::change_grab_status(GrabState::Wait);
     }
@@ -391,9 +535,10 @@ impl<T: InvokeUiSession> Session<T> {
 
     pub fn handle_flutter_key_event(
         &self,
-        name: &str,
+        _name: &str,
         keycode: i32,
         scancode: i32,
+        lock_modes: i32,
         down_or_up: bool,
     ) {
         if scancode < 0 || keycode < 0 {
@@ -414,13 +559,13 @@ impl<T: InvokeUiSession> Session<T> {
             KeyRelease(key)
         };
         let event = Event {
-            time: std::time::SystemTime::now(),
-            name: Option::Some(name.to_owned()),
+            time: SystemTime::now(),
+            unicode: None,
             code: keycode as _,
             scan_code: scancode as _,
             event_type: event_type,
         };
-        keyboard::client::process_event(&event);
+        keyboard::client::process_event(&event, Some(lock_modes));
     }
 
     // flutter only TODO new input
@@ -501,9 +646,13 @@ impl<T: InvokeUiSession> Session<T> {
         }
     }
 
-    pub fn reconnect(&self) {
+    pub fn reconnect(&self, force_relay: bool) {
         self.send(Data::Close);
         let cloned = self.clone();
+        // override only if true
+        if true == force_relay {
+            cloned.lc.write().unwrap().force_relay = true;
+        }
         let mut lock = self.thread.lock().unwrap();
         lock.take().map(|t| t.join());
         *lock = Some(std::thread::spawn(move || {
@@ -598,6 +747,100 @@ impl<T: InvokeUiSession> Session<T> {
         }
         self.update_transfer_list();
     }
+
+    pub fn elevate_direct(&self) {
+        self.send(Data::ElevateDirect);
+    }
+
+    pub fn elevate_with_logon(&self, username: String, password: String) {
+        self.send(Data::ElevateWithLogon(username, password));
+    }
+
+    #[tokio::main(flavor = "current_thread")]
+    pub async fn switch_sides(&self) {
+        match crate::ipc::connect(1000, "").await {
+            Ok(mut conn) => {
+                if conn
+                    .send(&crate::ipc::Data::SwitchSidesRequest(self.id.to_string()))
+                    .await
+                    .is_ok()
+                {
+                    if let Ok(Some(data)) = conn.next_timeout(1000).await {
+                        match data {
+                            crate::ipc::Data::SwitchSidesRequest(str_uuid) => {
+                                if let Ok(uuid) = Uuid::from_str(&str_uuid) {
+                                    let mut misc = Misc::new();
+                                    misc.set_switch_sides_request(SwitchSidesRequest {
+                                        uuid: Bytes::from(uuid.as_bytes().to_vec()),
+                                        ..Default::default()
+                                    });
+                                    let mut msg_out = Message::new();
+                                    msg_out.set_misc(misc);
+                                    self.send(Data::Message(msg_out));
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+            Err(err) => {
+                log::info!("server not started (will try to start): {}", err);
+            }
+        }
+    }
+
+    pub fn change_resolution(&self, width: i32, height: i32) {
+        let mut misc = Misc::new();
+        misc.set_change_resolution(Resolution {
+            width,
+            height,
+            ..Default::default()
+        });
+        let mut msg = Message::new();
+        msg.set_misc(misc);
+        self.send(Data::Message(msg));
+    }
+
+    pub fn request_voice_call(&self) {
+        self.send(Data::NewVoiceCall);
+    }
+
+    pub fn close_voice_call(&self) {
+        self.send(Data::CloseVoiceCall);
+    }
+
+    pub fn show_relay_hint(
+        &mut self,
+        last_recv_time: tokio::time::Instant,
+        msgtype: &str,
+        title: &str,
+        text: &str,
+    ) -> bool {
+        let duration = Duration::from_secs(3);
+        let counter_interval = 3;
+        let lock = self.lc.read().unwrap();
+        let success_time = lock.success_time;
+        let direct = lock.direct.unwrap_or(false);
+        let received = lock.received;
+        drop(lock);
+        if let Some(success_time) = success_time {
+            if direct && last_recv_time.duration_since(success_time) < duration {
+                let retry_for_relay = direct && !received;
+                let retry = check_if_retry(msgtype, title, text, retry_for_relay);
+                if retry && !retry_for_relay {
+                    self.lc.write().unwrap().direct_error_counter += 1;
+                    if self.lc.read().unwrap().direct_error_counter % counter_interval == 0 {
+                        #[cfg(feature = "flutter")]
+                        return true;
+                    }
+                }
+            } else {
+                self.lc.write().unwrap().direct_error_counter = 0;
+            }
+        }
+        false
+    }
 }
 
 pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
@@ -607,6 +850,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn set_display(&self, x: i32, y: i32, w: i32, h: i32, cursor_embedded: bool);
     fn switch_display(&self, display: &SwitchDisplay);
     fn set_peer_info(&self, peer_info: &PeerInfo); // flutter
+    fn set_displays(&self, displays: &Vec<DisplayInfo>);
     fn on_connected(&self, conn_type: ConnType);
     fn update_privacy_mode(&self);
     fn set_permission(&self, name: &str, value: bool);
@@ -632,11 +876,19 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn update_block_input_state(&self, on: bool);
     fn job_progress(&self, id: i32, file_num: i32, speed: f64, finished_size: f64);
     fn adapt_size(&self);
-    fn on_rgba(&self, data: &[u8]);
+    fn on_rgba(&self, data: &mut Vec<u8>);
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool);
     #[cfg(any(target_os = "android", target_os = "ios"))]
     fn clipboard(&self, content: String);
     fn cancel_msgbox(&self, tag: &str);
+    fn switch_back(&self, id: &str);
+    fn portable_service_running(&self, running: bool);
+    fn on_voice_call_started(&self);
+    fn on_voice_call_closed(&self, reason: &str);
+    fn on_voice_call_waiting(&self);
+    fn on_voice_call_incoming(&self);
+    fn get_rgba(&self) -> *const u8;
+    fn next_rgba(&self);
 }
 
 impl<T: InvokeUiSession> Deref for Session<T> {
@@ -726,6 +978,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
                 "Connected, waiting for image...",
                 "",
             );
+            self.lc.write().unwrap().success_time = Some(tokio::time::Instant::now());
         }
         self.on_connected(self.lc.read().unwrap().conn_type);
         #[cfg(windows)]
@@ -758,14 +1011,31 @@ impl<T: InvokeUiSession> Interface for Session<T> {
             handle_test_delay(t, peer).await;
         }
     }
+    
+    fn swap_modifier_mouse(&self, msg : &mut hbb_common::protos::message::MouseEvent) {
+        let allow_swap_key = self.get_toggle_option("allow_swap_key".to_string());
+        if allow_swap_key  {
+            msg.modifiers = msg.modifiers.iter().map(|ck| {
+                let ck = ck.enum_value_or_default();
+                let ck = match ck {
+                    ControlKey::Control => ControlKey::Meta,
+                    ControlKey::Meta => ControlKey::Control,
+                    ControlKey::RControl => ControlKey::Meta,
+                    ControlKey::RWin => ControlKey::Control,
+                    _ => ck,
+                };
+                hbb_common::protobuf::EnumOrUnknown::new(ck)
+            }).collect();
+        };
+    }
 }
 
 impl<T: InvokeUiSession> Session<T> {
     pub fn lock_screen(&self) {
-        crate::keyboard::client::lock_screen();
+        self.send_key_event(&crate::keyboard::client::event_lock_screen());
     }
     pub fn ctrl_alt_del(&self) {
-        crate::keyboard::client::ctrl_alt_del();
+        self.send_key_event(&crate::keyboard::client::event_ctrl_alt_del());
     }
 }
 
@@ -778,6 +1048,9 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>) {
     let token = LocalConfig::get_option("access_token");
     if key.is_empty() {
         key = crate::platform::get_license_key();
+    }
+    if key.is_empty() && !option_env!("RENDEZVOUS_SERVER").unwrap_or("").is_empty() {
+        key = RS_PUB_KEY.to_owned();
     }
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if handler.is_port_forward() {
@@ -868,7 +1141,7 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>) {
     let frame_count = Arc::new(AtomicUsize::new(0));
     let frame_count_cl = frame_count.clone();
     let ui_handler = handler.ui_handler.clone();
-    let (video_sender, audio_sender) = start_video_audio_threads(move |data: &[u8]| {
+    let (video_sender, audio_sender) = start_video_audio_threads(move |data: &mut Vec<u8>| {
         frame_count_cl.fetch_add(1, Ordering::Relaxed);
         ui_handler.on_rgba(data);
     });

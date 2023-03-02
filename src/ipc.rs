@@ -9,7 +9,7 @@ use parity_tokio_ipc::{
 use serde_derive::{Deserialize, Serialize};
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub use clipboard::ClipbaordFile;
+pub use clipboard::ClipboardFile;
 use hbb_common::{
     allow_err, bail, bytes,
     bytes_codec::BytesCodec,
@@ -166,6 +166,7 @@ pub enum Data {
         file_transfer_enabled: bool,
         restart: bool,
         recording: bool,
+        from_switch: bool,
     },
     ChatMessage {
         text: String,
@@ -189,9 +190,9 @@ pub enum Data {
     Socks(Option<config::Socks5Server>),
     FS(FS),
     Test,
-    SyncConfig(Option<(Config, Config2)>),
+    SyncConfig(Option<Box<(Config, Config2)>>),
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    ClipbaordFile(ClipbaordFile),
+    ClipboardFile(ClipboardFile),
     ClipboardFileEnabled(bool),
     PrivacyModeState((i32, PrivacyModeState)),
     TestRendezvousServer,
@@ -207,6 +208,13 @@ pub enum Data {
     Empty,
     Disconnected,
     DataPortableService(DataPortableService),
+    SwitchSidesRequest(String),
+    SwitchSidesBack,
+    UrlLink(String),
+    VoiceCallIncoming,
+    StartVoiceCall,
+    VoiceCallResponse(bool),
+    CloseVoiceCall(String),
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -411,7 +419,8 @@ async fn handle(data: Data, stream: &mut Connection) {
             let t = Config::get_nat_type();
             allow_err!(stream.send(&Data::NatType(Some(t))).await);
         }
-        Data::SyncConfig(Some((config, config2))) => {
+        Data::SyncConfig(Some(configs)) => {
+            let (config, config2) = *configs;
             let _chk = CheckIfRestart::new();
             Config::set(config);
             Config2::set(config2);
@@ -420,12 +429,23 @@ async fn handle(data: Data, stream: &mut Connection) {
         Data::SyncConfig(None) => {
             allow_err!(
                 stream
-                    .send(&Data::SyncConfig(Some((Config::get(), Config2::get()))))
+                    .send(&Data::SyncConfig(Some(
+                        (Config::get(), Config2::get()).into()
+                    )))
                     .await
             );
         }
         Data::TestRendezvousServer => {
             crate::test_rendezvous_server();
+        }
+        Data::SwitchSidesRequest(id) => {
+            let uuid = uuid::Uuid::new_v4();
+            crate::server::insert_switch_sides_uuid(id, uuid.clone());
+            allow_err!(
+                stream
+                    .send(&Data::SwitchSidesRequest(uuid.to_string()))
+                    .await
+            );
         }
         _ => {}
     }
@@ -529,7 +549,7 @@ async fn check_pid(postfix: &str) {
         file.read_to_string(&mut content).ok();
         let pid = content.parse::<i32>().unwrap_or(0);
         if pid > 0 {
-            use sysinfo::{ProcessExt, System, SystemExt};
+            use hbb_common::sysinfo::{ProcessExt, System, SystemExt};
             let mut sys = System::new();
             sys.refresh_processes();
             if let Some(p) = sys.process(pid.into()) {
@@ -819,4 +839,23 @@ pub async fn test_rendezvous_server() -> ResultType<()> {
     let mut c = connect(1000, "").await?;
     c.send(&Data::TestRendezvousServer).await?;
     Ok(())
+}
+
+#[tokio::main(flavor = "current_thread")]
+pub async fn send_url_scheme(url: String) -> ResultType<()> {
+    connect(1_000, "_url")
+        .await?
+        .send(&Data::UrlLink(url))
+        .await?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn verify_ffi_enum_data_size() {
+        println!("{}", std::mem::size_of::<Data>());
+        assert!(std::mem::size_of::<Data>() < 96);
+    }
 }

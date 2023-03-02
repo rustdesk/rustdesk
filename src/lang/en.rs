@@ -13,7 +13,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("setup_server_tip", "For faster connection, please set up your own server"),
         ("Auto Login", "Auto Login (Only valid if you set \"Lock after session end\")"),
         ("whitelist_tip", "Only whitelisted IP can access me"),
-        ("whitelist_sep", "Seperated by comma, semicolon, spaces or new line"),
+        ("whitelist_sep", "Separated by comma, semicolon, spaces or new line"),
         ("Wrong credentials", "Wrong username or password"),
         ("invalid_http", "must start with http:// or https://"),
         ("install_daemon_tip", "For starting on boot, you need to install system service."),
@@ -39,5 +39,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("verification_tip", "A new device has been detected, and a verification code has been sent to the registered email address, enter the verification code to continue logging in."),
         ("software_render_tip", "If you have an Nvidia graphics card and the remote window closes immediately after connecting, installing the nouveau driver and choosing to use software rendering may help. A software restart is required."),
         ("config_input", "In order to control remote desktop with keyboard, you need to grant RustDesk \"Input Monitoring\" permissions."),
+        ("request_elevation_tip", "You can also request elevation if there is someone on the remote side."),
+        ("wait_accept_uac_tip", "Please wait for the remote user to accept the UAC dialog."),
+        ("still_click_uac_tip", "Still requires the remote user to click OK on the UAC window of running RustDesk."),
+        ("config_microphone", "In order to speak remotely, you need to grant RustDesk \"Record Audio\" permissions."),
+        ("relay_hint_tip", "It may not be possible to connect directly, you can try to connect via relay. \nIn addition, if you want to use relay on your first try, you can add the \"/r\" suffix to the ID, or select the option \"Always connect via relay\" in the peer card."),
+        ("No transfers in progress", ""),
         ].iter().cloned().collect();
 }

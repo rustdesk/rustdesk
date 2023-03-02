@@ -19,6 +19,7 @@ cert.pfx
 sciter.dll
 **pdb
 src/bridge_generated.rs
+src/bridge_generated.io.rs
 *deb
 rustdesk
 *.cache
@@ -39,3 +40,8 @@ flatpak/.flatpak-builder/debian-binary
 flatpak/build/**
 # bridge file
 lib/generated_bridge.dart
+# vscode devcontainer
+.gitconfig
+.vscode-server/
+.ssh
+.devcontainer/.*

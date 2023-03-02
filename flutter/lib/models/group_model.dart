@@ -35,7 +35,7 @@ class GroupModel {
     await reset();
     if (gFFI.userModel.userName.isEmpty ||
         (gFFI.userModel.isAdmin.isFalse && gFFI.userModel.groupName.isEmpty)) {
-      statePeerTab.check();
+      gFFI.peerTabModel.check_dynamic_tabs();
       return;
     }
     userLoading.value = true;
@@ -82,7 +82,7 @@ class GroupModel {
       userLoadError.value = err.toString();
     } finally {
       userLoading.value = false;
-      statePeerTab.check();
+      gFFI.peerTabModel.check_dynamic_tabs();
     }
   }
 

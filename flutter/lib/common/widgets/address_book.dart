@@ -43,14 +43,8 @@ class _AddressBookState extends State<AddressBook> {
     return Obx(() {
       if (gFFI.userModel.userName.value.isEmpty) {
         return Center(
-          child: InkWell(
-            onTap: loginDialog,
-            child: Text(
-              translate("Login"),
-              style: const TextStyle(decoration: TextDecoration.underline),
-            ),
-          ),
-        );
+            child: ElevatedButton(
+                onPressed: loginDialog, child: Text(translate("Login"))));
       } else {
         if (gFFI.abModel.abLoading.value) {
           return const Center(
@@ -156,13 +150,13 @@ class _AddressBookState extends State<AddressBook> {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(translate('Tags')),
-        GestureDetector(
-            onTapDown: (e) {
-              final x = e.globalPosition.dx;
-              final y = e.globalPosition.dy;
+        Listener(
+            onPointerDown: (e) {
+              final x = e.position.dx;
+              final y = e.position.dy;
               menuPos = RelativeRect.fromLTRB(x, y, x, y);
             },
-            onTap: () => _showMenu(menuPos),
+            onPointerUp: (_) => _showMenu(menuPos),
             child: ActionMore()),
       ],
     );
@@ -335,8 +329,8 @@ class _AddressBookState extends State<AddressBook> {
           ],
         ),
         actions: [
-          TextButton(onPressed: close, child: Text(translate("Cancel"))),
-          TextButton(onPressed: submit, child: Text(translate("OK"))),
+          dialogButton("Cancel", onPressed: close, isOutline: true),
+          dialogButton("OK", onPressed: submit),
         ],
         onSubmit: submit,
         onCancel: close,
@@ -389,7 +383,7 @@ class _AddressBookState extends State<AddressBook> {
                       errorText: msg.isEmpty ? null : translate(msg),
                     ),
                     controller: controller,
-                    focusNode: FocusNode()..requestFocus(),
+                    autofocus: true,
                   ),
                 ),
               ],
@@ -402,8 +396,8 @@ class _AddressBookState extends State<AddressBook> {
           ],
         ),
         actions: [
-          TextButton(onPressed: close, child: Text(translate("Cancel"))),
-          TextButton(onPressed: submit, child: Text(translate("OK"))),
+          dialogButton("Cancel", onPressed: close, isOutline: true),
+          dialogButton("OK", onPressed: submit),
         ],
         onSubmit: submit,
         onCancel: close,

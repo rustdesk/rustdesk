@@ -5,7 +5,7 @@ use std::{
 
 use hbb_common::{
     log,
-    message_proto::{video_frame, VideoFrame},
+    message_proto::{video_frame, VideoFrame, Message, VoiceCallRequest, VoiceCallResponse}, get_time,
 };
 
 const MAX_LATENCY: i64 = 500;
@@ -15,9 +15,10 @@ const MIN_LATENCY: i64 = 100;
 /// Only sync the audio to video, not the other way around.
 #[derive(Debug)]
 pub struct LatencyController {
-    last_video_remote_ts: i64, // generated on remote deivce
+    last_video_remote_ts: i64, // generated on remote device
     update_time: Instant,
     allow_audio: bool,
+    audio_only: bool
 }
 
 impl Default for LatencyController {
@@ -26,6 +27,7 @@ impl Default for LatencyController {
             last_video_remote_ts: Default::default(),
             update_time: Instant::now(),
             allow_audio: Default::default(),
+            audio_only: false
         }
     }
 }
@@ -34,6 +36,11 @@ impl LatencyController {
     /// Create a new latency controller.
     pub fn new() -> Arc<Mutex<LatencyController>> {
         Arc::new(Mutex::new(LatencyController::default()))
+    }
+
+    /// Set whether this [LatencyController] should be working in audio only mode.
+    pub fn set_audio_only(&mut self, only: bool) {
+        self.audio_only = only;
     }
 
     /// Update the latency controller with the latest video timestamp.
@@ -46,7 +53,11 @@ impl LatencyController {
     pub fn check_audio(&mut self, timestamp: i64) -> bool {
         // Compute audio latency.
         let expected = self.update_time.elapsed().as_millis() as i64 + self.last_video_remote_ts;
-        let latency = expected - timestamp;
+        let latency = if self.audio_only {
+            expected
+        } else {
+            expected - timestamp
+        };
         // Set MAX and MIN, avoid fixing too frequently.
         if self.allow_audio {
             if latency.abs() > MAX_LATENCY {
@@ -59,6 +70,9 @@ impl LatencyController {
                 self.allow_audio = true;
             }
         }
+        // No video frame here, which means the update time is not up to date.
+        // We manually update the time here.
+        self.update_time = Instant::now();
         self.allow_audio
     }
 }
@@ -100,4 +114,25 @@ pub struct QualityStatus {
     pub delay: Option<i32>,
     pub target_bitrate: Option<i32>,
     pub codec_format: Option<CodecFormat>,
+}
+
+#[inline]
+pub fn new_voice_call_request(is_connect: bool) -> Message {
+    let mut req = VoiceCallRequest::new();
+    req.is_connect = is_connect;
+    req.req_timestamp = get_time();
+    let mut msg = Message::new();
+    msg.set_voice_call_request(req);
+    msg
+}
+
+#[inline]
+pub fn new_voice_call_response(request_timestamp: i64, accepted: bool) -> Message {
+    let mut resp = VoiceCallResponse::new();
+    resp.accepted = accepted;
+    resp.req_timestamp = request_timestamp;
+    resp.ack_timestamp = get_time();
+    let mut msg = Message::new();
+    msg.set_voice_call_response(resp);
+    msg
 }

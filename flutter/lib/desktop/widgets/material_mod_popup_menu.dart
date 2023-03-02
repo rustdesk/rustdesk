@@ -5,6 +5,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/desktop/widgets/menu_button.dart';
 
 // Examples can assume:
 // enum Commands { heroAndScholar, hurricaneCame }
@@ -790,6 +792,7 @@ class _PopupMenuRoute<T> extends PopupRoute<T> {
   _PopupMenuRoute({
     required this.position,
     required this.items,
+    this.menuWrapper,
     this.initialValue,
     this.elevation,
     required this.barrierLabel,
@@ -802,6 +805,7 @@ class _PopupMenuRoute<T> extends PopupRoute<T> {
 
   final RelativeRect position;
   final List<PopupMenuEntry<T>> items;
+  final MenuWrapper? menuWrapper;
   final List<Size?> itemSizes;
   final T? initialValue;
   final double? elevation;
@@ -844,11 +848,14 @@ class _PopupMenuRoute<T> extends PopupRoute<T> {
       }
     }
 
-    final Widget menu = _PopupMenu<T>(
+    Widget menu = _PopupMenu<T>(
       route: this,
       semanticLabel: semanticLabel,
       constraints: constraints,
     );
+    if (this.menuWrapper != null) {
+      menu = this.menuWrapper!(menu);
+    }
     final MediaQueryData mediaQuery = MediaQuery.of(context);
     return MediaQuery.removePadding(
       context: context,
@@ -1035,6 +1042,7 @@ Future<T?> showMenu<T>({
   required BuildContext context,
   required RelativeRect position,
   required List<PopupMenuEntry<T>> items,
+  MenuWrapper? menuWrapper,
   T? initialValue,
   double? elevation,
   String? semanticLabel,
@@ -1062,6 +1070,7 @@ Future<T?> showMenu<T>({
   return navigator.push(_PopupMenuRoute<T>(
     position: position,
     items: items,
+    menuWrapper: menuWrapper,
     initialValue: initialValue,
     elevation: elevation,
     semanticLabel: semanticLabel,
@@ -1094,6 +1103,8 @@ typedef PopupMenuCanceled = void Function();
 typedef PopupMenuItemBuilder<T> = List<PopupMenuEntry<T>> Function(
     BuildContext context);
 
+typedef MenuWrapper = Widget Function(Widget child);
+
 /// Displays a menu when pressed and calls [onSelected] when the menu is dismissed
 /// because an item was selected. The value passed to [onSelected] is the value of
 /// the selected menu item.
@@ -1124,6 +1135,7 @@ class PopupMenuButton<T> extends StatefulWidget {
   const PopupMenuButton({
     Key? key,
     required this.itemBuilder,
+    this.menuWrapper,
     this.initialValue,
     this.onHover,
     this.onSelected,
@@ -1150,6 +1162,9 @@ class PopupMenuButton<T> extends StatefulWidget {
 
   /// Called when the button is pressed to create the items to show in the menu.
   final PopupMenuItemBuilder<T> itemBuilder;
+
+  /// Menu wrapper.
+  final MenuWrapper? menuWrapper;
 
   /// The value of the menu item, if any, that should be highlighted when the menu opens.
   final T? initialValue;
@@ -1333,6 +1348,7 @@ class PopupMenuButtonState<T> extends State<PopupMenuButton<T>> {
         context: context,
         elevation: widget.elevation ?? popupMenuTheme.elevation,
         items: items,
+        menuWrapper: widget.menuWrapper,
         initialValue: widget.initialValue,
         position: position,
         shape: widget.shape ?? popupMenuTheme.shape,
@@ -1377,22 +1393,20 @@ class PopupMenuButtonState<T> extends State<PopupMenuButton<T>> {
           onTap: widget.enabled ? showButtonMenu : null,
           onHover: widget.onHover,
           canRequestFocus: _canRequestFocus,
-          radius: widget.splashRadius,
           enableFeedback: enableFeedback,
           child: widget.child,
         ),
       );
     }
 
-    return IconButton(
-      icon: widget.icon ?? Icon(Icons.adaptive.more),
-      padding: widget.padding,
-      splashRadius: widget.splashRadius,
-      iconSize: widget.iconSize ?? iconTheme.size ?? _kDefaultIconSize,
+    return MenuButton(
+      child: widget.icon ?? Icon(Icons.adaptive.more),
       tooltip:
           widget.tooltip ?? MaterialLocalizations.of(context).showMenuTooltip,
       onPressed: widget.enabled ? showButtonMenu : null,
       enableFeedback: enableFeedback,
+      color: MyTheme.button,
+      hoverColor: MyTheme.accent,
     );
   }
 }

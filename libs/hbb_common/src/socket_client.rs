@@ -13,22 +13,22 @@ use tokio_socks::{IntoTargetAddr, TargetAddr};
 pub fn check_port<T: std::string::ToString>(host: T, port: i32) -> String {
     let host = host.to_string();
     if crate::is_ipv6_str(&host) {
-        if host.starts_with("[") {
+        if host.starts_with('[') {
             return host;
         }
-        return format!("[{}]:{}", host, port);
+        return format!("[{host}]:{port}");
     }
-    if !host.contains(":") {
-        return format!("{}:{}", host, port);
+    if !host.contains(':') {
+        return format!("{host}:{port}");
     }
-    return host;
+    host
 }
 
 #[inline]
 pub fn increase_port<T: std::string::ToString>(host: T, offset: i32) -> String {
     let host = host.to_string();
     if crate::is_ipv6_str(&host) {
-        if host.starts_with("[") {
+        if host.starts_with('[') {
             let tmp: Vec<&str> = host.split("]:").collect();
             if tmp.len() == 2 {
                 let port: i32 = tmp[1].parse().unwrap_or(0);
@@ -37,8 +37,8 @@ pub fn increase_port<T: std::string::ToString>(host: T, offset: i32) -> String {
                 }
             }
         }
-    } else if host.contains(":") {
-        let tmp: Vec<&str> = host.split(":").collect();
+    } else if host.contains(':') {
+        let tmp: Vec<&str> = host.split(':').collect();
         if tmp.len() == 2 {
             let port: i32 = tmp[1].parse().unwrap_or(0);
             if port > 0 {
@@ -46,7 +46,7 @@ pub fn increase_port<T: std::string::ToString>(host: T, offset: i32) -> String {
             }
         }
     }
-    return host;
+    host
 }
 
 pub fn test_if_valid_server(host: &str) -> String {
@@ -71,7 +71,7 @@ pub trait IsResolvedSocketAddr {
 
 impl IsResolvedSocketAddr for SocketAddr {
     fn resolve(&self) -> Option<&SocketAddr> {
-        Some(&self)
+        Some(self)
     }
 }
 
@@ -120,12 +120,12 @@ pub async fn connect_tcp_local<
     if let Some(target) = target.resolve() {
         if let Some(local) = local {
             if local.is_ipv6() && target.is_ipv4() {
-                let target = query_nip_io(&target).await?;
-                return Ok(FramedStream::new(target, Some(local), ms_timeout).await?);
+                let target = query_nip_io(target).await?;
+                return FramedStream::new(target, Some(local), ms_timeout).await;
             }
         }
     }
-    Ok(FramedStream::new(target, local, ms_timeout).await?)
+    FramedStream::new(target, local, ms_timeout).await
 }
 
 #[inline]
@@ -140,16 +140,15 @@ pub fn is_ipv4(target: &TargetAddr<'_>) -> bool {
 pub async fn query_nip_io(addr: &SocketAddr) -> ResultType<SocketAddr> {
     tokio::net::lookup_host(format!("{}.nip.io:{}", addr.ip(), addr.port()))
         .await?
-        .filter(|x| x.is_ipv6())
-        .next()
+        .find(|x| x.is_ipv6())
         .context("Failed to get ipv6 from nip.io")
 }
 
 #[inline]
 pub fn ipv4_to_ipv6(addr: String, ipv4: bool) -> String {
     if !ipv4 && crate::is_ipv4_str(&addr) {
-        if let Some(ip) = addr.split(":").next() {
-            return addr.replace(ip, &format!("{}.nip.io", ip));
+        if let Some(ip) = addr.split(':').next() {
+            return addr.replace(ip, &format!("{ip}.nip.io"));
         }
     }
     addr
@@ -164,7 +163,7 @@ async fn test_target(target: &str) -> ResultType<SocketAddr> {
     tokio::net::lookup_host(target)
         .await?
         .next()
-        .context(format!("Failed to look up host for {}", target))
+        .context(format!("Failed to look up host for {target}"))
 }
 
 #[inline]

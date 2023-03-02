@@ -58,9 +58,16 @@ class InputModel {
   InputModel(this.parent);
 
   KeyEventResult handleRawKeyEvent(FocusNode data, RawKeyEvent e) {
-    bind.sessionGetKeyboardMode(id: id).then((result) {
-      keyboardMode = result.toString();
-    });
+    if (!stateGlobal.grabKeyboard) {
+      return KeyEventResult.handled;
+    }
+
+    // * Currently mobile does not enable map mode
+    if (isDesktop) {
+      bind.sessionGetKeyboardMode(id: id).then((result) {
+        keyboardMode = result.toString();
+      });
+    }
 
     final key = e.logicalKey;
     if (e is RawKeyDownEvent) {
@@ -93,10 +100,9 @@ class InputModel {
       }
     }
 
-    if (keyboardMode == 'map') {
+    // * Currently mobile does not enable map mode
+    if (isDesktop && keyboardMode == 'map') {
       mapKeyboardMode(e);
-    } else if (keyboardMode == 'translate') {
-      legacyKeyboardMode(e);
     } else {
       legacyKeyboardMode(e);
     }
@@ -119,8 +125,11 @@ class InputModel {
       keyCode = newData.keyCode;
     } else if (e.data is RawKeyEventDataLinux) {
       RawKeyEventDataLinux newData = e.data as RawKeyEventDataLinux;
-      scanCode = newData.scanCode;
-      keyCode = newData.keyCode;
+      // scanCode and keyCode of RawKeyEventDataLinux are incorrect.
+      // 1. scanCode means keycode
+      // 2. keyCode means keysym
+      scanCode = 0;
+      keyCode = newData.scanCode;
     } else if (e.data is RawKeyEventDataAndroid) {
       RawKeyEventDataAndroid newData = e.data as RawKeyEventDataAndroid;
       scanCode = newData.scanCode + 8;
@@ -135,16 +144,33 @@ class InputModel {
     } else {
       down = false;
     }
-    inputRawKey(e.character ?? "", keyCode, scanCode, down);
+    inputRawKey(e.character ?? '', keyCode, scanCode, down);
   }
 
   /// Send raw Key Event
   void inputRawKey(String name, int keyCode, int scanCode, bool down) {
+    const capslock = 1;
+    const numlock = 2;
+    const scrolllock = 3;
+    int lockModes = 0;
+    if (HardwareKeyboard.instance.lockModesEnabled
+        .contains(KeyboardLockMode.capsLock)) {
+      lockModes |= (1 << capslock);
+    }
+    if (HardwareKeyboard.instance.lockModesEnabled
+        .contains(KeyboardLockMode.numLock)) {
+      lockModes |= (1 << numlock);
+    }
+    if (HardwareKeyboard.instance.lockModesEnabled
+        .contains(KeyboardLockMode.scrollLock)) {
+      lockModes |= (1 << scrolllock);
+    }
     bind.sessionHandleFlutterKeyEvent(
         id: id,
         name: name,
         keycode: keyCode,
         scancode: scanCode,
+        lockModes: lockModes,
         downOrUp: down);
   }
 
@@ -197,7 +223,7 @@ class InputModel {
     // Check update event type and set buttons to be sent.
     int buttons = _lastButtons;
     if (type == _kMouseEventMove) {
-      // flutter may emit move event if one button is pressed and anoter button
+      // flutter may emit move event if one button is pressed and another button
       // is pressing or releasing.
       if (evt.buttons != _lastButtons) {
         // For simplicity
@@ -290,7 +316,6 @@ class InputModel {
     }
   }
 
-/*
   int _signOrZero(num x) {
     if (x == 0) {
       return 0;
@@ -341,7 +366,6 @@ class InputModel {
 
     trackpadScrollDistance = Offset.zero;
   }
-*/
 
   void onPointDownImage(PointerDownEvent e) {
     debugPrint("onPointDownImage");
@@ -388,6 +412,13 @@ class InputModel {
     }
   }
 
+  void refreshMousePos() => handleMouse({
+        'x': lastMousePos.dx,
+        'y': lastMousePos.dy,
+        'buttons': 0,
+        'type': _kMouseEventMove,
+      });
+
   void handleMouse(Map<String, dynamic> evt) {
     double x = evt['x'];
     double y = max(0.0, evt['y']);
@@ -427,18 +458,21 @@ class InputModel {
         return;
     }
     evt['type'] = type;
-    if (isDesktop) {
-      y = y - stateGlobal.tabBarHeight;
-    }
+    y -= CanvasModel.topToEdge;
+    x -= CanvasModel.leftToEdge;
     final canvasModel = parent.target!.canvasModel;
+    final nearThr = 3;
+    var nearRight = (canvasModel.size.width - x) < nearThr;
+    var nearBottom = (canvasModel.size.height - y) < nearThr;
+
     final ffiModel = parent.target!.ffiModel;
     if (isMove) {
       canvasModel.moveDesktopMouse(x, y);
     }
     final d = ffiModel.display;
+    final imageWidth = d.width * canvasModel.scale;
+    final imageHeight = d.height * canvasModel.scale;
     if (canvasModel.scrollStyle == ScrollStyle.scrollbar) {
-      final imageWidth = d.width * canvasModel.scale;
-      final imageHeight = d.height * canvasModel.scale;
       x += imageWidth * canvasModel.scrollX;
       y += imageHeight * canvasModel.scrollY;
 
@@ -456,14 +490,45 @@ class InputModel {
 
     x /= canvasModel.scale;
     y /= canvasModel.scale;
+    if (canvasModel.scale > 0 && canvasModel.scale < 1) {
+      final step = 1.0 / canvasModel.scale - 1;
+      if (nearRight) {
+        x += step;
+      }
+      if (nearBottom) {
+        y += step;
+      }
+    }
     x += d.x;
     y += d.y;
-    if (type != '') {
-      x = 0;
-      y = 0;
+    var evtX = 0;
+    var evtY = 0;
+    try {
+      evtX = x.round();
+      evtY = y.round();
+    } catch (e) {
+      debugPrintStack(
+          label: 'canvasModel.scale value ${canvasModel.scale}, $e');
+      return;
     }
-    evt['x'] = '${x.round()}';
-    evt['y'] = '${y.round()}';
+
+    if (evtX < d.x ||
+        evtY < d.y ||
+        evtX > (d.x + d.width) ||
+        evtY > (d.y + d.height)) {
+      // If left mouse up, no early return.
+      if (evt['buttons'] != kPrimaryMouseButton || type != 'up') {
+        return;
+      }
+    }
+
+    if (type != '') {
+      evtX = 0;
+      evtY = 0;
+    }
+
+    evt['x'] = '$evtX';
+    evt['y'] = '$evtY';
     var buttons = '';
     switch (evt['buttons']) {
       case kPrimaryMouseButton:

@@ -1,13 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 
 import '../../common.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 
 void clientClose(String id, OverlayDialogManager dialogManager) {
-  msgBox(id, '', 'Close', 'Are you sure to close the connection?', '',
+  msgBox(id, 'info', 'Close', 'Are you sure to close the connection?', '',
       dialogManager);
 }
 
@@ -24,19 +25,26 @@ void showRestartRemoteDevice(
   final res =
       await dialogManager.show<bool>((setState, close) => CustomAlertDialog(
             title: Row(children: [
-              Icon(Icons.warning_amber_sharp,
-                  color: Colors.redAccent, size: 28),
-              SizedBox(width: 10),
-              Text(translate("Restart Remote Device")),
+              Icon(Icons.warning_rounded, color: Colors.redAccent, size: 28),
+              Text(translate("Restart Remote Device")).paddingOnly(left: 10),
             ]),
             content: Text(
                 "${translate('Are you sure you want to restart')} \n${pi.username}@${pi.hostname}($id) ?"),
             actions: [
-              TextButton(
-                  onPressed: () => close(), child: Text(translate("Cancel"))),
-              ElevatedButton(
-                  onPressed: () => close(true), child: Text(translate("OK"))),
+              dialogButton(
+                "Cancel",
+                icon: Icon(Icons.close_rounded),
+                onPressed: close,
+                isOutline: true,
+              ),
+              dialogButton(
+                "OK",
+                icon: Icon(Icons.done_rounded),
+                onPressed: () => close(true),
+              ),
             ],
+            onCancel: close,
+            onSubmit: () => close(true),
           ));
   if (res == true) bind.sessionRestartRemoteDevice(id: id);
 }
@@ -48,8 +56,26 @@ void setPermanentPasswordDialog(OverlayDialogManager dialogManager) async {
   var validateLength = false;
   var validateSame = false;
   dialogManager.show((setState, close) {
+    submit() async {
+      close();
+      dialogManager.showLoading(translate("Waiting"));
+      if (await gFFI.serverModel.setPermanentPassword(p0.text)) {
+        dialogManager.dismissAll();
+        showSuccess();
+      } else {
+        dialogManager.dismissAll();
+        showError();
+      }
+    }
+
     return CustomAlertDialog(
-      title: Text(translate('Set your own password')),
+      title: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.password_rounded, color: MyTheme.accent),
+          Text(translate('Set your own password')).paddingOnly(left: 10),
+        ],
+      ),
       content: Form(
           autovalidateMode: AutovalidateMode.onUserInteraction,
           child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -94,30 +120,19 @@ void setPermanentPasswordDialog(OverlayDialogManager dialogManager) async {
               },
             ),
           ])),
+      onCancel: close,
+      onSubmit: (validateLength && validateSame) ? submit : null,
       actions: [
-        TextButton(
-          style: flatButtonStyle,
-          onPressed: () {
-            close();
-          },
-          child: Text(translate('Cancel')),
+        dialogButton(
+          'Cancel',
+          icon: Icon(Icons.close_rounded),
+          onPressed: close,
+          isOutline: true,
         ),
-        TextButton(
-          style: flatButtonStyle,
-          onPressed: (validateLength && validateSame)
-              ? () async {
-                  close();
-                  dialogManager.showLoading(translate("Waiting"));
-                  if (await gFFI.serverModel.setPermanentPassword(p0.text)) {
-                    dialogManager.dismissAll();
-                    showSuccess();
-                  } else {
-                    dialogManager.dismissAll();
-                    showError();
-                  }
-                }
-              : null,
-          child: Text(translate('OK')),
+        dialogButton(
+          'OK',
+          icon: Icon(Icons.done_rounded),
+          onPressed: (validateLength && validateSame) ? submit : null,
         ),
       ],
     );
@@ -178,7 +193,13 @@ void enterPasswordDialog(String id, OverlayDialogManager dialogManager) async {
     }
 
     return CustomAlertDialog(
-      title: Text(translate('Password Required')),
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.password_rounded, color: MyTheme.accent),
+          Text(translate('Password Required')).paddingOnly(left: 10),
+        ],
+      ),
       content: Column(mainAxisSize: MainAxisSize.min, children: [
         PasswordWidget(controller: controller),
         CheckboxListTile(
@@ -197,15 +218,16 @@ void enterPasswordDialog(String id, OverlayDialogManager dialogManager) async {
         ),
       ]),
       actions: [
-        TextButton(
-          style: flatButtonStyle,
+        dialogButton(
+          'Cancel',
+          icon: Icon(Icons.close_rounded),
           onPressed: cancel,
-          child: Text(translate('Cancel')),
+          isOutline: true,
         ),
-        TextButton(
-          style: flatButtonStyle,
+        dialogButton(
+          'OK',
+          icon: Icon(Icons.done_rounded),
           onPressed: submit,
-          child: Text(translate('OK')),
         ),
       ],
       onSubmit: submit,
@@ -214,27 +236,36 @@ void enterPasswordDialog(String id, OverlayDialogManager dialogManager) async {
   });
 }
 
-void wrongPasswordDialog(String id, OverlayDialogManager dialogManager) {
-  dialogManager.show((setState, close) => CustomAlertDialog(
-          title: Text(translate('Wrong Password')),
-          content: Text(translate('Do you want to enter again?')),
-          actions: [
-            TextButton(
-              style: flatButtonStyle,
-              onPressed: () {
-                close();
-                closeConnection();
-              },
-              child: Text(translate('Cancel')),
-            ),
-            TextButton(
-              style: flatButtonStyle,
-              onPressed: () {
-                enterPasswordDialog(id, dialogManager);
-              },
-              child: Text(translate('Retry')),
-            ),
-          ]));
+void wrongPasswordDialog(
+    String id, OverlayDialogManager dialogManager, type, title, text) {
+  dialogManager.dismissAll();
+  dialogManager.show((setState, close) {
+    cancel() {
+      close();
+      closeConnection();
+    }
+
+    submit() {
+      enterPasswordDialog(id, dialogManager);
+    }
+
+    return CustomAlertDialog(
+        title: null,
+        content: msgboxContent(type, title, text),
+        onSubmit: submit,
+        onCancel: cancel,
+        actions: [
+          dialogButton(
+            'Cancel',
+            onPressed: cancel,
+            isOutline: true,
+          ),
+          dialogButton(
+            'Retry',
+            onPressed: submit,
+          ),
+        ]);
+  });
 }
 
 void showServerSettingsWithValue(
@@ -320,15 +351,11 @@ void showServerSettingsWithValue(
                         child: LinearProgressIndicator())
                   ])),
       actions: [
-        TextButton(
-          style: flatButtonStyle,
-          onPressed: () {
-            close();
-          },
-          child: Text(translate('Cancel')),
-        ),
-        TextButton(
-          style: flatButtonStyle,
+        dialogButton('Cancel', onPressed: () {
+          close();
+        }, isOutline: true),
+        dialogButton(
+          'OK',
           onPressed: () async {
             setState(() {
               idServerMsg = null;
@@ -360,9 +387,234 @@ void showServerSettingsWithValue(
               isInProgress = false;
             });
           },
-          child: Text(translate('OK')),
         ),
       ],
+    );
+  });
+}
+
+void showWaitUacDialog(
+    String id, OverlayDialogManager dialogManager, String type) {
+  dialogManager.dismissAll();
+  dialogManager.show(
+      tag: '$id-wait-uac',
+      (setState, close) => CustomAlertDialog(
+            title: null,
+            content: msgboxContent(type, 'Wait', 'wait_accept_uac_tip'),
+          ));
+}
+
+void showRequestElevationDialog(String id, OverlayDialogManager dialogManager) {
+  RxString groupValue = ''.obs;
+  RxString errUser = ''.obs;
+  RxString errPwd = ''.obs;
+  TextEditingController userController = TextEditingController();
+  TextEditingController pwdController = TextEditingController();
+
+  void onRadioChanged(String? value) {
+    if (value != null) {
+      groupValue.value = value;
+    }
+  }
+
+  const minTextStyle = TextStyle(fontSize: 14);
+
+  var content = Obx(() => Column(children: [
+        Row(
+          children: [
+            Radio(
+                value: '',
+                groupValue: groupValue.value,
+                onChanged: onRadioChanged),
+            Expanded(
+                child:
+                    Text(translate('Ask the remote user for authentication'))),
+          ],
+        ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+                  translate(
+                      'Choose this if the remote account is administrator'),
+                  style: TextStyle(fontSize: 13))
+              .marginOnly(left: 40),
+        ).marginOnly(bottom: 15),
+        Row(
+          children: [
+            Radio(
+                value: 'logon',
+                groupValue: groupValue.value,
+                onChanged: onRadioChanged),
+            Expanded(
+              child: Text(translate(
+                  'Transmit the username and password of administrator')),
+            )
+          ],
+        ),
+        Row(
+          children: [
+            Expanded(
+                flex: 1,
+                child: Text(
+                  '${translate('Username')}:',
+                  style: minTextStyle,
+                ).marginOnly(right: 10)),
+            Expanded(
+              flex: 3,
+              child: TextField(
+                controller: userController,
+                style: minTextStyle,
+                decoration: InputDecoration(
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(vertical: 15),
+                    hintText: 'eg: admin',
+                    errorText: errUser.isEmpty ? null : errUser.value),
+                onChanged: (s) {
+                  if (s.isNotEmpty) {
+                    errUser.value = '';
+                  }
+                },
+              ),
+            )
+          ],
+        ).marginOnly(left: 40),
+        Row(
+          children: [
+            Expanded(
+                flex: 1,
+                child: Text(
+                  '${translate('Password')}:',
+                  style: minTextStyle,
+                ).marginOnly(right: 10)),
+            Expanded(
+              flex: 3,
+              child: TextField(
+                controller: pwdController,
+                obscureText: true,
+                style: minTextStyle,
+                decoration: InputDecoration(
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(vertical: 15),
+                    errorText: errPwd.isEmpty ? null : errPwd.value),
+                onChanged: (s) {
+                  if (s.isNotEmpty) {
+                    errPwd.value = '';
+                  }
+                },
+              ),
+            ),
+          ],
+        ).marginOnly(left: 40),
+        Align(
+            alignment: Alignment.centerLeft,
+            child: Text(translate('still_click_uac_tip'),
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold))
+                .marginOnly(top: 20)),
+      ]));
+
+  dialogManager.dismissAll();
+  dialogManager.show(tag: '$id-request-elevation', (setState, close) {
+    void submit() {
+      if (groupValue.value == 'logon') {
+        if (userController.text.isEmpty) {
+          errUser.value = translate('Empty Username');
+          return;
+        }
+        if (pwdController.text.isEmpty) {
+          errPwd.value = translate('Empty Password');
+          return;
+        }
+        bind.sessionElevateWithLogon(
+            id: id,
+            username: userController.text,
+            password: pwdController.text);
+      } else {
+        bind.sessionElevateDirect(id: id);
+      }
+    }
+
+    return CustomAlertDialog(
+      title: Text(translate('Request Elevation')),
+      content: content,
+      actions: [
+        dialogButton('Cancel', onPressed: close, isOutline: true),
+        dialogButton('OK', onPressed: submit),
+      ],
+      onSubmit: submit,
+      onCancel: close,
+    );
+  });
+}
+
+void showOnBlockDialog(
+  String id,
+  String type,
+  String title,
+  String text,
+  OverlayDialogManager dialogManager,
+) {
+  if (dialogManager.existing('$id-wait-uac') ||
+      dialogManager.existing('$id-request-elevation')) {
+    return;
+  }
+  dialogManager.show(tag: '$id-$type', (setState, close) {
+    void submit() {
+      close();
+      showRequestElevationDialog(id, dialogManager);
+    }
+
+    return CustomAlertDialog(
+      title: null,
+      content: msgboxContent(type, title,
+          "${translate(text)}${type.contains('uac') ? '\n' : '\n\n'}${translate('request_elevation_tip')}"),
+      actions: [
+        dialogButton('Wait', onPressed: close, isOutline: true),
+        dialogButton('Request Elevation', onPressed: submit),
+      ],
+      onSubmit: submit,
+      onCancel: close,
+    );
+  });
+}
+
+void showElevationError(String id, String type, String title, String text,
+    OverlayDialogManager dialogManager) {
+  dialogManager.show(tag: '$id-$type', (setState, close) {
+    void submit() {
+      close();
+      showRequestElevationDialog(id, dialogManager);
+    }
+
+    return CustomAlertDialog(
+      title: null,
+      content: msgboxContent(type, title, text),
+      actions: [
+        dialogButton('Cancel', onPressed: () {
+          close();
+        }, isOutline: true),
+        dialogButton('Retry', onPressed: submit),
+      ],
+      onSubmit: submit,
+      onCancel: close,
+    );
+  });
+}
+
+void showWaitAcceptDialog(String id, String type, String title, String text,
+    OverlayDialogManager dialogManager) {
+  dialogManager.dismissAll();
+  dialogManager.show((setState, close) {
+    onCancel() {
+      closeConnection();
+    }
+
+    return CustomAlertDialog(
+      title: null,
+      content: msgboxContent(type, title, text),
+      actions: [
+        dialogButton('Cancel', onPressed: onCancel, isOutline: true),
+      ],
+      onCancel: onCancel,
     );
   });
 }
@@ -420,10 +672,9 @@ class _PasswordWidgetState extends State<PasswordWidget> {
         // Here is key idea
         suffixIcon: IconButton(
           icon: Icon(
-            // Based on passwordVisible state choose the icon
-            _passwordVisible ? Icons.visibility : Icons.visibility_off,
-            color: Theme.of(context).primaryColorDark,
-          ),
+              // Based on passwordVisible state choose the icon
+              _passwordVisible ? Icons.visibility : Icons.visibility_off,
+              color: MyTheme.lightTheme.primaryColor),
           onPressed: () {
             // Update the state i.e. toggle the state of passwordVisible variable
             setState(() {

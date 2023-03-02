@@ -36,16 +36,16 @@ def main():
 def expand():
   for fn in glob.glob('./src/lang/*'):
     lang = os.path.basename(fn)[:-3]
-    if lang in ['en','cn']: continue
+    if lang in ['en','template']: continue
     print(lang)
     dict = get_lang(lang)
     fw = open("./src/lang/%s.rs"%lang, "wt", encoding='utf8')
-    for line in open('./src/lang/cn.rs', encoding='utf8'):
+    for line in open('./src/lang/template.rs', encoding='utf8'):
       line_strip = line.strip()
       if line_strip.startswith('("'):
         k, v = line_split(line_strip)
         if k in dict:
-          # embrased with " to avoid empty v
+          # embraced with " to avoid empty v
           line = line.replace('"%s"'%v, '"%s"'%dict[k])
         else:
           line = line.replace(v, "")

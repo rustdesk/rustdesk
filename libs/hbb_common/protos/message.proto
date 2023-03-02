@@ -90,6 +90,7 @@ message PeerInfo {
   int32 conn_id = 8;
   Features features = 9;
   SupportedEncoding encoding = 10;
+  SupportedResolutions resolutions = 11;
 }
 
 message LoginResponse {
@@ -201,6 +202,8 @@ message KeyEvent {
   bool press = 2;
   oneof union {
     ControlKey control_key = 3;
+    // high word, sym key code. win: virtual-key code, linux: keysym ?, macos: 
+    // low word, position key code. win: scancode, linux: key code, macos: key code
     uint32 chr = 4;
     uint32 unicode = 5;
     string seq = 6;
@@ -414,6 +417,13 @@ message Cliprdr {
   }
 }
 
+message Resolution {
+  int32 width = 1;
+  int32 height = 2;
+}
+
+message SupportedResolutions { repeated Resolution resolutions = 1; }
+
 message SwitchDisplay {
   int32 display = 1;
   sint32 x = 2;
@@ -421,6 +431,7 @@ message SwitchDisplay {
   int32 width = 4;
   int32 height = 5;
   bool cursor_embedded = 6;
+  SupportedResolutions resolutions = 7;
 }
 
 message PermissionInfo {
@@ -445,7 +456,7 @@ enum ImageQuality {
 }
 
 message VideoCodecState {
-  enum PerferCodec {
+  enum PreferCodec {
     Auto = 0;
     VPX = 1;
     H264 = 2;
@@ -455,7 +466,7 @@ message VideoCodecState {
   int32 score_vpx = 1;
   int32 score_h264 = 2;
   int32 score_h265 = 3;
-  PerferCodec perfer = 4;
+  PreferCodec prefer = 4;
 }
 
 message OptionMessage {
@@ -503,7 +514,7 @@ message AudioFrame {
 
 // Notify peer to show message box.
 message MessageBox {
-  // Message type. Refer to flutter/lib/commom.dart/msgBox().
+  // Message type. Refer to flutter/lib/common.dart/msgBox().
   string msgtype = 1;
   string title = 2;
   // English
@@ -552,6 +563,29 @@ message BackNotification {
   }
 }
 
+message ElevationRequestWithLogon {
+  string username = 1;
+  string password = 2;
+}
+
+message ElevationRequest {
+  oneof union {
+    bool direct = 1;
+    ElevationRequestWithLogon logon = 2;
+  }
+}
+
+message SwitchSidesRequest {
+  bytes uuid = 1;
+}
+
+message SwitchSidesResponse {
+  bytes uuid = 1;
+  LoginRequest lr = 2;
+}
+
+message SwitchBack {}
+
 message Misc {
   oneof union {
     ChatMessage chat_message = 4;
@@ -567,7 +601,25 @@ message Misc {
     bool uac = 15;
     bool foreground_window_elevated = 16;
     bool stop_service = 17;
+    ElevationRequest elevation_request = 18;
+    string elevation_response = 19;
+    bool portable_service_running = 20;
+    SwitchSidesRequest switch_sides_request = 21;
+    SwitchBack switch_back = 22;
+    Resolution change_resolution = 24;
   }
+}
+
+message VoiceCallRequest {
+  int64 req_timestamp = 1;
+  // Indicates whether the request is a connect action or a disconnect action.
+  bool is_connect = 2;
+}
+
+message VoiceCallResponse {
+  bool accepted = 1;
+  int64 req_timestamp = 2; // Should copy from [VoiceCallRequest::req_timestamp].
+  int64 ack_timestamp = 3;
 }
 
 message Message {
@@ -591,5 +643,9 @@ message Message {
     Misc misc = 19;
     Cliprdr cliprdr = 20;
     MessageBox message_box = 21;
+    SwitchSidesResponse switch_sides_response = 22;
+    VoiceCallRequest voice_call_request = 23;
+    VoiceCallResponse voice_call_response = 24;
+    PeerInfo peer_info = 25;
   }
 }

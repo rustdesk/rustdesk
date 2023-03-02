@@ -23,7 +23,7 @@ class DesktopTabPage extends StatefulWidget {
       DesktopTabController tabController = Get.find();
       tabController.add(TabInfo(
           key: kTabLabelSettingPage,
-          label: kTabLabelSettingPage,
+          label: translate(kTabLabelSettingPage),
           selectedIcon: Icons.build_sharp,
           unselectedIcon: Icons.build_outlined,
           page: DesktopSettingPage(
@@ -46,7 +46,7 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
     RemoteCountState.init();
     tabController.add(TabInfo(
         key: kTabLabelHomePage,
-        label: kTabLabelHomePage,
+        label: translate(kTabLabelHomePage),
         selectedIcon: Icons.home_sharp,
         unselectedIcon: Icons.home_outlined,
         closable: false,
@@ -64,24 +64,18 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
   @override
   Widget build(BuildContext context) {
     final tabWidget = Container(
-      child: Overlay(initialEntries: [
-        OverlayEntry(builder: (context) {
-          gFFI.dialogManager.setOverlayState(Overlay.of(context));
-          return Scaffold(
-              backgroundColor: Theme.of(context).backgroundColor,
-              body: DesktopTab(
-                controller: tabController,
-                tail: ActionIcon(
-                  message: 'Settings',
-                  icon: IconFont.menu,
-                  onTap: DesktopTabPage.onAddSetting,
-                  isClose: false,
-                ),
-              ));
-        })
-      ]),
-    );
-    return Platform.isMacOS
+        child: Scaffold(
+            backgroundColor: Theme.of(context).colorScheme.background,
+            body: DesktopTab(
+              controller: tabController,
+              tail: ActionIcon(
+                message: 'Settings',
+                icon: IconFont.menu,
+                onTap: DesktopTabPage.onAddSetting,
+                isClose: false,
+              ),
+            )));
+    return Platform.isMacOS || kUseCompatibleUiMode
         ? tabWidget
         : Obx(
             () => DragToResizeArea(

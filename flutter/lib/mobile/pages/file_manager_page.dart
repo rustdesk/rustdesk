@@ -174,23 +174,18 @@ class _FileManagerPageState extends State<FileManagerPage> {
                                         ],
                                       ),
                                       actions: [
-                                        TextButton(
-                                            style: flatButtonStyle,
+                                        dialogButton("Cancel",
                                             onPressed: () => close(false),
-                                            child: Text(translate("Cancel"))),
-                                        ElevatedButton(
-                                            style: flatButtonStyle,
-                                            onPressed: () {
-                                              if (name.value.text.isNotEmpty) {
-                                                model.createDir(PathUtil.join(
-                                                    model.currentDir.path,
-                                                    name.value.text,
-                                                    model
-                                                        .getCurrentIsWindows()));
-                                                close();
-                                              }
-                                            },
-                                            child: Text(translate("OK")))
+                                            isOutline: true),
+                                        dialogButton("OK", onPressed: () {
+                                          if (name.value.text.isNotEmpty) {
+                                            model.createDir(PathUtil.join(
+                                                model.currentDir.path,
+                                                name.value.text,
+                                                model.getCurrentIsWindows()));
+                                            close();
+                                          }
+                                        })
                                       ]));
                         } else if (v == "hidden") {
                           model.toggleShowHidden();

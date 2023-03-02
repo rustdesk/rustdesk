@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
@@ -28,7 +29,7 @@ class ServerModel with ChangeNotifier {
   bool _inputOk = false;
   bool _audioOk = false;
   bool _fileOk = false;
-  bool _showElevation = true;
+  bool _showElevation = false;
   bool _hideCm = false;
   int _connectStatus = 0; // Rendezvous Server status
   String _verificationMethod = "";
@@ -154,7 +155,8 @@ class ServerModel with ChangeNotifier {
   /// file true by default (if permission on)
   checkAndroidPermission() async {
     // audio
-    if (androidVersion < 30 || !await PermissionManager.check("audio")) {
+    if (androidVersion < 30 ||
+        !await AndroidPermissionManager.check(kRecordAudio)) {
       _audioOk = false;
       bind.mainSetOption(key: "enable-audio", value: "N");
     } else {
@@ -163,7 +165,7 @@ class ServerModel with ChangeNotifier {
     }
 
     // file
-    if (!await PermissionManager.check("file")) {
+    if (!await AndroidPermissionManager.check(kManageExternalStorage)) {
       _fileOk = false;
       bind.mainSetOption(key: "enable-file-transfer", value: "N");
     } else {
@@ -229,10 +231,10 @@ class ServerModel with ChangeNotifier {
   }
 
   toggleAudio() async {
-    if (!_audioOk && !await PermissionManager.check("audio")) {
-      final res = await PermissionManager.request("audio");
+    if (!_audioOk && !await AndroidPermissionManager.check(kRecordAudio)) {
+      final res = await AndroidPermissionManager.request(kRecordAudio);
       if (!res) {
-        // TODO handle fail
+        showToast(translate('Failed'));
         return;
       }
     }
@@ -243,10 +245,12 @@ class ServerModel with ChangeNotifier {
   }
 
   toggleFile() async {
-    if (!_fileOk && !await PermissionManager.check("file")) {
-      final res = await PermissionManager.request("file");
+    if (!_fileOk &&
+        !await AndroidPermissionManager.check(kManageExternalStorage)) {
+      final res =
+          await AndroidPermissionManager.request(kManageExternalStorage);
       if (!res) {
-        // TODO handle fail
+        showToast(translate('Failed'));
         return;
       }
     }
@@ -304,8 +308,8 @@ class ServerModel with ChangeNotifier {
           ]),
           content: Text(translate("android_service_will_start_tip")),
           actions: [
-            TextButton(onPressed: close, child: Text(translate("Cancel"))),
-            ElevatedButton(onPressed: submit, child: Text(translate("OK"))),
+            dialogButton("Cancel", onPressed: close, isOutline: true),
+            dialogButton("OK", onPressed: submit),
           ],
           onSubmit: submit,
           onCancel: close,
@@ -323,10 +327,10 @@ class ServerModel with ChangeNotifier {
     notifyListeners();
     parent.target?.ffiModel.updateEventListener("");
     await parent.target?.invokeMethod("init_service");
+    // ugly is here, because for desktop, below is useless
     await bind.mainStartService();
     updateClientState();
-    if (!Platform.isLinux) {
-      // current linux is not supported
+    if (Platform.isAndroid) {
       Wakelock.enable();
     }
   }
@@ -342,10 +346,6 @@ class ServerModel with ChangeNotifier {
       // current linux is not supported
       Wakelock.disable();
     }
-  }
-
-  Future<void> initInput() async {
-    await parent.target?.invokeMethod("init_input");
   }
 
   Future<bool> setPermanentPassword(String newPW) async {
@@ -501,8 +501,8 @@ class ServerModel with ChangeNotifier {
           ],
         ),
         actions: [
-          TextButton(onPressed: cancel, child: Text(translate("Dismiss"))),
-          ElevatedButton(onPressed: submit, child: Text(translate("Accept"))),
+          dialogButton("Dismiss", onPressed: cancel, isOutline: true),
+          dialogButton("Accept", onPressed: submit),
         ],
         onSubmit: submit,
         onCancel: cancel,
@@ -560,10 +560,9 @@ class ServerModel with ChangeNotifier {
     }
   }
 
-  closeAll() {
-    for (var client in _clients) {
-      bind.cmCloseConnection(connId: client.id);
-    }
+  Future<void> closeAll() async {
+    await Future.wait(
+        _clients.map((client) => bind.cmCloseConnection(connId: client.id)));
     _clients.clear();
     tabController.state.value.tabs.clear();
   }
@@ -577,6 +576,26 @@ class ServerModel with ChangeNotifier {
     if (_showElevation != show) {
       _showElevation = show;
       notifyListeners();
+    }
+  }
+
+  void updateVoiceCallState(Map<String, dynamic> evt) {
+    try {
+      final client = Client.fromJson(jsonDecode(evt["client"]));
+      final index = _clients.indexWhere((element) => element.id == client.id);
+      if (index != -1) {
+        _clients[index].inVoiceCall = client.inVoiceCall;
+        _clients[index].incomingVoiceCall = client.incomingVoiceCall;
+        if (client.incomingVoiceCall) {
+          // Has incoming phone call, let's set the window on top.
+          Future.delayed(Duration.zero, () {
+            window_on_top(null);
+          });
+        }
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint("updateVoiceCallState failed: $e");
     }
   }
 }
@@ -601,6 +620,9 @@ class Client {
   bool restart = false;
   bool recording = false;
   bool disconnected = false;
+  bool fromSwitch = false;
+  bool inVoiceCall = false;
+  bool incomingVoiceCall = false;
 
   RxBool hasUnreadChatMessage = false.obs;
 
@@ -621,6 +643,9 @@ class Client {
     restart = json['restart'];
     recording = json['recording'];
     disconnected = json['disconnected'];
+    fromSwitch = json['from_switch'];
+    inVoiceCall = json['in_voice_call'];
+    incomingVoiceCall = json['incoming_voice_call'];
   }
 
   Map<String, dynamic> toJson() {
@@ -638,6 +663,7 @@ class Client {
     data['restart'] = restart;
     data['recording'] = recording;
     data['disconnected'] = disconnected;
+    data['from_switch'] = fromSwitch;
     return data;
   }
 
@@ -659,7 +685,7 @@ String getLoginDialogTag(int id) {
 showInputWarnAlert(FFI ffi) {
   ffi.dialogManager.show((setState, close) {
     submit() {
-      ffi.serverModel.initInput();
+      AndroidPermissionManager.startAction(kActionAccessibilitySettings);
       close();
     }
 
@@ -674,9 +700,8 @@ showInputWarnAlert(FFI ffi) {
         ],
       ),
       actions: [
-        TextButton(onPressed: close, child: Text(translate("Cancel"))),
-        ElevatedButton(
-            onPressed: submit, child: Text(translate("Open System Setting"))),
+        dialogButton("Cancel", onPressed: close, isOutline: true),
+        dialogButton("Open System Setting", onPressed: submit),
       ],
       onSubmit: submit,
       onCancel: close,

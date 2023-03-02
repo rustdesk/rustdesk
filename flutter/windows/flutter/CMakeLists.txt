@@ -79,7 +79,7 @@ target_include_directories(flutter_wrapper_app PUBLIC
 add_dependencies(flutter_wrapper_app flutter_assemble)
 
 # === Flutter tool backend ===
-# _phony_ is a non-existent file to force this command to run every time,
+# _phony_ is a nonexistent file to force this command to run every time,
 # since currently there's no way to get a full input/output list from the
 # flutter tool.
 set(PHONY_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/_phony_")

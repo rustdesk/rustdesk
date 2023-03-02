@@ -26,10 +26,12 @@ class _PortForward {
 }
 
 class PortForwardPage extends StatefulWidget {
-  const PortForwardPage({Key? key, required this.id, required this.isRDP})
+  const PortForwardPage(
+      {Key? key, required this.id, required this.isRDP, this.forceRelay})
       : super(key: key);
   final String id;
   final bool isRDP;
+  final bool? forceRelay;
 
   @override
   State<PortForwardPage> createState() => _PortForwardPageState();
@@ -47,7 +49,7 @@ class _PortForwardPageState extends State<PortForwardPage>
   void initState() {
     super.initState();
     _ffi = FFI();
-    _ffi.start(widget.id, isPortForward: true);
+    _ffi.start(widget.id, isPortForward: true, forceRelay: widget.forceRelay);
     Get.put(_ffi, tag: 'pf_${widget.id}');
     if (!Platform.isLinux) {
       Wakelock.enable();
@@ -89,7 +91,7 @@ class _PortForwardPageState extends State<PortForwardPage>
                 Flexible(
                   child: Container(
                     decoration: BoxDecoration(
-                        color: Theme.of(context).backgroundColor,
+                        color: Theme.of(context).colorScheme.background,
                         border: Border.all(width: 1, color: MyTheme.border)),
                     child:
                         widget.isRDP ? buildRdp(context) : buildTunnel(context),
@@ -127,12 +129,12 @@ class _PortForwardPageState extends State<PortForwardPage>
   }
 
   buildTunnel(BuildContext context) {
-    text(String lable) => Expanded(
-        child: Text(translate(lable)).marginOnly(left: _kTextLeftMargin));
+    text(String label) => Expanded(
+        child: Text(translate(label)).marginOnly(left: _kTextLeftMargin));
 
     return Theme(
       data: Theme.of(context)
-          .copyWith(backgroundColor: Theme.of(context).backgroundColor),
+          .copyWith(backgroundColor: Theme.of(context).colorScheme.background),
       child: Obx(() => ListView.builder(
           controller: ScrollController(),
           itemCount: pfs.length + 2,
@@ -167,7 +169,8 @@ class _PortForwardPageState extends State<PortForwardPage>
 
     return Container(
       height: _kRowHeight,
-      decoration: BoxDecoration(color: Theme.of(context).backgroundColor),
+      decoration:
+          BoxDecoration(color: Theme.of(context).colorScheme.background),
       child: Row(children: [
         buildTunnelInputCell(context,
             controller: localPortController,
@@ -179,36 +182,33 @@ class _PortForwardPageState extends State<PortForwardPage>
         buildTunnelInputCell(context,
             controller: remotePortController,
             inputFormatters: portInputFormatter),
-        SizedBox(
-          width: _kColumn4Width,
-          child: ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                elevation: 0, side: const BorderSide(color: MyTheme.border)),
-            onPressed: () async {
-              int? localPort = int.tryParse(localPortController.text);
-              int? remotePort = int.tryParse(remotePortController.text);
-              if (localPort != null &&
-                  remotePort != null &&
-                  (remoteHostController.text.isEmpty ||
-                      remoteHostController.text.trim().isNotEmpty)) {
-                await bind.sessionAddPortForward(
-                    id: 'pf_${widget.id}',
-                    localPort: localPort,
-                    remoteHost: remoteHostController.text.trim().isEmpty
-                        ? 'localhost'
-                        : remoteHostController.text.trim(),
-                    remotePort: remotePort);
-                localPortController.clear();
-                remoteHostController.clear();
-                remotePortController.clear();
-                refreshTunnelConfig();
-              }
-            },
-            child: Text(
-              translate('Add'),
-            ),
-          ).marginAll(10),
-        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+              elevation: 0, side: const BorderSide(color: MyTheme.border)),
+          onPressed: () async {
+            int? localPort = int.tryParse(localPortController.text);
+            int? remotePort = int.tryParse(remotePortController.text);
+            if (localPort != null &&
+                remotePort != null &&
+                (remoteHostController.text.isEmpty ||
+                    remoteHostController.text.trim().isNotEmpty)) {
+              await bind.sessionAddPortForward(
+                  id: 'pf_${widget.id}',
+                  localPort: localPort,
+                  remoteHost: remoteHostController.text.trim().isEmpty
+                      ? 'localhost'
+                      : remoteHostController.text.trim(),
+                  remotePort: remotePort);
+              localPortController.clear();
+              remoteHostController.clear();
+              remotePortController.clear();
+              refreshTunnelConfig();
+            }
+          },
+          child: Text(
+            translate('Add'),
+          ),
+        ).marginAll(10),
       ]),
     );
   }
@@ -230,7 +230,7 @@ class _PortForwardPageState extends State<PortForwardPage>
                 borderSide: BorderSide(color: MyTheme.color(context).border!)),
             focusedBorder: OutlineInputBorder(
                 borderSide: BorderSide(color: MyTheme.color(context).border!)),
-            fillColor: Theme.of(context).backgroundColor,
+            fillColor: Theme.of(context).colorScheme.background,
             contentPadding: const EdgeInsets.all(10),
             hintText: hint,
             hintStyle:
@@ -241,8 +241,8 @@ class _PortForwardPageState extends State<PortForwardPage>
   }
 
   Widget buildTunnelDataRow(BuildContext context, _PortForward pf, int index) {
-    text(String lable) => Expanded(
-        child: Text(lable, style: const TextStyle(fontSize: 20))
+    text(String label) => Expanded(
+        child: Text(label, style: const TextStyle(fontSize: 20))
             .marginOnly(left: _kTextLeftMargin));
 
     return Container(
@@ -252,7 +252,7 @@ class _PortForwardPageState extends State<PortForwardPage>
               ? MyTheme.currentThemeMode() == ThemeMode.dark
                   ? const Color(0xFF202020)
                   : const Color(0xFFF4F5F6)
-              : Theme.of(context).backgroundColor),
+              : Theme.of(context).colorScheme.background),
       child: Row(children: [
         text(pf.localPort.toString()),
         const SizedBox(width: _kColumn1Width),
@@ -285,16 +285,16 @@ class _PortForwardPageState extends State<PortForwardPage>
   }
 
   buildRdp(BuildContext context) {
-    text1(String lable) => Expanded(
-        child: Text(translate(lable)).marginOnly(left: _kTextLeftMargin));
-    text2(String lable) => Expanded(
+    text1(String label) => Expanded(
+        child: Text(translate(label)).marginOnly(left: _kTextLeftMargin));
+    text2(String label) => Expanded(
             child: Text(
-          lable,
+          label,
           style: const TextStyle(fontSize: 20),
         ).marginOnly(left: _kTextLeftMargin));
     return Theme(
       data: Theme.of(context)
-          .copyWith(backgroundColor: Theme.of(context).backgroundColor),
+          .copyWith(backgroundColor: Theme.of(context).colorScheme.background),
       child: ListView.builder(
           controller: ScrollController(),
           itemCount: 2,
@@ -313,8 +313,8 @@ class _PortForwardPageState extends State<PortForwardPage>
             } else {
               return Container(
                 height: _kRowHeight,
-                decoration:
-                    BoxDecoration(color: Theme.of(context).backgroundColor),
+                decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.background),
                 child: Row(children: [
                   Expanded(
                     child: Align(

@@ -1,5 +1,7 @@
+import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 
 import '../../consts.dart';
@@ -95,12 +97,14 @@ class DraggableChatWindow extends StatelessWidget {
         children: [
           Padding(
               padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
-              child: Row(children: [
-                Icon(Icons.chat_bubble_outline,
-                    size: 20, color: Theme.of(context).colorScheme.primary),
-                SizedBox(width: 6),
-                Text(translate("Chat"))
-              ])),
+              child: Obx(() => Opacity(
+                  opacity: chatModel.isWindowFocus.value ? 1.0 : 0.4,
+                  child: Row(children: [
+                    Icon(Icons.chat_bubble_outline,
+                        size: 20, color: Theme.of(context).colorScheme.primary),
+                    SizedBox(width: 6),
+                    Text(translate("Chat"))
+                  ])))),
           Padding(
               padding: EdgeInsets.all(2),
               child: ActionIcon(
@@ -303,59 +307,119 @@ class _DraggableState extends State<Draggable> {
     if (widget.checkKeyboard) {
       checkKeyboard();
     }
-    if (widget.checkKeyboard) {
+    if (widget.checkScreenSize) {
       checkScreenSize();
     }
-    return Positioned(
-        top: _position.dy,
-        left: _position.dx,
-        width: widget.width,
-        height: widget.height,
-        child: widget.builder(context, onPanUpdate));
+    return Stack(children: [
+      Positioned(
+          top: _position.dy,
+          left: _position.dx,
+          width: widget.width,
+          height: widget.height,
+          child: widget.builder(context, onPanUpdate))
+    ]);
   }
 }
 
 class QualityMonitor extends StatelessWidget {
-  static const textStyle = TextStyle(color: MyTheme.grayBg);
   final QualityMonitorModel qualityMonitorModel;
   QualityMonitor(this.qualityMonitorModel);
+
+  Widget _row(String info, String? value, {Color? rightColor}) {
+    return Row(
+      children: [
+        Expanded(
+            flex: 8,
+            child: AutoSizeText(info,
+                style: TextStyle(color: MyTheme.darkGray),
+                textAlign: TextAlign.right,
+                maxLines: 1)),
+        Spacer(flex: 1),
+        Expanded(
+            flex: 8,
+            child: AutoSizeText(value ?? '',
+                style: TextStyle(color: rightColor ?? Colors.white),
+                maxLines: 1)),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) => ChangeNotifierProvider.value(
       value: qualityMonitorModel,
       child: Consumer<QualityMonitorModel>(
-          builder: (context, qualityMonitorModel, child) => Positioned(
-              top: 10,
-              right: 10,
-              child: qualityMonitorModel.show
-                  ? Container(
-                      padding: const EdgeInsets.all(8),
-                      color: MyTheme.canvasColor.withAlpha(120),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "Speed: ${qualityMonitorModel.data.speed ?? ''}",
-                            style: textStyle,
-                          ),
-                          Text(
-                            "FPS: ${qualityMonitorModel.data.fps ?? ''}",
-                            style: textStyle,
-                          ),
-                          Text(
-                            "Delay: ${qualityMonitorModel.data.delay ?? ''} ms",
-                            style: textStyle,
-                          ),
-                          Text(
-                            "Target Bitrate: ${qualityMonitorModel.data.targetBitrate ?? ''}kb",
-                            style: textStyle,
-                          ),
-                          Text(
-                            "Codec: ${qualityMonitorModel.data.codecFormat ?? ''}",
-                            style: textStyle,
-                          ),
-                        ],
-                      ),
-                    )
-                  : const SizedBox.shrink())));
+          builder: (context, qualityMonitorModel, child) => qualityMonitorModel
+                  .show
+              ? Container(
+                  constraints: BoxConstraints(maxWidth: 200),
+                  padding: const EdgeInsets.all(8),
+                  color: MyTheme.canvasColor.withAlpha(120),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _row("Speed", qualityMonitorModel.data.speed ?? '-'),
+                      _row("FPS", qualityMonitorModel.data.fps ?? '-'),
+                      _row(
+                          "Delay", "${qualityMonitorModel.data.delay ?? '-'}ms",
+                          rightColor: Colors.green),
+                      _row("Target Bitrate",
+                          "${qualityMonitorModel.data.targetBitrate ?? '-'}kb"),
+                      _row(
+                          "Codec", qualityMonitorModel.data.codecFormat ?? '-'),
+                    ],
+                  ),
+                )
+              : const SizedBox.shrink()));
+}
+
+class BlockableOverlayState extends OverlayKeyState {
+  final _middleBlocked = false.obs;
+
+  VoidCallback? onMiddleBlockedClick; // to-do use listener
+
+  RxBool get middleBlocked => _middleBlocked;
+
+  void addMiddleBlockedListener(void Function(bool) cb) {
+    _middleBlocked.listen(cb);
+  }
+
+  void setMiddleBlocked(bool blocked) {
+    if (blocked != _middleBlocked.value) {
+      _middleBlocked.value = blocked;
+    }
+  }
+}
+
+class BlockableOverlay extends StatelessWidget {
+  final Widget underlying;
+  final List<OverlayEntry>? upperLayer;
+
+  final BlockableOverlayState state;
+
+  BlockableOverlay(
+      {required this.underlying, required this.state, this.upperLayer});
+
+  @override
+  Widget build(BuildContext context) {
+    final initialEntries = [
+      OverlayEntry(builder: (_) => underlying),
+
+      /// middle layer
+      OverlayEntry(
+          builder: (context) => Obx(() => Listener(
+              onPointerDown: (_) {
+                state.onMiddleBlockedClick?.call();
+              },
+              child: Container(
+                  color:
+                      state.middleBlocked.value ? Colors.transparent : null)))),
+    ];
+
+    if (upperLayer != null) {
+      initialEntries.addAll(upperLayer!);
+    }
+
+    /// set key
+    return Overlay(key: state.key, initialEntries: initialEntries);
+  }
 }

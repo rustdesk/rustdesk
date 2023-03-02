@@ -134,7 +134,7 @@ const char* GetLastMsg();
  *
  * @param b [in] TRUE to enable printing message.
  *
- * @remark For now, no need to read evironment variable to check if should print.
+ * @remark For now, no need to read environment variable to check if should print.
  *
  */
 VOID SetPrintErrMsg(BOOL b);
