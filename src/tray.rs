@@ -131,6 +131,10 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
 
     let event_loop = EventLoopBuilder::new().build();
 
+    unsafe {
+        crate::platform::delegate::set_delegate(None);
+    }
+
     let tray_menu = Menu::new();
     let quit_i = MenuItem::new(crate::client::translate("Exit".to_owned()), true, None);
     tray_menu.append_items(&[&quit_i]);

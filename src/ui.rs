@@ -20,8 +20,6 @@ use crate::{common::get_app_name, ipc, ui_interface::*};
 mod cm;
 #[cfg(feature = "inline")]
 pub mod inline;
-#[cfg(target_os = "macos")]
-pub mod macos;
 pub mod remote;
 
 pub type Children = Arc<Mutex<(bool, HashMap<(String, String), Child>)>>;
@@ -43,7 +41,7 @@ struct UIHostHandler;
 
 pub fn start(args: &mut [String]) {
     #[cfg(target_os = "macos")]
-    macos::show_dock();
+    crate::platform::delegate::show_dock();
     #[cfg(all(target_os = "linux", feature = "inline"))]
     {
         #[cfg(feature = "appimage")]
@@ -75,7 +73,7 @@ pub fn start(args: &mut [String]) {
     allow_err!(sciter::set_options(sciter::RuntimeOptions::UxTheming(true)));
     frame.set_title(&crate::get_app_name());
     #[cfg(target_os = "macos")]
-    macos::make_menubar(frame.get_host(), args.is_empty());
+    crate::platform::delegate::make_menubar(frame.get_host(), args.is_empty());
     let page;
     if args.len() > 1 && args[0] == "--play" {
         args[0] = "--connect".to_owned();
