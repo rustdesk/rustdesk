@@ -1,6 +1,6 @@
-use serde_json::{json, value::Value};
 use std::ops::Deref;
 
+mod ca;
 mod cn;
 mod cs;
 mod da;
@@ -8,69 +8,65 @@ mod de;
 mod en;
 mod eo;
 mod es;
+mod fa;
 mod fr;
+mod gr;
 mod hu;
 mod id;
 mod it;
 mod ja;
 mod ko;
+mod kz;
 mod nl;
 mod pl;
 mod ptbr;
 mod ro;
 mod ru;
 mod sk;
-mod tr;
-mod tw;
-mod vn;
-mod kz;
-mod ua;
-mod fa;
-mod ca;
-mod gr;
-mod sv;
+mod sl;
 mod sq;
 mod sr;
+mod sv;
 mod th;
-mod sl;
+mod tr;
+mod tw;
+mod ua;
+mod vn;
 
-lazy_static::lazy_static! {
-    pub static ref LANGS: Value =
-        json!(vec![
-            ("en", "English"),
-            ("it", "Italiano"),
-            ("fr", "Français"),
-            ("de", "Deutsch"),
-            ("nl", "Nederlands"),
-            ("cn", "简体中文"),
-            ("tw", "繁體中文"),
-            ("pt", "Português"),
-            ("es", "Español"),
-            ("hu", "Magyar"),
-            ("ru", "Русский"),
-            ("sk", "Slovenčina"),
-            ("id", "Indonesia"),
-            ("cs", "Čeština"),
-            ("da", "Dansk"),
-            ("eo", "Esperanto"),
-            ("tr", "Türkçe"),
-            ("vn", "Tiếng Việt"),
-            ("pl", "Polski"),
-            ("ja", "日本語"),
-            ("ko", "한국어"),
-            ("kz", "Қазақ"),
-            ("ua", "Українська"),
-            ("fa", "فارسی"),
-            ("ca", "Català"),
-            ("gr", "Ελληνικά"),
-            ("sv", "Svenska"),
-            ("sq", "Shqip"),
-            ("sr", "Srpski"),
-            ("th", "ภาษาไทย"),
-            ("sl", "Slovenščina"),
-            ("ro", "Română"),
-        ]);
-}
+pub const LANGS: &[(&str, &str)] = &[
+    ("en", "English"),
+    ("it", "Italiano"),
+    ("fr", "Français"),
+    ("de", "Deutsch"),
+    ("nl", "Nederlands"),
+    ("cn", "简体中文"),
+    ("tw", "繁體中文"),
+    ("pt", "Português"),
+    ("es", "Español"),
+    ("hu", "Magyar"),
+    ("ru", "Русский"),
+    ("sk", "Slovenčina"),
+    ("id", "Indonesia"),
+    ("cs", "Čeština"),
+    ("da", "Dansk"),
+    ("eo", "Esperanto"),
+    ("tr", "Türkçe"),
+    ("vn", "Tiếng Việt"),
+    ("pl", "Polski"),
+    ("ja", "日本語"),
+    ("ko", "한국어"),
+    ("kz", "Қазақ"),
+    ("ua", "Українська"),
+    ("fa", "فارسی"),
+    ("ca", "Català"),
+    ("gr", "Ελληνικά"),
+    ("sv", "Svenska"),
+    ("sq", "Shqip"),
+    ("sr", "Srpski"),
+    ("th", "ภาษาไทย"),
+    ("sl", "Slovenščina"),
+    ("ro", "Română"),
+];
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn translate(name: String) -> String {
