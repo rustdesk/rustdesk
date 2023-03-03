@@ -500,6 +500,7 @@ class FileModel extends ChangeNotifier {
       for (var from in items.items) {
         final jobId = ++_jobId;
         _jobTable.add(JobProgress()
+          ..fileName = path.basename(from.path)
           ..jobName = from.path
           ..totalSize = from.size
           ..state = JobState.inProgress
@@ -853,7 +854,9 @@ class FileModel extends ChangeNotifier {
     int fileNum = jobDetail['file_num'];
     bool isRemote = jobDetail['is_remote'];
     final currJobId = _jobId++;
+    String fileName = path.basename(isRemote ? remote : to);
     var jobProgress = JobProgress()
+      ..fileName = fileName
       ..jobName = isRemote ? remote : to
       ..id = currJobId
       ..isRemote = isRemote
@@ -1121,6 +1124,7 @@ class JobProgress {
   var fileCount = 0;
   var isRemote = false;
   var jobName = "";
+  var fileName = "";
   var remote = "";
   var to = "";
   var showHidden = false;
@@ -1133,6 +1137,7 @@ class JobProgress {
     speed = 0;
     finishedSize = 0;
     jobName = "";
+    fileName = "";
     fileCount = 0;
     remote = "";
     to = "";
