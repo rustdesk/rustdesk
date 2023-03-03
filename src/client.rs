@@ -944,12 +944,7 @@ impl VideoHandler {
         }
         match &vf.union {
             Some(frame) => {
-                // windows && flutter_texture_render, fmt is ImageFormat::ABGR
-                #[cfg(all(target_os = "windows", feature = "flutter_texture_render"))]
-                let fmt = ImageFormat::ABGR;
-                #[cfg(not(all(target_os = "windows", feature = "flutter_texture_render")))]
-                let fmt = ImageFormat::ARGB;
-                let res = self.decoder.handle_video_frame(frame, STRIDE_ALIGN, fmt, &mut self.rgb);
+                let res = self.decoder.handle_video_frame(frame, STRIDE_ALIGN, ImageFormat::ARGB, &mut self.rgb);
                 if self.record {
                     self.recorder
                         .lock()

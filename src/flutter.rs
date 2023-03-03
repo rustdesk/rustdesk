@@ -154,7 +154,7 @@ pub struct FlutterHandler {
 
 #[cfg(feature = "flutter_texture_render")]
 pub type FlutterRgbaRendererPluginOnRgba =
-    unsafe extern "C" fn(texture_rgba: *mut c_void, buffer: *const u8, width: c_int, height: c_int);
+    unsafe extern "C" fn(texture_rgba: *mut c_void, buffer: *const u8, len: c_int, width: c_int, height: c_int, stride_align: c_int);
 
 // Video Texture Renderer in Flutter
 #[cfg(feature = "flutter_texture_render")]
@@ -223,8 +223,10 @@ impl VideoRenderer {
                 func(
                     self.ptr as _,
                     rgba.as_ptr() as _,
+                    rgba.len() as _,
                     self.width as _,
                     self.height as _,
+                    crate::common::STRIDE_ALIGN as _,
                 )
             };
         }
