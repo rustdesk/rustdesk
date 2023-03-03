@@ -306,18 +306,18 @@ impl Decoder {
     pub fn handle_video_frame(
         &mut self,
         frame: &video_frame::Union,
-        stride_align: usize,
+        stride: usize,
         fmt: ImageFormat,
         rgb: &mut Vec<u8>,
     ) -> ResultType<bool> {
         match frame {
             video_frame::Union::Vp9s(vp9s) => {
-                Decoder::handle_vp9s_video_frame(&mut self.vpx, vp9s, stride_align, fmt, rgb)
+                Decoder::handle_vp9s_video_frame(&mut self.vpx, vp9s, stride, fmt, rgb)
             }
             #[cfg(feature = "hwcodec")]
             video_frame::Union::H264s(h264s) => {
                 if let Some(decoder) = &mut self.hw.h264 {
-                    Decoder::handle_hw_video_frame(decoder, h264s, fmt, rgb, &mut self.i420)
+                    Decoder::handle_hw_video_frame(decoder, h264s, stride, fmt, rgb, &mut self.i420)
                 } else {
                     Err(anyhow!("don't support h264!"))
                 }
@@ -325,7 +325,7 @@ impl Decoder {
             #[cfg(feature = "hwcodec")]
             video_frame::Union::H265s(h265s) => {
                 if let Some(decoder) = &mut self.hw.h265 {
-                    Decoder::handle_hw_video_frame(decoder, h265s, fmt, rgb, &mut self.i420)
+                    Decoder::handle_hw_video_frame(decoder, h265s, stride, fmt, rgb, &mut self.i420)
                 } else {
                     Err(anyhow!("don't support h265!"))
                 }
@@ -333,7 +333,7 @@ impl Decoder {
             #[cfg(feature = "mediacodec")]
             video_frame::Union::H264s(h264s) => {
                 if let Some(decoder) = &mut self.media_codec.h264 {
-                    Decoder::handle_mediacodec_video_frame(decoder, h264s, fmt, rgb)
+                    Decoder::handle_mediacodec_video_frame(decoder, h264s, stride, fmt, rgb)
                 } else {
                     Err(anyhow!("don't support h264!"))
                 }
@@ -341,7 +341,7 @@ impl Decoder {
             #[cfg(feature = "mediacodec")]
             video_frame::Union::H265s(h265s) => {
                 if let Some(decoder) = &mut self.media_codec.h265 {
-                    Decoder::handle_mediacodec_video_frame(decoder, h265s, fmt, rgb)
+                    Decoder::handle_mediacodec_video_frame(decoder, h265s, stride, fmt, rgb)
                 } else {
                     Err(anyhow!("don't support h265!"))
                 }
@@ -353,7 +353,7 @@ impl Decoder {
     fn handle_vp9s_video_frame(
         decoder: &mut VpxDecoder,
         vp9s: &EncodedVideoFrames,
-        stride_align: usize,
+        stride: usize,
         fmt: ImageFormat,
         rgb: &mut Vec<u8>,
     ) -> ResultType<bool> {
@@ -371,7 +371,7 @@ impl Decoder {
         if last_frame.is_null() {
             Ok(false)
         } else {
-            last_frame.to(fmt, stride_align, rgb);
+            last_frame.to(fmt, stride, rgb);
             Ok(true)
         }
     }
@@ -380,7 +380,7 @@ impl Decoder {
     fn handle_hw_video_frame(
         decoder: &mut HwDecoder,
         frames: &EncodedVideoFrames,
-        stride_align: usize,
+        stride: usize,
         fmt: ImageFormat,
         raw: &mut Vec<u8>,
         i420: &mut Vec<u8>,
@@ -389,7 +389,7 @@ impl Decoder {
         for h264 in frames.frames.iter() {
             for image in decoder.decode(&h264.data)? {
                 // TODO: just process the last frame
-                if image.to_fmt(stride_align, fmt, raw, i420).is_ok() {
+                if image.to_fmt(stride, fmt, raw, i420).is_ok() {
                     ret = true;
                 }
             }
@@ -401,13 +401,13 @@ impl Decoder {
     fn handle_mediacodec_video_frame(
         decoder: &mut MediaCodecDecoder,
         frames: &EncodedVideoFrames,
-        stride_align: usize,
+        stride: usize,
         fmt: ImageFormat,
         raw: &mut Vec<u8>,
     ) -> ResultType<bool> {
         let mut ret = false;
         for h264 in frames.frames.iter() {
-            return decoder.decode(&h264.data, stride_align, fmt, raw);
+            return decoder.decode(&h264.data, stride, fmt, raw);
         }
         return Ok(false);
     }

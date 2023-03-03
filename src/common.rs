@@ -42,9 +42,9 @@ pub const SYNC_PEER_INFO_DISPLAYS: i32 = 1;
 #[cfg(all(target_os = "macos", feature = "flutter_texture_render"))]
 // https://developer.apple.com/forums/thread/712709
 // Memory alignment should be multiple of 64.
-pub const STRIDE_ALIGN_RGBA_OUTPUT: usize = 64;
+pub const DST_STRIDE_RGBA: usize = 64;
 #[cfg(not(all(target_os = "macos", feature = "flutter_texture_render")))]
-pub const STRIDE_ALIGN_RGBA_OUTPUT: usize = 1;
+pub const DST_STRIDE_RGBA: usize = 1;
 
 // the executable name of the portable version
 pub const PORTABLE_APPNAME_RUNTIME_ENV_KEY: &str = "RUSTDESK_APPNAME";
