@@ -106,7 +106,6 @@ fn get_values_of_seat0(indices: Vec<usize>) -> Vec<String> {
         for line in output.lines() {
             if let Some(sid) = line.split_whitespace().next() {
                 let d = get_display_server_of_session(sid);
-                dbg!(&d);
                 if is_active(sid) && d != "tty" {
                     return indices
                         .into_iter()
