@@ -50,8 +50,7 @@ impl MediaCodecDecoder {
         MediaCodecDecoders { h264, h265 }
     }
 
-    // to-do: apply stride to raw output data
-    pub fn decode(&mut self, data: &[u8], stride: usize, fmt: ImageFormat, raw: &mut Vec<u8>) -> ResultType<bool> {
+    pub fn decode(&mut self, data: &[u8], fmt: ImageFormat, raw: &mut Vec<u8>) -> ResultType<bool> {
         match self.dequeue_input_buffer(Duration::from_millis(10))? {
             Some(mut input_buffer) => {
                 let mut buf = input_buffer.buffer_mut();
