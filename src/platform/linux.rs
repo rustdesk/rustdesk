@@ -448,7 +448,7 @@ pub fn is_login_wayland() -> bool {
 
 pub fn current_is_wayland() -> bool {
     let dtype = get_display_server();
-    return "wayland" == dtype && unsafe { UNMODIFIED };
+    return DisplayServer::Wayland == dtype && unsafe { UNMODIFIED };
 }
 
 // to-do: test the other display manager

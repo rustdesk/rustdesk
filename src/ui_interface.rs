@@ -504,11 +504,13 @@ pub fn get_error() -> String {
     #[cfg(not(any(feature = "cli")))]
     #[cfg(target_os = "linux")]
     {
+        use hbb_common::platform::linux::DisplayServer;
+
         let dtype = crate::platform::linux::get_display_server();
-        if "wayland" == dtype {
+        if DisplayServer::Wayland == dtype {
             return crate::server::wayland::common_get_error();
         }
-        if dtype != "x11" {
+        if dtype != DisplayServer::X11 {
             return format!(
                 "{} {}, {}",
                 crate::client::translate("Unsupported display server ".to_owned()),

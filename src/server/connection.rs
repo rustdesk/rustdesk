@@ -854,8 +854,11 @@ impl Connection {
         }
         #[cfg(target_os = "linux")]
         if !self.file_transfer.is_some() && !self.port_forward_socket.is_some() {
+            use hbb_common::platform::linux::DisplayServer;
+
             let dtype = crate::platform::linux::get_display_server();
-            if dtype != "x11" && dtype != "wayland" {
+            // FIXME: Check it in rustdesk/libs/hbb_common/src/platform/linux.rs
+            if dtype != DisplayServer::X11 && dtype != DisplayServer::Wayland {
                 res.set_error(format!(
                     "Unsupported display server type {}, x11 or wayland expected",
                     dtype

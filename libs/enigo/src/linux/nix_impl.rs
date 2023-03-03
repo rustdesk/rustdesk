@@ -1,5 +1,6 @@
 use super::xdo::EnigoXdo;
 use crate::{Key, KeyboardControllable, MouseButton, MouseControllable};
+use hbb_common::platform::linux::DisplayServer;
 use std::io::Read;
 use tfc::{traits::*, Context as TFC_Context, Key as TFC_Key};
 
@@ -84,7 +85,7 @@ impl Enigo {
 
 impl Default for Enigo {
     fn default() -> Self {
-        let is_x11 = "x11" == hbb_common::platform::linux::get_display_server();
+        let is_x11 = DisplayServer::X11 == hbb_common::platform::linux::get_display_server();
         Self {
             is_x11,
             tfc: if is_x11 {

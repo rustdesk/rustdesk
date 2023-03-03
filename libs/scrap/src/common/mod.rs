@@ -74,7 +74,9 @@ pub trait TraitCapturer {
 #[cfg(x11)]
 #[inline]
 pub fn is_x11() -> bool {
-    "x11" == hbb_common::platform::linux::get_display_server()
+    use hbb_common::platform::linux::DisplayServer;
+    
+    DisplayServer::X11 == hbb_common::platform::linux::get_display_server()
 }
 
 #[cfg(x11)]
