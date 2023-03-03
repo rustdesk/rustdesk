@@ -169,7 +169,6 @@ struct VideoRenderer {
     ptr: usize,
     width: i32,
     height: i32,
-    data_len: usize,
     on_rgba_func: Option<Symbol<'static, FlutterRgbaRendererPluginOnRgba>>,
 }
 
@@ -198,7 +197,6 @@ impl Default for VideoRenderer {
             ptr: 0,
             width: 0,
             height: 0,
-            data_len: 0,
             on_rgba_func,
         }
     }
@@ -210,17 +208,10 @@ impl VideoRenderer {
     pub fn set_size(&mut self, width: i32, height: i32) {
         self.width = width;
         self.height = height;
-        self.data_len = if width > 0 && height > 0 {
-            let sa1 = crate::DST_STRIDE_RGBA - 1;
-            let row_bytes = (width as usize * 4 + sa1) & !sa1;
-            row_bytes * height as usize
-        } else {
-            0
-        };
     }
 
     pub fn on_rgba(&self, rgba: &Vec<u8>) {
-        if self.ptr == usize::default() || rgba.len() != self.data_len {
+        if self.ptr == usize::default() {
             return;
         }
         if let Some(func) = &self.on_rgba_func {
