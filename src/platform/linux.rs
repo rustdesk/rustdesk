@@ -319,48 +319,50 @@ pub fn start_os_service() {
     let mut cm0 = false;
     let mut last_restart = Instant::now();
     while running.load(Ordering::SeqCst) {
-        let (cur_uid, cur_user) = get_active_user_id_name();
-        let is_wayland = current_is_wayland();
+        if let Ok((session, properties)) = get_seat0_session_properties() {
+            let (cur_uid, cur_user) = (session.uid.to_string(), session.username);
+            let is_wayland = properties.get_display_server() == DisplayServer::Wayland;
 
-        if cur_user == "root" || !is_wayland {
-            // try kill subprocess "--server"
-            stop_server(&mut user_server);
-            // try start subprocess "--server"
-            if should_start_server(
-                true,
-                &mut uid,
-                cur_uid,
-                &mut cm0,
-                &mut last_restart,
-                &mut server,
-            ) {
-                force_stop_server();
-                start_server(None, &mut server);
-            }
-        } else if cur_user != "" {
-            if cur_user != "gdm" {
+            if cur_user == "root" || !is_wayland {
                 // try kill subprocess "--server"
-                stop_server(&mut server);
-
+                stop_server(&mut user_server);
                 // try start subprocess "--server"
                 if should_start_server(
-                    false,
+                    true,
                     &mut uid,
-                    cur_uid.clone(),
+                    cur_uid,
                     &mut cm0,
                     &mut last_restart,
-                    &mut user_server,
+                    &mut server,
                 ) {
                     force_stop_server();
-                    start_server(Some((cur_uid, cur_user)), &mut user_server);
+                    start_server(None, &mut server);
                 }
+            } else if cur_user != "" {
+                if cur_user != "gdm" {
+                    // try kill subprocess "--server"
+                    stop_server(&mut server);
+
+                    // try start subprocess "--server"
+                    if should_start_server(
+                        false,
+                        &mut uid,
+                        cur_uid.clone(),
+                        &mut cm0,
+                        &mut last_restart,
+                        &mut user_server,
+                    ) {
+                        force_stop_server();
+                        start_server(Some((cur_uid, cur_user)), &mut user_server);
+                    }
+                }
+            } else {
+                force_stop_server();
+                stop_server(&mut user_server);
+                stop_server(&mut server);
             }
-        } else {
-            force_stop_server();
-            stop_server(&mut user_server);
-            stop_server(&mut server);
+            std::thread::sleep(Duration::from_millis(super::SERVICE_INTERVAL));
         }
-        std::thread::sleep(Duration::from_millis(super::SERVICE_INTERVAL));
     }
 
     if let Some(ps) = user_server.take().as_mut() {
@@ -373,12 +375,23 @@ pub fn start_os_service() {
 }
 
 pub fn get_active_user_id_name() -> (String, String) {
-    let vec_id_name = get_values_of_seat0([1, 2].to_vec());
-    (vec_id_name[0].clone(), vec_id_name[1].clone())
+    if let Ok((session, properties)) = get_seat0_session_properties() {
+        (session.uid.to_string(), session.username)
+    } else {
+        log::warn!(
+            "Failed to get active uid & username, set default uid && username to (root, 1000)."
+        );
+        (String::from("1000"), String::from("root"))
+    }
 }
 
 pub fn get_active_userid() -> String {
-    get_values_of_seat0([1].to_vec())[0].clone()
+    if let Ok((session, properties)) = get_seat0_session_properties() {
+        session.uid.to_string()
+    } else {
+        log::warn!("Failed to get active userid, set default username to root.");
+        String::from("1000")
+    }
 }
 
 fn get_cm() -> bool {
@@ -462,7 +475,12 @@ fn _get_display_manager() -> String {
 }
 
 pub fn get_active_username() -> String {
-    get_values_of_seat0([2].to_vec())[0].clone()
+    if let Ok((session, properties)) = get_seat0_session_properties() {
+        session.username
+    } else {
+        log::warn!("Failed to get active username, set default username to root.");
+        String::from("1000")
+    }
 }
 
 pub fn get_active_user_home() -> Option<PathBuf> {
