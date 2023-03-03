@@ -349,6 +349,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Security", "Безпека"),
         ("Theme", "Тема"),
         ("Dark Theme", "Темна тема"),
+        ("Light Theme", ""),
         ("Dark", "Темна"),
         ("Light", "Світла"),
         ("Follow System", "Як у системі"),

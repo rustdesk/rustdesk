@@ -397,8 +397,13 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                 showLanguageSettings(gFFI.dialogManager);
               }),
           SettingsTile.navigation(
-            title: Text(translate('Dark Theme')),
-            leading: Icon(Icons.dark_mode),
+            title: Text(translate(
+                Theme.of(context).brightness == Brightness.light
+                    ? 'Dark Theme'
+                    : 'Light Theme')),
+            leading: Icon(Theme.of(context).brightness == Brightness.light
+                ? Icons.dark_mode
+                : Icons.light_mode),
             onPressed: (context) {
               showThemeSettings(gFFI.dialogManager);
             },
