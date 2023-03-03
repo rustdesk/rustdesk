@@ -156,6 +156,7 @@ pub struct FlutterHandler {
 pub type FlutterRgbaRendererPluginOnRgba = unsafe extern "C" fn(
     texture_rgba: *mut c_void,
     buffer: *const u8,
+    len: c_int,
     width: c_int,
     height: c_int,
     dst_rgba_stride: c_int,
@@ -219,6 +220,7 @@ impl VideoRenderer {
                 func(
                     self.ptr as _,
                     rgba.as_ptr() as _,
+                    rgba.len() as _,
                     self.width as _,
                     self.height as _,
                     crate::DST_STRIDE_RGBA as _,
