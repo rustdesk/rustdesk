@@ -276,11 +276,11 @@ impl HwDecoderImage<'_> {
     }
 
     pub fn bgra(&self, bgra: &mut Vec<u8>, i420: &mut Vec<u8>) -> ResultType<()> {
-        self.to_fmt(ImageFormat::ARGB, bgra, i420)
+        self.to_fmt((ImageFormat::ARGB, 1), bgra, i420)
     }
 
     pub fn rgba(&self, rgba: &mut Vec<u8>, i420: &mut Vec<u8>) -> ResultType<()> {
-        self.to_fmt(ImageFormat::ABGR, rgba, i420)
+        self.to_fmt((ImageFormat::ABGR, 1), rgba, i420)
     }
 }
 
