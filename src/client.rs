@@ -44,8 +44,7 @@ pub use helper::*;
 use scrap::{
     codec::{Decoder, DecoderCfg},
     record::{Recorder, RecorderContext},
-    VpxDecoderConfig, VpxVideoCodecId,
-    ImageFormat,
+    ImageFormat, VpxDecoderConfig, VpxVideoCodecId,
 };
 
 use crate::{
@@ -944,12 +943,11 @@ impl VideoHandler {
         }
         match &vf.union {
             Some(frame) => {
-                // windows && flutter_texture_render, fmt is ImageFormat::ABGR
-                #[cfg(all(target_os = "windows", feature = "flutter_texture_render"))]
-                let fmt = ImageFormat::ABGR;
-                #[cfg(not(all(target_os = "windows", feature = "flutter_texture_render")))]
-                let fmt = ImageFormat::ARGB;
-                let res = self.decoder.handle_video_frame(frame, fmt, &mut self.rgb);
+                let res = self.decoder.handle_video_frame(
+                    frame,
+                    (ImageFormat::ARGB, crate::DST_STRIDE_RGBA),
+                    &mut self.rgb,
+                );
                 if self.record {
                     self.recorder
                         .lock()
@@ -2038,7 +2036,7 @@ pub trait Interface: Send + Clone + 'static + Sized {
     fn is_force_relay(&self) -> bool {
         self.get_login_config_handler().read().unwrap().force_relay
     }
-    fn swap_modifier_mouse(&self, _msg : &mut hbb_common::protos::message::MouseEvent) {}
+    fn swap_modifier_mouse(&self, _msg: &mut hbb_common::protos::message::MouseEvent) {}
 }
 
 /// Data used by the client interface.

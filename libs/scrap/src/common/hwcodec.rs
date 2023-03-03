@@ -236,7 +236,13 @@ pub struct HwDecoderImage<'a> {
 }
 
 impl HwDecoderImage<'_> {
-    pub fn to_fmt(&self, fmt: ImageFormat, fmt_data: &mut Vec<u8>, i420: &mut Vec<u8>) -> ResultType<()> {
+    // take dst_stride into account when you convert
+    pub fn to_fmt(
+        &self,
+        (fmt, dst_stride): (ImageFormat, usize),
+        fmt_data: &mut Vec<u8>,
+        i420: &mut Vec<u8>,
+    ) -> ResultType<()> {
         let frame = self.frame;
         match frame.pixfmt {
             AVPixelFormat::AV_PIX_FMT_NV12 => hw::hw_nv12_to(
