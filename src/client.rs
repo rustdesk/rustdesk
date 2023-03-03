@@ -49,7 +49,7 @@ use scrap::{
 };
 
 use crate::{
-    common::{self, is_keyboard_mode_supported, STRIDE_ALIGN},
+    common::{self, is_keyboard_mode_supported, STRIDE_ALIGN_RGBA_OUTPUT},
     server::video_service::{SCRAP_X11_REF_URL, SCRAP_X11_REQUIRED},
 };
 
@@ -944,7 +944,7 @@ impl VideoHandler {
         }
         match &vf.union {
             Some(frame) => {
-                let res = self.decoder.handle_video_frame(frame, STRIDE_ALIGN, ImageFormat::ARGB, &mut self.rgb);
+                let res = self.decoder.handle_video_frame(frame, STRIDE_ALIGN_RGBA_OUTPUT, ImageFormat::ARGB, &mut self.rgb);
                 if self.record {
                     self.recorder
                         .lock()

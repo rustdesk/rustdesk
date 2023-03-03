@@ -206,7 +206,7 @@ impl VideoRenderer {
         self.width = width;
         self.height = height;
         self.data_len = if width > 0 && height > 0 {
-            let sa1 = crate::common::STRIDE_ALIGN - 1;
+            let sa1 = crate::common::STRIDE_ALIGN_RGBA_OUTPUT - 1;
             let row_bytes = (width as usize * 4 + sa1) & !sa1;
             row_bytes * height as usize
         } else {
@@ -226,7 +226,7 @@ impl VideoRenderer {
                     rgba.len() as _,
                     self.width as _,
                     self.height as _,
-                    crate::common::STRIDE_ALIGN as _,
+                    crate::common::STRIDE_ALIGN_RGBA_OUTPUT as _,
                 )
             };
         }
