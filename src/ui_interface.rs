@@ -639,7 +639,7 @@ pub fn get_langs() -> String {
     use serde_json::json;
     let mut x: Vec<(&str, String)> = crate::lang::LANGS
         .iter()
-        .map(|a| (a.0, format!("{} - {}", a.1, a.0)))
+        .map(|a| (a.0, format!("{} ({})", a.1, a.0)))
         .collect();
     x.sort_by(|a, b| a.0.cmp(b.0));
     json!(x).to_string()

@@ -39,8 +39,8 @@ pub const LANGS: &[(&str, &str)] = &[
     ("fr", "Français"),
     ("de", "Deutsch"),
     ("nl", "Nederlands"),
-    ("cn", "简体中文"),
-    ("tw", "繁體中文"),
+    ("zh-cn", "简体中文"),
+    ("zh-tw", "繁體中文"),
     ("pt", "Português"),
     ("es", "Español"),
     ("hu", "Magyar"),
@@ -79,7 +79,12 @@ pub fn translate_locale(name: String, locale: &str) -> String {
     if lang.is_empty() {
         // zh_CN on Linux, zh-Hans-CN on mac, zh_CN_#Hans on Android
         if locale.starts_with("zh") {
-            lang = (if locale.contains("tw") { "tw" } else { "cn" }).to_owned();
+            lang = (if locale.contains("tw") {
+                "zh-tw"
+            } else {
+                "zh-cn"
+            })
+            .to_owned();
         }
     }
     if lang.is_empty() {
@@ -93,9 +98,9 @@ pub fn translate_locale(name: String, locale: &str) -> String {
     let lang = lang.to_lowercase();
     let m = match lang.as_str() {
         "fr" => fr::T.deref(),
-        "cn" => cn::T.deref(),
+        "zh-cn" => cn::T.deref(),
         "it" => it::T.deref(),
-        "tw" => tw::T.deref(),
+        "zh-tw" => tw::T.deref(),
         "de" => de::T.deref(),
         "nl" => nl::T.deref(),
         "es" => es::T.deref(),
@@ -103,7 +108,6 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "ru" => ru::T.deref(),
         "eo" => eo::T.deref(),
         "id" => id::T.deref(),
-        "ptbr" => ptbr::T.deref(),
         "br" => ptbr::T.deref(),
         "pt" => ptbr::T.deref(),
         "tr" => tr::T.deref(),
