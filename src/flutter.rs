@@ -207,8 +207,8 @@ impl VideoRenderer {
         self.height = height;
         self.data_len = if width > 0 && height > 0 {
             let sa1 = crate::common::STRIDE_ALIGN - 1;
-            let w = (width as usize + sa1) & !sa1;
-            w * (height as usize) * 4
+            let row_bytes = (width as usize * 4 + sa1) & !sa1;
+            row_bytes * height as usize
         } else {
             0
         };

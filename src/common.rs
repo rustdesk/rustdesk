@@ -40,7 +40,9 @@ pub const CLIPBOARD_INTERVAL: u64 = 333;
 pub const SYNC_PEER_INFO_DISPLAYS: i32 = 1;
 
 #[cfg(all(target_os = "macos", feature = "flutter_texture_render"))]
-pub const STRIDE_ALIGN: usize = 16;
+// https://developer.apple.com/forums/thread/712709
+// Memory alignment should be multiple of 64.
+pub const STRIDE_ALIGN: usize = 64;
 #[cfg(not(all(target_os = "macos", feature = "flutter_texture_render")))]
 pub const STRIDE_ALIGN: usize = 1;
 

@@ -541,13 +541,15 @@ impl Image {
 
     pub fn to(&self, fmt: ImageFormat, stride_align: usize, dst: &mut Vec<u8>) {
         let h = self.height();
-        let mut w = self.width();
-        let bps = match fmt {
+        let w = self.width();
+        let bytes_per_pixel = match fmt {
             ImageFormat::Raw => 3,
             ImageFormat::ARGB | ImageFormat::ABGR => 4,
         };
-        w = (w + stride_align - 1) & !(stride_align - 1);
-        dst.resize(h * w * bps, 0);
+        // https://github.com/lemenkov/libyuv/blob/6900494d90ae095d44405cd4cc3f346971fa69c9/source/convert_argb.cc#L128
+        // https://github.com/lemenkov/libyuv/blob/6900494d90ae095d44405cd4cc3f346971fa69c9/source/convert_argb.cc#L129
+        let bytes_per_row = (w * bytes_per_pixel + stride_align - 1) & !(stride_align - 1);
+        dst.resize(h * bytes_per_row, 0);
         let img = self.inner();
         unsafe {
             match fmt {
@@ -560,7 +562,7 @@ impl Image {
                         img.planes[2],
                         img.stride[2],
                         dst.as_mut_ptr(),
-                        (w * bps) as _,
+                        bytes_per_row as _,
                         self.width() as _,
                         self.height() as _,
                     );
@@ -574,7 +576,7 @@ impl Image {
                         img.planes[2],
                         img.stride[2],
                         dst.as_mut_ptr(),
-                        (w * bps) as _,
+                        bytes_per_row as _,
                         self.width() as _,
                         self.height() as _,
                     );
@@ -588,7 +590,7 @@ impl Image {
                         img.planes[2],
                         img.stride[2],
                         dst.as_mut_ptr(),
-                        (w * bps) as _,
+                        bytes_per_row as _,
                         self.width() as _,
                         self.height() as _,
                     );

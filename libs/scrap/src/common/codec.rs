@@ -380,6 +380,7 @@ impl Decoder {
     fn handle_hw_video_frame(
         decoder: &mut HwDecoder,
         frames: &EncodedVideoFrames,
+        stride_align: usize,
         fmt: ImageFormat,
         raw: &mut Vec<u8>,
         i420: &mut Vec<u8>,
@@ -388,7 +389,7 @@ impl Decoder {
         for h264 in frames.frames.iter() {
             for image in decoder.decode(&h264.data)? {
                 // TODO: just process the last frame
-                if image.to_fmt(fmt, raw, i420).is_ok() {
+                if image.to_fmt(stride_align, fmt, raw, i420).is_ok() {
                     ret = true;
                 }
             }
@@ -400,12 +401,13 @@ impl Decoder {
     fn handle_mediacodec_video_frame(
         decoder: &mut MediaCodecDecoder,
         frames: &EncodedVideoFrames,
+        stride_align: usize,
         fmt: ImageFormat,
         raw: &mut Vec<u8>,
     ) -> ResultType<bool> {
         let mut ret = false;
         for h264 in frames.frames.iter() {
-            return decoder.decode(&h264.data, fmt, raw);
+            return decoder.decode(&h264.data, stride_align, fmt, raw);
         }
         return Ok(false);
     }
