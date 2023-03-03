@@ -144,7 +144,7 @@ extern "C" {
 fn get_vpx_i420_stride(
     width: usize,
     height: usize,
-    stride_align: usize,
+    stride: usize,
 ) -> (usize, usize, usize, usize, usize, usize) {
     let mut img = Default::default();
     unsafe {
@@ -153,7 +153,7 @@ fn get_vpx_i420_stride(
             vpx_img_fmt::VPX_IMG_FMT_I420,
             width as _,
             height as _,
-            stride_align as _,
+            stride as _,
             0x1 as _,
         );
     }
@@ -169,7 +169,7 @@ fn get_vpx_i420_stride(
 
 pub fn i420_to_rgb(width: usize, height: usize, src: &[u8], dst: &mut Vec<u8>) {
     let (_, _, src_stride_y, src_stride_uv, u, v) =
-        get_vpx_i420_stride(width, height, super::STRIDE_ALIGN);
+        get_vpx_i420_stride(width, height, super::STRIDE);
     let src_y = src.as_ptr();
     let src_u = src[u..].as_ptr();
     let src_v = src[v..].as_ptr();
@@ -192,7 +192,7 @@ pub fn i420_to_rgb(width: usize, height: usize, src: &[u8], dst: &mut Vec<u8>) {
 
 pub fn bgra_to_i420(width: usize, height: usize, src: &[u8], dst: &mut Vec<u8>) {
     let (_, h, dst_stride_y, dst_stride_uv, u, v) =
-        get_vpx_i420_stride(width, height, super::STRIDE_ALIGN);
+        get_vpx_i420_stride(width, height, super::STRIDE);
     dst.resize(h * dst_stride_y * 2, 0); // waste some memory to ensure memory safety
     let dst_y = dst.as_mut_ptr();
     let dst_u = dst[u..].as_mut_ptr();
@@ -215,7 +215,7 @@ pub fn bgra_to_i420(width: usize, height: usize, src: &[u8], dst: &mut Vec<u8>) 
 
 pub fn rgba_to_i420(width: usize, height: usize, src: &[u8], dst: &mut Vec<u8>) {
     let (_, h, dst_stride_y, dst_stride_uv, u, v) =
-        get_vpx_i420_stride(width, height, super::STRIDE_ALIGN);
+        get_vpx_i420_stride(width, height, super::STRIDE);
     dst.resize(h * dst_stride_y * 2, 0); // waste some memory to ensure memory safety
     let dst_y = dst.as_mut_ptr();
     let dst_u = dst[u..].as_mut_ptr();
@@ -246,7 +246,7 @@ pub unsafe fn nv12_to_i420(
     dst: &mut Vec<u8>,
 ) {
     let (_, h, dst_stride_y, dst_stride_uv, u, v) =
-        get_vpx_i420_stride(width, height, super::STRIDE_ALIGN);
+        get_vpx_i420_stride(width, height, super::STRIDE);
     dst.resize(h * dst_stride_y * 2, 0); // waste some memory to ensure memory safety
     let dst_y = dst.as_mut_ptr();
     let dst_u = dst[u..].as_mut_ptr();

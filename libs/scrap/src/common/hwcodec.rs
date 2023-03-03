@@ -1,6 +1,6 @@
 use crate::{
     codec::{EncoderApi, EncoderCfg},
-    hw, ImageFormat, HW_STRIDE_ALIGN,
+    hw, ImageFormat, HW_STRIDE,
 };
 use hbb_common::{
     anyhow::{anyhow, Context},
@@ -52,7 +52,7 @@ impl EncoderApi for HwEncoder {
                     width: config.width as _,
                     height: config.height as _,
                     pixfmt: DEFAULT_PIXFMT,
-                    align: HW_STRIDE_ALIGN as _,
+                    align: HW_STRIDE as _,
                     bitrate: config.bitrate * 1000,
                     timebase: DEFAULT_TIME_BASE,
                     gop: DEFAULT_GOP,
@@ -236,7 +236,7 @@ pub struct HwDecoderImage<'a> {
 }
 
 impl HwDecoderImage<'_> {
-    pub fn to_fmt(&self, fmt: ImageFormat, fmt_data: &mut Vec<u8>, i420: &mut Vec<u8>) -> ResultType<()> {
+    pub fn to_fmt(&self, stride: usize, fmt: ImageFormat, fmt_data: &mut Vec<u8>, i420: &mut Vec<u8>) -> ResultType<()> {
         let frame = self.frame;
         match frame.pixfmt {
             AVPixelFormat::AV_PIX_FMT_NV12 => hw::hw_nv12_to(
@@ -249,7 +249,7 @@ impl HwDecoderImage<'_> {
                 frame.linesize[1] as _,
                 fmt_data,
                 i420,
-                HW_STRIDE_ALIGN,
+                HW_STRIDE,
             ),
             AVPixelFormat::AV_PIX_FMT_YUV420P => {
                 hw::hw_i420_to(
@@ -269,12 +269,12 @@ impl HwDecoderImage<'_> {
         }
     }
 
-    pub fn bgra(&self, bgra: &mut Vec<u8>, i420: &mut Vec<u8>) -> ResultType<()> {
-        self.to_fmt(ImageFormat::ARGB, bgra, i420)
+    pub fn bgra(&self, stride: usize, bgra: &mut Vec<u8>, i420: &mut Vec<u8>) -> ResultType<()> {
+        self.to_fmt(stride, ImageFormat::ARGB, bgra, i420)
     }
 
-    pub fn rgba(&self, rgba: &mut Vec<u8>, i420: &mut Vec<u8>) -> ResultType<()> {
-        self.to_fmt(ImageFormat::ABGR, rgba, i420)
+    pub fn rgba(&self, stride: usize, rgba: &mut Vec<u8>, i420: &mut Vec<u8>) -> ResultType<()> {
+        self.to_fmt(stride, ImageFormat::ABGR, rgba, i420)
     }
 }
 
@@ -296,7 +296,7 @@ pub fn check_config() {
         width: 1920,
         height: 1080,
         pixfmt: DEFAULT_PIXFMT,
-        align: HW_STRIDE_ALIGN as _,
+        align: HW_STRIDE as _,
         bitrate: 0,
         timebase: DEFAULT_TIME_BASE,
         gop: DEFAULT_GOP,

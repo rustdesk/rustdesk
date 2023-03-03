@@ -18,7 +18,7 @@ use webm::mux;
 use webm::mux::Track;
 
 use scrap::vpxcodec as vpx_encode;
-use scrap::{TraitCapturer, Capturer, Display, STRIDE_ALIGN};
+use scrap::{TraitCapturer, Capturer, Display, STRIDE};
 
 const USAGE: &'static str = "
 Simple WebM screen capture.
@@ -137,7 +137,7 @@ fn main() -> io::Result<()> {
         if let Ok(frame) = c.frame(Duration::from_millis(0)) {
             let ms = time.as_secs() * 1000 + time.subsec_millis() as u64;
 
-            for frame in vpx.encode(ms as i64, &frame, STRIDE_ALIGN).unwrap() {
+            for frame in vpx.encode(ms as i64, &frame, STRIDE).unwrap() {
                 vt.add_frame(frame.data, frame.pts as u64 * 1_000_000, frame.key);
             }
         }

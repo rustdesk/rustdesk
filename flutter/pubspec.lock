@@ -1228,10 +1228,10 @@ packages:
     dependency: "direct main"
     description:
       name: texture_rgba_renderer
-      sha256: fbb09b2c6b4ce71261927f9e7e4ea339af3e2f3f2b175f6fb921de1c66ec848d
+      sha256: ec8d124e4c1d7dfff854ae34e95d7d9d877b8f9d291c383c67686e4b15cf538e
       url: "https://pub.dev"
     source: hosted
-    version: "0.0.8"
+    version: "0.0.12"
   timing:
     dependency: transitive
     description:
