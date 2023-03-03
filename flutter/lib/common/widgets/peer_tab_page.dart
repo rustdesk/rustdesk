@@ -12,6 +12,7 @@ import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/desktop/widgets/material_mod_popup_menu.dart'
     as mod_menu;
+import 'package:flutter_hbb/models/file_model.dart';
 import 'package:flutter_hbb/models/peer_tab_model.dart';
 import 'package:get/get.dart';
 import 'package:get/get_rx/src/rx_workers/utils/debouncer.dart';
@@ -39,6 +40,8 @@ EdgeInsets? _menuPadding() {
 
 class _PeerTabPageState extends State<PeerTabPage>
     with SingleTickerProviderStateMixin {
+  bool _hideSort = bind.getLocalFlutterConfig(k: 'peer-tab-index') == '0';
+
   final List<_TabEntry> entries = [
     _TabEntry(
         RecentPeersView(
@@ -83,6 +86,7 @@ class _PeerTabPageState extends State<PeerTabPage>
     if (tabIndex < entries.length) {
       gFFI.peerTabModel.setCurrentTab(tabIndex);
       entries[tabIndex].load();
+      _hideSort = tabIndex == 0;
     }
   }
 
@@ -95,22 +99,27 @@ class _PeerTabPageState extends State<PeerTabPage>
         SizedBox(
           height: 28,
           child: Container(
-              padding: isDesktop ? null : EdgeInsets.symmetric(horizontal: 2),
-              constraints: isDesktop ? null : kMobilePageConstraints,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(
-                      child: visibleContextMenuListener(
-                          _createSwitchBar(context))),
-                  buildScrollJumper(),
-                  const PeerSearchBar(),
-                  Offstage(
-                      offstage: !isDesktop,
-                      child: _createPeerViewTypeSwitch(context)
-                          .marginOnly(left: 13)),
-                ],
-              )),
+            padding: isDesktop ? null : EdgeInsets.symmetric(horizontal: 2),
+            constraints: isDesktop ? null : kMobilePageConstraints,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                    child:
+                        visibleContextMenuListener(_createSwitchBar(context))),
+                buildScrollJumper(),
+                const PeerSearchBar(),
+                Offstage(
+                    offstage: !isDesktop,
+                    child: _createPeerViewTypeSwitch(context)
+                        .marginOnly(left: 13)),
+                Offstage(
+                  offstage: _hideSort,
+                  child: PeerSortDropdown(),
+                )
+              ],
+            ),
+          ),
         ),
         _createPeersView(),
       ],
@@ -414,6 +423,51 @@ class _PeerSearchBarState extends State<PeerSearchBar> {
               )
             ],
           )),
+    );
+  }
+}
+
+class PeerSortDropdown extends StatefulWidget {
+  const PeerSortDropdown({super.key});
+
+  @override
+  State<PeerSortDropdown> createState() => _PeerSortDropdownState();
+}
+
+class _PeerSortDropdownState extends State<PeerSortDropdown> {
+  final List<String> sort_names = ['id', 'username', "status"];
+  String _sortType = peerSort.value;
+
+  @override
+  Widget build(BuildContext context) {
+    return DropdownButton<String>(
+      value: _sortType,
+      elevation: 16,
+      underline: SizedBox(),
+      onChanged: (v) {
+        if (v != null) {
+          setState(() {
+            _sortType = v;
+            bind.setLocalFlutterConfig(
+              k: "peer-sorting",
+              v: _sortType,
+            );
+          });
+          peerSort.value = _sortType;
+        }
+      },
+      dropdownColor: Theme.of(context).cardColor,
+      items: sort_names
+          .map<DropdownMenuItem<String>>(
+            (String value) => DropdownMenuItem<String>(
+              value: value,
+              child: Text(
+                value,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          )
+          .toList(),
     );
   }
 }

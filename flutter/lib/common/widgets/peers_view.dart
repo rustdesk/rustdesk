@@ -18,6 +18,13 @@ typedef PeerCardBuilder = Widget Function(Peer peer);
 
 /// for peer search text, global obs value
 final peerSearchText = "".obs;
+
+/// for peer sort, global obs value
+final peerSort = bind.getLocalFlutterConfig(k: 'peer-sorting').obs;
+
+// list for listener
+final obslist = [peerSearchText, peerSort].obs;
+
 final peerSearchTextController =
     TextEditingController(text: peerSearchText.value);
 
@@ -101,7 +108,7 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
   }
 
   Widget _buildPeersView(Peers peers) {
-    final body = ObxValue<RxString>((searchText) {
+    final body = ObxValue<RxList>((filters) {
       return FutureBuilder<List<Peer>>(
         builder: (context, snapshot) {
           if (snapshot.hasData) {
@@ -139,9 +146,9 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
             );
           }
         },
-        future: matchPeers(searchText.value, peers.peers),
+        future: matchPeers(filters[0].value, filters[1].value, peers.peers),
       );
-    }, peerSearchText);
+    }, obslist);
 
     return body;
   }
@@ -179,9 +186,34 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
     }();
   }
 
-  Future<List<Peer>>? matchPeers(String searchText, List<Peer> peers) async {
+  Future<List<Peer>>? matchPeers(
+      String searchText, String sortedBy, List<Peer> peers) async {
     if (widget.peerFilter != null) {
       peers = peers.where((peer) => widget.peerFilter!(peer)).toList();
+    }
+
+    // fallback to id sorting
+    if (sortedBy.isEmpty) {
+      sortedBy = 'id';
+      bind.setLocalFlutterConfig(
+        k: "peer-sorting",
+        v: sortedBy,
+      );
+    }
+
+    if (widget.peers.loadEvent != 'load_recent_peers') {
+      switch (sortedBy) {
+        case 'id':
+          peers.sort((p1, p2) => p1.id.compareTo(p2.id));
+          break;
+        case 'username':
+          peers.sort((p1, p2) =>
+              p1.username.toLowerCase().compareTo(p2.username.toLowerCase()));
+          break;
+        case 'status':
+          peers.sort((p1, p2) => p1.online ? 1 : -1);
+          break;
+      }
     }
 
     searchText = searchText.trim();
@@ -197,6 +229,7 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
         filteredList.add(peers[i]);
       }
     }
+
     return filteredList;
   }
 }
