@@ -30,7 +30,7 @@ cfg_if! {
 }
 
 pub mod codec;
-mod convert;
+pub mod convert;
 #[cfg(feature = "hwcodec")]
 pub mod hwcodec;
 #[cfg(feature = "mediacodec")]
