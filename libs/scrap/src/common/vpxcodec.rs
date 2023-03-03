@@ -6,7 +6,7 @@ use hbb_common::anyhow::{anyhow, Context};
 use hbb_common::message_proto::{EncodedVideoFrame, EncodedVideoFrames, Message, VideoFrame};
 use hbb_common::{get_time, ResultType};
 
-use crate::STRIDE;
+use crate::STRIDE_ALIGN;
 use crate::{codec::EncoderApi, ImageFormat};
 
 use super::vpx::{vp8e_enc_control_id::*, vpx_codec_err_t::*, *};
@@ -202,7 +202,7 @@ impl EncoderApi for VpxEncoder {
     fn encode_to_message(&mut self, frame: &[u8], ms: i64) -> ResultType<Message> {
         let mut frames = Vec::new();
         for ref frame in self
-            .encode(ms, frame, STRIDE)
+            .encode(ms, frame, STRIDE_ALIGN)
             .with_context(|| "Failed to encode")?
         {
             frames.push(VpxEncoder::create_frame(frame));
@@ -232,7 +232,7 @@ impl EncoderApi for VpxEncoder {
 }
 
 impl VpxEncoder {
-    pub fn encode(&mut self, pts: i64, data: &[u8], stride: usize) -> Result<EncodeFrames> {
+    pub fn encode(&mut self, pts: i64, data: &[u8], stride_align: usize) -> Result<EncodeFrames> {
         if 2 * data.len() < 3 * self.width * self.height {
             return Err(Error::FailedCall("len not enough".to_string()));
         }
@@ -243,7 +243,7 @@ impl VpxEncoder {
             vpx_img_fmt::VPX_IMG_FMT_I420,
             self.width as _,
             self.height as _,
-            stride as _,
+            stride_align as _,
             data.as_ptr() as _,
         ));
 
@@ -539,17 +539,15 @@ impl Image {
         self.inner().stride[iplane]
     }
 
-    pub fn to(&self, fmt: ImageFormat, stride: usize, dst: &mut Vec<u8>) {
+    pub fn to(&self, fmt: ImageFormat, stride_align: usize, dst: &mut Vec<u8>) {
         let h = self.height();
-        let w = self.width();
-        let bytes_per_pixel = match fmt {
+        let mut w = self.width();
+        let bps = match fmt {
             ImageFormat::Raw => 3,
             ImageFormat::ARGB | ImageFormat::ABGR => 4,
         };
-        // https://github.com/lemenkov/libyuv/blob/6900494d90ae095d44405cd4cc3f346971fa69c9/source/convert_argb.cc#L128
-        // https://github.com/lemenkov/libyuv/blob/6900494d90ae095d44405cd4cc3f346971fa69c9/source/convert_argb.cc#L129
-        let bytes_per_row = (w * bytes_per_pixel + stride - 1) & !(stride - 1);
-        dst.resize(h * bytes_per_row, 0);
+        w = (w + stride_align - 1) & !(stride_align - 1);
+        dst.resize(h * w * bps, 0);
         let img = self.inner();
         unsafe {
             match fmt {
@@ -562,7 +560,7 @@ impl Image {
                         img.planes[2],
                         img.stride[2],
                         dst.as_mut_ptr(),
-                        bytes_per_row as _,
+                        (w * bps) as _,
                         self.width() as _,
                         self.height() as _,
                     );
@@ -576,7 +574,7 @@ impl Image {
                         img.planes[2],
                         img.stride[2],
                         dst.as_mut_ptr(),
-                        bytes_per_row as _,
+                        (w * bps) as _,
                         self.width() as _,
                         self.height() as _,
                     );
@@ -590,7 +588,7 @@ impl Image {
                         img.planes[2],
                         img.stride[2],
                         dst.as_mut_ptr(),
-                        bytes_per_row as _,
+                        (w * bps) as _,
                         self.width() as _,
                         self.height() as _,
                     );
