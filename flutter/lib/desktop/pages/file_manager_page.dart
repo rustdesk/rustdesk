@@ -430,6 +430,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                                           message: lastModifiedStr,
                                           child: Text(
                                             lastModifiedStr,
+                                            overflow: TextOverflow.ellipsis,
                                             style: TextStyle(
                                               fontSize: 12,
                                               color: MyTheme.darkGray,
