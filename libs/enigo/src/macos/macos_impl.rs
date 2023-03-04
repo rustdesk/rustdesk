@@ -517,37 +517,7 @@ impl Enigo {
 
     #[inline]
     fn map_key_board(&mut self, ch: char) -> CGKeyCode {
-        // no idea why below char not working with shift, https://github.com/rustdesk/rustdesk/issues/406#issuecomment-1145157327
-        // seems related to numpad char
-        if ch == '-' || ch == '=' || ch == '.' || ch == '/' || (ch >= '0' && ch <= '9') {
-            return self.map_key_board_en(ch);
-        }
-        let mut code = u16::MAX;
-        unsafe {
-            let (keyboard, layout) = get_layout();
-            if !keyboard.is_null() && !layout.is_null() {
-                let name_ref = TISGetInputSourceProperty(keyboard, kTISPropertyInputSourceID);
-                if !name_ref.is_null() {
-                    let name = get_string(name_ref as _);
-                    if let Some(name) = name {
-                        if let Some(m) = self.char_to_vkey_map.get(&name) {
-                            code = *m.get(&ch).unwrap_or(&u16::MAX);
-                        } else {
-                            let m = get_map(&name, layout);
-                            code = *m.get(&ch).unwrap_or(&u16::MAX);
-                            self.char_to_vkey_map.insert(name.clone(), m);
-                        }
-                    }
-                }
-            }
-            if !keyboard.is_null() {
-                CFRelease(keyboard);
-            }
-        }
-        if code != u16::MAX {
-            return code;
-        }
-        self.map_key_board_en(ch)
+        return self.map_key_board_en(ch);
     }
 
     #[inline]
