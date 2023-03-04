@@ -45,7 +45,6 @@ lazy_static = "1.4"
 sha2 = "0.10"
 repng = "0.2"
 parity-tokio-ipc = { git = "https://github.com/open-trade/parity-tokio-ipc" }
-flexi_logger = { version = "0.22", features = ["async", "use_chrono_for_offset"] }
 runas = "0.2"
 magnum-opus = { git = "https://github.com/rustdesk/magnum-opus" }
 dasp = { version = "0.11", features = ["signal", "interpolate-linear", "interpolate"], optional = true }

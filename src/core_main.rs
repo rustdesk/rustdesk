@@ -8,9 +8,6 @@ use hbb_common::platform::register_breakdown_handler;
 /// If it returns [`None`], then the process will terminate, and flutter gui will not be started.
 /// If it returns [`Some`], then the process will continue, and flutter gui will be started.
 pub fn core_main() -> Option<Vec<String>> {
-    // https://docs.rs/flexi_logger/latest/flexi_logger/error_info/index.html#write
-    // though async logger more efficient, but it also causes more problems, disable it for now
-    // let mut _async_logger_holder: Option<flexi_logger::LoggerHandle> = None;
     let mut args = Vec::new();
     let mut flutter_args = Vec::new();
     let mut i = 0;
@@ -76,35 +73,14 @@ pub fn core_main() -> Option<Vec<String>> {
                 || (!click_setup && crate::platform::is_elevated(None).unwrap_or(false)));
         crate::portable_service::client::set_quick_support(_is_quick_support);
     }
-    #[cfg(debug_assertions)]
-    {
-        use hbb_common::env_logger::*;
-        init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "info"));
-    }
-    #[cfg(not(debug_assertions))]
-    {
-        let mut path = hbb_common::config::Config::log_path();
-        if args.len() > 0 && args[0].starts_with("--") {
-            let name = args[0].replace("--", "");
-            if !name.is_empty() {
-                path.push(name);
-            }
-        }
-        use flexi_logger::*;
-        if let Ok(x) = Logger::try_with_env_or_str("debug") {
-            // _async_logger_holder =
-            x.log_to_file(FileSpec::default().directory(path))
-                //.write_mode(WriteMode::Async)
-                .format(opt_format)
-                .rotate(
-                    Criterion::Age(Age::Day),
-                    Naming::Timestamps,
-                    Cleanup::KeepLogFiles(6),
-                )
-                .start()
-                .ok();
+    let mut log_name = "".to_owned();
+    if args.len() > 0 && args[0].starts_with("--") {
+        let name = args[0].replace("--", "");
+        if !name.is_empty() {
+            log_name = name;
         }
     }
+    hbb_common::init_log(false, &log_name);
     #[cfg(windows)]
     if !crate::platform::is_installed()
         && args.is_empty()
