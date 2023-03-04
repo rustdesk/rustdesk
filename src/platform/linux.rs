@@ -318,47 +318,55 @@ pub fn start_os_service() {
 
     let mut cm0 = false;
     let mut last_restart = Instant::now();
+    let mut last_seat0_sid = String::new();
+
     while running.load(Ordering::SeqCst) {
-        let (cur_uid, cur_user) = get_active_user_id_name();
-        let is_wayland = current_is_wayland();
+        // logout will change the session id， logout is required to
+        // switch user and desktop, so check session id first.
+        if last_seat0_sid.is_empty() || !is_active(&last_seat0_sid) {
+            let (sid, cur_uid, cur_user) = get_active_user_sid_id_name();
+            let is_wayland = current_is_wayland();
 
-        if cur_user == "root" || !is_wayland {
-            // try kill subprocess "--server"
-            stop_server(&mut user_server);
-            // try start subprocess "--server"
-            if should_start_server(
-                true,
-                &mut uid,
-                cur_uid,
-                &mut cm0,
-                &mut last_restart,
-                &mut server,
-            ) {
-                force_stop_server();
-                start_server(None, &mut server);
-            }
-        } else if cur_user != "" {
-            if cur_user != "gdm" {
+            last_seat0_sid = sid.clone();
+
+            if cur_user == "root" || !is_wayland {
                 // try kill subprocess "--server"
-                stop_server(&mut server);
-
+                stop_server(&mut user_server);
                 // try start subprocess "--server"
                 if should_start_server(
-                    false,
+                    true,
                     &mut uid,
                     cur_uid.clone(),
                     &mut cm0,
                     &mut last_restart,
-                    &mut user_server,
+                    &mut server,
                 ) {
                     force_stop_server();
-                    start_server(Some((cur_uid, cur_user)), &mut user_server);
+                    start_server(None, &mut server);
                 }
+            } else if cur_user != "" {
+                if cur_user != "gdm" {
+                    // try kill subprocess "--server"
+                    stop_server(&mut server);
+
+                    // try start subprocess "--server"
+                    if should_start_server(
+                        false,
+                        &mut uid,
+                        cur_uid.clone(),
+                        &mut cm0,
+                        &mut last_restart,
+                        &mut user_server,
+                    ) {
+                        force_stop_server();
+                        start_server(Some((cur_uid, cur_user)), &mut user_server);
+                    }
+                }
+            } else {
+                force_stop_server();
+                stop_server(&mut user_server);
+                stop_server(&mut server);
             }
-        } else {
-            force_stop_server();
-            stop_server(&mut user_server);
-            stop_server(&mut server);
         }
         std::thread::sleep(Duration::from_millis(super::SERVICE_INTERVAL));
     }
@@ -370,6 +378,16 @@ pub fn start_os_service() {
         allow_err!(ps.kill());
     }
     log::info!("Exit");
+}
+
+
+pub fn get_active_user_sid_id_name() -> (String, String, String) {
+    let vec_id_name = get_values_of_seat0([0, 1, 2].to_vec());
+    (
+        vec_id_name[0].clone(),
+        vec_id_name[1].clone(),
+        vec_id_name[2].clone(),
+    )
 }
 
 pub fn get_active_user_id_name() -> (String, String) {

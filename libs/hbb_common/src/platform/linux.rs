@@ -122,7 +122,7 @@ pub fn get_values_of_seat0(indices: Vec<usize>) -> Vec<String> {
         .collect::<Vec<String>>();
 }
 
-fn is_active(sid: &str) -> bool {
+pub fn is_active(sid: &str) -> bool {
     if let Ok(output) = run_loginctl(Some(vec!["show-session", "-p", "State", sid])) {
         String::from_utf8_lossy(&output.stdout).contains("active")
     } else {
