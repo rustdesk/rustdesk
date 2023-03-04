@@ -280,7 +280,6 @@ class DesktopTab extends StatelessWidget {
                 ),
                 const Divider(
                   height: 1,
-                  thickness: 1,
                 ),
               ],
             ),
@@ -957,7 +956,6 @@ class _TabState extends State<_Tab> with RestorationMixin {
                   indent: _kDividerIndent,
                   endIndent: _kDividerIndent,
                   color: MyTheme.tabbar(context).dividerColor,
-                  thickness: 1,
                 ),
               )
             ],

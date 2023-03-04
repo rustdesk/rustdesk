@@ -3,7 +3,7 @@ import 'dart:io';
 import 'dart:convert';
 
 import 'package:auto_size_text/auto_size_text.dart';
-import 'package:flutter/material.dart' hide MenuItem;
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/widgets/custom_password.dart';
@@ -14,7 +14,6 @@ import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/desktop/widgets/scroll_wrapper.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
-import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
@@ -55,10 +54,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         buildLeftPane(context),
-        const VerticalDivider(
-          width: 1,
-          thickness: 1,
-        ),
+        const VerticalDivider(width: 1),
         Expanded(
           child: buildRightPane(context),
         ),

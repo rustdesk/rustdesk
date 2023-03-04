@@ -120,7 +120,7 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
               ],
             ),
           ),
-          const VerticalDivider(thickness: 1, width: 1),
+          const VerticalDivider(width: 1),
           Expanded(
             child: Container(
               color: Theme.of(context).scaffoldBackgroundColor,

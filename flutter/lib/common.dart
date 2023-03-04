@@ -156,8 +156,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
 class MyTheme {
   MyTheme._();
 
-  static const Color grayBg = Color(0xFFEEEEEE);
-  static const Color white = Color(0xFFFFFFFF);
+  static const Color grayBg = Color(0xFFEFEFF2);
   static const Color accent = Color(0xFF0071FF);
   static const Color accent50 = Color(0x770071FF);
   static const Color accent80 = Color(0xAA0071FF);
@@ -173,20 +172,20 @@ class MyTheme {
   static ThemeData lightTheme = ThemeData(
     brightness: Brightness.light,
     hoverColor: Color.fromARGB(255, 224, 224, 224),
-    scaffoldBackgroundColor: Color(0xFFFFFFFF),
-    dialogBackgroundColor: Color(0xFFFFFFFF),
+    scaffoldBackgroundColor: Colors.white,
+    dialogBackgroundColor: Colors.white,
     dialogTheme: DialogTheme(
       elevation: 15,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18.0),
         side: BorderSide(
           width: 1,
-          color: Color(0xFFEEEEEE),
+          color: grayBg,
         ),
       ),
     ),
     inputDecorationTheme: InputDecorationTheme(
-      fillColor: Color(0xFFEEEEEE),
+      fillColor: grayBg,
       filled: true,
       isDense: true,
       contentPadding: EdgeInsets.all(15),
@@ -202,7 +201,7 @@ class MyTheme {
         bodyMedium:
             TextStyle(fontSize: 14, color: Colors.black87, height: 1.25),
         labelLarge: TextStyle(fontSize: 16.0, color: MyTheme.accent80)),
-    cardColor: Color(0xFFEEEEEE),
+    cardColor: grayBg,
     hintColor: Color(0xFFAAAAAA),
     visualDensity: VisualDensity.adaptivePlatformDensity,
     tabBarTheme: const TabBarTheme(
@@ -231,9 +230,7 @@ class MyTheme {
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        backgroundColor: Color(
-          0xFFEEEEEE,
-        ),
+        backgroundColor: grayBg,
         foregroundColor: Colors.black87,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8.0),
@@ -259,7 +256,7 @@ class MyTheme {
       primarySwatch: Colors.blue,
     ).copyWith(
       brightness: Brightness.light,
-      background: Color(0xFFEEEEEE),
+      background: grayBg,
     ),
   ).copyWith(
     extensions: <ThemeExtension<dynamic>>[
