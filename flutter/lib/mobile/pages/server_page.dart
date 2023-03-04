@@ -418,7 +418,7 @@ class ConnectionManager extends StatelessWidget {
                               gFFI.invokeMethod(
                                   "cancel_notification", client.id);
                             },
-                            label: Text(translate("Close")))
+                            label: Text(translate("Disconnect")))
                         : Row(children: [
                             TextButton(
                                 child: Text(translate("Dismiss")),
