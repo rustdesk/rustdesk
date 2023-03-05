@@ -49,17 +49,17 @@
 
 Για περισσότερες πληροφορίες μεταβείτε στο [DEVCONTAINER.md](docs/DEVCONTAINER.md).
 
-## Dependencies
+## Προ απαιτούμενα για build  
 
-Desktop versions use [sciter](https://sciter.com/) or Flutter for GUI, this tutorial is for Sciter only.
+Για τις παραθυρικές εκδόσεις χρησιμοποιείται είτε το [sciter](https://sciter.com/) είτε το Flutter, τα παρακάτω βήματα είναι μόνο για το Sciter.
 
-Please download sciter dynamic library yourself.
+Παρακαλώ κατεβάστε μόνοι σας την δυναμική βιβλιοθήκη sciter.
 
 [Windows](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll) |
 [Linux](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so) |
 [MacOS](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.osx/libsciter.dylib)
 
-## Raw steps to build
+## Λιτά βήματα ώστε να κάνετε build
 
 - Prepare your Rust development env and C++ build env
 
@@ -72,7 +72,7 @@ Please download sciter dynamic library yourself.
 
 ## [Build](https://rustdesk.com/docs/en/dev/build/)
 
-## How to build on Linux
+## Πως να το κάνετε build στο Linux
 
 ### Ubuntu 18 (Debian 10)
 
