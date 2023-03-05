@@ -137,9 +137,9 @@ mv libsciter-gtk.so target/debug
 VCPKG_ROOT=$HOME/vcpkg cargo run
 ```
 
-### Change Wayland to X11 (Xorg)
+### Αλλαγή του Wayland σε X11 (Xorg)
 
-RustDesk does not support Wayland. Check [this](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) to configuring Xorg as the default GNOME session.
+Το RustDesk δεν υποστιρίζει το Wayland. Διβάστε [εδώ](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) ώστε να ορίσετε Xorg ως το προκαθορισμένο GNOME περιβάλλον.
 
 ## Wayland support
 
