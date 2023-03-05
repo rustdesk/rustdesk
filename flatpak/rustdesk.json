@@ -13,8 +13,12 @@
       "build-commands": [
         "bsdtar -zxvf rustdesk-1.2.0.deb",
         "tar -xvf ./data.tar.xz",
-        "cp -r ./usr  /app/",
-        "mkdir -p /app/bin && ln -s /app/usr/lib/rustdesk/rustdesk /app/bin/rustdesk"
+        "cp -r ./usr/*  /app/",
+        "mkdir -p /app/bin && ln -s /app/lib/rustdesk/rustdesk /app/bin/rustdesk",
+        "sed -i '/^Icon=/ c\\Icon=/app/share/rustdesk/files/rustdesk.png' /app/share/applications/rustdesk.desktop",
+        "sed -i '/^Icon=/ c\\Icon=/app/share/rustdesk/files/rustdesk.png' /app/share/applications/rustdesk-link.desktop",
+        "sed -i '/^Exec=/ c\\Exec=/app/bin/rustdesk %u' /app/share/applications/rustdesk.desktop",
+        "sed -i '/^Exec=/ c\\Exec=/app/bin/rustdesk --connect \"%u\"' /app/share/applications/rustdesk-link.desktop"
       ],
       "sources": [
         {
