@@ -165,9 +165,9 @@ method return time=1662544486.931020 sender=:1.54 -> destination=:1.139 serial=2
    variant       uint32 4
 ```
 
-## How to build with Docker
+## Πως να το κάνετε build στο Docker
 
-Begin by cloning the repository and building the docker container:
+Ξεκινήστε κλωνοποιόντας το αποθετήριο και κάνοντας build το docker container:
 
 ```sh
 git clone https://github.com/rustdesk/rustdesk
