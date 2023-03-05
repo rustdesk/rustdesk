@@ -17,11 +17,11 @@
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
-RustDesk welcomes contribution from everyone. See [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) for help getting started.
+Το RustDesk ενθαρρύνει τη συνεισφορά όλων. Διαβάστε το [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) για βοήθεια στο πως να ξεκινήσετε.
 
-[**FAQ**](https://github.com/rustdesk/rustdesk/wiki/FAQ)
+[**Συχνές ερωτήσεις**](https://github.com/rustdesk/rustdesk/wiki/FAQ)
 
-[**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
+[**Κατεβάστε τα αρχεία**](https://github.com/rustdesk/rustdesk/releases)
 
 [**NIGHTLY BUILD**](https://github.com/rustdesk/rustdesk/releases/tag/nightly)
 
@@ -29,17 +29,17 @@ RustDesk welcomes contribution from everyone. See [`docs/CONTRIBUTING.md`](docs/
     alt="Get it on F-Droid"
     height="80">](https://f-droid.org/en/packages/com.carriez.flutter_hbb)
 
-## Free Public Servers
+## Δωρεάν δημόσιοι διακομιστές
 
-Below are the servers you are using for free, they may change over time. If you are not close to one of these, your network may be slow.
-| Location | Vendor | Specification |
+Παρακάτω είναι οι διακομιστές που χρησιμοποιούνται δωρεάν, ενδέχεται να αλλάξουν με την πάροδο του χρόνου. Εάν δεν είστε κοντά σε ένα από αυτούς, το δίκτυό σας ίσως να είναι αργό.
+| Περιοχή | Πάροχος | Προδιαγραφές |
 | --------- | ------------- | ------------------ |
-| Seoul | AWS lightsail | 1 vCPU / 0.5GB RAM |
-| Germany | Hetzner | 2 vCPU / 4GB RAM |
-| Germany | Codext | 4 vCPU / 8GB RAM |
-| Finland (Helsinki) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
-| USA (Ashburn) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
-| Ukraine (Kyiv) | dc.volia (2VM) | 2 vCPU / 4GB RAM |
+| Σεούλ | AWS lightsail | 1 vCPU / 0.5GB RAM |
+| Γερμανία | Hetzner | 2 vCPU / 4GB RAM |
+| Γερμανία | Codext | 4 vCPU / 8GB RAM |
+| Φινλανδία (Ελσίνκι) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
+| ΗΠΑ (Ashburn) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
+| Ουκρανία (Κίεβο) | dc.volia (2VM) | 2 vCPU / 4GB RAM |
 
 ## Dev Container
 
