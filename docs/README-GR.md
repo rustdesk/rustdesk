@@ -139,7 +139,7 @@ VCPKG_ROOT=$HOME/vcpkg cargo run
 
 ### Αλλαγή του Wayland σε X11 (Xorg)
 
-Το RustDesk δεν υποστιρίζει το πρωτόκολλο Wayland. Διαβάστε [εδώ](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) ώστε να ορίσετε το Xorg ως το προκαθορισμένο GNOME περιβάλλον.
+Το RustDesk δεν υποστηρίζει το πρωτόκολλο Wayland. Διαβάστε [εδώ](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) ώστε να ορίσετε το Xorg ως το προκαθορισμένο GNOME περιβάλλον.
 
 ## Υποστήριξη Wayland
 
