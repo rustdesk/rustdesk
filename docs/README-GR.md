@@ -61,9 +61,9 @@
 
 ## Λιτά βήματα ώστε να κάνετε build
 
-- Prepare your Rust development env and C++ build env
+- Προετοιμάστε τα παρακάτω περιβάλλοντα προγραμματισμού Rust και C++
 
-- Install [vcpkg](https://github.com/microsoft/vcpkg), and set `VCPKG_ROOT` env variable correctly
+- Εγκαταστήσετε το [vcpkg](https://github.com/microsoft/vcpkg), και ρυθμίστε σωστά την παράμετρο συστήματος `VCPKG_ROOT`
 
   - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
   - Linux/MacOS: vcpkg install libvpx libyuv opus
