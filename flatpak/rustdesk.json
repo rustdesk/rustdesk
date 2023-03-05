@@ -1,9 +1,10 @@
 {
-  "app-id": "org.rustdesk.rustdesk",
+  "id": "com.rustdesk.RustDesk",
   "runtime": "org.freedesktop.Platform",
   "runtime-version": "21.08",
   "sdk": "org.freedesktop.Sdk",
   "command": "rustdesk",
+  "icon": "share/rustdesk/files/rustdesk.png",
   "modules": [
     "shared-modules/libappindicator/libappindicator-gtk3-12.10.json",
     "xdotool.json",
@@ -15,15 +16,20 @@
         "tar -xvf ./data.tar.xz",
         "cp -r ./usr/*  /app/",
         "mkdir -p /app/bin && ln -s /app/lib/rustdesk/rustdesk /app/bin/rustdesk",
-        "sed -i '/^Icon=/ c\\Icon=/app/share/rustdesk/files/rustdesk.png' /app/share/applications/rustdesk.desktop",
-        "sed -i '/^Icon=/ c\\Icon=/app/share/rustdesk/files/rustdesk.png' /app/share/applications/rustdesk-link.desktop",
-        "sed -i '/^Exec=/ c\\Exec=/app/bin/rustdesk %u' /app/share/applications/rustdesk.desktop",
-        "sed -i '/^Exec=/ c\\Exec=/app/bin/rustdesk --connect \"%u\"' /app/share/applications/rustdesk-link.desktop"
+        "mv /app/share/applications/rustdesk.desktop /app/share/applications/com.rustdesk.RustDesk.desktop",
+        "sed -i '/^Icon=/ c\\Icon=com.rustdesk.RustDesk' /app/share/applications/com.rustdesk.RustDesk.desktop",
+        "sed -i '/^Icon=/ c\\Icon=com.rustdesk.RustDesk' /app/share/applications/rustdesk-link.desktop",
+        "for size in 16 24 32 48 64 128 256 512; do\n rsvg-convert -w $size -h $size -f png -o $size.png logo.svg\n install -Dm644 $size.png /app/share/icons/hicolor/${size}x${size}/apps/com.rustdesk.RustDesk.png\n done"
       ],
+      "cleanup": ["/include", "/lib/pkgconfig", "/share/gtk-doc"],
       "sources": [
         {
           "type": "file",
           "path": "../rustdesk-1.2.0.deb"
+        },
+        {
+          "type": "file",
+          "path": "../res/logo.svg"
         }
       ]
     }
