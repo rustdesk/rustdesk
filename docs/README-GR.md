@@ -143,7 +143,7 @@ VCPKG_ROOT=$HOME/vcpkg cargo run
 
 ## Υποστήριξη Wayland
 
-Το Wayland προς το παρόν δεν διαθέτει κάποιο API το οποίο να στέλνει τα πατήματα πλήκτρων στα υπόλοιπα παράθυρα. Για τον λόγο αυτό, το Rustdesk χρησιμοποιεί ένα API από κατώτερο επίπεδο, όπως το `/dev/uinput` συσκευή (Linux kernel level).
+Το Wayland προς το παρόν δεν διαθέτει κάποιο API το οποίο να στέλνει τα πατήματα πλήκτρων στα υπόλοιπα παράθυρα. Για τον λόγο αυτό, το Rustdesk χρησιμοποιεί ένα API από κατώτερο επίπεδο, όπως το `/dev/uinput` (Linux kernel level).
 
 When wayland is the controlled side, you have to start in the following way:
 ```bash
