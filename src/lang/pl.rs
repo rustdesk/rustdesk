@@ -459,7 +459,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Reconnect", "Połącz ponownie"),
         ("Codec", "Kodek"),
         ("Resolution", "Rozdzielczość"),
-        ("Key", "Klucz"),
         ("No transfers in progress", "Brak transferów w toku"),
-        ].iter().cloned().collect();
+        ("Set temporary password length", ""),
+    ].iter().cloned().collect();
 }
