@@ -139,9 +139,9 @@ VCPKG_ROOT=$HOME/vcpkg cargo run
 
 ### Αλλαγή του Wayland σε X11 (Xorg)
 
-Το RustDesk δεν υποστιρίζει το Wayland. Διβάστε [εδώ](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) ώστε να ορίσετε Xorg ως το προκαθορισμένο GNOME περιβάλλον.
+Το RustDesk δεν υποστιρίζει το πρωτόκολλο Wayland. Διαβάστε [εδώ](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) ώστε να ορίσετε το Xorg ως το προκαθορισμένο GNOME περιβάλλον.
 
-## Wayland support
+## Υποστήριξη Wayland
 
 Wayland does not seem to provide any API for sending keypresses to other windows. Therefore, the rustdesk uses an API from a lower level, namely the `/dev/uinput` device (Linux kernel level).
 
