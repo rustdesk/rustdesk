@@ -151,7 +151,7 @@ VCPKG_ROOT=$HOME/vcpkg cargo run
 $ sudo rustdesk --service
 $ rustdesk
 ```
-**Notice**: Wayland screen recording uses different interfaces. RustDesk currently only supports org.freedesktop.portal.ScreenCast.
+**Σημείωση**: Η εγγραφή οθόνης του Wayland χρησιμοποιεί διαφορετικές διεπαφές. Το RustDesk προς το παρόν υποστηρίζει μόνο org.freedesktop.portal.ScreenCast.
 ```bash
 $ dbus-send --session --print-reply       \
   --dest=org.freedesktop.portal.Desktop \
