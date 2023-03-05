@@ -45,9 +45,9 @@
 
 [![Open in Dev Containers](https://img.shields.io/static/v1?label=Dev%20Container&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/rustdesk/rustdesk)
 
-If you already have VS Code and Docker installed, you can click the badge above to get started. Clicking will cause VS Code to automatically install the Dev Containers extension if needed, clone the source code into a container volume, and spin up a dev container for use.
+Αν έχετε εγκατεστημένα το VS Code και το Docker, μπορείτε να ξεκινήσετε κάνοντας κλικ στην παραπάνω εικόνα. Αυτό θα έχει ως αποτέλεσμα, το VS Code να εγκαταστήσει αυτόματα την επέκταση Dev Containers, εάν χρειάζεται, θα κλωνοποιήσει τον πηγαίο κώδικα σε έναν νέο container και θα εκκινήσει ένα Dev Container για χρήση προγραμματισμού.
 
-Go through [DEVCONTAINER.md](docs/DEVCONTAINER.md) for more info.
+Για περισσότερες πληροφορίες μεταβείτε στο [DEVCONTAINER.md](docs/DEVCONTAINER.md).
 
 ## Dependencies
 
