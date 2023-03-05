@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="res/logo-header.svg" alt="RustDesk - Your remote desktop"><br>
+  <img src="../res/logo-header.svg" alt="RustDesk - Your remote desktop"><br>
   <a href="#Δωρεάν-δημόσιοι-διακομιστές">Διακομιστές</a> •
   <a href="#Γενικά-βήματα-ώστε-να-κάνετε-build">Build</a> •
   <a href="#Πως-να-κάνετε-build-στο-Docker">Docker</a> •
