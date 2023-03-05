@@ -51,7 +51,7 @@
 
 ## Προαπαιτούμενα για build  
 
-Για τις παραθυρικές εκδόσεις χρησιμοποιείται είτε το [sciter](https://sciter.com/) είτε το Flutter, τα παρακάτω βήματα είναι μόνο για το Sciter.
+Στις παραθυρικές εκδόσεις χρησιμοποιείται είτε το [sciter](https://sciter.com/) είτε το Flutter, τα παρακάτω βήματα είναι μόνο για το Sciter.
 
 Παρακαλώ κατεβάστε μόνοι σας την δυναμική βιβλιοθήκη sciter.
 
@@ -59,7 +59,7 @@
 [Linux](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so) |
 [MacOS](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.osx/libsciter.dylib)
 
-## Λιτά βήματα ώστε να κάνετε build
+## Γενικά βήματα ώστε να κάνετε build
 
 - Προετοιμάστε τα περιβάλλοντα προγραμματισμού Rust και C++
 
@@ -167,7 +167,7 @@ method return time=1662544486.931020 sender=:1.54 -> destination=:1.139 serial=2
 
 ## Πως να το κάνετε build στο Docker
 
-Ξεκινήστε κλωνοποιόντας το αποθετήριο και κάνοντας build το docker container:
+Ξεκινήστε κλωνοποιώντας το αποθετήριο και κάνοντας build το docker container:
 
 ```sh
 git clone https://github.com/rustdesk/rustdesk
