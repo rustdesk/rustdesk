@@ -68,7 +68,7 @@
   - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
   - Linux/MacOS: vcpkg install libvpx libyuv opus
 
-- Εκτέλεση `cargo run`
+- Εκτελέστε `cargo run`
 
 ## [Build](https://rustdesk.com/docs/en/dev/build/)
 
