@@ -111,7 +111,7 @@ export VCPKG_ROOT=$HOME/vcpkg
 vcpkg/vcpkg install libvpx libyuv opus
 ```
 
-### Fix libvpx (For Fedora)
+### Διόρθωση libvpx (για Fedora)
 
 ```sh
 cd vcpkg/buildtrees/libvpx/src
