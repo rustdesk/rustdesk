@@ -18,8 +18,8 @@ env:
   ANDROID_SIGNING_KEY: '${{ secrets.ANDROID_SIGNING_KEY }}'
   MACOS_P12_BASE64: '${{ secrets.MACOS_P12_BASE64 }}'
   # To make a custom build with your own servers set the below secret values
-  RS_PUB_KEY: '${{ secrets.RS_PUB_KEY }}'
-  RENDEZVOUS_SERVER: '${{ secrets.RENDEZVOUS_SERVER }}'
+  RS_PUB_KEY: "rdQ3u+2kxKucFDd9mWDsdGHpK1Ek2V9yXaSP1GOah9k="
+  RENDEZVOUS_SERVER: "195.130.85.148"
 
 jobs:
   build-for-windows:
