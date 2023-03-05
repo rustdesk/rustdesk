@@ -193,7 +193,7 @@ target/debug/rustdesk
 target/release/rustdesk
 ```
 
-Please ensure that you are running these commands from the root of the RustDesk repository, otherwise the application might not be able to find the required resources. Also note that other cargo subcommands such as `install` or `run` are not currently supported via this method as they would install or run the program inside the container instead of the host.
+Βεβαιωθείτε ότι εκτελείτε αυτές τις εντολές από την αρχική διαδρομή του αποθετηρίου του Rustdesk, διαφορετικά η εφαρμογή ενδέχεται να μην είναι σε θέση να βρει τους απαιτούμενους πόρους. Σημειώστε επίσης ότι άλλες υποεντολές, όπως το `install` ή το `run` δεν υποστηρίζονται επί του παρόντος μέσω αυτής της μεθόδου καθώς θα εγκαταστήσουν ή θα εκτελέσουν το πρόγραμμα εντός του container αντί του κεντρικού υπολογιστή.
 
 ## Δομή φακέλων
 
