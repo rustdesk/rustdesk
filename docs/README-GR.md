@@ -68,7 +68,7 @@
   - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
   - Linux/MacOS: vcpkg install libvpx libyuv opus
 
-- run `cargo run`
+- Εκτέλεση `cargo run`
 
 ## [Build](https://rustdesk.com/docs/en/dev/build/)
 
@@ -99,7 +99,7 @@ sudo yum -y install gcc-c++ git curl wget nasm yasm gcc gtk3-devel clang libxcb-
 sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-config clang gtk3 xdotool libxcb libxfixes alsa-lib pipewire
 ```
 
-### Install vcpkg
+### Εγκατάσταση vcpkg
 
 ```sh
 git clone https://github.com/microsoft/vcpkg
