@@ -140,7 +140,9 @@ class _ServerPageState extends State<ServerPage> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.start,
                       children: [
-                        ServerInfo(),
+                        gFFI.serverModel.isStart
+                            ? ServerInfo()
+                            : ServiceNotRunningNotification(),
                         const ConnectionManager(),
                         const PermissionChecker(),
                         SizedBox.fromSize(size: const Size(0, 15.0)),
@@ -158,6 +160,45 @@ void checkService() async {
     AndroidPermissionManager.complete(kManageExternalStorage,
         await AndroidPermissionManager.check(kManageExternalStorage));
     debugPrint("file permission finished");
+  }
+}
+
+class ServiceNotRunningNotification extends StatelessWidget {
+  ServiceNotRunningNotification({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final serverModel = Provider.of<ServerModel>(context);
+
+    return PaddingCard(
+        child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.warning_amber_sharp,
+                color: Colors.redAccent, size: 24),
+            const SizedBox(width: 10),
+            Expanded(
+                child: Text(
+              translate("Service is not running"),
+              style: const TextStyle(
+                fontFamily: 'WorkSans',
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
+            ))
+          ],
+        ).marginOnly(bottom: 8),
+        Text(translate("android_start_service_tip"),
+                style: const TextStyle(fontSize: 12, color: MyTheme.darkGray))
+            .marginOnly(bottom: 8),
+        ElevatedButton.icon(
+            icon: const Icon(Icons.play_arrow),
+            onPressed: serverModel.toggleService,
+            label: Text(translate("Start Service")))
+      ],
+    ));
   }
 }
 
@@ -199,75 +240,41 @@ class ServerInfo extends StatelessWidget {
       }
     }
 
-    return model.isStart
-        ? PaddingCard(
-            child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                readOnly: true,
-                style: const TextStyle(
-                    fontSize: 25.0, fontWeight: FontWeight.bold),
-                controller: model.serverId,
-                decoration: InputDecoration(
-                  icon: const Icon(Icons.perm_identity),
-                  labelText: translate("ID"),
-                  labelStyle: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                onSaved: (String? value) {},
+    return PaddingCard(
+        child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TextFormField(
+          readOnly: true,
+          style: const TextStyle(fontSize: 25.0, fontWeight: FontWeight.bold),
+          controller: model.serverId,
+          decoration: InputDecoration(
+            icon: const Icon(Icons.perm_identity),
+            labelText: translate("ID"),
+            labelStyle: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          onSaved: (String? value) {},
+        ),
+        TextFormField(
+          readOnly: true,
+          style: const TextStyle(fontSize: 25.0, fontWeight: FontWeight.bold),
+          controller: isPermanent ? emptyController : model.serverPasswd,
+          decoration: InputDecoration(
+              icon: const Icon(Icons.lock),
+              labelText: translate("Password"),
+              labelStyle: const TextStyle(
+                fontWeight: FontWeight.bold,
               ),
-              TextFormField(
-                readOnly: true,
-                style: const TextStyle(
-                    fontSize: 25.0, fontWeight: FontWeight.bold),
-                controller: isPermanent ? emptyController : model.serverPasswd,
-                decoration: InputDecoration(
-                    icon: const Icon(Icons.lock),
-                    labelText: translate("Password"),
-                    labelStyle: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                    ),
-                    suffix: isPermanent
-                        ? null
-                        : IconButton(
-                            icon: const Icon(Icons.refresh),
-                            onPressed: () =>
-                                bind.mainUpdateTemporaryPassword())),
-                onSaved: (String? value) {},
-              ),
-              Notification().marginOnly(top: 20)
-            ],
-          ))
-        : PaddingCard(
-            child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.warning_amber_sharp,
-                      color: Colors.redAccent, size: 24),
-                  const SizedBox(width: 10),
-                  Expanded(
-                      child: Text(
-                    translate("Service is not running"),
-                    style: const TextStyle(
-                      fontFamily: 'WorkSans',
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                    ),
-                  ))
-                ],
-              ).marginOnly(bottom: 8),
-              Text(translate("android_start_service_tip"),
-                      style: const TextStyle(
-                          fontSize: 12, color: MyTheme.darkGray))
-                  .marginOnly(bottom: 8),
-              ElevatedButton.icon(
-                  icon: const Icon(Icons.play_arrow),
-                  onPressed: serverModel.toggleService,
-                  label: Text(translate("Start Service")))
-            ],
-          ));
+              suffix: isPermanent
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.refresh),
+                      onPressed: () => bind.mainUpdateTemporaryPassword())),
+          onSaved: (String? value) {},
+        ),
+        Notification().marginOnly(top: 20)
+      ],
+    ));
   }
 }
 
