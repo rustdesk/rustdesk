@@ -301,7 +301,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Succeeded", "موفقیت آمیز"),
         ("Someone turns on privacy mode, exit", "اگر شخصی حالت حریم خصوصی را روشن کرد، خارج شوید"),
         ("Unsupported", "پشتیبانی نشده"),
-        ("Please switch to Display 1 first", ""),
+        ("Please switch to Display 1 first", "لطفاً ابتدا به صفحه نمایش 1 بروید"),
         ("Peer denied", "توسط میزبان راه دور رد شد"),
         ("Please install plugins", "لطفا افزونه ها را نصب کنید"),
         ("Peer exit", "میزبان خارج شد"),
