@@ -301,7 +301,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Succeeded", "Vellykket"),
         ("Someone turns on privacy mode, exit", "Nogen aktiverede databeskyttelsestilstand, slut"),
         ("Unsupported", "Ikke understøttet"),
-        ("Please switch to Display 1 first", ""),
         ("Peer denied", "Peer nægtet"),
         ("Please install plugins", "Venligst Installer plugins"),
         ("Peer exit", "Peer-Afslut"),
