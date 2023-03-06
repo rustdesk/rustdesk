@@ -509,7 +509,9 @@ class _MonitorMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (stateGlobal.displaysCount.value < 2) return Offstage();
+    if (PrivacyModeState.find(id).isTrue || stateGlobal.displaysCount.value < 2) {
+      return Offstage();
+    }
     return _IconSubmenuButton(
         icon: icon(),
         ffi: ffi,
