@@ -1,14 +1,5 @@
 use docopt::Docopt;
 use hbb_common::env_logger::{init_from_env, Env, DEFAULT_FILTER_ENV};
-#[cfg(feature = "hwcodec")]
-use hwcodec::{
-    decode::{DecodeContext, Decoder},
-    encode::{EncodeContext, Encoder},
-    ffmpeg::{CodecInfo, CodecInfos},
-    AVPixelFormat,
-    Quality::*,
-    RateControl::*,
-};
 use scrap::{
     codec::{EncoderApi, EncoderCfg},
     Capturer, Display, TraitCapturer, VpxDecoder, VpxDecoderConfig, VpxEncoder, VpxEncoderConfig,
@@ -26,17 +17,17 @@ Usage:
   benchmark (-h | --help)
 
 Options:
-  -h --help     Show this screen.
+  -h --help             Show this screen.
   --count=COUNT         Capture frame count [default: 100].
   --bitrate=KBS         Video bitrate in kilobits per second [default: 5000].
-  --hw-pixfmt=PIXFMT    Hareware codec pixfmt. [default: i420]
+  --hw-pixfmt=PIXFMT    Hardware codec pixfmt. [default: i420]
                         Valid values: i420, nv12.
 ";
 
 #[derive(Debug, serde::Deserialize)]
 struct Args {
-    flag_count: u32,
-    flag_bitrate: u32,
+    flag_count: usize,
+    flag_bitrate: usize,
     flag_hw_pixfmt: Pixfmt,
 }
 
@@ -51,16 +42,17 @@ fn main() {
     let args: Args = Docopt::new(USAGE)
         .and_then(|d| d.deserialize())
         .unwrap_or_else(|e| e.exit());
-    let bitrate_k = args.flag_bitrate as usize;
-    let yuv_count = args.flag_count as usize;
+    let bitrate_k = args.flag_bitrate;
+    let yuv_count = args.flag_count;
     let (yuvs, width, height) = capture_yuv(yuv_count);
     println!(
-        "benchmark {}x{} bitrate:{}k hw_pixfmt:{:?} count:{:?}",
-        width, height, bitrate_k, args.flag_hw_pixfmt, yuv_count
+        "benchmark {}x{} bitrate:{}k hw_pixfmt:{:?}",
+        width, height, bitrate_k, args.flag_hw_pixfmt
     );
     test_vp9(&yuvs, width, height, bitrate_k, yuv_count);
     #[cfg(feature = "hwcodec")]
     {
+        use hwcodec::AVPixelFormat;
         let hw_pixfmt = match args.flag_hw_pixfmt {
             Pixfmt::I420 => AVPixelFormat::AV_PIX_FMT_YUV420P,
             Pixfmt::NV12 => AVPixelFormat::AV_PIX_FMT_NV12,
@@ -82,19 +74,13 @@ fn capture_yuv(yuv_count: usize) -> (Vec<Vec<u8>>, usize, usize) {
     let d = displays.remove(index);
     let mut c = Capturer::new(d, true).unwrap();
     let mut v = vec![];
-    let start = Instant::now();
     loop {
         if let Ok(frame) = c.frame(std::time::Duration::from_millis(30)) {
             v.push(frame.0.to_vec());
-            print!(
-                "\rcapture {}/{}...{}s",
-                v.len(),
-                yuv_count,
-                start.elapsed().as_secs()
-            );
+            print!("\rcapture {}/{}", v.len(), yuv_count);
             std::io::stdout().flush().ok();
             if v.len() == yuv_count {
-                println!("\rcapture {}/{} finish", yuv_count, yuv_count);
+                println!();
                 return (v, c.width(), c.height());
             }
         }
@@ -134,6 +120,7 @@ fn test_vp9(yuvs: &Vec<Vec<u8>>, width: usize, height: usize, bitrate_k: usize, 
             vp9s.push(frame.data.to_vec());
         }
     }
+    assert_eq!(vp9s.len(), yuv_count);
 
     let mut decoder = VpxDecoder::new(VpxDecoderConfig {
         codec: VpxVideoCodecId::VP9,
@@ -150,7 +137,15 @@ fn test_vp9(yuvs: &Vec<Vec<u8>>, width: usize, height: usize, bitrate_k: usize, 
 
 #[cfg(feature = "hwcodec")]
 mod hw {
-    use hwcodec::ffmpeg::ffmpeg_linesize_offset_length;
+    use super::*;
+    use hwcodec::{
+        decode::{DecodeContext, Decoder},
+        encode::{EncodeContext, Encoder},
+        ffmpeg::{ffmpeg_linesize_offset_length, CodecInfo, CodecInfos},
+        AVPixelFormat,
+        Quality::*,
+        RateControl::*,
+    };
     use scrap::{
         convert::{
             hw::{hw_bgra_to_i420, hw_bgra_to_nv12},
@@ -159,13 +154,12 @@ mod hw {
         HW_STRIDE_ALIGN,
     };
 
-    use super::*;
     pub fn test(
         yuvs: &Vec<Vec<u8>>,
         width: usize,
         height: usize,
         bitrate_k: usize,
-        _yuv_count: usize,
+        yuv_count: usize,
         pixfmt: AVPixelFormat,
     ) {
         let ctx = EncodeContext {
@@ -181,17 +175,18 @@ mod hw {
             rc: RC_DEFAULT,
         };
 
-        println!("hw encoders:");
         let encoders = Encoder::available_encoders(ctx.clone());
+        println!("hw encoders: {}", encoders.len());
         let best = CodecInfo::score(encoders.clone());
         for info in encoders {
             test_encoder(info.clone(), ctx.clone(), yuvs, is_best(&best, &info));
         }
 
         let (h264s, h265s) = prepare_h26x(best, ctx.clone(), yuvs);
-
-        println!("hw decoders:");
+        assert!(h264s.is_empty() || h264s.len() == yuv_count);
+        assert!(h265s.is_empty() || h265s.len() == yuv_count);
         let decoders = Decoder::available_decoders();
+        println!("hw decoders: {}", decoders.len());
         let best = CodecInfo::score(decoders.clone());
         for info in decoders {
             let h26xs = if info.name.contains("h264") {
@@ -199,7 +194,7 @@ mod hw {
             } else {
                 &h265s
             };
-            if h264s.len() == yuvs.len() {
+            if h26xs.len() == yuvs.len() {
                 test_decoder(info.clone(), h26xs, is_best(&best, &info));
             }
         }
@@ -234,11 +229,13 @@ mod hw {
             let _ = decoder.decode(h26x).unwrap();
             cnt += 1;
         }
+        let device = format!("{:?}", ctx.device_type).to_lowercase();
+        let device = device.split("_").last().unwrap();
         println!(
-            "{}{} {:?}: {:?}",
+            "{}{} {}: {:?}",
             if best { "*" } else { "" },
             ctx.name,
-            ctx.device_type,
+            device,
             start.elapsed() / cnt
         );
     }
