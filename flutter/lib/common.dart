@@ -252,12 +252,7 @@ class MyTheme {
         ),
       ),
     ),
-    colorScheme: ColorScheme.fromSwatch(
-      primarySwatch: Colors.blue,
-    ).copyWith(
-      brightness: Brightness.light,
-      background: grayBg,
-    ),
+    colorScheme: ColorScheme.light(primary: Colors.blue, background: grayBg),
   ).copyWith(
     extensions: <ThemeExtension<dynamic>>[
       ColorThemeExtension.light,
@@ -356,10 +351,8 @@ class MyTheme {
         ),
       ),
     ),
-    colorScheme: ColorScheme.fromSwatch(
-      primarySwatch: Colors.blue,
-    ).copyWith(
-      brightness: Brightness.dark,
+    colorScheme: ColorScheme.dark(
+      primary: Colors.blue,
       background: Color(0xFF24252B),
     ),
   ).copyWith(
