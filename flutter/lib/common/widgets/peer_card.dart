@@ -890,13 +890,10 @@ class DiscoveredPeerCard extends BasePeerCard {
       menuItems.add(_createShortCutAction(peer.id));
     }
 
-    final inRecent = await bind.mainIsInRecentPeers(id: peer.id);
-    if (inRecent) {
-      if (!favs.contains(peer.id)) {
-        menuItems.add(_addFavAction(peer.id));
-      } else {
-        menuItems.add(_rmFavAction(peer.id, () async {}));
-      }
+    if (!favs.contains(peer.id)) {
+      menuItems.add(_addFavAction(peer.id));
+    } else {
+      menuItems.add(_rmFavAction(peer.id, () async {}));
     }
 
     if (gFFI.userModel.userName.isNotEmpty) {
