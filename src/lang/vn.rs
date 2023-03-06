@@ -301,6 +301,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Succeeded", "Thành công"),
         ("Someone turns on privacy mode, exit", "Ai đó đã bật chế độ riêng tư, thoát"),
         ("Unsupported", "Không hỗ trợ"),
+        ("Please switch to Display 1 first", ""),
         ("Peer denied", "Peer đã từ chối"),
         ("Please install plugins", "Hãy cài plugins"),
         ("Peer exit", "Peer đã thoát"),

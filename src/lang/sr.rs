@@ -301,6 +301,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Succeeded", "Uspešno"),
         ("Someone turns on privacy mode, exit", "Neko je uključio mod privatnosti, izlaz."),
         ("Unsupported", "Nepodržano"),
+        ("Please switch to Display 1 first", ""),
         ("Peer denied", "Klijent zabranjen"),
         ("Please install plugins", "Molimo instalirajte dodatke"),
         ("Peer exit", "Klijent izašao"),
