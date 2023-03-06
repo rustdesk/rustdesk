@@ -162,7 +162,7 @@ void setTemporaryPasswordLengthDialog(
     }
 
     return CustomAlertDialog(
-      title: Text(translate("Set temporary password length")),
+      title: Text(translate("Set one-time password length")),
       content: Column(
           mainAxisSize: MainAxisSize.min,
           children:
