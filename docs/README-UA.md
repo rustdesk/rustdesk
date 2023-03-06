@@ -35,8 +35,9 @@ RustDesk вітає внесок кожного. Дивіться [`docs/CONTRIB
 | Даллас | Vultr | 1 vCPU / 1GB RAM
 Німеччина | Hetzner | 2 vCPU / 4GB RAM | 2 VCPU / 4GB RAM | Німеччина | Hetzner | 2 VCPU / 4GB RAM |
 | Germany | Codext | 4 vCPU / 8GB RAM |
-| Finland (Helsinki) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
-| USA (Ashburn) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
+| Finland (Helsinki) | [Netlock](https://netlockendpoint.com) | 4 vCPU / 8GB RAM |
+| USA (Ashburn) | [Netlock](https://netlockendpoint.com) | 4 vCPU / 8GB RAM |
+| Ukraine (Kyiv) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
 
 ## Залежності
 
