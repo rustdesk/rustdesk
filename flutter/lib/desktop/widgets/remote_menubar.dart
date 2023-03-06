@@ -509,7 +509,8 @@ class _MonitorMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (PrivacyModeState.find(id).isTrue || stateGlobal.displaysCount.value < 2) {
+    if (PrivacyModeState.find(id).isTrue ||
+        stateGlobal.displaysCount.value < 2) {
       return Offstage();
     }
     return _IconSubmenuButton(
@@ -1548,6 +1549,16 @@ class _DisplayMenuState extends State<_DisplayMenu> {
         value: rxValue.value,
         onChanged: (value) {
           if (value == null) return;
+          if (widget.ffi.ffiModel.pi.currentDisplay != 0) {
+            msgBox(
+                widget.id,
+                'custom-nook-nocancel-hasclose',
+                'info',
+                'Please switch to Display 1 first',
+                '',
+                widget.ffi.dialogManager);
+            return;
+          }
           bind.sessionToggleOption(id: widget.id, value: option);
         },
         ffi: widget.ffi,

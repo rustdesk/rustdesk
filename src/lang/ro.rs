@@ -301,6 +301,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Succeeded", "Reușit"),
         ("Someone turns on privacy mode, exit", "Cineva activează modul privat, ieși din"),
         ("Unsupported", "Neacceptat"),
+        ("Please switch to Display 1 first", "")
         ("Peer denied", "Dispozitiv pereche refuzat"),
         ("Please install plugins", "Instalează pluginuri"),
         ("Peer exit", "Ieșire dispozitiv pereche"),
