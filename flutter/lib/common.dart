@@ -375,7 +375,7 @@ class MyTheme {
 
   static void changeDarkMode(ThemeMode mode) async {
     Get.changeThemeMode(mode);
-    if (desktopType == DesktopType.main) {
+    if (desktopType == DesktopType.main || isAndroid || isIOS) {
       if (mode == ThemeMode.system) {
         await bind.mainSetLocalOption(key: kCommConfKeyTheme, value: '');
       } else {
