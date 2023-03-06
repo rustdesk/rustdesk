@@ -371,7 +371,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Pin menubar", "Καρφίτσωμα γραμμής μενού"),
         ("Unpin menubar", "Ξεκαρφίτσωμα γραμμής μενού"),
         ("Recording", "Εγγραφή"),
-        ("Directory", "Φάκελος εγγράφων"),
+        ("Directory", "Φάκελος εγγραφών"),
         ("Automatically record incoming sessions", "Αυτόματη εγγραφή εισερχόμενων συνεδριών"),
         ("Change", "Αλλαγή"),
         ("Start session recording", "Έναρξη εγγραφής συνεδρίας"),
