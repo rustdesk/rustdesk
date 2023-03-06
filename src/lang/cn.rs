@@ -301,7 +301,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Succeeded", "成功"),
         ("Someone turns on privacy mode, exit", "其他用户使用隐私模式，退出"),
         ("Unsupported", "不支持"),
-        ("Please switch to Display 1 first", "请先切换到第一个屏幕")
+        ("Please switch to Display 1 first", "请先切换到第一个屏"),
         ("Peer denied", "被控端拒绝"),
         ("Please install plugins", "请安装插件"),
         ("Peer exit", "被控端退出"),

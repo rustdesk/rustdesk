@@ -245,7 +245,7 @@ pub fn start() -> ResultType<()> {
         wnd_handlers.hthread = proc_info.hThread as _;
         wnd_handlers.hprocess = proc_info.hProcess as _;
 
-        let hwnd = wait_find_privacy_hwnd(1_000)?;
+        let hwnd = wait_find_privacy_hwnd(30_000)?;
         if hwnd.is_null() {
             bail!("Failed to get hwnd after started");
         }

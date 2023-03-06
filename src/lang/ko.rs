@@ -301,7 +301,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Succeeded", "성공"),
         ("Someone turns on privacy mode, exit", "누군가가 개인정보 보호 모드를 활성화하여 종료됩니다"),
         ("Unsupported", "지원되지 않음"),
-        ("Please switch to Display 1 first", "")
+        ("Please switch to Display 1 first", ""),
         ("Peer denied", "다른 사용자에 의해 거부됨"),
         ("Please install plugins", "플러그인을 설치해주세요"),
         ("Peer exit", "다른 사용자가 나감"),

@@ -127,6 +127,15 @@ impl MagInterface {
         };
         s.init_succeeded = false;
         unsafe {
+            if GetSystemMetrics(SM_CMONITORS) != 1 {
+                // Do not try to use the magnifier in multi-screen setup (where the API
+                // crashes sometimes).
+                return Err(Error::new(
+                    ErrorKind::Other,
+                    "Magnifier capturer cannot work on multi-screen system.",
+                ));
+            }
+
             // load lib
             let lib_file_name = "Magnification.dll";
             let lib_file_name_c = CString::new(lib_file_name).unwrap();

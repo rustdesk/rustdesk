@@ -301,7 +301,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Succeeded", "Sikeres"),
         ("Someone turns on privacy mode, exit", "Valaki bekacsolta az inkognitó módot, lépjen ki"),
         ("Unsupported", "Nem támogatott"),
-        ("Please switch to Display 1 first", "")
+        ("Please switch to Display 1 first", ""),
         ("Peer denied", "Elutasítva a távoli fél álltal"),
         ("Please install plugins", "Kérem telepítse a bővítményeket"),
         ("Peer exit", "A távoli fél kilépett"),
