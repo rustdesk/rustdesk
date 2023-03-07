@@ -24,6 +24,63 @@ enum SortBy {
   }
 }
 
+class JobID {
+  int _count = 0;
+  int next() {
+    _count++;
+    return _count;
+  }
+}
+
+class SortStyle {
+  var by = SortBy.name;
+  var ascending = true;
+}
+
+class FileModelNew {
+  static final JobID jobID = JobID();
+  final jobTable = RxList<JobProgress>.empty(growable: true);
+  final _jobResultListener = JobResultListener<Map<String, dynamic>>();
+
+  final localController = FileController(isLocal: true);
+  final remoteController = FileController(isLocal: false);
+
+  int getJob(int id) {
+    return jobTable.indexWhere((element) => element.id == id);
+  }
+}
+
+class FileController extends FileState with FileAction, UIController {
+  FileController({required super.isLocal});
+}
+
+class FileState {
+  final bool isLocal;
+  final _fileFetcher = FileFetcher();
+
+  final options = DirectoryOptions().obs;
+  final directory = FileDirectory().obs;
+
+  final history = RxList<String>.empty(growable: true);
+  final sortStyle = SortStyle().obs;
+
+  FileState({required this.isLocal});
+}
+
+mixin FileAction on FileState {
+  test() {
+    final a = _fileFetcher;
+    final b = isLocal;
+  }
+}
+
+mixin UIController on FileState {
+  testUI() {
+    final a = _fileFetcher;
+    final b = isLocal;
+  }
+}
+
 class FileModel extends ChangeNotifier {
   /// mobile, current selected page show on mobile screen
   var _isSelectedLocal = false;
@@ -31,8 +88,8 @@ class FileModel extends ChangeNotifier {
   /// mobile, select mode state
   var _selectMode = false;
 
-  final _localOption = DirectoryOption();
-  final _remoteOption = DirectoryOption();
+  final _localOption = DirectoryOptions();
+  final _remoteOption = DirectoryOptions();
 
   List<String> localHistory = [];
   List<String> remoteHistory = [];
@@ -49,9 +106,9 @@ class FileModel extends ChangeNotifier {
 
   RxList<JobProgress> get jobTable => _jobTable;
 
-  bool get isLocal => _isSelectedLocal;
+  bool get isLocal => _isSelectedLocal; // TODO parent
 
-  bool get selectMode => _selectMode;
+  bool get selectMode => _selectMode; // TODO parent
 
   JobProgress get jobProgress => _jobProgress;
 
@@ -1179,12 +1236,12 @@ class PathUtil {
   }
 }
 
-class DirectoryOption {
+class DirectoryOptions {
   String home;
   bool showHidden;
   bool isWindows;
 
-  DirectoryOption(
+  DirectoryOptions(
       {this.home = "", this.showHidden = false, this.isWindows = false});
 
   clear() {
