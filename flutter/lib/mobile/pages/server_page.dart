@@ -349,65 +349,72 @@ class ConnectionManager extends StatelessWidget {
                     ? Icon(Icons.folder_outlined)
                     : Icon(Icons.mobile_screen_share),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(child: ClientInfo(client)),
-                        Expanded(
-                            flex: -1,
-                            child: client.isFileTransfer || !client.authorized
-                                ? const SizedBox.shrink()
-                                : IconButton(
-                                    onPressed: () {
-                                      gFFI.chatModel.changeCurrentID(client.id);
-                                      final bar =
-                                          navigationBarKey.currentWidget;
-                                      if (bar != null) {
-                                        bar as BottomNavigationBar;
-                                        bar.onTap!(1);
-                                      }
-                                    },
-                                    icon: const Icon(Icons.chat)))
-                      ],
-                    ),
-                    client.authorized
-                        ? const SizedBox.shrink()
-                        : Text(
-                            translate("android_new_connection_tip"),
-                            style: Theme.of(globalKey.currentContext!)
-                                .textTheme
-                                .bodyMedium,
-                          ),
-                    client.authorized
-                        ? ElevatedButton.icon(
-                            style: ButtonStyle(
-                                backgroundColor:
-                                    MaterialStatePropertyAll(Colors.red)),
-                            icon: const Icon(Icons.close),
-                            onPressed: () {
-                              bind.cmCloseConnection(connId: client.id);
-                              gFFI.invokeMethod(
-                                  "cancel_notification", client.id);
-                            },
-                            label: Text(translate("Disconnect")))
-                        : Row(children: [
-                            TextButton(
-                                child: Text(translate("Dismiss")),
-                                onPressed: () {
-                                  serverModel.sendLoginResponse(client, false);
-                                }),
-                            const SizedBox(width: 20),
-                            ElevatedButton.icon(
-                                icon: const Icon(Icons.check),
-                                label: Text(translate("Accept")),
-                                onPressed: () {
-                                  serverModel.sendLoginResponse(client, true);
-                                }),
-                          ]),
-                  ],
-                )))
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(child: ClientInfo(client)),
+                          Expanded(
+                              flex: -1,
+                              child: client.isFileTransfer || !client.authorized
+                                  ? const SizedBox.shrink()
+                                  : IconButton(
+                                      onPressed: () {
+                                        gFFI.chatModel
+                                            .changeCurrentID(client.id);
+                                        final bar =
+                                            navigationBarKey.currentWidget;
+                                        if (bar != null) {
+                                          bar as BottomNavigationBar;
+                                          bar.onTap!(1);
+                                        }
+                                      },
+                                      icon: const Icon(Icons.chat)))
+                        ],
+                      ),
+                      client.authorized
+                          ? const SizedBox.shrink()
+                          : Text(
+                              translate("android_new_connection_tip"),
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ).marginOnly(bottom: 5),
+                      client.authorized
+                          ? Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                  ElevatedButton.icon(
+                                      style: ButtonStyle(
+                                          backgroundColor:
+                                              MaterialStatePropertyAll(
+                                                  Colors.red)),
+                                      icon: const Icon(Icons.close),
+                                      onPressed: () {
+                                        bind.cmCloseConnection(
+                                            connId: client.id);
+                                        gFFI.invokeMethod(
+                                            "cancel_notification", client.id);
+                                      },
+                                      label: Text(translate("Disconnect")))
+                                ])
+                          : Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                  TextButton(
+                                      child: Text(translate("Dismiss")),
+                                      onPressed: () {
+                                        serverModel.sendLoginResponse(
+                                            client, false);
+                                      }).marginOnly(right: 15),
+                                  ElevatedButton.icon(
+                                      icon: const Icon(Icons.check),
+                                      label: Text(translate("Accept")),
+                                      onPressed: () {
+                                        serverModel.sendLoginResponse(
+                                            client, true);
+                                      }),
+                                ]),
+                    ])))
             .toList());
   }
 }
