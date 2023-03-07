@@ -386,7 +386,7 @@ def main():
         os.chdir('libs/virtual_display/dylib')
         system2('cargo build --release')
         os.chdir('../../..')
-        return
+
         if flutter:
             build_flutter_windows(version, features)
             return
