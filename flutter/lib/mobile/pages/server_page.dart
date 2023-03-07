@@ -330,37 +330,14 @@ class PermissionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-            flex: 5,
-            child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child:
-                    Text(name, style: Theme.of(context).textTheme.labelLarge))),
-        Expanded(
-          flex: 2,
-          child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(isOk ? translate("ON") : translate("OFF"),
-                  style: TextStyle(
-                      fontSize: 16.0,
-                      color: isOk ? Colors.green : Colors.grey))),
-        ),
-        Expanded(
-            flex: 3,
-            child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                    onPressed: onPressed,
-                    child: Text(
-                      translate(isOk ? "CLOSE" : "OPEN"),
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    )))),
-      ],
-    );
+    return SwitchListTile(
+        visualDensity: VisualDensity.compact,
+        contentPadding: EdgeInsets.all(0),
+        title: Text(name),
+        value: isOk,
+        onChanged: (bool value) {
+          onPressed();
+        });
   }
 }
 
