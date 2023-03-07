@@ -214,7 +214,7 @@ class ServerInfo extends StatelessWidget {
     final serverModel = Provider.of<ServerModel>(context);
 
     // @todo Theming
-    Widget Notification() {
+    Widget ConnectionStateNotification() {
       const Color colorPositive = Colors.greenAccent;
       const Color colorNegative = Colors.redAccent;
       const double paddingRight = 15;
@@ -272,7 +272,7 @@ class ServerInfo extends StatelessWidget {
                       onPressed: () => bind.mainUpdateTemporaryPassword())),
           onSaved: (String? value) {},
         ),
-        Notification().marginOnly(top: 20)
+        ConnectionStateNotification().marginOnly(top: 20)
       ],
     ));
   }
