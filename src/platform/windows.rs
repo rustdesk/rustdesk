@@ -1908,7 +1908,7 @@ pub fn user_accessible_folder() -> ResultType<PathBuf> {
 }
 
 mod cert {
-    use hbb_common::{bail, log, ResultType};
+    use hbb_common::{allow_err, bail, log, ResultType};
     use std::{path::Path, str::from_utf8};
     use winapi::shared::{
         minwindef::{BYTE, DWORD, TRUE},
@@ -1946,7 +1946,7 @@ mod cert {
             &mut size,
         ) == TRUE
         {
-            (thumbprint.to_vec(), hex::encode(thumbprint))
+            (thumbprint.to_vec(), hex::encode(thumbprint).to_ascii_uppercase())
         } else {
             (thumbprint.to_vec(), "".to_owned())
         }
@@ -1988,7 +1988,7 @@ mod cert {
             log::debug!("Thumbprint of cert {}", &thumbprint.1);
 
             let reg_cert_key = open_reg_cert_store()?;
-            let (cert_key, _) = reg_cert_key.create_subkey(&thumbprint.1.to_ascii_uppercase())?;
+            let (cert_key, _) = reg_cert_key.create_subkey(&thumbprint.1)?;
             let data = winreg::RegValue {
                 vtype: REG_BINARY,
                 bytes: create_cert_blob(thumbprint.0, cert_bytes),
@@ -2021,7 +2021,7 @@ mod cert {
                     buf.len() as _,
                 );
                 if cb_size != 1 {
-                    if let Ok(issuer) = from_utf8(&buf) {
+                    if let Ok(issuer) = from_utf8(&buf[..cb_size as _]) {
                         for iss in issuers_to_rm.iter() {
                             if issuer.contains(iss) {
                                 let (_, thumbprint) = compute_thumbprint(
@@ -2047,7 +2047,7 @@ mod cert {
         let thumbprints = get_thumbprints_to_rm()?;
         let reg_cert_key = unsafe { open_reg_cert_store()? };
         for thumbprint in thumbprints.iter() {
-            reg_cert_key.delete_subkey(&hex::encode(thumbprint)).ok();
+            allow_err!(reg_cert_key.delete_subkey(thumbprint));
         }
         Ok(())
     }
