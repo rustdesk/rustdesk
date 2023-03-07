@@ -399,8 +399,9 @@ class ConnectionManager extends StatelessWidget {
                                   serverModel.sendLoginResponse(client, false);
                                 }),
                             const SizedBox(width: 20),
-                            ElevatedButton(
-                                child: Text(translate("Accept")),
+                            ElevatedButton.icon(
+                                icon: const Icon(Icons.check),
+                                label: Text(translate("Accept")),
                                 onPressed: () {
                                   serverModel.sendLoginResponse(client, true);
                                 }),
