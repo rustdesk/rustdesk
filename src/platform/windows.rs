@@ -1175,7 +1175,7 @@ sc delete {app_name}
     run_cmds(cmds, debug, "install")?;
     std::thread::sleep(std::time::Duration::from_millis(2000));
     if options.contains("driverCert") {
-        allow_err!(cert::install_cert(std::path::Path::new(&path).join("IddSampleDriver.cer")));
+        allow_err!(cert::install_cert(std::path::Path::new(&path).join("RustDeskIddDriver.cer")));
     }
     if !silent {
         std::process::Command::new(&exe).spawn()?;
