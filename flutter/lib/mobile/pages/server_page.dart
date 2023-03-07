@@ -487,8 +487,11 @@ class ClientInfo extends StatelessWidget {
                   child: Padding(
                       padding: const EdgeInsets.only(right: 12),
                       child: CircleAvatar(
-                          backgroundColor:
-                              str2color(client.name).withOpacity(0.7),
+                          backgroundColor: str2color(
+                              client.name,
+                              Theme.of(context).brightness == Brightness.light
+                                  ? 255
+                                  : 150),
                           child: Text(client.name[0])))),
               Expanded(
                   child: Column(
