@@ -456,7 +456,8 @@ class ServerModel with ChangeNotifier {
     Future.delayed(Duration.zero, () async {
       if (!hideCm) window_on_top(null);
     });
-    if (client.authorized) {
+    // Only do the hidden task when on Desktop.
+    if (client.authorized && isDesktop) {
       cmHiddenTimer = Timer(const Duration(seconds: 3), () {
         if (!hideCm) windowManager.minimize();
         cmHiddenTimer = null;
