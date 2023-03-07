@@ -178,7 +178,7 @@ class _InstallPageBodyState extends State<_InstallPageBody>
                           if (b != null) driverCert.value = b;
                         })),
                     Text(
-                        '${translate('Install driver cert')} ${translate('Virtual display requirement')}')
+                        '${translate('Install driver cert(test cert)')} ${translate('Virtual display requirement')}')
                   ],
                 ),
               ),

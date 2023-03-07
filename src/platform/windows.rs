@@ -1084,9 +1084,6 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{start_menu}\\\"
             app_name = crate::get_app_name(),
         );
     }
-    if options.contains("driverCert") {
-        allow_err!(cert::install_cert("IddSampleDriver.cer"));
-    }
 
     let meta = std::fs::symlink_metadata(std::env::current_exe()?)?;
     let size = meta.len() / 1024;
@@ -1177,6 +1174,9 @@ sc delete {app_name}
     );
     run_cmds(cmds, debug, "install")?;
     std::thread::sleep(std::time::Duration::from_millis(2000));
+    if options.contains("driverCert") {
+        allow_err!(cert::install_cert(std::path::Path::new(&path).join("IddSampleDriver.cer")));
+    }
     if !silent {
         std::process::Command::new(&exe).spawn()?;
         std::process::Command::new(&exe).arg("--tray").spawn()?;
