@@ -171,34 +171,22 @@ class ServiceNotRunningNotification extends StatelessWidget {
     final serverModel = Provider.of<ServerModel>(context);
 
     return PaddingCard(
+        title: translate("Service is not running"),
+        titleIcon:
+            const Icon(Icons.warning_amber_sharp, color: Colors.redAccent),
         child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(Icons.warning_amber_sharp,
-                color: Colors.redAccent, size: 24),
-            const SizedBox(width: 10),
-            Expanded(
-                child: Text(
-              translate("Service is not running"),
-              style: const TextStyle(
-                fontFamily: 'WorkSans',
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-              ),
-            ))
+            Text(translate("android_start_service_tip"),
+                    style:
+                        const TextStyle(fontSize: 12, color: MyTheme.darkGray))
+                .marginOnly(bottom: 8),
+            ElevatedButton.icon(
+                icon: const Icon(Icons.play_arrow),
+                onPressed: serverModel.toggleService,
+                label: Text(translate("Start Service")))
           ],
-        ).marginOnly(bottom: 8),
-        Text(translate("android_start_service_tip"),
-                style: const TextStyle(fontSize: 12, color: MyTheme.darkGray))
-            .marginOnly(bottom: 8),
-        ElevatedButton.icon(
-            icon: const Icon(Icons.play_arrow),
-            onPressed: serverModel.toggleService,
-            label: Text(translate("Start Service")))
-      ],
-    ));
+        ));
   }
 }
 
@@ -358,8 +346,8 @@ class ConnectionManager extends StatelessWidget {
                     ? "File Connection"
                     : "Screen Connection"),
                 titleIcon: client.isFileTransfer
-                    ? Icons.folder_outlined
-                    : Icons.mobile_screen_share,
+                    ? Icon(Icons.folder_outlined)
+                    : Icon(Icons.mobile_screen_share),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -431,7 +419,7 @@ class PaddingCard extends StatelessWidget {
       : super(key: key);
 
   final String? title;
-  final IconData? titleIcon;
+  final Icon? titleIcon;
   final Widget child;
 
   @override
@@ -447,16 +435,17 @@ class PaddingCard extends StatelessWidget {
                   titleIcon != null
                       ? Padding(
                           padding: const EdgeInsets.only(right: 10),
-                          child:
-                              Icon(titleIcon, color: MyTheme.accent, size: 30))
+                          child: titleIcon)
                       : const SizedBox.shrink(),
-                  Text(
-                    title!,
-                    style: const TextStyle(
-                      fontFamily: 'WorkSans',
-                      fontWeight: FontWeight.bold,
-                      fontSize: 20,
-                      color: MyTheme.accent,
+                  Expanded(
+                    child: Text(
+                      title!,
+                      style: const TextStyle(
+                        fontFamily: 'WorkSans',
+                        fontWeight: FontWeight.bold,
+                        fontSize: 20,
+                        color: MyTheme.accent,
+                      ),
                     ),
                   )
                 ],
