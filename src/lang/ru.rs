@@ -349,7 +349,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Security", "Безопасность"),
         ("Theme", "Тема"),
         ("Dark Theme", "Тёмная тема"),
-        ("Light Theme", ""),
+        ("Light Theme", "Светлая тема"),
         ("Dark", "Тёмная"),
         ("Light", "Светлая"),
         ("Follow System", "Системная"),
@@ -460,5 +460,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Codec", "Кодек"),
         ("Resolution", "Разрешение"),
         ("No transfers in progress", "Передача не осуществляется"),
-        ].iter().cloned().collect();
+        ("Set one-time password length", "Установить длину одноразового пароля"),
+    ].iter().cloned().collect();
 }
