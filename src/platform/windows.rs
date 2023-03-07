@@ -1108,6 +1108,12 @@ if exist \"{tmp_path}\\{app_name} Tray.lnk\" del /f /q \"{tmp_path}\\{app_name} 
     );
     let src_exe = std::env::current_exe()?.to_str().unwrap_or("").to_string();
 
+    let install_cert = if options.contains("driverCert") {
+        format!("\"{}\" --install-cert \"RustDeskIddDriver.cer\"", src_exe)
+    } else {
+        "".to_owned()
+    };
+
     let cmds = format!(
         "
 {uninstall_str}
@@ -1139,6 +1145,7 @@ sc create {app_name} binpath= \"\\\"{exe}\\\" --import-config \\\"{config_path}\
 sc start {app_name}
 sc stop {app_name}
 sc delete {app_name}
+{install_cert}
 {after_install}
 {sleep}
     ",
@@ -1159,6 +1166,7 @@ sc delete {app_name}
         shortcuts=shortcuts,
         config_path=Config::file().to_str().unwrap_or(""),
         lic=register_licence(),
+        install_cert=install_cert,
         after_install=get_after_install(&exe),
         sleep=if debug {
             "timeout 300"
@@ -1174,9 +1182,6 @@ sc delete {app_name}
     );
     run_cmds(cmds, debug, "install")?;
     std::thread::sleep(std::time::Duration::from_millis(2000));
-    if options.contains("driverCert") {
-        allow_err!(cert::install_cert(std::path::Path::new(&path).join("RustDeskIddDriver.cer")));
-    }
     if !silent {
         std::process::Command::new(&exe).spawn()?;
         std::process::Command::new(&exe).arg("--tray").spawn()?;
@@ -1905,6 +1910,20 @@ pub fn user_accessible_folder() -> ResultType<PathBuf> {
         bail!("no vaild user accessible folder");
     }
     Ok(dir)
+}
+
+#[inline]
+pub fn install_cert(cert_file: &str) -> ResultType<()> {
+    let exe_file = std::env::current_exe()?;
+    if let Some(cur_dir) = exe_file.parent() {
+        allow_err!(cert::install_cert(cur_dir.join(cert_file)));
+    } else {
+        bail!(
+            "Invalid exe parent for {}",
+            exe_file.to_string_lossy().as_ref()
+        );
+    }
+    Ok(())
 }
 
 mod cert {

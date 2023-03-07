@@ -143,6 +143,10 @@ pub fn core_main() -> Option<Vec<String>> {
                 #[cfg(feature = "with_rc")]
                 hbb_common::allow_err!(crate::rc::extract_resources(&args[1]));
                 return None;
+            } else if args[0] == "--install-cert" {
+                #[cfg(windows)]
+                hbb_common::allow_err!(crate::platform::windows::install_cert(&args[1]));
+                return None;
             } else if args[0] == "--portable-service" {
                 crate::platform::elevate_or_run_as_system(
                     click_setup,
