@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
@@ -63,6 +65,7 @@ class _InstallPageBodyState extends State<_InstallPageBody>
   late final TextEditingController controller;
   final RxBool startmenu = true.obs;
   final RxBool desktopicon = true.obs;
+  final RxBool driverCert = false.obs;
   final RxBool showProgress = false.obs;
   final RxBool btnEnabled = true.obs;
 
@@ -165,6 +168,20 @@ class _InstallPageBodyState extends State<_InstallPageBody>
                   Text(translate('Create desktop icon'))
                 ],
               ),
+              Offstage(
+                offstage: !Platform.isWindows,
+                child: Row(
+                  children: [
+                    Obx(() => Checkbox(
+                        value: driverCert.value,
+                        onChanged: (b) {
+                          if (b != null) driverCert.value = b;
+                        })),
+                    Text(
+                        '${translate('Install driver cert')} ${translate('Virtual display requirement')}')
+                  ],
+                ),
+              ),
               GestureDetector(
                   onTap: () => launchUrlString('http://rustdesk.com/privacy'),
                   child: Row(
@@ -230,6 +247,7 @@ class _InstallPageBodyState extends State<_InstallPageBody>
     String args = '';
     if (startmenu.value) args += ' startmenu';
     if (desktopicon.value) args += ' desktopicon';
+    if (driverCert.value) args += ' driverCert';
     bind.installInstallMe(options: args, path: controller.text);
   }
 
