@@ -73,7 +73,7 @@ class ChatPage extends StatelessWidget implements PageShape {
                               ? InputDecoration(
                                   isDense: true,
                                   hintText:
-                                      "${translate('Write a message')}...",
+                                      "${translate('Write a message')}",
                                   filled: true,
                                   fillColor:
                                       Theme.of(context).colorScheme.background,
@@ -88,7 +88,7 @@ class ChatPage extends StatelessWidget implements PageShape {
                                 )
                               : defaultInputDecoration(
                                   hintText:
-                                      "${translate('Write a message')}...",
+                                      "${translate('Write a message')}",
                                   fillColor:
                                       Theme.of(context).colorScheme.background),
                           sendButtonBuilder: defaultSendButton(
