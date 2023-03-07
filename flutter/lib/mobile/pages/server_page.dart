@@ -312,10 +312,14 @@ class _PermissionCheckerState extends State<PermissionChecker> {
           hasAudioPermission
               ? PermissionRow(translate("Audio Capture"), serverModel.audioOk,
                   serverModel.toggleAudio)
-              : Text(
-                  "* ${translate("android_version_audio_tip")}",
-                  style: const TextStyle(color: MyTheme.darkGray),
-                )
+              : Row(children: [
+                  Icon(Icons.info_outline).marginOnly(right: 15),
+                  Expanded(
+                      child: Text(
+                    translate("android_version_audio_tip"),
+                    style: const TextStyle(color: MyTheme.darkGray),
+                  ))
+                ])
         ]));
   }
 }
