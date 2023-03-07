@@ -113,13 +113,18 @@ class _PeerTabPageState extends State<PeerTabPage>
                     offstage: !isDesktop,
                     child: _createPeerViewTypeSwitch(context)
                         .marginOnly(left: 13)),
-                Offstage(
-                  offstage: _hideSort,
-                  child: PeerSortDropdown(),
-                )
               ],
             ),
           ),
+        ),
+        Row(
+          children: [
+            Expanded(child: SizedBox()),
+            Offstage(
+              offstage: _hideSort,
+              child: PeerSortDropdown(),
+            ),
+          ],
         ),
         _createPeersView(),
       ],
@@ -240,32 +245,32 @@ class _PeerTabPageState extends State<PeerTabPage>
 
   Widget _createPeerViewTypeSwitch(BuildContext context) {
     final textColor = Theme.of(context).textTheme.titleLarge?.color;
-    final activeDeco =
-        BoxDecoration(color: Theme.of(context).colorScheme.background);
-    return Row(
-      children: [PeerUiType.grid, PeerUiType.list]
-          .map((type) => Obx(
-                () => Container(
-                  padding: EdgeInsets.all(4.0),
-                  decoration: peerCardUiType.value == type ? activeDeco : null,
-                  child: InkWell(
-                      onTap: () async {
-                        await bind.setLocalFlutterConfig(
-                            k: 'peer-card-ui-type', v: type.index.toString());
-                        peerCardUiType.value = type;
-                      },
-                      child: Icon(
-                        type == PeerUiType.grid
-                            ? Icons.grid_view_rounded
-                            : Icons.list,
-                        size: 18,
-                        color:
-                            peerCardUiType.value == type ? textColor : textColor
-                              ?..withOpacity(0.5),
-                      )),
-                ),
-              ))
-          .toList(),
+    final activeDeco = BoxDecoration(
+      color: Theme.of(context).colorScheme.background,
+      borderRadius: BorderRadius.circular(5),
+    );
+    final types = [PeerUiType.grid, PeerUiType.list];
+
+    return Obx(
+      () => Container(
+        padding: EdgeInsets.all(4.0),
+        decoration: activeDeco,
+        child: InkWell(
+            onTap: () async {
+              final type = types.elementAt(
+                  peerCardUiType.value == types.elementAt(0) ? 1 : 0);
+              await bind.setLocalFlutterConfig(
+                  k: 'peer-card-ui-type', v: type.index.toString());
+              peerCardUiType.value = type;
+            },
+            child: Icon(
+              peerCardUiType.value == PeerUiType.grid
+                  ? Icons.list_rounded
+                  : Icons.grid_view_rounded,
+              size: 18,
+              color: textColor,
+            )),
+      ),
     );
   }
 
@@ -441,7 +446,7 @@ class _PeerSortDropdownState extends State<PeerSortDropdown> {
   @override
   Widget build(BuildContext context) {
     return DropdownButton<String>(
-      value: _sortType,
+      value: _sortType == "" ? 'id' : _sortType,
       elevation: 16,
       underline: SizedBox(),
       onChanged: (v) {
