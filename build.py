@@ -106,6 +106,12 @@ def make_parser():
         action='store_true',
         help='Skip cargo build process, only flutter version + Linux supported currently'
     )
+    if windows:
+        parser.add_argument(
+            '--idd-driver',
+            action='store_true',
+            help='Build idd driver for virtual display.'
+        )
     return parser
 
 

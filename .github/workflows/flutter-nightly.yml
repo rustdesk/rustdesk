@@ -86,7 +86,7 @@ jobs:
         shell: bash
 
       - name: Build rustdesk
-        run: python3 .\build.py --portable --hwcodec --flutter
+        run: python3 .\build.py --portable --hwcodec --flutter --idd-driver
 
       - name: Sign rustdesk files
         uses: GermanBluefox/code-sign-action@v7
