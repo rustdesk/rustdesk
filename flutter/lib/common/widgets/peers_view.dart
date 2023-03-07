@@ -211,7 +211,7 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
               p1.username.toLowerCase().compareTo(p2.username.toLowerCase()));
           break;
         case 'status':
-          peers.sort((p1, p2) => p1.online ? 1 : -1);
+          peers.sort((p1, p2) => p1.online ? -1 : 1);
           break;
       }
     }

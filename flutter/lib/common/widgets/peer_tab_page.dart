@@ -12,7 +12,6 @@ import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/desktop/widgets/material_mod_popup_menu.dart'
     as mod_menu;
-import 'package:flutter_hbb/models/file_model.dart';
 import 'package:flutter_hbb/models/peer_tab_model.dart';
 import 'package:get/get.dart';
 import 'package:get/get_rx/src/rx_workers/utils/debouncer.dart';
@@ -446,7 +445,7 @@ class _PeerSortDropdownState extends State<PeerSortDropdown> {
   @override
   Widget build(BuildContext context) {
     return DropdownButton<String>(
-      value: _sortType == "" ? 'id' : _sortType,
+      value: _sortType.isEmpty ? 'id' : _sortType,
       elevation: 16,
       underline: SizedBox(),
       onChanged: (v) {

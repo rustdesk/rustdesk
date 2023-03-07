@@ -42,6 +42,7 @@ class _PeerCardState extends State<_PeerCard>
     with AutomaticKeepAliveClientMixin {
   var _menuPos = RelativeRect.fill;
   final double _cardRadius = 16;
+  final double _tileRadius = 5;
   final double _borderWidth = 2;
 
   @override
@@ -116,27 +117,32 @@ class _PeerCardState extends State<_PeerCard>
 
   Widget _buildDesktop() {
     final peer = super.widget.peer;
-    var deco = Rx<BoxDecoration?>(BoxDecoration(
+    var deco = Rx<BoxDecoration?>(
+      BoxDecoration(
         border: Border.all(color: Colors.transparent, width: _borderWidth),
-        borderRadius: peerCardUiType.value == PeerUiType.grid
-            ? BorderRadius.circular(_cardRadius)
-            : null));
+        borderRadius: BorderRadius.circular(
+          peerCardUiType.value == PeerUiType.grid ? _cardRadius : _tileRadius,
+        ),
+      ),
+    );
     return MouseRegion(
       onEnter: (evt) {
         deco.value = BoxDecoration(
-            border: Border.all(
-                color: Theme.of(context).colorScheme.primary,
-                width: _borderWidth),
-            borderRadius: peerCardUiType.value == PeerUiType.grid
-                ? BorderRadius.circular(_cardRadius)
-                : null);
+          border: Border.all(
+              color: Theme.of(context).colorScheme.primary,
+              width: _borderWidth),
+          borderRadius: BorderRadius.circular(
+            peerCardUiType.value == PeerUiType.grid ? _cardRadius : _tileRadius,
+          ),
+        );
       },
       onExit: (evt) {
         deco.value = BoxDecoration(
-            border: Border.all(color: Colors.transparent, width: _borderWidth),
-            borderRadius: peerCardUiType.value == PeerUiType.grid
-                ? BorderRadius.circular(_cardRadius)
-                : null);
+          border: Border.all(color: Colors.transparent, width: _borderWidth),
+          borderRadius: BorderRadius.circular(
+            peerCardUiType.value == PeerUiType.grid ? _cardRadius : _tileRadius,
+          ),
+        );
       },
       child: GestureDetector(
           onDoubleTap: () => widget.connect(context, peer.id),
@@ -163,6 +169,10 @@ class _PeerCardState extends State<_PeerCard>
             Container(
               decoration: BoxDecoration(
                 color: str2color('${peer.id}${peer.platform}', 0x7f),
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(_tileRadius),
+                  bottomLeft: Radius.circular(_tileRadius),
+                ),
               ),
               alignment: Alignment.center,
               width: 42,
@@ -171,7 +181,12 @@ class _PeerCardState extends State<_PeerCard>
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.background),
+                  color: Theme.of(context).colorScheme.background,
+                  borderRadius: BorderRadius.only(
+                    topRight: Radius.circular(_tileRadius),
+                    bottomRight: Radius.circular(_tileRadius),
+                  ),
+                ),
                 child: Row(
                   children: [
                     Expanded(
