@@ -369,10 +369,7 @@ class ConnectionManager extends StatelessWidget {
                                         bar.onTap!(1);
                                       }
                                     },
-                                    icon: const Icon(
-                                      Icons.chat,
-                                      color: MyTheme.accent,
-                                    )))
+                                    icon: const Icon(Icons.chat)))
                       ],
                     ),
                     client.authorized
@@ -429,7 +426,7 @@ class PaddingCard extends StatelessWidget {
       children.insert(
           0,
           Padding(
-              padding: const EdgeInsets.symmetric(vertical: 5.0),
+              padding: const EdgeInsets.fromLTRB(0, 5, 0, 8),
               child: Row(
                 children: [
                   titleIcon != null
@@ -441,11 +438,7 @@ class PaddingCard extends StatelessWidget {
                     child: Text(
                       title!,
                       style: const TextStyle(
-                        fontFamily: 'WorkSans',
-                        fontWeight: FontWeight.bold,
-                        fontSize: 20,
-                        color: MyTheme.accent,
-                      ),
+                          fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                   )
                 ],
@@ -494,13 +487,9 @@ class ClientInfo extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                    Text(client.name,
-                        style: const TextStyle(
-                            color: MyTheme.idColor, fontSize: 18)),
+                    Text(client.name, style: const TextStyle(fontSize: 18)),
                     const SizedBox(width: 8),
-                    Text(client.peerId,
-                        style: const TextStyle(
-                            color: MyTheme.idColor, fontSize: 10))
+                    Text(client.peerId, style: const TextStyle(fontSize: 10))
                   ]))
             ],
           ),
