@@ -461,8 +461,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Resolution", "Risoluzione"),
         ("No transfers in progress", "Nessun trasferimento in corso"),
         ("Set one-time password length", ""),
-        ("Install driver cert(test cert)", ""),
-        ("Virtual display requirement", ""),
-        ("Continue with installing cert is checked.", "")
+        ("Install driver cert (test cert)", ""),
+        ("Virtual display need", ""),
+        ("instsall_cert_tip", "")
     ].iter().cloned().collect();
 }

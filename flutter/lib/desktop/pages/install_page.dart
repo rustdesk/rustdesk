@@ -178,7 +178,7 @@ class _InstallPageBodyState extends State<_InstallPageBody>
                           if (b != null) driverCert.value = b;
                         })),
                     Text(
-                        '${translate('Install driver cert(test cert)')} ${translate('Virtual display requirement')}')
+                        '${translate('Install driver cert (test cert)')} ${translate('Virtual display need')}')
                   ],
                 ),
               ),
@@ -273,8 +273,7 @@ class _InstallPageBodyState extends State<_InstallPageBody>
         (setState, close) => CustomAlertDialog(
           title: null,
           content: SelectionArea(
-              child: msgboxContent(
-                  'info', '', 'Continue with installing cert is checked.')),
+              child: msgboxContent('info', '', 'instsall_cert_tip')),
           actions: btns,
           onCancel: close,
         ),
