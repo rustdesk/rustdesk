@@ -208,7 +208,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("x11 expected", "x11 necessario"),
         ("Port", "Porta"),
         ("Settings", "Impostazioni"),
-        ("Username", " Nome utente"),
+        ("Username", "Nome utente"),
         ("Invalid port", "Numero di porta non valido"),
         ("Closed manually by the peer", "Chiuso manualmente dal peer"),
         ("Enable remote configuration modification", "Abilita la modifica remota della configurazione"),
@@ -460,6 +460,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Codec", "Codec"),
         ("Resolution", "Risoluzione"),
         ("No transfers in progress", "Nessun trasferimento in corso"),
-        ("Set one-time password length", ""),
+        ("Set one-time password length", "Imposta lunghezza password monouso"),
+        ("Sort by", "Ordina per"),
     ].iter().cloned().collect();
 }

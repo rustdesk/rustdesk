@@ -461,5 +461,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Resolution", ""),
         ("No transfers in progress", ""),
         ("Set one-time password length", ""),
+        ("Sort by", ""),
     ].iter().cloned().collect();
 }
