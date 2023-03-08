@@ -4943,6 +4943,7 @@ dependencies = [
  "flutter_rust_bridge_codegen",
  "fruitbasket",
  "hbb_common",
+ "hex",
  "hound",
  "image 0.24.5",
  "impersonate_system",

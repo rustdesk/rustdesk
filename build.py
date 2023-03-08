@@ -37,7 +37,7 @@ def parse_rc_features(feature):
         'IddDriver': {
             'zip_url': 'https://github.com/fufesou/RustDeskIddDriver/releases/download/v0.1/RustDeskIddDriver_x64.zip',
             'checksum_url': 'https://github.com/fufesou/RustDeskIddDriver/releases/download/v0.1/checksum_md5',
-            'exclude': ['README.md'],
+            'exclude': ['README.md', 'certmgr.exe', 'install_cert_runas_admin.bat'],
         },
         'PrivacyMode': {
             'zip_url': 'https://github.com/fufesou/RustDeskTempTopMostWindow/releases/download/v0.1'
