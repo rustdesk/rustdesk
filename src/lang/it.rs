@@ -460,6 +460,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Codec", "Codec"),
         ("Resolution", "Risoluzione"),
         ("No transfers in progress", "Nessun trasferimento in corso"),
+        ("Set one-time password length", "Imposta la lunghezza della password monouso"),
         ("Set one-time password length", ""),
         ("idd_driver_tip", ""),
         ("confirm_idd_driver_tip", "")
