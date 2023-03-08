@@ -152,7 +152,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Configure", "Konfigurieren"),
         ("config_acc", "Um Ihren PC aus der Ferne zu steuern, müssen Sie RustDesk Zugriffsrechte erteilen."),
         ("config_screen", "Um aus der Ferne auf Ihren PC zugreifen zu können, müssen Sie RustDesk die Berechtigung \"Bildschirmaufnahme\" erteilen."),
-        ("Installing ...", " Wird installiert …"),
+        ("Installing ...", "Wird installiert …"),
         ("Install", "Installieren"),
         ("Installation", "Installation"),
         ("Installation Path", "Installationspfad"),
@@ -461,8 +461,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Resolution", "Auflösung"),
         ("No transfers in progress", "Keine Übertragungen im Gange"),
         ("Set one-time password length", "Länge des Einmalpassworts festlegen"),
-        ("idd_driver_tip", ""),
-        ("confirm_idd_driver_tip", ""),
-        ("RDP Settings", "RDP Einstellungen"),
+        ("idd_driver_tip", "Installieren Sie den virtuellen Anzeigetreiber, der verwendet wird, wenn Sie keine physischen Anzeigen haben."),
+        ("confirm_idd_driver_tip", "Die Option zur Installation des virtuellen Anzeigetreibers ist aktiviert. Beachten Sie, dass ein Testzertifikat installiert wird, um dem virtuellen Anzeigetreiber zu vertrauen. Dieses Testzertifikat wird nur verwendet, um Rustdesk-Treibern zu vertrauen."),
+        ("RDP Settings", "RDP-Einstellungen"),
     ].iter().cloned().collect();
 }
