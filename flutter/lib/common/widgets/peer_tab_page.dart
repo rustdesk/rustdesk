@@ -17,6 +17,7 @@ import 'package:get/get.dart';
 import 'package:get/get_rx/src/rx_workers/utils/debouncer.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
+import 'package:dropdown_button2/dropdown_button2.dart';
 
 import '../../common.dart';
 import '../../models/platform_model.dart';
@@ -112,18 +113,13 @@ class _PeerTabPageState extends State<PeerTabPage>
                     offstage: !isDesktop,
                     child: _createPeerViewTypeSwitch(context)
                         .marginOnly(left: 13)),
+                Offstage(
+                  offstage: _hideSort,
+                  child: PeerSortDropdown().marginOnly(left: 8),
+                ),
               ],
             ),
           ),
-        ),
-        Row(
-          children: [
-            Expanded(child: SizedBox()),
-            Offstage(
-              offstage: _hideSort,
-              child: PeerSortDropdown(),
-            ),
-          ],
         ),
         _createPeersView(),
       ],
@@ -244,7 +240,7 @@ class _PeerTabPageState extends State<PeerTabPage>
 
   Widget _createPeerViewTypeSwitch(BuildContext context) {
     final textColor = Theme.of(context).textTheme.titleLarge?.color;
-    final activeDeco = BoxDecoration(
+    final deco = BoxDecoration(
       color: Theme.of(context).colorScheme.background,
       borderRadius: BorderRadius.circular(5),
     );
@@ -253,7 +249,7 @@ class _PeerTabPageState extends State<PeerTabPage>
     return Obx(
       () => Container(
         padding: EdgeInsets.all(4.0),
-        decoration: activeDeco,
+        decoration: deco,
         child: InkWell(
             onTap: () async {
               final type = types.elementAt(
@@ -439,39 +435,74 @@ class PeerSortDropdown extends StatefulWidget {
 }
 
 class _PeerSortDropdownState extends State<PeerSortDropdown> {
-  final List<String> sort_names = ['id', 'username', "status"];
+  final List<String> sort_names = ['Remote ID', 'Username', "Status"];
   String _sortType = peerSort.value;
 
   @override
   Widget build(BuildContext context) {
-    return DropdownButton<String>(
-      value: _sortType.isEmpty ? 'id' : _sortType,
-      elevation: 16,
-      underline: SizedBox(),
-      onChanged: (v) {
-        if (v != null) {
-          setState(() {
-            _sortType = v;
-            bind.setLocalFlutterConfig(
-              k: "peer-sorting",
-              v: _sortType,
-            );
-          });
-          peerSort.value = _sortType;
-        }
-      },
-      dropdownColor: Theme.of(context).cardColor,
-      items: sort_names
-          .map<DropdownMenuItem<String>>(
-            (String value) => DropdownMenuItem<String>(
-              value: value,
-              child: Text(
-                value,
-                overflow: TextOverflow.ellipsis,
-              ),
+    final deco = BoxDecoration(
+      color: Theme.of(context).colorScheme.background,
+      borderRadius: BorderRadius.circular(5),
+    );
+    return Container(
+      padding: EdgeInsets.all(4.0),
+      decoration: deco,
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton2<String>(
+            value: sort_names.contains(_sortType) ? _sortType : sort_names[0],
+            onChanged: (v) async {
+              if (v != null) {
+                setState(() => _sortType = v);
+                await bind.setLocalFlutterConfig(
+                  k: "peer-sorting",
+                  v: _sortType,
+                );
+                peerSort.value = _sortType;
+              }
+            },
+            customButton: Icon(
+              Icons.sort,
+              size: 18,
             ),
-          )
-          .toList(),
+            dropdownStyleData: DropdownStyleData(
+              decoration: BoxDecoration(
+                color: Theme.of(context).cardColor,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              width: 160,
+            ),
+            items: [
+              DropdownMenuItem<String>(
+                alignment: Alignment.center,
+                child: Text(
+                  translate("Sort by"),
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                enabled: false,
+              ),
+              ...sort_names
+                  .map<DropdownMenuItem<String>>(
+                    (String value) => DropdownMenuItem<String>(
+                      value: value,
+                      child: Row(
+                        children: [
+                          Icon(
+                            value == _sortType
+                                ? Icons.radio_button_checked_rounded
+                                : Icons.radio_button_off_rounded,
+                            size: 18,
+                          ).paddingOnly(right: 12),
+                          Text(
+                            translate(value),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ]),
+      ),
     );
   }
 }

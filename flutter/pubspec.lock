@@ -386,6 +386,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.0.2"
+  dropdown_button2:
+    dependency: "direct main"
+    description:
+      name: dropdown_button2
+      sha256: "4458d81bfd24207f3d58f66f78097064e02f810f94cf1bc80bf20fe7685ebc80"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.0"
   event_bus:
     dependency: transitive
     description:
