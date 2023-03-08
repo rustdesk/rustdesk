@@ -38,7 +38,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
 
   @override
   void dispose() {
-    model.onClose().whenComplete(() {
+    model.close().whenComplete(() {
       gFFI.close();
       gFFI.dialogManager.dismissAll();
       Wakelock.disable();

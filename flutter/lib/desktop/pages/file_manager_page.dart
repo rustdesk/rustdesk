@@ -90,7 +90,7 @@ class _FileManagerPageState extends State<FileManagerPage>
 
   @override
   void dispose() {
-    model.onClose().whenComplete(() {
+    model.close().whenComplete(() {
       _ffi.close();
       _ffi.dialogManager.dismissAll();
       if (!Platform.isLinux) {
