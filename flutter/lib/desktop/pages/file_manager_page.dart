@@ -157,171 +157,163 @@ class _FileManagerPageState extends State<FileManagerPage>
   /// transfer status list
   /// watch transfer status
   Widget statusList() {
+    statusListView() => Obx(() => ListView.builder(
+          controller: ScrollController(),
+          itemBuilder: (BuildContext context, int index) {
+            final item = jobController.jobTable[index];
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 5),
+              child: generateCard(
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Transform.rotate(
+                          angle: item.isRemoteToLocal ? pi : 0,
+                          child: SvgPicture.asset(
+                            "assets/arrow.svg",
+                            color: Theme.of(context).tabBarTheme.labelColor,
+                          ),
+                        ).paddingOnly(left: 15),
+                        const SizedBox(
+                          width: 16.0,
+                        ),
+                        Expanded(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Tooltip(
+                                waitDuration: Duration(milliseconds: 500),
+                                message: item.jobName,
+                                child: Text(
+                                  item.fileName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ).paddingSymmetric(vertical: 10),
+                              ),
+                              Text(
+                                '${translate("Total")} ${readableFileSize(item.totalSize.toDouble())}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: MyTheme.darkGray,
+                                ),
+                              ),
+                              Offstage(
+                                offstage: item.state != JobState.inProgress,
+                                child: Text(
+                                  '${translate("Speed")} ${readableFileSize(item.speed)}/s',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: MyTheme.darkGray,
+                                  ),
+                                ),
+                              ),
+                              Offstage(
+                                offstage: item.state == JobState.inProgress,
+                                child: Text(
+                                  translate(
+                                    item.display(),
+                                  ),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: MyTheme.darkGray,
+                                  ),
+                                ),
+                              ),
+                              Offstage(
+                                offstage: item.state != JobState.inProgress,
+                                child: LinearPercentIndicator(
+                                  padding: EdgeInsets.only(right: 15),
+                                  animateFromLastPercent: true,
+                                  center: Text(
+                                    '${(item.finishedSize / item.totalSize * 100).toStringAsFixed(0)}%',
+                                  ),
+                                  barRadius: Radius.circular(15),
+                                  percent: item.finishedSize / item.totalSize,
+                                  progressColor: MyTheme.accent,
+                                  backgroundColor: Theme.of(context).hoverColor,
+                                  lineHeight: kDesktopFileTransferRowHeight,
+                                ).paddingSymmetric(vertical: 15),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Offstage(
+                              offstage: item.state != JobState.paused,
+                              child: MenuButton(
+                                onPressed: () {
+                                  jobController.resumeJob(item.id);
+                                },
+                                child: SvgPicture.asset(
+                                  "assets/refresh.svg",
+                                  color: Colors.white,
+                                ),
+                                color: MyTheme.accent,
+                                hoverColor: MyTheme.accent80,
+                              ),
+                            ),
+                            MenuButton(
+                              padding: EdgeInsets.only(right: 15),
+                              child: SvgPicture.asset(
+                                "assets/close.svg",
+                                color: Colors.white,
+                              ),
+                              onPressed: () {
+                                jobController.jobTable.removeAt(index);
+                                jobController.cancelJob(item.id);
+                              },
+                              color: MyTheme.accent,
+                              hoverColor: MyTheme.accent80,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ).paddingSymmetric(vertical: 10),
+              ),
+            );
+          },
+          itemCount: jobController.jobTable.length,
+        ));
+
     return PreferredSize(
       preferredSize: const Size(200, double.infinity),
       child: Container(
-        margin: const EdgeInsets.only(top: 16.0, bottom: 16.0, right: 16.0),
-        padding: const EdgeInsets.all(8.0),
-        child: jobController.jobTable.isEmpty
-            ? generateCard(
-                Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      SvgPicture.asset(
-                        "assets/transfer.svg",
-                        color: Theme.of(context).tabBarTheme.labelColor,
-                        height: 40,
-                      ).paddingOnly(bottom: 10),
-                      Text(
-                        translate("No transfers in progress"),
-                        textAlign: TextAlign.center,
-                        textScaleFactor: 1.20,
-                        style: TextStyle(
-                            color: Theme.of(context).tabBarTheme.labelColor),
+          margin: const EdgeInsets.only(top: 16.0, bottom: 16.0, right: 16.0),
+          padding: const EdgeInsets.all(8.0),
+          child: Obx(
+            () => jobController.jobTable.isEmpty
+                ? generateCard(
+                    Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SvgPicture.asset(
+                            "assets/transfer.svg",
+                            color: Theme.of(context).tabBarTheme.labelColor,
+                            height: 40,
+                          ).paddingOnly(bottom: 10),
+                          Text(
+                            translate("No transfers in progress"),
+                            textAlign: TextAlign.center,
+                            textScaleFactor: 1.20,
+                            style: TextStyle(
+                                color:
+                                    Theme.of(context).tabBarTheme.labelColor),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                ),
-              )
-            : Obx(
-                () => ListView.builder(
-                  controller: ScrollController(),
-                  itemBuilder: (BuildContext context, int index) {
-                    final item = jobController.jobTable[index];
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 5),
-                      child: generateCard(
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                Transform.rotate(
-                                  angle: item.isRemoteToLocal ? pi : 0,
-                                  child: SvgPicture.asset(
-                                    "assets/arrow.svg",
-                                    color: Theme.of(context)
-                                        .tabBarTheme
-                                        .labelColor,
-                                  ),
-                                ).paddingOnly(left: 15),
-                                const SizedBox(
-                                  width: 16.0,
-                                ),
-                                Expanded(
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Tooltip(
-                                        waitDuration:
-                                            Duration(milliseconds: 500),
-                                        message: item.jobName,
-                                        child: Text(
-                                          item.fileName,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ).paddingSymmetric(vertical: 10),
-                                      ),
-                                      Text(
-                                        '${translate("Total")} ${readableFileSize(item.totalSize.toDouble())}',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: MyTheme.darkGray,
-                                        ),
-                                      ),
-                                      Offstage(
-                                        offstage:
-                                            item.state != JobState.inProgress,
-                                        child: Text(
-                                          '${translate("Speed")} ${readableFileSize(item.speed)}/s',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: MyTheme.darkGray,
-                                          ),
-                                        ),
-                                      ),
-                                      Offstage(
-                                        offstage:
-                                            item.state == JobState.inProgress,
-                                        child: Text(
-                                          translate(
-                                            item.display(),
-                                          ),
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: MyTheme.darkGray,
-                                          ),
-                                        ),
-                                      ),
-                                      Offstage(
-                                        offstage:
-                                            item.state != JobState.inProgress,
-                                        child: LinearPercentIndicator(
-                                          padding: EdgeInsets.only(right: 15),
-                                          animateFromLastPercent: true,
-                                          center: Text(
-                                            '${(item.finishedSize / item.totalSize * 100).toStringAsFixed(0)}%',
-                                          ),
-                                          barRadius: Radius.circular(15),
-                                          percent: item.finishedSize /
-                                              item.totalSize,
-                                          progressColor: MyTheme.accent,
-                                          backgroundColor:
-                                              Theme.of(context).hoverColor,
-                                          lineHeight:
-                                              kDesktopFileTransferRowHeight,
-                                        ).paddingSymmetric(vertical: 15),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    Offstage(
-                                      offstage: item.state != JobState.paused,
-                                      child: MenuButton(
-                                        onPressed: () {
-                                          jobController.resumeJob(item.id);
-                                        },
-                                        child: SvgPicture.asset(
-                                          "assets/refresh.svg",
-                                          color: Colors.white,
-                                        ),
-                                        color: MyTheme.accent,
-                                        hoverColor: MyTheme.accent80,
-                                      ),
-                                    ),
-                                    MenuButton(
-                                      padding: EdgeInsets.only(right: 15),
-                                      child: SvgPicture.asset(
-                                        "assets/close.svg",
-                                        color: Colors.white,
-                                      ),
-                                      onPressed: () {
-                                        jobController.jobTable.removeAt(index);
-                                        jobController.cancelJob(item.id);
-                                      },
-                                      color: MyTheme.accent,
-                                      hoverColor: MyTheme.accent80,
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ],
-                        ).paddingSymmetric(vertical: 10),
-                      ),
-                    );
-                  },
-                  itemCount: jobController.jobTable.length,
-                ),
-              ),
-      ),
+                    ),
+                  )
+                : statusListView(),
+          )),
     );
   }
 
@@ -418,8 +410,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                   },
                   onExit: (evt) =>
                       widget._mouseFocusScope.value = MouseFocusScope.none,
-                  child: _buildFileList(
-                      context, isLocal, _fileListScrollController),
+                  child: _buildFileList(context, _fileListScrollController),
                 ))
               ],
             ),
@@ -864,7 +855,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Widget _buildFileList(
-      BuildContext context, bool isLocal, ScrollController scrollController) {
+      BuildContext context, ScrollController scrollController) {
     final fd = controller.directory.value;
     final entries = fd.entries;
 
@@ -1044,7 +1035,7 @@ class _FileManagerViewState extends State<FileManagerView> {
             // Header
             Row(
               children: [
-                Expanded(child: _buildFileBrowserHeader(context, isLocal)),
+                Expanded(child: _buildFileBrowserHeader(context)),
               ],
             ),
             // Body
@@ -1139,7 +1130,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     return false;
   }
 
-  Widget _buildFileBrowserHeader(BuildContext context, bool isLocal) {
+  Widget _buildFileBrowserHeader(BuildContext context) {
     final padding = EdgeInsets.all(1.0);
     return SizedBox(
       height: kDesktopFileTransferHeaderHeight,
@@ -1147,7 +1138,7 @@ class _FileManagerViewState extends State<FileManagerView> {
         children: [
           Obx(
             () => headerItemFunc(
-                _nameColWidth.value, SortBy.name, translate("Name"), isLocal),
+                _nameColWidth.value, SortBy.name, translate("Name")),
           ),
           DraggableDivider(
             axis: Axis.vertical,
@@ -1160,7 +1151,7 @@ class _FileManagerViewState extends State<FileManagerView> {
           ),
           Obx(
             () => headerItemFunc(_modifiedColWidth.value, SortBy.modified,
-                translate("Modified"), isLocal),
+                translate("Modified")),
           ),
           DraggableDivider(
               axis: Axis.vertical,
@@ -1172,16 +1163,13 @@ class _FileManagerViewState extends State<FileManagerView> {
                         _modifiedColWidth.value));
               },
               padding: padding),
-          Expanded(
-              child:
-                  headerItemFunc(null, SortBy.size, translate("Size"), isLocal))
+          Expanded(child: headerItemFunc(null, SortBy.size, translate("Size")))
         ],
       ),
     );
   }
 
-  Widget headerItemFunc(
-      double? width, SortBy sortBy, String name, bool isLocal) {
+  Widget headerItemFunc(double? width, SortBy sortBy, String name) {
     final headerTextStyle =
         Theme.of(context).dataTableTheme.headingTextStyle ?? TextStyle();
     return ObxValue<Rx<bool?>>(
@@ -1222,7 +1210,7 @@ class _FileManagerViewState extends State<FileManagerView> {
               ),
             ), () {
       if (controller.sortBy.value == sortBy) {
-        return controller.sortAscending;
+        return controller.sortAscending.obs;
       } else {
         return Rx<bool?>(null);
       }

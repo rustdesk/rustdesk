@@ -208,7 +208,7 @@ class FileController {
 
   final history = RxList<String>.empty(growable: true);
   final sortBy = SortBy.name.obs;
-  final sortAscending = true.obs;
+  var sortAscending = true;
   final JobController jobController;
   final OverlayDialogManager? dialogManager;
 
@@ -285,7 +285,7 @@ class FileController {
 
   void changeSortStyle(SortBy sort, {bool? isLocal, bool ascending = true}) {
     sortBy.value = sort;
-    sortAscending.value = ascending;
+    sortAscending = ascending;
     directory.value.changeSortStyle(sort, ascending: ascending);
   }
 
@@ -592,7 +592,7 @@ class FileController {
 
 class JobController {
   static final JobID jobID = JobID();
-  final jobTable = RxList<JobProgress>.empty(growable: true);
+  final jobTable = List<JobProgress>.empty(growable: true).obs;
   final jobResultListener = JobResultListener<Map<String, dynamic>>();
   final GetSessionID getSessionID;
   String get sessionID => getSessionID();
