@@ -55,13 +55,15 @@ class FileModel {
         getSessionID: getSessionID,
         dialogManager: parent.target?.dialogManager,
         jobController: jobController,
-        fileFetcher: fileFetcher);
+        fileFetcher: fileFetcher,
+        getOtherSideDirectoryData: () => remoteController.directoryData());
     remoteController = FileController(
         isLocal: false,
         getSessionID: getSessionID,
         dialogManager: parent.target?.dialogManager,
         jobController: jobController,
-        fileFetcher: fileFetcher);
+        fileFetcher: fileFetcher,
+        getOtherSideDirectoryData: () => localController.directoryData());
   }
 
   Future<void> onReady() async {
@@ -189,6 +191,12 @@ class FileModel {
   }
 }
 
+class DirectoryData {
+  final DirectoryOptions options;
+  final FileDirectory directory;
+  DirectoryData(this.directory, this.options);
+}
+
 class FileController {
   final bool isLocal;
   final GetSessionID getSessionID;
@@ -205,12 +213,15 @@ class FileController {
   final JobController jobController;
   final OverlayDialogManager? dialogManager;
 
+  final DirectoryData Function() getOtherSideDirectoryData;
+
   FileController(
       {required this.isLocal,
       required this.getSessionID,
       required this.dialogManager,
       required this.jobController,
-      required this.fileFetcher});
+      required this.fileFetcher,
+      required this.getOtherSideDirectoryData});
 
   String get homePath => options.value.home;
 
@@ -227,6 +238,10 @@ class FileController {
     } else {
       return dirPath.replaceFirst(homePath, "");
     }
+  }
+
+  DirectoryData directoryData() {
+    return DirectoryData(directory.value, options.value);
   }
 
   Future<void> onReady() async {
@@ -372,18 +387,18 @@ class FileController {
   }
 
   /// sendFiles from other side (SelectedItems) to current side (FileController.isLocal).
-  void sendFiles(SelectedItems items) {
-    /// ignore same side
-    if (items.isLocal == isLocal) {
+  void sendFiles(SelectedItems items, DirectoryData otherSideData) {
+    /// ignore wrong items side status
+    if (items.isLocal != isLocal) {
       return;
     }
 
     // alias
-    final isRemoteToLocal = isLocal;
+    final isRemoteToLocal = !isLocal;
 
-    final toPath = directory.value.path;
-    final isWindows = options.value.isWindows;
-    final showHidden = options.value.showHidden;
+    final toPath = otherSideData.directory.path;
+    final isWindows = otherSideData.options.isWindows;
+    final showHidden = otherSideData.options.showHidden;
     for (var from in items.items) {
       final jobID = jobController.add(from, isRemoteToLocal);
       bind.sessionSendFiles(
@@ -403,7 +418,7 @@ class FileController {
 
   Future<void> removeAction(SelectedItems items) async {
     _removeCheckboxRemember = false;
-    if (items.isLocal == isLocal) {
+    if (items.isLocal != isLocal) {
       debugPrint("Failed to removeFile, wrong files");
       return;
     }

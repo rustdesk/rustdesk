@@ -338,7 +338,8 @@ class _FileManagerPageState extends State<FileManagerPage>
         ..name = file.name
         ..size = FileSystemEntity.isDirectorySync(f.path) ? 0 : f.lengthSync());
     }
-    model.remoteController.sendFiles(items);
+    final otherSideData = model.localController.directoryData();
+    model.remoteController.sendFiles(items, otherSideData);
   }
 }
 
@@ -741,7 +742,9 @@ class _FileManagerViewState extends State<FileManagerView> {
                 ),
                 onPressed: validItems(_selectedItems)
                     ? () {
-                        controller.sendFiles(_selectedItems);
+                        final otherSideData =
+                            controller.getOtherSideDirectoryData();
+                        controller.sendFiles(_selectedItems, otherSideData);
                         _selectedItems.clear();
                       }
                     : null,
