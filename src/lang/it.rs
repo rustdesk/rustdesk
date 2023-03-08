@@ -204,7 +204,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Warning", "Avviso"),
         ("Login screen using Wayland is not supported", "La schermata di accesso non è supportata utilizzando Wayland"),
         ("Reboot required", "Riavvio necessario"),
-        ("Unsupported display server ", "Display server non supportato"),
+        ("Unsupported display server", "Display server non supportato"),
         ("x11 expected", "x11 necessario"),
         ("Port", "Porta"),
         ("Settings", "Impostazioni"),

@@ -204,7 +204,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Warning", "Dicka po shkon keq"),
         ("Login screen using Wayland is not supported", "Hyrja në ekran duke përdorur Wayland muk suportohet"),
         ("Reboot required", "Kërkohet rinisja"),
-        ("Unsupported display server ", "Nuk supurtohet severi ekranit"),
+        ("Unsupported display server", "Nuk supurtohet severi ekranit"),
         ("x11 expected", "Pritet x11"),
         ("Port", "Port"),
         ("Settings", "Cilësimet"),

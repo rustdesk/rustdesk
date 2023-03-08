@@ -511,7 +511,7 @@ pub fn get_error() -> String {
         if dtype != "x11" {
             return format!(
                 "{} {}, {}",
-                crate::client::translate("Unsupported display server ".to_owned()),
+                crate::client::translate("Unsupported display server".to_owned()),
                 dtype,
                 crate::client::translate("x11 expected".to_owned()),
             );
