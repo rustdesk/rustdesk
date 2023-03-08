@@ -1126,56 +1126,67 @@ void _rdpDialog(String id) async {
             ),
             Row(
               children: [
-                ConstrainedBox(
-                    constraints: const BoxConstraints(minWidth: 140),
-                    child: Text(
-                      "${translate('Port')}:",
-                      textAlign: TextAlign.right,
-                    ).marginOnly(right: 10)),
+                isDesktop
+                    ? ConstrainedBox(
+                        constraints: const BoxConstraints(minWidth: 140),
+                        child: Text(
+                          "${translate('Port')}:",
+                          textAlign: TextAlign.right,
+                        ).marginOnly(right: 10))
+                    : SizedBox.shrink(),
                 Expanded(
                   child: TextField(
                     inputFormatters: [
                       FilteringTextInputFormatter.allow(RegExp(
                           r'^([0-9]|[1-9]\d|[1-9]\d{2}|[1-9]\d{3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$'))
                     ],
-                    decoration: const InputDecoration(
-                        border: OutlineInputBorder(), hintText: '3389'),
+                    decoration: InputDecoration(
+                        labelText: isDesktop ? null : translate('Port'),
+                        border: isDesktop ? const OutlineInputBorder() : null,
+                        hintText: '3389'),
                     controller: portController,
                     autofocus: true,
                   ),
                 ),
               ],
-            ).marginOnly(bottom: 8),
+            ).marginOnly(bottom: isDesktop ? 8 : 0),
             Row(
               children: [
-                ConstrainedBox(
-                    constraints: const BoxConstraints(minWidth: 140),
-                    child: Text(
-                      "${translate('Username')}:",
-                      textAlign: TextAlign.right,
-                    ).marginOnly(right: 10)),
+                isDesktop
+                    ? ConstrainedBox(
+                        constraints: const BoxConstraints(minWidth: 140),
+                        child: Text(
+                          "${translate('Username')}:",
+                          textAlign: TextAlign.right,
+                        ).marginOnly(right: 10))
+                    : SizedBox.shrink(),
                 Expanded(
                   child: TextField(
-                    decoration:
-                        const InputDecoration(border: OutlineInputBorder()),
+                    decoration: InputDecoration(
+                        labelText: isDesktop ? null : translate('Username'),
+                        border: isDesktop ? const OutlineInputBorder() : null),
                     controller: userController,
                   ),
                 ),
               ],
-            ).marginOnly(bottom: 8),
+            ).marginOnly(bottom: isDesktop ? 8 : 0),
             Row(
               children: [
-                ConstrainedBox(
-                    constraints: const BoxConstraints(minWidth: 140),
-                    child: Text(
-                      "${translate('Password')}:",
-                      textAlign: TextAlign.right,
-                    ).marginOnly(right: 10)),
+                isDesktop
+                    ? ConstrainedBox(
+                        constraints: const BoxConstraints(minWidth: 140),
+                        child: Text(
+                          "${translate('Password')}:",
+                          textAlign: TextAlign.right,
+                        ).marginOnly(right: 10))
+                    : SizedBox.shrink(),
                 Expanded(
                   child: Obx(() => TextField(
                         obscureText: secure.value,
                         decoration: InputDecoration(
-                            border: const OutlineInputBorder(),
+                            labelText: isDesktop ? null : translate('Password'),
+                            border:
+                                isDesktop ? const OutlineInputBorder() : null,
                             suffixIcon: IconButton(
                                 onPressed: () => secure.value = !secure.value,
                                 icon: Icon(secure.value
@@ -1185,7 +1196,7 @@ void _rdpDialog(String id) async {
                       )),
                 ),
               ],
-            ).marginOnly(bottom: 8),
+            ).marginOnly(bottom: isDesktop ? 8 : 0),
           ],
         ),
       ),
