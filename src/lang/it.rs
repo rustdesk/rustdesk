@@ -461,9 +461,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Resolution", "Risoluzione"),
         ("No transfers in progress", "Nessun trasferimento in corso"),
         ("Set one-time password length", "Imposta la lunghezza della password monouso"),
-        ("idd_driver_tip", ""),
-        ("confirm_idd_driver_tip", ""),
-        ("RDP Settings", "Imposta lunghezza password monouso"),
+        ("idd_driver_tip", "Installa il driver per lo schermo virtuale che sarà utilizzato quando non si dispone di schermi fisici."),
+        ("confirm_idd_driver_tip", "L'opzione per installare il driver per lo schermo virtuale è selezionata. Nota che un certificato di test sarà installato per l'attendibilità del driver dello schermo virtuale. Questo certificato di test verrà utilizzato solo per l'attendibilità dei driver di RustDesk."),
+        ("RDP Settings", "Impostazioni RDP"),
         ("Sort by", "Ordina per"),
     ].iter().cloned().collect();
 }
