@@ -204,7 +204,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Warning", "Figyelmeztetés"),
         ("Login screen using Wayland is not supported", "Bejelentkezéskori Wayland használata nem támogatott"),
         ("Reboot required", "Újraindítás szükséges"),
-        ("Unsupported display server ", "Nem támogatott megjelenítő szerver"),
+        ("Unsupported display server", "Nem támogatott megjelenítő szerver"),
         ("x11 expected", "x11-re számítottt"),
         ("Port", "Port"),
         ("Settings", "Beállítások"),
@@ -461,6 +461,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Resolution", ""),
         ("No transfers in progress", ""),
         ("Set one-time password length", ""),
+        ("idd_driver_tip", ""),
+        ("confirm_idd_driver_tip", ""),
+        ("RDP Settings", ""),
         ("Sort by", ""),
     ].iter().cloned().collect();
 }

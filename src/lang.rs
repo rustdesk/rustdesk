@@ -10,7 +10,7 @@ mod eo;
 mod es;
 mod fa;
 mod fr;
-mod gr;
+mod el;
 mod hu;
 mod id;
 mod it;
@@ -59,7 +59,7 @@ pub const LANGS: &[(&str, &str)] = &[
     ("ua", "Українська"),
     ("fa", "فارسی"),
     ("ca", "Català"),
-    ("gr", "Ελληνικά"),
+    ("el", "Ελληνικά"),
     ("sv", "Svenska"),
     ("sq", "Shqip"),
     ("sr", "Srpski"),
@@ -122,7 +122,7 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "ua" => ua::T.deref(),
         "fa" => fa::T.deref(),
         "ca" => ca::T.deref(),
-        "gr" => gr::T.deref(),
+        "el" => el::T.deref(),
         "sv" => sv::T.deref(),
         "sq" => sq::T.deref(),
         "sr" => sr::T.deref(),

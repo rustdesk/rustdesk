@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
@@ -63,6 +65,7 @@ class _InstallPageBodyState extends State<_InstallPageBody>
   late final TextEditingController controller;
   final RxBool startmenu = true.obs;
   final RxBool desktopicon = true.obs;
+  final RxBool driverCert = true.obs;
   final RxBool showProgress = false.obs;
   final RxBool btnEnabled = true.obs;
 
@@ -145,25 +148,62 @@ class _InstallPageBodyState extends State<_InstallPageBody>
                       .marginOnly(left: em))
                 ],
               ).marginSymmetric(vertical: 2 * em),
-              Row(
-                children: [
-                  Obx(() => Checkbox(
-                      value: startmenu.value,
-                      onChanged: (b) {
-                        if (b != null) startmenu.value = b;
-                      })),
-                  Text(translate('Create start menu shortcuts'))
-                ],
+              TextButton(
+                onPressed: () => startmenu.value = !startmenu.value,
+                child: Row(
+                  children: [
+                    Obx(() => Checkbox(
+                        value: startmenu.value,
+                        onChanged: (b) {
+                          if (b != null) startmenu.value = b;
+                        })),
+                    RichText(
+                      text: TextSpan(
+                        text: translate('Create start menu shortcuts'),
+                        style: DefaultTextStyle.of(context).style,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              Row(
-                children: [
-                  Obx(() => Checkbox(
-                      value: desktopicon.value,
-                      onChanged: (b) {
-                        if (b != null) desktopicon.value = b;
-                      })),
-                  Text(translate('Create desktop icon'))
-                ],
+              TextButton(
+                onPressed: () => desktopicon.value = !desktopicon.value,
+                child: Row(
+                  children: [
+                    Obx(() => Checkbox(
+                        value: desktopicon.value,
+                        onChanged: (b) {
+                          if (b != null) desktopicon.value = b;
+                        })),
+                    RichText(
+                      text: TextSpan(
+                        text: translate('Create desktop icon'),
+                        style: DefaultTextStyle.of(context).style,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Offstage(
+                offstage: !Platform.isWindows,
+                child: TextButton(
+                  onPressed: () => driverCert.value = !driverCert.value,
+                  child: Row(
+                    children: [
+                      Obx(() => Checkbox(
+                          value: driverCert.value,
+                          onChanged: (b) {
+                            if (b != null) driverCert.value = b;
+                          })),
+                      RichText(
+                        text: TextSpan(
+                          text: translate('idd_driver_tip'),
+                          style: DefaultTextStyle.of(context).style,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
               GestureDetector(
                   onTap: () => launchUrlString('http://rustdesk.com/privacy'),
@@ -225,12 +265,47 @@ class _InstallPageBodyState extends State<_InstallPageBody>
   }
 
   void install() {
-    btnEnabled.value = false;
-    showProgress.value = true;
-    String args = '';
-    if (startmenu.value) args += ' startmenu';
-    if (desktopicon.value) args += ' desktopicon';
-    bind.installInstallMe(options: args, path: controller.text);
+    do_install() {
+      btnEnabled.value = false;
+      showProgress.value = true;
+      String args = '';
+      if (startmenu.value) args += ' startmenu';
+      if (desktopicon.value) args += ' desktopicon';
+      if (driverCert.value) args += ' driverCert';
+      bind.installInstallMe(options: args, path: controller.text);
+    }
+
+    if (driverCert.isTrue) {
+      final tag = 'install-info-install-cert-confirm';
+      final btns = [
+        dialogButton(
+          'Cancel',
+          onPressed: () => gFFI.dialogManager.dismissByTag(tag),
+          isOutline: true,
+        ),
+        dialogButton(
+          'OK',
+          onPressed: () {
+            gFFI.dialogManager.dismissByTag(tag);
+            do_install();
+          },
+          isOutline: false,
+        ),
+      ];
+      gFFI.dialogManager.show(
+        (setState, close) => CustomAlertDialog(
+          title: null,
+          content: SelectionArea(
+              child:
+                  msgboxContent('info', 'Warning', 'confirm_idd_driver_tip')),
+          actions: btns,
+          onCancel: close,
+        ),
+        tag: tag,
+      );
+    } else {
+      do_install();
+    }
   }
 
   void selectInstallPath() async {

@@ -14,7 +14,10 @@ const String kPeerPlatformAndroid = "Android";
 
 /// [kAppTypeMain] used by 'Desktop Main Page' , 'Mobile (Client and Server)', "Install Page"
 const String kAppTypeMain = "main";
+
+/// [kAppTypeConnectionManager] only for 'Desktop CM Page'
 const String kAppTypeConnectionManager = "cm";
+
 const String kAppTypeDesktopRemote = "remote";
 const String kAppTypeDesktopFileTransfer = "file transfer";
 const String kAppTypeDesktopPortForward = "port forward";

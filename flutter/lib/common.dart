@@ -368,7 +368,7 @@ class MyTheme {
 
   static void changeDarkMode(ThemeMode mode) async {
     Get.changeThemeMode(mode);
-    if (desktopType == DesktopType.main) {
+    if (desktopType == DesktopType.main || isAndroid || isIOS) {
       if (mode == ThemeMode.system) {
         await bind.mainSetLocalOption(key: kCommConfKeyTheme, value: '');
       } else {
@@ -946,7 +946,6 @@ Widget msgboxContent(String type, String title, String text) {
 void msgBoxCommon(OverlayDialogManager dialogManager, String title,
     Widget content, List<Widget> buttons,
     {bool hasCancel = true}) {
-  dialogManager.dismissAll();
   dialogManager.show((setState, close) => CustomAlertDialog(
         title: Text(
           translate(title),

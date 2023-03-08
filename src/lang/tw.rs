@@ -204,7 +204,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Warning", "警告"),
         ("Login screen using Wayland is not supported", "不支援使用 Wayland 的登入畫面"),
         ("Reboot required", "需要重新啟動"),
-        ("Unsupported display server ", "不支援顯示伺服器"),
+        ("Unsupported display server", "不支援顯示伺服器"),
         ("x11 expected", "預期 x11"),
         ("Port", "端口"),
         ("Settings", "設定"),
@@ -349,7 +349,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Security", "安全"),
         ("Theme", "主題"),
         ("Dark Theme", "暗黑主題"),
-        ("Light Theme", ""),
+        ("Light Theme", "明亮主題"),
         ("Dark", "黑暗"),
         ("Light", "明亮"),
         ("Follow System", "跟隨系統"),
@@ -461,6 +461,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Resolution", "分辨率"),
         ("No transfers in progress", ""),
         ("Set one-time password length", ""),
+        ("idd_driver_tip", ""),
+        ("confirm_idd_driver_tip", ""),
+        ("RDP Settings", ""),
         ("Sort by", ""),
     ].iter().cloned().collect();
 }

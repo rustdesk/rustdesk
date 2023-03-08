@@ -1108,6 +1108,12 @@ if exist \"{tmp_path}\\{app_name} Tray.lnk\" del /f /q \"{tmp_path}\\{app_name} 
     );
     let src_exe = std::env::current_exe()?.to_str().unwrap_or("").to_string();
 
+    let install_cert = if options.contains("driverCert") {
+        format!("\"{}\" --install-cert \"RustDeskIddDriver.cer\"", src_exe)
+    } else {
+        "".to_owned()
+    };
+
     let cmds = format!(
         "
 {uninstall_str}
@@ -1139,6 +1145,7 @@ sc create {app_name} binpath= \"\\\"{exe}\\\" --import-config \\\"{config_path}\
 sc start {app_name}
 sc stop {app_name}
 sc delete {app_name}
+{install_cert}
 {after_install}
 {sleep}
     ",
@@ -1159,6 +1166,7 @@ sc delete {app_name}
         shortcuts=shortcuts,
         config_path=Config::file().to_str().unwrap_or(""),
         lic=register_licence(),
+        install_cert=install_cert,
         after_install=get_after_install(&exe),
         sleep=if debug {
             "timeout 300"
@@ -1236,6 +1244,7 @@ fn get_uninstall(kill_self: bool) -> String {
 }
 
 pub fn uninstall_me(kill_self: bool) -> ResultType<()> {
+    allow_err!(cert::uninstall_certs());
     run_cmds(get_uninstall(kill_self), true, "uninstall")
 }
 
@@ -1901,4 +1910,178 @@ pub fn user_accessible_folder() -> ResultType<PathBuf> {
         bail!("no vaild user accessible folder");
     }
     Ok(dir)
+}
+
+#[inline]
+pub fn install_cert(cert_file: &str) -> ResultType<()> {
+    let exe_file = std::env::current_exe()?;
+    if let Some(cur_dir) = exe_file.parent() {
+        allow_err!(cert::install_cert(cur_dir.join(cert_file)));
+    } else {
+        bail!(
+            "Invalid exe parent for {}",
+            exe_file.to_string_lossy().as_ref()
+        );
+    }
+    Ok(())
+}
+
+mod cert {
+    use hbb_common::{allow_err, bail, log, ResultType};
+    use std::{path::Path, str::from_utf8};
+    use winapi::shared::{
+        minwindef::{BYTE, DWORD, TRUE},
+        ntdef::NULL,
+    };
+    use winapi::um::{
+        errhandlingapi::GetLastError,
+        wincrypt::{
+            CertCloseStore, CertEnumCertificatesInStore, CertNameToStrA, CertOpenSystemStoreA,
+            CryptHashCertificate, ALG_ID, CALG_SHA1, CERT_ID_SHA1_HASH, CERT_X500_NAME_STR,
+            PCCERT_CONTEXT,
+        },
+        winreg::HKEY_LOCAL_MACHINE,
+    };
+    use winreg::{
+        enums::{KEY_WRITE, REG_BINARY},
+        RegKey,
+    };
+
+    const ROOT_CERT_STORE_PATH: &str = "SOFTWARE\\Microsoft\\SystemCertificates\\ROOT\\Certificates\\";
+    const THUMBPRINT_ALG: ALG_ID = CALG_SHA1;
+    const THUMBPRINT_LEN: DWORD = 20;
+
+    #[inline]
+    unsafe fn compute_thumbprint(pb_encoded: *const BYTE, cb_encoded: DWORD) -> (Vec<u8>, String) {
+        let mut size = THUMBPRINT_LEN;
+        let mut thumbprint = [0u8; THUMBPRINT_LEN as usize];
+        if CryptHashCertificate(
+            0,
+            THUMBPRINT_ALG,
+            0,
+            pb_encoded,
+            cb_encoded,
+            thumbprint.as_mut_ptr(),
+            &mut size,
+        ) == TRUE
+        {
+            (thumbprint.to_vec(), hex::encode(thumbprint).to_ascii_uppercase())
+        } else {
+            (thumbprint.to_vec(), "".to_owned())
+        }
+    }
+
+    #[inline]
+    unsafe fn open_reg_cert_store() -> ResultType<RegKey> {
+        let hklm = winreg::RegKey::predef(HKEY_LOCAL_MACHINE);
+        Ok(hklm.open_subkey_with_flags(ROOT_CERT_STORE_PATH, KEY_WRITE)?)
+    }
+
+    // https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-gpef/6a9e35fa-2ac7-4c10-81e1-eabe8d2472f1
+    fn create_cert_blob(thumbprint: Vec<u8>, encoded: Vec<u8>) -> Vec<u8> {
+        let mut blob = Vec::new();
+
+        let mut property_id = (CERT_ID_SHA1_HASH as u32).to_le_bytes().to_vec();
+        let mut pro_reserved = [0x01, 0x00, 0x00, 0x00].to_vec();
+        let mut pro_length = (THUMBPRINT_LEN as u32).to_le_bytes().to_vec();
+        let mut pro_val = thumbprint;
+        blob.append(&mut property_id);
+        blob.append(&mut pro_reserved);
+        blob.append(&mut pro_length);
+        blob.append(&mut pro_val);
+
+        let mut blob_reserved = [0x20, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00].to_vec();
+        let mut blob_length = (encoded.len() as u32).to_le_bytes().to_vec();
+        let mut blob_val = encoded;
+        blob.append(&mut blob_reserved);
+        blob.append(&mut blob_length);
+        blob.append(&mut blob_val);
+
+        blob
+    }
+
+    pub fn install_cert<P: AsRef<Path>>(path: P) -> ResultType<()> {
+        let mut cert_bytes = std::fs::read(path)?;
+        unsafe {
+            let thumbprint = compute_thumbprint(cert_bytes.as_mut_ptr(), cert_bytes.len() as _);
+            log::debug!("Thumbprint of cert {}", &thumbprint.1);
+
+            let reg_cert_key = open_reg_cert_store()?;
+            let (cert_key, _) = reg_cert_key.create_subkey(&thumbprint.1)?;
+            let data = winreg::RegValue {
+                vtype: REG_BINARY,
+                bytes: create_cert_blob(thumbprint.0, cert_bytes),
+            };
+            cert_key.set_raw_value("Blob", &data)?;
+        }
+        Ok(())
+    }
+
+    fn get_thumbprints_to_rm() -> ResultType<Vec<String>> {
+        let issuers_to_rm = ["CN=\"WDKTestCert admin,133225435702113567\""];
+
+        let mut thumbprints = Vec::new();
+        let mut buf = [0u8; 1024];
+
+        unsafe {
+            let store_handle = CertOpenSystemStoreA(0 as _, "ROOT\0".as_ptr() as _);
+            if store_handle.is_null() {
+                bail!("Error opening certificate store: {}", GetLastError());
+            }
+
+            let mut cert_ctx: PCCERT_CONTEXT = CertEnumCertificatesInStore(store_handle, NULL as _);
+            while !cert_ctx.is_null() {
+                // https://stackoverflow.com/a/66432736
+                let cb_size = CertNameToStrA(
+                    (*cert_ctx).dwCertEncodingType,
+                    &mut ((*(*cert_ctx).pCertInfo).Issuer) as _,
+                    CERT_X500_NAME_STR,
+                    buf.as_mut_ptr() as _,
+                    buf.len() as _,
+                );
+                if cb_size != 1 {
+                    if let Ok(issuer) = from_utf8(&buf[..cb_size as _]) {
+                        for iss in issuers_to_rm.iter() {
+                            if issuer.contains(iss) {
+                                let (_, thumbprint) = compute_thumbprint(
+                                    (*cert_ctx).pbCertEncoded,
+                                    (*cert_ctx).cbCertEncoded,
+                                );
+                                if !thumbprint.is_empty() {
+                                    thumbprints.push(thumbprint);
+                                }
+                            }
+                        }
+                    }
+                }
+                cert_ctx = CertEnumCertificatesInStore(store_handle, cert_ctx);
+            }
+            CertCloseStore(store_handle, 0);
+        }
+
+        Ok(thumbprints)
+    }
+
+    pub fn uninstall_certs() -> ResultType<()> {
+        let thumbprints = get_thumbprints_to_rm()?;
+        let reg_cert_key = unsafe { open_reg_cert_store()? };
+        for thumbprint in thumbprints.iter() {
+            allow_err!(reg_cert_key.delete_subkey(thumbprint));
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_install_cert() {
+        println!("install driver cert: {:?}", cert::install_cert("RustDeskIddDriver.cer"));
+    }
+
+    #[test]
+    fn test_uninstall_cert() {
+        println!("uninstall driver certs: {:?}", cert::uninstall_certs());
+    }
 }

@@ -204,7 +204,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Warning", "警告"),
         ("Login screen using Wayland is not supported", "不支持使用 Wayland 登录界面"),
         ("Reboot required", "重启后才能生效"),
-        ("Unsupported display server ", "不支持当前显示服务器"),
+        ("Unsupported display server", "不支持当前显示服务器"),
         ("x11 expected", "请切换到 x11"),
         ("Port", "端口"),
         ("Settings", "设置"),
@@ -349,7 +349,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Security", "安全"),
         ("Theme", "主题"),
         ("Dark Theme", "暗黑主题"),
-        ("Light Theme", ""),
+        ("Light Theme", "明亮主题"),
         ("Dark", "黑暗"),
         ("Light", "明亮"),
         ("Follow System", "跟随系统"),
@@ -461,6 +461,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Resolution", "分辨率"),
         ("No transfers in progress", ""),
         ("Set one-time password length", ""),
+        ("idd_driver_tip", "安装虚拟显示器驱动，以便在没有连接显示器的情况下启动虚拟显示器进行控制。"),
+        ("confirm_idd_driver_tip", "安装虚拟显示器驱动的选项已勾选。请注意，测试证书将被安装以信任虚拟显示器驱动。测试证书仅会用于信任Rustdesk的驱动。"),
+        ("RDP Settings", ""),
         ("Sort by", ""),
     ].iter().cloned().collect();
 }

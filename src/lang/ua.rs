@@ -204,7 +204,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Warning", "Попередження"),
         ("Login screen using Wayland is not supported", "Вхід у систему з використанням Wayland не підтримується"),
         ("Reboot required", "Потрібне перезавантаження"),
-        ("Unsupported display server ", "Графічний сервер не підтримується"),
+        ("Unsupported display server", "Графічний сервер не підтримується"),
         ("x11 expected", "Очікується X11"),
         ("Port", "Порт"),
         ("Settings", "Налаштування"),
@@ -461,6 +461,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Resolution", ""),
         ("No transfers in progress", ""),
         ("Set one-time password length", ""),
+        ("idd_driver_tip", ""),
+        ("confirm_idd_driver_tip", ""),
+        ("RDP Settings", ""),
         ("Sort by", ""),
     ].iter().cloned().collect();
 }

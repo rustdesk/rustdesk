@@ -26,8 +26,14 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+/// tag "main" for [Desktop Main Page] and [Mobile (Client and Server)] (the mobile don't need multiple windows, only one global event stream is needed)
+/// tag "cm" only for [Desktop CM Page]
 pub(super) const APP_TYPE_MAIN: &str = "main";
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub(super) const APP_TYPE_CM: &str = "cm";
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub(super) const APP_TYPE_CM: &str = "main";
+
 pub(super) const APP_TYPE_DESKTOP_REMOTE: &str = "remote";
 pub(super) const APP_TYPE_DESKTOP_FILE_TRANSFER: &str = "file transfer";
 pub(super) const APP_TYPE_DESKTOP_PORT_FORWARD: &str = "port forward";

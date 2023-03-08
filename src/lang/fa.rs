@@ -204,7 +204,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Warning", "هشدار"),
         ("Login screen using Wayland is not supported", "پشتیبانی نمی شود Wayland ورود به سیستم با استفاده از "),
         ("Reboot required", "راه اندازی مجدد مورد نیاز است"),
-        ("Unsupported display server ", "سرور تصویر پشتیبانی نشده است"),
+        ("Unsupported display server", "سرور تصویر پشتیبانی نشده است"),
         ("x11 expected", ""),
         ("Port", "پورت"),
         ("Settings", "تنظیمات"),
@@ -461,6 +461,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Resolution", "وضوح"),
         ("No transfers in progress", "هیچ انتقالی در حال انجام نیست"),
         ("Set one-time password length", "طول رمز یکبار مصرف را تعیین کنید"),
+        ("idd_driver_tip", ""),
+        ("confirm_idd_driver_tip", ""),
+        ("RDP Settings", ""),
         ("Sort by", ""),
     ].iter().cloned().collect();
 }
