@@ -461,8 +461,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Resolution", "分辨率"),
         ("No transfers in progress", ""),
         ("Set one-time password length", ""),
-        ("Install driver cert (test cert)", "安装驱动证书 (测试证书)"),
-        ("Virtual display need", "虚拟显示器需要"),
-        ("instsall_cert_tip", "已选择安装驱动，是否继续？")
+        ("idd_driver_tip", "安装虚拟显示器驱动，以便在没有连接显示器的情况下启动虚拟显示器进行控制。"),
+        ("confirm_idd_driver_tip", "安装虚拟显示器驱动的选项已勾选。请注意，测试证书将被安装以信任虚拟显示器驱动。测试证书仅会用于信任Rustdesk的驱动。")
     ].iter().cloned().collect();
 }

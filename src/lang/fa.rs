@@ -461,8 +461,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Resolution", "وضوح"),
         ("No transfers in progress", "هیچ انتقالی در حال انجام نیست"),
         ("Set one-time password length", "طول رمز یکبار مصرف را تعیین کنید"),
-        ("Install driver cert (test cert)", ""),
-        ("Virtual display need", ""),
-        ("instsall_cert_tip", "")
+        ("idd_driver_tip", ""),
+        ("confirm_idd_driver_tip", "")
     ].iter().cloned().collect();
 }

@@ -148,38 +148,61 @@ class _InstallPageBodyState extends State<_InstallPageBody>
                       .marginOnly(left: em))
                 ],
               ).marginSymmetric(vertical: 2 * em),
-              Row(
-                children: [
-                  Obx(() => Checkbox(
-                      value: startmenu.value,
-                      onChanged: (b) {
-                        if (b != null) startmenu.value = b;
-                      })),
-                  Text(translate('Create start menu shortcuts'))
-                ],
-              ),
-              Row(
-                children: [
-                  Obx(() => Checkbox(
-                      value: desktopicon.value,
-                      onChanged: (b) {
-                        if (b != null) desktopicon.value = b;
-                      })),
-                  Text(translate('Create desktop icon'))
-                ],
-              ),
-              Offstage(
-                offstage: !Platform.isWindows,
+              TextButton(
+                onPressed: () => startmenu.value = !startmenu.value,
                 child: Row(
                   children: [
                     Obx(() => Checkbox(
-                        value: driverCert.value,
+                        value: startmenu.value,
                         onChanged: (b) {
-                          if (b != null) driverCert.value = b;
+                          if (b != null) startmenu.value = b;
                         })),
-                    Text(
-                        '${translate('Install driver cert (test cert)')} ${translate('Virtual display need')}')
+                    RichText(
+                      text: TextSpan(
+                        text: translate('Create start menu shortcuts'),
+                        style: DefaultTextStyle.of(context).style,
+                      ),
+                    ),
                   ],
+                ),
+              ),
+              TextButton(
+                onPressed: () => desktopicon.value = !desktopicon.value,
+                child: Row(
+                  children: [
+                    Obx(() => Checkbox(
+                        value: desktopicon.value,
+                        onChanged: (b) {
+                          if (b != null) desktopicon.value = b;
+                        })),
+                    RichText(
+                      text: TextSpan(
+                        text: translate('Create desktop icon'),
+                        style: DefaultTextStyle.of(context).style,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Offstage(
+                offstage: !Platform.isWindows,
+                child: TextButton(
+                  onPressed: () => driverCert.value = !driverCert.value,
+                  child: Row(
+                    children: [
+                      Obx(() => Checkbox(
+                          value: driverCert.value,
+                          onChanged: (b) {
+                            if (b != null) driverCert.value = b;
+                          })),
+                      RichText(
+                        text: TextSpan(
+                          text: translate('idd_driver_tip'),
+                          style: DefaultTextStyle.of(context).style,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               GestureDetector(
@@ -273,7 +296,8 @@ class _InstallPageBodyState extends State<_InstallPageBody>
         (setState, close) => CustomAlertDialog(
           title: null,
           content: SelectionArea(
-              child: msgboxContent('info', '', 'instsall_cert_tip')),
+              child:
+                  msgboxContent('info', 'Warning', 'confirm_idd_driver_tip')),
           actions: btns,
           onCancel: close,
         ),
