@@ -73,7 +73,6 @@ class FileModel {
 
   Future<void> close() async {
     parent.target?.dialogManager.dismissAll();
-    jobController.close();
     await localController.close();
     await remoteController.close();
   }
@@ -607,11 +606,6 @@ class JobController {
   // JobProgress? getJob(int id) {
   //   return jobTable.firstWhere((element) => element.id == id);
   // }
-
-  void close() {
-    jobTable.close();
-    jobTable.clear();
-  }
 
   // return jobID
   int add(Entry from, bool isRemoteToLocal) {
