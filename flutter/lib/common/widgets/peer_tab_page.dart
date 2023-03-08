@@ -435,7 +435,6 @@ class PeerSortDropdown extends StatefulWidget {
 }
 
 class _PeerSortDropdownState extends State<PeerSortDropdown> {
-  final List<String> sort_names = ['Remote ID', 'Username', "Status"];
   String _sortType = peerSort.value;
 
   @override
@@ -449,7 +448,9 @@ class _PeerSortDropdownState extends State<PeerSortDropdown> {
       decoration: deco,
       child: DropdownButtonHideUnderline(
         child: DropdownButton2<String>(
-            value: sort_names.contains(_sortType) ? _sortType : sort_names[0],
+            value: PeerSortType.values.contains(_sortType)
+                ? _sortType
+                : PeerSortType.remoteId,
             onChanged: (v) async {
               if (v != null) {
                 setState(() => _sortType = v);
@@ -480,7 +481,7 @@ class _PeerSortDropdownState extends State<PeerSortDropdown> {
                 ),
                 enabled: false,
               ),
-              ...sort_names
+              ...PeerSortType.values
                   .map<DropdownMenuItem<String>>(
                     (String value) => DropdownMenuItem<String>(
                       value: value,
