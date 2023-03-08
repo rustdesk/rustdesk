@@ -64,6 +64,7 @@ errno = "0.2.8"
 rdev = { git = "https://github.com/fufesou/rdev" }
 url = { version = "2.1", features = ["serde"] }
 dlopen = "0.1"
+hex = "0.4.3"
 
 reqwest = { version = "0.11", features = ["blocking", "json", "rustls-tls"], default-features=false }
 chrono = "0.4.23"
@@ -87,7 +88,7 @@ system_shutdown = "3.0.0"
 [target.'cfg(target_os = "windows")'.dependencies]
 trayicon = { git = "https://github.com/open-trade/trayicon-rs", features = ["winit"] }
 winit = "0.26"
-winapi = { version = "0.3", features = ["winuser"] }
+winapi = { version = "0.3", features = ["winuser", "wincrypt"] }
 winreg = "0.10"
 windows-service = "0.4"
 virtual_display = { path = "libs/virtual_display" }
