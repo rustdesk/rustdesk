@@ -462,6 +462,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("No transfers in progress", ""),
         ("Set one-time password length", ""),
         ("Install driver cert(test cert)", "安装驱动证书(测试证书)"),
-        ("Virtual display requirement", "虚拟显示器需要")
+        ("Virtual display requirement", "虚拟显示器需"),
+        ("Continue with installing cert is checked.", "安装证书已选择，是否继续")
     ].iter().cloned().collect();
 }
