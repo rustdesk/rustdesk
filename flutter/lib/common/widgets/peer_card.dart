@@ -1115,7 +1115,7 @@ void _rdpDialog(String id) async {
     }
 
     return CustomAlertDialog(
-      title: Text('RDP ${translate('Settings')}'),
+      title: Text(translate('RDP Settings')),
       content: ConstrainedBox(
         constraints: const BoxConstraints(minWidth: 500),
         child: Column(

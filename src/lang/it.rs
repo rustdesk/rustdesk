@@ -462,6 +462,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("No transfers in progress", "Nessun trasferimento in corso"),
         ("Set one-time password length", "Imposta la lunghezza della password monouso"),
         ("idd_driver_tip", ""),
-        ("confirm_idd_driver_tip", "")
+        ("confirm_idd_driver_tip", ""),
+        ("RDP Settings", ""),
     ].iter().cloned().collect();
 }
