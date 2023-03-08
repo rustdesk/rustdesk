@@ -435,7 +435,17 @@ class PeerSortDropdown extends StatefulWidget {
 }
 
 class _PeerSortDropdownState extends State<PeerSortDropdown> {
-  String _sortType = peerSort.value;
+  @override
+  void initState() {
+    if (!PeerSortType.values.contains(peerSort.value)) {
+      peerSort.value = PeerSortType.remoteId;
+      bind.setLocalFlutterConfig(
+        k: "peer-sorting",
+        v: peerSort.value,
+      );
+    }
+    super.initState();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -448,17 +458,13 @@ class _PeerSortDropdownState extends State<PeerSortDropdown> {
       decoration: deco,
       child: DropdownButtonHideUnderline(
         child: DropdownButton2<String>(
-            value: PeerSortType.values.contains(_sortType)
-                ? _sortType
-                : PeerSortType.remoteId,
             onChanged: (v) async {
               if (v != null) {
-                setState(() => _sortType = v);
+                setState(() => peerSort.value = v);
                 await bind.setLocalFlutterConfig(
                   k: "peer-sorting",
-                  v: _sortType,
+                  v: peerSort.value,
                 );
-                peerSort.value = _sortType;
               }
             },
             customButton: Icon(
@@ -488,7 +494,7 @@ class _PeerSortDropdownState extends State<PeerSortDropdown> {
                       child: Row(
                         children: [
                           Icon(
-                            value == _sortType
+                            value == peerSort.value
                                 ? Icons.radio_button_checked_rounded
                                 : Icons.radio_button_off_rounded,
                             size: 18,
