@@ -32,34 +32,37 @@ class JobID {
   }
 }
 
-class SortStyle {
-  var by = SortBy.name;
-  var ascending = true;
-}
+typedef GetSessionID = String Function();
 
 class FileModel {
   final WeakReference<FFI> parent;
-  late final String sessionID;
+  // late final String sessionID;
+  late final FileFetcher fileFetcher;
+  late final JobController jobController;
+
+  late final FileController localController;
+  late final FileController remoteController;
+
+  late final GetSessionID getSessionID;
+  String get sessionID => getSessionID();
+
   FileModel(this.parent) {
-    sessionID = parent.target?.id ?? "";
+    getSessionID = () => parent.target?.id ?? "";
+    fileFetcher = FileFetcher(getSessionID);
+    jobController = JobController(getSessionID);
+    localController = FileController(
+        isLocal: true,
+        getSessionID: getSessionID,
+        dialogManager: parent.target?.dialogManager,
+        jobController: jobController,
+        fileFetcher: fileFetcher);
+    remoteController = FileController(
+        isLocal: false,
+        getSessionID: getSessionID,
+        dialogManager: parent.target?.dialogManager,
+        jobController: jobController,
+        fileFetcher: fileFetcher);
   }
-
-  late final fileFetcher = FileFetcher(sessionID);
-  late final jobController = JobController(sessionID);
-
-  late final localController = FileController(
-      isLocal: true,
-      sessionID: sessionID,
-      dialogManager: parent.target?.dialogManager,
-      jobController: jobController,
-      fileFetcher: fileFetcher);
-
-  late final remoteController = FileController(
-      isLocal: false,
-      sessionID: sessionID,
-      dialogManager: parent.target?.dialogManager,
-      jobController: jobController,
-      fileFetcher: fileFetcher);
 
   Future<void> onReady() async {
     await localController.onReady();
@@ -188,7 +191,8 @@ class FileModel {
 
 class FileController {
   final bool isLocal;
-  final String sessionID;
+  final GetSessionID getSessionID;
+  String get sessionID => getSessionID();
 
   final FileFetcher fileFetcher;
 
@@ -196,13 +200,14 @@ class FileController {
   final directory = FileDirectory().obs;
 
   final history = RxList<String>.empty(growable: true);
-  final sortStyle = SortStyle().obs;
+  final sortBy = SortBy.name.obs;
+  final sortAscending = true.obs;
   final JobController jobController;
   final OverlayDialogManager? dialogManager;
 
   FileController(
       {required this.isLocal,
-      required this.sessionID,
+      required this.getSessionID,
       required this.dialogManager,
       required this.jobController,
       required this.fileFetcher});
@@ -265,8 +270,8 @@ class FileController {
   }
 
   void changeSortStyle(SortBy sort, {bool? isLocal, bool ascending = true}) {
-    sortStyle.value.by = sort;
-    sortStyle.value.ascending = ascending;
+    sortBy.value = sort;
+    sortAscending.value = ascending;
     directory.value.changeSortStyle(sort, ascending: ascending);
   }
 
@@ -297,7 +302,7 @@ class FileController {
     }
     try {
       final fd = await fileFetcher.fetchDirectory(path, isLocal, showHidden);
-      fd.format(isWindows, sort: sortStyle.value.by);
+      fd.format(isWindows, sort: sortBy.value);
       directory.value = fd;
     } catch (e) {
       debugPrint("Failed to openDirectory $path: $e");
@@ -342,7 +347,7 @@ class FileController {
   void initDirAndHome(Map<String, dynamic> evt) {
     try {
       final fd = FileDirectory.fromJson(jsonDecode(evt['value']));
-      fd.format(options.value.isWindows, sort: sortStyle.value.by);
+      fd.format(options.value.isWindows, sort: sortBy.value);
       if (fd.id > 0) {
         final jobIndex = jobController.getJob(fd.id);
         if (jobIndex != -1) {
@@ -575,9 +580,10 @@ class JobController {
   static final JobID jobID = JobID();
   final jobTable = RxList<JobProgress>.empty(growable: true);
   final jobResultListener = JobResultListener<Map<String, dynamic>>();
-  final String sessionID;
+  final GetSessionID getSessionID;
+  String get sessionID => getSessionID();
 
-  JobController(this.sessionID);
+  JobController(this.getSessionID);
 
   int getJob(int id) {
     return jobTable.indexWhere((element) => element.id == id);
@@ -764,9 +770,10 @@ class FileFetcher {
   Map<String, Completer<FileDirectory>> remoteTasks = {};
   Map<int, Completer<FileDirectory>> readRecursiveTasks = {};
 
-  String id;
+  final GetSessionID getSessionID;
+  String get sessionID => getSessionID();
 
-  FileFetcher(this.id);
+  FileFetcher(this.getSessionID);
 
   Future<FileDirectory> registerReadTask(bool isLocal, String path) {
     // final jobs = isLocal?localJobs:remoteJobs; // maybe we will use read local dir async later
@@ -829,12 +836,12 @@ class FileFetcher {
     try {
       if (isLocal) {
         final res = await bind.sessionReadLocalDirSync(
-            id: id ?? "", path: path, showHidden: showHidden);
+            id: sessionID ?? "", path: path, showHidden: showHidden);
         final fd = FileDirectory.fromJson(jsonDecode(res));
         return fd;
       } else {
         await bind.sessionReadRemoteDir(
-            id: id ?? "", path: path, includeHidden: showHidden);
+            id: sessionID ?? "", path: path, includeHidden: showHidden);
         return registerReadTask(isLocal, path);
       }
     } catch (e) {
@@ -847,7 +854,7 @@ class FileFetcher {
     // TODO test Recursive is show hidden default?
     try {
       await bind.sessionReadDirRecursive(
-          id: id,
+          id: sessionID,
           actId: actID,
           path: path,
           isRemote: !isLocal,
@@ -1032,7 +1039,7 @@ class SelectedItems {
 
   int get length => _items.length;
 
-  SelectedItems(this.isLocal);
+  SelectedItems({required this.isLocal});
 
   add(Entry e) {
     if (e.isDrive) return;

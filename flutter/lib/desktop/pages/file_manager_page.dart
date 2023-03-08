@@ -69,6 +69,7 @@ class _FileManagerPageState extends State<FileManagerPage>
   late FFI _ffi;
 
   FileModel get model => _ffi.fileModel;
+  JobController get jobController => model.jobController;
 
   @override
   void initState() {
@@ -84,7 +85,6 @@ class _FileManagerPageState extends State<FileManagerPage>
       Wakelock.enable();
     }
     debugPrint("File manager page init success with id ${widget.id}");
-    model.onDirChanged = breadCrumbScrollToEnd;
     _ffi.dialogManager.setOverlayState(_overlayKeyState);
   }
 
@@ -107,31 +107,24 @@ class _FileManagerPageState extends State<FileManagerPage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    // TODO
-    final localController = FileController(isLocal: true);
-    final remoteController = FileController(isLocal: false);
     return Overlay(key: _overlayKeyState.key, initialEntries: [
       OverlayEntry(builder: (_) {
-        return ChangeNotifierProvider.value(
-            value: _ffi.fileModel,
-            child: Consumer<FileModel>(builder: (context, model, child) {
-              return Scaffold(
-                backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-                body: Row(
-                  children: [
-                    Flexible(
-                        flex: 3,
-                        child: dropArea(FileManagerView(
-                            localController, _ffi, _mouseFocusScope))),
-                    Flexible(
-                        flex: 3,
-                        child: dropArea(FileManagerView(
-                            remoteController, _ffi, _mouseFocusScope))),
-                    Flexible(flex: 2, child: statusList())
-                  ],
-                ),
-              );
-            }));
+        return Scaffold(
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+          body: Row(
+            children: [
+              Flexible(
+                  flex: 3,
+                  child: dropArea(FileManagerView(
+                      model.localController, _ffi, _mouseFocusScope))),
+              Flexible(
+                  flex: 3,
+                  child: dropArea(FileManagerView(
+                      model.remoteController, _ffi, _mouseFocusScope))),
+              Flexible(flex: 2, child: statusList())
+            ],
+          ),
+        );
       })
     ]);
   }
@@ -169,7 +162,7 @@ class _FileManagerPageState extends State<FileManagerPage>
       child: Container(
         margin: const EdgeInsets.only(top: 16.0, bottom: 16.0, right: 16.0),
         padding: const EdgeInsets.all(8.0),
-        child: model.jobTable.isEmpty
+        child: jobController.jobTable.isEmpty
             ? generateCard(
                 Center(
                   child: Column(
@@ -195,7 +188,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                 () => ListView.builder(
                   controller: ScrollController(),
                   itemBuilder: (BuildContext context, int index) {
-                    final item = model.jobTable[index];
+                    final item = jobController.jobTable[index];
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 5),
                       child: generateCard(
@@ -206,7 +199,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
                                 Transform.rotate(
-                                  angle: item.isRemote ? pi : 0,
+                                  angle: item.isRemoteToLocal ? pi : 0,
                                   child: SvgPicture.asset(
                                     "assets/arrow.svg",
                                     color: Theme.of(context)
@@ -293,7 +286,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                                       offstage: item.state != JobState.paused,
                                       child: MenuButton(
                                         onPressed: () {
-                                          model.resumeJob(item.id);
+                                          jobController.resumeJob(item.id);
                                         },
                                         child: SvgPicture.asset(
                                           "assets/refresh.svg",
@@ -310,8 +303,8 @@ class _FileManagerPageState extends State<FileManagerPage>
                                         color: Colors.white,
                                       ),
                                       onPressed: () {
-                                        model.jobTable.removeAt(index);
-                                        model.cancelJob(item.id);
+                                        jobController.jobTable.removeAt(index);
+                                        jobController.cancelJob(item.id);
                                       },
                                       color: MyTheme.accent,
                                       hoverColor: MyTheme.accent80,
@@ -325,7 +318,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                       ),
                     );
                   },
-                  itemCount: model.jobTable.length,
+                  itemCount: jobController.jobTable.length,
                 ),
               ),
       ),
@@ -337,18 +330,15 @@ class _FileManagerPageState extends State<FileManagerPage>
       // ignore local
       return;
     }
-    var items = SelectedItems();
+    final items = SelectedItems(isLocal: false);
     for (var file in details.files) {
       final f = File(file.path);
-      items.add(
-          true,
-          Entry()
-            ..path = file.path
-            ..name = file.name
-            ..size =
-                FileSystemEntity.isDirectorySync(f.path) ? 0 : f.lengthSync());
+      items.add(Entry()
+        ..path = file.path
+        ..name = file.name
+        ..size = FileSystemEntity.isDirectorySync(f.path) ? 0 : f.lengthSync());
     }
-    model.sendFiles(items, isRemote: false);
+    model.remoteController.sendFiles(items);
   }
 }
 
@@ -364,7 +354,6 @@ class FileManagerView extends StatefulWidget {
 }
 
 class _FileManagerViewState extends State<FileManagerView> {
-  final _selectedItems = SelectedItems();
   final _locationStatus = LocationStatus.bread.obs;
   final _locationNode = FocusNode();
   final _locationBarKey = GlobalKey();
@@ -375,6 +364,8 @@ class _FileManagerViewState extends State<FileManagerView> {
   final _nameColWidth = kDesktopFileTransferNameColWidth.obs;
   final _modifiedColWidth = kDesktopFileTransferModifiedColWidth.obs;
   final _fileListScrollController = ScrollController();
+
+  late final _selectedItems = SelectedItems(isLocal: isLocal);
 
   /// [_lastClickTime], [_lastClickEntry] help to handle double click
   var _lastClickTime =
@@ -390,6 +381,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     super.initState();
     // register location listener
     _locationNode.addListener(onLocationFocusChanged);
+    controller.directory.listen((e) => breadCrumbScrollToEnd());
   }
 
   @override
@@ -508,7 +500,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                     hoverColor: Theme.of(context).hoverColor,
                     onPressed: () {
                       _selectedItems.clear();
-                      model.goBack(isLocal: isLocal);
+                      controller.goBack();
                     },
                   ),
                   MenuButton(
@@ -523,7 +515,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                     hoverColor: Theme.of(context).hoverColor,
                     onPressed: () {
                       _selectedItems.clear();
-                      model.goToParentDirectory(isLocal: isLocal);
+                      controller.goToParentDirectory();
                     },
                   ),
                 ],
@@ -560,8 +552,8 @@ class _FileManagerViewState extends State<FileManagerView> {
                                 Expanded(
                                     child: _locationStatus.value ==
                                             LocationStatus.bread
-                                        ? buildBread(isLocal)
-                                        : buildPathLocation(isLocal)),
+                                        ? buildBread()
+                                        : buildPathLocation()),
                               ],
                             ),
                           ),
@@ -617,7 +609,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                   left: 3,
                 ),
                 onPressed: () {
-                  model.refresh(isLocal: isLocal);
+                  controller.refresh();
                 },
                 child: SvgPicture.asset(
                   "assets/refresh.svg",
@@ -641,7 +633,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                         right: 3,
                       ),
                       onPressed: () {
-                        model.goHome(isLocal: isLocal);
+                        controller.goToHomeDirectory();
                       },
                       child: SvgPicture.asset(
                         "assets/home.svg",
@@ -656,12 +648,11 @@ class _FileManagerViewState extends State<FileManagerView> {
                         _ffi.dialogManager.show((setState, close) {
                           submit() {
                             if (name.value.text.isNotEmpty) {
-                              model.createDir(
-                                  PathUtil.join(
-                                      model.getCurrentDir(isLocal).path,
-                                      name.value.text,
-                                      model.getCurrentIsWindows(isLocal)),
-                                  isLocal: isLocal);
+                              controller.createDir(PathUtil.join(
+                                controller.directory.value.path,
+                                name.value.text,
+                                controller.options.value.isWindows,
+                              ));
                               close();
                             }
                           }
@@ -722,8 +713,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                     MenuButton(
                       onPressed: validItems(_selectedItems)
                           ? () async {
-                              await (model.removeAction(_selectedItems,
-                                  isLocal: isLocal));
+                              await (controller.removeAction(_selectedItems));
                               _selectedItems.clear();
                             }
                           : null,
@@ -751,7 +741,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                 ),
                 onPressed: validItems(_selectedItems)
                     ? () {
-                        model.sendFiles(_selectedItems, isRemote: !isLocal);
+                        controller.sendFiles(_selectedItems);
                         _selectedItems.clear();
                       }
                     : null,
@@ -814,10 +804,10 @@ class _FileManagerViewState extends State<FileManagerView> {
         switchType: SwitchType.scheckbox,
         text: translate("Show Hidden Files"),
         getter: () async {
-          return model.getCurrentShowHidden(isLocal);
+          return controller.options.value.isWindows;
         },
         setter: (bool v) async {
-          model.toggleShowHidden(local: isLocal);
+          controller.toggleShowHidden();
         },
         padding: kDesktopMenuPadding,
         dismissOnClicked: true,
@@ -825,7 +815,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       MenuEntryButton(
           childBuilder: (style) => Text(translate("Select All"), style: style),
           proc: () => setState(() =>
-              _selectedItems.selectAll(model.getCurrentDir(isLocal).entries)),
+              _selectedItems.selectAll(controller.directory.value.entries)),
           padding: kDesktopMenuPadding,
           dismissOnClicked: true),
       MenuEntryButton(
@@ -872,7 +862,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   Widget _buildFileList(
       BuildContext context, bool isLocal, ScrollController scrollController) {
-    final fd = model.getCurrentDir(isLocal);
+    final fd = controller.directory.value;
     final entries = fd.entries;
 
     return ListSearchActionListener(
@@ -919,161 +909,155 @@ class _FileManagerViewState extends State<FileManagerView> {
         _jumpToEntry(isLocal, searchResult.first, scrollController,
             kDesktopFileTransferRowHeight);
       },
-      child: ObxValue<RxString>(
-        (searchText) {
-          final filteredEntries = searchText.isNotEmpty
-              ? entries.where((element) {
-                  return element.name.contains(searchText.value);
-                }).toList(growable: false)
-              : entries;
-          final rows = filteredEntries.map((entry) {
-            final sizeStr =
-                entry.isFile ? readableFileSize(entry.size.toDouble()) : "";
-            final lastModifiedStr = entry.isDrive
-                ? " "
-                : "${entry.lastModified().toString().replaceAll(".000", "")}   ";
-            final isSelected = _selectedItems.contains(entry);
-            return Padding(
-              padding: EdgeInsets.symmetric(vertical: 1),
-              child: Container(
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? Theme.of(context).hoverColor
-                        : Theme.of(context).cardColor,
-                    borderRadius: BorderRadius.all(
-                      Radius.circular(5.0),
-                    ),
+      child: Obx(() {
+        final entries = controller.directory.value.entries;
+        final filteredEntries = _searchText.isNotEmpty
+            ? entries.where((element) {
+                return element.name.contains(_searchText.value);
+              }).toList(growable: false)
+            : entries;
+        final rows = filteredEntries.map((entry) {
+          final sizeStr =
+              entry.isFile ? readableFileSize(entry.size.toDouble()) : "";
+          final lastModifiedStr = entry.isDrive
+              ? " "
+              : "${entry.lastModified().toString().replaceAll(".000", "")}   ";
+          final isSelected = _selectedItems.contains(entry);
+          return Padding(
+            padding: EdgeInsets.symmetric(vertical: 1),
+            child: Container(
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? Theme.of(context).hoverColor
+                      : Theme.of(context).cardColor,
+                  borderRadius: BorderRadius.all(
+                    Radius.circular(5.0),
                   ),
-                  key: ValueKey(entry.name),
-                  height: kDesktopFileTransferRowHeight,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      Expanded(
-                        child: InkWell(
-                          child: Row(
-                            children: [
-                              GestureDetector(
-                                child: Obx(
-                                  () => Container(
-                                      width: _nameColWidth.value,
-                                      child: Tooltip(
-                                        waitDuration:
-                                            Duration(milliseconds: 500),
-                                        message: entry.name,
-                                        child: Row(children: [
-                                          entry.isDrive
-                                              ? Image(
-                                                      image: iconHardDrive,
-                                                      fit: BoxFit.scaleDown,
-                                                      color: Theme.of(context)
-                                                          .iconTheme
-                                                          .color
-                                                          ?.withOpacity(0.7))
-                                                  .paddingAll(4)
-                                              : SvgPicture.asset(
-                                                  entry.isFile
-                                                      ? "assets/file.svg"
-                                                      : "assets/folder.svg",
-                                                  color: Theme.of(context)
-                                                      .tabBarTheme
-                                                      .labelColor,
-                                                ),
-                                          Expanded(
-                                              child: Text(
-                                                  entry.name.nonBreaking,
-                                                  overflow:
-                                                      TextOverflow.ellipsis))
-                                        ]),
+                ),
+                key: ValueKey(entry.name),
+                height: kDesktopFileTransferRowHeight,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    Expanded(
+                      child: InkWell(
+                        child: Row(
+                          children: [
+                            GestureDetector(
+                              child: Obx(
+                                () => Container(
+                                    width: _nameColWidth.value,
+                                    child: Tooltip(
+                                      waitDuration: Duration(milliseconds: 500),
+                                      message: entry.name,
+                                      child: Row(children: [
+                                        entry.isDrive
+                                            ? Image(
+                                                    image: iconHardDrive,
+                                                    fit: BoxFit.scaleDown,
+                                                    color: Theme.of(context)
+                                                        .iconTheme
+                                                        .color
+                                                        ?.withOpacity(0.7))
+                                                .paddingAll(4)
+                                            : SvgPicture.asset(
+                                                entry.isFile
+                                                    ? "assets/file.svg"
+                                                    : "assets/folder.svg",
+                                                color: Theme.of(context)
+                                                    .tabBarTheme
+                                                    .labelColor,
+                                              ),
+                                        Expanded(
+                                            child: Text(entry.name.nonBreaking,
+                                                overflow:
+                                                    TextOverflow.ellipsis))
+                                      ]),
+                                    )),
+                              ),
+                              onTap: () {
+                                final items = _selectedItems;
+                                // handle double click
+                                if (_checkDoubleClick(entry)) {
+                                  controller.openDirectory(entry.path);
+                                  items.clear();
+                                  return;
+                                }
+                                _onSelectedChanged(
+                                    items, filteredEntries, entry, isLocal);
+                              },
+                            ),
+                            SizedBox(
+                              width: 2.0,
+                            ),
+                            GestureDetector(
+                              child: Obx(
+                                () => SizedBox(
+                                  width: _modifiedColWidth.value,
+                                  child: Tooltip(
+                                      waitDuration: Duration(milliseconds: 500),
+                                      message: lastModifiedStr,
+                                      child: Text(
+                                        lastModifiedStr,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: MyTheme.darkGray,
+                                        ),
                                       )),
                                 ),
-                                onTap: () {
-                                  final items = _selectedItems;
-                                  // handle double click
-                                  if (_checkDoubleClick(entry)) {
-                                    openDirectory(entry.path, isLocal: isLocal);
-                                    items.clear();
-                                    return;
-                                  }
-                                  _onSelectedChanged(
-                                      items, filteredEntries, entry, isLocal);
-                                },
                               ),
-                              SizedBox(
-                                width: 2.0,
-                              ),
-                              GestureDetector(
-                                child: Obx(
-                                  () => SizedBox(
-                                    width: _modifiedColWidth.value,
-                                    child: Tooltip(
-                                        waitDuration:
-                                            Duration(milliseconds: 500),
-                                        message: lastModifiedStr,
-                                        child: Text(
-                                          lastModifiedStr,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: MyTheme.darkGray,
-                                          ),
-                                        )),
+                            ),
+                            // Divider from header.
+                            SizedBox(
+                              width: 2.0,
+                            ),
+                            Expanded(
+                              // width: 100,
+                              child: GestureDetector(
+                                child: Tooltip(
+                                  waitDuration: Duration(milliseconds: 500),
+                                  message: sizeStr,
+                                  child: Text(
+                                    sizeStr,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                        fontSize: 10, color: MyTheme.darkGray),
                                   ),
                                 ),
                               ),
-                              // Divider from header.
-                              SizedBox(
-                                width: 2.0,
-                              ),
-                              Expanded(
-                                // width: 100,
-                                child: GestureDetector(
-                                  child: Tooltip(
-                                    waitDuration: Duration(milliseconds: 500),
-                                    message: sizeStr,
-                                    child: Text(
-                                      sizeStr,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                          fontSize: 10,
-                                          color: MyTheme.darkGray),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  )),
-            );
-          }).toList(growable: false);
-
-          return Column(
-            children: [
-              // Header
-              Row(
-                children: [
-                  Expanded(child: _buildFileBrowserHeader(context, isLocal)),
-                ],
-              ),
-              // Body
-              Expanded(
-                child: ListView.builder(
-                  controller: scrollController,
-                  itemExtent: kDesktopFileTransferRowHeight,
-                  itemBuilder: (context, index) {
-                    return rows[index];
-                  },
-                  itemCount: rows.length,
-                ),
-              ),
-            ],
+                    ),
+                  ],
+                )),
           );
-        },
-        _searchText,
-      ),
+        }).toList(growable: false);
+
+        return Column(
+          children: [
+            // Header
+            Row(
+              children: [
+                Expanded(child: _buildFileBrowserHeader(context, isLocal)),
+              ],
+            ),
+            // Body
+            Expanded(
+              child: ListView.builder(
+                controller: scrollController,
+                itemExtent: kDesktopFileTransferRowHeight,
+                itemBuilder: (context, index) {
+                  return rows[index];
+                },
+                itemCount: rows.length,
+              ),
+            ),
+          ],
+        );
+      }),
     );
   }
 
@@ -1084,7 +1068,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   void _jumpToEntry(bool isLocal, Entry entry,
       ScrollController scrollController, double rowHeight) {
-    final entries = model.getCurrentDir(isLocal).entries;
+    final entries = controller.directory.value.entries;
     final index = entries.indexOf(entry);
     if (index == -1) {
       debugPrint("entry is not valid: ${entry.path}");
@@ -1101,7 +1085,7 @@ class _FileManagerViewState extends State<FileManagerView> {
         scrollController.position.maxScrollExtent);
     scrollController.jumpTo(offset);
     setState(() {
-      selectedEntries.add(isLocal, searchResult.first);
+      selectedEntries.add(searchResult.first);
       debugPrint("focused on ${searchResult.first.name}");
     });
   }
@@ -1116,7 +1100,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       if (selectedItems.contains(entry)) {
         selectedItems.remove(entry);
       } else {
-        selectedItems.add(isLocal, entry);
+        selectedItems.add(entry);
       }
     } else if (isShiftDown) {
       final List<int> indexGroup = [];
@@ -1130,10 +1114,10 @@ class _FileManagerViewState extends State<FileManagerView> {
       selectedItems.clear();
       entries
           .getRange(minIndex, maxIndex + 1)
-          .forEach((e) => selectedItems.add(isLocal, e));
+          .forEach((e) => selectedItems.add(e));
     } else {
       selectedItems.clear();
-      selectedItems.add(isLocal, entry);
+      selectedItems.add(entry);
     }
     setState(() {});
   }
@@ -1205,7 +1189,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                 } else {
                   ascending.value = !ascending.value!;
                 }
-                model.changeSortStyle(sortBy,
+                controller.changeSortStyle(sortBy,
                     isLocal: isLocal, ascending: ascending.value!);
               },
               child: SizedBox(
@@ -1234,21 +1218,21 @@ class _FileManagerViewState extends State<FileManagerView> {
                 ),
               ),
             ), () {
-      if (model.getSortStyle(isLocal) == sortBy) {
-        return model.getSortAscending(isLocal).obs;
+      if (controller.sortBy.value == sortBy) {
+        return controller.sortAscending;
       } else {
         return Rx<bool?>(null);
       }
     }());
   }
 
-  Widget buildBread(bool isLocal) {
+  Widget buildBread() {
     final items = getPathBreadCrumbItems(isLocal, (list) {
       var path = "";
       for (var item in list) {
-        path = PathUtil.join(path, item, model.getCurrentIsWindows(isLocal));
+        path = PathUtil.join(path, item, controller.options.value.isWindows);
       }
-      openDirectory(path, isLocal: isLocal);
+      controller.openDirectory(path);
     });
 
     return items.isEmpty
@@ -1290,7 +1274,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                     final x = offset.dx;
                     final y = offset.dy + size.height + 1;
 
-                    final isPeerWindows = model.getCurrentIsWindows(isLocal);
+                    final isPeerWindows = controller.options.value.isWindows;
                     final List<MenuEntryBase> menuItems = [
                       MenuEntryButton(
                           childBuilder: (TextStyle? style) => isPeerWindows
@@ -1300,7 +1284,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                                   style: style,
                                 ),
                           proc: () {
-                            openDirectory('/', isLocal: isLocal);
+                            controller.openDirectory('/');
                           },
                           dismissOnClicked: true),
                       MenuEntryDivider()
@@ -1311,8 +1295,9 @@ class _FileManagerViewState extends State<FileManagerView> {
                         loadingTag = _ffi.dialogManager.showLoading("Waiting");
                       }
                       try {
-                        final fd =
-                            await model.fetchDirectory("/", isLocal, isLocal);
+                        final showHidden = controller.options.value.showHidden;
+                        final fd = await controller.fileFetcher
+                            .fetchDirectory("/", isLocal, showHidden);
                         for (var entry in fd.entries) {
                           menuItems.add(MenuEntryButton(
                               childBuilder: (TextStyle? style) =>
@@ -1331,8 +1316,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                                     )
                                   ]),
                               proc: () {
-                                openDirectory('${entry.name}\\',
-                                    isLocal: isLocal);
+                                controller.openDirectory('${entry.name}\\');
                               },
                               dismissOnClicked: true));
                         }
@@ -1369,9 +1353,9 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   List<BreadCrumbItem> getPathBreadCrumbItems(
       bool isLocal, void Function(List<String>) onPressed) {
-    final path = model.getCurrentDir(isLocal).path;
+    final path = controller.directory.value.path;
     final breadCrumbList = List<BreadCrumbItem>.empty(growable: true);
-    final isWindows = model.getCurrentIsWindows(isLocal);
+    final isWindows = controller.options.value.isWindows;
     if (isWindows && path == '/') {
       breadCrumbList.add(BreadCrumbItem(
           content: TextButton(
@@ -1403,7 +1387,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     return breadCrumbList;
   }
 
-  breadCrumbScrollToEnd(bool isLocal) {
+  breadCrumbScrollToEnd() {
     Future.delayed(Duration(milliseconds: 200), () {
       if (_breadCrumbScroller.hasClients) {
         _breadCrumbScroller.animateTo(
@@ -1414,9 +1398,9 @@ class _FileManagerViewState extends State<FileManagerView> {
     });
   }
 
-  Widget buildPathLocation(bool isLocal) {
+  Widget buildPathLocation() {
     final text = _locationStatus.value == LocationStatus.pathLocation
-        ? model.getCurrentDir(isLocal).path
+        ? controller.directory.value.path
         : _searchText.value;
     final textController = TextEditingController(text: text)
       ..selection = TextSelection.collapsed(offset: text.length);
@@ -1440,7 +1424,7 @@ class _FileManagerViewState extends State<FileManagerView> {
             ),
             controller: textController,
             onSubmitted: (path) {
-              openDirectory(path, isLocal: isLocal);
+              controller.openDirectory(path);
             },
             onChanged: _locationStatus.value == LocationStatus.fileSearchBar
                 ? (searchText) => onSearchText(searchText, isLocal)
