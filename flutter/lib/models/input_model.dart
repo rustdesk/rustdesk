@@ -45,7 +45,10 @@ class InputModel {
   var command = false;
 
   // trackpad
+  final _trackpadSpeed = 0.01;
   var trackpadScrollDistance = Offset.zero;
+  var _trackpadScrollUnsent = Offset.zero;
+  var _newScroll = true;
   Timer? _flingTimer;
 
   // mouse
@@ -331,10 +334,22 @@ class InputModel {
   void onPointerPanZoomUpdate(PointerPanZoomUpdateEvent e) {
     var delta = e.panDelta;
     trackpadScrollDistance += delta;
-    bind.sessionSendMouse(
-        id: id,
-        msg:
-            '{"type": "trackpad", "x": "${delta.dx.toInt()}", "y": "${delta.dy.toInt()}"}');
+    _trackpadScrollUnsent += (delta * _trackpadSpeed);
+    final x = _trackpadScrollUnsent.dx.truncate();
+    final y = _trackpadScrollUnsent.dy.truncate();
+    _trackpadScrollUnsent -= Offset(_trackpadScrollUnsent.dx - x.toDouble(),
+        _trackpadScrollUnsent.dy - y.toDouble());
+
+    var sendMsg = x != 0 || y != 0;
+    if (_newScroll) {
+      sendMsg = true;
+      _newScroll = false;
+    }
+
+    if (sendMsg) {
+      bind.sessionSendMouse(
+          id: id, msg: '{"type": "trackpad", "x": "$x", "y": "$y"}');
+    }
   }
 
   // Simple simulation for fling.
@@ -358,6 +373,8 @@ class InputModel {
   }
 
   void onPointerPanZoomEnd(PointerPanZoomEndEvent e) {
+    _newScroll = true;
+    _trackpadScrollUnsent = Offset.zero;
     var x = _signOrZero(trackpadScrollDistance.dx);
     var y = _signOrZero(trackpadScrollDistance.dy);
     var dx = trackpadScrollDistance.dx.abs() ~/ 40;
