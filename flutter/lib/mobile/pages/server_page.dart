@@ -477,7 +477,10 @@ class PaddingCard extends StatelessWidget {
     return SizedBox(
         width: double.maxFinite,
         child: Card(
-          margin: const EdgeInsets.fromLTRB(15.0, 15.0, 15.0, 0),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(13),
+          ),
+          margin: const EdgeInsets.fromLTRB(12.0, 10.0, 12.0, 0),
           child: Padding(
             padding:
                 const EdgeInsets.symmetric(vertical: 15.0, horizontal: 30.0),
