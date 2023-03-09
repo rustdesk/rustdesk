@@ -735,7 +735,7 @@ impl Connection {
         let url = self.server_audit_conn.clone();
         let mut v = v;
         v["id"] = json!(Config::get_id());
-        v["uuid"] = json!(base64::encode(hbb_common::get_uuid()));
+        v["uuid"] = json!(crate::encode64(hbb_common::get_uuid()));
         v["conn_id"] = json!(self.inner.id);
         tokio::spawn(async move {
             allow_err!(Self::post_audit_async(url, v).await);
@@ -765,7 +765,7 @@ impl Connection {
         info["files"] = json!(files);
         let v = json!({
             "id":json!(Config::get_id()),
-            "uuid":json!(base64::encode(hbb_common::get_uuid())),
+            "uuid":json!(crate::encode64(hbb_common::get_uuid())),
             "peer_id":json!(self.lr.my_id),
             "type": r#type as i8,
             "path":path,
@@ -788,7 +788,7 @@ impl Connection {
         }
         let mut v = Value::default();
         v["id"] = json!(Config::get_id());
-        v["uuid"] = json!(base64::encode(hbb_common::get_uuid()));
+        v["uuid"] = json!(crate::encode64(hbb_common::get_uuid()));
         v["typ"] = json!(typ as i8);
         v["from_remote"] = json!(from_remote);
         v["info"] = serde_json::Value::String(info.to_string());
