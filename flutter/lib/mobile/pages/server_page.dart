@@ -202,28 +202,38 @@ class ServerInfo extends StatelessWidget {
     final isPermanent = model.verificationMethod == kUsePermanentPassword;
     final serverModel = Provider.of<ServerModel>(context);
 
-    // @todo Theming
-    Widget ConnectionStateNotification() {
-      const Color colorPositive = Colors.greenAccent;
-      const Color colorNegative = Colors.redAccent;
-      const double paddingRight = 12;
+    const Color colorPositive = Colors.green;
+    const Color colorNegative = Colors.red;
+    const double iconMarginRight = 15;
+    const double iconSize = 24;
+    const TextStyle textStyleHeading = TextStyle(
+        fontSize: 16.0, fontWeight: FontWeight.bold, color: Colors.grey);
+    const TextStyle textStyleValue =
+        TextStyle(fontSize: 25.0, fontWeight: FontWeight.bold);
 
+    void copyToClipboard(String value) {
+      Clipboard.setData(ClipboardData(text: value));
+      showToast(translate('Copied'));
+    }
+
+    Widget ConnectionStateNotification() {
       if (serverModel.connectStatus == -1) {
         return Row(children: [
-          const Icon(Icons.warning_amber_sharp, color: colorNegative, size: 24)
-              .marginOnly(right: paddingRight),
+          const Icon(Icons.warning_amber_sharp,
+                  color: colorNegative, size: iconSize)
+              .marginOnly(right: iconMarginRight),
           Expanded(child: Text(translate('not_ready_status')))
         ]);
       } else if (serverModel.connectStatus == 0) {
         return Row(children: [
           SizedBox(width: 20, height: 20, child: CircularProgressIndicator())
-              .marginOnly(left: 4, right: paddingRight),
+              .marginOnly(left: 4, right: iconMarginRight),
           Expanded(child: Text(translate('connecting_status')))
         ]);
       } else {
         return Row(children: [
-          const Icon(Icons.check, color: colorPositive, size: 24)
-              .marginOnly(right: paddingRight),
+          const Icon(Icons.check, color: colorPositive, size: iconSize)
+              .marginOnly(right: iconMarginRight),
           Expanded(child: Text(translate('Ready')))
         ]);
       }
@@ -233,53 +243,42 @@ class ServerInfo extends StatelessWidget {
         title: translate('Your Device'),
         child: Column(
           // mainAxisSize: MainAxisSize.min,
-
           // ID
           children: [
             Row(children: [
-              const Icon(Icons.perm_identity, color: Colors.grey, size: 24)
-                  .marginOnly(right: 12),
+              const Icon(Icons.perm_identity,
+                      color: Colors.grey, size: iconSize)
+                  .marginOnly(right: iconMarginRight),
               Text(
                 translate('ID'),
-                style: const TextStyle(
-                    fontSize: 16.0,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey),
+                style: textStyleHeading,
               )
             ]),
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
               Text(
                 model.serverId.value.text,
-                style: const TextStyle(
-                    fontSize: 25.0, fontWeight: FontWeight.bold),
+                style: textStyleValue,
               ),
               IconButton(
                   visualDensity: VisualDensity.compact,
                   icon: Icon(Icons.copy_outlined),
                   onPressed: () {
-                    Clipboard.setData(
-                        ClipboardData(text: model.serverId.value.text.trim()));
-                    showToast(translate('ID copied'));
+                    copyToClipboard(model.serverId.value.text.trim());
                   })
-            ]).marginOnly(left: 35, bottom: 10),
-
+            ]).marginOnly(left: 39, bottom: 10),
             // Password
             Row(children: [
-              const Icon(Icons.lock_outline, color: Colors.grey, size: 24)
-                  .marginOnly(right: 12),
+              const Icon(Icons.lock_outline, color: Colors.grey, size: iconSize)
+                  .marginOnly(right: iconMarginRight),
               Text(
                 translate('One-time Password'),
-                style: const TextStyle(
-                    fontSize: 16.0,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey),
+                style: textStyleHeading,
               )
             ]),
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
               Text(
                 isPermanent ? '-' : model.serverPasswd.value.text,
-                style: const TextStyle(
-                    fontSize: 25.0, fontWeight: FontWeight.bold),
+                style: textStyleValue,
               ),
               isPermanent
                   ? SizedBox.shrink()
@@ -292,13 +291,11 @@ class ServerInfo extends StatelessWidget {
                           visualDensity: VisualDensity.compact,
                           icon: Icon(Icons.copy_outlined),
                           onPressed: () {
-                            Clipboard.setData(ClipboardData(
-                                text: model.serverPasswd.value.text.trim()));
-                            showToast(translate('Password copied'));
+                            copyToClipboard(
+                                model.serverPasswd.value.text.trim());
                           })
                     ])
-            ]).marginOnly(left: 35, bottom: 10),
-
+            ]).marginOnly(left: 40, bottom: 15),
             ConnectionStateNotification()
           ],
         ));
