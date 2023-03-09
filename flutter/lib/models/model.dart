@@ -371,7 +371,11 @@ class FfiModel with ChangeNotifier {
 
   _updateSessionWidthHeight(String id) {
     parent.target?.canvasModel.updateViewStyle();
-    bind.sessionSetSize(id: id, width: display.width, height: display.height);
+    if (display.width < 0 || display.height < 0) {
+      debugPrintStack(label: 'invalid display size (${display.width},${display.height})');
+    } else {
+      bind.sessionSetSize(id: id, width: display.width, height: display.height);
+    }
   }
 
   /// Handle the peer info event based on [evt].
