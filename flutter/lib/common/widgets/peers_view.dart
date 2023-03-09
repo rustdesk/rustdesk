@@ -100,6 +100,19 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
     );
   }
 
+  onVisibilityChanged(VisibilityInfo info) {
+    final peerId = _peerId((info.key as ValueKey).value);
+    if (info.visibleFraction > 0.00001) {
+      _curPeers.add(peerId);
+    } else {
+      _curPeers.remove(peerId);
+    }
+    _lastChangeTime = DateTime.now();
+  }
+
+  String _cardId(String id) => widget.peers.name + id;
+  String _peerId(String cardId) => cardId.replaceAll(widget.peers.name, '');
+
   Widget _buildPeersView(Peers peers) {
     final body = ObxValue<RxString>((searchText) {
       return FutureBuilder<List<Peer>>(
@@ -109,16 +122,8 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
             final cards = <Widget>[];
             for (final peer in peers) {
               final visibilityChild = VisibilityDetector(
-                key: ValueKey(peer.id),
-                onVisibilityChanged: (info) {
-                  final peerId = (info.key as ValueKey).value;
-                  if (info.visibleFraction > 0.00001) {
-                    _curPeers.add(peerId);
-                  } else {
-                    _curPeers.remove(peerId);
-                  }
-                  _lastChangeTime = DateTime.now();
-                },
+                key: ValueKey(_cardId(peer.id)),
+                onVisibilityChanged: onVisibilityChanged,
                 child: widget.peerCardBuilder(peer),
               );
               cards.add(isDesktop
@@ -165,7 +170,7 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
           }
         } else {
           if (_queryCount < _maxQueryCount) {
-            if (now.difference(_lastQueryTime) > queryInterval) {
+            if (now.difference(_lastQueryTime) >= queryInterval) {
               if (_curPeers.isNotEmpty) {
                 platformFFI.ffiBind
                     .queryOnlines(ids: _curPeers.toList(growable: false));
