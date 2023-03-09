@@ -482,11 +482,12 @@ class PaddingCard extends StatelessWidget {
                           child: titleIcon)
                       : const SizedBox.shrink(),
                   Expanded(
-                    child: Text(
-                      title!,
-                      style: const TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
+                    child: Text(title!,
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleLarge
+                            // @todo once the font weight is defined in theme, remove it here to be equal insted of individual
+                            ?.merge(TextStyle(fontWeight: FontWeight.bold))),
                   )
                 ],
               )));
