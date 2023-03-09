@@ -157,10 +157,10 @@ class _FileManagerPageState extends State<FileManagerPage>
   /// transfer status list
   /// watch transfer status
   Widget statusList() {
-    statusListView() => Obx(() => ListView.builder(
+    statusListView(List<JobProgress> jobs) => ListView.builder(
           controller: ScrollController(),
           itemBuilder: (BuildContext context, int index) {
-            final item = jobController.jobTable[index];
+            final item = jobs[index];
             return Padding(
               padding: const EdgeInsets.only(bottom: 5),
               child: generateCard(
@@ -281,7 +281,7 @@ class _FileManagerPageState extends State<FileManagerPage>
             );
           },
           itemCount: jobController.jobTable.length,
-        ));
+        );
 
     return PreferredSize(
       preferredSize: const Size(200, double.infinity),
@@ -312,7 +312,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                       ),
                     ),
                   )
-                : statusListView(),
+                : statusListView(jobController.jobTable),
           )),
     );
   }

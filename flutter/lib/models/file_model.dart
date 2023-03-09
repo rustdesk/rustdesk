@@ -100,6 +100,7 @@ class FileModel {
         jobController.cancelJob(id);
         final job = jobController.jobTable[jobIndex];
         job.state = JobState.done;
+        jobController.jobTable.refresh();
       }
     } else {
       var need_override = false;
@@ -286,7 +287,9 @@ class FileController {
   void changeSortStyle(SortBy sort, {bool? isLocal, bool ascending = true}) {
     sortBy.value = sort;
     sortAscending = ascending;
-    directory.value.changeSortStyle(sort, ascending: ascending);
+    directory.update((dir) {
+      dir?.changeSortStyle(sort, ascending: ascending);
+    });
   }
 
   Future<void> refresh() async {
@@ -374,6 +377,7 @@ class FileController {
           job.totalSize = totalSize;
           job.fileCount = fileCount;
           debugPrint("update receive details:${fd.path}");
+          jobController.jobTable.refresh();
         }
       } else if (options.value.home.isEmpty) {
         options.value.home = fd.path;
@@ -631,6 +635,7 @@ class JobController {
         job.speed = double.parse(evt['speed']);
         job.finishedSize = int.parse(evt['finished_size']);
         debugPrint("update job $id with $evt");
+        jobTable.refresh();
       }
     } catch (e) {
       debugPrint("Failed to tryUpdateJobProgress,evt:${evt.toString()}");
@@ -650,6 +655,7 @@ class JobController {
       job.finishedSize = job.totalSize;
       job.state = JobState.done;
       job.fileNum = int.parse(evt['file_num']);
+      jobTable.refresh();
     }
   }
 
@@ -665,6 +671,7 @@ class JobController {
         job.state = JobState.done;
         job.finishedSize = job.totalSize;
       }
+      jobTable.refresh();
     }
     debugPrint("jobError $evt");
   }
@@ -713,6 +720,7 @@ class JobController {
       bind.sessionResumeJob(
           id: sessionID, actId: job.id, isRemote: job.isRemoteToLocal);
       job.state = JobState.inProgress;
+      jobTable.refresh();
     } else {
       debugPrint("jobId $jobId is not exists");
     }
@@ -729,6 +737,7 @@ class JobController {
       final job = jobTable[jobIndex];
       job.fileCount = num_entries;
       job.totalSize = total_size.toInt();
+      jobTable.refresh();
     }
     debugPrint("update folder files: $info");
   }
