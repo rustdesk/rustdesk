@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hbb/mobile/widgets/dialog.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
@@ -205,7 +206,7 @@ class ServerInfo extends StatelessWidget {
     Widget ConnectionStateNotification() {
       const Color colorPositive = Colors.greenAccent;
       const Color colorNegative = Colors.redAccent;
-      const double paddingRight = 15;
+      const double paddingRight = 12;
 
       if (serverModel.connectStatus == -1) {
         return Row(children: [
@@ -229,40 +230,78 @@ class ServerInfo extends StatelessWidget {
     }
 
     return PaddingCard(
+        title: translate('Your Device'),
         child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        TextFormField(
-          readOnly: true,
-          style: const TextStyle(fontSize: 25.0, fontWeight: FontWeight.bold),
-          controller: model.serverId,
-          decoration: InputDecoration(
-            icon: const Icon(Icons.perm_identity),
-            labelText: translate("ID"),
-            labelStyle: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-          onSaved: (String? value) {},
-        ),
-        TextFormField(
-          readOnly: true,
-          style: const TextStyle(fontSize: 25.0, fontWeight: FontWeight.bold),
-          controller: isPermanent ? emptyController : model.serverPasswd,
-          decoration: InputDecoration(
-              icon: const Icon(Icons.lock),
-              labelText: translate("Password"),
-              labelStyle: const TextStyle(
-                fontWeight: FontWeight.bold,
+          // mainAxisSize: MainAxisSize.min,
+
+          // ID
+          children: [
+            Row(children: [
+              const Icon(Icons.perm_identity, color: Colors.grey, size: 24)
+                  .marginOnly(right: 12),
+              Text(
+                translate('ID'),
+                style: const TextStyle(
+                    fontSize: 16.0,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey),
+              )
+            ]),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Text(
+                model.serverId.value.text,
+                style: const TextStyle(
+                    fontSize: 25.0, fontWeight: FontWeight.bold),
               ),
-              suffix: isPermanent
-                  ? null
-                  : IconButton(
-                      icon: const Icon(Icons.refresh),
-                      onPressed: () => bind.mainUpdateTemporaryPassword())),
-          onSaved: (String? value) {},
-        ),
-        ConnectionStateNotification().marginOnly(top: 20)
-      ],
-    ));
+              IconButton(
+                  visualDensity: VisualDensity.compact,
+                  icon: Icon(Icons.copy_outlined),
+                  onPressed: () {
+                    Clipboard.setData(
+                        ClipboardData(text: model.serverId.value.text.trim()));
+                    showToast(translate('ID copied'));
+                  })
+            ]).marginOnly(left: 35, bottom: 10),
+
+            // Password
+            Row(children: [
+              const Icon(Icons.lock_outline, color: Colors.grey, size: 24)
+                  .marginOnly(right: 12),
+              Text(
+                translate('One-time Password'),
+                style: const TextStyle(
+                    fontSize: 16.0,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey),
+              )
+            ]),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Text(
+                isPermanent ? '-' : model.serverPasswd.value.text,
+                style: const TextStyle(
+                    fontSize: 25.0, fontWeight: FontWeight.bold),
+              ),
+              isPermanent
+                  ? SizedBox.shrink()
+                  : Row(children: [
+                      IconButton(
+                          visualDensity: VisualDensity.compact,
+                          icon: const Icon(Icons.refresh),
+                          onPressed: () => bind.mainUpdateTemporaryPassword()),
+                      IconButton(
+                          visualDensity: VisualDensity.compact,
+                          icon: Icon(Icons.copy_outlined),
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(
+                                text: model.serverPasswd.value.text.trim()));
+                            showToast(translate('Password copied'));
+                          })
+                    ])
+            ]).marginOnly(left: 35, bottom: 10),
+
+            ConnectionStateNotification()
+          ],
+        ));
   }
 }
 
