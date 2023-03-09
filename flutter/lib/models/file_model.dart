@@ -390,7 +390,7 @@ class FileController {
     }
   }
 
-  /// sendFiles from other side (SelectedItems) to current side (FileController.isLocal).
+  /// sendFiles from current side (FileController.isLocal) to other side (SelectedItems).
   void sendFiles(SelectedItems items, DirectoryData otherSideData) {
     /// ignore wrong items side status
     if (items.isLocal != isLocal) {

@@ -18,10 +18,46 @@ class FileManagerPage extends StatefulWidget {
   State<StatefulWidget> createState() => _FileManagerPageState();
 }
 
+enum SelectMode { local, remote, none }
+
+extension SelectModeEq on SelectMode {
+  bool eq(bool? currentIsLocal) {
+    if (currentIsLocal == null) {
+      return false;
+    }
+    if (currentIsLocal) {
+      return this == SelectMode.local;
+    } else {
+      return this == SelectMode.remote;
+    }
+  }
+}
+
+extension SelectModeExt on Rx<SelectMode> {
+  void toggle(bool currentIsLocal) {
+    switch (value) {
+      case SelectMode.local:
+        value = SelectMode.none;
+        break;
+      case SelectMode.remote:
+        value = SelectMode.none;
+        break;
+      case SelectMode.none:
+        if (currentIsLocal) {
+          value = SelectMode.local;
+        } else {
+          value = SelectMode.remote;
+        }
+        break;
+    }
+  }
+}
+
 class _FileManagerPageState extends State<FileManagerPage> {
   final model = gFFI.fileModel;
+  final selectMode = SelectMode.none.obs;
+
   var showLocal = true;
-  var isSelecting = false.obs;
 
   FileController get currentFileController =>
       showLocal ? model.localController : model.remoteController;
@@ -53,8 +89,9 @@ class _FileManagerPageState extends State<FileManagerPage> {
   @override
   Widget build(BuildContext context) => WillPopScope(
       onWillPop: () async {
-        if (isSelecting.value) {
-          isSelecting.value = false;
+        if (selectMode.value != SelectMode.none) {
+          selectMode.value = SelectMode.none;
+          setState(() {});
         } else {
           currentFileController.goBack();
         }
@@ -154,7 +191,8 @@ class _FileManagerPageState extends State<FileManagerPage> {
                   } else if (v == "select") {
                     model.localController.selectedItems.clear();
                     model.remoteController.selectedItems.clear();
-                    isSelecting.toggle();
+                    selectMode.toggle(showLocal);
+                    setState(() {});
                   } else if (v == "folder") {
                     final name = TextEditingController();
                     gFFI.dialogManager
@@ -196,43 +234,38 @@ class _FileManagerPageState extends State<FileManagerPage> {
         body: showLocal
             ? FileManagerView(
                 controller: model.localController,
-                isSelecting: isSelecting,
-                showCheckBox: showCheckBox())
+                selectMode: selectMode,
+              )
             : FileManagerView(
                 controller: model.remoteController,
-                isSelecting: isSelecting,
-                showCheckBox: showCheckBox()),
+                selectMode: selectMode,
+              ),
         bottomSheet: bottomSheet(),
       ));
-
-  bool showCheckBox() {
-    final selectedItems = getActiveSelectedItems();
-
-    if (selectedItems != null) {
-      return selectedItems.isLocal == showLocal;
-    }
-    return false;
-  }
 
   Widget? bottomSheet() {
     return Obx(() {
       final selectedItems = getActiveSelectedItems();
+      final jobTable = model.jobController.jobTable;
 
       final localLabel = selectedItems?.isLocal == null
           ? ""
           : " [${selectedItems!.isLocal ? translate("Local") : translate("Remote")}]";
-
-      if (isSelecting.value) {
+      if (!(selectMode.value == SelectMode.none)) {
         final selectedItemsLen =
             "${selectedItems?.items.length ?? 0} ${translate("items")}";
         if (selectedItems == null ||
             selectedItems.items.isEmpty ||
-            showCheckBox()) {
+            selectMode.value.eq(showLocal)) {
           return BottomSheetBody(
               leading: Icon(Icons.check),
               title: translate("Selected"),
               text: selectedItemsLen + localLabel,
-              onCanceled: () => isSelecting.toggle(),
+              onCanceled: () {
+                selectedItems?.items.clear();
+                selectMode.value = SelectMode.none;
+                setState(() {});
+              },
               actions: [
                 IconButton(
                   icon: Icon(Icons.compare_arrows),
@@ -241,9 +274,12 @@ class _FileManagerPageState extends State<FileManagerPage> {
                 IconButton(
                   icon: Icon(Icons.delete_forever),
                   onPressed: selectedItems != null
-                      ? () {
+                      ? () async {
                           if (selectedItems.items.isNotEmpty) {
-                            currentFileController.removeAction(selectedItems);
+                            await currentFileController
+                                .removeAction(selectedItems);
+                            selectedItems.items.clear();
+                            selectMode.value = SelectMode.none;
                           }
                         }
                       : null,
@@ -254,7 +290,11 @@ class _FileManagerPageState extends State<FileManagerPage> {
               leading: Icon(Icons.input),
               title: translate("Paste here?"),
               text: selectedItemsLen + localLabel,
-              onCanceled: () => isSelecting.toggle(),
+              onCanceled: () {
+                selectedItems.items.clear();
+                selectMode.value = SelectMode.none;
+                setState(() {});
+              },
               actions: [
                 IconButton(
                   icon: Icon(Icons.compare_arrows),
@@ -263,21 +303,20 @@ class _FileManagerPageState extends State<FileManagerPage> {
                 IconButton(
                   icon: Icon(Icons.paste),
                   onPressed: () {
-                    isSelecting.toggle();
+                    selectMode.value = SelectMode.none;
                     final otherSide = showLocal
                         ? model.remoteController
                         : model.localController;
-                    final otherSideData = DirectoryData(
-                        otherSide.directory.value, otherSide.options.value);
-                    currentFileController.sendFiles(
-                        selectedItems, otherSideData);
+                    final thisSideData =
+                        DirectoryData(currentDir, currentOptions);
+                    otherSide.sendFiles(selectedItems, thisSideData);
+                    selectedItems.items.clear();
+                    selectMode.value = SelectMode.none;
                   },
                 )
               ]);
         }
       }
-
-      final jobTable = model.jobController.jobTable;
 
       if (jobTable.isEmpty) {
         return Offstage();
@@ -285,28 +324,30 @@ class _FileManagerPageState extends State<FileManagerPage> {
 
       switch (jobTable.last.state) {
         case JobState.inProgress:
-          return Obx(() => BottomSheetBody(
-                leading: CircularProgressIndicator(),
-                title: translate("Waiting"),
-                text:
-                    "${translate("Speed")}:  ${readableFileSize(jobTable.last.speed)}/s",
-                onCanceled: () =>
-                    model.jobController.cancelJob(jobTable.last.id),
-              ));
+          return BottomSheetBody(
+            leading: CircularProgressIndicator(),
+            title: translate("Waiting"),
+            text:
+                "${translate("Speed")}:  ${readableFileSize(jobTable.last.speed)}/s",
+            onCanceled: () {
+              model.jobController.cancelJob(jobTable.last.id);
+              jobTable.clear();
+            },
+          );
         case JobState.done:
-          return Obx(() => BottomSheetBody(
-                leading: Icon(Icons.check),
-                title: "${translate("Successful")}!",
-                text: jobTable.last.display(),
-                onCanceled: () => jobTable.clear(),
-              ));
+          return BottomSheetBody(
+            leading: Icon(Icons.check),
+            title: "${translate("Successful")}!",
+            text: jobTable.last.display(),
+            onCanceled: () => jobTable.clear(),
+          );
         case JobState.error:
-          return Obx(() => BottomSheetBody(
-                leading: Icon(Icons.error),
-                title: "${translate("Error")}!",
-                text: "",
-                onCanceled: () => jobTable.clear(),
-              ));
+          return BottomSheetBody(
+            leading: Icon(Icons.error),
+            title: "${translate("Error")}!",
+            text: "",
+            onCanceled: () => jobTable.clear(),
+          );
         case JobState.none:
           break;
         case JobState.paused:
@@ -343,13 +384,9 @@ class _FileManagerPageState extends State<FileManagerPage> {
 
 class FileManagerView extends StatefulWidget {
   final FileController controller;
-  final RxBool isSelecting;
-  final bool showCheckBox;
+  final Rx<SelectMode> selectMode;
 
-  FileManagerView(
-      {required this.controller,
-      required this.isSelecting,
-      required this.showCheckBox});
+  FileManagerView({required this.controller, required this.selectMode});
 
   @override
   State<StatefulWidget> createState() => _FileManagerViewState();
@@ -383,13 +420,18 @@ class _FileManagerViewState extends State<FileManagerView> {
               return listTail();
             }
             var selected = false;
-            if (widget.isSelecting.value) {
+            if (widget.selectMode.value != SelectMode.none) {
               selected = _selectedItems.items.contains(entries[index]);
             }
 
             final sizeStr = entries[index].isFile
                 ? readableFileSize(entries[index].size.toDouble())
                 : "";
+
+            final showCheckBox = () {
+              return widget.selectMode.value != SelectMode.none &&
+                  widget.selectMode.value.eq(controller.selectedItems.isLocal);
+            }();
             return Card(
               child: ListTile(
                 leading: entries[index].isDrive
@@ -417,7 +459,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                       ),
                 trailing: entries[index].isDrive
                     ? null
-                    : widget.isSelecting.value && widget.showCheckBox
+                    : showCheckBox
                         ? Checkbox(
                             value: selected,
                             onChanged: (v) {
@@ -455,16 +497,18 @@ class _FileManagerViewState extends State<FileManagerView> {
                                 controller.removeAction(items);
                               } else if (v == "multi_select") {
                                 _selectedItems.clear();
-                                widget.isSelecting.toggle();
+                                widget.selectMode.toggle(isLocal);
+                                setState(() {});
                               }
                             }),
                 onTap: () {
-                  if (widget.isSelecting.value && widget.showCheckBox) {
+                  if (showCheckBox) {
                     if (selected) {
                       _selectedItems.remove(entries[index]);
                     } else {
                       _selectedItems.add(entries[index]);
                     }
+                    setState(() {});
                     return;
                   }
                   if (entries[index].isDirectory || entries[index].isDrive) {
@@ -477,8 +521,8 @@ class _FileManagerViewState extends State<FileManagerView> {
                     ? null
                     : () {
                         _selectedItems.clear();
-                        widget.isSelecting.toggle();
-                        if (widget.isSelecting.value) {
+                        widget.selectMode.toggle(isLocal);
+                        if (widget.selectMode.value != SelectMode.none) {
                           _selectedItems.add(entries[index]);
                         }
                         setState(() {});
