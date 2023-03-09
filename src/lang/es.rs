@@ -461,8 +461,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Resolution", "Resolución"),
         ("No transfers in progress", "No hay transferencias en curso"),
         ("Set one-time password length", "Establecer contraseña de un solo uso"),
-        ("idd_driver_tip", ""),
-        ("confirm_idd_driver_tip", ""),
-        ("RDP Settings", ""),
+        ("idd_driver_tip", "Instalar controlador virtual de pantalla a usar cuando no hay pantalla física."),
+        ("confirm_idd_driver_tip", "La opción de instalar el controlador de pantalla virtual está marcada. Hay que tener en cuenta que se instalará un certificado de prueba para confirar en el controlador de pantalla. Este certificado solo se usará para confiar en controladores Rustdesk."),
+        ("RDP Settings", "Ajustes RDP"),
     ].iter().cloned().collect();
 }
