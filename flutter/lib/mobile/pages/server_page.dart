@@ -242,7 +242,6 @@ class ServerInfo extends StatelessWidget {
     return PaddingCard(
         title: translate('Your Device'),
         child: Column(
-          // mainAxisSize: MainAxisSize.min,
           // ID
           children: [
             Row(children: [
@@ -384,73 +383,64 @@ class ConnectionManager extends StatelessWidget {
                 titleIcon: client.isFileTransfer
                     ? Icon(Icons.folder_outlined)
                     : Icon(Icons.mobile_screen_share),
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                child: Column(children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(child: ClientInfo(client)),
-                          Expanded(
-                              flex: -1,
-                              child: client.isFileTransfer || !client.authorized
-                                  ? const SizedBox.shrink()
-                                  : IconButton(
-                                      onPressed: () {
-                                        gFFI.chatModel
-                                            .changeCurrentID(client.id);
-                                        final bar =
-                                            navigationBarKey.currentWidget;
-                                        if (bar != null) {
-                                          bar as BottomNavigationBar;
-                                          bar.onTap!(1);
-                                        }
-                                      },
-                                      icon: const Icon(Icons.chat)))
-                        ],
-                      ),
-                      client.authorized
-                          ? const SizedBox.shrink()
-                          : Text(
-                              translate("android_new_connection_tip"),
-                              style: Theme.of(context).textTheme.bodyMedium,
-                            ).marginOnly(bottom: 5),
-                      client.authorized
-                          ? Row(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                  ElevatedButton.icon(
-                                      style: ButtonStyle(
-                                          backgroundColor:
-                                              MaterialStatePropertyAll(
-                                                  Colors.red)),
-                                      icon: const Icon(Icons.close),
-                                      onPressed: () {
-                                        bind.cmCloseConnection(
-                                            connId: client.id);
-                                        gFFI.invokeMethod(
-                                            "cancel_notification", client.id);
-                                      },
-                                      label: Text(translate("Disconnect")))
-                                ])
-                          : Row(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                  TextButton(
-                                      child: Text(translate("Dismiss")),
-                                      onPressed: () {
-                                        serverModel.sendLoginResponse(
-                                            client, false);
-                                      }).marginOnly(right: 15),
-                                  ElevatedButton.icon(
-                                      icon: const Icon(Icons.check),
-                                      label: Text(translate("Accept")),
-                                      onPressed: () {
-                                        serverModel.sendLoginResponse(
-                                            client, true);
-                                      }),
-                                ]),
-                    ])))
+                      Expanded(child: ClientInfo(client)),
+                      Expanded(
+                          flex: -1,
+                          child: client.isFileTransfer || !client.authorized
+                              ? const SizedBox.shrink()
+                              : IconButton(
+                                  onPressed: () {
+                                    gFFI.chatModel.changeCurrentID(client.id);
+                                    final bar = navigationBarKey.currentWidget;
+                                    if (bar != null) {
+                                      bar as BottomNavigationBar;
+                                      bar.onTap!(1);
+                                    }
+                                  },
+                                  icon: const Icon(Icons.chat)))
+                    ],
+                  ),
+                  client.authorized
+                      ? const SizedBox.shrink()
+                      : Text(
+                          translate("android_new_connection_tip"),
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ).marginOnly(bottom: 5),
+                  client.authorized
+                      ? Container(
+                          alignment: Alignment.centerRight,
+                          child: ElevatedButton.icon(
+                              style: ButtonStyle(
+                                  backgroundColor:
+                                      MaterialStatePropertyAll(Colors.red)),
+                              icon: const Icon(Icons.close),
+                              onPressed: () {
+                                bind.cmCloseConnection(connId: client.id);
+                                gFFI.invokeMethod(
+                                    "cancel_notification", client.id);
+                              },
+                              label: Text(translate("Disconnect"))))
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                              TextButton(
+                                  child: Text(translate("Dismiss")),
+                                  onPressed: () {
+                                    serverModel.sendLoginResponse(
+                                        client, false);
+                                  }).marginOnly(right: 15),
+                              ElevatedButton.icon(
+                                  icon: const Icon(Icons.check),
+                                  label: Text(translate("Accept")),
+                                  onPressed: () {
+                                    serverModel.sendLoginResponse(client, true);
+                                  }),
+                            ]),
+                ])))
             .toList());
   }
 }
@@ -473,17 +463,12 @@ class PaddingCard extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(0, 5, 0, 8),
               child: Row(
                 children: [
-                  titleIcon != null
-                      ? Padding(
-                          padding: const EdgeInsets.only(right: 10),
-                          child: titleIcon)
-                      : const SizedBox.shrink(),
+                  titleIcon?.marginOnly(right: 10) ?? const SizedBox.shrink(),
                   Expanded(
                     child: Text(title!,
                         style: Theme.of(context)
                             .textTheme
                             .titleLarge
-                            // @todo once the font weight is defined in theme, remove it here to be equal insted of individual
                             ?.merge(TextStyle(fontWeight: FontWeight.bold))),
                   )
                 ],
@@ -498,9 +483,8 @@ class PaddingCard extends StatelessWidget {
           margin: const EdgeInsets.fromLTRB(12.0, 10.0, 12.0, 0),
           child: Padding(
             padding:
-                const EdgeInsets.symmetric(vertical: 15.0, horizontal: 30.0),
+                const EdgeInsets.symmetric(vertical: 15.0, horizontal: 20.0),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: children,
             ),
           ),
@@ -516,7 +500,7 @@ class ClientInfo extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        child: Column(children: [
           Row(
             children: [
               Expanded(
@@ -533,7 +517,6 @@ class ClientInfo extends StatelessWidget {
               Expanded(
                   child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                     Text(client.name, style: const TextStyle(fontSize: 18)),
                     const SizedBox(width: 8),
