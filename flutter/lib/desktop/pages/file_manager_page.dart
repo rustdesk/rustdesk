@@ -358,8 +358,6 @@ class _FileManagerViewState extends State<FileManagerView> {
   final _modifiedColWidth = kDesktopFileTransferModifiedColWidth.obs;
   final _fileListScrollController = ScrollController();
 
-  late final _selectedItems = SelectedItems(isLocal: isLocal);
-
   /// [_lastClickTime], [_lastClickEntry] help to handle double click
   var _lastClickTime =
       DateTime.now().millisecondsSinceEpoch - bind.getDoubleClickTime() - 1000;
@@ -368,6 +366,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   FileController get controller => widget.controller;
   bool get isLocal => widget.controller.isLocal;
   FFI get _ffi => widget._ffi;
+  SelectedItems get selectedItems => controller.selectedItems;
 
   @override
   void initState() {
@@ -491,7 +490,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                     color: Theme.of(context).cardColor,
                     hoverColor: Theme.of(context).hoverColor,
                     onPressed: () {
-                      _selectedItems.clear();
+                      selectedItems.clear();
                       controller.goBack();
                     },
                   ),
@@ -506,7 +505,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                     color: Theme.of(context).cardColor,
                     hoverColor: Theme.of(context).hoverColor,
                     onPressed: () {
-                      _selectedItems.clear();
+                      selectedItems.clear();
                       controller.goToParentDirectory();
                     },
                   ),
@@ -703,10 +702,10 @@ class _FileManagerViewState extends State<FileManagerView> {
                       hoverColor: Theme.of(context).hoverColor,
                     ),
                     MenuButton(
-                      onPressed: validItems(_selectedItems)
+                      onPressed: selectedItems.valid()
                           ? () async {
-                              await (controller.removeAction(_selectedItems));
-                              _selectedItems.clear();
+                              await (controller.removeAction(selectedItems));
+                              selectedItems.clear();
                             }
                           : null,
                       child: SvgPicture.asset(
@@ -726,17 +725,17 @@ class _FileManagerViewState extends State<FileManagerView> {
                       ? EdgeInsets.only(left: 10)
                       : EdgeInsets.only(right: 10)),
                   backgroundColor: MaterialStateProperty.all(
-                    _selectedItems.length == 0
+                    selectedItems.length == 0
                         ? MyTheme.accent80
                         : MyTheme.accent,
                   ),
                 ),
-                onPressed: validItems(_selectedItems)
+                onPressed: selectedItems.valid()
                     ? () {
                         final otherSideData =
                             controller.getOtherSideDirectoryData();
-                        controller.sendFiles(_selectedItems, otherSideData);
-                        _selectedItems.clear();
+                        controller.sendFiles(selectedItems, otherSideData);
+                        selectedItems.clear();
                       }
                     : null,
                 icon: isLocal
@@ -744,7 +743,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                         translate('Send'),
                         textAlign: TextAlign.right,
                         style: TextStyle(
-                          color: _selectedItems.length == 0
+                          color: selectedItems.length == 0
                               ? Theme.of(context).brightness == Brightness.light
                                   ? MyTheme.grayBg
                                   : MyTheme.darkGray
@@ -755,7 +754,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                         quarterTurns: 2,
                         child: SvgPicture.asset(
                           "assets/arrow.svg",
-                          color: _selectedItems.length == 0
+                          color: selectedItems.length == 0
                               ? Theme.of(context).brightness == Brightness.light
                                   ? MyTheme.grayBg
                                   : MyTheme.darkGray
@@ -766,7 +765,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                 label: isLocal
                     ? SvgPicture.asset(
                         "assets/arrow.svg",
-                        color: _selectedItems.length == 0
+                        color: selectedItems.length == 0
                             ? Theme.of(context).brightness == Brightness.light
                                 ? MyTheme.grayBg
                                 : MyTheme.darkGray
@@ -775,7 +774,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                     : Text(
                         translate('Receive'),
                         style: TextStyle(
-                          color: _selectedItems.length == 0
+                          color: selectedItems.length == 0
                               ? Theme.of(context).brightness == Brightness.light
                                   ? MyTheme.grayBg
                                   : MyTheme.darkGray
@@ -809,13 +808,13 @@ class _FileManagerViewState extends State<FileManagerView> {
       MenuEntryButton(
           childBuilder: (style) => Text(translate("Select All"), style: style),
           proc: () => setState(() =>
-              _selectedItems.selectAll(controller.directory.value.entries)),
+              selectedItems.selectAll(controller.directory.value.entries)),
           padding: kDesktopMenuPadding,
           dismissOnClicked: true),
       MenuEntryButton(
           childBuilder: (style) =>
               Text(translate("Unselect All"), style: style),
-          proc: () => setState(() => _selectedItems.clear()),
+          proc: () => setState(() => selectedItems.clear()),
           padding: kDesktopMenuPadding,
           dismissOnClicked: true)
     ];
@@ -865,10 +864,10 @@ class _FileManagerViewState extends State<FileManagerView> {
       onNext: (buffer) {
         debugPrint("searching next for $buffer");
         assert(buffer.length == 1);
-        assert(_selectedItems.length <= 1);
+        assert(selectedItems.length <= 1);
         var skipCount = 0;
-        if (_selectedItems.items.isNotEmpty) {
-          final index = entries.indexOf(_selectedItems.items.first);
+        if (selectedItems.items.isNotEmpty) {
+          final index = entries.indexOf(selectedItems.items.first);
           if (index < 0) {
             return;
           }
@@ -884,7 +883,7 @@ class _FileManagerViewState extends State<FileManagerView> {
               (element) => element.name.toLowerCase().startsWith(buffer));
         }
         if (searchResult.isEmpty) {
-          setState(() => _selectedItems.clear());
+          setState(() => selectedItems.clear());
           return;
         }
         _jumpToEntry(isLocal, searchResult.first, scrollController,
@@ -892,12 +891,12 @@ class _FileManagerViewState extends State<FileManagerView> {
       },
       onSearch: (buffer) {
         debugPrint("searching for $buffer");
-        final selectedEntries = _selectedItems;
+        final selectedEntries = selectedItems;
         final searchResult = entries
             .where((element) => element.name.toLowerCase().startsWith(buffer));
         selectedEntries.clear();
         if (searchResult.isEmpty) {
-          setState(() => _selectedItems.clear());
+          setState(() => selectedItems.clear());
           return;
         }
         _jumpToEntry(isLocal, searchResult.first, scrollController,
@@ -916,7 +915,7 @@ class _FileManagerViewState extends State<FileManagerView> {
           final lastModifiedStr = entry.isDrive
               ? " "
               : "${entry.lastModified().toString().replaceAll(".000", "")}   ";
-          final isSelected = _selectedItems.contains(entry);
+          final isSelected = selectedItems.contains(entry);
           return Padding(
             padding: EdgeInsets.symmetric(vertical: 1),
             child: Container(
@@ -970,7 +969,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                                     )),
                               ),
                               onTap: () {
-                                final items = _selectedItems;
+                                final items = selectedItems;
                                 // handle double click
                                 if (_checkDoubleClick(entry)) {
                                   controller.openDirectory(entry.path);
@@ -1056,7 +1055,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   onSearchText(String searchText, bool isLocal) {
-    _selectedItems.clear();
+    selectedItems.clear();
     _searchText.value = searchText;
   }
 
@@ -1067,7 +1066,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     if (index == -1) {
       debugPrint("entry is not valid: ${entry.path}");
     }
-    final selectedEntries = _selectedItems;
+    final selectedEntries = selectedItems;
     final searchResult = entries.where((element) => element == entry);
     selectedEntries.clear();
     if (searchResult.isEmpty) {
@@ -1429,14 +1428,6 @@ class _FileManagerViewState extends State<FileManagerView> {
   // openDirectory(String path, {bool isLocal = false}) {
   //   model.openDirectory(path, isLocal: isLocal);
   // }
-}
-
-bool validItems(SelectedItems items) {
-  if (items.length > 0) {
-    // exclude DirDrive type
-    return items.items.any((item) => !item.isDrive);
-  }
-  return false;
 }
 
 Widget buildWindowsThisPC(BuildContext context, [TextStyle? textStyle]) {

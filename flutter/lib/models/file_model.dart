@@ -214,6 +214,7 @@ class FileController {
   final OverlayDialogManager? dialogManager;
 
   final DirectoryData Function() getOtherSideDirectoryData;
+  late final SelectedItems selectedItems = SelectedItems(isLocal: isLocal);
 
   FileController(
       {required this.isLocal,
@@ -1059,7 +1060,7 @@ class SelectedItems {
 
   SelectedItems({required this.isLocal});
 
-  add(Entry e) {
+  void add(Entry e) {
     if (e.isDrive) return;
     if (!_items.contains(e)) {
       _items.add(e);
@@ -1070,17 +1071,25 @@ class SelectedItems {
     return _items.contains(e);
   }
 
-  remove(Entry e) {
+  void remove(Entry e) {
     _items.remove(e);
   }
 
-  clear() {
+  void clear() {
     _items.clear();
   }
 
   void selectAll(List<Entry> entries) {
     _items.clear();
     _items.addAll(entries);
+  }
+
+  bool valid() {
+    if (length > 0) {
+      // exclude DirDrive type
+      return items.any((item) => !item.isDrive);
+    }
+    return false;
   }
 }
 
