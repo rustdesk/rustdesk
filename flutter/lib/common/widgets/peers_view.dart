@@ -45,7 +45,7 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
   var _lastChangeTime = DateTime.now();
   var _lastQueryPeers = <String>{};
   var _lastQueryTime = DateTime.now().subtract(const Duration(hours: 1));
-  var _queryCoun = 0;
+  var _queryCount = 0;
   var _exit = false;
 
   late final mobileWidth = () {
@@ -78,12 +78,12 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
 
   @override
   void onWindowFocus() {
-    _queryCoun = 0;
+    _queryCount = 0;
   }
 
   @override
   void onWindowMinimize() {
-    _queryCoun = _maxQueryCount;
+    _queryCount = _maxQueryCount;
   }
 
   @override
@@ -149,6 +149,7 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
   // ignore: todo
   // TODO: variables walk through async tasks?
   void _startCheckOnlines() {
+    final queryInterval = const Duration(seconds: 20);
     () async {
       while (!_exit) {
         final now = DateTime.now();
@@ -158,18 +159,18 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
               platformFFI.ffiBind
                   .queryOnlines(ids: _curPeers.toList(growable: false));
               _lastQueryPeers = {..._curPeers};
-              _lastQueryTime = DateTime.now();
-              _queryCoun = 0;
+              _lastQueryTime = DateTime.now().subtract(queryInterval);
+              _queryCount = 0;
             }
           }
         } else {
-          if (_queryCoun < _maxQueryCount) {
-            if (now.difference(_lastQueryTime) > const Duration(seconds: 20)) {
+          if (_queryCount < _maxQueryCount) {
+            if (now.difference(_lastQueryTime) > queryInterval) {
               if (_curPeers.isNotEmpty) {
                 platformFFI.ffiBind
                     .queryOnlines(ids: _curPeers.toList(growable: false));
                 _lastQueryTime = DateTime.now();
-                _queryCoun += 1;
+                _queryCount += 1;
               }
             }
           }
