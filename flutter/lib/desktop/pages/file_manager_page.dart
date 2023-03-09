@@ -15,7 +15,6 @@ import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/file_model.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
-import 'package:provider/provider.dart';
 import 'package:wakelock/wakelock.dart';
 
 import '../../consts.dart';
@@ -701,87 +700,93 @@ class _FileManagerViewState extends State<FileManagerView> {
                       color: Theme.of(context).cardColor,
                       hoverColor: Theme.of(context).hoverColor,
                     ),
-                    MenuButton(
-                      onPressed: selectedItems.valid()
-                          ? () async {
-                              await (controller.removeAction(selectedItems));
-                              selectedItems.clear();
-                            }
-                          : null,
-                      child: SvgPicture.asset(
-                        "assets/trash.svg",
-                        color: Theme.of(context).tabBarTheme.labelColor,
-                      ),
-                      color: Theme.of(context).cardColor,
-                      hoverColor: Theme.of(context).hoverColor,
-                    ),
+                    Obx(() => MenuButton(
+                          onPressed: SelectedItems.valid(selectedItems.items)
+                              ? () async {
+                                  await (controller
+                                      .removeAction(selectedItems));
+                                  selectedItems.clear();
+                                }
+                              : null,
+                          child: SvgPicture.asset(
+                            "assets/trash.svg",
+                            color: Theme.of(context).tabBarTheme.labelColor,
+                          ),
+                          color: Theme.of(context).cardColor,
+                          hoverColor: Theme.of(context).hoverColor,
+                        )),
                     menu(isLocal: isLocal),
                   ],
                 ),
               ),
-              ElevatedButton.icon(
-                style: ButtonStyle(
-                  padding: MaterialStateProperty.all<EdgeInsetsGeometry>(isLocal
-                      ? EdgeInsets.only(left: 10)
-                      : EdgeInsets.only(right: 10)),
-                  backgroundColor: MaterialStateProperty.all(
-                    selectedItems.length == 0
-                        ? MyTheme.accent80
-                        : MyTheme.accent,
-                  ),
-                ),
-                onPressed: selectedItems.valid()
-                    ? () {
-                        final otherSideData =
-                            controller.getOtherSideDirectoryData();
-                        controller.sendFiles(selectedItems, otherSideData);
-                        selectedItems.clear();
-                      }
-                    : null,
-                icon: isLocal
-                    ? Text(
-                        translate('Send'),
-                        textAlign: TextAlign.right,
-                        style: TextStyle(
-                          color: selectedItems.length == 0
-                              ? Theme.of(context).brightness == Brightness.light
-                                  ? MyTheme.grayBg
-                                  : MyTheme.darkGray
-                              : Colors.white,
-                        ),
-                      )
-                    : RotatedBox(
-                        quarterTurns: 2,
-                        child: SvgPicture.asset(
-                          "assets/arrow.svg",
-                          color: selectedItems.length == 0
-                              ? Theme.of(context).brightness == Brightness.light
-                                  ? MyTheme.grayBg
-                                  : MyTheme.darkGray
-                              : Colors.white,
-                          alignment: Alignment.bottomRight,
-                        ),
+              Obx(() => ElevatedButton.icon(
+                    style: ButtonStyle(
+                      padding: MaterialStateProperty.all<EdgeInsetsGeometry>(
+                          isLocal
+                              ? EdgeInsets.only(left: 10)
+                              : EdgeInsets.only(right: 10)),
+                      backgroundColor: MaterialStateProperty.all(
+                        selectedItems.items.isEmpty
+                            ? MyTheme.accent80
+                            : MyTheme.accent,
                       ),
-                label: isLocal
-                    ? SvgPicture.asset(
-                        "assets/arrow.svg",
-                        color: selectedItems.length == 0
-                            ? Theme.of(context).brightness == Brightness.light
-                                ? MyTheme.grayBg
-                                : MyTheme.darkGray
-                            : Colors.white,
-                      )
-                    : Text(
-                        translate('Receive'),
-                        style: TextStyle(
-                          color: selectedItems.length == 0
-                              ? Theme.of(context).brightness == Brightness.light
-                                  ? MyTheme.grayBg
-                                  : MyTheme.darkGray
-                              : Colors.white,
-                        ),
-                      ),
-              ),
+                    ),
+                    onPressed: SelectedItems.valid(selectedItems.items)
+                        ? () {
+                            final otherSideData =
+                                controller.getOtherSideDirectoryData();
+                            controller.sendFiles(selectedItems, otherSideData);
+                            selectedItems.clear();
+                          }
+                        : null,
+                    icon: isLocal
+                        ? Text(
+                            translate('Send'),
+                            textAlign: TextAlign.right,
+                            style: TextStyle(
+                              color: selectedItems.items.isEmpty
+                                  ? Theme.of(context).brightness ==
+                                          Brightness.light
+                                      ? MyTheme.grayBg
+                                      : MyTheme.darkGray
+                                  : Colors.white,
+                            ),
+                          )
+                        : RotatedBox(
+                            quarterTurns: 2,
+                            child: SvgPicture.asset(
+                              "assets/arrow.svg",
+                              color: selectedItems.items.isEmpty
+                                  ? Theme.of(context).brightness ==
+                                          Brightness.light
+                                      ? MyTheme.grayBg
+                                      : MyTheme.darkGray
+                                  : Colors.white,
+                              alignment: Alignment.bottomRight,
+                            ),
+                          ),
+                    label: isLocal
+                        ? SvgPicture.asset(
+                            "assets/arrow.svg",
+                            color: selectedItems.items.isEmpty
+                                ? Theme.of(context).brightness ==
+                                        Brightness.light
+                                    ? MyTheme.grayBg
+                                    : MyTheme.darkGray
+                                : Colors.white,
+                          )
+                        : Text(
+                            translate('Receive'),
+                            style: TextStyle(
+                              color: selectedItems.items.isEmpty
+                                  ? Theme.of(context).brightness ==
+                                          Brightness.light
+                                      ? MyTheme.grayBg
+                                      : MyTheme.darkGray
+                                  : Colors.white,
+                            ),
+                          ),
+                  )),
             ],
           ).marginOnly(top: 8.0)
         ],
@@ -814,7 +819,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       MenuEntryButton(
           childBuilder: (style) =>
               Text(translate("Unselect All"), style: style),
-          proc: () => setState(() => selectedItems.clear()),
+          proc: () => selectedItems.clear(),
           padding: kDesktopMenuPadding,
           dismissOnClicked: true)
     ];
@@ -864,7 +869,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       onNext: (buffer) {
         debugPrint("searching next for $buffer");
         assert(buffer.length == 1);
-        assert(selectedItems.length <= 1);
+        assert(selectedItems.items.length <= 1);
         var skipCount = 0;
         if (selectedItems.items.isNotEmpty) {
           final index = entries.indexOf(selectedItems.items.first);
@@ -883,7 +888,7 @@ class _FileManagerViewState extends State<FileManagerView> {
               (element) => element.name.toLowerCase().startsWith(buffer));
         }
         if (searchResult.isEmpty) {
-          setState(() => selectedItems.clear());
+          selectedItems.clear();
           return;
         }
         _jumpToEntry(isLocal, searchResult.first, scrollController,
@@ -896,7 +901,7 @@ class _FileManagerViewState extends State<FileManagerView> {
             .where((element) => element.name.toLowerCase().startsWith(buffer));
         selectedEntries.clear();
         if (searchResult.isEmpty) {
-          setState(() => selectedItems.clear());
+          selectedItems.clear();
           return;
         }
         _jumpToEntry(isLocal, searchResult.first, scrollController,
@@ -915,12 +920,11 @@ class _FileManagerViewState extends State<FileManagerView> {
           final lastModifiedStr = entry.isDrive
               ? " "
               : "${entry.lastModified().toString().replaceAll(".000", "")}   ";
-          final isSelected = selectedItems.contains(entry);
           return Padding(
             padding: EdgeInsets.symmetric(vertical: 1),
-            child: Container(
+            child: Obx(() => Container(
                 decoration: BoxDecoration(
-                  color: isSelected
+                  color: selectedItems.items.contains(entry)
                       ? Theme.of(context).hoverColor
                       : Theme.of(context).cardColor,
                   borderRadius: BorderRadius.all(
@@ -1025,7 +1029,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                       ),
                     ),
                   ],
-                )),
+                ))),
           );
         }).toList(growable: false);
 
@@ -1077,10 +1081,8 @@ class _FileManagerViewState extends State<FileManagerView> {
             entries.indexOf(searchResult.first) * rowHeight),
         scrollController.position.maxScrollExtent);
     scrollController.jumpTo(offset);
-    setState(() {
-      selectedEntries.add(searchResult.first);
-      debugPrint("focused on ${searchResult.first.name}");
-    });
+    selectedEntries.add(searchResult.first);
+    debugPrint("focused on ${searchResult.first.name}");
   }
 
   void _onSelectedChanged(SelectedItems selectedItems, List<Entry> entries,
@@ -1090,7 +1092,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     final isShiftDown =
         RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.shiftLeft);
     if (isCtrlDown) {
-      if (selectedItems.contains(entry)) {
+      if (selectedItems.items.contains(entry)) {
         selectedItems.remove(entry);
       } else {
         selectedItems.add(entry);

@@ -1052,40 +1052,32 @@ class DirectoryOptions {
 
 class SelectedItems {
   final bool isLocal;
-  final List<Entry> _items = [];
-
-  List<Entry> get items => _items;
-
-  int get length => _items.length;
+  final items = RxList<Entry>.empty(growable: true);
 
   SelectedItems({required this.isLocal});
 
   void add(Entry e) {
     if (e.isDrive) return;
-    if (!_items.contains(e)) {
-      _items.add(e);
+    if (!items.contains(e)) {
+      items.add(e);
     }
   }
 
-  bool contains(Entry e) {
-    return _items.contains(e);
-  }
-
   void remove(Entry e) {
-    _items.remove(e);
+    items.remove(e);
   }
 
   void clear() {
-    _items.clear();
+    items.clear();
   }
 
   void selectAll(List<Entry> entries) {
-    _items.clear();
-    _items.addAll(entries);
+    items.clear();
+    items.addAll(entries);
   }
 
-  bool valid() {
-    if (length > 0) {
+  static bool valid(RxList<Entry> items) {
+    if (items.isNotEmpty) {
       // exclude DirDrive type
       return items.any((item) => !item.isDrive);
     }
