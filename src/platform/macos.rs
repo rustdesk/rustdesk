@@ -581,7 +581,7 @@ fn check_main_window() -> bool {
     sys.refresh_processes();
     let app = format!("/Applications/{}.app", crate::get_app_name());
     let my_uid = sys
-        .process((std::process::id() as i32).into())
+        .process((std::process::id() as usize).into())
         .map(|x| x.user_id())
         .unwrap_or_default();
     for (_, p) in sys.processes().iter() {
@@ -667,9 +667,6 @@ pub fn change_resolution(name: &str, width: usize, height: usize) -> ResultType<
     Ok(())
 }
 
-
 pub fn check_super_user_permission() -> ResultType<bool> {
-    unsafe {
-        Ok(MacCheckAdminAuthorization() == YES)
-    }
+    unsafe { Ok(MacCheckAdminAuthorization() == YES) }
 }
