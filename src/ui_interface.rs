@@ -664,7 +664,7 @@ pub fn default_video_save_directory() -> String {
     if let Ok(home) = config::APP_HOME_DIR.read() {
         let mut path = home.to_owned();
         path.push_str("/RustDesk/ScreenRecord");
-        let dir = try_create(&std::path::Path::from(path));
+        let dir = try_create(&std::path::Path::new(&path));
         if !dir.is_empty() {
             return dir;
         }
