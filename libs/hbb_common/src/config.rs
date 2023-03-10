@@ -4,7 +4,7 @@ use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock},
-    time::SystemTime,
+    time::{Duration, Instant, SystemTime},
 };
 
 use anyhow::Result;
@@ -51,6 +51,7 @@ lazy_static::lazy_static! {
     pub static ref APP_NAME: Arc<RwLock<String>> = Arc::new(RwLock::new("RustDesk".to_owned()));
     static ref KEY_PAIR: Arc<Mutex<Option<KeyPair>>> = Default::default();
     static ref HW_CODEC_CONFIG: Arc<RwLock<HwCodecConfig>> = Arc::new(RwLock::new(HwCodecConfig::load()));
+    static ref USER_DEFAULT_CONFIG: Arc<RwLock<(UserDefaultConfig, Instant)>> = Arc::new(RwLock::new((UserDefaultConfig::load(), Instant::now())));
 }
 
 lazy_static::lazy_static! {
@@ -123,7 +124,7 @@ macro_rules! serde_field_bool {
         }
         impl $struct_name {
             pub fn $func() -> bool {
-                UserDefaultConfig::load().get($field_name) == "Y"
+                UserDefaultConfig::read().get($field_name) == "Y"
             }
         }
     };
@@ -980,21 +981,21 @@ impl PeerConfig {
     serde_field_string!(
         default_view_style,
         deserialize_view_style,
-        UserDefaultConfig::load().get("view_style")
+        UserDefaultConfig::read().get("view_style")
     );
     serde_field_string!(
         default_scroll_style,
         deserialize_scroll_style,
-        UserDefaultConfig::load().get("scroll_style")
+        UserDefaultConfig::read().get("scroll_style")
     );
     serde_field_string!(
         default_image_quality,
         deserialize_image_quality,
-        UserDefaultConfig::load().get("image_quality")
+        UserDefaultConfig::read().get("image_quality")
     );
 
     fn default_custom_image_quality() -> Vec<i32> {
-        let f: f64 = UserDefaultConfig::load()
+        let f: f64 = UserDefaultConfig::read()
             .get("custom_image_quality")
             .parse()
             .unwrap_or(50.0);
@@ -1020,15 +1021,15 @@ impl PeerConfig {
         let mut mp: HashMap<String, String> = de::Deserialize::deserialize(deserializer)?;
         let mut key = "codec-preference";
         if !mp.contains_key(key) {
-            mp.insert(key.to_owned(), UserDefaultConfig::load().get(key));
+            mp.insert(key.to_owned(), UserDefaultConfig::read().get(key));
         }
         key = "custom-fps";
         if !mp.contains_key(key) {
-            mp.insert(key.to_owned(), UserDefaultConfig::load().get(key));
+            mp.insert(key.to_owned(), UserDefaultConfig::read().get(key));
         }
         key = "zoom-cursor";
         if !mp.contains_key(key) {
-            mp.insert(key.to_owned(), UserDefaultConfig::load().get(key));
+            mp.insert(key.to_owned(), UserDefaultConfig::read().get(key));
         }
         Ok(mp)
     }
@@ -1046,7 +1047,12 @@ serde_field_bool!(
     default_show_quality_monitor,
     "ShowQualityMonitor::default_show_quality_monitor"
 );
-serde_field_bool!(DisableAudio, "disable_audio", default_disable_audio, "DisableAudio::default_disable_audio");
+serde_field_bool!(
+    DisableAudio,
+    "disable_audio",
+    default_disable_audio,
+    "DisableAudio::default_disable_audio"
+);
 serde_field_bool!(
     EnableFileTransfer,
     "enable_file_transfer",
@@ -1065,9 +1071,19 @@ serde_field_bool!(
     default_lock_after_session_end,
     "LockAfterSessionEnd::default_lock_after_session_end"
 );
-serde_field_bool!(PrivacyMode, "privacy_mode", default_privacy_mode, "PrivacyMode::default_privacy_mode");
+serde_field_bool!(
+    PrivacyMode,
+    "privacy_mode",
+    default_privacy_mode,
+    "PrivacyMode::default_privacy_mode"
+);
 
-serde_field_bool!(AllowSwapKey, "allow_swap_key", default_allow_swap_key, "AllowSwapKey::default_allow_swap_key");
+serde_field_bool!(
+    AllowSwapKey,
+    "allow_swap_key",
+    default_allow_swap_key,
+    "AllowSwapKey::default_allow_swap_key"
+);
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct LocalConfig {
@@ -1282,6 +1298,14 @@ pub struct UserDefaultConfig {
 }
 
 impl UserDefaultConfig {
+    pub fn read() -> UserDefaultConfig {
+        let mut cfg = USER_DEFAULT_CONFIG.write().unwrap();
+        if cfg.1.elapsed() > Duration::from_secs(1) {
+            *cfg = (Self::load(), Instant::now());
+        }
+        cfg.0.clone()
+    }
+
     pub fn load() -> UserDefaultConfig {
         Config::load_::<UserDefaultConfig>("_default")
     }
