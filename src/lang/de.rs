@@ -464,5 +464,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("idd_driver_tip", "Installieren Sie den virtuellen Anzeigetreiber, der verwendet wird, wenn Sie keine physischen Anzeigen haben."),
         ("confirm_idd_driver_tip", "Die Option zur Installation des virtuellen Anzeigetreibers ist aktiviert. Beachten Sie, dass ein Testzertifikat installiert wird, um dem virtuellen Anzeigetreiber zu vertrauen. Dieses Testzertifikat wird nur verwendet, um Rustdesk-Treibern zu vertrauen."),
         ("RDP Settings", "RDP-Einstellungen"),
+        ("Sort by", ""),
     ].iter().cloned().collect();
 }

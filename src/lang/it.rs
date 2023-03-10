@@ -208,7 +208,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("x11 expected", "x11 necessario"),
         ("Port", "Porta"),
         ("Settings", "Impostazioni"),
-        ("Username", " Nome utente"),
+        ("Username", "Nome utente"),
         ("Invalid port", "Numero di porta non valido"),
         ("Closed manually by the peer", "Chiuso manualmente dal peer"),
         ("Enable remote configuration modification", "Abilita la modifica remota della configurazione"),
@@ -461,8 +461,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Resolution", "Risoluzione"),
         ("No transfers in progress", "Nessun trasferimento in corso"),
         ("Set one-time password length", "Imposta la lunghezza della password monouso"),
-        ("idd_driver_tip", ""),
-        ("confirm_idd_driver_tip", ""),
+        ("idd_driver_tip", "Installa il driver per lo schermo virtuale che sarà utilizzato quando non si dispone di schermi fisici."),
+        ("confirm_idd_driver_tip", "L'opzione per installare il driver per lo schermo virtuale è selezionata. Nota che un certificato di test sarà installato per l'attendibilità del driver dello schermo virtuale. Questo certificato di test verrà utilizzato solo per l'attendibilità dei driver di RustDesk."),
         ("RDP Settings", "Impostazioni RDP"),
+        ("Sort by", "Ordina per"),
     ].iter().cloned().collect();
 }

@@ -464,5 +464,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("idd_driver_tip", "安装虚拟显示器驱动，以便在没有连接显示器的情况下启动虚拟显示器进行控制。"),
         ("confirm_idd_driver_tip", "安装虚拟显示器驱动的选项已勾选。请注意，测试证书将被安装以信任虚拟显示器驱动。测试证书仅会用于信任Rustdesk的驱动。"),
         ("RDP Settings", ""),
+        ("Sort by", ""),
     ].iter().cloned().collect();
 }
