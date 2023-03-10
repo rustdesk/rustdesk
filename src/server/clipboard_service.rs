@@ -29,7 +29,7 @@ impl super::service::Reset for State {
 
 pub fn new() -> GenericService {
     let sp = GenericService::new(NAME, true);
-    sp.repeat::<State, _>(INTERVAL, run);
+    sp.repeat::<State, _, _>(INTERVAL, run, GenericService::run_on_subscribes);
     sp
 }
 

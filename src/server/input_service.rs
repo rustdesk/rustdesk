@@ -118,13 +118,13 @@ pub type MouseCursorService = ServiceTmpl<MouseCursorSub>;
 
 pub fn new_cursor() -> MouseCursorService {
     let sp = MouseCursorService::new(NAME_CURSOR, true);
-    sp.repeat::<StateCursor, _>(33, run_cursor);
+    sp.repeat::<StateCursor, _, _>(33, run_cursor, MouseCursorService::run_on_subscribes);
     sp
 }
 
 pub fn new_pos() -> GenericService {
     let sp = GenericService::new(NAME_POS, false);
-    sp.repeat::<StatePos, _>(33, run_pos);
+    sp.repeat::<StatePos, _, _>(33, run_pos, GenericService::run_always);
     sp
 }
 

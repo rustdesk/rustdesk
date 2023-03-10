@@ -24,7 +24,7 @@ static RESTARTING: AtomicBool = AtomicBool::new(false);
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn new() -> GenericService {
     let sp = GenericService::new(NAME, true);
-    sp.repeat::<cpal_impl::State, _>(33, cpal_impl::run);
+    sp.repeat::<cpal_impl::State, _, _>(33, cpal_impl::run, GenericService::run_on_subscribes);
     sp
 }
 

@@ -151,7 +151,7 @@ impl VideoFrameController {
 
 pub fn new() -> GenericService {
     let sp = GenericService::new(NAME, true);
-    sp.run(run);
+    sp.run(run, GenericService::run_on_subscribes);
     sp
 }
 

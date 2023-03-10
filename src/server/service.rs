@@ -188,11 +188,22 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
             }
         }
     }
+    
+    #[inline]
+    pub fn run_on_subscribes(sp: &Self) -> bool {
+        sp.has_subscribes()
+    }
 
-    pub fn repeat<S, F>(&self, interval_ms: u64, callback: F)
+    #[inline]
+    pub fn run_always(_sp: &Self) -> bool {
+        true
+    }
+
+    pub fn repeat<S, F, R>(&self, interval_ms: u64, callback: F, should_run: R)
     where
         F: 'static + FnMut(Self, &mut S) -> ResultType<()> + Send,
         S: 'static + Default + Reset,
+        R: 'static + FnOnce(&Self) -> bool + Send + Copy,
     {
         let interval = time::Duration::from_millis(interval_ms);
         let mut callback = callback;
@@ -202,7 +213,7 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
             let mut may_reset = false;
             while sp.active() {
                 let now = time::Instant::now();
-                if sp.has_subscribes() {
+                if should_run(&sp) {
                     if let Err(err) = callback(sp.clone(), &mut state) {
                         log::error!("Error of {} service: {}", sp.name(), err);
                         thread::sleep(time::Duration::from_millis(MAX_ERROR_TIMEOUT));
@@ -225,16 +236,17 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
         self.0.write().unwrap().handle = Some(thread);
     }
 
-    pub fn run<F>(&self, callback: F)
+    pub fn run<F, R>(&self, callback: F, should_run: R)
     where
         F: 'static + FnMut(Self) -> ResultType<()> + Send,
+        R: 'static + FnOnce(&Self) -> bool + Send + Copy,
     {
         let sp = self.clone();
         let mut callback = callback;
         let thread = thread::spawn(move || {
             let mut error_timeout = HIBERNATE_TIMEOUT;
             while sp.active() {
-                if sp.has_subscribes() {
+                if should_run(&sp) {
                     log::debug!("Enter {} service inner loop", sp.name());
                     let tm = time::Instant::now();
                     if let Err(err) = callback(sp.clone()) {
