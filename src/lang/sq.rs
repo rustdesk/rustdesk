@@ -270,8 +270,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Note", "Shënime"),
         ("Connection", "Lidhja"),
         ("Share Screen", "Ndaj ekranin"),
-        ("CLOSE", "Mbyll"),
-        ("OPEN", "Hap"),
         ("Chat", "Biseda"),
         ("Total", "Total"),
         ("items", "artikuj"),
@@ -290,7 +288,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_service_will_start_tip", "Aktivizimi i \"Regjistrimi i ekranit\" do të nisë automatikisht shërbimin, duke lejuar pajisjet e tjera të kërkojnë një lidhje me pajisjen tuaj."),
         ("android_stop_service_tip", "Mbyllja e shërbimit do të mbyllë automatikisht të gjitha lidhjet e vendosura."),
         ("android_version_audio_tip", "Versioni aktual i Android nuk mbështet regjistrimin e audios, ju lutemi përmirësoni në Android 10 ose më të lartë."),
-        ("android_start_service_tip", "Shtyp [Fillo Shërbimin] ose HAP lejen e [Kapjen e Ekranit] për të nisur shërbimin e ndarjes së ekranit."),
+        ("android_start_service_tip", ""),
         ("Account", "Llogaria"),
         ("Overwrite", "Përshkruaj"),
         ("This file exists, skip or overwrite this file?", "Ky skedar ekziston , tejkalo ose përshkruaj këtë skedarë"),
@@ -469,5 +467,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Restore", ""),
         ("Minimize", ""),
         ("Maximize", ""),
+        ("Your Device", ""),
     ].iter().cloned().collect();
 }

@@ -270,8 +270,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Note", "Primedba"),
         ("Connection", "Konekcija"),
         ("Share Screen", "Podeli ekran"),
-        ("CLOSE", "ZATVORI"),
-        ("OPEN", "OTVORI"),
         ("Chat", "Dopisivanje"),
         ("Total", "Ukupno"),
         ("items", "stavki"),
@@ -290,7 +288,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_service_will_start_tip", "Uključenje \"Screen Capture\" automatski će pokrenuti servis, dozvoljavajući drugim uređajima da zahtevaju spajanje na vaš uređaj."),
         ("android_stop_service_tip", "Zatvaranje servisa automatski će zatvoriti sve uspostavljene konekcije."),
         ("android_version_audio_tip", "Tekuća Android verzija ne podržava audio snimanje, molimo nadogradite na Android 10 ili veći."),
-        ("android_start_service_tip", "Kliknite [Start Service] ili OPEN [Screen Capture] dozvolu da pokrenete servis deljenja ekrana."),
+        ("android_start_service_tip", ""),
         ("Account", "Nalog"),
         ("Overwrite", "Prepiši preko"),
         ("This file exists, skip or overwrite this file?", "Ova datoteka postoji, preskoči ili prepiši preko?"),
@@ -469,5 +467,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Restore", ""),
         ("Minimize", ""),
         ("Maximize", ""),
+        ("Your Device", ""),
     ].iter().cloned().collect();
 }

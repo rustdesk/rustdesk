@@ -270,8 +270,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Note", "Opomba"),
         ("Connection", "Povezava"),
         ("Share Screen", "Deli zaslon"),
-        ("CLOSE", "ZAPRI"),
-        ("OPEN", "ODPRI"),
         ("Chat", "Pogovor"),
         ("Total", "Skupaj"),
         ("items", "elementi"),
@@ -290,7 +288,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_service_will_start_tip", "Z vklopom zajema zaslona se bo samodejno zagnala storitev, ki omogoča da oddaljene naprave pošljejo zahtevo za povezavo na vašo napravo."),
         ("android_stop_service_tip", "Z zaustavitvijo storitve bodo samodejno prekinjene vse oddaljene povezave."),
         ("android_version_audio_tip", "Trenutna različica Androida ne omogoča zajema zvoka. Za zajem zvoka nadgradite na Android 10 ali novejši."),
-        ("android_start_service_tip", "Tapnite »Zaženi storitev« ali »ODPRI« pri dovoljenju za zajem zaslona da zaženete storitev deljenja zaslona."),
+        ("android_start_service_tip", ""),
         ("Account", "Račun"),
         ("Overwrite", "Prepiši"),
         ("This file exists, skip or overwrite this file?", "Datoteka obstaja, izpusti ali prepiši?"),
@@ -469,5 +467,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Restore", ""),
         ("Minimize", ""),
         ("Maximize", ""),
+        ("Your Device", ""),
     ].iter().cloned().collect();
 }

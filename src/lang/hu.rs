@@ -270,8 +270,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Note", "Megyjegyzés"),
         ("Connection", "Kapcsolat"),
         ("Share Screen", "Képernyőmegosztás"),
-        ("CLOSE", "BEZÁRÁS"),
-        ("OPEN", "MEGNYITÁS"),
         ("Chat", "Chat"),
         ("Total", "Összes"),
         ("items", "elemek"),
@@ -290,7 +288,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_service_will_start_tip", "A \"Képernyőrögzítés\" bekapcsolásával automatikus elindul a szolgáltatás, lehetővé téve, hogy más eszközök csatlakozási kérelmet küldhessenek"),
         ("android_stop_service_tip", "A szolgáltatás leállítása automatikusan szétkapcsol minden létező kapcsolatot."),
         ("android_version_audio_tip", "A jelenlegi Android verzió nem támogatja a hangrögzítést, frissítsen legalább Android 10-re, vagy egy újabb verzióra."),
-        ("android_start_service_tip", "Nyomjon a [Szolgáltatás indítása] gombra, vagy adjon [Képernyőrözítési] engedélyt az applikációnak hogy elindítsa a képernyőmegosztó szolgáltatást."),
+        ("android_start_service_tip", ""),
         ("Account", "Fiók"),
         ("Overwrite", "Felülírás"),
         ("This file exists, skip or overwrite this file?", "Ez a fájl már létezik, kihagyja vagy felülírja ezt a fájlt?"),
@@ -469,5 +467,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Restore", ""),
         ("Minimize", ""),
         ("Maximize", ""),
+        ("Your Device", ""),
     ].iter().cloned().collect();
 }

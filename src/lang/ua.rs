@@ -270,8 +270,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Note", "Примітка"),
         ("Connection", "З'єднання"),
         ("Share Screen", "Поділитися екраном"),
-        ("CLOSE", "ЗАКРИТИ"),
-        ("OPEN", "ВІДКРИТИ"),
         ("Chat", "Чат"),
         ("Total", "Всього"),
         ("items", "елементи"),
@@ -290,7 +288,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_service_will_start_tip", "Увімкнення захоплення екрана автоматично запускає службу, дозволяючи іншим пристроям запитувати з'єднання з цього пристрою."),
         ("android_stop_service_tip", "Закриття служби автоматично закриє всі встановлені з'єднання."),
         ("android_version_audio_tip", "Поточна версія Android не підтримує захоплення звуку, оновіть її до Android 10 або вище."),
-        ("android_start_service_tip", "Натисніть [Запуск проміжного сервера] або ВІДКРИТИ роздільну здатність [Захоплення екрана], щоб запустити службу демонстрації екрана."),
+        ("android_start_service_tip", ""),
         ("Account", "Акаунт"),
         ("Overwrite", "Перезаписати"),
         ("This file exists, skip or overwrite this file?", "Цей файл існує, пропустити або перезаписати файл?"),
@@ -469,5 +467,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Restore", ""),
         ("Minimize", ""),
         ("Maximize", ""),
+        ("Your Device", ""),
     ].iter().cloned().collect();
 }

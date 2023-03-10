@@ -270,8 +270,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Note", "备注"),
         ("Connection", "连接"),
         ("Share Screen", "共享屏幕"),
-        ("CLOSE", "关闭"),
-        ("OPEN", "开启"),
         ("Chat", "聊天消息"),
         ("Total", "总计"),
         ("items", "个项目"),
@@ -290,7 +288,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_service_will_start_tip", "开启录屏权限将自动开启服务，允许其他设备向此设备请求建立连接。"),
         ("android_stop_service_tip", "关闭服务将自动关闭所有已建立的连接。"),
         ("android_version_audio_tip", "当前安卓版本不支持音频录制，请升级至安卓 10 或更高。"),
-        ("android_start_service_tip", "点击 [启动服务] 或打开 [屏幕录制] 权限开启手机屏幕共享服务。"),
+        ("android_start_service_tip", ""),
         ("Account", "账户"),
         ("Overwrite", "覆盖"),
         ("This file exists, skip or overwrite this file?", "这个文件/文件夹已存在，跳过/覆盖？"),
@@ -469,5 +467,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Restore", ""),
         ("Minimize", ""),
         ("Maximize", ""),
+        ("Your Device", ""),
     ].iter().cloned().collect();
 }

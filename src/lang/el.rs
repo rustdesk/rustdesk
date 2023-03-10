@@ -270,8 +270,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Note", "Σημείωση"),
         ("Connection", "Σύνδεση"),
         ("Share Screen", "Κοινή χρήση οθόνης"),
-        ("CLOSE", "Απενεργοποίηση"),
-        ("OPEN", "Ενεργοποίηση"),
         ("Chat", "Κουβέντα"),
         ("Total", "Σύνολο"),
         ("items", "στοιχεία"),
@@ -290,7 +288,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_service_will_start_tip", "Η ενεργοποίηση της κοινής χρήσης οθόνης θα ξεκινήσει αυτόματα την υπηρεσία, ώστε άλλες συσκευές να μπορούν να ελέγχουν αυτήν τη συσκευή Android."),
         ("android_stop_service_tip", "Η απενεργοποίηση της υπηρεσίας θα αποσυνδέσει αυτόματα όλες τις εγκατεστημένες συνδέσεις."),
         ("android_version_audio_tip", "Η έκδοση Android που διαθέτετε δεν υποστηρίζει εγγραφή ήχου, ενημερώστε το σε Android 10 ή νεότερη έκδοση, εάν είναι δυνατόν."),
-        ("android_start_service_tip", "Πατήστε [Ενεργοποίηση υπηρεσίας] ή ενεργοποιήστε την άδεια [Πρόσβαση στην οθόνη] για να ξεκινήσετε την υπηρεσία κοινής χρήσης οθόνης."),
+        ("android_start_service_tip", ""),
         ("Account", "Λογαριασμός"),
         ("Overwrite", "Αντικατάσταση"),
         ("This file exists, skip or overwrite this file?", "Αυτό το αρχείο υπάρχει, παράβλεψη ή αντικατάσταση αυτού του αρχείου;"),
@@ -469,5 +467,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Restore", ""),
         ("Minimize", ""),
         ("Maximize", ""),
+        ("Your Device", ""),
     ].iter().cloned().collect();
 }

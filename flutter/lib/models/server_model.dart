@@ -289,7 +289,7 @@ class ServerModel with ChangeNotifier {
           content: Text(translate("android_stop_service_tip")),
           actions: [
             TextButton(onPressed: close, child: Text(translate("Cancel"))),
-            ElevatedButton(onPressed: submit, child: Text(translate("OK"))),
+            TextButton(onPressed: submit, child: Text(translate("OK"))),
           ],
           onSubmit: submit,
           onCancel: close,

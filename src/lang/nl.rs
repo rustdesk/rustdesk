@@ -270,8 +270,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Note", "Opmerking"),
         ("Connection", "Verbinding"),
         ("Share Screen", "Scherm Delen"),
-        ("CLOSE", "SLUITEN"),
-        ("OPEN", "OPEN"),
         ("Chat", "Chat"),
         ("Total", "Totaal"),
         ("items", "items"),
@@ -290,7 +288,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_service_will_start_tip", "Als u \"Schermopname\" inschakelt, wordt de service automatisch gestart, zodat andere apparaten een verbinding met uw apparaat kunnen aanvragen."),
         ("android_stop_service_tip", "Het sluiten van de service zal automatisch alle gemaakte verbindingen sluiten."),
         ("android_version_audio_tip", "De huidige versie van Android ondersteunt geen audio-opname, upgrade naar Android 10 of hoger."),
-        ("android_start_service_tip", "Druk op [Start Service] of op de permissie OPEN [Screenshot] om de service voor het overnemen van het scherm te starten."),
+        ("android_start_service_tip", ""),
         ("Account", "Account"),
         ("Overwrite", "Overschrijven"),
         ("This file exists, skip or overwrite this file?", "Dit bestand bestaat reeds, overslaan of overschrijven?"),
@@ -469,5 +467,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Restore", ""),
         ("Minimize", ""),
         ("Maximize", ""),
+        ("Your Device", ""),
     ].iter().cloned().collect();
 }

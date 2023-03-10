@@ -270,8 +270,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Note", "Hinweis"),
         ("Connection", "Verbindung"),
         ("Share Screen", "Bildschirm freigeben"),
-        ("CLOSE", "DEAKTIVIEREN"),
-        ("OPEN", "AKTIVIEREN"),
         ("Chat", "Chat"),
         ("Total", "Gesamt"),
         ("items", "Einträge"),
@@ -469,5 +467,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Restore", "Verkleinern"),
         ("Minimize", "Minimieren"),
         ("Maximize", "Maximieren"),
+        ("Your Device", "Ihr Gerät"),
     ].iter().cloned().collect();
 }

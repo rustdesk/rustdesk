@@ -270,8 +270,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Note", "Poznámka"),
         ("Connection", "Pripojenie"),
         ("Share Screen", "Zdielať obrazovku"),
-        ("CLOSE", "ZATVORIŤ"),
-        ("OPEN", "OTVORIŤ"),
         ("Chat", "Chat"),
         ("Total", "Celkom"),
         ("items", "položiek"),
@@ -290,7 +288,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_service_will_start_tip", "Zapnutie \"Zachytávanie obsahu obrazovky\" automaticky spistí službu, čo iným zariadeniam umožní požiadať o pripojenie k tomuto zariadeniu."),
         ("android_stop_service_tip", "Zastavenie služby automaticky ukončí všetky naviazané spojenia."),
         ("android_version_audio_tip", "Vaša verzia Androidu neumožňuje zaznamenávanie zvuku. Prejdite na verziu Android 10 alebo vyššiu."),
-        ("android_start_service_tip", "Klepnite na [Spustiť službu] alebo OTVORTE oprávnenie [Zachytávanie obsahu obrazovky], aby sa aktivovala služba zdieľania obrazovky."),
+        ("android_start_service_tip", ""),
         ("Account", ""),
         ("Overwrite", "Prepísať"),
         ("This file exists, skip or overwrite this file?", "Preskočiť alebo prepísať existujúci súbor?"),
@@ -469,5 +467,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Restore", ""),
         ("Minimize", ""),
         ("Maximize", ""),
+        ("Your Device", ""),
     ].iter().cloned().collect();
 }

@@ -270,8 +270,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Note", "Nota"),
         ("Connection", "Conexão"),
         ("Share Screen", "Compartilhar Tela"),
-        ("CLOSE", "FECHAR"),
-        ("OPEN", "ABRIR"),
         ("Chat", "Chat"),
         ("Total", "Total"),
         ("items", "itens"),
@@ -290,7 +288,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_service_will_start_tip", "Habilitar a Captura de Tela irá automaticamente inicalizar o serviço, permitindo que outros dispositivos solicitem uma conexão deste dispositivo."),
         ("android_stop_service_tip", "Fechar o serviço irá automaticamente fechar todas as conexões estabelecidas."),
         ("android_version_audio_tip", "A versão atual do Android não suporta captura de áudio, por favor atualize para o Android 10 ou superior."),
-        ("android_start_service_tip", "Toque [Iniciar Serviço] ou abra a permissão [Captura de Tela] para iniciar o serviço de compartilhamento de tela."),
+        ("android_start_service_tip", ""),
         ("Account", "Conta"),
         ("Overwrite", "Substituir"),
         ("This file exists, skip or overwrite this file?", "Este arquivo existe, pular ou substituir este arquivo?"),
@@ -469,5 +467,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Restore", ""),
         ("Minimize", ""),
         ("Maximize", ""),
+        ("Your Device", ""),
     ].iter().cloned().collect();
 }

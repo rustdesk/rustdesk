@@ -270,8 +270,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Note", "ノート"),
         ("Connection", "接続"),
         ("Share Screen", "画面を共有"),
-        ("CLOSE", "閉じる"),
-        ("OPEN", "開く"),
         ("Chat", "チャット"),
         ("Total", "計"),
         ("items", "個のアイテム"),
@@ -290,7 +288,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_service_will_start_tip", "「画面キャプチャ」をオンにするとサービスが自動的に開始され、他の端末がこの端末への接続をリクエストできるようになります。"),
         ("android_stop_service_tip", "サービスを停止すると、現在確立されている接続が全て自動的に閉じられます。"),
         ("android_version_audio_tip", "現在のAndroidバージョンでは音声キャプチャはサポートされていません。Android 10以降にアップグレードしてください。"),
-        ("android_start_service_tip", "「サービスを開始」をタップするか「画面キャプチャ」を開くと、画面共有サービスが開始されます。"),
+        ("android_start_service_tip", ""),
         ("Account", ""),
         ("Overwrite", "上書き"),
         ("This file exists, skip or overwrite this file?", "このファイルは存在しています。スキップするか上書きしますか？"),
@@ -469,5 +467,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Restore", ""),
         ("Minimize", ""),
         ("Maximize", ""),
+        ("Your Device", ""),
     ].iter().cloned().collect();
 }

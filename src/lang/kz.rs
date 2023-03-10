@@ -270,8 +270,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Note", "Нота"),
         ("Connection", "Қосылым"),
         ("Share Screen", "Екіренді Бөлісу"),
-        ("CLOSE", "ЖАБУ"),
-        ("OPEN", "АШУ"),
         ("Chat", "Чат"),
         ("Total", "Барлығы"),
         ("items", "зат"),
@@ -290,7 +288,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_service_will_start_tip", "\"Екіренді Тұсіру\" қосылған кезде сербес аутыматты іске қосылып, басқа құрылғыларға сіздің құрылғыға қосылым сұраныстауға мүмкіндің береді."),
         ("android_stop_service_tip", "Сербесті жабу аутыматты түрде барлық орнатылған қосылымдарды жабады."),
         ("android_version_audio_tip", "Ағымдағы Android нұсқасы аудионы түсіруді қолдамайды, Android 10 не жоғарғысына жаңғыртуды өтінеміз."),
-        ("android_start_service_tip", "[Сербесті Іске қосу]'ды түртіңіз не [Екіренді Түсіру] рұқсатын АШУ арқылы екіренді бөлісу сербесін іске қосыңыз."),
+        ("android_start_service_tip", ""),
         ("Account", "Есепкі"),
         ("Overwrite", "Үстінен қайта жазу"),
         ("This file exists, skip or overwrite this file?", "Бұл файыл бар, өткізіп жіберу әлде үстінен қайта жазу керек пе?"),
@@ -469,5 +467,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Restore", ""),
         ("Minimize", ""),
         ("Maximize", ""),
+        ("Your Device", ""),
     ].iter().cloned().collect();
 }
