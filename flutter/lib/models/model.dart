@@ -371,7 +371,7 @@ class FfiModel with ChangeNotifier {
 
   _updateSessionWidthHeight(String id) {
     parent.target?.canvasModel.updateViewStyle();
-    if (display.width < 0 || display.height < 0) {
+    if (display.width <= 0 || display.height <= 0) {
       debugPrintStack(label: 'invalid display size (${display.width},${display.height})');
     } else {
       bind.sessionSetSize(id: id, width: display.width, height: display.height);
