@@ -414,7 +414,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             scrollDirection: Axis.horizontal,
             child: Theme(
               data: themeData(),
-              child: MenuBar(
+              child: Row(
                 children: [
                   SizedBox(width: _MenubarTheme.buttonHMargin),
                   ...menubarItems,
@@ -440,6 +440,8 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         ),
       ),
       dividerTheme: DividerThemeData(space: 4),
+      menuBarTheme: MenuBarThemeData(
+          style: MenuStyle(padding: MaterialStatePropertyAll(EdgeInsets.zero))),
     );
   }
 }
@@ -552,6 +554,7 @@ class _MonitorMenu extends StatelessWidget {
     final pi = ffi.ffiModel.pi;
     for (int i = 0; i < pi.displays.length; i++) {
       rowChildren.add(_IconMenuButton(
+        topLevel: false,
         color: _MenubarTheme.blueColor,
         hoverColor: _MenubarTheme.hoverBlueColor,
         tooltip: "",
@@ -1819,6 +1822,7 @@ class _IconMenuButton extends StatefulWidget {
   final VoidCallback? onPressed;
   final double? hMargin;
   final double? vMargin;
+  final bool topLevel;
   const _IconMenuButton({
     Key? key,
     this.assetName,
@@ -1829,6 +1833,7 @@ class _IconMenuButton extends StatefulWidget {
     required this.onPressed,
     this.hMargin,
     this.vMargin,
+    this.topLevel = true,
   }) : super(key: key);
 
   @override
@@ -1848,7 +1853,7 @@ class _IconMenuButtonState extends State<_IconMenuButton> {
           width: _MenubarTheme.buttonSize,
           height: _MenubarTheme.buttonSize,
         );
-    return SizedBox(
+    final button = SizedBox(
       width: _MenubarTheme.buttonSize,
       height: _MenubarTheme.buttonSize,
       child: MenuItemButton(
@@ -1874,6 +1879,11 @@ class _IconMenuButtonState extends State<_IconMenuButton> {
     ).marginSymmetric(
         horizontal: widget.hMargin ?? _MenubarTheme.buttonHMargin,
         vertical: widget.vMargin ?? _MenubarTheme.buttonVMargin);
+    if (widget.topLevel) {
+      return MenuBar(children: [button]);
+    } else {
+      return button;
+    }
   }
 }
 
@@ -1914,7 +1924,7 @@ class _IconSubmenuButtonState extends State<_IconSubmenuButton> {
           width: _MenubarTheme.buttonSize,
           height: _MenubarTheme.buttonSize,
         );
-    return SizedBox(
+    final button = SizedBox(
             width: _MenubarTheme.buttonSize,
             height: _MenubarTheme.buttonSize,
             child: SubmenuButton(
@@ -1940,6 +1950,7 @@ class _IconSubmenuButtonState extends State<_IconSubmenuButton> {
         .marginSymmetric(
             horizontal: _MenubarTheme.buttonHMargin,
             vertical: _MenubarTheme.buttonVMargin);
+    return MenuBar(children: [button]);
   }
 }
 
