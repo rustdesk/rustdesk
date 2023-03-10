@@ -463,10 +463,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("confirm_idd_driver_tip", "L'opzione per installare il driver per lo schermo virtuale è selezionata. Nota che un certificato di test sarà installato per l'attendibilità del driver dello schermo virtuale. Questo certificato di test verrà utilizzato solo per l'attendibilità dei driver di RustDesk."),
         ("RDP Settings", "Impostazioni RDP"),
         ("Sort by", "Ordina per"),
-        ("New connection", ""),
-        ("Restore", ""),
-        ("Minimize", ""),
-        ("Maximize", ""),
-        ("Your Device", ""),
+        ("New connection", "Nuova connessione"),
+        ("Restore", "Ripristina"),
+        ("Minimize", "Minimizza"),
+        ("Maximize", "Massimizza"),
+        ("Your Device", "Il tuo dispositivo"),
     ].iter().cloned().collect();
 }
