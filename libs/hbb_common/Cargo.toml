@@ -34,11 +34,11 @@ tokio-socks = { git = "https://github.com/open-trade/tokio-socks" }
 chrono = "0.4"
 backtrace = "0.3"
 libc = "0.2"
-sysinfo = "0.28"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 mac_address = "1.1"
 machine-uid = "0.2"
+sysinfo = "0.28"
 
 [features]
 quic = []

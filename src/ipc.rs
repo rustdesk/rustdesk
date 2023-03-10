@@ -251,7 +251,7 @@ pub async fn start(postfix: &str) -> ResultType<()> {
 
 pub async fn new_listener(postfix: &str) -> ResultType<Incoming> {
     let path = Config::ipc_path(postfix);
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, target_os = "android", target_os = "ios")))]
     check_pid(postfix).await;
     let mut endpoint = Endpoint::new(path.clone());
     match SecurityAttributes::allow_everyone_create() {
@@ -541,7 +541,7 @@ fn get_pid_file(postfix: &str) -> String {
     format!("{}.pid", path)
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "android", target_os = "ios")))]
 async fn check_pid(postfix: &str) {
     let pid_file = get_pid_file(postfix);
     if let Ok(mut file) = File::open(&pid_file) {
