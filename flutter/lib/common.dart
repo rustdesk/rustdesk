@@ -252,7 +252,8 @@ class MyTheme {
         ),
       ),
     ),
-    colorScheme: ColorScheme.light(primary: Colors.blue, background: grayBg),
+    colorScheme: ColorScheme.light(
+        primary: Colors.blue, secondary: accent, background: grayBg),
   ).copyWith(
     extensions: <ThemeExtension<dynamic>>[
       ColorThemeExtension.light,
@@ -317,6 +318,7 @@ class MyTheme {
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: MyTheme.accent,
+        foregroundColor: Colors.white,
         disabledForegroundColor: Colors.white70,
         disabledBackgroundColor: Colors.white10,
         shape: RoundedRectangleBorder(
@@ -336,7 +338,6 @@ class MyTheme {
       ),
     ),
     checkboxTheme: const CheckboxThemeData(
-      checkColor: MaterialStatePropertyAll(dark),
       splashRadius: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.all(
@@ -353,6 +354,7 @@ class MyTheme {
     ),
     colorScheme: ColorScheme.dark(
       primary: Colors.blue,
+      secondary: accent,
       background: Color(0xFF24252B),
     ),
   ).copyWith(
