@@ -648,17 +648,26 @@ pub fn get_langs() -> String {
 #[inline]
 pub fn default_video_save_directory() -> String {
     let appname = crate::get_app_name();
+    // In order to make the function call results of the UI process and the video process the same, no result check is performed.
+    let try_create = |path: &std::path::Path| {
+        if !path.exists() {
+            if std::fs::create_dir_all(path).is_err() {
+                log::warn!("video directory {:?} create failed.", path);
+            }
+        }
+        path.to_string_lossy().to_string()
+    };
 
     #[cfg(any(target_os = "android", target_os = "ios"))]
     if let Ok(home) = config::APP_HOME_DIR.read() {
         let mut path = home.to_owned();
         path.push_str("/RustDesk/ScreenRecord");
-        return path;
+        return try_create(&std::path::Path::from(path));
     }
 
     if let Some(user) = directories_next::UserDirs::new() {
         if let Some(video_dir) = user.video_dir() {
-            return video_dir.join(appname).to_string_lossy().to_string();
+            return try_create(&video_dir.join(&appname));
         }
     }
 
@@ -669,12 +678,12 @@ pub fn default_video_save_directory() -> String {
         } else {
             "Videos"
         };
-        return home.join(name).join(appname).to_string_lossy().to_string();
+        return try_create(&home.join(name).join(&appname));
     }
 
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
-            return dir.join("videos").to_string_lossy().to_string();
+            return try_create(&dir.join("videos"));
         }
     }
     "".to_owned()
