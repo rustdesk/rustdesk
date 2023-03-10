@@ -648,29 +648,50 @@ pub fn get_langs() -> String {
 #[inline]
 pub fn default_video_save_directory() -> String {
     let appname = crate::get_app_name();
-    // In order to make the function call results of the UI process and the video process the same, no result check is performed.
+    // ui process can show it correctly Once vidoe process created it.
     let try_create = |path: &std::path::Path| {
         if !path.exists() {
-            if std::fs::create_dir_all(path).is_err() {
-                log::warn!("video directory {:?} create failed.", path);
-            }
+            std::fs::create_dir_all(path).ok();
         }
-        path.to_string_lossy().to_string()
+        if path.exists() {
+            path.to_string_lossy().to_string()
+        } else {
+            "".to_string()
+        }
     };
 
     #[cfg(any(target_os = "android", target_os = "ios"))]
     if let Ok(home) = config::APP_HOME_DIR.read() {
         let mut path = home.to_owned();
         path.push_str("/RustDesk/ScreenRecord");
-        return try_create(&std::path::Path::from(path));
+        let dir = try_create(&std::path::Path::from(path));
+        if !dir.is_empty() {
+            return dir;
+        }
     }
 
     if let Some(user) = directories_next::UserDirs::new() {
         if let Some(video_dir) = user.video_dir() {
-            return try_create(&video_dir.join(&appname));
+            let dir = try_create(&video_dir.join(&appname));
+            if !dir.is_empty() {
+                return dir;
+            }
+            if video_dir.exists() {
+                return video_dir.to_string_lossy().to_string();
+            }
+        }
+        if let Some(desktop_dir) = user.desktop_dir() {
+            if desktop_dir.exists() {
+                return desktop_dir.to_string_lossy().to_string();
+            }
+        }
+        let home = user.home_dir();
+        if home.exists() {
+            return home.to_string_lossy().to_string();
         }
     }
 
+    // same order as above
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if let Some(home) = crate::platform::get_active_user_home() {
         let name = if cfg!(target_os = "macos") {
@@ -678,12 +699,31 @@ pub fn default_video_save_directory() -> String {
         } else {
             "Videos"
         };
-        return try_create(&home.join(name).join(&appname));
+        let video_dir = home.join(name);
+        let dir = try_create(&video_dir.join(&appname));
+        if !dir.is_empty() {
+            return dir;
+        }
+        if video_dir.exists() {
+            return video_dir.to_string_lossy().to_string();
+        }
+        let desktop_dir = home.join("Desktop");
+        if desktop_dir.exists() {
+            return desktop_dir.to_string_lossy().to_string();
+        }
+        if home.exists() {
+            return home.to_string_lossy().to_string();
+        }
     }
 
     if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            return try_create(&dir.join("videos"));
+        if let Some(parent) = exe.parent() {
+            let dir = try_create(&parent.join("videos"));
+            if !dir.is_empty() {
+                return dir;
+            }
+            // basically exist
+            return parent.to_string_lossy().to_string();
         }
     }
     "".to_owned()
