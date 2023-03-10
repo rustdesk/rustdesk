@@ -166,17 +166,18 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'file_dir') {
         parent.target?.fileModel.receiveFileDir(evt);
       } else if (name == 'job_progress') {
-        parent.target?.fileModel.tryUpdateJobProgress(evt);
+        parent.target?.fileModel.jobController.tryUpdateJobProgress(evt);
       } else if (name == 'job_done') {
-        parent.target?.fileModel.jobDone(evt);
+        parent.target?.fileModel.jobController.jobDone(evt);
+        parent.target?.fileModel.refreshAll();
       } else if (name == 'job_error') {
-        parent.target?.fileModel.jobError(evt);
+        parent.target?.fileModel.jobController.jobError(evt);
       } else if (name == 'override_file_confirm') {
         parent.target?.fileModel.overrideFileConfirm(evt);
       } else if (name == 'load_last_job') {
-        parent.target?.fileModel.loadLastJob(evt);
+        parent.target?.fileModel.jobController.loadLastJob(evt);
       } else if (name == 'update_folder_files') {
-        parent.target?.fileModel.updateFolderFiles(evt);
+        parent.target?.fileModel.jobController.updateFolderFiles(evt);
       } else if (name == 'add_connection') {
         parent.target?.serverModel.addConnection(evt);
       } else if (name == 'on_client_remove') {
@@ -1575,9 +1576,6 @@ class FFI {
     }();
     // every instance will bind a stream
     this.id = id;
-    if (isFileTransfer) {
-      fileModel.initFileFetcher();
-    }
   }
 
   /// Login with [password], choose if the client should [remember] it.
