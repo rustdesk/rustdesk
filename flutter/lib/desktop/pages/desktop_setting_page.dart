@@ -381,8 +381,13 @@ class _GeneralState extends State<_General> {
             ),
             ElevatedButton(
                     onPressed: () async {
+                      String? initialDirectory;
+                      if (await Directory.fromUri(Uri.directory(dir))
+                          .exists()) {
+                        initialDirectory = dir;
+                      }
                       String? selectedDirectory = await FilePicker.platform
-                          .getDirectoryPath(initialDirectory: dir);
+                          .getDirectoryPath(initialDirectory: initialDirectory);
                       if (selectedDirectory != null) {
                         await bind.mainSetOption(
                             key: 'video-save-directory',
