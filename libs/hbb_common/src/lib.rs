@@ -42,6 +42,7 @@ pub use chrono;
 pub use directories_next;
 pub use libc;
 pub mod keyboard;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use sysinfo;
 
 #[cfg(feature = "quic")]
