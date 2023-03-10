@@ -708,6 +708,7 @@ pub struct AudioHandler {
     audio_stream: Option<Box<dyn StreamTrait>>,
     channels: u16,
     latency_controller: Arc<Mutex<LatencyController>>,
+    ignore_count: i32,
 }
 
 impl AudioHandler {
@@ -810,7 +811,11 @@ impl AudioHandler {
                 .check_audio(frame.timestamp)
                 .not()
             {
-                log::debug!("audio frame {} is ignored", frame.timestamp);
+                self.ignore_count += 1;
+                if self.ignore_count == 100 {
+                    self.ignore_count = 0;
+                    log::debug!("100 audio frames are ignored");
+                }
                 return;
             }
         }
@@ -2233,7 +2238,7 @@ fn get_pk(pk: &[u8]) -> Option<[u8; 32]> {
 
 #[inline]
 fn get_rs_pk(str_base64: &str) -> Option<sign::PublicKey> {
-    if let Ok(pk) = base64::decode(str_base64) {
+    if let Ok(pk) = crate::decode64(str_base64) {
         get_pk(&pk).map(|x| sign::PublicKey(x))
     } else {
         None

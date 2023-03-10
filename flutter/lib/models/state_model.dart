@@ -28,10 +28,9 @@ class StateGlobal {
 
   setWindowId(int id) => _windowId = id;
   setMaximize(bool v) {
-    if (_maximize != v) {
+    if (_maximize != v && !_fullscreen) {
       _maximize = v;
-      _resizeEdgeSize.value =
-          _maximize ? kMaximizeEdgeSize : kWindowEdgeSize;
+      _resizeEdgeSize.value = _maximize ? kMaximizeEdgeSize : kWindowEdgeSize;
     }
   }
   setFullscreen(bool v) {
@@ -39,7 +38,13 @@ class StateGlobal {
       _fullscreen = v;
       _showTabBar.value = !_fullscreen;
       _resizeEdgeSize.value =
-          fullscreen ? kFullScreenEdgeSize : kWindowEdgeSize;
+          fullscreen
+          ? kFullScreenEdgeSize
+          : _maximize
+              ? kMaximizeEdgeSize
+              : kWindowEdgeSize;
+      print(
+          "fullscreen: ${fullscreen}, resizeEdgeSize: ${_resizeEdgeSize.value}");
       _windowBorderWidth.value = fullscreen ? 0 : kWindowBorderWidth;
       WindowController.fromWindowId(windowId)
           .setFullscreen(_fullscreen)

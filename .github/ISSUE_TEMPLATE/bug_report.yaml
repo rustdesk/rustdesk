@@ -6,7 +6,7 @@ body:
     id: desc
     attributes:
       label: Bug Description
-      description: A clear and concise description of what the bug is
+      description: A clear and concise description of what the bug is (if it's a keyboard issue, provide the keyboard mode you're using. e.g. legacy, map, translate)
     validations:
       required: true
   - type: textarea

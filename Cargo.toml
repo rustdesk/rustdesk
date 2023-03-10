@@ -45,22 +45,22 @@ lazy_static = "1.4"
 sha2 = "0.10"
 repng = "0.2"
 parity-tokio-ipc = { git = "https://github.com/open-trade/parity-tokio-ipc" }
-runas = "0.2"
+runas = "1.0"
 magnum-opus = { git = "https://github.com/rustdesk/magnum-opus" }
 dasp = { version = "0.11", features = ["signal", "interpolate-linear", "interpolate"], optional = true }
 rubato = { version = "0.12", optional = true }
 samplerate = { version = "0.2", optional = true }
 async-trait = "0.1"
 uuid = { version = "1.0", features = ["v4"] }
-clap = "3.0"
+clap = "4.1"
 rpassword = "7.0"
-base64 = "0.13"
+base64 = "0.21"
 num_cpus = "1.13"
 bytes = { version = "1.2", features = ["serde"] }
 default-net = "0.12.0"
-wol-rs = "0.9.1"
+wol-rs = "1.0"
 flutter_rust_bridge = { version = "1.61.1", optional = true }
-errno = "0.2.8"
+errno = "0.3"
 rdev = { git = "https://github.com/fufesou/rdev" }
 url = { version = "2.1", features = ["serde"] }
 dlopen = "0.1"
@@ -71,7 +71,7 @@ chrono = "0.4.23"
 cidr-utils = "0.5.9"
 
 [target.'cfg(not(any(target_os = "android", target_os = "linux")))'.dependencies]
-cpal = "0.13.5"
+cpal = "0.14"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 machine-uid = "0.2"
@@ -81,9 +81,9 @@ sys-locale = "0.2"
 enigo = { path = "libs/enigo", features = [ "with_serde" ] }
 clipboard = { path = "libs/clipboard" }
 ctrlc = "3.2"
-arboard = "2.0"
+arboard = "3.2"
 #minreq = { version = "2.4", features = ["punycode", "https-native"] }
-system_shutdown = "3.0.0"
+system_shutdown = "4.0"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 trayicon = { git = "https://github.com/open-trade/trayicon-rs", features = ["winit"] }
@@ -148,6 +148,7 @@ cc = "1.0"
 hbb_common = { path = "libs/hbb_common" }
 simple_rc = { path = "libs/simple_rc", optional = true }
 flutter_rust_bridge_codegen = "1.61.1"
+os-version = "0.2"
 
 [dev-dependencies]
 hound = "3.5"

@@ -605,7 +605,7 @@ pub fn remove_discovered(id: String) {
 
 #[inline]
 pub fn get_uuid() -> String {
-    base64::encode(hbb_common::get_uuid())
+    crate::encode64(hbb_common::get_uuid())
 }
 
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
@@ -876,7 +876,7 @@ pub async fn change_id_shared(id: String, old_id: String) -> &'static str {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let uuid = machine_uid::get().unwrap_or("".to_owned());
     #[cfg(any(target_os = "android", target_os = "ios"))]
-    let uuid = base64::encode(hbb_common::get_uuid());
+    let uuid = crate::encode64(hbb_common::get_uuid());
 
     if uuid.is_empty() {
         log::error!("Failed to change id, uuid is_empty");

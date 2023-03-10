@@ -787,3 +787,15 @@ pub fn handle_url_scheme(url: String) {
         let _ = crate::run_me(vec![url]);
     }
 }
+
+#[inline]
+pub fn encode64<T: AsRef<[u8]>>(input: T) -> String {
+    #[allow(deprecated)]
+    base64::encode(input)
+}
+
+#[inline]
+pub fn decode64<T: AsRef<[u8]>>(input: T) -> Result<Vec<u8>, base64::DecodeError> {
+    #[allow(deprecated)]
+    base64::decode(input)
+}
