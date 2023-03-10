@@ -465,5 +465,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("confirm_idd_driver_tip", "Включена функция установки драйвера виртуального дисплея. Обратите внимание, что для доверия к драйверу будет установлен тестовый сертификат. Этот сертификат будет использоваться только для подтверждения доверия драйверам Rustdesk."),
         ("RDP Settings", "Настройки RDP"),
         ("Sort by", ""),
+        ("New connection", ""),
+        ("Restore", ""),
+        ("Minimize", ""),
+        ("Maximize", ""),
     ].iter().cloned().collect();
 }

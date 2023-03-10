@@ -593,7 +593,7 @@ class WindowActionPanelState extends State<WindowActionPanel>
               Offstage(
                   offstage: !widget.showMinimize || Platform.isMacOS,
                   child: ActionIcon(
-                    message: 'Minimize',
+                    message: translate('Minimize'),
                     icon: IconFont.min,
                     onTap: () {
                       if (widget.isMainWindow) {
@@ -608,7 +608,7 @@ class WindowActionPanelState extends State<WindowActionPanel>
                   offstage: !widget.showMaximize || Platform.isMacOS,
                   child: Obx(() => ActionIcon(
                         message:
-                            widget.isMaximized.value ? "Restore" : "Maximize",
+                            widget.isMaximized.value ? translate("Restore") : translate("Maximize"),
                         icon: widget.isMaximized.value
                             ? IconFont.restore
                             : IconFont.max,
@@ -618,7 +618,7 @@ class WindowActionPanelState extends State<WindowActionPanel>
               Offstage(
                   offstage: !widget.showClose || Platform.isMacOS,
                   child: ActionIcon(
-                    message: 'Close',
+                    message: translate('Close'),
                     icon: IconFont.close,
                     onTap: () async {
                       final res = await widget.onClose?.call() ?? true;
@@ -1076,7 +1076,7 @@ class AddButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ActionIcon(
-        message: 'New Connection',
+        message: translate('New Connection'),
         icon: IconFont.add,
         onTap: () => rustDeskWinManager.call(
             WindowType.Main, kWindowMainWindowOnTop, ""),

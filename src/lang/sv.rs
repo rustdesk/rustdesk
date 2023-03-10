@@ -465,5 +465,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("confirm_idd_driver_tip", ""),
         ("RDP Settings", ""),
         ("Sort by", ""),
+        ("New connection", ""),
+        ("Restore", ""),
+        ("Minimize", ""),
+        ("Maximize", ""),
     ].iter().cloned().collect();
 }
