@@ -465,5 +465,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("confirm_idd_driver_tip", "La opción de instalar el controlador de pantalla virtual está marcada. Hay que tener en cuenta que se instalará un certificado de prueba para confirar en el controlador de pantalla. Este certificado solo se usará para confiar en controladores Rustdesk."),
         ("RDP Settings", "Ajustes RDP"),
         ("Sort by", ""),
+        ("New connection", ""),
+        ("Restore", ""),
+        ("Minimize", ""),
+        ("Maximize", ""),
     ].iter().cloned().collect();
 }
