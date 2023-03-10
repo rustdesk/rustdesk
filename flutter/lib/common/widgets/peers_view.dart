@@ -19,16 +19,14 @@ typedef PeerCardBuilder = Widget Function(Peer peer);
 class PeerSortType {
   static const String remoteId = 'Remote ID';
   static const String remoteHost = 'Remote Host';
-  static const String alias = 'Alias';
   static const String username = 'Username';
-  static const String status = 'Status';
+  // static const String status = 'Status';
 
   static List<String> values = [
     PeerSortType.remoteId,
     PeerSortType.remoteHost,
-    PeerSortType.alias,
     PeerSortType.username,
-    PeerSortType.status
+    // PeerSortType.status
   ];
 }
 
@@ -226,23 +224,19 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
     if (widget.peers.loadEvent != 'load_recent_peers') {
       switch (sortedBy) {
         case PeerSortType.remoteId:
-          peers.sort((p1, p2) => p1.id.compareTo(p2.id));
+          peers.sort((p1, p2) => p1.getId().compareTo(p2.getId()));
           break;
         case PeerSortType.remoteHost:
           peers.sort((p1, p2) =>
               p1.hostname.toLowerCase().compareTo(p2.hostname.toLowerCase()));
           break;
-        case PeerSortType.alias:
-          peers.sort((p1, p2) =>
-              p1.alias.toLowerCase().compareTo(p2.alias.toLowerCase()));
-          break;
         case PeerSortType.username:
           peers.sort((p1, p2) =>
               p1.username.toLowerCase().compareTo(p2.username.toLowerCase()));
           break;
-        case PeerSortType.status:
-          peers.sort((p1, p2) => p1.online ? -1 : 1);
-          break;
+        // case PeerSortType.status:
+        // peers.sort((p1, p2) => p1.online ? -1 : 1);
+        // break;
       }
     }
 
