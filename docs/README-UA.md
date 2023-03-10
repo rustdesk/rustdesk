@@ -19,25 +19,37 @@
 
 RustDesk вітає внесок кожного. Дивіться [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) для допомоги на початку роботи.
 
+[**FAQ**](https://github.com/rustdesk/rustdesk/wiki/FAQ)
+
 [**Як працює RustDesk?**](https://github.com/rustdesk/rustdesk/wiki/How-does-RustDesk-work%3F)
 
-[**ЗАВАНТАЖИТИ ДОДАТОК**](https://github.com/rustdesk/rustdesk/releases)
+[**ЗАВАНТАЖИТИ ЗАСТОСУНОК**](https://github.com/rustdesk/rustdesk/releases)
 
-[<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png" alt="Get it on F-Droid" height="80">](https://f-droid.org/en/packages/com.carriez.flutter_hbb)
+[<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png"
+    alt="Get it on F-Droid"
+    height="80">](https://f-droid.org/en/packages/com.carriez.flutter_hbb)
 
 ## Безкоштовні загальнодоступні сервери
 
 Нижче наведені сервери, для безкоштовного використання, вони можуть змінюватися з часом. Якщо ви не перебуваєте поруч з одним із них, ваша мережа може працювати повільно.
 | Місцезнаходження | Постачальник | Технічні характеристики |
 | --------- | ------------- | ------------------ |
-| Сеул | AWS lightsail | 1 vCPU / 0.5GB RAM |
+| Південна Корея (Сеул) | AWS lightsail | 1 vCPU / 0.5GB RAM |
 | Сінгапур | Vultr | 1 vCPU / 1GB RAM |
-| Даллас | Vultr | 1 vCPU / 1GB RAM
-Німеччина | Hetzner | 2 vCPU / 4GB RAM | 2 VCPU / 4GB RAM | Німеччина | Hetzner | 2 VCPU / 4GB RAM |
-| Germany | Codext | 4 vCPU / 8GB RAM |
-| Finland (Helsinki) | [Netlock](https://netlockendpoint.com) | 4 vCPU / 8GB RAM |
-| USA (Ashburn) | [Netlock](https://netlockendpoint.com) | 4 vCPU / 8GB RAM |
-| Ukraine (Kyiv) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
+| США (Даллас) | Vultr | 1 vCPU / 1GB RAM
+| Німеччина | Hetzner | 2 VCPU / 4GB RAM |
+| Німеччина | Codext | 4 vCPU / 8GB RAM |
+| Фінляндія (Гельсінкі) | [Netlock](https://netlockendpoint.com) | 4 vCPU / 8GB RAM |
+| США (Ешберн) | [Netlock](https://netlockendpoint.com) | 4 vCPU / 8GB RAM |
+| Україна (Київ) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
+
+## Dev Container
+
+[![Open in Dev Containers](https://img.shields.io/static/v1?label=Dev%20Container&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/rustdesk/rustdesk)
+
+Якщо у вас уже встановлено VS Code і Docker, ви можете натиснути значок вище, щоб почати. Клацання призведе до того, що VS Code автоматично встановить розширення Dev Containers, якщо це необхідно, клонує виcхідний код у том контейнера та розгорне контейнер dev для використання.
+
+Дивіться [DEVCONTAINER.md](docs/DEVCONTAINER.md) для додаткової інфо.
 
 ## Залежності
 
@@ -65,36 +77,19 @@ RustDesk вітає внесок кожного. Дивіться [`docs/CONTRIB
 ### Ubuntu 18 (Debian 10)
 
 ```sh
-sudo apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake
+sudo apt install -y zip g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev \
+        libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake make \
+        libclang-dev ninja-build libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
 ```
 
+### openSUSE Tumbleweed 
+
+```sh
+sudo zypper install gcc-c++ git curl wget nasm yasm gcc gtk3-devel clang libxcb-devel libXfixes-devel cmake alsa-lib-devel gstreamer-devel gstreamer-plugins-base-devel xdotool-devel
+```
 ### Fedora 28 (CentOS 8)
 
 ```sh
-sudo yum -y install gcc-c++ git curl wget nasm yasm gcc gtk3-devel clang libxcb-devel libxdo-devel libXfixes-devel pulseaudio-libs-devel cmake alsa-lib-devel
-```
-
-### Arch (Manjaro)
-
-```sh
-sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-config clang gtk3 xdotool libxcb libxfixes alsa-lib pipewire
-```
-
-### Встановлення vcpkg
-
-```sh
-git clone https://github.com/microsoft/vcpkg
-cd vcpkg
-git checkout 2021.12.01
-cd ...
-vcpkg/bootstrap-vcpkg.sh
-export VCPKG_ROOT=$HOME/vcpkg
-vcpkg/vcpkg install libvpx libyuv opus
-```
-
-### Fedora 28 (CentOS 8)
-
-````sh
 sudo yum -y install gcc-c++ git curl wget nasm yasm gcc gtk3-devel clang libxcb-devel libxdo-devel libXfixes-devel pulseaudio-libs-devel cmake alsa-lib-devel
 ```
 
@@ -184,8 +179,10 @@ target/release/rustdesk
 - **[src/ui](https://github.com/rustdesk/rustdesk/tree/master/src/ui)**: графічний інтерфейс користувача
 - **[src/server](https://github.com/rustdesk/rustdesk/tree/master/src/server)**: сервіси аудіо/буфера обміну/вводу/відео та мережевих підключень
 - **[src/client.rs](https://github.com/rustdesk/rustdesk/tree/master/src/client.rs)**: однорангове з'єднання
-- **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: зв'яжіться з [rustdesk-server](https://github.com/rustdesk/rustdesk-server), дочекайтеся віддаленого прямого (обхід TCP NAT) або ретрансльованого з'єднання
+- **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: комунікація з [rustdesk-server](https://github.com/rustdesk/rustdesk-server), очікування віддаленого прямого (обхід TCP NAT) або ретрансльованого з'єднання
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: специфічний для платформи код
+- **[flutter](https://github.com/rustdesk/rustdesk/tree/master/flutter)**: код Flutter для мобільних пристроїв 
+- **[flutter/web/js](https://github.com/rustdesk/rustdesk/tree/master/flutter/web/js)**: JavaScript для Flutter веб клієнту
 
 ## Знімки
 
