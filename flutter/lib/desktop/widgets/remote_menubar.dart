@@ -1437,6 +1437,9 @@ class _DisplayMenuState extends State<_DisplayMenu> {
   }
 
   showRemoteCursor() {
+    if (widget.ffi.ffiModel.pi.platform == kPeerPlatformAndroid) {
+      return Offstage();
+    }
     final visible = !widget.ffi.canvasModel.cursorEmbedded;
     if (!visible) return Offstage();
     final state = ShowRemoteCursorState.find(widget.id);
