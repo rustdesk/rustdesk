@@ -139,6 +139,10 @@ fn update_last_cursor_pos(x: i32, y: i32) {
 
 fn run_pos(sp: GenericService, state: &mut StatePos) -> ResultType<()> {
     let (_, (x, y)) = *LATEST_SYS_CURSOR_POS.lock().unwrap();
+    if x == INVALID_CURSOR_POS || y == INVALID_CURSOR_POS {
+        return Ok(());
+    }
+
     if state.is_moved(x, y) {
         let mut msg_out = Message::new();
         msg_out.set_cursor_position(CursorPosition {
@@ -156,9 +160,6 @@ fn run_pos(sp: GenericService, state: &mut StatePos) -> ResultType<()> {
             }
         };
         sp.send_without(msg_out, exclude);
-    } else if x == 0 && y == 0 {
-        // Early return if cursor retains origin.
-        return Ok(());
     }
     state.cursor_pos = (x, y);
 
@@ -216,7 +217,7 @@ lazy_static::lazy_static! {
     };
     static ref KEYS_DOWN: Arc<Mutex<HashMap<KeysDown, Instant>>> = Default::default();
     static ref LATEST_PEER_INPUT_CURSOR: Arc<Mutex<Input>> = Default::default();
-    static ref LATEST_SYS_CURSOR_POS: Arc<Mutex<(Instant, (i32, i32))>> = Arc::new(Mutex::new((Instant::now().sub(MOUSE_MOVE_PROTECTION_TIMEOUT), (0, 0))));
+    static ref LATEST_SYS_CURSOR_POS: Arc<Mutex<(Instant, (i32, i32))>> = Arc::new(Mutex::new((Instant::now().sub(MOUSE_MOVE_PROTECTION_TIMEOUT), (INVALID_CURSOR_POS, INVALID_CURSOR_POS))));
 }
 static EXITING: AtomicBool = AtomicBool::new(false);
 
@@ -228,9 +229,6 @@ static RECORD_CURSOR_POS_RUNNING: AtomicBool = AtomicBool::new(false);
 
 pub fn try_start_record_cursor_pos() {
     if RECORD_CURSOR_POS_RUNNING.load(Ordering::SeqCst) {
-        return;
-    }
-    if *CONN_COUNT.lock().unwrap() == 0 {
         return;
     }
 
@@ -251,6 +249,7 @@ pub fn try_start_record_cursor_pos() {
                 thread::sleep(interval - elapsed);
             }
         }
+        update_last_cursor_pos(INVALID_CURSOR_POS, INVALID_CURSOR_POS);
     });
 }
 

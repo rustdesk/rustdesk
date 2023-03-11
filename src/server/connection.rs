@@ -951,8 +951,8 @@ impl Connection {
                     noperms.push(super::audio_service::NAME);
                 }
                 let mut s = s.write().unwrap();
-                s.add_connection(self.inner.clone(), &noperms);
                 try_start_record_cursor_pos();
+                s.add_connection(self.inner.clone(), &noperms);
             }
         }
     }
