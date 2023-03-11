@@ -2107,7 +2107,7 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
       child: Icon(
         Icons.drag_indicator,
         size: 20,
-        color: Colors.grey[800],
+        color: MyTheme.color(context).drag_indicator,
       ),
       feedback: widget,
       onDragStarted: (() {
@@ -2159,7 +2159,11 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
       data: TextButtonThemeData(style: buttonStyle),
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context)
+              .menuBarTheme
+              .style
+              ?.backgroundColor
+              ?.resolve(MaterialState.values.toSet()),
           borderRadius: BorderRadius.vertical(
             bottom: Radius.circular(5),
           ),
