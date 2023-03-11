@@ -408,7 +408,12 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       children: [
         Container(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.all(Radius.circular(10)),
+            borderRadius: BorderRadius.all(Radius.circular(4.0)),
+            color: Theme.of(context)
+                .menuBarTheme
+                .style
+                ?.backgroundColor
+                ?.resolve(MaterialState.values.toSet()),
           ),
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -416,9 +421,9 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
               data: themeData(),
               child: Row(
                 children: [
-                  SizedBox(width: _MenubarTheme.buttonHMargin),
+                  SizedBox(width: _MenubarTheme.buttonHMargin * 2),
                   ...menubarItems,
-                  SizedBox(width: _MenubarTheme.buttonHMargin)
+                  SizedBox(width: _MenubarTheme.buttonHMargin * 2)
                 ],
               ),
             ),
@@ -441,7 +446,13 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       ),
       dividerTheme: DividerThemeData(space: 4),
       menuBarTheme: MenuBarThemeData(
-          style: MenuStyle(padding: MaterialStatePropertyAll(EdgeInsets.zero))),
+          style: MenuStyle(
+        padding: MaterialStatePropertyAll(EdgeInsets.zero),
+        elevation: MaterialStatePropertyAll(0),
+        shape: MaterialStatePropertyAll(BeveledRectangleBorder()),
+      ).copyWith(
+              backgroundColor:
+                  Theme.of(context).menuBarTheme.style?.backgroundColor)),
     );
   }
 }
@@ -1869,6 +1880,7 @@ class _IconMenuButtonState extends State<_IconMenuButton> {
       height: _MenubarTheme.buttonSize,
       child: MenuItemButton(
         style: ButtonStyle(
+            backgroundColor: MaterialStatePropertyAll(Colors.transparent),
             padding: MaterialStatePropertyAll(EdgeInsets.zero),
             overlayColor: MaterialStatePropertyAll(Colors.transparent)),
         onHover: (value) => setState(() {
@@ -1940,6 +1952,7 @@ class _IconSubmenuButtonState extends State<_IconSubmenuButton> {
         child: SubmenuButton(
             menuStyle: widget.menuStyle,
             style: ButtonStyle(
+                backgroundColor: MaterialStatePropertyAll(Colors.transparent),
                 padding: MaterialStatePropertyAll(EdgeInsets.zero),
                 overlayColor: MaterialStatePropertyAll(Colors.transparent)),
             onHover: (value) => setState(() {
@@ -2100,7 +2113,7 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
       child: Icon(
         Icons.drag_indicator,
         size: 20,
-        color: Colors.grey[800],
+        color: MyTheme.color(context).drag_indicator,
       ),
       feedback: widget,
       onDragStarted: (() {
@@ -2152,7 +2165,11 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
       data: TextButtonThemeData(style: buttonStyle),
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context)
+              .menuBarTheme
+              .style
+              ?.backgroundColor
+              ?.resolve(MaterialState.values.toSet()),
           borderRadius: BorderRadius.vertical(
             bottom: Radius.circular(5),
           ),
