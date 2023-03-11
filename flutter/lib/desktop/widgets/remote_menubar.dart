@@ -1457,6 +1457,9 @@ class _DisplayMenuState extends State<_DisplayMenu> {
   }
 
   zoomCursor() {
+    if (widget.ffi.ffiModel.pi.platform == kPeerPlatformAndroid) {
+      return Offstage();
+    }
     final visible = widget.state.viewStyle.value != kRemoteViewStyleOriginal;
     if (!visible) return Offstage();
     final option = 'zoom-cursor';
