@@ -463,7 +463,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("confirm_idd_driver_tip", "گزینه نصب درایور نمایش مجازی تیک خورده است. توجه داشته باشید که یک گواهی آزمایشی برای اعتماد به درایور نمایش مجازی نصب خواهد شد. این گواهی آزمایشی فقط برای اعتماد به درایورهای Rustdesk استفاده خواهد شد."),
         ("RDP Settings", "RDP تنظیمات"),
         ("Sort by", "مرتب سازی بر اساس"),
-        ("New connection", "اتصال جدید"),
+        ("New Connection", "اتصال جدید"),
         ("Restore", "بازیابی"),
         ("Minimize", "کوچک کردن پنجره"),
         ("Maximize", "بزرک کردن پنجره"),
