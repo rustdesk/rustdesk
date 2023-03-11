@@ -431,7 +431,7 @@ jobs:
           - {
               arch: x86_64,
               target: aarch64-linux-android,
-              os: ubuntu-18.04,
+              os: ubuntu-20.04,
               extra-build-features: "",
             }
           # - {
