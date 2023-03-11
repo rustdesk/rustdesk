@@ -252,6 +252,9 @@ class MyTheme {
         ),
       ),
     ),
+    menuBarTheme: MenuBarThemeData(
+        style:
+            MenuStyle(backgroundColor: MaterialStatePropertyAll(Colors.white))),
     colorScheme: ColorScheme.light(
         primary: Colors.blue, secondary: accent, background: grayBg),
   ).copyWith(
@@ -352,6 +355,9 @@ class MyTheme {
         ),
       ),
     ),
+    menuBarTheme: MenuBarThemeData(
+        style: MenuStyle(
+            backgroundColor: MaterialStatePropertyAll(Color(0xFF121212)))),
     colorScheme: ColorScheme.dark(
       primary: Colors.blue,
       secondary: accent,
