@@ -468,5 +468,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Minimize", "Minimizza"),
         ("Maximize", "Massimizza"),
         ("Your Device", "Il tuo dispositivo"),
+        ("empty_recent_tip", "Oops, non c'è nessuna sessione recente!\nTempo di pianificarne una."),
+        ("empty_favorite_tip", "Ancora nessun peer?\nTrova qualcuno con cui connetterti e aggiungilo ai tuoi preferiti!"),
+        ("empty_lan_tip", "Oh no, sembra proprio che non abbiamo ancora rilevato nessun peer."),
+        ("empty_address_book_tip", "Oh diamine, sembra che per ora non ci siano peer nella tua rubrica."),
     ].iter().cloned().collect();
 }

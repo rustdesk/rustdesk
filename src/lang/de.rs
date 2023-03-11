@@ -468,5 +468,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Minimize", "Minimieren"),
         ("Maximize", "Maximieren"),
         ("Your Device", "Ihr Gerät"),
+        ("empty_recent_tip", ""),
+        ("empty_favorite_tip", ""),
+        ("empty_lan_tip", ""),
+        ("empty_address_book_tip", ""),
     ].iter().cloned().collect();
 }

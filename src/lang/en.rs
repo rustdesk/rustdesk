@@ -46,6 +46,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("relay_hint_tip", "It may not be possible to connect directly, you can try to connect via relay. \nIn addition, if you want to use relay on your first try, you can add the \"/r\" suffix to the ID, or select the option \"Always connect via relay\" in the peer card."),
         ("No transfers in progress", ""),
         ("idd_driver_tip", "Install virtual display driver which is used when you have no physical displays."),
-        ("confirm_idd_driver_tip", "The option to install the virtual display driver is checked. Note that a test certificate will be installed to trust the virtual display driver. This test certificate will only be used to trust Rustdesk drivers.")
+        ("confirm_idd_driver_tip", "The option to install the virtual display driver is checked. Note that a test certificate will be installed to trust the virtual display driver. This test certificate will only be used to trust Rustdesk drivers."),
+        ("empty_recent_tip", "Oops, no recent sessions!\nTime to plan a new one."),
+        ("empty_favorite_tip", "No favorite peers yet?\nLet's find someone to connect with and add it to your favorites!"),
+        ("empty_lan_tip", "Oh no, it looks like we haven't discovered any peers yet."),
+        ("empty_address_book_tip", "Oh dear, it appears that there are currently no peers listed in your address book."),
         ].iter().cloned().collect();
 }

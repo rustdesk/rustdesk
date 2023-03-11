@@ -167,7 +167,7 @@ class _PeerTabPageState extends State<PeerTabPage>
                         color: model.currentTab == t
                             ? Theme.of(context).colorScheme.background
                             : null,
-                        borderRadius: BorderRadius.circular(isDesktop ? 2 : 6),
+                        borderRadius: BorderRadius.circular(6),
                       ),
                       child: Align(
                         alignment: Alignment.center,
