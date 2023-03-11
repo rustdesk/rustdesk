@@ -23,6 +23,7 @@ env:
   # for multiarch gcc compatibility
   VCPKG_COMMIT_ID: "14e7bb4ae24616ec54ff6b2f6ef4e8659434ea44"
   VERSION: "1.2.0"
+  NDK_VERSION: "r23"
 
 jobs:
   build-for-windows:
@@ -354,7 +355,7 @@ jobs:
       - uses: nttld/setup-ndk@v1
         id: setup-ndk
         with:
-          ndk-version: r22b
+          ndk-version: ${{ env.NDK_VERSION }}
           add-to-path: true
 
       - name: Download deps
