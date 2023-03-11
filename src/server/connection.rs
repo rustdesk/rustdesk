@@ -541,7 +541,9 @@ impl Connection {
         conn.reset_resolution();
         ALIVE_CONNS.lock().unwrap().retain(|&c| c != id);
         if let Some(s) = conn.server.upgrade() {
-            s.write().unwrap().remove_connection(&conn.inner);
+            let mut s = s.write().unwrap();
+            s.remove_connection(&conn.inner);
+            try_stop_record_cursor_pos();
         }
         log::info!("#{} connection loop exited", id);
     }
@@ -948,9 +950,9 @@ impl Connection {
                 if !self.audio_enabled() {
                     noperms.push(super::audio_service::NAME);
                 }
-                s.write()
-                    .unwrap()
-                    .add_connection(self.inner.clone(), &noperms);
+                let mut s = s.write().unwrap();
+                try_start_record_cursor_pos();
+                s.add_connection(self.inner.clone(), &noperms);
             }
         }
     }
