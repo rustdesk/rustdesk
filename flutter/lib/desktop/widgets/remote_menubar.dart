@@ -108,6 +108,7 @@ class _MenubarTheme {
   static const double buttonHMargin = 3;
   static const double buttonVMargin = 6;
   static const double iconRadius = 8;
+  static const double elevation = 3;
 }
 
 typedef DismissFunc = void Function();
@@ -369,10 +370,13 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         alignment: FractionalOffset(_fractionX.value, 0),
         child: Offstage(
           offstage: _dragging.isTrue,
-          child: _DraggableShowHide(
-            dragging: _dragging,
-            fractionX: _fractionX,
-            show: show,
+          child: Material(
+            elevation: _MenubarTheme.elevation,
+            child: _DraggableShowHide(
+              dragging: _dragging,
+              fractionX: _fractionX,
+              show: show,
+            ),
           ),
         ),
       );
@@ -406,15 +410,14 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.all(Radius.circular(4.0)),
-            color: Theme.of(context)
-                .menuBarTheme
-                .style
-                ?.backgroundColor
-                ?.resolve(MaterialState.values.toSet()),
-          ),
+        Material(
+          elevation: _MenubarTheme.elevation,
+          borderRadius: BorderRadius.all(Radius.circular(4.0)),
+          color: Theme.of(context)
+              .menuBarTheme
+              .style
+              ?.backgroundColor
+              ?.resolve(MaterialState.values.toSet()),
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Theme(
