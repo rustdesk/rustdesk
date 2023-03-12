@@ -467,7 +467,7 @@ void showRequestElevationDialog(String id, OverlayDialogManager dialogManager) {
                 decoration: InputDecoration(
                     isDense: true,
                     contentPadding: EdgeInsets.symmetric(vertical: 15),
-                    hintText: 'eg: admin',
+                    hintText: translate('eg: admin'),
                     errorText: errUser.isEmpty ? null : errUser.value),
                 onChanged: (s) {
                   if (s.isNotEmpty) {
