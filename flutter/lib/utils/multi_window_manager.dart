@@ -41,11 +41,15 @@ class RustDeskMultiWindowManager {
   int? _fileTransferWindowId;
   int? _portForwardWindowId;
 
-  Future<dynamic> newRemoteDesktop(String remoteId,
-      {String? switch_uuid}) async {
+  Future<dynamic> newRemoteDesktop(
+    String remoteId, {
+    String? switch_uuid,
+    bool? forceRelay,
+  }) async {
     var params = {
       "type": WindowType.RemoteDesktop.index,
       "id": remoteId,
+      "forceRelay": forceRelay
     };
     if (switch_uuid != null) {
       params['switch_uuid'] = switch_uuid;
@@ -78,9 +82,12 @@ class RustDeskMultiWindowManager {
     }
   }
 
-  Future<dynamic> newFileTransfer(String remoteId) async {
-    final msg =
-        jsonEncode({"type": WindowType.FileTransfer.index, "id": remoteId});
+  Future<dynamic> newFileTransfer(String remoteId, {bool? forceRelay}) async {
+    var msg = jsonEncode({
+      "type": WindowType.FileTransfer.index,
+      "id": remoteId,
+      "forceRelay": forceRelay,
+    });
 
     try {
       final ids = await DesktopMultiWindow.getAllSubWindowIds();
@@ -107,9 +114,14 @@ class RustDeskMultiWindowManager {
     }
   }
 
-  Future<dynamic> newPortForward(String remoteId, bool isRDP) async {
-    final msg = jsonEncode(
-        {"type": WindowType.PortForward.index, "id": remoteId, "isRDP": isRDP});
+  Future<dynamic> newPortForward(String remoteId, bool isRDP,
+      {bool? forceRelay}) async {
+    final msg = jsonEncode({
+      "type": WindowType.PortForward.index,
+      "id": remoteId,
+      "isRDP": isRDP,
+      "forceRelay": forceRelay,
+    });
 
     try {
       final ids = await DesktopMultiWindow.getAllSubWindowIds();

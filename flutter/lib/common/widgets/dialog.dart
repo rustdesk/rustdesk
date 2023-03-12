@@ -1,18 +1,75 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:get/get.dart';
 
 import '../../common.dart';
 import '../../models/platform_model.dart';
+
+abstract class ValidationRule {
+  String get name;
+  bool validate(String value);
+}
+
+class LengthRangeValidationRule extends ValidationRule {
+  final int _min;
+  final int _max;
+
+  LengthRangeValidationRule(this._min, this._max);
+
+  @override
+  String get name => translate('length %min% to %max%')
+      .replaceAll('%min%', _min.toString())
+      .replaceAll('%max%', _max.toString());
+
+  @override
+  bool validate(String value) {
+    return value.length >= _min && value.length <= _max;
+  }
+}
+
+class RegexValidationRule extends ValidationRule {
+  final String _name;
+  final RegExp _regex;
+
+  RegexValidationRule(this._name, this._regex);
+
+  @override
+  String get name => translate(_name);
+
+  @override
+  bool validate(String value) {
+    return value.isNotEmpty ? value.contains(_regex) : false;
+  }
+}
 
 void changeIdDialog() {
   var newId = "";
   var msg = "";
   var isInProgress = false;
   TextEditingController controller = TextEditingController();
+  final RxString rxId = controller.text.trim().obs;
+
+  final rules = [
+    RegexValidationRule('starts with a letter', RegExp(r'^[a-zA-Z]')),
+    LengthRangeValidationRule(6, 16),
+    RegexValidationRule('allowed characters', RegExp(r'^\w*$'))
+  ];
+
   gFFI.dialogManager.show((setState, close) {
     submit() async {
       debugPrint("onSubmit");
       newId = controller.text.trim();
+
+      final Iterable violations = rules.where((r) => !r.validate(newId));
+      if (violations.isNotEmpty) {
+        setState(() {
+          msg = isDesktop
+              ? '${translate('Prompt')}:  ${violations.map((r) => r.name).join(', ')}'
+              : violations.map((r) => r.name).join(', ');
+        });
+        return;
+      }
+
       setState(() {
         msg = "";
         isInProgress = true;
@@ -31,7 +88,9 @@ void changeIdDialog() {
       }
       setState(() {
         isInProgress = false;
-        msg = translate(status);
+        msg = isDesktop
+            ? '${translate('Prompt')}: ${translate(status)}'
+            : translate(status);
       });
     }
 
@@ -46,19 +105,47 @@ void changeIdDialog() {
           ),
           TextField(
             decoration: InputDecoration(
-                border: const OutlineInputBorder(),
-                errorText: msg.isEmpty ? null : translate(msg)),
+                labelText: translate('Your new ID'),
+                border: isDesktop ? const OutlineInputBorder() : null,
+                errorText: msg.isEmpty ? null : translate(msg),
+                suffixText: '${rxId.value.length}/16',
+                suffixStyle: const TextStyle(fontSize: 12, color: Colors.grey)),
             inputFormatters: [
               LengthLimitingTextInputFormatter(16),
               // FilteringTextInputFormatter(RegExp(r"[a-zA-z][a-zA-z0-9\_]*"), allow: true)
             ],
-            maxLength: 16,
             controller: controller,
             autofocus: true,
+            onChanged: (value) {
+              setState(() {
+                rxId.value = value.trim();
+                msg = '';
+              });
+            },
           ),
           const SizedBox(
-            height: 4.0,
+            height: 8.0,
           ),
+          isDesktop
+              ? Obx(() => Wrap(
+                    runSpacing: 8,
+                    spacing: 4,
+                    children: rules.map((e) {
+                      var checked = e.validate(rxId.value);
+                      return Chip(
+                          label: Text(
+                            e.name,
+                            style: TextStyle(
+                                color: checked
+                                    ? const Color(0xFF0A9471)
+                                    : Color.fromARGB(255, 198, 86, 157)),
+                          ),
+                          backgroundColor: checked
+                              ? const Color(0xFFD0F7ED)
+                              : Color.fromARGB(255, 247, 205, 232));
+                    }).toList(),
+                  )).marginOnly(bottom: 8)
+              : SizedBox.shrink(),
           Offstage(
               offstage: !isInProgress, child: const LinearProgressIndicator())
         ],
@@ -95,7 +182,7 @@ void changeWhiteList({Function()? callback}) async {
                 child: TextField(
                     maxLines: null,
                     decoration: InputDecoration(
-                      border: const OutlineInputBorder(),
+                      border: isDesktop ? const OutlineInputBorder() : null,
                       errorText: msg.isEmpty ? null : translate(msg),
                     ),
                     controller: controller,

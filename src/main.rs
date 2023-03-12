@@ -1,6 +1,7 @@
-// Specify the Windows subsystem to eliminate console window.
-// Requires Rust 1.18.
-//#![windows_subsystem = "windows"]
+ #![cfg_attr(
+     all(not(debug_assertions), target_os = "windows"),
+     windows_subsystem = "windows"
+ )]
 
 use librustdesk::*;
 

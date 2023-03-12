@@ -1,24 +1,22 @@
 use std::{
     collections::HashMap,
     ops::{Deref, DerefMut},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, RwLock},
 };
-use std::sync::RwLock;
 
 use sciter::{
     dom::{
-        Element,
-        event::{BEHAVIOR_EVENTS, EVENT_GROUPS, EventReason, PHASE_MASK}, HELEMENT,
+        event::{EventReason, BEHAVIOR_EVENTS, EVENT_GROUPS, PHASE_MASK},
+        Element, HELEMENT,
     },
     make_args,
+    video::{video_destination, AssetPtr, COLOR_SPACE},
     Value,
-    video::{AssetPtr, COLOR_SPACE, video_destination},
 };
 
 use hbb_common::{
     allow_err, fs::TransferJobMeta, log, message_proto::*, rendezvous_proto::ConnType,
 };
-use hbb_common::tokio::io::AsyncReadExt;
 
 use crate::{
     client::*,
@@ -54,6 +52,20 @@ impl SciterHandler {
         if let Some(ref e) = self.element.lock().unwrap().as_ref() {
             allow_err!(e.call_method(func, &super::value_crash_workaround(args)[..]));
         }
+    }
+
+    fn make_displays_array(displays: &Vec<DisplayInfo>) -> Value {
+        let mut displays_value = Value::array(0);
+        for d in displays.iter() {
+            let mut display = Value::map();
+            display.set_item("x", d.x);
+            display.set_item("y", d.y);
+            display.set_item("width", d.width);
+            display.set_item("height", d.height);
+            display.set_item("cursor_embedded", d.cursor_embedded);
+            displays_value.push(display);
+        }
+        displays_value
     }
 }
 
@@ -217,20 +229,16 @@ impl InvokeUiSession for SciterHandler {
         pi_sciter.set_item("hostname", pi.hostname.clone());
         pi_sciter.set_item("platform", pi.platform.clone());
         pi_sciter.set_item("sas_enabled", pi.sas_enabled);
-
-        let mut displays = Value::array(0);
-        for ref d in pi.displays.iter() {
-            let mut display = Value::map();
-            display.set_item("x", d.x);
-            display.set_item("y", d.y);
-            display.set_item("width", d.width);
-            display.set_item("height", d.height);
-            display.set_item("cursor_embedded", d.cursor_embedded);
-            displays.push(display);
-        }
-        pi_sciter.set_item("displays", displays);
+        pi_sciter.set_item("displays", Self::make_displays_array(&pi.displays));
         pi_sciter.set_item("current_display", pi.current_display);
         self.call("updatePi", &make_args!(pi_sciter));
+    }
+
+    fn set_displays(&self, displays: &Vec<DisplayInfo>) {
+        self.call(
+            "updateDisplays",
+            &make_args!(Self::make_displays_array(displays)),
+        );
     }
 
     fn on_connected(&self, conn_type: ConnType) {
@@ -269,6 +277,8 @@ impl InvokeUiSession for SciterHandler {
 
     fn switch_back(&self, _id: &str) {}
 
+    fn portable_service_running(&self, _running: bool) {}
+
     fn on_voice_call_started(&self) {
         self.call("onVoiceCallStart", &make_args!());
     }
@@ -286,9 +296,11 @@ impl InvokeUiSession for SciterHandler {
     }
 
     /// RGBA is directly rendered by [on_rgba]. No need to store the rgba for the sciter ui.
-    fn get_rgba(&self) -> *const u8  { std::ptr::null() }
+    fn get_rgba(&self) -> *const u8 {
+        std::ptr::null()
+    }
 
-    fn next_rgba(&mut self) {}
+    fn next_rgba(&self) {}
 }
 
 pub struct SciterSession(Session<SciterHandler>);
@@ -346,7 +358,7 @@ impl sciter::EventHandler for SciterSession {
                     let site = AssetPtr::adopt(ptr as *mut video_destination);
                     log::debug!("[video] start video");
                     *VIDEO.lock().unwrap() = Some(site);
-                    self.reconnect();
+                    self.reconnect(false);
                 }
             }
             BEHAVIOR_EVENTS::VIDEO_INITIALIZED => {
@@ -395,7 +407,7 @@ impl sciter::EventHandler for SciterSession {
         fn transfer_file();
         fn tunnel();
         fn lock_screen();
-        fn reconnect();
+        fn reconnect(bool);
         fn get_chatbox();
         fn get_icon();
         fn get_home_dir();
@@ -450,10 +462,14 @@ impl sciter::EventHandler for SciterSession {
 
 impl SciterSession {
     pub fn new(cmd: String, id: String, password: String, args: Vec<String>) -> Self {
+        let force_relay = args.contains(&"--relay".to_string());
         let session: Session<SciterHandler> = Session {
             id: id.clone(),
             password: password.clone(),
             args,
+            server_keyboard_enabled: Arc::new(RwLock::new(true)),
+            server_file_transfer_enabled: Arc::new(RwLock::new(true)),
+            server_clipboard_enabled: Arc::new(RwLock::new(true)),
             ..Default::default()
         };
 
@@ -467,7 +483,11 @@ impl SciterSession {
             ConnType::DEFAULT_CONN
         };
 
-        session.lc.write().unwrap().initialize(id, conn_type, None);
+        session
+            .lc
+            .write()
+            .unwrap()
+            .initialize(id, conn_type, None, force_relay);
 
         Self(session)
     }

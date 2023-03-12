@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use block::RcBlock;
-use libc::c_void;
+use hbb_common::libc::c_void;
 
 pub type CGDisplayStreamRef = *mut c_void;
 pub type CFDictionaryRef = *mut c_void;

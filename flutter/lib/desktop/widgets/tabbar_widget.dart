@@ -53,6 +53,7 @@ enum DesktopTabType {
   remoteScreen,
   fileTransfer,
   portForward,
+  install,
 }
 
 class DesktopTabState {
@@ -249,8 +250,9 @@ class DesktopTab extends StatelessWidget {
     this.unSelectedTabBackgroundColor,
   }) : super(key: key) {
     tabType = controller.tabType;
-    isMainWindow =
-        tabType == DesktopTabType.main || tabType == DesktopTabType.cm;
+    isMainWindow = tabType == DesktopTabType.main ||
+        tabType == DesktopTabType.cm ||
+        tabType == DesktopTabType.install;
   }
 
   static RxString labelGetterAlias(String peerId) {
@@ -278,7 +280,6 @@ class DesktopTab extends StatelessWidget {
                 ),
                 const Divider(
                   height: 1,
-                  thickness: 1,
                 ),
               ],
             ),
@@ -361,7 +362,8 @@ class DesktopTab extends StatelessWidget {
   /// - hide single item when only has one item (home) on [DesktopTabPage].
   bool isHideSingleItem() {
     return state.value.tabs.length == 1 &&
-        controller.tabType == DesktopTabType.main;
+        (controller.tabType == DesktopTabType.main ||
+            controller.tabType == DesktopTabType.install);
   }
 
   Widget _buildBar() {
@@ -523,12 +525,18 @@ class WindowActionPanelState extends State<WindowActionPanel>
     super.dispose();
   }
 
+  void _setMaximize(bool maximize) {
+    stateGlobal.setMaximize(maximize);
+    setState(() {});
+  }
+
   @override
   void onWindowMaximize() {
     // catch maximize from system
     if (!widget.isMaximized.value) {
       widget.isMaximized.value = true;
     }
+    _setMaximize(true);
     super.onWindowMaximize();
   }
 
@@ -538,6 +546,7 @@ class WindowActionPanelState extends State<WindowActionPanel>
     if (widget.isMaximized.value) {
       widget.isMaximized.value = false;
     }
+    _setMaximize(false);
     super.onWindowUnmaximize();
   }
 
@@ -548,13 +557,20 @@ class WindowActionPanelState extends State<WindowActionPanel>
       if (rustDeskWinManager.getActiveWindows().contains(kMainWindowId)) {
         await rustDeskWinManager.unregisterActiveWindow(kMainWindowId);
       }
-      // `hide` must be placed after unregisterActiveWindow, because once all windows are hidden,
-      // flutter closes the application on macOS. We should ensure the post-run logic has ran successfully.
-      // e.g.: saving window position.
+      // macOS specific workaround, the window is not hiding when in fullscreen.
+      if (Platform.isMacOS && await windowManager.isFullScreen()) {
+        await windowManager.setFullScreen(false);
+        await Future.delayed(Duration(seconds: 1));
+      }
       await windowManager.hide();
     } else {
       // it's safe to hide the subwindow
-      await WindowController.fromWindowId(kWindowId!).hide();
+      final controller = WindowController.fromWindowId(kWindowId!);
+      if (Platform.isMacOS && await controller.isFullScreen()) {
+        await controller.setFullscreen(false);
+        await Future.delayed(Duration(seconds: 1));
+      }
+      await controller.hide();
       await Future.wait([
         rustDeskWinManager
             .call(WindowType.Main, kWindowEventHide, {"id": kWindowId!}),
@@ -592,7 +608,7 @@ class WindowActionPanelState extends State<WindowActionPanel>
                   offstage: !widget.showMaximize || Platform.isMacOS,
                   child: Obx(() => ActionIcon(
                         message:
-                            widget.isMaximized.value ? "Restore" : "Maximize",
+                            widget.isMaximized.value ? 'Restore' : 'Maximize',
                         icon: widget.isMaximized.value
                             ? IconFont.restore
                             : IconFont.max,
@@ -745,7 +761,8 @@ class _ListView extends StatelessWidget {
   /// - hide single item when only has one item (home) on [DesktopTabPage].
   bool isHideSingleItem() {
     return state.value.tabs.length == 1 &&
-        controller.tabType == DesktopTabType.main;
+            controller.tabType == DesktopTabType.main ||
+        controller.tabType == DesktopTabType.install;
   }
 
   @override
@@ -939,7 +956,6 @@ class _TabState extends State<_Tab> with RestorationMixin {
                   indent: _kDividerIndent,
                   endIndent: _kDividerIndent,
                   color: MyTheme.tabbar(context).dividerColor,
-                  thickness: 1,
                 ),
               )
             ],

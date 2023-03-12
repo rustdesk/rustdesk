@@ -58,6 +58,10 @@ class InputModel {
   InputModel(this.parent);
 
   KeyEventResult handleRawKeyEvent(FocusNode data, RawKeyEvent e) {
+    if (!stateGlobal.grabKeyboard) {
+      return KeyEventResult.handled;
+    }
+
     // * Currently mobile does not enable map mode
     if (isDesktop) {
       bind.sessionGetKeyboardMode(id: id).then((result) {
@@ -454,18 +458,21 @@ class InputModel {
         return;
     }
     evt['type'] = type;
-    if (isDesktop) {
-      y = y - stateGlobal.tabBarHeight;
-    }
+    y -= CanvasModel.topToEdge;
+    x -= CanvasModel.leftToEdge;
     final canvasModel = parent.target!.canvasModel;
+    final nearThr = 3;
+    var nearRight = (canvasModel.size.width - x) < nearThr;
+    var nearBottom = (canvasModel.size.height - y) < nearThr;
+
     final ffiModel = parent.target!.ffiModel;
     if (isMove) {
       canvasModel.moveDesktopMouse(x, y);
     }
     final d = ffiModel.display;
+    final imageWidth = d.width * canvasModel.scale;
+    final imageHeight = d.height * canvasModel.scale;
     if (canvasModel.scrollStyle == ScrollStyle.scrollbar) {
-      final imageWidth = d.width * canvasModel.scale;
-      final imageHeight = d.height * canvasModel.scale;
       x += imageWidth * canvasModel.scrollX;
       y += imageHeight * canvasModel.scrollY;
 
@@ -483,10 +490,32 @@ class InputModel {
 
     x /= canvasModel.scale;
     y /= canvasModel.scale;
+    if (canvasModel.scale > 0 && canvasModel.scale < 1) {
+      final step = 1.0 / canvasModel.scale - 1;
+      if (nearRight) {
+        x += step;
+      }
+      if (nearBottom) {
+        y += step;
+      }
+    }
     x += d.x;
     y += d.y;
+    var evtX = 0;
+    var evtY = 0;
+    try {
+      evtX = x.round();
+      evtY = y.round();
+    } catch (e) {
+      debugPrintStack(
+          label: 'canvasModel.scale value ${canvasModel.scale}, $e');
+      return;
+    }
 
-    if (x < d.x || y < d.y || x > (d.x + d.width) || y > (d.y + d.height)) {
+    if (evtX < d.x ||
+        evtY < d.y ||
+        evtX > (d.x + d.width) ||
+        evtY > (d.y + d.height)) {
       // If left mouse up, no early return.
       if (evt['buttons'] != kPrimaryMouseButton || type != 'up') {
         return;
@@ -494,12 +523,12 @@ class InputModel {
     }
 
     if (type != '') {
-      x = 0;
-      y = 0;
+      evtX = 0;
+      evtY = 0;
     }
 
-    evt['x'] = '${x.round()}';
-    evt['y'] = '${y.round()}';
+    evt['x'] = '$evtX';
+    evt['y'] = '$evtY';
     var buttons = '';
     switch (evt['buttons']) {
       case kPrimaryMouseButton:

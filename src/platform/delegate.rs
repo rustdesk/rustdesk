@@ -26,7 +26,7 @@ const SHOW_SETTINGS_TAG: u32 = 2;
 const RUN_ME_TAG: u32 = 3;
 const AWAKE: u32 = 4;
 
-trait AppHandler {
+pub trait AppHandler {
     fn command(&mut self, cmd: u32);
 }
 
@@ -63,9 +63,12 @@ impl AppHandler for Rc<Host> {
 }
 
 // https://github.com/xi-editor/druid/blob/master/druid-shell/src/platform/mac/application.rs
-unsafe fn set_delegate(handler: Option<Box<dyn AppHandler>>) {
-    let mut decl =
-        ClassDecl::new("AppDelegate", class!(NSObject)).expect("App Delegate definition failed");
+pub unsafe fn set_delegate(handler: Option<Box<dyn AppHandler>>) {
+    let decl = ClassDecl::new("AppDelegate", class!(NSObject));
+    if decl.is_none() {
+        return;
+    }
+    let mut decl = decl.unwrap();
     decl.add_ivar::<*mut c_void>(APP_HANDLER_IVAR);
 
     decl.add_method(

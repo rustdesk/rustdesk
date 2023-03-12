@@ -65,7 +65,7 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
   Widget build(BuildContext context) {
     final tabWidget = Container(
         child: Scaffold(
-            backgroundColor: Theme.of(context).backgroundColor,
+            backgroundColor: Theme.of(context).colorScheme.background,
             body: DesktopTab(
               controller: tabController,
               tail: ActionIcon(
@@ -75,7 +75,7 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
                 isClose: false,
               ),
             )));
-    return Platform.isMacOS
+    return Platform.isMacOS || kUseCompatibleUiMode
         ? tabWidget
         : Obx(
             () => DragToResizeArea(

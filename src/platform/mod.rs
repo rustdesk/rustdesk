@@ -11,6 +11,9 @@ pub mod windows;
 #[cfg(target_os = "macos")]
 pub mod macos;
 
+#[cfg(target_os = "macos")]
+pub mod delegate;
+
 #[cfg(target_os = "linux")]
 pub mod linux;
 
@@ -74,5 +77,13 @@ mod tests {
             assert!(!get_cursor_pos().is_none());
         }
     }
-}
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[test]
+    fn test_resolution() {
+        let name = r"\\.\DISPLAY1";
+        println!("current:{:?}", current_resolution(name));
+        println!("change:{:?}", change_resolution(name, 2880, 1800));
+        println!("resolutions:{:?}", resolutions(name));
+    }
+}

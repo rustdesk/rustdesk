@@ -17,6 +17,7 @@ import url_launcher_macos
 import wakelock_macos
 import window_manager
 import window_size
+import texture_rgba_renderer
 
 class MainFlutterWindow: NSWindow {
     override func awakeFromNib() {
@@ -49,6 +50,7 @@ class MainFlutterWindow: NSWindow {
             UrlLauncherPlugin.register(with: controller.registrar(forPlugin: "UrlLauncherPlugin"))
             WakelockMacosPlugin.register(with: controller.registrar(forPlugin: "WakelockMacosPlugin"))
             WindowSizePlugin.register(with: controller.registrar(forPlugin: "WindowSizePlugin"))
+            TextureRgbaRendererPlugin.register(with: controller.registrar(forPlugin: "TextureRgbaRendererPlugin"))
         }
         
         super.awakeFromNib()

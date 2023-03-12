@@ -1,10 +1,11 @@
 mod license;
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use hbb_common::ResultType;
 use license::*;
 
 fn gen_name(lic: &License) -> ResultType<String> {
     let tmp = serde_json::to_vec::<License>(lic)?;
-    let tmp = base64::encode_config(tmp, base64::URL_SAFE_NO_PAD);
+    let tmp = URL_SAFE_NO_PAD.encode(&tmp);
     let tmp: String = tmp.chars().rev().collect();
     Ok(tmp)
 }

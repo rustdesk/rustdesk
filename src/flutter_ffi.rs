@@ -1,14 +1,16 @@
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::common::get_default_sound_input;
 use crate::{
     client::file_trait::FileManager,
+    common::is_keyboard_mode_supported,
     common::make_fd_to_json,
-    common::{get_default_sound_input, is_keyboard_mode_supported},
     flutter::{self, SESSIONS},
     flutter::{session_add, session_start_},
     ui_interface::{self, *},
 };
-use flutter_rust_bridge::{StreamSink, SyncReturn, ZeroCopyBuffer};
+use flutter_rust_bridge::{StreamSink, SyncReturn};
 use hbb_common::{
-    config::{self, LocalConfig, PeerConfig, ONLINE},
+    config::{self, LocalConfig, PeerConfig, PeerInfoSerde, ONLINE},
     fs, log,
     message_proto::KeyboardMode,
     ResultType,
@@ -19,8 +21,8 @@ use std::{
     ffi::{CStr, CString},
     os::raw::c_char,
     str::FromStr,
+    time::SystemTime,
 };
-use crate::ui_session_interface::InvokeUiSession;
 
 // use crate::hbbs_http::account::AuthResult;
 
@@ -84,8 +86,15 @@ pub fn session_add_sync(
     is_file_transfer: bool,
     is_port_forward: bool,
     switch_uuid: String,
+    force_relay: bool,
 ) -> SyncReturn<String> {
-    if let Err(e) = session_add(&id, is_file_transfer, is_port_forward, &switch_uuid) {
+    if let Err(e) = session_add(
+        &id,
+        is_file_transfer,
+        is_port_forward,
+        &switch_uuid,
+        force_relay,
+    ) {
         SyncReturn(format!("Failed to add session with id {}, {}", &id, e))
     } else {
         SyncReturn("".to_owned())
@@ -132,10 +141,10 @@ pub fn session_login(id: String, password: String, remember: bool) {
 }
 
 pub fn session_close(id: String) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+    if let Some(mut session) = SESSIONS.write().unwrap().remove(&id) {
+        session.close_event_stream();
         session.close();
     }
-    let _ = SESSIONS.write().unwrap().remove(&id);
 }
 
 pub fn session_refresh(id: String) {
@@ -150,16 +159,22 @@ pub fn session_record_screen(id: String, start: bool, width: usize, height: usiz
     }
 }
 
-pub fn session_reconnect(id: String) {
+pub fn session_reconnect(id: String, force_relay: bool) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.reconnect();
+        session.reconnect(force_relay);
     }
 }
 
 pub fn session_toggle_option(id: String, value: String) {
+    let mut is_found = false;
     if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
-        log::warn!("toggle option {}", value);
-        session.toggle_option(value);
+        is_found = true;
+        log::warn!("toggle option {}", &value);
+        session.toggle_option(value.clone());
+    }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    if is_found && value == "disable-clipboard" {
+        crate::flutter::update_text_clipboard_required();
     }
 }
 
@@ -515,6 +530,19 @@ pub fn session_switch_sides(id: String) {
     }
 }
 
+pub fn session_change_resolution(id: String, width: i32, height: i32) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.change_resolution(width, height);
+    }
+}
+
+pub fn session_set_size(_id: String, _width: i32, _height: i32) {
+    #[cfg(feature = "flutter_texture_render")]
+    if let Some(session) = SESSIONS.write().unwrap().get_mut(&_id) {
+        session.set_size(_width, _height);
+    }
+}
+
 pub fn main_get_sound_inputs() -> Vec<String> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     return get_sound_inputs();
@@ -725,7 +753,28 @@ pub fn main_load_recent_peers() {
 pub fn main_load_fav_peers() {
     if !config::APP_DIR.read().unwrap().is_empty() {
         let favs = get_fav();
-        let peers: Vec<HashMap<&str, String>> = PeerConfig::peers()
+        let mut recent = PeerConfig::peers();
+        let mut lan = config::LanPeers::load()
+            .peers
+            .iter()
+            .filter(|d| recent.iter().all(|r| r.0 != d.id))
+            .map(|d| {
+                (
+                    d.id.clone(),
+                    SystemTime::UNIX_EPOCH,
+                    PeerConfig {
+                        info: PeerInfoSerde {
+                            username: d.username.clone(),
+                            hostname: d.hostname.clone(),
+                            platform: d.platform.clone(),
+                        },
+                        ..Default::default()
+                    },
+                )
+            })
+            .collect();
+        recent.append(&mut lan);
+        let peers: Vec<HashMap<&str, String>> = recent
             .into_iter()
             .filter_map(|(id, _, p)| {
                 if favs.contains(&id) {
@@ -769,6 +818,10 @@ pub fn main_load_lan_peers() {
     };
 }
 
+pub fn main_remove_discovered(id: String) {
+    remove_discovered(id);
+}
+
 fn main_broadcast_message(data: &HashMap<&str, &str>) {
     let apps = vec![
         flutter::APP_TYPE_DESKTOP_REMOTE,
@@ -803,6 +856,10 @@ pub fn main_set_user_default_option(key: String, value: String) {
 
 pub fn main_get_user_default_option(key: String) -> SyncReturn<String> {
     SyncReturn(get_user_default_option(key))
+}
+
+pub fn main_handle_relay_id(id: String) -> String {
+    handle_relay_id(id)
 }
 
 pub fn session_add_port_forward(
@@ -1173,6 +1230,9 @@ pub fn main_start_grab_keyboard() -> SyncReturn<bool> {
         return SyncReturn(false);
     }
     crate::keyboard::client::start_grab_loop();
+    if !is_can_input_monitoring(false) {
+        return SyncReturn(false);
+    }
     SyncReturn(true)
 }
 
@@ -1283,6 +1343,17 @@ pub fn main_hide_docker() -> SyncReturn<bool> {
     SyncReturn(true)
 }
 
+pub fn main_use_texture_render() -> SyncReturn<bool> {
+    #[cfg(not(feature = "flutter_texture_render"))]
+    {
+        SyncReturn(false)
+    }
+    #[cfg(feature = "flutter_texture_render")]
+    {
+        SyncReturn(true)
+    }
+}
+
 pub fn cm_start_listen_ipc_thread() {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     crate::flutter::connection_manager::start_listen_ipc_thread();
@@ -1308,7 +1379,7 @@ pub fn send_url_scheme(_url: String) {
 
 #[cfg(target_os = "android")]
 pub mod server_side {
-    use hbb_common::log;
+    use hbb_common::{config, log};
     use jni::{
         objects::{JClass, JString},
         sys::jstring,
@@ -1321,9 +1392,23 @@ pub mod server_side {
     pub unsafe extern "system" fn Java_com_carriez_flutter_1hbb_MainService_startServer(
         env: JNIEnv,
         _class: JClass,
+        app_dir: JString,
     ) {
-        log::debug!("startServer from java");
+        log::debug!("startServer from jvm");
+        if let Ok(app_dir) = env.get_string(app_dir) {
+            *config::APP_DIR.write().unwrap() = app_dir.into();
+        }
         std::thread::spawn(move || start_server(true));
+    }
+
+    #[no_mangle]
+    pub unsafe extern "system" fn Java_com_carriez_flutter_1hbb_MainService_startService(
+        env: JNIEnv,
+        _class: JClass,
+    ) {
+        log::debug!("startService from jvm");
+        config::Config::set_option("stop-service".into(), "".into());
+        crate::rendezvous_mediator::RendezvousMediator::restart();
     }
 
     #[no_mangle]
