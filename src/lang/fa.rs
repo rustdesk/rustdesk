@@ -472,5 +472,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("empty_favorite_tip", "هنوز همتای مورد علاقه‌ای ندارید؟\nبیایید فردی را برای ارتباط پیدا کنیم و آن را به موارد دلخواه خود اضافه کنیم!"),
         ("empty_lan_tip", "اوه نه، به نظر می رسد که ما هنوز همتای خود را پیدا نکرده ایم"),
         ("empty_address_book_tip", "اوه ، به نظر می رسد که در حال حاضر هیچ همتایی در دفترچه آدرس شما وجود ندارد"),
+        ("eg: admin", ""),
+        ("Empty Username", ""),
+        ("Empty Password", ""),
     ].iter().cloned().collect();
 }

@@ -472,5 +472,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("empty_favorite_tip", "Ещё нет избранных удалённых узлов?\nДавайте найдём, кого можно добавить в избранное!"),
         ("empty_lan_tip", "Не найдено удалённых узлов."),
         ("empty_address_book_tip", "В адресной книге нет удалённых узлов."),
+        ("eg: admin", ""),
+        ("Empty Username", ""),
+        ("Empty Password", ""),
     ].iter().cloned().collect();
 }
