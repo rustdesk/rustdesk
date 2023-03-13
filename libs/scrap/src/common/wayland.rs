@@ -1,11 +1,46 @@
 use crate::common::{x11::Frame, TraitCapturer};
 use crate::wayland::{capturable::*, *};
-use std::{io, time::Duration};
+use std::{io, sync::RwLock, time::Duration};
 
 pub struct Capturer(Display, Box<dyn Recorder>, bool, Vec<u8>);
 
+static mut IS_CURSOR_EMBEDDED: Option<bool> = None;
+
+lazy_static::lazy_static! {
+    static ref MAP_ERR: RwLock<Option<fn(err: String)-> io::Error>> = Default::default();
+}
+
+pub fn is_cursor_embedded() -> bool {
+    unsafe {
+        if IS_CURSOR_EMBEDDED.is_none() {
+            init_cursor_embedded();
+        }
+        IS_CURSOR_EMBEDDED.unwrap_or(false)
+    }
+}
+
+unsafe fn init_cursor_embedded() {
+    use crate::common::wayland::pipewire::get_available_cursor_modes;
+    match get_available_cursor_modes() {
+        Ok(modes) => {
+            IS_CURSOR_EMBEDDED = Some((modes & 0x02) > 0);
+        }
+        Err(..) => {
+            IS_CURSOR_EMBEDDED = Some(false);
+        }
+    }
+}
+
+pub fn set_map_err(f: fn(err: String) -> io::Error) {
+    *MAP_ERR.write().unwrap() = Some(f);
+}
+
 fn map_err<E: ToString>(err: E) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, err.to_string())
+    if let Some(f) = *MAP_ERR.read().unwrap() {
+        f(err.to_string())
+    } else {
+        io::Error::new(io::ErrorKind::Other, err.to_string())
+    }
 }
 
 impl Capturer {
@@ -36,6 +71,12 @@ impl TraitCapturer for Capturer {
             } else {
                 x
             })),
+            PixelProvider::RGB0(w, h, x) => Ok(Frame(if self.2 {
+                crate::common::rgba_to_i420(w as _, h as _, &x, &mut self.3);
+                &self.3[..]
+            } else {
+                x
+            })),
             PixelProvider::NONE => Err(std::io::ErrorKind::WouldBlock.into()),
             _ => Err(map_err("Invalid data")),
         }
@@ -54,7 +95,7 @@ impl Display {
     }
 
     pub fn all() -> io::Result<Vec<Display>> {
-        Ok(pipewire::get_capturables(false)
+        Ok(pipewire::get_capturables(is_cursor_embedded())
             .map_err(map_err)?
             .drain(..)
             .map(|x| Display(x))

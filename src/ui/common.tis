@@ -155,6 +155,7 @@ var svg_send = <svg viewBox="0 0 448 448">
 var svg_chat = <svg viewBox="0 0 511.07 511.07">
     <path d="m74.39 480.54h-36.213l25.607-25.607c13.807-13.807 22.429-31.765 24.747-51.246-36.029-23.644-62.375-54.751-76.478-90.425-14.093-35.647-15.864-74.888-5.121-113.48 12.89-46.309 43.123-88.518 85.128-118.85 45.646-32.963 102.47-50.387 164.33-50.387 77.927 0 143.61 22.389 189.95 64.745 41.744 38.159 64.734 89.63 64.734 144.93 0 26.868-5.471 53.011-16.26 77.703-11.165 25.551-27.514 48.302-48.593 67.619-46.399 42.523-112.04 65-189.83 65-28.877 0-59.01-3.855-85.913-10.929-25.465 26.123-59.972 40.929-96.086 40.929zm182-420c-124.04 0-200.15 73.973-220.56 147.28-19.284 69.28 9.143 134.74 76.043 175.12l7.475 4.511-0.23 8.727c-0.456 17.274-4.574 33.912-11.945 48.952 17.949-6.073 34.236-17.083 46.99-32.151l6.342-7.493 9.405 2.813c26.393 7.894 57.104 12.241 86.477 12.241 154.37 0 224.68-93.473 224.68-180.32 0-46.776-19.524-90.384-54.976-122.79-40.713-37.216-99.397-56.888-169.71-56.888z"/>
 </svg>;
+var svg_keyboard = <svg viewBox="0 0 511.07 511.07"><path d="M491.979 217.631H110.205a48.41 48.41 0 0 1 .637-4.061c4.408-21.755 23.676-38.152 46.71-38.152h149.314c39.306 0 71.282-32.246 71.282-71.552 0-11.28-9.145-20.56-20.426-20.56s-20.426 9.077-20.426 20.359c0 3.419-.575 6.941-1.619 10.01-4.082 11.998-15.451 20.893-28.812 20.893H157.553c-46.995 0-85.535 36.766-88.331 83.064H20.021C8.739 217.631 0 226.296 0 237.578v170.345c0 11.28 8.739 20.773 20.021 20.773H491.98c11.28 0 20.021-9.492 20.021-20.773V237.578c-.001-11.282-8.74-19.947-20.022-19.947zm-20.83 170.213H40.851V258.482h430.298v129.362z"/><path d="M113.021 273.461H89.872c-11.28 0-20.426 9.145-20.426 20.426s9.145 20.426 20.426 20.426h23.149c11.28 0 20.426-9.145 20.426-20.426s-9.145-20.426-20.426-20.426zM190.638 273.461h-23.149c-11.28 0-20.426 9.145-20.426 20.426s9.145 20.426 20.426 20.426h23.149c11.28 0 20.426-9.145 20.426-20.426s-9.145-20.426-20.426-20.426zM268.255 273.461h-23.149c-11.28 0-20.426 9.145-20.426 20.426s9.145 20.426 20.426 20.426h23.149c11.28 0 20.426-9.145 20.426-20.426s-9.145-20.426-20.426-20.426zM345.872 273.461h-23.149c-11.28 0-20.426 9.145-20.426 20.426s9.145 20.426 20.426 20.426h23.149c11.28 0 20.426-9.145 20.426-20.426s-9.145-20.426-20.426-20.426zM423.489 273.461H400.34c-11.28 0-20.426 9.145-20.426 20.426s9.145 20.426 20.426 20.426h23.149c11.28 0 20.426-9.145 20.426-20.426s-9.145-20.426-20.426-20.426zM113.021 325.206H89.872c-11.28 0-20.426 9.145-20.426 20.426s9.145 20.425 20.426 20.425h23.149c11.28 0 20.426-9.145 20.426-20.425s-9.145-20.426-20.426-20.426zM423.489 325.206H400.34c-11.28 0-20.426 9.145-20.426 20.426s9.145 20.425 20.426 20.425h23.149c11.28 0 20.426-9.145 20.426-20.425s-9.145-20.426-20.426-20.426zM345.872 329.291H167.489c-11.28 0-20.426 9.145-20.426 20.426s9.145 20.426 20.426 20.426h178.383c11.28 0 20.426-9.145 20.426-20.426s-9.145-20.426-20.426-20.426z"/></svg>;
 
 function scrollToBottom(el) {
     var y = el.box(#height, #content) - el.box(#height, #client);
@@ -231,7 +232,8 @@ class ChatBox: Reactor.Component {
 
 /******************** start of msgbox ****************************************/
 var remember_password = false;
-function msgbox(type, title, content, callback=null, height=180, width=500, hasRetry=false, contentStyle="") {
+var last_msgbox_tag = "";
+function msgbox(type, title, content, link="", callback=null, height=180, width=500, hasRetry=false, contentStyle="") {
     $(body).scrollTo(0, 0);
     if (!type) {
         closeMsgbox();
@@ -262,22 +264,36 @@ function msgbox(type, title, content, callback=null, height=180, width=500, hasR
         };
     } else if (type.indexOf("custom") < 0 && !is_port_forward && !callback) {
         callback = function() { view.close(); }
+    } else if (type == 'wait-remote-accept-nook') {
+        callback = function (res) {
+            if (!res) {
+                view.close();
+                return;
+            }
+        };
     }
-    $(#msgbox).content(<MsgboxComponent width={width} height={height} auto_login={auto_login} type={type} title={title} content={content} remember={remember} callback={callback} contentStyle={contentStyle} hasRetry={hasRetry} />);
+    last_msgbox_tag = type + "-" + title + "-" + content + "-" + link;
+    $(#msgbox).content(<MsgboxComponent width={width} height={height} auto_login={auto_login} type={type} title={title} content={content} link={link} remember={remember} callback={callback} contentStyle={contentStyle} hasRetry={hasRetry} />);
 }
 
 function connecting() {
     handler.msgbox("connecting", "Connecting...", "Connection in progress. Please wait.");
 }
 
-handler.msgbox = function(type, title, text, hasRetry=false) {
+handler.msgbox = function(type, title, text, link = "", hasRetry=false) {
     // crash somehow (when input wrong password), even with small time, for example, 1ms
-    self.timer(60ms, function() { msgbox(type, title, text, null, 180, 500, hasRetry); });
+    self.timer(60ms, function() { msgbox(type, title, text, link, null, 180, 500, hasRetry); });
+}
+
+handler.cancel_msgbox = function(tag) {
+    if (last_msgbox_tag == tag) {
+        closeMsgbox();
+    }
 }
 
 var reconnectTimeout = 1000;
-handler.msgbox_retry = function(type, title, text, hasRetry) {
-    handler.msgbox(type, title, text, hasRetry);
+handler.msgbox_retry = function(type, title, text, link, hasRetry) {
+    handler.msgbox(type, title, text, link, hasRetry);
     if (hasRetry) {
         self.timer(0, retryConnect);
         self.timer(reconnectTimeout, retryConnect);

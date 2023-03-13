@@ -9,7 +9,6 @@ var app;
 var tmp = handler.get_connect_status();
 var connect_status = tmp[0];
 var service_stopped = handler.get_option("stop-service") == "Y";
-var rendezvous_service_stopped = false;
 var using_public_server = handler.using_public_server();
 var software_update_url = "";
 var key_confirmed = tmp[1];
@@ -214,6 +213,7 @@ class Enhancements: Reactor.Component {
             <menu #enhancements-menu>
                 {has_hwcodec ? <li #enable-hwcodec><span>{svg_checkmark}</span>{translate("Hardware Codec")} (beta)</li> : ""}
                 <li #enable-abr><span>{svg_checkmark}</span>{translate("Adaptive Bitrate")} (beta)</li>
+                <li #screen-recording>{translate("Recording")}</li>
             </menu>
         </li>;
     }
@@ -232,6 +232,26 @@ class Enhancements: Reactor.Component {
         var v = me.id;
         if (v.indexOf("enable-") == 0) {
             handler.set_option(v, handler.get_option(v) != 'N' ? 'N' : '');
+        } else if (v == 'screen-recording') {
+            var dir = handler.get_option("video-save-directory");
+            if (!dir) dir = handler.default_video_save_directory();
+            var ts0 = handler.get_option("enable-record-session") == '' ? { checked: true } : {};
+            var ts1 = handler.get_option("allow-auto-record-incoming") == 'Y' ? { checked: true } : {};
+            msgbox("custom-recording", translate('Recording'),
+                <div .form>
+                    <div><button|checkbox(enable_record_session) {ts0}>{translate('Enable Recording Session')}</button></div>
+                    <div><button|checkbox(auto_record_incoming) {ts1}>{translate('Automatically record incoming sessions')}</button></div>
+                    <div>
+                        <div style="word-wrap:break-word"><span>{translate("Directory")}:&nbsp;&nbsp;</span><span #folderPath>{dir}</span></div>
+                        <div> <button #select_directory .link>{translate('Change')}</button> </div>
+                    </div>
+                </div>
+                , "", function(res=null) {
+                if (!res) return;
+                handler.set_option("enable-record-session", res.enable_record_session ? '' : 'N');
+                handler.set_option("allow-auto-record-incoming", res.auto_record_incoming ? 'Y' : '');
+                handler.set_option("video-save-directory", $(#folderPath).text);
+            });
         }
         this.toggleMenuState();
     }
@@ -276,6 +296,7 @@ class MyIdMenu: Reactor.Component {
                 <li #enable-file-transfer><span>{svg_checkmark}</span>{translate('Enable File Transfer')}</li> 
                 <li #enable-remote-restart><span>{svg_checkmark}</span>{translate('Enable Remote Restart')}</li> 
                 <li #enable-tunnel><span>{svg_checkmark}</span>{translate('Enable TCP Tunneling')}</li>
+                <li #enable-lan-discovery><span>{svg_checkmark}</span>{translate('Enable LAN Discovery')}</li>
                 <AudioInputs />
                 <Enhancements />
                 <li #allow-remote-config-modification><span>{svg_checkmark}</span>{translate('Enable remote configuration modification')}</li>
@@ -288,7 +309,6 @@ class MyIdMenu: Reactor.Component {
                 {handler.is_rdp_service_open() ? <ShareRdp /> : ""}
                 <DirectServer />
                 {false && handler.using_public_server() && <li #allow-always-relay><span>{svg_checkmark}</span>{translate('Always connected via relay')}</li>}
-                {handler.has_rendezvous_service() ? <li #stop-rendezvous-service>{translate(rendezvous_service_stopped ? "Start ID/relay service" : "Stop ID/relay service")}</li> : ""}
                 {handler.is_ok_change_id() ? <div .separator /> : ""}
                 {username ? 
                 <li #logout>{translate('Logout')} ({username})</li> :
@@ -339,7 +359,7 @@ class MyIdMenu: Reactor.Component {
 
     function showAbout() {
         var name = handler.get_app_name();
-        msgbox("custom-nocancel-nook-hasclose", "About " + name, "<div style='line-height: 2em'> \
+        msgbox("custom-nocancel-nook-hasclose", translate("About") + " " + name, "<div style='line-height: 2em'> \
             <div>Version: " + handler.get_version() + " \
             <div .link .custom-event url='https://rustdesk.com/privacy'>Privacy Statement</div> \
             <div .link .custom-event url='https://rustdesk.com'>Website</div> \
@@ -347,7 +367,7 @@ class MyIdMenu: Reactor.Component {
             <br />" + handler.get_license() + " \
             <p style='font-weight: bold'>Made with heart in this chaotic world!</p>\
             </div>\
-        </div>", function(el) {
+        </div>", "", function(el) {
             if (el && el.attributes) {
                 handler.open_url(el.attributes['url']);
             };
@@ -367,13 +387,14 @@ class MyIdMenu: Reactor.Component {
             <div>" + translate("whitelist_sep") + "</div> \
             <textarea .outline-focus spellcheck=\"false\" name=\"text\" novalue=\"0.0.0.0\" style=\"overflow: scroll-indicator; width:*; height: 140px; font-size: 1.2em; padding: 0.5em;\">" + old_value + "</textarea>\
             </div> \
-            ", function(res=null) {
+            ", "", function(res=null) {
                 if (!res) return;
                 var value = (res.text || "").trim();
                 if (value) {
                     var values = value.split(/[\s,;\n]+/g);
                     for (var ip in values) {
-                        if (!ip.match(/^\d+\.\d+\.\d+\.\d+$/)) {
+                        if (!ip.match(/^(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]?|0)\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]?|0)\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]?|0)\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]?|0)(\/([1-9]|[1-2][0-9]|3[0-2])){0,1}$/)
+                            && !ip.match(/^(((?:[0-9A-Fa-f]{1,4}))*((?::[0-9A-Fa-f]{1,4}))*::((?:[0-9A-Fa-f]{1,4}))*((?::[0-9A-Fa-f]{1,4}))*|((?:[0-9A-Fa-f]{1,4}))((?::[0-9A-Fa-f]{1,4})){7})(\/([1-9]|[1-9][0-9]|1[0-1][0-9]|12[0-8])){0,1}$/)) {
                             return translate("Invalid IP") + ": " + ip;
                         }
                     }
@@ -395,7 +416,7 @@ class MyIdMenu: Reactor.Component {
             <div><span>" + translate("API Server") + ": </span><input|text name='api' value='" + old_api + "' /></div> \
             <div><span>" + translate("Key") + ": </span><input|text name='key' value='" + old_key + "' /></div> \
             </div> \
-            ", function(res=null) {
+            ", "", function(res=null) {
                 if (!res) return;
                 var id = (res.id || "").trim();
                 var relay = (res.relay || "").trim();
@@ -431,7 +452,7 @@ class MyIdMenu: Reactor.Component {
             <div><span>{translate("Username")}:</span><input|text name='username' value={old_username} /></div>
             <div><span>{translate("Password")}:</span><PasswordComponent value={old_password} /></div>
             </div>
-            , function(res=null) {
+            , "", function(res=null) {
                 if (!res) return;
                 var proxy = (res.proxy || "").trim();
                 var username = (res.username || "").trim();
@@ -445,14 +466,12 @@ class MyIdMenu: Reactor.Component {
             }, 240);
         } else if (me.id == "stop-service") {
             handler.set_option("stop-service", service_stopped ? "" : "Y");
-        } else if (me.id == "stop-rendezvous-service") {
-            handler.set_option("stop-rendezvous-service",  rendezvous_service_stopped ? "" : "Y");
         } else if (me.id == "change-id") {
             msgbox("custom-id", translate("Change ID"), "<div .form .set-password> \
             <div>" + translate('id_change_tip') + " </div> \
             <div><span style='width: 100px; display:inline-block'>ID: </span><input|text .outline-focus style='width: 250px' name='id' /></div> \
             </div> \
-            ", function(res=null, show_progress) {
+            ", "", function(res=null, show_progress) {
                 if (!res) return;
                 show_progress();
                 var id = (res.id || "").trim();
@@ -498,7 +517,7 @@ function editDirectAccessPort() {
                     <input|text name='port' novalue={21118} />;
     msgbox("custom-direct-access-port", translate('Direct IP Access Settings'), <div .form .set-password>
             <div><span style="width: 60px;">{translate('Port')}:</span>{port}</div>
-        </div>, function(res=null) {
+        </div>, "", function(res=null) {
         if (!res) return;
         var p = (res.port || '').trim();
         if (p) {
@@ -736,11 +755,6 @@ class FixWayland: Reactor.Component {
         </div>;
     }
 
-    event click $(#fix-wayland) {
-        handler.fix_login_wayland();
-        app.update();
-    }
-    
     event click $(#help-me) {
         handler.open_url(translate("doc_fix_wayland"));
     }
@@ -750,19 +764,11 @@ class ModifyDefaultLogin: Reactor.Component {
     function render() {
         return <div .trust-me>
             <div>{translate('Warning')}</div>
-            <div>{translate('Current Wayland display server is not supported')}</div>
+            <div>{translate('wayland_experiment_tip')}</div>
             <div #help-me .link>{translate('Help')}</div>
         </div>;
     }
 
-    event click $(#modify-default-login) {
-        if (var r = handler.modify_default_login()) {
-            // without handler, will fail, fucking stupid sciter
-            handler.msgbox("custom-error", "Error", r);
-        }
-        app.update();
-    }
-    
     event click $(#help-me) {
         handler.open_url(translate("doc_fix_wayland"));
     }
@@ -802,7 +808,8 @@ function watch_screen_recording() {
 class PasswordEyeArea : Reactor.Component {
     render() {
         var method = handler.get_option('verification-method');
-        var value = method != 'use-permanent-password' ? password_cache[0] : "-";
+        var mode= handler.get_option('approve-mode');
+        var value = mode == 'click' ||  method == 'use-permanent-password' ? "-" : password_cache[0];
         return
             <div .eye-area style="width: *">
                 <input|text @{this.input} readonly value={value} />
@@ -827,7 +834,7 @@ class TemporaryPasswordLengthMenu: Reactor.Component {
         var me = this;
         var method = handler.get_option('verification-method');
         self.timer(1ms, function() { me.toggleMenuState() });
-        return <li disabled={ method == 'use-permanent-password' ? "true" : "false" }>{translate("Set temporary password length")}
+        return <li disabled={ method == 'use-permanent-password' ? "true" : "false" }>{translate("One-time password length")}
             <menu #temporary-password-length>
                 <li #temporary-password-length-6><span>{svg_checkmark}</span>6</li>
                 <li #temporary-password-length-8><span>{svg_checkmark}</span>8</li>
@@ -868,7 +875,7 @@ class PasswordArea: Reactor.Component {
         self.timer(1ms, function() { me.toggleMenuState() });
         return 
         <div .your-desktop>
-            <div>{translate('Password')}</div>
+            <div>{translate('One-time Password')}</div>
             <div .password style="flow:horizontal">
                 {this.renderPop()}
                 <PasswordEyeArea />
@@ -879,27 +886,46 @@ class PasswordArea: Reactor.Component {
 
     function renderPop() {
         var method = handler.get_option('verification-method');
+        var approve_mode= handler.get_option('approve-mode');
+        var show_password = approve_mode != 'click';
         return <popup><menu.context #edit-password-context>
-            <li #use-temporary-password><span>{svg_checkmark}</span>{translate('Use temporary password')}</li>
-            <li #use-permanent-password><span>{svg_checkmark}</span>{translate('Use permanent password')}</li>
-            <li #use-both-passwords><span>{svg_checkmark}</span>{translate('Use both passwords')}</li>
-            <div .separator />
-            <li #set-password  disabled={ method == 'use-temporary-password' ? "true" : "false" }>{translate('Set permanent password')}</li>
-            <TemporaryPasswordLengthMenu />
+            <li #approve-mode-password><span>{svg_checkmark}</span>{translate('Accept sessions via password')}</li>
+            <li #approve-mode-click><span>{svg_checkmark}</span>{translate('Accept sessions via click')}</li>
+            <li #approve-mode-both><span>{svg_checkmark}</span>{translate('Accept sessions via both')}</li>
+            { !show_password ? '' : <div .separator /> }
+            { !show_password ? '' : <li #use-temporary-password><span>{svg_checkmark}</span>{translate('Use one-time password')}</li> }
+            { !show_password ? '' : <li #use-permanent-password><span>{svg_checkmark}</span>{translate('Use permanent password')}</li> }
+            { !show_password ? '' : <li #use-both-passwords><span>{svg_checkmark}</span>{translate('Use both passwords')}</li> }
+            { !show_password ? '' : <div .separator /> }
+            { !show_password ? '' : <li #set-password  disabled={ method == 'use-temporary-password' ? "true" : "false" }>{translate('Set permanent password')}</li> }
+            { !show_password ? '' : <TemporaryPasswordLengthMenu /> }
         </menu></popup>;
     }
 
     function toggleMenuState() {
-        var id = handler.get_option('verification-method');
-        if (id != 'use-temporary-password' && id != 'use-permanent-password')
-            id = 'use-both-passwords';
-        for (var el in [this.$(li#use-temporary-password), this.$(li#use-permanent-password), this.$(li#use-both-passwords)]) {
-            el.attributes.toggleClass("selected", el.id == id);
+         var mode= handler.get_option('approve-mode');
+        var mode_id;
+        if (mode == 'password')
+            mode_id = 'approve-mode-password';
+        else if (mode == 'click')
+            mode_id = 'approve-mode-click';
+        else
+            mode_id = 'approve-mode-both';
+        var pwd_id = handler.get_option('verification-method');
+        if (pwd_id != 'use-temporary-password' && pwd_id != 'use-permanent-password')
+            pwd_id = 'use-both-passwords';
+        for (var el in this.$$(menu#edit-password-context>li)) {
+            if (el.id.indexOf("approve-mode-") == 0)
+                el.attributes.toggleClass("selected", el.id == mode_id);
+            if (el.id.indexOf("use-") == 0)
+                el.attributes.toggleClass("selected", el.id == pwd_id);
         }
     }
 
     event click $(svg#edit) (_, me) {
-        temporaryPasswordLengthMenu.update({show: true });
+        var approve_mode= handler.get_option('approve-mode');
+        var show_password = approve_mode != 'click';
+        if(show_password && temporaryPasswordLengthMenu) temporaryPasswordLengthMenu.update({show: true });
         var menu = $(menu#edit-password-context);        
         me.popup(menu);
     }
@@ -912,11 +938,11 @@ class PasswordArea: Reactor.Component {
             <div><span>" + translate('Password') + ":</span><input|password(password) .outline-focus " + value_field + " /></div> \
             <div><span>" + translate('Confirmation') + ":</span><input|password(confirmation) " + value_field + " /></div> \
         </div> \
-        ", function(res=null) {
+        ", "", function(res=null) {
             if (!res) return;
             var p0 = (res.password || "").trim();
             var p1 = (res.confirmation || "").trim();
-            if (p0.length < 6) {
+            if (p0.length < 6 && p0.length != 0) {
                 return translate("Too short, at least 6 characters.");
             }
             if (p0 != p1) {
@@ -932,16 +958,28 @@ class PasswordArea: Reactor.Component {
             handler.set_option('verification-method', me.id);
             this.toggleMenuState();
             passwordArea.update();
+        } else if (me.id.indexOf('approve-mode') == 0) {
+            var approve_mode;
+            if (me.id == 'approve-mode-password')
+                approve_mode = 'password';
+            else if (me.id == 'approve-mode-click')
+                approve_mode = 'click';
+            else
+                approve_mode = '';
+            handler.set_option('approve-mode', approve_mode);
+            this.toggleMenuState();
+            passwordArea.update();
         }
     }
 }
 
-var password_cache = ["","",""];
+var password_cache = ["","","",""];
 function updatePasswordArea() {
     self.timer(1s, function() {
         var temporary_password = handler.temporary_password();
         var verification_method = handler.get_option('verification-method');
         var temporary_password_length = handler.get_option('temporary-password-length');
+        var approve_mode = handler.get_option('approve-mode');
         var update = false;
         if (password_cache[0] != temporary_password) {
             password_cache[0] = temporary_password;
@@ -953,6 +991,10 @@ function updatePasswordArea() {
         }
         if (password_cache[2] != temporary_password_length) {
             password_cache[2] = temporary_password_length;
+            update = true;
+        }
+        if (password_cache[3] != approve_mode) {
+            password_cache[3] = approve_mode;
             update = true;
         }
         if (update) passwordArea.update();
@@ -1055,16 +1097,12 @@ function showSettings() {
 }
 
 function checkConnectStatus() {
+    handler.check_mouse_time(); // trigger connection status updater
     self.timer(1s, function() {
         var tmp = !!handler.get_option("stop-service");
         if (tmp != service_stopped) {
             service_stopped = tmp;
             app.update();
-        }
-        tmp = !!handler.get_option("stop-rendezvous-service");
-        if (tmp != rendezvous_service_stopped) {
-            rendezvous_service_stopped = tmp;
-            myIdMenu.update();
         }
         tmp = handler.using_public_server();
         if (tmp != using_public_server) {
@@ -1138,7 +1176,7 @@ function login() {
     msgbox("custom-login", translate('Login'), <div .form .set-password> 
             <div><span>{translate('Username')}:</span><input|text name="username" value={name0} .outline-focus /></div> 
             <div><span>{translate('Password')}:</span><PasswordComponent value={pass0} /></div> 
-        </div>, function(res=null, show_progress) {
+        </div>, "", function(res=null, show_progress) {
         if (!res) return;
         show_progress();
         var name = (res.username || '').trim();

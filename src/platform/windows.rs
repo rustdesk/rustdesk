@@ -1,23 +1,42 @@
 use super::{CursorData, ResultType};
+use crate::common::PORTABLE_APPNAME_RUNTIME_ENV_KEY;
 use crate::ipc;
 use crate::license::*;
 use hbb_common::{
     allow_err, bail,
     config::{self, Config},
-    log, sleep, timeout, tokio,
+    log,
+    message_proto::Resolution,
+    sleep, timeout, tokio,
 };
 use std::io::prelude::*;
 use std::{
     ffi::OsString,
     fs, io, mem,
+    os::windows::process::CommandExt,
+    path::PathBuf,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 use winapi::{
+    ctypes::c_void,
     shared::{minwindef::*, ntdef::NULL, windef::*},
     um::{
-        errhandlingapi::GetLastError, handleapi::CloseHandle, minwinbase::STILL_ACTIVE,
-        processthreadsapi::GetExitCodeProcess, winbase::*, wingdi::*, winnt::HANDLE, winuser::*,
+        errhandlingapi::GetLastError,
+        handleapi::CloseHandle,
+        minwinbase::STILL_ACTIVE,
+        processthreadsapi::{
+            GetCurrentProcess, GetCurrentProcessId, GetExitCodeProcess, OpenProcess,
+            OpenProcessToken, PROCESS_INFORMATION, STARTUPINFOW,
+        },
+        securitybaseapi::GetTokenInformation,
+        shellapi::ShellExecuteW,
+        winbase::*,
+        wingdi::*,
+        winnt::{
+            TokenElevation, HANDLE, PROCESS_QUERY_LIMITED_INFORMATION, TOKEN_ELEVATION, TOKEN_QUERY,
+        },
+        winuser::*,
     },
 };
 use windows_service::{
@@ -33,6 +52,7 @@ use winreg::RegKey;
 
 pub fn get_cursor_pos() -> Option<(i32, i32)> {
     unsafe {
+        #[allow(invalid_value)]
         let mut out = mem::MaybeUninit::uninit().assume_init();
         if GetCursorPos(&mut out) == FALSE {
             return None;
@@ -45,9 +65,10 @@ pub fn reset_input_cache() {}
 
 pub fn get_cursor() -> ResultType<Option<u64>> {
     unsafe {
+        #[allow(invalid_value)]
         let mut ci: CURSORINFO = mem::MaybeUninit::uninit().assume_init();
         ci.cbSize = std::mem::size_of::<CURSORINFO>() as _;
-        if GetCursorInfo(&mut ci) == FALSE {
+        if crate::portable_service::client::get_cursor_info(&mut ci) == FALSE {
             return Err(io::Error::last_os_error().into());
         }
         if ci.flags & CURSOR_SHOWING == 0 {
@@ -63,6 +84,7 @@ struct IconInfo(ICONINFO);
 impl IconInfo {
     fn new(icon: HICON) -> ResultType<Self> {
         unsafe {
+            #[allow(invalid_value)]
             let mut ii = mem::MaybeUninit::uninit().assume_init();
             if GetIconInfo(icon, &mut ii) == FALSE {
                 Err(io::Error::last_os_error().into())
@@ -423,6 +445,7 @@ extern "C" {
     fn win32_disable_lowlevel_keyboard(hwnd: HWND);
     fn win_stop_system_key_propagate(v: BOOL);
     fn is_win_down() -> BOOL;
+    fn is_local_system() -> BOOL;
 }
 
 extern "system" {
@@ -564,11 +587,11 @@ async fn launch_server(session_id: DWORD, close_first: bool) -> ResultType<HANDL
     Ok(h)
 }
 
-pub fn run_as_user(arg: &str) -> ResultType<Option<std::process::Child>> {
+pub fn run_as_user(arg: Vec<&str>) -> ResultType<Option<std::process::Child>> {
     let cmd = format!(
         "\"{}\" {}",
         std::env::current_exe()?.to_str().unwrap_or(""),
-        arg,
+        arg.join(" "),
     );
     let session_id = unsafe { get_current_session(share_rdp()) };
     use std::os::windows::ffi::OsStrExt;
@@ -580,7 +603,7 @@ pub fn run_as_user(arg: &str) -> ResultType<Option<std::process::Child>> {
     let h = unsafe { LaunchProcessWin(wstr, session_id, TRUE) };
     if h.is_null() {
         bail!(
-            "Failed to launch {} with session id {}: {}",
+            "Failed to launch {:?} with session id {}: {}",
             arg,
             session_id,
             get_error()
@@ -702,10 +725,10 @@ pub fn set_share_rdp(enable: bool) {
 }
 
 pub fn get_active_username() -> String {
-    let name = crate::username();
-    if name != "SYSTEM" {
-        return name;
+    if !is_root() {
+        return crate::username();
     }
+
     extern "C" {
         fn get_active_user(path: *mut u16, n: u32, rdp: BOOL) -> u32;
     }
@@ -723,13 +746,26 @@ pub fn get_active_username() -> String {
         .to_owned()
 }
 
+pub fn get_active_user_home() -> Option<PathBuf> {
+    let username = get_active_username();
+    if !username.is_empty() {
+        let drive = std::env::var("SystemDrive").unwrap_or("C:".to_owned());
+        let home = PathBuf::from(format!("{}\\Users\\{}", drive, username));
+        if home.exists() {
+            return Some(home);
+        }
+    }
+    None
+}
+
 pub fn is_prelogin() -> bool {
     let username = get_active_username();
     username.is_empty() || username == "SYSTEM"
 }
 
 pub fn is_root() -> bool {
-    crate::username() == "SYSTEM"
+    // https://stackoverflow.com/questions/4023586/correct-way-to-find-out-if-a-service-is-running-as-the-system-user
+    unsafe { is_local_system() == TRUE }
 }
 
 pub fn lock_screen() {
@@ -799,8 +835,8 @@ fn get_default_install_path() -> String {
 
 pub fn check_update_broker_process() -> ResultType<()> {
     // let (_, path, _, _) = get_install_info();
-    let process_exe = crate::ui::win_privacy::INJECTED_PROCESS_EXE;
-    let origin_process_exe = crate::ui::win_privacy::ORIGIN_PROCESS_EXE;
+    let process_exe = crate::win_privacy::INJECTED_PROCESS_EXE;
+    let origin_process_exe = crate::win_privacy::ORIGIN_PROCESS_EXE;
 
     let exe_file = std::env::current_exe()?;
     if exe_file.parent().is_none() {
@@ -808,6 +844,11 @@ pub fn check_update_broker_process() -> ResultType<()> {
     }
     let cur_dir = exe_file.parent().unwrap();
     let cur_exe = cur_dir.join(process_exe);
+
+    if !std::path::Path::new(&cur_exe).exists() {
+        std::fs::copy(origin_process_exe, cur_exe)?;
+        return Ok(());
+    }
 
     let ori_modified = fs::metadata(origin_process_exe)?.modified()?;
     if let Ok(metadata) = fs::metadata(&cur_exe) {
@@ -854,6 +895,37 @@ fn get_install_info_with_subkey(subkey: String) -> (String, String, String, Stri
     (subkey, path, start_menu, exe)
 }
 
+pub fn copy_exe_cmd(src_exe: &str, _exe: &str, path: &str) -> String {
+    #[cfg(feature = "flutter")]
+    let main_exe = format!(
+        "XCOPY \"{}\" \"{}\" /Y /E /H /C /I /K /R /Z",
+        PathBuf::from(src_exe)
+            .parent()
+            .unwrap()
+            .to_string_lossy()
+            .to_string(),
+        path
+    );
+    #[cfg(not(feature = "flutter"))]
+    let main_exe = format!(
+        "copy /Y \"{src_exe}\" \"{exe}\"",
+        src_exe = src_exe,
+        exe = _exe
+    );
+
+    return format!(
+        "
+        {main_exe}
+        copy /Y \"{ORIGIN_PROCESS_EXE}\" \"{path}\\{broker_exe}\"
+        \"{src_exe}\" --extract \"{path}\"
+        ",
+        main_exe = main_exe,
+        path = path,
+        ORIGIN_PROCESS_EXE = crate::win_privacy::ORIGIN_PROCESS_EXE,
+        broker_exe = crate::win_privacy::INJECTED_PROCESS_EXE,
+    );
+}
+
 pub fn update_me() -> ResultType<()> {
     let (_, path, _, exe) = get_install_info();
     let src_exe = std::env::current_exe()?.to_str().unwrap_or("").to_owned();
@@ -862,18 +934,16 @@ pub fn update_me() -> ResultType<()> {
         chcp 65001
         sc stop {app_name}
         taskkill /F /IM {broker_exe}
-        taskkill /F /IM {app_name}.exe
-        copy /Y \"{src_exe}\" \"{exe}\"
-        \"{src_exe}\" --extract \"{path}\"
+        taskkill /F /IM {app_name}.exe /FI \"PID ne {cur_pid}\"
+        {copy_exe}
         sc start {app_name}
         {lic}
     ",
-        src_exe = src_exe,
-        exe = exe,
-        broker_exe = crate::ui::win_privacy::INJECTED_PROCESS_EXE,
-        path = path,
+        copy_exe = copy_exe_cmd(&src_exe, &exe, &path),
+        broker_exe = crate::win_privacy::INJECTED_PROCESS_EXE,
         app_name = crate::get_app_name(),
         lic = register_licence(),
+        cur_pid = get_current_pid(),
     );
     std::thread::sleep(std::time::Duration::from_millis(1000));
     run_cmds(cmds, false, "update")?;
@@ -1036,14 +1106,14 @@ if exist \"{tmp_path}\\{app_name} Tray.lnk\" del /f /q \"{tmp_path}\\{app_name} 
         tmp_path = tmp_path,
         app_name = crate::get_app_name(),
     );
+    let src_exe = std::env::current_exe()?.to_str().unwrap_or("").to_string();
+
     let cmds = format!(
         "
 {uninstall_str}
 chcp 65001
 md \"{path}\"
-copy /Y \"{src_exe}\" \"{exe}\"
-copy /Y \"{ORIGIN_PROCESS_EXE}\" \"{path}\\{broker_exe}\"
-\"{src_exe}\" --extract \"{path}\"
+{copy_exe}
 reg add {subkey} /f
 reg add {subkey} /f /v DisplayIcon /t REG_SZ /d \"{exe}\"
 reg add {subkey} /f /v DisplayName /t REG_SZ /d \"{app_name}\"
@@ -1074,10 +1144,7 @@ sc delete {app_name}
     ",
         uninstall_str=uninstall_str,
         path=path,
-        src_exe=std::env::current_exe()?.to_str().unwrap_or(""),
         exe=exe,
-        ORIGIN_PROCESS_EXE = crate::ui::win_privacy::ORIGIN_PROCESS_EXE,
-        broker_exe=crate::ui::win_privacy::INJECTED_PROCESS_EXE,
         subkey=subkey,
         app_name=crate::get_app_name(),
         version=crate::VERSION,
@@ -1103,6 +1170,7 @@ sc delete {app_name}
         } else {
             &dels
         },
+        copy_exe = copy_exe_cmd(&src_exe, &exe, &path),
     );
     run_cmds(cmds, debug, "install")?;
     std::thread::sleep(std::time::Duration::from_millis(2000));
@@ -1132,13 +1200,14 @@ fn get_before_uninstall() -> String {
     sc stop {app_name}
     sc delete {app_name}
     taskkill /F /IM {broker_exe}
-    taskkill /F /IM {app_name}.exe
+    taskkill /F /IM {app_name}.exe /FI \"PID ne {cur_pid}\"
     reg delete HKEY_CLASSES_ROOT\\.{ext} /f
     netsh advfirewall firewall delete rule name=\"{app_name} Service\"
     ",
         app_name = app_name,
-        broker_exe = crate::ui::win_privacy::INJECTED_PROCESS_EXE,
-        ext = ext
+        broker_exe = crate::win_privacy::INJECTED_PROCESS_EXE,
+        ext = ext,
+        cur_pid = get_current_pid(),
     )
 }
 
@@ -1278,7 +1347,12 @@ fn get_reg_of(subkey: &str, name: &str) -> String {
 }
 
 fn get_license_from_exe_name() -> ResultType<License> {
-    let exe = std::env::current_exe()?.to_str().unwrap_or("").to_owned();
+    let mut exe = std::env::current_exe()?.to_str().unwrap_or("").to_owned();
+    // if defined portable appname entry, replace original executable name with it.
+    if let Ok(portable_exe) = std::env::var(PORTABLE_APPNAME_RUNTIME_ENV_KEY) {
+        exe = portable_exe;
+        log::debug!("update portable executable name to {}", exe);
+    }
     get_license_from_string(&exe)
 }
 
@@ -1305,22 +1379,6 @@ pub fn get_license() -> Option<License> {
 pub fn bootstrap() {
     if let Some(lic) = get_license() {
         *config::PROD_RENDEZVOUS_SERVER.write().unwrap() = lic.host.clone();
-        #[cfg(feature = "hbbs")]
-        {
-            if !is_win_server() {
-                return;
-            }
-            crate::hbbs::bootstrap(&lic.key, &lic.host);
-            std::thread::spawn(move || loop {
-                let tmp = Config::get_option("stop-rendezvous-service");
-                if tmp.is_empty() {
-                    crate::hbbs::start();
-                } else {
-                    crate::hbbs::stop();
-                }
-                std::thread::sleep(std::time::Duration::from_millis(100));
-            });
-        }
     }
 }
 
@@ -1416,5 +1474,401 @@ pub fn get_user_token(session_id: u32, as_user: bool) -> HANDLE {
         } else {
             token
         }
+    }
+}
+
+pub fn run_background(exe: &str, arg: &str) -> ResultType<bool> {
+    let wexe = wide_string(exe);
+    let warg;
+    unsafe {
+        let ret = ShellExecuteW(
+            NULL as _,
+            NULL as _,
+            wexe.as_ptr() as _,
+            if arg.is_empty() {
+                NULL as _
+            } else {
+                warg = wide_string(arg);
+                warg.as_ptr() as _
+            },
+            NULL as _,
+            SW_HIDE,
+        );
+        return Ok(ret as i32 > 32);
+    }
+}
+
+pub fn run_uac(exe: &str, arg: &str) -> ResultType<bool> {
+    let wop = wide_string("runas");
+    let wexe = wide_string(exe);
+    let warg;
+    unsafe {
+        let ret = ShellExecuteW(
+            NULL as _,
+            wop.as_ptr() as _,
+            wexe.as_ptr() as _,
+            if arg.is_empty() {
+                NULL as _
+            } else {
+                warg = wide_string(arg);
+                warg.as_ptr() as _
+            },
+            NULL as _,
+            SW_SHOWNORMAL,
+        );
+        return Ok(ret as i32 > 32);
+    }
+}
+
+pub fn check_super_user_permission() -> ResultType<bool> {
+    run_uac(
+        std::env::current_exe()?
+            .to_string_lossy()
+            .to_string()
+            .as_str(),
+        "--version",
+    )
+}
+
+pub fn elevate(arg: &str) -> ResultType<bool> {
+    run_uac(
+        std::env::current_exe()?
+            .to_string_lossy()
+            .to_string()
+            .as_str(),
+        arg,
+    )
+}
+
+pub fn run_as_system(arg: &str) -> ResultType<()> {
+    let exe = std::env::current_exe()?.to_string_lossy().to_string();
+    if impersonate_system::run_as_system(&exe, arg).is_err() {
+        bail!(format!("Failed to run {} as system", exe));
+    }
+    Ok(())
+}
+
+pub fn elevate_or_run_as_system(is_setup: bool, is_elevate: bool, is_run_as_system: bool) {
+    // avoid possible run recursively due to failed run.
+    log::info!(
+        "elevate:{}->{:?}, run_as_system:{}->{}",
+        is_elevate,
+        is_elevated(None),
+        is_run_as_system,
+        crate::username(),
+    );
+    let arg_elevate = if is_setup {
+        "--noinstall --elevate"
+    } else {
+        "--elevate"
+    };
+    let arg_run_as_system = if is_setup {
+        "--noinstall --run-as-system"
+    } else {
+        "--run-as-system"
+    };
+    if is_root() {
+        if is_run_as_system {
+            log::info!("run portable service");
+            crate::portable_service::server::run_portable_service();
+        }
+    } else {
+        match is_elevated(None) {
+            Ok(elevated) => {
+                if elevated {
+                    if !is_run_as_system {
+                        if run_as_system(arg_run_as_system).is_ok() {
+                            std::process::exit(0);
+                        } else {
+                            unsafe {
+                                log::error!("Failed to run as system, errno={}", GetLastError());
+                            }
+                        }
+                    }
+                } else {
+                    if !is_elevate {
+                        if let Ok(true) = elevate(arg_elevate) {
+                            std::process::exit(0);
+                        } else {
+                            unsafe {
+                                log::error!("Failed to elevate, errno={}", GetLastError());
+                            }
+                        }
+                    }
+                }
+            }
+            Err(_) => unsafe {
+                log::error!("Failed to get elevation status, errno={}", GetLastError());
+            },
+        }
+    }
+}
+
+// https://github.com/mgostIH/process_list/blob/master/src/windows/mod.rs
+#[repr(transparent)]
+pub(self) struct RAIIHandle(pub HANDLE);
+
+impl Drop for RAIIHandle {
+    fn drop(&mut self) {
+        // This never gives problem except when running under a debugger.
+        unsafe { CloseHandle(self.0) };
+    }
+}
+
+pub fn is_elevated(process_id: Option<DWORD>) -> ResultType<bool> {
+    unsafe {
+        let handle: HANDLE = match process_id {
+            Some(process_id) => OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, process_id),
+            None => GetCurrentProcess(),
+        };
+        if handle == NULL {
+            bail!("Failed to open process, errno {}", GetLastError())
+        }
+        let _handle = RAIIHandle(handle);
+        let mut token: HANDLE = mem::zeroed();
+        if OpenProcessToken(handle, TOKEN_QUERY, &mut token) == FALSE {
+            bail!("Failed to open process token, errno {}", GetLastError())
+        }
+        let _token = RAIIHandle(token);
+        let mut token_elevation: TOKEN_ELEVATION = mem::zeroed();
+        let mut size: DWORD = 0;
+        if GetTokenInformation(
+            token,
+            TokenElevation,
+            (&mut token_elevation) as *mut _ as *mut c_void,
+            mem::size_of::<TOKEN_ELEVATION>() as _,
+            &mut size,
+        ) == FALSE
+        {
+            bail!("Failed to get token information, errno {}", GetLastError())
+        }
+
+        Ok(token_elevation.TokenIsElevated != 0)
+    }
+}
+
+#[inline]
+fn filter_foreground_window(process_id: DWORD) -> ResultType<bool> {
+    if let Ok(output) = std::process::Command::new("tasklist")
+        .args(vec![
+            "/SVC",
+            "/NH",
+            "/FI",
+            &format!("PID eq {}", process_id),
+        ])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+    {
+        let s = String::from_utf8_lossy(&output.stdout)
+            .to_string()
+            .to_lowercase();
+        Ok(["Taskmgr", "mmc", "regedit"]
+            .iter()
+            .any(|name| s.contains(&name.to_string().to_lowercase())))
+    } else {
+        bail!("run tasklist failed");
+    }
+}
+
+pub fn is_foreground_window_elevated() -> ResultType<bool> {
+    unsafe {
+        let mut process_id: DWORD = 0;
+        GetWindowThreadProcessId(GetForegroundWindow(), &mut process_id);
+        if process_id == 0 {
+            bail!("Failed to get processId, errno {}", GetLastError())
+        }
+        let elevated = is_elevated(Some(process_id))?;
+        if elevated {
+            filter_foreground_window(process_id)
+        } else {
+            Ok(false)
+        }
+    }
+}
+
+fn get_current_pid() -> u32 {
+    unsafe { GetCurrentProcessId() }
+}
+
+pub fn get_double_click_time() -> u32 {
+    unsafe { GetDoubleClickTime() }
+}
+
+fn wide_string(s: &str) -> Vec<u16> {
+    use std::os::windows::prelude::OsStrExt;
+    std::ffi::OsStr::new(s)
+        .encode_wide()
+        .chain(Some(0).into_iter())
+        .collect()
+}
+
+/// send message to currently shown window
+pub fn send_message_to_hnwd(
+    class_name: &str,
+    window_name: &str,
+    dw_data: usize,
+    data: &str,
+    show_window: bool,
+) -> bool {
+    unsafe {
+        let class_name_utf16 = wide_string(class_name);
+        let window_name_utf16 = wide_string(window_name);
+        let window = FindWindowW(class_name_utf16.as_ptr(), window_name_utf16.as_ptr());
+        if window.is_null() {
+            log::warn!("no such window {}:{}", class_name, window_name);
+            return false;
+        }
+        let mut data_struct = COPYDATASTRUCT::default();
+        data_struct.dwData = dw_data;
+        let mut data_zero: String = data.chars().chain(Some('\0').into_iter()).collect();
+        println!("send {:?}", data_zero);
+        data_struct.cbData = data_zero.len() as _;
+        data_struct.lpData = data_zero.as_mut_ptr() as _;
+        SendMessageW(
+            window,
+            WM_COPYDATA,
+            0,
+            &data_struct as *const COPYDATASTRUCT as _,
+        );
+        if show_window {
+            ShowWindow(window, SW_NORMAL);
+            SetForegroundWindow(window);
+        }
+    }
+    return true;
+}
+
+pub fn create_process_with_logon(user: &str, pwd: &str, exe: &str, arg: &str) -> ResultType<()> {
+    unsafe {
+        let wuser = wide_string(user);
+        let wpc = wide_string("");
+        let wpwd = wide_string(pwd);
+        let cmd = if arg.is_empty() {
+            format!("\"{}\"", exe)
+        } else {
+            format!("\"{}\" {}", exe, arg)
+        };
+        let mut wcmd = wide_string(&cmd);
+        let mut si: STARTUPINFOW = mem::zeroed();
+        si.wShowWindow = SW_HIDE as _;
+        si.lpDesktop = NULL as _;
+        si.cb = std::mem::size_of::<STARTUPINFOW>() as _;
+        si.dwFlags = STARTF_USESHOWWINDOW;
+        let mut pi: PROCESS_INFORMATION = mem::zeroed();
+        let wexe = wide_string(exe);
+        if FALSE
+            == CreateProcessWithLogonW(
+                wuser.as_ptr(),
+                wpc.as_ptr(),
+                wpwd.as_ptr(),
+                LOGON_WITH_PROFILE,
+                wexe.as_ptr(),
+                wcmd.as_mut_ptr(),
+                CREATE_UNICODE_ENVIRONMENT,
+                NULL,
+                NULL as _,
+                &mut si as *mut STARTUPINFOW,
+                &mut pi as *mut PROCESS_INFORMATION,
+            )
+        {
+            bail!("CreateProcessWithLogonW failed, errno={}", GetLastError());
+        }
+    }
+    return Ok(());
+}
+
+pub fn set_path_permission(dir: &PathBuf, permission: &str) -> ResultType<()> {
+    std::process::Command::new("icacls")
+        .arg(dir.as_os_str())
+        .arg("/grant")
+        .arg(format!("Everyone:(OI)(CI){}", permission))
+        .arg("/T")
+        .spawn()?;
+    Ok(())
+}
+
+pub fn resolutions(name: &str) -> Vec<Resolution> {
+    unsafe {
+        let mut dm: DEVMODEW = std::mem::zeroed();
+        let wname = wide_string(name);
+        let len = if wname.len() <= dm.dmDeviceName.len() {
+            wname.len()
+        } else {
+            dm.dmDeviceName.len()
+        };
+        std::ptr::copy_nonoverlapping(wname.as_ptr(), dm.dmDeviceName.as_mut_ptr(), len);
+        dm.dmSize = std::mem::size_of::<DEVMODEW>() as _;
+        let mut v = vec![];
+        let mut num = 0;
+        loop {
+            if EnumDisplaySettingsW(NULL as _, num, &mut dm) == 0 {
+                break;
+            }
+            let r = Resolution {
+                width: dm.dmPelsWidth as _,
+                height: dm.dmPelsHeight as _,
+                ..Default::default()
+            };
+            if !v.contains(&r) {
+                v.push(r);
+            }
+            num += 1;
+        }
+        v
+    }
+}
+
+pub fn current_resolution(name: &str) -> ResultType<Resolution> {
+    unsafe {
+        let mut dm: DEVMODEW = std::mem::zeroed();
+        dm.dmSize = std::mem::size_of::<DEVMODEW>() as _;
+        let wname = wide_string(name);
+        if EnumDisplaySettingsW(wname.as_ptr(), ENUM_CURRENT_SETTINGS, &mut dm) == 0 {
+            bail!(
+                "failed to get currrent resolution, errno={}",
+                GetLastError()
+            );
+        }
+        let r = Resolution {
+            width: dm.dmPelsWidth as _,
+            height: dm.dmPelsHeight as _,
+            ..Default::default()
+        };
+        Ok(r)
+    }
+}
+
+pub fn change_resolution(name: &str, width: usize, height: usize) -> ResultType<()> {
+    unsafe {
+        let mut dm: DEVMODEW = std::mem::zeroed();
+        if FALSE == EnumDisplaySettingsW(NULL as _, ENUM_CURRENT_SETTINGS, &mut dm) {
+            bail!("EnumDisplaySettingsW failed, errno={}", GetLastError());
+        }
+        let wname = wide_string(name);
+        let len = if wname.len() <= dm.dmDeviceName.len() {
+            wname.len()
+        } else {
+            dm.dmDeviceName.len()
+        };
+        std::ptr::copy_nonoverlapping(wname.as_ptr(), dm.dmDeviceName.as_mut_ptr(), len);
+        dm.dmSize = std::mem::size_of::<DEVMODEW>() as _;
+        dm.dmPelsWidth = width as _;
+        dm.dmPelsHeight = height as _;
+        dm.dmFields = DM_PELSHEIGHT | DM_PELSWIDTH;
+        let res = ChangeDisplaySettingsExW(
+            wname.as_ptr(),
+            &mut dm,
+            NULL as _,
+            CDS_UPDATEREGISTRY | CDS_GLOBAL | CDS_RESET,
+            NULL,
+        );
+        if res != DISP_CHANGE_SUCCESSFUL {
+            bail!(
+                "ChangeDisplaySettingsExW failed, res={}, errno={}",
+                res,
+                GetLastError()
+            );
+        }
+        Ok(())
     }
 }

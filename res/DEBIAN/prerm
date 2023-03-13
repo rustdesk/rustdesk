@@ -1,0 +1,32 @@
+#!/bin/bash
+
+set -e
+
+case $1 in
+    remove|upgrade)
+		INITSYS=$(ls -al /proc/1/exe | awk -F' ' '{print $NF}' | awk -F'/' '{print $NF}')
+		
+		if [ "systemd" == "${INITSYS}" ]; then
+			rm /usr/bin/rustdesk
+
+			systemctl stop rustdesk || true
+			systemctl disable rustdesk || true
+			rm /etc/systemd/system/rustdesk.service /usr/lib/systemd/system/rustdesk.service || true
+			
+			# workaround temp dev build between 1.1.9 and 1.2.0
+			ubuntuVersion=$(grep -oP 'VERSION_ID="\K[\d]+' /etc/os-release | bc -l)
+			waylandSupportVersion=21
+			if [ "$ubuntuVersion" != "" ] && [ "$ubuntuVersion" -ge "$waylandSupportVersion" ]
+			then
+				serverUser=$(ps -ef | grep -E 'rustdesk +--server' | grep -v 'sudo ' | awk '{print $1}' | head -1)
+				if [ "$serverUser" != "" ] && [ "$serverUser" != "root" ]
+				then
+					systemctl --machine=${serverUser}@.host --user stop rustdesk >/dev/null 2>&1 || true
+				fi
+			fi
+			rm /usr/lib/systemd/user/rustdesk.service >/dev/null 2>&1 || true
+		fi
+        ;;
+esac
+
+exit 0

@@ -40,6 +40,7 @@ message DisplayInfo {
   int32 height = 4;
   string name = 5;
   bool online = 6;
+  bool cursor_embedded = 7;
 }
 
 message PortForward {
@@ -89,6 +90,7 @@ message PeerInfo {
   int32 conn_id = 8;
   Features features = 9;
   SupportedEncoding encoding = 10;
+  SupportedResolutions resolutions = 11;
 }
 
 message LoginResponse {
@@ -103,6 +105,13 @@ message MouseEvent {
   sint32 x = 2;
   sint32 y = 3;
   repeated ControlKey modifiers = 4;
+}
+
+enum KeyboardMode{
+  Legacy = 0;
+  Map = 1;
+  Translate = 2;
+  Auto = 3;
 }
 
 enum ControlKey {
@@ -193,11 +202,14 @@ message KeyEvent {
   bool press = 2;
   oneof union {
     ControlKey control_key = 3;
+    // high word, sym key code. win: virtual-key code, linux: keysym ?, macos: 
+    // low word, position key code. win: scancode, linux: key code, macos: key code
     uint32 chr = 4;
     uint32 unicode = 5;
     string seq = 6;
   }
   repeated ControlKey modifiers = 8;
+  KeyboardMode mode = 9;
 }
 
 message CursorData {
@@ -352,38 +364,31 @@ message FileDirCreate {
 
 // main logic from freeRDP
 message CliprdrMonitorReady {
-  int32 conn_id = 1;
 }
 
 message CliprdrFormat {
-  int32 conn_id = 1;
   int32 id = 2;
   string format = 3;
 }
 
 message CliprdrServerFormatList {
-  int32 conn_id = 1;
   repeated CliprdrFormat formats = 2;
 }
 
 message CliprdrServerFormatListResponse {
-  int32 conn_id = 1;
   int32 msg_flags = 2;
 }
 
 message CliprdrServerFormatDataRequest {
-  int32 conn_id = 1;
   int32 requested_format_id = 2;
 }
 
 message CliprdrServerFormatDataResponse {
-  int32 conn_id = 1;
   int32 msg_flags = 2;
   bytes format_data = 3;
 }
 
 message CliprdrFileContentsRequest {
-  int32 conn_id = 1;
   int32 stream_id = 2;
   int32 list_index = 3;
   int32 dw_flags = 4;
@@ -395,7 +400,6 @@ message CliprdrFileContentsRequest {
 }
 
 message CliprdrFileContentsResponse {
-  int32 conn_id = 1;
   int32 msg_flags = 3;
   int32 stream_id = 4;
   bytes requested_data = 5;
@@ -413,12 +417,21 @@ message Cliprdr {
   }
 }
 
+message Resolution {
+  int32 width = 1;
+  int32 height = 2;
+}
+
+message SupportedResolutions { repeated Resolution resolutions = 1; }
+
 message SwitchDisplay {
   int32 display = 1;
   sint32 x = 2;
   sint32 y = 3;
   int32 width = 4;
   int32 height = 5;
+  bool cursor_embedded = 6;
+  SupportedResolutions resolutions = 7;
 }
 
 message PermissionInfo {
@@ -428,6 +441,7 @@ message PermissionInfo {
     Audio = 3;
     File = 4;
     Restart = 5;
+    Recording = 6;
   }
 
   Permission permission = 1;
@@ -442,7 +456,7 @@ enum ImageQuality {
 }
 
 message VideoCodecState {
-  enum PerferCodec {
+  enum PreferCodec {
     Auto = 0;
     VPX = 1;
     H264 = 2;
@@ -452,7 +466,7 @@ message VideoCodecState {
   int32 score_vpx = 1;
   int32 score_h264 = 2;
   int32 score_h265 = 3;
-  PerferCodec perfer = 4;
+  PreferCodec prefer = 4;
 }
 
 message OptionMessage {
@@ -471,6 +485,7 @@ message OptionMessage {
   BoolOption disable_clipboard = 8;
   BoolOption enable_file_transfer = 9;
   VideoCodecState video_codec_state = 10;
+  int32 custom_fps = 11;
 }
 
 message TestDelay {
@@ -495,6 +510,19 @@ message AudioFormat {
 message AudioFrame { 
   bytes data = 1; 
   int64 timestamp = 2;
+}
+
+// Notify peer to show message box.
+message MessageBox {
+  // Message type. Refer to flutter/lib/common.dart/msgBox().
+  string msgtype = 1;
+  string title = 2;
+  // English
+  string text = 3;
+  // If not empty, msgbox provides a button to following the link.
+  // The link here can't be directly http url.
+  // It must be the key of http url configed in peer side or "rustdesk://*" (jump in app).
+  string link = 4;
 }
 
 message BackNotification {
@@ -535,6 +563,29 @@ message BackNotification {
   }
 }
 
+message ElevationRequestWithLogon {
+  string username = 1;
+  string password = 2;
+}
+
+message ElevationRequest {
+  oneof union {
+    bool direct = 1;
+    ElevationRequestWithLogon logon = 2;
+  }
+}
+
+message SwitchSidesRequest {
+  bytes uuid = 1;
+}
+
+message SwitchSidesResponse {
+  bytes uuid = 1;
+  LoginRequest lr = 2;
+}
+
+message SwitchBack {}
+
 message Misc {
   oneof union {
     ChatMessage chat_message = 4;
@@ -547,7 +598,28 @@ message Misc {
     bool video_received = 12;
     BackNotification back_notification = 13;
     bool restart_remote_device = 14;
+    bool uac = 15;
+    bool foreground_window_elevated = 16;
+    bool stop_service = 17;
+    ElevationRequest elevation_request = 18;
+    string elevation_response = 19;
+    bool portable_service_running = 20;
+    SwitchSidesRequest switch_sides_request = 21;
+    SwitchBack switch_back = 22;
+    Resolution change_resolution = 24;
   }
+}
+
+message VoiceCallRequest {
+  int64 req_timestamp = 1;
+  // Indicates whether the request is a connect action or a disconnect action.
+  bool is_connect = 2;
+}
+
+message VoiceCallResponse {
+  bool accepted = 1;
+  int64 req_timestamp = 2; // Should copy from [VoiceCallRequest::req_timestamp].
+  int64 ack_timestamp = 3;
 }
 
 message Message {
@@ -570,5 +642,10 @@ message Message {
     FileResponse file_response = 18;
     Misc misc = 19;
     Cliprdr cliprdr = 20;
+    MessageBox message_box = 21;
+    SwitchSidesResponse switch_sides_response = 22;
+    VoiceCallRequest voice_call_request = 23;
+    VoiceCallResponse voice_call_response = 24;
+    PeerInfo peer_info = 25;
   }
 }

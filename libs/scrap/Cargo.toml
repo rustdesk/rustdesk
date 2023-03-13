@@ -11,14 +11,15 @@ edition = "2018"
 
 [features]
 wayland = ["gstreamer", "gstreamer-app", "gstreamer-video", "dbus", "tracing"]
+mediacodec = ["ndk"]
 
 [dependencies]
 block = "0.1"
 cfg-if = "1.0"
-libc = "0.2"
 num_cpus = "1.13"
 lazy_static = "1.4"
 hbb_common = { path = "../hbb_common" }
+webm = "1.0"
 
 [dependencies.winapi]
 version = "0.3"
@@ -31,11 +32,11 @@ jni = "0.19"
 lazy_static = "1.4"
 log = "0.4"
 serde_json = "1.0"
+ndk = { version = "0.7", features = ["media"], optional = true}
 
 [target.'cfg(not(target_os = "android"))'.dev-dependencies]
 repng = "0.2"
 docopt = "1.1"
-webm = "1.0"
 serde = {version="1.0", features=["derive"]}
 quest = "0.3"
 

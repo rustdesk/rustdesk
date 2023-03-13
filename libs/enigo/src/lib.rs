@@ -19,9 +19,9 @@
 //! or any other "special" key on the Linux, macOS and Windows operating system.
 //!
 //! Possible use cases could be for testing user interfaces on different
-//! plattforms,
+//! platforms,
 //! building remote control applications or just automating tasks for user
-//! interfaces unaccessible by a public API or scripting laguage.
+//! interfaces unaccessible by a public API or scripting language.
 //!
 //! For the keyboard there are currently two modes you can use. The first mode
 //! is represented by the [key_sequence]() function
@@ -104,6 +104,10 @@ pub enum MouseButton {
     Middle,
     /// Right mouse button
     Right,
+    /// Back mouse button
+    Back,
+    /// Forward mouse button
+    Forward,
 
     /// Scroll up button
     ScrollUp,
@@ -118,6 +122,13 @@ pub enum MouseButton {
 /// Representing an interface and a set of mouse functions every
 /// operating system implementation _should_ implement.
 pub trait MouseControllable {
+    // https://stackoverflow.com/a/33687996
+    /// Offer the ability to confer concrete type.
+    fn as_any(&self) -> &dyn std::any::Any;
+
+    /// Offer the ability to confer concrete type.
+    fn as_mut_any(&mut self) -> &mut dyn std::any::Any;
+
     /// Lets the mouse cursor move to the specified x and y coordinates.
     ///
     /// The topleft corner of your monitor screen is x=0 y=0. Move
@@ -195,7 +206,7 @@ pub trait MouseControllable {
 
     /// Click a mouse button
     ///
-    /// it's esentially just a consecutive invokation of
+    /// it's essentially just a consecutive invocation of
     /// [mouse_down](trait.MouseControllable.html#tymethod.mouse_down) followed
     /// by a [mouse_up](trait.MouseControllable.html#tymethod.mouse_up). Just
     /// for
@@ -257,7 +268,7 @@ pub enum Key {
     Backspace,
     /// caps lock key
     CapsLock,
-    #[deprecated(since = "0.0.12", note = "now renamed to Meta")]
+    // #[deprecated(since = "0.0.12", note = "now renamed to Meta")]
     /// command key on macOS (super key on Linux, windows key on Windows)
     Command,
     /// control key
@@ -314,14 +325,14 @@ pub enum Key {
     Shift,
     /// space key
     Space,
-    #[deprecated(since = "0.0.12", note = "now renamed to Meta")]
+    // #[deprecated(since = "0.0.12", note = "now renamed to Meta")]
     /// super key on linux (command key on macOS, windows key on Windows)
     Super,
     /// tab key (tabulator)
     Tab,
     /// up arrow key
     UpArrow,
-    #[deprecated(since = "0.0.12", note = "now renamed to Meta")]
+    // #[deprecated(since = "0.0.12", note = "now renamed to Meta")]
     /// windows key on Windows (super key on Linux, command key on macOS)
     Windows,
     ///
@@ -425,6 +436,13 @@ pub enum Key {
 /// Representing an interface and a set of keyboard functions every
 /// operating system implementation _should_ implement.
 pub trait KeyboardControllable {
+    // https://stackoverflow.com/a/33687996
+    /// Offer the ability to confer concrete type.
+    fn as_any(&self) -> &dyn std::any::Any;
+
+    /// Offer the ability to confer concrete type.
+    fn as_mut_any(&mut self) -> &mut dyn std::any::Any;
+
     /// Types the string parsed with DSL.
     ///
     /// Typing {+SHIFT}hello{-SHIFT} becomes HELLO.
@@ -433,8 +451,9 @@ pub trait KeyboardControllable {
     where
         Self: Sized,
     {
-        self.key_sequence_parse_try(sequence)
-            .expect("Could not parse sequence");
+        if let Err(..) = self.key_sequence_parse_try(sequence) {
+            println!("Could not parse sequence");
+        }
     }
     /// Same as key_sequence_parse except returns any errors
     fn key_sequence_parse_try(&mut self, sequence: &str) -> Result<(), dsl::ParseError>
@@ -449,7 +468,7 @@ pub trait KeyboardControllable {
     /// Emits keystrokes such that the given string is inputted.
     ///
     /// You can use many unicode here like: ❤️. This works
-    /// regadless of the current keyboardlayout.
+    /// regardless of the current keyboardlayout.
     ///
     /// # Example
     ///

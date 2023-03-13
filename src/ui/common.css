@@ -56,7 +56,7 @@ button[type=checkbox], button[type=checkbox]:active {
 
 button.outline {
     border: color(border) solid 1px;
-    background: transparent; 
+    background: transparent;
     color: color(text);
 }
 
@@ -68,6 +68,15 @@ button.button:active, button.active {
 
 button.button:hover, button.outline:hover {
   border-color: color(hover-border);
+}
+
+button.link {
+  background: none !important;
+  border: none;
+  padding: 0 !important;
+  color: color(button);
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 input[type=text], input[type=password], input[type=number] {
@@ -106,7 +115,7 @@ textarea:empty {
   .base:disabled { background: transparent; }
   .slider:hover  { background: grey; }
   .slider:active { background: grey; }
-  .base { size: 16px; } 
+  .base { size: 16px; }
   .corner { background: white; }
 }
 
@@ -176,7 +185,7 @@ header div.window-icon icon {
 
 header caption {
   size: *;
-} 
+}
 
 @media platform != "OSX" {
   button.window {

@@ -1,7 +1,7 @@
 use std::ptr;
 
 use block::{Block, ConcreteBlock};
-use libc::c_void;
+use hbb_common::libc::c_void;
 use std::sync::{Arc, Mutex};
 
 use super::config::Config;

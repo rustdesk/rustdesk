@@ -1,6 +1,8 @@
 use super::*;
 use std::time::Duration;
-const FPS: u8 = 30;
+pub const FPS: u8 = 30;
+pub const MIN_FPS: u8 = 10;
+pub const MAX_FPS: u8 = 120;
 trait Percent {
     fn as_percent(&self) -> u32;
 }
@@ -23,7 +25,8 @@ pub struct VideoQoS {
     current_image_quality: u32,
     enable_abr: bool,
     pub current_delay: u32,
-    pub fps: u8,             // abr
+    pub fps: u8, // abr
+    pub user_fps: u8,
     pub target_bitrate: u32, // abr
     updated: bool,
     state: DelayState,
@@ -56,6 +59,7 @@ impl Default for VideoQoS {
     fn default() -> Self {
         VideoQoS {
             fps: FPS,
+            user_fps: FPS,
             user_image_quality: ImageQuality::Balanced.as_percent(),
             current_image_quality: ImageQuality::Balanced.as_percent(),
             enable_abr: false,
@@ -80,10 +84,17 @@ impl VideoQoS {
     }
 
     pub fn spf(&mut self) -> Duration {
-        if self.fps <= 0 {
-            self.fps = FPS;
+        if self.fps < MIN_FPS || self.fps > MAX_FPS {
+            self.fps = self.base_fps();
         }
         Duration::from_secs_f32(1. / (self.fps as f32))
+    }
+
+    fn base_fps(&self) -> u8 {
+        if self.user_fps >= MIN_FPS && self.user_fps <= MAX_FPS {
+            return self.user_fps;
+        }
+        return FPS;
     }
 
     // update_network_delay periodically
@@ -124,19 +135,19 @@ impl VideoQoS {
     fn refresh_quality(&mut self) {
         match self.state {
             DelayState::Normal => {
-                self.fps = FPS;
+                self.fps = self.base_fps();
                 self.current_image_quality = self.user_image_quality;
             }
             DelayState::LowDelay => {
-                self.fps = FPS;
+                self.fps = self.base_fps();
                 self.current_image_quality = std::cmp::min(self.user_image_quality, 50);
             }
             DelayState::HighDelay => {
-                self.fps = FPS / 2;
+                self.fps = self.base_fps() / 2;
                 self.current_image_quality = std::cmp::min(self.user_image_quality, 25);
             }
             DelayState::Broken => {
-                self.fps = FPS / 4;
+                self.fps = self.base_fps() / 4;
                 self.current_image_quality = 10;
             }
         }
@@ -146,6 +157,14 @@ impl VideoQoS {
 
     // handle image_quality change from peer
     pub fn update_image_quality(&mut self, image_quality: i32) {
+        if image_quality == ImageQuality::Low.value()
+            || image_quality == ImageQuality::Balanced.value()
+            || image_quality == ImageQuality::Best.value()
+        {
+            // not custom
+            self.user_fps = FPS;
+            self.fps = FPS;
+        }
         let image_quality = Self::convert_quality(image_quality) as _;
         if self.current_image_quality != image_quality {
             self.current_image_quality = image_quality;
@@ -154,6 +173,16 @@ impl VideoQoS {
         }
 
         self.user_image_quality = self.current_image_quality;
+    }
+
+    pub fn update_user_fps(&mut self, fps: u8) {
+        if fps >= MIN_FPS && fps <= MAX_FPS {
+            if self.user_fps != fps {
+                self.user_fps = fps;
+                self.fps = fps;
+                self.updated = true;
+            }
+        }
     }
 
     pub fn generate_bitrate(&mut self) -> ResultType<u32> {
@@ -169,7 +198,7 @@ impl VideoQoS {
 
         #[cfg(target_os = "android")]
         {
-            // fix when andorid screen shrinks
+            // fix when android screen shrinks
             let fix = scrap::Display::fix_quality() as u32;
             log::debug!("Android screen, fix quality:{}", fix);
             let base_bitrate = base_bitrate * fix;
@@ -196,11 +225,7 @@ impl VideoQoS {
     }
 
     pub fn check_abr_config(&mut self) -> bool {
-        self.enable_abr = if let Some(v) = Config2::get().options.get("enable-abr") {
-            v != "N"
-        } else {
-            true // default is true
-        };
+        self.enable_abr = "N" != Config::get_option("enable-abr");
         self.enable_abr
     }
 

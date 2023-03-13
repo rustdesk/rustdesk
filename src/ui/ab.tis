@@ -76,28 +76,34 @@ class AddressBook: Reactor.Component
     
     event click $(#add-id) (_, __) {
         var me = this;
-        msgbox("custom-add-id", translate("Add ID"), <div .form>
+        msgbox(
+            "custom-add-id",
+            translate("Add ID"),
+            <div .form>
             <div>{translate("whitelist_sep")}</div> 
             <textarea .outline-focus spellcheck="false" name="text" style="overflow: scroll-indicator; width:*; height: 160px; font-size: 1.2em; padding: 0.5em;"></textarea>
-            </div>, function(res=null) {
-            if (!res) return;
-            var value = (res.text || "").trim();
-            var values = value.split(/[\s,;\n]+/g);
-            if (values.length == 0) return;
-            for (var v in values) {
-                var found;
-                for (var i = 0; i < ab.peers.length; ++i) {
-                    if (ab.peers[i].id == v) {
-                        found = true;
-                        break;
+            </div>,
+            "",
+            function(res=null) {
+                if (!res) return;
+                var value = (res.text || "").trim();
+                var values = value.split(/[\s,;\n]+/g);
+                if (values.length == 0) return;
+                for (var v in values) {
+                    var found;
+                    for (var i = 0; i < ab.peers.length; ++i) {
+                        if (ab.peers[i].id == v) {
+                            found = true;
+                            break;
+                        }
                     }
+                    if (found) continue;
+                    ab.peers.push({ id: v });
                 }
-                if (found) continue;
-                ab.peers.push({ id: v });
-            }
-            updateAb();
-            me.update();
-        }, 300);
+                updateAb();
+                me.update();
+            },
+        300);
     }
     
     event click $(#add-tag) (_, __) {
@@ -105,7 +111,7 @@ class AddressBook: Reactor.Component
         msgbox("custom-add-tag", translate("Add Tag"), <div .form>
             <div>{translate("whitelist_sep")}</div> 
             <textarea .outline-focus spellcheck="false" name="text" style="overflow: scroll-indicator; width:*; height: 160px; font-size: 1.2em; padding: 0.5em;"></textarea>
-            </div>, function(res=null) {
+            </div>, "", function(res=null) {
             if (!res) return;
             var value = (res.text || "").trim();
             var values = value.split(/[\s,;\n]+/g);
@@ -245,7 +251,7 @@ class SearchBar: Reactor.Component {
     }
 
     event change $(input) (_, el) {
-        this.onChange(el.value.trim());
+        this.onChange(el.value.trim().toLowerCase());
     }
     
     function onChange(v) {
@@ -297,8 +303,13 @@ class SessionList: Reactor.Component {
         if (!p) return this.sessions;
         var tmp = [];
         this.sessions.map(function(s) {
-            var name = s[4] || s.alias || s[0] || s.id || "";
-            if (name.indexOf(p) >= 0) tmp.push(s);
+            var name = (s[4] || s.alias || "").toLowerCase();
+            var id = (s[0] || s.id || "").toLowerCase();
+            var user = (s[1] || "").toLowerCase();
+            var hostname = (s[2] || "").toLowerCase();
+            if (name.indexOf(p) >= 0 || id.indexOf(p) >= 0 || user.indexOf(p) >= 0 || hostname.indexOf(p) >= 0) {
+                tmp.push(s);
+            }
         });
         return tmp;
     }
@@ -316,7 +327,7 @@ class SessionList: Reactor.Component {
                     <li #connect>{translate('Connect')}</li>
                     <li #transfer>{translate('Transfer File')}</li>
                     <li #tunnel>{translate('TCP Tunneling')}</li>
-                    {false && !handler.using_public_server() && <li #force-always-relay><span>{svg_checkmark}</span>{translate('Always connect via relay')}</li>}
+                    <li #force-always-relay><span>{svg_checkmark}</span>{translate('Always connect via relay')}</li>
                     <li #rdp>RDP<EditRdpPort /></li>
                     <li #wol>{translate('WOL')}</li>
                     <div .separator />
@@ -396,7 +407,6 @@ class SessionList: Reactor.Component {
         if (el) {
           var force = handler.get_peer_option(id, "force-always-relay");
           el.attributes.toggleClass("selected", force == "Y");
-          el.attributes.toggleClass("line-through", force != "Y");
         }
         var conn = this.$(menu #connect);
         if (conn) {
@@ -479,7 +489,7 @@ class SessionList: Reactor.Component {
             msgbox("custom-rename", "Rename", "<div .form> \
                 <div><input|text name='name' .outline-focus style='width: *; height: 23px', value='" + old_name + "' /></div> \
                 </div> \
-                ", function(res=null) {
+                ", "", function(res=null) {
                     if (!res) return;
                     var name = (res.name || "").trim();
                     if (name != old_name) {
@@ -502,7 +512,7 @@ class SessionList: Reactor.Component {
                 }
             }
             if (!peer) return;
-            msgbox("custom-edit-tag", "Edit Tag", <SelectTags tags={peer.tags || []} />, function(res=null) {
+            msgbox("custom-edit-tag", "Edit Tag", <SelectTags tags={peer.tags || []} />, "", function(res=null) {
                     if (!res) return;
                     peer.tags = selectTags.tags;
                     updateAb();
@@ -734,7 +744,7 @@ function editRdpPort() {
             <div><span>{translate('Port')}:</span>{port}</div> 
             <div><span>{translate('Username')}:</span><input|text name="username" value={name0} /></div> 
             <div><span>{translate('Password')}:</span><PasswordComponent value={pass0} /></div> 
-        </div>, function(res=null) {
+        </div>, "", function(res=null) {
         if (!res) return;
         var p = (res.port || '').trim();
         if (p != p0) {

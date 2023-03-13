@@ -13,13 +13,13 @@ use crate::{
     config::{Config, COMPRESS_LEVEL},
 };
 
-pub fn read_dir(path: &PathBuf, include_hidden: bool) -> ResultType<FileDirectory> {
+pub fn read_dir(path: &Path, include_hidden: bool) -> ResultType<FileDirectory> {
     let mut dir = FileDirectory {
-        path: get_string(&path),
+        path: get_string(path),
         ..Default::default()
     };
     #[cfg(windows)]
-    if "/" == &get_string(&path) {
+    if "/" == &get_string(path) {
         let drives = unsafe { winapi::um::fileapi::GetLogicalDrives() };
         for i in 0..32 {
             if drives & (1 << i) != 0 {
@@ -36,74 +36,70 @@ pub fn read_dir(path: &PathBuf, include_hidden: bool) -> ResultType<FileDirector
         }
         return Ok(dir);
     }
-    for entry in path.read_dir()? {
-        if let Ok(entry) = entry {
-            let p = entry.path();
-            let name = p
-                .file_name()
-                .map(|p| p.to_str().unwrap_or(""))
-                .unwrap_or("")
-                .to_owned();
-            if name.is_empty() {
-                continue;
-            }
-            let mut is_hidden = false;
-            let meta;
-            if let Ok(tmp) = std::fs::symlink_metadata(&p) {
-                meta = tmp;
-            } else {
-                continue;
-            }
-            // docs.microsoft.com/en-us/windows/win32/fileio/file-attribute-constants
-            #[cfg(windows)]
-            if meta.file_attributes() & 0x2 != 0 {
-                is_hidden = true;
-            }
-            #[cfg(not(windows))]
-            if name.find('.').unwrap_or(usize::MAX) == 0 {
-                is_hidden = true;
-            }
-            if is_hidden && !include_hidden {
-                continue;
-            }
-            let (entry_type, size) = {
-                if p.is_dir() {
-                    if meta.file_type().is_symlink() {
-                        (FileType::DirLink.into(), 0)
-                    } else {
-                        (FileType::Dir.into(), 0)
-                    }
-                } else {
-                    if meta.file_type().is_symlink() {
-                        (FileType::FileLink.into(), 0)
-                    } else {
-                        (FileType::File.into(), meta.len())
-                    }
-                }
-            };
-            let modified_time = meta
-                .modified()
-                .map(|x| {
-                    x.duration_since(std::time::SystemTime::UNIX_EPOCH)
-                        .map(|x| x.as_secs())
-                        .unwrap_or(0)
-                })
-                .unwrap_or(0) as u64;
-            dir.entries.push(FileEntry {
-                name: get_file_name(&p),
-                entry_type,
-                is_hidden,
-                size,
-                modified_time,
-                ..Default::default()
-            });
+    for entry in path.read_dir()?.flatten() {
+        let p = entry.path();
+        let name = p
+            .file_name()
+            .map(|p| p.to_str().unwrap_or(""))
+            .unwrap_or("")
+            .to_owned();
+        if name.is_empty() {
+            continue;
         }
+        let mut is_hidden = false;
+        let meta;
+        if let Ok(tmp) = std::fs::symlink_metadata(&p) {
+            meta = tmp;
+        } else {
+            continue;
+        }
+        // docs.microsoft.com/en-us/windows/win32/fileio/file-attribute-constants
+        #[cfg(windows)]
+        if meta.file_attributes() & 0x2 != 0 {
+            is_hidden = true;
+        }
+        #[cfg(not(windows))]
+        if name.find('.').unwrap_or(usize::MAX) == 0 {
+            is_hidden = true;
+        }
+        if is_hidden && !include_hidden {
+            continue;
+        }
+        let (entry_type, size) = {
+            if p.is_dir() {
+                if meta.file_type().is_symlink() {
+                    (FileType::DirLink.into(), 0)
+                } else {
+                    (FileType::Dir.into(), 0)
+                }
+            } else if meta.file_type().is_symlink() {
+                (FileType::FileLink.into(), 0)
+            } else {
+                (FileType::File.into(), meta.len())
+            }
+        };
+        let modified_time = meta
+            .modified()
+            .map(|x| {
+                x.duration_since(std::time::SystemTime::UNIX_EPOCH)
+                    .map(|x| x.as_secs())
+                    .unwrap_or(0)
+            })
+            .unwrap_or(0);
+        dir.entries.push(FileEntry {
+            name: get_file_name(&p),
+            entry_type,
+            is_hidden,
+            size,
+            modified_time,
+            ..Default::default()
+        });
     }
     Ok(dir)
 }
 
 #[inline]
-pub fn get_file_name(p: &PathBuf) -> String {
+pub fn get_file_name(p: &Path) -> String {
     p.file_name()
         .map(|p| p.to_str().unwrap_or(""))
         .unwrap_or("")
@@ -111,7 +107,7 @@ pub fn get_file_name(p: &PathBuf) -> String {
 }
 
 #[inline]
-pub fn get_string(path: &PathBuf) -> String {
+pub fn get_string(path: &Path) -> String {
     path.to_str().unwrap_or("").to_owned()
 }
 
@@ -127,14 +123,14 @@ pub fn get_home_as_string() -> String {
 
 fn read_dir_recursive(
     path: &PathBuf,
-    prefix: &PathBuf,
+    prefix: &Path,
     include_hidden: bool,
 ) -> ResultType<Vec<FileEntry>> {
     let mut files = Vec::new();
     if path.is_dir() {
         // to-do: symbol link handling, cp the link rather than the content
         // to-do: file mode, for unix
-        let fd = read_dir(&path, include_hidden)?;
+        let fd = read_dir(path, include_hidden)?;
         for entry in fd.entries.iter() {
             match entry.entry_type.enum_value() {
                 Ok(FileType::File) => {
@@ -158,7 +154,7 @@ fn read_dir_recursive(
         }
         Ok(files)
     } else if path.is_file() {
-        let (size, modified_time) = if let Ok(meta) = std::fs::metadata(&path) {
+        let (size, modified_time) = if let Ok(meta) = std::fs::metadata(path) {
             (
                 meta.len(),
                 meta.modified()
@@ -167,7 +163,7 @@ fn read_dir_recursive(
                             .map(|x| x.as_secs())
                             .unwrap_or(0)
                     })
-                    .unwrap_or(0) as u64,
+                    .unwrap_or(0),
             )
         } else {
             (0, 0)
@@ -215,6 +211,8 @@ pub struct TransferJob {
     transferred: u64,
     enable_overwrite_detection: bool,
     file_confirmed: bool,
+    // indicating the last file is skipped
+    file_skipped: bool,
     file_is_waiting: bool,
     default_overwrite_strategy: Option<bool>,
 }
@@ -247,7 +245,7 @@ pub struct RemoveJobMeta {
 
 #[inline]
 fn get_ext(name: &str) -> &str {
-    if let Some(i) = name.rfind(".") {
+    if let Some(i) = name.rfind('.') {
         return &name[i + 1..];
     }
     ""
@@ -268,6 +266,7 @@ fn is_compressed_file(name: &str) -> bool {
 }
 
 impl TransferJob {
+    #[allow(clippy::too_many_arguments)]
     pub fn new_write(
         id: i32,
         remote: String,
@@ -279,7 +278,7 @@ impl TransferJob {
         enable_overwrite_detection: bool,
     ) -> Self {
         log::info!("new write {}", path);
-        let total_size = files.iter().map(|x| x.size as u64).sum();
+        let total_size = files.iter().map(|x| x.size).sum();
         Self {
             id,
             remote,
@@ -305,7 +304,7 @@ impl TransferJob {
     ) -> ResultType<Self> {
         log::info!("new read {}", path);
         let files = get_recursive_files(&path, show_hidden)?;
-        let total_size = files.iter().map(|x| x.size as u64).sum();
+        let total_size = files.iter().map(|x| x.size).sum();
         Ok(Self {
             id,
             remote,
@@ -361,7 +360,7 @@ impl TransferJob {
             let entry = &self.files[file_num];
             let path = self.join(&entry.name);
             let download_path = format!("{}.download", get_string(&path));
-            std::fs::rename(&download_path, &path).ok();
+            std::fs::rename(download_path, &path).ok();
             filetime::set_file_mtime(
                 &path,
                 filetime::FileTime::from_unix_time(entry.modified_time as _, 0),
@@ -376,11 +375,11 @@ impl TransferJob {
             let entry = &self.files[file_num];
             let path = self.join(&entry.name);
             let download_path = format!("{}.download", get_string(&path));
-            std::fs::remove_file(&download_path).ok();
+            std::fs::remove_file(download_path).ok();
         }
     }
 
-    pub async fn write(&mut self, block: FileTransferBlock, raw: Option<&[u8]>) -> ResultType<()> {
+    pub async fn write(&mut self, block: FileTransferBlock) -> ResultType<()> {
         if block.id != self.id {
             bail!("Wrong id");
         }
@@ -402,20 +401,15 @@ impl TransferJob {
             let path = format!("{}.download", get_string(&path));
             self.file = Some(File::create(&path).await?);
         }
-        let data = if let Some(data) = raw {
-            data
-        } else {
-            &block.data
-        };
         if block.compressed {
-            let tmp = decompress(data);
+            let tmp = decompress(&block.data);
             self.file.as_mut().unwrap().write_all(&tmp).await?;
             self.finished_size += tmp.len() as u64;
         } else {
-            self.file.as_mut().unwrap().write_all(data).await?;
-            self.finished_size += data.len() as u64;
+            self.file.as_mut().unwrap().write_all(&block.data).await?;
+            self.finished_size += block.data.len() as u64;
         }
-        self.transferred += data.len() as u64;
+        self.transferred += block.data.len() as u64;
         Ok(())
     }
 
@@ -436,7 +430,7 @@ impl TransferJob {
         }
         let name = &self.files[file_num].name;
         if self.file.is_none() {
-            match File::open(self.join(&name)).await {
+            match File::open(self.join(name)).await {
                 Ok(file) => {
                     self.file = Some(file);
                     self.file_confirmed = false;
@@ -450,20 +444,15 @@ impl TransferJob {
                 }
             }
         }
-        if self.enable_overwrite_detection {
-            if !self.file_confirmed() {
-                if !self.file_is_waiting() {
-                    self.send_current_digest(stream).await?;
-                    self.set_file_is_waiting(true);
-                }
-                return Ok(None);
+        if self.enable_overwrite_detection && !self.file_confirmed() {
+            if !self.file_is_waiting() {
+                self.send_current_digest(stream).await?;
+                self.set_file_is_waiting(true);
             }
+            return Ok(None);
         }
         const BUF_SIZE: usize = 128 * 1024;
-        let mut buf: Vec<u8> = Vec::with_capacity(BUF_SIZE);
-        unsafe {
-            buf.set_len(BUF_SIZE);
-        }
+        let mut buf: Vec<u8> = vec![0; BUF_SIZE];
         let mut compressed = false;
         let mut offset: usize = 0;
         loop {
@@ -546,25 +535,63 @@ impl TransferJob {
     pub fn set_file_confirmed(&mut self, file_confirmed: bool) {
         log::info!("id: {}, file_confirmed: {}", self.id, file_confirmed);
         self.file_confirmed = file_confirmed;
+        self.file_skipped = false;
     }
 
     pub fn set_file_is_waiting(&mut self, file_is_waiting: bool) {
         self.file_is_waiting = file_is_waiting;
     }
 
+    #[inline]
     pub fn file_is_waiting(&self) -> bool {
         self.file_is_waiting
     }
 
+    #[inline]
     pub fn file_confirmed(&self) -> bool {
         self.file_confirmed
     }
 
-    pub fn skip_current_file(&mut self) -> bool {
+    /// Indicating whether the last file is skipped
+    #[inline]
+    pub fn file_skipped(&self) -> bool {
+        self.file_skipped
+    }
+
+    /// Indicating whether the whole task is skipped
+    #[inline]
+    pub fn job_skipped(&self) -> bool {
+        self.file_skipped() && self.files.len() == 1
+    }
+
+    /// Check whether the job is completed after `read` returns `None`
+    /// This is a helper function which gives additional lifecycle when the job reads `None`.
+    /// If returns `true`, it means we can delete the job automatically. `False` otherwise.
+    ///
+    /// [`Note`]
+    /// Conditions:
+    /// 1. Files are not waiting for confirmation by peers.
+    #[inline]
+    pub fn job_completed(&self) -> bool {
+        // has no error, Condition 2
+        !self.enable_overwrite_detection || (!self.file_confirmed && !self.file_is_waiting)
+    }
+
+    /// Get job error message, useful for getting status when job had finished
+    pub fn job_error(&self) -> Option<String> {
+        if self.job_skipped() {
+            return Some("skipped".to_string());
+        }
+        None
+    }
+
+    pub fn set_file_skipped(&mut self) -> bool {
+        log::debug!("skip file {} in job {}", self.file_num, self.id);
         self.file.take();
         self.set_file_confirmed(false);
         self.set_file_is_waiting(false);
         self.file_num += 1;
+        self.file_skipped = true;
         true
     }
 
@@ -575,8 +602,7 @@ impl TransferJob {
             match r.union {
                 Some(file_transfer_send_confirm_request::Union::Skip(s)) => {
                     if s {
-                        log::debug!("skip file id:{}, file_num:{}", r.id, r.file_num);
-                        self.skip_current_file();
+                        self.set_file_skipped();
                     } else {
                         self.set_file_confirmed(true);
                     }
@@ -623,7 +649,7 @@ pub fn new_dir(id: i32, path: String, files: Vec<FileEntry>) -> Message {
     resp.set_dir(FileDirectory {
         id,
         path,
-        entries: files.into(),
+        entries: files,
         ..Default::default()
     });
     let mut msg_out = Message::new();
@@ -655,7 +681,7 @@ pub fn new_receive(id: i32, path: String, file_num: i32, files: Vec<FileEntry>) 
     action.set_receive(FileTransferReceiveRequest {
         id,
         path,
-        files: files.into(),
+        files,
         file_num,
         ..Default::default()
     });
@@ -699,8 +725,8 @@ pub fn remove_job(id: i32, jobs: &mut Vec<TransferJob>) {
 }
 
 #[inline]
-pub fn get_job(id: i32, jobs: &mut Vec<TransferJob>) -> Option<&mut TransferJob> {
-    jobs.iter_mut().filter(|x| x.id() == id).next()
+pub fn get_job(id: i32, jobs: &mut [TransferJob]) -> Option<&mut TransferJob> {
+    jobs.iter_mut().find(|x| x.id() == id)
 }
 
 pub async fn handle_read_jobs(
@@ -722,10 +748,16 @@ pub async fn handle_read_jobs(
                 stream.send(&new_block(block)).await?;
             }
             Ok(None) => {
-                if !job.enable_overwrite_detection || (!job.file_confirmed && !job.file_is_waiting)
-                {
+                if job.job_completed() {
                     finished.push(job.id());
-                    stream.send(&new_done(job.id(), job.file_num())).await?;
+                    let err = job.job_error();
+                    if err.is_some() {
+                        stream
+                            .send(&new_error(job.id(), err.unwrap(), job.file_num()))
+                            .await?;
+                    } else {
+                        stream.send(&new_done(job.id(), job.file_num())).await?;
+                    }
                 } else {
                     // waiting confirmation.
                 }
@@ -746,7 +778,7 @@ pub fn remove_all_empty_dir(path: &PathBuf) -> ResultType<()> {
                 remove_all_empty_dir(&path.join(&entry.name)).ok();
             }
             Ok(FileType::DirLink) | Ok(FileType::FileLink) => {
-                std::fs::remove_file(&path.join(&entry.name)).ok();
+                std::fs::remove_file(path.join(&entry.name)).ok();
             }
             _ => {}
         }
@@ -770,7 +802,7 @@ pub fn create_dir(dir: &str) -> ResultType<()> {
 #[inline]
 pub fn transform_windows_path(entries: &mut Vec<FileEntry>) {
     for entry in entries {
-        entry.name = entry.name.replace("\\", "/");
+        entry.name = entry.name.replace('\\', "/");
     }
 }
 

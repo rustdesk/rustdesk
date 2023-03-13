@@ -1,9 +1,20 @@
 #!/usr/bin/env python3
 
-import re 
+import re
 import os
 import glob
 from tabnanny import check
+
+def pad_start(s, n, c = ' '):
+   if len(s) >= n:
+      return s
+   return c * (n - len(s)) + s
+
+def safe_unicode(s):
+   res = ""
+   for c in s:
+      res += r"\u{}".format(pad_start(hex(ord(c))[2:], 4, '0'))
+   return res
 
 def main():
    print('export const LANGS = {')
@@ -11,19 +22,19 @@ def main():
       lang = os.path.basename(fn)[:-3]
       if lang == 'template': continue
       print('  %s: {'%lang)
-      for ln in open(fn):
+      for ln in open(fn, encoding='utf-8'):
          ln = ln.strip()
          if ln.startswith('("'):
             toks = ln.split('", "')
             assert(len(toks) == 2)
             a = toks[0][2:]
             b = toks[1][:-3]
-            print('    "%s": "%s",'%(a, b))
+            print('    "%s": "%s",'%(safe_unicode(a), safe_unicode(b)))
       print('  },')
    print('}')
    check_if_retry = ['', False]
    KEY_MAP = ['', False]
-   for ln in open('../../../src/client.rs'):
+   for ln in open('../../../src/client.rs', encoding='utf-8'):
       ln = ln.strip()
       if 'check_if_retry' in ln:
          check_if_retry[1] = True
@@ -55,10 +66,10 @@ def main():
    print('export const KEY_MAP: any = {')
    print(KEY_MAP[0])
    print('}')
-   for ln in open('../../../Cargo.toml'):
+   for ln in open('../../../Cargo.toml', encoding='utf-8'):
       if ln.startswith('version ='):
          print('export const ' + ln)
-      
+
 
 def removeComment(ln):
    return re.sub('\s+\/\/.*$', '', ln)

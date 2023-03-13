@@ -1,7 +1,9 @@
+use std::sync::{Arc, RwLock};
+
 use crate::client::*;
 use hbb_common::{
     allow_err, bail,
-    config::CONNECT_TIMEOUT,
+    config::READ_TIMEOUT,
     futures::{SinkExt, StreamExt},
     log,
     message_proto::*,
@@ -48,6 +50,9 @@ pub async fn listen(
     ui_receiver: mpsc::UnboundedReceiver<Data>,
     key: &str,
     token: &str,
+    lc: Arc<RwLock<LoginConfigHandler>>,
+    remote_host: String,
+    remote_port: i32,
 ) -> ResultType<()> {
     let listener = tcp::new_listener(format!("0.0.0.0:{}", port), true).await?;
     let addr = listener.local_addr()?;
@@ -61,6 +66,7 @@ pub async fn listen(
         tokio::select! {
             Ok((forward, addr)) = listener.accept() => {
                 log::info!("new connection from {:?}", addr);
+                lc.write().unwrap().port_forward = (remote_host.clone(), remote_port);
                 let id = id.clone();
                 let password = password.clone();
                 let mut forward = Framed::new(forward, BytesCodec::new());
@@ -69,13 +75,13 @@ pub async fn listen(
                         let interface = interface.clone();
                         tokio::spawn(async move {
                             if let Err(err) = run_forward(forward, stream).await {
-                               interface.msgbox("error", "Error", &err.to_string());
+                               interface.msgbox("error", "Error", &err.to_string(), "");
                             }
                             log::info!("connection from {:?} closed", addr);
                        });
                     }
                     Err(err) => {
-                        interface.msgbox("error", "Error", &err.to_string());
+                        interface.msgbox("error", "Error", &err.to_string(), "");
                     }
                     _ => {}
                 }
@@ -106,21 +112,60 @@ async fn connect_and_login(
     token: &str,
     is_rdp: bool,
 ) -> ResultType<Option<Stream>> {
+    let mut res = connect_and_login_2(
+        id,
+        password,
+        ui_receiver,
+        interface.clone(),
+        forward,
+        key,
+        token,
+        is_rdp,
+    )
+    .await;
+    if res.is_err() && interface.is_force_relay() {
+        res = connect_and_login_2(
+            id,
+            password,
+            ui_receiver,
+            interface,
+            forward,
+            key,
+            token,
+            is_rdp,
+        )
+        .await;
+    }
+    res
+}
+
+async fn connect_and_login_2(
+    id: &str,
+    password: &str,
+    ui_receiver: &mut mpsc::UnboundedReceiver<Data>,
+    interface: impl Interface,
+    forward: &mut Framed<TcpStream, BytesCodec>,
+    key: &str,
+    token: &str,
+    is_rdp: bool,
+) -> ResultType<Option<Stream>> {
     let conn_type = if is_rdp {
         ConnType::RDP
     } else {
         ConnType::PORT_FORWARD
     };
-    let (mut stream, _) = Client::start(id, key, token, conn_type).await?;
+    let (mut stream, direct) = Client::start(id, key, token, conn_type, interface.clone()).await?;
     let mut interface = interface;
     let mut buffer = Vec::new();
+    let mut received = false;
     loop {
         tokio::select! {
-            res = timeout(CONNECT_TIMEOUT, stream.next()) => match res {
+            res = timeout(READ_TIMEOUT, stream.next()) => match res {
                 Err(_) => {
                     bail!("Timeout");
                 }
                 Ok(Some(Ok(bytes))) => {
+                    received = true;
                     let msg_in = Message::parse_from_bytes(&bytes)?;
                     match msg_in.union {
                         Some(message::Union::Hash(hash)) => {
@@ -142,6 +187,11 @@ async fn connect_and_login(
                         }
                         _ => {}
                     }
+                }
+                Ok(Some(Err(err))) => {
+                    log::error!("Connection closed: {}", err);
+                    interface.set_force_relay(direct, received);
+                    bail!("Connection closed: {}", err);
                 }
                 _ => {
                     bail!("Reset by the peer");

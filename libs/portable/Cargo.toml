@@ -1,0 +1,16 @@
+[package]
+name = "rustdesk-portable-packer"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+build = "build.rs"
+
+[build-dependencies]
+embed-resource = "1.7"
+
+[dependencies]
+brotli = "3.3.4"
+dirs = "4.0.0"
+md5 = "0.7.0"

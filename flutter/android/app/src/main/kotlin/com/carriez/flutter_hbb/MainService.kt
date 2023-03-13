@@ -105,43 +105,30 @@ class MainService : Service() {
     @Keep
     fun rustSetByName(name: String, arg1: String, arg2: String) {
         when (name) {
-            "try_start_without_auth" -> {
+            "add_connection" -> {
                 try {
                     val jsonObject = JSONObject(arg1)
                     val id = jsonObject["id"] as Int
                     val username = jsonObject["name"] as String
                     val peerId = jsonObject["peer_id"] as String
-                    val type = if (jsonObject["is_file_transfer"] as Boolean) {
-                        translate("File Connection")
-                    } else {
-                        translate("Screen Connection")
-                    }
-                    loginRequestNotification(id, type, username, peerId)
-                } catch (e: JSONException) {
-                    e.printStackTrace()
-                }
-            }
-            "on_client_authorized" -> {
-                Log.d(logTag, "from rust:on_client_authorized")
-                try {
-                    val jsonObject = JSONObject(arg1)
-                    val id = jsonObject["id"] as Int
-                    val username = jsonObject["name"] as String
-                    val peerId = jsonObject["peer_id"] as String
+                    val authorized = jsonObject["authorized"] as Boolean
                     val isFileTransfer = jsonObject["is_file_transfer"] as Boolean
                     val type = if (isFileTransfer) {
                         translate("File Connection")
                     } else {
                         translate("Screen Connection")
                     }
-                    if (!isFileTransfer && !isStart) {
-                        startCapture()
+                    if (authorized) {
+                        if (!isFileTransfer && !isStart) {
+                            startCapture()
+                        }
+                        onClientAuthorizedNotification(id, type, username, peerId)
+                    } else {
+                        loginRequestNotification(id, type, username, peerId)
                     }
-                    onClientAuthorizedNotification(id, type, username, peerId)
                 } catch (e: JSONException) {
                     e.printStackTrace()
                 }
-
             }
             "stop_capture" -> {
                 Log.d(logTag, "from rust:stop_capture")
@@ -607,7 +594,7 @@ class MainService : Service() {
         }
         val notification = notificationBuilder
             .setOngoing(true)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.mipmap.ic_stat_logo)
             .setDefaults(Notification.DEFAULT_ALL)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)

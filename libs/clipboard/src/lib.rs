@@ -1,6 +1,6 @@
 use cliprdr::*;
 use hbb_common::{
-    log,
+    allow_err, log,
     tokio::sync::{
         mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
         Mutex as TokioMutex,
@@ -12,33 +12,31 @@ use std::{
     boxed::Box,
     collections::HashMap,
     ffi::{CStr, CString},
-    sync::Mutex,
+    sync::{Arc, Mutex, RwLock},
 };
 
 pub mod cliprdr;
+pub mod context_send;
+pub use context_send::*;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "t", content = "c")]
-pub enum ClipbaordFile {
-    ServerFormatList {
-        conn_id: i32,
+pub enum ClipboardFile {
+    MonitorReady,
+    FormatList {
         format_list: Vec<(i32, String)>,
     },
-    ServerFormatListResponse {
-        conn_id: i32,
+    FormatListResponse {
         msg_flags: i32,
     },
-    ServerFormatDataRequest {
-        conn_id: i32,
+    FormatDataRequest {
         requested_format_id: i32,
     },
-    ServerFormatDataResponse {
-        conn_id: i32,
+    FormatDataResponse {
         msg_flags: i32,
         format_data: Vec<u8>,
     },
     FileContentsRequest {
-        conn_id: i32,
         stream_id: i32,
         list_index: i32,
         dw_flags: i32,
@@ -49,7 +47,6 @@ pub enum ClipbaordFile {
         clip_data_id: i32,
     },
     FileContentsResponse {
-        conn_id: i32,
         msg_flags: i32,
         stream_id: i32,
         requested_data: Vec<u8>,
@@ -61,18 +58,89 @@ struct ConnEnabled {
     conn_enabled: HashMap<i32, bool>,
 }
 
-lazy_static::lazy_static! {
-    static ref MSG_CHANNEL_CLIENT: (UnboundedSender<(i32, ClipbaordFile)>, TokioMutex<UnboundedReceiver<(i32, ClipbaordFile)>>) = {
-        let (tx, rx) = unbounded_channel();
-        (tx, TokioMutex::new(rx))
-    };
-
-    static ref CLIP_CONN_ENABLED: Mutex<ConnEnabled> = Mutex::new(ConnEnabled::default());
+struct MsgChannel {
+    peer_id: String,
+    conn_id: i32,
+    sender: UnboundedSender<ClipboardFile>,
+    receiver: Arc<TokioMutex<UnboundedReceiver<ClipboardFile>>>,
 }
 
-#[inline(always)]
-pub fn get_rx_clip_client<'a>() -> &'a TokioMutex<UnboundedReceiver<(i32, ClipbaordFile)>> {
-    &MSG_CHANNEL_CLIENT.1
+#[derive(PartialEq)]
+pub enum ProcessSide {
+    UnknownSide,
+    ClientSide,
+    ServerSide,
+}
+
+lazy_static::lazy_static! {
+    static ref VEC_MSG_CHANNEL: RwLock<Vec<MsgChannel>> = Default::default();
+    static ref CLIP_CONN_ENABLED: Mutex<ConnEnabled> = Mutex::new(ConnEnabled::default());
+    static ref PROCESS_SIDE: RwLock<ProcessSide> = RwLock::new(ProcessSide::UnknownSide);
+}
+
+pub fn get_client_conn_id(peer_id: &str) -> Option<i32> {
+    VEC_MSG_CHANNEL
+        .read()
+        .unwrap()
+        .iter()
+        .find(|x| x.peer_id == peer_id.to_owned())
+        .map(|x| x.conn_id)
+}
+
+pub fn get_rx_cliprdr_client(
+    peer_id: &str,
+) -> (i32, Arc<TokioMutex<UnboundedReceiver<ClipboardFile>>>) {
+    let mut lock = VEC_MSG_CHANNEL.write().unwrap();
+    match lock.iter().find(|x| x.peer_id == peer_id.to_owned()) {
+        Some(msg_channel) => (msg_channel.conn_id, msg_channel.receiver.clone()),
+        None => {
+            let (sender, receiver) = unbounded_channel();
+            let receiver = Arc::new(TokioMutex::new(receiver));
+            let receiver2 = receiver.clone();
+            let conn_id = lock.len() as i32 + 1;
+            let msg_channel = MsgChannel {
+                peer_id: peer_id.to_owned(),
+                conn_id,
+                sender,
+                receiver,
+            };
+            lock.push(msg_channel);
+            (conn_id, receiver2)
+        }
+    }
+}
+
+pub fn get_rx_cliprdr_server(conn_id: i32) -> Arc<TokioMutex<UnboundedReceiver<ClipboardFile>>> {
+    let mut lock = VEC_MSG_CHANNEL.write().unwrap();
+    match lock.iter().find(|x| x.conn_id == conn_id) {
+        Some(msg_channel) => msg_channel.receiver.clone(),
+        None => {
+            let (sender, receiver) = unbounded_channel();
+            let receiver = Arc::new(TokioMutex::new(receiver));
+            let receiver2 = receiver.clone();
+            let msg_channel = MsgChannel {
+                peer_id: "".to_owned(),
+                conn_id,
+                sender,
+                receiver,
+            };
+            lock.push(msg_channel);
+            receiver2
+        }
+    }
+}
+
+#[inline]
+fn send_data(conn_id: i32, data: ClipboardFile) {
+    // no need to handle result here
+    if let Some(msg_channel) = VEC_MSG_CHANNEL
+        .read()
+        .unwrap()
+        .iter()
+        .find(|x| x.conn_id == conn_id)
+    {
+        allow_err!(msg_channel.sender.send(data));
+    }
 }
 
 pub fn set_conn_enabled(conn_id: i32, enabled: bool) {
@@ -88,61 +156,46 @@ pub fn empty_clipboard(context: &mut Box<CliprdrClientContext>, conn_id: i32) ->
 
 pub fn server_clip_file(
     context: &mut Box<CliprdrClientContext>,
-    s_conn_id: i32,
-    msg: ClipbaordFile,
+    conn_id: i32,
+    msg: ClipboardFile,
 ) -> u32 {
     match msg {
-        ClipbaordFile::ServerFormatList {
-            mut conn_id,
-            format_list,
-        } => {
-            if s_conn_id != 0 {
-                conn_id = s_conn_id as i32;
-            }
+        ClipboardFile::MonitorReady => {
+            log::debug!("server_monitor_ready called");
+            let ret = server_monitor_ready(context, conn_id);
+            log::debug!("server_monitor_ready called, return {}", ret);
+            ret
+        }
+        ClipboardFile::FormatList { format_list } => {
             log::debug!("server_format_list called");
             let ret = server_format_list(context, conn_id, format_list);
             log::debug!("server_format_list called, return {}", ret);
             ret
         }
-        ClipbaordFile::ServerFormatListResponse {
-            mut conn_id,
-            msg_flags,
-        } => {
-            if s_conn_id != 0 {
-                conn_id = s_conn_id as i32;
-            }
+        ClipboardFile::FormatListResponse { msg_flags } => {
             log::debug!("format_list_response called");
             let ret = server_format_list_response(context, conn_id, msg_flags);
             log::debug!("server_format_list_response called, return {}", ret);
             ret
         }
-        ClipbaordFile::ServerFormatDataRequest {
-            mut conn_id,
+        ClipboardFile::FormatDataRequest {
             requested_format_id,
         } => {
-            if s_conn_id != 0 {
-                conn_id = s_conn_id as i32;
-            }
             log::debug!("format_data_request called");
             let ret = server_format_data_request(context, conn_id, requested_format_id);
             log::debug!("server_format_data_request called, return {}", ret);
             ret
         }
-        ClipbaordFile::ServerFormatDataResponse {
-            mut conn_id,
+        ClipboardFile::FormatDataResponse {
             msg_flags,
             format_data,
         } => {
-            if s_conn_id != 0 {
-                conn_id = s_conn_id as i32;
-            }
             log::debug!("format_data_response called");
             let ret = server_format_data_response(context, conn_id, msg_flags, format_data);
             log::debug!("server_format_data_response called, return {}", ret);
             ret
         }
-        ClipbaordFile::FileContentsRequest {
-            mut conn_id,
+        ClipboardFile::FileContentsRequest {
             stream_id,
             list_index,
             dw_flags,
@@ -152,9 +205,6 @@ pub fn server_clip_file(
             have_clip_data_id,
             clip_data_id,
         } => {
-            if s_conn_id != 0 {
-                conn_id = s_conn_id as i32;
-            }
             log::debug!("file_contents_request called");
             let ret = server_file_contents_request(
                 context,
@@ -171,15 +221,11 @@ pub fn server_clip_file(
             log::debug!("server_file_contents_request called, return {}", ret);
             ret
         }
-        ClipbaordFile::FileContentsResponse {
-            mut conn_id,
+        ClipboardFile::FileContentsResponse {
             msg_flags,
             stream_id,
             requested_data,
         } => {
-            if s_conn_id != 0 {
-                conn_id = s_conn_id as i32;
-            }
             log::debug!("file_contents_response called");
             let ret = server_file_contents_response(
                 context,
@@ -191,6 +237,19 @@ pub fn server_clip_file(
             log::debug!("server_file_contents_response called, return {}", ret);
             ret
         }
+    }
+}
+
+pub fn server_monitor_ready(context: &mut Box<CliprdrClientContext>, conn_id: i32) -> u32 {
+    unsafe {
+        let monitor_ready = CLIPRDR_MONITOR_READY {
+            connID: conn_id as UINT32,
+            msgType: 0 as UINT16,
+            msgFlags: 0 as UINT16,
+            dataLen: 0 as UINT32,
+        };
+        let ret = ((**context).MonitorReady.unwrap())(&mut (**context), &monitor_ready);
+        ret as u32
     }
 }
 
@@ -243,6 +302,7 @@ pub fn server_format_list(
         ret as u32
     }
 }
+
 pub fn server_format_list_response(
     context: &mut Box<CliprdrClientContext>,
     conn_id: i32,
@@ -262,6 +322,7 @@ pub fn server_format_list_response(
         ret as u32
     }
 }
+
 pub fn server_format_data_request(
     context: &mut Box<CliprdrClientContext>,
     conn_id: i32,
@@ -280,6 +341,7 @@ pub fn server_format_data_request(
         ret as u32
     }
 }
+
 pub fn server_format_data_response(
     context: &mut Box<CliprdrClientContext>,
     conn_id: i32,
@@ -301,6 +363,7 @@ pub fn server_format_data_response(
         ret as u32
     }
 }
+
 pub fn server_file_contents_request(
     context: &mut Box<CliprdrClientContext>,
     conn_id: i32,
@@ -335,6 +398,7 @@ pub fn server_file_contents_request(
         ret as u32
     }
 }
+
 pub fn server_file_contents_response(
     context: &mut Box<CliprdrClientContext>,
     conn_id: i32,
@@ -363,7 +427,10 @@ pub fn server_file_contents_response(
 pub fn create_cliprdr_context(
     enable_files: bool,
     enable_others: bool,
+    process_side: ProcessSide,
 ) -> ResultType<Box<CliprdrClientContext>> {
+    *PROCESS_SIDE.write().unwrap() = process_side;
+
     Ok(CliprdrClientContext::create(
         enable_files,
         enable_others,
@@ -378,8 +445,11 @@ pub fn create_cliprdr_context(
 }
 
 extern "C" fn check_enabled(conn_id: UINT32) -> BOOL {
-    let lock = CLIP_CONN_ENABLED.lock().unwrap();
+    if *PROCESS_SIDE.read().unwrap() == ProcessSide::ClientSide {
+        return TRUE;
+    }
 
+    let lock = CLIP_CONN_ENABLED.lock().unwrap();
     let mut connd_enabled = false;
     if conn_id != 0 {
         if let Some(true) = lock.conn_enabled.get(&(conn_id as i32)) {
@@ -422,12 +492,17 @@ extern "C" fn client_format_list(
         }
         conn_id = (*clip_format_list).connID as i32;
     }
-    let data = ClipbaordFile::ServerFormatList {
-        conn_id,
-        format_list,
-    };
+    let data = ClipboardFile::FormatList { format_list };
     // no need to handle result here
-    MSG_CHANNEL_CLIENT.0.send((conn_id, data)).unwrap();
+    if conn_id == 0 {
+        VEC_MSG_CHANNEL
+            .read()
+            .unwrap()
+            .iter()
+            .for_each(|msg_channel| allow_err!(msg_channel.sender.send(data.clone())));
+    } else {
+        send_data(conn_id, data);
+    }
 
     0
 }
@@ -444,9 +519,8 @@ extern "C" fn client_format_list_response(
         conn_id = (*format_list_response).connID as i32;
         msg_flags = (*format_list_response).msgFlags as i32;
     }
-    let data = ClipbaordFile::ServerFormatListResponse { conn_id, msg_flags };
-    // no need to handle result here
-    MSG_CHANNEL_CLIENT.0.send((conn_id, data)).unwrap();
+    let data = ClipboardFile::FormatListResponse { msg_flags };
+    send_data(conn_id, data);
 
     0
 }
@@ -463,12 +537,11 @@ extern "C" fn client_format_data_request(
         conn_id = (*format_data_request).connID as i32;
         requested_format_id = (*format_data_request).requestedFormatId as i32;
     }
-    let data = ClipbaordFile::ServerFormatDataRequest {
-        conn_id,
+    let data = ClipboardFile::FormatDataRequest {
         requested_format_id,
     };
     // no need to handle result here
-    MSG_CHANNEL_CLIENT.0.send((conn_id, data)).unwrap();
+    send_data(conn_id, data);
 
     0
 }
@@ -495,13 +568,11 @@ extern "C" fn client_format_data_response(
             .to_vec();
         }
     }
-    let data = ClipbaordFile::ServerFormatDataResponse {
-        conn_id,
+    let data = ClipboardFile::FormatDataResponse {
         msg_flags,
         format_data,
     };
-    // no need to handle result here
-    MSG_CHANNEL_CLIENT.0.send((conn_id, data)).unwrap();
+    send_data(conn_id, data);
 
     0
 }
@@ -543,8 +614,7 @@ extern "C" fn client_file_contents_request(
         clip_data_id = (*file_contents_request).clipDataId as i32;
     }
 
-    let data = ClipbaordFile::FileContentsRequest {
-        conn_id,
+    let data = ClipboardFile::FileContentsRequest {
         stream_id,
         list_index,
         dw_flags,
@@ -554,8 +624,7 @@ extern "C" fn client_file_contents_request(
         have_clip_data_id,
         clip_data_id,
     };
-    // no need to handle result here
-    MSG_CHANNEL_CLIENT.0.send((conn_id, data)).unwrap();
+    send_data(conn_id, data);
 
     0
 }
@@ -584,14 +653,12 @@ extern "C" fn client_file_contents_response(
             .to_vec();
         }
     }
-    let data = ClipbaordFile::FileContentsResponse {
-        conn_id,
+    let data = ClipboardFile::FileContentsResponse {
         msg_flags,
         stream_id,
         requested_data,
     };
-    // no need to handle result here
-    MSG_CHANNEL_CLIENT.0.send((conn_id, data)).unwrap();
+    send_data(conn_id, data);
 
     0
 }

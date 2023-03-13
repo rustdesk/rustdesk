@@ -14,6 +14,7 @@ pub mod macos;
 #[cfg(target_os = "linux")]
 pub mod linux;
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::{message_proto::CursorData, ResultType};
 #[cfg(not(target_os = "macos"))]
 const SERVICE_INTERVAL: u64 = 300;
@@ -72,5 +73,14 @@ mod tests {
         for _ in 0..30 {
             assert!(!get_cursor_pos().is_none());
         }
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[test]
+    fn test_resolution() {
+        let name = r"\\.\DISPLAY1";
+        println!("current:{:?}", current_resolution(name));
+        println!("change:{:?}", change_resolution(name, 2880, 1800));
+        println!("resolutions:{:?}", resolutions(name));
     }
 }

@@ -23,15 +23,18 @@ fn main() {
     enigo.mouse_click(MouseButton::Left);
     thread::sleep(wait_time);
 
-    enigo.mouse_scroll_x(2);
-    thread::sleep(wait_time);
+    #[cfg(not(target_os = "macos"))]
+    {
+        enigo.mouse_scroll_x(2);
+        thread::sleep(wait_time);
 
-    enigo.mouse_scroll_x(-2);
-    thread::sleep(wait_time);
+        enigo.mouse_scroll_x(-2);
+        thread::sleep(wait_time);
 
-    enigo.mouse_scroll_y(2);
-    thread::sleep(wait_time);
+        enigo.mouse_scroll_y(2);
+        thread::sleep(wait_time);
 
-    enigo.mouse_scroll_y(-2);
-    thread::sleep(wait_time);
+        enigo.mouse_scroll_y(-2);
+        thread::sleep(wait_time);
+    }
 }

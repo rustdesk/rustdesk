@@ -8,7 +8,7 @@ pub struct Capturer {
     frame: Arc<Mutex<Option<quartz::Frame>>>,
     use_yuv: bool,
     i420: Vec<u8>,
-    saved_raw_data: Vec<u128>, // for faster compare and copy
+    saved_raw_data: Vec<u8>, // for faster compare and copy
 }
 
 impl Capturer {

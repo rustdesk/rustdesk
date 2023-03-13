@@ -15,6 +15,12 @@ enum DecodeState {
     Data(usize),
 }
 
+impl Default for BytesCodec {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BytesCodec {
     pub fn new() -> Self {
         Self {
@@ -56,7 +62,7 @@ impl BytesCodec {
         }
         src.advance(head_len);
         src.reserve(n);
-        return Ok(Some(n));
+        Ok(Some(n))
     }
 
     fn decode_data(&self, n: usize, src: &mut BytesMut) -> io::Result<Option<BytesMut>> {
@@ -137,32 +143,32 @@ mod tests {
         let mut buf = BytesMut::new();
         let mut bytes: Vec<u8> = Vec::new();
         bytes.resize(0x3F, 1);
-        assert!(!codec.encode(bytes.into(), &mut buf).is_err());
+        assert!(codec.encode(bytes.into(), &mut buf).is_ok());
         let buf_saved = buf.clone();
         assert_eq!(buf.len(), 0x3F + 1);
         if let Ok(Some(res)) = codec.decode(&mut buf) {
             assert_eq!(res.len(), 0x3F);
             assert_eq!(res[0], 1);
         } else {
-            assert!(false);
+            panic!();
         }
         let mut codec2 = BytesCodec::new();
         let mut buf2 = BytesMut::new();
         if let Ok(None) = codec2.decode(&mut buf2) {
         } else {
-            assert!(false);
+            panic!();
         }
         buf2.extend(&buf_saved[0..1]);
         if let Ok(None) = codec2.decode(&mut buf2) {
         } else {
-            assert!(false);
+            panic!();
         }
         buf2.extend(&buf_saved[1..]);
         if let Ok(Some(res)) = codec2.decode(&mut buf2) {
             assert_eq!(res.len(), 0x3F);
             assert_eq!(res[0], 1);
         } else {
-            assert!(false);
+            panic!();
         }
     }
 
@@ -171,21 +177,21 @@ mod tests {
         let mut codec = BytesCodec::new();
         let mut buf = BytesMut::new();
         let mut bytes: Vec<u8> = Vec::new();
-        assert!(!codec.encode("".into(), &mut buf).is_err());
+        assert!(codec.encode("".into(), &mut buf).is_ok());
         assert_eq!(buf.len(), 1);
         bytes.resize(0x3F + 1, 2);
-        assert!(!codec.encode(bytes.into(), &mut buf).is_err());
+        assert!(codec.encode(bytes.into(), &mut buf).is_ok());
         assert_eq!(buf.len(), 0x3F + 2 + 2);
         if let Ok(Some(res)) = codec.decode(&mut buf) {
             assert_eq!(res.len(), 0);
         } else {
-            assert!(false);
+            panic!();
         }
         if let Ok(Some(res)) = codec.decode(&mut buf) {
             assert_eq!(res.len(), 0x3F + 1);
             assert_eq!(res[0], 2);
         } else {
-            assert!(false);
+            panic!();
         }
     }
 
@@ -195,13 +201,13 @@ mod tests {
         let mut buf = BytesMut::new();
         let mut bytes: Vec<u8> = Vec::new();
         bytes.resize(0x3F - 1, 3);
-        assert!(!codec.encode(bytes.into(), &mut buf).is_err());
+        assert!(codec.encode(bytes.into(), &mut buf).is_ok());
         assert_eq!(buf.len(), 0x3F + 1 - 1);
         if let Ok(Some(res)) = codec.decode(&mut buf) {
             assert_eq!(res.len(), 0x3F - 1);
             assert_eq!(res[0], 3);
         } else {
-            assert!(false);
+            panic!();
         }
     }
     #[test]
@@ -210,13 +216,13 @@ mod tests {
         let mut buf = BytesMut::new();
         let mut bytes: Vec<u8> = Vec::new();
         bytes.resize(0x3FFF, 4);
-        assert!(!codec.encode(bytes.into(), &mut buf).is_err());
+        assert!(codec.encode(bytes.into(), &mut buf).is_ok());
         assert_eq!(buf.len(), 0x3FFF + 2);
         if let Ok(Some(res)) = codec.decode(&mut buf) {
             assert_eq!(res.len(), 0x3FFF);
             assert_eq!(res[0], 4);
         } else {
-            assert!(false);
+            panic!();
         }
     }
 
@@ -226,13 +232,13 @@ mod tests {
         let mut buf = BytesMut::new();
         let mut bytes: Vec<u8> = Vec::new();
         bytes.resize(0x3FFFFF, 5);
-        assert!(!codec.encode(bytes.into(), &mut buf).is_err());
+        assert!(codec.encode(bytes.into(), &mut buf).is_ok());
         assert_eq!(buf.len(), 0x3FFFFF + 3);
         if let Ok(Some(res)) = codec.decode(&mut buf) {
             assert_eq!(res.len(), 0x3FFFFF);
             assert_eq!(res[0], 5);
         } else {
-            assert!(false);
+            panic!();
         }
     }
 
@@ -242,33 +248,33 @@ mod tests {
         let mut buf = BytesMut::new();
         let mut bytes: Vec<u8> = Vec::new();
         bytes.resize(0x3FFFFF + 1, 6);
-        assert!(!codec.encode(bytes.into(), &mut buf).is_err());
+        assert!(codec.encode(bytes.into(), &mut buf).is_ok());
         let buf_saved = buf.clone();
         assert_eq!(buf.len(), 0x3FFFFF + 4 + 1);
         if let Ok(Some(res)) = codec.decode(&mut buf) {
             assert_eq!(res.len(), 0x3FFFFF + 1);
             assert_eq!(res[0], 6);
         } else {
-            assert!(false);
+            panic!();
         }
         let mut codec2 = BytesCodec::new();
         let mut buf2 = BytesMut::new();
         buf2.extend(&buf_saved[0..1]);
         if let Ok(None) = codec2.decode(&mut buf2) {
         } else {
-            assert!(false);
+            panic!();
         }
         buf2.extend(&buf_saved[1..6]);
         if let Ok(None) = codec2.decode(&mut buf2) {
         } else {
-            assert!(false);
+            panic!();
         }
         buf2.extend(&buf_saved[6..]);
         if let Ok(Some(res)) = codec2.decode(&mut buf2) {
             assert_eq!(res.len(), 0x3FFFFF + 1);
             assert_eq!(res[0], 6);
         } else {
-            assert!(false);
+            panic!();
         }
     }
 }

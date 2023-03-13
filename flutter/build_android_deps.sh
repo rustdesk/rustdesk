@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Build libyuv / opus / libvpx / oboe for Android 
-# Required: 
+# Build libyuv / opus / libvpx / oboe for Android
+# Required:
 #   1. set VCPKG_ROOT / ANDROID_NDK path environment variables
 #   2. vcpkg initialized
 #   3. ndk, version: 22 (if ndk < 22 you need to change LD as `export LD=$TOOLCHAIN/bin/$NDK_LLVM_TARGET-ld`)
@@ -23,7 +23,7 @@ HOST_TAG="linux-x86_64" # current platform, set as `ls $ANDROID_NDK/toolchains/l
 TOOLCHAIN=$ANDROID_NDK/toolchains/llvm/prebuilt/$HOST_TAG
 
 function build {
-  ANDROID_ABI=$1 
+  ANDROID_ABI=$1
   VCPKG_TARGET=$2
   NDK_LLVM_TARGET=$3
   LIBVPX_TARGET=$4
@@ -111,15 +111,15 @@ patch -N -d build/oboe -p1 < ../src/oboe.patch
 #   x86_64-linux-android
 #   i686-linux-android
 
-# LIBVPX_TARGET : 
-#   arm64-android-gcc  
-#   armv7-android-gcc  
+# LIBVPX_TARGET :
+#   arm64-android-gcc
+#   armv7-android-gcc
 #   x86_64-android-gcc
-#   x86-android-gcc   
+#   x86-android-gcc
 
 # args: ANDROID_ABI  VCPKG_TARGET  NDK_LLVM_TARGET  LIBVPX_TARGET
 build arm64-v8a arm64-android aarch64-linux-android arm64-android-gcc
-build armeabi-v7a arm-android arm-linux-androideabi armv7-android-gcc 
+build armeabi-v7a arm-android arm-linux-androideabi armv7-android-gcc
 
 # rm -rf build/libvpx
 # rm -rf build/oboe

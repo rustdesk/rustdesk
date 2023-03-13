@@ -14,6 +14,8 @@ var svg_secure = <svg viewBox="0 0 347.97 347.97">
 var svg_insecure = <svg viewBox="0 0 347.97 347.97"><path d="M317.469 61.615c-59.442 0-104.976-16.082-143.489-51.539-38.504 35.457-84.04 51.539-143.479 51.539 0 92.337-20.177 224.612 143.479 278.324 163.661-53.717 143.489-185.992 143.489-278.324z" fill="none" stroke="red" stroke-width="14.827"/><g fill="red"><path d="M238.802 115.023l-111.573 114.68-8.6-8.367L230.2 106.656z"/><path d="M125.559 108.093l114.68 111.572-8.368 8.601-114.68-111.572z"/></g></svg>;
 var svg_insecure_relay = <svg viewBox="0 0 347.97 347.97"><path d="M317.469 61.615c-59.442 0-104.976-16.082-143.489-51.539-38.504 35.457-84.04 51.539-143.479 51.539 0 92.337-20.177 224.612 143.479 278.324 163.661-53.717 143.489-185.992 143.489-278.324z" fill="none" stroke="red" stroke-width="14.827"/><g fill="red"><path d="M231.442 247.498l-7.754-10.205c-17.268 12.441-38.391 17.705-59.478 14.822-21.087-2.883-39.613-13.569-52.166-30.088-25.916-34.101-17.997-82.738 17.65-108.42 32.871-23.685 78.02-19.704 105.172 7.802l-32.052 7.987 3.082 12.369 48.722-12.142-11.712-46.998-12.822 3.196 4.496 18.039c-31.933-24.008-78.103-25.342-112.642-.458-31.361 22.596-44.3 60.436-35.754 94.723 2.77 11.115 7.801 21.862 15.192 31.588 30.19 39.727 88.538 47.705 130.066 17.785z"/></g></svg>;
 var svg_secure_relay = <svg viewBox="0 0 347.97 347.97"><path d="M317.469 61.615c-59.442 0-104.976-16.082-143.489-51.539-38.504 35.457-84.04 51.539-143.479 51.539 0 92.337-20.177 224.612 143.479 278.324 163.661-53.717 143.489-185.992 143.489-278.324z" fill="#3f7d46" stroke="#3f7d46" stroke-width="14.827"/><g fill="red"><path d="M231.442 247.498l-7.754-10.205c-17.268 12.441-38.391 17.705-59.478 14.822-21.087-2.883-39.613-13.569-52.166-30.088-25.916-34.101-17.997-82.738 17.65-108.42 32.871-23.685 78.02-19.704 105.172 7.802l-32.052 7.987 3.082 12.369 48.722-12.142-11.712-46.998-12.822 3.196 4.496 18.039c-31.933-24.008-78.103-25.342-112.642-.458-31.361 22.596-44.3 60.436-35.754 94.723 2.77 11.115 7.801 21.862 15.192 31.588 30.19 39.727 88.538 47.705 130.066 17.785z" fill="#fff"/></g></svg>;
+var svg_recording_off = <svg t="1663505560063" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="5393" width="32" height="32"><path d="M1002.666667 260.266667c-12.8-8.533333-29.866667-4.266667-42.666667 4.266666L725.333333 430.933333V298.666667c0-72.533333-55.466667-128-128-128H128C55.466667 170.666667 0 226.133333 0 298.666667v426.666666c0 72.533333 55.466667 128 128 128h469.333333c72.533333 0 128-55.466667 128-128v-132.266666l230.4 166.4c17.066667 12.8 46.933333 8.533333 59.733334-8.533334 4.266667-8.533333 8.533333-17.066667 8.533333-25.6V298.666667c0-17.066667-8.533333-29.866667-21.333333-38.4zM640 725.333333c0 25.6-17.066667 42.666667-42.666667 42.666667H128c-25.6 0-42.666667-17.066667-42.666667-42.666667V298.666667c0-25.6 17.066667-42.666667 42.666667-42.666667h469.333333c25.6 0 42.666667 17.066667 42.666667 42.666667v426.666666z m298.666667-81.066666L755.2 512 938.666667 379.733333v264.533334z" p-id="5394" fill="#8a8a8a"></path></svg>;
+var svg_recording_on = <svg t="1663505598640" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="5644" width="32" height="32"><path d="M1002.666667 260.266667c-12.8-8.533333-29.866667-4.266667-42.666667 4.266666L725.333333 430.933333V298.666667c0-72.533333-55.466667-128-128-128H128C55.466667 170.666667 0 226.133333 0 298.666667v426.666666c0 72.533333 55.466667 128 128 128h469.333333c72.533333 0 128-55.466667 128-128v-132.266666l230.4 166.4c17.066667 12.8 46.933333 8.533333 59.733334-8.533334 4.266667-8.533333 8.533333-17.066667 8.533333-25.6V298.666667c0-17.066667-8.533333-29.866667-21.333333-38.4z" p-id="5645" fill="#2C8CFF"></path></svg>;
 
 var cur_window_state = view.windowState;
 function check_state_change() {
@@ -76,7 +78,7 @@ class EditOsPassword: Reactor.Component {
 
 function editOSPassword(login=false) {
     var p0 = handler.get_option('os-password');
-    msgbox("custom-os-password", 'OS Password', p0, function(res=null) {
+    msgbox("custom-os-password", 'OS Password', p0, "", function(res=null) {
         if (!res) return;
         var a0 = handler.get_option('auto-login') != '';
         var p = (res.password || '').trim();
@@ -89,6 +91,8 @@ function editOSPassword(login=false) {
         }
       });
 }
+
+var recording = false;
 
 class Header: Reactor.Component {
     this var conn_note = "";
@@ -139,14 +143,33 @@ class Header: Reactor.Component {
             <span #chat>{svg_chat}</span>
             <span #action>{svg_action}</span>
             <span #display>{svg_display}</span>
+            <span #keyboard>{svg_keyboard}</span>
+            {recording_enabled ? <span #recording>{recording ? svg_recording_on : svg_recording_off}</span> : ""}
+            {this.renderKeyboardPop()}
             {this.renderDisplayPop()}
             {this.renderActionPop()}
         </div>;
     }
 
+    function renderKeyboardPop(){
+        return <popup>
+            <menu.context #keyboard-options>
+                <li #legacy><span>{svg_checkmark}</span>{translate('Legacy mode')}</li> 
+                <li #map><span>{svg_checkmark}</span>{translate('Map mode')}</li> 
+            </menu>
+        </popup>;
+    }
+
     function renderDisplayPop() {
         var codecs = handler.supported_hwcodec();
         var show_codec = handler.has_hwcodec() && (codecs[0] || codecs[1]);
+
+        var cursor_embedded = false;
+        if ((pi.displays || []).length > 0) {
+            if (pi.displays.length > pi.current_display) {
+                cursor_embedded = pi.displays[pi.current_display].cursor_embedded;
+            }
+        }
 
         return <popup>
             <menu.context #display-options>
@@ -168,7 +191,7 @@ class Header: Reactor.Component {
                 {codecs[1] ? <li #h265 type="codec-preference"><span>{svg_checkmark}</span>H265</li> : ""}
                 </div> : ""}
                 <div .separator />
-                <li #show-remote-cursor .toggle-option><span>{svg_checkmark}</span>{translate('Show remote cursor')}</li> 
+                {!cursor_embedded && <li #show-remote-cursor .toggle-option><span>{svg_checkmark}</span>{translate('Show remote cursor')}</li>}
                 <li #show-quality-monitor .toggle-option><span>{svg_checkmark}</span>{translate('Show quality monitor')}</li> 
                 {audio_enabled ? <li #disable-audio .toggle-option><span>{svg_checkmark}</span>{translate('Mute')}</li> : ""}
                 {is_win && pi.platform == 'Windows' && file_enabled ? <li #enable-file-transfer .toggle-option><span>{svg_checkmark}</span>{translate('Allow file copy and paste')}</li> : ""}
@@ -185,7 +208,7 @@ class Header: Reactor.Component {
                 {keyboard_enabled ? <li #os-password>{translate('OS Password')}<EditOsPassword /></li> : ""}
                 <li #transfer-file>{translate('Transfer File')}</li> 
                 <li #tunnel>{translate('TCP Tunneling')}</li> 
-                {handler.get_audit_server() && <li #note>{translate('Note')}</li>}
+                {handler.get_audit_server("conn") && <li #note>{translate('Note')}</li>}
                 <div .separator />
                 {keyboard_enabled && (pi.platform == "Linux" || pi.sas_enabled) ? <li #ctrl-alt-del>{translate('Insert')} Ctrl + Alt + Del</li> : ""}
                 {restart_enabled && (pi.platform == "Linux" || pi.platform == "Windows" || pi.platform == "Mac OS") ? <li #restart_remote_device>{translate('Restart Remote Device')}</li> : ""}
@@ -263,6 +286,20 @@ class Header: Reactor.Component {
         me.popup(menu);
     }
 
+    event click $(#keyboard) (_, me) {
+        var menu = $(menu#keyboard-options);
+        me.popup(menu);
+    }
+
+    event click $(span#recording) (_, me) {
+        recording = !recording;
+        header.update();
+        if (recording)
+            handler.refresh_video();
+        else
+            handler.record_screen(false, display_width, display_height);
+    }
+
     event click $(#screen) (_, me) {
         if (pi.current_display == me.index) return;
         handler.switch_display(me.index);
@@ -290,7 +327,7 @@ class Header: Reactor.Component {
         var self = this;
         msgbox("custom", "Note", <div .form>
          <textarea .outline-focus spellcheck="false" name="text" novalue="input note here" style="overflow: scroll-indicator; width:*; height: 140px; font-size: 1.2em; padding: 0.5em;">{self.conn_note}</textarea>
-          </div>, function(res=null) {
+          </div>, "", function(res=null) {
             if (!res) return;
             if (!res.text) return;
             self.conn_note = res.text;
@@ -303,9 +340,15 @@ class Header: Reactor.Component {
     }
 
     event click $(#restart_remote_device) {
-        msgbox("restart-confirmation", translate("Restart Remote Device"), translate("Are you sure you want to restart") + " " + pi.username + "@" + pi.hostname + "(" + get_id() + ") ?", function(res=null) {
-            if (res != null) handler.restart_remote_device();
-        });
+        msgbox(
+            "restart-confirmation",
+            translate("Restart Remote Device"),
+            translate("Are you sure you want to restart") + " " + pi.username + "@" + pi.hostname + "(" + get_id() + ") ?",
+            "",
+            function(res=null) {
+                if (res != null) handler.restart_remote_device();
+            }
+        );
     }
 
     event click $(#lock-screen) {
@@ -335,7 +378,7 @@ class Header: Reactor.Component {
             togglePrivacyMode(me.id);
         } else if (me.id == "show-quality-monitor") {
             toggleQualityMonitor(me.id);
-        }else if (me.attributes.hasClass("toggle-option")) {
+        } else if (me.attributes.hasClass("toggle-option")) {
             handler.toggle_option(me.id);
             toggleMenuState();
         } else if (!me.attributes.hasClass("selected")) {
@@ -352,6 +395,17 @@ class Header: Reactor.Component {
             toggleMenuState();
         }
     }
+
+    event click $(menu#keyboard-options>li) (_, me) {
+        if (me.id == "legacy") {
+            handler.save_keyboard_mode("legacy");
+        } else if (me.id == "map") {
+            handler.save_keyboard_mode("map");
+        } else if (me.id == "translate") {
+            handler.save_keyboard_mode("translate");
+        }
+        toggleMenuState()
+    }
 }
 
 function handle_custom_image_quality() {
@@ -359,7 +413,7 @@ function handle_custom_image_quality() {
     var bitrate = (tmp[0] || 50);
     msgbox("custom", "Custom Image Quality", "<div .form> \
           <div><input type=\"hslider\" style=\"width: 50%\" name=\"bitrate\" max=\"100\" min=\"10\" value=\"" + bitrate + "\"/ buddy=\"bitrate-buddy\"><b #bitrate-buddy>x</b>% Bitrate</div> \
-      </div>", function(res=null) {
+      </div>", "", function(res=null) {
         if (!res) return;
         if (!res.bitrate) return;
         handler.save_custom_image_quality(res.bitrate);
@@ -375,10 +429,15 @@ function toggleMenuState() {
     var s = handler.get_view_style();
     if (!s) s = "original";
     values.push(s);
+    var k = handler.get_keyboard_mode();
+    values.push(k);
     var c = handler.get_option("codec-preference");
     if (!c) c = "auto";
     values.push(c);
     for (var el in $$(menu#display-options li)) {
+        el.attributes.toggleClass("selected", values.indexOf(el.id) >= 0);
+    }
+    for (var el in $$(menu#keyboard-options>li)) {
         el.attributes.toggleClass("selected", values.indexOf(el.id) >= 0);
     }
     for (var id in ["show-remote-cursor", "show-quality-monitor", "disable-audio", "enable-file-transfer", "disable-clipboard", "lock-after-session-end"]) {
@@ -421,6 +480,14 @@ handler.updatePi = function(v) {
     }
 }
 
+handler.updateDisplays = function(v) {
+    pi.displays = v;
+    header.update();
+    if (is_port_forward) {
+        view.windowState = View.WINDOW_MINIMIZED;
+    }
+}
+
 function updatePrivacyMode() {
     var el = $(li#privacy-mode);
     if (el) {
@@ -443,7 +510,7 @@ handler.updatePrivacyMode = updatePrivacyMode;
 function togglePrivacyMode(privacy_id) {
     var supported = handler.is_privacy_mode_supported();
     if (!supported) {
-        msgbox("nocancel", translate("Privacy mode"), translate("Unsupported"), function() { });
+        msgbox("nocancel", translate("Privacy mode"), translate("Unsupported"), "", function() { });
     } else {
         handler.toggle_option(privacy_id);
     }

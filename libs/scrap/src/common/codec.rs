@@ -7,7 +7,11 @@ use std::{
 
 #[cfg(feature = "hwcodec")]
 use crate::hwcodec::*;
-use crate::vpxcodec::*;
+#[cfg(feature = "mediacodec")]
+use crate::mediacodec::{
+    MediaCodecDecoder, MediaCodecDecoders, H264_DECODER_SUPPORT, H265_DECODER_SUPPORT,
+};
+use crate::{vpxcodec::*, ImageFormat};
 
 use hbb_common::{
     anyhow::anyhow,
@@ -15,11 +19,11 @@ use hbb_common::{
     message_proto::{video_frame, EncodedVideoFrames, Message, VideoCodecState},
     ResultType,
 };
-#[cfg(feature = "hwcodec")]
+#[cfg(any(feature = "hwcodec", feature = "mediacodec"))]
 use hbb_common::{
     config::{Config2, PeerConfig},
     lazy_static,
-    message_proto::video_codec_state::PerferCodec,
+    message_proto::video_codec_state::PreferCodec,
 };
 
 #[cfg(feature = "hwcodec")]
@@ -82,6 +86,8 @@ pub struct Decoder {
     hw: HwDecoders,
     #[cfg(feature = "hwcodec")]
     i420: Vec<u8>,
+    #[cfg(feature = "mediacodec")]
+    media_codec: MediaCodecDecoders,
 }
 
 #[derive(Debug, Clone)]
@@ -143,29 +149,29 @@ impl Encoder {
                     && states.iter().all(|(_, s)| s.score_h265 > 0);
 
                 // Preference first
-                let mut preference = PerferCodec::Auto;
+                let mut preference = PreferCodec::Auto;
                 let preferences: Vec<_> = states
                     .iter()
                     .filter(|(_, s)| {
-                        s.perfer == PerferCodec::VPX.into()
-                            || s.perfer == PerferCodec::H264.into() && enabled_h264
-                            || s.perfer == PerferCodec::H265.into() && enabled_h265
+                        s.prefer == PreferCodec::VPX.into()
+                            || s.prefer == PreferCodec::H264.into() && enabled_h264
+                            || s.prefer == PreferCodec::H265.into() && enabled_h265
                     })
-                    .map(|(_, s)| s.perfer)
+                    .map(|(_, s)| s.prefer)
                     .collect();
                 if preferences.len() > 0 && preferences.iter().all(|&p| p == preferences[0]) {
-                    preference = preferences[0].enum_value_or(PerferCodec::Auto);
+                    preference = preferences[0].enum_value_or(PreferCodec::Auto);
                 }
 
                 match preference {
-                    PerferCodec::VPX => *name.lock().unwrap() = None,
-                    PerferCodec::H264 => {
+                    PreferCodec::VPX => *name.lock().unwrap() = None,
+                    PreferCodec::H264 => {
                         *name.lock().unwrap() = best.h264.map_or(None, |c| Some(c.name))
                     }
-                    PerferCodec::H265 => {
+                    PreferCodec::H265 => {
                         *name.lock().unwrap() = best.h265.map_or(None, |c| Some(c.name))
                     }
-                    PerferCodec::Auto => {
+                    PreferCodec::Auto => {
                         // score encoder
                         let mut score_vpx = SCORE_VPX;
                         let mut score_h264 = best.h264.as_ref().map_or(0, |c| c.score);
@@ -212,7 +218,7 @@ impl Encoder {
     #[inline]
     pub fn current_hw_encoder_name() -> Option<String> {
         #[cfg(feature = "hwcodec")]
-        if check_hwcodec_config() {
+        if enable_hwcodec_option() {
             return HwEncoder::current_name().lock().unwrap().clone();
         } else {
             return None;
@@ -223,7 +229,7 @@ impl Encoder {
 
     pub fn supported_encoding() -> (bool, bool) {
         #[cfg(feature = "hwcodec")]
-        if check_hwcodec_config() {
+        if enable_hwcodec_option() {
             let best = HwEncoder::best();
             (
                 best.h264.as_ref().map_or(false, |c| c.score > 0),
@@ -240,22 +246,36 @@ impl Encoder {
 impl Decoder {
     pub fn video_codec_state(_id: &str) -> VideoCodecState {
         #[cfg(feature = "hwcodec")]
-        if check_hwcodec_config() {
+        if enable_hwcodec_option() {
             let best = HwDecoder::best();
-            VideoCodecState {
+            return VideoCodecState {
                 score_vpx: SCORE_VPX,
                 score_h264: best.h264.map_or(0, |c| c.score),
                 score_h265: best.h265.map_or(0, |c| c.score),
-                perfer: Self::codec_preference(_id).into(),
-                ..Default::default()
-            }
-        } else {
-            return VideoCodecState {
-                score_vpx: SCORE_VPX,
+                prefer: Self::codec_preference(_id).into(),
                 ..Default::default()
             };
         }
-        #[cfg(not(feature = "hwcodec"))]
+        #[cfg(feature = "mediacodec")]
+        if enable_hwcodec_option() {
+            let score_h264 = if H264_DECODER_SUPPORT.load(std::sync::atomic::Ordering::SeqCst) {
+                92
+            } else {
+                0
+            };
+            let score_h265 = if H265_DECODER_SUPPORT.load(std::sync::atomic::Ordering::SeqCst) {
+                94
+            } else {
+                0
+            };
+            return VideoCodecState {
+                score_vpx: SCORE_VPX,
+                score_h264,
+                score_h265,
+                prefer: Self::codec_preference(_id).into(),
+                ..Default::default()
+            };
+        }
         VideoCodecState {
             score_vpx: SCORE_VPX,
             ..Default::default()
@@ -267,25 +287,36 @@ impl Decoder {
         Decoder {
             vpx,
             #[cfg(feature = "hwcodec")]
-            hw: HwDecoder::new_decoders(),
+            hw: if enable_hwcodec_option() {
+                HwDecoder::new_decoders()
+            } else {
+                HwDecoders::default()
+            },
             #[cfg(feature = "hwcodec")]
             i420: vec![],
+            #[cfg(feature = "mediacodec")]
+            media_codec: if enable_hwcodec_option() {
+                MediaCodecDecoder::new_decoders()
+            } else {
+                MediaCodecDecoders::default()
+            },
         }
     }
 
     pub fn handle_video_frame(
         &mut self,
         frame: &video_frame::Union,
+        fmt: ImageFormat,
         rgb: &mut Vec<u8>,
     ) -> ResultType<bool> {
         match frame {
             video_frame::Union::Vp9s(vp9s) => {
-                Decoder::handle_vp9s_video_frame(&mut self.vpx, vp9s, rgb)
+                Decoder::handle_vp9s_video_frame(&mut self.vpx, vp9s, fmt, rgb)
             }
             #[cfg(feature = "hwcodec")]
             video_frame::Union::H264s(h264s) => {
                 if let Some(decoder) = &mut self.hw.h264 {
-                    Decoder::handle_hw_video_frame(decoder, h264s, rgb, &mut self.i420)
+                    Decoder::handle_hw_video_frame(decoder, h264s, fmt, rgb, &mut self.i420)
                 } else {
                     Err(anyhow!("don't support h264!"))
                 }
@@ -293,7 +324,23 @@ impl Decoder {
             #[cfg(feature = "hwcodec")]
             video_frame::Union::H265s(h265s) => {
                 if let Some(decoder) = &mut self.hw.h265 {
-                    Decoder::handle_hw_video_frame(decoder, h265s, rgb, &mut self.i420)
+                    Decoder::handle_hw_video_frame(decoder, h265s, fmt, rgb, &mut self.i420)
+                } else {
+                    Err(anyhow!("don't support h265!"))
+                }
+            }
+            #[cfg(feature = "mediacodec")]
+            video_frame::Union::H264s(h264s) => {
+                if let Some(decoder) = &mut self.media_codec.h264 {
+                    Decoder::handle_mediacodec_video_frame(decoder, h264s, fmt, rgb)
+                } else {
+                    Err(anyhow!("don't support h264!"))
+                }
+            }
+            #[cfg(feature = "mediacodec")]
+            video_frame::Union::H265s(h265s) => {
+                if let Some(decoder) = &mut self.media_codec.h265 {
+                    Decoder::handle_mediacodec_video_frame(decoder, h265s, fmt, rgb)
                 } else {
                     Err(anyhow!("don't support h265!"))
                 }
@@ -305,6 +352,7 @@ impl Decoder {
     fn handle_vp9s_video_frame(
         decoder: &mut VpxDecoder,
         vp9s: &EncodedVideoFrames,
+        fmt: ImageFormat,
         rgb: &mut Vec<u8>,
     ) -> ResultType<bool> {
         let mut last_frame = Image::new();
@@ -321,7 +369,7 @@ impl Decoder {
         if last_frame.is_null() {
             Ok(false)
         } else {
-            last_frame.rgb(1, true, rgb);
+            last_frame.to(fmt, 1, rgb);
             Ok(true)
         }
     }
@@ -330,14 +378,15 @@ impl Decoder {
     fn handle_hw_video_frame(
         decoder: &mut HwDecoder,
         frames: &EncodedVideoFrames,
-        rgb: &mut Vec<u8>,
+        fmt: ImageFormat,
+        raw: &mut Vec<u8>,
         i420: &mut Vec<u8>,
     ) -> ResultType<bool> {
         let mut ret = false;
         for h264 in frames.frames.iter() {
             for image in decoder.decode(&h264.data)? {
                 // TODO: just process the last frame
-                if image.bgra(rgb, i420).is_ok() {
+                if image.to_fmt(fmt, raw, i420).is_ok() {
                     ret = true;
                 }
             }
@@ -345,26 +394,40 @@ impl Decoder {
         return Ok(ret);
     }
 
-    #[cfg(feature = "hwcodec")]
-    fn codec_preference(id: &str) -> PerferCodec {
+    #[cfg(feature = "mediacodec")]
+    fn handle_mediacodec_video_frame(
+        decoder: &mut MediaCodecDecoder,
+        frames: &EncodedVideoFrames,
+        fmt: ImageFormat,
+        raw: &mut Vec<u8>,
+    ) -> ResultType<bool> {
+        let mut ret = false;
+        for h264 in frames.frames.iter() {
+            return decoder.decode(&h264.data, fmt, raw);
+        }
+        return Ok(false);
+    }
+
+    #[cfg(any(feature = "hwcodec", feature = "mediacodec"))]
+    fn codec_preference(id: &str) -> PreferCodec {
         let codec = PeerConfig::load(id)
             .options
             .get("codec-preference")
             .map_or("".to_owned(), |c| c.to_owned());
         if codec == "vp9" {
-            PerferCodec::VPX
+            PreferCodec::VPX
         } else if codec == "h264" {
-            PerferCodec::H264
+            PreferCodec::H264
         } else if codec == "h265" {
-            PerferCodec::H265
+            PreferCodec::H265
         } else {
-            PerferCodec::Auto
+            PreferCodec::Auto
         }
     }
 }
 
-#[cfg(feature = "hwcodec")]
-fn check_hwcodec_config() -> bool {
+#[cfg(any(feature = "hwcodec", feature = "mediacodec"))]
+fn enable_hwcodec_option() -> bool {
     if let Some(v) = Config2::get().options.get("enable-hwcodec") {
         return v != "N";
     }

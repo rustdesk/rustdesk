@@ -7,11 +7,18 @@ name: CI
 on:
   workflow_dispatch:
   pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "README.md"
   push:
     branches:
       - master
     tags:
       - '*'
+    paths-ignore:
+      - ".github/**"
+      - "docs/**"
+      - "README.md"
 
 jobs:
   # ensure_cargo_fmt:
@@ -24,7 +31,7 @@ jobs:
   #       default: true
   #       profile: minimal
   #       components: rustfmt
-  #   - uses: actions/checkout@v2
+  #   - uses: actions/checkout@v3
   #   - run: cargo fmt -- --check
 
   # min_version:
@@ -32,7 +39,7 @@ jobs:
   #   runs-on: ubuntu-20.04
   #   steps:
   #   - name: Checkout source code
-  #     uses: actions/checkout@v2
+  #     uses: actions/checkout@v3
 
   #   - name: Install rust toolchain (v${{ env.MIN_SUPPORTED_RUST_VERSION }})
   #     uses: actions-rs/toolchain@v1
@@ -72,13 +79,13 @@ jobs:
           # - { target: x86_64-unknown-linux-musl   , os: ubuntu-20.04, use-cross: true }
     steps:
     - name: Checkout source code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     - name: Install prerequisites
       shell: bash
       run: |
         case ${{ matrix.job.target }} in
-          x86_64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev ;;
+          x86_64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev;;
           # arm-unknown-linux-*) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
           # aarch64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
         esac

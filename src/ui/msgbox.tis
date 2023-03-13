@@ -22,6 +22,7 @@ class MsgboxComponent: Reactor.Component {
         this.type = params.type;
         this.title = params.title;
         this.content = params.content;
+        this.link = params.link;
         this.remember = params.remember;
         this.callback = params.callback;
         this.hasRetry = params.hasRetry;
@@ -63,7 +64,7 @@ class MsgboxComponent: Reactor.Component {
             var ts = this.auto_login ? { checked: true } : {};
             return <div .form>
               <PasswordComponent value={this.content} />
-              <div><button|checkbox(auto_login) {ts}>{translate('Auto Login')}</button></div>
+              <div><button|checkbox(auto_login) {ts} style="width: *; word-wrap: break-word; overflow-wrap: break-word; white-space: normal; height: auto; overflow: hidden;">{translate('Auto Login')}</button></div>
               </div>;
         }
         return this.content;
@@ -93,6 +94,7 @@ class MsgboxComponent: Reactor.Component {
         var content = this.getContent();
         var hasCancel = this.type.indexOf("error") < 0 && this.type.indexOf("nocancel") < 0 && this.type != "restarting";
         var hasOk = this.type != "connecting" && this.type != "success" && this.type.indexOf("nook") < 0;
+        var hasLink = this.link != "";
         var hasClose = this.type.indexOf("hasclose") >= 0;
         var show_progress = this.type == "connecting";
         var me = this;
@@ -121,6 +123,7 @@ class MsgboxComponent: Reactor.Component {
                     {hasCancel || this.hasRetry ? <button .button #cancel .outline>{translate(this.hasRetry ? "OK" : "Cancel")}</button> : ""}
                     {this.hasSkip() ? <button .button #skip .outline>{translate('Skip')}</button> : ""}
                     {hasOk || this.hasRetry ? <button .button #submit>{translate(this.hasRetry ? "Retry" : "OK")}</button> : ""}
+                    {hasLink ? <button .button #jumplink .outline>{translate('JumpLink')}</button> : ""}
                     {hasClose ? <button .button #cancel .outline>{translate('Close')}</button> : ""}
                 </div>
             </div>
@@ -154,6 +157,12 @@ class MsgboxComponent: Reactor.Component {
         values.skip = true;
         if (this.callback) this.callback(values);
         if (this.close) this.close();
+    }
+
+    event click $(button#jumplink) {
+        if (this.link.indexOf("http") == 0) {
+            Sciter.launch(this.link);
+        }
     }
     
     event click $(button#submit) {
@@ -190,6 +199,14 @@ class MsgboxComponent: Reactor.Component {
             if (evt.keyCode == Event.VK_ESCAPE) {
                 this.cancel();
             }
+        }
+    }
+
+    event click $(button#select_directory) {
+        var folder = view.selectFolder(translate("Change"), $(#folderPath).text);
+        if (folder) {
+            if (folder.indexOf("file://") == 0) folder = folder.substring(7);
+            $(#folderPath).text = folder;
         }
     }
     

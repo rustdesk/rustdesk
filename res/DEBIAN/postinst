@@ -1,0 +1,23 @@
+#!/bin/bash
+
+set -e
+
+if [ "$1" = configure ]; then
+
+	INITSYS=$(ls -al /proc/1/exe | awk -F' ' '{print $NF}' | awk -F'/' '{print $NF}')
+	
+	if [ "systemd" == "$INITSYS" ]; then
+		ln -s /usr/lib/rustdesk/rustdesk /usr/bin/rustdesk
+
+		if [ -e /etc/systemd/system/rustdesk.service ]; then
+			rm /etc/systemd/system/rustdesk.service /usr/lib/systemd/system/rustdesk.service /usr/lib/systemd/user/rustdesk.service >/dev/null  2>&1
+		fi
+		version=$(python3 -V 2>&1 | grep -Po '(?<=Python )(.+)')
+		parsedVersion=$(echo "${version//./}")
+        mkdir -p /usr/lib/systemd/system/
+		cp /usr/share/rustdesk/files/systemd/rustdesk.service /usr/lib/systemd/system/rustdesk.service
+		systemctl daemon-reload
+		systemctl enable rustdesk
+		systemctl start rustdesk
+	fi
+fi

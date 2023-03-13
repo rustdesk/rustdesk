@@ -36,24 +36,22 @@ lib/generated_plugin_registrant.dart
 
 # Symbolication related
 app.*.symbols
-
 # Obfuscation related
 app.*.map.json
 jniLibs
-
 .vscode
 
 # flutter rust bridge
 lib/generated_bridge.dart
+lib/generated_bridge.freezed.dart
 
 # Flutter Generated Files
-linux/flutter/generated_plugin_registrant.cc
-linux/flutter/generated_plugin_registrant.h
-linux/flutter/generated_plugins.cmake
-macos/Flutter/GeneratedPluginRegistrant.swift
-windows/flutter/generated_plugin_registrant.cc
-windows/flutter/generated_plugin_registrant.h
-windows/flutter/generated_plugins.cmake
+**/GeneratedPluginRegistrant.swift
+**/flutter/generated_plugin_registrant.cc
+**/flutter/generated_plugin_registrant.h
+**/flutter/generated_plugins.cmake
+**/Runner/bridge_generated.h
 flutter_export_environment.sh
 Flutter-Generated.xcconfig
 key.jks
+macos/rustdesk.xcodeproj/project.xcworkspace/

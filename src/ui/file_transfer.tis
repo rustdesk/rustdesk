@@ -188,7 +188,8 @@ class JobTable: Reactor.Component {
         job.confirmed = true;
         return;
       }else if (job.type == "del-dir"){
-        handler.remove_dir_all(job.id, job.path, job.is_remote);
+        // TODO: include_hidden is always true
+        handler.remove_dir_all(job.id, job.path, job.is_remote, true);
         job.confirmed = true;
         return;
       }
@@ -244,7 +245,13 @@ class JobTable: Reactor.Component {
     var percent = job.total_size == 0 ? 100 : (100. * job.finished_size / job.total_size).toInteger(); // (100. * i / (n || 1)).toInteger();
     if (job.finished) percent = '100';
     if (percent) res += ", " + percent + "%";
-    if (job.finished) res = translate("Finished") + " " + res;
+    if (job.finished) {
+      if (job.err == "skipped") {
+        res = translate("Skipped") + " " + res;
+      } else {
+        res = translate("Finished") + " " + res;
+      }
+    }
     if (job.speed) res += ", " + getSize(0, job.speed) + "/s";
     return res;
   }
@@ -267,9 +274,10 @@ class JobTable: Reactor.Component {
     if (file_num < job.file_num) return;
     job.file_num = file_num;
     var n = job.num_entries || job.entries.length;
-    job.finished = job.file_num >= n - 1 || err == "cancel";
+    job.finished = job.file_num >= n - 1 || err == "cancel" || err == "skipped";
     job.finished_size = finished_size;
     job.speed = speed || 0;
+    job.err = err;
     this.updateJob(job);
     if (job.type == "del-dir") {
       if (job.finished) {
@@ -534,7 +542,7 @@ class FolderView : Reactor.Component {
       msgbox("custom", translate("Create Folder"), "<div .form> \
             <div>" + translate("Please enter the folder name") + ":</div> \
             <div><input|text(name) .outline-focus /></div> \
-        </div>", function(res=null) {
+        </div>", "", function(res=null) {
           if (!res) return;
           if (!res.name) return;
           var name = res.name.trim();
@@ -694,7 +702,7 @@ handler.clearAllJobs = function() {
   file_transfer.job_table.clearAllJobs();
 }
 
-handler.addJob = function (id, path, to, file_num, show_hidden, is_remote) {
+handler.addJob = function (id, path, to, file_num, show_hidden, is_remote) { // load last job
   // stdout.println("restore job: " + is_remote);
   file_transfer.job_table.addJob(id,path,to,file_num,show_hidden,is_remote);
 }
@@ -715,7 +723,7 @@ function confirmDelete(id ,path, is_remote) {
   msgbox("custom-skip", "Confirm Delete", "<div .form> \
         <div>" + translate('Are you sure you want to delete this file?') + "</div> \
         <div.ellipsis style=\"font-weight: bold;\">" + path + "</div> \
-    </div>", function(res=null) {
+    </div>", "", function(res=null) {
       if (!res) {
         file_transfer.job_table.updateJobStatus(id, -1, "cancel");
         file_transfer.job_table.cancelDeletePolling();
@@ -745,7 +753,7 @@ handler.confirmDeleteFiles = function(id, i, name) {
         <div>" + translate('Are you sure you want to delete this file?') + "</div> \
         <div.ellipsis style=\"font-weight: bold;\" .text>" + file_path + "</div> \
         <div><button|checkbox(remember) {ts}>" + translate('Do this for all conflicts') + "</button></div> \
-    </div>", function(res=null) {
+    </div>", "", function(res=null) {
       if (!res) {
         jt.updateJobStatus(id, i - 1, "cancel");
         file_transfer.job_table.cancelDeletePolling();
@@ -777,7 +785,7 @@ handler.overrideFileConfirm = function(id, file_num, to, is_upload) {
         <div>" + translate('This file exists, skip or overwrite this file?') + "</div> \
         <div.ellipsis style=\"font-weight: bold;\" .text>" + to + "</div> \
         <div><button|checkbox(remember) {ts}>" + translate('Do this for all conflicts') + "</button></div> \
-    </div>", function(res=null) {
+    </div>", "", function(res=null) {
       if (!res) {
         jt.updateJobStatus(id, -1, "cancel");
         handler.cancel_job(id);

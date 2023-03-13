@@ -1,9 +1,8 @@
-use winapi;
-
 use self::winapi::ctypes::c_int;
 use self::winapi::shared::{basetsd::ULONG_PTR, minwindef::*, windef::*};
 use self::winapi::um::winbase::*;
 use self::winapi::um::winuser::*;
+use winapi;
 
 use crate::win::keycodes::*;
 use crate::{Key, KeyboardControllable, MouseButton, MouseControllable};
@@ -22,23 +21,25 @@ static mut LAYOUT: HKL = std::ptr::null_mut();
 pub const ENIGO_INPUT_EXTRA_VALUE: ULONG_PTR = 100;
 
 fn mouse_event(flags: u32, data: u32, dx: i32, dy: i32) -> DWORD {
-    let mut input = INPUT {
-        type_: INPUT_MOUSE,
-        u: unsafe {
-            transmute(MOUSEINPUT {
-                dx,
-                dy,
-                mouseData: data,
-                dwFlags: flags,
-                time: 0,
-                dwExtraInfo: ENIGO_INPUT_EXTRA_VALUE,
-            })
-        },
-    };
+    let mut input: INPUT = unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
+    input.type_ = INPUT_MOUSE;
+    unsafe {
+        let dst_ptr = (&mut input.u as *mut _) as *mut u8;
+        let m = MOUSEINPUT {
+            dx,
+            dy,
+            mouseData: data,
+            dwFlags: flags,
+            time: 0,
+            dwExtraInfo: ENIGO_INPUT_EXTRA_VALUE,
+        };
+        let src_ptr = (&m as *const _) as *const u8;
+        std::ptr::copy_nonoverlapping(src_ptr, dst_ptr, size_of::<MOUSEINPUT>());
+    }
     unsafe { SendInput(1, &mut input as LPINPUT, size_of::<INPUT>() as c_int) }
 }
 
-fn keybd_event(flags: u32, vk: u16, scan: u16) -> DWORD {
+fn keybd_event(mut flags: u32, vk: u16, scan: u16) -> DWORD {
     let mut scan = scan;
     unsafe {
         // https://github.com/rustdesk/rustdesk/issues/366
@@ -51,19 +52,33 @@ fn keybd_event(flags: u32, vk: u16, scan: u16) -> DWORD {
             scan = MapVirtualKeyExW(vk as _, 0, LAYOUT) as _;
         }
     }
-    let mut input = INPUT {
+
+    if flags & KEYEVENTF_UNICODE == 0 {
+        if scan >> 8 == 0xE0 || scan >> 8 == 0xE1 {
+            flags |= winapi::um::winuser::KEYEVENTF_EXTENDEDKEY;
+        }
+    }
+    let mut union: INPUT_u = unsafe { std::mem::zeroed() };
+    unsafe {
+        *union.ki_mut() = KEYBDINPUT {
+            wVk: vk,
+            wScan: scan,
+            dwFlags: flags,
+            time: 0,
+            dwExtraInfo: ENIGO_INPUT_EXTRA_VALUE,
+        };
+    }
+    let mut inputs = [INPUT {
         type_: INPUT_KEYBOARD,
-        u: unsafe {
-            transmute_copy(&KEYBDINPUT {
-                wVk: vk,
-                wScan: scan,
-                dwFlags: flags,
-                time: 0,
-                dwExtraInfo: ENIGO_INPUT_EXTRA_VALUE,
-            })
-        },
-    };
-    unsafe { SendInput(1, &mut input as LPINPUT, size_of::<INPUT>() as c_int) }
+        u: union,
+    }; 1];
+    unsafe {
+        SendInput(
+            inputs.len() as UINT,
+            inputs.as_mut_ptr(),
+            size_of::<INPUT>() as c_int,
+        )
+    }
 }
 
 fn get_error() -> String {
@@ -102,6 +117,14 @@ fn get_error() -> String {
 }
 
 impl MouseControllable for Enigo {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_mut_any(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+
     fn mouse_move_to(&mut self, x: i32, y: i32) {
         mouse_event(
             MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK,
@@ -123,9 +146,18 @@ impl MouseControllable for Enigo {
                 MouseButton::Left => MOUSEEVENTF_LEFTDOWN,
                 MouseButton::Middle => MOUSEEVENTF_MIDDLEDOWN,
                 MouseButton::Right => MOUSEEVENTF_RIGHTDOWN,
-                _ => unimplemented!(),
+                MouseButton::Back => MOUSEEVENTF_XDOWN,
+                MouseButton::Forward => MOUSEEVENTF_XDOWN,
+                _ => {
+                    log::info!("Unsupported button {:?}", button);
+                    return Ok(());
+                }
             },
-            0,
+            match button {
+                MouseButton::Back => XBUTTON1 as _,
+                MouseButton::Forward => XBUTTON2 as _,
+                _ => 0, 
+            },
             0,
             0,
         );
@@ -144,9 +176,18 @@ impl MouseControllable for Enigo {
                 MouseButton::Left => MOUSEEVENTF_LEFTUP,
                 MouseButton::Middle => MOUSEEVENTF_MIDDLEUP,
                 MouseButton::Right => MOUSEEVENTF_RIGHTUP,
-                _ => unimplemented!(),
+                MouseButton::Back => MOUSEEVENTF_XUP,
+                MouseButton::Forward => MOUSEEVENTF_XUP,
+                _ => {
+                    log::info!("Unsupported button {:?}", button);
+                    return;
+                }
             },
-            0,
+            match button {
+                MouseButton::Back => XBUTTON1 as _,
+                MouseButton::Forward => XBUTTON2 as _,
+                _ => 0, 
+            },
             0,
             0,
         );
@@ -167,6 +208,14 @@ impl MouseControllable for Enigo {
 }
 
 impl KeyboardControllable for Enigo {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_mut_any(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+    
     fn key_sequence(&mut self, sequence: &str) {
         let mut buffer = [0; 2];
 
@@ -200,7 +249,7 @@ impl KeyboardControllable for Enigo {
     fn key_down(&mut self, key: Key) -> crate::ResultType {
         let code = self.key_to_keycode(key);
         if code == 0 || code == 65535 {
-            return Err("".into()); 
+            return Err("".into());
         }
         let res = keybd_event(0, code, 0);
         if res == 0 {
@@ -227,7 +276,8 @@ impl KeyboardControllable for Enigo {
 }
 
 impl Enigo {
-    /// Gets the (width, height) of the main display in screen coordinates (pixels).
+    /// Gets the (width, height) of the main display in screen coordinates
+    /// (pixels).
     ///
     /// # Example
     ///

@@ -1,0 +1,34 @@
+pkgname=rustdesk
+pkgver=1.2.0
+pkgrel=0
+epoch=
+pkgdesc=""
+arch=('x86_64')
+url=""
+license=('AGPL-3.0')
+groups=()
+depends=('gtk3' 'xdotool' 'libxcb' 'libxfixes' 'alsa-lib' 'curl' 'libva' 'libvdpau' 'libappindicator-gtk3')
+makedepends=()
+checkdepends=()
+optdepends=()
+provides=()
+conflicts=()
+replaces=()
+backup=()
+options=()
+install=pacman_install
+changelog=
+noextract=()
+md5sums=() #generate with 'makepkg -g'
+
+package() {
+  if [[ ${FLUTTER} ]]; then
+	  mkdir -p "${pkgdir}/usr/lib/rustdesk" && cp -r ${HBB}/flutter/build/linux/x64/release/bundle/* -t "${pkgdir}/usr/lib/rustdesk"
+  fi
+  mkdir -p "${pkgdir}/usr/bin"
+  pushd ${pkgdir} && ln -s /usr/lib/rustdesk/rustdesk usr/bin/rustdesk && popd
+  install -Dm 644 $HBB/res/rustdesk.service -t "${pkgdir}/usr/share/rustdesk/files"
+  install -Dm 644 $HBB/res/rustdesk.desktop -t "${pkgdir}/usr/share/rustdesk/files"
+  install -Dm 644 $HBB/res/rustdesk-link.desktop -t "${pkgdir}/usr/share/rustdesk/files"
+  install -Dm 644 $HBB/res/128x128@2x.png "${pkgdir}/usr/share/rustdesk/files/rustdesk.png"
+}

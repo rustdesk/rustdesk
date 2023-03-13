@@ -2,30 +2,33 @@ use std::{
     collections::HashMap,
     net::SocketAddr,
     ops::{Deref, Not},
+    str::FromStr,
     sync::{mpsc, Arc, Mutex, RwLock},
 };
 
 pub use async_trait::async_trait;
+use bytes::Bytes;
 #[cfg(not(any(target_os = "android", target_os = "linux")))]
 use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
     Device, Host, StreamConfig,
 };
 use magnum_opus::{Channels::*, Decoder as AudioDecoder};
-use scrap::{
-    codec::{Decoder, DecoderCfg},
-    VpxDecoderConfig, VpxVideoCodecId,
-};
-
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
+pub use file_trait::FileManager;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use hbb_common::tokio::sync::mpsc::UnboundedSender;
 use hbb_common::{
     allow_err,
     anyhow::{anyhow, Context},
     bail,
-    config::{Config, PeerConfig, PeerInfoSerde, CONNECT_TIMEOUT, RELAY_PORT, RENDEZVOUS_TIMEOUT},
-    log,
+    config::{
+        Config, PeerConfig, PeerInfoSerde, CONNECT_TIMEOUT, READ_TIMEOUT, RELAY_PORT,
+        RENDEZVOUS_TIMEOUT,
+    },
+    get_version_number, log,
     message_proto::{option_message::BoolOption, *},
     protobuf::Message as _,
     rand,
@@ -36,25 +39,70 @@ use hbb_common::{
     tokio::time::Duration,
     AddrMangle, ResultType, Stream,
 };
+pub use helper::LatencyController;
+pub use helper::*;
+use scrap::{
+    codec::{Decoder, DecoderCfg},
+    record::{Recorder, RecorderContext},
+    VpxDecoderConfig, VpxVideoCodecId,
+    ImageFormat,
+};
+
+use crate::{
+    common::{self, is_keyboard_mode_supported},
+    server::video_service::{SCRAP_X11_REF_URL, SCRAP_X11_REQUIRED},
+};
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::{
+    common::{check_clipboard, ClipboardContext, CLIPBOARD_INTERVAL},
+    ui_session_interface::SessionPermissionConfig,
+};
 
 pub use super::lang::*;
+
 pub mod file_trait;
-pub use file_trait::FileManager;
 pub mod helper;
-pub use helper::*;
+pub mod io_loop;
+
+pub const MILLI1: Duration = Duration::from_millis(1);
 pub const SEC30: Duration = Duration::from_secs(30);
 
+/// Client of the remote desktop.
 pub struct Client;
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+struct TextClipboardState {
+    is_required: bool,
+    running: bool,
+}
 
 #[cfg(not(any(target_os = "android", target_os = "linux")))]
 lazy_static::lazy_static! {
-static ref AUDIO_HOST: Host = cpal::default_host();
+    static ref AUDIO_HOST: Host = cpal::default_host();
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+lazy_static::lazy_static! {
+    static ref ENIGO: Arc<Mutex<enigo::Enigo>> = Arc::new(Mutex::new(enigo::Enigo::new()));
+    static ref OLD_CLIPBOARD_TEXT: Arc<Mutex<String>> = Default::default();
+    static ref TEXT_CLIPBOARD_STATE: Arc<Mutex<TextClipboardState>> = Arc::new(Mutex::new(TextClipboardState::new()));
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn get_key_state(key: enigo::Key) -> bool {
+    use enigo::KeyboardControllable;
+    #[cfg(target_os = "macos")]
+    if key == enigo::Key::NumLock {
+        return true;
+    }
+    ENIGO.lock().unwrap().get_key_state(key)
 }
 
 cfg_if::cfg_if! {
     if #[cfg(target_os = "android")] {
 
-use libc::{c_float, c_int, c_void};
+use hbb_common::libc::{c_float, c_int, c_void};
 type Oboe = *mut c_void;
 extern "C" {
     fn create_oboe_player(channels: c_int, sample_rate: c_int) -> Oboe;
@@ -111,13 +159,15 @@ impl Drop for OboePlayer {
 }
 
 impl Client {
+    /// Start a new connection.
     pub async fn start(
         peer: &str,
         key: &str,
         token: &str,
         conn_type: ConnType,
+        interface: impl Interface,
     ) -> ResultType<(Stream, bool)> {
-        match Self::_start(peer, key, token, conn_type).await {
+        match Self::_start(peer, key, token, conn_type, interface).await {
             Err(err) => {
                 let err_str = err.to_string();
                 if err_str.starts_with("Failed") {
@@ -130,33 +180,39 @@ impl Client {
         }
     }
 
+    /// Start a new connection.
     async fn _start(
         peer: &str,
         key: &str,
         token: &str,
         conn_type: ConnType,
+        interface: impl Interface,
     ) -> ResultType<(Stream, bool)> {
         // to-do: remember the port for each peer, so that we can retry easier
-        let any_addr = Config::get_any_listen_addr();
-        if crate::is_ip(peer) {
+        if hbb_common::is_ip_str(peer) {
             return Ok((
                 socket_client::connect_tcp(
                     crate::check_port(peer, RELAY_PORT + 1),
-                    any_addr,
                     RENDEZVOUS_TIMEOUT,
                 )
                 .await?,
                 true,
             ));
         }
+        // Allow connect to {domain}:{port}
+        if hbb_common::is_domain_port_str(peer) {
+            return Ok((
+                socket_client::connect_tcp(peer, RENDEZVOUS_TIMEOUT).await?,
+                true,
+            ));
+        }
         let (mut rendezvous_server, servers, contained) = crate::get_rendezvous_server(1_000).await;
-        let mut socket =
-            socket_client::connect_tcp(&*rendezvous_server, any_addr, RENDEZVOUS_TIMEOUT).await;
+        let mut socket = socket_client::connect_tcp(&*rendezvous_server, RENDEZVOUS_TIMEOUT).await;
         debug_assert!(!servers.contains(&rendezvous_server));
         if socket.is_err() && !servers.is_empty() {
             log::info!("try the other servers: {:?}", servers);
             for server in servers {
-                socket = socket_client::connect_tcp(&*server, any_addr, RENDEZVOUS_TIMEOUT).await;
+                socket = socket_client::connect_tcp(&*server, RENDEZVOUS_TIMEOUT).await;
                 if socket.is_ok() {
                     rendezvous_server = server;
                     break;
@@ -173,7 +229,7 @@ impl Client {
         let mut relay_server = "".to_owned();
 
         let start = std::time::Instant::now();
-        let mut peer_addr = any_addr;
+        let mut peer_addr = Config::get_any_listen_addr(true);
         let mut peer_nat_type = NatType::UNKNOWN_NAT;
         let my_nat_type = crate::get_nat_type(100).await;
         let mut is_local = false;
@@ -181,7 +237,11 @@ impl Client {
             log::info!("#{} punch attempt with {}, id: {}", i, my_addr, peer);
             let mut msg_out = RendezvousMessage::new();
             use hbb_common::protobuf::Enum;
-            let nat_type = NatType::from_i32(my_nat_type).unwrap_or(NatType::UNKNOWN_NAT);
+            let nat_type = if interface.is_force_relay() {
+                NatType::SYMMETRIC
+            } else {
+                NatType::from_i32(my_nat_type).unwrap_or(NatType::UNKNOWN_NAT)
+            };
             msg_out.set_punch_hole_request(PunchHoleRequest {
                 id: peer.to_owned(),
                 token: token.to_owned(),
@@ -230,10 +290,24 @@ impl Client {
                                 rr.relay_server
                             );
                             signed_id_pk = rr.pk().into();
-                            let mut conn =
-                                Self::create_relay(peer, rr.uuid, rr.relay_server, key, conn_type)
-                                    .await?;
-                            Self::secure_connection(peer, signed_id_pk, key, &mut conn).await?;
+                            let mut conn = Self::create_relay(
+                                peer,
+                                rr.uuid,
+                                rr.relay_server,
+                                key,
+                                conn_type,
+                                my_addr.is_ipv4(),
+                            )
+                            .await?;
+                            Self::secure_connection(
+                                peer,
+                                signed_id_pk,
+                                key,
+                                &mut conn,
+                                false,
+                                interface,
+                            )
+                            .await?;
                             return Ok((conn, false));
                         }
                         _ => {
@@ -274,10 +348,12 @@ impl Client {
             key,
             token,
             conn_type,
+            interface,
         )
         .await
     }
 
+    /// Connect to the peer.
     async fn connect(
         local_addr: SocketAddr,
         peer: SocketAddr,
@@ -292,6 +368,7 @@ impl Client {
         key: &str,
         token: &str,
         conn_type: ConnType,
+        interface: impl Interface,
     ) -> ResultType<(Stream, bool)> {
         let direct_failures = PeerConfig::load(peer_id).direct_failures;
         let mut connect_timeout = 0;
@@ -328,9 +405,10 @@ impl Client {
         log::info!("peer address: {}, timeout: {}", peer, connect_timeout);
         let start = std::time::Instant::now();
         // NOTICE: Socks5 is be used event in intranet. Which may be not a good way.
-        let mut conn = socket_client::connect_tcp(peer, local_addr, connect_timeout).await;
-        let direct = !conn.is_err();
-        if conn.is_err() {
+        let mut conn =
+            socket_client::connect_tcp_local(peer, Some(local_addr), connect_timeout).await;
+        let mut direct = !conn.is_err();
+        if interface.is_force_relay() || conn.is_err() {
             if !relay_server.is_empty() {
                 conn = Self::request_relay(
                     peer_id,
@@ -348,6 +426,7 @@ impl Client {
                         conn.err().unwrap()
                     );
                 }
+                direct = false;
             } else {
                 bail!("Failed to make direct connection to remote desktop");
             }
@@ -360,15 +439,18 @@ impl Client {
         }
         let mut conn = conn?;
         log::info!("{:?} used to establish connection", start.elapsed());
-        Self::secure_connection(peer_id, signed_id_pk, key, &mut conn).await?;
+        Self::secure_connection(peer_id, signed_id_pk, key, &mut conn, direct, interface).await?;
         Ok((conn, direct))
     }
 
+    /// Establish secure connection with the server.
     async fn secure_connection(
         peer_id: &str,
         signed_id_pk: Vec<u8>,
         key: &str,
         conn: &mut Stream,
+        direct: bool,
+        interface: impl Interface,
     ) -> ResultType<()> {
         let rs_pk = get_rs_pk(if key.is_empty() {
             hbb_common::config::RS_PUB_KEY
@@ -394,9 +476,15 @@ impl Client {
                 return Ok(());
             }
         };
-        match timeout(CONNECT_TIMEOUT, conn.next()).await? {
+        match timeout(READ_TIMEOUT, conn.next()).await? {
             Some(res) => {
-                let bytes = res?;
+                let bytes = match res {
+                    Ok(bytes) => bytes,
+                    Err(err) => {
+                        interface.set_force_relay(direct, false);
+                        bail!("{}", err);
+                    }
+                };
                 if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
                     if let Some(message::Union::SignedId(si)) = msg_in.union {
                         if let Ok((id, their_pk_b)) = decode_id_pk(&si.id, &sign_pk) {
@@ -441,6 +529,7 @@ impl Client {
         Ok(())
     }
 
+    /// Request a relay connection to the server.
     async fn request_relay(
         peer: &str,
         relay_server: String,
@@ -450,16 +539,16 @@ impl Client {
         token: &str,
         conn_type: ConnType,
     ) -> ResultType<Stream> {
-        let any_addr = Config::get_any_listen_addr();
         let mut succeed = false;
         let mut uuid = "".to_owned();
+        let mut ipv4 = true;
         for i in 1..=3 {
             // use different socket due to current hbbs implement requiring different nat address for each attempt
-            let mut socket =
-                socket_client::connect_tcp(rendezvous_server, any_addr, RENDEZVOUS_TIMEOUT)
-                    .await
-                    .with_context(|| "Failed to connect to rendezvous server")?;
+            let mut socket = socket_client::connect_tcp(rendezvous_server, RENDEZVOUS_TIMEOUT)
+                .await
+                .with_context(|| "Failed to connect to rendezvous server")?;
 
+            ipv4 = socket.local_addr().is_ipv4();
             let mut msg_out = RendezvousMessage::new();
             uuid = Uuid::new_v4().to_string();
             log::info!(
@@ -494,19 +583,20 @@ impl Client {
         if !succeed {
             bail!("Timeout");
         }
-        Self::create_relay(peer, uuid, relay_server, key, conn_type).await
+        Self::create_relay(peer, uuid, relay_server, key, conn_type, ipv4).await
     }
 
+    /// Create a relay connection to the server.
     async fn create_relay(
         peer: &str,
         uuid: String,
         relay_server: String,
         key: &str,
         conn_type: ConnType,
+        ipv4: bool,
     ) -> ResultType<Stream> {
         let mut conn = socket_client::connect_tcp(
-            crate::check_port(relay_server, RELAY_PORT),
-            Config::get_any_listen_addr(),
+            socket_client::ipv4_to_ipv6(crate::check_port(relay_server, RELAY_PORT), ipv4),
             CONNECT_TIMEOUT,
         )
         .await
@@ -522,8 +612,89 @@ impl Client {
         conn.send(&msg_out).await?;
         Ok(conn)
     }
+
+    #[inline]
+    #[cfg(feature = "flutter")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    pub fn set_is_text_clipboard_required(b: bool) {
+        TEXT_CLIPBOARD_STATE.lock().unwrap().is_required = b;
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    fn try_stop_clipboard(_self_id: &str) {
+        #[cfg(feature = "flutter")]
+        if crate::flutter::other_sessions_running(_self_id) {
+            return;
+        }
+        TEXT_CLIPBOARD_STATE.lock().unwrap().running = false;
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    fn try_start_clipboard(_conf_tx: Option<(SessionPermissionConfig, UnboundedSender<Data>)>) {
+        let mut clipboard_lock = TEXT_CLIPBOARD_STATE.lock().unwrap();
+        if clipboard_lock.running {
+            return;
+        }
+
+        match ClipboardContext::new() {
+            Ok(mut ctx) => {
+                clipboard_lock.running = true;
+                // ignore clipboard update before service start
+                check_clipboard(&mut ctx, Some(&OLD_CLIPBOARD_TEXT));
+                std::thread::spawn(move || {
+                    log::info!("Start text clipboard loop");
+                    loop {
+                        std::thread::sleep(Duration::from_millis(CLIPBOARD_INTERVAL));
+                        if !TEXT_CLIPBOARD_STATE.lock().unwrap().running {
+                            break;
+                        }
+
+                        if !TEXT_CLIPBOARD_STATE.lock().unwrap().is_required {
+                            continue;
+                        }
+
+                        if let Some(msg) = check_clipboard(&mut ctx, Some(&OLD_CLIPBOARD_TEXT)) {
+                            #[cfg(feature = "flutter")]
+                            crate::flutter::send_text_clipboard_msg(msg);
+                            #[cfg(not(feature = "flutter"))]
+                            if let Some((cfg, tx)) = &_conf_tx {
+                                if cfg.is_text_clipboard_required() {
+                                    let _ = tx.send(Data::Message(msg));
+                                }
+                            }
+                        }
+                    }
+                    log::info!("Stop text clipboard loop");
+                });
+            }
+            Err(err) => {
+                log::error!("Failed to start clipboard service of client: {}", err);
+            }
+        }
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    fn get_current_text_clipboard_msg() -> Option<Message> {
+        let txt = &*OLD_CLIPBOARD_TEXT.lock().unwrap();
+        if txt.is_empty() {
+            None
+        } else {
+            Some(crate::create_clipboard_msg(txt.clone()))
+        }
+    }
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+impl TextClipboardState {
+    fn new() -> Self {
+        Self {
+            is_required: true,
+            running: false,
+        }
+    }
+}
+
+/// Audio handler for the [`Client`].
 #[derive(Default)]
 pub struct AudioHandler {
     audio_decoder: Option<(AudioDecoder, Vec<f32>)>,
@@ -541,6 +712,7 @@ pub struct AudioHandler {
 }
 
 impl AudioHandler {
+    /// Create a new audio handler.
     pub fn new(latency_controller: Arc<Mutex<LatencyController>>) -> Self {
         AudioHandler {
             latency_controller,
@@ -548,6 +720,7 @@ impl AudioHandler {
         }
     }
 
+    /// Start the audio playback.
     #[cfg(target_os = "linux")]
     fn start_audio(&mut self, format0: AudioFormat) -> ResultType<()> {
         use psimple::Simple;
@@ -577,6 +750,7 @@ impl AudioHandler {
         Ok(())
     }
 
+    /// Start the audio playback.
     #[cfg(target_os = "android")]
     fn start_audio(&mut self, format0: AudioFormat) -> ResultType<()> {
         self.oboe = Some(OboePlayer::new(
@@ -587,6 +761,7 @@ impl AudioHandler {
         Ok(())
     }
 
+    /// Start the audio playback.
     #[cfg(not(any(target_os = "android", target_os = "linux")))]
     fn start_audio(&mut self, format0: AudioFormat) -> ResultType<()> {
         let device = AUDIO_HOST
@@ -611,6 +786,7 @@ impl AudioHandler {
         Ok(())
     }
 
+    /// Handle audio format and create an audio decoder.
     pub fn handle_format(&mut self, f: AudioFormat) {
         match AudioDecoder::new(f.sample_rate, if f.channels > 1 { Stereo } else { Mono }) {
             Ok(d) => {
@@ -625,6 +801,7 @@ impl AudioHandler {
         }
     }
 
+    /// Handle audio frame and play it.
     pub fn handle_frame(&mut self, frame: AudioFrame) {
         if frame.timestamp != 0 {
             if self
@@ -634,6 +811,7 @@ impl AudioHandler {
                 .check_audio(frame.timestamp)
                 .not()
             {
+                log::debug!("audio frame {} is ignored", frame.timestamp);
                 return;
             }
         }
@@ -644,6 +822,7 @@ impl AudioHandler {
         }
         #[cfg(target_os = "linux")]
         if self.simple.is_none() {
+            log::debug!("PulseAudio simple binding does not exists");
             return;
         }
         #[cfg(target_os = "android")]
@@ -692,6 +871,7 @@ impl AudioHandler {
         });
     }
 
+    /// Build audio output stream for current device.
     #[cfg(not(any(target_os = "android", target_os = "linux")))]
     fn build_output_stream<T: cpal::Sample>(
         &mut self,
@@ -727,13 +907,17 @@ impl AudioHandler {
     }
 }
 
+/// Video handler for the [`Client`].
 pub struct VideoHandler {
     decoder: Decoder,
     latency_controller: Arc<Mutex<LatencyController>>,
     pub rgb: Vec<u8>,
+    recorder: Arc<Mutex<Option<Recorder>>>,
+    record: bool,
 }
 
 impl VideoHandler {
+    /// Create a new video handler.
     pub fn new(latency_controller: Arc<Mutex<LatencyController>>) -> Self {
         VideoHandler {
             decoder: Decoder::new(DecoderCfg {
@@ -744,22 +928,42 @@ impl VideoHandler {
             }),
             latency_controller,
             rgb: Default::default(),
+            recorder: Default::default(),
+            record: false,
         }
     }
 
+    /// Handle a new video frame.
     pub fn handle_frame(&mut self, vf: VideoFrame) -> ResultType<bool> {
         if vf.timestamp != 0 {
+            // Update the latency controller with the latest timestamp.
             self.latency_controller
                 .lock()
                 .unwrap()
                 .update_video(vf.timestamp);
         }
         match &vf.union {
-            Some(frame) => self.decoder.handle_video_frame(frame, &mut self.rgb),
+            Some(frame) => {
+                // windows && flutter_texture_render, fmt is ImageFormat::ABGR
+                #[cfg(all(target_os = "windows", feature = "flutter_texture_render"))]
+                let fmt = ImageFormat::ABGR;
+                #[cfg(not(all(target_os = "windows", feature = "flutter_texture_render")))]
+                let fmt = ImageFormat::ARGB;
+                let res = self.decoder.handle_video_frame(frame, fmt, &mut self.rgb);
+                if self.record {
+                    self.recorder
+                        .lock()
+                        .unwrap()
+                        .as_mut()
+                        .map(|r| r.write_frame(frame));
+                }
+                res
+            }
             _ => Ok(false),
         }
     }
 
+    /// Reset the decoder.
     pub fn reset(&mut self) {
         self.decoder = Decoder::new(DecoderCfg {
             vpx: VpxDecoderConfig {
@@ -768,13 +972,34 @@ impl VideoHandler {
             },
         });
     }
+
+    /// Start or stop screen record.
+    pub fn record_screen(&mut self, start: bool, w: i32, h: i32, id: String) {
+        self.record = false;
+        if start {
+            self.recorder = Recorder::new(RecorderContext {
+                server: false,
+                id,
+                default_dir: crate::ui_interface::default_video_save_directory(),
+                filename: "".to_owned(),
+                width: w as _,
+                height: h as _,
+                codec_id: scrap::record::RecordCodecID::VP9,
+                tx: None,
+            })
+            .map_or(Default::default(), |r| Arc::new(Mutex::new(Some(r))));
+        } else {
+            self.recorder = Default::default();
+        }
+        self.record = start;
+    }
 }
 
+/// Login config handler for [`Client`].
 #[derive(Default)]
 pub struct LoginConfigHandler {
     id: String,
-    pub is_file_transfer: bool,
-    is_port_forward: bool,
+    pub conn_type: ConnType,
     hash: Hash,
     password: Vec<u8>, // remember password for reconnect
     pub remember: bool,
@@ -786,6 +1011,12 @@ pub struct LoginConfigHandler {
     session_id: u64,
     pub supported_encoding: Option<(bool, bool)>,
     pub restarting_remote_device: bool,
+    pub force_relay: bool,
+    pub direct: Option<bool>,
+    pub received: bool,
+    switch_uuid: Option<String>,
+    pub success_time: Option<hbb_common::tokio::time::Instant>,
+    pub direct_error_counter: usize,
 }
 
 impl Deref for LoginConfigHandler {
@@ -796,26 +1027,50 @@ impl Deref for LoginConfigHandler {
     }
 }
 
+/// Load [`PeerConfig`] from id.
+///
+/// # Arguments
+///
+/// * `id` - id of peer
 #[inline]
 pub fn load_config(id: &str) -> PeerConfig {
     PeerConfig::load(id)
 }
 
 impl LoginConfigHandler {
-    pub fn initialize(&mut self, id: String, is_file_transfer: bool, is_port_forward: bool) {
+    /// Initialize the login config handler.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - id of peer
+    /// * `conn_type` - Connection type enum.
+    pub fn initialize(
+        &mut self,
+        id: String,
+        conn_type: ConnType,
+        switch_uuid: Option<String>,
+        force_relay: bool,
+    ) {
         self.id = id;
-        self.is_file_transfer = is_file_transfer;
-        self.is_port_forward = is_port_forward;
+        self.conn_type = conn_type;
         let config = self.load_config();
         self.remember = !config.password.is_empty();
         self.config = config;
         self.session_id = rand::random();
         self.supported_encoding = None;
         self.restarting_remote_device = false;
+        self.force_relay = !self.get_option("force-always-relay").is_empty() || force_relay;
+        self.direct = None;
+        self.received = false;
+        self.switch_uuid = switch_uuid;
+        self.success_time = None;
+        self.direct_error_counter = 0;
     }
 
+    /// Check if the client should auto login.
+    /// Return password if the client should auto login, otherwise return empty string.
     pub fn should_auto_login(&self) -> String {
-        let l = self.lock_after_session_end;
+        let l = self.lock_after_session_end.v;
         let a = !self.get_option("auto-login").is_empty();
         let p = self.get_option("os-password");
         if !p.is_empty() && l && a {
@@ -825,57 +1080,129 @@ impl LoginConfigHandler {
         }
     }
 
+    /// Load [`PeerConfig`].
     fn load_config(&self) -> PeerConfig {
         load_config(&self.id)
     }
 
+    /// Save a [`PeerConfig`] into the handler.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - [`PeerConfig`] to save.
     pub fn save_config(&mut self, config: PeerConfig) {
         config.store(&self.id);
         self.config = config;
     }
 
+    /// Set an option for handler's [`PeerConfig`].
+    ///
+    /// # Arguments
+    ///
+    /// * `k` - key of option
+    /// * `v` - value of option
     pub fn set_option(&mut self, k: String, v: String) {
         let mut config = self.load_config();
         config.options.insert(k, v);
         self.save_config(config);
     }
 
+    //to-do: too many dup code below.
+
+    /// Save view style to the current config.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The view style to be saved.
     pub fn save_view_style(&mut self, value: String) {
         let mut config = self.load_config();
         config.view_style = value;
         self.save_config(config);
     }
 
+    /// Save keyboard mode to the current config.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The view style to be saved.
+    pub fn save_keyboard_mode(&mut self, value: String) {
+        let mut config = self.load_config();
+        config.keyboard_mode = value;
+        self.save_config(config);
+    }
+
+    /// Save scroll style to the current config.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The view style to be saved.
+    pub fn save_scroll_style(&mut self, value: String) {
+        let mut config = self.load_config();
+        config.scroll_style = value;
+        self.save_config(config);
+    }
+
+    /// Set a ui config of flutter for handler's [`PeerConfig`].
+    ///
+    /// # Arguments
+    ///
+    /// * `k` - key of option
+    /// * `v` - value of option
+    pub fn save_ui_flutter(&mut self, k: String, v: String) {
+        let mut config = self.load_config();
+        config.ui_flutter.insert(k, v);
+        self.save_config(config);
+    }
+
+    /// Get a ui config of flutter for handler's [`PeerConfig`].
+    /// Return String if the option is found, otherwise return "".
+    ///
+    /// # Arguments
+    ///
+    /// * `k` - key of option
+    pub fn get_ui_flutter(&self, k: &str) -> String {
+        if let Some(v) = self.config.ui_flutter.get(k) {
+            v.clone()
+        } else {
+            "".to_owned()
+        }
+    }
+
+    /// Toggle an option in the handler.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the option to toggle.
     pub fn toggle_option(&mut self, name: String) -> Option<Message> {
         let mut option = OptionMessage::default();
         let mut config = self.load_config();
         if name == "show-remote-cursor" {
-            config.show_remote_cursor = !config.show_remote_cursor;
-            option.show_remote_cursor = (if config.show_remote_cursor {
+            config.show_remote_cursor.v = !config.show_remote_cursor.v;
+            option.show_remote_cursor = (if config.show_remote_cursor.v {
                 BoolOption::Yes
             } else {
                 BoolOption::No
             })
             .into();
         } else if name == "disable-audio" {
-            config.disable_audio = !config.disable_audio;
-            option.disable_audio = (if config.disable_audio {
+            config.disable_audio.v = !config.disable_audio.v;
+            option.disable_audio = (if config.disable_audio.v {
                 BoolOption::Yes
             } else {
                 BoolOption::No
             })
             .into();
         } else if name == "disable-clipboard" {
-            config.disable_clipboard = !config.disable_clipboard;
-            option.disable_clipboard = (if config.disable_clipboard {
+            config.disable_clipboard.v = !config.disable_clipboard.v;
+            option.disable_clipboard = (if config.disable_clipboard.v {
                 BoolOption::Yes
             } else {
                 BoolOption::No
             })
             .into();
         } else if name == "lock-after-session-end" {
-            config.lock_after_session_end = !config.lock_after_session_end;
-            option.lock_after_session_end = (if config.lock_after_session_end {
+            config.lock_after_session_end.v = !config.lock_after_session_end.v;
+            option.lock_after_session_end = (if config.lock_after_session_end.v {
                 BoolOption::Yes
             } else {
                 BoolOption::No
@@ -883,15 +1210,15 @@ impl LoginConfigHandler {
             .into();
         } else if name == "privacy-mode" {
             // try toggle privacy mode
-            option.privacy_mode = (if config.privacy_mode {
+            option.privacy_mode = (if config.privacy_mode.v {
                 BoolOption::No
             } else {
                 BoolOption::Yes
             })
             .into();
         } else if name == "enable-file-transfer" {
-            config.enable_file_transfer = !config.enable_file_transfer;
-            option.enable_file_transfer = (if config.enable_file_transfer {
+            config.enable_file_transfer.v = !config.enable_file_transfer.v;
+            option.enable_file_transfer = (if config.enable_file_transfer.v {
                 BoolOption::Yes
             } else {
                 BoolOption::No
@@ -902,10 +1229,14 @@ impl LoginConfigHandler {
         } else if name == "unblock-input" {
             option.block_input = BoolOption::No.into();
         } else if name == "show-quality-monitor" {
-            config.show_quality_monitor = !config.show_quality_monitor;
+            config.show_quality_monitor.v = !config.show_quality_monitor.v;
         } else {
-            let v = self.options.get(&name).is_some();
-            if v {
+            let is_set = self
+                .options
+                .get(&name)
+                .map(|o| !o.is_empty())
+                .unwrap_or(false);
+            if is_set {
                 self.config.options.remove(&name);
             } else {
                 self.config.options.insert(name, "Y".to_owned());
@@ -923,8 +1254,22 @@ impl LoginConfigHandler {
         Some(msg_out)
     }
 
+    /// Get [`PeerConfig`] of the current [`LoginConfigHandler`].
+    ///
+    /// # Arguments
+    pub fn get_config(&mut self) -> &mut PeerConfig {
+        &mut self.config
+    }
+
+    /// Get [`OptionMessage`] of the current [`LoginConfigHandler`].
+    /// Return `None` if there's no option, for example, when the session is only for file transfer.
+    ///
+    /// # Arguments
+    ///
+    /// * `ignore_default` - If `true`, ignore the default value of the option.
     fn get_option_message(&self, ignore_default: bool) -> Option<OptionMessage> {
-        if self.is_port_forward || self.is_file_transfer {
+        if self.conn_type.eq(&ConnType::FILE_TRANSFER) || self.conn_type.eq(&ConnType::PORT_FORWARD)
+        {
             return None;
         }
         let mut n = 0;
@@ -935,8 +1280,16 @@ impl LoginConfigHandler {
             n += 1;
         } else if q == "custom" {
             let config = PeerConfig::load(&self.id);
-            msg.custom_image_quality = config.custom_image_quality[0] << 8;
+            let quality = if config.custom_image_quality.is_empty() {
+                50
+            } else {
+                config.custom_image_quality[0]
+            };
+            msg.custom_image_quality = quality << 8;
             n += 1;
+        }
+        if let Some(custom_fps) = self.options.get("custom-fps") {
+            msg.custom_fps = custom_fps.parse().unwrap_or(30);
         }
         if self.get_toggle_option("show-remote-cursor") {
             msg.show_remote_cursor = BoolOption::Yes.into();
@@ -970,7 +1323,8 @@ impl LoginConfigHandler {
     }
 
     pub fn get_option_message_after_login(&self) -> Option<OptionMessage> {
-        if self.is_port_forward || self.is_file_transfer {
+        if self.conn_type.eq(&ConnType::FILE_TRANSFER) || self.conn_type.eq(&ConnType::PORT_FORWARD)
+        {
             return None;
         }
         let mut n = 0;
@@ -986,6 +1340,13 @@ impl LoginConfigHandler {
         }
     }
 
+    /// Parse the image quality option.
+    /// Return [`ImageQuality`] if the option is valid, otherwise return `None`.
+    ///
+    /// # Arguments
+    ///
+    /// * `q` - The image quality option.
+    /// * `ignore_default` - Ignore the default value.
     fn get_image_quality_enum(&self, q: &str, ignore_default: bool) -> Option<ImageQuality> {
         if q == "low" {
             Some(ImageQuality::Low)
@@ -1002,21 +1363,26 @@ impl LoginConfigHandler {
         }
     }
 
+    /// Get the status of a toggle option.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the toggle option.
     pub fn get_toggle_option(&self, name: &str) -> bool {
         if name == "show-remote-cursor" {
-            self.config.show_remote_cursor
+            self.config.show_remote_cursor.v
         } else if name == "lock-after-session-end" {
-            self.config.lock_after_session_end
+            self.config.lock_after_session_end.v
         } else if name == "privacy-mode" {
-            self.config.privacy_mode
+            self.config.privacy_mode.v
         } else if name == "enable-file-transfer" {
-            self.config.enable_file_transfer
+            self.config.enable_file_transfer.v
         } else if name == "disable-audio" {
-            self.config.disable_audio
+            self.config.disable_audio.v
         } else if name == "disable-clipboard" {
-            self.config.disable_clipboard
+            self.config.disable_clipboard.v
         } else if name == "show-quality-monitor" {
-            self.config.show_quality_monitor
+            self.config.show_quality_monitor.v
         } else {
             !self.get_option(name).is_empty()
         }
@@ -1030,6 +1396,7 @@ impl LoginConfigHandler {
         }
     }
 
+    /// Create a [`Message`] for refreshing video.
     pub fn refresh() -> Message {
         let mut misc = Misc::new();
         misc.set_refresh_video(true);
@@ -1038,6 +1405,12 @@ impl LoginConfigHandler {
         msg_out
     }
 
+    /// Create a [`Message`] for saving custom image quality.
+    ///
+    /// # Arguments
+    ///
+    /// * `bitrate` - The given bitrate.
+    /// * `quantizer` - The given quantizer.
     pub fn save_custom_image_quality(&mut self, image_quality: i32) -> Message {
         let mut misc = Misc::new();
         misc.set_option(OptionMessage {
@@ -1053,6 +1426,11 @@ impl LoginConfigHandler {
         msg_out
     }
 
+    /// Save the given image quality to the config.
+    /// Return a [`Message`] that contains image quality, or `None` if the image quality is not valid.
+    /// # Arguments
+    ///
+    /// * `value` - The image quality.
     pub fn save_image_quality(&mut self, value: String) -> Option<Message> {
         let mut res = None;
         if let Some(q) = self.get_image_quality_enum(&value, false) {
@@ -1071,6 +1449,27 @@ impl LoginConfigHandler {
         res
     }
 
+    /// Create a [`Message`] for saving custom fps.
+    ///
+    /// # Arguments
+    ///
+    /// * `fps` - The given fps.
+    pub fn set_custom_fps(&mut self, fps: i32) -> Message {
+        let mut misc = Misc::new();
+        misc.set_option(OptionMessage {
+            custom_fps: fps,
+            ..Default::default()
+        });
+        let mut msg_out = Message::new();
+        msg_out.set_misc(misc);
+        let mut config = self.load_config();
+        config
+            .options
+            .insert("custom-fps".to_owned(), fps.to_string());
+        self.save_config(config);
+        msg_out
+    }
+
     pub fn get_option(&self, k: &str) -> String {
         if let Some(v) = self.config.options.get(k) {
             v.clone()
@@ -1079,17 +1478,12 @@ impl LoginConfigHandler {
         }
     }
 
-    pub fn handle_login_error(&mut self, err: &str, interface: &impl Interface) -> bool {
-        if err == "Wrong Password" {
-            self.password = Default::default();
-            interface.msgbox("re-input-password", err, "Do you want to enter again?");
-            true
-        } else {
-            interface.msgbox("error", "Login Error", err);
-            false
-        }
-    }
-
+    /// Get user name.
+    /// Return the name of the given peer. If the peer has no name, return the name in the config.
+    ///
+    /// # Arguments
+    ///
+    /// * `pi` - peer info.
     pub fn get_username(&self, pi: &PeerInfo) -> String {
         return if pi.username.is_empty() {
             self.info.username.clone()
@@ -1098,13 +1492,19 @@ impl LoginConfigHandler {
         };
     }
 
-    pub fn handle_peer_info(&mut self, username: String, pi: PeerInfo) {
+    /// Handle peer info.
+    ///
+    /// # Arguments
+    ///
+    /// * `username` - The name of the peer.
+    /// * `pi` - The peer info.
+    pub fn handle_peer_info(&mut self, pi: &PeerInfo) {
         if !pi.version.is_empty() {
             self.version = hbb_common::get_version_number(&pi.version);
         }
-        self.features = pi.features.into_option();
+        self.features = pi.features.clone().into_option();
         let serde = PeerInfoSerde {
-            username,
+            username: pi.username.clone(),
             hostname: pi.hostname.clone(),
             platform: pi.platform.clone(),
         };
@@ -1124,10 +1524,24 @@ impl LoginConfigHandler {
                 log::debug!("remove password of {}", self.id);
             }
         }
+        if config.keyboard_mode.is_empty() {
+            if is_keyboard_mode_supported(&KeyboardMode::Map, get_version_number(&pi.version)) {
+                config.keyboard_mode = KeyboardMode::Map.to_string();
+            } else {
+                config.keyboard_mode = KeyboardMode::Legacy.to_string();
+            }
+        } else {
+            let keyboard_modes =
+                common::get_supported_keyboard_modes(get_version_number(&pi.version));
+            let current_mode = &KeyboardMode::from_str(&config.keyboard_mode).unwrap_or_default();
+            if !keyboard_modes.contains(current_mode) {
+                config.keyboard_mode = KeyboardMode::Legacy.to_string();
+            }
+        }
         self.conn_id = pi.conn_id;
         // no matter if change, for update file time
         self.save_config(config);
-        #[cfg(feature = "hwcodec")]
+        #[cfg(any(feature = "hwcodec", feature = "mediacodec"))]
         {
             self.supported_encoding = Some((pi.encoding.h264, pi.encoding.h265));
         }
@@ -1152,9 +1566,10 @@ impl LoginConfigHandler {
         serde_json::to_string::<HashMap<String, String>>(&x).unwrap_or_default()
     }
 
+    /// Create a [`Message`] for login.
     fn create_login_msg(&self, password: Vec<u8>) -> Message {
         #[cfg(any(target_os = "android", target_os = "ios"))]
-        let my_id = Config::get_id_or(crate::common::MOBILE_INFO1.lock().unwrap().clone());
+        let my_id = Config::get_id_or(crate::common::DEVICE_ID.lock().unwrap().clone());
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let my_id = Config::get_id();
         let mut lr = LoginRequest {
@@ -1167,19 +1582,20 @@ impl LoginConfigHandler {
             version: crate::VERSION.to_string(),
             ..Default::default()
         };
-        if self.is_file_transfer {
-            lr.set_file_transfer(FileTransfer {
+        match self.conn_type {
+            ConnType::FILE_TRANSFER => lr.set_file_transfer(FileTransfer {
                 dir: self.get_remote_dir(),
                 show_hidden: !self.get_option("remote_show_hidden").is_empty(),
                 ..Default::default()
-            });
-        } else if self.is_port_forward {
-            lr.set_port_forward(PortForward {
+            }),
+            ConnType::PORT_FORWARD => lr.set_port_forward(PortForward {
                 host: self.port_forward.0.clone(),
                 port: self.port_forward.1,
                 ..Default::default()
-            });
+            }),
+            _ => {}
         }
+
         let mut msg_out = Message::new();
         msg_out.set_login_request(lr);
         msg_out
@@ -1204,42 +1620,63 @@ impl LoginConfigHandler {
         msg_out.set_misc(misc);
         msg_out
     }
+
+    pub fn set_force_relay(&mut self, direct: bool, received: bool) {
+        self.force_relay = false;
+        if direct && !received {
+            let errno = errno::errno().0;
+            log::info!("errno is {}", errno);
+            // TODO: check mac and ios
+            if cfg!(windows) && errno == 10054 || !cfg!(windows) && errno == 104 {
+                self.force_relay = true;
+                self.set_option("force-always-relay".to_owned(), "Y".to_owned());
+            }
+        }
+    }
 }
 
+/// Media data.
 pub enum MediaData {
     VideoFrame(VideoFrame),
     AudioFrame(AudioFrame),
     AudioFormat(AudioFormat),
     Reset,
+    RecordScreen(bool, i32, i32, String),
 }
 
 pub type MediaSender = mpsc::Sender<MediaData>;
 
+/// Start video and audio thread.
+/// Return two [`MediaSender`], they should be given to the media producer.
+///
+/// # Arguments
+///
+/// * `video_callback` - The callback for video frame. Being called when a video frame is ready.
 pub fn start_video_audio_threads<F>(video_callback: F) -> (MediaSender, MediaSender)
 where
-    F: 'static + FnMut(&[u8]) + Send,
+    F: 'static + FnMut(&mut Vec<u8>) + Send,
 {
     let (video_sender, video_receiver) = mpsc::channel::<MediaData>();
-    let (audio_sender, audio_receiver) = mpsc::channel::<MediaData>();
     let mut video_callback = video_callback;
 
     let latency_controller = LatencyController::new();
     let latency_controller_cl = latency_controller.clone();
-    // Create video_handler out of the thread below to ensure that the handler exists before client start.
-    // It will take a few tenths of a second for the first time, and then tens of milliseconds.
-    let mut video_handler = VideoHandler::new(latency_controller);
 
     std::thread::spawn(move || {
+        let mut video_handler = VideoHandler::new(latency_controller);
         loop {
             if let Ok(data) = video_receiver.recv() {
                 match data {
                     MediaData::VideoFrame(vf) => {
                         if let Ok(true) = video_handler.handle_frame(vf) {
-                            video_callback(&video_handler.rgb);
+                            video_callback(&mut video_handler.rgb);
                         }
                     }
                     MediaData::Reset => {
                         video_handler.reset();
+                    }
+                    MediaData::RecordScreen(start, w, h, id) => {
+                        video_handler.record_screen(start, w, h, id)
                     }
                     _ => {}
                 }
@@ -1249,8 +1686,19 @@ where
         }
         log::info!("Video decoder loop exits");
     });
+    let audio_sender = start_audio_thread(Some(latency_controller_cl));
+    return (video_sender, audio_sender);
+}
+
+/// Start an audio thread
+/// Return a audio [`MediaSender`]
+pub fn start_audio_thread(
+    latency_controller: Option<Arc<Mutex<LatencyController>>>,
+) -> MediaSender {
+    let latency_controller = latency_controller.unwrap_or(LatencyController::new());
+    let (audio_sender, audio_receiver) = mpsc::channel::<MediaData>();
     std::thread::spawn(move || {
-        let mut audio_handler = AudioHandler::new(latency_controller_cl);
+        let mut audio_handler = AudioHandler::new(latency_controller);
         loop {
             if let Ok(data) = audio_receiver.recv() {
                 match data {
@@ -1258,6 +1706,7 @@ where
                         audio_handler.handle_frame(af);
                     }
                     MediaData::AudioFormat(f) => {
+                        log::debug!("recved audio format, sample rate={}", f.sample_rate);
                         audio_handler.handle_format(f);
                     }
                     _ => {}
@@ -1268,9 +1717,15 @@ where
         }
         log::info!("Audio decoder loop exits");
     });
-    return (video_sender, audio_sender);
+    audio_sender
 }
 
+/// Handle latency test.
+///
+/// # Arguments
+///
+/// * `t` - The latency test message.
+/// * `peer` - The peer.
 pub async fn handle_test_delay(t: TestDelay, peer: &mut Stream) {
     if !t.from_client {
         let mut msg_out = Message::new();
@@ -1279,9 +1734,45 @@ pub async fn handle_test_delay(t: TestDelay, peer: &mut Stream) {
     }
 }
 
-// mask = buttons << 3 | type
-// type, 1: down, 2: up, 3: wheel
-// buttons, 1: left, 2: right, 4: middle
+/// Whether is track pad scrolling.
+#[inline]
+#[cfg(all(target_os = "macos"))]
+fn check_scroll_on_mac(mask: i32, x: i32, y: i32) -> bool {
+    // flutter version we set mask type bit to 4 when track pad scrolling.
+    if mask & 7 == 4 {
+        return true;
+    }
+    if mask & 3 != 3 {
+        return false;
+    }
+    let btn = mask >> 3;
+    if y == -1 {
+        btn != 0xff88 && btn != -0x780000
+    } else if y == 1 {
+        btn != 0x78 && btn != 0x780000
+    } else if x != 0 {
+        // No mouse support horizontal scrolling.
+        true
+    } else {
+        false
+    }
+}
+
+/// Send mouse data.
+///
+/// # Arguments
+///
+/// * `mask` - Mouse event.
+///     * mask = buttons << 3 | type
+///     * type, 1: down, 2: up, 3: wheel, 4: trackpad
+///     * buttons, 1: left, 2: right, 4: middle
+/// * `x` - X coordinate.
+/// * `y` - Y coordinate.
+/// * `alt` - Whether the alt key is pressed.
+/// * `ctrl` - Whether the ctrl key is pressed.
+/// * `shift` - Whether the shift key is pressed.
+/// * `command` - Whether the command key is pressed.
+/// * `interface` - The interface for sending data.
 #[inline]
 pub fn send_mouse(
     mask: i32,
@@ -1312,10 +1803,19 @@ pub fn send_mouse(
     if command {
         mouse_event.modifiers.push(ControlKey::Meta.into());
     }
+    #[cfg(all(target_os = "macos"))]
+    if check_scroll_on_mac(mask, x, y) {
+        mouse_event.modifiers.push(ControlKey::Scroll.into());
+    }
     msg_out.set_mouse_event(mouse_event);
     interface.send(Data::Message(msg_out));
 }
 
+/// Activate OS by sending mouse movement.
+///
+/// # Arguments
+///
+/// * `interface` - The interface for sending data.
 fn activate_os(interface: &impl Interface) {
     send_mouse(0, 0, 0, false, false, false, false, interface);
     std::thread::sleep(Duration::from_millis(50));
@@ -1334,12 +1834,26 @@ fn activate_os(interface: &impl Interface) {
     */
 }
 
+/// Input the OS's password.
+///
+/// # Arguments
+///
+/// * `p` - The password.
+/// * `activate` - Whether to activate OS.
+/// * `interface` - The interface for sending data.
 pub fn input_os_password(p: String, activate: bool, interface: impl Interface) {
     std::thread::spawn(move || {
         _input_os_password(p, activate, interface);
     });
 }
 
+/// Input the OS's password.
+///
+/// # Arguments
+///
+/// * `p` - The password.
+/// * `activate` - Whether to activate OS.
+/// * `interface` - The interface for sending data.
 fn _input_os_password(p: String, activate: bool, interface: impl Interface) {
     if activate {
         activate_os(&interface);
@@ -1356,6 +1870,45 @@ fn _input_os_password(p: String, activate: bool, interface: impl Interface) {
     interface.send(Data::Message(msg_out));
 }
 
+/// Handle login error.
+/// Return true if the password is wrong, return false if there's an actual error.
+pub fn handle_login_error(
+    lc: Arc<RwLock<LoginConfigHandler>>,
+    err: &str,
+    interface: &impl Interface,
+) -> bool {
+    if err == "Wrong Password" {
+        lc.write().unwrap().password = Default::default();
+        interface.msgbox("re-input-password", err, "Do you want to enter again?", "");
+        true
+    } else if err == "No Password Access" {
+        lc.write().unwrap().password = Default::default();
+        interface.msgbox(
+            "wait-remote-accept-nook",
+            "Prompt",
+            "Please wait for the remote side to accept your session request...",
+            "",
+        );
+        true
+    } else {
+        if err.contains(SCRAP_X11_REQUIRED) {
+            interface.msgbox("error", "Login Error", err, SCRAP_X11_REF_URL);
+        } else {
+            interface.msgbox("error", "Login Error", err, "");
+        }
+        false
+    }
+}
+
+/// Handle hash message sent by peer.
+/// Hash will be used for login.
+///
+/// # Arguments
+///
+/// * `lc` - Login config.
+/// * `hash` - Hash sent by peer.
+/// * `interface` - [`Interface`] for sending data.
+/// * `peer` - [`Stream`] for communicating with peer.
 pub async fn handle_hash(
     lc: Arc<RwLock<LoginConfigHandler>>,
     password_preset: &str,
@@ -1363,6 +1916,14 @@ pub async fn handle_hash(
     interface: &impl Interface,
     peer: &mut Stream,
 ) {
+    lc.write().unwrap().hash = hash.clone();
+    let uuid = lc.read().unwrap().switch_uuid.clone();
+    if let Some(uuid) = uuid {
+        if let Ok(uuid) = uuid::Uuid::from_str(&uuid) {
+            send_switch_login_request(lc.clone(), peer, uuid).await;
+            return;
+        }
+    }
     let mut password = lc.read().unwrap().password.clone();
     if password.is_empty() {
         if !password_preset.is_empty() {
@@ -1379,7 +1940,7 @@ pub async fn handle_hash(
     if password.is_empty() {
         // login without password, the remote side can click accept
         send_login(lc.clone(), Vec::new(), peer).await;
-        interface.msgbox("input-password", "Password Required", "");
+        interface.msgbox("input-password", "Password Required", "", "");
     } else {
         let mut hasher = Sha256::new();
         hasher.update(&password);
@@ -1389,11 +1950,26 @@ pub async fn handle_hash(
     lc.write().unwrap().hash = hash;
 }
 
+/// Send login message to peer.
+///
+/// # Arguments
+///
+/// * `lc` - Login config.
+/// * `password` - Password.
+/// * `peer` - [`Stream`] for communicating with peer.
 async fn send_login(lc: Arc<RwLock<LoginConfigHandler>>, password: Vec<u8>, peer: &mut Stream) {
     let msg_out = lc.read().unwrap().create_login_msg(password);
     allow_err!(peer.send(&msg_out).await);
 }
 
+/// Handle login request made from ui.
+///
+/// # Arguments
+///
+/// * `lc` - Login config.
+/// * `password` - Password.
+/// * `remember` - Whether to remember password.
+/// * `peer` - [`Stream`] for communicating with peer.
 pub async fn handle_login_from_ui(
     lc: Arc<RwLock<LoginConfigHandler>>,
     password: String,
@@ -1412,24 +1988,61 @@ pub async fn handle_login_from_ui(
     send_login(lc.clone(), hasher2.finalize()[..].into(), peer).await;
 }
 
+async fn send_switch_login_request(
+    lc: Arc<RwLock<LoginConfigHandler>>,
+    peer: &mut Stream,
+    uuid: Uuid,
+) {
+    let mut msg_out = Message::new();
+    msg_out.set_switch_sides_response(SwitchSidesResponse {
+        uuid: Bytes::from(uuid.as_bytes().to_vec()),
+        lr: hbb_common::protobuf::MessageField::some(
+            lc.read()
+                .unwrap()
+                .create_login_msg(vec![])
+                .login_request()
+                .to_owned(),
+        ),
+        ..Default::default()
+    });
+    allow_err!(peer.send(&msg_out).await);
+}
+
+/// Interface for client to send data and commands.
 #[async_trait]
 pub trait Interface: Send + Clone + 'static + Sized {
+    /// Send message data to remote peer.
     fn send(&self, data: Data);
-    fn msgbox(&self, msgtype: &str, title: &str, text: &str);
+    fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str);
     fn handle_login_error(&mut self, err: &str) -> bool;
     fn handle_peer_info(&mut self, pi: PeerInfo);
+    fn on_error(&self, err: &str) {
+        self.msgbox("error", "Error", err, "");
+    }
     async fn handle_hash(&mut self, pass: &str, hash: Hash, peer: &mut Stream);
     async fn handle_login_from_ui(&mut self, password: String, remember: bool, peer: &mut Stream);
     async fn handle_test_delay(&mut self, t: TestDelay, peer: &mut Stream);
+
+    fn get_login_config_handler(&self) -> Arc<RwLock<LoginConfigHandler>>;
+    fn set_force_relay(&self, direct: bool, received: bool) {
+        self.get_login_config_handler()
+            .write()
+            .unwrap()
+            .set_force_relay(direct, received);
+    }
+    fn is_force_relay(&self) -> bool {
+        self.get_login_config_handler().read().unwrap().force_relay
+    }
 }
 
+/// Data used by the client interface.
 #[derive(Clone)]
 pub enum Data {
     Close,
     Login((String, bool)),
     Message(Message),
     SendFiles((i32, String, String, i32, bool, bool)),
-    RemoveDirAll((i32, String, bool)),
+    RemoveDirAll((i32, String, bool, bool)),
     ConfirmDeleteFiles((i32, i32)),
     SetNoConfirm(i32),
     RemoveDir((i32, String)),
@@ -1443,9 +2056,15 @@ pub enum Data {
     SetConfirmOverrideFile((i32, i32, bool, bool, bool)),
     AddJob((i32, String, String, i32, bool, bool)),
     ResumeJob((i32, bool)),
+    RecordScreen(bool, i32, i32, String),
+    ElevateDirect,
+    ElevateWithLogon(String, String),
+    NewVoiceCall,
+    CloseVoiceCall,
 }
 
-#[derive(Clone)]
+/// Keycode for key events.
+#[derive(Clone, Debug)]
 pub enum Key {
     ControlKey(ControlKey),
     Chr(u32),
@@ -1575,18 +2194,26 @@ lazy_static::lazy_static! {
     ].iter().cloned().collect();
 }
 
+/// Check if the given message is an error and can be retried.
+///
+/// # Arguments
+///
+/// * `msgtype` - The message type.
+/// * `title` - The title of the message.
+/// * `text` - The text of the message.
 #[inline]
-pub fn check_if_retry(msgtype: &str, title: &str, text: &str) -> bool {
+pub fn check_if_retry(msgtype: &str, title: &str, text: &str, retry_for_relay: bool) -> bool {
     msgtype == "error"
         && title == "Connection Error"
-        && !text.to_lowercase().contains("offline")
-        && !text.to_lowercase().contains("exist")
-        && !text.to_lowercase().contains("handshake")
-        && !text.to_lowercase().contains("failed")
-        && !text.to_lowercase().contains("resolve")
-        && !text.to_lowercase().contains("mismatch")
-        && !text.to_lowercase().contains("manually")
-        && !text.to_lowercase().contains("not allowed")
+        && ((text.contains("10054") || text.contains("104")) && retry_for_relay
+            || (!text.to_lowercase().contains("offline")
+                && !text.to_lowercase().contains("exist")
+                && !text.to_lowercase().contains("handshake")
+                && !text.to_lowercase().contains("failed")
+                && !text.to_lowercase().contains("resolve")
+                && !text.to_lowercase().contains("mismatch")
+                && !text.to_lowercase().contains("manually")
+                && !text.to_lowercase().contains("not allowed")))
 }
 
 #[inline]

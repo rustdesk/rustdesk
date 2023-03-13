@@ -16,9 +16,10 @@ use gstreamer as gst;
 use gstreamer::prelude::*;
 use gstreamer_app::AppSink;
 
+use hbb_common::config;
+
 use super::capturable::PixelProvider;
 use super::capturable::{Capturable, Recorder};
-
 use super::pipewire_dbus::{OrgFreedesktopPortalRequestResponse, OrgFreedesktopPortalScreenCast};
 
 #[derive(Debug, Clone, Copy)]
@@ -116,11 +117,13 @@ impl Capturable for PipeWireCapturable {
 pub struct PipeWireRecorder {
     buffer: Option<gst::MappedBuffer<gst::buffer::Readable>>,
     buffer_cropped: Vec<u8>,
+    pix_fmt: String,
     is_cropped: bool,
     pipeline: gst::Pipeline,
     appsink: AppSink,
     width: usize,
     height: usize,
+    saved_raw_data: Vec<u8>, // for faster compare and copy
 }
 
 impl PipeWireRecorder {
@@ -130,6 +133,7 @@ impl PipeWireRecorder {
         let src = gst::ElementFactory::make("pipewiresrc", None)?;
         src.set_property("fd", &capturable.fd.as_raw_fd())?;
         src.set_property("path", &format!("{}", capturable.path))?;
+        src.set_property("keepalive_time", &1_000.as_raw_fd())?;
 
         // For some reason pipewire blocks on destruction of AppSink if this is not set to true,
         // see: https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/982
@@ -141,23 +145,32 @@ impl PipeWireRecorder {
 
         pipeline.add_many(&[&src, &sink])?;
         src.link(&sink)?;
+
         let appsink = sink
             .dynamic_cast::<AppSink>()
             .map_err(|_| GStreamerError("Sink element is expected to be an appsink!".into()))?;
-        appsink.set_caps(Some(&gst::Caps::new_simple(
+        let mut caps = gst::Caps::new_empty();
+        caps.merge_structure(gst::structure::Structure::new(
             "video/x-raw",
             &[("format", &"BGRx")],
-        )));
+        ));
+        caps.merge_structure(gst::structure::Structure::new(
+            "video/x-raw",
+            &[("format", &"RGBx")],
+        ));
+        appsink.set_caps(Some(&caps));
 
         pipeline.set_state(gst::State::Playing)?;
         Ok(Self {
             pipeline,
             appsink,
             buffer: None,
+            pix_fmt: "".into(),
             width: 0,
             height: 0,
             buffer_cropped: vec![],
             is_cropped: false,
+            saved_raw_data: Vec::new(),
         })
     }
 }
@@ -177,6 +190,11 @@ impl Recorder for PipeWireRecorder {
             let h: i32 = cap.get_value("height")?.get_some()?;
             let w = w as usize;
             let h = h as usize;
+            self.pix_fmt = cap
+                .get::<&str>("format")?
+                .ok_or("Failed to get pixel format")?
+                .to_string();
+
             let buf = sample
                 .get_buffer_owned()
                 .ok_or_else(|| GStreamerError("Failed to get owned buffer.".into()))?;
@@ -190,6 +208,9 @@ impl Recorder for PipeWireRecorder {
             let buf = buf
                 .into_mapped_buffer_readable()
                 .map_err(|_| GStreamerError("Failed to map buffer.".into()))?;
+            if let Err(..) = crate::would_block_if_equal(&mut self.saved_raw_data, buf.as_slice()) {
+                return Ok(PixelProvider::NONE);
+            }
             let buf_size = buf.get_size();
             // BGRx is 4 bytes per pixel
             if buf_size != (w * h * 4) {
@@ -234,15 +255,22 @@ impl Recorder for PipeWireRecorder {
         if self.buffer.is_none() {
             return Err(Box::new(GStreamerError("No buffer available!".into())));
         }
-        Ok(PixelProvider::BGR0(
-            self.width,
-            self.height,
-            if self.is_cropped {
-                self.buffer_cropped.as_slice()
-            } else {
-                self.buffer.as_ref().unwrap().as_slice()
-            },
-        ))
+        let buf = if self.is_cropped {
+            self.buffer_cropped.as_slice()
+        } else {
+            self.buffer
+                .as_ref()
+                .ok_or("Failed to get buffer as ref")?
+                .as_slice()
+        };
+        match self.pix_fmt.as_str() {
+            "BGRx" => Ok(PixelProvider::BGR0(self.width, self.height, buf)),
+            "RGBx" => Ok(PixelProvider::RGB0(self.width, self.height, buf)),
+            _ => Err(Box::new(GStreamerError(format!(
+                "Unreachable! Unknown pix_fmt, {}",
+                &self.pix_fmt
+            )))),
+        }
     }
 }
 
@@ -358,21 +386,22 @@ fn streams_from_response(response: OrgFreedesktopPortalRequestResponse) -> Vec<P
                             info.size.1 = v[1] as _;
                         }
                     }
-                    let v = attributes
-                        .get("position")?
-                        .as_iter()?
-                        .filter_map(|v| {
-                            Some(
-                                v.as_iter()?
-                                    .map(|x| x.as_i64().unwrap_or(0))
-                                    .collect::<Vec<i64>>(),
-                            )
-                        })
-                        .next();
-                    if let Some(v) = v {
-                        if v.len() == 2 {
-                            info.position.0 = v[0] as _;
-                            info.position.1 = v[1] as _;
+                    if let Some(pos) = attributes.get("position") {
+                        let v = pos
+                            .as_iter()?
+                            .filter_map(|v| {
+                                Some(
+                                    v.as_iter()?
+                                        .map(|x| x.as_i64().unwrap_or(0))
+                                        .collect::<Vec<i64>>(),
+                                )
+                            })
+                            .next();
+                        if let Some(v) = v {
+                            if v.len() == 2 {
+                                info.position.0 = v[0] as _;
+                                info.position.1 = v[1] as _;
+                            }
                         }
                     }
                     Some(info)
@@ -384,6 +413,14 @@ fn streams_from_response(response: OrgFreedesktopPortalRequestResponse) -> Vec<P
 }
 
 static mut INIT: bool = false;
+const RESTORE_TOKEN: &str = "restore_token";
+const RESTORE_TOKEN_CONF_KEY: &str = "wayland-restore-token";
+
+pub fn get_available_cursor_modes() -> Result<u32, dbus::Error> {
+    let conn = SyncConnection::new_session()?;
+    let portal = get_portal(&conn);
+    portal.available_cursor_modes()
+}
 
 // mostly inspired by https://gitlab.gnome.org/snippets/19
 fn request_screen_cast(
@@ -412,6 +449,12 @@ fn request_screen_cast(
         "handle_token".to_string(),
         Variant(Box::new("u1".to_string())),
     );
+    // The following code may be improved.
+    // https://flatpak.github.io/xdg-desktop-portal/#:~:text=To%20avoid%20a%20race%20condition
+    // To avoid a race condition
+    // between the caller subscribing to the signal after receiving the reply for the method call and the signal getting emitted,
+    // a convention for Request object paths has been established that allows
+    // the caller to subscribe to the signal before making the method call.
     let path = portal.create_session(args)?;
     handle_response(
         &conn,
@@ -419,6 +462,16 @@ fn request_screen_cast(
         move |r: OrgFreedesktopPortalRequestResponse, c, _| {
             let portal = get_portal(c);
             let mut args: PropMap = HashMap::new();
+            if let Ok(version) = portal.version() {
+                if version >= 4 {
+                    let restore_token = config::LocalConfig::get_option(RESTORE_TOKEN_CONF_KEY);
+                    if !restore_token.is_empty() {
+                        args.insert(RESTORE_TOKEN.to_string(), Variant(Box::new(restore_token)));
+                    }
+                    // persist_mode may be configured by the user.
+                    args.insert("persist_mode".to_string(), Variant(Box::new(2u32)));
+                }
+            }
             args.insert(
                 "handle_token".to_string(),
                 Variant(Box::new("u2".to_string())),
@@ -427,7 +480,17 @@ fn request_screen_cast(
             args.insert("multiple".into(), Variant(Box::new(true)));
             args.insert("types".into(), Variant(Box::new(1u32))); //| 2u32)));
 
-            let cursor_mode = if capture_cursor { 2u32 } else { 1u32 };
+            let mut cursor_mode = 0u32;
+            let mut available_cursor_modes = 0u32;
+            if let Ok(modes) = portal.available_cursor_modes() {
+                available_cursor_modes = modes;
+            }
+            if capture_cursor {
+                cursor_mode = 2u32 & available_cursor_modes;
+            }
+            if cursor_mode == 0 {
+                cursor_mode = 1u32 & available_cursor_modes;
+            }
             let plasma = std::env::var("DESKTOP_SESSION").map_or(false, |s| s.contains("plasma"));
             if plasma && capture_cursor {
                 // Warn the user if capturing the cursor is tried on kde as this can crash
@@ -437,7 +500,9 @@ fn request_screen_cast(
                     desktop, see https://bugs.kde.org/show_bug.cgi?id=435042 for details! \
                     You have been warned.");
             }
-            args.insert("cursor_mode".into(), Variant(Box::new(cursor_mode)));
+            if cursor_mode > 0 {
+                args.insert("cursor_mode".into(), Variant(Box::new(cursor_mode)));
+            }
             let session: dbus::Path = r
                 .results
                 .get("session_handle")
@@ -476,12 +541,24 @@ fn request_screen_cast(
                         c,
                         path,
                         move |r: OrgFreedesktopPortalRequestResponse, c, _| {
+                            let portal = get_portal(c);
+                            if let Ok(version) = portal.version() {
+                                if version >= 4 {
+                                    if let Some(restore_token) = r.results.get(RESTORE_TOKEN) {
+                                        if let Some(restore_token) = restore_token.as_str() {
+                                            config::LocalConfig::set_option(
+                                                RESTORE_TOKEN_CONF_KEY.to_owned(),
+                                                restore_token.to_owned(),
+                                            );
+                                        }
+                                    }
+                                }
+                            }
                             streams
                                 .clone()
                                 .lock()
                                 .unwrap()
                                 .append(&mut streams_from_response(r));
-                            let portal = get_portal(c);
                             fd.clone().lock().unwrap().replace(
                                 portal.open_pipe_wire_remote(session.clone(), HashMap::new())?,
                             );

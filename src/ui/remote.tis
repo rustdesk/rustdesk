@@ -6,23 +6,27 @@ var display_width = 0;
 var display_height = 0;
 var display_origin_x = 0;
 var display_origin_y = 0;
+var display_cursor_embedded = false;
 var display_scale = 1;
 var keyboard_enabled = true; // server side
 var clipboard_enabled = true; // server side
 var audio_enabled = true; // server side
 var file_enabled = true; // server side
 var restart_enabled = true; // server side
+var recording_enabled = true; // server side
 var scroll_body = $(body);
 
-handler.setDisplay = function(x, y, w, h) {
+handler.setDisplay = function(x, y, w, h, cursor_embedded) {
     display_width = w;
     display_height = h;
     display_origin_x = x;
     display_origin_y = y;
+    display_cursor_embedded = cursor_embedded;
     adaptDisplay();
+    if (recording) handler.record_screen(true, w, h);
 }
 
-// in case toolbar not shown correclty
+// in case toolbar not shown correctly
 view.windowMinSize = (scaleIt(500), scaleIt(300));
 
 function adaptDisplay() {
@@ -67,6 +71,7 @@ function adaptDisplay() {
             }
         }
     }
+    refreshCursor();
     handler.style.set {
         width: w / scaleFactor + "px",
         height: h / scaleFactor + "px",
@@ -98,6 +103,7 @@ var acc_wheel_delta_y0 = 0;
 var total_wheel_time = 0;
 var wheeling = false;
 var dragging = false;
+var is_mouse_event_triggered = false;
 
 // https://stackoverflow.com/questions/5833399/calculating-scroll-inertia-momentum
 function resetWheel() {
@@ -114,7 +120,7 @@ function resetWheel() {
 
 var INERTIA_ACCELERATION = 30;
 
-// not good, precision not enough to simulate accelation effect,
+// not good, precision not enough to simulate acceleration effect,
 // seems have to use pixel based rather line based delta
 function accWheel(v, is_x) {
     if (wheeling) return;
@@ -139,6 +145,7 @@ function accWheel(v, is_x) {
 
 function handler.onMouse(evt)
 {
+    is_mouse_event_triggered = true;
     if (is_file_transfer || is_port_forward) return false;
     if (view.windowState == View.WINDOW_FULL_SCREEN && !dragging) {
         var dy = evt.y - scroll_body.scroll(#top);
@@ -190,6 +197,9 @@ function handler.onMouse(evt)
         dragging = false;
         break;
       case Event.MOUSE_MOVE:
+        if (display_cursor_embedded) {
+            break;
+        }
         if (cursor_img.style#display != "none" && keyboard_enabled) {
             cursor_img.style#display = "none";
         }
@@ -317,6 +327,7 @@ function handler.onMouse(evt)
     return true;
 };
 
+var cur_id = -1;
 var cur_hotx = 0;
 var cur_hoty = 0;
 var cur_img = null;
@@ -345,11 +356,21 @@ function scaleCursorImage(img) {
 var useSystemCursor = true;
 function updateCursor(system=false) {
     stdout.println("Update cursor, system: " + system);
-    useSystemCursor= system;
+    useSystemCursor = system;
     if (system) {
         handler.style#cursor = undefined;
     } else if (cur_img) {
         handler.style.cursor(cur_img, (cur_hotx * display_scale).toInteger(), (cur_hoty * display_scale).toInteger());
+    }
+}
+
+function refreshCursor() {
+    if (display_cursor_embedded) {
+        cursor_img.style#display = "none";
+        return;
+    }
+    if (cur_id != -1) {
+        handler.setCursorId(cur_id);
     }
 }
 
@@ -360,8 +381,9 @@ handler.setCursorData = function(id, hotx, hoty, width, height, colors) {
     if (img) {
         image_binded = true;
         cursors[id] = [img, hotx, hoty, width, height];
+        cur_id = id;
         img = scaleCursorImage(img);
-        if (cursor_img.style#display == 'none') {
+        if (!first_mouse_event_triggered || cursor_img.style#display == 'none') {
             self.timer(1ms, updateCursor);
         }
         cur_img = img;
@@ -371,11 +393,12 @@ handler.setCursorData = function(id, hotx, hoty, width, height, colors) {
 handler.setCursorId = function(id) {
     var img = cursors[id];
     if (img) {
+        cur_id = id;
         image_binded = true;
         cur_hotx = img[1];
         cur_hoty = img[2];
         img = scaleCursorImage(img[0]);
-        if (cursor_img.style#display == 'none') {
+        if (!first_mouse_event_triggered || cursor_img.style#display == 'none') {
             self.timer(1ms, updateCursor);
         }
         cur_img = img;
@@ -455,6 +478,7 @@ function self.closing() {
     var (x, y, w, h) = view.box(#rectw, #border, #screen);
     if (is_file_transfer) save_file_transfer_close_state();
     if (is_file_transfer || is_port_forward || size_adapted) handler.save_size(x, y, w, h);
+    if (recording) handler.record_screen(false, display_width, display_height);
 }
 
 var qualityMonitor;
@@ -507,6 +531,7 @@ handler.setPermission = function(name, enabled) {
     if (name == "file") file_enabled = enabled;
     if (name == "clipboard") clipboard_enabled = enabled;
     if (name == "restart") restart_enabled = enabled;
+    if (name == "recording") recording_enabled = enabled;
     input_blocked = false;
     header.update();
     });

@@ -4,6 +4,7 @@
 
 use super::{CursorData, ResultType};
 use cocoa::{
+    appkit::{NSApp, NSApplication, NSApplicationActivationPolicy::*},
     base::{id, nil, BOOL, NO, YES},
     foundation::{NSDictionary, NSPoint, NSSize, NSString},
 };
@@ -16,10 +17,11 @@ use core_graphics::{
     display::{kCGNullWindowID, kCGWindowListOptionOnScreenOnly, CGWindowListCopyWindowInfo},
     window::{kCGWindowName, kCGWindowOwnerPID},
 };
-use hbb_common::{bail, log};
+use hbb_common::{allow_err, anyhow::anyhow, bail, log, message_proto::Resolution};
 use include_dir::{include_dir, Dir};
 use objc::{class, msg_send, sel, sel_impl};
 use scrap::{libc::c_void, quartz::ffi::*};
+use std::path::PathBuf;
 
 static PRIVILEGES_SCRIPTS_DIR: Dir =
     include_dir!("$CARGO_MANIFEST_DIR/src/platform/privileges_scripts");
@@ -31,6 +33,17 @@ extern "C" {
     fn CGEventGetLocation(e: *const c_void) -> CGPoint;
     static kAXTrustedCheckOptionPrompt: CFStringRef;
     fn AXIsProcessTrustedWithOptions(options: CFDictionaryRef) -> BOOL;
+    fn InputMonitoringAuthStatus(_: BOOL) -> BOOL;
+    fn MacGetModeNum(display: u32, numModes: *mut u32) -> BOOL;
+    fn MacGetModes(
+        display: u32,
+        widths: *mut u32,
+        heights: *mut u32,
+        max: u32,
+        numModes: *mut u32,
+    ) -> BOOL;
+    fn MacGetMode(display: u32, width: *mut u32, height: *mut u32) -> BOOL;
+    fn MacSetMode(display: u32, width: u32, height: u32) -> BOOL;
 }
 
 pub fn is_process_trusted(prompt: bool) -> bool {
@@ -43,6 +56,13 @@ pub fn is_process_trusted(prompt: bool) -> bool {
             kAXTrustedCheckOptionPrompt as _,
         );
         AXIsProcessTrustedWithOptions(options as _) == YES
+    }
+}
+
+pub fn is_can_input_monitoring(prompt: bool) -> bool {
+    unsafe {
+        let value = if prompt { YES } else { NO };
+        InputMonitoringAuthStatus(value) == YES
     }
 }
 
@@ -161,7 +181,7 @@ pub fn is_installed_daemon(prompt: bool) -> bool {
     false
 }
 
-pub fn uninstall() -> bool {
+pub fn uninstall(show_new_window: bool) -> bool {
     // to-do: do together with win/linux about refactory start/stop service
     if !is_installed_daemon(false) {
         return false;
@@ -196,14 +216,21 @@ pub fn uninstall() -> bool {
                         .args(&["remove", &format!("{}_server", crate::get_full_name())])
                         .status()
                         .ok();
-                    std::process::Command::new("sh")
-                        .arg("-c")
-                        .arg(&format!(
-                            "sleep 0.5; open /Applications/{}.app",
-                            crate::get_app_name(),
-                        ))
-                        .spawn()
-                        .ok();
+                    if show_new_window {
+                        std::process::Command::new("sh")
+                            .arg("-c")
+                            .arg(&format!(
+                                "sleep 0.5; open /Applications/{}.app",
+                                crate::get_app_name(),
+                            ))
+                            .spawn()
+                            .ok();
+                    } else {
+                        std::process::Command::new("pkill")
+                            .arg(crate::get_app_name())
+                            .status()
+                            .ok();
+                    }
                     quit_gui();
                 }
             }
@@ -321,7 +348,7 @@ pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
         */
         let mut colors: Vec<u8> = Vec::new();
         colors.reserve((size.height * size.width) as usize * 4);
-        // TIFF is rgb colrspace, no need to convert
+        // TIFF is rgb colorspace, no need to convert
         // let cs: id = msg_send![class!(NSColorSpace), sRGBColorSpace];
         for y in 0..(size.height as _) {
             for x in 0..(size.width as _) {
@@ -374,6 +401,17 @@ pub fn get_active_userid() -> String {
     get_active_user("-n")
 }
 
+pub fn get_active_user_home() -> Option<PathBuf> {
+    let username = get_active_username();
+    if !username.is_empty() {
+        let home = PathBuf::from(format!("/Users/{}", username));
+        if home.exists() {
+            return Some(home);
+        }
+    }
+    None
+}
+
 pub fn is_prelogin() -> bool {
     get_active_userid() == "0"
 }
@@ -382,12 +420,12 @@ pub fn is_root() -> bool {
     crate::username() == "root"
 }
 
-pub fn run_as_user(arg: &str) -> ResultType<Option<std::process::Child>> {
+pub fn run_as_user(arg: Vec<&str>) -> ResultType<Option<std::process::Child>> {
     let uid = get_active_userid();
     let cmd = std::env::current_exe()?;
-    let task = std::process::Command::new("launchctl")
-        .args(vec!["asuser", &uid, cmd.to_str().unwrap_or(""), arg])
-        .spawn()?;
+    let mut args = vec!["asuser", &uid, cmd.to_str().unwrap_or("")];
+    args.append(&mut arg.clone());
+    let task = std::process::Command::new("launchctl").args(args).spawn()?;
     Ok(Some(task))
 }
 
@@ -419,7 +457,7 @@ pub fn start_os_service() {
                     .status()
                     .ok();
                 println!("The others killed");
-                // launchctl load/unload/start agent not work in daemon, show not priviledged.
+                // launchctl load/unload/start agent not work in daemon, show not privileged.
                 // sudo launchctl asuser 501 open -n also not allowed.
                 std::process::Command::new("launchctl")
                     .args(&[
@@ -488,7 +526,7 @@ pub fn start_os_service() {
                     Err(err) => {
                         log::error!("Failed to start server: {}", err);
                     }
-                    _ => { /*no hapen*/ }
+                    _ => { /*no happen*/ }
                 }
             }
             std::thread::sleep(std::time::Duration::from_millis(super::SERVICE_INTERVAL));
@@ -520,8 +558,110 @@ pub fn is_installed() -> bool {
 }
 
 pub fn quit_gui() {
-    use cocoa::appkit::NSApp;
     unsafe {
         let () = msg_send!(NSApp(), terminate: nil);
     };
+}
+
+pub fn get_double_click_time() -> u32 {
+    // to-do: https://github.com/servo/core-foundation-rs/blob/786895643140fa0ee4f913d7b4aeb0c4626b2085/cocoa/src/appkit.rs#L2823
+    500 as _
+}
+
+pub fn hide_dock() {
+    unsafe {
+        NSApp().setActivationPolicy_(NSApplicationActivationPolicyAccessory);
+    }
+}
+
+fn check_main_window() -> bool {
+    use hbb_common::sysinfo::{ProcessExt, System, SystemExt};
+    let mut sys = System::new();
+    sys.refresh_processes();
+    let app = format!("/Applications/{}.app", crate::get_app_name());
+    let my_uid = sys
+        .process((std::process::id() as i32).into())
+        .map(|x| x.user_id())
+        .unwrap_or_default();
+    for (_, p) in sys.processes().iter() {
+        if p.cmd().len() == 1 && p.user_id() == my_uid && p.cmd()[0].contains(&app) {
+            return true;
+        }
+    }
+    std::process::Command::new("open")
+        .args(["-n", &app])
+        .status()
+        .ok();
+    false
+}
+
+pub fn handle_application_should_open_untitled_file() {
+    hbb_common::log::debug!("icon clicked on finder");
+    let x = std::env::args().nth(1).unwrap_or_default();
+    if x == "--server" || x == "--cm" || x == "--tray" {
+        if crate::platform::macos::check_main_window() {
+            allow_err!(crate::ipc::send_url_scheme("rustdesk:".into()));
+        }
+    }
+}
+
+pub fn resolutions(name: &str) -> Vec<Resolution> {
+    let mut v = vec![];
+    if let Ok(display) = name.parse::<u32>() {
+        let mut num = 0;
+        unsafe {
+            if YES == MacGetModeNum(display, &mut num) {
+                let (mut widths, mut heights) = (vec![0; num as _], vec![0; num as _]);
+                let mut realNum = 0;
+                if YES
+                    == MacGetModes(
+                        display,
+                        widths.as_mut_ptr(),
+                        heights.as_mut_ptr(),
+                        num,
+                        &mut realNum,
+                    )
+                {
+                    if realNum <= num {
+                        for i in 0..realNum {
+                            let resolution = Resolution {
+                                width: widths[i as usize] as _,
+                                height: heights[i as usize] as _,
+                                ..Default::default()
+                            };
+                            if !v.contains(&resolution) {
+                                v.push(resolution);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    v
+}
+
+pub fn current_resolution(name: &str) -> ResultType<Resolution> {
+    let display = name.parse::<u32>().map_err(|e| anyhow!(e))?;
+    unsafe {
+        let (mut width, mut height) = (0, 0);
+        if NO == MacGetMode(display, &mut width, &mut height) {
+            bail!("MacGetMode failed");
+        }
+        Ok(Resolution {
+            width: width as _,
+            height: height as _,
+            ..Default::default()
+        })
+    }
+}
+
+pub fn change_resolution(name: &str, width: usize, height: usize) -> ResultType<()> {
+    let display = name.parse::<u32>().map_err(|e| anyhow!(e))?;
+    unsafe {
+        if NO == MacSetMode(display, width as _, height as _) {
+            bail!("MacSetMode failed");
+        }
+    }
+    Ok(())
 }

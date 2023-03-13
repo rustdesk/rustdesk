@@ -45,7 +45,7 @@ div.right-panel {
 
 div.icon-and-id {
     flow: horizontal;
-    border-spacing: 1em; 
+    border-spacing: 1em;
 }
 
 div.icon {
@@ -64,11 +64,11 @@ div.id {
 
 div.permissions {
     flow: horizontal;
-    border-spacing: 0.5em; 
+    border-spacing: 0.5em;
 }
 
 div.permissions > div {
-    size: 48px;
+    size: 42px;
     background: color(accent);
 }
 
@@ -108,20 +108,48 @@ icon.restart {
     background: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAB7BAAAewQHDaVRTAAAAGXRFWHRTb2Z0d2FyZQB3d3cuaW5rc2NhcGUub3Jnm+48GgAAAbhJREFUWIXVlrFqFGEUhb+7UYxaWCQKlrKKxaZSQVGDJih2tj6MD2DnMwiWvoAIRnENIpZiYxEro6IooiS7SPwsMgNLkk3mjmYmnmb45/73nMNwz/x/qH3gMu2gH6rAU+Blw+Lngau4jpmGxVF7qp1iPWjaQKnZ2WnXbuP/NqAeUPc3ZkA9XDwvqc+BVWCgPlJ7tRwUKThZce819b46VH+pfXVRXVO/q2cSul3VOgZUl0ejq86r39TXI8mqZKDuDEwCw3IREQvAbWAGmMsQZQ0sAl3gHPB1Q+0e8BuYzRDuy2yOiFVgaUxtRf0ETGc4syk4rc6PqU0Cx9j8Zf6dAeAK8Fi9sUXtFjABvEgxJlNwRP2svlNPjbw/q35U36oTFbnyMSwabxb/gB/qA3VBHagrauV7RW0DRfP1IvMlXqkXkhz1DYyQTKtHa/Z2VVMx3IiI+PI3/bCHjuOpFrSnAMpL6QfgTcMGesDx0kBr2BMzsNyi/vtQu8CJlgwsRbZDnWP90NkKaxHxJMOXMqAeAn5u0ydwMCKGY+qbkB3C2W3EKWoXk5zVoHbUZ+6Mh7tl4G4F8RJ3qvL+AfV3r5Vdpj70AAAAAElFTkSuQmCC');
 }
 
-div.buttons {
-    width: *;
-    border-spacing: 0.5em;
-    text-align: center;
+icon.recording {
+    background: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAANpJREFUWEftltENAiEMhtsJ1NcynG6gI+gGugEOR591gppeQoIYSDBILxEeydH/57u2FMF4obE+TAOTwLoIhBDOAHBExG2n6rgR0akW640AM0sn4SWMiDycc7s8JjN7Ijro/k8NqAAR5RoeAPZxv2ggP9hCJiWZxtGbq3hqbJiBVHy4gVx8qAER8Yi4JFy6huVAKXemgb8icI+1b5KEitq0DOO/Nm1EEX1TK27p/bVvv36MOhl4EtHHbFF7jq8AoG1z08OAiFycczrkFNe6RrIet26NMQlMAuYEXiayryF/QQktAAAAAElFTkSuQmCC');
 }
 
-div.buttons button {
-    width: 80px;
-    height: 40px;
-    margin: 0.5em;
+div.outer_buttons {
+    flow:vertical;
+    border-spacing:8;
+}
+
+div.inner_buttons {
+    flow:horizontal;
+    border-spacing:8;
+}
+
+button.control {
+    width: *;
+}
+
+button.elevate {
+    background:green;
+}
+
+button.elevate:active {
+    background: rgb(2, 104, 2);
+    border-color: color(hover-border);
+}
+
+button.elevate>span {
+    flow:horizontal;
+    width: *;
+}
+
+button.elevate>span>span {
+    margin-left:*;
+    margin-right:*;
+}
+
+button.elevate>span>span>span {
+    vertical-align: middle;
 }
 
 button#disconnect {
-    width: 160px;
     background: color(blood-red);
     border: none;
 }

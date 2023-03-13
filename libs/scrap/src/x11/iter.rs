@@ -1,7 +1,8 @@
+use std::ffi::CString;
 use std::ptr;
 use std::rc::Rc;
 
-use libc;
+use hbb_common::libc;
 
 use super::ffi::*;
 use super::{Display, Rect, Server};
@@ -64,6 +65,7 @@ impl Iterator for DisplayIter {
                 if inner.rem != 0 {
                     unsafe {
                         let data = &*inner.data;
+                        let name = get_atom_name(self.server.raw(), data.name);
 
                         let display = Display::new(
                             self.server.clone(),
@@ -75,6 +77,7 @@ impl Iterator for DisplayIter {
                                 h: data.height,
                             },
                             root,
+                            name,
                         );
 
                         xcb_randr_monitor_info_next(inner);
@@ -89,5 +92,32 @@ impl Iterator for DisplayIter {
             // The current screen was empty, so try the next screen.
             self.inner = Self::next_screen(&mut self.outer, &self.server);
         }
+    }
+}
+
+fn get_atom_name(conn: *mut xcb_connection_t, atom: xcb_atom_t) -> String {
+    let empty = "".to_owned();
+    if atom == 0 {
+        return empty;
+    }
+    unsafe {
+        let mut e: xcb_generic_error_t = std::mem::zeroed();
+        let reply = xcb_get_atom_name_reply(
+            conn,
+            xcb_get_atom_name(conn, atom),
+            &mut ((&mut e) as *mut xcb_generic_error_t) as _,
+        );
+        if reply == std::ptr::null() {
+            return empty;
+        }
+        let length = xcb_get_atom_name_name_length(reply);
+        let name = xcb_get_atom_name_name(reply);
+        let mut v = vec![0u8; length as _];
+        std::ptr::copy_nonoverlapping(name as _, v.as_mut_ptr(), length as _);
+        libc::free(reply as *mut _);
+        if let Ok(s) = CString::new(v) {
+            return s.to_string_lossy().to_string();
+        }
+        empty
     }
 }

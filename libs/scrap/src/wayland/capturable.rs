@@ -4,6 +4,7 @@ use std::error::Error;
 pub enum PixelProvider<'a> {
     // 8 bits per color
     RGB(usize, usize, &'a [u8]),
+    RGB0(usize, usize, &'a [u8]),
     BGR0(usize, usize, &'a [u8]),
     // width, height, stride
     BGR0S(usize, usize, usize, &'a [u8]),
@@ -14,6 +15,7 @@ impl<'a> PixelProvider<'a> {
     pub fn size(&self) -> (usize, usize) {
         match self {
             PixelProvider::RGB(w, h, _) => (*w, *h),
+            PixelProvider::RGB0(w, h, _) => (*w, *h),
             PixelProvider::BGR0(w, h, _) => (*w, *h),
             PixelProvider::BGR0S(w, h, _, _) => (*w, *h),
             PixelProvider::NONE => (0, 0),

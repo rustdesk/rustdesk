@@ -13,6 +13,7 @@ impl Display {
 
     pub fn online() -> Result<Vec<Display>, CGError> {
         unsafe {
+            #[allow(invalid_value)]
             let mut arr: [u32; 16] = mem::MaybeUninit::uninit().assume_init();
             let mut len: u32 = 0;
 
