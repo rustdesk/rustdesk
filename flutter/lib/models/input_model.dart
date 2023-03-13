@@ -419,7 +419,50 @@ class InputModel {
         'type': _kMouseEventMove,
       });
 
-  void handleMouse(Map<String, dynamic> evt) {
+  void tryMoveEdgeOnExit(Offset pos) => handleMouse(
+        {
+          'x': pos.dx,
+          'y': pos.dy,
+          'buttons': 0,
+          'type': _kMouseEventMove,
+        },
+        onExit: true,
+      );
+
+  int trySetNearestRange(int v, int min, int max, int n) {
+    if (v < min && v >= min - n) {
+      v = min;
+    }
+    if (v > max && v <= max + n) {
+      v = max;
+    }
+    return v;
+  }
+
+  Offset setNearestEdge(double x, double y, Display d) {
+    double left = x - d.x;
+    double right = d.x + d.width - 1 - x;
+    double top = y - d.y;
+    double bottom = d.y + d.height - 1 - y;
+    if (left < right && left < top && left < bottom) {
+      x = d.x;
+    }
+    if (right < left && right < top && right < bottom) {
+      x = d.x + d.width - 1;
+    }
+    if (top < left && top < right && top < bottom) {
+      y = d.y;
+    }
+    if (bottom < left && bottom < right && bottom < top) {
+      y = d.y + d.height - 1;
+    }
+    return Offset(x, y);
+  }
+
+  void handleMouse(
+    Map<String, dynamic> evt, {
+    bool onExit = false,
+  }) {
     double x = evt['x'];
     double y = max(0.0, evt['y']);
     final cursorModel = parent.target!.cursorModel;
@@ -501,6 +544,13 @@ class InputModel {
     }
     x += d.x;
     y += d.y;
+
+    if (onExit) {
+      final pos = setNearestEdge(x, y, d);
+      x = pos.dx;
+      y = pos.dy;
+    }
+
     var evtX = 0;
     var evtY = 0;
     try {
@@ -512,10 +562,13 @@ class InputModel {
       return;
     }
 
-    if (evtX < d.x ||
-        evtY < d.y ||
-        evtX > (d.x + d.width) ||
-        evtY > (d.y + d.height)) {
+    int minX = d.x.toInt();
+    int maxX = (d.x + d.width).toInt() - 1;
+    int minY = d.y.toInt();
+    int maxY = (d.y + d.height).toInt() - 1;
+    evtX = trySetNearestRange(evtX, minX, maxX, 5);
+    evtY = trySetNearestRange(evtY, minY, maxY, 5);
+    if (evtX < minX || evtY < minY || evtX > maxX || evtY > maxY) {
       // If left mouse up, no early return.
       if (evt['buttons'] != kPrimaryMouseButton || type != 'up') {
         return;
