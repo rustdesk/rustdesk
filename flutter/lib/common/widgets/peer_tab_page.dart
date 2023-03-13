@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:ui' as ui;
 
 import 'package:bot_toast/bot_toast.dart';
@@ -453,6 +454,13 @@ class _PeerSortDropdownState extends State<PeerSortDropdown> {
       color: Theme.of(context).colorScheme.background,
       borderRadius: BorderRadius.circular(5),
     );
+
+    final translated_text =
+        PeerSortType.values.map((e) => translate(e)).toList();
+
+    final double max_width =
+        50 + translated_text.map((e) => e.length).reduce(max) * 10;
+
     return Container(
       padding: EdgeInsets.all(4.0),
       decoration: deco,
@@ -471,12 +479,13 @@ class _PeerSortDropdownState extends State<PeerSortDropdown> {
               Icons.sort,
               size: 18,
             ),
+            isExpanded: true,
             dropdownStyleData: DropdownStyleData(
               decoration: BoxDecoration(
                 color: Theme.of(context).cardColor,
                 borderRadius: BorderRadius.circular(10),
               ),
-              width: 160,
+              width: max_width,
             ),
             items: [
               DropdownMenuItem<String>(
@@ -487,7 +496,7 @@ class _PeerSortDropdownState extends State<PeerSortDropdown> {
                 ),
                 enabled: false,
               ),
-              ...PeerSortType.values
+              ...translated_text
                   .map<DropdownMenuItem<String>>(
                     (String value) => DropdownMenuItem<String>(
                       value: value,
@@ -500,7 +509,7 @@ class _PeerSortDropdownState extends State<PeerSortDropdown> {
                             size: 18,
                           ).paddingOnly(right: 12),
                           Text(
-                            translate(value),
+                            value,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ],
