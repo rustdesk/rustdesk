@@ -309,7 +309,7 @@ class _RemotePageState extends State<RemotePage>
 
   void leaveView(PointerExitEvent evt) {
     if (_ffi.ffiModel.keyboard()) {
-      _ffi.inputModel.tryHoverEdgeOnExit(evt.position);
+      _ffi.inputModel.tryMoveEdgeOnExit(evt.position);
     }
 
     _cursorOverImage.value = false;

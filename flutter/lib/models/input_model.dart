@@ -419,7 +419,7 @@ class InputModel {
         'type': _kMouseEventMove,
       });
 
-  void tryHoverEdgeOnExit(Offset pos) => handleMouse(
+  void tryMoveEdgeOnExit(Offset pos) => handleMouse(
         {
           'x': pos.dx,
           'y': pos.dy,
