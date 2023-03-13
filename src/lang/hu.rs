@@ -289,6 +289,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_stop_service_tip", "A szolgáltatás leállítása automatikusan szétkapcsol minden létező kapcsolatot."),
         ("android_version_audio_tip", "A jelenlegi Android verzió nem támogatja a hangrögzítést, frissítsen legalább Android 10-re, vagy egy újabb verzióra."),
         ("android_start_service_tip", ""),
+        ("android_permission_may_not_change_tip", ""),
         ("Account", "Fiók"),
         ("Overwrite", "Felülírás"),
         ("This file exists, skip or overwrite this file?", "Ez a fájl már létezik, kihagyja vagy felülírja ezt a fájlt?"),

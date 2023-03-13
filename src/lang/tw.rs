@@ -289,6 +289,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_stop_service_tip", "關閉服務將自動關閉所有已建立的連接。"),
         ("android_version_audio_tip", "目前的 Android 版本不支持音訊錄製，請升級至 Android 10 或以上版本。"),
         ("android_start_service_tip", ""),
+        ("android_permission_may_not_change_tip", "對於已經建立的連接，權限可能不會立即發生改變，除非重新建立連接。"),
         ("Account", "賬戶"),
         ("Overwrite", "覆寫"),
         ("This file exists, skip or overwrite this file?", "此檔案/資料夾已存在，要跳過或是覆寫此檔案嗎？"),

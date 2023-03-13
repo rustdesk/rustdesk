@@ -289,6 +289,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_stop_service_tip", "Đóng dịch vụ sẽ tự động đóng tất cả các kết nối đã thiết lập."),
         ("android_version_audio_tip", "Phiên bản Android hiện tại không hỗ trợ ghi âm, vui lòng nâng cấp lên Android 10 trở lên."),
         ("android_start_service_tip", ""),
+        ("android_permission_may_not_change_tip", ""),
         ("Account", ""),
         ("Overwrite", "Ghi đè"),
         ("This file exists, skip or overwrite this file?", "Tệp tin này đã tồn tại, bạn có muốn bỏ qua hay ghi đè lên tệp tin này?"),
