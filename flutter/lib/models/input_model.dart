@@ -566,8 +566,8 @@ class InputModel {
     int maxX = (d.x + d.width).toInt() - 1;
     int minY = d.y.toInt();
     int maxY = (d.y + d.height).toInt() - 1;
-    evtX = trySetNearestRange(evtX, minX, maxX, 3);
-    evtY = trySetNearestRange(evtY, minY, maxY, 3);
+    evtX = trySetNearestRange(evtX, minX, maxX, 5);
+    evtY = trySetNearestRange(evtY, minY, maxY, 5);
     if (evtX < minX || evtY < minY || evtX > maxX || evtY > maxY) {
       // If left mouse up, no early return.
       if (evt['buttons'] != kPrimaryMouseButton || type != 'up') {
