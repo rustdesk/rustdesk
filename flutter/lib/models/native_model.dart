@@ -234,6 +234,9 @@ class PlatformFFI {
         debugPrint(
             '_appType:$_appType,info1-id:$id,info2-name:$name,dir:$_dir');
       }
+      if (desktopType == DesktopType.cm) {
+        await _ffiBind.cmStartListenIpcThread();
+      }
       await _ffiBind.mainDeviceId(id: id);
       await _ffiBind.mainDeviceName(name: name);
       await _ffiBind.mainSetHomeDir(home: _homeDir);

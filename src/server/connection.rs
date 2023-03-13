@@ -2013,10 +2013,12 @@ async fn start_ipc(
             for _ in 0..10 {
                 #[cfg(not(target_os = "linux"))]
                 {
+                    log::debug!("Start cm");
                     res = crate::platform::run_as_user(args.clone());
                 }
                 #[cfg(target_os = "linux")]
                 {
+                    log::debug!("Start cm");
                     res = crate::platform::run_as_user(args.clone(), None);
                 }
                 if res.is_ok() {
@@ -2032,12 +2034,13 @@ async fn start_ipc(
             run_done = false;
         }
         if !run_done {
+            log::debug!("Start cm");
             super::CHILD_PROCESS
                 .lock()
                 .unwrap()
                 .push(crate::run_me(args)?);
         }
-        for _ in 0..10 {
+        for _ in 0..20 {
             sleep(0.3).await;
             if let Ok(s) = crate::ipc::connect(1000, "_cm").await {
                 stream = Some(s);
