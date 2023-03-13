@@ -331,7 +331,7 @@ class QualityMonitor extends StatelessWidget {
         Expanded(
             flex: 8,
             child: AutoSizeText(info,
-                style: TextStyle(color: MyTheme.darkGray),
+                style: TextStyle(color: Color.fromARGB(255, 210, 210, 210)),
                 textAlign: TextAlign.right,
                 maxLines: 1)),
         Spacer(flex: 1),
@@ -353,7 +353,7 @@ class QualityMonitor extends StatelessWidget {
               ? Container(
                   constraints: BoxConstraints(maxWidth: 200),
                   padding: const EdgeInsets.all(8),
-                  color: MyTheme.canvasColor.withAlpha(120),
+                  color: MyTheme.canvasColor.withAlpha(150),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
