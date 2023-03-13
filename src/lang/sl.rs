@@ -289,6 +289,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_stop_service_tip", "Z zaustavitvijo storitve bodo samodejno prekinjene vse oddaljene povezave."),
         ("android_version_audio_tip", "Trenutna različica Androida ne omogoča zajema zvoka. Za zajem zvoka nadgradite na Android 10 ali novejši."),
         ("android_start_service_tip", ""),
+        ("android_permission_may_not_change_tip", ""),
         ("Account", "Račun"),
         ("Overwrite", "Prepiši"),
         ("This file exists, skip or overwrite this file?", "Datoteka obstaja, izpusti ali prepiši?"),

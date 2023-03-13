@@ -289,6 +289,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_stop_service_tip", "Η απενεργοποίηση της υπηρεσίας θα αποσυνδέσει αυτόματα όλες τις εγκατεστημένες συνδέσεις."),
         ("android_version_audio_tip", "Η έκδοση Android που διαθέτετε δεν υποστηρίζει εγγραφή ήχου, ενημερώστε το σε Android 10 ή νεότερη έκδοση, εάν είναι δυνατόν."),
         ("android_start_service_tip", ""),
+        ("android_permission_may_not_change_tip", ""),
         ("Account", "Λογαριασμός"),
         ("Overwrite", "Αντικατάσταση"),
         ("This file exists, skip or overwrite this file?", "Αυτό το αρχείο υπάρχει, παράβλεψη ή αντικατάσταση αυτού του αρχείου;"),

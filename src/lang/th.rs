@@ -289,6 +289,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_stop_service_tip", "การปิดการใช้งานเซอร์วิสจะปิดการเชื่อมต่อทั้งหมดโดยอัตโนมัติ"),
         ("android_version_audio_tip", "เวอร์ชั่นแอนดรอยด์ปัจจุบันของคุณไม่รองรับการบันทึกข้อมูลเสียง กรุณาอัปเกรดเป็นแอนดรอยด์เวอร์ชั่น 10 หรือสูงกว่า"),
         ("android_start_service_tip", ""),
+        ("android_permission_may_not_change_tip", ""),
         ("Account", "บัญชี"),
         ("Overwrite", "เขียนทับ"),
         ("This file exists, skip or overwrite this file?", "พบไฟล์ที่มีอยู่แล้ว ต้องการเขียนทับหรือไม่?"),

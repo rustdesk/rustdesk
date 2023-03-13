@@ -289,6 +289,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_stop_service_tip", "Durch das Deaktivieren des Dienstes werden automatisch alle hergestellten Verbindungen getrennt."),
         ("android_version_audio_tip", "Ihre Android-Version unterstützt keine Audioaufnahme, bitte aktualisieren Sie auf Android 10 oder höher, falls möglich."),
         ("android_start_service_tip", "Tippen Sie auf \"Vermittlungsdienst starten\" oder aktivieren Sie die Berechtigung \"Bildschirmaufnahme\", um den Bildschirmfreigabedienst zu starten."),
+        ("android_permission_may_not_change_tip", ""),
         ("Account", "Konto"),
         ("Overwrite", "Überschreiben"),
         ("This file exists, skip or overwrite this file?", "Diese Datei existiert; überspringen oder überschreiben?"),

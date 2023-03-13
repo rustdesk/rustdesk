@@ -24,6 +24,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_stop_service_tip", "Closing the service will automatically close all established connections."),
         ("android_version_audio_tip", "The current Android version does not support audio capture, please upgrade to Android 10 or higher."),
         ("android_start_service_tip", "Tap [Start Service] or enable [Screen Capture] permission to start the screen sharing service."),
+        ("android_permission_may_not_change_tip", "Permissions for established connections may not be changed instantly until reconnected."),
         ("doc_mac_permission", "https://rustdesk.com/docs/en/manual/mac/#enable-permissions"),
         ("doc_fix_wayland", "https://rustdesk.com/docs/en/manual/linux/#x11-required"),
         ("server_not_support", "Not yet supported by the server"),

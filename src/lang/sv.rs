@@ -289,6 +289,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_stop_service_tip", "Genom att stänga av tjänsten kommer alla enheter att kopplas ifrån."),
         ("android_version_audio_tip", "Din version av Android stödjer inte ljudinspelning, Android 10 eller nyare krävs"),
         ("android_start_service_tip", ""),
+        ("android_permission_may_not_change_tip", ""),
         ("Account", "Konto"),
         ("Overwrite", "Skriv över"),
         ("This file exists, skip or overwrite this file?", "Filen finns redan, hoppa över eller skriv över filen?"),

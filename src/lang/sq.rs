@@ -289,6 +289,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_stop_service_tip", "Mbyllja e shërbimit do të mbyllë automatikisht të gjitha lidhjet e vendosura."),
         ("android_version_audio_tip", "Versioni aktual i Android nuk mbështet regjistrimin e audios, ju lutemi përmirësoni në Android 10 ose më të lartë."),
         ("android_start_service_tip", ""),
+        ("android_permission_may_not_change_tip", ""),
         ("Account", "Llogaria"),
         ("Overwrite", "Përshkruaj"),
         ("This file exists, skip or overwrite this file?", "Ky skedar ekziston , tejkalo ose përshkruaj këtë skedarë"),
