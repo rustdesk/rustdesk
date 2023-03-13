@@ -2040,7 +2040,7 @@ async fn start_ipc(
                 .unwrap()
                 .push(crate::run_me(args)?);
         }
-        for _ in 0..10 {
+        for _ in 0..20 {
             sleep(0.3).await;
             if let Ok(s) = crate::ipc::connect(1000, "_cm").await {
                 stream = Some(s);
