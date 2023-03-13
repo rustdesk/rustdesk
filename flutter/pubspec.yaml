@@ -55,11 +55,11 @@ dependencies:
   window_manager:
     git:
       url: https://github.com/Kingtous/rustdesk_window_manager
-      ref: 32b24c66151b72bba033ef8b954486aa9351d97b
+      ref: c140f9685bead805c433c9f5a4618a5115f01fa8
   desktop_multi_window:
     git:
       url: https://github.com/Kingtous/rustdesk_desktop_multi_window
-      ref: e3947d4b4f8edaa655de63cd47f2a59a6e024218
+      ref: d1da784d3e8d89f3134b026d00d19711de894e7d
   freezed_annotation: ^2.0.3
   flutter_custom_cursor: ^0.0.4
   window_size:
