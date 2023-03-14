@@ -492,7 +492,7 @@ pub mod client {
                     "--portable-service",
                 ) {
                     *SHMEM.lock().unwrap() = None;
-                    bail!("Failed to run portable service process:{}", e);
+                    bail!("Failed to run portable service process: {}", e);
                 }
             }
             StartPara::Logon(username, password) => {
@@ -535,7 +535,7 @@ pub mod client {
                     "--portable-service",
                 ) {
                     *SHMEM.lock().unwrap() = None;
-                    bail!("Failed to run portable service process:{}", e);
+                    bail!("Failed to run portable service process: {}", e);
                 }
             }
         }
