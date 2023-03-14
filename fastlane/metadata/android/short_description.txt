@@ -1,1 +1,0 @@
-Een open-source remote desktop applicatie, het open source alternatief voor TeamViewer.
