@@ -4,8 +4,8 @@
 ## Onze Belofte
 
 Wij als leden, medewerkers en leiders beloven deelname aan onze
-gemeenschap een pesterij-vrije ervaring te maken voor iedereen, ongeacht leeftijd, lichaamsgrootte
-grootte, zichtbare of onzichtbare handicap, etniciteit, geslachtskenmerken, gender
+gemeenschap een pesterij-vrije ervaring te maken voor iedereen, ongeacht leeftijd, lichaamsgrootte, 
+zichtbare of onzichtbare handicap, etniciteit, geslachtskenmerken, gender
 identiteit en expressie, ervaringsniveau, opleiding, sociaal-economische status,
 nationaliteit, persoonlijk voorkomen, ras, religie of seksuele identiteit
 en geaardheid.
