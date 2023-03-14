@@ -839,7 +839,6 @@ class CustomAlertDialog extends StatelessWidget {
         ),
         actions: actions,
         actionsPadding: EdgeInsets.fromLTRB(padding, 0, padding, padding),
-        actionsAlignment: MainAxisAlignment.center,
       ),
     );
   }
