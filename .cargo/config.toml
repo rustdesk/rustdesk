@@ -6,5 +6,3 @@ rustflags = ["-Ctarget-feature=+crt-static"]
 rustflags = [
     "-C", "link-args=-sectcreate __CGPreLoginApp __cgpreloginapp /dev/null",
 ]
-[registries.crates-io]
-protocol = "sparse"
