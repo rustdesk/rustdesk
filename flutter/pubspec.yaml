@@ -92,7 +92,7 @@ dependencies:
   password_strength: ^0.2.0
   flutter_launcher_icons: ^0.11.0
   flutter_keyboard_visibility: ^5.4.0
-  texture_rgba_renderer: ^0.0.12
+  texture_rgba_renderer: ^0.0.13
   percent_indicator: ^4.2.2
   dropdown_button2: ^2.0.0
 
