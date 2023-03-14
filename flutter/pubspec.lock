@@ -325,8 +325,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "3e2655677c54f421f9e378680d8171b95a211e0f"
-      resolved-ref: "3e2655677c54f421f9e378680d8171b95a211e0f"
+      ref: "980ae3b45837a4bc55d82231801ffcbb0806b0c1"
+      resolved-ref: "980ae3b45837a4bc55d82231801ffcbb0806b0c1"
       url: "https://github.com/Kingtous/rustdesk_desktop_multi_window"
     source: git
     version: "0.1.0"
@@ -1236,10 +1236,10 @@ packages:
     dependency: "direct main"
     description:
       name: texture_rgba_renderer
-      sha256: ec8d124e4c1d7dfff854ae34e95d7d9d877b8f9d291c383c67686e4b15cf538e
+      sha256: "52bc9f217b7b07a760ee837d5a17329ad1f78ae8ed1e3fa612c6f1bed3c77f79"
       url: "https://pub.dev"
     source: hosted
-    version: "0.0.12"
+    version: "0.0.13"
   timing:
     dependency: transitive
     description:
@@ -1516,11 +1516,11 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "32b24c66151b72bba033ef8b954486aa9351d97b"
-      resolved-ref: "32b24c66151b72bba033ef8b954486aa9351d97b"
+      ref: c140f9685bead805c433c9f5a4618a5115f01fa8
+      resolved-ref: c140f9685bead805c433c9f5a4618a5115f01fa8
       url: "https://github.com/Kingtous/rustdesk_window_manager"
     source: git
-    version: "0.2.7"
+    version: "0.3.1"
   window_size:
     dependency: "direct main"
     description:
