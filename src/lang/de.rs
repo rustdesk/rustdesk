@@ -210,7 +210,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Settings", "Einstellungen"),
         ("Username", "Benutzername"),
         ("Invalid port", "Ungültiger Port"),
-        ("Closed manually by the peer", "Von der Gegenstelle manuell geschlossen"),
+        ("Closed manually by the peer", "Von der Gegenstelle manuell geschlossen."),
         ("Enable remote configuration modification", "Änderung der Konfiguration aus der Ferne zulassen"),
         ("Run without install", "Ohne Installation ausführen"),
         ("Connect via relay", "Über Relay-Server verbinden"),
@@ -289,7 +289,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_stop_service_tip", "Durch das Deaktivieren des Dienstes werden automatisch alle hergestellten Verbindungen getrennt."),
         ("android_version_audio_tip", "Ihre Android-Version unterstützt keine Audioaufnahme, bitte aktualisieren Sie auf Android 10 oder höher, falls möglich."),
         ("android_start_service_tip", "Tippen Sie auf \"Vermittlungsdienst starten\" oder aktivieren Sie die Berechtigung \"Bildschirmaufnahme\", um den Bildschirmfreigabedienst zu starten."),
-        ("android_permission_may_not_change_tip", ""),
+        ("android_permission_may_not_change_tip", "Die Berechtigungen für bestehende Verbindungen können nicht sofort geändert werden, bis die Verbindung wiederhergestellt ist."),
         ("Account", "Konto"),
         ("Overwrite", "Überschreiben"),
         ("This file exists, skip or overwrite this file?", "Diese Datei existiert; überspringen oder überschreiben?"),
@@ -426,7 +426,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wait", "Warten"),
         ("Elevation Error", "Berechtigungsfehler"),
         ("Ask the remote user for authentication", "Den entfernten Benutzer zur Authentifizierung auffordern"),
-        ("Choose this if the remote account is administrator", "Wählen Sie dies, wenn das entfernte Konto Administrator ist"),
+        ("Choose this if the remote account is administrator", "Wählen Sie dies, wenn das entfernte Konto Administrator ist."),
         ("Transmit the username and password of administrator", "Übermitteln Sie den Benutzernamen und das Passwort des Administrators"),
         ("still_click_uac_tip", "Der entfernte Benutzer muss immer noch im UAC-Fenster von RustDesk auf OK klicken."),
         ("Request Elevation", "Erhöhte Rechte anfordern"),
@@ -476,5 +476,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("eg: admin", "z. B.: admin"),
         ("Empty Username", "Leerer Benutzername"),
         ("Empty Password", "Leeres Passwort"),
+        ("Me", "Ich"),
     ].iter().cloned().collect();
 }
