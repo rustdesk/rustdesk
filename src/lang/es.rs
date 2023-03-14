@@ -475,7 +475,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("empty_address_book_tip", "Parece que actualmente no hay pares en tu libreta de direcciones."),
         ("eg: admin", "ej.: admin"),
         ("Empty Username", "Nombre de usuario vacío"),
-        ("Empty Password", "Contaseña vacía"),
+        ("Empty Password", "Contraseña vacía"),
         ("Me", "Yo"),
     ].iter().cloned().collect();
 }
