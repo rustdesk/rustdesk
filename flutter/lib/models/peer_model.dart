@@ -14,6 +14,13 @@ class Peer {
   String rdpUsername;
   bool online = false;
 
+  String getId() {
+    if (alias != '') {
+      return alias;
+    }
+    return id;
+  }
+
   Peer.fromJson(Map<String, dynamic> json)
       : id = json['id'] ?? '',
         username = json['username'] ?? '',

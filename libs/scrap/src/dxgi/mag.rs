@@ -127,15 +127,6 @@ impl MagInterface {
         };
         s.init_succeeded = false;
         unsafe {
-            if GetSystemMetrics(SM_CMONITORS) != 1 {
-                // Do not try to use the magnifier in multi-screen setup (where the API
-                // crashes sometimes).
-                return Err(Error::new(
-                    ErrorKind::Other,
-                    "Magnifier capturer cannot work on multi-screen system.",
-                ));
-            }
-
             // load lib
             let lib_file_name = "Magnification.dll";
             let lib_file_name_c = CString::new(lib_file_name).unwrap();
@@ -282,10 +273,10 @@ impl CapturerMag {
             let y = GetSystemMetrics(SM_YVIRTUALSCREEN);
             let w = GetSystemMetrics(SM_CXVIRTUALSCREEN);
             let h = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-            if !(origin.0 == x as i32
-                && origin.1 == y as i32
-                && width == w as usize
-                && height == h as usize)
+            if !(origin.0 >= x as i32
+                && origin.1 >= y as i32
+                && width <= w as usize
+                && height <= h as usize)
             {
                 return Err(Error::new(
                     ErrorKind::Other,
@@ -518,10 +509,10 @@ impl CapturerMag {
             let y = GetSystemMetrics(SM_YVIRTUALSCREEN);
             let w = GetSystemMetrics(SM_CXVIRTUALSCREEN);
             let h = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-            if !(self.rect.left == x as i32
-                && self.rect.top == y as i32
-                && self.rect.right == (x + w) as i32
-                && self.rect.bottom == (y + h) as i32)
+            if !(self.rect.left >= x as i32
+                && self.rect.top >= y as i32
+                && self.rect.right <= (x + w) as i32
+                && self.rect.bottom <= (y + h) as i32)
             {
                 return Err(Error::new(
                     ErrorKind::Other,
@@ -545,8 +536,8 @@ impl CapturerMag {
                     HWND_TOP,
                     self.rect.left,
                     self.rect.top,
-                    self.rect.right,
-                    self.rect.bottom,
+                    self.rect.right - self.rect.left,
+                    self.rect.bottom - self.rect.top,
                     0,
                 )
             {
@@ -556,8 +547,8 @@ impl CapturerMag {
                         "Failed SetWindowPos (x, y, w , h) - ({}, {}, {}, {}), error {}",
                         self.rect.left,
                         self.rect.top,
-                        self.rect.right,
-                        self.rect.bottom,
+                        self.rect.right - self.rect.left,
+                        self.rect.bottom - self.rect.top,
                         GetLastError()
                     ),
                 ));

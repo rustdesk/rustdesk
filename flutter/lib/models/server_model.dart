@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
@@ -127,10 +128,13 @@ class ServerModel with ChangeNotifier {
         _connectStatus = status;
         notifyListeners();
       }
-      final res = await bind.cmCheckClientsLength(length: _clients.length);
-      if (res != null) {
-        debugPrint("clients not match!");
-        updateClientState(res);
+
+      if (desktopType == DesktopType.cm) {
+        final res = await bind.cmCheckClientsLength(length: _clients.length);
+        if (res != null) {
+          debugPrint("clients not match!");
+          updateClientState(res);
+        }
       }
 
       updatePasswordModel();
@@ -154,7 +158,8 @@ class ServerModel with ChangeNotifier {
   /// file true by default (if permission on)
   checkAndroidPermission() async {
     // audio
-    if (androidVersion < 30 || !await PermissionManager.check("audio")) {
+    if (androidVersion < 30 ||
+        !await AndroidPermissionManager.check(kRecordAudio)) {
       _audioOk = false;
       bind.mainSetOption(key: "enable-audio", value: "N");
     } else {
@@ -163,7 +168,7 @@ class ServerModel with ChangeNotifier {
     }
 
     // file
-    if (!await PermissionManager.check("file")) {
+    if (!await AndroidPermissionManager.check(kManageExternalStorage)) {
       _fileOk = false;
       bind.mainSetOption(key: "enable-file-transfer", value: "N");
     } else {
@@ -229,10 +234,13 @@ class ServerModel with ChangeNotifier {
   }
 
   toggleAudio() async {
-    if (!_audioOk && !await PermissionManager.check("audio")) {
-      final res = await PermissionManager.request("audio");
+    if (clients.isNotEmpty) {
+      await showClientsMayNotBeChangedAlert(parent.target);
+    }
+    if (!_audioOk && !await AndroidPermissionManager.check(kRecordAudio)) {
+      final res = await AndroidPermissionManager.request(kRecordAudio);
       if (!res) {
-        // TODO handle fail
+        showToast(translate('Failed'));
         return;
       }
     }
@@ -243,10 +251,15 @@ class ServerModel with ChangeNotifier {
   }
 
   toggleFile() async {
-    if (!_fileOk && !await PermissionManager.check("file")) {
-      final res = await PermissionManager.request("file");
+    if (clients.isNotEmpty) {
+      await showClientsMayNotBeChangedAlert(parent.target);
+    }
+    if (!_fileOk &&
+        !await AndroidPermissionManager.check(kManageExternalStorage)) {
+      final res =
+          await AndroidPermissionManager.request(kManageExternalStorage);
       if (!res) {
-        // TODO handle fail
+        showToast(translate('Failed'));
         return;
       }
     }
@@ -256,11 +269,17 @@ class ServerModel with ChangeNotifier {
     notifyListeners();
   }
 
-  toggleInput() {
+  toggleInput() async {
+    if (clients.isNotEmpty) {
+      await showClientsMayNotBeChangedAlert(parent.target);
+    }
     if (_inputOk) {
       parent.target?.invokeMethod("stop_input");
+      bind.mainSetOption(key: "enable-keyboard", value: 'N');
     } else {
       if (parent.target != null) {
+        /// the result of toggle-on depends on user actions in the settings page.
+        /// handle result, see [ServerModel.changeStatue]
         showInputWarnAlert(parent.target!);
       }
     }
@@ -282,7 +301,7 @@ class ServerModel with ChangeNotifier {
           content: Text(translate("android_stop_service_tip")),
           actions: [
             TextButton(onPressed: close, child: Text(translate("Cancel"))),
-            ElevatedButton(onPressed: submit, child: Text(translate("OK"))),
+            TextButton(onPressed: submit, child: Text(translate("OK"))),
           ],
           onSubmit: submit,
           onCancel: close,
@@ -342,10 +361,6 @@ class ServerModel with ChangeNotifier {
       // current linux is not supported
       Wakelock.disable();
     }
-  }
-
-  Future<void> initInput() async {
-    await parent.target?.invokeMethod("init_input");
   }
 
   Future<bool> setPermanentPassword(String newPW) async {
@@ -456,7 +471,8 @@ class ServerModel with ChangeNotifier {
     Future.delayed(Duration.zero, () async {
       if (!hideCm) window_on_top(null);
     });
-    if (client.authorized) {
+    // Only do the hidden task when on Desktop.
+    if (client.authorized && isDesktop) {
       cmHiddenTimer = Timer(const Duration(seconds: 3), () {
         if (!hideCm) windowManager.minimize();
         cmHiddenTimer = null;
@@ -561,7 +577,8 @@ class ServerModel with ChangeNotifier {
   }
 
   Future<void> closeAll() async {
-    await Future.wait(_clients.map((client) => bind.cmCloseConnection(connId: client.id)));
+    await Future.wait(
+        _clients.map((client) => bind.cmCloseConnection(connId: client.id)));
     _clients.clear();
     tabController.state.value.tabs.clear();
   }
@@ -684,7 +701,7 @@ String getLoginDialogTag(int id) {
 showInputWarnAlert(FFI ffi) {
   ffi.dialogManager.show((setState, close) {
     submit() {
-      ffi.serverModel.initInput();
+      AndroidPermissionManager.startAction(kActionAccessibilitySettings);
       close();
     }
 
@@ -703,6 +720,25 @@ showInputWarnAlert(FFI ffi) {
         dialogButton("Open System Setting", onPressed: submit),
       ],
       onSubmit: submit,
+      onCancel: close,
+    );
+  });
+}
+
+Future<void> showClientsMayNotBeChangedAlert(FFI? ffi) async {
+  await ffi?.dialogManager.show((setState, close) {
+    return CustomAlertDialog(
+      title: Text(translate("Permissions")),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(translate("android_permission_may_not_change_tip")),
+        ],
+      ),
+      actions: [
+        dialogButton("OK", onPressed: close),
+      ],
+      onSubmit: close,
       onCancel: close,
     );
   });

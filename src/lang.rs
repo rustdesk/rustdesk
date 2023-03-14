@@ -1,6 +1,6 @@
-use serde_json::{json, value::Value};
 use std::ops::Deref;
 
+mod ca;
 mod cn;
 mod cs;
 mod da;
@@ -8,69 +8,65 @@ mod de;
 mod en;
 mod eo;
 mod es;
+mod fa;
 mod fr;
+mod el;
 mod hu;
 mod id;
 mod it;
 mod ja;
 mod ko;
+mod kz;
 mod nl;
 mod pl;
 mod ptbr;
 mod ro;
 mod ru;
 mod sk;
-mod tr;
-mod tw;
-mod vn;
-mod kz;
-mod ua;
-mod fa;
-mod ca;
-mod gr;
-mod sv;
+mod sl;
 mod sq;
 mod sr;
+mod sv;
 mod th;
-mod sl;
+mod tr;
+mod tw;
+mod ua;
+mod vn;
 
-lazy_static::lazy_static! {
-    pub static ref LANGS: Value =
-        json!(vec![
-            ("en", "English"),
-            ("it", "Italiano"),
-            ("fr", "Français"),
-            ("de", "Deutsch"),
-            ("nl", "Nederlands"),
-            ("cn", "简体中文"),
-            ("tw", "繁體中文"),
-            ("pt", "Português"),
-            ("es", "Español"),
-            ("hu", "Magyar"),
-            ("ru", "Русский"),
-            ("sk", "Slovenčina"),
-            ("id", "Indonesia"),
-            ("cs", "Čeština"),
-            ("da", "Dansk"),
-            ("eo", "Esperanto"),
-            ("tr", "Türkçe"),
-            ("vn", "Tiếng Việt"),
-            ("pl", "Polski"),
-            ("ja", "日本語"),
-            ("ko", "한국어"),
-            ("kz", "Қазақ"),
-            ("ua", "Українська"),
-            ("fa", "فارسی"),
-            ("ca", "Català"),
-            ("gr", "Ελληνικά"),
-            ("sv", "Svenska"),
-            ("sq", "Shqip"),
-            ("sr", "Srpski"),
-            ("th", "ภาษาไทย"),
-            ("sl", "Slovenščina"),
-            ("ro", "Română"),
-        ]);
-}
+pub const LANGS: &[(&str, &str)] = &[
+    ("en", "English"),
+    ("it", "Italiano"),
+    ("fr", "Français"),
+    ("de", "Deutsch"),
+    ("nl", "Nederlands"),
+    ("zh-cn", "简体中文"),
+    ("zh-tw", "繁體中文"),
+    ("pt", "Português"),
+    ("es", "Español"),
+    ("hu", "Magyar"),
+    ("ru", "Русский"),
+    ("sk", "Slovenčina"),
+    ("id", "Indonesia"),
+    ("cs", "Čeština"),
+    ("da", "Dansk"),
+    ("eo", "Esperanto"),
+    ("tr", "Türkçe"),
+    ("vn", "Tiếng Việt"),
+    ("pl", "Polski"),
+    ("ja", "日本語"),
+    ("ko", "한국어"),
+    ("kz", "Қазақ"),
+    ("ua", "Українська"),
+    ("fa", "فارسی"),
+    ("ca", "Català"),
+    ("el", "Ελληνικά"),
+    ("sv", "Svenska"),
+    ("sq", "Shqip"),
+    ("sr", "Srpski"),
+    ("th", "ภาษาไทย"),
+    ("sl", "Slovenščina"),
+    ("ro", "Română"),
+];
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn translate(name: String) -> String {
@@ -83,7 +79,12 @@ pub fn translate_locale(name: String, locale: &str) -> String {
     if lang.is_empty() {
         // zh_CN on Linux, zh-Hans-CN on mac, zh_CN_#Hans on Android
         if locale.starts_with("zh") {
-            lang = (if locale.contains("tw") { "tw" } else { "cn" }).to_owned();
+            lang = (if locale.contains("tw") {
+                "zh-tw"
+            } else {
+                "zh-cn"
+            })
+            .to_owned();
         }
     }
     if lang.is_empty() {
@@ -97,18 +98,17 @@ pub fn translate_locale(name: String, locale: &str) -> String {
     let lang = lang.to_lowercase();
     let m = match lang.as_str() {
         "fr" => fr::T.deref(),
-        "cn" => cn::T.deref(),
+        "zh-cn" => cn::T.deref(),
         "it" => it::T.deref(),
         "nl" => nl::T.deref(),
         "tw" => tw::T.deref(),
-        "de" => de::T.deref(),
-        "nl" => nl::T.deref(),
+        "zh-tw" => tw::T.deref(),
+        "de" => de::T.deref(),        
         "es" => es::T.deref(),
         "hu" => hu::T.deref(),
         "ru" => ru::T.deref(),
         "eo" => eo::T.deref(),
         "id" => id::T.deref(),
-        "ptbr" => ptbr::T.deref(),
         "br" => ptbr::T.deref(),
         "pt" => ptbr::T.deref(),
         "tr" => tr::T.deref(),
@@ -123,7 +123,7 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "ua" => ua::T.deref(),
         "fa" => fa::T.deref(),
         "ca" => ca::T.deref(),
-        "gr" => gr::T.deref(),
+        "el" => el::T.deref(),
         "sv" => sv::T.deref(),
         "sq" => sq::T.deref(),
         "sr" => sr::T.deref(),

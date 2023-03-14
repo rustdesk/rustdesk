@@ -39,6 +39,13 @@ pub const CLIPBOARD_INTERVAL: u64 = 333;
 
 pub const SYNC_PEER_INFO_DISPLAYS: i32 = 1;
 
+#[cfg(all(target_os = "macos", feature = "flutter_texture_render"))]
+// https://developer.apple.com/forums/thread/712709
+// Memory alignment should be multiple of 64.
+pub const DST_STRIDE_RGBA: usize = 64;
+#[cfg(not(all(target_os = "macos", feature = "flutter_texture_render")))]
+pub const DST_STRIDE_RGBA: usize = 1;
+
 // the executable name of the portable version
 pub const PORTABLE_APPNAME_RUNTIME_ENV_KEY: &str = "RUSTDESK_APPNAME";
 
@@ -779,4 +786,16 @@ pub fn handle_url_scheme(url: String) {
         log::debug!("Send the url to the existing flutter process failed, {}. Let's open a new program to handle this.", err);
         let _ = crate::run_me(vec![url]);
     }
+}
+
+#[inline]
+pub fn encode64<T: AsRef<[u8]>>(input: T) -> String {
+    #[allow(deprecated)]
+    base64::encode(input)
+}
+
+#[inline]
+pub fn decode64<T: AsRef<[u8]>>(input: T) -> Result<Vec<u8>, base64::DecodeError> {
+    #[allow(deprecated)]
+    base64::decode(input)
 }

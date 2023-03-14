@@ -10,7 +10,7 @@ use crate::{
 };
 use flutter_rust_bridge::{StreamSink, SyncReturn};
 use hbb_common::{
-    config::{self, LocalConfig, PeerConfig, ONLINE},
+    config::{self, LocalConfig, PeerConfig, PeerInfoSerde, ONLINE},
     fs, log,
     message_proto::KeyboardMode,
     ResultType,
@@ -21,6 +21,7 @@ use std::{
     ffi::{CStr, CString},
     os::raw::c_char,
     str::FromStr,
+    time::SystemTime,
 };
 
 // use crate::hbbs_http::account::AuthResult;
@@ -726,10 +727,6 @@ pub fn main_peer_has_password(id: String) -> bool {
     peer_has_password(id)
 }
 
-pub fn main_is_in_recent_peers(id: String) -> bool {
-    PeerConfig::peers().iter().any(|e| e.0 == id)
-}
-
 pub fn main_load_recent_peers() {
     if !config::APP_DIR.read().unwrap().is_empty() {
         let peers: Vec<HashMap<&str, String>> = PeerConfig::peers()
@@ -756,7 +753,28 @@ pub fn main_load_recent_peers() {
 pub fn main_load_fav_peers() {
     if !config::APP_DIR.read().unwrap().is_empty() {
         let favs = get_fav();
-        let peers: Vec<HashMap<&str, String>> = PeerConfig::peers()
+        let mut recent = PeerConfig::peers();
+        let mut lan = config::LanPeers::load()
+            .peers
+            .iter()
+            .filter(|d| recent.iter().all(|r| r.0 != d.id))
+            .map(|d| {
+                (
+                    d.id.clone(),
+                    SystemTime::UNIX_EPOCH,
+                    PeerConfig {
+                        info: PeerInfoSerde {
+                            username: d.username.clone(),
+                            hostname: d.hostname.clone(),
+                            platform: d.platform.clone(),
+                        },
+                        ..Default::default()
+                    },
+                )
+            })
+            .collect();
+        recent.append(&mut lan);
+        let peers: Vec<HashMap<&str, String>> = recent
             .into_iter()
             .filter_map(|(id, _, p)| {
                 if favs.contains(&id) {
@@ -838,6 +856,10 @@ pub fn main_set_user_default_option(key: String, value: String) {
 
 pub fn main_get_user_default_option(key: String) -> SyncReturn<String> {
     SyncReturn(get_user_default_option(key))
+}
+
+pub fn main_handle_relay_id(id: String) -> String {
+    handle_relay_id(id)
 }
 
 pub fn session_add_port_forward(
@@ -1357,7 +1379,7 @@ pub fn send_url_scheme(_url: String) {
 
 #[cfg(target_os = "android")]
 pub mod server_side {
-    use hbb_common::log;
+    use hbb_common::{config, log};
     use jni::{
         objects::{JClass, JString},
         sys::jstring,
@@ -1370,9 +1392,23 @@ pub mod server_side {
     pub unsafe extern "system" fn Java_com_carriez_flutter_1hbb_MainService_startServer(
         env: JNIEnv,
         _class: JClass,
+        app_dir: JString,
     ) {
-        log::debug!("startServer from java");
+        log::debug!("startServer from jvm");
+        if let Ok(app_dir) = env.get_string(app_dir) {
+            *config::APP_DIR.write().unwrap() = app_dir.into();
+        }
         std::thread::spawn(move || start_server(true));
+    }
+
+    #[no_mangle]
+    pub unsafe extern "system" fn Java_com_carriez_flutter_1hbb_MainService_startService(
+        env: JNIEnv,
+        _class: JClass,
+    ) {
+        log::debug!("startService from jvm");
+        config::Config::set_option("stop-service".into(), "".into());
+        crate::rendezvous_mediator::RendezvousMediator::restart();
     }
 
     #[no_mangle]

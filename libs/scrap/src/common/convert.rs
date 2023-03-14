@@ -190,6 +190,29 @@ pub fn i420_to_rgb(width: usize, height: usize, src: &[u8], dst: &mut Vec<u8>) {
     };
 }
 
+pub fn i420_to_bgra(width: usize, height: usize, src: &[u8], dst: &mut Vec<u8>) {
+    let (_, _, src_stride_y, src_stride_uv, u, v) =
+        get_vpx_i420_stride(width, height, super::STRIDE_ALIGN);
+    let src_y = src.as_ptr();
+    let src_u = src[u..].as_ptr();
+    let src_v = src[v..].as_ptr();
+    dst.resize(width * height * 4, 0);
+    unsafe {
+        super::I420ToARGB(
+            src_y,
+            src_stride_y as _,
+            src_u,
+            src_stride_uv as _,
+            src_v,
+            src_stride_uv as _,
+            dst.as_mut_ptr(),
+            (width * 3) as _,
+            width as _,
+            height as _,
+        );
+    };
+}
+
 pub fn bgra_to_i420(width: usize, height: usize, src: &[u8], dst: &mut Vec<u8>) {
     let (_, h, dst_stride_y, dst_stride_uv, u, v) =
         get_vpx_i420_stride(width, height, super::STRIDE_ALIGN);
@@ -269,8 +292,8 @@ pub unsafe fn nv12_to_i420(
 
 #[cfg(feature = "hwcodec")]
 pub mod hw {
-    use hbb_common::{anyhow::anyhow, ResultType};
     use crate::ImageFormat;
+    use hbb_common::{anyhow::anyhow, ResultType};
     #[cfg(target_os = "windows")]
     use hwcodec::{ffmpeg::ffmpeg_linesize_offset_length, AVPixelFormat};
 
@@ -466,9 +489,7 @@ pub mod hw {
                         _ => Err(anyhow!("NV12ToABGR failed")),
                     }
                 }
-                _ => {
-                    Err(anyhow!("unsupported image format"))
-                }
+                _ => Err(anyhow!("unsupported image format")),
             }
         }
     }
@@ -519,8 +540,7 @@ pub mod hw {
                         height as _,
                     );
                 }
-                _ => {
-                }
+                _ => {}
             }
         };
     }

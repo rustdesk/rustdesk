@@ -63,8 +63,9 @@ void changeIdDialog() {
       final Iterable violations = rules.where((r) => !r.validate(newId));
       if (violations.isNotEmpty) {
         setState(() {
-          msg =
-              '${translate('Prompt')}: ${violations.map((r) => r.name).join(', ')}';
+          msg = isDesktop
+              ? '${translate('Prompt')}:  ${violations.map((r) => r.name).join(', ')}'
+              : violations.map((r) => r.name).join(', ');
         });
         return;
       }
@@ -87,7 +88,9 @@ void changeIdDialog() {
       }
       setState(() {
         isInProgress = false;
-        msg = '${translate('Prompt')}: ${translate(status)}';
+        msg = isDesktop
+            ? '${translate('Prompt')}: ${translate(status)}'
+            : translate(status);
       });
     }
 
@@ -103,7 +106,7 @@ void changeIdDialog() {
           TextField(
             decoration: InputDecoration(
                 labelText: translate('Your new ID'),
-                border: const OutlineInputBorder(),
+                border: isDesktop ? const OutlineInputBorder() : null,
                 errorText: msg.isEmpty ? null : translate(msg),
                 suffixText: '${rxId.value.length}/16',
                 suffixStyle: const TextStyle(fontSize: 12, color: Colors.grey)),
@@ -123,27 +126,26 @@ void changeIdDialog() {
           const SizedBox(
             height: 8.0,
           ),
-          Obx(() => Wrap(
-                runSpacing: 8,
-                spacing: 4,
-                children: rules.map((e) {
-                  var checked = e.validate(rxId.value);
-                  return Chip(
-                      label: Text(
-                        e.name,
-                        style: TextStyle(
-                            color: checked
-                                ? const Color(0xFF0A9471)
-                                : Color.fromARGB(255, 198, 86, 157)),
-                      ),
-                      backgroundColor: checked
-                          ? const Color(0xFFD0F7ED)
-                          : Color.fromARGB(255, 247, 205, 232));
-                }).toList(),
-              )),
-          const SizedBox(
-            height: 8.0,
-          ),
+          isDesktop
+              ? Obx(() => Wrap(
+                    runSpacing: 8,
+                    spacing: 4,
+                    children: rules.map((e) {
+                      var checked = e.validate(rxId.value);
+                      return Chip(
+                          label: Text(
+                            e.name,
+                            style: TextStyle(
+                                color: checked
+                                    ? const Color(0xFF0A9471)
+                                    : Color.fromARGB(255, 198, 86, 157)),
+                          ),
+                          backgroundColor: checked
+                              ? const Color(0xFFD0F7ED)
+                              : Color.fromARGB(255, 247, 205, 232));
+                    }).toList(),
+                  )).marginOnly(bottom: 8)
+              : SizedBox.shrink(),
           Offstage(
               offstage: !isInProgress, child: const LinearProgressIndicator())
         ],
@@ -180,7 +182,7 @@ void changeWhiteList({Function()? callback}) async {
                 child: TextField(
                     maxLines: null,
                     decoration: InputDecoration(
-                      border: const OutlineInputBorder(),
+                      border: isDesktop ? const OutlineInputBorder() : null,
                       errorText: msg.isEmpty ? null : translate(msg),
                     ),
                     controller: controller,

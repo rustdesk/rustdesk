@@ -1,4 +1,4 @@
-use hbb_common::{log, anyhow::Error, bail, ResultType};
+use hbb_common::{anyhow::Error, bail, log, ResultType};
 use ndk::media::media_codec::{MediaCodec, MediaCodecDirection, MediaFormat};
 use std::ops::Deref;
 use std::{
@@ -50,7 +50,13 @@ impl MediaCodecDecoder {
         MediaCodecDecoders { h264, h265 }
     }
 
-    pub fn decode(&mut self, data: &[u8], fmt: ImageFormat, raw: &mut Vec<u8>) -> ResultType<bool> {
+    // take dst_stride into account please
+    pub fn decode(
+        &mut self,
+        data: &[u8],
+        (fmt, dst_stride): (ImageFormat, usize),
+        raw: &mut Vec<u8>,
+    ) -> ResultType<bool> {
         match self.dequeue_input_buffer(Duration::from_millis(10))? {
             Some(mut input_buffer) => {
                 let mut buf = input_buffer.buffer_mut();

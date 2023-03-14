@@ -13,7 +13,8 @@ use std::{
     convert::TryFrom,
     ops::Sub,
     sync::atomic::{AtomicBool, Ordering},
-    time::Instant,
+    thread,
+    time::{self, Instant},
 };
 
 const INVALID_CURSOR_POS: i32 = i32::MIN;
@@ -128,6 +129,7 @@ pub fn new_pos() -> GenericService {
     sp
 }
 
+#[inline]
 fn update_last_cursor_pos(x: i32, y: i32) {
     let mut lock = LATEST_SYS_CURSOR_POS.lock().unwrap();
     if lock.1 .0 != x || lock.1 .1 != y {
@@ -136,28 +138,30 @@ fn update_last_cursor_pos(x: i32, y: i32) {
 }
 
 fn run_pos(sp: GenericService, state: &mut StatePos) -> ResultType<()> {
-    if let Some((x, y)) = crate::get_cursor_pos() {
-        update_last_cursor_pos(x, y);
-        if state.is_moved(x, y) {
-            let mut msg_out = Message::new();
-            msg_out.set_cursor_position(CursorPosition {
-                x,
-                y,
-                ..Default::default()
-            });
-            let exclude = {
-                let now = get_time();
-                let lock = LATEST_PEER_INPUT_CURSOR.lock().unwrap();
-                if now - lock.time < 300 {
-                    lock.conn
-                } else {
-                    0
-                }
-            };
-            sp.send_without(msg_out, exclude);
-        }
-        state.cursor_pos = (x, y);
+    let (_, (x, y)) = *LATEST_SYS_CURSOR_POS.lock().unwrap();
+    if x == INVALID_CURSOR_POS || y == INVALID_CURSOR_POS {
+        return Ok(());
     }
+
+    if state.is_moved(x, y) {
+        let mut msg_out = Message::new();
+        msg_out.set_cursor_position(CursorPosition {
+            x,
+            y,
+            ..Default::default()
+        });
+        let exclude = {
+            let now = get_time();
+            let lock = LATEST_PEER_INPUT_CURSOR.lock().unwrap();
+            if now - lock.time < 300 {
+                lock.conn
+            } else {
+                0
+            }
+        };
+        sp.send_without(msg_out, exclude);
+    }
+    state.cursor_pos = (x, y);
 
     sp.snapshot(|sps| {
         let mut msg_out = Message::new();
@@ -213,13 +217,49 @@ lazy_static::lazy_static! {
     };
     static ref KEYS_DOWN: Arc<Mutex<HashMap<KeysDown, Instant>>> = Default::default();
     static ref LATEST_PEER_INPUT_CURSOR: Arc<Mutex<Input>> = Default::default();
-    static ref LATEST_SYS_CURSOR_POS: Arc<Mutex<(Instant, (i32, i32))>> = Arc::new(Mutex::new((Instant::now().sub(MOUSE_MOVE_PROTECTION_TIMEOUT), (0, 0))));
+    static ref LATEST_SYS_CURSOR_POS: Arc<Mutex<(Instant, (i32, i32))>> = Arc::new(Mutex::new((Instant::now().sub(MOUSE_MOVE_PROTECTION_TIMEOUT), (INVALID_CURSOR_POS, INVALID_CURSOR_POS))));
 }
 static EXITING: AtomicBool = AtomicBool::new(false);
 
 const MOUSE_MOVE_PROTECTION_TIMEOUT: Duration = Duration::from_millis(1_000);
 // Actual diff of (x,y) is (1,1) here. But 5 may be tolerant.
 const MOUSE_ACTIVE_DISTANCE: i32 = 5;
+
+static RECORD_CURSOR_POS_RUNNING: AtomicBool = AtomicBool::new(false);
+
+pub fn try_start_record_cursor_pos() {
+    if RECORD_CURSOR_POS_RUNNING.load(Ordering::SeqCst) {
+        return;
+    }
+
+    RECORD_CURSOR_POS_RUNNING.store(true, Ordering::SeqCst);
+    thread::spawn(|| {
+        let interval = time::Duration::from_millis(33);
+        loop {
+            if !RECORD_CURSOR_POS_RUNNING.load(Ordering::SeqCst) {
+                break;
+            }
+
+            let now = time::Instant::now();
+            if let Some((x, y)) = crate::get_cursor_pos() {
+                update_last_cursor_pos(x, y);
+            }
+            let elapsed = now.elapsed();
+            if elapsed < interval {
+                thread::sleep(interval - elapsed);
+            }
+        }
+        update_last_cursor_pos(INVALID_CURSOR_POS, INVALID_CURSOR_POS);
+    });
+}
+
+pub fn try_stop_record_cursor_pos() {
+    let count_lock = CONN_COUNT.lock().unwrap();
+    if *count_lock > 0 {
+        return;
+    }
+    RECORD_CURSOR_POS_RUNNING.store(false, Ordering::SeqCst);
+}
 
 // mac key input must be run in main thread, otherwise crash on >= osx 10.15
 #[cfg(target_os = "macos")]
@@ -717,11 +757,8 @@ pub fn handle_key(evt: &KeyEvent) {
 fn reset_input() {
     unsafe {
         let _lock = VIRTUAL_INPUT_MTX.lock();
-        VIRTUAL_INPUT = VirtualInput::new(
-            CGEventSourceStateID::Private,
-            CGEventTapLocation::Session,
-        )
-        .ok();
+        VIRTUAL_INPUT =
+            VirtualInput::new(CGEventSourceStateID::Private, CGEventTapLocation::Session).ok();
     }
 }
 
@@ -1095,8 +1132,7 @@ fn translate_keyboard_mode(evt: &KeyEvent) {
         Some(key_event::Union::Seq(seq)) => {
             ENIGO.lock().unwrap().key_sequence(seq);
         }
-        Some(key_event::Union::Chr(..)) =>
-        {
+        Some(key_event::Union::Chr(..)) => {
             #[cfg(target_os = "windows")]
             translate_process_code(evt.chr(), evt.down);
             #[cfg(not(target_os = "windows"))]

@@ -215,6 +215,7 @@ static mut IS_0X021D_DOWN: bool = false;
 static mut IS_LEFT_OPTION_DOWN: bool = false;
 
 pub fn start_grab_loop() {
+    std::env::set_var("KEYBOARD_ONLY", "y");
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     std::thread::spawn(move || {
         let try_handle_keyboard = move |event: Event, key: Key, is_press: bool| -> Option<Event> {

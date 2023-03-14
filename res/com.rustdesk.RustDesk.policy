@@ -11,6 +11,7 @@
     <message>Authentication is required to change RustDesk options</message>
     <message xml:lang="zh_CN">要更改RustDesk选项, 需要您先通过身份验证</message>
     <message xml:lang="zh_TW">要變更RustDesk選項, 需要您先通過身份驗證</message>
+    <message xml:lang="de">Authentifizierung zum Ändern der RustDesk-Optionen</message>
     <annotate key="org.freedesktop.policykit.exec.path">/usr/share/rustdesk/files/polkit</annotate>
     <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
     <defaults>

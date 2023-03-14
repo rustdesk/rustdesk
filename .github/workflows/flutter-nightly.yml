@@ -14,6 +14,7 @@ env:
   # for multiarch gcc compatibility
   VCPKG_COMMIT_ID: "14e7bb4ae24616ec54ff6b2f6ef4e8659434ea44"
   VERSION: "1.2.0"
+  NDK_VERSION: "r23"
   #signing keys env variable checks
   ANDROID_SIGNING_KEY: '${{ secrets.ANDROID_SIGNING_KEY }}'
   MACOS_P12_BASE64: '${{ secrets.MACOS_P12_BASE64 }}'
@@ -86,7 +87,7 @@ jobs:
         shell: bash
 
       - name: Build rustdesk
-        run: python3 .\build.py --portable --hwcodec --flutter
+        run: python3 .\build.py --portable --hwcodec --flutter --feature IddDriver
 
       - name: Sign rustdesk files
         uses: GermanBluefox/code-sign-action@v7
@@ -430,7 +431,7 @@ jobs:
           - {
               arch: x86_64,
               target: aarch64-linux-android,
-              os: ubuntu-18.04,
+              os: ubuntu-20.04,
               extra-build-features: "",
             }
           # - {
@@ -454,7 +455,7 @@ jobs:
       - uses: nttld/setup-ndk@v1
         id: setup-ndk
         with:
-          ndk-version: r22b
+          ndk-version: ${{ env.NDK_VERSION }}
           add-to-path: true
 
       - name: Download deps
@@ -732,7 +733,7 @@ jobs:
               x86_64)
                 # no need mock on x86_64
                 export VCPKG_ROOT=/opt/artifacts/vcpkg
-                cargo build --lib --features hwcodec,flutter,flutter_texture_render,${{ matrix.job.extra-build-features }} --release
+                cargo build --lib --features hwcodec,flutter,${{ matrix.job.extra-build-features }} --release
                 ;;
             esac
 
@@ -900,7 +901,7 @@ jobs:
                 ln -s /usr/include /vcpkg/installed/arm64-linux/include
                 export VCPKG_ROOT=/vcpkg
                 # disable hwcodec for compilation
-                cargo build --lib --features flutter,flutter_texture_render,${{ matrix.job.extra-build-features }} --release
+                cargo build --lib --features flutter,${{ matrix.job.extra-build-features }} --release
                 ;;
               armv7)
                 cp -r /opt/artifacts/vcpkg/installed/lib/* /usr/lib/arm-linux-gnueabihf/
@@ -910,7 +911,7 @@ jobs:
                 ln -s /usr/include /vcpkg/installed/arm-linux/include
                 export VCPKG_ROOT=/vcpkg
                 # disable hwcodec for compilation
-                cargo build --lib --features flutter,flutter_texture_render,${{ matrix.job.extra-build-features }} --release
+                cargo build --lib --features flutter,${{ matrix.job.extra-build-features }} --release
                 ;;
             esac
 
@@ -1511,7 +1512,7 @@ jobs:
             pushd flatpak
             git clone https://github.com/flathub/shared-modules.git --depth=1
             flatpak-builder --user --force-clean --repo=repo ./build ./rustdesk.json
-            flatpak build-bundle ./repo rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}.flatpak org.rustdesk.rustdesk
+            flatpak build-bundle ./repo rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}.flatpak com.rustdesk.RustDesk
 
       - name: Publish flatpak package
         uses: softprops/action-gh-release@v1

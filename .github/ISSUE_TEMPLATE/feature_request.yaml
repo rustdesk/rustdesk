@@ -1,5 +1,6 @@
 name: 🛠️ Feature request
 description: Suggest an idea for RustDesk
+labels: ["enhancement"]
 body:
   - type: textarea
     id: desc

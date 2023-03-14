@@ -1,0 +1,9 @@
+[package]
+name = "qemu-rustdesk"
+version = "0.1.0"
+authors = ["rustdesk <info@rustdesk.com>"]
+edition = "2021"
+
+[dependencies]
+qemu-display = { git = "https://gitlab.com/marcandre.lureau/qemu-display" }
+hbb_common = { path = "../../libs/hbb_common" }

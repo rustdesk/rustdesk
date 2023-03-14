@@ -306,7 +306,7 @@ impl Decoder {
     pub fn handle_video_frame(
         &mut self,
         frame: &video_frame::Union,
-        fmt: ImageFormat,
+        fmt: (ImageFormat, usize),
         rgb: &mut Vec<u8>,
     ) -> ResultType<bool> {
         match frame {
@@ -352,7 +352,7 @@ impl Decoder {
     fn handle_vp9s_video_frame(
         decoder: &mut VpxDecoder,
         vp9s: &EncodedVideoFrames,
-        fmt: ImageFormat,
+        fmt: (ImageFormat, usize),
         rgb: &mut Vec<u8>,
     ) -> ResultType<bool> {
         let mut last_frame = Image::new();
@@ -369,7 +369,7 @@ impl Decoder {
         if last_frame.is_null() {
             Ok(false)
         } else {
-            last_frame.to(fmt, 1, rgb);
+            last_frame.to(fmt.0, fmt.1, rgb);
             Ok(true)
         }
     }
@@ -378,7 +378,7 @@ impl Decoder {
     fn handle_hw_video_frame(
         decoder: &mut HwDecoder,
         frames: &EncodedVideoFrames,
-        fmt: ImageFormat,
+        fmt: (ImageFormat, usize),
         raw: &mut Vec<u8>,
         i420: &mut Vec<u8>,
     ) -> ResultType<bool> {
@@ -398,7 +398,7 @@ impl Decoder {
     fn handle_mediacodec_video_frame(
         decoder: &mut MediaCodecDecoder,
         frames: &EncodedVideoFrames,
-        fmt: ImageFormat,
+        fmt: (ImageFormat, usize),
         raw: &mut Vec<u8>,
     ) -> ResultType<bool> {
         let mut ret = false;

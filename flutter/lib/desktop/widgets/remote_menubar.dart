@@ -23,6 +23,10 @@ import '../../common/shared_state.dart';
 import './popup_menu.dart';
 import './kb_layout_type_chooser.dart';
 
+const _kKeyLegacyMode = 'legacy';
+const _kKeyMapMode = 'map';
+const _kKeyTranslateMode = 'translate';
+
 class MenubarState {
   final kStoreKey = 'remoteMenubarState';
   late RxBool show;
@@ -104,6 +108,7 @@ class _MenubarTheme {
   static const double buttonHMargin = 3;
   static const double buttonVMargin = 6;
   static const double iconRadius = 8;
+  static const double elevation = 3;
 }
 
 typedef DismissFunc = void Function();
@@ -365,10 +370,13 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         alignment: FractionalOffset(_fractionX.value, 0),
         child: Offstage(
           offstage: _dragging.isTrue,
-          child: _DraggableShowHide(
-            dragging: _dragging,
-            fractionX: _fractionX,
-            show: show,
+          child: Material(
+            elevation: _MenubarTheme.elevation,
+            child: _DraggableShowHide(
+              dragging: _dragging,
+              fractionX: _fractionX,
+              show: show,
+            ),
           ),
         ),
       );
@@ -402,22 +410,27 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.all(Radius.circular(10)),
-          ),
+        Material(
+          elevation: _MenubarTheme.elevation,
+          borderRadius: BorderRadius.all(Radius.circular(4.0)),
+          color: Theme.of(context)
+              .menuBarTheme
+              .style
+              ?.backgroundColor
+              ?.resolve(MaterialState.values.toSet()),
           child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Theme(
-                data: themeData(),
-                child: MenuBar(
-                  children: [
-                    SizedBox(width: _MenubarTheme.buttonHMargin),
-                    ...menubarItems,
-                    SizedBox(width: _MenubarTheme.buttonHMargin)
-                  ],
-                ),
-              )),
+            scrollDirection: Axis.horizontal,
+            child: Theme(
+              data: themeData(),
+              child: Row(
+                children: [
+                  SizedBox(width: _MenubarTheme.buttonHMargin * 2),
+                  ...menubarItems,
+                  SizedBox(width: _MenubarTheme.buttonHMargin * 2)
+                ],
+              ),
+            ),
+          ),
         ),
         _buildDraggableShowHide(context),
       ],
@@ -427,11 +440,22 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   ThemeData themeData() {
     return Theme.of(context).copyWith(
       menuButtonTheme: MenuButtonThemeData(
-          style: ButtonStyle(
-              minimumSize: MaterialStatePropertyAll(Size(64, 36)),
-              textStyle: MaterialStatePropertyAll(
-                  TextStyle(fontWeight: FontWeight.normal)))),
+        style: ButtonStyle(
+          minimumSize: MaterialStatePropertyAll(Size(64, 36)),
+          textStyle: MaterialStatePropertyAll(
+            TextStyle(fontWeight: FontWeight.normal),
+          ),
+        ),
+      ),
       dividerTheme: DividerThemeData(space: 4),
+      menuBarTheme: MenuBarThemeData(
+          style: MenuStyle(
+        padding: MaterialStatePropertyAll(EdgeInsets.zero),
+        elevation: MaterialStatePropertyAll(0),
+        shape: MaterialStatePropertyAll(BeveledRectangleBorder()),
+      ).copyWith(
+              backgroundColor:
+                  Theme.of(context).menuBarTheme.style?.backgroundColor)),
     );
   }
 }
@@ -501,8 +525,12 @@ class _MonitorMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (stateGlobal.displaysCount.value < 2) return Offstage();
+    if (PrivacyModeState.find(id).isTrue ||
+        stateGlobal.displaysCount.value < 2) {
+      return Offstage();
+    }
     return _IconSubmenuButton(
+        tooltip: 'Select Monitor',
         icon: icon(),
         ffi: ffi,
         color: _MenubarTheme.blueColor,
@@ -541,6 +569,7 @@ class _MonitorMenu extends StatelessWidget {
     final pi = ffi.ffiModel.pi;
     for (int i = 0; i < pi.displays.length; i++) {
       rowChildren.add(_IconMenuButton(
+        topLevel: false,
         color: _MenubarTheme.blueColor,
         hoverColor: _MenubarTheme.hoverBlueColor,
         tooltip: "",
@@ -593,6 +622,7 @@ class _ControlMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _IconSubmenuButton(
+        tooltip: 'Control Actions',
         svg: "assets/actions.svg",
         color: _MenubarTheme.blueColor,
         hoverColor: _MenubarTheme.hoverBlueColor,
@@ -651,26 +681,44 @@ class _ControlMenu extends StatelessWidget {
       }
 
       return CustomAlertDialog(
-        title: Text(translate('OS Password')),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          PasswordWidget(controller: controller),
-          CheckboxListTile(
-            contentPadding: const EdgeInsets.all(0),
-            dense: true,
-            controlAffinity: ListTileControlAffinity.leading,
-            title: Text(
-              translate('Auto Login'),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.password_rounded, color: MyTheme.accent),
+            Text(translate('OS Password')).paddingOnly(left: 10),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            PasswordWidget(controller: controller),
+            CheckboxListTile(
+              contentPadding: const EdgeInsets.all(0),
+              dense: true,
+              controlAffinity: ListTileControlAffinity.leading,
+              title: Text(
+                translate('Auto Login'),
+              ),
+              value: autoLogin,
+              onChanged: (v) {
+                if (v == null) return;
+                setState(() => autoLogin = v);
+              },
             ),
-            value: autoLogin,
-            onChanged: (v) {
-              if (v == null) return;
-              setState(() => autoLogin = v);
-            },
-          ),
-        ]),
+          ],
+        ),
         actions: [
-          dialogButton('Cancel', onPressed: close, isOutline: true),
-          dialogButton('OK', onPressed: submit),
+          dialogButton(
+            "Cancel",
+            icon: Icon(Icons.close_rounded),
+            onPressed: close,
+            isOutline: true,
+          ),
+          dialogButton(
+            "OK",
+            icon: Icon(Icons.done_rounded),
+            onPressed: submit,
+          ),
         ],
         onSubmit: submit,
         onCancel: close,
@@ -896,6 +944,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
   Widget build(BuildContext context) {
     _updateScreen();
     return _IconSubmenuButton(
+        tooltip: 'Display Settings',
         svg: "assets/display.svg",
         ffi: widget.ffi,
         color: _MenubarTheme.blueColor,
@@ -916,6 +965,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
           disableClipboard(),
           lockAfterSessionEnd(),
           privacyMode(),
+          swapKey(),
         ]);
   }
 
@@ -949,12 +999,13 @@ class _DisplayMenuState extends State<_DisplayMenu> {
 
       final canvasModel = widget.ffi.canvasModel;
       final width = (canvasModel.getDisplayWidth() * canvasModel.scale +
-                  canvasModel.windowBorderWidth * 2) *
+                  CanvasModel.leftToEdge +
+                  CanvasModel.rightToEdge) *
               scale +
           magicWidth;
       final height = (canvasModel.getDisplayHeight() * canvasModel.scale +
-                  canvasModel.tabBarHeight +
-                  canvasModel.windowBorderWidth * 2) *
+                  CanvasModel.topToEdge +
+                  CanvasModel.bottomToEdge) *
               scale +
           magicHeight;
       double left = wndRect.left + (wndRect.width - width) / 2;
@@ -1023,10 +1074,10 @@ class _DisplayMenuState extends State<_DisplayMenu> {
     final canvasModel = widget.ffi.canvasModel;
     final displayWidth = canvasModel.getDisplayWidth();
     final displayHeight = canvasModel.getDisplayHeight();
-    final requiredWidth = displayWidth +
-        (canvasModel.tabBarHeight + canvasModel.windowBorderWidth * 2);
-    final requiredHeight = displayHeight +
-        (canvasModel.tabBarHeight + canvasModel.windowBorderWidth * 2);
+    final requiredWidth =
+        CanvasModel.leftToEdge + displayWidth + CanvasModel.rightToEdge;
+    final requiredHeight =
+        CanvasModel.topToEdge + displayHeight + CanvasModel.bottomToEdge;
     return selfWidth > (requiredWidth * scale) &&
         selfHeight > (requiredHeight * scale);
   }
@@ -1400,6 +1451,9 @@ class _DisplayMenuState extends State<_DisplayMenu> {
   }
 
   showRemoteCursor() {
+    if (widget.ffi.ffiModel.pi.platform == kPeerPlatformAndroid) {
+      return Offstage();
+    }
     final visible = !widget.ffi.canvasModel.cursorEmbedded;
     if (!visible) return Offstage();
     final state = ShowRemoteCursorState.find(widget.id);
@@ -1417,6 +1471,9 @@ class _DisplayMenuState extends State<_DisplayMenu> {
   }
 
   zoomCursor() {
+    if (widget.ffi.ffiModel.pi.platform == kPeerPlatformAndroid) {
+      return Offstage();
+    }
     final visible = widget.state.viewStyle.value != kRemoteViewStyleOriginal;
     if (!visible) return Offstage();
     final option = 'zoom-cursor';
@@ -1518,10 +1575,37 @@ class _DisplayMenuState extends State<_DisplayMenu> {
         value: rxValue.value,
         onChanged: (value) {
           if (value == null) return;
+          if (widget.ffi.ffiModel.pi.currentDisplay != 0) {
+            msgBox(
+                widget.id,
+                'custom-nook-nocancel-hasclose',
+                'info',
+                'Please switch to Display 1 first',
+                '',
+                widget.ffi.dialogManager);
+            return;
+          }
           bind.sessionToggleOption(id: widget.id, value: option);
         },
         ffi: widget.ffi,
         child: Text(translate('Privacy mode')));
+  }
+
+  swapKey() {
+    final visible = perms['keyboard'] != false &&
+        ((Platform.isMacOS && pi.platform != kPeerPlatformMacOS) ||
+            (!Platform.isMacOS && pi.platform == kPeerPlatformMacOS));
+    if (!visible) return Offstage();
+    final option = 'allow_swap_key';
+    final value = bind.sessionGetToggleOptionSync(id: widget.id, arg: option);
+    return _CheckboxMenuButton(
+        value: value,
+        onChanged: (value) {
+          if (value == null) return;
+          bind.sessionToggleOption(id: widget.id, value: option);
+        },
+        ffi: widget.ffi,
+        child: Text(translate('Swap control-command key')));
   }
 }
 
@@ -1540,12 +1624,17 @@ class _KeyboardMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     var ffiModel = Provider.of<FfiModel>(context);
     if (ffiModel.permissions['keyboard'] == false) return Offstage();
-    // Do not support peer 1.1.9.
     if (stateGlobal.grabKeyboard) {
-      bind.sessionSetKeyboardMode(id: id, value: 'map');
+      if (bind.sessionIsKeyboardModeSupported(id: id, mode: _kKeyMapMode)) {
+        bind.sessionSetKeyboardMode(id: id, value: _kKeyMapMode);
+      } else if (bind.sessionIsKeyboardModeSupported(
+          id: id, mode: _kKeyLegacyMode)) {
+        bind.sessionSetKeyboardMode(id: id, value: _kKeyLegacyMode);
+      }
       return Offstage();
     }
     return _IconSubmenuButton(
+        tooltip: 'Keyboard Settings',
         svg: "assets/keyboard.svg",
         ffi: ffi,
         color: _MenubarTheme.blueColor,
@@ -1555,13 +1644,13 @@ class _KeyboardMenu extends StatelessWidget {
 
   mode() {
     return futureBuilder(future: () async {
-      return await bind.sessionGetKeyboardMode(id: id) ?? 'legacy';
+      return await bind.sessionGetKeyboardMode(id: id) ?? _kKeyLegacyMode;
     }(), hasData: (data) {
       final groupValue = data as String;
       List<KeyboardModeMenu> modes = [
-        KeyboardModeMenu(key: 'legacy', menu: 'Legacy mode'),
-        KeyboardModeMenu(key: 'map', menu: 'Map mode'),
-        KeyboardModeMenu(key: 'translate', menu: 'Translate mode'),
+        KeyboardModeMenu(key: _kKeyLegacyMode, menu: 'Legacy mode'),
+        KeyboardModeMenu(key: _kKeyMapMode, menu: 'Map mode'),
+        KeyboardModeMenu(key: _kKeyTranslateMode, menu: 'Translate mode'),
       ];
       List<_RadioMenuButton> list = [];
       onChanged(String? value) async {
@@ -1571,13 +1660,13 @@ class _KeyboardMenu extends StatelessWidget {
 
       for (KeyboardModeMenu mode in modes) {
         if (bind.sessionIsKeyboardModeSupported(id: id, mode: mode.key)) {
-          if (mode.key == 'translate') {
+          if (mode.key == _kKeyTranslateMode) {
             if (Platform.isLinux || pi.platform == kPeerPlatformLinux) {
               continue;
             }
           }
           var text = translate(mode.menu);
-          if (mode.key == 'translate') {
+          if (mode.key == _kKeyTranslateMode) {
             text = '$text beta';
           }
           list.add(_RadioMenuButton<String>(
@@ -1633,6 +1722,7 @@ class _ChatMenuState extends State<_ChatMenu> {
   @override
   Widget build(BuildContext context) {
     return _IconSubmenuButton(
+        tooltip: 'Chat',
         key: chatButtonKey,
         svg: 'assets/chat.svg',
         ffi: widget.ffi,
@@ -1751,22 +1841,24 @@ class _CloseMenu extends StatelessWidget {
 class _IconMenuButton extends StatefulWidget {
   final String? assetName;
   final Widget? icon;
-  final String tooltip;
+  final String? tooltip;
   final Color color;
   final Color hoverColor;
   final VoidCallback? onPressed;
   final double? hMargin;
   final double? vMargin;
+  final bool topLevel;
   const _IconMenuButton({
     Key? key,
     this.assetName,
     this.icon,
-    required this.tooltip,
+    this.tooltip,
     required this.color,
     required this.hoverColor,
     required this.onPressed,
     this.hMargin,
     this.vMargin,
+    this.topLevel = true,
   }) : super(key: key);
 
   @override
@@ -1786,36 +1878,40 @@ class _IconMenuButtonState extends State<_IconMenuButton> {
           width: _MenubarTheme.buttonSize,
           height: _MenubarTheme.buttonSize,
         );
-    return SizedBox(
+    final button = SizedBox(
       width: _MenubarTheme.buttonSize,
       height: _MenubarTheme.buttonSize,
       child: MenuItemButton(
         style: ButtonStyle(
+            backgroundColor: MaterialStatePropertyAll(Colors.transparent),
             padding: MaterialStatePropertyAll(EdgeInsets.zero),
             overlayColor: MaterialStatePropertyAll(Colors.transparent)),
         onHover: (value) => setState(() {
           hover = value;
         }),
         onPressed: widget.onPressed,
-        child: Tooltip(
-            message: translate(widget.tooltip),
-            child: Material(
-                type: MaterialType.transparency,
-                child: Ink(
-                    decoration: BoxDecoration(
-                      borderRadius:
-                          BorderRadius.circular(_MenubarTheme.iconRadius),
-                      color: hover ? widget.hoverColor : widget.color,
-                    ),
-                    child: icon))),
+        child: Material(
+            type: MaterialType.transparency,
+            child: Ink(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(_MenubarTheme.iconRadius),
+                  color: hover ? widget.hoverColor : widget.color,
+                ),
+                child: icon)),
       ),
     ).marginSymmetric(
         horizontal: widget.hMargin ?? _MenubarTheme.buttonHMargin,
         vertical: widget.vMargin ?? _MenubarTheme.buttonVMargin);
+    if (widget.topLevel) {
+      return MenuBar(children: [button]);
+    } else {
+      return button;
+    }
   }
 }
 
 class _IconSubmenuButton extends StatefulWidget {
+  final String tooltip;
   final String? svg;
   final Widget? icon;
   final Color color;
@@ -1828,6 +1924,7 @@ class _IconSubmenuButton extends StatefulWidget {
       {Key? key,
       this.svg,
       this.icon,
+      required this.tooltip,
       required this.color,
       required this.hoverColor,
       required this.menuChildren,
@@ -1852,32 +1949,35 @@ class _IconSubmenuButtonState extends State<_IconSubmenuButton> {
           width: _MenubarTheme.buttonSize,
           height: _MenubarTheme.buttonSize,
         );
-    return SizedBox(
-            width: _MenubarTheme.buttonSize,
-            height: _MenubarTheme.buttonSize,
-            child: SubmenuButton(
-                menuStyle: widget.menuStyle,
-                style: ButtonStyle(
-                    padding: MaterialStatePropertyAll(EdgeInsets.zero),
-                    overlayColor: MaterialStatePropertyAll(Colors.transparent)),
-                onHover: (value) => setState(() {
-                      hover = value;
-                    }),
-                child: Material(
-                    type: MaterialType.transparency,
-                    child: Ink(
-                        decoration: BoxDecoration(
-                          borderRadius:
-                              BorderRadius.circular(_MenubarTheme.iconRadius),
-                          color: hover ? widget.hoverColor : widget.color,
-                        ),
-                        child: icon)),
-                menuChildren: widget.menuChildren
-                    .map((e) => _buildPointerTrackWidget(e, widget.ffi))
-                    .toList()))
-        .marginSymmetric(
-            horizontal: _MenubarTheme.buttonHMargin,
-            vertical: _MenubarTheme.buttonVMargin);
+    final button = SizedBox(
+        width: _MenubarTheme.buttonSize,
+        height: _MenubarTheme.buttonSize,
+        child: SubmenuButton(
+            menuStyle: widget.menuStyle,
+            style: ButtonStyle(
+                backgroundColor: MaterialStatePropertyAll(Colors.transparent),
+                padding: MaterialStatePropertyAll(EdgeInsets.zero),
+                overlayColor: MaterialStatePropertyAll(Colors.transparent)),
+            onHover: (value) => setState(() {
+                  hover = value;
+                }),
+            child: Material(
+                type: MaterialType.transparency,
+                child: Ink(
+                    decoration: BoxDecoration(
+                      borderRadius:
+                          BorderRadius.circular(_MenubarTheme.iconRadius),
+                      color: hover ? widget.hoverColor : widget.color,
+                    ),
+                    child: icon)),
+            menuChildren: widget.menuChildren
+                .map((e) => _buildPointerTrackWidget(e, widget.ffi))
+                .toList()));
+    return MenuBar(children: [
+      button.marginSymmetric(
+          horizontal: _MenubarTheme.buttonHMargin,
+          vertical: _MenubarTheme.buttonVMargin)
+    ]);
   }
 }
 
@@ -2016,7 +2116,7 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
       child: Icon(
         Icons.drag_indicator,
         size: 20,
-        color: Colors.grey[800],
+        color: MyTheme.color(context).drag_indicator,
       ),
       feedback: widget,
       onDragStarted: (() {
@@ -2068,7 +2168,11 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
       data: TextButtonThemeData(style: buttonStyle),
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context)
+              .menuBarTheme
+              .style
+              ?.backgroundColor
+              ?.resolve(MaterialState.values.toSet()),
           borderRadius: BorderRadius.vertical(
             bottom: Radius.circular(5),
           ),

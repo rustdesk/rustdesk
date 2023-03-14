@@ -251,7 +251,7 @@ pub async fn start(postfix: &str) -> ResultType<()> {
 
 pub async fn new_listener(postfix: &str) -> ResultType<Incoming> {
     let path = Config::ipc_path(postfix);
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, target_os = "android", target_os = "ios")))]
     check_pid(postfix).await;
     let mut endpoint = Endpoint::new(path.clone());
     match SecurityAttributes::allow_everyone_create() {
@@ -541,19 +541,19 @@ fn get_pid_file(postfix: &str) -> String {
     format!("{}.pid", path)
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "android", target_os = "ios")))]
 async fn check_pid(postfix: &str) {
     let pid_file = get_pid_file(postfix);
     if let Ok(mut file) = File::open(&pid_file) {
         let mut content = String::new();
         file.read_to_string(&mut content).ok();
-        let pid = content.parse::<i32>().unwrap_or(0);
+        let pid = content.parse::<usize>().unwrap_or(0);
         if pid > 0 {
             use hbb_common::sysinfo::{ProcessExt, System, SystemExt};
             let mut sys = System::new();
             sys.refresh_processes();
             if let Some(p) = sys.process(pid.into()) {
-                if let Some(current) = sys.process((std::process::id() as i32).into()) {
+                if let Some(current) = sys.process((std::process::id() as usize).into()) {
                     if current.name() == p.name() {
                         // double check with connect
                         if connect(1000, postfix).await.is_ok() {

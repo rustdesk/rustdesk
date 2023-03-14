@@ -42,6 +42,7 @@ class _PeerCardState extends State<_PeerCard>
     with AutomaticKeepAliveClientMixin {
   var _menuPos = RelativeRect.fill;
   final double _cardRadius = 16;
+  final double _tileRadius = 5;
   final double _borderWidth = 2;
 
   @override
@@ -116,27 +117,32 @@ class _PeerCardState extends State<_PeerCard>
 
   Widget _buildDesktop() {
     final peer = super.widget.peer;
-    var deco = Rx<BoxDecoration?>(BoxDecoration(
+    var deco = Rx<BoxDecoration?>(
+      BoxDecoration(
         border: Border.all(color: Colors.transparent, width: _borderWidth),
-        borderRadius: peerCardUiType.value == PeerUiType.grid
-            ? BorderRadius.circular(_cardRadius)
-            : null));
+        borderRadius: BorderRadius.circular(
+          peerCardUiType.value == PeerUiType.grid ? _cardRadius : _tileRadius,
+        ),
+      ),
+    );
     return MouseRegion(
       onEnter: (evt) {
         deco.value = BoxDecoration(
-            border: Border.all(
-                color: Theme.of(context).colorScheme.primary,
-                width: _borderWidth),
-            borderRadius: peerCardUiType.value == PeerUiType.grid
-                ? BorderRadius.circular(_cardRadius)
-                : null);
+          border: Border.all(
+              color: Theme.of(context).colorScheme.primary,
+              width: _borderWidth),
+          borderRadius: BorderRadius.circular(
+            peerCardUiType.value == PeerUiType.grid ? _cardRadius : _tileRadius,
+          ),
+        );
       },
       onExit: (evt) {
         deco.value = BoxDecoration(
-            border: Border.all(color: Colors.transparent, width: _borderWidth),
-            borderRadius: peerCardUiType.value == PeerUiType.grid
-                ? BorderRadius.circular(_cardRadius)
-                : null);
+          border: Border.all(color: Colors.transparent, width: _borderWidth),
+          borderRadius: BorderRadius.circular(
+            peerCardUiType.value == PeerUiType.grid ? _cardRadius : _tileRadius,
+          ),
+        );
       },
       child: GestureDetector(
           onDoubleTap: () => widget.connect(context, peer.id),
@@ -163,6 +169,10 @@ class _PeerCardState extends State<_PeerCard>
             Container(
               decoration: BoxDecoration(
                 color: str2color('${peer.id}${peer.platform}', 0x7f),
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(_tileRadius),
+                  bottomLeft: Radius.circular(_tileRadius),
+                ),
               ),
               alignment: Alignment.center,
               width: 42,
@@ -171,7 +181,12 @@ class _PeerCardState extends State<_PeerCard>
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.background),
+                  color: Theme.of(context).colorScheme.background,
+                  borderRadius: BorderRadius.only(
+                    topRight: Radius.circular(_tileRadius),
+                    bottomRight: Radius.circular(_tileRadius),
+                  ),
+                ),
                 child: Row(
                   children: [
                     Expanded(
@@ -532,19 +547,7 @@ abstract class BasePeerCard extends StatelessWidget {
         ],
       ),
       proc: () {
-        () async {
-          if (isLan) {
-            bind.mainRemoveDiscovered(id: id);
-          } else {
-            final favs = (await bind.mainGetFav()).toList();
-            if (favs.remove(id)) {
-              await bind.mainStoreFav(favs: favs);
-            }
-            await bind.mainRemovePeer(id: id);
-          }
-          removePreference(id);
-          await reloadFunc();
-        }();
+        _delete(id, isLan, reloadFunc);
       },
       padding: menuPadding,
       dismissOnClicked: true,
@@ -673,7 +676,13 @@ abstract class BasePeerCard extends StatelessWidget {
       }
 
       return CustomAlertDialog(
-        title: Text(translate('Rename')),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.edit_rounded, color: MyTheme.accent),
+            Text(translate('Rename')).paddingOnly(left: 10),
+          ],
+        ),
         content: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -682,9 +691,7 @@ abstract class BasePeerCard extends StatelessWidget {
                 child: TextFormField(
                   controller: controller,
                   autofocus: true,
-                  decoration: InputDecoration(
-                      border: OutlineInputBorder(),
-                      labelText: translate('Name')),
+                  decoration: InputDecoration(labelText: translate('Name')),
                 ),
               ),
             ),
@@ -694,8 +701,17 @@ abstract class BasePeerCard extends StatelessWidget {
           ],
         ),
         actions: [
-          dialogButton("Cancel", onPressed: close, isOutline: true),
-          dialogButton("OK", onPressed: submit),
+          dialogButton(
+            "Cancel",
+            icon: Icon(Icons.close_rounded),
+            onPressed: close,
+            isOutline: true,
+          ),
+          dialogButton(
+            "OK",
+            icon: Icon(Icons.done_rounded),
+            onPressed: submit,
+          ),
         ],
         onSubmit: submit,
         onCancel: close,
@@ -705,6 +721,58 @@ abstract class BasePeerCard extends StatelessWidget {
 
   @protected
   void _update();
+
+  void _delete(String id, bool isLan, Function reloadFunc) async {
+    gFFI.dialogManager.show(
+      (setState, close) {
+        submit() async {
+          if (isLan) {
+            bind.mainRemoveDiscovered(id: id);
+          } else {
+            final favs = (await bind.mainGetFav()).toList();
+            if (favs.remove(id)) {
+              await bind.mainStoreFav(favs: favs);
+            }
+            await bind.mainRemovePeer(id: id);
+          }
+          removePreference(id);
+          await reloadFunc();
+          close();
+        }
+
+        return CustomAlertDialog(
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.delete_rounded,
+                color: Colors.red,
+              ),
+              Text(translate('Delete')).paddingOnly(
+                left: 10,
+              ),
+            ],
+          ),
+          content: SizedBox.shrink(),
+          actions: [
+            dialogButton(
+              "Cancel",
+              icon: Icon(Icons.close_rounded),
+              onPressed: close,
+              isOutline: true,
+            ),
+            dialogButton(
+              "OK",
+              icon: Icon(Icons.done_rounded),
+              onPressed: submit,
+            ),
+          ],
+          onSubmit: submit,
+          onCancel: close,
+        );
+      },
+    );
+  }
 }
 
 class RecentPeerCard extends BasePeerCard {
@@ -837,13 +905,10 @@ class DiscoveredPeerCard extends BasePeerCard {
       menuItems.add(_createShortCutAction(peer.id));
     }
 
-    final inRecent = await bind.mainIsInRecentPeers(id: peer.id);
-    if (inRecent) {
-      if (!favs.contains(peer.id)) {
-        menuItems.add(_addFavAction(peer.id));
-      } else {
-        menuItems.add(_rmFavAction(peer.id, () async {}));
-      }
+    if (!favs.contains(peer.id)) {
+      menuItems.add(_addFavAction(peer.id));
+    } else {
+      menuItems.add(_rmFavAction(peer.id, () async {}));
     }
 
     if (gFFI.userModel.userName.isNotEmpty) {
@@ -1065,7 +1130,7 @@ void _rdpDialog(String id) async {
     }
 
     return CustomAlertDialog(
-      title: Text('RDP ${translate('Settings')}'),
+      title: Text(translate('RDP Settings')),
       content: ConstrainedBox(
         constraints: const BoxConstraints(minWidth: 500),
         child: Column(
@@ -1076,56 +1141,67 @@ void _rdpDialog(String id) async {
             ),
             Row(
               children: [
-                ConstrainedBox(
-                    constraints: const BoxConstraints(minWidth: 140),
-                    child: Text(
-                      "${translate('Port')}:",
-                      textAlign: TextAlign.right,
-                    ).marginOnly(right: 10)),
+                isDesktop
+                    ? ConstrainedBox(
+                        constraints: const BoxConstraints(minWidth: 140),
+                        child: Text(
+                          "${translate('Port')}:",
+                          textAlign: TextAlign.right,
+                        ).marginOnly(right: 10))
+                    : SizedBox.shrink(),
                 Expanded(
                   child: TextField(
                     inputFormatters: [
                       FilteringTextInputFormatter.allow(RegExp(
                           r'^([0-9]|[1-9]\d|[1-9]\d{2}|[1-9]\d{3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$'))
                     ],
-                    decoration: const InputDecoration(
-                        border: OutlineInputBorder(), hintText: '3389'),
+                    decoration: InputDecoration(
+                        labelText: isDesktop ? null : translate('Port'),
+                        border: isDesktop ? const OutlineInputBorder() : null,
+                        hintText: '3389'),
                     controller: portController,
                     autofocus: true,
                   ),
                 ),
               ],
-            ).marginOnly(bottom: 8),
+            ).marginOnly(bottom: isDesktop ? 8 : 0),
             Row(
               children: [
-                ConstrainedBox(
-                    constraints: const BoxConstraints(minWidth: 140),
-                    child: Text(
-                      "${translate('Username')}:",
-                      textAlign: TextAlign.right,
-                    ).marginOnly(right: 10)),
+                isDesktop
+                    ? ConstrainedBox(
+                        constraints: const BoxConstraints(minWidth: 140),
+                        child: Text(
+                          "${translate('Username')}:",
+                          textAlign: TextAlign.right,
+                        ).marginOnly(right: 10))
+                    : SizedBox.shrink(),
                 Expanded(
                   child: TextField(
-                    decoration:
-                        const InputDecoration(border: OutlineInputBorder()),
+                    decoration: InputDecoration(
+                        labelText: isDesktop ? null : translate('Username'),
+                        border: isDesktop ? const OutlineInputBorder() : null),
                     controller: userController,
                   ),
                 ),
               ],
-            ).marginOnly(bottom: 8),
+            ).marginOnly(bottom: isDesktop ? 8 : 0),
             Row(
               children: [
-                ConstrainedBox(
-                    constraints: const BoxConstraints(minWidth: 140),
-                    child: Text(
-                      "${translate('Password')}:",
-                      textAlign: TextAlign.right,
-                    ).marginOnly(right: 10)),
+                isDesktop
+                    ? ConstrainedBox(
+                        constraints: const BoxConstraints(minWidth: 140),
+                        child: Text(
+                          "${translate('Password')}:",
+                          textAlign: TextAlign.right,
+                        ).marginOnly(right: 10))
+                    : SizedBox.shrink(),
                 Expanded(
                   child: Obx(() => TextField(
                         obscureText: secure.value,
                         decoration: InputDecoration(
-                            border: const OutlineInputBorder(),
+                            labelText: isDesktop ? null : translate('Password'),
+                            border:
+                                isDesktop ? const OutlineInputBorder() : null,
                             suffixIcon: IconButton(
                                 onPressed: () => secure.value = !secure.value,
                                 icon: Icon(secure.value
@@ -1135,7 +1211,7 @@ void _rdpDialog(String id) async {
                       )),
                 ),
               ],
-            ).marginOnly(bottom: 8),
+            ).marginOnly(bottom: isDesktop ? 8 : 0),
           ],
         ),
       ),

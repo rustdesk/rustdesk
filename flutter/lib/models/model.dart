@@ -156,7 +156,7 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'clipboard') {
         Clipboard.setData(ClipboardData(text: evt['content']));
       } else if (name == 'permission') {
-        parent.target?.ffiModel.updatePermission(evt, peerId);
+        updatePermission(evt, peerId);
       } else if (name == 'chat_client_mode') {
         parent.target?.chatModel
             .receive(ChatModel.clientModeID, evt['text'] ?? '');
@@ -166,17 +166,18 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'file_dir') {
         parent.target?.fileModel.receiveFileDir(evt);
       } else if (name == 'job_progress') {
-        parent.target?.fileModel.tryUpdateJobProgress(evt);
+        parent.target?.fileModel.jobController.tryUpdateJobProgress(evt);
       } else if (name == 'job_done') {
-        parent.target?.fileModel.jobDone(evt);
+        parent.target?.fileModel.jobController.jobDone(evt);
+        parent.target?.fileModel.refreshAll();
       } else if (name == 'job_error') {
-        parent.target?.fileModel.jobError(evt);
+        parent.target?.fileModel.jobController.jobError(evt);
       } else if (name == 'override_file_confirm') {
         parent.target?.fileModel.overrideFileConfirm(evt);
       } else if (name == 'load_last_job') {
-        parent.target?.fileModel.loadLastJob(evt);
+        parent.target?.fileModel.jobController.loadLastJob(evt);
       } else if (name == 'update_folder_files') {
-        parent.target?.fileModel.updateFolderFiles(evt);
+        parent.target?.fileModel.jobController.updateFolderFiles(evt);
       } else if (name == 'add_connection') {
         parent.target?.serverModel.addConnection(evt);
       } else if (name == 'on_client_remove') {
@@ -241,35 +242,32 @@ class FfiModel with ChangeNotifier {
     }
   }
 
-  handleSwitchDisplay(Map<String, dynamic> evt, String peerId) {
-    final oldOrientation = _display.width > _display.height;
-    var old = _pi.currentDisplay;
-    _pi.currentDisplay = int.parse(evt['display']);
-    _display.x = double.parse(evt['x']);
-    _display.y = double.parse(evt['y']);
-    _display.width = int.parse(evt['width']);
-    _display.height = int.parse(evt['height']);
-    _display.cursorEmbedded = int.parse(evt['cursor_embedded']) == 1;
-    if (old != _pi.currentDisplay) {
-      parent.target?.cursorModel.updateDisplayOrigin(_display.x, _display.y);
+  _updateCurDisplay(String peerId, Display newDisplay) {
+    if (newDisplay != _display) {
+      if (newDisplay.x != _display.x || newDisplay.y != _display.y) {
+        parent.target?.cursorModel
+            .updateDisplayOrigin(newDisplay.x, newDisplay.y);
+      }
+      _display = newDisplay;
+      _updateSessionWidthHeight(peerId);
     }
+  }
 
-    _updateSessionWidthHeight(peerId, display.width, display.height);
+  handleSwitchDisplay(Map<String, dynamic> evt, String peerId) {
+    _pi.currentDisplay = int.parse(evt['display']);
+    var newDisplay = Display();
+    newDisplay.x = double.parse(evt['x']);
+    newDisplay.y = double.parse(evt['y']);
+    newDisplay.width = int.parse(evt['width']);
+    newDisplay.height = int.parse(evt['height']);
+    newDisplay.cursorEmbedded = int.parse(evt['cursor_embedded']) == 1;
+
+    _updateCurDisplay(peerId, newDisplay);
 
     try {
       CurrentDisplayState.find(peerId).value = _pi.currentDisplay;
     } catch (e) {
       //
-    }
-
-    // remote is mobile, and orientation changed
-    if ((_display.width > _display.height) != oldOrientation) {
-      gFFI.canvasModel.updateViewStyle();
-    }
-    if (_pi.platform == kPeerPlatformLinux ||
-        _pi.platform == kPeerPlatformWindows ||
-        _pi.platform == kPeerPlatformMacOS) {
-      parent.target?.canvasModel.updateViewStyle();
     }
     parent.target?.recordingModel.onSwitchDisplay();
     handleResolutions(peerId, evt["resolutions"]);
@@ -372,8 +370,13 @@ class FfiModel with ChangeNotifier {
     });
   }
 
-  _updateSessionWidthHeight(String id, int width, int height) {
-    bind.sessionSetSize(id: id, width: display.width, height: display.height);
+  _updateSessionWidthHeight(String id) {
+    parent.target?.canvasModel.updateViewStyle();
+    if (display.width <= 0 || display.height <= 0) {
+      debugPrintStack(label: 'invalid display size (${display.width},${display.height})');
+    } else {
+      bind.sessionSetSize(id: id, width: display.width, height: display.height);
+    }
   }
 
   /// Handle the peer info event based on [evt].
@@ -429,7 +432,7 @@ class FfiModel with ChangeNotifier {
       stateGlobal.displaysCount.value = _pi.displays.length;
       if (_pi.currentDisplay < _pi.displays.length) {
         _display = _pi.displays[_pi.currentDisplay];
-        _updateSessionWidthHeight(peerId, display.width, display.height);
+        _updateSessionWidthHeight(peerId);
       }
       if (displays.isNotEmpty) {
         parent.target?.dialogManager.showLoading(
@@ -488,7 +491,7 @@ class FfiModel with ChangeNotifier {
       _pi.displays = newDisplays;
       stateGlobal.displaysCount.value = _pi.displays.length;
       if (_pi.currentDisplay >= 0 && _pi.currentDisplay < _pi.displays.length) {
-        _display = _pi.displays[_pi.currentDisplay];
+        _updateCurDisplay(peerId, _pi.displays[_pi.currentDisplay]);
       }
     }
     notifyListeners();
@@ -619,12 +622,27 @@ class ViewStyle {
   final int displayWidth;
   final int displayHeight;
   ViewStyle({
-    this.style = '',
-    this.width = 0.0,
-    this.height = 0.0,
-    this.displayWidth = 0,
-    this.displayHeight = 0,
+    required this.style,
+    required this.width,
+    required this.height,
+    required this.displayWidth,
+    required this.displayHeight,
   });
+
+  static defaultViewStyle() {
+    final desktop = (isDesktop || isWebDesktop);
+    final w =
+        desktop ? kDesktopDefaultDisplayWidth : kMobileDefaultDisplayWidth;
+    final h =
+        desktop ? kDesktopDefaultDisplayHeight : kMobileDefaultDisplayHeight;
+    return ViewStyle(
+      style: '',
+      width: w.toDouble(),
+      height: h.toDouble(),
+      displayWidth: w,
+      displayHeight: h,
+    );
+  }
 
   static int _double2Int(double v) => (v * 100).round().toInt();
 
@@ -654,9 +672,14 @@ class ViewStyle {
   double get scale {
     double s = 1.0;
     if (style == kRemoteViewStyleAdaptive) {
-      final s1 = width / displayWidth;
-      final s2 = height / displayHeight;
-      s = s1 < s2 ? s1 : s2;
+      if (width != 0 &&
+          height != 0 &&
+          displayWidth != 0 &&
+          displayHeight != 0) {
+        final s1 = width / displayWidth;
+        final s2 = height / displayHeight;
+        s = s1 < s2 ? s1 : s2;
+      }
     }
     return s;
   }
@@ -682,7 +705,7 @@ class CanvasModel with ChangeNotifier {
   // scroll offset y percent
   double _scrollY = 0.0;
   ScrollStyle _scrollStyle = ScrollStyle.scrollauto;
-  ViewStyle _lastViewStyle = ViewStyle();
+  ViewStyle _lastViewStyle = ViewStyle.defaultViewStyle();
 
   final _imageOverflow = false.obs;
 
@@ -709,12 +732,25 @@ class CanvasModel with ChangeNotifier {
   double get scrollX => _scrollX;
   double get scrollY => _scrollY;
 
+  static double get leftToEdge => (isDesktop || isWebDesktop)
+      ? windowBorderWidth + kDragToResizeAreaPadding.left
+      : 0;
+  static double get rightToEdge => (isDesktop || isWebDesktop)
+      ? windowBorderWidth + kDragToResizeAreaPadding.right
+      : 0;
+  static double get topToEdge => (isDesktop || isWebDesktop)
+      ? tabBarHeight + windowBorderWidth + kDragToResizeAreaPadding.top
+      : 0;
+  static double get bottomToEdge => (isDesktop || isWebDesktop)
+      ? windowBorderWidth + kDragToResizeAreaPadding.bottom
+      : 0;
+
   updateViewStyle() async {
     Size getSize() {
       final size = MediaQueryData.fromWindow(ui.window).size;
       // If minimized, w or h may be negative here.
-      double w = size.width - windowBorderWidth * 2;
-      double h = size.height - tabBarHeight - windowBorderWidth * 2;
+      double w = size.width - leftToEdge - rightToEdge;
+      double h = size.height - topToEdge - bottomToEdge;
       return Size(w < 0 ? 0 : w, h < 0 ? 0 : h);
     }
 
@@ -788,21 +824,33 @@ class CanvasModel with ChangeNotifier {
     return parent.target?.ffiModel.display.height ?? defaultHeight;
   }
 
-  double get windowBorderWidth => stateGlobal.windowBorderWidth.value;
-  double get tabBarHeight => stateGlobal.tabBarHeight;
+  static double get windowBorderWidth => stateGlobal.windowBorderWidth.value;
+  static double get tabBarHeight => stateGlobal.tabBarHeight;
 
   moveDesktopMouse(double x, double y) {
+    if (size.width == 0 || size.height == 0) {
+      return;
+    }
+
     // On mobile platforms, move the canvas with the cursor.
     final dw = getDisplayWidth() * _scale;
     final dh = getDisplayHeight() * _scale;
     var dxOffset = 0;
     var dyOffset = 0;
-    if (dw > size.width) {
-      dxOffset = (x - dw * (x / size.width) - _x).toInt();
+    try {
+      if (dw > size.width) {
+        dxOffset = (x - dw * (x / size.width) - _x).toInt();
+      }
+      if (dh > size.height) {
+        dyOffset = (y - dh * (y / size.height) - _y).toInt();
+      }
+    } catch (e) {
+      debugPrintStack(
+          label:
+              '(x,y) ($x,$y), (_x,_y) ($_x,$_y), _scale $_scale, display size (${getDisplayWidth()},${getDisplayHeight()}), size $size, , $e');
+      return;
     }
-    if (dh > size.height) {
-      dyOffset = (y - dh * (y / size.height) - _y).toInt();
-    }
+
     _x += dxOffset;
     _y += dyOffset;
     if (dxOffset != 0 || dyOffset != 0) {
@@ -1528,9 +1576,6 @@ class FFI {
     }();
     // every instance will bind a stream
     this.id = id;
-    if (isFileTransfer) {
-      fileModel.initFileFetcher();
-    }
   }
 
   /// Login with [password], choose if the client should [remember] it.
@@ -1579,6 +1624,19 @@ class Display {
         ? kDesktopDefaultDisplayHeight
         : kMobileDefaultDisplayHeight;
   }
+
+  @override
+  bool operator ==(Object other) =>
+      other is Display &&
+      other.runtimeType == runtimeType &&
+      _innerEqual(other);
+
+  bool _innerEqual(Display other) =>
+      other.x == x &&
+      other.y == y &&
+      other.width == width &&
+      other.height == height &&
+      other.cursorEmbedded == cursorEmbedded;
 }
 
 class Resolution {
