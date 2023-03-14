@@ -473,9 +473,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("empty_favorite_tip", "Ancora nessun peer?\nTrova qualcuno con cui connetterti e aggiungilo ai tuoi preferiti!"),
         ("empty_lan_tip", "Oh no, sembra proprio che non abbiamo ancora rilevato nessun peer."),
         ("empty_address_book_tip", "Oh diamine, sembra che per ora non ci siano peer nella tua rubrica."),
-        ("eg: admin", ""),
-        ("Empty Username", ""),
-        ("Empty Password", ""),
-        ("Me", ""),
+        ("eg: admin", "es: admin"),
+        ("Empty Username", "Nome Utente Vuoto"),
+        ("Empty Password", "Password Vuota"),
+        ("Me", "Io"),
     ].iter().cloned().collect();
 }
