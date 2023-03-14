@@ -44,7 +44,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_change_tip", "Alleen de letters a-z, A-Z, 0-9, _ (underscore) kunnen worden gebruikt. De eerste letter moet a-z, A-Z zijn. De lengte moet tussen 6 en 16 liggen."),
         ("Website", "Website"),
         ("About", "Over"),
-        ("Slogan_tip", "Gedaan met het hart in deze chaotische wereld!"),
+        ("Slogan_tip", "Ontwikkeld met het hart voor deze chaotische wereld!"),
         ("Privacy Statement", "Privacyverklaring"),
         ("Mute", "Geluid uit"),
         ("Build Date", "Versie datum"),
