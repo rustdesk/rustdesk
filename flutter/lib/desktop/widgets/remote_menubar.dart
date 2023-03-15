@@ -372,6 +372,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           offstage: _dragging.isTrue,
           child: Material(
             elevation: _MenubarTheme.elevation,
+            shadowColor: MyTheme.color(context).shadow,
             child: _DraggableShowHide(
               dragging: _dragging,
               fractionX: _fractionX,
@@ -412,6 +413,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       children: [
         Material(
           elevation: _MenubarTheme.elevation,
+          shadowColor: MyTheme.color(context).shadow,
           borderRadius: BorderRadius.all(Radius.circular(4.0)),
           color: Theme.of(context)
               .menuBarTheme

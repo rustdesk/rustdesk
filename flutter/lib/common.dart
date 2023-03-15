@@ -112,18 +112,21 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
     required this.border2,
     required this.highlight,
     required this.drag_indicator,
+    required this.shadow,
   });
 
   final Color? border;
   final Color? border2;
   final Color? highlight;
   final Color? drag_indicator;
+  final Color? shadow;
 
   static final light = ColorThemeExtension(
     border: Color(0xFFCCCCCC),
     border2: Color(0xFFBBBBBB),
     highlight: Color(0xFFE5E5E5),
     drag_indicator: Colors.grey[800],
+    shadow: Colors.black,
   );
 
   static final dark = ColorThemeExtension(
@@ -131,19 +134,24 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
     border2: Color(0xFFE5E5E5),
     highlight: Color(0xFF3F3F3F),
     drag_indicator: Colors.grey,
+    shadow: Colors.grey,
   );
 
   @override
-  ThemeExtension<ColorThemeExtension> copyWith(
-      {Color? border,
-      Color? border2,
-      Color? highlight,
-      Color? drag_indicator}) {
+  ThemeExtension<ColorThemeExtension> copyWith({
+    Color? border,
+    Color? border2,
+    Color? highlight,
+    Color? drag_indicator,
+    Color? shadow,
+  }) {
     return ColorThemeExtension(
-        border: border ?? this.border,
-        border2: border2 ?? this.border2,
-        highlight: highlight ?? this.highlight,
-        drag_indicator: drag_indicator ?? this.drag_indicator);
+      border: border ?? this.border,
+      border2: border2 ?? this.border2,
+      highlight: highlight ?? this.highlight,
+      drag_indicator: drag_indicator ?? this.drag_indicator,
+      shadow: shadow ?? this.shadow,
+    );
   }
 
   @override
@@ -157,6 +165,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
       border2: Color.lerp(border2, other.border2, t),
       highlight: Color.lerp(highlight, other.highlight, t),
       drag_indicator: Color.lerp(drag_indicator, other.drag_indicator, t),
+      shadow: Color.lerp(shadow, other.shadow, t),
     );
   }
 }
