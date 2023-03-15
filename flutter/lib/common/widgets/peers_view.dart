@@ -80,6 +80,7 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
   var _lastQueryPeers = <String>{};
   var _lastQueryTime = DateTime.now().subtract(const Duration(hours: 1));
   var _queryCount = 0;
+  var _loaded = false;
   var _exit = false;
 
   late final mobileWidth = () {
@@ -125,7 +126,7 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
     return ChangeNotifierProvider<Peers>(
       create: (context) => widget.peers,
       child: Consumer<Peers>(
-        builder: (context, peers, child) => peers.peers.isEmpty
+        builder: (context, peers, child) => peers.peers.isEmpty && _loaded
             ? Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -166,6 +167,7 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
   String _peerId(String cardId) => cardId.replaceAll(widget.peers.name, '');
 
   Widget _buildPeersView(Peers peers) {
+    _loaded = true;
     final body = ObxValue<RxList>((filters) {
       return FutureBuilder<List<Peer>>(
         builder: (context, snapshot) {
