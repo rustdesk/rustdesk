@@ -4,7 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
-import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/utils/event_loop.dart';
 import 'package:get/get.dart';
 import 'package:path/path.dart' as path;
 
@@ -45,6 +45,7 @@ class FileModel {
 
   late final GetSessionID getSessionID;
   String get sessionID => getSessionID();
+  late final _FileDialogEventLoop evtLoop;
 
   FileModel(this.parent) {
     getSessionID = () => parent.target?.id ?? "";
@@ -64,14 +65,17 @@ class FileModel {
         jobController: jobController,
         fileFetcher: fileFetcher,
         getOtherSideDirectoryData: () => localController.directoryData());
+    evtLoop = _FileDialogEventLoop();
   }
 
   Future<void> onReady() async {
+    await evtLoop.onReady();
     await localController.onReady();
     await remoteController.onReady();
   }
 
   Future<void> close() async {
+    await evtLoop.close();
     parent.target?.dialogManager.dismissAll();
     await localController.close();
     await remoteController.close();
@@ -90,14 +94,16 @@ class FileModel {
     fileFetcher.tryCompleteTask(evt['value'], evt['is_local']);
   }
 
-  void overrideFileConfirm(Map<String, dynamic> evt) async {
-    final resp = await showFileConfirmDialog(
-        translate("Overwrite"), "${evt['read_path']}", true);
+  Future<void> overrideFileConfirm(Map<String, dynamic> evt,
+      {bool? overrideConfirm}) async {
+    final resp = overrideConfirm ??
+        await showFileConfirmDialog(
+            translate("Overwrite"), "${evt['read_path']}", true);
     final id = int.tryParse(evt['id']) ?? 0;
     if (false == resp) {
       final jobIndex = jobController.getJob(id);
       if (jobIndex != -1) {
-        jobController.cancelJob(id);
+        await jobController.cancelJob(id);
         final job = jobController.jobTable[jobIndex];
         job.state = JobState.done;
         jobController.jobTable.refresh();
@@ -111,7 +117,7 @@ class FileModel {
         // overwrite
         need_override = true;
       }
-      bind.sessionSetConfirmOverrideFile(
+      await bind.sessionSetConfirmOverrideFile(
           id: sessionID,
           actId: id,
           fileNum: int.parse(evt['file_num']),
@@ -677,8 +683,8 @@ class JobController {
     debugPrint("jobError $evt");
   }
 
-  void cancelJob(int id) async {
-    bind.sessionCancelJob(id: sessionID, actId: id);
+  Future<void> cancelJob(int id) async {
+    await bind.sessionCancelJob(id: sessionID, actId: id);
   }
 
   void loadLastJob(Map<String, dynamic> evt) {
@@ -1166,4 +1172,59 @@ List<Entry> _sortList(List<Entry> list, SortBy sortType, bool ascending) {
         : [...dirs.reversed.toList(), ...files.reversed.toList()];
   }
   return [];
+}
+
+/// Define a general queue which can accepts different dialog type.
+///
+/// [Visibility]
+/// The `_FileDialogType` and `_DialogEvent` are invisible for other models.
+enum _FileDialogType { overwrite, unknown }
+
+class _FileDialogEvent
+    extends BaseEvent<_FileDialogType, Map<String, dynamic>> {
+  WeakReference<FileModel> fileModel;
+  bool? _overrideConfirm;
+
+  _FileDialogEvent(this.fileModel, super.type, super.data);
+
+  void setOverrideConfirm(bool? confirm) {
+    _overrideConfirm = confirm;
+  }
+
+  @override
+  EventCallback<Map<String, dynamic>>? findCallback(_FileDialogType type) {
+    final model = fileModel.target;
+    if (model == null) {
+      return null;
+    }
+    switch (type) {
+      case _FileDialogType.overwrite:
+        return (data) async {
+          return await model.overrideFileConfirm(data, overrideConfirm: _overrideConfirm);
+        };
+      default:
+      return null;
+    }
+  }
+}
+
+class _FileDialogEventLoop extends BaseEventLoop<_FileDialogType, Map<String, dynamic>> {
+
+  bool? overrideConfirm;
+
+  @override
+  Future<void> onPreConsume(BaseEvent<_FileDialogType, Map<String, dynamic>> evt) async {
+    var event = evt as _FileDialogEvent;
+    event.setOverrideConfirm(overrideConfirm);
+  }
+  
+  @override
+  Future<void> onEventsClear() {
+    overrideConfirm = null;
+    return super.onEventsClear();
+  }
+
+  void setOverrideConfirm(bool confirm) {
+    overrideConfirm = confirm;
+  }
 }
