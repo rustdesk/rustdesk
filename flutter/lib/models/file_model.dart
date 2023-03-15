@@ -412,12 +412,12 @@ class FileController {
           }
           job.totalSize = totalSize;
           job.fileCount = fileCount;
-          debugPrint("update receive details:${fd.path}");
+          debugPrint("update receive details: ${fd.path}");
           jobController.jobTable.refresh();
         }
       } else if (options.value.home.isEmpty) {
         options.value.home = fd.path;
-        debugPrint("init remote home:${fd.path}");
+        debugPrint("init remote home: ${fd.path}");
         directory.value = fd;
       }
     } catch (e) {
@@ -449,7 +449,7 @@ class FileController {
           includeHidden: showHidden,
           isRemote: isRemoteToLocal);
       debugPrint(
-          "path:${from.path}, toPath:$toPath, to:${PathUtil.join(toPath, from.name, isWindows)}");
+          "path: ${from.path}, toPath: $toPath, to: ${PathUtil.join(toPath, from.name, isWindows)}");
     }
   }
 
@@ -674,7 +674,7 @@ class JobController {
         jobTable.refresh();
       }
     } catch (e) {
-      debugPrint("Failed to tryUpdateJobProgress,evt:${evt.toString()}");
+      debugPrint("Failed to tryUpdateJobProgress, evt: ${evt.toString()}");
     }
   }
 
@@ -841,7 +841,7 @@ class FileFetcher {
     Timer(Duration(seconds: 2), () {
       tasks.remove(path);
       if (c.isCompleted) return;
-      c.completeError("Failed to read dir,timeout");
+      c.completeError("Failed to read dir, timeout");
     });
     return c.future;
   }
@@ -857,7 +857,7 @@ class FileFetcher {
     Timer(Duration(seconds: 2), () {
       tasks.remove(actID);
       if (c.isCompleted) return;
-      c.completeError("Failed to read dir,timeout");
+      c.completeError("Failed to read dir, timeout");
     });
     return c.future;
   }
@@ -881,7 +881,7 @@ class FileFetcher {
         completer?.complete(fd);
       }
     } catch (e) {
-      debugPrint("tryCompleteJob err :$e");
+      debugPrint("tryCompleteJob err: $e");
     }
   }
 
@@ -1255,7 +1255,7 @@ class FileDialogEventLoop
     event.setOverrideConfirm(_overrideConfirm);
     event.setSkip(_skip);
     debugPrint(
-        "FileDialogEventLoop: consuming<jobId:${evt.data['id']} overrideConfirm: $_overrideConfirm, skip:$_skip>");
+        "FileDialogEventLoop: consuming<jobId: ${evt.data['id']} overrideConfirm: $_overrideConfirm, skip: $_skip>");
   }
 
   @override
