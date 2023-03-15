@@ -8,10 +8,10 @@ abstract class BaseEvent<EventType, Data> {
   EventType type;
   Data data;
 
-  /// Constructor
+  /// Constructor.
   BaseEvent(this.type, this.data);
 
-  /// Consume this event
+  /// Consume this event.
   @visibleForTesting
   Future<dynamic> consume() async {
     final cb = findCallback(type);
@@ -51,7 +51,7 @@ abstract class BaseEventLoop<EventType, Data> {
       }
       timer.cancel();
       _timer = null;
-      // handle logic
+      // Handle the logic.
       await onEventsStartConsuming();
       while (_evts.isNotEmpty) {
         final evt = _evts.first;
@@ -61,7 +61,7 @@ abstract class BaseEventLoop<EventType, Data> {
         await onPostConsume(evt);
       }
       await onEventsClear();
-      // Now events are all processed
+      // Now events are all processed.
       _timer = Timer.periodic(Duration(milliseconds: 100), _handleTimer);
   }
 
@@ -69,7 +69,7 @@ abstract class BaseEventLoop<EventType, Data> {
     _timer?.cancel();
   }
 
-  void push_event(BaseEvent<EventType, Data> evt) {
+  void pushEvent(BaseEvent<EventType, Data> evt) {
     _evts.add(evt);
   }
 

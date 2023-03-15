@@ -95,7 +95,7 @@ class FileModel {
   }
 
   Future<void> postOverrideFileConfirm(Map<String, dynamic> evt) async {
-    evtLoop.push_event(
+    evtLoop.pushEvent(
         _FileDialogEvent(WeakReference(this), FileDialogType.overwrite, evt));
   }
 
@@ -1233,27 +1233,27 @@ class _FileDialogEvent extends BaseEvent<FileDialogType, Map<String, dynamic>> {
 
 class FileDialogEventLoop
     extends BaseEventLoop<FileDialogType, Map<String, dynamic>> {
-  bool? overrideConfirm;
+  bool? _overrideConfirm;
   bool _skip = false;
 
   @override
   Future<void> onPreConsume(
       BaseEvent<FileDialogType, Map<String, dynamic>> evt) async {
     var event = evt as _FileDialogEvent;
-    event.setOverrideConfirm(overrideConfirm);
+    event.setOverrideConfirm(_overrideConfirm);
     event.setSkip(_skip);
-    debugPrint("FileDialogEventLoop: consuming<jobId:${evt.data['id']} overrideConfirm: $overrideConfirm, skip:$_skip>");
+    debugPrint("FileDialogEventLoop: consuming<jobId:${evt.data['id']} overrideConfirm: $_overrideConfirm, skip:$_skip>");
   }
 
   @override
   Future<void> onEventsClear() {
-    overrideConfirm = null;
+    _overrideConfirm = null;
     _skip = false;
     return super.onEventsClear();
   }
 
   void setOverrideConfirm(bool? confirm) {
-    overrideConfirm = confirm;
+    _overrideConfirm = confirm;
   }
 
   void setSkip(bool skip) {
