@@ -393,7 +393,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       toolbarItems.add(_MobileActionMenu(ffi: widget.ffi));
     }
 
-    if (PrivacyModeState.find(widget.id).isTrue ||
+    if (PrivacyModeState.find(widget.id).isFalse &&
         stateGlobal.displaysCount.value > 1) {
       toolbarItems.add(
         bind.mainGetUserDefaultOption(key: 'show_monitors_menubar') == 'Y'
