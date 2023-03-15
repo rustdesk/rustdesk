@@ -478,6 +478,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Empty Password", ""),
         ("Me", ""),
         ("identical_file_tip", "此文件与对方的一致"),
-        ("Show monitors in menu bar", ""),
+        ("show_monitors_tip", ""),
     ].iter().cloned().collect();
 }

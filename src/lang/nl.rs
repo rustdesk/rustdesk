@@ -478,6 +478,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Empty Password", "Wachtwoord Leeg"),
         ("Me", ""),
         ("identical_file_tip", ""),
-        ("Show monitors in menu bar", ""),
+        ("show_monitors_tip", ""),
     ].iter().cloned().collect();
 }
