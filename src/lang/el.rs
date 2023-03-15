@@ -477,5 +477,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Empty Username", "Κενό όνομα χρήστη"),
         ("Empty Password", "Κενός κωδικός πρόσβασης"),
         ("Me", ""),
+        ("Show monitors in menu bar", ""),
     ].iter().cloned().collect();
 }
