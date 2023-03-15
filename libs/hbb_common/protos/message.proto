@@ -301,6 +301,7 @@ message FileTransferDigest {
   uint64 last_modified = 3;
   uint64 file_size = 4;
   bool is_upload = 5;
+  bool is_identical = 6;
 }
 
 message FileTransferBlock {

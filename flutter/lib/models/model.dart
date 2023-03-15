@@ -173,7 +173,7 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'job_error') {
         parent.target?.fileModel.jobController.jobError(evt);
       } else if (name == 'override_file_confirm') {
-        parent.target?.fileModel.overrideFileConfirm(evt);
+        parent.target?.fileModel.postOverrideFileConfirm(evt);
       } else if (name == 'load_last_job') {
         parent.target?.fileModel.jobController.loadLastJob(evt);
       } else if (name == 'update_folder_files') {
