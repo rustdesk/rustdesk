@@ -356,7 +356,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     return Align(
       alignment: Alignment.topCenter,
       child: Obx(() => show.value
-          ? _buildMenubar(context)
+          ? _buildToolbar(context)
           : _buildDraggableShowHide(context)),
     );
   }
@@ -384,39 +384,39 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     });
   }
 
-  Widget _buildMenubar(BuildContext context) {
-    final List<Widget> menubarItems = [];
+  Widget _buildToolbar(BuildContext context) {
+    final List<Widget> toolbarItems = [];
     if (!isWebDesktop) {
-      menubarItems.add(_PinMenu(state: widget.state));
-      menubarItems.add(
+      toolbarItems.add(_PinMenu(state: widget.state));
+      toolbarItems.add(
           _FullscreenMenu(state: widget.state, setFullscreen: _setFullscreen));
-      menubarItems.add(_MobileActionMenu(ffi: widget.ffi));
+      toolbarItems.add(_MobileActionMenu(ffi: widget.ffi));
     }
 
     if (PrivacyModeState.find(widget.id).isTrue ||
         stateGlobal.displaysCount.value > 1) {
-      menubarItems.add(
+      toolbarItems.add(
         bind.mainGetUserDefaultOption(key: 'show_monitors_menubar') == 'Y'
             ? _MultiMonitorMenu(id: widget.id, ffi: widget.ffi)
             : _MonitorMenu(id: widget.id, ffi: widget.ffi),
       );
     }
 
-    menubarItems
+    toolbarItems
         .add(_ControlMenu(id: widget.id, ffi: widget.ffi, state: widget.state));
-    menubarItems.add(_DisplayMenu(
+    toolbarItems.add(_DisplayMenu(
       id: widget.id,
       ffi: widget.ffi,
       state: widget.state,
       setFullscreen: _setFullscreen,
     ));
-    menubarItems.add(_KeyboardMenu(id: widget.id, ffi: widget.ffi));
+    toolbarItems.add(_KeyboardMenu(id: widget.id, ffi: widget.ffi));
     if (!isWeb) {
-      menubarItems.add(_ChatMenu(id: widget.id, ffi: widget.ffi));
-      menubarItems.add(_VoiceCallMenu(id: widget.id, ffi: widget.ffi));
+      toolbarItems.add(_ChatMenu(id: widget.id, ffi: widget.ffi));
+      toolbarItems.add(_VoiceCallMenu(id: widget.id, ffi: widget.ffi));
     }
-    menubarItems.add(_RecordMenu());
-    menubarItems.add(_CloseMenu(id: widget.id, ffi: widget.ffi));
+    toolbarItems.add(_RecordMenu());
+    toolbarItems.add(_CloseMenu(id: widget.id, ffi: widget.ffi));
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -436,7 +436,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
               child: Row(
                 children: [
                   SizedBox(width: _MenubarTheme.buttonHMargin * 2),
-                  ...menubarItems,
+                  ...toolbarItems,
                   SizedBox(width: _MenubarTheme.buttonHMargin * 2)
                 ],
               ),

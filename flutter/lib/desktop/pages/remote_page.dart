@@ -22,7 +22,7 @@ import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
 import '../../utils/image.dart';
-import '../widgets/remote_menubar.dart';
+import '../widgets/remote_toolbar.dart';
 import '../widgets/kb_layout_type_chooser.dart';
 
 bool _isCustomCursorInited = false;
