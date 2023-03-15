@@ -43,6 +43,7 @@ lazy_static::lazy_static! {
     static ref CONFIG: Arc<RwLock<Config>> = Arc::new(RwLock::new(Config::load()));
     static ref CONFIG2: Arc<RwLock<Config2>> = Arc::new(RwLock::new(Config2::load()));
     static ref LOCAL_CONFIG: Arc<RwLock<LocalConfig>> = Arc::new(RwLock::new(LocalConfig::load()));
+    pub static ref CONFIG_OIDC: Arc<RwLock<ConfigOidc>> = Arc::new(RwLock::new(ConfigOidc::load()));
     pub static ref ONLINE: Arc<Mutex<HashMap<String, i64>>> = Default::default();
     pub static ref PROD_RENDEZVOUS_SERVER: Arc<RwLock<String>> = Arc::new(RwLock::new(match option_env!("RENDEZVOUS_SERVER") {
         Some(key) if !key.is_empty() => key,
@@ -255,6 +256,35 @@ pub struct PeerInfoSerde {
     pub hostname: String,
     #[serde(default)]
     pub platform: String,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
+pub struct ConfigOidc {
+    #[serde(default)]
+    pub max_auth_count: usize,
+    #[serde(default)]
+    pub callback_url: String,
+    #[serde(default)]
+    pub providers: HashMap<String, ConfigOidcProvider>,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
+pub struct ConfigOidcProvider {
+    // seconds. 0 means never expires
+    #[serde(default)]
+    pub refresh_token_expires_in: u32,
+    #[serde(default)]
+    pub client_id: String,
+    #[serde(default)]
+    pub client_secret: String,
+    #[serde(default)]
+    pub issuer: Option<String>,
+    #[serde(default)]
+    pub authorization_endpoint: Option<String>,
+    #[serde(default)]
+    pub token_endpoint: Option<String>,
+    #[serde(default)]
+    pub userinfo_endpoint: Option<String>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
@@ -1363,6 +1393,29 @@ impl UserDefaultConfig {
             }
             None => default.to_string(),
         }
+    }
+}
+
+impl ConfigOidc {
+    fn suffix() -> &'static str {
+        "_oidc"
+    }
+
+    fn load() -> Self {
+        Config::load_::<Self>(Self::suffix())._load_env()
+    }
+
+    fn _load_env(mut self) -> Self {
+        use std::env;
+        for (k, mut v) in &mut self.providers {
+            if let Ok(client_id) = env::var(format!("OIDC-{}-CLIENT-ID", k.to_uppercase())) {
+                v.client_id = client_id;
+            }
+            if let Ok(client_secret) = env::var(format!("OIDC-{}-CLIENT-SECRET", k.to_uppercase())) {
+                v.client_secret = client_secret;
+            }
+        }
+        self
     }
 }
 
