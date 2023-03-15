@@ -780,7 +780,7 @@ handler.confirmDeleteFiles = function(id, i, name) {
 
 handler.overrideFileConfirm = function(id, file_num, to, is_upload, is_identical) {
   var jt = file_transfer.job_table;
-  var identical_msg = is_identical ? translate("This file is identical with the peer's one"): "";
+  var identical_msg = is_identical ? translate("identical_file_tip"): "";
   msgbox("custom-skip", "Confirm Write Strategy", "<div .form> \
         <div>" + translate('Overwrite') + " " + translate('files') + ".</div> \
         <div>" + translate('This file exists, skip or overwrite this file?') + "</div> \

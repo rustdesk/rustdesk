@@ -179,7 +179,7 @@ class FileModel {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const SizedBox(height: 12),
-                    Text(translate("This file is identical with the peer's one"),
+                    Text(translate("identical_file_tip"),
                         style: const TextStyle(fontWeight: FontWeight.w500))
                   ],
                 ),
