@@ -391,7 +391,16 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           _FullscreenMenu(state: widget.state, setFullscreen: _setFullscreen));
       menubarItems.add(_MobileActionMenu(ffi: widget.ffi));
     }
-    menubarItems.add(_MonitorMenu(id: widget.id, ffi: widget.ffi));
+
+    if (PrivacyModeState.find(widget.id).isTrue ||
+        stateGlobal.displaysCount.value > 1) {
+      menubarItems.add(
+        bind.mainGetUserDefaultOption(key: 'show_monitors_menubar') == 'Y'
+            ? _MultiMonitorMenu(id: widget.id, ffi: widget.ffi)
+            : _MonitorMenu(id: widget.id, ffi: widget.ffi),
+      );
+    }
+
     menubarItems
         .add(_ControlMenu(id: widget.id, ffi: widget.ffi, state: widget.state));
     menubarItems.add(_DisplayMenu(
@@ -525,10 +534,6 @@ class _MonitorMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (PrivacyModeState.find(id).isTrue ||
-        stateGlobal.displaysCount.value < 2) {
-      return Offstage();
-    }
     return _IconSubmenuButton(
         tooltip: 'Select Monitor',
         icon: icon(),
@@ -547,19 +552,20 @@ class _MonitorMenu extends StatelessWidget {
       alignment: Alignment.center,
       children: [
         SvgPicture.asset(
-          "assets/display.svg",
+          "assets/screen.svg",
           color: Colors.white,
         ),
-        Padding(
-          padding: const EdgeInsets.only(bottom: 3.9),
-          child: Obx(() {
-            RxInt display = CurrentDisplayState.find(id);
-            return Text(
-              '${display.value + 1}/${pi.displays.length}',
-              style: const TextStyle(color: Colors.white, fontSize: 8),
-            );
-          }),
-        )
+        Obx(() {
+          RxInt display = CurrentDisplayState.find(id);
+          return Text(
+            '${display.value + 1}/${pi.displays.length}',
+            style: const TextStyle(
+              color: _MenubarTheme.blueColor,
+              fontSize: 8,
+              fontWeight: FontWeight.bold,
+            ),
+          );
+        }),
       ],
     );
   }
@@ -582,19 +588,17 @@ class _MonitorMenu extends StatelessWidget {
             alignment: Alignment.center,
             children: [
               SvgPicture.asset(
-                "assets/display.svg",
+                "assets/screen.svg",
                 color: Colors.white,
               ),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 3.5 /*2.5*/),
-                child: Text(
-                  (i + 1).toString(),
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                  ),
+              Text(
+                (i + 1).toString(),
+                style: TextStyle(
+                  color: _MenubarTheme.blueColor,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
                 ),
-              )
+              ),
             ],
           ),
         ),
@@ -2203,4 +2207,70 @@ Widget _buildPointerTrackWidget(Widget child, FFI ffi) {
       child: child,
     ),
   );
+}
+
+class _MultiMonitorMenu extends StatelessWidget {
+  final String id;
+  final FFI ffi;
+
+  const _MultiMonitorMenu({
+    super.key,
+    required this.id,
+    required this.ffi,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final List<Widget> rowChildren = [];
+    final pi = ffi.ffiModel.pi;
+
+    for (int i = 0; i < pi.displays.length; i++) {
+      rowChildren.add(
+        Obx(() {
+          RxInt display = CurrentDisplayState.find(id);
+          return _IconMenuButton(
+            topLevel: false,
+            color: i == display.value
+                ? _MenubarTheme.blueColor
+                : Colors.grey[800]!,
+            hoverColor: i == display.value
+                ? _MenubarTheme.hoverBlueColor
+                : Colors.grey[850]!,
+            icon: Container(
+              alignment: AlignmentDirectional.center,
+              constraints:
+                  const BoxConstraints(minHeight: _MenubarTheme.height),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  SvgPicture.asset(
+                    "assets/screen.svg",
+                    color: Colors.white,
+                  ),
+                  Obx(
+                    () => Text(
+                      (i + 1).toString(),
+                      style: TextStyle(
+                        color: i == display.value
+                            ? _MenubarTheme.blueColor
+                            : Colors.grey[800]!,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            onPressed: () {
+              if (display.value != i) {
+                bind.sessionSwitchDisplay(id: id, value: i);
+              }
+            },
+          );
+        }),
+      );
+    }
+    return Row(children: rowChildren);
+  }
 }
