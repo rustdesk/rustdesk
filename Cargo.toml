@@ -4,7 +4,7 @@ version = "1.2.0"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
-description = "A remote control software."
+description = "Zdalna pomoc e-Instytycja.pl"
 default-run = "rustdesk"
 
 [lib]
