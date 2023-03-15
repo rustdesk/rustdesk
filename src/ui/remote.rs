@@ -197,10 +197,10 @@ impl InvokeUiSession for SciterHandler {
         self.call("confirmDeleteFiles", &make_args!(id, i, name));
     }
 
-    fn override_file_confirm(&self, id: i32, file_num: i32, to: String, is_upload: bool) {
+    fn override_file_confirm(&self, id: i32, file_num: i32, to: String, is_upload: bool, is_identical: bool) {
         self.call(
             "overrideFileConfirm",
-            &make_args!(id, file_num, to, is_upload),
+            &make_args!(id, file_num, to, is_upload, is_identical),
         );
     }
 

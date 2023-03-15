@@ -4,7 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
-import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/utils/event_loop.dart';
 import 'package:get/get.dart';
 import 'package:path/path.dart' as path;
 
@@ -45,6 +45,7 @@ class FileModel {
 
   late final GetSessionID getSessionID;
   String get sessionID => getSessionID();
+  late final FileDialogEventLoop evtLoop;
 
   FileModel(this.parent) {
     getSessionID = () => parent.target?.id ?? "";
@@ -64,14 +65,17 @@ class FileModel {
         jobController: jobController,
         fileFetcher: fileFetcher,
         getOtherSideDirectoryData: () => localController.directoryData());
+    evtLoop = FileDialogEventLoop();
   }
 
   Future<void> onReady() async {
+    await evtLoop.onReady();
     await localController.onReady();
     await remoteController.onReady();
   }
 
   Future<void> close() async {
+    await evtLoop.close();
     parent.target?.dialogManager.dismissAll();
     await localController.close();
     await remoteController.close();
@@ -90,14 +94,26 @@ class FileModel {
     fileFetcher.tryCompleteTask(evt['value'], evt['is_local']);
   }
 
-  void overrideFileConfirm(Map<String, dynamic> evt) async {
-    final resp = await showFileConfirmDialog(
-        translate("Overwrite"), "${evt['read_path']}", true);
+  Future<void> postOverrideFileConfirm(Map<String, dynamic> evt) async {
+    evtLoop.pushEvent(
+        _FileDialogEvent(WeakReference(this), FileDialogType.overwrite, evt));
+  }
+
+  Future<void> overrideFileConfirm(Map<String, dynamic> evt,
+      {bool? overrideConfirm, bool skip = false}) async {
+    // If `skip == true`, it means to skip this file without showing dialog.
+    // Because `resp` may be null after the user operation or the last remembered operation,
+    // and we should distinguish them.
+    final resp = overrideConfirm ??
+        (!skip
+            ? await showFileConfirmDialog(translate("Overwrite"),
+                "${evt['read_path']}", true, evt['is_identical'] == "true")
+            : null);
     final id = int.tryParse(evt['id']) ?? 0;
     if (false == resp) {
       final jobIndex = jobController.getJob(id);
       if (jobIndex != -1) {
-        jobController.cancelJob(id);
+        await jobController.cancelJob(id);
         final job = jobController.jobTable[jobIndex];
         job.state = JobState.done;
         jobController.jobTable.refresh();
@@ -111,7 +127,11 @@ class FileModel {
         // overwrite
         need_override = true;
       }
-      bind.sessionSetConfirmOverrideFile(
+      // Update the loop config.
+      if (fileConfirmCheckboxRemember) {
+        evtLoop.setSkip(!need_override);
+      }
+      await bind.sessionSetConfirmOverrideFile(
           id: sessionID,
           actId: id,
           fileNum: int.parse(evt['file_num']),
@@ -119,12 +139,16 @@ class FileModel {
           remember: fileConfirmCheckboxRemember,
           isUpload: evt['is_upload'] == "true");
     }
+    // Update the loop config.
+    if (fileConfirmCheckboxRemember) {
+      evtLoop.setOverrideConfirm(resp);
+    }
   }
 
   bool fileConfirmCheckboxRemember = false;
 
   Future<bool?> showFileConfirmDialog(
-      String title, String content, bool showCheckbox) async {
+      String title, String content, bool showCheckbox, bool isIdentical) async {
     fileConfirmCheckboxRemember = false;
     return await parent.target?.dialogManager.show<bool?>(
         (setState, Function(bool? v) close) {
@@ -149,6 +173,17 @@ class FileModel {
                   style: const TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 5),
               Text(content),
+              Offstage(
+                offstage: !isIdentical,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(height: 12),
+                    Text(translate("identical_file_tip"),
+                        style: const TextStyle(fontWeight: FontWeight.w500))
+                  ],
+                ),
+              ),
               showCheckbox
                   ? CheckboxListTile(
                       contentPadding: const EdgeInsets.all(0),
@@ -677,8 +712,8 @@ class JobController {
     debugPrint("jobError $evt");
   }
 
-  void cancelJob(int id) async {
-    bind.sessionCancelJob(id: sessionID, actId: id);
+  Future<void> cancelJob(int id) async {
+    await bind.sessionCancelJob(id: sessionID, actId: id);
   }
 
   void loadLastJob(Map<String, dynamic> evt) {
@@ -1166,4 +1201,75 @@ List<Entry> _sortList(List<Entry> list, SortBy sortType, bool ascending) {
         : [...dirs.reversed.toList(), ...files.reversed.toList()];
   }
   return [];
+}
+
+/// Define a general queue which can accepts different dialog type.
+///
+/// [Visibility]
+/// The `_FileDialogType` and `_DialogEvent` are invisible for other models.
+enum FileDialogType { overwrite, unknown }
+
+class _FileDialogEvent extends BaseEvent<FileDialogType, Map<String, dynamic>> {
+  WeakReference<FileModel> fileModel;
+  bool? _overrideConfirm;
+  bool _skip = false;
+
+  _FileDialogEvent(this.fileModel, super.type, super.data);
+
+  void setOverrideConfirm(bool? confirm) {
+    _overrideConfirm = confirm;
+  }
+
+  void setSkip(bool skip) {
+    _skip = skip;
+  }
+
+  @override
+  EventCallback<Map<String, dynamic>>? findCallback(FileDialogType type) {
+    final model = fileModel.target;
+    if (model == null) {
+      return null;
+    }
+    switch (type) {
+      case FileDialogType.overwrite:
+        return (data) async {
+          return await model.overrideFileConfirm(data,
+              overrideConfirm: _overrideConfirm, skip: _skip);
+        };
+      default:
+        debugPrint("Unknown event type: $type with $data");
+        return null;
+    }
+  }
+}
+
+class FileDialogEventLoop
+    extends BaseEventLoop<FileDialogType, Map<String, dynamic>> {
+  bool? _overrideConfirm;
+  bool _skip = false;
+
+  @override
+  Future<void> onPreConsume(
+      BaseEvent<FileDialogType, Map<String, dynamic>> evt) async {
+    var event = evt as _FileDialogEvent;
+    event.setOverrideConfirm(_overrideConfirm);
+    event.setSkip(_skip);
+    debugPrint(
+        "FileDialogEventLoop: consuming<jobId:${evt.data['id']} overrideConfirm: $_overrideConfirm, skip:$_skip>");
+  }
+
+  @override
+  Future<void> onEventsClear() {
+    _overrideConfirm = null;
+    _skip = false;
+    return super.onEventsClear();
+  }
+
+  void setOverrideConfirm(bool? confirm) {
+    _overrideConfirm = confirm;
+  }
+
+  void setSkip(bool skip) {
+    _skip = skip;
+  }
 }

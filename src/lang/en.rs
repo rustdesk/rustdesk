@@ -52,5 +52,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("empty_favorite_tip", "No favorite peers yet?\nLet's find someone to connect with and add it to your favorites!"),
         ("empty_lan_tip", "Oh no, it looks like we haven't discovered any peers yet."),
         ("empty_address_book_tip", "Oh dear, it appears that there are currently no peers listed in your address book."),
+        ("identical_file_tip", "This file is identical with the peer's one.")
         ].iter().cloned().collect();
 }
