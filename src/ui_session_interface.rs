@@ -872,7 +872,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
         only_count: bool,
     );
     fn confirm_delete_files(&self, id: i32, i: i32, name: String);
-    fn override_file_confirm(&self, id: i32, file_num: i32, to: String, is_upload: bool);
+    fn override_file_confirm(&self, id: i32, file_num: i32, to: String, is_upload: bool, is_identical: bool);
     fn update_block_input_state(&self, on: bool);
     fn job_progress(&self, id: i32, file_num: i32, speed: f64, finished_size: f64);
     fn adapt_size(&self);

@@ -821,20 +821,21 @@ pub fn is_write_need_confirmation(
     if path.exists() && path.is_file() {
         let metadata = std::fs::metadata(path)?;
         let modified_time = metadata.modified()?;
-        // let remote_mt = Duration::from_secs(digest.last_modified);
+        let remote_mt = Duration::from_secs(digest.last_modified);
         let local_mt = modified_time.duration_since(UNIX_EPOCH)?;
         // [Note]
-        // We decide not to compare the file with peers, 
+        // We decide to give the decision whether to override the existing file to users,
         // which obey the behavior of the file manager in our system.
-        //
-        // if remote_mt == local_mt && digest.file_size == metadata.len() {
-        //     return Ok(DigestCheckResult::IsSame);
-        // }
+        let mut is_identical = false;
+        if remote_mt == local_mt && digest.file_size == metadata.len() {
+            is_identical = true;
+        }
         Ok(DigestCheckResult::NeedConfirm(FileTransferDigest {
             id: digest.id,
             file_num: digest.file_num,
             last_modified: local_mt.as_secs(),
             file_size: metadata.len(),
+            is_identical,
             ..Default::default()
         }))
     } else {

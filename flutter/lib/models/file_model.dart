@@ -104,10 +104,11 @@ class FileModel {
     // If `skip == true`, it means to skip this file without showing dialog.
     // Because `resp` may be null after the user operation or the last remembered operation,
     // and we should distinguish them.
-    final resp = overrideConfirm ?? (!skip
-        ? await showFileConfirmDialog(
-            translate("Overwrite"), "${evt['read_path']}", true)
-        : null);
+    final resp = overrideConfirm ??
+        (!skip
+            ? await showFileConfirmDialog(translate("Overwrite"),
+                "${evt['read_path']}", true, evt['is_identical'] == "true")
+            : null);
     final id = int.tryParse(evt['id']) ?? 0;
     if (false == resp) {
       final jobIndex = jobController.getJob(id);
@@ -147,7 +148,7 @@ class FileModel {
   bool fileConfirmCheckboxRemember = false;
 
   Future<bool?> showFileConfirmDialog(
-      String title, String content, bool showCheckbox) async {
+      String title, String content, bool showCheckbox, bool isIdentical) async {
     fileConfirmCheckboxRemember = false;
     return await parent.target?.dialogManager.show<bool?>(
         (setState, Function(bool? v) close) {
@@ -172,6 +173,17 @@ class FileModel {
                   style: const TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 5),
               Text(content),
+              Offstage(
+                offstage: !isIdentical,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(height: 12),
+                    Text(translate("This file is identical with the peer's one"),
+                        style: const TextStyle(fontWeight: FontWeight.w500))
+                  ],
+                ),
+              ),
               showCheckbox
                   ? CheckboxListTile(
                       contentPadding: const EdgeInsets.all(0),
@@ -1242,7 +1254,8 @@ class FileDialogEventLoop
     var event = evt as _FileDialogEvent;
     event.setOverrideConfirm(_overrideConfirm);
     event.setSkip(_skip);
-    debugPrint("FileDialogEventLoop: consuming<jobId:${evt.data['id']} overrideConfirm: $_overrideConfirm, skip:$_skip>");
+    debugPrint(
+        "FileDialogEventLoop: consuming<jobId:${evt.data['id']} overrideConfirm: $_overrideConfirm, skip:$_skip>");
   }
 
   @override
