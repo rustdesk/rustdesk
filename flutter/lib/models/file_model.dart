@@ -283,7 +283,9 @@ class FileController {
   }
 
   Future<void> onReady() async {
-    options.value.home = await bind.mainGetHomeDir();
+    if (isLocal) {
+      options.value.home = await bind.mainGetHomeDir();
+    }
     options.value.showHidden = (await bind.sessionGetPeerOption(
             id: sessionID,
             name: isLocal ? "local_show_hidden" : "remote_show_hidden"))
