@@ -1318,6 +1318,7 @@ class _DisplayState extends State<_Display> {
 
   Widget other(BuildContext context) {
     return _Card(title: 'Other Default Options', children: [
+      otherRow('View Mode', 'view-only'),
       otherRow('show_monitors_tip', 'show_monitors_toolbar'),
       otherRow('Show remote cursor', 'show_remote_cursor'),
       otherRow('Zoom cursor', 'zoom-cursor'),

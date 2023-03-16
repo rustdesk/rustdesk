@@ -479,5 +479,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Me", ""),
         ("identical_file_tip", ""),
         ("show_monitors_tip", ""),
+        ("View Mode", ""),
     ].iter().cloned().collect();
 }
