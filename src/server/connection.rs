@@ -103,6 +103,9 @@ pub struct Connection {
     show_remote_cursor: bool,
     // by peer
     ip: String,
+    // by peer
+    disable_keyboard: bool,
+    // by peer
     disable_clipboard: bool,
     // by peer
     disable_audio: bool,
@@ -219,6 +222,7 @@ impl Connection {
             disable_audio: false,
             enable_file_transfer: false,
             disable_clipboard: false,
+            disable_keyboard: false,
             tx_input,
             video_ack_required: false,
             peer_info: Default::default(),
@@ -327,7 +331,7 @@ impl Connection {
                                 if let Some(s) = conn.server.upgrade() {
                                     s.write().unwrap().subscribe(
                                         super::clipboard_service::NAME,
-                                        conn.inner.clone(), conn.clipboard_enabled() && conn.keyboard);
+                                        conn.inner.clone(), conn.clipboard_enabled() && conn.peer_keyboard_enabled());
                                 }
                             } else if &name == "audio" {
                                 conn.audio = enabled;
@@ -939,13 +943,13 @@ impl Connection {
         } else if sub_service {
             if let Some(s) = self.server.upgrade() {
                 let mut noperms = Vec::new();
-                if !self.keyboard && !self.show_remote_cursor {
+                if !self.peer_keyboard_enabled() && !self.show_remote_cursor {
                     noperms.push(NAME_CURSOR);
                 }
                 if !self.show_remote_cursor {
                     noperms.push(NAME_POS);
                 }
-                if !self.clipboard_enabled() || !self.keyboard {
+                if !self.clipboard_enabled() || !self.peer_keyboard_enabled() {
                     noperms.push(super::clipboard_service::NAME);
                 }
                 if !self.audio_enabled() {
@@ -957,6 +961,10 @@ impl Connection {
                 s.add_connection(self.inner.clone(), &noperms);
             }
         }
+    }
+
+    fn peer_keyboard_enabled(&self) -> bool {
+        self.keyboard && !self.disable_keyboard
     }
 
     fn clipboard_enabled(&self) -> bool {
@@ -1312,7 +1320,7 @@ impl Connection {
                         log::debug!("call_main_service_mouse_input fail:{}", e);
                     }
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                    if self.keyboard {
+                    if self.peer_keyboard_enabled() {
                         if is_left_up(&me) {
                             CLICK_TIME.store(get_time(), Ordering::SeqCst);
                         } else {
@@ -1323,7 +1331,7 @@ impl Connection {
                 }
                 Some(message::Union::KeyEvent(me)) => {
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                    if self.keyboard {
+                    if self.peer_keyboard_enabled() {
                         if is_enter(&me) {
                             CLICK_TIME.store(get_time(), Ordering::SeqCst);
                         }
@@ -1750,7 +1758,7 @@ impl Connection {
                     s.write().unwrap().subscribe(
                         NAME_CURSOR,
                         self.inner.clone(),
-                        self.keyboard || self.show_remote_cursor,
+                        self.peer_keyboard_enabled() || self.show_remote_cursor,
                     );
                     s.write().unwrap().subscribe(
                         NAME_POS,
@@ -1788,7 +1796,24 @@ impl Connection {
                     s.write().unwrap().subscribe(
                         super::clipboard_service::NAME,
                         self.inner.clone(),
-                        self.clipboard_enabled() && self.keyboard,
+                        self.clipboard_enabled() && self.peer_keyboard_enabled(),
+                    );
+                }
+            }
+        }
+        if let Ok(q) = o.disable_keyboard.enum_value() {
+            if q != BoolOption::NotSet {
+                self.disable_keyboard = q == BoolOption::Yes;
+                if let Some(s) = self.server.upgrade() {
+                    s.write().unwrap().subscribe(
+                        super::clipboard_service::NAME,
+                        self.inner.clone(),
+                        self.clipboard_enabled() && self.peer_keyboard_enabled(),
+                    );
+                    s.write().unwrap().subscribe(
+                        NAME_CURSOR,
+                        self.inner.clone(),
+                        self.peer_keyboard_enabled() || self.show_remote_cursor,
                     );
                 }
             }

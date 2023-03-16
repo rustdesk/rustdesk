@@ -479,5 +479,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Me", "من"),
         ("identical_file_tip", "این فایل با فایل همتا یکسان است."),
         ("show_monitors_tip", "نمایش مانیتورها در نوار ابزار"),
+        ("View Mode", ""),
     ].iter().cloned().collect();
 }

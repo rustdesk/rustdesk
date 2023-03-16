@@ -1296,7 +1296,12 @@ impl LoginConfigHandler {
         if let Some(custom_fps) = self.options.get("custom-fps") {
             msg.custom_fps = custom_fps.parse().unwrap_or(30);
         }
-        if self.get_toggle_option("show-remote-cursor") {
+        let view_only = self.get_toggle_option("view-only");
+        if view_only {
+            msg.disable_keyboard = BoolOption::Yes.into();
+            n += 1;
+        }
+        if view_only || self.get_toggle_option("show-remote-cursor") {
             msg.show_remote_cursor = BoolOption::Yes.into();
             n += 1;
         }
@@ -1312,7 +1317,7 @@ impl LoginConfigHandler {
             msg.enable_file_transfer = BoolOption::Yes.into();
             n += 1;
         }
-        if self.get_toggle_option("disable-clipboard") {
+        if view_only || self.get_toggle_option("disable-clipboard") {
             msg.disable_clipboard = BoolOption::Yes.into();
             n += 1;
         }

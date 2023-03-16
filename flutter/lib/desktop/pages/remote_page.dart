@@ -139,8 +139,9 @@ class _RemotePageState extends State<RemotePage>
     _ffi.ffiModel.updateEventListener(widget.id);
     _ffi.qualityMonitorModel.checkShowQualityMonitor(widget.id);
     // Session option should be set after models.dart/FFI.start
-    _showRemoteCursor.value = bind.sessionGetToggleOptionSync(
-        id: widget.id, arg: 'show-remote-cursor');
+    // _showRemoteCursor has been set by setViewOnly
+    _ffi.ffiModel.setViewOnly(widget.id,
+        bind.sessionGetToggleOptionSync(id: widget.id, arg: 'view-only'));
     _zoomCursor.value =
         bind.sessionGetToggleOptionSync(id: widget.id, arg: 'zoom-cursor');
     DesktopMultiWindow.addListener(this);

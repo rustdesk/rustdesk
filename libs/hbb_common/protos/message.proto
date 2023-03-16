@@ -487,6 +487,7 @@ message OptionMessage {
   BoolOption enable_file_transfer = 9;
   VideoCodecState video_codec_state = 10;
   int32 custom_fps = 11;
+  BoolOption disable_keyboard = 12;
 }
 
 message TestDelay {
