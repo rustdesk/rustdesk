@@ -1312,6 +1312,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                               },
                               dismissOnClicked: true));
                         }
+                        menuItems.add(MenuEntryDivider());
                       } catch (e) {
                         debugPrint("buildBread fetchDirectory err=$e");
                       } finally {
@@ -1320,7 +1321,6 @@ class _FileManagerViewState extends State<FileManagerView> {
                         }
                       }
                     }
-                    menuItems.add(MenuEntryDivider());
                     mod_menu.showMenu(
                         context: context,
                         position: RelativeRect.fromLTRB(x, y, x, y),
