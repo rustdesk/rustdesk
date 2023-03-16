@@ -260,7 +260,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       ),
     ]);
 
-    if (!ffi.canvasModel.cursorEmbedded) {
+    if (!ffi.canvasModel.cursorEmbedded && !ffi.ffiModel.viewOnly) {
       menu.add(MenuEntryDivider<String>());
       menu.add(RemoteMenuEntry.showRemoteCursor(
         key,
@@ -269,7 +269,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       ));
     }
 
-    if (perms['keyboard'] != false) {
+    if (perms['keyboard'] != false && !ffi.ffiModel.viewOnly) {
       if (perms['clipboard'] != false) {
         menu.add(RemoteMenuEntry.disableClipboard(key, padding,
             dismissFunc: cancelFunc));
