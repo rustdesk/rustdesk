@@ -8,6 +8,7 @@ import 'package:flutter_hbb/utils/event_loop.dart';
 import 'package:get/get.dart';
 import 'package:path/path.dart' as path;
 
+import '../consts.dart';
 import 'model.dart';
 import 'platform_model.dart';
 
@@ -54,14 +55,14 @@ class FileModel {
     localController = FileController(
         isLocal: true,
         getSessionID: getSessionID,
-        dialogManager: parent.target?.dialogManager,
+        rootState: parent,
         jobController: jobController,
         fileFetcher: fileFetcher,
         getOtherSideDirectoryData: () => remoteController.directoryData());
     remoteController = FileController(
         isLocal: false,
         getSessionID: getSessionID,
-        dialogManager: parent.target?.dialogManager,
+        rootState: parent,
         jobController: jobController,
         fileFetcher: fileFetcher,
         getOtherSideDirectoryData: () => localController.directoryData());
@@ -246,7 +247,7 @@ class FileController {
   final sortBy = SortBy.name.obs;
   var sortAscending = true;
   final JobController jobController;
-  final OverlayDialogManager? dialogManager;
+  final WeakReference<FFI> rootState;
 
   final DirectoryData Function() getOtherSideDirectoryData;
   late final SelectedItems selectedItems = SelectedItems(isLocal: isLocal);
@@ -254,12 +255,13 @@ class FileController {
   FileController(
       {required this.isLocal,
       required this.getSessionID,
-      required this.dialogManager,
+      required this.rootState,
       required this.jobController,
       required this.fileFetcher,
       required this.getOtherSideDirectoryData});
 
   String get homePath => options.value.home;
+  OverlayDialogManager? get dialogManager => rootState.target?.dialogManager;
 
   String get shortPath {
     final dirPath = directory.value.path;
@@ -286,7 +288,9 @@ class FileController {
             id: sessionID,
             name: isLocal ? "local_show_hidden" : "remote_show_hidden"))
         .isNotEmpty;
-    options.value.isWindows = Platform.isWindows;
+    options.value.isWindows = isLocal
+        ? Platform.isWindows
+        : rootState.target?.ffiModel.pi.platform == kPeerPlatformWindows;
 
     await Future.delayed(Duration(milliseconds: 100));
 
@@ -475,7 +479,7 @@ class FileController {
         title = translate("Not an empty directory");
         dialogManager?.showLoading(translate("Waiting"));
         final fd = await fileFetcher.fetchDirectoryRecursive(
-            jobID, item.path, items.isLocal!, true);
+            jobID, item.path, items.isLocal, true);
         if (fd.path.isEmpty) {
           fd.path = item.path;
         }
@@ -890,12 +894,12 @@ class FileFetcher {
     try {
       if (isLocal) {
         final res = await bind.sessionReadLocalDirSync(
-            id: sessionID ?? "", path: path, showHidden: showHidden);
+            id: sessionID, path: path, showHidden: showHidden);
         final fd = FileDirectory.fromJson(jsonDecode(res));
         return fd;
       } else {
         await bind.sessionReadRemoteDir(
-            id: sessionID ?? "", path: path, includeHidden: showHidden);
+            id: sessionID, path: path, includeHidden: showHidden);
         return registerReadTask(isLocal, path);
       }
     } catch (e) {
