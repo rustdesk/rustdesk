@@ -1762,9 +1762,15 @@ pub fn send_message_to_hnwd(
 }
 
 pub fn create_process_with_logon(user: &str, pwd: &str, exe: &str, arg: &str) -> ResultType<()> {
+    let last_error_table = HashMap::from([
+        (ERROR_LOGON_FAILURE, "The user name or password is incorrect."),
+        (ERROR_ACCESS_DENIED, "Access is denied.")
+    ]);
+
     unsafe {
-        let wuser = wide_string(user);
-        let wpc = wide_string("");
+        let user_split = user.split("\\").collect::<Vec<&str>>();
+        let wuser = wide_string(user_split.get(1).unwrap_or(&user));
+        let wpc = wide_string(user_split.get(0).unwrap_or(&""));	
         let wpwd = wide_string(pwd);
         let cmd = if arg.is_empty() {
             format!("\"{}\"", exe)
@@ -1794,7 +1800,14 @@ pub fn create_process_with_logon(user: &str, pwd: &str, exe: &str, arg: &str) ->
                 &mut pi as *mut PROCESS_INFORMATION,
             )
         {
-            bail!("CreateProcessWithLogonW failed, errno={}", GetLastError());
+            let last_error = GetLastError();
+            bail!(
+                "CreateProcessWithLogonW failed : \"{}\", errno={}", 
+                last_error_table
+                    .get(&last_error)
+                    .unwrap_or(&"Unknown error"),
+                last_error
+            );
         }
     }
     return Ok(());
