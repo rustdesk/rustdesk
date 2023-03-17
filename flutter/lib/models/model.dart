@@ -450,6 +450,8 @@ class FfiModel with ChangeNotifier {
       handleResolutions(peerId, evt["resolutions"]);
       parent.target?.elevationModel.onPeerInfo(_pi);
     }
+    setViewOnly(
+        peerId, bind.sessionGetToggleOptionSync(id: peerId, arg: 'view-only'));
     notifyListeners();
   }
 
@@ -522,6 +524,7 @@ class FfiModel with ChangeNotifier {
   }
 
   void setViewOnly(String id, bool value) {
+    if (version_cmp(_pi.version, '1.2.0') < 0) return;
     if (value) {
       ShowRemoteCursorState.find(id).value = value;
     } else {

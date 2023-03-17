@@ -543,12 +543,6 @@ pub fn session_set_size(_id: String, _width: i32, _height: i32) {
     }
 }
 
-pub fn session_set_view_only(id: String, view_only: bool) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.set_view_only(view_only);
-    }
-}
-
 pub fn main_get_sound_inputs() -> Vec<String> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     return get_sound_inputs();

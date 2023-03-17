@@ -385,7 +385,6 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   }
 
   Widget _buildToolbar(BuildContext context) {
-    final ffiModel = Provider.of<FfiModel>(context);
     final List<Widget> toolbarItems = [];
     if (!isWebDesktop) {
       toolbarItems.add(_PinMenu(state: widget.state));
@@ -397,7 +396,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     if (PrivacyModeState.find(widget.id).isFalse &&
         stateGlobal.displaysCount.value > 1) {
       toolbarItems.add(
-        bind.mainGetUserDefaultOption(key: 'show_monitors_menubar') == 'Y'
+        bind.mainGetUserDefaultOption(key: 'show_monitors_toolbar') == 'Y'
             ? _MultiMonitorMenu(id: widget.id, ffi: widget.ffi)
             : _MonitorMenu(id: widget.id, ffi: widget.ffi),
       );
@@ -411,9 +410,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       state: widget.state,
       setFullscreen: _setFullscreen,
     ));
-    if (!ffiModel.viewOnly) {
-      toolbarItems.add(_KeyboardMenu(id: widget.id, ffi: widget.ffi));
-    }
+    toolbarItems.add(_KeyboardMenu(id: widget.id, ffi: widget.ffi));
     if (!isWeb) {
       toolbarItems.add(_ChatMenu(id: widget.id, ffi: widget.ffi));
       toolbarItems.add(_VoiceCallMenu(id: widget.id, ffi: widget.ffi));
@@ -969,7 +966,6 @@ class _DisplayMenuState extends State<_DisplayMenu> {
           codec(),
           resolutions(),
           Divider(),
-          view_only(),
           showRemoteCursor(),
           zoomCursor(),
           showQualityMonitor(),
@@ -1463,39 +1459,26 @@ class _DisplayMenuState extends State<_DisplayMenu> {
         child: Text(translate("Resolution")));
   }
 
-  view_only() {
-    final visible = version_cmp(pi.version, '1.2.0') >= 0;
-    if (!visible) return Offstage();
-    final ffiModel = widget.ffi.ffiModel;
-    return _CheckboxMenuButton(
-        value: ffiModel.viewOnly,
-        onChanged: (value) async {
-          if (value == null) return;
-          bind.sessionSetViewOnly(id: widget.id, viewOnly: value);
-          ffiModel.setViewOnly(widget.id, value);
-        },
-        ffi: widget.ffi,
-        child: Text(translate('View Mode')));
-  }
-
   showRemoteCursor() {
     if (widget.ffi.ffiModel.pi.platform == kPeerPlatformAndroid) {
       return Offstage();
     }
     final ffiModel = widget.ffi.ffiModel;
-    final visible =
-        !ffiModel.viewOnly && !widget.ffi.canvasModel.cursorEmbedded;
+    final visible = !widget.ffi.canvasModel.cursorEmbedded;
     if (!visible) return Offstage();
+    final enabled = !ffiModel.viewOnly;
     final state = ShowRemoteCursorState.find(widget.id);
     final option = 'show-remote-cursor';
     return _CheckboxMenuButton(
         value: state.value,
-        onChanged: (value) async {
-          if (value == null) return;
-          await bind.sessionToggleOption(id: widget.id, value: option);
-          state.value =
-              bind.sessionGetToggleOptionSync(id: widget.id, arg: option);
-        },
+        onChanged: enabled
+            ? (value) async {
+                if (value == null) return;
+                await bind.sessionToggleOption(id: widget.id, value: option);
+                state.value =
+                    bind.sessionGetToggleOptionSync(id: widget.id, arg: option);
+              }
+            : null,
         ffi: widget.ffi,
         child: Text(translate('Show remote cursor')));
   }
@@ -1568,18 +1551,20 @@ class _DisplayMenuState extends State<_DisplayMenu> {
 
   disableClipboard() {
     final ffiModel = widget.ffi.ffiModel;
-    final visible = perms['keyboard'] != false &&
-        perms['clipboard'] != false &&
-        !ffiModel.viewOnly;
+    final visible = perms['keyboard'] != false && perms['clipboard'] != false;
     if (!visible) return Offstage();
+    final enabled = !ffiModel.viewOnly;
     final option = 'disable-clipboard';
-    final value = bind.sessionGetToggleOptionSync(id: widget.id, arg: option);
+    var value = bind.sessionGetToggleOptionSync(id: widget.id, arg: option);
+    if (ffiModel.viewOnly) value = true;
     return _CheckboxMenuButton(
         value: value,
-        onChanged: (value) {
-          if (value == null) return;
-          bind.sessionToggleOption(id: widget.id, value: option);
-        },
+        onChanged: enabled
+            ? (value) {
+                if (value == null) return;
+                bind.sessionToggleOption(id: widget.id, value: option);
+              }
+            : null,
         ffi: widget.ffi,
         child: Text(translate('Disable clipboard')));
   }
@@ -1672,7 +1657,12 @@ class _KeyboardMenu extends StatelessWidget {
         ffi: ffi,
         color: _MenubarTheme.blueColor,
         hoverColor: _MenubarTheme.hoverBlueColor,
-        menuChildren: [mode(), localKeyboardType()]);
+        menuChildren: [
+          mode(),
+          localKeyboardType(),
+          Divider(),
+          view_mode(),
+        ]);
   }
 
   mode() {
@@ -1686,6 +1676,7 @@ class _KeyboardMenu extends StatelessWidget {
         KeyboardModeMenu(key: _kKeyTranslateMode, menu: 'Translate mode'),
       ];
       List<_RadioMenuButton> list = [];
+      final enabled = !ffi.ffiModel.viewOnly;
       onChanged(String? value) async {
         if (value == null) return;
         await bind.sessionSetKeyboardMode(id: id, value: value);
@@ -1706,7 +1697,7 @@ class _KeyboardMenu extends StatelessWidget {
             child: Text(text),
             value: mode.key,
             groupValue: groupValue,
-            onChanged: onChanged,
+            onChanged: enabled ? onChanged : null,
             ffi: ffi,
           ));
         }
@@ -1719,6 +1710,7 @@ class _KeyboardMenu extends StatelessWidget {
     final localPlatform = getLocalPlatformForKBLayoutType(pi.platform);
     final visible = localPlatform != '';
     if (!visible) return Offstage();
+    final enabled = !ffi.ffiModel.viewOnly;
     return Column(
       children: [
         Divider(),
@@ -1727,11 +1719,29 @@ class _KeyboardMenu extends StatelessWidget {
               '${translate('Local keyboard type')}: ${KBLayoutType.value}'),
           trailingIcon: const Icon(Icons.settings),
           ffi: ffi,
-          onPressed: () =>
-              showKBLayoutTypeChooser(localPlatform, ffi.dialogManager),
+          onPressed: enabled
+              ? () => showKBLayoutTypeChooser(localPlatform, ffi.dialogManager)
+              : null,
         )
       ],
     );
+  }
+
+  view_mode() {
+    final ffiModel = ffi.ffiModel;
+    final enabled = version_cmp(pi.version, '1.2.0') >= 0 &&
+        ffiModel.permissions["keyboard"] != false;
+    return _CheckboxMenuButton(
+        value: ffiModel.viewOnly,
+        onChanged: enabled
+            ? (value) async {
+                if (value == null) return;
+                await bind.sessionToggleOption(id: id, value: 'view-only');
+                ffiModel.setViewOnly(id, value);
+              }
+            : null,
+        ffi: ffi,
+        child: Text(translate('View Mode')));
   }
 }
 

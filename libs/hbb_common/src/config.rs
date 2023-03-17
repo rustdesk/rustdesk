@@ -235,10 +235,12 @@ pub struct PeerConfig {
     pub show_quality_monitor: ShowQualityMonitor,
     #[serde(default)]
     pub keyboard_mode: String,
+    #[serde(flatten)]
+    pub view_only: ViewOnly,
 
     // The other scalar value must before this
     #[serde(default, deserialize_with = "PeerConfig::deserialize_options")]
-    pub options: HashMap<String, String>,
+    pub options: HashMap<String, String>, // not use delete to represent default values
     // Various data for flutter ui
     #[serde(default)]
     pub ui_flutter: HashMap<String, String>,
@@ -1061,10 +1063,6 @@ impl PeerConfig {
         if !mp.contains_key(key) {
             mp.insert(key.to_owned(), UserDefaultConfig::read().get(key));
         }
-        key = "view-only";
-        if !mp.contains_key(key) {
-            mp.insert(key.to_owned(), UserDefaultConfig::read().get(key));
-        }
         Ok(mp)
     }
 }
@@ -1117,6 +1115,13 @@ serde_field_bool!(
     "allow_swap_key",
     default_allow_swap_key,
     "AllowSwapKey::default_allow_swap_key"
+);
+
+serde_field_bool!(
+    ViewOnly,
+    "view_only",
+    default_view_only,
+    "ViewOnly::default_view_only"
 );
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
@@ -1415,7 +1420,8 @@ impl ConfigOidc {
             if let Ok(client_id) = env::var(format!("OIDC-{}-CLIENT-ID", k.to_uppercase())) {
                 v.client_id = client_id;
             }
-            if let Ok(client_secret) = env::var(format!("OIDC-{}-CLIENT-SECRET", k.to_uppercase())) {
+            if let Ok(client_secret) = env::var(format!("OIDC-{}-CLIENT-SECRET", k.to_uppercase()))
+            {
                 v.client_secret = client_secret;
             }
         }
