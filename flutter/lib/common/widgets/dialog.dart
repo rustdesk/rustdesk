@@ -106,7 +106,6 @@ void changeIdDialog() {
           TextField(
             decoration: InputDecoration(
                 labelText: translate('Your new ID'),
-                border: isDesktop ? const OutlineInputBorder() : null,
                 errorText: msg.isEmpty ? null : translate(msg),
                 suffixText: '${rxId.value.length}/16',
                 suffixStyle: const TextStyle(fontSize: 12, color: Colors.grey)),
