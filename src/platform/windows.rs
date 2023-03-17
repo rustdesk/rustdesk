@@ -1817,7 +1817,7 @@ pub fn set_path_permission(dir: &PathBuf, permission: &str) -> ResultType<()> {
     std::process::Command::new("icacls")
         .arg(dir.as_os_str())
         .arg("/grant")
-        .arg(format!("Everyone:(OI)(CI){}", permission))
+        .arg(format!("*S-1-1-0:(OI)(CI){}", permission))
         .arg("/T")
         .spawn()?;
     Ok(())
