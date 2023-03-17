@@ -11,7 +11,7 @@ import 'package:wakelock/wakelock.dart';
 
 const double _kColumn1Width = 30;
 const double _kColumn4Width = 100;
-const double _kRowHeight = 50;
+const double _kRowHeight = 60;
 const double _kTextLeftMargin = 20;
 
 class _PortForward {
@@ -183,8 +183,6 @@ class _PortForwardPageState extends State<PortForwardPage>
             controller: remotePortController,
             inputFormatters: portInputFormatter),
         ElevatedButton(
-          style: ElevatedButton.styleFrom(
-              elevation: 0, side: const BorderSide(color: MyTheme.border)),
           onPressed: () async {
             int? localPort = int.tryParse(localPortController.text);
             int? remotePort = int.tryParse(remotePortController.text);
@@ -208,7 +206,7 @@ class _PortForwardPageState extends State<PortForwardPage>
           child: Text(
             translate('Add'),
           ),
-        ).marginAll(10),
+        ).marginSymmetric(horizontal: 10),
       ]),
     );
   }
@@ -217,26 +215,15 @@ class _PortForwardPageState extends State<PortForwardPage>
       {required TextEditingController controller,
       List<TextInputFormatter>? inputFormatters,
       String? hint}) {
-    final textColor = Theme.of(context).textTheme.titleLarge?.color;
     return Expanded(
-      child: TextField(
-        controller: controller,
-        inputFormatters: inputFormatters,
-        cursorColor: textColor,
-        cursorHeight: 20,
-        cursorWidth: 1,
-        decoration: InputDecoration(
-            border: OutlineInputBorder(
-                borderSide: BorderSide(color: MyTheme.color(context).border!)),
-            focusedBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: MyTheme.color(context).border!)),
-            fillColor: Theme.of(context).colorScheme.background,
-            contentPadding: const EdgeInsets.all(10),
-            hintText: hint,
-            hintStyle:
-                TextStyle(color: Theme.of(context).hintColor, fontSize: 16)),
-        style: TextStyle(color: textColor, fontSize: 16),
-      ).marginAll(10),
+      child: Padding(
+          padding: const EdgeInsets.all(10.0),
+          child: TextField(
+              controller: controller,
+              inputFormatters: inputFormatters,
+              decoration: InputDecoration(
+                hintText: hint,
+              ))),
     );
   }
 
