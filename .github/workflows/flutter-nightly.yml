@@ -420,7 +420,7 @@ jobs:
             ./flutter/lib/generated_bridge.dart 
             ./flutter/lib/generated_bridge.freezed.dart
 
-  build-rustdesk-android-arm64:
+  build-rustdesk-android:
     needs: [generate-bridge-linux]
     name: build rustdesk android apk ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: ${{ matrix.job.os }}
@@ -433,13 +433,15 @@ jobs:
               target: aarch64-linux-android,
               os: ubuntu-20.04,
               extra-build-features: "",
+              openssl-arch: android-arm64
             }
-          # - {
-          #     arch: x86_64,
-          #     target: armv7-linux-androideabi,
-          #     os: ubuntu-18.04,
-          #     extra-build-features: "",
-          #   }
+          - {
+              arch: x86_64,
+              target: armv7-linux-androideabi,
+              os: ubuntu-18.04,
+              extra-build-features: "",
+              openssl-arch: android-arm
+            }
     steps:
       - name: Install dependencies
         run: |
@@ -458,12 +460,11 @@ jobs:
           ndk-version: ${{ env.NDK_VERSION }}
           add-to-path: true
 
-      - name: Download deps
+      - name: Clone deps
         shell: bash
         run: |
           pushd /opt
-          wget https://github.com/rustdesk/doc.rustdesk.com/releases/download/console/dep.tar.gz
-          tar xzf dep.tar.gz
+          git clone https://github.com/Kingtous/rustdesk_thirdparty_lib.git --depth=1
 
       - name: Restore bridge files
         uses: actions/download-artifact@master
@@ -491,7 +492,7 @@ jobs:
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
-          VCPKG_ROOT: /opt/vcpkg
+          VCPKG_ROOT: /opt/rustdesk_thirdparty_lib/vcpkg
         run: |
           rustup target add ${{ matrix.job.target }} 
           cargo install cargo-ndk
@@ -514,16 +515,12 @@ jobs:
           JAVA_HOME: /usr/lib/jvm/java-11-openjdk-amd64
         run: |
           export PATH=/usr/lib/jvm/java-11-openjdk-amd64/bin:$PATH
-          # download so
-          pushd flutter
-            wget -O so.tar.gz https://github.com/rustdesk/doc.rustdesk.com/releases/download/console/so.tar.gz
-            tar xzvf so.tar.gz
-          popd
           # temporary use debug sign config
           sed -i "s/signingConfigs.release/signingConfigs.debug/g" ./flutter/android/app/build.gradle
           case ${{ matrix.job.target }} in
             aarch64-linux-android)
               mkdir -p ./flutter/android/app/src/main/jniLibs/arm64-v8a
+              cp /opt/rustdesk_thirdparty_lib/android/app/src/main/jniLibs/arm64-v8a/*.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/
               cp ./target/${{ matrix.job.target }}/release/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/librustdesk.so
               # build flutter
               pushd flutter
@@ -532,6 +529,7 @@ jobs:
             ;;
             armv7-linux-androideabi)
               mkdir -p ./flutter/android/app/src/main/jniLibs/armeabi-v7a
+              cp /opt/rustdesk_thirdparty_lib/android/app/src/main/jniLibs/armeabi-v7a/*.so ./flutter/android/app/src/main/jniLibs/armeabi-v7a/
               cp ./target/${{ matrix.job.target }}/release/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/armeabi-v7a/librustdesk.so
               # build flutter
               pushd flutter
