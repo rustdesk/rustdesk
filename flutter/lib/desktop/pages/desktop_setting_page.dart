@@ -1862,7 +1862,6 @@ void changeSocks5Proxy() async {
                 Expanded(
                   child: TextField(
                     decoration: InputDecoration(
-                        border: const OutlineInputBorder(),
                         errorText: proxyMsg.isNotEmpty ? proxyMsg : null),
                     controller: proxyController,
                     autofocus: true,
@@ -1880,9 +1879,6 @@ void changeSocks5Proxy() async {
                     ).marginOnly(right: 10)),
                 Expanded(
                   child: TextField(
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                    ),
                     controller: userController,
                   ),
                 ),
@@ -1900,7 +1896,6 @@ void changeSocks5Proxy() async {
                   child: Obx(() => TextField(
                         obscureText: obscure.value,
                         decoration: InputDecoration(
-                            border: const OutlineInputBorder(),
                             suffixIcon: IconButton(
                                 onPressed: () => obscure.value = !obscure.value,
                                 icon: Icon(obscure.value
