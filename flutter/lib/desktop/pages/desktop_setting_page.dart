@@ -1738,19 +1738,20 @@ class _ComboBox extends StatelessWidget {
     current = keys[index];
     return Container(
       decoration: BoxDecoration(
-          border: Border.all(
-        color: enabled
-            ? MyTheme.color(context).border2 ?? MyTheme.border
-            : MyTheme.border,
-      )),
-      height: 30,
+        border: Border.all(
+          color: enabled
+              ? MyTheme.color(context).border2 ?? MyTheme.border
+              : MyTheme.border,
+        ),
+        borderRadius:
+            BorderRadius.circular(8), //border raiuds of dropdown button
+      ),
+      height: 42, // should be the height of a TextField
       child: Obx(() => DropdownButton<String>(
             isExpanded: true,
             value: ref.value,
             elevation: 16,
-            underline: Container(
-              height: 25,
-            ),
+            underline: Container(),
             style: TextStyle(
                 color: enabled
                     ? Theme.of(context).textTheme.titleMedium?.color
@@ -1758,7 +1759,7 @@ class _ComboBox extends StatelessWidget {
             icon: const Icon(
               Icons.expand_more_sharp,
               size: 20,
-            ),
+            ).marginOnly(right: 15),
             onChanged: enabled
                 ? (String? newValue) {
                     if (newValue != null && newValue != ref.value) {
@@ -1775,11 +1776,11 @@ class _ComboBox extends StatelessWidget {
                   value,
                   style: const TextStyle(fontSize: _kContentFontSize),
                   overflow: TextOverflow.ellipsis,
-                ).marginOnly(left: 5),
+                ).marginOnly(left: 15),
               );
             }).toList(),
           )),
-    );
+    ).marginOnly(bottom: 5);
   }
 }
 
