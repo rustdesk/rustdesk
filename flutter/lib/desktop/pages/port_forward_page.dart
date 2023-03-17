@@ -322,14 +322,9 @@ class _PortForwardPageState extends State<PortForwardPage>
                       child: SizedBox(
                         width: 120,
                         child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                              elevation: 0,
-                              side: const BorderSide(color: MyTheme.border)),
                           onPressed: () => bind.sessionNewRdp(id: widget.id),
                           child: Text(
                             translate('New RDP'),
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w300, fontSize: 14),
                           ),
                         ).marginSymmetric(vertical: 10),
                       ).marginOnly(left: 20),
