@@ -181,7 +181,6 @@ void changeWhiteList({Function()? callback}) async {
                 child: TextField(
                     maxLines: null,
                     decoration: InputDecoration(
-                      border: isDesktop ? const OutlineInputBorder() : null,
                       errorText: msg.isEmpty ? null : translate(msg),
                     ),
                     controller: controller,
