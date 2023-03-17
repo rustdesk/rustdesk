@@ -1404,14 +1404,14 @@ class _DisplayMenuState extends State<_DisplayMenu> {
               child: Text(translate('H264')),
               value: 'h264',
               groupValue: groupValue,
-              onChanged: onChanged,
+              onChanged: codecs[0] ? onChanged : null,
               ffi: widget.ffi,
             ),
             _RadioMenuButton<String>(
               child: Text(translate('H265')),
               value: 'h265',
               groupValue: groupValue,
-              onChanged: onChanged,
+              onChanged: codecs[1] ? onChanged : null,
               ffi: widget.ffi,
             ),
           ]);
