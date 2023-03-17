@@ -1701,9 +1701,6 @@ _LabeledTextField(
             enabled: enabled,
             obscureText: secure,
             decoration: InputDecoration(
-                isDense: true,
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.fromLTRB(14, 15, 14, 15),
                 errorText: errorText.isNotEmpty ? errorText : null),
             style: TextStyle(
               color: _disabledTextColor(context, enabled),
