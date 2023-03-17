@@ -17,10 +17,11 @@ use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
+    collections::HashMap
 };
 use winapi::{
     ctypes::c_void,
-    shared::{minwindef::*, ntdef::NULL, windef::*},
+    shared::{minwindef::*, ntdef::NULL, windef::*, winerror::*},
     um::{
         errhandlingapi::GetLastError,
         handleapi::CloseHandle,
