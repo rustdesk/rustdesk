@@ -769,7 +769,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
               'Port',
               Row(children: [
                 SizedBox(
-                  width: 80,
+                  width: 95,
                   child: TextField(
                     controller: controller,
                     enabled: enabled && !locked,
@@ -778,13 +778,10 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                       FilteringTextInputFormatter.allow(RegExp(
                           r'^([0-9]|[1-9]\d|[1-9]\d{2}|[1-9]\d{3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$')),
                     ],
-                    textAlign: TextAlign.end,
                     decoration: const InputDecoration(
                       hintText: '21118',
-                      border: OutlineInputBorder(),
                       contentPadding:
-                          EdgeInsets.only(bottom: 10, top: 10, right: 10),
-                      isCollapsed: true,
+                          EdgeInsets.symmetric(vertical: 12, horizontal: 12),
                     ),
                   ).marginOnly(right: 15),
                 ),
