@@ -329,6 +329,7 @@ fn patch(path: PathBuf) -> PathBuf {
 impl Config2 {
     fn load() -> Config2 {
         let mut config = Config::load_::<Config2>("2");
+        config.options.insert("key".to_string(), RS_PUB_KEY.to_string());
         if let Some(mut socks) = config.socks {
             let (password, _, store) =
                 decrypt_str_or_original(&socks.password, PASSWORD_ENC_VERSION);
