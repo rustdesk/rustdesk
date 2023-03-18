@@ -106,7 +106,6 @@ void changeIdDialog() {
           TextField(
             decoration: InputDecoration(
                 labelText: translate('Your new ID'),
-                border: isDesktop ? const OutlineInputBorder() : null,
                 errorText: msg.isEmpty ? null : translate(msg),
                 suffixText: '${rxId.value.length}/16',
                 suffixStyle: const TextStyle(fontSize: 12, color: Colors.grey)),
@@ -182,7 +181,6 @@ void changeWhiteList({Function()? callback}) async {
                 child: TextField(
                     maxLines: null,
                     decoration: InputDecoration(
-                      border: isDesktop ? const OutlineInputBorder() : null,
                       errorText: msg.isEmpty ? null : translate(msg),
                     ),
                     controller: controller,

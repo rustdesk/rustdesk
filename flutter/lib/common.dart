@@ -206,10 +206,8 @@ class MyTheme {
             fillColor: grayBg,
             filled: true,
             isDense: true,
-            contentPadding: EdgeInsets.all(15),
-            border: UnderlineInputBorder(
-              borderRadius: BorderRadius.circular(18),
-              borderSide: BorderSide.none,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
             ),
           )
         : null,
@@ -302,10 +300,8 @@ class MyTheme {
             fillColor: Color(0xFF24252B),
             filled: true,
             isDense: true,
-            contentPadding: EdgeInsets.all(15),
-            border: UnderlineInputBorder(
-              borderRadius: BorderRadius.circular(18),
-              borderSide: BorderSide.none,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
             ),
           )
         : null,

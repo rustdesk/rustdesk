@@ -634,7 +634,6 @@ void setPasswordDialog() async {
                     obscureText: true,
                     decoration: InputDecoration(
                         labelText: translate('Password'),
-                        border: const OutlineInputBorder(),
                         errorText: errMsg0.isNotEmpty ? errMsg0 : null),
                     controller: p0,
                     autofocus: true,
@@ -662,7 +661,6 @@ void setPasswordDialog() async {
                   child: TextField(
                     obscureText: true,
                     decoration: InputDecoration(
-                        border: const OutlineInputBorder(),
                         labelText: translate('Confirmation'),
                         errorText: errMsg1.isNotEmpty ? errMsg1 : null),
                     controller: p1,
