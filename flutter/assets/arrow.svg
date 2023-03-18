@@ -1,2 +1,48 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" style="isolation:isolate" viewBox="305.118 110.478 32 32" width="32pt" height="32pt"><g><path d=" M 305.118 110.478 L 337.118 110.478 L 337.118 142.478 L 305.118 142.478 L 305.118 110.478 Z " fill="none"/><path d=" M 322.26 126.052 L 316.297 120.09 C 315.72 119.512 315.72 118.574 316.297 117.997 L 316.297 117.997 C 316.875 117.419 317.813 117.419 318.39 117.997 L 326.02 125.627 C 326.49 126.097 326.49 126.86 326.02 127.33 L 318.39 134.959 C 317.813 135.537 316.875 135.537 316.297 134.959 L 316.297 134.959 C 315.72 134.382 315.72 133.444 316.297 132.866 L 322.26 126.904 C 322.495 126.669 322.495 126.287 322.26 126.052 Z " fill="rgb(0,0,0)"/></g></svg>
+<svg
+   style="isolation:isolate"
+   viewBox="305.118 110.478 32 32"
+   width="32"
+   height="32"
+   version="1.1"
+   id="svg1626"
+   sodipodi:docname="arrow.svg"
+   inkscape:version="1.2.2 (b0a8486541, 2022-12-01)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs1630" />
+  <sodipodi:namedview
+     id="namedview1628"
+     pagecolor="#ffffff"
+     bordercolor="#999999"
+     borderopacity="1"
+     inkscape:showpageshadow="0"
+     inkscape:pageopacity="0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="pt"
+     showgrid="false"
+     inkscape:zoom="5.53125"
+     inkscape:cx="-5.5141243"
+     inkscape:cy="21.423729"
+     inkscape:window-width="2560"
+     inkscape:window-height="1367"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg1626" />
+  <g
+     id="g1624">
+    <path
+       d="m 305.118,110.478 h 32 v 32 h -32 z"
+       fill="none"
+       id="path1620" />
+    <path
+       d="m 322.26,126.052 -5.963,-5.962 c -0.577,-0.578 -0.577,-1.516 0,-2.093 v 0 c 0.578,-0.578 1.516,-0.578 2.093,0 l 7.63,7.63 c 0.47,0.47 0.47,1.233 0,1.703 l -7.63,7.629 c -0.577,0.578 -1.515,0.578 -2.093,0 v 0 c -0.577,-0.577 -0.577,-1.515 0,-2.093 l 5.963,-5.962 c 0.235,-0.235 0.235,-0.617 0,-0.852 z"
+       fill="#000000"
+       id="path1622" />
+  </g>
+</svg>
