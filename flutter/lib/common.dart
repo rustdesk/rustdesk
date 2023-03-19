@@ -1817,10 +1817,14 @@ class ServerConfig {
   /// also see [encode]
   /// throw when decoding failure
   ServerConfig.decode(String msg) {
-    final input = msg.split('').reversed.join('');
-    final bytes = base64Decode(base64.normalize(input));
-    final json = jsonDecode(utf8.decode(bytes));
-
+    var json = {};
+    try {
+      json = jsonDecode(msg);
+    } catch (err) {
+      final input = msg.split('').reversed.join('');
+      final bytes = base64Decode(base64.normalize(input));
+      json = jsonDecode(utf8.decode(bytes));
+    }
     idServer = json['host'] ?? '';
     relayServer = json['relay'] ?? '';
     apiServer = json['api'] ?? '';
