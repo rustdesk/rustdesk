@@ -1819,6 +1819,7 @@ class ServerConfig {
   ServerConfig.decode(String msg) {
     var json = {};
     try {
+      // back compatible
       json = jsonDecode(msg);
     } catch (err) {
       final input = msg.split('').reversed.join('');
