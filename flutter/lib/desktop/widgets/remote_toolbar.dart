@@ -1694,7 +1694,7 @@ class _KeyboardMenu extends StatelessWidget {
       for (KeyboardModeMenu mode in modes) {
         if (bind.sessionIsKeyboardModeSupported(id: id, mode: mode.key)) {
           if (mode.key == _kKeyTranslateMode) {
-            if (Platform.isLinux || pi.platform == kPeerPlatformLinux) {
+            if (Platform.isLinux) {
               continue;
             }
           }
