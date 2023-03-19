@@ -413,6 +413,11 @@ pub fn fix_key_down_timeout_at_exit() {
     log::info!("fix_key_down_timeout_at_exit");
 }
 
+#[cfg(target_os = "linux")]
+pub fn clear_remapped_keycode() {
+    ENIGO.lock().unwrap().tfc_clear_remapped();
+}
+
 #[inline]
 fn record_key_is_control_key(record_key: u64) -> bool {
     record_key < KEY_CHAR_START
@@ -1130,7 +1135,24 @@ fn translate_process_code(code: u32, down: bool) {
 fn translate_keyboard_mode(evt: &KeyEvent) {
     match &evt.union {
         Some(key_event::Union::Seq(seq)) => {
-            ENIGO.lock().unwrap().key_sequence(seq);
+            // Fr -> US
+            // client: Shift + & => 1(send to remote)
+            // remote: Shift + 1 => !
+            //
+            // Try to release shift first.
+            // remote: Shift + 1 => 1
+            let mut en = ENIGO.lock().unwrap();
+
+            #[cfg(target_os = "linux")]
+            {
+                simulate_(&EventType::KeyRelease(RdevKey::ShiftLeft));
+                simulate_(&EventType::KeyRelease(RdevKey::ShiftRight));
+                for chr in seq.chars() {
+                    en.key_click(Key::Layout(chr));
+                }
+            }
+            #[cfg(not(target_os = "linux"))]
+            en.key_sequence(seq);
         }
         Some(key_event::Union::Chr(..)) => {
             #[cfg(target_os = "windows")]

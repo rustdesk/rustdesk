@@ -1,5 +1,5 @@
 use super::xdo::EnigoXdo;
-use crate::{Key, KeyboardControllable, MouseButton, MouseControllable};
+use crate::{Key, KeyboardControllable, MouseButton, MouseControllable, ResultType};
 use std::io::Read;
 use tfc::{traits::*, Context as TFC_Context, Key as TFC_Key};
 
@@ -40,6 +40,37 @@ impl Enigo {
     /// Get custom mouse.
     pub fn get_custom_mouse(&mut self) -> &mut Option<CustomMouce> {
         &mut self.custom_mouse
+    }
+
+    /// Clear remapped keycodes
+    pub fn tfc_clear_remapped(&mut self) {
+        if let Some(tfc) = &mut self.tfc {
+            tfc.recover_remapped_keycodes();
+        }
+    }
+
+    fn tfc_key_click(&mut self, key: Key) -> ResultType {
+        if let Some(tfc) = &mut self.tfc {
+            let res = match key {
+                Key::Layout(chr) => tfc.unicode_char(chr),
+                key => {
+                    let tfc_key: TFC_Key = match convert_to_tfc_key(key) {
+                        Some(key) => key,
+                        None => {
+                            return Err("Failed to convert key to TFC_Key".into());
+                        }
+                    };
+                    tfc.key_click(tfc_key)
+                }
+            };
+            if res.is_err() {
+                Err("Failed to click char by tfc".to_string().into())
+            } else {
+                Ok(())
+            }
+        } else {
+            Err("Not Found TFC".into())
+        }
     }
 
     fn tfc_key_down_or_up(&mut self, key: Key, down: bool, up: bool) -> bool {
@@ -223,6 +254,7 @@ impl KeyboardControllable for Enigo {
         }
     }
 
+    /// Warning: Get 6^ in French.
     fn key_sequence(&mut self, sequence: &str) {
         if self.is_x11 {
             self.xdo.key_sequence(sequence)
@@ -262,8 +294,10 @@ impl KeyboardControllable for Enigo {
         }
     }
     fn key_click(&mut self, key: Key) {
-        self.key_down(key).ok();
-        self.key_up(key);
+        if self.tfc_key_click(key).is_err() {
+            self.key_down(key).ok();
+            self.key_up(key);
+        }
     }
 }
 
@@ -334,4 +368,11 @@ fn convert_to_tfc_key(key: Key) -> Option<TFC_Key> {
         }
     };
     Some(key)
+}
+
+#[test]
+fn test_key_seq() {
+    // Get 6^ in French.
+    let mut en = Enigo::new();
+    en.key_sequence("^^");
 }
