@@ -420,7 +420,14 @@ impl InvokeUiSession for FlutterHandler {
     // unused in flutter // TEST flutter
     fn confirm_delete_files(&self, _id: i32, _i: i32, _name: String) {}
 
-    fn override_file_confirm(&self, id: i32, file_num: i32, to: String, is_upload: bool, is_identical: bool) {
+    fn override_file_confirm(
+        &self,
+        id: i32,
+        file_num: i32,
+        to: String,
+        is_upload: bool,
+        is_identical: bool,
+    ) {
         self.push_event(
             "override_file_confirm",
             vec![
@@ -428,7 +435,7 @@ impl InvokeUiSession for FlutterHandler {
                 ("file_num", &file_num.to_string()),
                 ("read_path", &to),
                 ("is_upload", &is_upload.to_string()),
-                ("is_identical", &is_identical.to_string())
+                ("is_identical", &is_identical.to_string()),
             ],
         );
     }
@@ -632,12 +639,14 @@ pub fn session_add(
     is_port_forward: bool,
     switch_uuid: &str,
     force_relay: bool,
+    password: String,
 ) -> ResultType<()> {
     let session_id = get_session_id(id.to_owned());
     LocalConfig::set_remote_id(&session_id);
 
     let session: Session<FlutterHandler> = Session {
         id: session_id.clone(),
+        password,
         server_keyboard_enabled: Arc::new(RwLock::new(true)),
         server_file_transfer_enabled: Arc::new(RwLock::new(true)),
         server_clipboard_enabled: Arc::new(RwLock::new(true)),

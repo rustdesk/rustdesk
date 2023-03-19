@@ -23,9 +23,6 @@ import '../../models/platform_model.dart';
 
 class _MenuTheme {
   static const Color blueColor = MyTheme.button;
-  static const Color hoverBlueColor = MyTheme.accent;
-  static const Color redColor = Colors.redAccent;
-  static const Color hoverRedColor = Colors.red;
   // kMinInteractiveDimension
   static const double height = 20.0;
   static const double dividerHeight = 12.0;
@@ -71,6 +68,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         page: RemotePage(
           key: ValueKey(peerId),
           id: peerId,
+          password: params['password'],
           menubarState: _menubarState,
           switchUuid: params['switch_uuid'],
           forceRelay: params['forceRelay'],
@@ -106,6 +104,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           page: RemotePage(
             key: ValueKey(id),
             id: id,
+            password: args['password'],
             menubarState: _menubarState,
             switchUuid: switchUuid,
             forceRelay: args['forceRelay'],

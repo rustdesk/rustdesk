@@ -25,19 +25,20 @@ import '../../utils/image.dart';
 import '../widgets/remote_toolbar.dart';
 import '../widgets/kb_layout_type_chooser.dart';
 
-bool _isCustomCursorInited = false;
 final SimpleWrapper<bool> _firstEnterImage = SimpleWrapper(false);
 
 class RemotePage extends StatefulWidget {
   RemotePage({
     Key? key,
     required this.id,
+    required this.password,
     required this.menubarState,
     this.switchUuid,
     this.forceRelay,
   }) : super(key: key);
 
   final String id;
+  final String? password;
   final MenubarState menubarState;
   final String? switchUuid;
   final bool? forceRelay;
@@ -113,6 +114,7 @@ class _RemotePageState extends State<RemotePage>
     });
     _ffi.start(
       widget.id,
+      password: widget.password,
       switchUuid: widget.switchUuid,
       forceRelay: widget.forceRelay,
     );
