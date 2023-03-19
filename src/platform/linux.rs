@@ -320,6 +320,20 @@ pub fn start_os_service() {
     let mut last_restart = Instant::now();
     while running.load(Ordering::SeqCst) {
         let (cur_uid, cur_user) = get_active_user_id_name();
+
+        // for fixing https://github.com/rustdesk/rustdesk/issues/3129 to avoid too much dbus calling,
+        // though duplicate logic here with should_start_server
+        if !(cur_uid != *uid && !cur_uid.is_empty()) {
+            let cm = get_cm();
+            if !(!cm
+                && ((cm0 && last_restart.elapsed().as_secs() > 60)
+                    || last_restart.elapsed().as_secs() > 3600))
+            {
+                std::thread::sleep(Duration::from_millis(500));
+                continue;
+            }
+        }
+
         let is_wayland = current_is_wayland();
 
         if cur_user == "root" || !is_wayland {
