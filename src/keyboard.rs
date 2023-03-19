@@ -3,11 +3,13 @@ use crate::client::get_key_state;
 use crate::common::GrabState;
 #[cfg(feature = "flutter")]
 use crate::flutter::{CUR_SESSION_ID, SESSIONS};
+#[cfg(target_os = "windows")]
+use crate::platform::windows::get_char_by_vk;
 #[cfg(not(any(feature = "flutter", feature = "cli")))]
 use crate::ui::CUR_SESSION;
-use hbb_common::message_proto::*;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::log;
+use hbb_common::message_proto::*;
 use rdev::{Event, EventType, Key};
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -789,8 +791,18 @@ fn try_fill_unicode(event: &Event, key_event: &KeyEvent, events: &mut Vec<KeyEve
                 }
             }
         }
-        None => {}
+        None => {
+            #[cfg(target_os = "windows")]
+            if is_hot_key_modifiers_down() && unsafe { !IS_0X021D_DOWN }{
+                if let Some(chr) = get_char_by_vk(event.code as u32) {
+                    let mut evt = key_event.clone();
+                    evt.set_seq(chr.to_string());
+                    events.push(evt);
+                }
+            }
+        }
     }
+    
 }
 
 #[cfg(target_os = "windows")]
@@ -857,7 +869,7 @@ pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -
     }
 
     #[cfg(target_os = "windows")]
-    if unsafe { IS_0X021D_DOWN } || !is_hot_key_modifiers_down() {
+    if matches!(event.event_type, EventType::KeyPress(_)) {
         try_fill_unicode(event, &key_event, &mut events);
     }
 
