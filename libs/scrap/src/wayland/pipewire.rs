@@ -416,6 +416,12 @@ static mut INIT: bool = false;
 const RESTORE_TOKEN: &str = "restore_token";
 const RESTORE_TOKEN_CONF_KEY: &str = "wayland-restore-token";
 
+const PORTAL_CURSOR_MODE_HIDDEN: u32 = 1;
+#[allow(dead_code)]
+const PORTAL_CURSOR_MODE_EMBEDDED: u32 = 2;
+#[allow(dead_code)]
+const PORTAL_CURSOR_MODE_METADATA: u32 = 4;
+
 pub fn get_available_cursor_modes() -> Result<u32, dbus::Error> {
     let conn = SyncConnection::new_session()?;
     let portal = get_portal(&conn);
@@ -485,11 +491,11 @@ fn request_screen_cast(
             if let Ok(modes) = portal.available_cursor_modes() {
                 available_cursor_modes = modes;
             }
-            if capture_cursor {
-                cursor_mode = 2u32 & available_cursor_modes;
-            }
+            // if capture_cursor {
+            //     cursor_mode = PORTAL_CURSOR_MODE_METADATA & available_cursor_modes;
+            // }
             if cursor_mode == 0 {
-                cursor_mode = 1u32 & available_cursor_modes;
+                cursor_mode = PORTAL_CURSOR_MODE_HIDDEN & available_cursor_modes;
             }
             let plasma = std::env::var("DESKTOP_SESSION").map_or(false, |s| s.contains("plasma"));
             if plasma && capture_cursor {
