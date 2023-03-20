@@ -125,7 +125,7 @@ pub fn core_main() -> Option<Vec<String>> {
             } else if args[0] == "--reinstall" {
                 hbb_common::allow_err!(platform::uninstall_me(false));
                 hbb_common::allow_err!(platform::install_me(
-                    "desktopicon startmenu",
+                    "desktopicon startmenu driverCert",
                     "".to_owned(),
                     false,
                     false,
