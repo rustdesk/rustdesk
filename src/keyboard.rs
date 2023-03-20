@@ -791,9 +791,10 @@ fn try_fill_unicode(event: &Event, key_event: &KeyEvent, events: &mut Vec<KeyEve
                 }
             }
         }
-        None => {
+        None =>
+        {
             #[cfg(target_os = "windows")]
-            if is_hot_key_modifiers_down() && unsafe { !IS_0X021D_DOWN }{
+            if is_hot_key_modifiers_down() && unsafe { !IS_0X021D_DOWN } {
                 if let Some(chr) = get_char_by_vk(event.code as u32) {
                     let mut evt = key_event.clone();
                     evt.set_seq(chr.to_string());
@@ -802,7 +803,6 @@ fn try_fill_unicode(event: &Event, key_event: &KeyEvent, events: &mut Vec<KeyEve
             }
         }
     }
-    
 }
 
 #[cfg(target_os = "windows")]

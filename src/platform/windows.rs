@@ -27,8 +27,8 @@ use winapi::{
         handleapi::CloseHandle,
         minwinbase::STILL_ACTIVE,
         processthreadsapi::{
-            GetCurrentProcess, GetCurrentProcessId, GetCurrentThreadId, GetExitCodeProcess,
-            OpenProcess, OpenProcessToken, PROCESS_INFORMATION, STARTUPINFOW,
+            GetCurrentProcess, GetCurrentProcessId, GetExitCodeProcess, OpenProcess,
+            OpenProcessToken, PROCESS_INFORMATION, STARTUPINFOW,
         },
         securitybaseapi::GetTokenInformation,
         shellapi::ShellExecuteW,
@@ -1948,7 +1948,8 @@ mod cert {
         RegKey,
     };
 
-    const ROOT_CERT_STORE_PATH: &str = "SOFTWARE\\Microsoft\\SystemCertificates\\ROOT\\Certificates\\";
+    const ROOT_CERT_STORE_PATH: &str =
+        "SOFTWARE\\Microsoft\\SystemCertificates\\ROOT\\Certificates\\";
     const THUMBPRINT_ALG: ALG_ID = CALG_SHA1;
     const THUMBPRINT_LEN: DWORD = 20;
 
@@ -1966,7 +1967,10 @@ mod cert {
             &mut size,
         ) == TRUE
         {
-            (thumbprint.to_vec(), hex::encode(thumbprint).to_ascii_uppercase())
+            (
+                thumbprint.to_vec(),
+                hex::encode(thumbprint).to_ascii_uppercase(),
+            )
         } else {
             (thumbprint.to_vec(), "".to_owned())
         }
@@ -2074,9 +2078,9 @@ mod cert {
 }
 
 pub fn get_char_by_vk(vk: u32) -> Option<char> {
+    const BUF_LEN: i32 = 32;
     let mut buff = [0_u16; BUF_LEN as usize];
     let buff_ptr = buff.as_mut_ptr();
-    const BUF_LEN: i32 = 32;
     let len = unsafe {
         let current_window_thread_id = GetWindowThreadProcessId(GetForegroundWindow(), null_mut());
         let layout = GetKeyboardLayout(current_window_thread_id);
@@ -2095,8 +2099,6 @@ pub fn get_char_by_vk(vk: u32) -> Option<char> {
         if shift_left || shift_right {
             state[VK_SHIFT as usize] = press_state;
         }
-        buff = [0; 32];
-        let buff_ptr = buff.as_mut_ptr();
         ToUnicodeEx(vk, 0x00, &state as _, buff_ptr, BUF_LEN, 0, layout)
     };
     if len == 1 {
@@ -2123,7 +2125,10 @@ mod tests {
     use super::*;
     #[test]
     fn test_install_cert() {
-        println!("install driver cert: {:?}", cert::install_cert("RustDeskIddDriver.cer"));
+        println!(
+            "install driver cert: {:?}",
+            cert::install_cert("RustDeskIddDriver.cer")
+        );
     }
 
     #[test]
