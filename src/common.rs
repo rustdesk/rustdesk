@@ -809,7 +809,7 @@ pub async fn get_key(sync: bool) -> String {
     };
     if key.is_empty() {
         #[cfg(windows)]
-        if let Some(lic) = windows::get_license() {
+        if let Some(lic) = crate::platform::windows::get_license() {
             return lic.key;
         }
     }
