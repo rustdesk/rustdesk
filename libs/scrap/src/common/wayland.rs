@@ -22,8 +22,9 @@ pub fn is_cursor_embedded() -> bool {
 unsafe fn init_cursor_embedded() {
     use crate::common::wayland::pipewire::get_available_cursor_modes;
     match get_available_cursor_modes() {
-        Ok(modes) => {
-            IS_CURSOR_EMBEDDED = Some((modes & 0x02) > 0);
+        Ok(_modes) => {
+            // IS_CURSOR_EMBEDDED = Some((_modes & 0x02) > 0);
+            IS_CURSOR_EMBEDDED = Some(false)
         }
         Err(..) => {
             IS_CURSOR_EMBEDDED = Some(false);
