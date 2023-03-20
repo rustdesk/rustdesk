@@ -57,14 +57,14 @@ impl Enigo {
                     let tfc_key: TFC_Key = match convert_to_tfc_key(key) {
                         Some(key) => key,
                         None => {
-                            return Err("Failed to convert key to TFC_Key".into());
+                            return Err(format!("Failed to convert {:?} to TFC_Key", key).into());
                         }
                     };
                     tfc.key_click(tfc_key)
                 }
             };
             if res.is_err() {
-                Err("Failed to click char by tfc".to_string().into())
+                Err(format!("Failed to click {:?} by tfc", key).into())
             } else {
                 Ok(())
             }
