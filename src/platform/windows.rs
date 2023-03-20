@@ -10,6 +10,7 @@ use hbb_common::{
     sleep, timeout, tokio,
 };
 use std::io::prelude::*;
+use std::ptr::null_mut;
 use std::{
     ffi::OsString,
     fs, io, mem,
@@ -1961,7 +1962,8 @@ mod cert {
         RegKey,
     };
 
-    const ROOT_CERT_STORE_PATH: &str = "SOFTWARE\\Microsoft\\SystemCertificates\\ROOT\\Certificates\\";
+    const ROOT_CERT_STORE_PATH: &str =
+        "SOFTWARE\\Microsoft\\SystemCertificates\\ROOT\\Certificates\\";
     const THUMBPRINT_ALG: ALG_ID = CALG_SHA1;
     const THUMBPRINT_LEN: DWORD = 20;
 
@@ -1979,7 +1981,10 @@ mod cert {
             &mut size,
         ) == TRUE
         {
-            (thumbprint.to_vec(), hex::encode(thumbprint).to_ascii_uppercase())
+            (
+                thumbprint.to_vec(),
+                hex::encode(thumbprint).to_ascii_uppercase(),
+            )
         } else {
             (thumbprint.to_vec(), "".to_owned())
         }
@@ -2086,16 +2091,70 @@ mod cert {
     }
 }
 
+pub fn get_char_by_vk(vk: u32) -> Option<char> {
+    const BUF_LEN: i32 = 32;
+    let mut buff = [0_u16; BUF_LEN as usize];
+    let buff_ptr = buff.as_mut_ptr();
+    let len = unsafe {
+        let current_window_thread_id = GetWindowThreadProcessId(GetForegroundWindow(), null_mut());
+        let layout = GetKeyboardLayout(current_window_thread_id);
+
+        // refs: https://github.com/fufesou/rdev/blob/25a99ce71ab42843ad253dd51e6a35e83e87a8a4/src/windows/keyboard.rs#L115
+        let press_state = 129;
+        let mut state: [BYTE; 256] = [0; 256];
+        let shift_left = rdev::get_modifier(rdev::Key::ShiftLeft);
+        let shift_right = rdev::get_modifier(rdev::Key::ShiftRight);
+        if shift_left {
+            state[VK_LSHIFT as usize] = press_state;
+        }
+        if shift_right {
+            state[VK_RSHIFT as usize] = press_state;
+        }
+        if shift_left || shift_right {
+            state[VK_SHIFT as usize] = press_state;
+        }
+        ToUnicodeEx(vk, 0x00, &state as _, buff_ptr, BUF_LEN, 0, layout)
+    };
+    if len == 1 {
+        if let Some(chr) = String::from_utf16(&buff[..len as usize])
+            .ok()?
+            .chars()
+            .next()
+        {
+            if chr.is_control() {
+                return None;
+            } else {
+                Some(chr)
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     #[test]
     fn test_install_cert() {
-        println!("install driver cert: {:?}", cert::install_cert("RustDeskIddDriver.cer"));
+        println!(
+            "install driver cert: {:?}",
+            cert::install_cert("RustDeskIddDriver.cer")
+        );
     }
 
     #[test]
     fn test_uninstall_cert() {
         println!("uninstall driver certs: {:?}", cert::uninstall_certs());
+    }
+
+    #[test]
+    fn test_get_char_by_vk() {
+        let chr = get_char_by_vk(0x41); // VK_A
+        assert_eq!(chr, Some('a'));
+        let chr = get_char_by_vk(VK_ESCAPE as u32); // VK_ESC
+        assert_eq!(chr, None)
     }
 }

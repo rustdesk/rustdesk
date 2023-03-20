@@ -33,6 +33,11 @@ pub fn is_xfce() -> bool {
     }
 }
 
+pub fn breakdown_callback() {
+    #[cfg(target_os = "linux")]
+    crate::input_service::clear_remapped_keycode()
+}
+
 // Android
 #[cfg(target_os = "android")]
 pub fn get_active_username() -> String {

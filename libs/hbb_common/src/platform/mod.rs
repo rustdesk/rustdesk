@@ -7,6 +7,8 @@ pub mod macos;
 use crate::{config::Config, log};
 use std::process::exit;
 
+static mut GLOBAL_CALLBACK: Option<Box<dyn Fn()>> = None;
+
 extern "C" fn breakdown_signal_handler(sig: i32) {
     let mut stack = vec![];
     backtrace::trace(|frame| {
@@ -41,11 +43,20 @@ extern "C" fn breakdown_signal_handler(sig: i32) {
         )
         .ok();
     }
+    unsafe {
+        if let Some(callback) = &GLOBAL_CALLBACK {
+            callback()
+        }
+    }
     exit(0);
 }
 
-pub fn register_breakdown_handler() {
+pub fn register_breakdown_handler<T>(callback: T)
+where
+    T: Fn() + 'static,
+{
     unsafe {
+        GLOBAL_CALLBACK = Some(Box::new(callback));
         libc::signal(libc::SIGSEGV, breakdown_signal_handler as _);
     }
 }
