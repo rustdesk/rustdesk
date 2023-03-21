@@ -235,8 +235,26 @@ impl Server {
         let tx = self.inner.lock().unwrap().tx.clone();
         let _client_thread = thread::spawn(move || loop {});
 
+        let mut client = Client::new(self.clone(), true);
         self.run_console().await?;
         let rx = self.rx.lock().unwrap();
+        loop {
+            let ev = if client.update_pending() {
+                match rx.try_recv() {
+                    Ok(e) => Some(e),
+                    Err(mpsc::TryRecvError::Empty) => None,
+                    Err(e) => {
+                        return Err(e.into());
+                    }
+                }
+            } else {
+                Some(rx.recv()?)
+            };
+            if !client.handle_event(ev).await? {
+                break;
+            }
+        }
+
         self.stop_console()?;
         Ok(())
     }
@@ -308,26 +326,15 @@ pub async fn run() -> ResultType<()> {
     .context("Failed to connect to DBus")?;
 
     let vm_name = VMProxy::new(&dbus).await?.name().await?;
-
     let console = Console::new(&dbus.into(), 0)
         .await
         .context("Failed to get the console")?;
     let server = Server::new(format!("qemu-rustdesk ({})", vm_name), console).await?;
     for stream in listener.incoming() {
-        match stream {
-            Ok(stream) => {
-                tokio::spawn(async {
-                    /*
-                    if let Err(err) = server.handle_connection(stream).await {
-                        log::error!("Connection closed: {err}");
-                    }
-                    */
-                });
-            }
-            Err(err) => {
-                log::error!("Failed to accept connection: {}", err);
-                continue;
-            }
+        let stream = stream?;
+        let server = server.clone();
+        if let Err(err) = server.handle_connection(stream).await {
+            log::error!("Connection closed: {err}");
         }
     }
 
