@@ -259,7 +259,9 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       ),
     ]);
 
-    if (!ffi.canvasModel.cursorEmbedded && !ffi.ffiModel.viewOnly) {
+    if (!ffi.canvasModel.cursorEmbedded &&
+        !ffi.ffiModel.viewOnly &&
+        !pi.is_wayland) {
       menu.add(MenuEntryDivider<String>());
       menu.add(RemoteMenuEntry.showRemoteCursor(
         key,

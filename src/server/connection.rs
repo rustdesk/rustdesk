@@ -843,6 +843,16 @@ impl Connection {
             pi.hostname = DEVICE_NAME.lock().unwrap().clone();
             pi.platform = "Android".into();
         }
+
+        #[cfg(target_os = "linux")]
+        {
+            pi.platform_additions = format!(r#"
+                {{
+                    "is_wayland": {},
+                }}
+            "#, crate::platform::current_is_wayland());
+        }
+
         #[cfg(feature = "hwcodec")]
         {
             let (h264, h265) = scrap::codec::Encoder::supported_encoding();

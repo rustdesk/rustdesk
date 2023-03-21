@@ -452,6 +452,11 @@ class FfiModel with ChangeNotifier {
       setViewOnly(peerId,
           bind.sessionGetToggleOptionSync(id: peerId, arg: 'view-only'));
     }
+    if (connType == ConnType.defaultConn) {
+      try {
+        _pi.platform_additions = json.decode(evt['platform_additions']);
+      } catch (e) {}
+    }
     notifyListeners();
   }
 
@@ -1687,6 +1692,9 @@ class PeerInfo {
   List<Display> displays = [];
   Features features = Features();
   List<Resolution> resolutions = [];
+  Map<String, dynamic> platform_additions = {};
+
+  bool get is_wayland => platform_additions['is_wayland'] == true;
 }
 
 const canvasKey = 'canvas';
