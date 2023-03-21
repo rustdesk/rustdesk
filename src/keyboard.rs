@@ -460,8 +460,8 @@ pub fn event_type_to_event(event_type: EventType) -> Event {
         event_type,
         time: SystemTime::now(),
         unicode: None,
-        code: 0,
-        scan_code: 0,
+        platform_code: 0,
+        position_code: 0,
     }
 }
 
@@ -763,15 +763,15 @@ pub fn map_keyboard_mode(peer: &str, event: &Event, mut key_event: KeyEvent) -> 
     };
     #[cfg(target_os = "linux")]
     let keycode = match peer {
-        OS_LOWER_WINDOWS => rdev::linux_code_to_win_scancode(event.code as _)?,
+        OS_LOWER_WINDOWS => rdev::linux_code_to_win_scancode(event.position_code as _)?,
         OS_LOWER_MACOS => {
             if hbb_common::config::LocalConfig::get_kb_layout_type() == "ISO" {
-                rdev::linux_code_to_macos_iso_code(event.code as _)?
+                rdev::linux_code_to_macos_iso_code(event.position_code as _)?
             } else {
-                rdev::linux_code_to_macos_code(event.code as _)?
+                rdev::linux_code_to_macos_code(event.position_code as _)?
             }
         }
-        _ => event.code as _,
+        _ => event.position_code as _,
     };
     #[cfg(any(target_os = "android", target_os = "ios"))]
     let keycode = 0;
