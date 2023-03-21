@@ -757,9 +757,9 @@ pub fn map_keyboard_mode(peer: &str, event: &Event, mut key_event: KeyEvent) -> 
     };
     #[cfg(target_os = "macos")]
     let keycode = match peer {
-        OS_LOWER_WINDOWS => rdev::macos_code_to_win_scancode(event.code as _)?,
-        OS_LOWER_MACOS => event.code as _,
-        _ => rdev::macos_code_to_linux_code(event.code as _)?,
+        OS_LOWER_WINDOWS => rdev::macos_code_to_win_scancode(event.platform_code as _)?,
+        OS_LOWER_MACOS => event.platform_code as _,
+        _ => rdev::macos_code_to_linux_code(event.platform_code as _)?,
     };
     #[cfg(target_os = "linux")]
     let keycode = match peer {
@@ -851,7 +851,7 @@ pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -
 
     #[cfg(target_os = "macos")]
     // ignore right option key
-    if event.code as u32 == rdev::kVK_RightOption {
+    if event.platform_code as u32 == rdev::kVK_RightOption {
         return events;
     }
 
