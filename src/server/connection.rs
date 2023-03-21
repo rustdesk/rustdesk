@@ -848,7 +848,7 @@ impl Connection {
         {
             pi.platform_additions = format!(r#"
                 {{
-                    "is_wayland": {},
+                    "is_wayland": {}
                 }}
             "#, crate::platform::current_is_wayland());
         }

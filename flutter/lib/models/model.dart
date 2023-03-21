@@ -453,9 +453,14 @@ class FfiModel with ChangeNotifier {
           bind.sessionGetToggleOptionSync(id: peerId, arg: 'view-only'));
     }
     if (connType == ConnType.defaultConn) {
-      try {
-        _pi.platform_additions = json.decode(evt['platform_additions']);
-      } catch (e) {}
+      final platform_additions = evt['platform_additions'];
+      if (platform_additions != null && platform_additions != '') {
+        try {
+          _pi.platform_additions = json.decode(platform_additions);
+        } catch (e) {
+          debugPrint('Failed to decode platform_additions $e');
+        }
+      }
     }
     notifyListeners();
   }
