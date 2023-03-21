@@ -880,6 +880,10 @@ pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -
         }
     }
 
+    if event.platform_code == 0xFE03 {
+        return events;
+    }
+
     #[cfg(target_os = "linux")]
     try_fill_unicode(event, &key_event, &mut events);
 
