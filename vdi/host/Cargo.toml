@@ -5,5 +5,10 @@ authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 
 [dependencies]
-qemu-display = { git = "https://gitlab.com/marcandre.lureau/qemu-display" }
+qemu-display = { git = "https://github.com/rustdesk/qemu-display" }
 hbb_common = { path = "../../libs/hbb_common" }
+clap = { version = "4.1", features = ["derive"] }
+zbus = { version = "3.0" }
+derivative = "2.2"
+image = "0.24"
+async-trait = "0.1"
