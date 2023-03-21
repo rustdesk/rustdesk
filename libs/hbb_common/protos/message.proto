@@ -91,6 +91,8 @@ message PeerInfo {
   Features features = 9;
   SupportedEncoding encoding = 10;
   SupportedResolutions resolutions = 11;
+  // Use JSON's key-value format which is friendly for peer to handle.
+  string platform_additions = 12;
 }
 
 message LoginResponse {

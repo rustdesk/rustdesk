@@ -452,6 +452,16 @@ class FfiModel with ChangeNotifier {
       setViewOnly(peerId,
           bind.sessionGetToggleOptionSync(id: peerId, arg: 'view-only'));
     }
+    if (connType == ConnType.defaultConn) {
+      final platform_additions = evt['platform_additions'];
+      if (platform_additions != null && platform_additions != '') {
+        try {
+          _pi.platform_additions = json.decode(platform_additions);
+        } catch (e) {
+          debugPrint('Failed to decode platform_additions $e');
+        }
+      }
+    }
     notifyListeners();
   }
 
@@ -1687,6 +1697,9 @@ class PeerInfo {
   List<Display> displays = [];
   Features features = Features();
   List<Resolution> resolutions = [];
+  Map<String, dynamic> platform_additions = {};
+
+  bool get is_wayland => platform_additions['is_wayland'] == true;
 }
 
 const canvasKey = 'canvas';

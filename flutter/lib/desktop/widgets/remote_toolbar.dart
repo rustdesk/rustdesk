@@ -1464,7 +1464,8 @@ class _DisplayMenuState extends State<_DisplayMenu> {
       return Offstage();
     }
     final ffiModel = widget.ffi.ffiModel;
-    final visible = !widget.ffi.canvasModel.cursorEmbedded;
+    final visible =
+        !widget.ffi.canvasModel.cursorEmbedded && !ffiModel.pi.is_wayland;
     if (!visible) return Offstage();
     final enabled = !ffiModel.viewOnly;
     final state = ShowRemoteCursorState.find(widget.id);
@@ -1684,6 +1685,9 @@ class _KeyboardMenu extends StatelessWidget {
 
       for (KeyboardModeMenu mode in modes) {
         if (bind.sessionIsKeyboardModeSupported(id: id, mode: mode.key)) {
+          if (pi.is_wayland && mode.key != _kKeyMapMode) {
+            continue;
+          }
           if (mode.key == _kKeyTranslateMode) {
             if (Platform.isLinux) {
               continue;
