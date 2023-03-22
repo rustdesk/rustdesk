@@ -842,21 +842,9 @@ fn is_altgr(event: &Event) -> bool {
         false
     }
 
-    #[cfg(target_os = "macos")]
-    // ignore right option key
-    if event.platform_code as u32 == rdev::kVK_RightOption {
-        true
-    } else {
-        false
-    }
-
     #[cfg(target_os = "windows")]
-    if unsafe { IS_0X021D_DOWN } {
-        if event.position_code == 0xE038 {
-            true
-        } else {
-            false
-        }
+    if unsafe { IS_0X021D_DOWN } && event.position_code == 0xE038 {
+        true
     } else {
         false
     }
@@ -882,6 +870,13 @@ pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -
         }
     }
 
+    #[cfg(target_os = "macos")]
+    // ignore right option key
+    if event.code as u32 == rdev::kVK_RightOption {
+        return events;
+    }
+
+    #[cfg(not(target_os = "macos"))]
     if is_altgr(event) {
         return events;
     }
