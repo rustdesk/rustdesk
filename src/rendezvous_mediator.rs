@@ -54,6 +54,8 @@ impl RendezvousMediator {
     pub async fn start_all() {
         let mut nat_tested = false;
         check_zombie();
+        #[cfg(target_os = "linux")]
+        crate::server::check_xdesktop();
         let server = new_server();
         if Config::get_nat_type() == NatType::UNKNOWN_NAT as i32 {
             crate::test_nat_type();
@@ -72,7 +74,10 @@ impl RendezvousMediator {
                 allow_err!(super::lan::start_listening());
             });
         }
-        loop {
+        #[cfg(target_os = "linux")]
+        crate::platform::linux_desktop::start_xdesktop();
+        SHOULD_EXIT.store(false, Ordering::SeqCst);
+        while !SHOULD_EXIT.load(Ordering::SeqCst) {
             Config::reset_online();
             if Config::get_option("stop-service").is_empty() {
                 if !nat_tested {
@@ -96,6 +101,8 @@ impl RendezvousMediator {
             }
             sleep(1.).await;
         }
+        #[cfg(target_os = "linux")]
+        crate::platform::linux_desktop::stop_xdesktop();
     }
 
     pub async fn start(server: ServerPtr, host: String) -> ResultType<()> {

@@ -1,3 +1,4 @@
+use super::linux_desktop::GNOME_SESSION_BINARY;
 use super::{CursorData, ResultType};
 pub use hbb_common::platform::linux::*;
 use hbb_common::{
@@ -204,7 +205,7 @@ fn stop_server(server: &mut Option<Child>) {
 fn set_x11_env(uid: &str) {
     log::info!("uid of seat0: {}", uid);
     let gdm = format!("/run/user/{}/gdm/Xauthority", uid);
-    let mut auth = get_env_tries("XAUTHORITY", uid, 10);
+    let mut auth = get_env_tries("XAUTHORITY", uid, GNOME_SESSION_BINARY, 10);
     // auth is another user's when uid = 0, https://github.com/rustdesk/rustdesk/issues/2468
     if auth.is_empty() || uid == "0" {
         auth = if Path::new(&gdm).exists() {
@@ -223,7 +224,7 @@ fn set_x11_env(uid: &str) {
             }
         };
     }
-    let mut d = get_env("DISPLAY", uid);
+    let mut d = get_env("DISPLAY", GNOME_SESSION_BINARY, uid);
     if d.is_empty() {
         d = get_display();
     }
@@ -385,12 +386,12 @@ pub fn start_os_service() {
 }
 
 pub fn get_active_user_id_name() -> (String, String) {
-    let vec_id_name = get_values_of_seat0([1, 2].to_vec());
+    let vec_id_name = get_values_of_seat0(&[1, 2]);
     (vec_id_name[0].clone(), vec_id_name[1].clone())
 }
 
 pub fn get_active_userid() -> String {
-    get_values_of_seat0([1].to_vec())[0].clone()
+    get_values_of_seat0(&[1])[0].clone()
 }
 
 fn get_cm() -> bool {
@@ -474,7 +475,7 @@ fn _get_display_manager() -> String {
 }
 
 pub fn get_active_username() -> String {
-    get_values_of_seat0([2].to_vec())[0].clone()
+    get_values_of_seat0(&[2])[0].clone()
 }
 
 pub fn get_active_user_home() -> Option<PathBuf> {
@@ -488,9 +489,15 @@ pub fn get_active_user_home() -> Option<PathBuf> {
     None
 }
 
+pub(super) fn get_env_var(k: &str) -> String {
+    match std::env::var(k) {
+        Ok(v) => v,
+        Err(_e) => "".to_owned(),
+    }
+}
+
 pub fn is_prelogin() -> bool {
-    let n = get_active_userid().len();
-    n < 4 && n > 1
+    get_active_userid().len() >= 4 || get_active_username() == "root"
 }
 
 pub fn is_root() -> bool {
@@ -597,9 +604,9 @@ pub fn is_installed() -> bool {
     true
 }
 
-fn get_env_tries(name: &str, uid: &str, n: usize) -> String {
+pub(super) fn get_env_tries(name: &str, uid: &str, process: &str, n: usize) -> String {
     for _ in 0..n {
-        let x = get_env(name, uid);
+        let x = get_env(name, uid, process);
         if !x.is_empty() {
             return x;
         }
@@ -608,9 +615,9 @@ fn get_env_tries(name: &str, uid: &str, n: usize) -> String {
     "".to_owned()
 }
 
-fn get_env(name: &str, uid: &str) -> String {
-    let cmd = format!("ps -u {} -o pid= | xargs -I__ cat /proc/__/environ 2>/dev/null | tr '\\0' '\\n' | grep '^{}=' | tail -1 | sed 's/{}=//g'", uid, name, name);
-    log::debug!("Run: {}", &cmd);
+fn get_env(name: &str, uid: &str, process: &str) -> String {
+    let cmd = format!("ps -u {} -f | grep '{}' | tail -1 | awk '{{print $2}}' | xargs -I__ cat /proc/__/environ 2>/dev/null | tr '\\0' '\\n' | grep '^{}=' | tail -1 | sed 's/{}=//g'", uid, process, name, name);
+    // log::debug!("Run: {}", &cmd);
     if let Ok(x) = run_cmds(cmd) {
         x.trim_end().to_string()
     } else {

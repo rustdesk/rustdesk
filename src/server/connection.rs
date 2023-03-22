@@ -56,6 +56,16 @@ lazy_static::lazy_static! {
 pub static CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 pub static MOUSE_MOVE_TIME: AtomicI64 = AtomicI64::new(0);
 
+pub const LOGIN_MSG_XDESKTOP_NOT_INITED: &str = "xdesktop env is not inited";
+pub const LOGIN_MSG_XSESSION_NOT_READY: &str = "xsession unready";
+pub const LOGIN_MSG_XSESSION_FAILED: &str = "xsession failed";
+pub const LOGIN_MSG_XSESSION_ANOTHER_USER_READTY: &str = "xsession another user login";
+pub const LOGIN_MSG_XSESSION_NOT_READY_PASSWORD_EMPTY: &str = "xsession unready, password empty";
+pub const LOGIN_MSG_XSESSION_NOT_READY_PASSWORD_WRONG: &str = "xsession unready, password wrong";
+pub const LOGIN_MSG_PASSWORD_EMPTY: &str = "Empty Password";
+pub const LOGIN_MSG_PASSWORD_WRONG: &str = "Wrong Password";
+pub const LOGIN_MSG_OFFLINE: &str = "Offline";
+
 #[derive(Clone, Default)]
 pub struct ConnInner {
     id: i32,
@@ -900,7 +910,7 @@ impl Connection {
         }
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if self.file_transfer.is_some() {
-            if crate::platform::is_prelogin() || self.tx_to_cm.send(ipc::Data::Test).is_err() {
+            if !crate::platform::is_prelogin() || self.tx_to_cm.send(ipc::Data::Test).is_err() {
                 username = "".to_owned();
             }
         }
@@ -1057,6 +1067,47 @@ impl Connection {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn input_key(&self, msg: KeyEvent, press: bool) {
         self.tx_input.send(MessageInput::Key((msg, press))).ok();
+    }
+
+    fn try_start_desktop(_username: &str, _passsword: &str) -> String {
+        #[cfg(target_os = "linux")]
+        {
+            if _username.is_empty() {
+                match crate::platform::linux_desktop::get_desktop_env() {
+                    Some(desktop_env) => {
+                        if desktop_env.is_ready() {
+                            ""
+                        } else {
+                            LOGIN_MSG_XSESSION_NOT_READY
+                        }
+                    }
+                    None => LOGIN_MSG_XDESKTOP_NOT_INITED,
+                }
+                .to_owned()
+            } else {
+                match crate::platform::linux_desktop::try_start_x_session(_username, _passsword) {
+                    Ok(desktop_env) => {
+                        if desktop_env.is_ready() {
+                            if _username != desktop_env.username {
+                                LOGIN_MSG_XSESSION_ANOTHER_USER_READTY.to_owned()
+                            } else {
+                                "".to_owned()
+                            }
+                        } else {
+                            LOGIN_MSG_XSESSION_NOT_READY.to_owned()
+                        }
+                    }
+                    Err(e) => {
+                        log::error!("Failed to start xsession {}", e);
+                        LOGIN_MSG_XSESSION_FAILED.to_owned()
+                    }
+                }
+            }
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            "".to_owned()
+        }
     }
 
     fn validate_one_password(&self, password: String) -> bool {
@@ -1223,16 +1274,31 @@ impl Connection {
                 }
                 _ => {}
             }
+
+            let desktop_err = match lr.os_login.as_ref() {
+                Some(os_login) => Self::try_start_desktop(&os_login.username, &os_login.password),
+                None => Self::try_start_desktop("", ""),
+            };
+            if !desktop_err.is_empty() && desktop_err != LOGIN_MSG_XSESSION_NOT_READY {
+                self.send_login_error(desktop_err).await;
+                return true;
+            }
+
             if !hbb_common::is_ipv4_str(&lr.username) && lr.username != Config::get_id() {
-                self.send_login_error("Offline").await;
+                self.send_login_error(LOGIN_MSG_OFFLINE).await;
             } else if password::approve_mode() == ApproveMode::Click
                 || password::approve_mode() == ApproveMode::Both && !password::has_valid_password()
             {
-                self.try_start_cm(lr.my_id, lr.my_name, false);
-                if hbb_common::get_version_number(&lr.version)
-                    >= hbb_common::get_version_number("1.2.0")
-                {
-                    self.send_login_error("No Password Access").await;
+                if desktop_err.is_empty() {
+                    self.try_start_cm(lr.my_id, lr.my_name, false);
+                    if hbb_common::get_version_number(&lr.version)
+                        >= hbb_common::get_version_number("1.2.0")
+                    {
+                        self.send_login_error("No Password Access").await;
+                    }
+                } else {
+                    self.send_login_error(LOGIN_MSG_XSESSION_NOT_READY_PASSWORD_EMPTY)
+                        .await;
                 }
                 return true;
             } else if password::approve_mode() == ApproveMode::Password
@@ -1288,16 +1354,25 @@ impl Connection {
                         .lock()
                         .unwrap()
                         .insert(self.ip.clone(), failure);
-                    self.send_login_error("Wrong Password").await;
-                    self.try_start_cm(lr.my_id, lr.my_name, false);
+                    if desktop_err.is_empty() {
+                        self.send_login_error(LOGIN_MSG_PASSWORD_WRONG).await;
+                        self.try_start_cm(lr.my_id, lr.my_name, false);
+                    } else {
+                        self.send_login_error(LOGIN_MSG_XSESSION_NOT_READY_PASSWORD_WRONG)
+                            .await;
+                    }
                 } else {
                     if failure.0 != 0 {
                         LOGIN_FAILURES.lock().unwrap().remove(&self.ip);
                     }
-                    self.try_start_cm(lr.my_id, lr.my_name, true);
-                    self.send_logon_response().await;
-                    if self.port_forward_socket.is_some() {
-                        return false;
+                    if desktop_err.is_empty() {
+                        self.send_logon_response().await;
+                        self.try_start_cm(lr.my_id, lr.my_name, true);
+                        if self.port_forward_socket.is_some() {
+                            return false;
+                        }
+                    } else {
+                        self.send_login_error(desktop_err).await;
                     }
                 }
             }
@@ -2038,7 +2113,7 @@ async fn start_ipc(
     tx_from_cm: mpsc::UnboundedSender<ipc::Data>,
 ) -> ResultType<()> {
     loop {
-        if !crate::platform::is_prelogin() {
+        if crate::platform::is_prelogin() {
             break;
         }
         sleep(1.).await;

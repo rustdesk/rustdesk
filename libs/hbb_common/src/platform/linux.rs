@@ -28,7 +28,7 @@ impl Distro {
 }
 
 pub fn get_display_server() -> String {
-    let mut session = get_values_of_seat0([0].to_vec())[0].clone();
+    let mut session = get_values_of_seat0(&[0])[0].clone();
     if session.is_empty() {
         // loginctl has not given the expected output.  try something else.
         if let Ok(sid) = std::env::var("XDG_SESSION_ID") {
@@ -87,7 +87,7 @@ fn get_display_server_of_session(session: &str) -> String {
     display_server.to_lowercase()
 }
 
-pub fn get_values_of_seat0(indices: Vec<usize>) -> Vec<String> {
+pub fn get_values_of_seat0(indices: &[usize]) -> Vec<String> {
     if let Ok(output) = run_loginctl(None) {
         for line in String::from_utf8_lossy(&output.stdout).lines() {
             if line.contains("seat0") {
@@ -95,7 +95,7 @@ pub fn get_values_of_seat0(indices: Vec<usize>) -> Vec<String> {
                     if is_active(sid) {
                         return indices
                             .into_iter()
-                            .map(|idx| line.split_whitespace().nth(idx).unwrap_or("").to_owned())
+                            .map(|idx| line.split_whitespace().nth(*idx).unwrap_or("").to_owned())
                             .collect::<Vec<String>>();
                     }
                 }
@@ -111,7 +111,7 @@ pub fn get_values_of_seat0(indices: Vec<usize>) -> Vec<String> {
                 if is_active(sid) && d != "tty" {
                     return indices
                         .into_iter()
-                        .map(|idx| line.split_whitespace().nth(idx).unwrap_or("").to_owned())
+                        .map(|idx| line.split_whitespace().nth(*idx).unwrap_or("").to_owned())
                         .collect::<Vec<String>>();
                 }
             }
@@ -140,7 +140,7 @@ pub fn run_cmds(cmds: String) -> ResultType<String> {
 }
 
 #[cfg(not(feature = "flatpak"))]
-fn run_loginctl(args: Option<Vec<&str>>) -> std::io::Result<std::process::Output> {
+pub(super) fn run_loginctl(args: Option<Vec<&str>>) -> std::io::Result<std::process::Output> {
     let mut cmd = std::process::Command::new("loginctl");
     if let Some(a) = args {
         return cmd.args(a).output();
@@ -149,7 +149,7 @@ fn run_loginctl(args: Option<Vec<&str>>) -> std::io::Result<std::process::Output
 }
 
 #[cfg(feature = "flatpak")]
-fn run_loginctl(args: Option<Vec<&str>>) -> std::io::Result<std::process::Output> {
+pub(super) fn run_loginctl(args: Option<Vec<&str>>) -> std::io::Result<std::process::Output> {
     let mut l_args = String::from("loginctl");
     if let Some(a) = args {
         l_args = format!("{} {}", l_args, a.join(" "));

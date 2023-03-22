@@ -356,6 +356,40 @@ pub fn check_zombie() {
     });
 }
 
+#[cfg(target_os = "linux")]
+pub fn check_xdesktop() {
+    std::thread::spawn(|| {
+        use crate::platform::linux_desktop::{get_desktop_env, DesktopEnv};
+        let mut desktop_env = DesktopEnv::new();
+        loop {
+            let new_env = match get_desktop_env() {
+                Some(env) => env,
+                None => DesktopEnv::new(),
+            };
+
+            if new_env.is_ready() {
+                if !desktop_env.is_ready() {
+                    desktop_env = new_env.clone();
+                } else {
+                    if !desktop_env.is_same_env(&new_env) {
+                        log::info!("xdesktop env diff {:?} to {:?}", &new_env, desktop_env);
+                        break;
+                    }
+                }
+            } else {
+                if desktop_env.is_ready() {
+                    log::info!("xdesktop env diff {:?} to {:?}", &new_env, desktop_env);
+                    break;
+                }
+            }
+
+            std::thread::sleep(Duration::from_millis(300));
+        }
+
+        crate::RendezvousMediator::restart();
+    });
+}
+
 /// Start the host server that allows the remote peer to control the current machine.
 ///
 /// # Arguments

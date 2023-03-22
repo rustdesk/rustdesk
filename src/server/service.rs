@@ -189,6 +189,17 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
         }
     }
 
+    #[inline]
+    fn wait_prelogin(&self) {
+        #[cfg(target_os = "linux")]
+        while self.active() {
+            if crate::platform::linux::is_prelogin() {
+                break;
+            }
+            thread::sleep(time::Duration::from_millis(300));
+        }
+    }
+
     pub fn repeat<S, F>(&self, interval_ms: u64, callback: F)
     where
         F: 'static + FnMut(Self, &mut S) -> ResultType<()> + Send,
@@ -198,6 +209,9 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
         let mut callback = callback;
         let sp = self.clone();
         let thread = thread::spawn(move || {
+            sp.wait_prelogin();
+            log::info!("Service {} wait prelogin done", sp.name());
+
             let mut state = S::default();
             let mut may_reset = false;
             while sp.active() {
@@ -221,6 +235,7 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
                     thread::sleep(interval - elapsed);
                 }
             }
+            log::info!("Service {} exit", sp.name());
         });
         self.0.write().unwrap().handle = Some(thread);
     }
@@ -232,6 +247,8 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
         let sp = self.clone();
         let mut callback = callback;
         let thread = thread::spawn(move || {
+            sp.wait_prelogin();
+
             let mut error_timeout = HIBERNATE_TIMEOUT;
             while sp.active() {
                 if sp.has_subscribes() {
@@ -256,6 +273,7 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
                 }
                 thread::sleep(time::Duration::from_millis(HIBERNATE_TIMEOUT));
             }
+            log::info!("Service {} exit", sp.name());
         });
         self.0.write().unwrap().handle = Some(thread);
     }

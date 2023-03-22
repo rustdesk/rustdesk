@@ -360,9 +360,9 @@ impl<T: InvokeUiSession> Remote<T> {
                 allow_err!(peer.send(&msg).await);
                 return false;
             }
-            Data::Login((password, remember)) => {
+            Data::Login((os_username, os_password, password, remember)) => {
                 self.handler
-                    .handle_login_from_ui(password, remember, peer)
+                    .handle_login_from_ui(os_username, os_password, password, remember, peer)
                     .await;
             }
             Data::ToggleClipboardFile => {
