@@ -1,7 +1,7 @@
-use hbb_common::{log, tokio, ResultType};
+use hbb_common::{tokio, ResultType};
 use image::GenericImage;
 use qemu_display::{Console, ConsoleListenerHandler, MouseButton};
-use std::{collections::HashSet, sync::Arc, time};
+use std::{collections::HashSet, sync::Arc};
 pub use tokio::sync::{mpsc, Mutex};
 
 #[derive(Debug)]
@@ -54,91 +54,17 @@ impl ConsoleListenerHandler for ConsoleListener {
     }
 
     fn disconnected(&mut self) {
-        dbg!();
+        self.tx.send(Event::Disconnected).ok();
     }
 }
 
-#[derive(derivative::Derivative)]
-#[derivative(Debug)]
-pub struct Client {
-    #[derivative(Debug = "ignore")]
-    console: Arc<Mutex<Console>>,
-    last_update: Option<time::Instant>,
-    has_update: bool,
-    req_update: bool,
-    last_buttons: HashSet<MouseButton>,
-    dimensions: (u16, u16),
-    image: Arc<Mutex<BgraImage>>,
-}
-
-impl Client {
-    pub fn new(console: Arc<Mutex<Console>>, image: Arc<Mutex<BgraImage>>) -> Self {
-        Self {
-            console,
-            image,
-            last_update: None,
-            has_update: false,
-            req_update: false,
-            last_buttons: HashSet::new(),
-            dimensions: (0, 0),
-        }
+pub async fn key_event(console: &mut Console, qnum: u32, down: bool) -> ResultType<()> {
+    if down {
+        console.keyboard.press(qnum).await?;
+    } else {
+        console.keyboard.release(qnum).await?;
     }
-
-    pub fn update_pending(&self) -> bool {
-        self.has_update && self.req_update
-    }
-
-    pub async fn key_event(&self, qnum: u32, down: bool) -> ResultType<()> {
-        let console = self.console.lock().await;
-        if down {
-            console.keyboard.press(qnum).await?;
-        } else {
-            console.keyboard.release(qnum).await?;
-        }
-        Ok(())
-    }
-
-    pub async fn desktop_resize(&mut self) -> ResultType<()> {
-        let image = self.image.lock().await;
-        let (width, height) = (image.width() as _, image.height() as _);
-        if (width, height) == self.dimensions {
-            return Ok(());
-        }
-        self.dimensions = (width, height);
-        Ok(())
-    }
-
-    pub async fn send_framebuffer_update(&mut self) -> ResultType<()> {
-        self.desktop_resize().await?;
-        if self.has_update && self.req_update {
-            if let Some(last_update) = self.last_update {
-                if last_update.elapsed().as_millis() < 10 {
-                    log::info!("TODO: <10ms, could delay update..")
-                }
-            }
-            // self.server.send_framebuffer_update(&self.vnc_server)?;
-            self.last_update = Some(time::Instant::now());
-            self.has_update = false;
-            self.req_update = false;
-        }
-        Ok(())
-    }
-
-    pub async fn handle_event(&mut self, event: Option<Event>) -> ResultType<bool> {
-        match event {
-            Some(Event::ConsoleUpdate(_)) => {
-                self.has_update = true;
-            }
-            Some(Event::Disconnected) => {
-                return Ok(false);
-            }
-            None => {
-                self.send_framebuffer_update().await?;
-            }
-        }
-
-        Ok(true)
-    }
+    Ok(())
 }
 
 fn image_from_vec(format: u32, width: u32, height: u32, stride: u32, data: Vec<u8>) -> BgraImage {

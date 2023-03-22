@@ -1,13 +1,18 @@
 use clap::Parser;
-use hbb_common::{anyhow::Context, log, tokio, ResultType};
-use qemu_display::{Console, VMProxy};
-use std::{
-    borrow::Borrow,
-    net::{TcpListener, TcpStream},
-    sync::Arc,
-    thread,
+use hbb_common::{
+    allow_err,
+    anyhow::{bail, Context},
+    log,
+    message_proto::*,
+    protobuf::Message as _,
+    tokio,
+    tokio::net::TcpListener,
+    ResultType, Stream,
 };
+use qemu_display::{Console, VMProxy};
+use std::{borrow::Borrow, sync::Arc};
 
+use crate::connection::*;
 use crate::console::*;
 
 #[derive(Parser, Debug)]
@@ -37,8 +42,10 @@ struct Cli {
 #[derive(Debug)]
 struct Server {
     vm_name: String,
-    rx: mpsc::UnboundedReceiver<Event>,
-    tx: mpsc::UnboundedSender<Event>,
+    rx_console: mpsc::UnboundedReceiver<Event>,
+    tx_console: mpsc::UnboundedSender<Event>,
+    rx_conn: mpsc::UnboundedReceiver<Message>,
+    tx_conn: mpsc::UnboundedSender<Message>,
     image: Arc<Mutex<BgraImage>>,
     console: Arc<Mutex<Console>>,
 }
@@ -48,12 +55,15 @@ impl Server {
         let width = console.width().await?;
         let height = console.height().await?;
         let image = BgraImage::new(width as _, height as _);
-        let (tx, rx) = mpsc::unbounded_channel();
+        let (tx_console, rx_console) = mpsc::unbounded_channel();
+        let (tx_conn, rx_conn) = mpsc::unbounded_channel();
         Ok(Self {
             vm_name,
-            rx,
+            rx_console,
+            tx_console,
+            rx_conn,
+            tx_conn,
             image: Arc::new(Mutex::new(image)),
-            tx,
             console: Arc::new(Mutex::new(console)),
         })
     }
@@ -69,7 +79,7 @@ impl Server {
             .await
             .register_listener(ConsoleListener {
                 image: self.image.clone(),
-                tx: self.tx.clone(),
+                tx: self.tx_console.clone(),
             })
             .await?;
         Ok(())
@@ -80,33 +90,47 @@ impl Server {
         (image.width() as u16, image.height() as u16)
     }
 
-    async fn handle_connection(&mut self, stream: TcpStream) -> ResultType<()> {
-        let (width, height) = self.dimensions().await;
-
-        let tx = self.tx.clone();
-        let _client_thread = thread::spawn(move || loop {});
-
-        let mut client = Client::new(self.console.clone(), self.image.clone());
+    async fn handle_connection(&mut self, stream: Stream) -> ResultType<()> {
+        let mut stream = stream;
         self.run_console().await?;
+        let mut conn = Connection {
+            tx: self.tx_conn.clone(),
+        };
+
         loop {
-            let ev = if client.update_pending() {
-                match self.rx.try_recv() {
-                    Ok(e) => Some(e),
-                    Err(mpsc::error::TryRecvError::Empty) => None,
-                    Err(e) => {
-                        return Err(e.into());
+            tokio::select! {
+                Some(evt) = self.rx_console.recv() => {
+                    match evt {
+                        _ => {}
                     }
                 }
-            } else {
-                Some(
-                    self.rx
-                        .recv()
-                        .await
-                        .context("Channel closed unexpectedly")?,
-                )
-            };
-            if !client.handle_event(ev).await? {
-                break;
+                Some(msg) = self.rx_conn.recv() => {
+                    allow_err!(stream.send(&msg).await);
+                }
+                res = stream.next() => {
+                    if let Some(res) = res {
+                        match res {
+                            Err(err) => {
+                                bail!(err);
+                            }
+                            Ok(bytes) => {
+                                if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
+                                    match conn.on_message(msg_in).await {
+                                        Ok(false) => {
+                                            break;
+                                        }
+                                        Err(err) => {
+                                            log::error!("{err}");
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        bail!("Reset by the peer");
+                    }
+                }
             }
         }
 
@@ -119,7 +143,9 @@ impl Server {
 pub async fn run() -> ResultType<()> {
     let args = Cli::parse();
 
-    let listener = TcpListener::bind::<std::net::SocketAddr>(args.address.into()).unwrap();
+    let listener = TcpListener::bind::<std::net::SocketAddr>(args.address.into())
+        .await
+        .unwrap();
     let dbus = if let Some(addr) = args.dbus_address {
         zbus::ConnectionBuilder::address(addr.borrow())?
             .build()
@@ -134,12 +160,13 @@ pub async fn run() -> ResultType<()> {
         .await
         .context("Failed to get the console")?;
     let mut server = Server::new(format!("qemu-rustdesk ({})", vm_name), console).await?;
-    for stream in listener.incoming() {
-        let stream = stream?;
+    loop {
+        let (stream, addr) = listener.accept().await?;
+        stream.set_nodelay(true).ok();
+        let laddr = stream.local_addr()?;
+        let stream = Stream::from(stream, laddr);
         if let Err(err) = server.handle_connection(stream).await {
-            log::error!("Connection closed: {err}");
+            log::error!("Connection from {addr} closed: {err}");
         }
     }
-
-    Ok(())
 }

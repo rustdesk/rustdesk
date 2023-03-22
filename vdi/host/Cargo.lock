@@ -1528,7 +1528,6 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "clap",
- "derivative",
  "hbb_common",
  "image",
  "qemu-display",
