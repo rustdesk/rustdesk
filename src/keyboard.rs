@@ -834,6 +834,7 @@ pub fn translate_key_code(peer: &str, event: &Event, key_event: KeyEvent) -> Opt
 }
 
 #[inline]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 fn is_altgr(event: &Event) -> bool {
     #[cfg(target_os = "linux")]
     if event.platform_code == 0xFE03 {
@@ -872,11 +873,11 @@ pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -
 
     #[cfg(target_os = "macos")]
     // ignore right option key
-    if event.code as u32 == rdev::kVK_RightOption {
+    if event.platform_code as u32 == rdev::kVK_RightOption {
         return events;
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     if is_altgr(event) {
         return events;
     }
