@@ -191,7 +191,7 @@ pub fn run_cmds(cmds: &str) -> ResultType<String> {
 }
 
 #[cfg(not(feature = "flatpak"))]
-fn run_loginctl(args: Option<Vec<&str>>) -> std::io::Result<std::process::Output> {
+pub(super) fn run_loginctl(args: Option<Vec<&str>>) -> std::io::Result<std::process::Output> {
     let mut cmd = std::process::Command::new("loginctl");
     if let Some(a) = args {
         return cmd.args(a).output();
@@ -200,7 +200,7 @@ fn run_loginctl(args: Option<Vec<&str>>) -> std::io::Result<std::process::Output
 }
 
 #[cfg(feature = "flatpak")]
-fn run_loginctl(args: Option<Vec<&str>>) -> std::io::Result<std::process::Output> {
+pub(super) fn run_loginctl(args: Option<Vec<&str>>) -> std::io::Result<std::process::Output> {
     let mut l_args = String::from("loginctl");
     if let Some(a) = args {
         l_args = format!("{} {}", l_args, a.join(" "));

@@ -1,3 +1,4 @@
+use super::linux_desktop::GNOME_SESSION_BINARY;
 use super::{CursorData, ResultType};
 use desktop::Desktop;
 pub use hbb_common::platform::linux::*;

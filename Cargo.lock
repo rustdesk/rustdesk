@@ -4160,6 +4160,38 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b15813163c1d831bf4a13c3610c05c0d03b39feb07f7e09fa234dac9b15aaf39"
 
 [[package]]
+name = "pam"
+version = "0.7.0"
+source = "git+https://github.com/fufesou/pam#10da2cbbabe32cbc9de22a66abe44738e7ec0ea0"
+dependencies = [
+ "libc",
+ "pam-macros",
+ "pam-sys",
+ "users 0.10.0",
+]
+
+[[package]]
+name = "pam-macros"
+version = "0.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c94f3b9b97df3c6d4e51a14916639b24e02c7d15d1dba686ce9b1118277cb811"
+dependencies = [
+ "proc-macro2 1.0.54",
+ "quote 1.0.26",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "pam-sys"
+version = "1.0.0-alpha4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5e9dfd42858f6a6bb1081079fd9dc259ca3e2aaece6cb689fd36b1058046c969"
+dependencies = [
+ "bindgen 0.59.2",
+ "libc",
+]
+
+[[package]]
 name = "pango"
 version = "0.16.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5124,6 +5156,7 @@ dependencies = [
  "objc",
  "objc_id",
  "os-version",
+ "pam",
  "parity-tokio-ipc",
  "rdev",
  "repng",
@@ -5149,6 +5182,7 @@ dependencies = [
  "tray-icon",
  "trayicon",
  "url",
+ "users 0.11.0",
  "uuid",
  "virtual_display",
  "whoami",
@@ -6441,6 +6475,26 @@ dependencies = [
  "idna",
  "percent-encoding",
  "serde 1.0.159",
+]
+
+[[package]]
+name = "users"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aa4227e95324a443c9fcb06e03d4d85e91aabe9a5a02aa818688b6918b6af486"
+dependencies = [
+ "libc",
+ "log",
+]
+
+[[package]]
+name = "users"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "24cc0f6d6f267b73e5a2cadf007ba8f9bc39c6a6f9666f8cf25ea809a153b032"
+dependencies = [
+ "libc",
+ "log",
 ]
 
 [[package]]
