@@ -1688,11 +1688,6 @@ class _KeyboardMenu extends StatelessWidget {
           if (pi.is_wayland && mode.key != _kKeyMapMode) {
             continue;
           }
-          if (mode.key == _kKeyTranslateMode) {
-            if (Platform.isLinux) {
-              continue;
-            }
-          }
           var text = translate(mode.menu);
           if (mode.key == _kKeyTranslateMode) {
             text = '$text beta';
