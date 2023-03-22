@@ -833,6 +833,35 @@ pub fn translate_key_code(peer: &str, event: &Event, key_event: KeyEvent) -> Opt
     map_keyboard_mode(peer, event, key_event)
 }
 
+#[inline]
+fn is_altgr(event: &Event) -> bool {
+    #[cfg(target_os = "linux")]
+    if event.platform_code == 0xFE03 {
+        true
+    } else {
+        false
+    }
+
+    #[cfg(target_os = "macos")]
+    // ignore right option key
+    if event.platform_code as u32 == rdev::kVK_RightOption {
+        true
+    } else {
+        false
+    }
+
+    #[cfg(target_os = "windows")]
+    if unsafe { IS_0X021D_DOWN } {
+        if event.position_code == 0xE038 {
+            true
+        } else {
+            false
+        }
+    } else {
+        false
+    }
+}
+
 pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -> Vec<KeyEvent> {
     let mut events: Vec<KeyEvent> = Vec::new();
     if let Some(unicode_info) = &event.unicode {
@@ -849,23 +878,13 @@ pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -
         }
     }
 
-    #[cfg(target_os = "macos")]
-    // ignore right option key
-    if event.platform_code as u32 == rdev::kVK_RightOption {
+    if is_altgr(event) {
         return events;
     }
 
     #[cfg(target_os = "windows")]
-    unsafe {
-        if event.position_code == 0x021D {
-            return events;
-        }
-
-        if IS_0X021D_DOWN {
-            if event.position_code == 0xE038 {
-                return events;
-            }
-        }
+    if event.position_code == 0x021D {
+        return events;
     }
 
     #[cfg(target_os = "windows")]
@@ -878,10 +897,6 @@ pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -
         if IS_0X021D_DOWN {
             return events;
         }
-    }
-
-    if event.platform_code == 0xFE03 {
-        return events;
     }
 
     #[cfg(target_os = "linux")]
