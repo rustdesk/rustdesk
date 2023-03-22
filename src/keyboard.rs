@@ -227,8 +227,8 @@ pub fn start_grab_loop() {
             }
 
             let mut _keyboard_mode = KeyboardMode::Map;
-            let _scan_code = event.scan_code;
-            let _code = event.code;
+            let _scan_code = event.position_code;
+            let _code = event.platform_code;
             let res = if KEYBOARD_HOOKED.load(Ordering::SeqCst) {
                 _keyboard_mode = client::process_event(&event, None);
                 if is_press {
@@ -460,8 +460,8 @@ pub fn event_type_to_event(event_type: EventType) -> Event {
         event_type,
         time: SystemTime::now(),
         unicode: None,
-        code: 0,
-        scan_code: 0,
+        platform_code: 0,
+        position_code: 0,
     }
 }
 
@@ -546,7 +546,7 @@ pub fn legacy_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Vec<KeyEv
             // when pressing AltGr, an extra VK_LCONTROL with a special
             // scancode with bit 9 set is sent, let's ignore this.
             #[cfg(windows)]
-            if (event.scan_code >> 8) == 0xE0 {
+            if (event.position_code >> 8) == 0xE0 {
                 unsafe {
                     IS_ALT_GR = true;
                 }
@@ -741,37 +741,37 @@ pub fn map_keyboard_mode(peer: &str, event: &Event, mut key_event: KeyEvent) -> 
         OS_LOWER_WINDOWS => {
             // https://github.com/rustdesk/rustdesk/issues/1371
             // Filter scancodes that are greater than 255 and the hight word is not 0xE0.
-            if event.scan_code > 255 && (event.scan_code >> 8) != 0xE0 {
+            if event.position_code > 255 && (event.position_code >> 8) != 0xE0 {
                 return None;
             }
-            event.scan_code
+            event.position_code
         }
         OS_LOWER_MACOS => {
             if hbb_common::config::LocalConfig::get_kb_layout_type() == "ISO" {
-                rdev::win_scancode_to_macos_iso_code(event.scan_code)?
+                rdev::win_scancode_to_macos_iso_code(event.position_code)?
             } else {
-                rdev::win_scancode_to_macos_code(event.scan_code)?
+                rdev::win_scancode_to_macos_code(event.position_code)?
             }
         }
-        _ => rdev::win_scancode_to_linux_code(event.scan_code)?,
+        _ => rdev::win_scancode_to_linux_code(event.position_code)?,
     };
     #[cfg(target_os = "macos")]
     let keycode = match peer {
-        OS_LOWER_WINDOWS => rdev::macos_code_to_win_scancode(event.code as _)?,
-        OS_LOWER_MACOS => event.code as _,
-        _ => rdev::macos_code_to_linux_code(event.code as _)?,
+        OS_LOWER_WINDOWS => rdev::macos_code_to_win_scancode(event.platform_code as _)?,
+        OS_LOWER_MACOS => event.platform_code as _,
+        _ => rdev::macos_code_to_linux_code(event.platform_code as _)?,
     };
     #[cfg(target_os = "linux")]
     let keycode = match peer {
-        OS_LOWER_WINDOWS => rdev::linux_code_to_win_scancode(event.code as _)?,
+        OS_LOWER_WINDOWS => rdev::linux_code_to_win_scancode(event.position_code as _)?,
         OS_LOWER_MACOS => {
             if hbb_common::config::LocalConfig::get_kb_layout_type() == "ISO" {
-                rdev::linux_code_to_macos_iso_code(event.code as _)?
+                rdev::linux_code_to_macos_iso_code(event.position_code as _)?
             } else {
-                rdev::linux_code_to_macos_code(event.code as _)?
+                rdev::linux_code_to_macos_code(event.position_code as _)?
             }
         }
-        _ => event.code as _,
+        _ => event.position_code as _,
     };
     #[cfg(any(target_os = "android", target_os = "ios"))]
     let keycode = 0;
@@ -795,7 +795,7 @@ fn try_fill_unicode(event: &Event, key_event: &KeyEvent, events: &mut Vec<KeyEve
         {
             #[cfg(target_os = "windows")]
             if is_hot_key_modifiers_down() && unsafe { !IS_0X021D_DOWN } {
-                if let Some(chr) = get_char_by_vk(event.code as u32) {
+                if let Some(chr) = get_char_by_vk(event.platform_code as u32) {
                     let mut evt = key_event.clone();
                     evt.set_seq(chr.to_string());
                     events.push(evt);
@@ -823,7 +823,7 @@ fn is_hot_key_modifiers_down() -> bool {
 #[cfg(target_os = "windows")]
 pub fn translate_key_code(peer: &str, event: &Event, key_event: KeyEvent) -> Option<KeyEvent> {
     let mut key_event = map_keyboard_mode(peer, event, key_event)?;
-    key_event.set_chr((key_event.chr() & 0x0000FFFF) | ((event.code as u32) << 16));
+    key_event.set_chr((key_event.chr() & 0x0000FFFF) | ((event.platform_code as u32) << 16));
     Some(key_event)
 }
 
@@ -831,6 +831,28 @@ pub fn translate_key_code(peer: &str, event: &Event, key_event: KeyEvent) -> Opt
 #[cfg(not(target_os = "windows"))]
 pub fn translate_key_code(peer: &str, event: &Event, key_event: KeyEvent) -> Option<KeyEvent> {
     map_keyboard_mode(peer, event, key_event)
+}
+
+#[inline]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+fn is_altgr(event: &Event) -> bool {
+    #[cfg(target_os = "linux")]
+    if event.platform_code == 0xFE03 {
+        true
+    } else {
+        false
+    }
+
+    #[cfg(target_os = "windows")]
+    if unsafe { IS_0X021D_DOWN } && event.position_code == 0xE038 {
+        true
+    } else {
+        false
+    }
+}
+
+fn is_press(event: &Event) -> bool {
+    matches!(event.event_type, EventType::KeyPress(_))
 }
 
 pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -> Vec<KeyEvent> {
@@ -851,25 +873,22 @@ pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -
 
     #[cfg(target_os = "macos")]
     // ignore right option key
-    if event.code as u32 == rdev::kVK_RightOption {
+    if event.platform_code as u32 == rdev::kVK_RightOption {
+        return events;
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    if is_altgr(event) {
         return events;
     }
 
     #[cfg(target_os = "windows")]
-    unsafe {
-        if event.scan_code == 0x021D {
-            return events;
-        }
-
-        if IS_0X021D_DOWN {
-            if event.scan_code == 0xE038 {
-                return events;
-            }
-        }
+    if event.position_code == 0x021D {
+        return events;
     }
 
-    #[cfg(target_os = "windows")]
-    if matches!(event.event_type, EventType::KeyPress(_)) {
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    if is_press(event) {
         try_fill_unicode(event, &key_event, &mut events);
     }
 
@@ -879,9 +898,6 @@ pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -
             return events;
         }
     }
-
-    #[cfg(target_os = "linux")]
-    try_fill_unicode(event, &key_event, &mut events);
 
     #[cfg(target_os = "macos")]
     if !unsafe { IS_LEFT_OPTION_DOWN } {

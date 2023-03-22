@@ -562,8 +562,8 @@ impl<T: InvokeUiSession> Session<T> {
         let event = Event {
             time: SystemTime::now(),
             unicode: None,
-            code: keycode as _,
-            scan_code: scancode as _,
+            platform_code: keycode as _,
+            position_code: scancode as _,
             event_type: event_type,
         };
         keyboard::client::process_event(&event, Some(lock_modes));
