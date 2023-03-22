@@ -862,6 +862,10 @@ fn is_altgr(event: &Event) -> bool {
     }
 }
 
+fn is_press(event: &Event) -> bool {
+    matches!(event.event_type, EventType::KeyPress(_))
+}
+
 pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -> Vec<KeyEvent> {
     let mut events: Vec<KeyEvent> = Vec::new();
     if let Some(unicode_info) = &event.unicode {
@@ -887,8 +891,8 @@ pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -
         return events;
     }
 
-    #[cfg(target_os = "windows")]
-    if matches!(event.event_type, EventType::KeyPress(_)) {
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    if is_press(event) {
         try_fill_unicode(event, &key_event, &mut events);
     }
 
@@ -898,9 +902,6 @@ pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -
             return events;
         }
     }
-
-    #[cfg(target_os = "linux")]
-    try_fill_unicode(event, &key_event, &mut events);
 
     #[cfg(target_os = "macos")]
     if !unsafe { IS_LEFT_OPTION_DOWN } {
