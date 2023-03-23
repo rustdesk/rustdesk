@@ -1631,8 +1631,14 @@ class FFI {
   }
 
   /// Login with [password], choose if the client should [remember] it.
-  void login(String id, String password, bool remember) {
-    bind.sessionLogin(id: id, password: password, remember: remember);
+  void login(String osUsername, String osPassword, String id, String password,
+      bool remember) {
+    bind.sessionLogin(
+        id: id,
+        os_username: osUsername,
+        os_password: osPassword,
+        password: password,
+        remember: remember);
   }
 
   /// Close the remote session.
