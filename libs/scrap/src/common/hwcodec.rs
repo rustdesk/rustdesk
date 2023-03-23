@@ -107,7 +107,6 @@ impl EncoderApi for HwEncoder {
                 DataFormat::H264 => vf.set_h264s(frames),
                 DataFormat::H265 => vf.set_h265s(frames),
             }
-            vf.timestamp = get_time();
             msg_out.set_video_frame(vf);
             Ok(msg_out)
         } else {
