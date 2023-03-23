@@ -237,7 +237,7 @@ impl DesktopEnv {
     fn get_env_seat0(&mut self) -> ResultType<bool> {
         let output = Command::new("loginctl").output()?;
         for line in String::from_utf8_lossy(&output.stdout).lines() {
-            if line.contains("seat0") {
+            if !line.contains("gdm") && line.contains("seat0") {
                 if let Some(sid) = line.split_whitespace().nth(0) {
                     if Self::is_active(sid)? {
                         if let Some(uid) = line.split_whitespace().nth(1) {
