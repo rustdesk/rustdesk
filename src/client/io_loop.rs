@@ -318,13 +318,11 @@ impl<T: InvokeUiSession> Remote<T> {
                             let mut msg = Message::new();
                             msg.set_audio_frame(frame.clone());
                             tx_audio.send(Data::Message(msg)).ok();
-                            log::debug!("send audio frame {}", frame.timestamp);
                         }
                         Some(message::Union::Misc(misc)) => {
                             let mut msg = Message::new();
                             msg.set_misc(misc.clone());
                             tx_audio.send(Data::Message(msg)).ok();
-                            log::debug!("send audio misc {:?}", misc.audio_format());
                         }
                         _ => {}
                     },

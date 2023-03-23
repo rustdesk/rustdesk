@@ -787,7 +787,6 @@ fn create_msg(vp9s: Vec<EncodedVideoFrame>) -> Message {
         frames: vp9s.into(),
         ..Default::default()
     });
-    vf.timestamp = hbb_common::get_time();
     msg_out.set_video_frame(vf);
     msg_out
 }

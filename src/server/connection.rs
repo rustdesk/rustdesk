@@ -7,8 +7,7 @@ use crate::common::update_clipboard;
 use crate::portable_service::client as portable_client;
 use crate::{
     client::{
-        new_voice_call_request, new_voice_call_response, start_audio_thread, LatencyController,
-        MediaData, MediaSender,
+        new_voice_call_request, new_voice_call_response, start_audio_thread, MediaData, MediaSender,
     },
     common::{get_default_sound_input, set_sound_input},
     video_service,
@@ -843,15 +842,16 @@ impl Connection {
             pi.hostname = DEVICE_NAME.lock().unwrap().clone();
             pi.platform = "Android".into();
         }
-        let mut platform_additions = serde_json::Map::new();
         #[cfg(target_os = "linux")]
         {
+            let mut platform_additions = serde_json::Map::new();
             if crate::platform::current_is_wayland() {
                 platform_additions.insert("is_wayland".into(), json!(true));
             }
-        }
-        if !platform_additions.is_empty() {
-            pi.platform_additions = serde_json::to_string(&platform_additions).unwrap_or("".into());
+            if !platform_additions.is_empty() {
+                pi.platform_additions =
+                    serde_json::to_string(&platform_additions).unwrap_or("".into());
+            }
         }
 
         #[cfg(feature = "hwcodec")]
@@ -1612,11 +1612,7 @@ impl Connection {
                         if !self.disable_audio {
                             // Drop the audio sender previously.
                             drop(std::mem::replace(&mut self.audio_sender, None));
-                            // Start a audio thread to play the audio sent by peer.
-                            let latency_controller = LatencyController::new();
-                            // No video frame will be sent here, so we need to disable latency controller, or audio check may fail.
-                            latency_controller.lock().unwrap().set_audio_only(true);
-                            self.audio_sender = Some(start_audio_thread(Some(latency_controller)));
+                            self.audio_sender = Some(start_audio_thread());
                             allow_err!(self
                                 .audio_sender
                                 .as_ref()

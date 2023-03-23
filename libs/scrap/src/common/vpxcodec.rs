@@ -4,7 +4,7 @@
 
 use hbb_common::anyhow::{anyhow, Context};
 use hbb_common::message_proto::{EncodedVideoFrame, EncodedVideoFrames, Message, VideoFrame};
-use hbb_common::{get_time, ResultType};
+use hbb_common::ResultType;
 
 use crate::STRIDE_ALIGN;
 use crate::{codec::EncoderApi, ImageFormat};
@@ -287,7 +287,6 @@ impl VpxEncoder {
             frames: vp9s.into(),
             ..Default::default()
         });
-        vf.timestamp = get_time();
         msg_out.set_video_frame(vf);
         msg_out
     }

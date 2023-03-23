@@ -13,7 +13,6 @@
 // https://github.com/krruzic/pulsectl
 
 use super::*;
-use hbb_common::get_time;
 use magnum_opus::{Application::*, Channels::*, Encoder};
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -349,7 +348,6 @@ fn send_f32(data: &[f32], encoder: &mut Encoder, sp: &GenericService) {
                         let mut msg_out = Message::new();
                         msg_out.set_audio_frame(AudioFrame {
                             data: data.into(),
-                            timestamp: get_time(),
                             ..Default::default()
                         });
                         sp.send(msg_out);
@@ -369,7 +367,6 @@ fn send_f32(data: &[f32], encoder: &mut Encoder, sp: &GenericService) {
             let mut msg_out = Message::new();
             msg_out.set_audio_frame(AudioFrame {
                 data: data.into(),
-                timestamp: get_time(),
                 ..Default::default()
             });
             sp.send(msg_out);
