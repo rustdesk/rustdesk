@@ -33,6 +33,8 @@ AppDir:
     - sourceline: deb http://archive.ubuntu.com/ubuntu/ bionic-updates multiverse
     - sourceline: deb http://archive.ubuntu.com/ubuntu/ bionic-backports main restricted
         universe multiverse
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ bionic-security main restricted
+        universe multiverse
     - sourceline: deb http://ppa.launchpad.net/pipewire-debian/pipewire-upstream/ubuntu
         bionic main
     include:
@@ -50,6 +52,9 @@ AppDir:
     - libva-x11-2
     - libvdpau1
     - libgstreamer-plugins-base1.0-0
+    - libwayland-cursor0
+    - libwayland-egl1
+    - libpulse0
     exclude:
     - humanity-icon-theme
     - hicolor-icon-theme
