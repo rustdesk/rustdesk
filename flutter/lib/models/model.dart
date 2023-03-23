@@ -535,11 +535,18 @@ class FfiModel with ChangeNotifier {
 
   void setViewOnly(String id, bool value) {
     if (version_cmp(_pi.version, '1.2.0') < 0) return;
-    if (value) {
-      ShowRemoteCursorState.find(id).value = value;
-    } else {
-      ShowRemoteCursorState.find(id).value =
-          bind.sessionGetToggleOptionSync(id: id, arg: 'show-remote-cursor');
+    // tmp fix for https://github.com/rustdesk/rustdesk/pull/3706#issuecomment-1481242389
+    // because below rx not used in mobile version, so not initialized, below code will cause crash
+    // current our flutter code quality is fucking shit now. !!!!!!!!!!!!!!!!
+    try {
+      if (value) {
+        ShowRemoteCursorState.find(id).value = value;
+      } else {
+        ShowRemoteCursorState.find(id).value =
+            bind.sessionGetToggleOptionSync(id: id, arg: 'show-remote-cursor');
+      }
+    } catch (e) {
+      //
     }
     if (_viewOnly != value) {
       _viewOnly = value;
