@@ -230,19 +230,6 @@ pub(super) fn get_primary() -> ResultType<usize> {
     }
 }
 
-pub(super) fn get_display_num() -> ResultType<usize> {
-    let addr = *CAP_DISPLAY_INFO.read().unwrap();
-    if addr != 0 {
-        let cap_display_info: *const CapDisplayInfo = addr as _;
-        unsafe {
-            let cap_display_info = &*cap_display_info;
-            Ok(cap_display_info.num)
-        }
-    } else {
-        bail!("Failed to get capturer display info");
-    }
-}
-
 #[allow(dead_code)]
 pub(super) fn release_resource() {
     if scrap::is_x11() {
