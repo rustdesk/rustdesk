@@ -90,7 +90,7 @@ fn get_display_server_of_session(session: &str) -> String {
 pub fn get_values_of_seat0(indices: &[usize]) -> Vec<String> {
     if let Ok(output) = run_loginctl(None) {
         for line in String::from_utf8_lossy(&output.stdout).lines() {
-            if line.contains("seat0") {
+            if !line.contains("gdm") && line.contains("seat0") {
                 if let Some(sid) = line.split_whitespace().next() {
                     if is_active(sid) {
                         return indices
