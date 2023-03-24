@@ -14,6 +14,7 @@ import 'package:wakelock/wakelock.dart';
 
 import '../../common.dart';
 import '../../common/widgets/overlay.dart';
+import '../../common/widgets/dialog.dart';
 import '../../common/widgets/remote_input.dart';
 import '../../models/input_model.dart';
 import '../../models/model.dart';

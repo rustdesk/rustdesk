@@ -480,5 +480,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("identical_file_tip", ""),
         ("show_monitors_tip", ""),
         ("View Mode", ""),
+        ("Enter RustDesk password", ""),
+        ("Remember RustDesk password", ""),
+        ("Login Required", ""),
     ].iter().cloned().collect();
 }

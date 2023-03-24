@@ -9,6 +9,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../common.dart';
+import './dialog.dart';
 
 class _IconOP extends StatelessWidget {
   final String icon;
@@ -324,17 +325,16 @@ class LoginWidgetUserPass extends StatelessWidget {
           children: [
             const SizedBox(height: 8.0),
             DialogTextField(
-                title: translate("Username"),
+                title: translate(DialogTextField.kUsernameTitle),
                 controller: username,
                 focusNode: userFocusNode,
-                prefixIcon: Icon(Icons.account_circle_outlined),
+                prefixIcon: DialogTextField.kUsernameIcon,
                 errorText: usernameMsg),
-            DialogTextField(
-                title: translate("Password"),
-                obscureText: true,
-                controller: pass,
-                prefixIcon: Icon(Icons.lock_outline),
-                errorText: passMsg),
+            PasswordWidget(
+              controller: pass,
+              autoFocus: false,
+              errorText: passMsg,
+            ),
             Obx(() => CheckboxListTile(
                   contentPadding: const EdgeInsets.all(0),
                   dense: true,
@@ -374,49 +374,6 @@ class LoginWidgetUserPass extends StatelessWidget {
             ])),
           ],
         ));
-  }
-}
-
-class DialogTextField extends StatelessWidget {
-  final String title;
-  final bool obscureText;
-  final String? errorText;
-  final String? helperText;
-  final Widget? prefixIcon;
-  final TextEditingController controller;
-  final FocusNode? focusNode;
-
-  DialogTextField(
-      {Key? key,
-      this.focusNode,
-      this.obscureText = false,
-      this.errorText,
-      this.helperText,
-      this.prefixIcon,
-      required this.title,
-      required this.controller})
-      : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: TextField(
-            decoration: InputDecoration(
-                labelText: title,
-                prefixIcon: prefixIcon,
-                helperText: helperText,
-                helperMaxLines: 8,
-                errorText: errorText),
-            controller: controller,
-            focusNode: focusNode,
-            autofocus: true,
-            obscureText: obscureText,
-          ),
-        ),
-      ],
-    ).paddingSymmetric(vertical: 4.0);
   }
 }
 
