@@ -1233,16 +1233,23 @@ fn translate_keyboard_mode(evt: &KeyEvent) {
             // remote: Shift + 1 => 1
             let mut en = ENIGO.lock().unwrap();
 
-            #[cfg(target_os = "linux")]
+            #[cfg(target_os = "macos")]
+            en.key_sequence(seq);
+            #[cfg(any(target_os = "linux", target_os = "windows"))]
             {
-                simulate_(&EventType::KeyRelease(RdevKey::ShiftLeft));
-                simulate_(&EventType::KeyRelease(RdevKey::ShiftRight));
+                if get_modifier_state(Key::Shift, &mut en) {
+                    simulate_(&EventType::KeyRelease(RdevKey::ShiftLeft));
+                }
+                if get_modifier_state(Key::RightShift, &mut en) {
+                    simulate_(&EventType::KeyRelease(RdevKey::ShiftRight));
+                }
                 for chr in seq.chars() {
+                    #[cfg(target_os = "windows")]
+                    rdev::simulate_char(chr).ok();
+                    #[cfg(target_os = "linux")]
                     en.key_click(Key::Layout(chr));
                 }
             }
-            #[cfg(not(target_os = "linux"))]
-            en.key_sequence(seq);
         }
         Some(key_event::Union::Chr(..)) => {
             #[cfg(target_os = "windows")]
