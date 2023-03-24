@@ -712,7 +712,7 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn login(
-        &mut self,
+        &self,
         os_username: String,
         os_password: String,
         password: String,
