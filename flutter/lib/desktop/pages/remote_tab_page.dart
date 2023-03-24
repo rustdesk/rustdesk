@@ -9,7 +9,7 @@ import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/desktop/pages/remote_page.dart';
-import 'package:flutter_hbb/desktop/widgets/remote_menubar.dart';
+import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/desktop/widgets/material_mod_popup_menu.dart'
     as mod_menu;
@@ -23,9 +23,6 @@ import '../../models/platform_model.dart';
 
 class _MenuTheme {
   static const Color blueColor = MyTheme.button;
-  static const Color hoverBlueColor = MyTheme.accent;
-  static const Color redColor = Colors.redAccent;
-  static const Color hoverRedColor = Colors.red;
   // kMinInteractiveDimension
   static const double height = 20.0;
   static const double dividerHeight = 12.0;
@@ -71,6 +68,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         page: RemotePage(
           key: ValueKey(peerId),
           id: peerId,
+          password: params['password'],
           menubarState: _menubarState,
           switchUuid: params['switch_uuid'],
           forceRelay: params['forceRelay'],
@@ -106,6 +104,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           page: RemotePage(
             key: ValueKey(id),
             id: id,
+            password: args['password'],
             menubarState: _menubarState,
             switchUuid: switchUuid,
             forceRelay: args['forceRelay'],
@@ -260,7 +259,9 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       ),
     ]);
 
-    if (!ffi.canvasModel.cursorEmbedded) {
+    if (!ffi.canvasModel.cursorEmbedded &&
+        !ffi.ffiModel.viewOnly &&
+        !pi.is_wayland) {
       menu.add(MenuEntryDivider<String>());
       menu.add(RemoteMenuEntry.showRemoteCursor(
         key,
@@ -269,7 +270,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       ));
     }
 
-    if (perms['keyboard'] != false) {
+    if (perms['keyboard'] != false && !ffi.ffiModel.viewOnly) {
       if (perms['clipboard'] != false) {
         menu.add(RemoteMenuEntry.disableClipboard(key, padding,
             dismissFunc: cancelFunc));

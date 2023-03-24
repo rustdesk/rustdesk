@@ -32,6 +32,9 @@ AppDir:
     - sourceline: deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ bionic-backports main restricted
         universe multiverse
       key_url: 'http://keyserver.ubuntu.com/pks/lookup?op=get&search=0x3b4fe6acc0b21f32'
+    - sourceline: deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ bionic-security main restricted
+        universe multiverse
+      key_url: 'http://keyserver.ubuntu.com/pks/lookup?op=get&search=0x3b4fe6acc0b21f32'
     include:
     - libc6
     - libgtk-3-0
@@ -47,6 +50,9 @@ AppDir:
     - libva-x11-2
     - libvdpau1
     - libgstreamer-plugins-base1.0-0
+    - libwayland-cursor0
+    - libwayland-egl1
+    - libpulse0
     exclude:
     - humanity-icon-theme
     - hicolor-icon-theme

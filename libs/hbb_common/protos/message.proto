@@ -25,7 +25,6 @@ message VideoFrame {
     EncodedVideoFrames h264s = 10;
     EncodedVideoFrames h265s = 11;
   }
-  int64 timestamp = 9;
 }
 
 message IdPk {
@@ -91,6 +90,8 @@ message PeerInfo {
   Features features = 9;
   SupportedEncoding encoding = 10;
   SupportedResolutions resolutions = 11;
+  // Use JSON's key-value format which is friendly for peer to handle.
+  string platform_additions = 12;
 }
 
 message LoginResponse {
@@ -487,6 +488,7 @@ message OptionMessage {
   BoolOption enable_file_transfer = 9;
   VideoCodecState video_codec_state = 10;
   int32 custom_fps = 11;
+  BoolOption disable_keyboard = 12;
 }
 
 message TestDelay {
@@ -510,7 +512,6 @@ message AudioFormat {
 
 message AudioFrame { 
   bytes data = 1; 
-  int64 timestamp = 2;
 }
 
 // Notify peer to show message box.

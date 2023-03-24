@@ -27,6 +27,7 @@ rustdesk
 appimage/AppDir
 appimage/*.AppImage
 appimage/appimage-build
+appimage/*.xz
 # flutter
 flutter/linux/build/**
 flutter/linux/cmake-build-debug/**
@@ -38,6 +39,8 @@ flatpak/.flatpak-builder/shared-modules/**
 flatpak/.flatpak-builder/shared-modules/*.tar.xz
 flatpak/.flatpak-builder/debian-binary
 flatpak/build/**
+flatpak/repo/**
+flatpak/*.flatpak
 # bridge file
 lib/generated_bridge.dart
 # vscode devcontainer

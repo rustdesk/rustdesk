@@ -1,12 +1,11 @@
 use super::{CursorData, ResultType};
 pub use hbb_common::platform::linux::*;
 use hbb_common::{
-    allow_err,
-    anyhow::anyhow,
-    bail,
+    allow_err, bail,
     libc::{c_char, c_int, c_long, c_void},
     log,
     message_proto::Resolution,
+    regex::{Captures, Regex},
 };
 use std::{
     cell::RefCell,
@@ -18,7 +17,6 @@ use std::{
     },
     time::{Duration, Instant},
 };
-use xrandr_parser::Parser;
 
 type Xdo = *const c_void;
 
@@ -320,6 +318,20 @@ pub fn start_os_service() {
     let mut last_restart = Instant::now();
     while running.load(Ordering::SeqCst) {
         let (cur_uid, cur_user) = get_active_user_id_name();
+
+        // for fixing https://github.com/rustdesk/rustdesk/issues/3129 to avoid too much dbus calling,
+        // though duplicate logic here with should_start_server
+        if !(cur_uid != *uid && !cur_uid.is_empty()) {
+            let cm = get_cm();
+            if !(!cm
+                && ((cm0 && last_restart.elapsed().as_secs() > 60)
+                    || last_restart.elapsed().as_secs() > 3600))
+            {
+                std::thread::sleep(Duration::from_millis(500));
+                continue;
+            }
+        }
+
         let is_wayland = current_is_wayland();
 
         if cur_user == "root" || !is_wayland {
@@ -657,44 +669,99 @@ pub fn get_double_click_time() -> u32 {
     }
 }
 
+#[inline]
+fn get_width_height_from_captures<'t>(caps: &Captures<'t>) -> Option<(i32, i32)> {
+    match (caps.name("width"), caps.name("height")) {
+        (Some(width), Some(height)) => {
+            match (
+                width.as_str().parse::<i32>(),
+                height.as_str().parse::<i32>(),
+            ) {
+                (Ok(width), Ok(height)) => {
+                    return Some((width, height));
+                }
+                _ => {}
+            }
+        }
+        _ => {}
+    }
+    None
+}
+
+#[inline]
+fn get_xrandr_conn_pat(name: &str) -> String {
+    format!(
+        r"{}\s+connected.+?(?P<width>\d+)x(?P<height>\d+)\+(?P<x>\d+)\+(?P<y>\d+).*?\n",
+        name
+    )
+}
+
 pub fn resolutions(name: &str) -> Vec<Resolution> {
+    let resolutions_pat = r"(?P<resolutions>(\s*\d+x\d+\s+\d+.*\n)+)";
+    let connected_pat = get_xrandr_conn_pat(name);
     let mut v = vec![];
-    let mut parser = Parser::new();
-    if parser.parse().is_ok() {
-        if let Ok(connector) = parser.get_connector(name) {
-            if let Ok(resolutions) = &connector.available_resolutions() {
-                for r in resolutions {
-                    if let Ok(width) = r.horizontal.parse::<i32>() {
-                        if let Ok(height) = r.vertical.parse::<i32>() {
-                            let resolution = Resolution {
-                                width,
-                                height,
-                                ..Default::default()
-                            };
-                            if !v.contains(&resolution) {
-                                v.push(resolution);
+    if let Ok(re) = Regex::new(&format!("{}{}", connected_pat, resolutions_pat)) {
+        match run_cmds("xrandr --query | tr -s ' '".to_owned()) {
+            Ok(xrandr_output) => {
+                // There'are different kinds of xrandr output.
+                /*
+                1.
+                Screen 0: minimum 320 x 175, current 1920 x 1080, maximum 1920 x 1080
+                default connected 1920x1080+0+0 0mm x 0mm
+                 1920x1080 10.00*
+                 1280x720 25.00
+                 1680x1050 60.00
+                Virtual2 disconnected (normal left inverted right x axis y axis)
+                Virtual3 disconnected (normal left inverted right x axis y axis)
+
+                XWAYLAND0 connected primary 1920x984+0+0 (normal left inverted right x axis y axis) 0mm x 0mm
+                Virtual1 connected primary 1920x984+0+0 (normal left inverted right x axis y axis) 0mm x 0mm
+                HDMI-0 connected (normal left inverted right x axis y axis)
+
+                rdp0 connected primary 1920x1080+0+0 0mm x 0mm
+                    */
+                if let Some(caps) = re.captures(&xrandr_output) {
+                    if let Some(resolutions) = caps.name("resolutions") {
+                        let resolution_pat =
+                            r"\s*(?P<width>\d+)x(?P<height>\d+)\s+(?P<rates>(\d+\.\d+[* ]*)+)\s*\n";
+                        let resolution_re = Regex::new(&format!(r"{}", resolution_pat)).unwrap();
+                        for resolution_caps in resolution_re.captures_iter(resolutions.as_str()) {
+                            if let Some((width, height)) =
+                                get_width_height_from_captures(&resolution_caps)
+                            {
+                                let resolution = Resolution {
+                                    width,
+                                    height,
+                                    ..Default::default()
+                                };
+                                if !v.contains(&resolution) {
+                                    v.push(resolution);
+                                }
                             }
                         }
                     }
                 }
             }
+            Err(e) => log::error!("Failed to run xrandr query, {}", e),
         }
     }
+
     v
 }
 
 pub fn current_resolution(name: &str) -> ResultType<Resolution> {
-    let mut parser = Parser::new();
-    parser.parse().map_err(|e| anyhow!(e))?;
-    let connector = parser.get_connector(name).map_err(|e| anyhow!(e))?;
-    let r = connector.current_resolution();
-    let width = r.horizontal.parse::<i32>()?;
-    let height = r.vertical.parse::<i32>()?;
-    Ok(Resolution {
-        width,
-        height,
-        ..Default::default()
-    })
+    let xrandr_output = run_cmds("xrandr --query | tr -s ' '".to_owned())?;
+    let re = Regex::new(&get_xrandr_conn_pat(name))?;
+    if let Some(caps) = re.captures(&xrandr_output) {
+        if let Some((width, height)) = get_width_height_from_captures(&caps) {
+            return Ok(Resolution {
+                width,
+                height,
+                ..Default::default()
+            });
+        }
+    }
+    bail!("Failed to find current resolution for {}", name);
 }
 
 pub fn change_resolution(name: &str, width: usize, height: usize) -> ResultType<()> {

@@ -8,6 +8,7 @@ import 'package:flutter_hbb/utils/event_loop.dart';
 import 'package:get/get.dart';
 import 'package:path/path.dart' as path;
 
+import '../consts.dart';
 import 'model.dart';
 import 'platform_model.dart';
 
@@ -54,14 +55,14 @@ class FileModel {
     localController = FileController(
         isLocal: true,
         getSessionID: getSessionID,
-        dialogManager: parent.target?.dialogManager,
+        rootState: parent,
         jobController: jobController,
         fileFetcher: fileFetcher,
         getOtherSideDirectoryData: () => remoteController.directoryData());
     remoteController = FileController(
         isLocal: false,
         getSessionID: getSessionID,
-        dialogManager: parent.target?.dialogManager,
+        rootState: parent,
         jobController: jobController,
         fileFetcher: fileFetcher,
         getOtherSideDirectoryData: () => localController.directoryData());
@@ -246,7 +247,7 @@ class FileController {
   final sortBy = SortBy.name.obs;
   var sortAscending = true;
   final JobController jobController;
-  final OverlayDialogManager? dialogManager;
+  final WeakReference<FFI> rootState;
 
   final DirectoryData Function() getOtherSideDirectoryData;
   late final SelectedItems selectedItems = SelectedItems(isLocal: isLocal);
@@ -254,12 +255,13 @@ class FileController {
   FileController(
       {required this.isLocal,
       required this.getSessionID,
-      required this.dialogManager,
+      required this.rootState,
       required this.jobController,
       required this.fileFetcher,
       required this.getOtherSideDirectoryData});
 
   String get homePath => options.value.home;
+  OverlayDialogManager? get dialogManager => rootState.target?.dialogManager;
 
   String get shortPath {
     final dirPath = directory.value.path;
@@ -281,12 +283,16 @@ class FileController {
   }
 
   Future<void> onReady() async {
-    options.value.home = await bind.mainGetHomeDir();
+    if (isLocal) {
+      options.value.home = await bind.mainGetHomeDir();
+    }
     options.value.showHidden = (await bind.sessionGetPeerOption(
             id: sessionID,
             name: isLocal ? "local_show_hidden" : "remote_show_hidden"))
         .isNotEmpty;
-    options.value.isWindows = Platform.isWindows;
+    options.value.isWindows = isLocal
+        ? Platform.isWindows
+        : rootState.target?.ffiModel.pi.platform == kPeerPlatformWindows;
 
     await Future.delayed(Duration(milliseconds: 100));
 
@@ -412,12 +418,12 @@ class FileController {
           }
           job.totalSize = totalSize;
           job.fileCount = fileCount;
-          debugPrint("update receive details:${fd.path}");
+          debugPrint("update receive details: ${fd.path}");
           jobController.jobTable.refresh();
         }
       } else if (options.value.home.isEmpty) {
         options.value.home = fd.path;
-        debugPrint("init remote home:${fd.path}");
+        debugPrint("init remote home: ${fd.path}");
         directory.value = fd;
       }
     } catch (e) {
@@ -449,7 +455,7 @@ class FileController {
           includeHidden: showHidden,
           isRemote: isRemoteToLocal);
       debugPrint(
-          "path:${from.path}, toPath:$toPath, to:${PathUtil.join(toPath, from.name, isWindows)}");
+          "path: ${from.path}, toPath: $toPath, to: ${PathUtil.join(toPath, from.name, isWindows)}");
     }
   }
 
@@ -475,7 +481,7 @@ class FileController {
         title = translate("Not an empty directory");
         dialogManager?.showLoading(translate("Waiting"));
         final fd = await fileFetcher.fetchDirectoryRecursive(
-            jobID, item.path, items.isLocal!, true);
+            jobID, item.path, items.isLocal, true);
         if (fd.path.isEmpty) {
           fd.path = item.path;
         }
@@ -674,7 +680,7 @@ class JobController {
         jobTable.refresh();
       }
     } catch (e) {
-      debugPrint("Failed to tryUpdateJobProgress,evt:${evt.toString()}");
+      debugPrint("Failed to tryUpdateJobProgress, evt: ${evt.toString()}");
     }
   }
 
@@ -841,7 +847,7 @@ class FileFetcher {
     Timer(Duration(seconds: 2), () {
       tasks.remove(path);
       if (c.isCompleted) return;
-      c.completeError("Failed to read dir,timeout");
+      c.completeError("Failed to read dir, timeout");
     });
     return c.future;
   }
@@ -857,7 +863,7 @@ class FileFetcher {
     Timer(Duration(seconds: 2), () {
       tasks.remove(actID);
       if (c.isCompleted) return;
-      c.completeError("Failed to read dir,timeout");
+      c.completeError("Failed to read dir, timeout");
     });
     return c.future;
   }
@@ -881,7 +887,7 @@ class FileFetcher {
         completer?.complete(fd);
       }
     } catch (e) {
-      debugPrint("tryCompleteJob err :$e");
+      debugPrint("tryCompleteJob err: $e");
     }
   }
 
@@ -890,12 +896,12 @@ class FileFetcher {
     try {
       if (isLocal) {
         final res = await bind.sessionReadLocalDirSync(
-            id: sessionID ?? "", path: path, showHidden: showHidden);
+            id: sessionID, path: path, showHidden: showHidden);
         final fd = FileDirectory.fromJson(jsonDecode(res));
         return fd;
       } else {
         await bind.sessionReadRemoteDir(
-            id: sessionID ?? "", path: path, includeHidden: showHidden);
+            id: sessionID, path: path, includeHidden: showHidden);
         return registerReadTask(isLocal, path);
       }
     } catch (e) {
@@ -1255,7 +1261,7 @@ class FileDialogEventLoop
     event.setOverrideConfirm(_overrideConfirm);
     event.setSkip(_skip);
     debugPrint(
-        "FileDialogEventLoop: consuming<jobId:${evt.data['id']} overrideConfirm: $_overrideConfirm, skip:$_skip>");
+        "FileDialogEventLoop: consuming<jobId: ${evt.data['id']} overrideConfirm: $_overrideConfirm, skip: $_skip>");
   }
 
   @override

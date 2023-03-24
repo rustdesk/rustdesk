@@ -22,14 +22,6 @@ use hbb_common::{message_proto::CursorData, ResultType};
 #[cfg(not(target_os = "macos"))]
 const SERVICE_INTERVAL: u64 = 300;
 
-pub fn get_license_key() -> String {
-    #[cfg(windows)]
-    if let Some(lic) = windows::get_license() {
-        return lic.key;
-    }
-    Default::default()
-}
-
 pub fn is_xfce() -> bool {
     #[cfg(target_os = "linux")]
     {
@@ -39,6 +31,11 @@ pub fn is_xfce() -> bool {
     {
         return false;
     }
+}
+
+pub fn breakdown_callback() {
+    #[cfg(target_os = "linux")]
+    crate::input_service::clear_remapped_keycode()
 }
 
 // Android

@@ -87,6 +87,7 @@ pub fn session_add_sync(
     is_port_forward: bool,
     switch_uuid: String,
     force_relay: bool,
+    password: String,
 ) -> SyncReturn<String> {
     if let Err(e) = session_add(
         &id,
@@ -94,6 +95,7 @@ pub fn session_add_sync(
         is_port_forward,
         &switch_uuid,
         force_relay,
+        password,
     ) {
         SyncReturn(format!("Failed to add session with id {}, {}", &id, e))
     } else {

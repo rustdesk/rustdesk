@@ -13,7 +13,7 @@ use bytes::Bytes;
 use rdev::{Event, EventType::*};
 use uuid::Uuid;
 
-use hbb_common::config::{Config, LocalConfig, PeerConfig, RS_PUB_KEY};
+use hbb_common::config::{Config, LocalConfig, PeerConfig};
 use hbb_common::rendezvous_proto::ConnType;
 use hbb_common::tokio::{self, sync::mpsc};
 use hbb_common::{allow_err, message_proto::*};
@@ -374,7 +374,6 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn swab_modifier_key(&self, msg: &mut KeyEvent) {
-
         let allow_swap_key = self.get_toggle_option("allow_swap_key".to_string());
         if allow_swap_key {
             if let Some(key_event::Union::ControlKey(ck)) = msg.union {
@@ -388,19 +387,22 @@ impl<T: InvokeUiSession> Session<T> {
                 };
                 msg.set_control_key(ck);
             }
-            msg.modifiers = msg.modifiers.iter().map(|ck| {
-                let ck = ck.enum_value_or_default();
-                let ck = match ck {
-                    ControlKey::Control => ControlKey::Meta,
-                    ControlKey::Meta => ControlKey::Control,
-                    ControlKey::RControl => ControlKey::Meta,
-                    ControlKey::RWin => ControlKey::Control,
-                    _ => ck,
-                };
-                hbb_common::protobuf::EnumOrUnknown::new(ck)
-            }).collect();
-            
-        
+            msg.modifiers = msg
+                .modifiers
+                .iter()
+                .map(|ck| {
+                    let ck = ck.enum_value_or_default();
+                    let ck = match ck {
+                        ControlKey::Control => ControlKey::Meta,
+                        ControlKey::Meta => ControlKey::Control,
+                        ControlKey::RControl => ControlKey::Meta,
+                        ControlKey::RWin => ControlKey::Control,
+                        _ => ck,
+                    };
+                    hbb_common::protobuf::EnumOrUnknown::new(ck)
+                })
+                .collect();
+
             let code = msg.chr();
             if code != 0 {
                 let mut peer = self.peer_platform().to_lowercase();
@@ -444,7 +446,6 @@ impl<T: InvokeUiSession> Session<T> {
                 msg.set_chr(key);
             }
         }
-
     }
 
     pub fn send_key_event(&self, evt: &KeyEvent) {
@@ -561,8 +562,8 @@ impl<T: InvokeUiSession> Session<T> {
         let event = Event {
             time: SystemTime::now(),
             unicode: None,
-            code: keycode as _,
-            scan_code: scancode as _,
+            platform_code: keycode as _,
+            position_code: scancode as _,
             event_type: event_type,
         };
         keyboard::client::process_event(&event, Some(lock_modes));
@@ -872,7 +873,14 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
         only_count: bool,
     );
     fn confirm_delete_files(&self, id: i32, i: i32, name: String);
-    fn override_file_confirm(&self, id: i32, file_num: i32, to: String, is_upload: bool, is_identical: bool);
+    fn override_file_confirm(
+        &self,
+        id: i32,
+        file_num: i32,
+        to: String,
+        is_upload: bool,
+        is_identical: bool,
+    );
     fn update_block_input_state(&self, on: bool);
     fn job_progress(&self, id: i32, file_num: i32, speed: f64, finished_size: f64);
     fn adapt_size(&self);
@@ -1011,21 +1019,25 @@ impl<T: InvokeUiSession> Interface for Session<T> {
             handle_test_delay(t, peer).await;
         }
     }
-    
-    fn swap_modifier_mouse(&self, msg : &mut hbb_common::protos::message::MouseEvent) {
+
+    fn swap_modifier_mouse(&self, msg: &mut hbb_common::protos::message::MouseEvent) {
         let allow_swap_key = self.get_toggle_option("allow_swap_key".to_string());
-        if allow_swap_key  {
-            msg.modifiers = msg.modifiers.iter().map(|ck| {
-                let ck = ck.enum_value_or_default();
-                let ck = match ck {
-                    ControlKey::Control => ControlKey::Meta,
-                    ControlKey::Meta => ControlKey::Control,
-                    ControlKey::RControl => ControlKey::Meta,
-                    ControlKey::RWin => ControlKey::Control,
-                    _ => ck,
-                };
-                hbb_common::protobuf::EnumOrUnknown::new(ck)
-            }).collect();
+        if allow_swap_key {
+            msg.modifiers = msg
+                .modifiers
+                .iter()
+                .map(|ck| {
+                    let ck = ck.enum_value_or_default();
+                    let ck = match ck {
+                        ControlKey::Control => ControlKey::Meta,
+                        ControlKey::Meta => ControlKey::Control,
+                        ControlKey::RControl => ControlKey::Meta,
+                        ControlKey::RWin => ControlKey::Control,
+                        _ => ck,
+                    };
+                    hbb_common::protobuf::EnumOrUnknown::new(ck)
+                })
+                .collect();
         };
     }
 }
@@ -1043,15 +1055,8 @@ impl<T: InvokeUiSession> Session<T> {
 pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>) {
     let (sender, mut receiver) = mpsc::unbounded_channel::<Data>();
     *handler.sender.write().unwrap() = Some(sender.clone());
-    let mut options = crate::ipc::get_options_async().await;
-    let mut key = options.remove("key").unwrap_or("".to_owned());
     let token = LocalConfig::get_option("access_token");
-    if key.is_empty() {
-        key = crate::platform::get_license_key();
-    }
-    if key.is_empty() && !option_env!("RENDEZVOUS_SERVER").unwrap_or("").is_empty() {
-        key = RS_PUB_KEY.to_owned();
-    }
+    let key = crate::get_key(false).await;
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if handler.is_port_forward() {
         if handler.is_rdp() {

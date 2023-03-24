@@ -1059,7 +1059,7 @@ void showOptions(
     final toggles = [
       getToggle(id, setState, 'show-quality-monitor', 'Show quality monitor'),
     ];
-    if (!gFFI.canvasModel.cursorEmbedded) {
+    if (!gFFI.canvasModel.cursorEmbedded && !pi.is_wayland) {
       toggles.insert(0,
           getToggle(id, setState, 'show-remote-cursor', 'Show remote cursor'));
     }

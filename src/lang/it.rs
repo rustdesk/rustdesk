@@ -477,6 +477,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Empty Username", "Nome Utente Vuoto"),
         ("Empty Password", "Password Vuota"),
         ("Me", "Io"),
-        ("identical_file_tip", "")
+        ("identical_file_tip", "Questo file è identico a quello del peer."),
+        ("show_monitors_tip", "Mostra schermi nella barra degli strumenti"),
+        ("View Mode", "Modalità di visualizzazione"),
     ].iter().cloned().collect();
 }

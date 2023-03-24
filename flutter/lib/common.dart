@@ -201,16 +201,16 @@ class MyTheme {
         ),
       ),
     ),
-    inputDecorationTheme: InputDecorationTheme(
-      fillColor: grayBg,
-      filled: true,
-      isDense: true,
-      contentPadding: EdgeInsets.all(15),
-      border: UnderlineInputBorder(
-        borderRadius: BorderRadius.circular(18),
-        borderSide: BorderSide.none,
-      ),
-    ),
+    inputDecorationTheme: isDesktop
+        ? InputDecorationTheme(
+            fillColor: grayBg,
+            filled: true,
+            isDense: true,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          )
+        : null,
     textTheme: const TextTheme(
         titleLarge: TextStyle(fontSize: 19, color: Colors.black87),
         titleSmall: TextStyle(fontSize: 14, color: Colors.black87),
@@ -295,16 +295,16 @@ class MyTheme {
         ),
       ),
     ),
-    inputDecorationTheme: InputDecorationTheme(
-      fillColor: Color(0xFF24252B),
-      filled: true,
-      isDense: true,
-      contentPadding: EdgeInsets.all(15),
-      border: UnderlineInputBorder(
-        borderRadius: BorderRadius.circular(18),
-        borderSide: BorderSide.none,
-      ),
-    ),
+    inputDecorationTheme: isDesktop
+        ? InputDecorationTheme(
+            fillColor: Color(0xFF24252B),
+            filled: true,
+            isDense: true,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          )
+        : null,
     textTheme: const TextTheme(
         titleLarge: TextStyle(fontSize: 19),
         titleSmall: TextStyle(fontSize: 14),
@@ -839,7 +839,6 @@ class CustomAlertDialog extends StatelessWidget {
         ),
         actions: actions,
         actionsPadding: EdgeInsets.fromLTRB(padding, 0, padding, padding),
-        actionsAlignment: MainAxisAlignment.center,
       ),
     );
   }
@@ -1524,6 +1523,11 @@ bool checkArguments() {
   }
   String? id =
       kBootArgs.length < connectIndex + 1 ? null : kBootArgs[connectIndex + 1];
+  String? password =
+      kBootArgs.length < connectIndex + 2 ? null : kBootArgs[connectIndex + 2];
+  if (password != null && password.startsWith("--")) {
+    password = null;
+  }
   final switchUuidIndex = kBootArgs.indexOf("--switch_uuid");
   String? switchUuid = kBootArgs.length < switchUuidIndex + 1
       ? null
@@ -1537,7 +1541,8 @@ bool checkArguments() {
       kBootArgs.removeAt(connectIndex);
       // fallback to peer id
       Future.delayed(Duration.zero, () {
-        rustDeskWinManager.newRemoteDesktop(id, switch_uuid: switchUuid);
+        rustDeskWinManager.newRemoteDesktop(id,
+            password: password, switch_uuid: switchUuid);
       });
       return true;
     }
@@ -1818,10 +1823,15 @@ class ServerConfig {
   /// also see [encode]
   /// throw when decoding failure
   ServerConfig.decode(String msg) {
-    final input = msg.split('').reversed.join('');
-    final bytes = base64Decode(base64.normalize(input));
-    final json = jsonDecode(utf8.decode(bytes));
-
+    var json = {};
+    try {
+      // back compatible
+      json = jsonDecode(msg);
+    } catch (err) {
+      final input = msg.split('').reversed.join('');
+      final bytes = base64Decode(base64.normalize(input));
+      json = jsonDecode(utf8.decode(bytes));
+    }
     idServer = json['host'] ?? '';
     relayServer = json['relay'] ?? '';
     apiServer = json['api'] ?? '';

@@ -431,7 +431,7 @@ fn check_displays_new() -> Option<Vec<Display>> {
     }
 }
 
-fn check_displays_changed() -> Option<Message> {
+fn check_get_displays_changed_msg() -> Option<Message> {
     let displays = check_displays_new()?;
     let (current, displays) = get_displays_2(&displays);
     let mut pi = PeerInfo {
@@ -585,11 +585,8 @@ fn run(sp: GenericService) -> ResultType<()> {
                 bail!("SWITCH");
             }
 
-            if let Some(msg_out) = check_displays_changed() {
+            if let Some(msg_out) = check_get_displays_changed_msg() {
                 sp.send(msg_out);
-            }
-
-            if c.ndisplay != get_display_num() {
                 log::info!("Displays changed");
                 *SWITCH.lock().unwrap() = true;
                 bail!("SWITCH");
@@ -787,7 +784,6 @@ fn create_msg(vp9s: Vec<EncodedVideoFrame>) -> Message {
         frames: vp9s.into(),
         ..Default::default()
     });
-    vf.timestamp = hbb_common::get_time();
     msg_out.set_video_frame(vf);
     msg_out
 }
@@ -844,21 +840,6 @@ pub fn handle_one_frame_encoded(
     };
     send_conn_ids = sp.send_video_frame(create_msg(vec![vp9_frame]));
     Ok(send_conn_ids)
-}
-
-fn get_display_num() -> usize {
-    #[cfg(target_os = "linux")]
-    {
-        if !scrap::is_x11() {
-            return if let Ok(n) = super::wayland::get_display_num() {
-                n
-            } else {
-                0
-            };
-        }
-    }
-
-    LAST_SYNC_DISPLAYS.read().unwrap().len()
 }
 
 pub(super) fn get_displays_2(all: &Vec<Display>) -> (usize, Vec<DisplayInfo>) {

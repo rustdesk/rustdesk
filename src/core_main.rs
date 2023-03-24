@@ -1,3 +1,4 @@
+use crate::platform::breakdown_callback;
 use hbb_common::log;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::platform::register_breakdown_handler;
@@ -38,7 +39,7 @@ pub fn core_main() -> Option<Vec<String>> {
         i += 1;
     }
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    register_breakdown_handler();
+    register_breakdown_handler(breakdown_callback);
     #[cfg(target_os = "linux")]
     #[cfg(feature = "flutter")]
     {
@@ -125,7 +126,7 @@ pub fn core_main() -> Option<Vec<String>> {
             } else if args[0] == "--reinstall" {
                 hbb_common::allow_err!(platform::uninstall_me(false));
                 hbb_common::allow_err!(platform::install_me(
-                    "desktopicon startmenu",
+                    "desktopicon startmenu driverCert",
                     "".to_owned(),
                     false,
                     false,
@@ -133,7 +134,7 @@ pub fn core_main() -> Option<Vec<String>> {
                 return None;
             } else if args[0] == "--silent-install" {
                 hbb_common::allow_err!(platform::install_me(
-                    "desktopicon startmenu",
+                    "desktopicon startmenu driverCert",
                     "".to_owned(),
                     true,
                     args.len() > 1,

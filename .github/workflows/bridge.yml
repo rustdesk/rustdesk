@@ -1,0 +1,73 @@
+# This yaml shares the build bridge steps with ci and nightly.
+name: Build flutter-rust-bridge
+
+on:
+  workflow_call:
+
+jobs:
+  generate_bridge:
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - {
+              target: x86_64-unknown-linux-gnu,
+              os: ubuntu-18.04,
+              extra-build-args: "",
+            }
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v3
+
+      - name: Install prerequisites
+        run: |
+          sudo apt update -y
+          sudo apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang cmake libclang-dev ninja-build llvm-dev libclang-10-dev llvm-10-dev pkg-config
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.job.target }}
+          override: true
+          profile: minimal # minimal component installation (ie, no documentation)
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: bridge-${{ matrix.job.os }}
+          workspace: "/tmp/flutter_rust_bridge/frb_codegen"
+
+      - name: Cache Bridge
+        id: cache-bridge
+        uses: actions/cache@v3
+        with:
+          path: /tmp/flutter_rust_bridge
+          key: vcpkg-${{ matrix.job.arch }}
+
+      - name: Install flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Install flutter rust bridge deps
+        shell: bash
+        run: |
+          cargo install flutter_rust_bridge_codegen
+          pushd flutter && flutter pub get && popd
+
+      - name: Run flutter rust bridge
+        run: |
+          ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@master
+        with:
+          name: bridge-artifact
+          path: |
+            ./src/bridge_generated.rs
+            ./src/bridge_generated.io.rs
+            ./flutter/lib/generated_bridge.dart 
+            ./flutter/lib/generated_bridge.freezed.dart

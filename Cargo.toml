@@ -121,7 +121,6 @@ mouce = { git="https://github.com/fufesou/mouce.git" }
 evdev = { git="https://github.com/fufesou/evdev" }
 dbus = "0.9"
 dbus-crossroads = "0.5"
-xrandr-parser = "0.3.0"
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.11"
