@@ -53,6 +53,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("empty_lan_tip", "Oh no, it looks like we haven't discovered any peers yet."),
         ("empty_address_book_tip", "Oh dear, it appears that there are currently no peers listed in your address book."),
         ("identical_file_tip", "This file is identical with the peer's one."),
-        ("show_monitors_tip", "Show monitors in toolbar")
+        ("show_monitors_tip", "Show monitors in toolbar."),
+        ("enter_rustdesk_passwd_tip", "Enter RustDesk password."),
+        ("remember_rustdesk_passwd_tip", "Remember RustDesk password."),
+        ("login_linux_tip", "Login to remote Linux account"),
+        ("login_linux_tooltip_tip", "You need to login to remote Linux account to enable a X desktop session."),
         ].iter().cloned().collect();
 }

@@ -517,9 +517,12 @@ _connectDialog(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.password_rounded, color: MyTheme.accent),
-          Text(translate(usernameController == null
-                  ? 'Password Required'
-                  : 'Login Required'))
+          (usernameController == null
+                  ? Text(translate('Password Required'))
+                  : Tooltip(
+                      message: translate('login_linux_tooltip_tip'),
+                      child: Text(translate('login_linux_tip')),
+                    ))
               .paddingOnly(left: 10),
         ],
       ),
@@ -538,12 +541,15 @@ _connectDialog(
                 controller: passwordController,
                 autoFocus: false,
               ),
+        usernameController == null || usernameController == null
+            ? Offstage()
+            : const Divider(),
         peerPasswordController == null
             ? Offstage()
             : PasswordWidget(
                 controller: peerPasswordController,
                 autoFocus: usernameController == null,
-                hintText: 'Enter RustDesk password',
+                hintText: 'enter_rustdesk_passwd_tip',
               ),
         peerPasswordController == null
             ? Offstage()
@@ -552,7 +558,7 @@ _connectDialog(
                 dense: true,
                 controlAffinity: ListTileControlAffinity.leading,
                 title: Text(
-                  translate('Remember RustDesk password'),
+                  translate('remember_rustdesk_passwd_tip'),
                 ),
                 value: remember,
                 onChanged: (v) {
