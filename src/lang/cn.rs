@@ -480,8 +480,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("identical_file_tip", "此文件与对方的一致"),
         ("show_monitors_tip", ""),
         ("View Mode", "浏览模式"),
-        ("Enter RustDesk password", "请输入RustDesk密码"),
-        ("Remember RustDesk password", "记住RustDesk密码"),
+        ("Enter RustDesk password", "请输入 RustDesk 密码"),
+        ("Remember RustDesk password", "记住 RustDesk 密码"),
         ("Login Required", "需要登陆"),
     ].iter().cloned().collect();
 }
