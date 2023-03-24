@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/desktop/pages/remote_tab_page.dart';
@@ -26,6 +28,9 @@ class DesktopRemoteScreen extends StatelessWidget {
           ChangeNotifierProvider.value(value: gFFI.canvasModel),
         ],
         child: Scaffold(
+          // Set transparent background for padding the resize area out of the flutter view.
+          // This allows the wallpaper goes through our resize area. (Linux only now).
+          backgroundColor: Platform.isLinux ? Colors.transparent : null,
           body: ConnectionTabPage(
             params: params,
           ),

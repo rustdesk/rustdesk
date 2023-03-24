@@ -103,6 +103,9 @@ pub struct Connection {
     show_remote_cursor: bool,
     // by peer
     ip: String,
+    // by peer
+    disable_keyboard: bool,
+    // by peer
     disable_clipboard: bool,
     // by peer
     disable_audio: bool,
@@ -219,6 +222,7 @@ impl Connection {
             disable_audio: false,
             enable_file_transfer: false,
             disable_clipboard: false,
+            disable_keyboard: false,
             tx_input,
             video_ack_required: false,
             peer_info: Default::default(),
@@ -327,7 +331,7 @@ impl Connection {
                                 if let Some(s) = conn.server.upgrade() {
                                     s.write().unwrap().subscribe(
                                         super::clipboard_service::NAME,
-                                        conn.inner.clone(), conn.clipboard_enabled() && conn.keyboard);
+                                        conn.inner.clone(), conn.clipboard_enabled() && conn.peer_keyboard_enabled());
                                 }
                             } else if &name == "audio" {
                                 conn.audio = enabled;
@@ -541,7 +545,10 @@ impl Connection {
         conn.reset_resolution();
         ALIVE_CONNS.lock().unwrap().retain(|&c| c != id);
         if let Some(s) = conn.server.upgrade() {
-            s.write().unwrap().remove_connection(&conn.inner);
+            let mut s = s.write().unwrap();
+            s.remove_connection(&conn.inner);
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            try_stop_record_cursor_pos();
         }
         log::info!("#{} connection loop exited", id);
     }
@@ -605,6 +612,8 @@ impl Connection {
                 }
             }
         }
+        #[cfg(target_os = "linux")]
+        clear_remapped_keycode();
         log::info!("Input thread exited");
     }
 
@@ -735,7 +744,7 @@ impl Connection {
         let url = self.server_audit_conn.clone();
         let mut v = v;
         v["id"] = json!(Config::get_id());
-        v["uuid"] = json!(base64::encode(hbb_common::get_uuid()));
+        v["uuid"] = json!(crate::encode64(hbb_common::get_uuid()));
         v["conn_id"] = json!(self.inner.id);
         tokio::spawn(async move {
             allow_err!(Self::post_audit_async(url, v).await);
@@ -765,7 +774,7 @@ impl Connection {
         info["files"] = json!(files);
         let v = json!({
             "id":json!(Config::get_id()),
-            "uuid":json!(base64::encode(hbb_common::get_uuid())),
+            "uuid":json!(crate::encode64(hbb_common::get_uuid())),
             "peer_id":json!(self.lr.my_id),
             "type": r#type as i8,
             "path":path,
@@ -788,7 +797,7 @@ impl Connection {
         }
         let mut v = Value::default();
         v["id"] = json!(Config::get_id());
-        v["uuid"] = json!(base64::encode(hbb_common::get_uuid()));
+        v["uuid"] = json!(crate::encode64(hbb_common::get_uuid()));
         v["typ"] = json!(typ as i8);
         v["from_remote"] = json!(from_remote);
         v["info"] = serde_json::Value::String(info.to_string());
@@ -936,23 +945,28 @@ impl Connection {
         } else if sub_service {
             if let Some(s) = self.server.upgrade() {
                 let mut noperms = Vec::new();
-                if !self.keyboard && !self.show_remote_cursor {
+                if !self.peer_keyboard_enabled() && !self.show_remote_cursor {
                     noperms.push(NAME_CURSOR);
                 }
                 if !self.show_remote_cursor {
                     noperms.push(NAME_POS);
                 }
-                if !self.clipboard_enabled() || !self.keyboard {
+                if !self.clipboard_enabled() || !self.peer_keyboard_enabled() {
                     noperms.push(super::clipboard_service::NAME);
                 }
                 if !self.audio_enabled() {
                     noperms.push(super::audio_service::NAME);
                 }
-                s.write()
-                    .unwrap()
-                    .add_connection(self.inner.clone(), &noperms);
+                let mut s = s.write().unwrap();
+                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                try_start_record_cursor_pos();
+                s.add_connection(self.inner.clone(), &noperms);
             }
         }
+    }
+
+    fn peer_keyboard_enabled(&self) -> bool {
+        self.keyboard && !self.disable_keyboard
     }
 
     fn clipboard_enabled(&self) -> bool {
@@ -1308,7 +1322,7 @@ impl Connection {
                         log::debug!("call_main_service_mouse_input fail:{}", e);
                     }
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                    if self.keyboard {
+                    if self.peer_keyboard_enabled() {
                         if is_left_up(&me) {
                             CLICK_TIME.store(get_time(), Ordering::SeqCst);
                         } else {
@@ -1319,7 +1333,7 @@ impl Connection {
                 }
                 Some(message::Union::KeyEvent(me)) => {
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                    if self.keyboard {
+                    if self.peer_keyboard_enabled() {
                         if is_enter(&me) {
                             CLICK_TIME.store(get_time(), Ordering::SeqCst);
                         }
@@ -1738,6 +1752,7 @@ impl Connection {
                 self.lock_after_session_end = q == BoolOption::Yes;
             }
         }
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if let Ok(q) = o.show_remote_cursor.enum_value() {
             if q != BoolOption::NotSet {
                 self.show_remote_cursor = q == BoolOption::Yes;
@@ -1745,7 +1760,7 @@ impl Connection {
                     s.write().unwrap().subscribe(
                         NAME_CURSOR,
                         self.inner.clone(),
-                        self.keyboard || self.show_remote_cursor,
+                        self.peer_keyboard_enabled() || self.show_remote_cursor,
                     );
                     s.write().unwrap().subscribe(
                         NAME_POS,
@@ -1783,7 +1798,24 @@ impl Connection {
                     s.write().unwrap().subscribe(
                         super::clipboard_service::NAME,
                         self.inner.clone(),
-                        self.clipboard_enabled() && self.keyboard,
+                        self.clipboard_enabled() && self.peer_keyboard_enabled(),
+                    );
+                }
+            }
+        }
+        if let Ok(q) = o.disable_keyboard.enum_value() {
+            if q != BoolOption::NotSet {
+                self.disable_keyboard = q == BoolOption::Yes;
+                if let Some(s) = self.server.upgrade() {
+                    s.write().unwrap().subscribe(
+                        super::clipboard_service::NAME,
+                        self.inner.clone(),
+                        self.clipboard_enabled() && self.peer_keyboard_enabled(),
+                    );
+                    s.write().unwrap().subscribe(
+                        NAME_CURSOR,
+                        self.inner.clone(),
+                        self.peer_keyboard_enabled() || self.show_remote_cursor,
                     );
                 }
             }
@@ -2008,10 +2040,12 @@ async fn start_ipc(
             for _ in 0..10 {
                 #[cfg(not(target_os = "linux"))]
                 {
+                    log::debug!("Start cm");
                     res = crate::platform::run_as_user(args.clone());
                 }
                 #[cfg(target_os = "linux")]
                 {
+                    log::debug!("Start cm");
                     res = crate::platform::run_as_user(args.clone(), None);
                 }
                 if res.is_ok() {
@@ -2027,12 +2061,13 @@ async fn start_ipc(
             run_done = false;
         }
         if !run_done {
+            log::debug!("Start cm");
             super::CHILD_PROCESS
                 .lock()
                 .unwrap()
                 .push(crate::run_me(args)?);
         }
-        for _ in 0..10 {
+        for _ in 0..20 {
             sleep(0.3).await;
             if let Ok(s) = crate::ipc::connect(1000, "_cm").await {
                 stream = Some(s);

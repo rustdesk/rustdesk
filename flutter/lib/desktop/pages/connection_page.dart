@@ -151,10 +151,7 @@ class _ConnectionPageState extends State<ConnectionPage>
   /// Connects to the selected peer.
   void onConnect({bool isFileTransfer = false}) {
     var id = _idController.id;
-    var forceRelay = id.endsWith(r'/r');
-    if (forceRelay) id = id.substring(0, id.length - 2);
-    connect(context, id,
-        isFileTransfer: isFileTransfer, forceRelay: forceRelay);
+    connect(context, id, isFileTransfer: isFileTransfer);
   }
 
   /// UI for the remote ID TextField.
@@ -164,9 +161,8 @@ class _ConnectionPageState extends State<ConnectionPage>
       width: 320 + 20 * 2,
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 22),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.background,
-        borderRadius: const BorderRadius.all(Radius.circular(13)),
-      ),
+          borderRadius: const BorderRadius.all(Radius.circular(13)),
+          border: Border.all(color: Theme.of(context).colorScheme.background)),
       child: Ink(
         child: Column(
           children: [
@@ -197,32 +193,19 @@ class _ConnectionPageState extends State<ConnectionPage>
                       style: const TextStyle(
                         fontFamily: 'WorkSans',
                         fontSize: 22,
-                        height: 1.25,
+                        height: 1.4,
                       ),
                       maxLines: 1,
                       cursorColor:
                           Theme.of(context).textTheme.titleLarge?.color,
                       decoration: InputDecoration(
+                          filled: false,
                           counterText: '',
                           hintText: _idInputFocused.value
                               ? null
                               : translate('Enter Remote ID'),
-                          border: OutlineInputBorder(
-                              borderRadius: BorderRadius.zero,
-                              borderSide: BorderSide(
-                                  color: MyTheme.color(context).border!)),
-                          enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.zero,
-                              borderSide: BorderSide(
-                                  color: MyTheme.color(context).border!)),
-                          focusedBorder: const OutlineInputBorder(
-                            borderRadius: BorderRadius.zero,
-                            borderSide:
-                                BorderSide(color: MyTheme.button, width: 3),
-                          ),
-                          isDense: true,
                           contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 12)),
+                              horizontal: 15, vertical: 13)),
                       controller: _idController,
                       inputFormatters: [IDTextInputFormatter()],
                       onSubmitted: (s) {

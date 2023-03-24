@@ -44,8 +44,7 @@ pub use helper::*;
 use scrap::{
     codec::{Decoder, DecoderCfg},
     record::{Recorder, RecorderContext},
-    VpxDecoderConfig, VpxVideoCodecId,
-    ImageFormat,
+    ImageFormat, VpxDecoderConfig, VpxVideoCodecId,
 };
 
 use crate::{
@@ -709,6 +708,7 @@ pub struct AudioHandler {
     audio_stream: Option<Box<dyn StreamTrait>>,
     channels: u16,
     latency_controller: Arc<Mutex<LatencyController>>,
+    ignore_count: i32,
 }
 
 impl AudioHandler {
@@ -811,7 +811,11 @@ impl AudioHandler {
                 .check_audio(frame.timestamp)
                 .not()
             {
-                log::debug!("audio frame {} is ignored", frame.timestamp);
+                self.ignore_count += 1;
+                if self.ignore_count == 100 {
+                    self.ignore_count = 0;
+                    log::debug!("100 audio frames are ignored");
+                }
                 return;
             }
         }
@@ -944,12 +948,11 @@ impl VideoHandler {
         }
         match &vf.union {
             Some(frame) => {
-                // windows && flutter_texture_render, fmt is ImageFormat::ABGR
-                #[cfg(all(target_os = "windows", feature = "flutter_texture_render"))]
-                let fmt = ImageFormat::ABGR;
-                #[cfg(not(all(target_os = "windows", feature = "flutter_texture_render")))]
-                let fmt = ImageFormat::ARGB;
-                let res = self.decoder.handle_video_frame(frame, fmt, &mut self.rgb);
+                let res = self.decoder.handle_video_frame(
+                    frame,
+                    (ImageFormat::ARGB, crate::DST_STRIDE_RGBA),
+                    &mut self.rgb,
+                );
                 if self.record {
                     self.recorder
                         .lock()
@@ -1230,6 +1233,26 @@ impl LoginConfigHandler {
             option.block_input = BoolOption::No.into();
         } else if name == "show-quality-monitor" {
             config.show_quality_monitor.v = !config.show_quality_monitor.v;
+        } else if name == "allow_swap_key" {
+            config.allow_swap_key.v = !config.allow_swap_key.v;
+        } else if name == "view-only" {
+            config.view_only.v = !config.view_only.v;
+            let f = |b: bool| {
+                if b {
+                    BoolOption::Yes.into()
+                } else {
+                    BoolOption::No.into()
+                }
+            };
+            if config.view_only.v {
+                option.disable_keyboard = f(true);
+                option.disable_clipboard = f(true);
+                option.show_remote_cursor = f(true);
+            } else {
+                option.disable_keyboard = f(false);
+                option.disable_clipboard = f(self.get_toggle_option("disable-clipboard"));
+                option.show_remote_cursor = f(self.get_toggle_option("show-remote-cursor"));
+            }
         } else {
             let is_set = self
                 .options
@@ -1237,7 +1260,12 @@ impl LoginConfigHandler {
                 .map(|o| !o.is_empty())
                 .unwrap_or(false);
             if is_set {
-                self.config.options.remove(&name);
+                if name == "zoom-cursor" {
+                    self.config.options.insert(name, "".to_owned());
+                } else {
+                    // Notice: When PeerConfig loads, the default value is taken when the option key does not exist.
+                    self.config.options.remove(&name);
+                }
             } else {
                 self.config.options.insert(name, "Y".to_owned());
             }
@@ -1291,7 +1319,12 @@ impl LoginConfigHandler {
         if let Some(custom_fps) = self.options.get("custom-fps") {
             msg.custom_fps = custom_fps.parse().unwrap_or(30);
         }
-        if self.get_toggle_option("show-remote-cursor") {
+        let view_only = self.get_toggle_option("view-only");
+        if view_only {
+            msg.disable_keyboard = BoolOption::Yes.into();
+            n += 1;
+        }
+        if view_only || self.get_toggle_option("show-remote-cursor") {
             msg.show_remote_cursor = BoolOption::Yes.into();
             n += 1;
         }
@@ -1307,7 +1340,7 @@ impl LoginConfigHandler {
             msg.enable_file_transfer = BoolOption::Yes.into();
             n += 1;
         }
-        if self.get_toggle_option("disable-clipboard") {
+        if view_only || self.get_toggle_option("disable-clipboard") {
             msg.disable_clipboard = BoolOption::Yes.into();
             n += 1;
         }
@@ -1383,6 +1416,10 @@ impl LoginConfigHandler {
             self.config.disable_clipboard.v
         } else if name == "show-quality-monitor" {
             self.config.show_quality_monitor.v
+        } else if name == "allow_swap_key" {
+            self.config.allow_swap_key.v
+        } else if name == "view-only" {
+            self.config.view_only.v
         } else {
             !self.get_option(name).is_empty()
         }
@@ -1807,6 +1844,7 @@ pub fn send_mouse(
     if check_scroll_on_mac(mask, x, y) {
         mouse_event.modifiers.push(ControlKey::Scroll.into());
     }
+    interface.swap_modifier_mouse(&mut mouse_event);
     msg_out.set_mouse_event(mouse_event);
     interface.send(Data::Message(msg_out));
 }
@@ -2033,6 +2071,7 @@ pub trait Interface: Send + Clone + 'static + Sized {
     fn is_force_relay(&self) -> bool {
         self.get_login_config_handler().read().unwrap().force_relay
     }
+    fn swap_modifier_mouse(&self, _msg: &mut hbb_common::protos::message::MouseEvent) {}
 }
 
 /// Data used by the client interface.
@@ -2229,7 +2268,7 @@ fn get_pk(pk: &[u8]) -> Option<[u8; 32]> {
 
 #[inline]
 fn get_rs_pk(str_base64: &str) -> Option<sign::PublicKey> {
-    if let Ok(pk) = base64::decode(str_base64) {
+    if let Ok(pk) = crate::decode64(str_base64) {
         get_pk(&pk).map(|x| sign::PublicKey(x))
     } else {
         None

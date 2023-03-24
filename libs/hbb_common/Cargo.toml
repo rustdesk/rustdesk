@@ -7,16 +7,17 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+flexi_logger = { version = "0.25", features = ["async"] }
 protobuf = { version = "3.1", features = ["with-bytes"] }
 tokio = { version = "1.20", features = ["full"] }
 tokio-util = { version = "0.7", features = ["full"] }
 futures = "0.3"
 bytes = { version = "1.2", features = ["serde"] }
 log = "0.4"
-env_logger = "0.9"
+env_logger = "0.10"
 socket2 = { version = "0.3", features = ["reuseport"] }
 zstd = "0.9"
-quinn = {version = "0.8", optional = true }
+quinn = {version = "0.9", optional = true }
 anyhow = "1.0"
 futures-util = "0.3"
 directories-next = "2.0"
@@ -33,11 +34,11 @@ tokio-socks = { git = "https://github.com/open-trade/tokio-socks" }
 chrono = "0.4"
 backtrace = "0.3"
 libc = "0.2"
-sysinfo = "0.24"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 mac_address = "1.1"
 machine-uid = "0.2"
+sysinfo = "0.28"
 
 [features]
 quic = []
@@ -53,5 +54,5 @@ winapi = { version = "0.3", features = ["winuser"] }
 osascript = "0.3.0"
 
 [dev-dependencies]
-toml = "0.5"
+toml = "0.7"
 serde_json = "1.0"

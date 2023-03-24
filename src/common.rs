@@ -39,6 +39,13 @@ pub const CLIPBOARD_INTERVAL: u64 = 333;
 
 pub const SYNC_PEER_INFO_DISPLAYS: i32 = 1;
 
+#[cfg(all(target_os = "macos", feature = "flutter_texture_render"))]
+// https://developer.apple.com/forums/thread/712709
+// Memory alignment should be multiple of 64.
+pub const DST_STRIDE_RGBA: usize = 64;
+#[cfg(not(all(target_os = "macos", feature = "flutter_texture_render")))]
+pub const DST_STRIDE_RGBA: usize = 1;
+
 // the executable name of the portable version
 pub const PORTABLE_APPNAME_RUNTIME_ENV_KEY: &str = "RUSTDESK_APPNAME";
 
@@ -779,4 +786,35 @@ pub fn handle_url_scheme(url: String) {
         log::debug!("Send the url to the existing flutter process failed, {}. Let's open a new program to handle this.", err);
         let _ = crate::run_me(vec![url]);
     }
+}
+
+#[inline]
+pub fn encode64<T: AsRef<[u8]>>(input: T) -> String {
+    #[allow(deprecated)]
+    base64::encode(input)
+}
+
+#[inline]
+pub fn decode64<T: AsRef<[u8]>>(input: T) -> Result<Vec<u8>, base64::DecodeError> {
+    #[allow(deprecated)]
+    base64::decode(input)
+}
+
+pub async fn get_key(sync: bool) -> String {
+    let mut key = if sync {
+        Config::get_option("key")
+    } else {
+        let mut options = crate::ipc::get_options_async().await;
+        options.remove("key").unwrap_or_default()
+    };
+    if key.is_empty() {
+        #[cfg(windows)]
+        if let Some(lic) = crate::platform::windows::get_license() {
+            return lic.key;
+        }
+    }
+    if key.is_empty() && !option_env!("RENDEZVOUS_SERVER").unwrap_or("").is_empty() {
+        key = config::RS_PUB_KEY.to_owned();
+    }
+    key
 }

@@ -954,6 +954,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                                 digest.file_num,
                                                 read_path,
                                                 true,
+                                                digest.is_identical,
                                             );
                                         }
                                     }
@@ -997,6 +998,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                                             digest.file_num,
                                                             write_path,
                                                             false,
+                                                            digest.is_identical,
                                                         );
                                                     }
                                                 }
@@ -1055,25 +1057,26 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                     Some(misc::Union::PermissionInfo(p)) => {
                         log::info!("Change permission {:?} -> {}", p.permission, p.enabled);
-                        match p.permission.enum_value_or_default() {
-                            Permission::Keyboard => {
+                        // https://github.com/rustdesk/rustdesk/issues/3703#issuecomment-1474734754
+                        match p.permission.enum_value() {
+                            Ok(Permission::Keyboard) => {
                                 #[cfg(feature = "flutter")]
                                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
                                 crate::flutter::update_text_clipboard_required();
                                 *self.handler.server_keyboard_enabled.write().unwrap() = p.enabled;
                                 self.handler.set_permission("keyboard", p.enabled);
                             }
-                            Permission::Clipboard => {
+                            Ok(Permission::Clipboard) => {
                                 #[cfg(feature = "flutter")]
                                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
                                 crate::flutter::update_text_clipboard_required();
                                 *self.handler.server_clipboard_enabled.write().unwrap() = p.enabled;
                                 self.handler.set_permission("clipboard", p.enabled);
                             }
-                            Permission::Audio => {
+                            Ok(Permission::Audio) => {
                                 self.handler.set_permission("audio", p.enabled);
                             }
-                            Permission::File => {
+                            Ok(Permission::File) => {
                                 *self.handler.server_file_transfer_enabled.write().unwrap() =
                                     p.enabled;
                                 if !p.enabled && self.handler.is_file_transfer() {
@@ -1082,12 +1085,13 @@ impl<T: InvokeUiSession> Remote<T> {
                                 self.check_clipboard_file_context();
                                 self.handler.set_permission("file", p.enabled);
                             }
-                            Permission::Restart => {
+                            Ok(Permission::Restart) => {
                                 self.handler.set_permission("restart", p.enabled);
                             }
-                            Permission::Recording => {
+                            Ok(Permission::Recording) => {
                                 self.handler.set_permission("recording", p.enabled);
                             }
+                            _ => {}
                         }
                     }
                     Some(misc::Union::SwitchDisplay(s)) => {

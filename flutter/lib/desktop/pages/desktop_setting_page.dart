@@ -19,7 +19,7 @@ import 'package:flutter_hbb/desktop/widgets/scroll_wrapper.dart';
 import '../../common/widgets/dialog.dart';
 import '../../common/widgets/login.dart';
 
-const double _kTabWidth = 235;
+const double _kTabWidth = 200;
 const double _kTabHeight = 42;
 const double _kCardFixedWidth = 540;
 const double _kCardLeftMargin = 15;
@@ -120,7 +120,7 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
               ],
             ),
           ),
-          const VerticalDivider(thickness: 1, width: 1),
+          const VerticalDivider(width: 1),
           Expanded(
             child: Container(
               color: Theme.of(context).scaffoldBackgroundColor,
@@ -381,8 +381,13 @@ class _GeneralState extends State<_General> {
             ),
             ElevatedButton(
                     onPressed: () async {
+                      String? initialDirectory;
+                      if (await Directory.fromUri(Uri.directory(dir))
+                          .exists()) {
+                        initialDirectory = dir;
+                      }
                       String? selectedDirectory = await FilePicker.platform
-                          .getDirectoryPath(initialDirectory: dir);
+                          .getDirectoryPath(initialDirectory: initialDirectory);
                       if (selectedDirectory != null) {
                         await bind.mainSetOption(
                             key: 'video-save-directory',
@@ -538,6 +543,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
               translate('Screen Share'),
               translate('Deny remote access'),
             ],
+            enabled: enabled,
             initialKey: initialKey,
             onChanged: (mode) async {
               String modeValue;
@@ -667,6 +673,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
 
           return _Card(title: 'Password', children: [
             _ComboBox(
+              enabled: !locked,
               keys: modeKeys,
               values: modeValues,
               initialKey: modeInitialKey,
@@ -762,7 +769,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
               'Port',
               Row(children: [
                 SizedBox(
-                  width: 80,
+                  width: 95,
                   child: TextField(
                     controller: controller,
                     enabled: enabled && !locked,
@@ -771,13 +778,10 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                       FilteringTextInputFormatter.allow(RegExp(
                           r'^([0-9]|[1-9]\d|[1-9]\d{2}|[1-9]\d{3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$')),
                     ],
-                    textAlign: TextAlign.end,
                     decoration: const InputDecoration(
                       hintText: '21118',
-                      border: OutlineInputBorder(),
                       contentPadding:
-                          EdgeInsets.only(bottom: 10, top: 10, right: 10),
-                      isCollapsed: true,
+                          EdgeInsets.symmetric(vertical: 12, horizontal: 12),
                     ),
                   ).marginOnly(right: 15),
                 ),
@@ -1311,6 +1315,8 @@ class _DisplayState extends State<_Display> {
 
   Widget other(BuildContext context) {
     return _Card(title: 'Other Default Options', children: [
+      otherRow('View Mode', 'view_only'),
+      otherRow('show_monitors_tip', 'show_monitors_toolbar'),
       otherRow('Show remote cursor', 'show_remote_cursor'),
       otherRow('Zoom cursor', 'zoom-cursor'),
       otherRow('Show quality monitor', 'show_quality_monitor'),
@@ -1695,9 +1701,6 @@ _LabeledTextField(
             enabled: enabled,
             obscureText: secure,
             decoration: InputDecoration(
-                isDense: true,
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.fromLTRB(14, 15, 14, 15),
                 errorText: errorText.isNotEmpty ? errorText : null),
             style: TextStyle(
               color: _disabledTextColor(context, enabled),
@@ -1722,7 +1725,6 @@ class _ComboBox extends StatelessWidget {
     required this.values,
     required this.initialKey,
     required this.onChanged,
-    // ignore: unused_element
     this.enabled = true,
   }) : super(key: key);
 
@@ -1735,19 +1737,29 @@ class _ComboBox extends StatelessWidget {
     var ref = values[index].obs;
     current = keys[index];
     return Container(
-      decoration: BoxDecoration(border: Border.all(color: MyTheme.border)),
-      height: 30,
+      decoration: BoxDecoration(
+        border: Border.all(
+          color: enabled
+              ? MyTheme.color(context).border2 ?? MyTheme.border
+              : MyTheme.border,
+        ),
+        borderRadius:
+            BorderRadius.circular(8), //border raiuds of dropdown button
+      ),
+      height: 42, // should be the height of a TextField
       child: Obx(() => DropdownButton<String>(
             isExpanded: true,
             value: ref.value,
             elevation: 16,
-            underline: Container(
-              height: 25,
-            ),
+            underline: Container(),
+            style: TextStyle(
+                color: enabled
+                    ? Theme.of(context).textTheme.titleMedium?.color
+                    : _disabledTextColor(context, enabled)),
             icon: const Icon(
               Icons.expand_more_sharp,
               size: 20,
-            ),
+            ).marginOnly(right: 15),
             onChanged: enabled
                 ? (String? newValue) {
                     if (newValue != null && newValue != ref.value) {
@@ -1764,11 +1776,11 @@ class _ComboBox extends StatelessWidget {
                   value,
                   style: const TextStyle(fontSize: _kContentFontSize),
                   overflow: TextOverflow.ellipsis,
-                ).marginOnly(left: 5),
+                ).marginOnly(left: 15),
               );
             }).toList(),
           )),
-    );
+    ).marginOnly(bottom: 5);
   }
 }
 
@@ -1845,7 +1857,6 @@ void changeSocks5Proxy() async {
                 Expanded(
                   child: TextField(
                     decoration: InputDecoration(
-                        border: const OutlineInputBorder(),
                         errorText: proxyMsg.isNotEmpty ? proxyMsg : null),
                     controller: proxyController,
                     autofocus: true,
@@ -1863,9 +1874,6 @@ void changeSocks5Proxy() async {
                     ).marginOnly(right: 10)),
                 Expanded(
                   child: TextField(
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                    ),
                     controller: userController,
                   ),
                 ),
@@ -1883,7 +1891,6 @@ void changeSocks5Proxy() async {
                   child: Obx(() => TextField(
                         obscureText: obscure.value,
                         decoration: InputDecoration(
-                            border: const OutlineInputBorder(),
                             suffixIcon: IconButton(
                                 onPressed: () => obscure.value = !obscure.value,
                                 icon: Icon(obscure.value

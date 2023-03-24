@@ -30,7 +30,7 @@ typedef F4Dart = int Function(Pointer<Utf8>);
 typedef F5 = Void Function(Pointer<Utf8>);
 typedef F5Dart = void Function(Pointer<Utf8>);
 typedef HandleEvent = Future<void> Function(Map<String, dynamic> evt);
-// pub fn session_register_texture(id: *const char, ptr: usize) 
+// pub fn session_register_texture(id: *const char, ptr: usize)
 typedef F6 = Void Function(Pointer<Utf8>, Uint64);
 typedef F6Dart = void Function(Pointer<Utf8>, int);
 
@@ -56,7 +56,6 @@ class PlatformFFI {
   F4Dart? _session_get_rgba_size;
   F5Dart? _session_next_rgba;
   F6Dart? _session_register_texture;
-  
 
   static get localeName => Platform.localeName;
 
@@ -162,7 +161,8 @@ class PlatformFFI {
           dylib.lookupFunction<F4, F4Dart>("session_get_rgba_size");
       _session_next_rgba =
           dylib.lookupFunction<F5, F5Dart>("session_next_rgba");
-      _session_register_texture = dylib.lookupFunction<F6, F6Dart>("session_register_texture");
+      _session_register_texture =
+          dylib.lookupFunction<F6, F6Dart>("session_register_texture");
       try {
         // SYSTEM user failed
         _dir = (await getApplicationDocumentsDirectory()).path;
@@ -234,6 +234,9 @@ class PlatformFFI {
         debugPrint(
             '_appType:$_appType,info1-id:$id,info2-name:$name,dir:$_dir');
       }
+      if (desktopType == DesktopType.cm) {
+        await _ffiBind.cmStartListenIpcThread();
+      }
       await _ffiBind.mainDeviceId(id: id);
       await _ffiBind.mainDeviceName(name: name);
       await _ffiBind.mainSetHomeDir(home: _homeDir);
@@ -300,5 +303,9 @@ class PlatformFFI {
   invokeMethod(String method, [dynamic arguments]) async {
     if (!isAndroid) return Future<bool>(() => false);
     return await _toAndroidChannel.invokeMethod(method, arguments);
+  }
+
+  void syncAndroidServiceAppDirConfigPath() {
+    invokeMethod(AndroidChannel.kSyncAppDirConfigPath, _dir);
   }
 }

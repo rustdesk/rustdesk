@@ -301,6 +301,7 @@ message FileTransferDigest {
   uint64 last_modified = 3;
   uint64 file_size = 4;
   bool is_upload = 5;
+  bool is_identical = 6;
 }
 
 message FileTransferBlock {
@@ -486,6 +487,7 @@ message OptionMessage {
   BoolOption enable_file_transfer = 9;
   VideoCodecState video_codec_state = 10;
   int32 custom_fps = 11;
+  BoolOption disable_keyboard = 12;
 }
 
 message TestDelay {

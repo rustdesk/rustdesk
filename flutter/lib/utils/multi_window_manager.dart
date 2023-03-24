@@ -43,12 +43,14 @@ class RustDeskMultiWindowManager {
 
   Future<dynamic> newRemoteDesktop(
     String remoteId, {
+    String? password,
     String? switch_uuid,
     bool? forceRelay,
   }) async {
     var params = {
       "type": WindowType.RemoteDesktop.index,
       "id": remoteId,
+      "password": password,
       "forceRelay": forceRelay
     };
     if (switch_uuid != null) {

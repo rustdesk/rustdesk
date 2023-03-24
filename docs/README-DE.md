@@ -5,21 +5,21 @@
   <a href="#auf-docker-kompilieren">Docker</a> •
   <a href="#dateistruktur">Dateistruktur</a> •
   <a href="#screenshots">Screenshots</a><br>
-  [<a href="../README.md">English</a>] | [<a href="README-UA.md">Українська</a>] | [<a href="README-CS.md">česky</a>] | [<a href="README-ZH.md">中文</a>] | [<a href="README-HU.md">Magyar</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FA.md">فارسی</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-ID.md">Indonesian</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PTBR.md">Português (Brasil)</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">한국어</a>] | [<a href="README-AR.md">العربي</a>] | [<a href="README-VN.md">Tiếng Việt</a>] | [<a href="README-DA.md">Dansk</a>]<br>
-  <b>Wir brauchen deine Hilfe, um dieses README, die <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">RustDesk-Benutzeroberfläche</a> und die <a href="https://github.com/rustdesk/doc.rustdesk.com">Dokumentation</a> in deine Muttersprache zu übersetzen.</b>
+  [<a href="../README.md">English</a>] | [<a href="README-UA.md">Українська</a>] | [<a href="README-CS.md">česky</a>] | [<a href="README-ZH.md">中文</a>] | [<a href="README-HU.md">Magyar</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FA.md">فارسی</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-ID.md">Indonesian</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PTBR.md">Português (Brasil)</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">한국어</a>] | [<a href="README-AR.md">العربي</a>] | [<a href="README-VN.md">Tiếng Việt</a>] | [<a href="README-DA.md">Dansk</a>] | [<a href="README-GR.md">Ελληνικά</a>]<br>
+  <b>Wir brauchen Ihre Hilfe, um dieses README, die <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">RustDesk-Benutzeroberfläche</a> und die <a href="https://github.com/rustdesk/doc.rustdesk.com">Dokumentation</a> in Ihre Muttersprache zu übersetzen.</b>
 </p>
 
-Rede mit uns auf: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
+Reden Sie mit uns auf: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-RustDesk ist eine in Rust geschriebene Remote-Desktop-Software, die out of the box ohne besondere Konfiguration funktioniert. Du hast die volle Kontrolle über deine Daten und musst dir keine Sorgen um die Sicherheit machen. Du kannst unseren Rendezvous/Relay-Server nutzen, [einen eigenen Server aufsetzen](https://rustdesk.com/server) oder [einen eigenen Server programmieren](https://github.com/rustdesk/rustdesk-server-demo).
+RustDesk ist eine in Rust geschriebene Remote-Desktop-Software, die out of the box ohne besondere Konfiguration funktioniert. Sie haben die volle Kontrolle über Ihre Daten und müssen sich keine Sorgen um die Sicherheit machen. Sie können unseren Rendezvous/Relay-Server nutzen, [einen eigenen Server aufsetzen](https://rustdesk.com/server) oder [einen eigenen Server programmieren](https://github.com/rustdesk/rustdesk-server-demo).
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
-RustDesk heißt jegliche Mitarbeit willkommen. Schau dir [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) an, wenn du Unterstützung beim Start brauchst.
+RustDesk heißt jegliche Mitarbeit willkommen. Schauen Sie sich [CONTRIBUTING-DE.md](CONTRIBUTING-DE.md) an, wenn Sie Unterstützung beim Start brauchen.
 
-[**Wie arbeitet RustDesk?**](https://github.com/rustdesk/rustdesk/wiki/How-does-RustDesk-work%3F)
+[**FAQ**](https://github.com/rustdesk/rustdesk/wiki/FAQ)
 
 [**Programm herunterladen**](https://github.com/rustdesk/rustdesk/releases)
 
@@ -31,21 +31,29 @@ RustDesk heißt jegliche Mitarbeit willkommen. Schau dir [`docs/CONTRIBUTING.md`
 
 ## Freie öffentliche Server
 
-Nachfolgend sind die Server gelistet, die du kostenlos nutzen kannst. Es kann sein, dass sich diese Liste immer mal wieder ändert. Falls du nicht in der Nähe einer dieser Server bist, kann es sein, dass deine Verbindung langsam sein wird.
+Nachfolgend sind die Server gelistet, die Sie kostenlos nutzen können. Es kann sein, dass sich diese Liste immer mal wieder ändert. Falls Sie nicht in der Nähe einer dieser Server sind, kann es sein, dass Ihre Verbindung langsam sein wird.
 | Standort | Anbieter | Spezifikation |
 | --------- | ------------- | ------------------ |
-| Südkorea (Seoul) | AWS lightsail | 1 vCPU / 0,5 GB RAM |
-| Deutschland | Hetzner | 2 vCPU / 4 GB RAM |
-| Deutschland | Codext | 4 vCPU / 8 GB RAM |
-| Finnland (Helsinki) | 0x101 Cyber Security | 4 vCPU / 8 GB RAM |
-| USA (Ashburn) | 0x101 Cyber Security | 4 vCPU / 8 GB RAM |
-| Ukraine (Kiew) | dc.volia (2VM) | 2 vCPU / 4 GB RAM |
+| Südkorea (Seoul) | [AWS lightsail](https://aws.amazon.com/de/) | 1 vCPU / 0,5 GB RAM |
+| Deutschland | [Hetzner](https://www.hetzner.com/de/) | 2 vCPU / 4 GB RAM |
+| Deutschland | [Codext](https://codext.de/) | 4 vCPU / 8 GB RAM |
+| Finnland (Helsinki) | [Netlock](https://netlockendpoint.com/de/index.html) | 4 vCPU / 8 GB RAM |
+| USA (Ashburn) | [Netlock](https://netlockendpoint.com/de/index.html) | 4 vCPU / 8 GB RAM |
+| Ukraine (Kiew) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4 GB RAM |
+
+## Dev-Container
+
+[![In Dev-Containern öffnen](https://img.shields.io/static/v1?label=Dev%20Container&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/rustdesk/rustdesk)
+
+Wenn Sie VS Code und Docker bereits installiert haben, können Sie auf das Abzeichen oben klicken, um loszulegen. Wenn Sie darauf klicken, wird VS Code automatisch die Dev-Container-Erweiterung installieren, den Quellcode in ein Container-Volume klonen und einen Dev-Container für die Verwendung aufsetzen.
+
+Weitere Informationen finden Sie in [DEVCONTAINER-DE.md](DEVCONTAINER-DE.md).
 
 ## Abhängigkeiten
 
 Desktop-Versionen verwenden [Sciter](https://sciter.com/) oder Flutter für die GUI, dieses Tutorial ist nur für Sciter.
 
-Bitte lade die dynamische Bibliothek Sciter selbst herunter.
+Bitte laden Sie die dynamische Bibliothek Sciter selbst herunter.
 
 [Windows](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll) |
 [Linux](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so) |
@@ -53,14 +61,14 @@ Bitte lade die dynamische Bibliothek Sciter selbst herunter.
 
 ## Grobe Schritte zum Kompilieren
 
-- Bereite deine Rust-Entwicklungsumgebung und C++-Build-Umgebung vor
+- Bereiten Sie Ihre Rust-Entwicklungsumgebung und C++-Build-Umgebung vor
 
-- Installiere [vcpkg](https://github.com/microsoft/vcpkg) und füge die Systemumgebungsvariable `VCPKG_ROOT` hinzu
+- Installieren Sie [vcpkg](https://github.com/microsoft/vcpkg) und fügen Sie die Systemumgebungsvariable `VCPKG_ROOT` hinzu
 
   - Windows: `vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static`
   - Linux/macOS: `vcpkg install libvpx libyuv opus`
 
-- Nutze `cargo run`
+- Nutzen Sie `cargo run`
 
 ## [Erstellen](https://rustdesk.com/docs/de/dev/build/)
 
@@ -159,7 +167,7 @@ method return time=1662544486.931020 sender=:1.54 -> destination=:1.139 serial=2
 
 ## Auf Docker kompilieren
 
-Beginne damit, das Repository zu klonen und den Docker-Container zu bauen:
+Beginnen Sie damit, das Repository zu klonen und den Docker-Container zu bauen:
 
 ```sh
 git clone https://github.com/rustdesk/rustdesk
@@ -167,25 +175,25 @@ cd rustdesk
 docker build -t "rustdesk-builder" .
 ```
 
-Führe jedes Mal, wenn du das Programm kompilieren musst, folgenden Befehl aus:
+Führen Sie jedes Mal, wenn Sie das Programm kompilieren müssen, folgenden Befehl aus:
 
 ```sh
 docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
 ```
 
-Bedenke, dass das erste Kompilieren länger dauern kann, bis die Abhängigkeiten zwischengespeichert sind. Nachfolgende Kompiliervorgänge sind schneller. Wenn du verschiedene Argumente für den Kompilierbefehl angeben musst, kannst du dies am Ende des Befehls an der Position `<OPTIONAL-ARGS>` tun. Wenn du zum Beispiel eine optimierte Releaseversion kompilieren willst, kannst du `--release` am Ende des Befehls anhängen. Das daraus entstehende Programm findest du im Zielordner auf deinem System. Du kannst es mit folgendem Befehl ausführen:
+Bedenken Sie, dass das erste Kompilieren länger dauern kann, bis die Abhängigkeiten zwischengespeichert sind. Nachfolgende Kompiliervorgänge sind schneller. Wenn Sie verschiedene Argumente für den Kompilierbefehl angeben müssen, können Sie dies am Ende des Befehls an der Position `<OPTIONAL-ARGS>` tun. Wenn Sie zum Beispiel eine optimierte Releaseversion kompilieren wollen, können Sie `--release` am Ende des Befehls anhängen. Das daraus entstehende Programm finden Sie im Zielordner auf Ihrem System. Sie können es mit folgendem Befehl ausführen:
 
 ```sh
 target/debug/rustdesk
 ```
 
-Oder, wenn du eine Releaseversion benutzt:
+Oder, wenn Sie eine Releaseversion benutzen:
 
 ```sh
 target/release/rustdesk
 ```
 
-Bitte stelle sicher, dass du diese Befehle im Stammverzeichnis des RustDesk-Repositorys nutzt. Ansonsten kann es passieren, dass das Programm die Ressourcen nicht finden kann. Bitte bedenke auch, dass andere Cargo-Unterbefehle wie `install` oder `run` aktuell noch nicht unterstützt werden, da sie das Programm innerhalb des Containers starten oder installieren würden, anstatt auf deinem eigentlichen System.
+Bitte stellen Sie sicher, dass Sie diese Befehle im Stammverzeichnis des RustDesk-Repositorys nutzen. Ansonsten kann es passieren, dass das Programm die Ressourcen nicht finden kann. Bitte bedenken Sie auch, dass andere Cargo-Unterbefehle wie `install` oder `run` aktuell noch nicht unterstützt werden, da sie das Programm innerhalb des Containers starten oder installieren würden, anstatt auf Ihrem eigentlichen System.
 
 ## Dateistruktur
 

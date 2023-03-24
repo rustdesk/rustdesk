@@ -43,7 +43,7 @@ class ChatModel with ChangeNotifier {
 
   final ChatUser me = ChatUser(
     id: "",
-    firstName: "Me",
+    firstName: translate("Me"),
   );
 
   late final Map<int, MessageBody> _messages = {}..[clientModeID] =

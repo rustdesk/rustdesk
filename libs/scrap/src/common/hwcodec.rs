@@ -236,7 +236,13 @@ pub struct HwDecoderImage<'a> {
 }
 
 impl HwDecoderImage<'_> {
-    pub fn to_fmt(&self, fmt: ImageFormat, fmt_data: &mut Vec<u8>, i420: &mut Vec<u8>) -> ResultType<()> {
+    // take dst_stride into account when you convert
+    pub fn to_fmt(
+        &self,
+        (fmt, dst_stride): (ImageFormat, usize),
+        fmt_data: &mut Vec<u8>,
+        i420: &mut Vec<u8>,
+    ) -> ResultType<()> {
         let frame = self.frame;
         match frame.pixfmt {
             AVPixelFormat::AV_PIX_FMT_NV12 => hw::hw_nv12_to(
@@ -270,11 +276,11 @@ impl HwDecoderImage<'_> {
     }
 
     pub fn bgra(&self, bgra: &mut Vec<u8>, i420: &mut Vec<u8>) -> ResultType<()> {
-        self.to_fmt(ImageFormat::ARGB, bgra, i420)
+        self.to_fmt((ImageFormat::ARGB, 1), bgra, i420)
     }
 
     pub fn rgba(&self, rgba: &mut Vec<u8>, i420: &mut Vec<u8>) -> ResultType<()> {
-        self.to_fmt(ImageFormat::ABGR, rgba, i420)
+        self.to_fmt((ImageFormat::ABGR, 1), rgba, i420)
     }
 }
 

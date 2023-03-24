@@ -81,8 +81,10 @@ fn get_display_server_of_session(session: &str) -> String {
             display_server = sestype;
         }
     }
-    // If the session is not a tty, then just return the type as usual
-    display_server
+    if display_server == "" {
+        display_server = "x11".to_owned();
+    }
+    display_server.to_lowercase()
 }
 
 pub fn get_values_of_seat0(indices: Vec<usize>) -> Vec<String> {

@@ -197,10 +197,10 @@ impl InvokeUiSession for SciterHandler {
         self.call("confirmDeleteFiles", &make_args!(id, i, name));
     }
 
-    fn override_file_confirm(&self, id: i32, file_num: i32, to: String, is_upload: bool) {
+    fn override_file_confirm(&self, id: i32, file_num: i32, to: String, is_upload: bool, is_identical: bool) {
         self.call(
             "overrideFileConfirm",
-            &make_args!(id, file_num, to, is_upload),
+            &make_args!(id, file_num, to, is_upload, is_identical),
         );
     }
 
@@ -462,6 +462,7 @@ impl sciter::EventHandler for SciterSession {
 
 impl SciterSession {
     pub fn new(cmd: String, id: String, password: String, args: Vec<String>) -> Self {
+        let force_relay = args.contains(&"--relay".to_string());
         let session: Session<SciterHandler> = Session {
             id: id.clone(),
             password: password.clone(),
@@ -486,7 +487,7 @@ impl SciterSession {
             .lc
             .write()
             .unwrap()
-            .initialize(id, conn_type, None, false);
+            .initialize(id, conn_type, None, force_relay);
 
         Self(session)
     }

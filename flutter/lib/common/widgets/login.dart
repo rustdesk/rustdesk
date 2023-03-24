@@ -405,7 +405,6 @@ class DialogTextField extends StatelessWidget {
           child: TextField(
             decoration: InputDecoration(
                 labelText: title,
-                border: const OutlineInputBorder(),
                 prefixIcon: prefixIcon,
                 helperText: helperText,
                 helperMaxLines: 8,
@@ -635,9 +634,7 @@ Future<bool?> verificationCodeDialog(UserPayload? user) async {
                 offstage: user?.email == null,
                 child: TextField(
                   decoration: InputDecoration(
-                      labelText: "Email",
-                      prefixIcon: Icon(Icons.email),
-                      border: InputBorder.none),
+                      labelText: "Email", prefixIcon: Icon(Icons.email)),
                   readOnly: true,
                   controller: TextEditingController(text: user?.email),
                 )),

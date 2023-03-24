@@ -848,7 +848,7 @@ pub fn elevate_portable(_id: i32) {
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[inline]
 pub fn handle_incoming_voice_call(id: i32, accept: bool) {
-    if let Some(client) = CLIENTS.write().unwrap().get_mut(&id) {
+    if let Some(client) = CLIENTS.read().unwrap().get(&id) {
         allow_err!(client.tx.send(Data::VoiceCallResponse(accept)));
     };
 }
@@ -856,7 +856,7 @@ pub fn handle_incoming_voice_call(id: i32, accept: bool) {
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[inline]
 pub fn close_voice_call(id: i32) {
-    if let Some(client) = CLIENTS.write().unwrap().get_mut(&id) {
+    if let Some(client) = CLIENTS.read().unwrap().get(&id) {
         allow_err!(client.tx.send(Data::CloseVoiceCall("".to_owned())));
     };
 }

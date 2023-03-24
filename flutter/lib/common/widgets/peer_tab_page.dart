@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:ui' as ui;
 
 import 'package:bot_toast/bot_toast.dart';
@@ -17,6 +18,7 @@ import 'package:get/get.dart';
 import 'package:get/get_rx/src/rx_workers/utils/debouncer.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
+import 'package:dropdown_button2/dropdown_button2.dart';
 
 import '../../common.dart';
 import '../../models/platform_model.dart';
@@ -39,6 +41,8 @@ EdgeInsets? _menuPadding() {
 
 class _PeerTabPageState extends State<PeerTabPage>
     with SingleTickerProviderStateMixin {
+  bool _hideSort = bind.getLocalFlutterConfig(k: 'peer-tab-index') == '0';
+
   final List<_TabEntry> entries = [
     _TabEntry(
         RecentPeersView(
@@ -83,6 +87,7 @@ class _PeerTabPageState extends State<PeerTabPage>
     if (tabIndex < entries.length) {
       gFFI.peerTabModel.setCurrentTab(tabIndex);
       entries[tabIndex].load();
+      _hideSort = tabIndex == 0;
     }
   }
 
@@ -95,22 +100,27 @@ class _PeerTabPageState extends State<PeerTabPage>
         SizedBox(
           height: 28,
           child: Container(
-              padding: isDesktop ? null : EdgeInsets.symmetric(horizontal: 2),
-              constraints: isDesktop ? null : kMobilePageConstraints,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(
-                      child: visibleContextMenuListener(
-                          _createSwitchBar(context))),
-                  buildScrollJumper(),
-                  const PeerSearchBar(),
-                  Offstage(
-                      offstage: !isDesktop,
-                      child: _createPeerViewTypeSwitch(context)
-                          .marginOnly(left: 13)),
-                ],
-              )),
+            padding: isDesktop ? null : EdgeInsets.symmetric(horizontal: 2),
+            constraints: isDesktop ? null : kMobilePageConstraints,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                    child:
+                        visibleContextMenuListener(_createSwitchBar(context))),
+                buildScrollJumper(),
+                const PeerSearchBar(),
+                Offstage(
+                    offstage: !isDesktop,
+                    child: _createPeerViewTypeSwitch(context)
+                        .marginOnly(left: 13)),
+                Offstage(
+                  offstage: _hideSort,
+                  child: PeerSortDropdown().marginOnly(left: 8),
+                ),
+              ],
+            ),
+          ),
         ),
         _createPeersView(),
       ],
@@ -158,7 +168,7 @@ class _PeerTabPageState extends State<PeerTabPage>
                         color: model.currentTab == t
                             ? Theme.of(context).colorScheme.background
                             : null,
-                        borderRadius: BorderRadius.circular(isDesktop ? 2 : 6),
+                        borderRadius: BorderRadius.circular(6),
                       ),
                       child: Align(
                         alignment: Alignment.center,
@@ -231,32 +241,32 @@ class _PeerTabPageState extends State<PeerTabPage>
 
   Widget _createPeerViewTypeSwitch(BuildContext context) {
     final textColor = Theme.of(context).textTheme.titleLarge?.color;
-    final activeDeco =
-        BoxDecoration(color: Theme.of(context).colorScheme.background);
-    return Row(
-      children: [PeerUiType.grid, PeerUiType.list]
-          .map((type) => Obx(
-                () => Container(
-                  padding: EdgeInsets.all(4.0),
-                  decoration: peerCardUiType.value == type ? activeDeco : null,
-                  child: InkWell(
-                      onTap: () async {
-                        await bind.setLocalFlutterConfig(
-                            k: 'peer-card-ui-type', v: type.index.toString());
-                        peerCardUiType.value = type;
-                      },
-                      child: Icon(
-                        type == PeerUiType.grid
-                            ? Icons.grid_view_rounded
-                            : Icons.list,
-                        size: 18,
-                        color:
-                            peerCardUiType.value == type ? textColor : textColor
-                              ?..withOpacity(0.5),
-                      )),
-                ),
-              ))
-          .toList(),
+    final deco = BoxDecoration(
+      color: Theme.of(context).colorScheme.background,
+      borderRadius: BorderRadius.circular(5),
+    );
+    final types = [PeerUiType.grid, PeerUiType.list];
+
+    return Obx(
+      () => Container(
+        padding: EdgeInsets.all(4.0),
+        decoration: deco,
+        child: InkWell(
+            onTap: () async {
+              final type = types.elementAt(
+                  peerCardUiType.value == types.elementAt(0) ? 1 : 0);
+              await bind.setLocalFlutterConfig(
+                  k: 'peer-card-ui-type', v: type.index.toString());
+              peerCardUiType.value = type;
+            },
+            child: Icon(
+              peerCardUiType.value == PeerUiType.grid
+                  ? Icons.list_rounded
+                  : Icons.grid_view_rounded,
+              size: 18,
+              color: textColor,
+            )),
+      ),
     );
   }
 
@@ -414,6 +424,101 @@ class _PeerSearchBarState extends State<PeerSearchBar> {
               )
             ],
           )),
+    );
+  }
+}
+
+class PeerSortDropdown extends StatefulWidget {
+  const PeerSortDropdown({super.key});
+
+  @override
+  State<PeerSortDropdown> createState() => _PeerSortDropdownState();
+}
+
+class _PeerSortDropdownState extends State<PeerSortDropdown> {
+  @override
+  void initState() {
+    if (!PeerSortType.values.contains(peerSort.value)) {
+      peerSort.value = PeerSortType.remoteId;
+      bind.setLocalFlutterConfig(
+        k: "peer-sorting",
+        v: peerSort.value,
+      );
+    }
+    super.initState();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final deco = BoxDecoration(
+      color: Theme.of(context).colorScheme.background,
+      borderRadius: BorderRadius.circular(5),
+    );
+
+    final translated_text =
+        PeerSortType.values.map((e) => translate(e)).toList();
+
+    final double max_width =
+        50 + translated_text.map((e) => e.length).reduce(max) * 10;
+
+    return Container(
+      padding: EdgeInsets.all(4.0),
+      decoration: deco,
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton2<String>(
+            onChanged: (v) async {
+              if (v != null) {
+                setState(() => peerSort.value = v);
+                await bind.setLocalFlutterConfig(
+                  k: "peer-sorting",
+                  v: peerSort.value,
+                );
+              }
+            },
+            customButton: Icon(
+              Icons.sort,
+              size: 18,
+            ),
+            isExpanded: true,
+            dropdownStyleData: DropdownStyleData(
+              decoration: BoxDecoration(
+                color: Theme.of(context).cardColor,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              width: max_width,
+            ),
+            items: [
+              DropdownMenuItem<String>(
+                alignment: Alignment.center,
+                child: Text(
+                  translate("Sort by"),
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                enabled: false,
+              ),
+              ...translated_text
+                  .map<DropdownMenuItem<String>>(
+                    (String value) => DropdownMenuItem<String>(
+                      value: value,
+                      child: Row(
+                        children: [
+                          Icon(
+                            value == peerSort.value
+                                ? Icons.radio_button_checked_rounded
+                                : Icons.radio_button_off_rounded,
+                            size: 18,
+                          ).paddingOnly(right: 12),
+                          Text(
+                            value,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ]),
+      ),
     );
   }
 }
