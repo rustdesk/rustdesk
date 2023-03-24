@@ -541,7 +541,7 @@ _connectDialog(
                 controller: passwordController,
                 autoFocus: false,
               ),
-        usernameController == null || usernameController == null
+        usernameController == null || peerPasswordController == null
             ? Offstage()
             : const Divider(),
         peerPasswordController == null
