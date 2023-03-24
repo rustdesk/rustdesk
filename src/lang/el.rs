@@ -480,5 +480,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("identical_file_tip", "Το αρχείο είναι πανομοιότυπο με αυτό του άλλου υπολογιστή."),
         ("show_monitors_tip", "Εμφάνιση οθονών στη γραμμή εργαλείων"),
         ("View Mode", "Λειτουργία προβολής"),
+        ("enter_rustdesk_passwd_tip", ""),
+        ("remember_rustdesk_passwd_tip", ""),
+        ("login_linux_tip", ""),
     ].iter().cloned().collect();
 }

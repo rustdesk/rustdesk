@@ -25,7 +25,7 @@ import 'package:get/get.dart';
 
 import '../common.dart';
 import '../utils/image.dart' as img;
-import '../mobile/widgets/dialog.dart';
+import '../common/widgets/dialog.dart';
 import 'input_model.dart';
 import 'platform_model.dart';
 
@@ -293,6 +293,11 @@ class FfiModel with ChangeNotifier {
       wrongPasswordDialog(id, dialogManager, type, title, text);
     } else if (type == 'input-password') {
       enterPasswordDialog(id, dialogManager);
+    } else if (type == 'xsession-login' || type == 'xsession-re-login') {
+      // to-do
+    } else if (type == 'xsession-login-password' ||
+        type == 'xsession-login-password') {
+      // to-do
     } else if (type == 'restarting') {
       showMsgBox(id, type, title, text, link, false, dialogManager,
           hasCancel: false);
