@@ -218,7 +218,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("whitelist_tip", "Nur IPs auf der Whitelist können zugreifen."),
         ("Login", "Anmelden"),
         ("Verify", "Überprüfen"),
-        ("Remember me", "Login speichern"),
+        ("Remember me", "Login merken"),
         ("Trust this device", "Diesem Gerät vertrauen"),
         ("Verification code", "Verifizierungscode"),
         ("verification_tip", "Es wurde ein neues Gerät erkannt und ein Verifizierungscode an die registrierte E-Mail-Adresse gesendet. Geben Sie den Verifizierungscode ein, um sich erneut anzumelden."),
@@ -480,8 +480,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("identical_file_tip", "Diese Datei ist identisch mit der Datei der Gegenstelle."),
         ("show_monitors_tip", "Monitore in der Symbolleiste anzeigen"),
         ("View Mode", "Ansichtsmodus"),
-        ("enter_rustdesk_passwd_tip", ""),
-        ("remember_rustdesk_passwd_tip", ""),
-        ("login_linux_tip", ""),
+        ("enter_rustdesk_passwd_tip", "RustDesk-Passwort eingeben."),
+        ("remember_rustdesk_passwd_tip", "RustDesk-Passwort merken."),
+        ("login_linux_tip", "Anmeldung am entfernten Linux-Konto"),
+        ("login_linux_tooltip_tip", "Sie müssen sich an einem entfernten Linux-Konto anmelden, um eine X-Desktop-Sitzung zu eröffnen."),
     ].iter().cloned().collect();
 }
