@@ -480,8 +480,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("identical_file_tip", "Файл идентичен файлу на удалённом узле."),
         ("show_monitors_tip", "Показывать мониторы на панели инструментов"),
         ("View Mode", "Режим просмотра"),
-        ("enter_rustdesk_passwd_tip", ""),
-        ("remember_rustdesk_passwd_tip", ""),
-        ("login_linux_tip", ""),
+        ("enter_rustdesk_passwd_tip", "Введите пароль RustDesk"),
+        ("remember_rustdesk_passwd_tip", "Запомнить пароль RustDesk"),
+        ("login_linux_tip", "Вход в удалённый аккаунт Linux"),
+        ("login_linux_tooltip_tip", "Чтобы включить сеанс рабочего стола X, необходимо войти в удалённый аккаунт Linux."),
     ].iter().cloned().collect();
 }
