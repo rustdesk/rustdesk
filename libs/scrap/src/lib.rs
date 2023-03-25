@@ -2,7 +2,7 @@
 extern crate block;
 #[macro_use]
 extern crate cfg_if;
-pub extern crate libc;
+pub use hbb_common::libc;
 #[cfg(dxgi)]
 extern crate winapi;
 

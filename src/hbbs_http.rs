@@ -5,6 +5,7 @@ use serde_json::{Map, Value};
 #[cfg(feature = "flutter")]
 pub mod account;
 pub mod record_upload;
+pub mod sync;
 
 #[derive(Debug)]
 pub enum HbbHttpResponse<T> {

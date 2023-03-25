@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/main.dart';
 import 'package:get/get.dart';
 
 class RefreshWrapper extends StatefulWidget {
   final Widget Function(BuildContext context) builder;
+
   const RefreshWrapper({super.key, required this.builder});
 
   @override
@@ -26,10 +28,12 @@ class RefreshWrapperState extends State<RefreshWrapper> {
   }
 
   rebuild() {
-    debugPrint("=====Global State Rebuild (win-${windowId ?? 'main'})=====");
+    debugPrint("=====Global State Rebuild (win-${kWindowId ?? 'main'})=====");
     if (Get.context != null) {
       (context as Element).visitChildren(_rebuildElement);
     }
+    // Synchronize the window theme of the system.
+    updateSystemWindowTheme();
     setState(() {});
   }
 

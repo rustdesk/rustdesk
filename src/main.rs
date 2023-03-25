@@ -1,10 +1,11 @@
-// Specify the Windows subsystem to eliminate console window.
-// Requires Rust 1.18.
-//#![windows_subsystem = "windows"]
+ #![cfg_attr(
+     all(not(debug_assertions), target_os = "windows"),
+     windows_subsystem = "windows"
+ )]
 
 use librustdesk::*;
 
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 fn main() {
     if !common::global_init() {
         return;
@@ -16,7 +17,12 @@ fn main() {
     common::global_clean();
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
+#[cfg(not(any(
+    target_os = "android",
+    target_os = "ios",
+    feature = "cli",
+    feature = "flutter"
+)))]
 fn main() {
     if !common::global_init() {
         return;
@@ -91,6 +97,7 @@ fn main() {
         let token = LocalConfig::get_option("access_token");
         cli::connect_test(p, key, token);
     } else if let Some(p) = matches.value_of("server") {
+        log::info!("id={}", hbb_common::config::Config::get_id());
         crate::start_server(true);
     }
     common::global_clean();

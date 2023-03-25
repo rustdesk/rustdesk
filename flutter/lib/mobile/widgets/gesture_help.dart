@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:toggle_switch/toggle_switch.dart';
 
-import '../../models/model.dart';
-
 class GestureIcons {
   static const String _family = 'gestureicons';
 
@@ -79,7 +77,10 @@ class _GestureHelpState extends State<GestureHelp> {
               children: <Widget>[
                 ToggleSwitch(
                   initialLabelIndex: _selectedIndex,
-                  inactiveBgColor: MyTheme.darkGray,
+                  activeFgColor: Colors.white,
+                  inactiveFgColor: Colors.white60,
+                  activeBgColor: [MyTheme.accent],
+                  inactiveBgColor: Theme.of(context).hintColor,
                   totalSwitches: 2,
                   minWidth: 150,
                   fontSize: 15,
@@ -188,7 +189,7 @@ class GestureInfo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-        width: this.width,
+        width: width,
         child: Column(
           children: [
             Icon(
@@ -199,11 +200,14 @@ class GestureInfo extends StatelessWidget {
             SizedBox(height: 6),
             Text(fromText,
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 9, color: Colors.grey)),
+                style:
+                    TextStyle(fontSize: 9, color: Theme.of(context).hintColor)),
             SizedBox(height: 3),
             Text(toText,
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12, color: Colors.black))
+                style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).textTheme.bodySmall?.color))
           ],
         ));
   }

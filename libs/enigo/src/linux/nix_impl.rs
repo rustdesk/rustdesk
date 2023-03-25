@@ -1,5 +1,5 @@
 use super::xdo::EnigoXdo;
-use crate::{Key, KeyboardControllable, MouseButton, MouseControllable};
+use crate::{Key, KeyboardControllable, MouseButton, MouseControllable, ResultType};
 use std::io::Read;
 use tfc::{traits::*, Context as TFC_Context, Key as TFC_Key};
 
@@ -13,7 +13,7 @@ pub struct Enigo {
     is_x11: bool,
     tfc: Option<TFC_Context>,
     custom_keyboard: Option<CustomKeyboard>,
-    cutsom_mouse: Option<CustomMouce>,
+    custom_mouse: Option<CustomMouce>,
 }
 
 impl Enigo {
@@ -21,7 +21,7 @@ impl Enigo {
     pub fn delay(&self) -> u64 {
         self.xdo.delay()
     }
-    /// Set delay of xdo implemetation.
+    /// Set delay of xdo implementation.
     pub fn set_delay(&mut self, delay: u64) {
         self.xdo.set_delay(delay)
     }
@@ -31,7 +31,7 @@ impl Enigo {
     }
     /// Set custom mouse.
     pub fn set_custom_mouse(&mut self, custom_mouse: CustomMouce) {
-        self.cutsom_mouse = Some(custom_mouse)
+        self.custom_mouse = Some(custom_mouse)
     }
     /// Get custom keyboard.
     pub fn get_custom_keyboard(&mut self) -> &mut Option<CustomKeyboard> {
@@ -39,7 +39,38 @@ impl Enigo {
     }
     /// Get custom mouse.
     pub fn get_custom_mouse(&mut self) -> &mut Option<CustomMouce> {
-        &mut self.cutsom_mouse
+        &mut self.custom_mouse
+    }
+
+    /// Clear remapped keycodes
+    pub fn tfc_clear_remapped(&mut self) {
+        if let Some(tfc) = &mut self.tfc {
+            tfc.recover_remapped_keycodes();
+        }
+    }
+
+    fn tfc_key_click(&mut self, key: Key) -> ResultType {
+        if let Some(tfc) = &mut self.tfc {
+            let res = match key {
+                Key::Layout(chr) => tfc.unicode_char(chr),
+                key => {
+                    let tfc_key: TFC_Key = match convert_to_tfc_key(key) {
+                        Some(key) => key,
+                        None => {
+                            return Err(format!("Failed to convert {:?} to TFC_Key", key).into());
+                        }
+                    };
+                    tfc.key_click(tfc_key)
+                }
+            };
+            if res.is_err() {
+                Err(format!("Failed to click {:?} by tfc", key).into())
+            } else {
+                Ok(())
+            }
+        } else {
+            Err("Not Found TFC".into())
+        }
     }
 
     fn tfc_key_down_or_up(&mut self, key: Key, down: bool, up: bool) -> bool {
@@ -99,7 +130,7 @@ impl Default for Enigo {
                 None
             },
             custom_keyboard: None,
-            cutsom_mouse: None,
+            custom_mouse: None,
             xdo: EnigoXdo::default(),
         }
     }
@@ -118,7 +149,7 @@ impl MouseControllable for Enigo {
         if self.is_x11 {
             self.xdo.mouse_move_to(x, y);
         } else {
-            if let Some(mouse) = &mut self.cutsom_mouse {
+            if let Some(mouse) = &mut self.custom_mouse {
                 mouse.mouse_move_to(x, y)
             }
         }
@@ -127,7 +158,7 @@ impl MouseControllable for Enigo {
         if self.is_x11 {
             self.xdo.mouse_move_relative(x, y);
         } else {
-            if let Some(mouse) = &mut self.cutsom_mouse {
+            if let Some(mouse) = &mut self.custom_mouse {
                 mouse.mouse_move_relative(x, y)
             }
         }
@@ -136,7 +167,7 @@ impl MouseControllable for Enigo {
         if self.is_x11 {
             self.xdo.mouse_down(button)
         } else {
-            if let Some(mouse) = &mut self.cutsom_mouse {
+            if let Some(mouse) = &mut self.custom_mouse {
                 mouse.mouse_down(button)
             } else {
                 Ok(())
@@ -147,7 +178,7 @@ impl MouseControllable for Enigo {
         if self.is_x11 {
             self.xdo.mouse_up(button)
         } else {
-            if let Some(mouse) = &mut self.cutsom_mouse {
+            if let Some(mouse) = &mut self.custom_mouse {
                 mouse.mouse_up(button)
             }
         }
@@ -156,7 +187,7 @@ impl MouseControllable for Enigo {
         if self.is_x11 {
             self.xdo.mouse_click(button)
         } else {
-            if let Some(mouse) = &mut self.cutsom_mouse {
+            if let Some(mouse) = &mut self.custom_mouse {
                 mouse.mouse_click(button)
             }
         }
@@ -165,7 +196,7 @@ impl MouseControllable for Enigo {
         if self.is_x11 {
             self.xdo.mouse_scroll_x(length)
         } else {
-            if let Some(mouse) = &mut self.cutsom_mouse {
+            if let Some(mouse) = &mut self.custom_mouse {
                 mouse.mouse_scroll_x(length)
             }
         }
@@ -174,7 +205,7 @@ impl MouseControllable for Enigo {
         if self.is_x11 {
             self.xdo.mouse_scroll_y(length)
         } else {
-            if let Some(mouse) = &mut self.cutsom_mouse {
+            if let Some(mouse) = &mut self.custom_mouse {
                 mouse.mouse_scroll_y(length)
             }
         }
@@ -183,6 +214,7 @@ impl MouseControllable for Enigo {
 
 fn get_led_state(key: Key) -> bool {
     let led_file = match key {
+        // FIXME: the file may be /sys/class/leds/input2 or input5 ...
         Key::CapsLock => "/sys/class/leds/input1::capslock/brightness",
         Key::NumLock => "/sys/class/leds/input1::numlock/brightness",
         _ => {
@@ -222,6 +254,7 @@ impl KeyboardControllable for Enigo {
         }
     }
 
+    /// Warning: Get 6^ in French.
     fn key_sequence(&mut self, sequence: &str) {
         if self.is_x11 {
             self.xdo.key_sequence(sequence)
@@ -261,8 +294,10 @@ impl KeyboardControllable for Enigo {
         }
     }
     fn key_click(&mut self, key: Key) {
-        self.key_down(key).ok();
-        self.key_up(key);
+        if self.tfc_key_click(key).is_err() {
+            self.key_down(key).ok();
+            self.key_up(key);
+        }
     }
 }
 
@@ -333,4 +368,11 @@ fn convert_to_tfc_key(key: Key) -> Option<TFC_Key> {
         }
     };
     Some(key)
+}
+
+#[test]
+fn test_key_seq() {
+    // Get 6^ in French.
+    let mut en = Enigo::new();
+    en.key_sequence("^^");
 }

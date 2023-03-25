@@ -30,7 +30,7 @@ cfg_if! {
 }
 
 pub mod codec;
-mod convert;
+pub mod convert;
 #[cfg(feature = "hwcodec")]
 pub mod hwcodec;
 #[cfg(feature = "mediacodec")]
@@ -42,6 +42,13 @@ pub const HW_STRIDE_ALIGN: usize = 0; // recommended by av_frame_get_buffer
 
 pub mod record;
 mod vpx;
+
+#[derive(Copy, Clone)]
+pub enum ImageFormat {
+    Raw,
+    ABGR,
+    ARGB,
+}
 
 #[inline]
 pub fn would_block_if_equal(old: &mut Vec<u8>, b: &[u8]) -> std::io::Result<()> {
@@ -74,9 +81,9 @@ pub fn is_x11() -> bool {
 #[inline]
 pub fn is_cursor_embedded() -> bool {
     if is_x11() {
-        x11::is_cursor_embedded
+        x11::IS_CURSOR_EMBEDDED
     } else {
-        wayland::is_cursor_embedded
+        wayland::is_cursor_embedded()
     }
 }
 

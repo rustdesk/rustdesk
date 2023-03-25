@@ -1,44 +1,17 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 
 import '../../common.dart';
-import '../../models/model.dart';
 import '../../models/platform_model.dart';
 
-void clientClose(String id, OverlayDialogManager dialogManager) {
-  msgBox(id, '', 'Close', 'Are you sure to close the connection?', '',
-      dialogManager);
-}
-
-void showSuccess() {
+void _showSuccess() {
   showToast(translate("Successful"));
 }
 
-void showError() {
+void _showError() {
   showToast(translate("Error"));
-}
-
-void showRestartRemoteDevice(
-    PeerInfo pi, String id, OverlayDialogManager dialogManager) async {
-  final res =
-      await dialogManager.show<bool>((setState, close) => CustomAlertDialog(
-            title: Row(children: [
-              Icon(Icons.warning_amber_sharp,
-                  color: Colors.redAccent, size: 28),
-              SizedBox(width: 10),
-              Text(translate("Restart Remote Device")),
-            ]),
-            content: Text(
-                "${translate('Are you sure you want to restart')} \n${pi.username}@${pi.hostname}($id) ?"),
-            actions: [
-              TextButton(
-                  onPressed: () => close(), child: Text(translate("Cancel"))),
-              ElevatedButton(
-                  onPressed: () => close(true), child: Text(translate("OK"))),
-            ],
-          ));
-  if (res == true) bind.sessionRestartRemoteDevice(id: id);
 }
 
 void setPermanentPasswordDialog(OverlayDialogManager dialogManager) async {
@@ -48,8 +21,26 @@ void setPermanentPasswordDialog(OverlayDialogManager dialogManager) async {
   var validateLength = false;
   var validateSame = false;
   dialogManager.show((setState, close) {
+    submit() async {
+      close();
+      dialogManager.showLoading(translate("Waiting"));
+      if (await gFFI.serverModel.setPermanentPassword(p0.text)) {
+        dialogManager.dismissAll();
+        _showSuccess();
+      } else {
+        dialogManager.dismissAll();
+        _showError();
+      }
+    }
+
     return CustomAlertDialog(
-      title: Text(translate('Set your own password')),
+      title: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.password_rounded, color: MyTheme.accent),
+          Text(translate('Set your own password')).paddingOnly(left: 10),
+        ],
+      ),
       content: Form(
           autovalidateMode: AutovalidateMode.onUserInteraction,
           child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -94,30 +85,19 @@ void setPermanentPasswordDialog(OverlayDialogManager dialogManager) async {
               },
             ),
           ])),
+      onCancel: close,
+      onSubmit: (validateLength && validateSame) ? submit : null,
       actions: [
-        TextButton(
-          style: flatButtonStyle,
-          onPressed: () {
-            close();
-          },
-          child: Text(translate('Cancel')),
+        dialogButton(
+          'Cancel',
+          icon: Icon(Icons.close_rounded),
+          onPressed: close,
+          isOutline: true,
         ),
-        TextButton(
-          style: flatButtonStyle,
-          onPressed: (validateLength && validateSame)
-              ? () async {
-                  close();
-                  dialogManager.showLoading(translate("Waiting"));
-                  if (await gFFI.serverModel.setPermanentPassword(p0.text)) {
-                    dialogManager.dismissAll();
-                    showSuccess();
-                  } else {
-                    dialogManager.dismissAll();
-                    showError();
-                  }
-                }
-              : null,
-          child: Text(translate('OK')),
+        dialogButton(
+          'OK',
+          icon: Icon(Icons.done_rounded),
+          onPressed: (validateLength && validateSame) ? submit : null,
         ),
       ],
     );
@@ -142,12 +122,12 @@ void setTemporaryPasswordLengthDialog(
       bind.mainUpdateTemporaryPassword();
       Future.delayed(Duration(milliseconds: 200), () {
         close();
-        showSuccess();
+        _showSuccess();
       });
     }
 
     return CustomAlertDialog(
-      title: Text(translate("Set temporary password length")),
+      title: Text(translate("Set one-time password length")),
       content: Column(
           mainAxisSize: MainAxisSize.min,
           children:
@@ -156,85 +136,6 @@ void setTemporaryPasswordLengthDialog(
       contentPadding: 14,
     );
   }, backDismiss: true, clickMaskDismiss: true);
-}
-
-void enterPasswordDialog(String id, OverlayDialogManager dialogManager) async {
-  final controller = TextEditingController();
-  var remember = await bind.sessionGetRemember(id: id) ?? false;
-  dialogManager.dismissAll();
-  dialogManager.show((setState, close) {
-    cancel() {
-      close();
-      closeConnection();
-    }
-
-    submit() {
-      var text = controller.text.trim();
-      if (text == '') return;
-      gFFI.login(id, text, remember);
-      close();
-      dialogManager.showLoading(translate('Logging in...'),
-          onCancel: closeConnection);
-    }
-
-    return CustomAlertDialog(
-      title: Text(translate('Password Required')),
-      content: Column(mainAxisSize: MainAxisSize.min, children: [
-        PasswordWidget(controller: controller),
-        CheckboxListTile(
-          contentPadding: const EdgeInsets.all(0),
-          dense: true,
-          controlAffinity: ListTileControlAffinity.leading,
-          title: Text(
-            translate('Remember password'),
-          ),
-          value: remember,
-          onChanged: (v) {
-            if (v != null) {
-              setState(() => remember = v);
-            }
-          },
-        ),
-      ]),
-      actions: [
-        TextButton(
-          style: flatButtonStyle,
-          onPressed: cancel,
-          child: Text(translate('Cancel')),
-        ),
-        TextButton(
-          style: flatButtonStyle,
-          onPressed: submit,
-          child: Text(translate('OK')),
-        ),
-      ],
-      onSubmit: submit,
-      onCancel: cancel,
-    );
-  });
-}
-
-void wrongPasswordDialog(String id, OverlayDialogManager dialogManager) {
-  dialogManager.show((setState, close) => CustomAlertDialog(
-          title: Text(translate('Wrong Password')),
-          content: Text(translate('Do you want to enter again?')),
-          actions: [
-            TextButton(
-              style: flatButtonStyle,
-              onPressed: () {
-                close();
-                closeConnection();
-              },
-              child: Text(translate('Cancel')),
-            ),
-            TextButton(
-              style: flatButtonStyle,
-              onPressed: () {
-                enterPasswordDialog(id, dialogManager);
-              },
-              child: Text(translate('Retry')),
-            ),
-          ]));
 }
 
 void showServerSettingsWithValue(
@@ -320,15 +221,11 @@ void showServerSettingsWithValue(
                         child: LinearProgressIndicator())
                   ])),
       actions: [
-        TextButton(
-          style: flatButtonStyle,
-          onPressed: () {
-            close();
-          },
-          child: Text(translate('Cancel')),
-        ),
-        TextButton(
-          style: flatButtonStyle,
+        dialogButton('Cancel', onPressed: () {
+          close();
+        }, isOutline: true),
+        dialogButton(
+          'OK',
           onPressed: () async {
             setState(() {
               idServerMsg = null;
@@ -360,7 +257,6 @@ void showServerSettingsWithValue(
               isInProgress = false;
             });
           },
-          child: Text(translate('OK')),
         ),
       ],
     );
@@ -374,64 +270,4 @@ Future<String?> validateAsync(String value) async {
   }
   final res = await bind.mainTestIfValidServer(server: value);
   return res.isEmpty ? null : res;
-}
-
-class PasswordWidget extends StatefulWidget {
-  PasswordWidget({Key? key, required this.controller, this.autoFocus = true})
-      : super(key: key);
-
-  final TextEditingController controller;
-  final bool autoFocus;
-
-  @override
-  State<PasswordWidget> createState() => _PasswordWidgetState();
-}
-
-class _PasswordWidgetState extends State<PasswordWidget> {
-  bool _passwordVisible = false;
-  final _focusNode = FocusNode();
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.autoFocus) {
-      Timer(Duration(milliseconds: 50), () => _focusNode.requestFocus());
-    }
-  }
-
-  @override
-  void dispose() {
-    _focusNode.unfocus();
-    _focusNode.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return TextField(
-      focusNode: _focusNode,
-      controller: widget.controller,
-      obscureText: !_passwordVisible,
-      //This will obscure text dynamically
-      keyboardType: TextInputType.visiblePassword,
-      decoration: InputDecoration(
-        labelText: translate('Password'),
-        hintText: translate('Enter your password'),
-        // Here is key idea
-        suffixIcon: IconButton(
-          icon: Icon(
-            // Based on passwordVisible state choose the icon
-            _passwordVisible ? Icons.visibility : Icons.visibility_off,
-            color: Theme.of(context).primaryColorDark,
-          ),
-          onPressed: () {
-            // Update the state i.e. toggle the state of passwordVisible variable
-            setState(() {
-              _passwordVisible = !_passwordVisible;
-            });
-          },
-        ),
-      ),
-    );
-  }
 }

@@ -19,6 +19,8 @@ class PrivacyModeState {
     final key = tag(id);
     if (Get.isRegistered(tag: key)) {
       Get.delete(tag: key);
+    } else {
+      Get.find<RxBool>(tag: key).value = false;
     }
   }
 
@@ -33,6 +35,8 @@ class BlockInputState {
     if (!Get.isRegistered(tag: key)) {
       final RxBool state = false.obs;
       Get.put(state, tag: key);
+    } else {
+      Get.find<RxBool>(tag: key).value = false;
     }
   }
 
@@ -54,6 +58,8 @@ class CurrentDisplayState {
     if (!Get.isRegistered(tag: key)) {
       final RxInt state = RxInt(0);
       Get.put(state, tag: key);
+    } else {
+      Get.find<RxInt>(tag: key).value = 0;
     }
   }
 
@@ -123,6 +129,8 @@ class ShowRemoteCursorState {
     if (!Get.isRegistered(tag: key)) {
       final RxBool state = false.obs;
       Get.put(state, tag: key);
+    } else {
+      Get.find<RxBool>(tag: key).value = false;
     }
   }
 
@@ -145,6 +153,8 @@ class KeyboardEnabledState {
       // Server side, default true
       final RxBool state = true.obs;
       Get.put(state, tag: key);
+    } else {
+      Get.find<RxBool>(tag: key).value = true;
     }
   }
 
@@ -164,9 +174,10 @@ class RemoteCursorMovedState {
   static void init(String id) {
     final key = tag(id);
     if (!Get.isRegistered(tag: key)) {
-      // Server side, default true
       final RxBool state = false.obs;
       Get.put(state, tag: key);
+    } else {
+      Get.find<RxBool>(tag: key).value = false;
     }
   }
 
@@ -186,9 +197,10 @@ class RemoteCountState {
   static void init() {
     final key = tag();
     if (!Get.isRegistered(tag: key)) {
-      // Server side, default true
       final RxInt state = 1.obs;
       Get.put(state, tag: key);
+    } else {
+      Get.find<RxInt>(tag: key).value = 1;
     }
   }
 
@@ -210,6 +222,8 @@ class PeerBoolOption {
     if (!Get.isRegistered(tag: key)) {
       final RxBool value = RxBool(init_getter());
       Get.put(value, tag: key);
+    } else {
+      Get.find<RxBool>(tag: key).value = init_getter();
     }
   }
 
@@ -232,6 +246,8 @@ class PeerStringOption {
     if (!Get.isRegistered(tag: key)) {
       final RxString value = RxString(init_getter());
       Get.put(value, tag: key);
+    } else {
+      Get.find<RxString>(tag: key).value = init_getter();
     }
   }
 

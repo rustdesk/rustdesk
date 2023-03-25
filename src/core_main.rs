@@ -1,4 +1,7 @@
+use crate::platform::breakdown_callback;
 use hbb_common::log;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use hbb_common::platform::register_breakdown_handler;
 
 /// shared by flutter and sciter main function
 ///
@@ -6,9 +9,6 @@ use hbb_common::log;
 /// If it returns [`None`], then the process will terminate, and flutter gui will not be started.
 /// If it returns [`Some`], then the process will continue, and flutter gui will be started.
 pub fn core_main() -> Option<Vec<String>> {
-    // https://docs.rs/flexi_logger/latest/flexi_logger/error_info/index.html#write
-    // though async logger more efficient, but it also causes more problems, disable it for now
-    // let mut _async_logger_holder: Option<flexi_logger::LoggerHandle> = None;
     let mut args = Vec::new();
     let mut flutter_args = Vec::new();
     let mut i = 0;
@@ -38,16 +38,23 @@ pub fn core_main() -> Option<Vec<String>> {
         }
         i += 1;
     }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    register_breakdown_handler(breakdown_callback);
+    #[cfg(target_os = "linux")]
+    #[cfg(feature = "flutter")]
+    {
+        let (k, v) = ("LIBGL_ALWAYS_SOFTWARE", "true");
+        if !hbb_common::config::Config::get_option("allow-always-software-render").is_empty() {
+            std::env::set_var(k, v);
+        } else {
+            std::env::remove_var(k);
+        }
+    }
     #[cfg(feature = "flutter")]
     if _is_flutter_connect {
         return core_main_invoke_new_connection(std::env::args());
     }
     let click_setup = cfg!(windows) && args.is_empty() && crate::common::is_setup(&arg_exe);
-    #[cfg(not(feature = "flutter"))]
-    {
-        _is_quick_support =
-            cfg!(windows) && args.is_empty() && arg_exe.to_lowercase().ends_with("qs.exe");
-    }
     if click_setup {
         args.push("--install".to_owned());
         flutter_args.push("--install".to_string());
@@ -59,35 +66,22 @@ pub fn core_main() -> Option<Vec<String>> {
         println!("{}", crate::VERSION);
         return None;
     }
-    #[cfg(debug_assertions)]
+    #[cfg(windows)]
     {
-        use hbb_common::env_logger::*;
-        init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "info"));
+        _is_quick_support |= !crate::platform::is_installed()
+            && args.is_empty()
+            && (arg_exe.to_lowercase().ends_with("qs.exe")
+                || (!click_setup && crate::platform::is_elevated(None).unwrap_or(false)));
+        crate::portable_service::client::set_quick_support(_is_quick_support);
     }
-    #[cfg(not(debug_assertions))]
-    {
-        let mut path = hbb_common::config::Config::log_path();
-        if args.len() > 0 && args[0].starts_with("--") {
-            let name = args[0].replace("--", "");
-            if !name.is_empty() {
-                path.push(name);
-            }
-        }
-        use flexi_logger::*;
-        if let Ok(x) = Logger::try_with_env_or_str("debug") {
-            // _async_logger_holder =
-            x.log_to_file(FileSpec::default().directory(path))
-                //.write_mode(WriteMode::Async)
-                .format(opt_format)
-                .rotate(
-                    Criterion::Age(Age::Day),
-                    Naming::Timestamps,
-                    Cleanup::KeepLogFiles(6),
-                )
-                .start()
-                .ok();
+    let mut log_name = "".to_owned();
+    if args.len() > 0 && args[0].starts_with("--") {
+        let name = args[0].replace("--", "");
+        if !name.is_empty() {
+            log_name = name;
         }
     }
+    hbb_common::init_log(false, &log_name);
     #[cfg(windows)]
     if !crate::platform::is_installed()
         && args.is_empty()
@@ -95,7 +89,8 @@ pub fn core_main() -> Option<Vec<String>> {
         && !_is_elevate
         && !_is_run_as_system
     {
-        if let Err(e) = crate::portable_service::client::start_portable_service() {
+        use crate::portable_service::client;
+        if let Err(e) = client::start_portable_service(client::StartPara::Direct) {
             log::error!("Failed to start portable service:{:?}", e);
         }
     }
@@ -111,7 +106,7 @@ pub fn core_main() -> Option<Vec<String>> {
         {
             use crate::platform;
             if args[0] == "--uninstall" {
-                if let Err(err) = platform::uninstall_me() {
+                if let Err(err) = platform::uninstall_me(true) {
                     log::error!("Failed to uninstall: {}", err);
                 }
                 return None;
@@ -129,9 +124,9 @@ pub fn core_main() -> Option<Vec<String>> {
                 hbb_common::allow_err!(platform::update_me());
                 return None;
             } else if args[0] == "--reinstall" {
-                hbb_common::allow_err!(platform::uninstall_me());
+                hbb_common::allow_err!(platform::uninstall_me(false));
                 hbb_common::allow_err!(platform::install_me(
-                    "desktopicon startmenu",
+                    "desktopicon startmenu driverCert",
                     "".to_owned(),
                     false,
                     false,
@@ -139,7 +134,7 @@ pub fn core_main() -> Option<Vec<String>> {
                 return None;
             } else if args[0] == "--silent-install" {
                 hbb_common::allow_err!(platform::install_me(
-                    "desktopicon startmenu",
+                    "desktopicon startmenu driverCert",
                     "".to_owned(),
                     true,
                     args.len() > 1,
@@ -149,8 +144,9 @@ pub fn core_main() -> Option<Vec<String>> {
                 #[cfg(feature = "with_rc")]
                 hbb_common::allow_err!(crate::rc::extract_resources(&args[1]));
                 return None;
-            } else if args[0] == "--tray" {
-                crate::tray::start_tray();
+            } else if args[0] == "--install-cert" {
+                #[cfg(windows)]
+                hbb_common::allow_err!(crate::platform::windows::install_cert(&args[1]));
                 return None;
             } else if args[0] == "--portable-service" {
                 crate::platform::elevate_or_run_as_system(
@@ -168,33 +164,24 @@ pub fn core_main() -> Option<Vec<String>> {
                 std::fs::remove_file(&args[1]).ok();
                 return None;
             }
+        } else if args[0] == "--tray" {
+            crate::tray::start_tray();
+            return None;
         } else if args[0] == "--service" {
             log::info!("start --service");
             crate::start_os_service();
             return None;
         } else if args[0] == "--server" {
             log::info!("start --server with user {}", crate::username());
-            #[cfg(target_os = "windows")]
+            #[cfg(any(target_os = "linux", target_os = "windows"))]
             {
                 crate::start_server(true);
                 return None;
             }
             #[cfg(target_os = "macos")]
             {
-                std::thread::spawn(move || crate::start_server(true));
-                crate::tray::make_tray();
-                return None;
-            }
-            #[cfg(target_os = "linux")]
-            {
                 let handler = std::thread::spawn(move || crate::start_server(true));
-                // Show the tray in linux only when current user is a normal user
-                // [Note]
-                // As for GNOME, the tray cannot be shown in user's status bar.
-                // As for KDE, the tray can be shown without user's theme.
-                if !crate::platform::is_root() {
-                    crate::tray::start_tray();
-                }
+                crate::tray::start_tray();
                 // prevent server exit when encountering errors from tray
                 hbb_common::allow_err!(handler.join());
             }
@@ -221,6 +208,13 @@ pub fn core_main() -> Option<Vec<String>> {
                 }
             }
             return None;
+        } else if args[0] == "--get-id" {
+            if crate::platform::is_root() {
+                println!("{}", crate::ipc::get_id());
+            } else {
+                println!("Permission denied!");
+            }
+            return None;
         } else if args[0] == "--check-hwcodec-config" {
             #[cfg(feature = "hwcodec")]
             scrap::hwcodec::check_config();
@@ -228,8 +222,6 @@ pub fn core_main() -> Option<Vec<String>> {
         } else if args[0] == "--cm" {
             // call connection manager to establish connections
             // meanwhile, return true to call flutter window to show control panel
-            #[cfg(feature = "flutter")]
-            crate::flutter::connection_manager::start_listen_ipc_thread();
             crate::ui_interface::start_option_status_sync();
         }
     }
@@ -276,18 +268,37 @@ fn import_config(path: &str) {
 fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<String>> {
     args.position(|element| {
         return element == "--connect";
-    })
-    .unwrap();
+    })?;
     let peer_id = args.next().unwrap_or("".to_string());
     if peer_id.is_empty() {
         eprintln!("please provide a valid peer id");
         return None;
     }
+    let mut switch_uuid = None;
+    while let Some(item) = args.next() {
+        if item == "--switch_uuid" {
+            switch_uuid = args.next();
+        }
+    }
+    let mut param_array = vec![];
+    if switch_uuid.is_some() {
+        let switch_uuid = switch_uuid.map_or("".to_string(), |p| format!("switch_uuid={}", p));
+        param_array.push(switch_uuid);
+    }
+
+    let params = param_array.join("&");
+    let params_flag = if params.is_empty() { "" } else { "?" };
+    #[allow(unused)]
+    let uni_links = format!(
+        "rustdesk://connection/new/{}{}{}",
+        peer_id, params_flag, params
+    );
+
     #[cfg(target_os = "linux")]
     {
         use crate::dbus::invoke_new_connection;
 
-        match invoke_new_connection(peer_id) {
+        match invoke_new_connection(uni_links) {
             Ok(()) => {
                 return None;
             }
@@ -301,16 +312,21 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
     #[cfg(windows)]
     {
         use winapi::um::winuser::WM_USER;
-        let uni_links = format!("rustdesk://connection/new/{}", peer_id);
         let res = crate::platform::send_message_to_hnwd(
             "FLUTTER_RUNNER_WIN32_WINDOW",
             "RustDesk",
             (WM_USER + 2) as _, // referred from unilinks desktop pub
             uni_links.as_str(),
-            true,
+            false,
         );
         return if res { None } else { Some(Vec::new()) };
     }
     #[cfg(target_os = "macos")]
-    return Some(Vec::new());
+    {
+        return if let Err(_) = crate::ipc::send_url_scheme(uni_links) {
+            Some(Vec::new())
+        } else {
+            None
+        };
+    }
 }

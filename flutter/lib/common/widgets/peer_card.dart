@@ -42,6 +42,7 @@ class _PeerCardState extends State<_PeerCard>
     with AutomaticKeepAliveClientMixin {
   var _menuPos = RelativeRect.fill;
   final double _cardRadius = 16;
+  final double _tileRadius = 5;
   final double _borderWidth = 2;
 
   @override
@@ -116,27 +117,32 @@ class _PeerCardState extends State<_PeerCard>
 
   Widget _buildDesktop() {
     final peer = super.widget.peer;
-    var deco = Rx<BoxDecoration?>(BoxDecoration(
+    var deco = Rx<BoxDecoration?>(
+      BoxDecoration(
         border: Border.all(color: Colors.transparent, width: _borderWidth),
-        borderRadius: peerCardUiType.value == PeerUiType.grid
-            ? BorderRadius.circular(_cardRadius)
-            : null));
+        borderRadius: BorderRadius.circular(
+          peerCardUiType.value == PeerUiType.grid ? _cardRadius : _tileRadius,
+        ),
+      ),
+    );
     return MouseRegion(
       onEnter: (evt) {
         deco.value = BoxDecoration(
-            border: Border.all(
-                color: Theme.of(context).colorScheme.primary,
-                width: _borderWidth),
-            borderRadius: peerCardUiType.value == PeerUiType.grid
-                ? BorderRadius.circular(_cardRadius)
-                : null);
+          border: Border.all(
+              color: Theme.of(context).colorScheme.primary,
+              width: _borderWidth),
+          borderRadius: BorderRadius.circular(
+            peerCardUiType.value == PeerUiType.grid ? _cardRadius : _tileRadius,
+          ),
+        );
       },
       onExit: (evt) {
         deco.value = BoxDecoration(
-            border: Border.all(color: Colors.transparent, width: _borderWidth),
-            borderRadius: peerCardUiType.value == PeerUiType.grid
-                ? BorderRadius.circular(_cardRadius)
-                : null);
+          border: Border.all(color: Colors.transparent, width: _borderWidth),
+          borderRadius: BorderRadius.circular(
+            peerCardUiType.value == PeerUiType.grid ? _cardRadius : _tileRadius,
+          ),
+        );
       },
       child: GestureDetector(
           onDoubleTap: () => widget.connect(context, peer.id),
@@ -163,6 +169,10 @@ class _PeerCardState extends State<_PeerCard>
             Container(
               decoration: BoxDecoration(
                 color: str2color('${peer.id}${peer.platform}', 0x7f),
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(_tileRadius),
+                  bottomLeft: Radius.circular(_tileRadius),
+                ),
               ),
               alignment: Alignment.center,
               width: 42,
@@ -170,8 +180,13 @@ class _PeerCardState extends State<_PeerCard>
             ),
             Expanded(
               child: Container(
-                decoration:
-                    BoxDecoration(color: Theme.of(context).backgroundColor),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.background,
+                  borderRadius: BorderRadius.only(
+                    topRight: Radius.circular(_tileRadius),
+                    bottomRight: Radius.circular(_tileRadius),
+                  ),
+                ),
                 child: Row(
                   children: [
                     Expanded(
@@ -266,7 +281,7 @@ class _PeerCardState extends State<_PeerCard>
                   ),
                 ),
                 Container(
-                  color: Theme.of(context).backgroundColor,
+                  color: Theme.of(context).colorScheme.background,
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -316,21 +331,11 @@ class _PeerCardState extends State<_PeerCard>
   bool get wantKeepAlive => true;
 }
 
-enum CardType {
-  recent,
-  fav,
-  lan,
-  ab,
-  grp,
-}
-
 abstract class BasePeerCard extends StatelessWidget {
   final Peer peer;
   final EdgeInsets? menuPadding;
-  final CardType cardType;
 
-  BasePeerCard(
-      {required this.peer, required this.cardType, this.menuPadding, Key? key})
+  BasePeerCard({required this.peer, this.menuPadding, Key? key})
       : super(key: key);
 
   @override
@@ -435,7 +440,7 @@ abstract class BasePeerCard extends StatelessWidget {
                         if (Navigator.canPop(context)) {
                           Navigator.pop(context);
                         }
-                        _rdpDialog(id, cardType);
+                        _rdpDialog(id);
                       },
                     )),
               ))
@@ -481,22 +486,24 @@ abstract class BasePeerCard extends StatelessWidget {
   }
 
   @protected
+  Future<bool> _isForceAlwaysRelay(String id) async {
+    return (await bind.mainGetPeerOption(id: id, key: 'force-always-relay'))
+        .isNotEmpty;
+  }
+
+  @protected
   Future<MenuEntryBase<String>> _forceAlwaysRelayAction(String id) async {
     const option = 'force-always-relay';
     return MenuEntrySwitch<String>(
       switchType: SwitchType.scheckbox,
       text: translate('Always connect via relay'),
       getter: () async {
-        if (cardType == CardType.ab) {
-          return gFFI.abModel.find(id)?.forceAlwaysRelay ?? false;
-        } else {
-          return (await bind.mainGetPeerOption(id: id, key: option)).isNotEmpty;
-        }
+        return await _isForceAlwaysRelay(id);
       },
       setter: (bool v) async {
         gFFI.abModel.setPeerForceAlwaysRelay(id, v);
         await bind.mainSetPeerOption(
-            id: id, key: option, value: bool2option('force-always-relay', v));
+            id: id, key: option, value: bool2option(option, v));
       },
       padding: menuPadding,
       dismissOnClicked: true,
@@ -523,20 +530,24 @@ abstract class BasePeerCard extends StatelessWidget {
       String id, Future<void> Function() reloadFunc,
       {bool isLan = false}) {
     return MenuEntryButton<String>(
-      childBuilder: (TextStyle? style) => Text(
-        translate('Remove'),
-        style: style,
+      childBuilder: (TextStyle? style) => Row(
+        children: [
+          Text(
+            translate('Delete'),
+            style: style?.copyWith(color: Colors.red),
+          ),
+          Expanded(
+              child: Align(
+            alignment: Alignment.centerRight,
+            child: Transform.scale(
+              scale: 0.8,
+              child: Icon(Icons.delete_forever, color: Colors.red),
+            ),
+          ).marginOnly(right: 4)),
+        ],
       ),
       proc: () {
-        () async {
-          if (isLan) {
-            // TODO
-          } else {
-            await bind.mainRemovePeer(id: id);
-          }
-          removePreference(id);
-          await reloadFunc();
-        }();
+        _delete(id, isLan, reloadFunc);
       },
       padding: menuPadding,
       dismissOnClicked: true,
@@ -561,9 +572,21 @@ abstract class BasePeerCard extends StatelessWidget {
   @protected
   MenuEntryBase<String> _addFavAction(String id) {
     return MenuEntryButton<String>(
-      childBuilder: (TextStyle? style) => Text(
-        translate('Add to Favorites'),
-        style: style,
+      childBuilder: (TextStyle? style) => Row(
+        children: [
+          Text(
+            translate('Add to Favorites'),
+            style: style,
+          ),
+          Expanded(
+              child: Align(
+            alignment: Alignment.centerRight,
+            child: Transform.scale(
+              scale: 0.8,
+              child: Icon(Icons.star_outline),
+            ),
+          ).marginOnly(right: 4)),
+        ],
       ),
       proc: () {
         () async {
@@ -583,9 +606,21 @@ abstract class BasePeerCard extends StatelessWidget {
   MenuEntryBase<String> _rmFavAction(
       String id, Future<void> Function() reloadFunc) {
     return MenuEntryButton<String>(
-      childBuilder: (TextStyle? style) => Text(
-        translate('Remove from Favorites'),
-        style: style,
+      childBuilder: (TextStyle? style) => Row(
+        children: [
+          Text(
+            translate('Remove from Favorites'),
+            style: style,
+          ),
+          Expanded(
+              child: Align(
+            alignment: Alignment.centerRight,
+            child: Transform.scale(
+              scale: 0.8,
+              child: Icon(Icons.star),
+            ),
+          ).marginOnly(right: 4)),
+        ],
       ),
       proc: () {
         () async {
@@ -621,14 +656,13 @@ abstract class BasePeerCard extends StatelessWidget {
     );
   }
 
+  @protected
+  Future<String> _getAlias(String id) async =>
+      await bind.mainGetPeerOption(id: id, key: 'alias');
+
   void _rename(String id) async {
     RxBool isInProgress = false.obs;
-    String name;
-    if (cardType == CardType.ab) {
-      name = gFFI.abModel.find(id)?.alias ?? "";
-    } else {
-      name = await bind.mainGetPeerOption(id: id, key: 'alias');
-    }
+    String name = await _getAlias(id);
     var controller = TextEditingController(text: name);
     gFFI.dialogManager.show((setState, close) {
       submit() async {
@@ -636,13 +670,19 @@ abstract class BasePeerCard extends StatelessWidget {
         String name = controller.text.trim();
         await bind.mainSetPeerAlias(id: id, alias: name);
         gFFI.abModel.setPeerAlias(id, name);
-        update();
+        _update();
         close();
         isInProgress.value = false;
       }
 
       return CustomAlertDialog(
-        title: Text(translate('Rename')),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.edit_rounded, color: MyTheme.accent),
+            Text(translate('Rename')).paddingOnly(left: 10),
+          ],
+        ),
         content: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -650,9 +690,8 @@ abstract class BasePeerCard extends StatelessWidget {
               child: Form(
                 child: TextFormField(
                   controller: controller,
-                  focusNode: FocusNode()..requestFocus(),
-                  decoration:
-                      const InputDecoration(border: OutlineInputBorder()),
+                  autofocus: true,
+                  decoration: InputDecoration(labelText: translate('Name')),
                 ),
               ),
             ),
@@ -662,8 +701,17 @@ abstract class BasePeerCard extends StatelessWidget {
           ],
         ),
         actions: [
-          TextButton(onPressed: close, child: Text(translate("Cancel"))),
-          TextButton(onPressed: submit, child: Text(translate("OK"))),
+          dialogButton(
+            "Cancel",
+            icon: Icon(Icons.close_rounded),
+            onPressed: close,
+            isOutline: true,
+          ),
+          dialogButton(
+            "OK",
+            icon: Icon(Icons.done_rounded),
+            onPressed: submit,
+          ),
         ],
         onSubmit: submit,
         onCancel: close,
@@ -671,34 +719,65 @@ abstract class BasePeerCard extends StatelessWidget {
     });
   }
 
-  void update() {
-    switch (cardType) {
-      case CardType.recent:
-        bind.mainLoadRecentPeers();
-        break;
-      case CardType.fav:
-        bind.mainLoadFavPeers();
-        break;
-      case CardType.lan:
-        bind.mainLoadLanPeers();
-        break;
-      case CardType.ab:
-        gFFI.abModel.pullAb();
-        break;
-      case CardType.grp:
-        gFFI.groupModel.pull();
-        break;
-    }
+  @protected
+  void _update();
+
+  void _delete(String id, bool isLan, Function reloadFunc) async {
+    gFFI.dialogManager.show(
+      (setState, close) {
+        submit() async {
+          if (isLan) {
+            bind.mainRemoveDiscovered(id: id);
+          } else {
+            final favs = (await bind.mainGetFav()).toList();
+            if (favs.remove(id)) {
+              await bind.mainStoreFav(favs: favs);
+            }
+            await bind.mainRemovePeer(id: id);
+          }
+          removePreference(id);
+          await reloadFunc();
+          close();
+        }
+
+        return CustomAlertDialog(
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.delete_rounded,
+                color: Colors.red,
+              ),
+              Text(translate('Delete')).paddingOnly(
+                left: 10,
+              ),
+            ],
+          ),
+          content: SizedBox.shrink(),
+          actions: [
+            dialogButton(
+              "Cancel",
+              icon: Icon(Icons.close_rounded),
+              onPressed: close,
+              isOutline: true,
+            ),
+            dialogButton(
+              "OK",
+              icon: Icon(Icons.done_rounded),
+              onPressed: submit,
+            ),
+          ],
+          onSubmit: submit,
+          onCancel: close,
+        );
+      },
+    );
   }
 }
 
 class RecentPeerCard extends BasePeerCard {
   RecentPeerCard({required Peer peer, EdgeInsets? menuPadding, Key? key})
-      : super(
-            peer: peer,
-            cardType: CardType.recent,
-            menuPadding: menuPadding,
-            key: key);
+      : super(peer: peer, menuPadding: menuPadding, key: key);
 
   @override
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
@@ -707,6 +786,9 @@ class RecentPeerCard extends BasePeerCard {
       _connectAction(context, peer),
       _transferFileAction(context, peer.id),
     ];
+
+    final List favs = (await bind.mainGetFav()).toList();
+
     if (isDesktop && peer.platform != 'Android') {
       menuItems.add(_tcpTunnelingAction(context, peer.id));
     }
@@ -720,27 +802,37 @@ class RecentPeerCard extends BasePeerCard {
     }
     menuItems.add(MenuEntryDivider());
     menuItems.add(_renameAction(peer.id));
-    menuItems.add(_removeAction(peer.id, () async {
-      await bind.mainLoadRecentPeers();
-    }));
     if (await bind.mainPeerHasPassword(id: peer.id)) {
       menuItems.add(_unrememberPasswordAction(peer.id));
     }
-    menuItems.add(_addFavAction(peer.id));
-    if (!gFFI.abModel.idContainBy(peer.id)) {
-      menuItems.add(_addToAb(peer));
+
+    if (!favs.contains(peer.id)) {
+      menuItems.add(_addFavAction(peer.id));
+    } else {
+      menuItems.add(_rmFavAction(peer.id, () async {}));
     }
+
+    if (gFFI.userModel.userName.isNotEmpty) {
+      if (!gFFI.abModel.idContainBy(peer.id)) {
+        menuItems.add(_addToAb(peer));
+      }
+    }
+
+    menuItems.add(MenuEntryDivider());
+    menuItems.add(_removeAction(peer.id, () async {
+      await bind.mainLoadRecentPeers();
+    }));
     return menuItems;
   }
+
+  @protected
+  @override
+  void _update() => bind.mainLoadRecentPeers();
 }
 
 class FavoritePeerCard extends BasePeerCard {
   FavoritePeerCard({required Peer peer, EdgeInsets? menuPadding, Key? key})
-      : super(
-            peer: peer,
-            cardType: CardType.fav,
-            menuPadding: menuPadding,
-            key: key);
+      : super(peer: peer, menuPadding: menuPadding, key: key);
 
   @override
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
@@ -762,29 +854,34 @@ class FavoritePeerCard extends BasePeerCard {
     }
     menuItems.add(MenuEntryDivider());
     menuItems.add(_renameAction(peer.id));
-    menuItems.add(_removeAction(peer.id, () async {
-      await bind.mainLoadFavPeers();
-    }));
     if (await bind.mainPeerHasPassword(id: peer.id)) {
       menuItems.add(_unrememberPasswordAction(peer.id));
     }
     menuItems.add(_rmFavAction(peer.id, () async {
       await bind.mainLoadFavPeers();
     }));
-    if (!gFFI.abModel.idContainBy(peer.id)) {
-      menuItems.add(_addToAb(peer));
+
+    if (gFFI.userModel.userName.isNotEmpty) {
+      if (!gFFI.abModel.idContainBy(peer.id)) {
+        menuItems.add(_addToAb(peer));
+      }
     }
+
+    menuItems.add(MenuEntryDivider());
+    menuItems.add(_removeAction(peer.id, () async {
+      await bind.mainLoadFavPeers();
+    }));
     return menuItems;
   }
+
+  @protected
+  @override
+  void _update() => bind.mainLoadFavPeers();
 }
 
 class DiscoveredPeerCard extends BasePeerCard {
   DiscoveredPeerCard({required Peer peer, EdgeInsets? menuPadding, Key? key})
-      : super(
-            peer: peer,
-            cardType: CardType.lan,
-            menuPadding: menuPadding,
-            key: key);
+      : super(peer: peer, menuPadding: menuPadding, key: key);
 
   @override
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
@@ -793,6 +890,9 @@ class DiscoveredPeerCard extends BasePeerCard {
       _connectAction(context, peer),
       _transferFileAction(context, peer.id),
     ];
+
+    final List favs = (await bind.mainGetFav()).toList();
+
     if (isDesktop && peer.platform != 'Android') {
       menuItems.add(_tcpTunnelingAction(context, peer.id));
     }
@@ -804,22 +904,36 @@ class DiscoveredPeerCard extends BasePeerCard {
     if (Platform.isWindows) {
       menuItems.add(_createShortCutAction(peer.id));
     }
-    menuItems.add(MenuEntryDivider());
-    menuItems.add(_removeAction(peer.id, () async {}));
-    if (!gFFI.abModel.idContainBy(peer.id)) {
-      menuItems.add(_addToAb(peer));
+
+    if (!favs.contains(peer.id)) {
+      menuItems.add(_addFavAction(peer.id));
+    } else {
+      menuItems.add(_rmFavAction(peer.id, () async {}));
     }
+
+    if (gFFI.userModel.userName.isNotEmpty) {
+      if (!gFFI.abModel.idContainBy(peer.id)) {
+        menuItems.add(_addToAb(peer));
+      }
+    }
+
+    menuItems.add(MenuEntryDivider());
+    menuItems.add(
+      _removeAction(peer.id, () async {
+        await bind.mainLoadLanPeers();
+      }, isLan: true),
+    );
     return menuItems;
   }
+
+  @protected
+  @override
+  void _update() => bind.mainLoadLanPeers();
 }
 
 class AddressBookPeerCard extends BasePeerCard {
   AddressBookPeerCard({required Peer peer, EdgeInsets? menuPadding, Key? key})
-      : super(
-            peer: peer,
-            cardType: CardType.ab,
-            menuPadding: menuPadding,
-            key: key);
+      : super(peer: peer, menuPadding: menuPadding, key: key);
 
   @override
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
@@ -841,15 +955,31 @@ class AddressBookPeerCard extends BasePeerCard {
     }
     menuItems.add(MenuEntryDivider());
     menuItems.add(_renameAction(peer.id));
-    menuItems.add(_removeAction(peer.id, () async {}));
     if (await bind.mainPeerHasPassword(id: peer.id)) {
       menuItems.add(_unrememberPasswordAction(peer.id));
     }
     if (gFFI.abModel.tags.isNotEmpty) {
       menuItems.add(_editTagAction(peer.id));
     }
+
+    menuItems.add(MenuEntryDivider());
+    menuItems.add(_removeAction(peer.id, () async {}));
     return menuItems;
   }
+
+  @protected
+  @override
+  Future<bool> _isForceAlwaysRelay(String id) async =>
+      gFFI.abModel.find(id)?.forceAlwaysRelay ?? false;
+
+  @protected
+  @override
+  Future<String> _getAlias(String id) async =>
+      gFFI.abModel.find(id)?.alias ?? '';
+
+  @protected
+  @override
+  void _update() => gFFI.abModel.pullAb();
 
   @protected
   @override
@@ -931,8 +1061,8 @@ class AddressBookPeerCard extends BasePeerCard {
           ],
         ),
         actions: [
-          TextButton(onPressed: close, child: Text(translate("Cancel"))),
-          TextButton(onPressed: submit, child: Text(translate("OK"))),
+          dialogButton("Cancel", onPressed: close, isOutline: true),
+          dialogButton("OK", onPressed: submit),
         ],
         onSubmit: submit,
         onCancel: close,
@@ -943,11 +1073,7 @@ class AddressBookPeerCard extends BasePeerCard {
 
 class MyGroupPeerCard extends BasePeerCard {
   MyGroupPeerCard({required Peer peer, EdgeInsets? menuPadding, Key? key})
-      : super(
-            peer: peer,
-            cardType: CardType.grp,
-            menuPadding: menuPadding,
-            key: key);
+      : super(peer: peer, menuPadding: menuPadding, key: key);
 
   @override
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
@@ -974,18 +1100,15 @@ class MyGroupPeerCard extends BasePeerCard {
     }
     return menuItems;
   }
+
+  @protected
+  @override
+  void _update() => gFFI.groupModel.pull();
 }
 
-void _rdpDialog(String id, CardType card) async {
-  String port, username;
-  if (card == CardType.ab) {
-    port = gFFI.abModel.find(id)?.rdpPort ?? '';
-    username = gFFI.abModel.find(id)?.rdpUsername ?? '';
-  } else {
-    port = await bind.mainGetPeerOption(id: id, key: 'rdp_port');
-    username = await bind.mainGetPeerOption(id: id, key: 'rdp_username');
-  }
-
+void _rdpDialog(String id) async {
+  final port = await bind.mainGetPeerOption(id: id, key: 'rdp_port');
+  final username = await bind.mainGetPeerOption(id: id, key: 'rdp_username');
   final portController = TextEditingController(text: port);
   final userController = TextEditingController(text: username);
   final passwordController = TextEditingController(
@@ -1007,7 +1130,7 @@ void _rdpDialog(String id, CardType card) async {
     }
 
     return CustomAlertDialog(
-      title: Text('RDP ${translate('Settings')}'),
+      title: Text(translate('RDP Settings')),
       content: ConstrainedBox(
         constraints: const BoxConstraints(minWidth: 500),
         child: Column(
@@ -1018,69 +1141,63 @@ void _rdpDialog(String id, CardType card) async {
             ),
             Row(
               children: [
-                ConstrainedBox(
-                    constraints: const BoxConstraints(minWidth: 100),
-                    child: Text(
-                      "${translate('Port')}:",
-                      textAlign: TextAlign.start,
-                    ).marginOnly(bottom: 16.0)),
-                const SizedBox(
-                  width: 24.0,
-                ),
+                isDesktop
+                    ? ConstrainedBox(
+                        constraints: const BoxConstraints(minWidth: 140),
+                        child: Text(
+                          "${translate('Port')}:",
+                          textAlign: TextAlign.right,
+                        ).marginOnly(right: 10))
+                    : SizedBox.shrink(),
                 Expanded(
                   child: TextField(
                     inputFormatters: [
                       FilteringTextInputFormatter.allow(RegExp(
                           r'^([0-9]|[1-9]\d|[1-9]\d{2}|[1-9]\d{3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$'))
                     ],
-                    decoration: const InputDecoration(
-                        border: OutlineInputBorder(), hintText: '3389'),
+                    decoration: InputDecoration(
+                        labelText: isDesktop ? null : translate('Port'),
+                        hintText: '3389'),
                     controller: portController,
-                    focusNode: FocusNode()..requestFocus(),
+                    autofocus: true,
                   ),
                 ),
               ],
-            ),
-            const SizedBox(
-              height: 8.0,
-            ),
+            ).marginOnly(bottom: isDesktop ? 8 : 0),
             Row(
               children: [
-                ConstrainedBox(
-                    constraints: const BoxConstraints(minWidth: 100),
-                    child: Text(
-                      "${translate('Username')}:",
-                      textAlign: TextAlign.start,
-                    ).marginOnly(bottom: 16.0)),
-                const SizedBox(
-                  width: 24.0,
-                ),
+                isDesktop
+                    ? ConstrainedBox(
+                        constraints: const BoxConstraints(minWidth: 140),
+                        child: Text(
+                          "${translate('Username')}:",
+                          textAlign: TextAlign.right,
+                        ).marginOnly(right: 10))
+                    : SizedBox.shrink(),
                 Expanded(
                   child: TextField(
-                    decoration:
-                        const InputDecoration(border: OutlineInputBorder()),
+                    decoration: InputDecoration(
+                        labelText: isDesktop ? null : translate('Username')),
                     controller: userController,
                   ),
                 ),
               ],
-            ),
-            const SizedBox(
-              height: 8.0,
-            ),
+            ).marginOnly(bottom: isDesktop ? 8 : 0),
             Row(
               children: [
-                ConstrainedBox(
-                    constraints: const BoxConstraints(minWidth: 100),
-                    child: Text("${translate('Password')}:")
-                        .marginOnly(bottom: 16.0)),
-                const SizedBox(
-                  width: 24.0,
-                ),
+                isDesktop
+                    ? ConstrainedBox(
+                        constraints: const BoxConstraints(minWidth: 140),
+                        child: Text(
+                          "${translate('Password')}:",
+                          textAlign: TextAlign.right,
+                        ).marginOnly(right: 10))
+                    : SizedBox.shrink(),
                 Expanded(
                   child: Obx(() => TextField(
                         obscureText: secure.value,
                         decoration: InputDecoration(
-                            border: const OutlineInputBorder(),
+                            labelText: isDesktop ? null : translate('Password'),
                             suffixIcon: IconButton(
                                 onPressed: () => secure.value = !secure.value,
                                 icon: Icon(secure.value
@@ -1090,13 +1207,13 @@ void _rdpDialog(String id, CardType card) async {
                       )),
                 ),
               ],
-            ),
+            ).marginOnly(bottom: isDesktop ? 8 : 0),
           ],
         ),
       ),
       actions: [
-        TextButton(onPressed: close, child: Text(translate("Cancel"))),
-        TextButton(onPressed: submit, child: Text(translate("OK"))),
+        dialogButton("Cancel", onPressed: close, isOutline: true),
+        dialogButton("OK", onPressed: submit),
       ],
       onSubmit: submit,
       onCancel: close,
@@ -1115,21 +1232,21 @@ Widget getOnline(double rightPadding, bool online) {
 }
 
 class ActionMore extends StatelessWidget {
-  final RxBool _iconMoreHover = false.obs;
+  final RxBool _hover = false.obs;
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-        onEnter: (_) => _iconMoreHover.value = true,
-        onExit: (_) => _iconMoreHover.value = false,
+    return InkWell(
+        onTap: () {},
+        onHover: (value) => _hover.value = value,
         child: Obx(() => CircleAvatar(
             radius: 14,
-            backgroundColor: _iconMoreHover.value
+            backgroundColor: _hover.value
                 ? Theme.of(context).scaffoldBackgroundColor
-                : Theme.of(context).backgroundColor,
+                : Theme.of(context).colorScheme.background,
             child: Icon(Icons.more_vert,
                 size: 18,
-                color: _iconMoreHover.value
+                color: _hover.value
                     ? Theme.of(context).textTheme.titleLarge?.color
                     : Theme.of(context)
                         .textTheme

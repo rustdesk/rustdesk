@@ -1,20 +1,21 @@
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
-#include <windows.h>
 #include <tchar.h>
+#include <uni_links_desktop/uni_links_desktop_plugin.h>
+#include <windows.h>
+
+#include <algorithm>
 #include <iostream>
 
 #include "flutter_window.h"
 #include "utils.h"
-// #include <bitsdojo_window_windows/bitsdojo_window_plugin.h>
-
-#include <uni_links_desktop/uni_links_desktop_plugin.h>
 
 typedef char** (*FUNC_RUSTDESK_CORE_MAIN)(int*);
 typedef void (*FUNC_RUSTDESK_FREE_ARGS)( char**, int);
 const char* uniLinksPrefix = "rustdesk://";
+/// Note: `--server`, `--service` are already handled in [core_main.rs].
+const std::vector<std::string> parameters_white_list = {"--install", "--cm"};
 
-// auto bdw = bitsdojo_window_configure(BDW_CUSTOM_FRAME | BDW_HIDE_ON_STARTUP);
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command)
 {
@@ -40,6 +41,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   }
   std::vector<std::string> command_line_arguments =
       GetCommandLineArguments();
+  // Remove possible trailing whitespace from command line arguments
+  for (auto& argument : command_line_arguments) {
+    argument.erase(argument.find_last_not_of(" \n\r\t"));
+  }
 
   int args_len = 0;
   char** c_args = rustdesk_core_main(&args_len);
@@ -51,19 +56,33 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   std::vector<std::string> rust_args(c_args, c_args + args_len);
   free_c_args(c_args, args_len);
 
-  // uni links dispatch
-  // only do uni links when dispatch a rustdesk links
-  auto prefix = std::string(uniLinksPrefix);
-  if (!command_line_arguments.empty() && command_line_arguments.front().compare(0, prefix.size(), prefix.c_str()) == 0) {
-     HWND hwnd = ::FindWindow(_T("FLUTTER_RUNNER_WIN32_WINDOW"), _T("RustDesk"));
-    if (hwnd != NULL) {
-      DispatchToUniLinksDesktop(hwnd);
-
-      ::ShowWindow(hwnd, SW_NORMAL);
-      ::SetForegroundWindow(hwnd);
+  // Uri links dispatch
+  HWND hwnd = ::FindWindow(_T("FLUTTER_RUNNER_WIN32_WINDOW"), _T("RustDesk"));
+  if (hwnd != NULL) {
+    // Allow multiple flutter instances when being executed by parameters
+    // contained in whitelists.
+    bool allow_multiple_instances = false;
+    for (auto& whitelist_param : parameters_white_list) {
+      allow_multiple_instances =
+          allow_multiple_instances ||
+          std::find(command_line_arguments.begin(),
+                    command_line_arguments.end(),
+                    whitelist_param) != command_line_arguments.end();
+    }
+    if (!allow_multiple_instances) {
+      if (!command_line_arguments.empty()) {
+        // Dispatch command line arguments
+        DispatchToUniLinksDesktop(hwnd);
+      } else {
+        // Not called with arguments, or just open the app shortcut on desktop.
+        // So we just show the main window instead.
+        ::ShowWindow(hwnd, SW_NORMAL);
+        ::SetForegroundWindow(hwnd);
+      }
       return EXIT_FAILURE;
     }
   }
+
   // Attach to console when present (e.g., 'flutter run') or create a
   // new console when running with a debugger.
   if (!::AttachConsole(ATTACH_PARENT_PROCESS) && ::IsDebuggerPresent())
@@ -77,10 +96,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   flutter::DartProject project(L"data");
   // connection manager hide icon from taskbar
-  bool showOnTaskBar = true;
+  bool is_cm_page = false;
   auto cmParam = std::string("--cm");
   if (!command_line_arguments.empty() && command_line_arguments.front().compare(0, cmParam.size(), cmParam.c_str()) == 0) {
-      showOnTaskBar = false;
+    is_cm_page = true;
   }
   command_line_arguments.insert(command_line_arguments.end(), rust_args.begin(), rust_args.end());
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
@@ -88,9 +107,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(800, 600);
-  if (!window.CreateAndShow(L"RustDesk", origin, size, showOnTaskBar))
-  {
-    return EXIT_FAILURE;
+  if (!window.CreateAndShow(
+          is_cm_page ? L"RustDesk - Connection Manager" : L"RustDesk", origin,
+          size, !is_cm_page)) {
+      return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);
 

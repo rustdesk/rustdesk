@@ -21,7 +21,7 @@ pub use context_send::*;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "t", content = "c")]
-pub enum ClipbaordFile {
+pub enum ClipboardFile {
     MonitorReady,
     FormatList {
         format_list: Vec<(i32, String)>,
@@ -61,8 +61,8 @@ struct ConnEnabled {
 struct MsgChannel {
     peer_id: String,
     conn_id: i32,
-    sender: UnboundedSender<ClipbaordFile>,
-    receiver: Arc<TokioMutex<UnboundedReceiver<ClipbaordFile>>>,
+    sender: UnboundedSender<ClipboardFile>,
+    receiver: Arc<TokioMutex<UnboundedReceiver<ClipboardFile>>>,
 }
 
 #[derive(PartialEq)]
@@ -89,7 +89,7 @@ pub fn get_client_conn_id(peer_id: &str) -> Option<i32> {
 
 pub fn get_rx_cliprdr_client(
     peer_id: &str,
-) -> (i32, Arc<TokioMutex<UnboundedReceiver<ClipbaordFile>>>) {
+) -> (i32, Arc<TokioMutex<UnboundedReceiver<ClipboardFile>>>) {
     let mut lock = VEC_MSG_CHANNEL.write().unwrap();
     match lock.iter().find(|x| x.peer_id == peer_id.to_owned()) {
         Some(msg_channel) => (msg_channel.conn_id, msg_channel.receiver.clone()),
@@ -110,7 +110,7 @@ pub fn get_rx_cliprdr_client(
     }
 }
 
-pub fn get_rx_cliprdr_server(conn_id: i32) -> Arc<TokioMutex<UnboundedReceiver<ClipbaordFile>>> {
+pub fn get_rx_cliprdr_server(conn_id: i32) -> Arc<TokioMutex<UnboundedReceiver<ClipboardFile>>> {
     let mut lock = VEC_MSG_CHANNEL.write().unwrap();
     match lock.iter().find(|x| x.conn_id == conn_id) {
         Some(msg_channel) => msg_channel.receiver.clone(),
@@ -131,7 +131,7 @@ pub fn get_rx_cliprdr_server(conn_id: i32) -> Arc<TokioMutex<UnboundedReceiver<C
 }
 
 #[inline]
-fn send_data(conn_id: i32, data: ClipbaordFile) {
+fn send_data(conn_id: i32, data: ClipboardFile) {
     // no need to handle result here
     if let Some(msg_channel) = VEC_MSG_CHANNEL
         .read()
@@ -157,28 +157,28 @@ pub fn empty_clipboard(context: &mut Box<CliprdrClientContext>, conn_id: i32) ->
 pub fn server_clip_file(
     context: &mut Box<CliprdrClientContext>,
     conn_id: i32,
-    msg: ClipbaordFile,
+    msg: ClipboardFile,
 ) -> u32 {
     match msg {
-        ClipbaordFile::MonitorReady => {
+        ClipboardFile::MonitorReady => {
             log::debug!("server_monitor_ready called");
             let ret = server_monitor_ready(context, conn_id);
             log::debug!("server_monitor_ready called, return {}", ret);
             ret
         }
-        ClipbaordFile::FormatList { format_list } => {
+        ClipboardFile::FormatList { format_list } => {
             log::debug!("server_format_list called");
             let ret = server_format_list(context, conn_id, format_list);
             log::debug!("server_format_list called, return {}", ret);
             ret
         }
-        ClipbaordFile::FormatListResponse { msg_flags } => {
+        ClipboardFile::FormatListResponse { msg_flags } => {
             log::debug!("format_list_response called");
             let ret = server_format_list_response(context, conn_id, msg_flags);
             log::debug!("server_format_list_response called, return {}", ret);
             ret
         }
-        ClipbaordFile::FormatDataRequest {
+        ClipboardFile::FormatDataRequest {
             requested_format_id,
         } => {
             log::debug!("format_data_request called");
@@ -186,7 +186,7 @@ pub fn server_clip_file(
             log::debug!("server_format_data_request called, return {}", ret);
             ret
         }
-        ClipbaordFile::FormatDataResponse {
+        ClipboardFile::FormatDataResponse {
             msg_flags,
             format_data,
         } => {
@@ -195,7 +195,7 @@ pub fn server_clip_file(
             log::debug!("server_format_data_response called, return {}", ret);
             ret
         }
-        ClipbaordFile::FileContentsRequest {
+        ClipboardFile::FileContentsRequest {
             stream_id,
             list_index,
             dw_flags,
@@ -221,7 +221,7 @@ pub fn server_clip_file(
             log::debug!("server_file_contents_request called, return {}", ret);
             ret
         }
-        ClipbaordFile::FileContentsResponse {
+        ClipboardFile::FileContentsResponse {
             msg_flags,
             stream_id,
             requested_data,
@@ -492,7 +492,7 @@ extern "C" fn client_format_list(
         }
         conn_id = (*clip_format_list).connID as i32;
     }
-    let data = ClipbaordFile::FormatList { format_list };
+    let data = ClipboardFile::FormatList { format_list };
     // no need to handle result here
     if conn_id == 0 {
         VEC_MSG_CHANNEL
@@ -519,7 +519,7 @@ extern "C" fn client_format_list_response(
         conn_id = (*format_list_response).connID as i32;
         msg_flags = (*format_list_response).msgFlags as i32;
     }
-    let data = ClipbaordFile::FormatListResponse { msg_flags };
+    let data = ClipboardFile::FormatListResponse { msg_flags };
     send_data(conn_id, data);
 
     0
@@ -537,7 +537,7 @@ extern "C" fn client_format_data_request(
         conn_id = (*format_data_request).connID as i32;
         requested_format_id = (*format_data_request).requestedFormatId as i32;
     }
-    let data = ClipbaordFile::FormatDataRequest {
+    let data = ClipboardFile::FormatDataRequest {
         requested_format_id,
     };
     // no need to handle result here
@@ -568,7 +568,7 @@ extern "C" fn client_format_data_response(
             .to_vec();
         }
     }
-    let data = ClipbaordFile::FormatDataResponse {
+    let data = ClipboardFile::FormatDataResponse {
         msg_flags,
         format_data,
     };
@@ -614,7 +614,7 @@ extern "C" fn client_file_contents_request(
         clip_data_id = (*file_contents_request).clipDataId as i32;
     }
 
-    let data = ClipbaordFile::FileContentsRequest {
+    let data = ClipboardFile::FileContentsRequest {
         stream_id,
         list_index,
         dw_flags,
@@ -653,7 +653,7 @@ extern "C" fn client_file_contents_response(
             .to_vec();
         }
     }
-    let data = ClipbaordFile::FileContentsResponse {
+    let data = ClipboardFile::FileContentsResponse {
         msg_flags,
         stream_id,
         requested_data,

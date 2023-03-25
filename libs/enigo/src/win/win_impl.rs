@@ -39,7 +39,7 @@ fn mouse_event(flags: u32, data: u32, dx: i32, dy: i32) -> DWORD {
     unsafe { SendInput(1, &mut input as LPINPUT, size_of::<INPUT>() as c_int) }
 }
 
-fn keybd_event(flags: u32, vk: u16, scan: u16) -> DWORD {
+fn keybd_event(mut flags: u32, vk: u16, scan: u16) -> DWORD {
     let mut scan = scan;
     unsafe {
         // https://github.com/rustdesk/rustdesk/issues/366
@@ -52,21 +52,33 @@ fn keybd_event(flags: u32, vk: u16, scan: u16) -> DWORD {
             scan = MapVirtualKeyExW(vk as _, 0, LAYOUT) as _;
         }
     }
-    let mut input: INPUT = unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
-    input.type_ = INPUT_KEYBOARD;
+
+    if flags & KEYEVENTF_UNICODE == 0 {
+        if scan >> 8 == 0xE0 || scan >> 8 == 0xE1 {
+            flags |= winapi::um::winuser::KEYEVENTF_EXTENDEDKEY;
+        }
+    }
+    let mut union: INPUT_u = unsafe { std::mem::zeroed() };
     unsafe {
-        let dst_ptr = (&mut input.u as *mut _) as *mut u8;
-        let k = KEYBDINPUT {
+        *union.ki_mut() = KEYBDINPUT {
             wVk: vk,
             wScan: scan,
             dwFlags: flags,
             time: 0,
             dwExtraInfo: ENIGO_INPUT_EXTRA_VALUE,
         };
-        let src_ptr = (&k as *const _) as *const u8;
-        std::ptr::copy_nonoverlapping(src_ptr, dst_ptr, size_of::<KEYBDINPUT>());
     }
-    unsafe { SendInput(1, &mut input as LPINPUT, size_of::<INPUT>() as c_int) }
+    let mut inputs = [INPUT {
+        type_: INPUT_KEYBOARD,
+        u: union,
+    }; 1];
+    unsafe {
+        SendInput(
+            inputs.len() as UINT,
+            inputs.as_mut_ptr(),
+            size_of::<INPUT>() as c_int,
+        )
+    }
 }
 
 fn get_error() -> String {
@@ -134,9 +146,18 @@ impl MouseControllable for Enigo {
                 MouseButton::Left => MOUSEEVENTF_LEFTDOWN,
                 MouseButton::Middle => MOUSEEVENTF_MIDDLEDOWN,
                 MouseButton::Right => MOUSEEVENTF_RIGHTDOWN,
-                _ => unimplemented!(),
+                MouseButton::Back => MOUSEEVENTF_XDOWN,
+                MouseButton::Forward => MOUSEEVENTF_XDOWN,
+                _ => {
+                    log::info!("Unsupported button {:?}", button);
+                    return Ok(());
+                }
             },
-            0,
+            match button {
+                MouseButton::Back => XBUTTON1 as _,
+                MouseButton::Forward => XBUTTON2 as _,
+                _ => 0, 
+            },
             0,
             0,
         );
@@ -155,9 +176,18 @@ impl MouseControllable for Enigo {
                 MouseButton::Left => MOUSEEVENTF_LEFTUP,
                 MouseButton::Middle => MOUSEEVENTF_MIDDLEUP,
                 MouseButton::Right => MOUSEEVENTF_RIGHTUP,
-                _ => unimplemented!(),
+                MouseButton::Back => MOUSEEVENTF_XUP,
+                MouseButton::Forward => MOUSEEVENTF_XUP,
+                _ => {
+                    log::info!("Unsupported button {:?}", button);
+                    return;
+                }
             },
-            0,
+            match button {
+                MouseButton::Back => XBUTTON1 as _,
+                MouseButton::Forward => XBUTTON2 as _,
+                _ => 0, 
+            },
             0,
             0,
         );

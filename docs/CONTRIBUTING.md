@@ -35,7 +35,7 @@ efforts from contributors on the same issue.
 
 - Add tests relevant to the fixed bug or new feature.
 
-For specific git instructions, see [GitHub workflow 101](https://github.com/servo/servo/wiki/Github-workflow).
+For specific git instructions, see [GitHub workflow 101](https://github.com/servo/servo/wiki/GitHub-workflow).
 
 ## Conduct
 

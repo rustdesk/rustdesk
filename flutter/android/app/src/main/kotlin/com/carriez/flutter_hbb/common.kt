@@ -1,5 +1,6 @@
 package com.carriez.flutter_hbb
 
+import android.Manifest.permission.*
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
@@ -12,8 +13,8 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
-import android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS
-import android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+import android.provider.Settings
+import android.provider.Settings.*
 import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat.getSystemService
 import com.hjq.permissions.Permission
@@ -21,6 +22,31 @@ import com.hjq.permissions.XXPermissions
 import java.nio.ByteBuffer
 import java.util.*
 
+
+// intent action, extra
+const val ACT_REQUEST_MEDIA_PROJECTION = "REQUEST_MEDIA_PROJECTION"
+const val ACT_INIT_MEDIA_PROJECTION_AND_SERVICE = "INIT_MEDIA_PROJECTION_AND_SERVICE"
+const val ACT_LOGIN_REQ_NOTIFY = "LOGIN_REQ_NOTIFY"
+const val EXT_INIT_FROM_BOOT = "EXT_INIT_FROM_BOOT"
+const val EXT_MEDIA_PROJECTION_RES_INTENT = "MEDIA_PROJECTION_RES_INTENT"
+const val EXT_LOGIN_REQ_NOTIFY = "LOGIN_REQ_NOTIFY"
+
+// Activity requestCode
+const val REQ_INVOKE_PERMISSION_ACTIVITY_MEDIA_PROJECTION = 101
+const val REQ_REQUEST_MEDIA_PROJECTION = 201
+
+// Activity responseCode
+const val RES_FAILED = -100
+
+// Flutter channel
+const val START_ACTION = "start_action"
+const val GET_START_ON_BOOT_OPT = "get_start_on_boot_opt"
+const val SET_START_ON_BOOT_OPT = "set_start_on_boot_opt"
+const val SYNC_APP_DIR_CONFIG_PATH = "sync_app_dir"
+
+const val KEY_SHARED_PREFERENCES = "KEY_SHARED_PREFERENCES"
+const val KEY_START_ON_BOOT_OPT = "KEY_START_ON_BOOT_OPT"
+const val KEY_APP_DIR_CONFIG_PATH = "KEY_APP_DIR_CONFIG_PATH"
 
 @SuppressLint("ConstantLocale")
 val LOCAL_NAME = Locale.getDefault().toString()
@@ -30,61 +56,13 @@ data class Info(
     var width: Int, var height: Int, var scale: Int, var dpi: Int
 )
 
-@RequiresApi(Build.VERSION_CODES.LOLLIPOP)
-fun testVP9Support(): Boolean {
-    return true
-    val res = MediaCodecList(MediaCodecList.ALL_CODECS)
-        .findEncoderForFormat(
-            MediaFormat.createVideoFormat(
-                MediaFormat.MIMETYPE_VIDEO_VP9,
-                SCREEN_INFO.width,
-                SCREEN_INFO.width
-            )
-        )
-    return res != null
-}
-
-@RequiresApi(Build.VERSION_CODES.M)
 fun requestPermission(context: Context, type: String) {
-    val permission = when (type) {
-        "ignore_battery_optimizations" -> {
-            try {
-                context.startActivity(Intent(ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                    data = Uri.parse("package:" + context.packageName)
-                })
-            } catch (e:Exception) {
-                e.printStackTrace()
-            }
-            return
-        }
-        "application_details_settings" -> {
-            try {
-                context.startActivity(Intent().apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    action = "android.settings.APPLICATION_DETAILS_SETTINGS"
-                    data = Uri.parse("package:" + context.packageName)
-                })
-            } catch (e:Exception) {
-                e.printStackTrace()
-            }
-            return
-        }
-        "audio" -> {
-            Permission.RECORD_AUDIO
-        }
-        "file" -> {
-            Permission.MANAGE_EXTERNAL_STORAGE
-        }
-        else -> {
-            return
-        }
-    }
     XXPermissions.with(context)
-        .permission(permission)
+        .permission(type)
         .request { _, all ->
             if (all) {
                 Handler(Looper.getMainLooper()).post {
-                    MainActivity.flutterMethodChannel.invokeMethod(
+                    MainActivity.flutterMethodChannel?.invokeMethod(
                         "on_android_permission_result",
                         mapOf("type" to type, "result" to all)
                     )
@@ -93,24 +71,18 @@ fun requestPermission(context: Context, type: String) {
         }
 }
 
-@RequiresApi(Build.VERSION_CODES.M)
-fun checkPermission(context: Context, type: String): Boolean {
-    val permission = when (type) {
-        "ignore_battery_optimizations" -> {
-            val pw = context.getSystemService(Context.POWER_SERVICE) as PowerManager
-            return pw.isIgnoringBatteryOptimizations(context.packageName)
-        }
-        "audio" -> {
-            Permission.RECORD_AUDIO
-        }
-        "file" -> {
-            Permission.MANAGE_EXTERNAL_STORAGE
-        }
-        else -> {
-            return false
-        }
+fun startAction(context: Context, action: String) {
+    try {
+        context.startActivity(Intent(action).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            // don't pass package name when launch ACTION_ACCESSIBILITY_SETTINGS
+            if (ACTION_ACCESSIBILITY_SETTINGS != action) {
+                data = Uri.parse("package:" + context.packageName)
+            }
+        })
+    } catch (e: Exception) {
+        e.printStackTrace()
     }
-    return XXPermissions.isGranted(context, permission)
 }
 
 class AudioReader(val bufSize: Int, private val maxFrames: Int) {

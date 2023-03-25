@@ -1,11 +1,12 @@
 use crate::{bail, bytes_codec::BytesCodec, ResultType};
+use anyhow::Context as AnyhowCtx;
 use bytes::{BufMut, Bytes, BytesMut};
 use futures::{SinkExt, StreamExt};
 use protobuf::Message;
 use sodiumoxide::crypto::secretbox::{self, Key, Nonce};
 use std::{
     io::{self, Error, ErrorKind},
-    net::SocketAddr,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     ops::{Deref, DerefMut},
     pin::Pin,
     task::{Context, Poll},
@@ -99,7 +100,7 @@ impl FramedStream {
                 }
             }
         }
-        bail!(format!("Failed to connect to {}", remote_addr));
+        bail!(format!("Failed to connect to {remote_addr}"));
     }
 
     pub async fn connect<'a, 't, P, T>(
@@ -209,7 +210,7 @@ impl FramedStream {
             if let Some(Ok(bytes)) = res.as_mut() {
                 key.2 += 1;
                 let nonce = Self::get_nonce(key.2);
-                match secretbox::open(&bytes, &nonce, &key.0) {
+                match secretbox::open(bytes, &nonce, &key.0) {
                     Ok(res) => {
                         bytes.clear();
                         bytes.put_slice(&res);
@@ -245,17 +246,50 @@ impl FramedStream {
 
 const DEFAULT_BACKLOG: u32 = 128;
 
-#[allow(clippy::never_loop)]
 pub async fn new_listener<T: ToSocketAddrs>(addr: T, reuse: bool) -> ResultType<TcpListener> {
     if !reuse {
         Ok(TcpListener::bind(addr).await?)
     } else {
-        for addr in lookup_host(&addr).await? {
-            let socket = new_socket(addr, true)?;
-            return Ok(socket.listen(DEFAULT_BACKLOG)?);
-        }
-        bail!("could not resolve to any address");
+        let addr = lookup_host(&addr)
+            .await?
+            .next()
+            .context("could not resolve to any address")?;
+        new_socket(addr, true)?
+            .listen(DEFAULT_BACKLOG)
+            .map_err(anyhow::Error::msg)
     }
+}
+
+pub async fn listen_any(port: u16) -> ResultType<TcpListener> {
+    if let Ok(mut socket) = TcpSocket::new_v6() {
+        #[cfg(unix)]
+        {
+            use std::os::unix::io::{FromRawFd, IntoRawFd};
+            let raw_fd = socket.into_raw_fd();
+            let sock2 = unsafe { socket2::Socket::from_raw_fd(raw_fd) };
+            sock2.set_only_v6(false).ok();
+            socket = unsafe { TcpSocket::from_raw_fd(sock2.into_raw_fd()) };
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::prelude::{FromRawSocket, IntoRawSocket};
+            let raw_socket = socket.into_raw_socket();
+            let sock2 = unsafe { socket2::Socket::from_raw_socket(raw_socket) };
+            sock2.set_only_v6(false).ok();
+            socket = unsafe { TcpSocket::from_raw_socket(sock2.into_raw_socket()) };
+        }
+        if socket
+            .bind(SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), port))
+            .is_ok()
+        {
+            if let Ok(l) = socket.listen(DEFAULT_BACKLOG) {
+                return Ok(l);
+            }
+        }
+    }
+    let s = TcpSocket::new_v4()?;
+    s.bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port))?;
+    Ok(s.listen(DEFAULT_BACKLOG)?)
 }
 
 impl Unpin for DynTcpStream {}

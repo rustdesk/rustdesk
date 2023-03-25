@@ -6,9 +6,9 @@ import 'dart:io';
 
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/common/widgets/address_book.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/scroll_wrapper.dart';
+import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:window_manager/window_manager.dart';
@@ -16,9 +16,10 @@ import 'package:window_manager/window_manager.dart';
 import '../../common.dart';
 import '../../common/formatter/id_formatter.dart';
 import '../../common/widgets/peer_tab_page.dart';
-import '../../common/widgets/peers_view.dart';
 import '../../models/platform_model.dart';
 import '../widgets/button.dart';
+
+import 'package:flutter_hbb/common/widgets/dialog.dart';
 
 /// Connection page for connecting to a remote peer.
 class ConnectionPage extends StatefulWidget {
@@ -46,7 +47,7 @@ class _ConnectionPageState extends State<ConnectionPage>
   var svcStatusCode = 0.obs;
   var svcIsUsingPublicServer = true.obs;
 
-  bool isWindowMinisized = false;
+  bool isWindowMinimized = false;
 
   @override
   void initState() {
@@ -66,6 +67,9 @@ class _ConnectionPageState extends State<ConnectionPage>
     });
     _idFocusNode.addListener(() {
       _idInputFocused.value = _idFocusNode.hasFocus;
+      // select all to faciliate removing text, just following the behavior of address input of chrome
+      _idController.selection = TextSelection(
+          baseOffset: 0, extentOffset: _idController.value.text.length);
     });
     windowManager.addListener(this);
   }
@@ -82,14 +86,26 @@ class _ConnectionPageState extends State<ConnectionPage>
   void onWindowEvent(String eventName) {
     super.onWindowEvent(eventName);
     if (eventName == 'minimize') {
-      isWindowMinisized = true;
+      isWindowMinimized = true;
     } else if (eventName == 'maximize' || eventName == 'restore') {
-      if (isWindowMinisized && Platform.isWindows) {
-        // windows can't update when minisized.
+      if (isWindowMinimized && Platform.isWindows) {
+        // windows can't update when minimized.
         Get.forceAppUpdate();
       }
-      isWindowMinisized = false;
+      isWindowMinimized = false;
     }
+  }
+
+  @override
+  void onWindowEnterFullScreen() {
+    // Remove edge border by setting the value to zero.
+    stateGlobal.resizeEdgeSize.value = 0;
+  }
+
+  @override
+  void onWindowLeaveFullScreen() {
+    // Restore edge border to default edge size.
+    stateGlobal.resizeEdgeSize.value = kWindowEdgeSize;
   }
 
   @override
@@ -107,7 +123,7 @@ class _ConnectionPageState extends State<ConnectionPage>
             scrollController: _scrollController,
             child: CustomScrollView(
               controller: _scrollController,
-              physics: NeverScrollableScrollPhysics(),
+              physics: DraggableNeverScrollableScrollPhysics(),
               slivers: [
                 SliverList(
                     delegate: SliverChildListDelegate([
@@ -136,7 +152,7 @@ class _ConnectionPageState extends State<ConnectionPage>
   /// Callback for the connect button.
   /// Connects to the selected peer.
   void onConnect({bool isFileTransfer = false}) {
-    final id = _idController.id;
+    var id = _idController.id;
     connect(context, id, isFileTransfer: isFileTransfer);
   }
 
@@ -147,9 +163,8 @@ class _ConnectionPageState extends State<ConnectionPage>
       width: 320 + 20 * 2,
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 22),
       decoration: BoxDecoration(
-        color: Theme.of(context).backgroundColor,
-        borderRadius: const BorderRadius.all(Radius.circular(13)),
-      ),
+          borderRadius: const BorderRadius.all(Radius.circular(13)),
+          border: Border.all(color: Theme.of(context).colorScheme.background)),
       child: Ink(
         child: Column(
           children: [
@@ -172,6 +187,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                 Expanded(
                   child: Obx(
                     () => TextField(
+                      maxLength: 90,
                       autocorrect: false,
                       enableSuggestions: false,
                       keyboardType: TextInputType.visiblePassword,
@@ -179,31 +195,19 @@ class _ConnectionPageState extends State<ConnectionPage>
                       style: const TextStyle(
                         fontFamily: 'WorkSans',
                         fontSize: 22,
-                        height: 1,
+                        height: 1.4,
                       ),
                       maxLines: 1,
                       cursorColor:
                           Theme.of(context).textTheme.titleLarge?.color,
                       decoration: InputDecoration(
+                          filled: false,
+                          counterText: '',
                           hintText: _idInputFocused.value
                               ? null
                               : translate('Enter Remote ID'),
-                          border: OutlineInputBorder(
-                              borderRadius: BorderRadius.zero,
-                              borderSide: BorderSide(
-                                  color: MyTheme.color(context).border!)),
-                          enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.zero,
-                              borderSide: BorderSide(
-                                  color: MyTheme.color(context).border!)),
-                          focusedBorder: const OutlineInputBorder(
-                            borderRadius: BorderRadius.zero,
-                            borderSide:
-                                BorderSide(color: MyTheme.button, width: 3),
-                          ),
-                          isDense: true,
                           contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 12)),
+                              horizontal: 15, vertical: 13)),
                       controller: _idController,
                       inputFormatters: [IDTextInputFormatter()],
                       onSubmitted: (s) {

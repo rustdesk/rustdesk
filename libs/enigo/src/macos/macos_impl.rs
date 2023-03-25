@@ -226,7 +226,10 @@ impl MouseControllable for Enigo {
             MouseButton::Left => (CGMouseButton::Left, CGEventType::LeftMouseDown),
             MouseButton::Middle => (CGMouseButton::Center, CGEventType::OtherMouseDown),
             MouseButton::Right => (CGMouseButton::Right, CGEventType::RightMouseDown),
-            _ => unimplemented!(),
+            _ => {
+                log::info!("Unsupported button {:?}", button);
+                return Ok(());
+            },
         };
         let dest = CGPoint::new(current_x as f64, current_y as f64);
         if let Some(src) = self.event_source.as_ref() {
@@ -249,7 +252,10 @@ impl MouseControllable for Enigo {
             MouseButton::Left => (CGMouseButton::Left, CGEventType::LeftMouseUp),
             MouseButton::Middle => (CGMouseButton::Center, CGEventType::OtherMouseUp),
             MouseButton::Right => (CGMouseButton::Right, CGEventType::RightMouseUp),
-            _ => unimplemented!(),
+            _ => {
+                log::info!("Unsupported button {:?}", button);
+                return;
+            },
         };
         let dest = CGPoint::new(current_x as f64, current_y as f64);
         if let Some(src) = self.event_source.as_ref() {

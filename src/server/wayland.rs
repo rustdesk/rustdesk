@@ -1,6 +1,6 @@
 use super::*;
 use hbb_common::{allow_err, platform::linux::DISTRO};
-use scrap::{set_map_err, Capturer, Display, Frame, TraitCapturer};
+use scrap::{is_cursor_embedded, set_map_err, Capturer, Display, Frame, TraitCapturer};
 use std::io;
 
 use super::video_service::{
@@ -12,7 +12,7 @@ lazy_static::lazy_static! {
     static ref LOG_SCRAP_COUNT: Mutex<u32> = Mutex::new(0);
 }
 
-pub fn set_wayland_scrap_map_err() {
+pub fn init() {
     set_map_err(map_err_scrap);
 }
 
@@ -129,7 +129,7 @@ pub(super) async fn check_init() -> ResultType<()> {
                 let num = all.len();
                 let (primary, mut displays) = super::video_service::get_displays_2(&all);
                 for display in displays.iter_mut() {
-                    display.cursor_embedded = true;
+                    display.cursor_embedded = is_cursor_embedded();
                 }
 
                 let mut rects: Vec<((i32, i32), usize, usize)> = Vec::new();
@@ -230,19 +230,6 @@ pub(super) fn get_primary() -> ResultType<usize> {
     }
 }
 
-pub(super) fn get_display_num() -> ResultType<usize> {
-    let addr = *CAP_DISPLAY_INFO.read().unwrap();
-    if addr != 0 {
-        let cap_display_info: *const CapDisplayInfo = addr as _;
-        unsafe {
-            let cap_display_info = &*cap_display_info;
-            Ok(cap_display_info.num)
-        }
-    } else {
-        bail!("Failed to get capturer display info");
-    }
-}
-
 #[allow(dead_code)]
 pub(super) fn release_resource() {
     if scrap::is_x11() {
@@ -276,7 +263,7 @@ pub(super) fn get_capturer() -> ResultType<super::video_service::CapturerInfo> {
                 ndisplay: cap_display_info.num,
                 current: cap_display_info.current,
                 privacy_mode_id: 0,
-                _captuerer_privacy_mode_id: 0,
+                _capturer_privacy_mode_id: 0,
                 capturer: Box::new(cap_display_info.capturer.clone()),
             })
         }

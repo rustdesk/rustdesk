@@ -27,6 +27,7 @@ message PunchHole {
   bytes socket_addr = 1;
   string relay_server = 2;
   NatType nat_type = 3;
+  string request_region = 4;
 }
 
 message TestNatRequest {
@@ -51,6 +52,7 @@ message PunchHoleSent {
   string relay_server = 3;
   NatType nat_type = 4;
   string version = 5;
+  string request_region = 6;
 }
 
 message RegisterPk {
@@ -105,6 +107,7 @@ message RequestRelay {
   string licence_key = 6;
   ConnType conn_type = 7;
   string token = 8;
+  string request_region = 9;
 }
 
 message RelayResponse {
@@ -117,6 +120,7 @@ message RelayResponse {
   }
   string refuse_reason = 6;
   string version = 7;
+  string request_region = 8;
 }
 
 message SoftwareUpdate { string url = 1; }
@@ -128,6 +132,7 @@ message SoftwareUpdate { string url = 1; }
 message FetchLocalAddr { 
   bytes socket_addr = 1; 
   string relay_server = 2;
+  string request_region = 3;
 }
 
 message LocalAddr {
@@ -136,6 +141,7 @@ message LocalAddr {
   string relay_server = 3;
   string id = 4;
   string version = 5;
+  string request_region = 6;
 }
 
 message PeerDiscovery {

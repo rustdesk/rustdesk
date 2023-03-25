@@ -13,7 +13,8 @@ use std::{
     convert::TryFrom,
     ops::Sub,
     sync::atomic::{AtomicBool, Ordering},
-    time::Instant,
+    thread,
+    time::{self, Instant},
 };
 
 const INVALID_CURSOR_POS: i32 = i32::MIN;
@@ -71,7 +72,6 @@ struct Input {
     y: i32,
 }
 
-const KEY_RDEV_START: u64 = 999;
 const KEY_CHAR_START: u64 = 9999;
 
 #[derive(Clone, Default)]
@@ -129,6 +129,7 @@ pub fn new_pos() -> GenericService {
     sp
 }
 
+#[inline]
 fn update_last_cursor_pos(x: i32, y: i32) {
     let mut lock = LATEST_SYS_CURSOR_POS.lock().unwrap();
     if lock.1 .0 != x || lock.1 .1 != y {
@@ -137,28 +138,30 @@ fn update_last_cursor_pos(x: i32, y: i32) {
 }
 
 fn run_pos(sp: GenericService, state: &mut StatePos) -> ResultType<()> {
-    if let Some((x, y)) = crate::get_cursor_pos() {
-        update_last_cursor_pos(x, y);
-        if state.is_moved(x, y) {
-            let mut msg_out = Message::new();
-            msg_out.set_cursor_position(CursorPosition {
-                x,
-                y,
-                ..Default::default()
-            });
-            let exclude = {
-                let now = get_time();
-                let lock = LATEST_PEER_INPUT_CURSOR.lock().unwrap();
-                if now - lock.time < 300 {
-                    lock.conn
-                } else {
-                    0
-                }
-            };
-            sp.send_without(msg_out, exclude);
-        }
-        state.cursor_pos = (x, y);
+    let (_, (x, y)) = *LATEST_SYS_CURSOR_POS.lock().unwrap();
+    if x == INVALID_CURSOR_POS || y == INVALID_CURSOR_POS {
+        return Ok(());
     }
+
+    if state.is_moved(x, y) {
+        let mut msg_out = Message::new();
+        msg_out.set_cursor_position(CursorPosition {
+            x,
+            y,
+            ..Default::default()
+        });
+        let exclude = {
+            let now = get_time();
+            let lock = LATEST_PEER_INPUT_CURSOR.lock().unwrap();
+            if now - lock.time < 300 {
+                lock.conn
+            } else {
+                0
+            }
+        };
+        sp.send_without(msg_out, exclude);
+    }
+    state.cursor_pos = (x, y);
 
     sp.snapshot(|sps| {
         let mut msg_out = Message::new();
@@ -202,19 +205,61 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
     Ok(())
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+enum KeysDown {
+    RdevKey(RawKey),
+    EnigoKey(u64),
+}
+
 lazy_static::lazy_static! {
     static ref ENIGO: Arc<Mutex<Enigo>> = {
         Arc::new(Mutex::new(Enigo::new()))
     };
-    static ref KEYS_DOWN: Arc<Mutex<HashMap<u64, Instant>>> = Default::default();
+    static ref KEYS_DOWN: Arc<Mutex<HashMap<KeysDown, Instant>>> = Default::default();
     static ref LATEST_PEER_INPUT_CURSOR: Arc<Mutex<Input>> = Default::default();
-    static ref LATEST_SYS_CURSOR_POS: Arc<Mutex<(Instant, (i32, i32))>> = Arc::new(Mutex::new((Instant::now().sub(MOUSE_MOVE_PROTECTION_TIMEOUT), (0, 0))));
+    static ref LATEST_SYS_CURSOR_POS: Arc<Mutex<(Instant, (i32, i32))>> = Arc::new(Mutex::new((Instant::now().sub(MOUSE_MOVE_PROTECTION_TIMEOUT), (INVALID_CURSOR_POS, INVALID_CURSOR_POS))));
 }
 static EXITING: AtomicBool = AtomicBool::new(false);
 
 const MOUSE_MOVE_PROTECTION_TIMEOUT: Duration = Duration::from_millis(1_000);
 // Actual diff of (x,y) is (1,1) here. But 5 may be tolerant.
 const MOUSE_ACTIVE_DISTANCE: i32 = 5;
+
+static RECORD_CURSOR_POS_RUNNING: AtomicBool = AtomicBool::new(false);
+
+pub fn try_start_record_cursor_pos() {
+    if RECORD_CURSOR_POS_RUNNING.load(Ordering::SeqCst) {
+        return;
+    }
+
+    RECORD_CURSOR_POS_RUNNING.store(true, Ordering::SeqCst);
+    thread::spawn(|| {
+        let interval = time::Duration::from_millis(33);
+        loop {
+            if !RECORD_CURSOR_POS_RUNNING.load(Ordering::SeqCst) {
+                break;
+            }
+
+            let now = time::Instant::now();
+            if let Some((x, y)) = crate::get_cursor_pos() {
+                update_last_cursor_pos(x, y);
+            }
+            let elapsed = now.elapsed();
+            if elapsed < interval {
+                thread::sleep(interval - elapsed);
+            }
+        }
+        update_last_cursor_pos(INVALID_CURSOR_POS, INVALID_CURSOR_POS);
+    });
+}
+
+pub fn try_stop_record_cursor_pos() {
+    let count_lock = CONN_COUNT.lock().unwrap();
+    if *count_lock > 0 {
+        return;
+    }
+    RECORD_CURSOR_POS_RUNNING.store(false, Ordering::SeqCst);
+}
 
 // mac key input must be run in main thread, otherwise crash on >= osx 10.15
 #[cfg(target_os = "macos")]
@@ -368,6 +413,11 @@ pub fn fix_key_down_timeout_at_exit() {
     log::info!("fix_key_down_timeout_at_exit");
 }
 
+#[cfg(target_os = "linux")]
+pub fn clear_remapped_keycode() {
+    ENIGO.lock().unwrap().tfc_clear_remapped();
+}
+
 #[inline]
 fn record_key_is_control_key(record_key: u64) -> bool {
     record_key < KEY_CHAR_START
@@ -375,12 +425,7 @@ fn record_key_is_control_key(record_key: u64) -> bool {
 
 #[inline]
 fn record_key_is_chr(record_key: u64) -> bool {
-    KEY_RDEV_START <= record_key && record_key < KEY_CHAR_START
-}
-
-#[inline]
-fn record_key_is_rdev_layout(record_key: u64) -> bool {
-    KEY_CHAR_START <= record_key
+    record_key < KEY_CHAR_START
 }
 
 #[inline]
@@ -396,15 +441,16 @@ fn record_key_to_key(record_key: u64) -> Option<Key> {
 }
 
 #[inline]
-fn release_record_key(record_key: u64) {
-    let func = move || {
-        if record_key_is_rdev_layout(record_key) {
-            simulate_(&EventType::KeyRelease(RdevKey::Unknown(
-                (record_key - KEY_RDEV_START) as _,
-            )));
-        } else if let Some(key) = record_key_to_key(record_key) {
-            ENIGO.lock().unwrap().key_up(key);
-            log::debug!("Fixed {:?} timeout", key);
+fn release_record_key(record_key: KeysDown) {
+    let func = move || match record_key {
+        KeysDown::RdevKey(raw_key) => {
+            simulate_(&EventType::KeyRelease(RdevKey::RawKey(raw_key)));
+        }
+        KeysDown::EnigoKey(key) => {
+            if let Some(key) = record_key_to_key(key) {
+                ENIGO.lock().unwrap().key_up(key);
+                log::debug!("Fixed {:?} timeout", key);
+            }
         }
     };
 
@@ -487,7 +533,7 @@ fn active_mouse_(conn: i32) -> bool {
         return false;
     }
 
-    let in_actived_dist = |a: i32, b: i32| -> bool { (a - b).abs() < MOUSE_ACTIVE_DISTANCE };
+    let in_active_dist = |a: i32, b: i32| -> bool { (a - b).abs() < MOUSE_ACTIVE_DISTANCE };
 
     // Check if input is in valid range
     match crate::get_cursor_pos() {
@@ -496,7 +542,7 @@ fn active_mouse_(conn: i32) -> bool {
                 let lock = LATEST_PEER_INPUT_CURSOR.lock().unwrap();
                 (lock.x, lock.y)
             };
-            let mut can_active = in_actived_dist(last_in_x, x) && in_actived_dist(last_in_y, y);
+            let mut can_active = in_active_dist(last_in_x, x) && in_active_dist(last_in_y, y);
             // The cursor may not have been moved to last input position if system is busy now.
             // While this is not a common case, we check it again after some time later.
             if !can_active {
@@ -505,7 +551,7 @@ fn active_mouse_(conn: i32) -> bool {
                 std::thread::sleep(std::time::Duration::from_micros(10));
                 // Sleep here can also somehow suppress delay accumulation.
                 if let Some((x2, y2)) = crate::get_cursor_pos() {
-                    can_active = in_actived_dist(last_in_x, x2) && in_actived_dist(last_in_y, y2);
+                    can_active = in_active_dist(last_in_x, x2) && in_active_dist(last_in_y, y2);
                 }
             }
             if !can_active {
@@ -556,26 +602,38 @@ pub fn handle_mouse_(evt: &MouseEvent) {
             en.mouse_move_to(evt.x, evt.y);
         }
         1 => match buttons {
-            1 => {
+            0x01 => {
                 allow_err!(en.mouse_down(MouseButton::Left));
             }
-            2 => {
+            0x02 => {
                 allow_err!(en.mouse_down(MouseButton::Right));
             }
-            4 => {
+            0x04 => {
                 allow_err!(en.mouse_down(MouseButton::Middle));
+            }
+            0x08 => {
+                allow_err!(en.mouse_down(MouseButton::Back));
+            }
+            0x10 => {
+                allow_err!(en.mouse_down(MouseButton::Forward));
             }
             _ => {}
         },
         2 => match buttons {
-            1 => {
+            0x01 => {
                 en.mouse_up(MouseButton::Left);
             }
-            2 => {
+            0x02 => {
                 en.mouse_up(MouseButton::Right);
             }
-            4 => {
+            0x04 => {
                 en.mouse_up(MouseButton::Middle);
+            }
+            0x08 => {
+                en.mouse_up(MouseButton::Back);
+            }
+            0x10 => {
+                en.mouse_up(MouseButton::Forward);
             }
             _ => {}
         },
@@ -704,11 +762,8 @@ pub fn handle_key(evt: &KeyEvent) {
 fn reset_input() {
     unsafe {
         let _lock = VIRTUAL_INPUT_MTX.lock();
-        VIRTUAL_INPUT = VirtualInput::new(
-            CGEventSourceStateID::Private,
-            CGEventTapLocation::AnnotatedSession,
-        )
-        .ok();
+        VIRTUAL_INPUT =
+            VirtualInput::new(CGEventSourceStateID::Private, CGEventTapLocation::Session).ok();
     }
 }
 
@@ -721,7 +776,7 @@ pub fn reset_input_ondisconn() {
     }
 }
 
-fn sim_rdev_rawkey(code: u32, keydown: bool) {
+fn sim_rdev_rawkey_position(code: u32, keydown: bool) {
     #[cfg(target_os = "windows")]
     let rawkey = RawKey::ScanCode(code);
     #[cfg(target_os = "linux")]
@@ -732,6 +787,21 @@ fn sim_rdev_rawkey(code: u32, keydown: bool) {
     #[cfg(target_os = "macos")]
     let rawkey = RawKey::MacVirtualKeycode(code);
 
+    // map mode(1): Send keycode according to the peer platform.
+    record_pressed_key(KeysDown::RdevKey(rawkey), keydown);
+
+    let event_type = if keydown {
+        EventType::KeyPress(RdevKey::RawKey(rawkey))
+    } else {
+        EventType::KeyRelease(RdevKey::RawKey(rawkey))
+    };
+    simulate_(&event_type);
+}
+
+#[cfg(target_os = "windows")]
+fn sim_rdev_rawkey_virtual(code: u32, keydown: bool) {
+    let rawkey = RawKey::WinVirtualKeycode(code);
+    record_pressed_key(KeysDown::RdevKey(rawkey), keydown);
     let event_type = if keydown {
         EventType::KeyPress(RdevKey::RawKey(rawkey))
     } else {
@@ -862,15 +932,12 @@ fn sync_numlock_capslock_status(key_event: &KeyEvent) {
 }
 
 fn map_keyboard_mode(evt: &KeyEvent) {
-    // map mode(1): Send keycode according to the peer platform.
-    record_pressed_key(evt.chr() as u64 + KEY_CHAR_START, evt.down);
-
     #[cfg(windows)]
     crate::platform::windows::try_change_desktop();
 
     // Wayland
     #[cfg(target_os = "linux")]
-    if !*IS_X11.lock().unwrap() {
+    if !*IS_X11 {
         let mut en = ENIGO.lock().unwrap();
         let code = evt.chr() as u16;
 
@@ -882,7 +949,7 @@ fn map_keyboard_mode(evt: &KeyEvent) {
         return;
     }
 
-    sim_rdev_rawkey(evt.chr(), evt.down);
+    sim_rdev_rawkey_position(evt.chr(), evt.down);
 }
 
 #[cfg(target_os = "macos")]
@@ -912,10 +979,11 @@ fn release_unpressed_modifiers(en: &mut Enigo, key_event: &KeyEvent) {
 
 #[cfg(target_os = "linux")]
 fn is_altgr_pressed() -> bool {
+    let altgr_rawkey = RawKey::LinuxXorgKeycode(ControlKey::RAlt.value() as _);
     KEYS_DOWN
         .lock()
         .unwrap()
-        .get(&(ControlKey::RAlt.value() as _))
+        .get(&KeysDown::RdevKey(altgr_rawkey))
         .is_some()
 }
 
@@ -999,7 +1067,7 @@ fn release_keys(en: &mut Enigo, to_release: &Vec<Key>) {
     }
 }
 
-fn record_pressed_key(record_key: u64, down: bool) {
+fn record_pressed_key(record_key: KeysDown, down: bool) {
     let mut key_down = KEYS_DOWN.lock().unwrap();
     if down {
         key_down.insert(record_key, Instant::now());
@@ -1038,12 +1106,12 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
                 return;
             }
             let record_key = ck.value() as u64;
-            record_pressed_key(record_key, down);
+            record_pressed_key(KeysDown::EnigoKey(record_key), down);
             process_control_key(&mut en, &ck, down)
         }
         Some(key_event::Union::Chr(chr)) => {
             let record_key = chr as u64 + KEY_CHAR_START;
-            record_pressed_key(record_key, down);
+            record_pressed_key(KeysDown::EnigoKey(record_key), down);
             process_chr(&mut en, chr, down)
         }
         Some(key_event::Union::Unicode(chr)) => process_unicode(&mut en, chr),
@@ -1053,6 +1121,52 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
 
     #[cfg(not(target_os = "macos"))]
     release_keys(&mut en, &to_release);
+}
+
+#[cfg(target_os = "windows")]
+fn translate_process_code(code: u32, down: bool) {
+    crate::platform::windows::try_change_desktop();
+    match code >> 16 {
+        0 => sim_rdev_rawkey_position(code, down),
+        vk_code => sim_rdev_rawkey_virtual(vk_code, down),
+    };
+}
+
+fn translate_keyboard_mode(evt: &KeyEvent) {
+    match &evt.union {
+        Some(key_event::Union::Seq(seq)) => {
+            // Fr -> US
+            // client: Shift + & => 1(send to remote)
+            // remote: Shift + 1 => !
+            //
+            // Try to release shift first.
+            // remote: Shift + 1 => 1
+            let mut en = ENIGO.lock().unwrap();
+
+            #[cfg(target_os = "linux")]
+            {
+                simulate_(&EventType::KeyRelease(RdevKey::ShiftLeft));
+                simulate_(&EventType::KeyRelease(RdevKey::ShiftRight));
+                for chr in seq.chars() {
+                    en.key_click(Key::Layout(chr));
+                }
+            }
+            #[cfg(not(target_os = "linux"))]
+            en.key_sequence(seq);
+        }
+        Some(key_event::Union::Chr(..)) => {
+            #[cfg(target_os = "windows")]
+            translate_process_code(evt.chr(), evt.down);
+            #[cfg(not(target_os = "windows"))]
+            sim_rdev_rawkey_position(evt.chr(), evt.down);
+        }
+        Some(key_event::Union::Unicode(..)) => {
+            // Do not handle unicode for now.
+        }
+        _ => {
+            log::debug!("Unreachable. Unexpected key event {:?}", &evt);
+        }
+    }
 }
 
 pub fn handle_key_(evt: &KeyEvent) {
@@ -1068,7 +1182,7 @@ pub fn handle_key_(evt: &KeyEvent) {
             map_keyboard_mode(evt);
         }
         KeyboardMode::Translate => {
-            legacy_keyboard_mode(evt);
+            translate_keyboard_mode(evt);
         }
         _ => {
             legacy_keyboard_mode(evt);
