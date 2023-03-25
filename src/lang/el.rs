@@ -480,8 +480,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("identical_file_tip", "Το αρχείο είναι πανομοιότυπο με αυτό του άλλου υπολογιστή."),
         ("show_monitors_tip", "Εμφάνιση οθονών στη γραμμή εργαλείων"),
         ("View Mode", "Λειτουργία προβολής"),
-        ("enter_rustdesk_passwd_tip", ""),
-        ("remember_rustdesk_passwd_tip", ""),
-        ("login_linux_tip", ""),
+        ("enter_rustdesk_passwd_tip", "Εισαγωγή του κωδικού RustDesk."),
+        ("remember_rustdesk_passwd_tip", "Να θυμάσαι τον κωδικό του RustDesk."),
+        ("login_linux_tip", "Είσοδος σε απομακρυσμένο λογαριασμό Linux"),
+        ("login_linux_tooltip_tip", "Απαιτείται είσοδος σε απομακρυσμένο λογαριασμό Linux για την ενεργοποίηση του περιβάλλον εργασίας Χ."),
     ].iter().cloned().collect();
 }
