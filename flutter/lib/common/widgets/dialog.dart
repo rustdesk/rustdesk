@@ -496,6 +496,11 @@ _connectDialog(
     }
 
     submit() {
+      // to-do:
+      // username and password are about remote OS account.
+      // If the remote side is headless.
+      // The client side should login to remote OS account, to enable X desktop session.
+      // `username` and `password` will be used in the near future.
       final username = usernameController?.text.trim() ?? '';
       final password = passwordController?.text.trim() ?? '';
       final peerPassword = peerPasswordController?.text.trim() ?? '';
