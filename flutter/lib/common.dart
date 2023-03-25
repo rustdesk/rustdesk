@@ -1522,14 +1522,14 @@ bool checkArguments() {
     return false;
   }
   String? id =
-      kBootArgs.length < connectIndex + 1 ? null : kBootArgs[connectIndex + 1];
+      kBootArgs.length <= connectIndex + 1 ? null : kBootArgs[connectIndex + 1];
   String? password =
-      kBootArgs.length < connectIndex + 2 ? null : kBootArgs[connectIndex + 2];
+      kBootArgs.length <= connectIndex + 2 ? null : kBootArgs[connectIndex + 2];
   if (password != null && password.startsWith("--")) {
     password = null;
   }
   final switchUuidIndex = kBootArgs.indexOf("--switch_uuid");
-  String? switchUuid = kBootArgs.length < switchUuidIndex + 1
+  String? switchUuid = kBootArgs.length <= switchUuidIndex + 1
       ? null
       : kBootArgs[switchUuidIndex + 1];
   if (id != null) {
