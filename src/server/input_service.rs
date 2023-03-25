@@ -5,7 +5,7 @@ use crate::common::IS_X11;
 use dispatch::Queue;
 use enigo::{Enigo, Key, KeyboardControllable, MouseButton, MouseControllable};
 use hbb_common::{config::COMPRESS_LEVEL, get_time, protobuf::EnumOrUnknown};
-use rdev::{self, EventType, Key as RdevKey, RawKey};
+use rdev::{self, EventType, Key as RdevKey, KeyCode, RawKey};
 #[cfg(target_os = "macos")]
 use rdev::{CGEventSourceStateID, CGEventTapLocation, VirtualInput};
 use std::time::Duration;
@@ -113,23 +113,32 @@ impl Subscriber for MouseCursorSub {
     }
 }
 
+#[cfg(not(target_os = "macos"))]
 struct LockModesHandler {
     caps_lock_changed: bool,
     num_lock_changed: bool,
 }
 
+#[cfg(target_os = "macos")]
+struct LockModesHandler;
+
 impl LockModesHandler {
+    #[inline]
+    fn is_modifier_enabled(key_event: &KeyEvent, modifier: ControlKey) {
+        key_event.modifiers.contains(&modifier.into());
+    }
+
+    #[cfg(not(target_os = "macos"))]
     fn new(key_event: &KeyEvent) -> Self {
         let mut en = ENIGO.lock().unwrap();
-
-        let event_caps_enabled = key_event.modifiers.contains(&ControlKey::CapsLock.into());
+        let event_caps_enabled = Self::is_modifier_enabled(key_event, ControlKey::CapsLock);
         let local_caps_enabled = en.get_key_state(enigo::Key::CapsLock);
         let caps_lock_changed = event_caps_enabled != local_caps_enabled;
         if caps_lock_changed {
-            click_capslock(&mut en);
+            en.key_click(enigo::Key::CapsLock);
         }
 
-        let event_num_enabled = key_event.modifiers.contains(&ControlKey::NumLock.into());
+        let event_num_enabled = Self::is_modifier_enabled(key_event, ControlKey::NumLock);
         let local_num_enabled = en.get_key_state(enigo::Key::NumLock);
         #[cfg(not(target_os = "windows"))]
         let disable_numlock = false;
@@ -137,7 +146,7 @@ impl LockModesHandler {
         let disable_numlock = is_numlock_disabled(key_event);
         let num_lock_changed = event_num_enabled != local_num_enabled && !disable_numlock;
         if num_lock_changed {
-            click_numlock(&mut en);
+            en.key_click(enigo::Key::NumLock);
         }
 
         Self {
@@ -145,16 +154,36 @@ impl LockModesHandler {
             num_lock_changed,
         }
     }
+
+    #[cfg(target_os = "macos")]
+    fn new(key_event: &KeyEvent) -> Self {
+        let event_caps_enabled = Self::is_modifier_enabled(key_event, ControlKey::CapsLock);
+        let local_caps_enabled = VirtualInput::get_key_state(
+            CGEventSourceStateID::CombinedSessionState,
+            rdev::kVK_CapsLock,
+        );
+        let caps_key = RdevKey::RawKey(rdev::RawKey::MacVirtualKeycode(rdev::kVK_CapsLock));
+        if event_caps_enabled && !local_caps_enabled {
+            simulate_(&EventType::KeyPress(caps_key));
+            key_sleep();
+        } else if !event_caps_enabled && local_caps_enabled {
+            simulate_(&EventType::KeyRelease(caps_key));
+            key_sleep();
+        }
+
+        Self {}
+    }
 }
 
+#[cfg(not(target_os = "macos"))]
 impl Drop for LockModesHandler {
     fn drop(&mut self) {
         let mut en = ENIGO.lock().unwrap();
         if self.caps_lock_changed {
-            click_capslock(&mut en);
+            en.key_click(enigo::Key::CapsLock);
         }
         if self.num_lock_changed {
-            click_numlock(&mut en);
+            en.key_click(enigo::Key::NumLock);
         }
     }
 }
@@ -392,6 +421,12 @@ fn is_pressed(key: &Key, en: &mut Enigo) -> bool {
 }
 
 #[inline]
+#[cfg(target_os = "macos")]
+fn key_sleep() {
+    std::thread::sleep(Duration::from_millis(20));
+}
+
+#[inline]
 fn get_modifier_state(key: Key, en: &mut Enigo) -> bool {
     // https://github.com/rustdesk/rustdesk/issues/332
     // on Linux, if RightAlt is down, RightAlt status is false, Alt status is true
@@ -459,6 +494,7 @@ pub fn fix_key_down_timeout_at_exit() {
     log::info!("fix_key_down_timeout_at_exit");
 }
 
+#[inline]
 #[cfg(target_os = "linux")]
 pub fn clear_remapped_keycode() {
     ENIGO.lock().unwrap().tfc_clear_remapped();
@@ -792,7 +828,7 @@ pub fn handle_key(evt: &KeyEvent) {
         // having GUI, run main GUI thread, otherwise crash
         let evt = evt.clone();
         QUEUE.exec_async(move || handle_key_(&evt));
-        std::thread::sleep(Duration::from_millis(20));
+        key_sleep();
         return;
     }
     #[cfg(windows)]
@@ -800,7 +836,7 @@ pub fn handle_key(evt: &KeyEvent) {
     #[cfg(not(windows))]
     handle_key_(evt);
     #[cfg(target_os = "macos")]
-    std::thread::sleep(Duration::from_millis(20));
+    key_sleep();
 }
 
 #[cfg(target_os = "macos")]
@@ -822,7 +858,7 @@ pub fn reset_input_ondisconn() {
     }
 }
 
-fn sim_rdev_rawkey_position(code: u32, keydown: bool) {
+fn sim_rdev_rawkey_position(code: KeyCode, keydown: bool) {
     #[cfg(target_os = "windows")]
     let rawkey = RawKey::ScanCode(code);
     #[cfg(target_os = "linux")]
@@ -927,20 +963,6 @@ fn is_numlock_disabled(key_event: &KeyEvent) -> bool {
     }
 }
 
-fn click_capslock(en: &mut Enigo) {
-    #[cfg(not(targe_os = "macos"))]
-    en.key_click(enigo::Key::CapsLock);
-    #[cfg(target_os = "macos")]
-    let _ = en.key_down(enigo::Key::CapsLock);
-}
-
-#[inline]
-fn click_numlock(_en: &mut Enigo) {
-    // without numlock in macos
-    #[cfg(not(target_os = "macos"))]
-    _en.key_click(enigo::Key::NumLock);
-}
-
 fn map_keyboard_mode(evt: &KeyEvent) {
     #[cfg(windows)]
     crate::platform::windows::try_change_desktop();
@@ -959,7 +981,7 @@ fn map_keyboard_mode(evt: &KeyEvent) {
         return;
     }
 
-    sim_rdev_rawkey_position(evt.chr(), evt.down);
+    sim_rdev_rawkey_position(evt.chr() as _, evt.down);
 }
 
 #[cfg(target_os = "macos")]
@@ -1137,7 +1159,7 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
 fn translate_process_code(code: u32, down: bool) {
     crate::platform::windows::try_change_desktop();
     match code >> 16 {
-        0 => sim_rdev_rawkey_position(code, down),
+        0 => sim_rdev_rawkey_position(code as _, down),
         vk_code => sim_rdev_rawkey_virtual(vk_code, down),
     };
 }
@@ -1168,7 +1190,7 @@ fn translate_keyboard_mode(evt: &KeyEvent) {
             #[cfg(target_os = "windows")]
             translate_process_code(evt.chr(), evt.down);
             #[cfg(not(target_os = "windows"))]
-            sim_rdev_rawkey_position(evt.chr(), evt.down);
+            sim_rdev_rawkey_position(evt.chr() as _, evt.down);
         }
         Some(key_event::Union::Unicode(..)) => {
             // Do not handle unicode for now.
@@ -1187,7 +1209,7 @@ pub fn handle_key_(evt: &KeyEvent) {
     let _lock_mode_handler = match &evt.union {
         Some(key_event::Union::Unicode(..)) | Some(key_event::Union::Seq(..)) => {
             Some(LockModesHandler::new(&evt))
-        },
+        }
         _ => {
             if evt.down {
                 Some(LockModesHandler::new(&evt))

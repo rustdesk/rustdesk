@@ -10,7 +10,7 @@ use crate::ui::CUR_SESSION;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::log;
 use hbb_common::message_proto::*;
-use rdev::{Event, EventType, Key};
+use rdev::{Event, EventType, Key, KeyCode};
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
@@ -46,26 +46,26 @@ lazy_static::lazy_static! {
         m.insert(Key::MetaRight, false);
         Mutex::new(m)
     };
-    static ref NUMPAD_POSITION_CODES: Arc<Vec<u32>> = {
+    static ref NUMPAD_POSITION_CODES: Arc<Vec<KeyCode>> = {
         let numpad_keys = [
-            rdev::Key::KpMinus,
-            rdev::Key::KpPlus,
-            rdev::Key::KpMultiply,
-            rdev::Key::KpDivide,
-            rdev::Key::KpDecimal,
-            rdev::Key::KpReturn,
-            rdev::Key::KpEqual,
-            rdev::Key::KpComma,
-            rdev::Key::Kp0,
-            rdev::Key::Kp1,
-            rdev::Key::Kp2,
-            rdev::Key::Kp3,
-            rdev::Key::Kp4,
-            rdev::Key::Kp5,
-            rdev::Key::Kp6,
-            rdev::Key::Kp7,
-            rdev::Key::Kp8,
-            rdev::Key::Kp9,
+            Key::KpMinus,
+            Key::KpPlus,
+            Key::KpMultiply,
+            Key::KpDivide,
+            Key::KpDecimal,
+            Key::KpReturn,
+            Key::KpEqual,
+            Key::KpComma,
+            Key::Kp0,
+            Key::Kp1,
+            Key::Kp2,
+            Key::Kp3,
+            Key::Kp4,
+            Key::Kp5,
+            Key::Kp6,
+            Key::Kp7,
+            Key::Kp8,
+            Key::Kp9,
         ];
         #[cfg(target_os = "windows")]
         let codes = numpad_keys.iter().filter_map(|k| rdev::win_scancode_from_key(*k)).collect();
@@ -257,7 +257,7 @@ pub fn start_grab_loop() {
 
             let mut _keyboard_mode = KeyboardMode::Map;
             let _scan_code = event.position_code;
-            let _code = event.platform_code;
+            let _code = event.platform_code as KeyCode;
             let res = if KEYBOARD_HOOKED.load(Ordering::SeqCst) {
                 _keyboard_mode = client::process_event(&event, None);
                 if is_press {
@@ -293,7 +293,7 @@ pub fn start_grab_loop() {
 
             #[cfg(target_os = "macos")]
             unsafe {
-                if _code as u32 == rdev::kVK_Option {
+                if _code == rdev::kVK_Option {
                     IS_LEFT_OPTION_DOWN = is_press;
                 }
             }
@@ -496,7 +496,7 @@ pub fn event_to_key_events(
     };
 
     if keyboard_mode != KeyboardMode::Translate {
-        let is_numpad_key = NUMPAD_POSITION_CODES.contains(&event.position_code);
+        let is_numpad_key = NUMPAD_POSITION_CODES.contains(&(event.position_code as _));
         for key_event in &mut key_events {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             if let Some(lock_modes) = lock_modes {
@@ -929,7 +929,7 @@ pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -
 
     #[cfg(target_os = "macos")]
     // ignore right option key
-    if event.platform_code as u32 == rdev::kVK_RightOption {
+    if event.platform_code == rdev::kVK_RightOption as u32 {
         return events;
     }
 
