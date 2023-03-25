@@ -33,6 +33,7 @@ jobs:
           # - { target: i686-pc-windows-msvc        , os: windows-2019                  }
           # - { target: x86_64-pc-windows-gnu       , os: windows-2019                  }
           - { target: x86_64-pc-windows-msvc, os: windows-2019 }
+          - { target: aarch64-pc-windows-msvc, os: windows-2019 }
     steps:
       - name: Checkout source code
         uses: actions/checkout@v3
@@ -142,6 +143,11 @@ jobs:
         job:
           - {
               target: x86_64-apple-darwin,
+              os: macos-latest,
+              extra-build-args: "",
+            }
+          - {
+              target: aarch64-apple-darwin,
               os: macos-latest,
               extra-build-args: "",
             }
