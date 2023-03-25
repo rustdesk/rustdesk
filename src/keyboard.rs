@@ -70,9 +70,9 @@ lazy_static::lazy_static! {
         #[cfg(target_os = "windows")]
         let codes = numpad_keys.iter().filter_map(|k| rdev::win_scancode_from_key(*k)).collect();
         #[cfg(target_os = "linux")]
-        let codes = numpad_keys.iter().filter_map(|k| rdev::linux_code_from_keycode(*k)).collect();
+        let codes = numpad_keys.iter().filter_map(|k| rdev::linux_code_from_code(*k)).collect();
         #[cfg(target_os = "macos")]
-        let codes = numpad_keys.iter().filter_map(|k| rdev::macos_code_from_keycode(*k)).collect();
+        let codes = numpad_keys.iter().filter_map(|k| rdev::macos_code_from_code(*k)).collect();
         Arc::new(codes)
     };
 }

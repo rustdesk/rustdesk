@@ -878,14 +878,6 @@ fn simulate_(event_type: &EventType) {
     }
 }
 
-fn is_modifier_in_key_event(control_key: ControlKey, key_event: &KeyEvent) -> bool {
-    key_event
-        .modifiers
-        .iter()
-        .position(|&m| m == control_key.into())
-        .is_some()
-}
-
 #[inline]
 fn control_key_value_to_key(value: i32) -> Option<Key> {
     KEY_MAP.get(&value).and_then(|k| Some(*k))
@@ -1192,7 +1184,7 @@ pub fn handle_key_(evt: &KeyEvent) {
         return;
     }
 
-    let lock_mode_handler = if evt.down {
+    let _lock_mode_handler = if evt.down {
         Some(LockModesHandler::new(&evt))
     } else {
         None
