@@ -1184,24 +1184,27 @@ pub fn handle_key_(evt: &KeyEvent) {
         return;
     }
 
-    match evt.mode.unwrap() {
-        KeyboardMode::Map => {
-            let _lock_mode_handler = if evt.down {
+    let _lock_mode_handler = match &evt.union {
+        Some(key_event::Union::Unicode(..)) | Some(key_event::Union::Seq(..)) => {
+            Some(LockModesHandler::new(&evt))
+        },
+        _ => {
+            if evt.down {
                 Some(LockModesHandler::new(&evt))
             } else {
                 None
-            };
+            }
+        }
+    };
+
+    match evt.mode.unwrap() {
+        KeyboardMode::Map => {
             map_keyboard_mode(evt);
         }
         KeyboardMode::Translate => {
             translate_keyboard_mode(evt);
         }
         _ => {
-            let _lock_mode_handler = if evt.down {
-                Some(LockModesHandler::new(&evt))
-            } else {
-                None
-            };
             legacy_keyboard_mode(evt);
         }
     }
