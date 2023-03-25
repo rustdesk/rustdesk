@@ -113,6 +113,52 @@ impl Subscriber for MouseCursorSub {
     }
 }
 
+struct LockModesHandler {
+    caps_lock_changed: bool,
+    num_lock_changed: bool,
+}
+
+impl LockModesHandler {
+    fn new(key_event: &KeyEvent) -> Self {
+        let mut en = ENIGO.lock().unwrap();
+
+        let event_caps_enabled = key_event.modifiers.contains(&ControlKey::CapsLock.into());
+        let local_caps_enabled = en.get_key_state(enigo::Key::CapsLock);
+        let caps_lock_changed = event_caps_enabled != local_caps_enabled;
+        if caps_lock_changed {
+            click_capslock(&mut en);
+        }
+
+        let event_num_enabled = key_event.modifiers.contains(&ControlKey::NumLock.into());
+        let local_num_enabled = en.get_key_state(enigo::Key::NumLock);
+        #[cfg(not(target_os = "windows"))]
+        let disable_numlock = false;
+        #[cfg(target_os = "windows")]
+        let disable_numlock = is_numlock_disabled(key_event);
+        let num_lock_changed = event_num_enabled != local_num_enabled && !disable_numlock;
+        if num_lock_changed {
+            click_numlock(&mut en);
+        }
+
+        Self {
+            caps_lock_changed,
+            num_lock_changed,
+        }
+    }
+}
+
+impl Drop for LockModesHandler {
+    fn drop(&mut self) {
+        let mut en = ENIGO.lock().unwrap();
+        if self.caps_lock_changed {
+            click_capslock(&mut en);
+        }
+        if self.num_lock_changed {
+            click_numlock(&mut en);
+        }
+    }
+}
+
 pub const NAME_CURSOR: &'static str = "mouse_cursor";
 pub const NAME_POS: &'static str = "mouse_pos";
 pub type MouseCursorService = ServiceTmpl<MouseCursorSub>;
@@ -850,10 +896,6 @@ fn char_value_to_key(value: u32) -> Key {
     Key::Layout(std::char::from_u32(value).unwrap_or('\0'))
 }
 
-fn is_not_same_status(client_locking: bool, remote_locking: bool) -> bool {
-    client_locking != remote_locking
-}
-
 #[cfg(target_os = "windows")]
 fn has_numpad_key(key_event: &KeyEvent) -> bool {
     key_event
@@ -900,35 +942,11 @@ fn click_capslock(en: &mut Enigo) {
     let _ = en.key_down(enigo::Key::CapsLock);
 }
 
+#[inline]
 fn click_numlock(_en: &mut Enigo) {
     // without numlock in macos
     #[cfg(not(target_os = "macos"))]
     _en.key_click(enigo::Key::NumLock);
-}
-
-fn sync_numlock_capslock_status(key_event: &KeyEvent) {
-    let mut en = ENIGO.lock().unwrap();
-
-    let client_caps_locking = is_modifier_in_key_event(ControlKey::CapsLock, key_event);
-    let client_num_locking = is_modifier_in_key_event(ControlKey::NumLock, key_event);
-    let remote_caps_locking = en.get_key_state(enigo::Key::CapsLock);
-    let remote_num_locking = en.get_key_state(enigo::Key::NumLock);
-
-    let need_click_capslock = is_not_same_status(client_caps_locking, remote_caps_locking);
-    let need_click_numlock = is_not_same_status(client_num_locking, remote_num_locking);
-
-    #[cfg(not(target_os = "windows"))]
-    let disable_numlock = false;
-    #[cfg(target_os = "windows")]
-    let disable_numlock = is_numlock_disabled(key_event);
-
-    if need_click_capslock {
-        click_capslock(&mut en);
-    }
-
-    if need_click_numlock && !disable_numlock {
-        click_numlock(&mut en);
-    }
 }
 
 fn map_keyboard_mode(evt: &KeyEvent) {
@@ -1174,9 +1192,12 @@ pub fn handle_key_(evt: &KeyEvent) {
         return;
     }
 
-    if evt.down {
-        sync_numlock_capslock_status(evt)
-    }
+    let lock_mode_handler = if evt.down {
+        Some(LockModesHandler::new(&evt))
+    } else {
+        None
+    };
+
     match evt.mode.unwrap() {
         KeyboardMode::Map => {
             map_keyboard_mode(evt);

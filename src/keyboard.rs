@@ -46,6 +46,35 @@ lazy_static::lazy_static! {
         m.insert(Key::MetaRight, false);
         Mutex::new(m)
     };
+    static ref NUMPAD_POSITION_CODES: Arc<Vec<u32>> = {
+        let numpad_keys = [
+            rdev::Key::KpMinus,
+            rdev::Key::KpPlus,
+            rdev::Key::KpMultiply,
+            rdev::Key::KpDivide,
+            rdev::Key::KpDecimal,
+            rdev::Key::KpReturn,
+            rdev::Key::KpEqual,
+            rdev::Key::KpComma,
+            rdev::Key::Kp0,
+            rdev::Key::Kp1,
+            rdev::Key::Kp2,
+            rdev::Key::Kp3,
+            rdev::Key::Kp4,
+            rdev::Key::Kp5,
+            rdev::Key::Kp6,
+            rdev::Key::Kp7,
+            rdev::Key::Kp8,
+            rdev::Key::Kp9,
+        ];
+        #[cfg(target_os = "windows")]
+        let codes = numpad_keys.iter().filter_map(|k| rdev::win_scancode_from_key(*k)).collect();
+        #[cfg(target_os = "linux")]
+        let codes = numpad_keys.iter().filter_map(|k| rdev::linux_code_from_keycode(*k)).collect();
+        #[cfg(target_os = "macos")]
+        let codes = numpad_keys.iter().filter_map(|k| rdev::macos_code_from_keycode(*k)).collect();
+        Arc::new(codes)
+    };
 }
 
 pub mod client {
@@ -333,19 +362,43 @@ pub fn get_keyboard_mode_enum() -> KeyboardMode {
     match client::get_keyboard_mode().as_str() {
         "map" => KeyboardMode::Map,
         "translate" => KeyboardMode::Translate,
-        _ => KeyboardMode::Legacy,
+        "legacy" => KeyboardMode::Legacy,
+        _ => {
+            // Set "map" as default mode if version > 1.2.0.
+            let mut is_peer_version_gt_1_2_0 = false;
+
+            #[cfg(not(any(feature = "flutter", feature = "cli")))]
+            if let Some(session) = CUR_SESSION.lock().unwrap().as_ref() {
+                is_peer_version_gt_1_2_0 =
+                    session.get_peer_version() > hbb_common::get_version_number("1.2.0");
+            }
+            #[cfg(feature = "flutter")]
+            if let Some(session) = SESSIONS
+                .read()
+                .unwrap()
+                .get(&*CUR_SESSION_ID.read().unwrap())
+            {
+                is_peer_version_gt_1_2_0 =
+                    session.get_peer_version() > hbb_common::get_version_number("1.2.0");
+            }
+            if is_peer_version_gt_1_2_0 {
+                KeyboardMode::Map
+            } else {
+                KeyboardMode::Legacy
+            }
+        }
     }
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-fn add_numlock_capslock_with_lock_modes(key_event: &mut KeyEvent, lock_modes: i32) {
+fn parse_add_lock_modes_modifiers(key_event: &mut KeyEvent, lock_modes: i32, is_numpad_key: bool) {
     const CAPS_LOCK: i32 = 1;
     const NUM_LOCK: i32 = 2;
     // const SCROLL_LOCK: i32 = 3;
-    if lock_modes & (1 << CAPS_LOCK) != 0 {
+    if !is_numpad_key && (lock_modes & (1 << CAPS_LOCK) != 0) {
         key_event.modifiers.push(ControlKey::CapsLock.into());
     }
-    if lock_modes & (1 << NUM_LOCK) != 0 {
+    if is_numpad_key && (lock_modes & (1 << NUM_LOCK) != 0) {
         key_event.modifiers.push(ControlKey::NumLock.into());
     }
     // if lock_modes & (1 << SCROLL_LOCK) != 0 {
@@ -354,11 +407,11 @@ fn add_numlock_capslock_with_lock_modes(key_event: &mut KeyEvent, lock_modes: i3
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-fn add_numlock_capslock_status(key_event: &mut KeyEvent) {
-    if get_key_state(enigo::Key::CapsLock) {
+fn add_lock_modes_modifiers(key_event: &mut KeyEvent, is_numpad_key: bool) {
+    if !is_numpad_key && get_key_state(enigo::Key::CapsLock) {
         key_event.modifiers.push(ControlKey::CapsLock.into());
     }
-    if get_key_state(enigo::Key::NumLock) {
+    if is_numpad_key && get_key_state(enigo::Key::NumLock) {
         key_event.modifiers.push(ControlKey::NumLock.into());
     }
 }
@@ -443,12 +496,13 @@ pub fn event_to_key_events(
     };
 
     if keyboard_mode != KeyboardMode::Translate {
+        let is_numpad_key = NUMPAD_POSITION_CODES.contains(&event.position_code);
         for key_event in &mut key_events {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             if let Some(lock_modes) = lock_modes {
-                add_numlock_capslock_with_lock_modes(key_event, lock_modes);
+                parse_add_lock_modes_modifiers(key_event, lock_modes, is_numpad_key);
             } else {
-                add_numlock_capslock_status(key_event);
+                add_lock_modes_modifiers(key_event, is_numpad_key);
             }
         }
     }
