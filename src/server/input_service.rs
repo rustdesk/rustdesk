@@ -124,8 +124,8 @@ struct LockModesHandler;
 
 impl LockModesHandler {
     #[inline]
-    fn is_modifier_enabled(key_event: &KeyEvent, modifier: ControlKey) {
-        key_event.modifiers.contains(&modifier.into());
+    fn is_modifier_enabled(key_event: &KeyEvent, modifier: ControlKey) -> bool {
+        key_event.modifiers.contains(&modifier.into())
     }
 
     #[cfg(not(target_os = "macos"))]
