@@ -158,17 +158,23 @@ impl LockModesHandler {
     #[cfg(target_os = "macos")]
     fn new(key_event: &KeyEvent) -> Self {
         let event_caps_enabled = Self::is_modifier_enabled(key_event, ControlKey::CapsLock);
-        let local_caps_enabled = VirtualInput::get_key_state(
-            CGEventSourceStateID::CombinedSessionState,
-            rdev::kVK_CapsLock,
-        );
-        let caps_key = RdevKey::RawKey(rdev::RawKey::MacVirtualKeycode(rdev::kVK_CapsLock));
+        // Do not use the following code to detect `local_caps_enabled`.
+        // Because the state of get_key_state will not affect simuation of `VIRTUAL_INPUT_STATE` in this file.
+        //
+        // let local_caps_enabled = VirtualInput::get_key_state(
+        //     CGEventSourceStateID::CombinedSessionState,
+        //     rdev::kVK_CapsLock,
+        // );
+        let local_caps_enabled = unsafe {
+            let _lock = VIRTUAL_INPUT_MTX.lock();
+            VIRTUAL_INPUT_STATE
+                .as_ref()
+                .map_or(false, |input| input.capslock_down)
+        };
         if event_caps_enabled && !local_caps_enabled {
-            simulate_(&EventType::KeyPress(caps_key));
-            key_sleep();
+            press_capslock();
         } else if !event_caps_enabled && local_caps_enabled {
-            simulate_(&EventType::KeyRelease(caps_key));
-            key_sleep();
+            release_capslock();
         }
 
         Self {}
@@ -344,9 +350,32 @@ lazy_static::lazy_static! {
 }
 
 #[cfg(target_os = "macos")]
+struct VirtualInputState {
+    virtual_input: VirtualInput,
+    capslock_down: bool,
+}
+
+#[cfg(target_os = "macos")]
+impl VirtualInputState {
+    fn new() -> Option<Self> {
+        VirtualInput::new(CGEventSourceStateID::Private, CGEventTapLocation::Session)
+            .map(|virtual_input| Self {
+                virtual_input,
+                capslock_down: false,
+            })
+            .ok()
+    }
+
+    #[inline]
+    fn simulate(&self, event_type: &EventType) -> ResultType<()> {
+        Ok(self.virtual_input.simulate(&event_type)?)
+    }
+}
+
+#[cfg(target_os = "macos")]
 static mut VIRTUAL_INPUT_MTX: Mutex<()> = Mutex::new(());
 #[cfg(target_os = "macos")]
-static mut VIRTUAL_INPUT: Option<VirtualInput> = None;
+static mut VIRTUAL_INPUT_STATE: Option<VirtualInputState> = None;
 
 // First call set_uinput() will create keyboard and mouse clients.
 // The clients are ipc connections that must live shorter than tokio runtime.
@@ -844,8 +873,7 @@ pub fn handle_key(evt: &KeyEvent) {
 fn reset_input() {
     unsafe {
         let _lock = VIRTUAL_INPUT_MTX.lock();
-        VIRTUAL_INPUT =
-            VirtualInput::new(CGEventSourceStateID::Private, CGEventTapLocation::Session).ok();
+        VIRTUAL_INPUT_STATE = VirtualInputState::new();
     }
 }
 
@@ -892,13 +920,43 @@ fn sim_rdev_rawkey_virtual(code: u32, keydown: bool) {
     simulate_(&event_type);
 }
 
-#[cfg(target_os = "macos")]
 #[inline]
+#[cfg(target_os = "macos")]
 fn simulate_(event_type: &EventType) {
     unsafe {
         let _lock = VIRTUAL_INPUT_MTX.lock();
-        if let Some(virtual_input) = &VIRTUAL_INPUT {
-            let _ = virtual_input.simulate(&event_type);
+        if let Some(input) = &VIRTUAL_INPUT_STATE {
+            let _ = input.simulate(&event_type);
+        }
+    }
+}
+
+#[inline]
+#[cfg(target_os = "macos")]
+fn press_capslock() {
+    let caps_key = RdevKey::RawKey(rdev::RawKey::MacVirtualKeycode(rdev::kVK_CapsLock));
+    unsafe {
+        let _lock = VIRTUAL_INPUT_MTX.lock();
+        if let Some(input) = &mut VIRTUAL_INPUT_STATE {
+            if input.simulate(&EventType::KeyPress(caps_key)).is_ok() {
+                input.capslock_down = true;
+                key_sleep();
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[inline]
+fn release_capslock() {
+    let caps_key = RdevKey::RawKey(rdev::RawKey::MacVirtualKeycode(rdev::kVK_CapsLock));
+    unsafe {
+        let _lock = VIRTUAL_INPUT_MTX.lock();
+        if let Some(input) = &mut VIRTUAL_INPUT_STATE {
+            if input.simulate(&EventType::KeyRelease(caps_key)).is_ok() {
+                input.capslock_down = false;
+                key_sleep();
+            }
         }
     }
 }
