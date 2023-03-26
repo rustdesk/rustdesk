@@ -480,8 +480,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("identical_file_tip", "Questo file è identico a quello del peer."),
         ("show_monitors_tip", "Mostra schermi nella barra degli strumenti"),
         ("View Mode", "Modalità di visualizzazione"),
-        ("enter_rustdesk_passwd_tip", ""),
-        ("remember_rustdesk_passwd_tip", ""),
-        ("login_linux_tip", ""),
+        ("enter_rustdesk_passwd_tip", "Inserisci la password di RustDesk."),
+        ("remember_rustdesk_passwd_tip", "Ricorda la passowrd di RustDesk."),
+        ("login_linux_tip", "Effettua l'accesso sul tuo account Linux"),
     ].iter().cloned().collect();
 }
