@@ -10,7 +10,7 @@ use crate::ui::CUR_SESSION;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::log;
 use hbb_common::message_proto::*;
-use rdev::{Event, EventType, Key};
+use rdev::{Event, EventType, Key, KeyCode};
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
@@ -228,7 +228,7 @@ pub fn start_grab_loop() {
 
             let mut _keyboard_mode = KeyboardMode::Map;
             let _scan_code = event.position_code;
-            let _code = event.platform_code;
+            let _code = event.platform_code as KeyCode;
             let res = if KEYBOARD_HOOKED.load(Ordering::SeqCst) {
                 _keyboard_mode = client::process_event(&event, None);
                 if is_press {
@@ -264,7 +264,7 @@ pub fn start_grab_loop() {
 
             #[cfg(target_os = "macos")]
             unsafe {
-                if _code as u32 == rdev::kVK_Option {
+                if _code == rdev::kVK_Option {
                     IS_LEFT_OPTION_DOWN = is_press;
                 }
             }
@@ -333,19 +333,53 @@ pub fn get_keyboard_mode_enum() -> KeyboardMode {
     match client::get_keyboard_mode().as_str() {
         "map" => KeyboardMode::Map,
         "translate" => KeyboardMode::Translate,
-        _ => KeyboardMode::Legacy,
+        "legacy" => KeyboardMode::Legacy,
+        _ => {
+            // Set "map" as default mode if version > 1.2.0.
+            let mut is_peer_version_gt_1_2_0 = false;
+
+            #[cfg(not(any(feature = "flutter", feature = "cli")))]
+            if let Some(session) = CUR_SESSION.lock().unwrap().as_ref() {
+                is_peer_version_gt_1_2_0 =
+                    session.get_peer_version() > hbb_common::get_version_number("1.2.0");
+            }
+            #[cfg(feature = "flutter")]
+            if let Some(session) = SESSIONS
+                .read()
+                .unwrap()
+                .get(&*CUR_SESSION_ID.read().unwrap())
+            {
+                is_peer_version_gt_1_2_0 =
+                    session.get_peer_version() > hbb_common::get_version_number("1.2.0");
+            }
+            if is_peer_version_gt_1_2_0 {
+                KeyboardMode::Map
+            } else {
+                KeyboardMode::Legacy
+            }
+        }
     }
 }
 
+#[inline]
+fn is_numpad_key(event: &Event) -> bool {
+    matches!(event.event_type, EventType::KeyPress(key) | EventType::KeyRelease(key) if match key {
+        Key::Kp0 | Key::Kp1 | Key::Kp2 | Key::Kp3| Key::Kp4| Key::Kp5| Key::Kp6|
+        Key::Kp7| Key::Kp8| Key::Kp9 | Key::KpMinus | Key::KpMultiply |
+        Key::KpDivide | Key::KpPlus | Key::KpDecimal => true,
+        _ => false
+    })
+}
+
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-fn add_numlock_capslock_with_lock_modes(key_event: &mut KeyEvent, lock_modes: i32) {
+fn parse_add_lock_modes_modifiers(key_event: &mut KeyEvent, lock_modes: i32, is_numpad_key: bool) {
     const CAPS_LOCK: i32 = 1;
     const NUM_LOCK: i32 = 2;
     // const SCROLL_LOCK: i32 = 3;
-    if lock_modes & (1 << CAPS_LOCK) != 0 {
+    if !is_numpad_key && (lock_modes & (1 << CAPS_LOCK) != 0) {
         key_event.modifiers.push(ControlKey::CapsLock.into());
     }
-    if lock_modes & (1 << NUM_LOCK) != 0 {
+    if is_numpad_key && (lock_modes & (1 << NUM_LOCK) != 0) {
         key_event.modifiers.push(ControlKey::NumLock.into());
     }
     // if lock_modes & (1 << SCROLL_LOCK) != 0 {
@@ -354,11 +388,11 @@ fn add_numlock_capslock_with_lock_modes(key_event: &mut KeyEvent, lock_modes: i3
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-fn add_numlock_capslock_status(key_event: &mut KeyEvent) {
-    if get_key_state(enigo::Key::CapsLock) {
+fn add_lock_modes_modifiers(key_event: &mut KeyEvent, is_numpad_key: bool) {
+    if !is_numpad_key && get_key_state(enigo::Key::CapsLock) {
         key_event.modifiers.push(ControlKey::CapsLock.into());
     }
-    if get_key_state(enigo::Key::NumLock) {
+    if is_numpad_key && get_key_state(enigo::Key::NumLock) {
         key_event.modifiers.push(ControlKey::NumLock.into());
     }
 }
@@ -443,12 +477,13 @@ pub fn event_to_key_events(
     };
 
     if keyboard_mode != KeyboardMode::Translate {
+        let is_numpad_key = is_numpad_key(&event);
         for key_event in &mut key_events {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             if let Some(lock_modes) = lock_modes {
-                add_numlock_capslock_with_lock_modes(key_event, lock_modes);
+                parse_add_lock_modes_modifiers(key_event, lock_modes, is_numpad_key);
             } else {
-                add_numlock_capslock_status(key_event);
+                add_lock_modes_modifiers(key_event, is_numpad_key);
             }
         }
     }
@@ -776,7 +811,7 @@ pub fn map_keyboard_mode(peer: &str, event: &Event, mut key_event: KeyEvent) -> 
     #[cfg(any(target_os = "android", target_os = "ios"))]
     let keycode = 0;
 
-    key_event.set_chr(keycode);
+    key_event.set_chr(keycode as _);
     Some(key_event)
 }
 
@@ -851,6 +886,8 @@ fn is_altgr(event: &Event) -> bool {
     }
 }
 
+#[inline]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 fn is_press(event: &Event) -> bool {
     matches!(event.event_type, EventType::KeyPress(_))
 }
@@ -873,7 +910,7 @@ pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -
 
     #[cfg(target_os = "macos")]
     // ignore right option key
-    if event.platform_code as u32 == rdev::kVK_RightOption {
+    if event.platform_code == rdev::kVK_RightOption as u32 {
         return events;
     }
 

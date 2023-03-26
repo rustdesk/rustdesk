@@ -10,7 +10,7 @@ use std::time::{Duration, SystemTime};
 
 use async_trait::async_trait;
 use bytes::Bytes;
-use rdev::{Event, EventType::*};
+use rdev::{Event, EventType::*, KeyCode};
 use uuid::Uuid;
 
 use hbb_common::config::{Config, LocalConfig, PeerConfig};
@@ -421,7 +421,7 @@ impl<T: InvokeUiSession> Session<T> {
                         rdev::win_scancode_from_key(key).unwrap_or_default()
                     }
                     "macos" => {
-                        let key = rdev::macos_key_from_code(code);
+                        let key = rdev::macos_key_from_code(code as _);
                         let key = match key {
                             rdev::Key::ControlLeft => rdev::Key::MetaLeft,
                             rdev::Key::MetaLeft => rdev::Key::ControlLeft,
@@ -429,7 +429,7 @@ impl<T: InvokeUiSession> Session<T> {
                             rdev::Key::MetaRight => rdev::Key::ControlLeft,
                             _ => key,
                         };
-                        rdev::macos_keycode_from_key(key).unwrap_or_default()
+                        rdev::macos_keycode_from_key(key).unwrap_or_default() as _
                     }
                     _ => {
                         let key = rdev::linux_key_from_code(code);
@@ -545,8 +545,8 @@ impl<T: InvokeUiSession> Session<T> {
         if scancode < 0 || keycode < 0 {
             return;
         }
-        let keycode: u32 = keycode as u32;
-        let scancode: u32 = scancode as u32;
+        let keycode: KeyCode = keycode as _;
+        let scancode: u32 = scancode as _;
 
         #[cfg(not(target_os = "windows"))]
         let key = rdev::key_from_code(keycode) as rdev::Key;
