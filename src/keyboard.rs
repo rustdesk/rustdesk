@@ -811,7 +811,7 @@ pub fn map_keyboard_mode(peer: &str, event: &Event, mut key_event: KeyEvent) -> 
     #[cfg(any(target_os = "android", target_os = "ios"))]
     let keycode = 0;
 
-    key_event.set_chr(keycode);
+    key_event.set_chr(keycode as _);
     Some(key_event)
 }
 
