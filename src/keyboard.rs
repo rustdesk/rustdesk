@@ -10,7 +10,9 @@ use crate::ui::CUR_SESSION;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::log;
 use hbb_common::message_proto::*;
-use rdev::{Event, EventType, Key, KeyCode};
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+use rdev::KeyCode;
+use rdev::{Event, EventType, Key};
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
@@ -906,6 +908,12 @@ pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -
             #[cfg(not(target_os = "macos"))]
             return events;
         }
+    }
+    if is_numpad_key(&event) {
+        if let Some(evt) = translate_key_code(peer, event, key_event) {
+            events.push(evt);
+        }
+        return events;
     }
 
     #[cfg(target_os = "macos")]
