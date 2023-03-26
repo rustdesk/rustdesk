@@ -477,7 +477,7 @@ pub fn event_to_key_events(
     };
 
     if keyboard_mode != KeyboardMode::Translate {
-        let is_numpad_key = is_numpad_key(&event.event_type);
+        let is_numpad_key = is_numpad_key(&event);
         for key_event in &mut key_events {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             if let Some(lock_modes) = lock_modes {
