@@ -480,8 +480,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("identical_file_tip", "此檔案與對方的檔案一致"),
         ("show_monitors_tip", "在工具列中顯示顯示器"),
         ("View Mode", "瀏覽模式"),
-        ("enter_rustdesk_passwd_tip", ""),
-        ("remember_rustdesk_passwd_tip", ""),
-        ("login_linux_tip", ""),
+        ("enter_rustdesk_passwd_tip", "輸入 RustDesk 密碼"),
+        ("remember_rustdesk_passwd_tip", "記住 RustDesk 密碼"),
+        ("login_linux_tip", "登入到遠端 Linux 使用者帳戶"),
+        ("login_linux_tooltip_tip", "需要登入到遠端 Linux 使用者帳戶才能啟用 X 介面。"),
     ].iter().cloned().collect();
 }
