@@ -3,7 +3,8 @@ use crate::{
     hw, ImageFormat, HW_STRIDE_ALIGN,
 };
 use hbb_common::{
-    anyhow::{allow_err, anyhow, Context},
+    allow_err,
+    anyhow::{anyhow, Context},
     bytes::Bytes,
     config::HwCodecConfig,
     get_time, lazy_static, log,
@@ -354,7 +355,7 @@ pub fn check_config_process(force_reset: bool) {
                     // kill: Different platforms have different results
                     allow_err!(child.kill());
                     std::thread::sleep(std::time::Duration::from_millis(30));
-                    match ps.try_wait() {
+                    match child.try_wait() {
                         Ok(Some(status)) => log::info!("Check hwcodec config, exit with: {status}"),
                         Ok(None) => {
                             log::info!(
