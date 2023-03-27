@@ -182,7 +182,7 @@ jobs:
           rm res/icon.ico && cp flutter/windows/runner/resources/app_icon.ico res/icon.ico
           cargo build --features inline --target=${{ matrix.job.target }} --release
           mkdir -p ./Release
-          mv ./target/release/rustdesk.exe ./Release/rustdesk.exe
+          mv ./target/${{ matrix.job.target }}/release/rustdesk.exe ./Release/rustdesk.exe
           wget -O ./Release/sciter.dll https://github.com/c-smile/sciter-sdk/raw/master/bin.win/x32/sciter.dll
           echo "output_folder=./Release" >> $GITHUB_OUTPUT
 
@@ -716,7 +716,7 @@ jobs:
           #     use-cross: true,
           #     extra-build-features: "",
           #   }
-          # - { arch: armv7, target: arm-unknown-linux-gnueabihf , os: ubuntu-20.04, use-cross: true, extra-build-features: "flatpak" }
+          # - { arch: armv7, target: arm-unknown-linux-gnueabihf , os: ubuntu-20.04, use-cross: true, extra-build-features: "appimage" }
           # - { target: arm-unknown-linux-musleabihf, os: ubuntu-20.04, use-cross: true }
     steps:
       - name: Maximize build space
@@ -846,11 +846,11 @@ jobs:
                 cargo build --lib --features flutter,${{ matrix.job.extra-build-features }} --release
                 ;;
               armv7)
-                cp -r /opt/artifacts/vcpkg/installed/lib/* /usr/lib/arm-linux-gnueabihf/
-                cp -r /opt/artifacts/vcpkg/installed/include/* /usr/include/
-                mkdir -p /vcpkg/installed/arm-linux
-                ln -s /usr/lib/arm-linux-gnueabihf  /vcpkg/installed/arm-linux/lib
-                ln -s /usr/include /vcpkg/installed/arm-linux/include
+                # cp -r /opt/artifacts/vcpkg/installed/lib/* /usr/lib/arm-linux-gnueabihf/
+                # cp -r /opt/artifacts/vcpkg/installed/include/* /usr/include/
+                # mkdir -p /vcpkg/installed/arm-linux
+                # ln -s /usr/lib/arm-linux-gnueabihf  /vcpkg/installed/arm-linux/lib
+                # ln -s /usr/include /vcpkg/installed/arm-linux/include
                 export VCPKG_ROOT=/vcpkg
                 # disable hwcodec for compilation
                 cargo build --lib --features flutter,${{ matrix.job.extra-build-features }} --release
@@ -862,6 +862,90 @@ jobs:
         with:
           name: librustdesk-${{ matrix.job.arch }}-${{ matrix.job.extra-build-features }}.so
           path: target/release/liblibrustdesk.so
+
+  build-rustdesk-sciter-arm:
+    needs: [build-vcpkg-deps-linux]
+    name: build-rustdesk(sciter) ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # use a high level qemu-user-static
+        job:
+          - {
+              arch: armv7,
+              target: arm-unknown-linux-gnueabihf,
+              deb-arch: armhf,
+              os: ubuntu-latest,
+              use-cross: true,
+              extra-build-features: "",
+            }
+          # - { arch: armv7, target: arm-unknown-linux-gnueabihf , os: ubuntu-20.04, use-cross: true, extra-build-features: "appimage" }
+          # - { target: arm-unknown-linux-musleabihf, os: ubuntu-20.04, use-cross: true }
+    steps:
+
+      - name: Checkout source code
+        uses: actions/checkout@v3
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.job.target }}
+          override: true
+          profile: minimal # minimal component installation (ie, no documentation)
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: rustdesk-lib-cache
+          key: ${{ matrix.job.target }}-${{ matrix.job.extra-build-features }}
+          cache-directories: "/opt/rust-registry"
+
+      - name: Restore vcpkg files
+        uses: actions/download-artifact@master
+        with:
+          name: vcpkg-artifact-${{ matrix.job.arch }}
+          path: /opt/artifacts/vcpkg/installed
+
+      - name: Install cross tool
+        run: |
+          wget https://github.com/cross-rs/cross/releases/download/v0.2.5/cross-x86_64-unknown-linux-gnu.tar.gz
+          tar -zxvf cross-x86_64-unknown-linux-gnu.tar.gz
+          mv cross* /usr/local/bin/
+
+      - name: Build RustDesk
+        env:
+          ARCH: ${{ matrix.job.deb-arch }}
+          VCPKG_ROOT: /opt/artifacts/vcpkg
+        run: |
+          python3 ./res/inline-sciter.py
+          cross build --target ${{ matrix.job.target }} --features inline --release
+          wget -O ./target/${{ matrix.job.target }}/release/libsciter-gtk.so https://github.com/c-smile/sciter-sdk/blob/master/bin.lnx/arm32/libsciter-gtk.so
+          ./build.py --package ./target/${{ matrix.job.target }}/release
+
+      - name: Rename rustdesk
+        shell: bash
+        run: |
+          for name in rustdesk*??.deb; do
+              # use cp to duplicate deb files to fit other packages.
+              cp "$name" "${name%%.deb}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb"
+          done
+
+      - name: Publish debian package
+        if: ${{ matrix.job.extra-build-features == '' }}
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@master
+        if: ${{ contains(matrix.job.extra-build-features, 'flatpak') }}
+        with:
+          name: rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb
+          path: rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb
 
   build-rustdesk-linux-arm:
     needs: [build-rustdesk-lib-linux-arm]
@@ -893,7 +977,7 @@ jobs:
           #     extra-build-features: "flatpak",
           #   }
           # - { arch: armv7, target: arm-unknown-linux-gnueabihf , os: ubuntu-20.04, use-cross: true, extra-build-features: "" }
-          # - { arch: armv7, target: arm-unknown-linux-gnueabihf , os: ubuntu-20.04, use-cross: true, extra-build-features: "flatpak" }
+          # - { arch: armv7, target: arm-unknown-linux-gnueabihf , os: ubuntu-20.04, use-cross: true, extra-build-features: "appimage" }
           # - { target: arm-unknown-linux-musleabihf, os: ubuntu-20.04, use-cross: true }
     steps:
       - name: Checkout source code
