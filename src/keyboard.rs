@@ -374,14 +374,14 @@ fn is_numpad_key(event: &Event) -> bool {
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-fn parse_add_lock_modes_modifiers(key_event: &mut KeyEvent, lock_modes: i32, is_numpad_key: bool) {
+fn parse_add_lock_modes_modifiers(key_event: &mut KeyEvent, lock_modes: i32) {
     const CAPS_LOCK: i32 = 1;
     const NUM_LOCK: i32 = 2;
     // const SCROLL_LOCK: i32 = 3;
-    if !is_numpad_key && (lock_modes & (1 << CAPS_LOCK) != 0) {
+    if lock_modes & (1 << CAPS_LOCK) != 0 {
         key_event.modifiers.push(ControlKey::CapsLock.into());
     }
-    if is_numpad_key && (lock_modes & (1 << NUM_LOCK) != 0) {
+    if lock_modes & (1 << NUM_LOCK) != 0 {
         key_event.modifiers.push(ControlKey::NumLock.into());
     }
     // if lock_modes & (1 << SCROLL_LOCK) != 0 {
@@ -390,11 +390,11 @@ fn parse_add_lock_modes_modifiers(key_event: &mut KeyEvent, lock_modes: i32, is_
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-fn add_lock_modes_modifiers(key_event: &mut KeyEvent, is_numpad_key: bool) {
-    if !is_numpad_key && get_key_state(enigo::Key::CapsLock) {
+fn add_lock_modes_modifiers(key_event: &mut KeyEvent) {
+    if get_key_state(enigo::Key::CapsLock) {
         key_event.modifiers.push(ControlKey::CapsLock.into());
     }
-    if is_numpad_key && get_key_state(enigo::Key::NumLock) {
+    if get_key_state(enigo::Key::NumLock) {
         key_event.modifiers.push(ControlKey::NumLock.into());
     }
 }
@@ -479,13 +479,12 @@ pub fn event_to_key_events(
     };
 
     if keyboard_mode != KeyboardMode::Translate {
-        let is_numpad_key = is_numpad_key(&event);
         for key_event in &mut key_events {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             if let Some(lock_modes) = lock_modes {
-                parse_add_lock_modes_modifiers(key_event, lock_modes, is_numpad_key);
+                parse_add_lock_modes_modifiers(key_event, lock_modes);
             } else {
-                add_lock_modes_modifiers(key_event, is_numpad_key);
+                add_lock_modes_modifiers(key_event);
             }
         }
     }
