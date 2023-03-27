@@ -109,10 +109,78 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v3
 
-      - name: Build rustdesk sciter
-        uses: ./.github/workflows/sciter.yml
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
         with:
+          toolchain: stable
           target: ${{ matrix.job.target }}
+          override: true
+          profile: minimal # minimal component installation (ie, no documentation)
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: ${{ matrix.job.os }}-sciter
+
+      - name: Restore from cache and install vcpkg
+        uses: lukka/run-vcpkg@v7
+        with:
+          setupOnly: true
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+
+      - name: Install vcpkg dependencies
+        run: |
+          $VCPKG_ROOT/vcpkg install libvpx:x86-windows-static libyuv:x86-windows-static opus:x86-windows-static
+        shell: bash
+
+      - name: Build rustdesk
+        id: build
+        shell: bash
+        run: |
+          python3 res/inline-sciter.py
+          # Replace the link for the ico.
+          rm res/icon.ico && cp flutter/windows/runner/resources/app_icon.ico res/icon.ico
+          cargo build --features inline --target=${{ matrix.job.target }} --release
+          mkdir -p ./Release
+          mv ./target/release/rustdesk.exe ./Release/rustdesk.exe
+          wget -O ./Release/sciter.dll https://github.com/c-smile/sciter-sdk/raw/master/bin.win/x32/sciter.dll
+          echo "output_folder=./Release" >> $GITHUB_OUTPUT
+
+      - name: Sign rustdesk files
+        uses: GermanBluefox/code-sign-action@v7
+        with:
+          certificate: '${{ secrets.WINDOWS_PFX_BASE64 }}'
+          password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
+          certificatesha1: '${{ secrets.WINDOWS_PFX_SHA1_THUMBPRINT }}'
+          # certificatename: '${{ secrets.CERTNAME }}'
+          folder: './Release/'
+          recursive: true
+
+      - name: Build self-extracted executable
+        shell: bash
+        run: |
+          pushd ./libs/portable
+          python3 ./generate.py -f ../../Release/ -o . -e ../../Release/rustdesk.exe
+          popd
+          mkdir -p ./SignOutput
+          mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}.exe
+      
+      - name: Sign rustdesk self-extracted file
+        uses: GermanBluefox/code-sign-action@v7
+        with:
+          certificate: '${{ secrets.WINDOWS_PFX_BASE64 }}'
+          password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
+          certificatesha1: '${{ secrets.WINDOWS_PFX_SHA1_THUMBPRINT }}'
+          # certificatename: '${{ secrets.WINDOWS_PFX_NAME }}'
+          folder: './SignOutput'
+          recursive: false
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            ./SignOutput/rustdesk-*.exe
 
   build-for-macOS:
     name: ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-args }}]
