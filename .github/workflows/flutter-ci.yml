@@ -26,7 +26,7 @@ env:
   NDK_VERSION: "r23"
 
 jobs:
-  build-for-windows:
+  build-for-windows-flutter:
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
     runs-on: ${{ matrix.job.os }}
     strategy:
@@ -92,6 +92,27 @@ jobs:
 
       - name: Build rustdesk
         run: python3 .\build.py --portable --hwcodec --flutter
+  
+  # The fallback for the flutter version, we use Sciter for 32bit Windows.
+  build-for-windows-sciter:
+    name: ${{ matrix.job.target }} (${{ matrix.job.os }})
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          # - { target: i686-pc-windows-msvc        , os: windows-2019                  }
+          # - { target: x86_64-pc-windows-gnu       , os: windows-2019                  }
+          - { target: i686-pc-windows-msvc, os: windows-2019 }
+          # - { target: aarch64-pc-windows-msvc, os: windows-2019 }
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v3
+
+      - name: Build rustdesk sciter
+        uses: ./.github/workflows/sciter.yml
+        with:
+          target: ${{ matrix.job.target }}
 
   build-for-macOS:
     name: ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-args }}]

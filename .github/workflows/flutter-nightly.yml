@@ -23,7 +23,7 @@ env:
   RENDEZVOUS_SERVER: '${{ secrets.RENDEZVOUS_SERVER }}'
 
 jobs:
-  build-for-windows:
+  build-for-windows-flutter:
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
     runs-on: ${{ matrix.job.os }}
     strategy:
@@ -116,6 +116,64 @@ jobs:
       #         mv "$name" ./SignOutput/"${name%%-install.exe}-${{ matrix.job.target }}.exe"
       #     done
 
+      - name: Sign rustdesk self-extracted file
+        uses: GermanBluefox/code-sign-action@v7
+        with:
+          certificate: '${{ secrets.WINDOWS_PFX_BASE64 }}'
+          password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
+          certificatesha1: '${{ secrets.WINDOWS_PFX_SHA1_THUMBPRINT }}'
+          # certificatename: '${{ secrets.WINDOWS_PFX_NAME }}'
+          folder: './SignOutput'
+          recursive: false
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            ./SignOutput/rustdesk-*.exe
+
+  # The fallback for the flutter version, we use Sciter for 32bit Windows.
+  build-for-windows-sciter:
+    name: ${{ matrix.job.target }} (${{ matrix.job.os }})
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          # - { target: i686-pc-windows-msvc        , os: windows-2019                  }
+          # - { target: x86_64-pc-windows-gnu       , os: windows-2019                  }
+          - { target: i686-pc-windows-msvc, os: windows-2019 }
+          # - { target: aarch64-pc-windows-msvc, os: windows-2019 }
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v3
+
+      - name: Build rustdesk sciter
+        uses: ./.github/workflows/sciter.yml
+        with:
+          target: ${{ matrix.job.target }}
+
+      - name: Sign rustdesk files
+        uses: GermanBluefox/code-sign-action@v7
+        with:
+          certificate: '${{ secrets.WINDOWS_PFX_BASE64 }}'
+          password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
+          certificatesha1: '${{ secrets.WINDOWS_PFX_SHA1_THUMBPRINT }}'
+          # certificatename: '${{ secrets.CERTNAME }}'
+          folder: './Release/'
+          recursive: true
+
+      - name: Build self-extracted executable
+        shell: bash
+        run: |
+          pushd ./libs/portable
+          python3 ./generate.py -f ../../Release/ -o . -e ../../Release/rustdesk.exe
+          popd
+          mkdir -p ./SignOutput
+          mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}.exe
+      
       - name: Sign rustdesk self-extracted file
         uses: GermanBluefox/code-sign-action@v7
         with:
