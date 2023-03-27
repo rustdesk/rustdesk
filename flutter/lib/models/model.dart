@@ -576,7 +576,13 @@ class ImageModel with ChangeNotifier {
   addCallbackOnFirstImage(Function(String) cb) => callbacksOnFirstImage.add(cb);
 
   onRgba(Uint8List rgba) {
-    if (_waitForImage[id]!) {
+    final waitforImage = _waitForImage[id];
+    if (waitforImage == null) {
+      debugPrint('Exception, peer $id not found for waiting image');
+      return;
+    }
+
+    if (waitforImage == true) {
       _waitForImage[id] = false;
       parent.target?.dialogManager.dismissAll();
       if (isDesktop) {
@@ -1564,6 +1570,7 @@ class FFI {
       id = 'pf_$id';
     } else {
       chatModel.resetClientMode();
+      connType = ConnType.defaultConn;
       canvasModel.id = id;
       imageModel.id = id;
       cursorModel.id = id;
