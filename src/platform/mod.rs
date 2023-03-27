@@ -19,7 +19,7 @@ pub mod linux;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::{message_proto::CursorData, ResultType};
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "android", target_os = "ios")))]
 const SERVICE_INTERVAL: u64 = 300;
 
 pub fn is_xfce() -> bool {

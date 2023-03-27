@@ -365,7 +365,7 @@ pub fn check_zombie() {
 /// Otherwise, client will check if there's already a server and start one if not.
 #[cfg(any(target_os = "android", target_os = "ios"))]
 #[tokio::main]
-pub async fn start_server(is_server: bool) {
+pub async fn start_server(_is_server: bool) {
     crate::RendezvousMediator::start_all().await;
 }
 

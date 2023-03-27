@@ -16,6 +16,7 @@ lazy_static::lazy_static! {
     static ref SENDER : Mutex<broadcast::Sender<Vec<i32>>> = Mutex::new(start_hbbs_sync());
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn start() {
     let _sender = SENDER.lock().unwrap();
 }

@@ -8,6 +8,7 @@ use hbb_common::platform::register_breakdown_handler;
 /// [Note]
 /// If it returns [`None`], then the process will terminate, and flutter gui will not be started.
 /// If it returns [`Some`], then the process will continue, and flutter gui will be started.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn core_main() -> Option<Vec<String>> {
     let mut args = Vec::new();
     let mut flutter_args = Vec::new();
