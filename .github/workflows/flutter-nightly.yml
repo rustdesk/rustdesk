@@ -180,7 +180,7 @@ jobs:
           python3 res/inline-sciter.py
           # Replace the link for the ico.
           rm res/icon.ico && cp flutter/windows/runner/resources/app_icon.ico res/icon.ico
-          cargo build --features inline --target=${{ matrix.job.target }} --release
+          cargo build --features inline --target=${{ matrix.job.target }} --release --bins
           mkdir -p ./Release
           mv ./target/${{ matrix.job.target }}/release/rustdesk.exe ./Release/rustdesk.exe
           wget -O ./Release/sciter.dll https://github.com/c-smile/sciter-sdk/raw/master/bin.win/x32/sciter.dll
@@ -711,12 +711,12 @@ jobs:
           # - { arch: aarch64, target: aarch64-unknown-linux-gnu   , os: ubuntu-20.04, use-cross: true, extra-build-features: "flatpak" }
           # - {
           #     arch: armv7,
-          #     target: arm-unknown-linux-gnueabihf,
+          #     target: armv7-unknown-linux-gnueabihf,
           #     os: ubuntu-20.04,
           #     use-cross: true,
           #     extra-build-features: "",
           #   }
-          # - { arch: armv7, target: arm-unknown-linux-gnueabihf , os: ubuntu-20.04, use-cross: true, extra-build-features: "appimage" }
+          # - { arch: armv7, target: armv7-unknown-linux-gnueabihf , os: ubuntu-20.04, use-cross: true, extra-build-features: "appimage" }
           # - { target: arm-unknown-linux-musleabihf, os: ubuntu-20.04, use-cross: true }
     steps:
       - name: Maximize build space
@@ -832,30 +832,8 @@ jobs:
             cat ~/.cargo/config
             # start build
             pushd /workspace
-            # mock 
-            case "${{ matrix.job.arch }}" in
-              aarch64)
-                cp -r /opt/artifacts/vcpkg/installed/lib/* /usr/lib/aarch64-linux-gnu/
-                cp -r /opt/artifacts/vcpkg/installed/include/* /usr/include/
-                ls -l /opt/artifacts/vcpkg/installed/lib/
-                mkdir -p /vcpkg/installed/arm64-linux
-                ln -s /usr/lib/aarch64-linux-gnu  /vcpkg/installed/arm64-linux/lib
-                ln -s /usr/include /vcpkg/installed/arm64-linux/include
-                export VCPKG_ROOT=/vcpkg
-                # disable hwcodec for compilation
-                cargo build --lib --features flutter,${{ matrix.job.extra-build-features }} --release
-                ;;
-              armv7)
-                # cp -r /opt/artifacts/vcpkg/installed/lib/* /usr/lib/arm-linux-gnueabihf/
-                # cp -r /opt/artifacts/vcpkg/installed/include/* /usr/include/
-                # mkdir -p /vcpkg/installed/arm-linux
-                # ln -s /usr/lib/arm-linux-gnueabihf  /vcpkg/installed/arm-linux/lib
-                # ln -s /usr/include /vcpkg/installed/arm-linux/include
-                export VCPKG_ROOT=/vcpkg
-                # disable hwcodec for compilation
-                cargo build --lib --features flutter,${{ matrix.job.extra-build-features }} --release
-                ;;
-            esac
+            export VCPKG_ROOT=/opt/artifacts/vcpkg
+            cargo build --lib --features flutter,${{ matrix.job.extra-build-features }} --release
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@master
@@ -874,18 +852,35 @@ jobs:
         job:
           - {
               arch: armv7,
-              target: arm-unknown-linux-gnueabihf,
+              target: armv7-unknown-linux-gnueabihf,
               deb-arch: armhf,
               os: ubuntu-latest,
               use-cross: true,
               extra-build-features: "",
             }
-          # - { arch: armv7, target: arm-unknown-linux-gnueabihf , os: ubuntu-20.04, use-cross: true, extra-build-features: "appimage" }
+          # - { arch: armv7, target: armv7-unknown-linux-gnueabihf , os: ubuntu-20.04, use-cross: true, extra-build-features: "appimage" }
           # - { target: arm-unknown-linux-musleabihf, os: ubuntu-20.04, use-cross: true }
     steps:
 
+      - name: Maximize build space
+        run: |
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          sudo apt update -y
+          sudo apt install qemu-user-static
+
       - name: Checkout source code
         uses: actions/checkout@v3
+
+      - name: Set Swap Space
+        uses: pierotofy/set-swap-space@master
+        with:
+          swap-size-gb: 12
+
+      - name: Free Space
+        run: |
+          df
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -901,27 +896,78 @@ jobs:
           key: ${{ matrix.job.target }}-${{ matrix.job.extra-build-features }}
           cache-directories: "/opt/rust-registry"
 
+      - name: Install local registry
+        run: |
+          mkdir -p /opt/rust-registry
+          cargo install cargo-local-registry
+
+      - name: Build local registry
+        uses: nick-fields/retry@v2
+        id: build-local-registry
+        continue-on-error: true
+        with:
+          max_attempts: 3
+          timeout_minutes: 15
+          retry_on: error
+          command: cargo local-registry --sync ./Cargo.lock /opt/rust-registry
+
       - name: Restore vcpkg files
         uses: actions/download-artifact@master
         with:
           name: vcpkg-artifact-${{ matrix.job.arch }}
           path: /opt/artifacts/vcpkg/installed
 
-      - name: Install cross tool
-        run: |
-          wget https://github.com/cross-rs/cross/releases/download/v0.2.5/cross-x86_64-unknown-linux-gnu.tar.gz
-          tar -zxvf cross-x86_64-unknown-linux-gnu.tar.gz
-          mv cross* /usr/local/bin/
+      - uses: Kingtous/run-on-arch-action@amd64-support
+        name: Build rustdesk sciter binary for ${{ matrix.job.arch }}
+        id: vcpkg
+        with:
+          arch: ${{ matrix.job.arch }}
+          distro: ubuntu18.04-rustdesk
+          githubToken: ${{ github.token }}
+          setup: |
+            ls -l "${PWD}"
+          dockerRunArgs: |
+            --volume "${PWD}:/workspace"
+            --volume "/opt/artifacts:/opt/artifacts"
+            --volume "/opt/rust-registry:/opt/rust-registry"
+          shell: /bin/bash
+          install: |
+            apt update -y
+            apt-get -qq install -y git cmake g++ gcc build-essential nasm yasm curl unzip xz-utils python3 wget pkg-config ninja-build pkg-config libgtk-3-dev liblzma-dev clang libappindicator3-dev rpm libclang-dev
+            apt-get -qq install -y libdbus-1-dev pkg-config nasm yasm libglib2.0-dev libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev 
+            apt-get -qq install -y libpulse-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libvpx-dev libvdpau-dev libva-dev
+          run: |
+            # disable git safe.directory
+            git config --global --add safe.directory "*"
+            # rust
+            pushd /opt
+            wget -O rust.tar.gz https://static.rust-lang.org/dist/rust-1.64.0-${{ matrix.job.target }}.tar.gz
+            tar -zxvf rust.tar.gz > /dev/null && rm rust.tar.gz
+            cd rust-1.64.0-${{ matrix.job.target }} && ./install.sh
+            rm -rf rust-1.64.0-${{ matrix.job.target }}
+            # edit config
+            mkdir -p ~/.cargo/
+            echo """
+              [source.crates-io]
+              registry = 'https://github.com/rust-lang/crates.io-index'
+              replace-with = 'local-registry'
 
-      - name: Build RustDesk
-        env:
-          ARCH: ${{ matrix.job.deb-arch }}
-          VCPKG_ROOT: /opt/artifacts/vcpkg
-        run: |
-          python3 ./res/inline-sciter.py
-          cross build --target ${{ matrix.job.target }} --features inline --release
-          wget -O ./target/${{ matrix.job.target }}/release/libsciter-gtk.so https://github.com/c-smile/sciter-sdk/blob/master/bin.lnx/arm32/libsciter-gtk.so
-          ./build.py --package ./target/${{ matrix.job.target }}/release
+              [source.local-registry]
+              local-registry = '/opt/rust-registry/'
+            """ > ~/.cargo/config
+            cat ~/.cargo/config
+            
+            # build
+            pushd /workspace
+            python3 ./res/inline-sciter.py
+            export VCPKG_ROOT=/opt/artifacts/vcpkg
+            export ARCH=armhf
+            cargo build --features inline --release --bins
+            # package
+            mkdir -p ./Release
+            mv ./target/release/rustdesk ./Release/rustdesk
+            wget -O ./Release/libsciter-gtk.so https://github.com/c-smile/sciter-sdk/raw/master/bin.lnx/arm32/libsciter-gtk.so
+            ./build.py --package ./Release
 
       - name: Rename rustdesk
         shell: bash
@@ -976,8 +1022,8 @@ jobs:
           #     use-cross: true,
           #     extra-build-features: "flatpak",
           #   }
-          # - { arch: armv7, target: arm-unknown-linux-gnueabihf , os: ubuntu-20.04, use-cross: true, extra-build-features: "" }
-          # - { arch: armv7, target: arm-unknown-linux-gnueabihf , os: ubuntu-20.04, use-cross: true, extra-build-features: "appimage" }
+          # - { arch: armv7, target: armv7-unknown-linux-gnueabihf , os: ubuntu-20.04, use-cross: true, extra-build-features: "" }
+          # - { arch: armv7, target: armv7-unknown-linux-gnueabihf , os: ubuntu-20.04, use-cross: true, extra-build-features: "appimage" }
           # - { target: arm-unknown-linux-musleabihf, os: ubuntu-20.04, use-cross: true }
     steps:
       - name: Checkout source code
