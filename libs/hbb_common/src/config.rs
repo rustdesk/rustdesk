@@ -297,6 +297,7 @@ pub struct TransferSerde {
     pub read_jobs: Vec<String>,
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn patch(path: PathBuf) -> PathBuf {
     if let Some(_tmp) = path.to_str() {
         #[cfg(windows)]

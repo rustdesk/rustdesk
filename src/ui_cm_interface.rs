@@ -15,7 +15,11 @@ use std::{
 use clipboard::{cliprdr::CliprdrClientContext, empty_clipboard, set_conn_enabled, ContextSend};
 use serde_derive::Serialize;
 
-use crate::ipc::{self, Connection, Data};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::ipc::Connection;
+use crate::ipc::{self, Data};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use hbb_common::tokio::sync::mpsc::unbounded_channel;
 #[cfg(windows)]
 use hbb_common::tokio::sync::Mutex as TokioMutex;
 use hbb_common::{
@@ -28,7 +32,7 @@ use hbb_common::{
     protobuf::Message as _,
     tokio::{
         self,
-        sync::mpsc::{self, unbounded_channel, UnboundedSender},
+        sync::mpsc::{self, UnboundedSender},
         task::spawn_blocking,
     },
 };
@@ -55,6 +59,7 @@ pub struct Client {
     tx: UnboundedSender<Data>,
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 struct IpcTaskRunner<T: InvokeUiCM> {
     stream: Connection,
     cm: ConnectionManager<T>,
@@ -143,7 +148,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
             from_switch,
             tx,
             in_voice_call: false,
-            incoming_voice_call: false
+            incoming_voice_call: false,
         };
         CLIENTS
             .write()
@@ -183,10 +188,12 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         self.ui_handler.remove_connection(id, close);
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn show_elevation(&self, show: bool) {
         self.ui_handler.show_elevation(show);
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn voice_call_started(&self, id: i32) {
         if let Some(client) = CLIENTS.write().unwrap().get_mut(&id) {
             client.incoming_voice_call = false;
@@ -195,6 +202,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         }
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn voice_call_incoming(&self, id: i32) {
         if let Some(client) = CLIENTS.write().unwrap().get_mut(&id) {
             client.incoming_voice_call = true;
@@ -203,6 +211,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         }
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn voice_call_closed(&self, id: i32, _reason: &str) {
         if let Some(client) = CLIENTS.write().unwrap().get_mut(&id) {
             client.incoming_voice_call = false;
@@ -282,6 +291,7 @@ pub fn switch_back(id: i32) {
     };
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 impl<T: InvokeUiCM> IpcTaskRunner<T> {
     #[cfg(windows)]
     async fn enable_cliprdr_file_context(&mut self, conn_id: i32, enabled: bool) {

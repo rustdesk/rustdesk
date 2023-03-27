@@ -9,8 +9,12 @@ use hbb_common::password_security;
 use hbb_common::{
     allow_err,
     config::{self, Config, LocalConfig, PeerConfig},
-    directories_next, log, sleep,
-    tokio::{self, sync::mpsc, time},
+    directories_next, log, tokio,
+};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use hbb_common::{
+    sleep,
+    tokio::{sync::mpsc, time},
 };
 
 use hbb_common::{
@@ -339,8 +343,8 @@ pub fn get_socks() -> Vec<String> {
 }
 
 #[inline]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn set_socks(proxy: String, username: String, password: String) {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     ipc::set_socks(config::Socks5Server {
         proxy,
         username,
@@ -348,6 +352,9 @@ pub fn set_socks(proxy: String, username: String, password: String) {
     })
     .ok();
 }
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub fn set_socks(_: String, _: String, _: String) {}
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[inline]
@@ -791,14 +798,15 @@ pub fn check_zombie(children: Children) {
     }
 }
 
+// Make sure `SENDER` is inited here.
+#[inline]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn start_option_status_sync() {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        let _sender = SENDER.lock().unwrap();
-    }
+    let _sender = SENDER.lock().unwrap();
 }
 
 // not call directly
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn check_connect_status(reconnect: bool) -> mpsc::UnboundedSender<ipc::Data> {
     let (tx, rx) = mpsc::unbounded_channel::<ipc::Data>();
     std::thread::spawn(move || check_connect_status_(reconnect, rx));
@@ -834,6 +842,7 @@ pub fn get_user_default_option(key: String) -> String {
 
 // notice: avoiding create ipc connection repeatedly,
 // because windows named pipe has serious memory leak issue.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tokio::main(flavor = "current_thread")]
 async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc::Data>) {
     let mut key_confirmed = false;

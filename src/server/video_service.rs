@@ -831,14 +831,13 @@ pub fn handle_one_frame_encoded(
         }
         Ok(())
     })?;
-    let mut send_conn_ids: HashSet<i32> = Default::default();
     let vp9_frame = EncodedVideoFrame {
         data: frame.to_vec().into(),
         key: true,
         pts: ms,
         ..Default::default()
     };
-    send_conn_ids = sp.send_video_frame(create_msg(vec![vp9_frame]));
+    let send_conn_ids = sp.send_video_frame(create_msg(vec![vp9_frame]));
     Ok(send_conn_ids)
 }
 

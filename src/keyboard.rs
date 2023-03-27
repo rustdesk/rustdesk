@@ -179,6 +179,7 @@ pub mod client {
     }
 
     #[inline]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn lock_screen() {
         send_key_event(&event_lock_screen());
     }
@@ -198,6 +199,7 @@ pub mod client {
     }
 
     #[inline]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn ctrl_alt_del() {
         send_key_event(&event_ctrl_alt_del());
     }
@@ -364,6 +366,7 @@ pub fn get_keyboard_mode_enum() -> KeyboardMode {
 }
 
 #[inline]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn is_numpad_key(event: &Event) -> bool {
     matches!(event.event_type, EventType::KeyPress(key) | EventType::KeyRelease(key) if match key {
         Key::Kp0 | Key::Kp1 | Key::Kp2 | Key::Kp3 | Key::Kp4 | Key::Kp5 | Key::Kp6 | Key::Kp7 | Key::Kp8 |
@@ -373,6 +376,7 @@ fn is_numpad_key(event: &Event) -> bool {
 }
 
 #[inline]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn is_letter_key(event: &Event) -> bool {
     matches!(event.event_type, EventType::KeyPress(key) | EventType::KeyRelease(key) if match key {
         Key::KeyA | Key::KeyB | Key::KeyC | Key::KeyD | Key::KeyE | Key::KeyF | Key::KeyG | Key::KeyH |
@@ -456,7 +460,7 @@ fn update_modifiers_state(event: &Event) {
 pub fn event_to_key_events(
     event: &Event,
     keyboard_mode: KeyboardMode,
-    lock_modes: Option<i32>,
+    _lock_modes: Option<i32>,
 ) -> Vec<KeyEvent> {
     let mut key_event = KeyEvent::new();
     update_modifiers_state(event);
@@ -475,7 +479,12 @@ pub fn event_to_key_events(
     peer.retain(|c| !c.is_whitespace());
 
     key_event.mode = keyboard_mode.into();
-    let mut key_events = match keyboard_mode {
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let mut key_events;
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let key_events;
+    key_events = match keyboard_mode {
         KeyboardMode::Map => match map_keyboard_mode(peer.as_str(), event, key_event) {
             Some(event) => [event].to_vec(),
             None => Vec::new(),
@@ -493,12 +502,12 @@ pub fn event_to_key_events(
         }
     };
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if keyboard_mode != KeyboardMode::Translate {
         let is_numpad_key = is_numpad_key(&event);
         let is_letter_key = is_letter_key(&event);
         for key_event in &mut key_events {
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            if let Some(lock_modes) = lock_modes {
+            if let Some(lock_modes) = _lock_modes {
                 parse_add_lock_modes_modifiers(key_event, lock_modes, is_numpad_key, is_letter_key);
             } else {
                 add_lock_modes_modifiers(key_event, is_numpad_key, is_letter_key);
@@ -778,7 +787,7 @@ pub fn legacy_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Vec<KeyEv
     events
 }
 
-pub fn map_keyboard_mode(peer: &str, event: &Event, mut key_event: KeyEvent) -> Option<KeyEvent> {
+pub fn map_keyboard_mode(_peer: &str, event: &Event, mut key_event: KeyEvent) -> Option<KeyEvent> {
     match event.event_type {
         EventType::KeyPress(..) => {
             key_event.down = true;
@@ -790,7 +799,7 @@ pub fn map_keyboard_mode(peer: &str, event: &Event, mut key_event: KeyEvent) -> 
     };
 
     #[cfg(target_os = "windows")]
-    let keycode = match peer {
+    let keycode = match _peer {
         OS_LOWER_WINDOWS => {
             // https://github.com/rustdesk/rustdesk/issues/1371
             // Filter scancodes that are greater than 255 and the hight word is not 0xE0.
@@ -809,13 +818,13 @@ pub fn map_keyboard_mode(peer: &str, event: &Event, mut key_event: KeyEvent) -> 
         _ => rdev::win_scancode_to_linux_code(event.position_code)?,
     };
     #[cfg(target_os = "macos")]
-    let keycode = match peer {
+    let keycode = match _peer {
         OS_LOWER_WINDOWS => rdev::macos_code_to_win_scancode(event.platform_code as _)?,
         OS_LOWER_MACOS => event.platform_code as _,
         _ => rdev::macos_code_to_linux_code(event.platform_code as _)?,
     };
     #[cfg(target_os = "linux")]
-    let keycode = match peer {
+    let keycode = match _peer {
         OS_LOWER_WINDOWS => rdev::linux_code_to_win_scancode(event.position_code as _)?,
         OS_LOWER_MACOS => {
             if hbb_common::config::LocalConfig::get_kb_layout_type() == "ISO" {
@@ -833,6 +842,7 @@ pub fn map_keyboard_mode(peer: &str, event: &Event, mut key_event: KeyEvent) -> 
     Some(key_event)
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn try_fill_unicode(event: &Event, key_event: &KeyEvent, events: &mut Vec<KeyEvent>) {
     match &event.unicode {
         Some(unicode_info) => {
@@ -925,6 +935,8 @@ pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -
             return events;
         }
     }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if is_numpad_key(&event) {
         if let Some(evt) = translate_key_code(peer, event, key_event) {
             events.push(evt);

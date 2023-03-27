@@ -1,7 +1,11 @@
 use std::collections::HashMap;
 use std::num::NonZeroI64;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use std::sync::Mutex;
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc,
+};
 
 #[cfg(windows)]
 use clipboard::{cliprdr::CliprdrClientContext, ContextSend};
@@ -13,6 +17,8 @@ use hbb_common::fs::{
 use hbb_common::message_proto::permission_info::Permission;
 use hbb_common::protobuf::Message as _;
 use hbb_common::rendezvous_proto::ConnType;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use hbb_common::sleep;
 use hbb_common::tokio::sync::mpsc::error::TryRecvError;
 #[cfg(windows)]
 use hbb_common::tokio::sync::Mutex as TokioMutex;
@@ -21,18 +27,17 @@ use hbb_common::tokio::{
     sync::mpsc,
     time::{self, Duration, Instant, Interval},
 };
-use hbb_common::{allow_err, get_time, message_proto::*, sleep};
-use hbb_common::{fs, log, Stream};
+use hbb_common::{allow_err, fs, get_time, log, message_proto::*, Stream};
 
 use crate::client::{
     new_voice_call_request, Client, CodecFormat, MediaData, MediaSender, QualityStatus, MILLI1,
     SEC30,
 };
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::common::update_clipboard;
+use crate::common::{self, update_clipboard};
 use crate::common::{get_default_sound_input, set_sound_input};
 use crate::ui_session_interface::{InvokeUiSession, Session};
-use crate::{audio_service, common, ConnInner, CLIENT_SERVER};
+use crate::{audio_service, ConnInner, CLIENT_SERVER};
 use crate::{client::Data, client::Interface};
 
 pub struct Remote<T: InvokeUiSession> {
@@ -44,6 +49,7 @@ pub struct Remote<T: InvokeUiSession> {
     // Stop sending local audio to remote client.
     stop_voice_call_sender: Option<std::sync::mpsc::Sender<()>>,
     voice_call_request_timestamp: Option<NonZeroI64>,
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     old_clipboard: Arc<Mutex<String>>,
     read_jobs: Vec<fs::TransferJob>,
     write_jobs: Vec<fs::TransferJob>,
@@ -74,6 +80,7 @@ impl<T: InvokeUiSession> Remote<T> {
             audio_sender,
             receiver,
             sender,
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             old_clipboard: Default::default(),
             read_jobs: Vec::new(),
             write_jobs: Vec::new(),
@@ -840,7 +847,9 @@ impl<T: InvokeUiSession> Remote<T> {
                         self.handler.handle_peer_info(pi);
                         self.check_clipboard_file_context();
                         if !(self.handler.is_file_transfer() || self.handler.is_port_forward()) {
+                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
                             let sender = self.sender.clone();
+                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
                             let permission_config = self.handler.get_permission_config();
 
                             #[cfg(feature = "flutter")]
