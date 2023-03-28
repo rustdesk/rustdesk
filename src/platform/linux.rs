@@ -296,7 +296,6 @@ fn force_stop_server() {
 pub fn start_os_service() {
     stop_rustdesk_servers();
     start_uinput_service();
-    start_check_desktop_env();
 
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
@@ -371,8 +370,6 @@ pub fn start_os_service() {
         }
     }
 
-    stop_check_desktop_env();
-
     if let Some(ps) = user_server.take().as_mut() {
         allow_err!(ps.kill());
     }
@@ -384,13 +381,13 @@ pub fn start_os_service() {
 
 #[inline]
 pub fn get_active_user_id_name() -> (String, String) {
-    let desktop = get_desktop_env();
-    (desktop.uid.clone(), desktop.username.clone())
+    let vec_id_name = get_values_of_seat0(&[1, 2]);
+    (vec_id_name[0].clone(), vec_id_name[1].clone())
 }
 
 #[inline]
 pub fn get_active_userid() -> String {
-    get_desktop_env().uid.clone()
+    get_values_of_seat0(&[1])[0].clone()
 }
 
 fn get_cm() -> bool {
@@ -436,7 +433,7 @@ fn _get_display_manager() -> String {
 
 #[inline]
 pub fn get_active_username() -> String {
-    get_desktop_env().username.clone()
+    get_values_of_seat0(&[2])[0].clone()
 }
 
 pub fn get_active_user_home() -> Option<PathBuf> {
