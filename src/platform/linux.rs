@@ -1,4 +1,3 @@
-use super::linux_desktop::{get_desktop_env, Desktop};
 use super::{CursorData, ResultType};
 use desktop::Desktop;
 pub use hbb_common::platform::linux::*;
@@ -297,6 +296,7 @@ fn force_stop_server() {
 pub fn start_os_service() {
     stop_rustdesk_servers();
     start_uinput_service();
+    start_check_desktop_env();
 
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
@@ -370,6 +370,8 @@ pub fn start_os_service() {
             sid = desktop.sid.clone();
         }
     }
+
+    stop_check_desktop_env();
 
     if let Some(ps) = user_server.take().as_mut() {
         allow_err!(ps.kill());

@@ -1074,18 +1074,19 @@ impl Connection {
     fn try_start_desktop(_username: &str, _passsword: &str) -> String {
         #[cfg(target_os = "linux")]
         if _username.is_empty() {
-            let desktop = crate::platform::linux_desktop::get_desktop_env();
-            if desktop.is_ready() {
-                ""
-            } else {
+            let username = crate::platform::linux_desktop_manager::get_username();
+            if username.is_empty() {
                 LOGIN_MSG_XSESSION_NOT_READY
+            } else {
+                ""
             }
             .to_owned()
         } else {
-            match crate::platform::linux_desktop::try_start_x_session(_username, _passsword) {
-                Ok(desktop) => {
-                    if desktop.is_ready() {
-                        if _username != desktop.username {
+            match crate::platform::linux_desktop_manager::try_start_x_session(_username, _passsword)
+            {
+                Ok((username, x11_ready)) => {
+                    if x11_ready {
+                        if _username != username {
                             LOGIN_MSG_XSESSION_ANOTHER_USER_READTY.to_owned()
                         } else {
                             "".to_owned()
