@@ -1,4 +1,4 @@
-use super::linux_desktop::GNOME_SESSION_BINARY;
+use super::linux_desktop::{get_desktop_env, Desktop};
 use super::{CursorData, ResultType};
 use desktop::Desktop;
 pub use hbb_common::platform::linux::*;
@@ -382,13 +382,13 @@ pub fn start_os_service() {
 
 #[inline]
 pub fn get_active_user_id_name() -> (String, String) {
-    let vec_id_name = get_values_of_seat0(&[1, 2]);
-    (vec_id_name[0].clone(), vec_id_name[1].clone())
+    let desktop = get_desktop_env();
+    (desktop.uid.clone(), desktop.username.clone())
 }
 
 #[inline]
 pub fn get_active_userid() -> String {
-    get_values_of_seat0(&[1])[0].clone()
+    get_desktop_env().uid.clone()
 }
 
 fn get_cm() -> bool {
@@ -434,7 +434,7 @@ fn _get_display_manager() -> String {
 
 #[inline]
 pub fn get_active_username() -> String {
-    get_values_of_seat0(&[2])[0].clone()
+    get_desktop_env().username.clone()
 }
 
 pub fn get_active_user_home() -> Option<PathBuf> {

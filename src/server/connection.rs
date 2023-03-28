@@ -1073,43 +1073,35 @@ impl Connection {
 
     fn try_start_desktop(_username: &str, _passsword: &str) -> String {
         #[cfg(target_os = "linux")]
-        {
-            if _username.is_empty() {
-                match crate::platform::linux_desktop::get_desktop_env() {
-                    Some(desktop_env) => {
-                        if desktop_env.is_ready() {
-                            ""
-                        } else {
-                            LOGIN_MSG_XSESSION_NOT_READY
-                        }
-                    }
-                    None => LOGIN_MSG_XDESKTOP_NOT_INITED,
-                }
-                .to_owned()
+        if _username.is_empty() {
+            let desktop = crate::platform::linux_desktop::get_desktop_env();
+            if desktop.is_ready() {
+                ""
             } else {
-                match crate::platform::linux_desktop::try_start_x_session(_username, _passsword) {
-                    Ok(desktop_env) => {
-                        if desktop_env.is_ready() {
-                            if _username != desktop_env.username {
-                                LOGIN_MSG_XSESSION_ANOTHER_USER_READTY.to_owned()
-                            } else {
-                                "".to_owned()
-                            }
+                LOGIN_MSG_XSESSION_NOT_READY
+            }
+            .to_owned()
+        } else {
+            match crate::platform::linux_desktop::try_start_x_session(_username, _passsword) {
+                Ok(desktop) => {
+                    if desktop.is_ready() {
+                        if _username != desktop.username {
+                            LOGIN_MSG_XSESSION_ANOTHER_USER_READTY.to_owned()
                         } else {
-                            LOGIN_MSG_XSESSION_NOT_READY.to_owned()
+                            "".to_owned()
                         }
+                    } else {
+                        LOGIN_MSG_XSESSION_NOT_READY.to_owned()
                     }
-                    Err(e) => {
-                        log::error!("Failed to start xsession {}", e);
-                        LOGIN_MSG_XSESSION_FAILED.to_owned()
-                    }
+                }
+                Err(e) => {
+                    log::error!("Failed to start xsession {}", e);
+                    LOGIN_MSG_XSESSION_FAILED.to_owned()
                 }
             }
         }
         #[cfg(not(target_os = "linux"))]
-        {
-            "".to_owned()
-        }
+        "".to_owned()
     }
 
     fn validate_one_password(&self, password: String) -> bool {

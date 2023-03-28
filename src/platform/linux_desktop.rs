@@ -17,7 +17,8 @@ use users::{get_user_by_name, os::unix::UserExt, User};
 
 lazy_static::lazy_static! {
     static ref DESKTOP_RUNNING: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
-    static ref DESKTOP_INST: Arc<Mutex<Option<Desktop>>> = Arc::new(Mutex::new(None));
+    static ref DESKTOP_ENV: Arc<Mutex<Desktop>> = Arc::new(Mutex::new(Desktop::new()));
+    static ref CHILD_FLAGS: Arc<Mutex<Option<ChildFlags>>> = Arc::new(Mutex::new(None));
 }
 
 pub const VIRTUAL_X11_DESKTOP: &str = "xfce4";
@@ -37,7 +38,8 @@ pub enum Protocal {
 }
 
 #[derive(Debug, Clone)]
-pub struct DesktopEnv {
+pub struct Desktop {
+    pub sid: String,
     pub protocal: Protocal,
     pub username: String,
     pub uid: String,
@@ -46,24 +48,31 @@ pub struct DesktopEnv {
 }
 
 #[derive(Debug)]
-pub struct Desktop {
-    env: DesktopEnv,
+struct ChildFlags {
     child_exit: Arc<AtomicBool>,
     is_child_running: Arc<AtomicBool>,
 }
 
 fn check_update_env() {
-    let mut inst = DESKTOP_INST.lock().unwrap();
-    if let Some(inst) = &mut (*inst) {
-        if !inst.is_child_running.load(Ordering::SeqCst) {
-            inst.child_exit.store(true, Ordering::SeqCst);
-            let old_env = inst.env.clone();
-            allow_err!(inst.env.refresh());
-            if !inst.env.is_same_env(&old_env) {
-                inst.env.update_env();
-                log::debug!("desktop env changed, {:?}", &inst.env);
-            }
+    let mut child_flags = CHILD_FLAGS.lock().unwrap();
+    let mut desktop = DESKTOP_ENV.lock().unwrap();
+
+    if let Some(child_flags) = &mut (*child_flags) {
+        if child_flags.is_child_running.load(Ordering::SeqCst) {
+            return;
         }
+        child_flags.child_exit.store(true, Ordering::SeqCst);
+    }
+
+    if !desktop.sid.is_empty() && is_active(&desktop.sid) {
+        return;
+    }
+
+    let old_desktop = desktop.clone();
+    desktop.refresh();
+    if !desktop.is_same_env(&old_desktop) {
+        desktop.update_env();
+        log::debug!("desktop env changed, {:?}", &desktop);
     }
 }
 
@@ -74,7 +83,7 @@ pub fn start_xdesktop() {
         } else {
             log::info!("Wait desktop: none");
         }
-        *DESKTOP_INST.lock().unwrap() = Some(Desktop::new());
+        *CHILD_FLAGS.lock().unwrap() = Some(ChildFlags::new());
 
         let interval = time::Duration::from_millis(super::SERVICE_INTERVAL);
         DESKTOP_RUNNING.store(true, Ordering::SeqCst);
@@ -90,19 +99,24 @@ pub fn stop_xdesktop() {
     DESKTOP_RUNNING.store(false, Ordering::SeqCst);
 }
 
-pub fn get_desktop_env() -> Option<DesktopEnv> {
-    match &*DESKTOP_INST.lock().unwrap() {
-        Some(inst) => Some(inst.env.clone()),
-        None => None,
-    }
+#[inline]
+pub fn get_desktop_env() -> Desktop {
+    DESKTOP_ENV.lock().unwrap().clone()
 }
 
-pub fn try_start_x_session(username: &str, password: &str) -> ResultType<DesktopEnv> {
-    let mut inst = DESKTOP_INST.lock().unwrap();
-    if let Some(inst) = &mut (*inst) {
-        let _ = inst.try_start_x_session(username, password)?;
-        log::debug!("try_start_x_session, username: {}, {:?}", &username, &inst);
-        Ok(inst.env.clone())
+pub fn try_start_x_session(username: &str, password: &str) -> ResultType<Desktop> {
+    let mut child_flags = CHILD_FLAGS.lock().unwrap();
+    let mut desktop_lock = DESKTOP_ENV.lock().unwrap();
+    let mut desktop = Desktop::new();
+    if let Some(child_flags) = &mut (*child_flags) {
+        let _ = child_flags.try_start_x_session(&mut desktop, username, password)?;
+        log::debug!(
+            "try_start_x_session, username: {}, {:?}",
+            &username,
+            &child_flags
+        );
+        *desktop_lock = desktop.clone();
+        Ok(desktop)
     } else {
         bail!(crate::server::LOGIN_MSG_XDESKTOP_NOT_INITED);
     }
@@ -111,8 +125,8 @@ pub fn try_start_x_session(username: &str, password: &str) -> ResultType<Desktop
 fn wait_xdesktop(timeout_secs: u64) -> bool {
     let wait_begin = Instant::now();
     while wait_begin.elapsed().as_secs() < timeout_secs {
-        let seat0 = get_values_of_seat0(&[0]);
-        if !seat0[0].is_empty() {
+        let uid = &get_values_of_seat0(&[1])[0];
+        if !uid.is_empty() {
             return true;
         }
 
@@ -132,11 +146,12 @@ fn wait_xdesktop(timeout_secs: u64) -> bool {
     false
 }
 
-impl DesktopEnv {
+impl Desktop {
     pub fn new() -> Self {
         let xauth = get_env_var("XAUTHORITY");
 
         Self {
+            sid: "".to_owned(),
             protocal: Protocal::Unknown,
             username: "".to_owned(),
             uid: "".to_owned(),
@@ -150,27 +165,41 @@ impl DesktopEnv {
     }
 
     fn update_env(&self) {
-        if self.is_ready() {
+        if self.is_x11() {
             std::env::set_var("DISPLAY", &self.display);
             std::env::set_var("XAUTHORITY", &self.xauth);
             std::env::set_var(ENV_DESKTOP_PROTOCAL, &self.protocal.to_string());
         } else {
             std::env::set_var("DISPLAY", "");
             std::env::set_var("XAUTHORITY", "");
-            std::env::set_var(ENV_DESKTOP_PROTOCAL, &Protocal::Unknown.to_string());
+            std::env::set_var(ENV_DESKTOP_PROTOCAL, &self.protocal.to_string());
         }
     }
 
     pub fn is_same_env(&self, other: &Self) -> bool {
-        self.protocal == other.protocal
+        self.sid == other.sid
+            && self.protocal == other.protocal
             && self.uid == other.uid
             && self.display == other.display
             && self.xauth == other.xauth
     }
 
-    #[inline(always)]
-    pub fn is_ready(&self) -> bool {
+    #[inline]
+    pub fn is_x11(&self) -> bool {
         self.protocal == Protocal::X11
+    }
+
+    #[inline]
+    pub fn is_wayland(&self) -> bool {
+        self.protocal == Protocal::Wayland
+    }
+
+    #[inline]
+    pub fn is_ready(&self) -> bool {
+        match self.protocal {
+            Protocal::X11 | Protocal::Wayland => true,
+            _ => false,
+        }
     }
 
     // The logic mainly fron https://github.com/neutrinolabs/xrdp/blob/34fe9b60ebaea59e8814bbc3ca5383cabaa1b869/sesman/session.c#L334.
@@ -185,6 +214,7 @@ impl DesktopEnv {
         bail!("No avaliable display found in range {:?}", display_range)
     }
 
+    #[inline]
     fn is_x_server_running(display: u32) -> bool {
         Path::new(&format!("/tmp/.X11-unix/X{}", display)).exists()
             || Path::new(&format!("/tmp/.X{}-lock", display)).exists()
@@ -231,148 +261,6 @@ impl DesktopEnv {
                 }
             };
         }
-    }
-
-    // fixme: reduce loginctl
-    fn get_env_seat0(&mut self) -> ResultType<bool> {
-        let output = Command::new("loginctl").output()?;
-        for line in String::from_utf8_lossy(&output.stdout).lines() {
-            if !line.contains("gdm") && line.contains("seat0") {
-                if let Some(sid) = line.split_whitespace().nth(0) {
-                    if Self::is_active(sid)? {
-                        if let Some(uid) = line.split_whitespace().nth(1) {
-                            self.uid = uid.to_owned();
-                        }
-                        if let Some(u) = line.split_whitespace().nth(2) {
-                            self.username = u.to_owned();
-                        }
-
-                        self.protocal = Protocal::Unknown;
-                        let type_output = Command::new("loginctl")
-                            .args(vec!["show-session", "-p", "Type", sid])
-                            .output()?;
-                        let type_stdout = String::from_utf8_lossy(&type_output.stdout);
-
-                        if type_stdout.contains("x11") {
-                            self.protocal = Protocal::X11;
-                            break;
-                        } else if type_stdout.contains("wayland") {
-                            self.protocal = Protocal::Wayland;
-                        }
-                    }
-                }
-            }
-        }
-        Ok(self.is_ready())
-    }
-
-    // some case, there is no seat0 https://github.com/rustdesk/rustdesk/issues/73
-    fn get_env_active(&mut self) -> ResultType<bool> {
-        let output = Command::new("loginctl").output()?;
-
-        // set active Xorg session
-        for line in String::from_utf8_lossy(&output.stdout).lines() {
-            if line.contains("sessions listed.") {
-                continue;
-            }
-            if let Some(sid) = line.split_whitespace().nth(0) {
-                if Self::is_active(sid)? {
-                    if Self::get_display_server_of_session(sid) == ENV_DESKTOP_PROTOCAL__X11 {
-                        if let Some(uid) = line.split_whitespace().nth(1) {
-                            self.uid = uid.to_owned();
-                        }
-                        if let Some(u) = line.split_whitespace().nth(2) {
-                            self.username = u.to_owned();
-                        }
-
-                        self.protocal = Protocal::X11;
-                    }
-                }
-            }
-        }
-        // // set active xfce4 session
-        // for line in String::from_utf8_lossy(&output.stdout).lines() {
-        //     if let Some(sid) = line.split_whitespace().nth(0) {
-        //         if Self::is_active(sid)? {
-        //             let tty_output = Command::new("loginctl")
-        //                 .args(vec!["show-session", "-p", "TTY", sid])
-        //                 .output()?;
-        //             let tty: String = String::from_utf8_lossy(&tty_output.stdout)
-        //                 .replace("TTY=", "")
-        //                 .trim_end()
-        //                 .into();
-
-        //             let xfce_panel_info =
-        //                 run_cmds(format!("ps -e | grep \"{}.\\\\+{}\"", tty, XFCE4_PANEL))?;
-        //             if xfce_panel_info.trim_end().to_string() != "" {
-        //                 if let Some(uid) = line.split_whitespace().nth(1) {
-        //                     self.uid = uid.to_owned();
-        //                 }
-        //                 if let Some(u) = line.split_whitespace().nth(2) {
-        //                     self.username = u.to_owned();
-        //                 }
-        //             }
-        //         }
-        //     }
-        // }
-        Ok(self.is_ready())
-    }
-
-    // fixme: dup
-    fn get_display_server_of_session(session: &str) -> String {
-        if let Ok(output) = Command::new("loginctl")
-            .args(vec!["show-session", "-p", "Type", session])
-            .output()
-        // Check session type of the session
-        {
-            let display_server = String::from_utf8_lossy(&output.stdout)
-                .replace("Type=", "")
-                .trim_end()
-                .into();
-            if display_server == "tty" {
-                // If the type is tty...
-                if let Ok(output) = Command::new("loginctl")
-                    .args(vec!["show-session", "-p", "TTY", session])
-                    .output()
-                // Get the tty number
-                {
-                    let tty: String = String::from_utf8_lossy(&output.stdout)
-                        .replace("TTY=", "")
-                        .trim_end()
-                        .into();
-                    if let Ok(xorg_results) =
-                        run_cmds(format!("ps -e | grep \"{}.\\\\+Xorg\"", tty))
-                    // And check if Xorg is running on that tty
-                    {
-                        if xorg_results.trim_end().to_string() != "" {
-                            // If it is, manually return "x11", otherwise return tty
-                            ENV_DESKTOP_PROTOCAL__X11.to_owned()
-                        } else {
-                            display_server
-                        }
-                    } else {
-                        // If any of these commands fail just fall back to the display server
-                        display_server
-                    }
-                } else {
-                    display_server
-                }
-            } else {
-                // If the session is not a tty, then just return the type as usual
-                display_server
-            }
-        } else {
-            "".to_owned()
-        }
-    }
-
-    // fixme: remove
-    fn is_active(sid: &str) -> ResultType<bool> {
-        let output = Command::new("loginctl")
-            .args(vec!["show-session", "-p", "State", sid])
-            .output()?;
-
-        Ok(String::from_utf8_lossy(&output.stdout).contains("active"))
     }
 
     fn get_display_by_user(user: &str) -> String {
@@ -455,38 +343,47 @@ impl DesktopEnv {
         }
     }
 
-    fn refresh(&mut self) -> ResultType<bool> {
+    fn refresh(&mut self) {
         *self = Self::new();
-        if self.get_env_seat0()? || self.get_env_active()? {
-            self.get_display();
-            self.get_xauth();
-            Ok(true)
-        } else {
-            Ok(false)
+
+        let seat0_values = get_values_of_seat0(&[0, 1, 2]);
+        if seat0_values[0].is_empty() {
+            return;
         }
+
+        self.sid = seat0_values[0].clone();
+        self.uid = seat0_values[1].clone();
+        self.username = seat0_values[2].clone();
+        self.protocal = get_display_server_of_session(&self.sid).into();
+        self.get_display();
+        self.get_xauth();
     }
 }
 
-impl Drop for Desktop {
+impl Drop for ChildFlags {
     fn drop(&mut self) {
         self.stop_children();
     }
 }
 
-impl Desktop {
+impl ChildFlags {
     fn fatal_exit() {
         std::process::exit(0);
     }
 
     pub fn new() -> Self {
         Self {
-            env: DesktopEnv::new(),
             child_exit: Arc::new(AtomicBool::new(true)),
             is_child_running: Arc::new(AtomicBool::new(false)),
         }
     }
 
-    fn try_start_x_session(&mut self, username: &str, password: &str) -> ResultType<()> {
+    fn try_start_x_session(
+        &mut self,
+        desktop: &mut Desktop,
+        username: &str,
+        password: &str,
+    ) -> ResultType<()> {
         match get_user_by_name(username) {
             Some(userinfo) => {
                 let mut client = pam::Client::with_password(pam_get_service_name())?;
@@ -495,22 +392,24 @@ impl Desktop {
                     .set_credentials(username, password);
                 match client.authenticate() {
                     Ok(_) => {
-                        if self.env.is_ready() && self.env.username == username {
+                        if desktop.is_x11() && desktop.username == username {
                             return Ok(());
                         }
 
-                        self.env.username = username.to_string();
-                        self.env.uid = userinfo.uid().to_string();
-                        self.env.protocal = Protocal::Unknown;
-                        match self.start_x_session(&userinfo, password) {
+                        // to-do: sid is empty if xorg is managed by this process
+                        desktop.sid = "".to_owned();
+                        desktop.username = username.to_string();
+                        desktop.uid = userinfo.uid().to_string();
+                        desktop.protocal = Protocal::Unknown;
+                        match self.start_x_session(desktop, &userinfo, password) {
                             Ok(_) => {
-                                log::info!("Succeeded to start x11, update env {:?}", &self.env);
-                                self.env.update_env();
+                                log::info!("Succeeded to start x11, update env {:?}", &desktop);
+                                desktop.update_env();
                                 Ok(())
                             }
                             Err(e) => {
-                                self.env = DesktopEnv::new();
-                                self.env.update_env();
+                                *desktop = Desktop::new();
+                                desktop.update_env();
                                 bail!("failed to start x session, {}", e);
                             }
                         }
@@ -526,19 +425,24 @@ impl Desktop {
         }
     }
 
-    fn start_x_session(&mut self, userinfo: &User, password: &str) -> ResultType<()> {
+    fn start_x_session(
+        &mut self,
+        desktop: &mut Desktop,
+        userinfo: &User,
+        password: &str,
+    ) -> ResultType<()> {
         self.stop_children();
 
-        let display_num = DesktopEnv::get_avail_display()?;
+        let display_num = Desktop::get_avail_display()?;
         // "xServer_ip:display_num.screen_num"
-        self.env.display = format!(":{}", display_num);
+        desktop.display = format!(":{}", display_num);
 
         let uid = userinfo.uid();
         let gid = userinfo.primary_group_id();
         let envs = HashMap::from([
             ("SHELL", userinfo.shell().to_string_lossy().to_string()),
             ("PATH", "/sbin:/bin:/usr/bin:/usr/local/bin".to_owned()),
-            ("USER", self.env.username.clone()),
+            ("USER", desktop.username.clone()),
             ("UID", userinfo.uid().to_string()),
             ("HOME", userinfo.home_dir().to_string_lossy().to_string()),
             (
@@ -549,7 +453,7 @@ impl Desktop {
             // ("XAUTHORITY", self.xauth.clone()),
             // (ENV_DESKTOP_PROTOCAL, XProtocal::X11.to_string()),
         ]);
-        let env = self.env.clone();
+        let desktop_clone = desktop.clone();
         self.child_exit.store(false, Ordering::SeqCst);
         let is_child_running = self.is_child_running.clone();
 
@@ -560,7 +464,7 @@ impl Desktop {
             match Self::start_x_session_thread(
                 tx_res.clone(),
                 is_child_running,
-                env,
+                desktop_clone,
                 uid,
                 gid,
                 display_num,
@@ -579,7 +483,7 @@ impl Desktop {
         match rx_res.recv_timeout(Duration::from_millis(10_000)) {
             Ok(res) => {
                 if res == "" {
-                    self.env.protocal = Protocal::X11;
+                    desktop.protocal = Protocal::X11;
                     Ok(())
                 } else {
                     bail!(res)
@@ -594,7 +498,7 @@ impl Desktop {
     fn start_x_session_thread(
         tx_res: SyncSender<String>,
         is_child_running: Arc<AtomicBool>,
-        env: DesktopEnv,
+        desktop: Desktop,
         uid: u32,
         gid: u32,
         display_num: u32,
@@ -604,16 +508,16 @@ impl Desktop {
         let mut client = pam::Client::with_password(pam_get_service_name())?;
         client
             .conversation_mut()
-            .set_credentials(&env.username, &password);
+            .set_credentials(&desktop.username, &password);
         client.authenticate()?;
 
-        client.set_item(pam::PamItemType::TTY, &env.display)?;
+        client.set_item(pam::PamItemType::TTY, &desktop.display)?;
         client.open_session()?;
 
         // fixme: FreeBSD kernel needs to login here.
         // see: https://github.com/neutrinolabs/xrdp/blob/a64573b596b5fb07ca3a51590c5308d621f7214e/sesman/session.c#L556
 
-        let (child_xorg, child_wm) = Self::start_x11(&env, uid, gid, display_num, &envs)?;
+        let (child_xorg, child_wm) = Self::start_x11(&desktop, uid, gid, display_num, &envs)?;
         is_child_running.store(true, Ordering::SeqCst);
 
         log::info!("Start xorg and wm done, notify and wait xtop x11");
@@ -646,25 +550,25 @@ impl Desktop {
     }
 
     fn start_x11(
-        env: &DesktopEnv,
+        desktop: &Desktop,
         uid: u32,
         gid: u32,
         display_num: u32,
         envs: &HashMap<&str, String>,
     ) -> ResultType<(Child, Child)> {
-        log::debug!("envs of user {}: {:?}", &env.username, &envs);
+        log::debug!("envs of user {}: {:?}", &desktop.username, &envs);
 
-        DesktopEnv::add_xauth_cookie(&env.xauth, &env.display, uid, gid, &envs)?;
+        Desktop::add_xauth_cookie(&desktop.xauth, &desktop.display, uid, gid, &envs)?;
 
         // Start Xorg
-        let mut child_xorg = Self::start_x_server(&env.xauth, &env.display, uid, gid, &envs)?;
+        let mut child_xorg =
+            Self::start_x_server(&desktop.xauth, &desktop.display, uid, gid, &envs)?;
 
         log::info!("xorg started, wait 10 secs to ensuer x server is running");
 
         let max_wait_secs = 10;
         // wait x server running
-        if let Err(e) =
-            DesktopEnv::wait_x_server_running(child_xorg.id(), display_num, max_wait_secs)
+        if let Err(e) = Desktop::wait_x_server_running(child_xorg.id(), display_num, max_wait_secs)
         {
             match Self::wait_xorg_exit(&mut child_xorg) {
                 Ok(msg) => log::info!("{}", msg),
@@ -678,12 +582,12 @@ impl Desktop {
 
         log::info!(
             "xorg is running, start x window manager with DISPLAY: {}, XAUTHORITY: {}",
-            &env.display,
-            &env.xauth
+            &desktop.display,
+            &desktop.xauth
         );
 
-        std::env::set_var("DISPLAY", &env.display);
-        std::env::set_var("XAUTHORITY", &env.xauth);
+        std::env::set_var("DISPLAY", &desktop.display);
+        std::env::set_var("XAUTHORITY", &desktop.xauth);
         // start window manager (startwm.sh)
         let child_wm = match Self::start_x_window_manager(uid, gid, &envs) {
             Ok(c) => c,
@@ -803,10 +707,10 @@ impl Desktop {
     }
 
     fn try_wait_stop_x11(child_xorg: &mut Child, child_wm: &mut Child) -> bool {
-        let mut inst = DESKTOP_INST.lock().unwrap();
+        let mut child_flags = CHILD_FLAGS.lock().unwrap();
         let mut exited = true;
-        if let Some(inst) = &mut (*inst) {
-            if inst.child_exit.load(Ordering::SeqCst) {
+        if let Some(child_flags) = &mut (*child_flags) {
+            if child_flags.child_exit.load(Ordering::SeqCst) {
                 exited = true;
             } else {
                 exited = Self::try_wait_x11_child_exit(child_xorg, child_wm);
@@ -814,8 +718,8 @@ impl Desktop {
             if exited {
                 println!("=============================MYDEBUG begin to wait x11 children exit");
                 Self::wait_x11_children_exit(child_xorg, child_wm);
-                inst.is_child_running.store(false, Ordering::SeqCst);
-                inst.child_exit.store(true, Ordering::SeqCst);
+                child_flags.is_child_running.store(false, Ordering::SeqCst);
+                child_flags.child_exit.store(true, Ordering::SeqCst);
             }
         }
         exited
@@ -946,6 +850,16 @@ impl ToString for Protocal {
             Protocal::X11 => ENV_DESKTOP_PROTOCAL__X11.to_owned(),
             Protocal::Wayland => ENV_DESKTOP_PROTOCAL_WAYLAND.to_owned(),
             Protocal::Unknown => ENV_DESKTOP_PROTOCAL_UNKNOWN.to_owned(),
+        }
+    }
+}
+
+impl From<String> for Protocal {
+    fn from(value: String) -> Self {
+        match &value as &str {
+            ENV_DESKTOP_PROTOCAL__X11 => Protocal::X11,
+            ENV_DESKTOP_PROTOCAL_WAYLAND => Protocal::Wayland,
+            _ => Protocal::Unknown,
         }
     }
 }
