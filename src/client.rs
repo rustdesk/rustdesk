@@ -706,6 +706,8 @@ pub struct AudioHandler {
     #[cfg(not(any(target_os = "android", target_os = "linux")))]
     audio_stream: Option<Box<dyn StreamTrait>>,
     channels: u16,
+    #[cfg(not(any(target_os = "android", target_os = "linux")))]
+    ready: Arc<std::sync::Mutex<bool>>,
 }
 
 impl AudioHandler {
@@ -794,7 +796,7 @@ impl AudioHandler {
     #[inline]
     pub fn handle_frame(&mut self, frame: AudioFrame) {
         #[cfg(not(any(target_os = "android", target_os = "linux")))]
-        if self.audio_stream.is_none() {
+        if self.audio_stream.is_none() || !self.ready.lock().unwrap().clone() {
             return;
         }
         #[cfg(target_os = "linux")]
@@ -860,9 +862,13 @@ impl AudioHandler {
             log::trace!("an error occurred on stream: {}", err);
         };
         let audio_buffer = self.audio_buffer.clone();
+        let ready = self.ready.clone();
         let stream = device.build_output_stream(
             config,
             move |data: &mut [T], _: &_| {
+                if !*ready.lock().unwrap() {
+                    *ready.lock().unwrap() = true;
+                }
                 let mut lock = audio_buffer.lock().unwrap();
                 let mut n = data.len();
                 if lock.len() < n {
