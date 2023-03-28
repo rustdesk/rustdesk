@@ -1,5 +1,5 @@
 use super::{CursorData, ResultType};
-use desktop::{get_desktop_env, start_check_desktop_env, stop_check_desktop_env, Desktop};
+use desktop::{Desktop, ENV_DESKTOP_PROTOCAL_WAYLAND};
 pub use hbb_common::platform::linux::*;
 use hbb_common::{
     allow_err, bail,
@@ -281,10 +281,10 @@ fn force_stop_server() {
 pub fn start_os_service() {
     stop_rustdesk_servers();
     start_uinput_service();
-    start_check_desktop_env();
 
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
+    let mut desktop = Desktop::default();
     let mut uid = "".to_owned();
     let mut server: Option<Child> = None;
     let mut user_server: Option<Child> = None;
@@ -297,16 +297,11 @@ pub fn start_os_service() {
     let mut cm0 = false;
     let mut last_restart = Instant::now();
     while running.load(Ordering::SeqCst) {
-        let desktop_env = get_desktop_env();
-
-        if desktop_env.sid.is_empty() {
-            sleep_millis(500);
-            continue;
-        }
+        desktop.refresh();
 
         // for fixing https://github.com/rustdesk/rustdesk/issues/3129 to avoid too much dbus calling,
         // though duplicate logic here with should_start_server
-        if !(desktop_env.uid != *uid && !desktop_env.uid.is_empty()) {
+        if !(desktop.uid != *uid && !desktop.uid.is_empty()) {
             let cm = get_cm();
             if !(!cm
                 && ((cm0 && last_restart.elapsed().as_secs() > 60)
@@ -317,14 +312,14 @@ pub fn start_os_service() {
             }
         }
 
-        if desktop_env.username == "root" || !desktop_env.is_wayland() {
+        if desktop.username == "root" || !desktop.is_wayland() || desktop.sid.is_empty() {
             // try kill subprocess "--server"
             stop_server(&mut user_server);
             // try start subprocess "--server"
             if should_start_server(
                 true,
                 &mut uid,
-                &desktop_env,
+                &desktop,
                 &mut cm0,
                 &mut last_restart,
                 &mut server,
@@ -332,8 +327,8 @@ pub fn start_os_service() {
                 force_stop_server();
                 start_server(None, &mut server);
             }
-        } else if desktop_env.username != "" {
-            if desktop_env.username != "gdm" {
+        } else if desktop.username != "" {
+            if desktop.username != "gdm" {
                 // try kill subprocess "--server"
                 stop_server(&mut server);
 
@@ -341,14 +336,14 @@ pub fn start_os_service() {
                 if should_start_server(
                     false,
                     &mut uid,
-                    &desktop_env,
+                    &desktop,
                     &mut cm0,
                     &mut last_restart,
                     &mut user_server,
                 ) {
                     force_stop_server();
                     start_server(
-                        Some((desktop_env.uid.clone(), desktop_env.username.clone())),
+                        Some((desktop.uid.clone(), desktop.username.clone())),
                         &mut user_server,
                     );
                 }
@@ -361,8 +356,6 @@ pub fn start_os_service() {
         sleep_millis(super::SERVICE_INTERVAL);
     }
 
-    stop_check_desktop_env();
-
     if let Some(ps) = user_server.take().as_mut() {
         allow_err!(ps.kill());
     }
@@ -374,13 +367,13 @@ pub fn start_os_service() {
 
 #[inline]
 pub fn get_active_user_id_name() -> (String, String) {
-    let desktop = get_desktop_env();
-    (desktop.uid.clone(), desktop.username.clone())
+    let vec_id_name = get_values_of_seat0(&[1, 2]);
+    (vec_id_name[0].clone(), vec_id_name[1].clone())
 }
 
 #[inline]
 pub fn get_active_userid() -> String {
-    get_desktop_env().uid.clone()
+    get_values_of_seat0(&[1])[0].clone()
 }
 
 fn get_cm() -> bool {
@@ -411,7 +404,8 @@ pub fn is_login_wayland() -> bool {
 
 #[inline]
 pub fn current_is_wayland() -> bool {
-    get_desktop_env().is_wayland() && unsafe { UNMODIFIED }
+    let dtype = get_display_server();
+    return ENV_DESKTOP_PROTOCAL_WAYLAND == dtype && unsafe { UNMODIFIED };
 }
 
 // to-do: test the other display manager
@@ -426,7 +420,7 @@ fn _get_display_manager() -> String {
 
 #[inline]
 pub fn get_active_username() -> String {
-    get_desktop_env().username.clone()
+    get_values_of_seat0(&[2])[0].clone()
 }
 
 pub fn get_active_user_home() -> Option<PathBuf> {
@@ -735,159 +729,26 @@ pub fn change_resolution(name: &str, width: usize, height: usize) -> ResultType<
 }
 
 mod desktop {
-    use super::{super::SERVICE_INTERVAL, *};
-    use hbb_common::{log, tokio::time};
-    use std::{
-        sync::{
-            atomic::{AtomicBool, Ordering},
-            Arc, Mutex,
-        },
-        time::{Duration, Instant},
-    };
+    use super::*;
 
     pub const XFCE4_PANEL: &str = "xfce4-panel";
     pub const GNOME_SESSION_BINARY: &str = "gnome-session-binary";
-    pub const ENV_DESKTOP_PROTOCAL: &str = "RUSTDESK_PROTOCAL";
     pub const ENV_DESKTOP_PROTOCAL_WAYLAND: &str = "wayland";
-    pub const ENV_DESKTOP_PROTOCAL__X11: &str = "x11";
-    pub const ENV_DESKTOP_PROTOCAL_UNKNOWN: &str = "unknown";
 
-    lazy_static::lazy_static! {
-        static ref RUNNING: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
-        static ref DESKTOP_ENV: Arc<Mutex<Desktop>> = Arc::new(Mutex::new(Desktop::new()));
-    }
-
-    #[derive(Copy, Clone, PartialEq, Debug)]
-    pub enum Protocal {
-        Wayland,
-        X11, // Xorg
-        Unknown,
-    }
-
-    impl ToString for Protocal {
-        fn to_string(&self) -> String {
-            match self {
-                Protocal::X11 => ENV_DESKTOP_PROTOCAL__X11.to_owned(),
-                Protocal::Wayland => ENV_DESKTOP_PROTOCAL_WAYLAND.to_owned(),
-                Protocal::Unknown => ENV_DESKTOP_PROTOCAL_UNKNOWN.to_owned(),
-            }
-        }
-    }
-
-    impl From<String> for Protocal {
-        fn from(value: String) -> Self {
-            match &value as &str {
-                ENV_DESKTOP_PROTOCAL__X11 => Protocal::X11,
-                ENV_DESKTOP_PROTOCAL_WAYLAND => Protocal::Wayland,
-                _ => Protocal::Unknown,
-            }
-        }
-    }
-
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Default)]
     pub struct Desktop {
         pub sid: String,
-        pub protocal: Protocal,
         pub username: String,
         pub uid: String,
+        pub protocal: String,
         pub display: String,
         pub xauth: String,
     }
 
-    fn check_update_env() {
-        let mut desktop = DESKTOP_ENV.lock().unwrap();
-        if !desktop.sid.is_empty() && is_active(&desktop.sid) {
-            return;
-        }
-
-        desktop.refresh();
-        desktop.update_env();
-        log::debug!("desktop env changed, {:?}", &desktop);
-    }
-
-    fn wait_xdesktop(timeout_secs: u64) -> bool {
-        let wait_begin = Instant::now();
-        while wait_begin.elapsed().as_secs() < timeout_secs {
-            let uid = &get_values_of_seat0(&[1])[0];
-            if !uid.is_empty() {
-                return true;
-            }
-
-            if let Ok(output) = run_cmds(format!(
-                "ps -ef | grep -v 'grep' | grep -E 'gnome-session-binary|{}'",
-                XFCE4_PANEL
-            )) {
-                if !output.is_empty() {
-                    log::info!("wait xdesktop: find xclient {}", &output);
-                    return true;
-                }
-            }
-
-            std::thread::sleep(Duration::from_millis(SERVICE_INTERVAL));
-        }
-
-        false
-    }
-
-    pub fn start_check_desktop_env() {
-        std::thread::spawn(|| {
-            if wait_xdesktop(20) {
-                log::info!("Wait desktop: default");
-            } else {
-                log::info!("Wait desktop: none");
-            }
-
-            let interval = time::Duration::from_millis(SERVICE_INTERVAL);
-            RUNNING.store(true, Ordering::SeqCst);
-            while RUNNING.load(Ordering::SeqCst) {
-                check_update_env();
-                std::thread::sleep(interval);
-            }
-            log::info!("xdesktop update thread exit");
-        });
-    }
-
-    pub fn stop_check_desktop_env() {
-        RUNNING.store(false, Ordering::SeqCst);
-    }
-
-    #[inline]
-    pub fn get_desktop_env() -> Desktop {
-        DESKTOP_ENV.lock().unwrap().clone()
-    }
-
     impl Desktop {
-        pub fn new() -> Self {
-            Self {
-                sid: "".to_owned(),
-                protocal: Protocal::Unknown,
-                username: "".to_owned(),
-                uid: "".to_owned(),
-                display: "".to_owned(),
-                xauth: get_env_var("XAUTHORITY"),
-            }
-        }
-
-        fn update_env(&self) {
-            if self.is_x11() {
-                std::env::set_var("DISPLAY", &self.display);
-                std::env::set_var("XAUTHORITY", &self.xauth);
-                std::env::set_var(ENV_DESKTOP_PROTOCAL, &self.protocal.to_string());
-            } else {
-                std::env::set_var("DISPLAY", "");
-                std::env::set_var("XAUTHORITY", "");
-                std::env::set_var(ENV_DESKTOP_PROTOCAL, &self.protocal.to_string());
-            }
-        }
-
-        #[inline]
-        pub fn is_x11(&self) -> bool {
-            self.protocal == Protocal::X11
-        }
-
         #[inline]
         pub fn is_wayland(&self) -> bool {
-            self.protocal == Protocal::Wayland
+            self.protocal == ENV_DESKTOP_PROTOCAL_WAYLAND
         }
 
         fn get_display(&mut self) {
@@ -969,11 +830,14 @@ mod desktop {
             last
         }
 
-        fn refresh(&mut self) {
-            *self = Self::new();
+        pub fn refresh(&mut self) {
+            if is_active(&self.sid) {
+                return;
+            }
 
             let seat0_values = get_values_of_seat0(&[0, 1, 2]);
             if seat0_values[0].is_empty() {
+                *self = Self::default();
                 return;
             }
 
