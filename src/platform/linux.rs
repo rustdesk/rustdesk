@@ -1,4 +1,4 @@
-use super::linux_desktop::GNOME_SESSION_BINARY;
+use super::linux_desktop::{get_desktop_env, Desktop};
 use super::{CursorData, ResultType};
 pub use hbb_common::platform::linux::*;
 use hbb_common::{
@@ -63,6 +63,11 @@ pub struct xcb_xfixes_get_cursor_image {
     pub yhot: u16,
     pub cursor_serial: c_long,
     pub pixels: *const c_long,
+}
+
+#[inline]
+fn sleep_millis(millis: u64) {
+    std::thread::sleep(Duration::from_millis(millis));
 }
 
 pub fn get_cursor_pos() -> Option<(i32, i32)> {
@@ -191,7 +196,7 @@ fn start_server(user: Option<(String, String)>, server: &mut Option<Child>) {
 fn stop_server(server: &mut Option<Child>) {
     if let Some(mut ps) = server.take() {
         allow_err!(ps.kill());
-        std::thread::sleep(Duration::from_millis(30));
+        sleep_millis(30);
         match ps.try_wait() {
             Ok(Some(_status)) => {}
             Ok(None) => {
@@ -202,42 +207,15 @@ fn stop_server(server: &mut Option<Child>) {
     }
 }
 
-fn set_x11_env(uid: &str) {
-    log::info!("uid of seat0: {}", uid);
-    let gdm = format!("/run/user/{}/gdm/Xauthority", uid);
-    let mut auth = get_env_tries("XAUTHORITY", uid, GNOME_SESSION_BINARY, 10);
-    // auth is another user's when uid = 0, https://github.com/rustdesk/rustdesk/issues/2468
-    if auth.is_empty() || uid == "0" {
-        auth = if Path::new(&gdm).exists() {
-            gdm
-        } else {
-            let username = get_active_username();
-            if username == "root" {
-                format!("/{}/.Xauthority", username)
-            } else {
-                let tmp = format!("/home/{}/.Xauthority", username);
-                if Path::new(&tmp).exists() {
-                    tmp
-                } else {
-                    format!("/var/lib/{}/.Xauthority", username)
-                }
-            }
-        };
-    }
-    let mut d = get_env("DISPLAY", GNOME_SESSION_BINARY, uid);
-    if d.is_empty() {
-        d = get_display();
-    }
-    if d.is_empty() {
-        d = ":0".to_owned();
-    }
-    d = d.replace(&whoami::hostname(), "").replace("localhost", "");
-    log::info!("DISPLAY: {}", d);
-    log::info!("XAUTHORITY: {}", auth);
-    std::env::set_var("XAUTHORITY", auth);
-    std::env::set_var("DISPLAY", d);
+#[inline]
+fn set_x11_env(desktop: &Desktop) {
+    log::info!("DISPLAY: {}", desktop.display);
+    log::info!("XAUTHORITY: {}", desktop.xauth);
+    std::env::set_var("XAUTHORITY", &desktop.xauth);
+    std::env::set_var("DISPLAY", &desktop.display);
 }
 
+#[inline]
 fn stop_rustdesk_servers() {
     let _ = run_cmds(format!(
         r##"ps -ef | grep -E 'rustdesk +--server' | awk '{{printf("kill -9 %d\n", $2)}}' | bash"##,
@@ -247,21 +225,21 @@ fn stop_rustdesk_servers() {
 fn should_start_server(
     try_x11: bool,
     uid: &mut String,
-    cur_uid: String,
+    desktop: &Desktop,
     cm0: &mut bool,
     last_restart: &mut Instant,
     server: &mut Option<Child>,
 ) -> bool {
     let cm = get_cm();
     let mut start_new = false;
-    if cur_uid != *uid && !cur_uid.is_empty() {
-        *uid = cur_uid;
+    if desktop.uid != *uid && !desktop.uid.is_empty() {
+        *uid = desktop.uid.clone();
         if try_x11 {
-            set_x11_env(&uid);
+            set_x11_env(&desktop);
         }
         if let Some(ps) = server.as_mut() {
             allow_err!(ps.kill());
-            std::thread::sleep(Duration::from_millis(30));
+            sleep_millis(30);
             *last_restart = Instant::now();
         }
     } else if !cm
@@ -273,7 +251,7 @@ fn should_start_server(
         // and x server get displays failure issue
         if let Some(ps) = server.as_mut() {
             allow_err!(ps.kill());
-            std::thread::sleep(Duration::from_millis(30));
+            sleep_millis(30);
             *last_restart = Instant::now();
             log::info!("restart server");
         }
@@ -297,7 +275,7 @@ fn should_start_server(
 // stop_rustdesk_servers() is just a temp solution here.
 fn force_stop_server() {
     stop_rustdesk_servers();
-    std::thread::sleep(Duration::from_millis(super::SERVICE_INTERVAL));
+    sleep_millis(super::SERVICE_INTERVAL);
 }
 
 pub fn start_os_service() {
@@ -318,31 +296,34 @@ pub fn start_os_service() {
     let mut cm0 = false;
     let mut last_restart = Instant::now();
     while running.load(Ordering::SeqCst) {
-        let (cur_uid, cur_user) = get_active_user_id_name();
+        let desktop_env = get_desktop_env();
+
+        if desktop_env.sid.is_empty() {
+            sleep_millis(500);
+            continue;
+        }
 
         // for fixing https://github.com/rustdesk/rustdesk/issues/3129 to avoid too much dbus calling,
         // though duplicate logic here with should_start_server
-        if !(cur_uid != *uid && !cur_uid.is_empty()) {
+        if !(desktop_env.uid != *uid && !desktop_env.uid.is_empty()) {
             let cm = get_cm();
             if !(!cm
                 && ((cm0 && last_restart.elapsed().as_secs() > 60)
                     || last_restart.elapsed().as_secs() > 3600))
             {
-                std::thread::sleep(Duration::from_millis(500));
+                sleep_millis(500);
                 continue;
             }
         }
 
-        let is_wayland = current_is_wayland();
-
-        if cur_user == "root" || !is_wayland {
+        if desktop_env.username == "root" || !desktop_env.is_wayland() {
             // try kill subprocess "--server"
             stop_server(&mut user_server);
             // try start subprocess "--server"
             if should_start_server(
                 true,
                 &mut uid,
-                cur_uid,
+                &desktop_env,
                 &mut cm0,
                 &mut last_restart,
                 &mut server,
@@ -350,8 +331,8 @@ pub fn start_os_service() {
                 force_stop_server();
                 start_server(None, &mut server);
             }
-        } else if cur_user != "" {
-            if cur_user != "gdm" {
+        } else if desktop_env.username != "" {
+            if desktop_env.username != "gdm" {
                 // try kill subprocess "--server"
                 stop_server(&mut server);
 
@@ -359,13 +340,16 @@ pub fn start_os_service() {
                 if should_start_server(
                     false,
                     &mut uid,
-                    cur_uid.clone(),
+                    &desktop_env,
                     &mut cm0,
                     &mut last_restart,
                     &mut user_server,
                 ) {
                     force_stop_server();
-                    start_server(Some((cur_uid, cur_user)), &mut user_server);
+                    start_server(
+                        Some((desktop_env.uid.clone(), desktop_env.username.clone())),
+                        &mut user_server,
+                    );
                 }
             }
         } else {
@@ -373,7 +357,7 @@ pub fn start_os_service() {
             stop_server(&mut user_server);
             stop_server(&mut server);
         }
-        std::thread::sleep(Duration::from_millis(super::SERVICE_INTERVAL));
+        sleep_millis(super::SERVICE_INTERVAL);
     }
 
     if let Some(ps) = user_server.take().as_mut() {
@@ -385,13 +369,15 @@ pub fn start_os_service() {
     log::info!("Exit");
 }
 
+#[inline]
 pub fn get_active_user_id_name() -> (String, String) {
-    let vec_id_name = get_values_of_seat0(&[1, 2]);
-    (vec_id_name[0].clone(), vec_id_name[1].clone())
+    let desktop = get_desktop_env();
+    (desktop.uid.clone(), desktop.username.clone())
 }
 
+#[inline]
 pub fn get_active_userid() -> String {
-    get_values_of_seat0(&[1])[0].clone()
+    get_desktop_env().uid.clone()
 }
 
 fn get_cm() -> bool {
@@ -410,45 +396,6 @@ fn get_cm() -> bool {
     false
 }
 
-fn get_display() -> String {
-    let user = get_active_username();
-    log::debug!("w {}", &user);
-    if let Ok(output) = Command::new("w").arg(&user).output() {
-        for line in String::from_utf8_lossy(&output.stdout).lines() {
-            log::debug!("  {}", line);
-            let mut iter = line.split_whitespace();
-            let b = iter.nth(2);
-            if let Some(b) = b {
-                if b.starts_with(":") {
-                    return b.to_owned();
-                }
-            }
-        }
-    }
-    // above not work for gdm user
-    log::debug!("ls -l /tmp/.X11-unix/");
-    let mut last = "".to_owned();
-    if let Ok(output) = Command::new("ls")
-        .args(vec!["-l", "/tmp/.X11-unix/"])
-        .output()
-    {
-        for line in String::from_utf8_lossy(&output.stdout).lines() {
-            log::debug!("  {}", line);
-            let mut iter = line.split_whitespace();
-            let user_field = iter.nth(2);
-            if let Some(x) = iter.last() {
-                if x.starts_with("X") {
-                    last = x.replace("X", ":").to_owned();
-                    if user_field == Some(&user) {
-                        return last;
-                    }
-                }
-            }
-        }
-    }
-    last
-}
-
 pub fn is_login_wayland() -> bool {
     if let Ok(contents) = std::fs::read_to_string("/etc/gdm3/custom.conf") {
         contents.contains("#WaylandEnable=false") || contents.contains("WaylandEnable=true")
@@ -459,9 +406,9 @@ pub fn is_login_wayland() -> bool {
     }
 }
 
+#[inline]
 pub fn current_is_wayland() -> bool {
-    let dtype = get_display_server();
-    return "wayland" == dtype && unsafe { UNMODIFIED };
+    get_desktop_env().is_wayland() && unsafe { UNMODIFIED }
 }
 
 // to-do: test the other display manager
@@ -474,8 +421,9 @@ fn _get_display_manager() -> String {
     "gdm3".to_owned()
 }
 
+#[inline]
 pub fn get_active_username() -> String {
-    get_values_of_seat0(&[2])[0].clone()
+    get_desktop_env().username.clone()
 }
 
 pub fn get_active_user_home() -> Option<PathBuf> {
@@ -610,7 +558,7 @@ pub(super) fn get_env_tries(name: &str, uid: &str, process: &str, n: usize) -> S
         if !x.is_empty() {
             return x;
         }
-        std::thread::sleep(Duration::from_millis(300));
+        sleep_millis(300);
     }
     "".to_owned()
 }

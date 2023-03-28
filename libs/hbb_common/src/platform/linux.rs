@@ -43,7 +43,7 @@ pub fn get_display_server() -> String {
     get_display_server_of_session(&session)
 }
 
-fn get_display_server_of_session(session: &str) -> String {
+pub fn get_display_server_of_session(session: &str) -> String {
     let mut display_server = if let Ok(output) =
         run_loginctl(Some(vec!["show-session", "-p", "Type", session]))
     // Check session type of the session
@@ -87,44 +87,41 @@ fn get_display_server_of_session(session: &str) -> String {
     display_server.to_lowercase()
 }
 
+#[inline]
+fn line_values(indices: &[usize], line: &str) -> Vec<String> {
+    indices
+        .into_iter()
+        .map(|idx| line.split_whitespace().nth(*idx).unwrap_or("").to_owned())
+        .collect::<Vec<String>>()
+}
+
 pub fn get_values_of_seat0(indices: &[usize]) -> Vec<String> {
     if let Ok(output) = run_loginctl(None) {
         for line in String::from_utf8_lossy(&output.stdout).lines() {
-            if !line.contains("gdm") && line.contains("seat0") {
+            if line.contains("seat0") {
                 if let Some(sid) = line.split_whitespace().next() {
                     if is_active(sid) {
-                        return indices
-                            .into_iter()
-                            .map(|idx| line.split_whitespace().nth(*idx).unwrap_or("").to_owned())
-                            .collect::<Vec<String>>();
+                        return line_values(indices, line);
                     }
                 }
             }
         }
-    }
 
-    // some case, there is no seat0 https://github.com/rustdesk/rustdesk/issues/73
-    if let Ok(output) = run_loginctl(None) {
+        // some case, there is no seat0 https://github.com/rustdesk/rustdesk/issues/73
         for line in String::from_utf8_lossy(&output.stdout).lines() {
             if let Some(sid) = line.split_whitespace().next() {
                 let d = get_display_server_of_session(sid);
                 if is_active(sid) && d != "tty" {
-                    return indices
-                        .into_iter()
-                        .map(|idx| line.split_whitespace().nth(*idx).unwrap_or("").to_owned())
-                        .collect::<Vec<String>>();
+                    return line_values(indices, line);
                 }
             }
         }
     }
 
-    return indices
-        .iter()
-        .map(|_x| "".to_owned())
-        .collect::<Vec<String>>();
+    line_values(indices, "")
 }
 
-fn is_active(sid: &str) -> bool {
+pub fn is_active(sid: &str) -> bool {
     if let Ok(output) = run_loginctl(Some(vec!["show-session", "-p", "State", sid])) {
         String::from_utf8_lossy(&output.stdout).contains("active")
     } else {
