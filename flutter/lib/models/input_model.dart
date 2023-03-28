@@ -59,6 +59,8 @@ class InputModel {
 
   get id => parent.target?.id ?? "";
 
+  bool get keyboardPerm => parent.target!.ffiModel.keyboard;
+
   InputModel(this.parent);
 
   KeyEventResult handleRawKeyEvent(FocusNode data, RawKeyEvent e) {
@@ -203,7 +205,7 @@ class InputModel {
   /// [down] indicates the key's state(down or up).
   /// [press] indicates a click event(down and up).
   void inputKey(String name, {bool? down, bool? press}) {
-    if (!parent.target!.ffiModel.keyboard()) return;
+    if (!keyboardPerm) return;
     bind.sessionInputKey(
         id: id,
         name: name,
@@ -286,7 +288,7 @@ class InputModel {
 
   /// Send mouse press event.
   void sendMouse(String type, MouseButtons button) {
-    if (!parent.target!.ffiModel.keyboard()) return;
+    if (!keyboardPerm) return;
     bind.sessionSendMouse(
         id: id,
         msg: json.encode(modify({'type': type, 'buttons': button.value})));
@@ -303,7 +305,7 @@ class InputModel {
 
   /// Send mouse movement event with distance in [x] and [y].
   void moveMouse(double x, double y) {
-    if (!parent.target!.ffiModel.keyboard()) return;
+    if (!keyboardPerm) return;
     var x2 = x.toInt();
     var y2 = y.toInt();
     bind.sessionSendMouse(
@@ -379,7 +381,7 @@ class InputModel {
   }
 
   void _scheduleFling2(double x, double y, int delay) {
-    if ((x ==0 && y == 0) || _stopFling) {
+    if ((x == 0 && y == 0) || _stopFling) {
       return;
     }
 
@@ -394,7 +396,7 @@ class InputModel {
       final dx0 = x * _trackpadSpeed * 2;
       final dy0 = y * _trackpadSpeed * 2;
 
-      // Try set delta (x,y) and delay. 
+      // Try set delta (x,y) and delay.
       var dx = dx0.toInt();
       var dy = dy0.toInt();
       var delay = _flingBaseDelay;
@@ -432,7 +434,8 @@ class InputModel {
   void onPointerPanZoomEnd(PointerPanZoomEndEvent e) {
     _stopFling = false;
     _trackpadScrollUnsent = Offset.zero;
-    _scheduleFling2(_trackpadLastDelta.dx, _trackpadLastDelta.dy, _flingBaseDelay);
+    _scheduleFling2(
+        _trackpadLastDelta.dx, _trackpadLastDelta.dy, _flingBaseDelay);
     _trackpadLastDelta = Offset.zero;
   }
 

@@ -7,7 +7,7 @@ use hbb_common::{
     anyhow::{anyhow, Context},
     bytes::Bytes,
     config::HwCodecConfig,
-    get_time, lazy_static, log,
+    lazy_static, log,
     message_proto::{EncodedVideoFrame, EncodedVideoFrames, Message, VideoFrame},
     ResultType,
 };
