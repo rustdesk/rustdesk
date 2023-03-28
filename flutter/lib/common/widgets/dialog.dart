@@ -506,8 +506,8 @@ _connectDialog(
       final peerPassword = peerPasswordController?.text.trim() ?? '';
       if (peerPasswordController != null && peerPassword.isEmpty) return;
       gFFI.login(
-        // username,
-        // password,
+        username,
+        password,
         id,
         peerPassword,
         remember,
