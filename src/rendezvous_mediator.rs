@@ -73,7 +73,7 @@ impl RendezvousMediator {
             });
         }
         #[cfg(target_os = "linux")]
-        crate::platform::linux_desktop::start_xdesktop();
+        crate::platform::linux_desktop_manager::start_xdesktop();
         SHOULD_EXIT.store(false, Ordering::SeqCst);
         while !SHOULD_EXIT.load(Ordering::SeqCst) {
             Config::reset_online();
@@ -100,7 +100,7 @@ impl RendezvousMediator {
             sleep(1.).await;
         }
         #[cfg(target_os = "linux")]
-        crate::platform::linux_desktop::stop_xdesktop();
+        crate::platform::linux_desktop_manager::stop_xdesktop();
     }
 
     pub async fn start(server: ServerPtr, host: String) -> ResultType<()> {

@@ -18,7 +18,7 @@ pub mod delegate;
 pub mod linux;
 
 #[cfg(target_os = "linux")]
-pub mod linux_desktop;
+pub mod linux_desktop_manager;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::{message_proto::CursorData, ResultType};
