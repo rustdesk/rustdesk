@@ -1635,8 +1635,8 @@ class FFI {
       bool remember) {
     bind.sessionLogin(
         id: id,
-        os_username: osUsername,
-        os_password: osPassword,
+        osUsername: osUsername,
+        osPassword: osPassword,
         password: password,
         remember: remember);
   }
