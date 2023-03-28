@@ -1638,12 +1638,15 @@ class _KeyboardMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     var ffiModel = Provider.of<FfiModel>(context);
     if (!ffiModel.keyboard) return Offstage();
+    String? modeOnly;
     if (stateGlobal.grabKeyboard) {
       if (bind.sessionIsKeyboardModeSupported(id: id, mode: _kKeyMapMode)) {
         bind.sessionSetKeyboardMode(id: id, value: _kKeyMapMode);
+        modeOnly = _kKeyMapMode;
       } else if (bind.sessionIsKeyboardModeSupported(
           id: id, mode: _kKeyLegacyMode)) {
         bind.sessionSetKeyboardMode(id: id, value: _kKeyLegacyMode);
+        modeOnly = _kKeyLegacyMode;
       }
     }
     return _IconSubmenuButton(
@@ -1653,14 +1656,14 @@ class _KeyboardMenu extends StatelessWidget {
         color: _MenubarTheme.blueColor,
         hoverColor: _MenubarTheme.hoverBlueColor,
         menuChildren: [
-          mode(),
+          mode(modeOnly),
           localKeyboardType(),
           Divider(),
           view_mode(),
         ]);
   }
 
-  mode() {
+  mode(String? modeOnly) {
     return futureBuilder(future: () async {
       return await bind.sessionGetKeyboardMode(id: id) ?? _kKeyLegacyMode;
     }(), hasData: (data) {
@@ -1678,22 +1681,28 @@ class _KeyboardMenu extends StatelessWidget {
       }
 
       for (KeyboardModeMenu mode in modes) {
-        if (bind.sessionIsKeyboardModeSupported(id: id, mode: mode.key)) {
-          if (pi.is_wayland && mode.key != _kKeyMapMode) {
-            continue;
-          }
-          var text = translate(mode.menu);
-          if (mode.key == _kKeyTranslateMode) {
-            text = '$text beta';
-          }
-          list.add(_RadioMenuButton<String>(
-            child: Text(text),
-            value: mode.key,
-            groupValue: groupValue,
-            onChanged: enabled ? onChanged : null,
-            ffi: ffi,
-          ));
+        if (modeOnly != null && mode.key != modeOnly) {
+          continue;
+        } else if (!bind.sessionIsKeyboardModeSupported(
+            id: id, mode: mode.key)) {
+          continue;
         }
+
+        if (pi.is_wayland && mode.key != _kKeyMapMode) {
+          continue;
+        }
+
+        var text = translate(mode.menu);
+        if (mode.key == _kKeyTranslateMode) {
+          text = '$text beta';
+        }
+        list.add(_RadioMenuButton<String>(
+          child: Text(text),
+          value: mode.key,
+          groupValue: groupValue,
+          onChanged: enabled ? onChanged : null,
+          ffi: ffi,
+        ));
       }
       return Column(children: list);
     });
