@@ -364,7 +364,7 @@ pub fn check_config_process(force_reset: bool) {
                             let res = child.wait();
                             log::info!("Check hwcodec config, wait result: {res:?}");
                         }
-                        Err(e) => println!("Check hwcodec config, error attempting to wait: {e}"),
+                        Err(e) => log::info!("Check hwcodec config, error attempting to wait: {e}"),
                     }
                     HwCodecConfig::refresh();
                 }
