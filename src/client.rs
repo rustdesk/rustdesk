@@ -14,6 +14,8 @@ use cpal::{
     Device, Host, StreamConfig,
 };
 use magnum_opus::{Channels::*, Decoder as AudioDecoder};
+#[cfg(not(any(target_os = "android", target_os = "linux")))]
+use ringbuf::{ring_buffer::RbBase, Rb};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
@@ -701,13 +703,25 @@ pub struct AudioHandler {
     #[cfg(target_os = "linux")]
     simple: Option<psimple::Simple>,
     #[cfg(not(any(target_os = "android", target_os = "linux")))]
-    audio_buffer: Arc<std::sync::Mutex<std::collections::vec_deque::VecDeque<f32>>>,
+    audio_buffer: AudioBuffer,
     sample_rate: (u32, u32),
     #[cfg(not(any(target_os = "android", target_os = "linux")))]
     audio_stream: Option<Box<dyn StreamTrait>>,
     channels: u16,
     #[cfg(not(any(target_os = "android", target_os = "linux")))]
     ready: Arc<std::sync::Mutex<bool>>,
+}
+
+#[cfg(not(any(target_os = "android", target_os = "linux")))]
+struct AudioBuffer(pub Arc<std::sync::Mutex<ringbuf::HeapRb<f32>>>);
+
+#[cfg(not(any(target_os = "android", target_os = "linux")))]
+impl Default for AudioBuffer {
+    fn default() -> Self {
+        Self(Arc::new(std::sync::Mutex::new(
+            ringbuf::HeapRb::<f32>::new(48000 * 2), // 48000hz, 2 channel, 1 second
+        )))
+    }
 }
 
 impl AudioHandler {
@@ -816,11 +830,7 @@ impl AudioHandler {
                 {
                     let sample_rate0 = self.sample_rate.0;
                     let sample_rate = self.sample_rate.1;
-                    let audio_buffer = self.audio_buffer.clone();
-                    // avoiding memory overflow if audio_buffer consumer side has problem
-                    if audio_buffer.lock().unwrap().len() as u32 > sample_rate * 120 {
-                        *audio_buffer.lock().unwrap() = Default::default();
-                    }
+                    let audio_buffer = self.audio_buffer.0.clone();
                     if sample_rate != sample_rate0 {
                         let buffer = crate::resample_channels(
                             &buffer[0..n],
@@ -828,12 +838,12 @@ impl AudioHandler {
                             sample_rate,
                             channels,
                         );
-                        audio_buffer.lock().unwrap().extend(buffer);
+                        audio_buffer.lock().unwrap().push_slice_overwrite(&buffer);
                     } else {
                         audio_buffer
                             .lock()
                             .unwrap()
-                            .extend(buffer[0..n].iter().cloned());
+                            .push_slice_overwrite(&buffer[0..n]);
                     }
                 }
                 #[cfg(target_os = "android")]
@@ -861,7 +871,7 @@ impl AudioHandler {
             // too many errors, will improve later
             log::trace!("an error occurred on stream: {}", err);
         };
-        let audio_buffer = self.audio_buffer.clone();
+        let audio_buffer = self.audio_buffer.0.clone();
         let ready = self.ready.clone();
         let stream = device.build_output_stream(
             config,
@@ -871,10 +881,13 @@ impl AudioHandler {
                 }
                 let mut lock = audio_buffer.lock().unwrap();
                 let mut n = data.len();
-                if lock.len() < n {
-                    n = lock.len();
+                if lock.occupied_len() < n {
+                    n = lock.occupied_len();
                 }
-                let mut input = lock.drain(0..n);
+                let mut elems = vec![0.0f32; n];
+                lock.pop_slice(&mut elems);
+                drop(lock);
+                let mut input = elems.into_iter();
                 for sample in data.iter_mut() {
                     *sample = match input.next() {
                         Some(x) => T::from(&x),
