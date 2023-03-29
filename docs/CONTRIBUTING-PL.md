@@ -36,10 +36,10 @@ efforts from contributors on the same issue.
 
 For specific git instructions, see [GitHub workflow 101](https://github.com/servo/servo/wiki/GitHub-workflow).
 
-## Conduct
+## Kodeks postępowania
 
-https://github.com/rustdesk/rustdesk/blob/master/docs/CODE_OF_CONDUCT-PL.md
+[Kodeks postępowania](CODE_OF_CONDUCT-PL.md)
 
-## Communication
+## Komunikacja
 
 RustDesk contributors frequent the [Discord](https://discord.gg/nDceKgxnkV).
