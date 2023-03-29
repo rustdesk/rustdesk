@@ -111,7 +111,6 @@ pub fn get_values_of_seat0(indices: &[usize]) -> Vec<String> {
             if line.contains("seat0") {
                 if let Some(sid) = line.split_whitespace().next() {
                     if is_active(sid) {
-                        println!("REMOVE ME ============================== get_values_of_seat0 seat0 {}", &line);
                         return line_values(indices, line);
                     }
                 }
@@ -123,7 +122,6 @@ pub fn get_values_of_seat0(indices: &[usize]) -> Vec<String> {
             if let Some(sid) = line.split_whitespace().next() {
                 let d = get_display_server_of_session(sid);
                 if is_active(sid) && d != "tty" {
-                    println!("REMOVE ME ============================== get_values_of_seat0 active {}", &line);
                     return line_values(indices, line);
                 }
             }

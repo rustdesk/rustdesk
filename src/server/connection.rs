@@ -893,7 +893,7 @@ impl Connection {
             let dtype = crate::platform::linux::get_display_server();
             if dtype != "x11" && dtype != "wayland" {
                 res.set_error(format!(
-                    "Unsupported display server type {}, x11 or wayland expected",
+                    "Unsupported display server type '{}', x11 or wayland expected",
                     dtype
                 ));
                 let mut msg_out = Message::new();
@@ -1073,7 +1073,6 @@ impl Connection {
         #[cfg(target_os = "linux")]
         if _username.is_empty() {
             let username = crate::platform::linux_desktop_manager::get_username();
-            println!("REMOVE ME ===================================== try_start_desktop username '{}'", &username);
             if username.is_empty() {
                 LOGIN_MSG_XSESSION_NOT_READY
             } else {
@@ -1313,14 +1312,12 @@ impl Connection {
                 }
             } else {
                 if desktop_err.is_empty() {
-                    println!("REMOVE ME =============================== send logon response");
                     self.send_logon_response().await;
                     self.try_start_cm(lr.my_id, lr.my_name, true);
                     if self.port_forward_socket.is_some() {
                         return false;
                     }
                 } else {
-                    println!("REMOVE ME =============================== send login error {}", &desktop_err);
                     self.send_login_error(desktop_err).await;
                 }
             }
