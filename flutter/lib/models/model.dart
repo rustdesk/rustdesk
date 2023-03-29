@@ -294,10 +294,10 @@ class FfiModel with ChangeNotifier {
     } else if (type == 'input-password') {
       enterPasswordDialog(id, dialogManager);
     } else if (type == 'xsession-login' || type == 'xsession-re-login') {
-      // to-do
+      enterUserLoginDialog(id, dialogManager);
     } else if (type == 'xsession-login-password' ||
         type == 'xsession-login-password') {
-      // to-do
+      enterUserLoginAndPasswordDialog(id, dialogManager);
     } else if (type == 'restarting') {
       showMsgBox(id, type, title, text, link, false, dialogManager,
           hasCancel: false);
