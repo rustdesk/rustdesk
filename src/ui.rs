@@ -62,7 +62,7 @@ pub fn start(args: &mut [String]) {
             if sciter_dll_path.exists() {
                 // Try to set the sciter dll.
                 let p = sciter_dll_path.to_string_lossy().to_string();
-                println!("Found dll:{}, \n {:?}", p, sciter::set_library(&p));
+                log::debug!("Found dll:{}, \n {:?}", p, sciter::set_library(&p));
             }
         }
     }

@@ -153,6 +153,8 @@ jobs:
   build-for-windows-sciter:
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
     runs-on: ${{ matrix.job.os }}
+    # Temporarily disable this action due to additional test is needed.
+    if: false 
     strategy:
       fail-fast: false
       matrix:
@@ -165,13 +167,22 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v3
 
+      - name: Install LLVM and Clang
+        uses: Kingtous/install-llvm-action-32bit@master
+        with:
+          version: ${{ env.LLVM_VERSION }}
+
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: stable-${{ matrix.job.target }}
           target: ${{ matrix.job.target }}
           override: true
           profile: minimal # minimal component installation (ie, no documentation)
+      
+      - name: Set Rust toolchain to the target
+        run: |
+          rustup default stable-${{ matrix.job.target }}
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -195,10 +206,10 @@ jobs:
           python3 res/inline-sciter.py
           # Replace the link for the ico.
           rm res/icon.ico && cp flutter/windows/runner/resources/app_icon.ico res/icon.ico
-          cargo build --features inline --target=${{ matrix.job.target }} --release --bins
+          cargo build --features inline --release --bins
           mkdir -p ./Release
-          mv ./target/${{ matrix.job.target }}/release/rustdesk.exe ./Release/rustdesk.exe
-          wget -O ./Release/sciter.dll https://github.com/c-smile/sciter-sdk/raw/master/bin.win/x32/sciter.dll
+          mv ./target/release/rustdesk.exe ./Release/rustdesk.exe
+          curl -LJ -o ./Release/sciter.dll https://github.com/c-smile/sciter-sdk/raw/master/bin.win/x32/sciter.dll
           echo "output_folder=./Release" >> $GITHUB_OUTPUT
 
       - name: Sign rustdesk files
@@ -216,10 +227,11 @@ jobs:
         shell: bash
         run: |
           pushd ./libs/portable
+          pip3 install -r requirements.txt
           python3 ./generate.py -f ../../Release/ -o . -e ../../Release/rustdesk.exe
           popd
           mkdir -p ./SignOutput
-          mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}.exe
+          mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-sciter.exe
       
       - name: Sign rustdesk self-extracted file
         uses: GermanBluefox/code-sign-action@v7
@@ -992,7 +1004,7 @@ jobs:
         run: |
           for name in rustdesk*??.deb; do
               # use cp to duplicate deb files to fit other packages.
-              cp "$name" "${name%%.deb}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb"
+              cp "$name" "${name%%.deb}-${{ matrix.job.target }}-${{ matrix.job.os }}-sciter.deb"
           done
 
       - name: Publish debian package
@@ -1002,14 +1014,14 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb
+            rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}-sciter.deb
 
       - name: Upload Artifact
         uses: actions/upload-artifact@master
         if: ${{ contains(matrix.job.extra-build-features, 'flatpak') }}
         with:
-          name: rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb
-          path: rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb
+          name: rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}-sciter.deb
+          path: rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}-sciter.deb
 
   build-rustdesk-linux-arm:
     needs: [build-rustdesk-lib-linux-arm]
