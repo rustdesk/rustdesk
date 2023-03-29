@@ -27,6 +27,9 @@ impl Distro {
     }
 }
 
+// -1
+const INVALID_SESSION: &str = "4294967295";
+
 pub fn get_display_server() -> String {
     let mut session = get_values_of_seat0(&[0])[0].clone();
     if session.is_empty() {
@@ -37,10 +40,17 @@ pub fn get_display_server() -> String {
         }
         if session.is_empty() {
             session = run_cmds("cat /proc/self/sessionid".to_owned()).unwrap_or_default();
+            if session == INVALID_SESSION {
+                session = "".to_owned();
+            }
         }
     }
 
-    get_display_server_of_session(&session)
+    if session.is_empty() {
+        "".to_owned()
+    } else {
+        get_display_server_of_session(&session)
+    }
 }
 
 pub fn get_display_server_of_session(session: &str) -> String {
@@ -101,6 +111,7 @@ pub fn get_values_of_seat0(indices: &[usize]) -> Vec<String> {
             if line.contains("seat0") {
                 if let Some(sid) = line.split_whitespace().next() {
                     if is_active(sid) {
+                        println!("REMOVE ME ============================== get_values_of_seat0 seat0 {}", &line);
                         return line_values(indices, line);
                     }
                 }
@@ -112,6 +123,7 @@ pub fn get_values_of_seat0(indices: &[usize]) -> Vec<String> {
             if let Some(sid) = line.split_whitespace().next() {
                 let d = get_display_server_of_session(sid);
                 if is_active(sid) && d != "tty" {
+                    println!("REMOVE ME ============================== get_values_of_seat0 active {}", &line);
                     return line_values(indices, line);
                 }
             }
