@@ -1075,6 +1075,7 @@ impl Connection {
         #[cfg(target_os = "linux")]
         if _username.is_empty() {
             let username = crate::platform::linux_desktop_manager::get_username();
+            println!("REMOVE ME ===================================== try_start_desktop username '{}'", &username);
             if username.is_empty() {
                 LOGIN_MSG_XSESSION_NOT_READY
             } else {
@@ -1274,6 +1275,7 @@ impl Connection {
                 Some(os_login) => Self::try_start_desktop(&os_login.username, &os_login.password),
                 None => Self::try_start_desktop("", ""),
             };
+            // If err is LOGIN_MSG_XSESSION_NOT_READY, just keep this msg and go on checking password.
             if !desktop_err.is_empty() && desktop_err != LOGIN_MSG_XSESSION_NOT_READY {
                 self.send_login_error(desktop_err).await;
                 return true;
@@ -1302,73 +1304,26 @@ impl Connection {
                 self.send_login_error("Connection not allowed").await;
                 return false;
             } else if self.is_recent_session() {
-                self.try_start_cm(lr.my_id, lr.my_name, true);
-                self.send_logon_response().await;
-                if self.port_forward_socket.is_some() {
-                    return false;
-                }
-            } else if lr.password.is_empty() {
-                self.try_start_cm(lr.my_id, lr.my_name, false);
-            } else {
-                let mut failure = LOGIN_FAILURES
-                    .lock()
-                    .unwrap()
-                    .get(&self.ip)
-                    .map(|x| x.clone())
-                    .unwrap_or((0, 0, 0));
-                let time = (get_time() / 60_000) as i32;
-                if failure.2 > 30 {
-                    self.send_login_error("Too many wrong password attempts")
-                        .await;
-                    Self::post_alarm_audit(
-                        AlarmAuditType::ManyWrongPassword,
-                        true,
-                        json!({
-                                    "ip":self.ip,
-                        }),
-                    );
-                } else if time == failure.0 && failure.1 > 6 {
-                    self.send_login_error("Please try 1 minute later").await;
-                    Self::post_alarm_audit(
-                        AlarmAuditType::FrequentAttempt,
-                        true,
-                        json!({
-                                    "ip":self.ip,
-                        }),
-                    );
-                } else if !self.validate_password() {
-                    if failure.0 == time {
-                        failure.1 += 1;
-                        failure.2 += 1;
-                    } else {
-                        failure.0 = time;
-                        failure.1 = 1;
-                        failure.2 += 1;
-                    }
-                    LOGIN_FAILURES
-                        .lock()
-                        .unwrap()
-                        .insert(self.ip.clone(), failure);
-                    if desktop_err.is_empty() {
-                        self.send_login_error(LOGIN_MSG_PASSWORD_WRONG).await;
-                        self.try_start_cm(lr.my_id, lr.my_name, false);
-                    } else {
-                        self.send_login_error(LOGIN_MSG_XSESSION_NOT_READY_PASSWORD_WRONG)
-                            .await;
+                if desktop_err.is_empty() {
+                    self.try_start_cm(lr.my_id, lr.my_name, true);
+                    self.send_logon_response().await;
+                    if self.port_forward_socket.is_some() {
+                        return false;
                     }
                 } else {
-                    if failure.0 != 0 {
-                        LOGIN_FAILURES.lock().unwrap().remove(&self.ip);
+                    self.send_login_error(desktop_err).await;
+                }
+            } else {
+                if desktop_err.is_empty() {
+                    println!("REMOVE ME =============================== send logon response");
+                    self.send_logon_response().await;
+                    self.try_start_cm(lr.my_id, lr.my_name, true);
+                    if self.port_forward_socket.is_some() {
+                        return false;
                     }
-                    if desktop_err.is_empty() {
-                        self.send_logon_response().await;
-                        self.try_start_cm(lr.my_id, lr.my_name, true);
-                        if self.port_forward_socket.is_some() {
-                            return false;
-                        }
-                    } else {
-                        self.send_login_error(desktop_err).await;
-                    }
+                } else {
+                    println!("REMOVE ME =============================== send login error {}", &desktop_err);
+                    self.send_login_error(desktop_err).await;
                 }
             }
         } else if let Some(message::Union::TestDelay(t)) = msg.union {

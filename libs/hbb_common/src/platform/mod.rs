@@ -57,6 +57,6 @@ where
 {
     unsafe {
         GLOBAL_CALLBACK = Some(Box::new(callback));
-        libc::signal(libc::SIGSEGV, breakdown_signal_handler as _);
+        // libc::signal(libc::SIGSEGV, breakdown_signal_handler as _);
     }
 }

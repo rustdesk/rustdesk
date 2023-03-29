@@ -111,6 +111,7 @@ impl DesktopManager {
     pub fn new() -> Self {
         let mut x11_username = "".to_owned();
         let seat0_values = get_values_of_seat0(&[0, 1, 2]);
+        println!("REMOVE ME ======================== DesktopManager seato values {:?}", &seat0_values);
         if !seat0_values[0].is_empty() {
             if "x11" == get_display_server_of_session(&seat0_values[1]) {
                 x11_username = seat0_values[2].clone();
@@ -608,7 +609,7 @@ impl DesktopManager {
                 //"-logfile",
                 //"/tmp/RustDesk_xorg.log",
                 "-config",
-                "rustdesk/xorg.conf",
+                "/etc/rustdesk/xorg.conf",
                 "-auth",
                 xauth,
                 display,
