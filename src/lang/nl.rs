@@ -68,7 +68,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Close", "Sluit"),
         ("Retry", "Probeer opnieuw"),
         ("OK", "OK"),
-        ("Password Required", "Wachtwoord vereist"),
+        ("remember_password_tip", "Wachtwoord vereist"),
         ("Please enter your password", "Geef uw wachtwoord in"),
         ("Remember password", "Wachtwoord onthouden"),
         ("Wrong Password", "Verkeerd wachtwoord"),
@@ -483,5 +483,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("enter_rustdesk_passwd_tip", "Geef het RustDesk-wachtwoord op."),
         ("remember_rustdesk_passwd_tip", "RustDesk Wachtwoord onthouden."),
         ("login_linux_tip", "Je moet inloggen op een Linux Account op afstand om een X desktop sessie te openen."),
+        ("login_linux_tooltip_tip", ""),
+        ("verify_rustdesk_password_tip", ""),
+        ("remember_account_tip", ""),
+        ("remember_password_tip", ""),
     ].iter().cloned().collect();
 }

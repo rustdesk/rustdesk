@@ -68,7 +68,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Close", "بستن"),
         ("Retry", "تلاش مجدد"),
         ("OK", "قبول"),
-        ("Password Required", "رمز عبور لازم است"),
+        ("remember_password_tip", "رمز عبور لازم است"),
         ("Please enter your password", "رمز عبور خود را وارد کنید"),
         ("Remember password", "رمز عبور را به خاطر بسپار"),
         ("Wrong Password", "رمز عبور اشتباه است"),
@@ -483,5 +483,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("enter_rustdesk_passwd_tip", ""),
         ("remember_rustdesk_passwd_tip", ""),
         ("login_linux_tip", ""),
+        ("login_linux_tooltip_tip", ""),
+        ("verify_rustdesk_password_tip", ""),
+        ("remember_account_tip", ""),
+        ("remember_password_tip", ""),
     ].iter().cloned().collect();
 }
