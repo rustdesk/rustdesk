@@ -35,7 +35,8 @@ pub fn is_xfce() -> bool {
 
 pub fn breakdown_callback() {
     #[cfg(target_os = "linux")]
-    crate::input_service::clear_remapped_keycode()
+    crate::input_service::clear_remapped_keycode();
+    crate::input_service::release_modifiers();
 }
 
 // Android

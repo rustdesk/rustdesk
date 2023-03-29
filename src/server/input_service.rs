@@ -551,6 +551,24 @@ fn record_key_to_key(record_key: u64) -> Option<Key> {
     }
 }
 
+pub fn release_modifiers() {
+    let mut en = ENIGO.lock().unwrap();
+    for modifier in [
+        Key::Shift,
+        Key::Control,
+        Key::Alt,
+        Key::Meta,
+        Key::RightShift,
+        Key::RightControl,
+        Key::RightAlt,
+        Key::RWin,
+    ] {
+        if get_modifier_state(modifier, &mut en) {
+            en.key_up(modifier);
+        }
+    }
+}
+
 #[inline]
 fn release_record_key(record_key: KeysDown) {
     let func = move || match record_key {
