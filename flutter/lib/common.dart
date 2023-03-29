@@ -186,6 +186,46 @@ class MyTheme {
   static const Color button = Color(0xFF2C8CFF);
   static const Color hoverBorder = Color(0xFF999999);
 
+  // TextButton
+  // Value is used to calculate "dialog.actionsPadding"
+  static const double mobileTextButtonPaddingLR = 20;
+
+  // TextButton on mobile needs a fixed padding, otherwise small buttons
+  // like "OK" has a larger left/right padding.
+  static const EdgeInsets mobileTextButtonPadding =
+      EdgeInsets.symmetric(horizontal: mobileTextButtonPaddingLR);
+
+  // Dialogs
+  static const double dialogPadding = 24;
+
+  // padding bottom depend on content (some dialogs has no content)
+  static EdgeInsets dialogTitlePadding({bool content = true}) {
+    final double p = dialogPadding;
+
+    return EdgeInsets.fromLTRB(p, p, p, content ? 0 : p);
+  }
+
+  // padding bottom depend on actions (mobile has dialogs without actions)
+  static EdgeInsets dialogContentPadding({bool actions = true}) {
+    final double p = dialogPadding;
+
+    return isDesktop
+        ? EdgeInsets.fromLTRB(p, p, p, actions ? (p - 4) : p)
+        : EdgeInsets.fromLTRB(p, p, p, actions ? (p / 2) : p);
+  }
+
+  static EdgeInsets dialogActionsPadding() {
+    final double p = dialogPadding;
+
+    return isDesktop
+        ? EdgeInsets.fromLTRB(p, 0, p, (p - 4))
+        : EdgeInsets.fromLTRB(p, 0, (p - mobileTextButtonPaddingLR), (p / 2));
+  }
+
+  static EdgeInsets dialogButtonPadding = isDesktop
+      ? EdgeInsets.only(left: dialogPadding)
+      : EdgeInsets.only(left: dialogPadding / 3);
+
   static ThemeData lightTheme = ThemeData(
     brightness: Brightness.light,
     hoverColor: Color.fromARGB(255, 224, 224, 224),
@@ -236,7 +276,14 @@ class MyTheme {
               ),
             ),
           )
-        : null,
+        : TextButtonThemeData(
+            style: TextButton.styleFrom(
+              padding: mobileTextButtonPadding,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8.0),
+              ),
+            ),
+          ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: MyTheme.accent,
@@ -334,7 +381,14 @@ class MyTheme {
               ),
             ),
           )
-        : null,
+        : TextButtonThemeData(
+            style: TextButton.styleFrom(
+              padding: mobileTextButtonPadding,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8.0),
+              ),
+            ),
+          ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: MyTheme.accent,
@@ -771,6 +825,10 @@ void showToast(String text, {Duration timeout = const Duration(seconds: 2)}) {
   });
 }
 
+// TODO
+// - Remove argument "contentPadding", no need for it, all should look the same.
+// - Remove "required" for argument "content". See simple confirm dialog "delete peer", only title and actions are used. No need to "content: SizedBox.shrink()".
+// - Make dead code alive, transform arguments "onSubmit" and "onCancel" into correspondenting buttons "ConfirmOkButton", "CancelButton".
 class CustomAlertDialog extends StatelessWidget {
   const CustomAlertDialog(
       {Key? key,
@@ -798,8 +856,8 @@ class CustomAlertDialog extends StatelessWidget {
     Future.delayed(Duration.zero, () {
       if (!scopeNode.hasFocus) scopeNode.requestFocus();
     });
-    const double padding = 30;
     bool tabTapped = false;
+
     return FocusScope(
       node: scopeNode,
       autofocus: true,
@@ -824,22 +882,18 @@ class CustomAlertDialog extends StatelessWidget {
         return KeyEventResult.ignored;
       },
       child: AlertDialog(
-        scrollable: true,
-        title: title,
-        titlePadding: EdgeInsets.fromLTRB(padding, 24, padding, 0),
-        contentPadding: EdgeInsets.fromLTRB(
-          contentPadding ?? padding,
-          25,
-          contentPadding ?? padding,
-          actions is List ? 10 : padding,
-        ),
-        content: ConstrainedBox(
-          constraints: contentBoxConstraints,
-          child: content,
-        ),
-        actions: actions,
-        actionsPadding: EdgeInsets.fromLTRB(padding, 0, padding, padding),
-      ),
+          scrollable: true,
+          title: title,
+          content: ConstrainedBox(
+            constraints: contentBoxConstraints,
+            child: content,
+          ),
+          actions: actions,
+          titlePadding: MyTheme.dialogTitlePadding(content: content != null),
+          contentPadding:
+              MyTheme.dialogContentPadding(actions: actions is List),
+          actionsPadding: MyTheme.dialogActionsPadding(),
+          buttonPadding: MyTheme.dialogButtonPadding),
     );
   }
 }
