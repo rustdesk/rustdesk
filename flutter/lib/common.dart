@@ -186,26 +186,51 @@ class MyTheme {
   static const Color button = Color(0xFF2C8CFF);
   static const Color hoverBorder = Color(0xFF999999);
 
+  // ListTile
+  static const ListTileThemeData listTileTheme = ListTileThemeData(
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.all(
+        Radius.circular(5),
+      ),
+    ),
+  );
+
+  // Checkbox
+  static const CheckboxThemeData checkboxTheme = CheckboxThemeData(
+    splashRadius: 0,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.all(
+        Radius.circular(5),
+      ),
+    ),
+  );
+
   // TextButton
   // Value is used to calculate "dialog.actionsPadding"
   static const double mobileTextButtonPaddingLR = 20;
 
   // TextButton on mobile needs a fixed padding, otherwise small buttons
   // like "OK" has a larger left/right padding.
-  static const EdgeInsets mobileTextButtonPadding =
-      EdgeInsets.symmetric(horizontal: mobileTextButtonPaddingLR);
+  static TextButtonThemeData mobileTextButtonTheme = TextButtonThemeData(
+    style: TextButton.styleFrom(
+      padding: EdgeInsets.symmetric(horizontal: mobileTextButtonPaddingLR),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8.0),
+      ),
+    ),
+  );
 
   // Dialogs
   static const double dialogPadding = 24;
 
-  // padding bottom depend on content (some dialogs has no content)
+  // padding bottom depends on content (some dialogs has no content)
   static EdgeInsets dialogTitlePadding({bool content = true}) {
     final double p = dialogPadding;
 
     return EdgeInsets.fromLTRB(p, p, p, content ? 0 : p);
   }
 
-  // padding bottom depend on actions (mobile has dialogs without actions)
+  // padding bottom depends on actions (mobile has dialogs without actions)
   static EdgeInsets dialogContentPadding({bool actions = true}) {
     final double p = dialogPadding;
 
@@ -276,14 +301,7 @@ class MyTheme {
               ),
             ),
           )
-        : TextButtonThemeData(
-            style: TextButton.styleFrom(
-              padding: mobileTextButtonPadding,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8.0),
-              ),
-            ),
-          ),
+        : mobileTextButtonTheme,
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: MyTheme.accent,
@@ -301,21 +319,8 @@ class MyTheme {
         ),
       ),
     ),
-    checkboxTheme: const CheckboxThemeData(
-      splashRadius: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.all(
-          Radius.circular(5),
-        ),
-      ),
-    ),
-    listTileTheme: ListTileThemeData(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.all(
-          Radius.circular(5),
-        ),
-      ),
-    ),
+    checkboxTheme: checkboxTheme,
+    listTileTheme: listTileTheme,
     menuBarTheme: MenuBarThemeData(
         style:
             MenuStyle(backgroundColor: MaterialStatePropertyAll(Colors.white))),
@@ -381,14 +386,7 @@ class MyTheme {
               ),
             ),
           )
-        : TextButtonThemeData(
-            style: TextButton.styleFrom(
-              padding: mobileTextButtonPadding,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8.0),
-              ),
-            ),
-          ),
+        : mobileTextButtonTheme,
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: MyTheme.accent,
@@ -411,21 +409,8 @@ class MyTheme {
         ),
       ),
     ),
-    checkboxTheme: const CheckboxThemeData(
-      splashRadius: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.all(
-          Radius.circular(5),
-        ),
-      ),
-    ),
-    listTileTheme: ListTileThemeData(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.all(
-          Radius.circular(5),
-        ),
-      ),
-    ),
+    checkboxTheme: checkboxTheme,
+    listTileTheme: listTileTheme,
     menuBarTheme: MenuBarThemeData(
         style: MenuStyle(
             backgroundColor: MaterialStatePropertyAll(Color(0xFF121212)))),
