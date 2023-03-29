@@ -10,7 +10,7 @@ jobs:
       fail-fast: true
       matrix:
         job:
-          # - { arch: armv7, os: ubuntu-20.04 }
+          - { arch: armv7, os: ubuntu-20.04 }
           - { arch: x86_64, os: ubuntu-20.04 }
           - { arch: aarch64, os: ubuntu-20.04 }
     steps:
@@ -46,12 +46,12 @@ jobs:
                 wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null
                 apt update -y
                 apt install -y curl zip unzip tar git cmake g++ gcc build-essential pkg-config wget nasm yasm ninja-build libjpeg8-dev
+                cmake --version
+                gcc -v
                 ;;
               aarch64|armv7)
-                apt install -y curl zip unzip tar git cmake g++ gcc build-essential pkg-config wget nasm yasm ninja-build libjpeg8-dev automake libtool
+                apt install -y curl zip unzip git
             esac
-            cmake --version
-            gcc -v
           run: |
             # disable git safe.directory
             git config --global --add safe.directory "*"
@@ -65,25 +65,19 @@ jobs:
                 ./bootstrap-vcpkg.sh
                 ./vcpkg install libvpx libyuv opus
                 ;;
-              aarch64|armv7)
+              aarch64)
                 pushd /artifacts
-                # libyuv
-                git clone https://chromium.googlesource.com/libyuv/libyuv || true
-                pushd libyuv
-                git pull
-                mkdir -p build
-                pushd build
+                rm -rf rustdesk_thirdparty_lib
+                git clone https://github.com/Kingtous/rustdesk_thirdparty_lib.git --depth=1
                 mkdir -p /artifacts/vcpkg/installed
-                cmake .. -DCMAKE_INSTALL_PREFIX=/artifacts/vcpkg/installed
-                make -j4 && make install
-                popd
-                popd
-                # libopus, ubuntu 18.04 prebuilt is not be compiled with -fPIC
-                wget -O opus.tar.gz http://archive.ubuntu.com/ubuntu/pool/main/o/opus/opus_1.1.2.orig.tar.gz
-                tar -zxvf opus.tar.gz; ls -l
-                pushd opus-1.1.2
-                ./autogen.sh; ./configure --prefix=/artifacts/vcpkg/installed
-                make -j4; make install
+                mv ./rustdesk_thirdparty_lib/vcpkg/installed/arm64-linux /artifacts/vcpkg/installed/arm64-linux
+                ;;
+              armv7)
+                pushd /artifacts
+                rm -rf rustdesk_thirdparty_lib
+                git clone https://github.com/Kingtous/rustdesk_thirdparty_lib.git --depth=1
+                mkdir -p /artifacts/vcpkg/installed
+                mv ./rustdesk_thirdparty_lib/vcpkg/installed/arm-linux /artifacts/vcpkg/installed/arm-linux
                 ;;
             esac
       - name: Upload artifacts

@@ -54,6 +54,18 @@ pub fn start(args: &mut [String]) {
         let dir = "/usr";
         sciter::set_library(&(prefix + dir + "/lib/rustdesk/libsciter-gtk.so")).ok();
     }
+    #[cfg(windows)]
+    // Check if there is a sciter.dll nearby.
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            let sciter_dll_path = parent.join("sciter.dll");
+            if sciter_dll_path.exists() {
+                // Try to set the sciter dll.
+                let p = sciter_dll_path.to_string_lossy().to_string();
+                log::debug!("Found dll:{}, \n {:?}", p, sciter::set_library(&p));
+            }
+        }
+    }
     // https://github.com/c-smile/sciter-sdk/blob/master/include/sciter-x-types.h
     // https://github.com/rustdesk/rustdesk/issues/132#issuecomment-886069737
     #[cfg(windows)]

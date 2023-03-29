@@ -4674,7 +4674,7 @@ dependencies = [
 [[package]]
 name = "rdev"
 version = "0.5.0-2"
-source = "git+https://github.com/fufesou/rdev#89d2cb5c4bac81da4aafaedcf78af6af7c80c9d0"
+source = "git+https://github.com/fufesou/rdev#aeea78dec3e731dd616da09668bbbd835a773d6c"
 dependencies = [
  "cocoa",
  "core-foundation 0.9.3",
@@ -5885,7 +5885,7 @@ checksum = "222a222a5bfe1bba4a77b45ec488a741b3cb8872e5e499451fd7d0129c9c7c3d"
 [[package]]
 name = "tfc"
 version = "0.6.1"
-source = "git+https://github.com/fufesou/The-Fat-Controller#1dba9a39c089ac9a7853b9dd5399c1d4aa3157d3"
+source = "git+https://github.com/fufesou/The-Fat-Controller#9dd86151525fd010dc93f6bc9b6aedd1a75cc342"
 dependencies = [
  "anyhow",
  "core-graphics 0.22.3",
