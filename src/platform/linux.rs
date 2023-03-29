@@ -232,30 +232,42 @@ fn should_start_server(
 ) -> bool {
     let cm = get_cm();
     let mut start_new = false;
-    if desktop.uid != *uid && !desktop.uid.is_empty() {
+    let mut should_kill = false;
+
+    if desktop.is_headless() {
+        if !uid.is_empty() {
+            // From having a monitor to not having a monitor.
+            *uid = "".to_owned();
+            should_kill = true;
+        }
+    } else if desktop.uid != *uid && !desktop.uid.is_empty() {
         *uid = desktop.uid.clone();
         if try_x11 {
             set_x11_env(&desktop);
         }
-        if let Some(ps) = server.as_mut() {
-            allow_err!(ps.kill());
-            sleep_millis(30);
-            *last_restart = Instant::now();
-        }
-    } else if !cm
+        should_kill = true;
+    }
+
+    if !should_kill
+        && !cm
         && ((*cm0 && last_restart.elapsed().as_secs() > 60)
             || last_restart.elapsed().as_secs() > 3600)
     {
         // restart server if new connections all closed, or every one hour,
         // as a workaround to resolve "SpotUdp" (dns resolve)
         // and x server get displays failure issue
+        should_kill = true;
+        log::info!("restart server");
+    }
+
+    if should_kill {
         if let Some(ps) = server.as_mut() {
             allow_err!(ps.kill());
             sleep_millis(30);
             *last_restart = Instant::now();
-            log::info!("restart server");
         }
     }
+
     if let Some(ps) = server.as_mut() {
         match ps.try_wait() {
             Ok(Some(_)) => {
@@ -285,6 +297,8 @@ pub fn start_os_service() {
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
     let mut desktop = Desktop::default();
+    desktop.is_rustdesk_subprocess = false;
+    let mut sid = "".to_owned();
     let mut uid = "".to_owned();
     let mut server: Option<Child> = None;
     let mut user_server: Option<Child> = None;
@@ -299,20 +313,8 @@ pub fn start_os_service() {
     while running.load(Ordering::SeqCst) {
         desktop.refresh();
 
-        // for fixing https://github.com/rustdesk/rustdesk/issues/3129 to avoid too much dbus calling,
-        // though duplicate logic here with should_start_server
-        if !(desktop.uid != *uid && !desktop.uid.is_empty()) {
-            let cm = get_cm();
-            if !(!cm
-                && ((cm0 && last_restart.elapsed().as_secs() > 60)
-                    || last_restart.elapsed().as_secs() > 3600))
-            {
-                sleep_millis(500);
-                continue;
-            }
-        }
-
-        if desktop.username == "root" || !desktop.is_wayland() || desktop.sid.is_empty() {
+        // Duplicate logic here with should_start_server
+        if desktop.username == "root" || !desktop.is_wayland() {
             // try kill subprocess "--server"
             stop_server(&mut user_server);
             // try start subprocess "--server"
@@ -353,7 +355,18 @@ pub fn start_os_service() {
             stop_server(&mut user_server);
             stop_server(&mut server);
         }
-        sleep_millis(super::SERVICE_INTERVAL);
+
+        let keeps_headless = sid.is_empty() && desktop.is_headless();
+        let keeps_session = sid == desktop.sid;
+        if keeps_headless || keeps_session {
+            // for fixing https://github.com/rustdesk/rustdesk/issues/3129 to avoid too much dbus calling,
+            sleep_millis(500);
+        } else {
+            sleep_millis(super::SERVICE_INTERVAL);
+        }
+        if !desktop.is_headless() {
+            sid = desktop.sid.clone();
+        }
     }
 
     if let Some(ps) = user_server.take().as_mut() {
@@ -561,7 +574,7 @@ pub(super) fn get_env_tries(name: &str, uid: &str, process: &str, n: usize) -> S
 }
 
 fn get_env(name: &str, uid: &str, process: &str) -> String {
-    let cmd = format!("ps -u {} -f | grep '{}' | tail -1 | awk '{{print $2}}' | xargs -I__ cat /proc/__/environ 2>/dev/null | tr '\\0' '\\n' | grep '^{}=' | tail -1 | sed 's/{}=//g'", uid, process, name, name);
+    let cmd = format!("ps -u {} -f | grep '{}' | grep -v 'grep' | tail -1 | awk '{{print $2}}' | xargs -I__ cat /proc/__/environ 2>/dev/null | tr '\\0' '\\n' | grep '^{}=' | tail -1 | sed 's/{}=//g'", uid, process, name, name);
     // log::debug!("Run: {}", &cmd);
     if let Ok(x) = run_cmds(cmd) {
         x.trim_end().to_string()
@@ -743,12 +756,18 @@ mod desktop {
         pub protocal: String,
         pub display: String,
         pub xauth: String,
+        pub is_rustdesk_subprocess: bool,
     }
 
     impl Desktop {
         #[inline]
         pub fn is_wayland(&self) -> bool {
             self.protocal == ENV_DESKTOP_PROTOCAL_WAYLAND
+        }
+
+        #[inline]
+        pub fn is_headless(&self) -> bool {
+            self.sid.is_empty() || self.is_rustdesk_subprocess
         }
 
         fn get_display(&mut self) {
@@ -830,14 +849,25 @@ mod desktop {
             last
         }
 
+        fn set_is_subprocess(&mut self) {
+            self.is_rustdesk_subprocess = false;
+            let cmd = "ps -ef | grep 'rustdesk/xorg.conf' | grep -v grep | wc -l";
+            if let Ok(res) = run_cmds(cmd.to_owned()) {
+                if res.trim() != "0" {
+                    self.is_rustdesk_subprocess = true;
+                }
+            }
+        }
+
         pub fn refresh(&mut self) {
-            if is_active(&self.sid) {
+            if !self.sid.is_empty() && is_active(&self.sid) {
                 return;
             }
 
             let seat0_values = get_values_of_seat0(&[0, 1, 2]);
             if seat0_values[0].is_empty() {
                 *self = Self::default();
+                self.is_rustdesk_subprocess = false;
                 return;
             }
 
@@ -847,6 +877,9 @@ mod desktop {
             self.protocal = get_display_server_of_session(&self.sid).into();
             self.get_display();
             self.get_xauth();
+            self.set_is_subprocess();
+
+            println!("REMOVE ME ======================================= desktop: {:?}", self);
         }
     }
 }
