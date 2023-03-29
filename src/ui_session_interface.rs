@@ -1149,13 +1149,15 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>) {
     let frame_count = Arc::new(AtomicUsize::new(0));
     let frame_count_cl = frame_count.clone();
     let ui_handler = handler.ui_handler.clone();
-    let (video_sender, audio_sender) = start_video_audio_threads(move |data: &mut Vec<u8>| {
-        frame_count_cl.fetch_add(1, Ordering::Relaxed);
-        ui_handler.on_rgba(data);
-    });
+    let (video_sender, audio_sender, video_queue) =
+        start_video_audio_threads(move |data: &mut Vec<u8>| {
+            frame_count_cl.fetch_add(1, Ordering::Relaxed);
+            ui_handler.on_rgba(data);
+        });
 
     let mut remote = Remote::new(
         handler,
+        video_queue,
         video_sender,
         audio_sender,
         receiver,

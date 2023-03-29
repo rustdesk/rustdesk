@@ -9,6 +9,7 @@ use std::sync::{
 
 #[cfg(windows)]
 use clipboard::{cliprdr::CliprdrClientContext, ContextSend};
+use crossbeam_queue::ArrayQueue;
 use hbb_common::config::{PeerConfig, TransferSerde};
 use hbb_common::fs::{
     can_enable_overwrite_detection, get_job, get_string, new_send_confirm, DigestCheckResult,
@@ -42,6 +43,7 @@ use crate::{client::Data, client::Interface};
 
 pub struct Remote<T: InvokeUiSession> {
     handler: Session<T>,
+    video_queue: Arc<ArrayQueue<VideoFrame>>,
     video_sender: MediaSender,
     audio_sender: MediaSender,
     receiver: mpsc::UnboundedReceiver<Data>,
@@ -68,6 +70,7 @@ pub struct Remote<T: InvokeUiSession> {
 impl<T: InvokeUiSession> Remote<T> {
     pub fn new(
         handler: Session<T>,
+        video_queue: Arc<ArrayQueue<VideoFrame>>,
         video_sender: MediaSender,
         audio_sender: MediaSender,
         receiver: mpsc::UnboundedReceiver<Data>,
@@ -76,6 +79,7 @@ impl<T: InvokeUiSession> Remote<T> {
     ) -> Self {
         Self {
             handler,
+            video_queue,
             video_sender,
             audio_sender,
             receiver,
@@ -830,7 +834,8 @@ impl<T: InvokeUiSession> Remote<T> {
                             ..Default::default()
                         })
                     };
-                    self.video_sender.send(MediaData::VideoFrame(vf)).ok();
+                    self.video_queue.force_push(vf);
+                    self.video_sender.send(MediaData::VideoFrame).ok();
                 }
                 Some(message::Union::Hash(hash)) => {
                     self.handler

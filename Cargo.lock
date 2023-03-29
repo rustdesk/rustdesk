@@ -4945,6 +4945,7 @@ dependencies = [
  "core-foundation 0.9.3",
  "core-graphics 0.22.3",
  "cpal",
+ "crossbeam-queue",
  "ctrlc",
  "dark-light",
  "dasp",
