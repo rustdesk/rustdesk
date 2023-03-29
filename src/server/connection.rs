@@ -10,6 +10,7 @@ use crate::{
         new_voice_call_request, new_voice_call_response, start_audio_thread, MediaData, MediaSender,
     },
     common::{get_default_sound_input, set_sound_input},
+    keyboard::{is_modifier, keycode_to_rdev_key},
     video_service,
 };
 #[cfg(any(target_os = "android", target_os = "ios"))]
@@ -39,6 +40,7 @@ use sha2::{Digest, Sha256};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use std::sync::atomic::Ordering;
 use std::{
+    collections::HashSet,
     num::NonZeroI64,
     sync::{atomic::AtomicI64, mpsc as std_mpsc},
 };
@@ -132,6 +134,7 @@ pub struct Connection {
     voice_call_request_timestamp: Option<NonZeroI64>,
     audio_input_device_before_voice_call: Option<String>,
     options_in_login: Option<OptionMessage>,
+    pressed_modifiers: HashSet<rdev::Key>,
 }
 
 impl ConnInner {
@@ -243,6 +246,7 @@ impl Connection {
             voice_call_request_timestamp: None,
             audio_input_device_before_voice_call: None,
             options_in_login: None,
+            pressed_modifiers: Default::default(),
         };
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         tokio::spawn(async move {
@@ -618,7 +622,6 @@ impl Connection {
         }
         #[cfg(target_os = "linux")]
         clear_remapped_keycode();
-        release_modifiers();
         log::info!("Input thread exited");
     }
 
@@ -1366,6 +1369,28 @@ impl Connection {
                         } else {
                             me.press
                         };
+
+                        let key = match me.mode.unwrap() {
+                            KeyboardMode::Map => Some(keycode_to_rdev_key(me.chr())),
+                            KeyboardMode::Translate => {
+                                if let Some(key_event::Union::Chr(code)) = me.union.clone() {
+                                    Some(keycode_to_rdev_key(code & 0x0000FFFF))
+                                } else {
+                                    None
+                                }
+                            }
+                            _ => None,
+                        }
+                        .filter(is_modifier);
+
+                        if let Some(key) = key {
+                            if is_press {
+                                self.pressed_modifiers.insert(key);
+                            } else {
+                                self.pressed_modifiers.remove(&key);
+                            }
+                        }
+
                         if is_press {
                             match me.union {
                                 Some(key_event::Union::Unicode(_))
@@ -2023,6 +2048,14 @@ impl Connection {
             })
             .count();
     }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    fn release_pressed_modifiers(&mut self) {
+        for modifier in self.pressed_modifiers.iter() {
+            rdev::simulate(&rdev::EventType::KeyRelease(*modifier)).ok();
+        }
+        self.pressed_modifiers.clear();
+    }
 }
 
 pub fn insert_switch_sides_uuid(id: String, uuid: uuid::Uuid) {
@@ -2218,5 +2251,12 @@ impl Default for PortableState {
             last_foreground_window_elevated: Default::default(),
             last_running: Default::default(),
         }
+    }
+}
+
+impl Drop for Connection {
+    fn drop(&mut self) {
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        self.release_pressed_modifiers();
     }
 }

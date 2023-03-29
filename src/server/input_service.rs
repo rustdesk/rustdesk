@@ -551,7 +551,7 @@ fn record_key_to_key(record_key: u64) -> Option<Key> {
     }
 }
 
-pub fn release_modifiers() {
+pub fn release_device_modifiers() {
     let mut en = ENIGO.lock().unwrap();
     for modifier in [
         Key::Shift,
