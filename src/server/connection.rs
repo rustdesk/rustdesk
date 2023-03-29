@@ -618,6 +618,7 @@ impl Connection {
         }
         #[cfg(target_os = "linux")]
         clear_remapped_keycode();
+        release_modifiers();
         log::info!("Input thread exited");
     }
 
