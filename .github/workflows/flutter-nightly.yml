@@ -266,6 +266,7 @@ jobs:
             }
           - {
               target: aarch64-apple-darwin,
+              arch: aarch64,
               os: macos-latest,
               extra-build-args: "",
             }
