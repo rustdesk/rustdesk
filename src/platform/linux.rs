@@ -769,6 +769,7 @@ mod desktop {
         pub protocal: String,
         pub display: String,
         pub xauth: String,
+        pub is_rustdesk_subprocess: bool,
     }
 
     impl Desktop {
@@ -785,6 +786,11 @@ mod desktop {
         #[inline]
         pub fn is_headless(&self) -> bool {
             self.sid.is_empty()
+        }
+
+        #[inline]
+        pub fn is_headless(&self) -> bool {
+            self.sid.is_empty() || self.is_rustdesk_subprocess
         }
 
         fn get_display(&mut self) {
@@ -901,6 +907,16 @@ mod desktop {
             last
         }
 
+        fn set_is_subprocess(&mut self) {
+            self.is_rustdesk_subprocess = false;
+            let cmd = "ps -ef | grep 'rustdesk/xorg.conf' | grep -v grep | wc -l";
+            if let Ok(res) = run_cmds(cmd) {
+                if res.trim() != "0" {
+                    self.is_rustdesk_subprocess = true;
+                }
+            }
+        }
+
         pub fn refresh(&mut self) {
             if !self.sid.is_empty() && is_active(&self.sid) {
                 return;
@@ -909,6 +925,7 @@ mod desktop {
             let seat0_values = get_values_of_seat0(&[0, 1, 2]);
             if seat0_values[0].is_empty() {
                 *self = Self::default();
+                self.is_rustdesk_subprocess = false;
                 return;
             }
 
@@ -924,6 +941,9 @@ mod desktop {
 
             self.get_display();
             self.get_xauth();
+            self.set_is_subprocess();
+
+            println!("REMOVE ME ======================================= desktop: {:?}", self);
         }
     }
 }
