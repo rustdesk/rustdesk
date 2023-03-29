@@ -132,8 +132,6 @@ void setTemporaryPasswordLengthDialog(
           mainAxisSize: MainAxisSize.min,
           children:
               lengths.map((e) => getRadio(e, e, length, setLength)).toList()),
-      actions: [],
-      contentPadding: 14,
     );
   }, backDismiss: true, clickMaskDismiss: true);
 }

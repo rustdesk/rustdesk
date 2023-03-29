@@ -696,10 +696,8 @@ class _RemotePageState extends State<RemotePage> {
   //     return CustomAlertDialog(
   //         title: Text(translate('Physical Keyboard Input Mode')),
   //         content: Column(mainAxisSize: MainAxisSize.min, children: [
-  //           getRadio('Legacy mode', 'legacy', current, setMode,
-  //               contentPadding: EdgeInsets.zero),
-  //           getRadio('Map mode', 'map', current, setMode,
-  //               contentPadding: EdgeInsets.zero),
+  //           getRadio('Legacy mode', 'legacy', current, setMode),
+  //           getRadio('Map mode', 'map', current, setMode),
   //         ]));
   //   }, clickMaskDismiss: true);
   // }
@@ -1069,7 +1067,6 @@ void showOptions(
       content: Column(
           mainAxisSize: MainAxisSize.min,
           children: displays + radios + toggles + more),
-      contentPadding: 0,
     );
   }, clickMaskDismiss: true, backDismiss: true);
 }

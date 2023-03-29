@@ -502,19 +502,18 @@ void showLanguageSettings(OverlayDialogManager dialogManager) async {
       }
 
       return CustomAlertDialog(
-          title: SizedBox.shrink(),
-          content: Column(
-            children: [
-                  getRadio('Default', '', lang, setLang),
-                  Divider(color: MyTheme.border),
-                ] +
-                langs.map((e) {
-                  final key = e[0] as String;
-                  final name = e[1] as String;
-                  return getRadio(name, key, lang, setLang);
-                }).toList(),
-          ),
-          actions: []);
+        content: Column(
+          children: [
+                getRadio('Default', '', lang, setLang),
+                Divider(color: MyTheme.border),
+              ] +
+              langs.map((e) {
+                final key = e[0] as String;
+                final name = e[1] as String;
+                return getRadio(name, key, lang, setLang);
+              }).toList(),
+        ),
+      );
     }, backDismiss: true, clickMaskDismiss: true);
   } catch (e) {
     //
@@ -536,14 +535,12 @@ void showThemeSettings(OverlayDialogManager dialogManager) async {
     }
 
     return CustomAlertDialog(
-        title: SizedBox.shrink(),
-        contentPadding: 10,
-        content: Column(children: [
-          getRadio('Light', ThemeMode.light, themeMode, setTheme),
-          getRadio('Dark', ThemeMode.dark, themeMode, setTheme),
-          getRadio('Follow System', ThemeMode.system, themeMode, setTheme)
-        ]),
-        actions: []);
+      content: Column(children: [
+        getRadio('Light', ThemeMode.light, themeMode, setTheme),
+        getRadio('Dark', ThemeMode.dark, themeMode, setTheme),
+        getRadio('Follow System', ThemeMode.system, themeMode, setTheme)
+      ]),
+    );
   }, backDismiss: true, clickMaskDismiss: true);
 }
 
