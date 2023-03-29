@@ -111,7 +111,6 @@ impl DesktopManager {
     pub fn new() -> Self {
         let mut x11_username = "".to_owned();
         let seat0_values = get_values_of_seat0(&[0, 1, 2]);
-        println!("REMOVE ME ======================== DesktopManager seato values {:?}", &seat0_values);
         if !seat0_values[0].is_empty() {
             if "x11" == get_display_server_of_session(&seat0_values[1]) {
                 x11_username = seat0_values[2].clone();
@@ -427,10 +426,6 @@ impl DesktopManager {
     fn try_wait_x11_child_exit(child_xorg: &mut Child, child_wm: &mut Child) -> bool {
         match child_xorg.try_wait() {
             Ok(Some(status)) => {
-                println!(
-                    "=============================MYDEBUG Xorg exit with {}",
-                    status
-                );
                 log::info!("Xorg exit with {}", status);
                 return true;
             }
@@ -440,10 +435,7 @@ impl DesktopManager {
 
         match child_wm.try_wait() {
             Ok(Some(status)) => {
-                println!(
-                    "=============================MYDEBUG: wm exit with {}",
-                    status
-                );
+                // Logout may result "wm exit with signal: 11 (SIGSEGV) (core dumped)"
                 log::info!("wm exit with {}", status);
                 return true;
             }
@@ -460,20 +452,12 @@ impl DesktopManager {
             for _ in 0..2 {
                 match child_xorg.try_wait() {
                     Ok(Some(status)) => {
-                        println!(
-                            "=============================MYDEBUG Xorg exit with {}",
-                            status
-                        );
                         log::info!("Xorg exit with {}", status);
                         exited = true;
                         break;
                     }
                     Ok(None) => {}
                     Err(e) => {
-                        println!(
-                            "=============================MYDEBUG Failed to wait xorg process, {}",
-                            &e
-                        );
                         log::error!("Failed to wait xorg process, {}", e);
                         Self::fatal_exit();
                     }
@@ -481,9 +465,6 @@ impl DesktopManager {
                 std::thread::sleep(std::time::Duration::from_millis(1_000));
             }
             if !exited {
-                println!(
-                    "=============================MYDEBUG Failed to wait child xorg, after kill()"
-                );
                 log::error!("Failed to wait child xorg, after kill()");
                 // try kill -9?
             }
@@ -494,19 +475,12 @@ impl DesktopManager {
             for _ in 0..2 {
                 match child_wm.try_wait() {
                     Ok(Some(status)) => {
-                        println!(
-                            "=============================MYDEBUG wm exit with {}",
-                            status
-                        );
+                        // Logout may result "wm exit with signal: 11 (SIGSEGV) (core dumped)"
                         log::info!("wm exit with {}", status);
                         exited = true;
                     }
                     Ok(None) => {}
                     Err(e) => {
-                        println!(
-                            "=============================MYDEBUG Failed to wait wm process, {}",
-                            &e
-                        );
                         log::error!("Failed to wait wm process, {}", e);
                         Self::fatal_exit();
                     }
@@ -514,9 +488,6 @@ impl DesktopManager {
                 std::thread::sleep(std::time::Duration::from_millis(1_000));
             }
             if !exited {
-                println!(
-                    "=============================MYDEBUG Failed to wait child xorg, after kill()"
-                );
                 log::error!("Failed to wait child xorg, after kill()");
                 // try kill -9?
             }
@@ -533,7 +504,7 @@ impl DesktopManager {
                 exited = Self::try_wait_x11_child_exit(child_xorg, child_wm);
             }
             if exited {
-                println!("=============================MYDEBUG begin to wait x11 children exit");
+                log::debug!("Wait x11 children exiting");
                 Self::wait_x11_children_exit(child_xorg, child_wm);
                 desktop_manager
                     .is_child_running

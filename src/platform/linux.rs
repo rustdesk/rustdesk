@@ -227,7 +227,7 @@ fn stop_rustdesk_servers() {
 
 #[inline]
 fn stop_xorg_subprocess() {
-    let _ = run_cmds(format!(
+    let _ = run_cmds(&format!(
         r##"ps -ef | grep '/etc/rustdesk/xorg.conf' | grep -v grep | awk '{{printf("kill -9 %d\n", $2)}}' | bash"##,
     ));
 }
