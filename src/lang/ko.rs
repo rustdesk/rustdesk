@@ -68,7 +68,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Close", "닫기"),
         ("Retry", "재시도"),
         ("OK", "확인"),
-        ("Password Required", "비밀번호 입력"),
+        ("remember_password_tip", "비밀번호 입력"),
         ("Please enter your password", "비밀번호를 입력해주세요"),
         ("Remember password", "이 비밀번호 기억하기"),
         ("Wrong Password", "틀린 비밀번호"),
@@ -483,5 +483,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("enter_rustdesk_passwd_tip", ""),
         ("remember_rustdesk_passwd_tip", ""),
         ("login_linux_tip", ""),
+        ("login_linux_tooltip_tip", ""),
+        ("verify_rustdesk_password_tip", ""),
+        ("remember_account_tip", ""),
+        ("remember_password_tip", ""),
     ].iter().cloned().collect();
 }

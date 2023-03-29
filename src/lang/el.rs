@@ -68,7 +68,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Close", "Κλείσιμο"),
         ("Retry", "Δοκίμασε ξανά"),
         ("OK", "ΟΚ"),
-        ("Password Required", "Απαιτείται κωδικός πρόσβασης"),
+        ("remember_password_tip", "Απαιτείται κωδικός πρόσβασης"),
         ("Please enter your password", "Παρακαλώ εισάγετε τον κωδικό πρόσβασης"),
         ("Remember password", "Απομνημόνευση κωδικού πρόσβασης"),
         ("Wrong Password", "Λάθος κωδικός πρόσβασης"),
@@ -484,5 +484,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("remember_rustdesk_passwd_tip", "Να θυμάσαι τον κωδικό του RustDesk."),
         ("login_linux_tip", "Είσοδος σε απομακρυσμένο λογαριασμό Linux"),
         ("login_linux_tooltip_tip", "Απαιτείται είσοδος σε απομακρυσμένο λογαριασμό Linux για την ενεργοποίηση του περιβάλλον εργασίας Χ."),
+        ("verify_rustdesk_password_tip", ""),
+        ("remember_account_tip", ""),
+        ("remember_password_tip", ""),
     ].iter().cloned().collect();
 }

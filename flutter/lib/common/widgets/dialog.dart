@@ -456,7 +456,7 @@ void enterPasswordDialog(String id, OverlayDialogManager dialogManager) async {
   await _connectDialog(
     id,
     dialogManager,
-    peerPasswordController: TextEditingController(),
+    passwordController: TextEditingController(),
   );
 }
 
@@ -464,8 +464,8 @@ void enterUserLoginDialog(String id, OverlayDialogManager dialogManager) async {
   await _connectDialog(
     id,
     dialogManager,
-    usernameController: TextEditingController(),
-    passwordController: TextEditingController(),
+    osUsernameController: TextEditingController(),
+    osPasswordController: TextEditingController(),
   );
 }
 
@@ -474,20 +474,27 @@ void enterUserLoginAndPasswordDialog(
   await _connectDialog(
     id,
     dialogManager,
-    usernameController: TextEditingController(),
+    osUsernameController: TextEditingController(),
+    osPasswordController: TextEditingController(),
     passwordController: TextEditingController(),
-    peerPasswordController: TextEditingController(),
   );
 }
 
 _connectDialog(
   String id,
   OverlayDialogManager dialogManager, {
-  TextEditingController? usernameController,
+  TextEditingController? osUsernameController,
+  TextEditingController? osPasswordController,
   TextEditingController? passwordController,
-  TextEditingController? peerPasswordController,
 }) async {
-  var remember = await bind.sessionGetRemember(id: id) ?? false;
+  var rememberPassword = false;
+  if (passwordController != null) {
+    rememberPassword = await bind.sessionGetRemember(id: id) ?? false;
+  }
+  var rememberAccount = false;
+  if (osUsernameController != null) {
+    rememberAccount = await bind.sessionGetRemember(id: id) ?? false;
+  }
   dialogManager.dismissAll();
   dialogManager.show((setState, close) {
     cancel() {
@@ -501,20 +508,109 @@ _connectDialog(
       // If the remote side is headless.
       // The client side should login to remote OS account, to enable X desktop session.
       // `username` and `password` will be used in the near future.
-      final username = usernameController?.text.trim() ?? '';
+      final osUsername = osUsernameController?.text.trim() ?? '';
+      final osPassword = osPasswordController?.text.trim() ?? '';
       final password = passwordController?.text.trim() ?? '';
-      final peerPassword = peerPasswordController?.text.trim() ?? '';
-      if (peerPasswordController != null && peerPassword.isEmpty) return;
+      if (passwordController != null && password.isEmpty) return;
       gFFI.login(
-        username,
-        password,
+        osUsername,
+        osPassword,
         id,
-        peerPassword,
-        remember,
+        password,
+        rememberPassword,
       );
       close();
       dialogManager.showLoading(translate('Logging in...'),
           onCancel: closeConnection);
+    }
+
+    descWidget(String text) {
+      return Column(
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              text,
+              maxLines: 3,
+              softWrap: true,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 16),
+            ),
+          ),
+          Container(
+            height: 8,
+          ),
+        ],
+      );
+    }
+
+    rememberWidget(
+      String desc,
+      bool remember,
+      ValueChanged<bool?>? onChanged,
+    ) {
+      return CheckboxListTile(
+        contentPadding: const EdgeInsets.all(0),
+        dense: true,
+        controlAffinity: ListTileControlAffinity.leading,
+        title: Text(desc),
+        value: remember,
+        onChanged: onChanged,
+      );
+    }
+
+    osAccountWidget() {
+      if (osUsernameController == null || osPasswordController == null) {
+        return Offstage();
+      }
+      return Column(
+        children: [
+          descWidget(translate('login_linux_tooltip_tip')),
+          DialogTextField(
+            title: translate(DialogTextField.kUsernameTitle),
+            controller: osUsernameController,
+            prefixIcon: DialogTextField.kUsernameIcon,
+            errorText: null,
+          ),
+          PasswordWidget(
+            controller: osPasswordController,
+            autoFocus: false,
+          ),
+          rememberWidget(
+            translate('remember_account_tip'),
+            rememberAccount,
+            (v) {
+              if (v != null) {
+                setState(() => rememberAccount = v);
+              }
+            },
+          ),
+        ],
+      );
+    }
+
+    passwdWidget() {
+      if (passwordController == null) {
+        return Offstage();
+      }
+      return Column(
+        children: [
+          descWidget(translate('verify_rustdesk_password_tip')),
+          PasswordWidget(
+            controller: passwordController,
+            autoFocus: osUsernameController == null,
+          ),
+          rememberWidget(
+            translate('remember_password_tip'),
+            rememberPassword,
+            (v) {
+              if (v != null) {
+                setState(() => rememberPassword = v);
+              }
+            },
+          ),
+        ],
+      );
     }
 
     return CustomAlertDialog(
@@ -522,56 +618,15 @@ _connectDialog(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.password_rounded, color: MyTheme.accent),
-          (usernameController == null
-                  ? Text(translate('Password Required'))
-                  : Tooltip(
-                      message: translate('login_linux_tooltip_tip'),
-                      child: Text(translate('login_linux_tip')),
-                    ))
-              .paddingOnly(left: 10),
+          Text(translate('Password Required')).paddingOnly(left: 10),
         ],
       ),
       content: Column(mainAxisSize: MainAxisSize.min, children: [
-        usernameController == null
+        osAccountWidget(),
+        osUsernameController == null || passwordController == null
             ? Offstage()
-            : DialogTextField(
-                title: translate(DialogTextField.kUsernameTitle),
-                controller: usernameController,
-                prefixIcon: DialogTextField.kUsernameIcon,
-                errorText: null,
-              ),
-        passwordController == null
-            ? Offstage()
-            : PasswordWidget(
-                controller: passwordController,
-                autoFocus: false,
-              ),
-        usernameController == null || peerPasswordController == null
-            ? Offstage()
-            : const Divider(),
-        peerPasswordController == null
-            ? Offstage()
-            : PasswordWidget(
-                controller: peerPasswordController,
-                autoFocus: usernameController == null,
-                hintText: 'enter_rustdesk_passwd_tip',
-              ),
-        peerPasswordController == null
-            ? Offstage()
-            : CheckboxListTile(
-                contentPadding: const EdgeInsets.all(0),
-                dense: true,
-                controlAffinity: ListTileControlAffinity.leading,
-                title: Text(
-                  translate('remember_rustdesk_passwd_tip'),
-                ),
-                value: remember,
-                onChanged: (v) {
-                  if (v != null) {
-                    setState(() => remember = v);
-                  }
-                },
-              ),
+            : Container(height: 10),
+        passwdWidget(),
       ]),
       actions: [
         dialogButton(

@@ -68,7 +68,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Close", "Luk"),
         ("Retry", "Prøv igen"),
         ("OK", "OK"),
-        ("Password Required", "Adgangskode påkrævet"),
+        ("remember_password_tip", "Adgangskode påkrævet"),
         ("Please enter your password", "Indtast venligst dit kodeord"),
         ("Remember password", "Husk kodeord"),
         ("Wrong Password", "Forkert kodeord"),
@@ -483,5 +483,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("enter_rustdesk_passwd_tip", ""),
         ("remember_rustdesk_passwd_tip", ""),
         ("login_linux_tip", ""),
+        ("login_linux_tooltip_tip", ""),
+        ("verify_rustdesk_password_tip", ""),
+        ("remember_account_tip", ""),
+        ("remember_password_tip", ""),
     ].iter().cloned().collect();
 }
