@@ -802,7 +802,7 @@ class _FileManagerViewState extends State<FileManagerView> {
         switchType: SwitchType.scheckbox,
         text: translate("Show Hidden Files"),
         getter: () async {
-          return controller.options.value.isWindows;
+          return controller.options.value.showHidden;
         },
         setter: (bool v) async {
           controller.toggleShowHidden();
