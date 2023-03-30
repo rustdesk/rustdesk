@@ -1669,7 +1669,7 @@ impl Connection {
                 Some(message::Union::AudioFrame(frame)) => {
                     if !self.disable_audio {
                         if let Some(sender) = &self.audio_sender {
-                            allow_err!(sender.send(MediaData::AudioFrame(frame)));
+                            allow_err!(sender.send(MediaData::AudioFrame(Box::new(frame))));
                         } else {
                             log::warn!(
                                 "Processing audio frame without the voice call audio sender."

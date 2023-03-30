@@ -13,6 +13,7 @@ use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
     Device, Host, StreamConfig,
 };
+use crossbeam_queue::ArrayQueue;
 use magnum_opus::{Channels::*, Decoder as AudioDecoder};
 #[cfg(not(any(target_os = "android", target_os = "linux")))]
 use ringbuf::{ring_buffer::RbBase, Rb};
@@ -67,6 +68,7 @@ pub mod io_loop;
 
 pub const MILLI1: Duration = Duration::from_millis(1);
 pub const SEC30: Duration = Duration::from_secs(30);
+pub const VIDEO_QUEUE_SIZE: usize = 120;
 
 /// Client of the remote desktop.
 pub struct Client;
@@ -1659,8 +1661,9 @@ impl LoginConfigHandler {
 
 /// Media data.
 pub enum MediaData {
-    VideoFrame(VideoFrame),
-    AudioFrame(AudioFrame),
+    VideoQueue,
+    VideoFrame(Box<VideoFrame>),
+    AudioFrame(Box<AudioFrame>),
     AudioFormat(AudioFormat),
     Reset,
     RecordScreen(bool, i32, i32, String),
@@ -1674,11 +1677,15 @@ pub type MediaSender = mpsc::Sender<MediaData>;
 /// # Arguments
 ///
 /// * `video_callback` - The callback for video frame. Being called when a video frame is ready.
-pub fn start_video_audio_threads<F>(video_callback: F) -> (MediaSender, MediaSender)
+pub fn start_video_audio_threads<F>(
+    video_callback: F,
+) -> (MediaSender, MediaSender, Arc<ArrayQueue<VideoFrame>>)
 where
     F: 'static + FnMut(&mut Vec<u8>) + Send,
 {
     let (video_sender, video_receiver) = mpsc::channel::<MediaData>();
+    let video_queue = Arc::new(ArrayQueue::<VideoFrame>::new(VIDEO_QUEUE_SIZE));
+    let video_queue_cloned = video_queue.clone();
     let mut video_callback = video_callback;
 
     std::thread::spawn(move || {
@@ -1687,8 +1694,15 @@ where
             if let Ok(data) = video_receiver.recv() {
                 match data {
                     MediaData::VideoFrame(vf) => {
-                        if let Ok(true) = video_handler.handle_frame(vf) {
+                        if let Ok(true) = video_handler.handle_frame(*vf) {
                             video_callback(&mut video_handler.rgb);
+                        }
+                    }
+                    MediaData::VideoQueue => {
+                        if let Some(vf) = video_queue.pop() {
+                            if let Ok(true) = video_handler.handle_frame(vf) {
+                                video_callback(&mut video_handler.rgb);
+                            }
                         }
                     }
                     MediaData::Reset => {
@@ -1706,7 +1720,7 @@ where
         log::info!("Video decoder loop exits");
     });
     let audio_sender = start_audio_thread();
-    return (video_sender, audio_sender);
+    return (video_sender, audio_sender, video_queue_cloned);
 }
 
 /// Start an audio thread
@@ -1719,7 +1733,7 @@ pub fn start_audio_thread() -> MediaSender {
             if let Ok(data) = audio_receiver.recv() {
                 match data {
                     MediaData::AudioFrame(af) => {
-                        audio_handler.handle_frame(af);
+                        audio_handler.handle_frame(*af);
                     }
                     MediaData::AudioFormat(f) => {
                         log::debug!("recved audio format, sample rate={}", f.sample_rate);
