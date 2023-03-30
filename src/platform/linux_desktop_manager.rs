@@ -143,16 +143,13 @@ impl DesktopManager {
     }
 
     fn get_supported_display_seat0_username(&self) -> Option<String> {
-        if is_gdm_user(&self.seat0_username)
-            && self.seat0_display_server == DISPLAY_SERVER_WAYLAND
+        if is_gdm_user(&self.seat0_username) && self.seat0_display_server == DISPLAY_SERVER_WAYLAND
         {
             None
+        } else if self.seat0_username.is_empty() {
+            None
         } else {
-            if self.seat0_username.is_empty() {
-                None
-            } else {
-                Some(self.seat0_username.clone())
-            }
+            Some(self.seat0_username.clone())
         }
     }
 

@@ -450,8 +450,6 @@ fn run(sp: GenericService) -> ResultType<()> {
     #[cfg(windows)]
     ensure_close_virtual_device()?;
 
-    println!("REMOVE ME ================================= run 111");
-
     // ensure_inited() is needed because release_resource() may be called.
     #[cfg(target_os = "linux")]
     super::wayland::ensure_inited()?;
