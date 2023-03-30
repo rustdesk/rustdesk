@@ -897,3 +897,149 @@ void showRestartRemoteDevice(
           ));
   if (res == true) bind.sessionRestartRemoteDevice(id: id);
 }
+
+showSetOSPassword(
+  String id,
+  bool login,
+  OverlayDialogManager dialogManager,
+) async {
+  final controller = TextEditingController();
+  var password = await bind.sessionGetOption(id: id, arg: 'os-password') ?? '';
+  var autoLogin = await bind.sessionGetOption(id: id, arg: 'auto-login') != '';
+  controller.text = password;
+  dialogManager.show((setState, close) {
+    submit() {
+      var text = controller.text.trim();
+      bind.sessionPeerOption(id: id, name: 'os-password', value: text);
+      bind.sessionPeerOption(
+          id: id, name: 'auto-login', value: autoLogin ? 'Y' : '');
+      if (text != '' && login) {
+        bind.sessionInputOsPassword(id: id, value: text);
+      }
+      close();
+    }
+
+    return CustomAlertDialog(
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.password_rounded, color: MyTheme.accent),
+          Text(translate('OS Password')).paddingOnly(left: 10),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          PasswordWidget(controller: controller),
+          CheckboxListTile(
+            contentPadding: const EdgeInsets.all(0),
+            dense: true,
+            controlAffinity: ListTileControlAffinity.leading,
+            title: Text(
+              translate('Auto Login'),
+            ),
+            value: autoLogin,
+            onChanged: (v) {
+              if (v == null) return;
+              setState(() => autoLogin = v);
+            },
+          ),
+        ],
+      ),
+      actions: [
+        dialogButton(
+          "Cancel",
+          icon: Icon(Icons.close_rounded),
+          onPressed: close,
+          isOutline: true,
+        ),
+        dialogButton(
+          "OK",
+          icon: Icon(Icons.done_rounded),
+          onPressed: submit,
+        ),
+      ],
+      onSubmit: submit,
+      onCancel: close,
+    );
+  });
+}
+
+showSetOSAccount(
+  String id,
+  OverlayDialogManager dialogManager,
+) async {
+  final usernameController = TextEditingController();
+  final passwdController = TextEditingController();
+  var username = await bind.sessionGetOption(id: id, arg: 'os-username') ?? '';
+  var password = await bind.sessionGetOption(id: id, arg: 'os-password') ?? '';
+  usernameController.text = username;
+  passwdController.text = password;
+  dialogManager.show((setState, close) {
+    submit() {
+      final username = usernameController.text.trim();
+      final password = usernameController.text.trim();
+      bind.sessionPeerOption(id: id, name: 'os-username', value: username);
+      bind.sessionPeerOption(id: id, name: 'os-password', value: password);
+      close();
+    }
+
+    descWidget(String text) {
+      return Column(
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              text,
+              maxLines: 3,
+              softWrap: true,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 16),
+            ),
+          ),
+          Container(
+            height: 8,
+          ),
+        ],
+      );
+    }
+
+    return CustomAlertDialog(
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.password_rounded, color: MyTheme.accent),
+          Text(translate('OS Account')).paddingOnly(left: 10),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          descWidget(translate("os_account_desk_tip")),
+          DialogTextField(
+            title: translate(DialogTextField.kUsernameTitle),
+            controller: usernameController,
+            prefixIcon: DialogTextField.kUsernameIcon,
+            errorText: null,
+          ),
+          PasswordWidget(controller: passwdController),
+        ],
+      ),
+      actions: [
+        dialogButton(
+          "Cancel",
+          icon: Icon(Icons.close_rounded),
+          onPressed: close,
+          isOutline: true,
+        ),
+        dialogButton(
+          "OK",
+          icon: Icon(Icons.done_rounded),
+          onPressed: submit,
+        ),
+      ],
+      onSubmit: submit,
+      onCancel: close,
+    );
+  });
+}
