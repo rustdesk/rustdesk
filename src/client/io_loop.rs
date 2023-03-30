@@ -816,6 +816,18 @@ impl<T: InvokeUiSession> Remote<T> {
         }
     }
 
+    fn contains_key_frame(vf: &VideoFrame) -> bool {
+        match &vf.union {
+            Some(vf) => match vf {
+                video_frame::Union::Vp9s(f) => f.frames.iter().any(|e| e.key),
+                video_frame::Union::H264s(f) => f.frames.iter().any(|e| e.key),
+                video_frame::Union::H265s(f) => f.frames.iter().any(|e| e.key),
+                _ => false,
+            },
+            None => false,
+        }
+    }
+
     async fn handle_msg_from_peer(&mut self, data: &[u8], peer: &mut Stream) -> bool {
         if let Ok(msg_in) = Message::parse_from_bytes(&data) {
             match msg_in.union {
@@ -834,8 +846,15 @@ impl<T: InvokeUiSession> Remote<T> {
                             ..Default::default()
                         })
                     };
-                    self.video_queue.force_push(vf);
-                    self.video_sender.send(MediaData::VideoFrame).ok();
+                    if Self::contains_key_frame(&vf) {
+                        while let Some(_) = self.video_queue.pop() {}
+                        self.video_sender
+                            .send(MediaData::VideoFrame(Box::new(vf)))
+                            .ok();
+                    } else {
+                        self.video_queue.force_push(vf);
+                        self.video_sender.send(MediaData::VideoQueue).ok();
+                    }
                 }
                 Some(message::Union::Hash(hash)) => {
                     self.handler
@@ -1222,7 +1241,9 @@ impl<T: InvokeUiSession> Remote<T> {
                 }
                 Some(message::Union::AudioFrame(frame)) => {
                     if !self.handler.lc.read().unwrap().disable_audio.v {
-                        self.audio_sender.send(MediaData::AudioFrame(frame)).ok();
+                        self.audio_sender
+                            .send(MediaData::AudioFrame(Box::new(frame)))
+                            .ok();
                     }
                 }
                 Some(message::Union::FileAction(action)) => match action.union {

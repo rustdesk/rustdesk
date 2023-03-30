@@ -1661,8 +1661,9 @@ impl LoginConfigHandler {
 
 /// Media data.
 pub enum MediaData {
-    VideoFrame,
-    AudioFrame(AudioFrame),
+    VideoQueue,
+    VideoFrame(Box<VideoFrame>),
+    AudioFrame(Box<AudioFrame>),
     AudioFormat(AudioFormat),
     Reset,
     RecordScreen(bool, i32, i32, String),
@@ -1692,7 +1693,12 @@ where
         loop {
             if let Ok(data) = video_receiver.recv() {
                 match data {
-                    MediaData::VideoFrame => {
+                    MediaData::VideoFrame(vf) => {
+                        if let Ok(true) = video_handler.handle_frame(*vf) {
+                            video_callback(&mut video_handler.rgb);
+                        }
+                    }
+                    MediaData::VideoQueue => {
                         if let Some(vf) = video_queue.pop() {
                             if let Ok(true) = video_handler.handle_frame(vf) {
                                 video_callback(&mut video_handler.rgb);
@@ -1727,7 +1733,7 @@ pub fn start_audio_thread() -> MediaSender {
             if let Ok(data) = audio_receiver.recv() {
                 match data {
                     MediaData::AudioFrame(af) => {
-                        audio_handler.handle_frame(af);
+                        audio_handler.handle_frame(*af);
                     }
                     MediaData::AudioFormat(f) => {
                         log::debug!("recved audio format, sample rate={}", f.sample_rate);
