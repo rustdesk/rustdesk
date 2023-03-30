@@ -128,11 +128,6 @@ impl DesktopManager {
             seat0_username = seat0_values[1].clone();
             seat0_display_server = get_display_server_of_session(&seat0_values[0]);
         }
-        println!(
-            "REMOVE ME ================================== DesktopManager: {:?}, display server: {}",
-            &seat0_values, &seat0_display_server
-        );
-
         Self {
             seat0_username,
             seat0_display_server,
