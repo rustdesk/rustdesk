@@ -507,6 +507,10 @@ _connectDialog(
       final osPassword = osPasswordController?.text.trim() ?? '';
       final password = passwordController?.text.trim() ?? '';
       if (passwordController != null && password.isEmpty) return;
+      if (rememberAccount) {
+        bind.sessionPeerOption(id: id, name: 'os-username', value: osUsername);
+        bind.sessionPeerOption(id: id, name: 'os-password', value: osPassword);
+      }
       gFFI.login(
         osUsername,
         osPassword,
