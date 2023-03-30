@@ -1154,25 +1154,32 @@ class AndroidPermissionManager {
   }
 }
 
+// TODO move this to mobile/widgets.
+// Used only for mobile, pages remote, settings, dialog
+// TODO remove argument contentPadding, it’s not used, getToggle() has not
 RadioListTile<T> getRadio<T>(
     String name, T toValue, T curValue, void Function(T?) onChange,
     {EdgeInsetsGeometry? contentPadding}) {
   return RadioListTile<T>(
-    contentPadding: contentPadding,
+    contentPadding: contentPadding ?? EdgeInsets.zero,
+    visualDensity: VisualDensity.compact,
     controlAffinity: ListTileControlAffinity.trailing,
     title: Text(translate(name)),
     value: toValue,
     groupValue: curValue,
     onChanged: onChange,
-    dense: true,
   );
 }
 
+// TODO move this to mobile/widgets.
+// Used only for mobile, pages remote, settings, dialog
 CheckboxListTile getToggle(
     String id, void Function(void Function()) setState, option, name,
     {FFI? ffi}) {
   final opt = bind.sessionGetToggleOptionSync(id: id, arg: option);
   return CheckboxListTile(
+      contentPadding: EdgeInsets.zero,
+      visualDensity: VisualDensity.compact,
       value: opt,
       onChanged: (v) {
         setState(() {
@@ -1182,7 +1189,6 @@ CheckboxListTile getToggle(
           (ffi ?? gFFI).qualityMonitorModel.checkShowQualityMonitor(id);
         }
       },
-      dense: true,
       title: Text(translate(name)));
 }
 
