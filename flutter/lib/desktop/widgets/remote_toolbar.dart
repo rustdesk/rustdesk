@@ -689,6 +689,26 @@ class _ControlMenu extends StatelessWidget {
         close();
       }
 
+      descWidget(String text) {
+        return Column(
+          children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                text,
+                maxLines: 3,
+                softWrap: true,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 16),
+              ),
+            ),
+            Container(
+              height: 8,
+            ),
+          ],
+        );
+      }
+
       return CustomAlertDialog(
         title: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -700,6 +720,7 @@ class _ControlMenu extends StatelessWidget {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            descWidget(translate("os_account_desk_tip")),
             DialogTextField(
               title: translate(DialogTextField.kUsernameTitle),
               controller: usernameController,

@@ -225,20 +225,16 @@ class _ConnectionPageState extends State<ConnectionPage>
                 children: [
                   Button(
                     isOutline: true,
-                    onTap: () {
-                      onConnect(isFileTransfer: true);
-                    },
+                    onTap: () => enterUserLoginAndPasswordDialog(
+                      'fdsfd',
+                      gFFI.dialogManager,
+                    ),
                     text: "Transfer File",
                   ),
                   const SizedBox(
                     width: 17,
                   ),
-                  Button(
-                      onTap: () => enterUserLoginAndPasswordDialog(
-                            'fdsfd',
-                            gFFI.dialogManager,
-                          ),
-                      text: "Connect"),
+                  Button(onTap: onConnect, text: "Connect"),
                 ],
               ),
             )

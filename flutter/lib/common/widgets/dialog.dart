@@ -503,11 +503,6 @@ _connectDialog(
     }
 
     submit() {
-      // to-do:
-      // username and password are about remote OS account.
-      // If the remote side is headless.
-      // The client side should login to remote OS account, to enable X desktop session.
-      // `username` and `password` will be used in the near future.
       final osUsername = osUsernameController?.text.trim() ?? '';
       final osPassword = osPasswordController?.text.trim() ?? '';
       final password = passwordController?.text.trim() ?? '';
@@ -565,7 +560,7 @@ _connectDialog(
       }
       return Column(
         children: [
-          descWidget(translate('login_linux_tooltip_tip')),
+          descWidget(translate('login_linux_tip')),
           DialogTextField(
             title: translate(DialogTextField.kUsernameTitle),
             controller: osUsernameController,
