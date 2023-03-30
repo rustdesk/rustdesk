@@ -548,19 +548,39 @@ class _RemotePageState extends State<RemotePage> {
       more.add(PopupMenuItem<String>(
           child: Text(translate('Refresh')), value: 'refresh'));
     }
-    more.add(PopupMenuItem<String>(
-        child: Row(
-            children: ([
-          Text(translate('OS Password')),
-          TextButton(
-            style: flatButtonStyle,
-            onPressed: () {
-              showSetOSPassword(id, false, gFFI.dialogManager);
-            },
-            child: Icon(Icons.edit, color: MyTheme.accent),
-          )
-        ])),
-        value: 'enter_os_password'));
+    if (gFFI.ffiModel.pi.is_headless) {
+      more.add(
+        PopupMenuItem<String>(
+            child: Row(
+                children: ([
+              Text(translate('OS Account')),
+              TextButton(
+                style: flatButtonStyle,
+                onPressed: () {
+                  showSetOSAccount(id, gFFI.dialogManager);
+                },
+                child: Icon(Icons.edit, color: MyTheme.accent),
+              )
+            ])),
+            value: 'enter_os_account'),
+      );
+    } else {
+      more.add(
+        PopupMenuItem<String>(
+            child: Row(
+                children: ([
+              Text(translate('OS Password')),
+              TextButton(
+                style: flatButtonStyle,
+                onPressed: () {
+                  showSetOSPassword(id, false, gFFI.dialogManager);
+                },
+                child: Icon(Icons.edit, color: MyTheme.accent),
+              )
+            ])),
+            value: 'enter_os_password'),
+      );
+    }
     if (!isWebDesktop) {
       if (perms['keyboard'] != false && perms['clipboard'] != false) {
         more.add(PopupMenuItem<String>(
@@ -657,6 +677,8 @@ class _RemotePageState extends State<RemotePage> {
         } else {
           showSetOSPassword(id, true, gFFI.dialogManager);
         }
+      } else if (value == 'enter_os_account') {
+        showSetOSAccount(id, gFFI.dialogManager);
       } else if (value == 'reset_canvas') {
         gFFI.cursorModel.reset();
       } else if (value == 'restart') {
@@ -1069,50 +1091,6 @@ void showOptions(
           children: displays + radios + toggles + more),
     );
   }, clickMaskDismiss: true, backDismiss: true);
-}
-
-void showSetOSPassword(
-    String id, bool login, OverlayDialogManager dialogManager) async {
-  final controller = TextEditingController();
-  var password = await bind.sessionGetOption(id: id, arg: "os-password") ?? "";
-  var autoLogin = await bind.sessionGetOption(id: id, arg: "auto-login") != "";
-  controller.text = password;
-  dialogManager.show((setState, close) {
-    return CustomAlertDialog(
-        title: Text(translate('OS Password')),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          PasswordWidget(controller: controller),
-          CheckboxListTile(
-            contentPadding: const EdgeInsets.all(0),
-            dense: true,
-            controlAffinity: ListTileControlAffinity.leading,
-            title: Text(
-              translate('Auto Login'),
-            ),
-            value: autoLogin,
-            onChanged: (v) {
-              if (v == null) return;
-              setState(() => autoLogin = v);
-            },
-          ),
-        ]),
-        actions: [
-          dialogButton('Cancel', onPressed: close, isOutline: true),
-          dialogButton(
-            'OK',
-            onPressed: () {
-              var text = controller.text.trim();
-              bind.sessionPeerOption(id: id, name: "os-password", value: text);
-              bind.sessionPeerOption(
-                  id: id, name: "auto-login", value: autoLogin ? 'Y' : '');
-              if (text != "" && login) {
-                bind.sessionInputOsPassword(id: id, value: text);
-              }
-              close();
-            },
-          ),
-        ]);
-  });
 }
 
 void sendPrompt(bool isMac, String key) {
