@@ -21,9 +21,6 @@ use std::{
 
 type Xdo = *const c_void;
 
-pub const ENV_DESKTOP_PROTOCAL_WAYLAND: &str = "wayland";
-pub const ENV_DESKTOP_PROTOCAL_X11: &str = "x11";
-
 pub const PA_SAMPLE_RATE: u32 = 48000;
 static mut UNMODIFIED: bool = true;
 
@@ -401,12 +398,6 @@ pub fn get_active_user_id_name() -> (String, String) {
 #[inline]
 pub fn get_active_userid() -> String {
     get_values_of_seat0(&[1])[0].clone()
-}
-
-#[inline]
-pub fn is_gdm_user(username: &str) -> bool {
-    username == "gdm"
-    // || username == "lightgdm"
 }
 
 fn get_cm() -> bool {
@@ -809,7 +800,7 @@ mod desktop {
 
         #[inline]
         pub fn is_login_wayland(&self) -> bool {
-            super::is_gdm_user(&self.username) && self.protocal == ENV_DESKTOP_PROTOCAL_WAYLAND
+            super::is_gdm_user(&self.username) && self.protocal == DISPLAY_SERVER_WAYLAND
         }
 
         #[inline]
@@ -961,6 +952,7 @@ mod desktop {
             if self.is_login_wayland() {
                 self.display = "".to_owned();
                 self.xauth = "".to_owned();
+                self.is_rustdesk_subprocess = false;
                 return;
             }
 

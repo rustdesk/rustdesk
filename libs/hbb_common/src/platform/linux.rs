@@ -35,6 +35,7 @@ pub fn is_gdm_user(username: &str) -> bool {
     // || username == "lightgdm"
 }
 
+<<<<<<< HEAD
 #[inline]
 pub fn is_desktop_wayland() -> bool {
     get_display_server() == DISPLAY_SERVER_WAYLAND
@@ -43,12 +44,23 @@ pub fn is_desktop_wayland() -> bool {
 #[inline]
 pub fn is_x11_or_headless() -> bool {
     !is_desktop_wayland()
+=======
+pub fn is_x11_or_headless() -> bool {
+    let (username, display_server) = get_user_and_display_server();
+    display_server == DISPLAY_SERVER_WAYLAND && is_gdm_user(&username)
+        || display_server != DISPLAY_SERVER_WAYLAND
+}
+
+pub fn is_desktop_wayland() -> bool {
+    let (username, display_server) = get_user_and_display_server();
+    display_server == DISPLAY_SERVER_WAYLAND && !is_gdm_user(&username)
+>>>>>>> temp commit
 }
 
 // -1
 const INVALID_SESSION: &str = "4294967295";
 
-pub fn get_display_server() -> String {
+pub fn get_user_and_display_server() -> (String, String) {
     let mut session = get_values_of_seat0(&[0])[0].clone();
     if session.is_empty() {
         // loginctl has not given the expected output.  try something else.
@@ -63,11 +75,17 @@ pub fn get_display_server() -> String {
             }
         }
     }
+<<<<<<< HEAD
     if session.is_empty() {
+=======
+
+    let display_server = if session.is_empty() {
+>>>>>>> temp commit
         "".to_owned()
     } else {
         get_display_server_of_session(&session)
-    }
+    };
+    (session, display_server)
 }
 
 pub fn get_display_server_of_session(session: &str) -> String {
