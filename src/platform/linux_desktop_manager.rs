@@ -123,15 +123,15 @@ impl DesktopManager {
     pub fn new() -> Self {
         let mut seat0_username = "".to_owned();
         let mut seat0_display_server = "".to_owned();
-        let seat0_values = get_values_of_seat0(&[0, 1, 2]);
-        println!(
-            "REMOVE ME ================================== DesktopManager: {:?}",
-            &seat0_values
-        );
+        let seat0_values = get_values_of_seat0(&[0, 2]);
         if !seat0_values[0].is_empty() {
-            seat0_username = seat0_values[2].clone();
-            seat0_display_server = get_display_server_of_session(&seat0_values[1]);
+            seat0_username = seat0_values[1].clone();
+            seat0_display_server = get_display_server_of_session(&seat0_values[0]);
         }
+        println!(
+            "REMOVE ME ================================== DesktopManager: {:?}, display server: {}",
+            &seat0_values, &seat0_display_server
+        );
 
         Self {
             seat0_username,
@@ -144,7 +144,7 @@ impl DesktopManager {
 
     fn get_supported_display_seat0_username(&self) -> Option<String> {
         if is_gdm_user(&self.seat0_username)
-            && self.seat0_display_server == ENV_DESKTOP_PROTOCAL_WAYLAND
+            && self.seat0_display_server == DISPLAY_SERVER_WAYLAND
         {
             None
         } else {

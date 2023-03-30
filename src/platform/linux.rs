@@ -21,9 +21,6 @@ use std::{
 
 type Xdo = *const c_void;
 
-pub const ENV_DESKTOP_PROTOCAL_WAYLAND: &str = "wayland";
-pub const ENV_DESKTOP_PROTOCAL_X11: &str = "x11";
-
 pub const PA_SAMPLE_RATE: u32 = 48000;
 static mut UNMODIFIED: bool = true;
 
@@ -210,12 +207,15 @@ fn stop_server(server: &mut Option<Child>) {
     }
 }
 
-#[inline]
 fn set_x11_env(desktop: &Desktop) {
     log::info!("DISPLAY: {}", desktop.display);
     log::info!("XAUTHORITY: {}", desktop.xauth);
-    std::env::set_var("XAUTHORITY", &desktop.xauth);
-    std::env::set_var("DISPLAY", &desktop.display);
+    if !desktop.display.is_empty() {
+        std::env::set_var("DISPLAY", &desktop.display);
+    }
+    if !desktop.xauth.is_empty() {
+        std::env::set_var("XAUTHORITY", &desktop.xauth);
+    }
 }
 
 #[inline]
@@ -401,12 +401,6 @@ pub fn get_active_userid() -> String {
     get_values_of_seat0(&[1])[0].clone()
 }
 
-#[inline]
-pub fn is_gdm_user(username: &str) -> bool {
-    username == "gdm"
-    // || username == "lightgdm"
-}
-
 fn get_cm() -> bool {
     if let Ok(output) = Command::new("ps").args(vec!["aux"]).output() {
         for line in String::from_utf8_lossy(&output.stdout).lines() {
@@ -435,8 +429,7 @@ pub fn is_login_wayland() -> bool {
 
 #[inline]
 pub fn current_is_wayland() -> bool {
-    let dtype = get_display_server();
-    return ENV_DESKTOP_PROTOCAL_WAYLAND == dtype && unsafe { UNMODIFIED };
+    return is_desktop_wayland() && unsafe { UNMODIFIED };
 }
 
 // to-do: test the other display manager
@@ -779,12 +772,12 @@ mod desktop {
     impl Desktop {
         #[inline]
         pub fn is_wayland(&self) -> bool {
-            self.protocal == ENV_DESKTOP_PROTOCAL_WAYLAND
+            self.protocal == DISPLAY_SERVER_WAYLAND
         }
 
         #[inline]
         pub fn is_login_wayland(&self) -> bool {
-            super::is_gdm_user(&self.username) && self.protocal == ENV_DESKTOP_PROTOCAL_WAYLAND
+            super::is_gdm_user(&self.username) && self.protocal == DISPLAY_SERVER_WAYLAND
         }
 
         #[inline]
@@ -898,6 +891,13 @@ mod desktop {
             self.uid = seat0_values[1].clone();
             self.username = seat0_values[2].clone();
             self.protocal = get_display_server_of_session(&self.sid).into();
+            if self.is_login_wayland() {
+                self.display = "".to_owned();
+                self.xauth = "".to_owned();
+                self.is_rustdesk_subprocess = false;
+                return;
+            }
+
             self.get_display();
             self.get_xauth();
             self.set_is_subprocess();

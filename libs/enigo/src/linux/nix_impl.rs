@@ -115,7 +115,7 @@ impl Enigo {
 
 impl Default for Enigo {
     fn default() -> Self {
-        let is_x11 = "x11" == hbb_common::platform::linux::get_display_server();
+        let is_x11 = hbb_common::platform::linux::is_x11_or_headless();
         Self {
             is_x11,
             tfc: if is_x11 {

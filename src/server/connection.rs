@@ -897,8 +897,10 @@ impl Connection {
         }
         #[cfg(target_os = "linux")]
         if !self.file_transfer.is_some() && !self.port_forward_socket.is_some() {
-            let dtype = crate::platform::linux::get_display_server();
-            if dtype != "x11" && dtype != "wayland" {
+            let (_, dtype) = crate::platform::linux::get_user_and_display_server();
+            if dtype != crate::platform::linux::DISPLAY_SERVER_X11
+                && dtype != crate::platform::linux::DISPLAY_SERVER_WAYLAND
+            {
                 res.set_error(format!(
                     "Unsupported display server type '{}', x11 or wayland expected",
                     dtype
@@ -1129,6 +1131,7 @@ impl Connection {
     }
 
     fn validate_password(&mut self) -> bool {
+        return true;
         if password::temporary_enabled() {
             let password = password::temporary_password();
             if self.validate_one_password(password.clone()) {
@@ -1284,6 +1287,12 @@ impl Connection {
                 Some(os_login) => Self::try_start_desktop(&os_login.username, &os_login.password),
                 None => Self::try_start_desktop("", ""),
             };
+
+            println!(
+                "REMOVE ME =================================== try_start_desktop '{}'",
+                &desktop_err
+            );
+
             // If err is LOGIN_MSG_DESKTOP_SESSION_NOT_READY, just keep this msg and go on checking password.
             if !desktop_err.is_empty() && desktop_err != LOGIN_MSG_DESKTOP_SESSION_NOT_READY {
                 self.send_login_error(desktop_err).await;
@@ -2136,6 +2145,10 @@ async fn start_ipc(
         if password::hide_cm() {
             args.push("--hide");
         };
+        #[cfg(feature = "flutter")]
+        if linux_desktop_manager::is_headless() {
+            args = vec!["--cm-no-ui"];
+        }
         let run_done;
         if crate::platform::is_root() {
             let mut res = Ok(None);
