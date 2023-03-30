@@ -264,12 +264,6 @@ jobs:
               os: macos-latest,
               extra-build-args: "",
             }
-          - {
-              target: aarch64-apple-darwin,
-              arch: aarch64,
-              os: macos-latest,
-              extra-build-args: "",
-            }
     steps:
       - name: Checkout source code
         uses: actions/checkout@v3
