@@ -2165,6 +2165,8 @@ async fn start_ipc(
     mut rx_to_cm: mpsc::UnboundedReceiver<ipc::Data>,
     tx_from_cm: mpsc::UnboundedSender<ipc::Data>,
 ) -> ResultType<()> {
+    use hbb_common::platform::linux::run_cmds;
+
     loop {
         if crate::platform::is_prelogin() {
             break;
@@ -2179,8 +2181,21 @@ async fn start_ipc(
         if password::hide_cm() {
             args.push("--hide");
         };
+        #[cfg(not(feature = "flutter"))]
+        let user = None;
+        let mut user = None;
         #[cfg(feature = "flutter")]
         if linux_desktop_manager::is_headless() {
+            let username = linux_desktop_manager::get_username();
+            let uid = {
+                let output = run_cmds(format!("id -u {}", &username))?;
+                let output = output.trim();
+                if output.is_empty() || !output.parse::<i32>().is_ok() {
+                    bail!("Invalid username {}", &username);
+                }
+                output.to_string()
+            };
+            user = Some((username, uid));
             args = vec!["--cm-no-ui"];
         }
         let run_done;
@@ -2195,7 +2210,7 @@ async fn start_ipc(
                 #[cfg(target_os = "linux")]
                 {
                     log::debug!("Start cm");
-                    res = crate::platform::run_as_user(args.clone(), None);
+                    res = crate::platform::run_as_user(args.clone(), user);
                 }
                 if res.is_ok() {
                     break;
