@@ -639,7 +639,7 @@ class _ControlMenu extends StatelessWidget {
         ffi: ffi,
         menuChildren: [
           requestElevation(),
-          osPassword(),
+          ffi.ffiModel.pi.is_headless ? osAccount() : osPassword(),
           transferFile(context),
           tcpTunneling(context),
           note(),
@@ -660,6 +660,72 @@ class _ControlMenu extends StatelessWidget {
         child: Text(translate('Request Elevation')),
         ffi: ffi,
         onPressed: () => showRequestElevationDialog(id, ffi.dialogManager));
+  }
+
+  osAccount() {
+    return _MenuItemButton(
+        child: Text(translate('OS Account')),
+        trailingIcon: Transform.scale(scale: 0.8, child: Icon(Icons.edit)),
+        ffi: ffi,
+        onPressed: () => _showSetOSAccount(id, false, ffi.dialogManager));
+  }
+
+  _showSetOSAccount(
+      String id, bool login, OverlayDialogManager dialogManager) async {
+    final usernameController = TextEditingController();
+    final passwdController = TextEditingController();
+    var username =
+        await bind.sessionGetOption(id: id, arg: 'os-username') ?? '';
+    var password =
+        await bind.sessionGetOption(id: id, arg: 'os-password') ?? '';
+    usernameController.text = username;
+    passwdController.text = password;
+    dialogManager.show((setState, close) {
+      submit() {
+        final username = usernameController.text.trim();
+        final password = usernameController.text.trim();
+        bind.sessionPeerOption(id: id, name: 'os-username', value: username);
+        bind.sessionPeerOption(id: id, name: 'os-password', value: password);
+        close();
+      }
+
+      return CustomAlertDialog(
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.password_rounded, color: MyTheme.accent),
+            Text(translate('OS Password')).paddingOnly(left: 10),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DialogTextField(
+              title: translate(DialogTextField.kUsernameTitle),
+              controller: usernameController,
+              prefixIcon: DialogTextField.kUsernameIcon,
+              errorText: null,
+            ),
+            PasswordWidget(controller: passwdController),
+          ],
+        ),
+        actions: [
+          dialogButton(
+            "Cancel",
+            icon: Icon(Icons.close_rounded),
+            onPressed: close,
+            isOutline: true,
+          ),
+          dialogButton(
+            "OK",
+            icon: Icon(Icons.done_rounded),
+            onPressed: submit,
+          ),
+        ],
+        onSubmit: submit,
+        onCancel: close,
+      );
+    });
   }
 
   osPassword() {

@@ -3,6 +3,8 @@ use super::{input_service::*, *};
 use crate::clipboard_file::*;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::common::update_clipboard;
+#[cfg(target_os = "linux")]
+use crate::platform::linux_desktop_manager;
 #[cfg(windows)]
 use crate::portable_service::client as portable_client;
 use crate::{
@@ -866,6 +868,9 @@ impl Connection {
             if crate::platform::current_is_wayland() {
                 platform_additions.insert("is_wayland".into(), json!(true));
             }
+            if linux_desktop_manager::is_headless() {
+                platform_additions.insert("headless".into(), json!(true));
+            }
             if !platform_additions.is_empty() {
                 pi.platform_additions =
                     serde_json::to_string(&platform_additions).unwrap_or("".into());
@@ -1074,7 +1079,7 @@ impl Connection {
     fn try_start_desktop(_username: &str, _passsword: &str) -> String {
         #[cfg(target_os = "linux")]
         if _username.is_empty() {
-            let username = crate::platform::linux_desktop_manager::get_username();
+            let username = linux_desktop_manager::get_username();
             if username.is_empty() {
                 LOGIN_MSG_XSESSION_NOT_READY
             } else {
@@ -1082,8 +1087,7 @@ impl Connection {
             }
             .to_owned()
         } else {
-            match crate::platform::linux_desktop_manager::try_start_x_session(_username, _passsword)
-            {
+            match linux_desktop_manager::try_start_x_session(_username, _passsword) {
                 Ok((username, x11_ready)) => {
                     if x11_ready {
                         if _username != username {

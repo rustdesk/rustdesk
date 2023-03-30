@@ -1725,6 +1725,7 @@ class PeerInfo {
   Map<String, dynamic> platform_additions = {};
 
   bool get is_wayland => platform_additions['is_wayland'] == true;
+  bool get is_headless => platform_additions['headless'] == true;
 }
 
 const canvasKey = 'canvas';
