@@ -1991,7 +1991,7 @@ pub async fn handle_hash(
     lc: Arc<RwLock<LoginConfigHandler>>,
     password_preset: &str,
     hash: Hash,
-    _interface: &impl Interface,
+    interface: &impl Interface,
     peer: &mut Stream,
 ) {
     lc.write().unwrap().hash = hash.clone();
@@ -2015,22 +2015,21 @@ pub async fn handle_hash(
     if password.is_empty() {
         password = lc.read().unwrap().config.password.clone();
     }
-    if password.is_empty() {
+    let password = if password.is_empty() {
         // login without password, the remote side can click accept
-        send_login(lc.clone(), "".to_owned(), "".to_owned(), Vec::new(), peer).await;
+        interface.msgbox("input-password", "Password Required", "", "");
+        Vec::new()
     } else {
         let mut hasher = Sha256::new();
         hasher.update(&password);
         hasher.update(&hash.challenge);
-        send_login(
-            lc.clone(),
-            "".to_owned(),
-            "".to_owned(),
-            hasher.finalize()[..].into(),
-            peer,
-        )
-        .await;
-    }
+        hasher.finalize()[..].into()
+    };
+
+    let os_username = lc.read().unwrap().get_option("os-username");
+    let os_password = lc.read().unwrap().get_option("os-password");
+
+    send_login(lc.clone(), os_username, os_password, password, peer).await;
     lc.write().unwrap().hash = hash;
 }
 
