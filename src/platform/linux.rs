@@ -325,7 +325,8 @@ pub fn start_os_service() {
         desktop.refresh();
 
         // Duplicate logic here with should_start_server
-        if desktop.username == "root" || !desktop.is_wayland() {
+        // Login wayland will try to start a headless --server.
+        if desktop.username == "root" || !desktop.is_wayland() || desktop.is_login_wayland() {
             // try kill subprocess "--server"
             stop_server(&mut user_server);
             // try start subprocess "--server"
@@ -342,26 +343,24 @@ pub fn start_os_service() {
                 start_server(None, &mut server);
             }
         } else if desktop.username != "" {
-            if desktop.username != "gdm" {
-                // try kill subprocess "--server"
-                stop_server(&mut server);
+            // try kill subprocess "--server"
+            stop_server(&mut server);
 
-                // try start subprocess "--server"
-                if should_start_server(
-                    false,
-                    &mut uid,
-                    &desktop,
-                    &mut cm0,
-                    &mut last_restart,
+            // try start subprocess "--server"
+            if should_start_server(
+                false,
+                &mut uid,
+                &desktop,
+                &mut cm0,
+                &mut last_restart,
+                &mut user_server,
+            ) {
+                stop_xorg_subprocess();
+                force_stop_server();
+                start_server(
+                    Some((desktop.uid.clone(), desktop.username.clone())),
                     &mut user_server,
-                ) {
-                    stop_xorg_subprocess();
-                    force_stop_server();
-                    start_server(
-                        Some((desktop.uid.clone(), desktop.username.clone())),
-                        &mut user_server,
-                    );
-                }
+                );
             }
         } else {
             force_stop_server();
@@ -400,6 +399,12 @@ pub fn get_active_user_id_name() -> (String, String) {
 #[inline]
 pub fn get_active_userid() -> String {
     get_values_of_seat0(&[1])[0].clone()
+}
+
+#[inline]
+pub fn is_gdm_user(username: &str) -> bool {
+    username == "gdm"
+    // || username == "lightgdm"
 }
 
 fn get_cm() -> bool {
@@ -775,6 +780,11 @@ mod desktop {
         #[inline]
         pub fn is_wayland(&self) -> bool {
             self.protocal == ENV_DESKTOP_PROTOCAL_WAYLAND
+        }
+
+        #[inline]
+        pub fn is_login_wayland(&self) -> bool {
+            super::is_gdm_user(&self.username) && self.protocal == ENV_DESKTOP_PROTOCAL_WAYLAND
         }
 
         #[inline]

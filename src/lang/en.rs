@@ -56,7 +56,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("show_monitors_tip", "Show monitors in toolbar."),
         ("enter_rustdesk_passwd_tip", "Enter RustDesk password"),
         ("remember_rustdesk_passwd_tip", "Remember RustDesk password"),
-        ("login_linux_tip", "Remote desktop is unready. Please \n  1. Login on remote side and then try again\n  2. Or input remote account to login and start a X desktop session"),
+        ("login_linux_tip", "You need to login to remote Linux account to enable a X desktop session"),
         ("verify_rustdesk_password_tip", "Veryfy RustDesk password"),
         ("remember_account_tip", "Remember this account"),
         ("remember_password_tip", "Remember password"),
