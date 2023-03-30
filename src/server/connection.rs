@@ -18,6 +18,8 @@ use crate::{
 use crate::{common::DEVICE_NAME, flutter::connection_manager::start_channel};
 use crate::{ipc, VERSION};
 use cidr_utils::cidr::IpCidr;
+#[cfg(all(target_os = "linux", feature = "flutter"))]
+use hbb_common::platform::linux::run_cmds;
 use hbb_common::{
     config::Config,
     fs,
@@ -146,6 +148,8 @@ pub struct Connection {
     voice_call_request_timestamp: Option<NonZeroI64>,
     audio_input_device_before_voice_call: Option<String>,
     options_in_login: Option<OptionMessage>,
+    rx_cm_stream_ready: mpsc::Receiver<()>,
+    tx_desktop_ready: mpsc::Sender<()>,
 }
 
 impl ConnInner {
@@ -206,6 +210,8 @@ impl Connection {
         let (tx_video, mut rx_video) = mpsc::unbounded_channel::<(Instant, Arc<Message>)>();
         let (tx_input, _rx_input) = std_mpsc::channel();
         let mut hbbs_rx = crate::hbbs_http::sync::signal_receiver();
+        let (tx_cm_stream_ready, rx_cm_stream_ready) = mpsc::channel(1);
+        let (tx_desktop_ready, rx_desktop_ready) = mpsc::channel(1);
 
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let tx_cloned = tx.clone();
@@ -257,10 +263,14 @@ impl Connection {
             voice_call_request_timestamp: None,
             audio_input_device_before_voice_call: None,
             options_in_login: None,
+            rx_cm_stream_ready,
+            tx_desktop_ready,
         };
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         tokio::spawn(async move {
-            if let Err(err) = start_ipc(rx_to_cm, tx_from_cm).await {
+            if let Err(err) =
+                start_ipc(rx_to_cm, tx_from_cm, rx_desktop_ready, tx_cm_stream_ready).await
+            {
                 log::error!("ipc to connection manager exit: {}", err);
             }
         });
@@ -1287,6 +1297,9 @@ impl Connection {
                 Some(os_login) => Self::try_start_desktop(&os_login.username, &os_login.password),
                 None => Self::try_start_desktop("", ""),
             };
+            #[cfg(target_os = "linux")]
+            let is_headless = linux_desktop_manager::is_headless();
+            let wait_ipc_timeout = 10_000;
 
             println!(
                 "REMOVE ME =================================== try_start_desktop '{}'",
@@ -1318,6 +1331,11 @@ impl Connection {
                 return false;
             } else if self.is_recent_session() {
                 if desktop_err.is_empty() {
+                    #[cfg(target_os = "linux")]
+                    if is_headless {
+                        self.tx_desktop_ready.send(()).await.ok();
+                        let _res = timeout(wait_ipc_timeout, self.rx_cm_stream_ready.recv()).await;
+                    }
                     self.try_start_cm(lr.my_id, lr.my_name, true);
                     self.send_logon_response().await;
                     if self.port_forward_socket.is_some() {
@@ -1385,6 +1403,12 @@ impl Connection {
                         LOGIN_FAILURES.lock().unwrap().remove(&self.ip);
                     }
                     if desktop_err.is_empty() {
+                        #[cfg(target_os = "linux")]
+                        if is_headless {
+                            self.tx_desktop_ready.send(()).await.ok();
+                            let _res =
+                                timeout(wait_ipc_timeout, self.rx_cm_stream_ready.recv()).await;
+                        }
                         self.send_logon_response().await;
                         self.try_start_cm(lr.my_id, lr.my_name, true);
                         if self.port_forward_socket.is_some() {
@@ -2130,9 +2154,9 @@ pub fn insert_switch_sides_uuid(id: String, uuid: uuid::Uuid) {
 async fn start_ipc(
     mut rx_to_cm: mpsc::UnboundedReceiver<ipc::Data>,
     tx_from_cm: mpsc::UnboundedSender<ipc::Data>,
+    mut _rx_desktop_ready: mpsc::Receiver<()>,
+    tx_stream_ready: mpsc::Sender<()>,
 ) -> ResultType<()> {
-    use hbb_common::platform::linux::run_cmds;
-
     loop {
         if crate::platform::is_prelogin() {
             break;
@@ -2147,12 +2171,25 @@ async fn start_ipc(
         if password::hide_cm() {
             args.push("--hide");
         };
-        #[cfg(not(feature = "flutter"))]
+
+        #[cfg(all(target_os = "linux", not(feature = "flutter")))]
         let user = None;
+        #[cfg(all(target_os = "linux", feature = "flutter"))]
         let mut user = None;
-        #[cfg(feature = "flutter")]
+        #[cfg(all(target_os = "linux", feature = "flutter"))]
         if linux_desktop_manager::is_headless() {
-            let username = linux_desktop_manager::get_username();
+            let mut username = linux_desktop_manager::get_username();
+            loop {
+                if !username.is_empty() {
+                    break;
+                }
+                let _res = timeout(500, _rx_desktop_ready.recv()).await;
+                username = linux_desktop_manager::get_username();
+            }
+            println!(
+                "REMOVE ME =================================== headless username '{}' ",
+                &username
+            );
             let uid = {
                 let output = run_cmds(format!("id -u {}", &username))?;
                 let output = output.trim();
@@ -2162,6 +2199,10 @@ async fn start_ipc(
                 output.to_string()
             };
             user = Some((username, uid));
+            println!(
+                "REMOVE ME =================================== headless user '{:?}' ",
+                &user
+            );
             args = vec!["--cm-no-ui"];
         }
         let run_done;
@@ -2176,6 +2217,10 @@ async fn start_ipc(
                 #[cfg(target_os = "linux")]
                 {
                     log::debug!("Start cm");
+                    println!(
+                        "REMOVE ME =================================== start_ipc 222 '{}' ",
+                        linux_desktop_manager::is_headless()
+                    );
                     res = crate::platform::run_as_user(args.clone(), user.clone());
                 }
                 if res.is_ok() {
@@ -2190,6 +2235,10 @@ async fn start_ipc(
         } else {
             run_done = false;
         }
+        println!(
+            "REMOVE ME =================================== start_ipc 333 '{}' ",
+            run_done
+        );
         if !run_done {
             log::debug!("Start cm");
             super::CHILD_PROCESS
@@ -2208,6 +2257,8 @@ async fn start_ipc(
             bail!("Failed to connect to connection manager");
         }
     }
+
+    let _res = tx_stream_ready.send(()).await;
     let mut stream = stream.unwrap();
     loop {
         tokio::select! {
