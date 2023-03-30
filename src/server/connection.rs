@@ -58,12 +58,14 @@ lazy_static::lazy_static! {
 pub static CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 pub static MOUSE_MOVE_TIME: AtomicI64 = AtomicI64::new(0);
 
-pub const LOGIN_MSG_XDESKTOP_NOT_INITED: &str = "xdesktop env is not inited";
-pub const LOGIN_MSG_XSESSION_NOT_READY: &str = "xsession unready";
-pub const LOGIN_MSG_XSESSION_FAILED: &str = "xsession failed";
-pub const LOGIN_MSG_XSESSION_ANOTHER_USER_READTY: &str = "xsession another user login";
-pub const LOGIN_MSG_XSESSION_NOT_READY_PASSWORD_EMPTY: &str = "xsession unready, password empty";
-pub const LOGIN_MSG_XSESSION_NOT_READY_PASSWORD_WRONG: &str = "xsession unready, password wrong";
+pub const LOGIN_MSG_DESKTOP_NOT_INITED: &str = "Desktop env is not inited";
+pub const LOGIN_MSG_DESKTOP_SESSION_NOT_READY: &str = "Desktop session unready";
+pub const LOGIN_MSG_DESKTOP_XSESSION_FAILED: &str = "Desktop xsession failed";
+pub const LOGIN_MSG_DESKTOP_SESSION_ANOTHER_USER: &str = "Desktop session another user login";
+pub const LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_EMPTY: &str =
+    "Desktop session unready, password empty";
+pub const LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_WRONG: &str =
+    "Desktop session unready, password wrong";
 pub const LOGIN_MSG_PASSWORD_EMPTY: &str = "Empty Password";
 pub const LOGIN_MSG_PASSWORD_WRONG: &str = "Wrong Password";
 pub const LOGIN_MSG_OFFLINE: &str = "Offline";
@@ -1079,27 +1081,33 @@ impl Connection {
         if _username.is_empty() {
             let username = linux_desktop_manager::get_username();
             if username.is_empty() {
-                LOGIN_MSG_XSESSION_NOT_READY
+                LOGIN_MSG_DESKTOP_SESSION_NOT_READY
             } else {
                 ""
             }
             .to_owned()
         } else {
+            let username = linux_desktop_manager::get_username();
+            if username == _username {
+                // No need to verify password here.
+                return "".to_owned();
+            }
+
             match linux_desktop_manager::try_start_x_session(_username, _passsword) {
                 Ok((username, x11_ready)) => {
                     if x11_ready {
                         if _username != username {
-                            LOGIN_MSG_XSESSION_ANOTHER_USER_READTY.to_owned()
+                            LOGIN_MSG_DESKTOP_SESSION_ANOTHER_USER.to_owned()
                         } else {
                             "".to_owned()
                         }
                     } else {
-                        LOGIN_MSG_XSESSION_NOT_READY.to_owned()
+                        LOGIN_MSG_DESKTOP_SESSION_NOT_READY.to_owned()
                     }
                 }
                 Err(e) => {
                     log::error!("Failed to start xsession {}", e);
-                    LOGIN_MSG_XSESSION_FAILED.to_owned()
+                    LOGIN_MSG_DESKTOP_XSESSION_FAILED.to_owned()
                 }
             }
         }
@@ -1276,8 +1284,8 @@ impl Connection {
                 Some(os_login) => Self::try_start_desktop(&os_login.username, &os_login.password),
                 None => Self::try_start_desktop("", ""),
             };
-            // If err is LOGIN_MSG_XSESSION_NOT_READY, just keep this msg and go on checking password.
-            if !desktop_err.is_empty() && desktop_err != LOGIN_MSG_XSESSION_NOT_READY {
+            // If err is LOGIN_MSG_DESKTOP_SESSION_NOT_READY, just keep this msg and go on checking password.
+            if !desktop_err.is_empty() && desktop_err != LOGIN_MSG_DESKTOP_SESSION_NOT_READY {
                 self.send_login_error(desktop_err).await;
                 return true;
             }
@@ -1313,7 +1321,7 @@ impl Connection {
                 if desktop_err.is_empty() {
                     self.try_start_cm(lr.my_id, lr.my_name, false);
                 } else {
-                    self.send_login_error(LOGIN_MSG_XSESSION_NOT_READY_PASSWORD_EMPTY)
+                    self.send_login_error(LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_EMPTY)
                         .await;
                 }
             } else {
@@ -1360,7 +1368,7 @@ impl Connection {
                         self.send_login_error(LOGIN_MSG_PASSWORD_WRONG).await;
                         self.try_start_cm(lr.my_id, lr.my_name, false);
                     } else {
-                        self.send_login_error(LOGIN_MSG_XSESSION_NOT_READY_PASSWORD_WRONG)
+                        self.send_login_error(LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_WRONG)
                             .await;
                     }
                 } else {

@@ -262,7 +262,7 @@ function msgbox(type, title, content, link="", callback=null, height=180, width=
               else msgbox("connecting", "Connecting...", "Logging in...");
             }
         };
-    } else if (type == "xsession-login" || type == "xsession-re-login") {
+    } else if (type == "session-login" || type == "session-re-login") {
         callback = function (res) {
             if (!res) {
                 view.close();
@@ -274,7 +274,7 @@ function msgbox(type, title, content, link="", callback=null, height=180, width=
               else msgbox("connecting", "Connecting...", "Logging in...");
             }
         };
-    } else if (type.indexOf("xsession-login") >= 0) {
+    } else if (type.indexOf("session-login") >= 0) {
         callback = function (res) {
             if (!res) {
                 view.close();

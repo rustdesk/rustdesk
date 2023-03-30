@@ -108,7 +108,7 @@ fn line_values(indices: &[usize], line: &str) -> Vec<String> {
 pub fn get_values_of_seat0(indices: &[usize]) -> Vec<String> {
     if let Ok(output) = run_loginctl(None) {
         for line in String::from_utf8_lossy(&output.stdout).lines() {
-            if line.contains("seat0") {
+            if !line.contains("gdm") && line.contains("seat0") {
                 if let Some(sid) = line.split_whitespace().next() {
                     if is_active(sid) {
                         return line_values(indices, line);
@@ -119,10 +119,12 @@ pub fn get_values_of_seat0(indices: &[usize]) -> Vec<String> {
 
         // some case, there is no seat0 https://github.com/rustdesk/rustdesk/issues/73
         for line in String::from_utf8_lossy(&output.stdout).lines() {
-            if let Some(sid) = line.split_whitespace().next() {
-                let d = get_display_server_of_session(sid);
-                if is_active(sid) && d != "tty" {
-                    return line_values(indices, line);
+            if !line.contains("gdm") {
+                if let Some(sid) = line.split_whitespace().next() {
+                    let d = get_display_server_of_session(sid);
+                    if is_active(sid) && d != "tty" {
+                        return line_values(indices, line);
+                    }
                 }
             }
         }

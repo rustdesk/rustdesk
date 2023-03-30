@@ -1927,34 +1927,34 @@ pub fn handle_login_error(
         lc.write().unwrap().password = Default::default();
         interface.msgbox("re-input-password", err, "Do you want to enter again?", "");
         true
-    } else if err == crate::server::LOGIN_MSG_XSESSION_NOT_READY {
+    } else if err == crate::server::LOGIN_MSG_DESKTOP_SESSION_NOT_READY {
         interface.msgbox(
-            "xsession-login",
-            "xsession is unready",
+            "session-login",
+            "session is unready",
             "Input linux user/password",
             "",
         );
         true
-    } else if err == crate::server::LOGIN_MSG_XSESSION_FAILED {
+    } else if err == crate::server::LOGIN_MSG_DESKTOP_XSESSION_FAILED {
         interface.msgbox(
-            "xsession-re-login",
+            "session-re-login",
             "xsession username/password is wrong",
             "Do you want to enter again?",
             "",
         );
         true
-    } else if err == crate::server::LOGIN_MSG_XSESSION_NOT_READY_PASSWORD_EMPTY {
+    } else if err == crate::server::LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_EMPTY {
         interface.msgbox(
-            "xsession-login-password",
-            "xsession is unready",
+            "session-login-password",
+            "session is unready",
             "Input connection password and linux user/password",
             "",
         );
         true
-    } else if err == crate::server::LOGIN_MSG_XSESSION_NOT_READY_PASSWORD_WRONG {
+    } else if err == crate::server::LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_WRONG {
         interface.msgbox(
-            "xsession-login-re-password",
-            "xsession is unready and password is wrong",
+            "session-login-re-password",
+            "session is unready and password is wrong",
             "Do you want to enter again?",
             "",
         );
