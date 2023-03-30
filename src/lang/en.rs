@@ -56,10 +56,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("show_monitors_tip", "Show monitors in toolbar."),
         ("enter_rustdesk_passwd_tip", "Enter RustDesk password"),
         ("remember_rustdesk_passwd_tip", "Remember RustDesk password"),
-        ("login_linux_tip", "Login to remote Linux account"),
-        ("login_linux_tooltip_tip", "You need to login to remote Linux account to enable a X desktop session"),
+        ("login_linux_tip", "You need to login to remote Linux account to enable a X desktop session"),
         ("verify_rustdesk_password_tip", "Veryfy RustDesk password"),
         ("remember_account_tip", "Remember this account"),
         ("remember_password_tip", "Remember password"),
+        ("os_account_desk_tip", "This account is used to login the remote OS and enable the desktop session in headless"),
         ].iter().cloned().collect();
 }

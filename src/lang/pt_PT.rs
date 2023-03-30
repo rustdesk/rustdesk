@@ -68,7 +68,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Close", "Fechar"),
         ("Retry", "Tentar novamente"),
         ("OK", "Confirmar"),
-        ("remember_password_tip", "Palavra-chave Necessária"),
+        ("remember_password_tip", ""),
         ("Please enter your password", "Por favor introduza a sua palavra-chave"),
         ("Remember password", "Memorizar palavra-chave"),
         ("Wrong Password", "Palavra-chave inválida"),
@@ -480,12 +480,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("identical_file_tip", ""),
         ("show_monitors_tip", ""),
         ("View Mode", ""),
-        ("enter_rustdesk_passwd_tip", ""),
-        ("remember_rustdesk_passwd_tip", ""),
         ("login_linux_tip", ""),
-        ("login_linux_tooltip_tip", ""),
         ("verify_rustdesk_password_tip", ""),
         ("remember_account_tip", ""),
-        ("remember_password_tip", ""),
+        ("os_account_desk_tip", ""),
+        ("OS Account", ""),
     ].iter().cloned().collect();
 }
