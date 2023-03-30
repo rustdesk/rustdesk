@@ -478,7 +478,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Empty Password", "Puste hasło"),
         ("Me", "Ja"),
         ("identical_file_tip", "Ten plik jest identyczny jak plik na drugim komputerze."),
-        ("show_monitors_tip", "Pokaż monitory w zasobniku."),
+        ("show_monitors_tip", "Pokaż monitory w zasobniku"),
         ("View Mode", "Tryb widoku"),
         ("enter_rustdesk_passwd_tip", "Podaj hasło RustDesk."),
         ("remember_rustdesk_passwd_tip", "Zapamiętaj hasło RustDesk."),
