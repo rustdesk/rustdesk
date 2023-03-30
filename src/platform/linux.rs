@@ -226,9 +226,12 @@ fn stop_rustdesk_servers() {
 }
 
 #[inline]
-fn stop_xorg_subprocess() {
+fn stop_subprocess() {
     let _ = run_cmds(format!(
         r##"ps -ef | grep '/etc/rustdesk/xorg.conf' | grep -v grep | awk '{{printf("kill -9 %d\n", $2)}}' | bash"##,
+    ));
+    let _ = run_cmds(format!(
+        r##"ps -ef | grep -E 'rustdesk +--cm-no-ui' | grep -v grep | awk '{{printf("kill -9 %d\n", $2)}}' | bash"##,
     ));
 }
 
@@ -302,7 +305,7 @@ fn force_stop_server() {
 
 pub fn start_os_service() {
     stop_rustdesk_servers();
-    stop_xorg_subprocess();
+    stop_subprocess();
     start_uinput_service();
 
     let running = Arc::new(AtomicBool::new(true));
@@ -338,7 +341,7 @@ pub fn start_os_service() {
                 &mut last_restart,
                 &mut server,
             ) {
-                stop_xorg_subprocess();
+                stop_subprocess();
                 force_stop_server();
                 start_server(None, &mut server);
             }
@@ -355,7 +358,7 @@ pub fn start_os_service() {
                 &mut last_restart,
                 &mut user_server,
             ) {
-                stop_xorg_subprocess();
+                stop_subprocess();
                 force_stop_server();
                 start_server(
                     Some((desktop.uid.clone(), desktop.username.clone())),
@@ -881,7 +884,6 @@ mod desktop {
                 return;
             }
 
-            println!("REMOVE ME ================================== desktop: refresh");
             let seat0_values = get_values_of_seat0(&[0, 1, 2]);
             if seat0_values[0].is_empty() {
                 *self = Self::default();
@@ -903,11 +905,6 @@ mod desktop {
             self.get_display();
             self.get_xauth();
             self.set_is_subprocess();
-
-            println!(
-                "REMOVE ME ================================== desktop: {:?}",
-                self
-            );
         }
     }
 }

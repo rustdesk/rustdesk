@@ -1301,11 +1301,6 @@ impl Connection {
             let is_headless = linux_desktop_manager::is_headless();
             let wait_ipc_timeout = 10_000;
 
-            println!(
-                "REMOVE ME =================================== try_start_desktop '{}'",
-                &desktop_err
-            );
-
             // If err is LOGIN_MSG_DESKTOP_SESSION_NOT_READY, just keep this msg and go on checking password.
             if !desktop_err.is_empty() && desktop_err != LOGIN_MSG_DESKTOP_SESSION_NOT_READY {
                 self.send_login_error(desktop_err).await;
