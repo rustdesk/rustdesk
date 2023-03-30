@@ -625,7 +625,7 @@ _connectDialog(
         osAccountWidget(),
         osUsernameController == null || passwordController == null
             ? Offstage()
-            : Container(height: 10),
+            : Container(height: 12),
         passwdWidget(),
       ]),
       actions: [

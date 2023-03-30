@@ -80,6 +80,15 @@ pub fn try_start_x_session(username: &str, password: &str) -> ResultType<(String
     }
 }
 
+#[inline]
+pub fn is_headless() -> bool {
+    DESKTOP_MANAGER
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map_or(false, |manager| manager.x11_username.is_empty())
+}
+
 pub fn get_username() -> String {
     match &*DESKTOP_MANAGER.lock().unwrap() {
         Some(manager) => {
