@@ -464,6 +464,7 @@ pub fn get_env_var(k: &str) -> String {
     }
 }
 
+// Headless is enabled, no need to wait prelogin.
 pub fn is_prelogin() -> bool {
     let n = get_active_userid().len();
     n < 4 && n > 1
