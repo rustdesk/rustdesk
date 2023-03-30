@@ -465,8 +465,10 @@ pub(super) fn get_env_var(k: &str) -> String {
     }
 }
 
+// Headless is enabled, no need to wait prelogin.
 pub fn is_prelogin() -> bool {
-    get_active_userid().len() >= 4 || get_active_username() == "root"
+    true
+    // get_active_userid().len() >= 4 || get_active_username() == "root"
 }
 
 pub fn is_root() -> bool {

@@ -51,7 +51,9 @@ pub fn is_desktop_wayland() -> bool {
 const INVALID_SESSION: &str = "4294967295";
 
 pub fn get_user_and_display_server() -> (String, String) {
-    let mut session = get_values_of_seat0(&[0])[0].clone();
+    let seat0_values = get_values_of_seat0(&[0, 2]);
+    let mut session = seat0_values[0].clone();
+    let username = seat0_values[1].clone();
     if session.is_empty() {
         // loginctl has not given the expected output.  try something else.
         if let Ok(sid) = std::env::var("XDG_SESSION_ID") {
@@ -71,7 +73,7 @@ pub fn get_user_and_display_server() -> (String, String) {
     } else {
         get_display_server_of_session(&session)
     };
-    (session, display_server)
+    (username, display_server)
 }
 
 pub fn get_display_server_of_session(session: &str) -> String {
