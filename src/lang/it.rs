@@ -68,7 +68,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Close", "Chiudi"),
         ("Retry", "Riprova"),
         ("OK", "OK"),
-        ("remember_password_tip", ""),
+        ("Password Required", "Password Richiesta"),
         ("Please enter your password", "Inserisci la tua password"),
         ("Remember password", "Ricorda password"),
         ("Wrong Password", "Password Errata"),
