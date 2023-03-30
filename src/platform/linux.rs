@@ -357,6 +357,7 @@ pub fn start_os_service() {
                 &mut last_restart,
                 &mut user_server,
             ) {
+                stop_xorg_subprocess();
                 force_stop_server();
                 start_server(
                     Some((desktop.uid.clone(), desktop.username.clone())),
@@ -400,6 +401,12 @@ pub fn get_active_user_id_name() -> (String, String) {
 #[inline]
 pub fn get_active_userid() -> String {
     get_values_of_seat0(&[1])[0].clone()
+}
+
+#[inline]
+pub fn is_gdm_user(username: &str) -> bool {
+    username == "gdm"
+    // || username == "lightgdm"
 }
 
 fn get_cm() -> bool {
@@ -798,6 +805,11 @@ mod desktop {
         #[inline]
         pub fn is_headless(&self) -> bool {
             self.sid.is_empty()
+        }
+
+        #[inline]
+        pub fn is_login_wayland(&self) -> bool {
+            super::is_gdm_user(&self.username) && self.protocal == ENV_DESKTOP_PROTOCAL_WAYLAND
         }
 
         #[inline]

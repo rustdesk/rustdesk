@@ -23,6 +23,7 @@ lazy_static::lazy_static! {
 #[derive(Debug)]
 struct DesktopManager {
     seat0_username: String,
+    seat0_display_server: String,
     child_username: String,
     child_exit: Arc<AtomicBool>,
     is_child_running: Arc<AtomicBool>,
@@ -61,8 +62,8 @@ pub fn stop_xdesktop() {
 pub fn try_start_x_session(username: &str, password: &str) -> ResultType<(String, bool)> {
     let mut desktop_manager = DESKTOP_MANAGER.lock().unwrap();
     if let Some(desktop_manager) = &mut (*desktop_manager) {
-        if !desktop_manager.seat0_username.is_empty() {
-            return Ok((desktop_manager.seat0_username.clone(), true));
+        if let Some(seat0_username) = desktop_manager.get_supported_display_seat0_username() {
+            return Ok((seat0_username, true));
         }
 
         let _ = desktop_manager.try_start_x_session(username, password)?;
@@ -86,14 +87,16 @@ pub fn is_headless() -> bool {
         .lock()
         .unwrap()
         .as_ref()
-        .map_or(false, |manager| manager.seat0_username.is_empty())
+        .map_or(false, |manager| {
+            manager.get_supported_display_seat0_username().is_none()
+        })
 }
 
 pub fn get_username() -> String {
     match &*DESKTOP_MANAGER.lock().unwrap() {
         Some(manager) => {
-            if !manager.seat0_username.is_empty() {
-                manager.seat0_username.clone()
+            if let Some(seat0_username) = manager.get_supported_display_seat0_username() {
+                seat0_username
             } else {
                 if manager.is_running() && !manager.child_username.is_empty() {
                     manager.child_username.clone()
@@ -119,25 +122,37 @@ impl DesktopManager {
 
     pub fn new() -> Self {
         let mut seat0_username = "".to_owned();
+        let mut seat0_display_server = "".to_owned();
         let seat0_values = get_values_of_seat0(&[0, 1, 2]);
         println!(
             "REMOVE ME ================================== DesktopManager: {:?}",
             &seat0_values
         );
         if !seat0_values[0].is_empty() {
-            let display_server = get_display_server_of_session(&seat0_values[1]);
-            if display_server == ENV_DESKTOP_PROTOCAL_X11
-                || display_server == ENV_DESKTOP_PROTOCAL_WAYLAND
-            {
-                seat0_username = seat0_values[2].clone();
-            }
+            seat0_username = seat0_values[2].clone();
+            seat0_display_server = get_display_server_of_session(&seat0_values[1]);
         }
 
         Self {
             seat0_username,
+            seat0_display_server,
             child_username: "".to_owned(),
             child_exit: Arc::new(AtomicBool::new(true)),
             is_child_running: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    fn get_supported_display_seat0_username(&self) -> Option<String> {
+        if is_gdm_user(&self.seat0_username)
+            && self.seat0_display_server == ENV_DESKTOP_PROTOCAL_WAYLAND
+        {
+            None
+        } else {
+            if self.seat0_username.is_empty() {
+                None
+            } else {
+                Some(self.seat0_username.clone())
+            }
         }
     }
 
