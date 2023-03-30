@@ -68,7 +68,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Close", "Luk"),
         ("Retry", "Prøv igen"),
         ("OK", "OK"),
-        ("remember_password_tip", ""),
+        ("Password Required", "Adgangskode påkrævet"),
         ("Please enter your password", "Indtast venligst dit kodeord"),
         ("Remember password", "Husk kodeord"),
         ("Wrong Password", "Forkert kodeord"),

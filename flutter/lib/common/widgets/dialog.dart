@@ -600,7 +600,7 @@ _connectDialog(
             autoFocus: osUsernameController == null,
           ),
           rememberWidget(
-            translate('remember_password_tip'),
+            translate('Remember password'),
             rememberPassword,
             (v) {
               if (v != null) {

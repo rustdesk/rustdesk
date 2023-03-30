@@ -68,7 +68,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Close", "Bezárás"),
         ("Retry", "Újra"),
         ("OK", "OK"),
-        ("remember_password_tip", ""),
+        ("Password Required", "Jelszó megadása kötelező"),
         ("Please enter your password", "Kérem írja be a jelszavát"),
         ("Remember password", "Jelszó megjegyzése"),
         ("Wrong Password", "Hibás jelszó"),
