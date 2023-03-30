@@ -293,10 +293,10 @@ class FfiModel with ChangeNotifier {
       wrongPasswordDialog(id, dialogManager, type, title, text);
     } else if (type == 'input-password') {
       enterPasswordDialog(id, dialogManager);
-    } else if (type == 'xsession-login' || type == 'xsession-re-login') {
+    } else if (type == 'session-login' || type == 'session-re-login') {
       enterUserLoginDialog(id, dialogManager);
-    } else if (type == 'xsession-login-password' ||
-        type == 'xsession-login-password') {
+    } else if (type == 'session-login-password' ||
+        type == 'session-login-password') {
       enterUserLoginAndPasswordDialog(id, dialogManager);
     } else if (type == 'restarting') {
       showMsgBox(id, type, title, text, link, false, dialogManager,

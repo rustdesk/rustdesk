@@ -21,6 +21,9 @@ use std::{
 
 type Xdo = *const c_void;
 
+pub const ENV_DESKTOP_PROTOCAL_WAYLAND: &str = "wayland";
+pub const ENV_DESKTOP_PROTOCAL_X11: &str = "x11";
+
 pub const PA_SAMPLE_RATE: u32 = 48000;
 static mut UNMODIFIED: bool = true;
 
@@ -930,6 +933,8 @@ mod desktop {
             if !self.sid.is_empty() && is_active(&self.sid) {
                 return;
             }
+
+            println!("REMOVE ME ================================== desktop: refresh");
             let seat0_values = get_values_of_seat0(&[0, 1, 2]);
             if seat0_values[0].is_empty() {
                 *self = Self::default();
@@ -950,6 +955,11 @@ mod desktop {
             self.get_display();
             self.get_xauth();
             self.set_is_subprocess();
+
+            println!(
+                "REMOVE ME ================================== desktop: {:?}",
+                self
+            );
         }
     }
 }

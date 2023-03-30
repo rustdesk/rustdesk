@@ -22,7 +22,7 @@ lazy_static::lazy_static! {
 
 #[derive(Debug)]
 struct DesktopManager {
-    x11_username: String,
+    seat0_username: String,
     child_username: String,
     child_exit: Arc<AtomicBool>,
     is_child_running: Arc<AtomicBool>,
@@ -61,8 +61,8 @@ pub fn stop_xdesktop() {
 pub fn try_start_x_session(username: &str, password: &str) -> ResultType<(String, bool)> {
     let mut desktop_manager = DESKTOP_MANAGER.lock().unwrap();
     if let Some(desktop_manager) = &mut (*desktop_manager) {
-        if !desktop_manager.x11_username.is_empty() {
-            return Ok((desktop_manager.x11_username.clone(), true));
+        if !desktop_manager.seat0_username.is_empty() {
+            return Ok((desktop_manager.seat0_username.clone(), true));
         }
 
         let _ = desktop_manager.try_start_x_session(username, password)?;
@@ -76,7 +76,7 @@ pub fn try_start_x_session(username: &str, password: &str) -> ResultType<(String
             desktop_manager.is_running(),
         ))
     } else {
-        bail!(crate::server::LOGIN_MSG_XDESKTOP_NOT_INITED);
+        bail!(crate::server::LOGIN_MSG_DESKTOP_NOT_INITED);
     }
 }
 
@@ -86,14 +86,14 @@ pub fn is_headless() -> bool {
         .lock()
         .unwrap()
         .as_ref()
-        .map_or(false, |manager| manager.x11_username.is_empty())
+        .map_or(false, |manager| manager.seat0_username.is_empty())
 }
 
 pub fn get_username() -> String {
     match &*DESKTOP_MANAGER.lock().unwrap() {
         Some(manager) => {
-            if !manager.x11_username.is_empty() {
-                manager.x11_username.clone()
+            if !manager.seat0_username.is_empty() {
+                manager.seat0_username.clone()
             } else {
                 if manager.is_running() && !manager.child_username.is_empty() {
                     manager.child_username.clone()
@@ -118,16 +118,23 @@ impl DesktopManager {
     }
 
     pub fn new() -> Self {
-        let mut x11_username = "".to_owned();
+        let mut seat0_username = "".to_owned();
         let seat0_values = get_values_of_seat0(&[0, 1, 2]);
+        println!(
+            "REMOVE ME ================================== DesktopManager: {:?}",
+            &seat0_values
+        );
         if !seat0_values[0].is_empty() {
-            if "x11" == get_display_server_of_session(&seat0_values[1]) {
-                x11_username = seat0_values[2].clone();
+            let display_server = get_display_server_of_session(&seat0_values[1]);
+            if display_server == ENV_DESKTOP_PROTOCAL_X11
+                || display_server == ENV_DESKTOP_PROTOCAL_WAYLAND
+            {
+                seat0_username = seat0_values[2].clone();
             }
         }
 
         Self {
-            x11_username,
+            seat0_username,
             child_username: "".to_owned(),
             child_exit: Arc::new(AtomicBool::new(true)),
             is_child_running: Arc::new(AtomicBool::new(false)),
