@@ -154,7 +154,7 @@ jobs:
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
     runs-on: ${{ matrix.job.os }}
     # Temporarily disable this action due to additional test is needed.
-    if: false 
+    # if: false 
     strategy:
       fail-fast: false
       matrix:
@@ -175,14 +175,10 @@ jobs:
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable-${{ matrix.job.target }}
+          toolchain: nightly-${{ matrix.job.target }}
           target: ${{ matrix.job.target }}
           override: true
           profile: minimal # minimal component installation (ie, no documentation)
-      
-      - name: Set Rust toolchain to the target
-        run: |
-          rustup default stable-${{ matrix.job.target }}
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -204,6 +200,8 @@ jobs:
         shell: bash
         run: |
           python3 res/inline-sciter.py
+          # Patch sciter x86
+          sed -i 's/branch = "dyn"/branch = "dyn_x86"/g' ./Cargo.toml
           # Replace the link for the ico.
           rm res/icon.ico && cp flutter/windows/runner/resources/app_icon.ico res/icon.ico
           cargo build --features inline --release --bins
