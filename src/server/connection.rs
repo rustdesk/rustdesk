@@ -150,7 +150,9 @@ pub struct Connection {
     audio_input_device_before_voice_call: Option<String>,
     options_in_login: Option<OptionMessage>,
     pressed_modifiers: HashSet<rdev::Key>,
+    #[cfg(target_os = "linux")]
     rx_cm_stream_ready: mpsc::Receiver<()>,
+    #[cfg(target_os = "linux")]
     tx_desktop_ready: mpsc::Sender<()>,
 }
 
@@ -212,8 +214,8 @@ impl Connection {
         let (tx_video, mut rx_video) = mpsc::unbounded_channel::<(Instant, Arc<Message>)>();
         let (tx_input, _rx_input) = std_mpsc::channel();
         let mut hbbs_rx = crate::hbbs_http::sync::signal_receiver();
-        let (tx_cm_stream_ready, rx_cm_stream_ready) = mpsc::channel(1);
-        let (tx_desktop_ready, rx_desktop_ready) = mpsc::channel(1);
+        let (tx_cm_stream_ready, _rx_cm_stream_ready) = mpsc::channel(1);
+        let (_tx_desktop_ready, rx_desktop_ready) = mpsc::channel(1);
 
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let tx_cloned = tx.clone();
@@ -266,8 +268,10 @@ impl Connection {
             audio_input_device_before_voice_call: None,
             options_in_login: None,
             pressed_modifiers: Default::default(),
-            rx_cm_stream_ready,
-            tx_desktop_ready,
+            #[cfg(target_os = "linux")]
+            rx_cm_stream_ready: _rx_cm_stream_ready,
+            #[cfg(target_os = "linux")]
+            tx_desktop_ready: _tx_desktop_ready,
         };
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         tokio::spawn(async move {
@@ -1300,6 +1304,7 @@ impl Connection {
             };
             #[cfg(target_os = "linux")]
             let is_headless = linux_desktop_manager::is_headless();
+            #[cfg(target_os = "linux")]
             let wait_ipc_timeout = 10_000;
 
             // If err is LOGIN_MSG_DESKTOP_SESSION_NOT_READY, just keep this msg and go on checking password.
