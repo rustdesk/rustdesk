@@ -2183,13 +2183,9 @@ async fn start_ipc(
                 if !username.is_empty() {
                     break;
                 }
-                let _res = timeout(500, _rx_desktop_ready.recv()).await;
+                let _res = timeout(1_000, _rx_desktop_ready.recv()).await;
                 username = linux_desktop_manager::get_username();
             }
-            println!(
-                "REMOVE ME =================================== headless username '{}' ",
-                &username
-            );
             let uid = {
                 let output = run_cmds(format!("id -u {}", &username))?;
                 let output = output.trim();
@@ -2198,11 +2194,7 @@ async fn start_ipc(
                 }
                 output.to_string()
             };
-            user = Some((username, uid));
-            println!(
-                "REMOVE ME =================================== headless user '{:?}' ",
-                &user
-            );
+            user = Some((uid, username));
             args = vec!["--cm-no-ui"];
         }
         let run_done;
@@ -2217,10 +2209,6 @@ async fn start_ipc(
                 #[cfg(target_os = "linux")]
                 {
                     log::debug!("Start cm");
-                    println!(
-                        "REMOVE ME =================================== start_ipc 222 '{}' ",
-                        linux_desktop_manager::is_headless()
-                    );
                     res = crate::platform::run_as_user(args.clone(), user.clone());
                 }
                 if res.is_ok() {
@@ -2235,10 +2223,6 @@ async fn start_ipc(
         } else {
             run_done = false;
         }
-        println!(
-            "REMOVE ME =================================== start_ipc 333 '{}' ",
-            run_done
-        );
         if !run_done {
             log::debug!("Start cm");
             super::CHILD_PROCESS
