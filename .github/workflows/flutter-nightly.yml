@@ -1003,7 +1003,7 @@ jobs:
           done
 
       - name: Publish debian package
-        if: ${{ matrix.job.extra-build-features == '' }} && env.UPLOAD_ARTIFACT == 'true'
+        if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true'
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
@@ -1176,7 +1176,7 @@ jobs:
           done
 
       - name: Publish debian package
-        if: ${{ matrix.job.extra-build-features == '' }} && env.UPLOAD_ARTIFACT == 'true'
+        if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true'
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
@@ -1199,7 +1199,7 @@ jobs:
           sudo appimage-builder --skip-tests --recipe ./AppImageBuilder-${{ matrix.job.arch }}.yml
 
       - name: Publish appimage package
-        if: ${{ matrix.job.extra-build-features == 'appimage' }} && env.UPLOAD_ARTIFACT == 'true'
+        if: matrix.job.extra-build-features == 'appimage' && env.UPLOAD_ARTIFACT == 'true'
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
@@ -1273,7 +1273,7 @@ jobs:
       #       res/rustdesk*.zst
 
       - name: Publish fedora28/centos8 package
-        if: ${{ matrix.job.extra-build-features == '' }} && env.UPLOAD_ARTIFACT == 'true'
+        if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true'
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
@@ -1396,7 +1396,7 @@ jobs:
           done
 
       - name: Publish debian package
-        if: ${{ matrix.job.extra-build-features == '' }} && env.UPLOAD_ARTIFACT == 'true'
+        if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true'
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
@@ -1452,7 +1452,7 @@ jobs:
             cd res && HBB=`pwd`/.. FLUTTER=1 makepkg -f
 
       - name: Publish archlinux package
-        if: ${{ matrix.job.extra-build-features == '' }} && env.UPLOAD_ARTIFACT == 'true'
+        if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true'
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
@@ -1461,7 +1461,7 @@ jobs:
             res/rustdesk*.zst
 
       - name: Build appimage package
-        if: ${{ matrix.job.extra-build-features == 'appimage' }}
+        if: matrix.job.extra-build-features == 'appimage' && env.UPLOAD_ARTIFACT == 'true'
         shell: bash
         run: |
           # set-up appimage-builder
@@ -1475,7 +1475,7 @@ jobs:
           sudo appimage-builder --skip-tests --recipe ./AppImageBuilder-x86_64.yml
 
       - name: Publish appimage package
-        if: ${{ matrix.job.extra-build-features == 'appimage' }} && env.UPLOAD_ARTIFACT == 'true'
+        if: matrix.job.extra-build-features == 'appimage' && env.UPLOAD_ARTIFACT == 'true'
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
@@ -1484,7 +1484,7 @@ jobs:
             ./appimage/rustdesk-${{ env.VERSION }}-*.AppImage
 
       - name: Publish fedora28/centos8 package
-        if: ${{ matrix.job.extra-build-features == '' }} && env.UPLOAD_ARTIFACT == 'true'
+        if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true'
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
