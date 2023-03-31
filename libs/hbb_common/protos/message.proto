@@ -24,6 +24,7 @@ message VideoFrame {
     YUV yuv = 8;
     EncodedVideoFrames h264s = 10;
     EncodedVideoFrames h265s = 11;
+    EncodedVideoFrames vp8s = 12;
   }
 }
 
@@ -76,6 +77,7 @@ message Features {
 message SupportedEncoding {
   bool h264 = 1;
   bool h265 = 2;
+  bool vp8 = 3;
 }
 
 message PeerInfo {
@@ -457,18 +459,20 @@ enum ImageQuality {
   Best = 4;
 }
 
-message VideoCodecState {
+message SupportedDecoding {
   enum PreferCodec {
     Auto = 0;
-    VPX = 1;
+    VP9 = 1;
     H264 = 2;
     H265 = 3;
+    VP8 = 4;
   }
 
-  int32 score_vpx = 1;
-  int32 score_h264 = 2;
-  int32 score_h265 = 3;
+  int32 ability_vp9 = 1;
+  int32 ability_h264 = 2;
+  int32 ability_h265 = 3;
   PreferCodec prefer = 4;
+  int32 ability_vp8 = 5;
 }
 
 message OptionMessage {
@@ -486,7 +490,7 @@ message OptionMessage {
   BoolOption disable_audio = 7;
   BoolOption disable_clipboard = 8;
   BoolOption enable_file_transfer = 9;
-  VideoCodecState video_codec_state = 10;
+  SupportedDecoding supported_decoding = 10;
   int32 custom_fps = 11;
   BoolOption disable_keyboard = 12;
 }

@@ -29,10 +29,10 @@ use hbb_common::tokio::{
     time::{self, Duration, Instant, Interval},
 };
 use hbb_common::{allow_err, fs, get_time, log, message_proto::*, Stream};
+use scrap::CodecFormat;
 
 use crate::client::{
-    new_voice_call_request, Client, CodecFormat, MediaData, MediaSender, QualityStatus, MILLI1,
-    SEC30,
+    new_voice_call_request, Client, MediaData, MediaSender, QualityStatus, MILLI1, SEC30,
 };
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::common::{self, update_clipboard};
@@ -817,11 +817,10 @@ impl<T: InvokeUiSession> Remote<T> {
     }
 
     fn contains_key_frame(vf: &VideoFrame) -> bool {
+        use video_frame::Union::*;
         match &vf.union {
             Some(vf) => match vf {
-                video_frame::Union::Vp9s(f) => f.frames.iter().any(|e| e.key),
-                video_frame::Union::H264s(f) => f.frames.iter().any(|e| e.key),
-                video_frame::Union::H265s(f) => f.frames.iter().any(|e| e.key),
+                Vp8s(f) | Vp9s(f) | H264s(f) | H265s(f) => f.frames.iter().any(|e| e.key),
                 _ => false,
             },
             None => false,

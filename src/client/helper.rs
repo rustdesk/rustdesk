@@ -1,37 +1,8 @@
 use hbb_common::{
     get_time,
-    message_proto::{video_frame, Message, VideoFrame, VoiceCallRequest, VoiceCallResponse},
+    message_proto::{Message, VoiceCallRequest, VoiceCallResponse},
 };
-
-#[derive(PartialEq, Debug, Clone)]
-pub enum CodecFormat {
-    VP9,
-    H264,
-    H265,
-    Unknown,
-}
-
-impl From<&VideoFrame> for CodecFormat {
-    fn from(it: &VideoFrame) -> Self {
-        match it.union {
-            Some(video_frame::Union::Vp9s(_)) => CodecFormat::VP9,
-            Some(video_frame::Union::H264s(_)) => CodecFormat::H264,
-            Some(video_frame::Union::H265s(_)) => CodecFormat::H265,
-            _ => CodecFormat::Unknown,
-        }
-    }
-}
-
-impl ToString for CodecFormat {
-    fn to_string(&self) -> String {
-        match self {
-            CodecFormat::VP9 => "VP9".into(),
-            CodecFormat::H264 => "H264".into(),
-            CodecFormat::H265 => "H265".into(),
-            CodecFormat::Unknown => "Unknow".into(),
-        }
-    }
-}
+use scrap::CodecFormat;
 
 #[derive(Debug, Default)]
 pub struct QualityStatus {
