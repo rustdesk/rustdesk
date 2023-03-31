@@ -973,9 +973,11 @@ void showOptions(
   if (hasHwcodec) {
     try {
       final Map codecsJson =
-          jsonDecode(await bind.sessionSupportedHwcodec(id: id));
+          jsonDecode(await bind.sessionAlternativeCodecs(id: id));
+      final vp8 = codecsJson['vp8'] ?? false;
       final h264 = codecsJson['h264'] ?? false;
       final h265 = codecsJson['h265'] ?? false;
+      codecs.add(vp8);
       codecs.add(h264);
       codecs.add(h265);
     } catch (e) {
@@ -1044,6 +1046,7 @@ void showOptions(
     if (hasHwcodec && codecs.length == 2 && (codecs[0] || codecs[1])) {
       radios.addAll([
         getRadio(translate('Auto'), 'auto', codec, setCodec),
+        getRadio('VP8', 'vp8', codec, setCodec),
         getRadio('VP9', 'vp9', codec, setCodec),
       ]);
       if (codecs[0]) {

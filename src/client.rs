@@ -44,9 +44,9 @@ use hbb_common::{
 };
 pub use helper::*;
 use scrap::{
-    codec::{Decoder, DecoderCfg},
+    codec::Decoder,
     record::{Recorder, RecorderContext},
-    ImageFormat, VpxDecoderConfig, VpxVideoCodecId,
+    ImageFormat,
 };
 
 use crate::{
@@ -917,12 +917,7 @@ impl VideoHandler {
     /// Create a new video handler.
     pub fn new() -> Self {
         VideoHandler {
-            decoder: Decoder::new(DecoderCfg {
-                vpx: VpxDecoderConfig {
-                    codec: VpxVideoCodecId::VP9,
-                    num_threads: (num_cpus::get() / 2) as _,
-                },
-            }),
+            decoder: Decoder::new(),
             rgb: Default::default(),
             recorder: Default::default(),
             record: false,
@@ -954,12 +949,7 @@ impl VideoHandler {
 
     /// Reset the decoder.
     pub fn reset(&mut self) {
-        self.decoder = Decoder::new(DecoderCfg {
-            vpx: VpxDecoderConfig {
-                codec: VpxVideoCodecId::VP9,
-                num_threads: 1,
-            },
-        });
+        self.decoder = Decoder::new();
     }
 
     /// Start or stop screen record.
@@ -973,7 +963,7 @@ impl VideoHandler {
                 filename: "".to_owned(),
                 width: w as _,
                 height: h as _,
-                codec_id: scrap::record::RecordCodecID::VP9,
+                format: scrap::CodecFormat::VP9,
                 tx: None,
             })
             .map_or(Default::default(), |r| Arc::new(Mutex::new(Some(r))));
@@ -999,7 +989,7 @@ pub struct LoginConfigHandler {
     pub conn_id: i32,
     features: Option<Features>,
     session_id: u64,
-    pub supported_encoding: Option<(bool, bool)>,
+    pub supported_encoding: SupportedEncoding,
     pub restarting_remote_device: bool,
     pub force_relay: bool,
     pub direct: Option<bool>,
@@ -1047,7 +1037,7 @@ impl LoginConfigHandler {
         self.remember = !config.password.is_empty();
         self.config = config;
         self.session_id = rand::random();
-        self.supported_encoding = None;
+        self.supported_encoding = Default::default();
         self.restarting_remote_device = false;
         self.force_relay = !self.get_option("force-always-relay").is_empty() || force_relay;
         self.direct = None;
@@ -1331,8 +1321,8 @@ impl LoginConfigHandler {
             msg.disable_clipboard = BoolOption::Yes.into();
             n += 1;
         }
-        let state = Decoder::video_codec_state(&self.id);
-        msg.video_codec_state = hbb_common::protobuf::MessageField::some(state);
+        msg.supported_decoding =
+            hbb_common::protobuf::MessageField::some(Decoder::supported_decodings(Some(&self.id)));
         n += 1;
 
         if n > 0 {
@@ -1565,10 +1555,7 @@ impl LoginConfigHandler {
         self.conn_id = pi.conn_id;
         // no matter if change, for update file time
         self.save_config(config);
-        #[cfg(any(feature = "hwcodec", feature = "mediacodec"))]
-        {
-            self.supported_encoding = Some((pi.encoding.h264, pi.encoding.h265));
-        }
+        self.supported_encoding = pi.encoding.clone().unwrap_or_default();
     }
 
     pub fn get_remote_dir(&self) -> String {
@@ -1626,10 +1613,10 @@ impl LoginConfigHandler {
     }
 
     pub fn change_prefer_codec(&self) -> Message {
-        let state = scrap::codec::Decoder::video_codec_state(&self.id);
+        let decoding = scrap::codec::Decoder::supported_decodings(Some(&self.id));
         let mut misc = Misc::new();
         misc.set_option(OptionMessage {
-            video_codec_state: hbb_common::protobuf::MessageField::some(state),
+            supported_decoding: hbb_common::protobuf::MessageField::some(decoding),
             ..Default::default()
         });
         let mut msg_out = Message::new();
