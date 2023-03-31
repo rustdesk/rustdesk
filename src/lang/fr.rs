@@ -454,7 +454,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Voice call", "Appel voix"),
         ("Text chat", "Conversation textuelfle"),
         ("Stop voice call", "Stopper l'appel voix"),
-        ("relay_hint_tip", "Il se peut qu'il ne doit pas possible de se connecter directement, vous pouvez essayer de vous connecter via un relais. \nEn outre, si vous souhaitez utiliser directement le relais, vous pouvez ajouter le suffixe \"/r\ » à l'ID ou sélectionner l'option \"Toujours se connecter via le relais\ » dans la fiche pair."),
+        ("relay_hint_tip", "Il se peut qu'il ne doit pas possible de se connecter directement, vous pouvez essayer de vous connecter via un relais. \nEn outre, si vous souhaitez utiliser directement le relais, vous pouvez ajouter le suffixe \"/r\" à l'ID ou sélectionner l'option \"Toujours se connecter via le relais\" dans la fiche pair."),
         ("Reconnect", "Se reconnecter"),
         ("Codec", "Codec"),
         ("Resolution", "Résolution"),
