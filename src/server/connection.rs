@@ -1369,10 +1369,12 @@ impl Connection {
                             me.press
                         };
 
-                        let key = match me.mode.unwrap() {
-                            KeyboardMode::Map => Some(crate::keyboard::keycode_to_rdev_key(me.chr())),
+                        let key = match me.mode.enum_value_or_default() {
+                            KeyboardMode::Map => {
+                                Some(crate::keyboard::keycode_to_rdev_key(me.chr()))
+                            }
                             KeyboardMode::Translate => {
-                                if let Some(key_event::Union::Chr(code)) = me.union.clone() {
+                                if let Some(key_event::Union::Chr(code)) = me.union {
                                     Some(crate::keyboard::keycode_to_rdev_key(code & 0x0000FFFF))
                                 } else {
                                     None
