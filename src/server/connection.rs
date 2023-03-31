@@ -10,7 +10,6 @@ use crate::{
         new_voice_call_request, new_voice_call_response, start_audio_thread, MediaData, MediaSender,
     },
     common::{get_default_sound_input, set_sound_input},
-    keyboard::{is_modifier, keycode_to_rdev_key},
     video_service,
 };
 #[cfg(any(target_os = "android", target_os = "ios"))]
@@ -1371,17 +1370,17 @@ impl Connection {
                         };
 
                         let key = match me.mode.unwrap() {
-                            KeyboardMode::Map => Some(keycode_to_rdev_key(me.chr())),
+                            KeyboardMode::Map => Some(crate::keyboard::keycode_to_rdev_key(me.chr())),
                             KeyboardMode::Translate => {
                                 if let Some(key_event::Union::Chr(code)) = me.union.clone() {
-                                    Some(keycode_to_rdev_key(code & 0x0000FFFF))
+                                    Some(crate::keyboard::keycode_to_rdev_key(code & 0x0000FFFF))
                                 } else {
                                     None
                                 }
                             }
                             _ => None,
                         }
-                        .filter(is_modifier);
+                        .filter(crate::keyboard::is_modifier);
 
                         if let Some(key) = key {
                             if is_press {
