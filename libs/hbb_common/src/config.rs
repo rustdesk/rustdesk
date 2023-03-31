@@ -938,7 +938,7 @@ impl PeerConfig {
         let _lock = CONFIG.read().unwrap();
         let mut config = self.clone();
         config.password = encrypt_vec_or_original(&config.password, PASSWORD_ENC_VERSION);
-        for opt in ["rdp_password", "os-username", "os-password"] {
+        for opt in ["rdp_password", "os-password"] {
             if let Some(v) = config.options.get_mut(opt) {
                 *v = encrypt_str_or_original(v, PASSWORD_ENC_VERSION)
             }
