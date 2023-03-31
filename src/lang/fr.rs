@@ -402,7 +402,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Accept sessions via password", "Accepter les sessions via mot de passe"),
         ("Accept sessions via click", "Accepter les sessions via clique de confirmation"),
         ("Accept sessions via both", "Accepter les sessions via mot de passe ou clique de confirmation"),
-        ("Please wait for the remote side to accept your session request...", "Veuillez attendre que votre demande de session distante soit accepter ..."),
         ("One-time Password", "Mot de passe unique"),
         ("Use one-time password", "Utiliser un mot de passe unique"),
         ("One-time password length", "Longueur du mot de passe unique"),

@@ -3,7 +3,7 @@ use super::{input_service::*, *};
 use crate::clipboard_file::*;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::common::update_clipboard;
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "linux_headless"))]
 use crate::platform::linux_desktop_manager;
 #[cfg(windows)]
 use crate::portable_service::client as portable_client;
@@ -18,7 +18,7 @@ use crate::{
 use crate::{common::DEVICE_NAME, flutter::connection_manager::start_channel};
 use crate::{ipc, VERSION};
 use cidr_utils::cidr::IpCidr;
-#[cfg(all(target_os = "linux", feature = "flutter"))]
+#[cfg(all(target_os = "linux", feature = "linux_headless"))]
 use hbb_common::platform::linux::run_cmds;
 use hbb_common::{
     config::Config,
@@ -65,12 +65,16 @@ pub const LOGIN_MSG_DESKTOP_NOT_INITED: &str = "Desktop env is not inited";
 pub const LOGIN_MSG_DESKTOP_SESSION_NOT_READY: &str = "Desktop session unready";
 pub const LOGIN_MSG_DESKTOP_XSESSION_FAILED: &str = "Desktop xsession failed";
 pub const LOGIN_MSG_DESKTOP_SESSION_ANOTHER_USER: &str = "Desktop session another user login";
+pub const LOGIN_MSG_DESKTOP_XORG_NOT_FOUND: &str = "Desktop xorg not found";
+// ls /usr/share/xsessions/
+pub const LOGIN_MSG_DESKTOP_NO_DESKTOP: &str = "Desktop none";
 pub const LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_EMPTY: &str =
     "Desktop session unready, password empty";
 pub const LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_WRONG: &str =
     "Desktop session unready, password wrong";
 pub const LOGIN_MSG_PASSWORD_EMPTY: &str = "Empty Password";
 pub const LOGIN_MSG_PASSWORD_WRONG: &str = "Wrong Password";
+pub const LOGIN_MSG_NO_PASSWORD_ACCESS: &str = "No Password Access";
 pub const LOGIN_MSG_OFFLINE: &str = "Offline";
 
 #[derive(Clone, Default)]
@@ -150,9 +154,9 @@ pub struct Connection {
     audio_input_device_before_voice_call: Option<String>,
     options_in_login: Option<OptionMessage>,
     pressed_modifiers: HashSet<rdev::Key>,
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", feature = "linux_headless"))]
     rx_cm_stream_ready: mpsc::Receiver<()>,
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", feature = "linux_headless"))]
     tx_desktop_ready: mpsc::Sender<()>,
 }
 
@@ -270,9 +274,9 @@ impl Connection {
             audio_input_device_before_voice_call: None,
             options_in_login: None,
             pressed_modifiers: Default::default(),
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", feature = "linux_headless"))]
             rx_cm_stream_ready: _rx_cm_stream_ready,
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", feature = "linux_headless"))]
             tx_desktop_ready: _tx_desktop_ready,
         };
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -886,6 +890,7 @@ impl Connection {
             if crate::platform::current_is_wayland() {
                 platform_additions.insert("is_wayland".into(), json!(true));
             }
+            #[cfg(feature = "linux_headless")]
             if linux_desktop_manager::is_headless() {
                 platform_additions.insert("headless".into(), json!(true));
             }
@@ -1096,45 +1101,6 @@ impl Connection {
         self.tx_input.send(MessageInput::Key((msg, press))).ok();
     }
 
-    fn try_start_desktop(_username: &str, _passsword: &str) -> String {
-        #[cfg(target_os = "linux")]
-        if _username.is_empty() {
-            let username = linux_desktop_manager::get_username();
-            if username.is_empty() {
-                LOGIN_MSG_DESKTOP_SESSION_NOT_READY
-            } else {
-                ""
-            }
-            .to_owned()
-        } else {
-            let username = linux_desktop_manager::get_username();
-            if username == _username {
-                // No need to verify password here.
-                return "".to_owned();
-            }
-
-            match linux_desktop_manager::try_start_x_session(_username, _passsword) {
-                Ok((username, x11_ready)) => {
-                    if x11_ready {
-                        if _username != username {
-                            LOGIN_MSG_DESKTOP_SESSION_ANOTHER_USER.to_owned()
-                        } else {
-                            "".to_owned()
-                        }
-                    } else {
-                        LOGIN_MSG_DESKTOP_SESSION_NOT_READY.to_owned()
-                    }
-                }
-                Err(e) => {
-                    log::error!("Failed to start xsession {}", e);
-                    LOGIN_MSG_DESKTOP_XSESSION_FAILED.to_owned()
-                }
-            }
-        }
-        #[cfg(not(target_os = "linux"))]
-        "".to_owned()
-    }
-
     fn validate_one_password(&self, password: String) -> bool {
         if password.len() == 0 {
             return false;
@@ -1300,16 +1266,20 @@ impl Connection {
                 _ => {}
             }
 
+            #[cfg(all(target_os = "linux", feature = "linux_headless"))]
             let desktop_err = match lr.os_login.as_ref() {
-                Some(os_login) => Self::try_start_desktop(&os_login.username, &os_login.password),
-                None => Self::try_start_desktop("", ""),
+                Some(os_login) => {
+                    linux_desktop_manager::try_start_desktop(&os_login.username, &os_login.password)
+                }
+                None => linux_desktop_manager::try_start_desktop("", ""),
             };
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", feature = "linux_headless"))]
             let is_headless = linux_desktop_manager::is_headless();
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", feature = "linux_headless"))]
             let wait_ipc_timeout = 10_000;
 
             // If err is LOGIN_MSG_DESKTOP_SESSION_NOT_READY, just keep this msg and go on checking password.
+            #[cfg(all(target_os = "linux", feature = "linux_headless"))]
             if !desktop_err.is_empty() && desktop_err != LOGIN_MSG_DESKTOP_SESSION_NOT_READY {
                 self.send_login_error(desktop_err).await;
                 return true;
@@ -1324,7 +1294,7 @@ impl Connection {
                 if hbb_common::get_version_number(&lr.version)
                     >= hbb_common::get_version_number("1.2.0")
                 {
-                    self.send_login_error("No Password Access").await;
+                    self.send_login_error(LOGIN_MSG_NO_PASSWORD_ACCESS).await;
                 }
                 return true;
             } else if password::approve_mode() == ApproveMode::Password
@@ -1333,6 +1303,7 @@ impl Connection {
                 self.send_login_error("Connection not allowed").await;
                 return false;
             } else if self.is_recent_session() {
+                #[cfg(all(target_os = "linux", feature = "linux_headless"))]
                 if desktop_err.is_empty() {
                     #[cfg(target_os = "linux")]
                     if is_headless {
@@ -1347,13 +1318,24 @@ impl Connection {
                 } else {
                     self.send_login_error(desktop_err).await;
                 }
+                #[cfg(not(all(target_os = "linux", feature = "linux_headless")))]
+                {
+                    self.try_start_cm(lr.my_id, lr.my_name, true);
+                    self.send_logon_response().await;
+                    if self.port_forward_socket.is_some() {
+                        return false;
+                    }
+                }
             } else if lr.password.is_empty() {
+                #[cfg(all(target_os = "linux", feature = "linux_headless"))]
                 if desktop_err.is_empty() {
                     self.try_start_cm(lr.my_id, lr.my_name, false);
                 } else {
                     self.send_login_error(LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_EMPTY)
                         .await;
                 }
+                #[cfg(not(all(target_os = "linux", feature = "linux_headless")))]
+                self.try_start_cm(lr.my_id, lr.my_name, false);
             } else {
                 let mut failure = LOGIN_FAILURES
                     .lock()
@@ -1394,6 +1376,7 @@ impl Connection {
                         .lock()
                         .unwrap()
                         .insert(self.ip.clone(), failure);
+                    #[cfg(all(target_os = "linux", feature = "linux_headless"))]
                     if desktop_err.is_empty() {
                         self.send_login_error(LOGIN_MSG_PASSWORD_WRONG).await;
                         self.try_start_cm(lr.my_id, lr.my_name, false);
@@ -1401,10 +1384,16 @@ impl Connection {
                         self.send_login_error(LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_WRONG)
                             .await;
                     }
+                    #[cfg(not(all(target_os = "linux", feature = "linux_headless")))]
+                    {
+                        self.send_login_error(LOGIN_MSG_PASSWORD_WRONG).await;
+                        self.try_start_cm(lr.my_id, lr.my_name, false);
+                    }
                 } else {
                     if failure.0 != 0 {
                         LOGIN_FAILURES.lock().unwrap().remove(&self.ip);
                     }
+                    #[cfg(all(target_os = "linux", feature = "linux_headless"))]
                     if desktop_err.is_empty() {
                         #[cfg(target_os = "linux")]
                         if is_headless {
@@ -1419,6 +1408,14 @@ impl Connection {
                         }
                     } else {
                         self.send_login_error(desktop_err).await;
+                    }
+                    #[cfg(not(all(target_os = "linux", feature = "linux_headless")))]
+                    {
+                        self.send_logon_response().await;
+                        self.try_start_cm(lr.my_id, lr.my_name, true);
+                        if self.port_forward_socket.is_some() {
+                            return false;
+                        }
                     }
                 }
             }
@@ -2207,11 +2204,13 @@ async fn start_ipc(
             args.push("--hide");
         };
 
-        #[cfg(all(target_os = "linux", not(feature = "flutter")))]
+        #[cfg(target_os = "linux")]
+        #[cfg(not(feature = "linux_headless"))]
         let user = None;
-        #[cfg(all(target_os = "linux", feature = "flutter"))]
+        #[cfg(all(target_os = "linux", feature = "linux_headless"))]
         let mut user = None;
-        #[cfg(all(target_os = "linux", feature = "flutter"))]
+        // Cm run as user, wait until desktop session is ready.
+        #[cfg(all(target_os = "linux", feature = "linux_headless"))]
         if linux_desktop_manager::is_headless() {
             let mut username = linux_desktop_manager::get_username();
             loop {

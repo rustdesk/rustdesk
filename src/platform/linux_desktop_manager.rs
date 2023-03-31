@@ -1,4 +1,9 @@
 use super::{linux::*, ResultType};
+use crate::server::{
+    LOGIN_MSG_DESKTOP_NO_DESKTOP, LOGIN_MSG_DESKTOP_SESSION_ANOTHER_USER,
+    LOGIN_MSG_DESKTOP_SESSION_NOT_READY, LOGIN_MSG_DESKTOP_XORG_NOT_FOUND,
+    LOGIN_MSG_DESKTOP_XSESSION_FAILED,
+};
 use hbb_common::{allow_err, bail, log, rand::prelude::*, tokio::time};
 use pam;
 use std::{
@@ -59,7 +64,65 @@ pub fn stop_xdesktop() {
     *DESKTOP_MANAGER.lock().unwrap() = None;
 }
 
-pub fn try_start_x_session(username: &str, password: &str) -> ResultType<(String, bool)> {
+pub fn try_start_desktop(_username: &str, _passsword: &str) -> String {
+    if _username.is_empty() {
+        let username = get_username();
+        if username.is_empty() {
+            LOGIN_MSG_DESKTOP_SESSION_NOT_READY
+        } else {
+            ""
+        }
+        .to_owned()
+    } else {
+        let username = get_username();
+        if username == _username {
+            // No need to verify password here.
+            return "".to_owned();
+        }
+
+        match run_cmds(&format!("which {}", DesktopManager::get_xorg())) {
+            Ok(output) => {
+                if output.trim().is_empty() {
+                    return LOGIN_MSG_DESKTOP_XORG_NOT_FOUND.to_owned();
+                }
+            }
+            _ => {
+                return LOGIN_MSG_DESKTOP_XORG_NOT_FOUND.to_owned();
+            }
+        }
+
+        match run_cmds("ls /usr/share/xsessions/") {
+            Ok(output) => {
+                if output.trim().is_empty() {
+                    return LOGIN_MSG_DESKTOP_NO_DESKTOP.to_owned();
+                }
+            }
+            _ => {
+                return LOGIN_MSG_DESKTOP_NO_DESKTOP.to_owned();
+            }
+        }
+
+        match try_start_x_session(_username, _passsword) {
+            Ok((username, x11_ready)) => {
+                if x11_ready {
+                    if _username != username {
+                        LOGIN_MSG_DESKTOP_SESSION_ANOTHER_USER.to_owned()
+                    } else {
+                        "".to_owned()
+                    }
+                } else {
+                    LOGIN_MSG_DESKTOP_SESSION_NOT_READY.to_owned()
+                }
+            }
+            Err(e) => {
+                log::error!("Failed to start xsession {}", e);
+                LOGIN_MSG_DESKTOP_XSESSION_FAILED.to_owned()
+            }
+        }
+    }
+}
+
+fn try_start_x_session(username: &str, password: &str) -> ResultType<(String, bool)> {
     let mut desktop_manager = DESKTOP_MANAGER.lock().unwrap();
     if let Some(desktop_manager) = &mut (*desktop_manager) {
         if let Some(seat0_username) = desktop_manager.get_supported_display_seat0_username() {
@@ -547,36 +610,36 @@ impl DesktopManager {
         }
     }
 
-    fn get_xorg() -> ResultType<&'static str> {
+    fn get_xorg() -> &'static str {
         // Fedora 26 or later
         let xorg = "/usr/libexec/Xorg";
         if Path::new(xorg).is_file() {
-            return Ok(xorg);
+            return xorg;
         }
         // Debian 9 or later
         let xorg = "/usr/lib/xorg/Xorg";
         if Path::new(xorg).is_file() {
-            return Ok(xorg);
+            return xorg;
         }
         // Ubuntu 16.04 or later
         let xorg = "/usr/lib/xorg/Xorg";
         if Path::new(xorg).is_file() {
-            return Ok(xorg);
+            return xorg;
         }
         // Arch Linux
         let xorg = "/usr/lib/xorg-server/Xorg";
         if Path::new(xorg).is_file() {
-            return Ok(xorg);
+            return xorg;
         }
         // Arch Linux
         let xorg = "/usr/lib/Xorg";
         if Path::new(xorg).is_file() {
-            return Ok(xorg);
+            return xorg;
         }
         // CentOS 7 /usr/bin/Xorg or param=Xorg
 
         log::warn!("Failed to find xorg, use default Xorg.\n Please add \"allowed_users=anybody\" to \"/etc/X11/Xwrapper.config\".");
-        Ok("Xorg")
+        "Xorg"
     }
 
     fn start_x_server(
@@ -586,7 +649,7 @@ impl DesktopManager {
         gid: u32,
         envs: &HashMap<&str, String>,
     ) -> ResultType<Child> {
-        let xorg = Self::get_xorg()?;
+        let xorg = Self::get_xorg();
         log::info!("Use xorg: {}", &xorg);
         match Command::new(xorg)
             .envs(envs)

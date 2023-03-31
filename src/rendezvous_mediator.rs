@@ -72,7 +72,7 @@ impl RendezvousMediator {
                 allow_err!(super::lan::start_listening());
             });
         }
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", feature = "linux_headless"))]
         crate::platform::linux_desktop_manager::start_xdesktop();
         SHOULD_EXIT.store(false, Ordering::SeqCst);
         while !SHOULD_EXIT.load(Ordering::SeqCst) {
@@ -99,7 +99,7 @@ impl RendezvousMediator {
             }
             sleep(1.).await;
         }
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", feature = "linux_headless"))]
         crate::platform::linux_desktop_manager::stop_xdesktop();
     }
 

@@ -1912,6 +1912,71 @@ fn _input_os_password(p: String, activate: bool, interface: impl Interface) {
     interface.send(Data::Message(msg_out));
 }
 
+#[derive(Copy, Clone)]
+struct LoginErrorMsgBox {
+    msgtype: &'static str,
+    title: &'static str,
+    text: &'static str,
+    link: &'static str,
+    try_again: bool,
+}
+
+lazy_static::lazy_static! {
+    static ref LOGIN_ERROR_MAP: Arc<HashMap<&'static str, LoginErrorMsgBox>> = {
+        use hbb_common::config::LINK_HEADLESS_LINUX_SUPPORT;
+        let map = HashMap::from([(crate::server::LOGIN_MSG_DESKTOP_SESSION_NOT_READY, LoginErrorMsgBox{
+            msgtype: "session-login",
+            title: "session_not_ready_title_tip",
+            text: "session_not_ready_text_tip",
+            link: "",
+            try_again: true,
+        }), (crate::server::LOGIN_MSG_DESKTOP_XSESSION_FAILED, LoginErrorMsgBox{
+            msgtype: "session-re-login",
+            title: "xsession_failed_title_tip",
+            text: "xsession_failed_text_tip",
+            link: "",
+            try_again: true,
+        }), (crate::server::LOGIN_MSG_DESKTOP_SESSION_ANOTHER_USER, LoginErrorMsgBox{
+            msgtype: "info",
+            title: "another_user_login_title_tip",
+            text: "another_user_login_text_tip",
+            link: "",
+            try_again: false,
+        }), (crate::server::LOGIN_MSG_DESKTOP_XORG_NOT_FOUND, LoginErrorMsgBox{
+            msgtype: "session-re-login",
+            title: "xorg_not_found_title_tip",
+            text: "xorg_not_found_text_tip",
+            link: LINK_HEADLESS_LINUX_SUPPORT,
+            try_again: true,
+        }), (crate::server::LOGIN_MSG_DESKTOP_NO_DESKTOP, LoginErrorMsgBox{
+            msgtype: "session-re-login",
+            title: "no_desktop_title_tip",
+            text: "no_desktop_text_tip",
+            link: LINK_HEADLESS_LINUX_SUPPORT,
+            try_again: true,
+        }), (crate::server::LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_EMPTY, LoginErrorMsgBox{
+            msgtype: "session-login-password",
+            title: "session_unready_no_password_title_tip",
+            text: "session_unready_no_password_text_tip",
+            link: "",
+            try_again: true,
+        }), (crate::server::LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_WRONG, LoginErrorMsgBox{
+            msgtype: "session-login-re-password",
+            title: "session_unready_wrong_password_title_tip",
+            text: "session_unready_wrong_password_text_tip",
+            link: "",
+            try_again: true,
+        }), (crate::server::LOGIN_MSG_NO_PASSWORD_ACCESS, LoginErrorMsgBox{
+            msgtype: "wait-remote-accept-nook",
+            title: "Prompt",
+            text: "no_password_access_text_tip",
+            link: "",
+            try_again: true,
+        })]);
+        Arc::new(map)
+    };
+}
+
 /// Handle login error.
 /// Return true if the password is wrong, return false if there's an actual error.
 pub fn handle_login_error(
@@ -1927,47 +1992,19 @@ pub fn handle_login_error(
         lc.write().unwrap().password = Default::default();
         interface.msgbox("re-input-password", err, "Do you want to enter again?", "");
         true
-    } else if err == crate::server::LOGIN_MSG_DESKTOP_SESSION_NOT_READY {
-        interface.msgbox(
-            "session-login",
-            "session is unready",
-            "Input linux user/password",
-            "",
-        );
-        true
-    } else if err == crate::server::LOGIN_MSG_DESKTOP_XSESSION_FAILED {
-        interface.msgbox(
-            "session-re-login",
-            "xsession username/password is wrong",
-            "Do you want to enter again?",
-            "",
-        );
-        true
-    } else if err == crate::server::LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_EMPTY {
-        interface.msgbox(
-            "session-login-password",
-            "session is unready",
-            "Input connection password and linux user/password",
-            "",
-        );
-        true
-    } else if err == crate::server::LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_WRONG {
-        interface.msgbox(
-            "session-login-re-password",
-            "session is unready and password is wrong",
-            "Do you want to enter again?",
-            "",
-        );
-        true
-    } else if err == "No Password Access" {
-        lc.write().unwrap().password = Default::default();
-        interface.msgbox(
-            "wait-remote-accept-nook",
-            "Prompt",
-            "Please wait for the remote side to accept your session request...",
-            "",
-        );
-        true
+    } else if LOGIN_ERROR_MAP.contains_key(err) {
+        if let Some(msgbox_info) = LOGIN_ERROR_MAP.get(err) {
+            interface.msgbox(
+                msgbox_info.msgtype,
+                msgbox_info.title,
+                msgbox_info.text,
+                msgbox_info.link,
+            );
+            msgbox_info.try_again
+        } else {
+            // unreachable!
+            false
+        }
     } else {
         if err.contains(SCRAP_X11_REQUIRED) {
             interface.msgbox("error", "Login Error", err, SCRAP_X11_REF_URL);
