@@ -214,7 +214,9 @@ impl Connection {
         let (tx_video, mut rx_video) = mpsc::unbounded_channel::<(Instant, Arc<Message>)>();
         let (tx_input, _rx_input) = std_mpsc::channel();
         let mut hbbs_rx = crate::hbbs_http::sync::signal_receiver();
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let (tx_cm_stream_ready, _rx_cm_stream_ready) = mpsc::channel(1);
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let (_tx_desktop_ready, rx_desktop_ready) = mpsc::channel(1);
 
         #[cfg(not(any(target_os = "android", target_os = "ios")))]

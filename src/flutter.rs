@@ -827,6 +827,7 @@ pub mod connection_manager {
         start_listen_ipc(true);
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn start_listen_ipc(new_thread: bool) {
         use crate::ui_cm_interface::{start_ipc, ConnectionManager};
 
