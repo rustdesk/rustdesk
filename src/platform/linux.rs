@@ -226,11 +226,11 @@ fn stop_rustdesk_servers() {
 }
 
 #[inline]
-fn stop_xorg_subprocess() {
+fn stop_subprocess() {
     let _ = run_cmds(&format!(
         r##"ps -ef | grep '/etc/rustdesk/xorg.conf' | grep -v grep | awk '{{printf("kill -9 %d\n", $2)}}' | bash"##,
     ));
-    let _ = run_cmds(format!(
+    let _ = run_cmds(&format!(
         r##"ps -ef | grep -E 'rustdesk +--cm-no-ui' | grep -v grep | awk '{{printf("kill -9 %d\n", $2)}}' | bash"##,
     ));
 }
@@ -790,16 +790,6 @@ mod desktop {
         #[inline]
         pub fn is_wayland(&self) -> bool {
             self.protocal == DISPLAY_SERVER_WAYLAND
-        }
-
-        #[inline]
-        pub fn is_login_wayland(&self) -> bool {
-            super::is_gdm_user(&self.username) && self.protocal == DISPLAY_SERVER_WAYLAND
-        }
-
-        #[inline]
-        pub fn is_headless(&self) -> bool {
-            self.sid.is_empty()
         }
 
         #[inline]

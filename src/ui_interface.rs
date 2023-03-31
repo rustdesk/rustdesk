@@ -511,9 +511,8 @@ pub fn get_error() -> String {
     #[cfg(not(any(feature = "cli")))]
     #[cfg(target_os = "linux")]
     {
-        let (username, dtype) = crate::platform::linux::get_user_and_display_server();
+        let dtype = crate::platform::linux::get_display_server();
         if crate::platform::linux::DISPLAY_SERVER_WAYLAND == dtype
-            && !crate::platform::linux::is_gdm_user(&username)
         {
             return crate::server::wayland::common_get_error();
         }

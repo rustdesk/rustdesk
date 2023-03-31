@@ -915,7 +915,7 @@ impl Connection {
         }
         #[cfg(target_os = "linux")]
         if !self.file_transfer.is_some() && !self.port_forward_socket.is_some() {
-            let (_, dtype) = crate::platform::linux::get_user_and_display_server();
+            let dtype = crate::platform::linux::get_display_server();
             if dtype != crate::platform::linux::DISPLAY_SERVER_X11
                 && dtype != crate::platform::linux::DISPLAY_SERVER_WAYLAND
             {
@@ -2222,7 +2222,7 @@ async fn start_ipc(
                 username = linux_desktop_manager::get_username();
             }
             let uid = {
-                let output = run_cmds(format!("id -u {}", &username))?;
+                let output = run_cmds(&format!("id -u {}", &username))?;
                 let output = output.trim();
                 if output.is_empty() || !output.parse::<i32>().is_ok() {
                     bail!("Invalid username {}", &username);

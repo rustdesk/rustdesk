@@ -373,7 +373,7 @@ impl DesktopManager {
     fn wait_x_server_running(pid: u32, display_num: u32, max_wait_secs: u64) -> ResultType<()> {
         let wait_begin = Instant::now();
         loop {
-            if run_cmds(format!("ls /proc/{}", pid))?.is_empty() {
+            if run_cmds(&format!("ls /proc/{}", pid))?.is_empty() {
                 bail!("X server exit");
             }
 
