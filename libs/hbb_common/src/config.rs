@@ -915,15 +915,12 @@ impl PeerConfig {
                     decrypt_vec_or_original(&config.password, PASSWORD_ENC_VERSION);
                 config.password = password;
                 store = store || store2;
-                if let Some(v) = config.options.get_mut("rdp_password") {
-                    let (password, _, store2) = decrypt_str_or_original(v, PASSWORD_ENC_VERSION);
-                    *v = password;
-                    store = store || store2;
-                }
-                if let Some(v) = config.options.get_mut("os-password") {
-                    let (password, _, store2) = decrypt_str_or_original(v, PASSWORD_ENC_VERSION);
-                    *v = password;
-                    store = store || store2;
+                for opt in ["rdp_password", "os-password"] {
+                    if let Some(v) = config.options.get_mut(opt) {
+                        let (encrypted, _, store2) = decrypt_str_or_original(v, PASSWORD_ENC_VERSION);
+                        *v = encrypted;
+                        store = store || store2;
+                    }
                 }
                 if store {
                     config.store(id);
@@ -941,12 +938,11 @@ impl PeerConfig {
         let _lock = CONFIG.read().unwrap();
         let mut config = self.clone();
         config.password = encrypt_vec_or_original(&config.password, PASSWORD_ENC_VERSION);
-        if let Some(v) = config.options.get_mut("rdp_password") {
-            *v = encrypt_str_or_original(v, PASSWORD_ENC_VERSION)
+        for opt in ["rdp_password", "os-username", "os-password"] {
+            if let Some(v) = config.options.get_mut(opt) {
+                *v = encrypt_str_or_original(v, PASSWORD_ENC_VERSION)
+            }
         }
-        if let Some(v) = config.options.get_mut("os-password") {
-            *v = encrypt_str_or_original(v, PASSWORD_ENC_VERSION)
-        };
         if let Err(err) = store_path(Self::path(id), config) {
             log::error!("Failed to store config: {}", err);
         }
