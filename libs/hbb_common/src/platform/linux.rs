@@ -35,7 +35,6 @@ pub fn is_gdm_user(username: &str) -> bool {
     // || username == "lightgdm"
 }
 
-<<<<<<< HEAD
 #[inline]
 pub fn is_desktop_wayland() -> bool {
     get_display_server() == DISPLAY_SERVER_WAYLAND
@@ -44,26 +43,13 @@ pub fn is_desktop_wayland() -> bool {
 #[inline]
 pub fn is_x11_or_headless() -> bool {
     !is_desktop_wayland()
-=======
-pub fn is_x11_or_headless() -> bool {
-    let (username, display_server) = get_user_and_display_server();
-    display_server == DISPLAY_SERVER_WAYLAND && is_gdm_user(&username)
-        || display_server != DISPLAY_SERVER_WAYLAND
-}
-
-pub fn is_desktop_wayland() -> bool {
-    let (username, display_server) = get_user_and_display_server();
-    display_server == DISPLAY_SERVER_WAYLAND && !is_gdm_user(&username)
->>>>>>> temp commit
 }
 
 // -1
 const INVALID_SESSION: &str = "4294967295";
 
-pub fn get_user_and_display_server() -> (String, String) {
-    let seat0_values = get_values_of_seat0(&[0, 2]);
-    let mut session = seat0_values[0].clone();
-    let username = seat0_values[1].clone();
+pub fn get_display_server() -> String {
+    let mut session = get_values_of_seat0(&[0])[0].clone();
     if session.is_empty() {
         // loginctl has not given the expected output.  try something else.
         if let Ok(sid) = std::env::var("XDG_SESSION_ID") {
@@ -77,17 +63,11 @@ pub fn get_user_and_display_server() -> (String, String) {
             }
         }
     }
-<<<<<<< HEAD
     if session.is_empty() {
-=======
-
-    let display_server = if session.is_empty() {
->>>>>>> temp commit
         "".to_owned()
     } else {
         get_display_server_of_session(&session)
-    };
-    (username, display_server)
+    }
 }
 
 pub fn get_display_server_of_session(session: &str) -> String {
@@ -211,7 +191,7 @@ pub fn run_cmds(cmds: &str) -> ResultType<String> {
 }
 
 #[cfg(not(feature = "flatpak"))]
-pub(super) fn run_loginctl(args: Option<Vec<&str>>) -> std::io::Result<std::process::Output> {
+fn run_loginctl(args: Option<Vec<&str>>) -> std::io::Result<std::process::Output> {
     let mut cmd = std::process::Command::new("loginctl");
     if let Some(a) = args {
         return cmd.args(a).output();
@@ -220,7 +200,7 @@ pub(super) fn run_loginctl(args: Option<Vec<&str>>) -> std::io::Result<std::proc
 }
 
 #[cfg(feature = "flatpak")]
-pub(super) fn run_loginctl(args: Option<Vec<&str>>) -> std::io::Result<std::process::Output> {
+fn run_loginctl(args: Option<Vec<&str>>) -> std::io::Result<std::process::Output> {
     let mut l_args = String::from("loginctl");
     if let Some(a) = args {
         l_args = format!("{} {}", l_args, a.join(" "));
