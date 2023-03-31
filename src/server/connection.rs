@@ -883,7 +883,7 @@ impl Connection {
             let dtype = crate::platform::linux::get_display_server();
             if dtype != "x11" && dtype != "wayland" {
                 res.set_error(format!(
-                    "Unsupported display server type {}, x11 or wayland expected",
+                    "Unsupported display server type \"{}\", x11 or wayland expected",
                     dtype
                 ));
                 let mut msg_out = Message::new();
