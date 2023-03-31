@@ -31,7 +31,7 @@ use scrap::{
     codec::{Encoder, EncoderCfg, HwEncoderConfig},
     record::{Recorder, RecorderContext},
     vpxcodec::{VpxEncoderConfig, VpxVideoCodecId},
-    Display, TraitCapturer,
+    CodecName, Display, TraitCapturer,
 };
 #[cfg(windows)]
 use std::sync::Once;
@@ -468,21 +468,29 @@ fn run(sp: GenericService) -> ResultType<()> {
     drop(video_qos);
     log::info!("init bitrate={}, abr enabled:{}", bitrate, abr);
 
-    let encoder_cfg = match Encoder::current_hw_encoder_name() {
-        Some(codec_name) => EncoderCfg::HW(HwEncoderConfig {
-            codec_name,
-            width: c.width,
-            height: c.height,
-            bitrate: bitrate as _,
-        }),
-        None => EncoderCfg::VPX(VpxEncoderConfig {
-            width: c.width as _,
-            height: c.height as _,
-            timebase: [1, 1000], // Output timestamp precision
-            bitrate,
-            codec: VpxVideoCodecId::VP9,
-            num_threads: (num_cpus::get() / 2) as _,
-        }),
+    let encoder_cfg = match Encoder::negotiated_codec() {
+        scrap::CodecName::H264(name) | scrap::CodecName::H265(name) => {
+            EncoderCfg::HW(HwEncoderConfig {
+                name,
+                width: c.width,
+                height: c.height,
+                bitrate: bitrate as _,
+            })
+        }
+        name @ (scrap::CodecName::VP8 | scrap::CodecName::VP9) => {
+            EncoderCfg::VPX(VpxEncoderConfig {
+                width: c.width as _,
+                height: c.height as _,
+                timebase: [1, 1000], // Output timestamp precision
+                bitrate,
+                codec: if name == scrap::CodecName::VP8 {
+                    VpxVideoCodecId::VP8
+                } else {
+                    VpxVideoCodecId::VP9
+                },
+                num_threads: (num_cpus::get() / 2) as _,
+            })
+        }
     };
 
     let mut encoder;
@@ -526,7 +534,7 @@ fn run(sp: GenericService) -> ResultType<()> {
     let mut try_gdi = 1;
     #[cfg(windows)]
     log::info!("gdi: {}", c.is_gdi());
-    let codec_name = Encoder::current_hw_encoder_name();
+    let codec_name = Encoder::negotiated_codec();
     let recorder = get_recorder(c.width, c.height, &codec_name);
     #[cfg(windows)]
     start_uac_elevation_check();
@@ -557,7 +565,7 @@ fn run(sp: GenericService) -> ResultType<()> {
             *SWITCH.lock().unwrap() = true;
             bail!("SWITCH");
         }
-        if codec_name != Encoder::current_hw_encoder_name() {
+        if codec_name != Encoder::negotiated_codec() {
             bail!("SWITCH");
         }
         #[cfg(windows)]
@@ -603,8 +611,14 @@ fn run(sp: GenericService) -> ResultType<()> {
                 let time = now - start;
                 let ms = (time.as_secs() * 1000 + time.subsec_millis() as u64) as i64;
                 match frame {
+                    scrap::Frame::VP8(data) => {
+                        let send_conn_ids =
+                            handle_one_frame_encoded(VpxVideoCodecId::VP8, &sp, data, ms)?;
+                        frame_controller.set_send(now, send_conn_ids);
+                    }
                     scrap::Frame::VP9(data) => {
-                        let send_conn_ids = handle_one_frame_encoded(&sp, data, ms)?;
+                        let send_conn_ids =
+                            handle_one_frame_encoded(VpxVideoCodecId::VP9, &sp, data, ms)?;
                         frame_controller.set_send(now, send_conn_ids);
                     }
                     scrap::Frame::RAW(data) => {
@@ -717,12 +731,11 @@ fn run(sp: GenericService) -> ResultType<()> {
 fn get_recorder(
     width: usize,
     height: usize,
-    codec_name: &Option<String>,
+    codec_name: &CodecName,
 ) -> Arc<Mutex<Option<Recorder>>> {
     #[cfg(not(target_os = "ios"))]
     let recorder = if !Config::get_option("allow-auto-record-incoming").is_empty() {
         use crate::hbbs_http::record_upload;
-        use scrap::record::RecordCodecID::*;
 
         let tx = if record_upload::is_enable() {
             let (tx, rx) = std::sync::mpsc::channel();
@@ -731,16 +744,6 @@ fn get_recorder(
         } else {
             None
         };
-        let codec_id = match codec_name {
-            Some(name) => {
-                if name.contains("264") {
-                    H264
-                } else {
-                    H265
-                }
-            }
-            None => VP9,
-        };
         Recorder::new(RecorderContext {
             server: true,
             id: Config::get_id(),
@@ -748,7 +751,7 @@ fn get_recorder(
             filename: "".to_owned(),
             width,
             height,
-            codec_id,
+            format: codec_name.into(),
             tx,
         })
         .map_or(Default::default(), |r| Arc::new(Mutex::new(Some(r))))
@@ -773,19 +776,6 @@ fn check_privacy_mode_changed(sp: &GenericService, privacy_mode_id: i32) -> Resu
         bail!("SWITCH");
     }
     Ok(())
-}
-
-#[inline]
-#[cfg(any(target_os = "android", target_os = "ios"))]
-fn create_msg(vp9s: Vec<EncodedVideoFrame>) -> Message {
-    let mut msg_out = Message::new();
-    let mut vf = VideoFrame::new();
-    vf.set_vp9s(EncodedVideoFrames {
-        frames: vp9s.into(),
-        ..Default::default()
-    });
-    msg_out.set_video_frame(vf);
-    msg_out
 }
 
 #[inline]
@@ -820,6 +810,7 @@ fn handle_one_frame(
 #[inline]
 #[cfg(any(target_os = "android", target_os = "ios"))]
 pub fn handle_one_frame_encoded(
+    codec: VpxVideoCodecId,
     sp: &GenericService,
     frame: &[u8],
     ms: i64,
@@ -831,13 +822,13 @@ pub fn handle_one_frame_encoded(
         }
         Ok(())
     })?;
-    let vp9_frame = EncodedVideoFrame {
+    let vpx_frame = EncodedVideoFrame {
         data: frame.to_vec().into(),
         key: true,
         pts: ms,
         ..Default::default()
     };
-    let send_conn_ids = sp.send_video_frame(create_msg(vec![vp9_frame]));
+    let send_conn_ids = sp.send_video_frame(scrap::VpxEncoder::create_msg(codec, vec![vpx_frame]));
     Ok(send_conn_ids)
 }
 

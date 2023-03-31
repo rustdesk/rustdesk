@@ -30,6 +30,7 @@ pub struct VpxEncoder {
     ctx: vpx_codec_ctx_t,
     width: usize,
     height: usize,
+    id: VpxVideoCodecId,
 }
 
 pub struct VpxDecoder {
@@ -97,15 +98,10 @@ impl EncoderApi for VpxEncoder {
     {
         match cfg {
             crate::codec::EncoderCfg::VPX(config) => {
-                let i;
-                if cfg!(feature = "VP8") {
-                    i = match config.codec {
-                        VpxVideoCodecId::VP8 => call_vpx_ptr!(vpx_codec_vp8_cx()),
-                        VpxVideoCodecId::VP9 => call_vpx_ptr!(vpx_codec_vp9_cx()),
-                    };
-                } else {
-                    i = call_vpx_ptr!(vpx_codec_vp9_cx());
-                }
+                let i = match config.codec {
+                    VpxVideoCodecId::VP8 => call_vpx_ptr!(vpx_codec_vp8_cx()),
+                    VpxVideoCodecId::VP9 => call_vpx_ptr!(vpx_codec_vp9_cx()),
+                };
                 let mut c = unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
                 call_vpx!(vpx_codec_enc_config_default(i, &mut c, 0));
 
@@ -187,12 +183,17 @@ impl EncoderApi for VpxEncoder {
                         VP9E_SET_TILE_COLUMNS as _,
                         4 as c_int
                     ));
+                } else if config.codec == VpxVideoCodecId::VP8 {
+                    // https://github.com/webmproject/libvpx/blob/972149cafeb71d6f08df89e91a0130d6a38c4b15/vpx/vp8cx.h#L172
+                    // https://groups.google.com/a/webmproject.org/g/webm-discuss/c/DJhSrmfQ61M
+                    call_vpx!(vpx_codec_control_(&mut ctx, VP8E_SET_CPUUSED as _, 12,));
                 }
 
                 Ok(Self {
                     ctx,
                     width: config.width as _,
                     height: config.height as _,
+                    id: config.codec,
                 })
             }
             _ => Err(anyhow!("encoder type mismatch")),
@@ -213,7 +214,7 @@ impl EncoderApi for VpxEncoder {
 
         // to-do: flush periodically, e.g. 1 second
         if frames.len() > 0 {
-            Ok(VpxEncoder::create_msg(frames))
+            Ok(VpxEncoder::create_msg(self.id, frames))
         } else {
             Err(anyhow!("no valid frame"))
         }
@@ -280,13 +281,17 @@ impl VpxEncoder {
     }
 
     #[inline]
-    fn create_msg(vp9s: Vec<EncodedVideoFrame>) -> Message {
+    pub fn create_msg(codec_id: VpxVideoCodecId, frames: Vec<EncodedVideoFrame>) -> Message {
         let mut msg_out = Message::new();
         let mut vf = VideoFrame::new();
-        vf.set_vp9s(EncodedVideoFrames {
-            frames: vp9s.into(),
+        let vpxs = EncodedVideoFrames {
+            frames: frames.into(),
             ..Default::default()
-        });
+        };
+        match codec_id {
+            VpxVideoCodecId::VP8 => vf.set_vp8s(vpxs),
+            VpxVideoCodecId::VP9 => vf.set_vp9s(vpxs),
+        }
         msg_out.set_video_frame(vf);
         msg_out
     }
@@ -382,15 +387,10 @@ impl VpxDecoder {
     pub fn new(config: VpxDecoderConfig) -> Result<Self> {
         // This is sound because `vpx_codec_ctx` is a repr(C) struct without any field that can
         // cause UB if uninitialized.
-        let i;
-        if cfg!(feature = "VP8") {
-            i = match config.codec {
-                VpxVideoCodecId::VP8 => call_vpx_ptr!(vpx_codec_vp8_dx()),
-                VpxVideoCodecId::VP9 => call_vpx_ptr!(vpx_codec_vp9_dx()),
-            };
-        } else {
-            i = call_vpx_ptr!(vpx_codec_vp9_dx());
-        }
+        let i = match config.codec {
+            VpxVideoCodecId::VP8 => call_vpx_ptr!(vpx_codec_vp8_dx()),
+            VpxVideoCodecId::VP9 => call_vpx_ptr!(vpx_codec_vp9_dx()),
+        };
         let mut ctx = Default::default();
         let cfg = vpx_codec_dec_cfg_t {
             threads: if config.num_threads == 0 {
