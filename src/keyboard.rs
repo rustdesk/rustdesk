@@ -843,7 +843,7 @@ pub fn map_keyboard_mode(_peer: &str, event: &Event, mut key_event: KeyEvent) ->
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-fn try_fill_unicode(event: &Event, key_event: &KeyEvent, events: &mut Vec<KeyEvent>) {
+fn try_fill_unicode(peer: &str, event: &Event, key_event: &KeyEvent, events: &mut Vec<KeyEvent>) {
     match &event.unicode {
         Some(unicode_info) => {
             if let Some(name) = &unicode_info.name {
@@ -857,11 +857,13 @@ fn try_fill_unicode(event: &Event, key_event: &KeyEvent, events: &mut Vec<KeyEve
         None =>
         {
             #[cfg(target_os = "windows")]
-            if is_hot_key_modifiers_down() && unsafe { !IS_0X021D_DOWN } {
-                if let Some(chr) = get_char_by_vk(event.platform_code as u32) {
-                    let mut evt = key_event.clone();
-                    evt.set_seq(chr.to_string());
-                    events.push(evt);
+            if peer == OS_LOWER_LINUX {
+                if is_hot_key_modifiers_down() && unsafe { !IS_0X021D_DOWN } {
+                    if let Some(chr) = get_char_by_vk(event.platform_code as u32) {
+                        let mut evt = key_event.clone();
+                        evt.set_seq(chr.to_string());
+                        events.push(evt);
+                    }
                 }
             }
         }
@@ -886,7 +888,12 @@ fn is_hot_key_modifiers_down() -> bool {
 #[cfg(target_os = "windows")]
 pub fn translate_key_code(peer: &str, event: &Event, key_event: KeyEvent) -> Option<KeyEvent> {
     let mut key_event = map_keyboard_mode(peer, event, key_event)?;
-    key_event.set_chr((key_event.chr() & 0x0000FFFF) | ((event.platform_code as u32) << 16));
+    let chr = if peer == OS_LOWER_WINDOWS {
+        (key_event.chr() & 0x0000FFFF) | ((event.platform_code as u32) << 16)
+    } else {
+        key_event.chr()
+    };
+    key_event.set_chr(chr);
     Some(key_event)
 }
 
@@ -962,7 +969,7 @@ pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -
 
     #[cfg(any(target_os = "linux", target_os = "windows"))]
     if is_press(event) {
-        try_fill_unicode(event, &key_event, &mut events);
+        try_fill_unicode(peer, event, &key_event, &mut events);
     }
 
     #[cfg(target_os = "windows")]
