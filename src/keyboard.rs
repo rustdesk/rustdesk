@@ -843,7 +843,7 @@ pub fn map_keyboard_mode(_peer: &str, event: &Event, mut key_event: KeyEvent) ->
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-fn try_fill_unicode(peer: &str, event: &Event, key_event: &KeyEvent, events: &mut Vec<KeyEvent>) {
+fn try_fill_unicode(_peer: &str, event: &Event, key_event: &KeyEvent, events: &mut Vec<KeyEvent>) {
     match &event.unicode {
         Some(unicode_info) => {
             if let Some(name) = &unicode_info.name {
@@ -857,7 +857,7 @@ fn try_fill_unicode(peer: &str, event: &Event, key_event: &KeyEvent, events: &mu
         None =>
         {
             #[cfg(target_os = "windows")]
-            if peer == OS_LOWER_LINUX {
+            if _peer == OS_LOWER_LINUX {
                 if is_hot_key_modifiers_down() && unsafe { !IS_0X021D_DOWN } {
                     if let Some(chr) = get_char_by_vk(event.platform_code as u32) {
                         let mut evt = key_event.clone();
@@ -981,7 +981,7 @@ pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -
 
     #[cfg(target_os = "macos")]
     if !unsafe { IS_LEFT_OPTION_DOWN } {
-        try_fill_unicode(event, &key_event, &mut events);
+        try_fill_unicode(peer, event, &key_event, &mut events);
     }
 
     if events.is_empty() {
