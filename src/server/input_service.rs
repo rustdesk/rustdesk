@@ -1193,7 +1193,9 @@ fn is_function_key(ck: &EnumOrUnknown<ControlKey>) -> bool {
         });
         res = true;
     } else if ck.value() == ControlKey::LockScreen.value() {
-        lock_screen_2();
+        std::thread::spawn(|| {
+            lock_screen_2();
+        });
         res = true;
     }
     return res;

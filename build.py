@@ -18,6 +18,12 @@ exe_path = 'target/release/' + hbb_name
 flutter_win_target_dir = 'flutter/build/windows/runner/Release/'
 skip_cargo = False
 
+def get_arch() -> str:
+    custom_arch = os.environ.get("ARCH")
+    if custom_arch is None:
+        return "amd64"
+    return custom_arch
+
 def system2(cmd):
     err = os.system(cmd)
     if err != 0:
@@ -105,6 +111,10 @@ def make_parser():
         '--skip-cargo',
         action='store_true',
         help='Skip cargo build process, only flutter version + Linux supported currently'
+    )
+    parser.add_argument(
+        "--package",
+        type=str
     )
     return parser
 
@@ -251,13 +261,13 @@ def generate_control_file(version):
 
     content = """Package: rustdesk
 Version: %s
-Architecture: amd64
+Architecture: %s
 Maintainer: open-trade <info@rustdesk.com>
 Homepage: https://rustdesk.com
 Depends: libgtk-3-0, libxcb-randr0, libxdo3, libxfixes3, libxcb-shape0, libxcb-xfixes0, libasound2, libsystemd0, curl, libva-drm2, libva-x11-2, libvdpau1, libgstreamer-plugins-base1.0-0
 Description: A remote control software.
 
-""" % version
+""" % (version, get_arch())
     file = open(control_file_path, "w")
     file.write(content)
     file.close()
@@ -307,6 +317,39 @@ def build_flutter_deb(version, features):
     os.rename('rustdesk.deb', '../rustdesk-%s.deb' % version)
     os.chdir("..")
 
+def build_deb_from_folder(version, binary_folder):
+    os.chdir('flutter')
+    system2('mkdir -p tmpdeb/usr/bin/')
+    system2('mkdir -p tmpdeb/usr/lib/rustdesk')
+    system2('mkdir -p tmpdeb/usr/share/rustdesk/files/systemd/')
+    system2('mkdir -p tmpdeb/usr/share/applications/')
+    system2('mkdir -p tmpdeb/usr/share/polkit-1/actions')
+    system2('rm tmpdeb/usr/bin/rustdesk || true')
+    system2(
+        f'cp -r ../{binary_folder}/* tmpdeb/usr/lib/rustdesk/')
+    system2(
+        'cp ../res/rustdesk.service tmpdeb/usr/share/rustdesk/files/systemd/')
+    system2(
+        'cp ../res/128x128@2x.png tmpdeb/usr/share/rustdesk/files/rustdesk.png')
+    system2(
+        'cp ../res/rustdesk.desktop tmpdeb/usr/share/applications/rustdesk.desktop')
+    system2(
+        'cp ../res/rustdesk-link.desktop tmpdeb/usr/share/applications/rustdesk-link.desktop')
+    system2(
+        'cp ../res/com.rustdesk.RustDesk.policy tmpdeb/usr/share/polkit-1/actions/')
+    system2(
+        "echo \"#!/bin/sh\" >> tmpdeb/usr/share/rustdesk/files/polkit && chmod a+x tmpdeb/usr/share/rustdesk/files/polkit")
+
+    system2('mkdir -p tmpdeb/DEBIAN')
+    generate_control_file(version)
+    system2('cp -a ../res/DEBIAN/* tmpdeb/DEBIAN/')
+    md5_file('usr/share/rustdesk/files/systemd/rustdesk.service')
+    system2('dpkg-deb -b tmpdeb rustdesk.deb;')
+
+    system2('/bin/rm -rf tmpdeb/')
+    system2('/bin/rm -rf ../res/DEBIAN/control')
+    os.rename('rustdesk.deb', '../rustdesk-%s.deb' % version)
+    os.chdir("..")
 
 def build_flutter_dmg(version, features):
     if not skip_cargo:
@@ -381,6 +424,10 @@ def main():
     if args.skip_cargo:
         skip_cargo = True
     portable = args.portable
+    package = args.package
+    if package:
+        build_deb_from_folder(version, package)
+        return
     if windows:
         # build virtual display dynamic library
         os.chdir('libs/virtual_display/dylib')

@@ -128,12 +128,19 @@ void setTemporaryPasswordLengthDialog(
 
     return CustomAlertDialog(
       title: Text(translate("Set one-time password length")),
-      content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children:
-              lengths.map((e) => getRadio(e, e, length, setLength)).toList()),
-      actions: [],
-      contentPadding: 14,
+      content: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: lengths
+              .map(
+                (value) => Row(
+                  children: [
+                    Text(value),
+                    Radio(
+                        value: value, groupValue: length, onChanged: setLength),
+                  ],
+                ),
+              )
+              .toList()),
     );
   }, backDismiss: true, clickMaskDismiss: true);
 }

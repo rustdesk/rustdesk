@@ -755,7 +755,7 @@ lazy_static::lazy_static! {
 
 #[cfg(target_os = "linux")]
 lazy_static::lazy_static! {
-    pub static ref IS_X11: bool = "x11" == hbb_common::platform::linux::get_display_server();
+    pub static ref IS_X11: bool = hbb_common::platform::linux::is_x11_or_headless();
 }
 
 pub fn make_fd_to_json(id: i32, path: String, entries: &Vec<FileEntry>) -> String {
