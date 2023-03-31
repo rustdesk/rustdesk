@@ -1,0 +1,66 @@
+# Copyright (c) 2019-2020-2021-2022-2023 Luca Cappa
+# Released under the term specified in file LICENSE.txt
+# SPDX short identifier: MIT
+
+name: 'run-vcpkg'
+description: 'Setup (and optionally run) vcpkg to build C/C++ dependencies and cache them automatically.'
+author: 'Luca Cappa https://github.com/lukka'
+inputs:
+  
+  # The following 'inputs' are commonly defined by the user in the workflow.
+  vcpkgDirectory:
+    default: ${{ github.workspace }}/vcpkg
+    required: false
+    descriptions: "Specify the vcpkg's root directory. If not specified, it defaults to  <github.workspace>/vcpkg/ . When vcpkg is a Git submodule, specify the path to it."
+  runVcpkgInstall:
+    default: false
+    required: false
+    description: "Run the installation of packages by running `vcpkg install` on the directory of the discovered 'vcpkg.json' file. Default is false."
+  vcpkgGitCommitId:
+    required: false
+    description: "Specify the full SHA-1 hash of a Git commit (not a branch name, nor a tag!) that establishes which version of vcpkg needs to be used. When using vcpkg as a Git submodule, this input is *not* needed as implicitly specified by the submodule."
+  vcpkgGitURL:
+    default: "https://github.com/microsoft/vcpkg.git"
+    required: false
+    description: "Specify the URL Git repository to download vcpkg from. Defaults to https://github.com/microsoft/vcpkg.git"
+  doNotUpdateVcpkg: 
+    default: false
+    required: false
+    description: "Avoid to update vcpkg (launching git) in the specified 'vcpkgDirectory'. This is useful when vcpkg is being checkout independently of the run-vcpkg action. Default is false."
+  doNotCache:
+    default: false
+    required: false
+    description: "Disable the run-vcpkg's automatic caching mechanism by setting it to true. Default is false. This does not disable vcpkg's binary cache which is always on."
+
+  # The following inputs are rarely set by the user, since the default values suffice the most common scenarios.
+  vcpkgJsonGlob:
+    default: '**/vcpkg.json'
+    required: false
+    description: "Specify the glob expression used to discover the vcpkg.json whose content's hash is added to the cache key. On Windows runners using `github.workspace` context to form the expression would not work as expected since it contains backslashes. Use instead `**/path/to/vcpkg.json` to match the desired `vcpkg.json` file."
+  vcpkgJsonIgnores:
+    default: "['**/vcpkg/**']"
+    required: false
+    description: "Specify an array of string containing the pattenrs to be ignored when searching for the vcpkg.json file. The default value ignores the pattern '**/vcpkg/**'"
+  binaryCachePath:
+    required: false
+    description: "Specify a path to store the built packages to be cached with the GitHub cache service. Default is '<runnerWorkspace>/b/vcpkg_cache'."
+  runVcpkgFormatString:
+    default: '[`install`, `--recurse`, `--clean-after-build`, `--x-install-root`, `$[env.VCPKG_INSTALLED_DIR]`, `--triplet`, `$[env.VCPKG_DEFAULT_TRIPLET]`]'
+    required: false
+    description: "Specify the command line to run vcpkg with. This is only useful when the input 'runVcpkgInstall' is set to true."
+  useShell:
+    default: true
+    required: false
+    description: "Specify which shell to be used when launching commands. 'true' means the default shell is used. 'false' means no shell is used. It also can be an absolute path and arguments of the shell to spawn commands with."
+  logCollectionRegExps:
+    default: "\\s*\"(.+CMakeOutput\\.log)\"\\.\\s*;\\s*\"(.+CMakeError\\.log)\"\\.\\s*;\\s*(.+out\\.log)\\s*;\\s+(.+err\\.log)\\s*;\\s*(.+vcpkg.+\\.log)\\s*"
+    required: false
+    description: "Specifies a semicolon separated list of regular expressions that are used to identify log file paths in the workflow output. A regular expression must have a single capturing group, that is a single pair of parenthesis such as 'See also (.+.log)'. When a match occurs, the content of the file is written into the workflow output for disclosing its content to the user. The default regular expressions are for CMake's and vcpkg's log files."
+
+runs:
+  using: 'node16'
+  main: 'dist/index.js'
+
+branding:
+  icon: 'terminal'  
+  color: 'green'
