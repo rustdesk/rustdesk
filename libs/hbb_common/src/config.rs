@@ -917,8 +917,7 @@ impl PeerConfig {
                 store = store || store2;
                 for opt in ["rdp_password", "os-password"] {
                     if let Some(v) = config.options.get_mut(opt) {
-                        let (encrypted, _, store2) =
-                            decrypt_str_or_original(v, PASSWORD_ENC_VERSION);
+                        let (encrypted, _, store2) = decrypt_str_or_original(v, PASSWORD_ENC_VERSION);
                         *v = encrypted;
                         store = store || store2;
                     }
@@ -1357,7 +1356,7 @@ impl UserDefaultConfig {
             "view_style" => self.get_string(key, "original", vec!["adaptive"]),
             "scroll_style" => self.get_string(key, "scrollauto", vec!["scrollbar"]),
             "image_quality" => self.get_string(key, "balanced", vec!["best", "low", "custom"]),
-            "codec-preference" => self.get_string(key, "auto", vec!["vp8", "vp9", "h264", "h265"]),
+            "codec-preference" => self.get_string(key, "auto", vec!["vp9", "h264", "h265"]),
             "custom_image_quality" => self.get_double_string(key, 50.0, 10.0, 100.0),
             "custom-fps" => self.get_double_string(key, 30.0, 10.0, 120.0),
             _ => self

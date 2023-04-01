@@ -1258,6 +1258,9 @@ class _DisplayState extends State<_Display> {
   }
 
   Widget codec(BuildContext context) {
+    if (!bind.mainHasHwcodec()) {
+      return Offstage();
+    }
     final key = 'codec-preference';
     onChanged(String value) async {
       await bind.mainSetUserDefaultOption(key: key, value: value);
@@ -1265,28 +1268,7 @@ class _DisplayState extends State<_Display> {
     }
 
     final groupValue = bind.mainGetUserDefaultOption(key: key);
-    var hwRadios = [];
-    try {
-      final Map codecsJson = jsonDecode(bind.mainSupportedHwdecodings());
-      final h264 = codecsJson['h264'] ?? false;
-      final h265 = codecsJson['h265'] ?? false;
-      if (h264) {
-        hwRadios.add(_Radio(context,
-            value: 'h264',
-            groupValue: groupValue,
-            label: 'H264',
-            onChanged: onChanged));
-      }
-      if (h265) {
-        hwRadios.add(_Radio(context,
-            value: 'h265',
-            groupValue: groupValue,
-            label: 'H265',
-            onChanged: onChanged));
-      }
-    } catch (e) {
-      debugPrint("failed to parse supported hwdecodings, err=$e");
-    }
+
     return _Card(title: 'Default Codec', children: [
       _Radio(context,
           value: 'auto',
@@ -1294,16 +1276,20 @@ class _DisplayState extends State<_Display> {
           label: 'Auto',
           onChanged: onChanged),
       _Radio(context,
-          value: 'vp8',
-          groupValue: groupValue,
-          label: 'VP8',
-          onChanged: onChanged),
-      _Radio(context,
           value: 'vp9',
           groupValue: groupValue,
           label: 'VP9',
           onChanged: onChanged),
-      ...hwRadios,
+      _Radio(context,
+          value: 'h264',
+          groupValue: groupValue,
+          label: 'H264',
+          onChanged: onChanged),
+      _Radio(context,
+          value: 'h265',
+          groupValue: groupValue,
+          label: 'H265',
+          onChanged: onChanged),
     ]);
   }
 
