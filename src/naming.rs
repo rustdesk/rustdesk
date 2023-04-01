@@ -4,10 +4,8 @@ use hbb_common::ResultType;
 use license::*;
 
 fn gen_name(lic: &License) -> ResultType<String> {
-    let tmp = serde_json::to_vec::<License>(lic)?;
-    let tmp = URL_SAFE_NO_PAD.encode(&tmp);
-    let tmp: String = tmp.chars().rev().collect();
-    Ok(tmp)
+    let tmp = URL_SAFE_NO_PAD.encode(&serde_json::to_vec(lic)?);
+    Ok(tmp.chars().rev().collect())
 }
 
 fn main() {
