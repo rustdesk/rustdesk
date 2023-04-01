@@ -9,19 +9,8 @@ fn gen_name(lic: &License) -> ResultType<String> {
 }
 
 fn main() {
-    let mut args = Vec::new();
-    let mut i = 0;
-    for arg in std::env::args() {
-        if i > 0 {
-            args.push(arg);
-        }
-        i += 1;
-    }
-    let api = if args.len() < 3 {
-        "".to_owned()
-    } else {
-        args[2].clone()
-    };
+    let args: Vec<_> = std::env::args().skip(1).collect();
+    let api = args.get(2).cloned().unwrap_or_default();
     if args.len() >= 2 {
         println!(
             "rustdesk-licensed-{}.exe",
