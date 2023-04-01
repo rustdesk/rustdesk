@@ -320,6 +320,8 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   PeerInfo get pi => widget.ffi.ffiModel.pi;
   FfiModel get ffiModel => widget.ffi.ffiModel;
 
+  triggerAutoHide() => _debouncerHide.value = _debouncerHide.value + 1;
+
   @override
   initState() {
     super.initState();
@@ -332,7 +334,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
 
     widget.onEnterOrLeaveImageSetter((enter) {
       if (enter) {
-        _debouncerHide.value = 0;
+        triggerAutoHide();
         _isCursorOverImage = true;
       } else {
         _isCursorOverImage = false;
@@ -367,7 +369,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   Widget _buildDraggableShowHide(BuildContext context) {
     return Obx(() {
       if (show.isTrue && _dragging.isFalse) {
-        _debouncerHide.value = 1;
+        triggerAutoHide();
       }
       return Align(
         alignment: FractionalOffset(_fractionX.value, 0),
