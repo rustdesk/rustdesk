@@ -865,6 +865,7 @@ fn try_fill_unicode(_peer: &str, event: &Event, key_event: &KeyEvent, events: &m
                 if name.len() > 0 {
                     let mut evt = key_event.clone();
                     evt.set_seq(name.to_string());
+                    evt.down = true;
                     events.push(evt);
                 }
             }
@@ -877,6 +878,7 @@ fn try_fill_unicode(_peer: &str, event: &Event, key_event: &KeyEvent, events: &m
                     if let Some(chr) = get_char_from_vk(event.platform_code as u32) {
                         let mut evt = key_event.clone();
                         evt.set_seq(chr.to_string());
+                        evt.down = true;
                         events.push(evt);
                     }
                 }
@@ -956,6 +958,7 @@ fn is_press(event: &Event) -> bool {
 // https://github.com/fufesou/rustdesk/wiki/Keyboard-mode----Translate-Mode
 pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -> Vec<KeyEvent> {
     let mut events: Vec<KeyEvent> = Vec::new();
+
     if let Some(unicode_info) = &event.unicode {
         if unicode_info.is_dead {
             #[cfg(target_os = "macos")]
@@ -994,20 +997,21 @@ pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -
         return events;
     }
 
+    #[cfg(target_os = "windows")]
+    try_file_win2win_hotkey(peer, event, &key_event, &mut events);
+
     #[cfg(any(target_os = "linux", target_os = "windows"))]
-    if is_press(event) {
+    if events.is_empty() && is_press(event) {
         try_fill_unicode(peer, event, &key_event, &mut events);
     }
 
+    // If AltGr is down, no need to send events other than unicode.
     #[cfg(target_os = "windows")]
     unsafe {
         if IS_0X021D_DOWN {
             return events;
         }
     }
-
-    #[cfg(target_os = "windows")]
-    try_file_win2win_hotkey(peer, event, &key_event, &mut events);
 
     #[cfg(target_os = "macos")]
     if !unsafe { IS_LEFT_OPTION_DOWN } {
