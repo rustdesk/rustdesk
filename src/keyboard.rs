@@ -4,7 +4,7 @@ use crate::common::GrabState;
 #[cfg(feature = "flutter")]
 use crate::flutter::{CUR_SESSION_ID, SESSIONS};
 #[cfg(target_os = "windows")]
-use crate::platform::windows::get_char_by_vk;
+use crate::platform::windows::{get_char_from_vk, get_unicode_from_vk};
 #[cfg(not(any(feature = "flutter", feature = "cli")))]
 use crate::ui::CUR_SESSION;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -865,6 +865,7 @@ fn try_fill_unicode(_peer: &str, event: &Event, key_event: &KeyEvent, events: &m
                 if name.len() > 0 {
                     let mut evt = key_event.clone();
                     evt.set_seq(name.to_string());
+                    evt.down = true;
                     events.push(evt);
                 }
             }
@@ -874,13 +875,44 @@ fn try_fill_unicode(_peer: &str, event: &Event, key_event: &KeyEvent, events: &m
             #[cfg(target_os = "windows")]
             if _peer == OS_LOWER_LINUX {
                 if is_hot_key_modifiers_down() && unsafe { !IS_0X021D_DOWN } {
-                    if let Some(chr) = get_char_by_vk(event.platform_code as u32) {
+                    if let Some(chr) = get_char_from_vk(event.platform_code as u32) {
                         let mut evt = key_event.clone();
                         evt.set_seq(chr.to_string());
+                        evt.down = true;
                         events.push(evt);
                     }
                 }
             }
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn try_file_win2win_hotkey(
+    peer: &str,
+    event: &Event,
+    key_event: &KeyEvent,
+    events: &mut Vec<KeyEvent>,
+) {
+    if peer == OS_LOWER_WINDOWS && is_hot_key_modifiers_down() && unsafe { !IS_0X021D_DOWN } {
+        let mut down = false;
+        let win2win_hotkey = match event.event_type {
+            EventType::KeyPress(..) => {
+                down = true;
+                if let Some(unicode) = get_unicode_from_vk(event.platform_code as u32) {
+                    Some((unicode as u32 & 0x0000FFFF) | (event.platform_code << 16))
+                } else {
+                    None
+                }
+            }
+            EventType::KeyRelease(..) => Some(event.platform_code << 16),
+            _ => None,
+        };
+        if let Some(code) = win2win_hotkey {
+            let mut evt = key_event.clone();
+            evt.set_win2win_hotkey(code);
+            evt.down = down;
+            events.push(evt);
         }
     }
 }
@@ -897,25 +929,6 @@ fn is_hot_key_modifiers_down() -> bool {
         return true;
     }
     return false;
-}
-
-#[inline]
-#[cfg(target_os = "windows")]
-pub fn translate_key_code(peer: &str, event: &Event, key_event: KeyEvent) -> Option<KeyEvent> {
-    let mut key_event = map_keyboard_mode(peer, event, key_event)?;
-    let chr = if peer == OS_LOWER_WINDOWS {
-        (key_event.chr() & 0x0000FFFF) | ((event.platform_code as u32) << 16)
-    } else {
-        key_event.chr()
-    };
-    key_event.set_chr(chr);
-    Some(key_event)
-}
-
-#[inline]
-#[cfg(not(target_os = "windows"))]
-pub fn translate_key_code(peer: &str, event: &Event, key_event: KeyEvent) -> Option<KeyEvent> {
-    map_keyboard_mode(peer, event, key_event)
 }
 
 #[inline]
@@ -945,6 +958,7 @@ fn is_press(event: &Event) -> bool {
 // https://github.com/fufesou/rustdesk/wiki/Keyboard-mode----Translate-Mode
 pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -> Vec<KeyEvent> {
     let mut events: Vec<KeyEvent> = Vec::new();
+
     if let Some(unicode_info) = &event.unicode {
         if unicode_info.is_dead {
             #[cfg(target_os = "macos")]
@@ -961,7 +975,7 @@ pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if is_numpad_key(&event) {
-        if let Some(evt) = translate_key_code(peer, event, key_event) {
+        if let Some(evt) = map_keyboard_mode(peer, event, key_event) {
             events.push(evt);
         }
         return events;
@@ -983,11 +997,15 @@ pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -
         return events;
     }
 
+    #[cfg(target_os = "windows")]
+    try_file_win2win_hotkey(peer, event, &key_event, &mut events);
+
     #[cfg(any(target_os = "linux", target_os = "windows"))]
-    if is_press(event) {
+    if events.is_empty() && is_press(event) {
         try_fill_unicode(peer, event, &key_event, &mut events);
     }
 
+    // If AltGr is down, no need to send events other than unicode.
     #[cfg(target_os = "windows")]
     unsafe {
         if IS_0X021D_DOWN {
@@ -1001,7 +1019,7 @@ pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -
     }
 
     if events.is_empty() {
-        if let Some(evt) = translate_key_code(peer, event, key_event) {
+        if let Some(evt) = map_keyboard_mode(peer, event, key_event) {
             events.push(evt);
         }
     }
