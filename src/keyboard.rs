@@ -517,6 +517,11 @@ pub fn event_to_key_events(
         }
     };
 
+    println!(
+        "REMOVE ME ==================================== key_events {:?}",
+        &key_events
+    );
+
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if keyboard_mode != KeyboardMode::Translate {
         let is_numpad_key = is_numpad_key(&event);
@@ -893,8 +898,10 @@ fn try_file_win2win_hotkey(
     events: &mut Vec<KeyEvent>,
 ) {
     if peer == OS_LOWER_WINDOWS && is_hot_key_modifiers_down() && unsafe { !IS_0X021D_DOWN } {
+        let mut down = false;
         let win2win_hotkey = match event.event_type {
             EventType::KeyPress(..) => {
+                down = true;
                 if let Some(unicode) = get_unicode_from_vk(event.platform_code as u32) {
                     Some((unicode as u32 & 0x0000FFFF) | (event.platform_code << 16))
                 } else {
@@ -907,6 +914,7 @@ fn try_file_win2win_hotkey(
         if let Some(code) = win2win_hotkey {
             let mut evt = key_event.clone();
             evt.set_win2win_hotkey(code);
+            evt.down = down;
             events.push(evt);
         }
     }
