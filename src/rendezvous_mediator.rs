@@ -74,8 +74,7 @@ impl RendezvousMediator {
         }
         #[cfg(all(target_os = "linux", feature = "linux_headless"))]
         crate::platform::linux_desktop_manager::start_xdesktop();
-        SHOULD_EXIT.store(false, Ordering::SeqCst);
-        while !SHOULD_EXIT.load(Ordering::SeqCst) {
+        loop {
             Config::reset_online();
             if Config::get_option("stop-service").is_empty() {
                 if !nat_tested {
@@ -99,8 +98,10 @@ impl RendezvousMediator {
             }
             sleep(1.).await;
         }
-        #[cfg(all(target_os = "linux", feature = "linux_headless"))]
-        crate::platform::linux_desktop_manager::stop_xdesktop();
+        // It should be better to call stop_xdesktop.
+        // But for server, it also is Ok without calling this method.
+        // #[cfg(all(target_os = "linux", feature = "linux_headless"))]
+        // crate::platform::linux_desktop_manager::stop_xdesktop();
     }
 
     pub async fn start(server: ServerPtr, host: String) -> ResultType<()> {
