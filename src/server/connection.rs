@@ -942,7 +942,7 @@ impl Connection {
         }
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if self.file_transfer.is_some() {
-            if !crate::platform::is_prelogin() || self.tx_to_cm.send(ipc::Data::Test).is_err() {
+            if crate::platform::is_prelogin() || self.tx_to_cm.send(ipc::Data::Test).is_err() {
                 username = "".to_owned();
             }
         }
@@ -2190,7 +2190,7 @@ async fn start_ipc(
     tx_stream_ready: mpsc::Sender<()>,
 ) -> ResultType<()> {
     loop {
-        if crate::platform::is_prelogin() {
+        if !crate::platform::is_prelogin() {
             break;
         }
         sleep(1.).await;
