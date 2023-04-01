@@ -752,13 +752,6 @@ pub fn has_hwcodec() -> bool {
     return true;
 }
 
-#[cfg(feature = "flutter")]
-#[inline]
-pub fn supported_hwdecodings() -> (bool, bool) {
-    let decoding = scrap::codec::Decoder::supported_decodings(None);
-    (decoding.ability_h264 > 0, decoding.ability_h265 > 0)
-}
-
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[inline]
 pub fn is_root() -> bool {

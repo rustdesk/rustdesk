@@ -536,7 +536,7 @@ impl Connection {
             let _ = privacy_mode::turn_off_privacy(0);
         }
         video_service::notify_video_frame_fetched(id, None);
-        scrap::codec::Encoder::update(id, scrap::codec::EncodingUpdate::Remove);
+        scrap::codec::Encoder::update_video_encoder(id, scrap::codec::EncoderUpdate::Remove);
         video_service::VIDEO_QOS.lock().unwrap().reset();
         if conn.authorized {
             password::update_temporary_password();
@@ -862,7 +862,16 @@ impl Connection {
             }
         }
 
-        pi.encoding = Some(scrap::codec::Encoder::supported_encoding()).into();
+        #[cfg(feature = "hwcodec")]
+        {
+            let (h264, h265) = scrap::codec::Encoder::supported_encoding();
+            pi.encoding = Some(SupportedEncoding {
+                h264,
+                h265,
+                ..Default::default()
+            })
+            .into();
+        }
 
         if self.port_forward_socket.is_some() {
             let mut msg_out = Message::new();
@@ -1138,21 +1147,21 @@ impl Connection {
         self.lr = lr.clone();
         if let Some(o) = lr.option.as_ref() {
             self.options_in_login = Some(o.clone());
-            if let Some(q) = o.supported_decoding.clone().take() {
-                scrap::codec::Encoder::update(
+            if let Some(q) = o.video_codec_state.clone().take() {
+                scrap::codec::Encoder::update_video_encoder(
                     self.inner.id(),
-                    scrap::codec::EncodingUpdate::New(q),
+                    scrap::codec::EncoderUpdate::State(q),
                 );
             } else {
-                scrap::codec::Encoder::update(
+                scrap::codec::Encoder::update_video_encoder(
                     self.inner.id(),
-                    scrap::codec::EncodingUpdate::NewOnlyVP9,
+                    scrap::codec::EncoderUpdate::DisableHwIfNotExist,
                 );
             }
         } else {
-            scrap::codec::Encoder::update(
+            scrap::codec::Encoder::update_video_encoder(
                 self.inner.id(),
-                scrap::codec::EncodingUpdate::NewOnlyVP9,
+                scrap::codec::EncoderUpdate::DisableHwIfNotExist,
             );
         }
         self.video_ack_required = lr.video_ack_required;
@@ -1775,8 +1784,11 @@ impl Connection {
                 .unwrap()
                 .update_user_fps(o.custom_fps as _);
         }
-        if let Some(q) = o.supported_decoding.clone().take() {
-            scrap::codec::Encoder::update(self.inner.id(), scrap::codec::EncodingUpdate::New(q));
+        if let Some(q) = o.video_codec_state.clone().take() {
+            scrap::codec::Encoder::update_video_encoder(
+                self.inner.id(),
+                scrap::codec::EncoderUpdate::State(q),
+            );
         }
         if let Ok(q) = o.lock_after_session_end.enum_value() {
             if q != BoolOption::NotSet {

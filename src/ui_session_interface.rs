@@ -216,16 +216,24 @@ impl<T: InvokeUiSession> Session<T> {
         true
     }
 
-    pub fn alternative_codecs(&self) -> (bool, bool, bool) {
-        let decoder = scrap::codec::Decoder::supported_decodings(None);
-        let mut vp8 = decoder.ability_vp8 > 0;
-        let mut h264 = decoder.ability_h264 > 0;
-        let mut h265 = decoder.ability_h265 > 0;
-        let enc = &self.lc.read().unwrap().supported_encoding;
-        vp8 = vp8 && enc.vp8;
-        h264 = h264 && enc.h264;
-        h265 = h265 && enc.h265;
-        (vp8, h264, h265)
+    pub fn supported_hwcodec(&self) -> (bool, bool) {
+        #[cfg(any(feature = "hwcodec", feature = "mediacodec"))]
+        {
+            let decoder = scrap::codec::Decoder::video_codec_state(&self.id);
+            let mut h264 = decoder.score_h264 > 0;
+            let mut h265 = decoder.score_h265 > 0;
+            let (encoding_264, encoding_265) = self
+                .lc
+                .read()
+                .unwrap()
+                .supported_encoding
+                .unwrap_or_default();
+            h264 = h264 && encoding_264;
+            h265 = h265 && encoding_265;
+            return (h264, h265);
+        }
+        #[allow(unreachable_code)]
+        (false, false)
     }
 
     pub fn change_prefer_codec(&self) {

@@ -1349,30 +1349,29 @@ class _DisplayMenuState extends State<_DisplayMenu> {
 
   codec() {
     return futureBuilder(future: () async {
-      final alternativeCodecs =
-          await bind.sessionAlternativeCodecs(id: widget.id);
+      final supportedHwcodec =
+          await bind.sessionSupportedHwcodec(id: widget.id);
       final codecPreference =
           await bind.sessionGetOption(id: widget.id, arg: 'codec-preference') ??
               '';
       return {
-        'alternativeCodecs': alternativeCodecs,
+        'supportedHwcodec': supportedHwcodec,
         'codecPreference': codecPreference
       };
     }(), hasData: (data) {
       final List<bool> codecs = [];
       try {
-        final Map codecsJson = jsonDecode(data['alternativeCodecs']);
-        final vp8 = codecsJson['vp8'] ?? false;
+        final Map codecsJson = jsonDecode(data['supportedHwcodec']);
         final h264 = codecsJson['h264'] ?? false;
         final h265 = codecsJson['h265'] ?? false;
-        codecs.add(vp8);
         codecs.add(h264);
         codecs.add(h265);
       } catch (e) {
         debugPrint("Show Codec Preference err=$e");
       }
-      final visible =
-          codecs.length == 3 && (codecs[0] || codecs[1] || codecs[2]);
+      final visible = bind.mainHasHwcodec() &&
+          codecs.length == 2 &&
+          (codecs[0] || codecs[1]);
       if (!visible) return Offstage();
       final groupValue = data['codecPreference'] as String;
       onChanged(String? value) async {
@@ -1394,13 +1393,6 @@ class _DisplayMenuState extends State<_DisplayMenu> {
               ffi: widget.ffi,
             ),
             _RadioMenuButton<String>(
-              child: Text(translate('VP8')),
-              value: 'vp8',
-              groupValue: groupValue,
-              onChanged: codecs[0] ? onChanged : null,
-              ffi: widget.ffi,
-            ),
-            _RadioMenuButton<String>(
               child: Text(translate('VP9')),
               value: 'vp9',
               groupValue: groupValue,
@@ -1411,14 +1403,14 @@ class _DisplayMenuState extends State<_DisplayMenu> {
               child: Text(translate('H264')),
               value: 'h264',
               groupValue: groupValue,
-              onChanged: codecs[1] ? onChanged : null,
+              onChanged: codecs[0] ? onChanged : null,
               ffi: widget.ffi,
             ),
             _RadioMenuButton<String>(
               child: Text(translate('H265')),
               value: 'h265',
               groupValue: groupValue,
-              onChanged: codecs[2] ? onChanged : null,
+              onChanged: codecs[1] ? onChanged : null,
               ffi: widget.ffi,
             ),
           ]);

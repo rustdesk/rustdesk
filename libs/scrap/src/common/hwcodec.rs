@@ -7,7 +7,7 @@ use hbb_common::{
     anyhow::{anyhow, Context},
     bytes::Bytes,
     config::HwCodecConfig,
-    log,
+    lazy_static, log,
     message_proto::{EncodedVideoFrame, EncodedVideoFrames, Message, VideoFrame},
     ResultType,
 };
@@ -19,6 +19,11 @@ use hwcodec::{
     Quality::{self, *},
     RateControl::{self, *},
 };
+use std::sync::{Arc, Mutex};
+
+lazy_static::lazy_static! {
+    static ref HW_ENCODER_NAME: Arc<Mutex<Option<String>>> = Default::default();
+}
 
 const CFG_KEY_ENCODER: &str = "bestHwEncoders";
 const CFG_KEY_DECODER: &str = "bestHwDecoders";
@@ -44,7 +49,7 @@ impl EncoderApi for HwEncoder {
         match cfg {
             EncoderCfg::HW(config) => {
                 let ctx = EncodeContext {
-                    name: config.name.clone(),
+                    name: config.codec_name.clone(),
                     width: config.width as _,
                     height: config.height as _,
                     pixfmt: DEFAULT_PIXFMT,
@@ -55,12 +60,12 @@ impl EncoderApi for HwEncoder {
                     quality: DEFAULT_HW_QUALITY,
                     rc: DEFAULT_RC,
                 };
-                let format = match Encoder::format_from_name(config.name.clone()) {
+                let format = match Encoder::format_from_name(config.codec_name.clone()) {
                     Ok(format) => format,
                     Err(_) => {
                         return Err(anyhow!(format!(
                             "failed to get format from name:{}",
-                            config.name
+                            config.codec_name
                         )))
                     }
                 };
@@ -126,6 +131,10 @@ impl HwEncoder {
             h264: None,
             h265: None,
         })
+    }
+
+    pub fn current_name() -> Arc<Mutex<Option<String>>> {
+        HW_ENCODER_NAME.clone()
     }
 
     pub fn encode(&mut self, bgra: &[u8]) -> ResultType<Vec<EncodeFrame>> {

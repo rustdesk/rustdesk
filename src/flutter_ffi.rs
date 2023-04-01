@@ -969,13 +969,6 @@ pub fn main_has_hwcodec() -> SyncReturn<bool> {
     SyncReturn(has_hwcodec())
 }
 
-pub fn main_supported_hwdecodings() -> SyncReturn<String> {
-    let decoding = supported_hwdecodings();
-    let msg = HashMap::from([("h264", decoding.0), ("h265", decoding.1)]);
-
-    SyncReturn(serde_json::ser::to_string(&msg).unwrap_or("".to_owned()))
-}
-
 pub fn main_is_root() -> bool {
     is_root()
 }
@@ -1061,10 +1054,10 @@ pub fn session_send_note(id: String, note: String) {
     }
 }
 
-pub fn session_alternative_codecs(id: String) -> String {
+pub fn session_supported_hwcodec(id: String) -> String {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        let (vp8, h264, h265) = session.alternative_codecs();
-        let msg = HashMap::from([("vp8", vp8), ("h264", h264), ("h265", h265)]);
+        let (h264, h265) = session.supported_hwcodec();
+        let msg = HashMap::from([("h264", h264), ("h265", h265)]);
         serde_json::ser::to_string(&msg).unwrap_or("".to_owned())
     } else {
         String::new()

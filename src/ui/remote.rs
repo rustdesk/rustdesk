@@ -20,6 +20,7 @@ use hbb_common::{
 
 use crate::{
     client::*,
+    ui_interface::has_hwcodec,
     ui_session_interface::{InvokeUiSession, Session},
 };
 
@@ -196,14 +197,7 @@ impl InvokeUiSession for SciterHandler {
         self.call("confirmDeleteFiles", &make_args!(id, i, name));
     }
 
-    fn override_file_confirm(
-        &self,
-        id: i32,
-        file_num: i32,
-        to: String,
-        is_upload: bool,
-        is_identical: bool,
-    ) {
+    fn override_file_confirm(&self, id: i32, file_num: i32, to: String, is_upload: bool, is_identical: bool) {
         self.call(
             "overrideFileConfirm",
             &make_args!(id, file_num, to, is_upload, is_identical),
@@ -457,7 +451,8 @@ impl sciter::EventHandler for SciterSession {
         fn set_write_override(i32, i32, bool, bool, bool);
         fn get_keyboard_mode();
         fn save_keyboard_mode(String);
-        fn alternative_codecs();
+        fn has_hwcodec();
+        fn supported_hwcodec();
         fn change_prefer_codec();
         fn restart_remote_device();
         fn request_voice_call();
@@ -509,6 +504,10 @@ impl SciterSession {
         v
     }
 
+    fn has_hwcodec(&self) -> bool {
+        has_hwcodec()
+    }
+
     pub fn t(&self, name: String) -> String {
         crate::client::translate(name)
     }
@@ -517,10 +516,9 @@ impl SciterSession {
         super::get_icon()
     }
 
-    fn alternative_codecs(&self) -> Value {
-        let (vp8, h264, h265) = self.0.alternative_codecs();
+    fn supported_hwcodec(&self) -> Value {
+        let (h264, h265) = self.0.supported_hwcodec();
         let mut v = Value::array(0);
-        v.push(vp8);
         v.push(h264);
         v.push(h265);
         v
