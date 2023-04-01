@@ -455,8 +455,8 @@ pub fn get_env_var(k: &str) -> String {
 }
 
 pub fn is_prelogin() -> bool {
-    let (uid, uname) = get_active_user_id_name();
-    uid.len() >= 4 || uname == "root"
+    let n = get_active_userid().len();
+    n < 4 && n > 1
 }
 
 pub fn is_root() -> bool {
