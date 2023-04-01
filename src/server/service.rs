@@ -189,20 +189,6 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
         }
     }
 
-    #[inline]
-    fn wait_prelogin_or_x11gdm(&self) {
-        #[cfg(target_os = "linux")]
-        while self.active() {
-            if crate::platform::linux::is_prelogin() {
-                break;
-            }
-            if crate::platform::linux::is_x11_wayland() {
-                break;
-            }
-            thread::sleep(time::Duration::from_millis(300));
-        }
-    }
-
     pub fn repeat<S, F>(&self, interval_ms: u64, callback: F)
     where
         F: 'static + FnMut(Self, &mut S) -> ResultType<()> + Send,
@@ -212,8 +198,6 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
         let mut callback = callback;
         let sp = self.clone();
         let thread = thread::spawn(move || {
-            sp.wait_prelogin_or_x11gdm();
-
             let mut state = S::default();
             let mut may_reset = false;
             while sp.active() {
@@ -248,8 +232,6 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
         let sp = self.clone();
         let mut callback = callback;
         let thread = thread::spawn(move || {
-            sp.wait_prelogin_or_x11gdm();
-
             let mut error_timeout = HIBERNATE_TIMEOUT;
             while sp.active() {
                 if sp.has_subscribes() {
