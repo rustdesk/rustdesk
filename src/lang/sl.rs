@@ -402,6 +402,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Accept sessions via password", "Sprejmi seje z geslom"),
         ("Accept sessions via click", "Sprejmi seje s potrditvijo"),
         ("Accept sessions via both", "Sprejmi seje z geslom ali potrditvijo"),
+        ("Please wait for the remote side to accept your session request...", "Počakajte, da oddaljeni računalnik sprejme povezavo..."),
         ("One-time Password", "Enkratno geslo"),
         ("Use one-time password", "Uporabi enkratno geslo"),
         ("One-time password length", "Dolžina enkratnega gesla"),
@@ -498,6 +499,5 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("session_unready_no_password_text_tip", ""),
         ("session_unready_wrong_password_title_tip", ""),
         ("session_unready_wrong_password_text_tip", ""),
-        ("no_password_access_text_tip", ""),
     ].iter().cloned().collect();
 }

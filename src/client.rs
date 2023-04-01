@@ -1969,7 +1969,7 @@ lazy_static::lazy_static! {
         }), (crate::server::LOGIN_MSG_NO_PASSWORD_ACCESS, LoginErrorMsgBox{
             msgtype: "wait-remote-accept-nook",
             title: "Prompt",
-            text: "no_password_access_text_tip",
+            text: "Please wait for the remote side to accept your session request...",
             link: "",
             try_again: true,
         })]);

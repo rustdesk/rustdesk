@@ -74,6 +74,5 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("session_unready_no_password_text_tip", "Input connection password and linux user/password"),
         ("session_unready_wrong_password_title_tip", "Password is wrong"),
         ("session_unready_wrong_password_text_tip", "Do you want to enter again"),
-        ("no_password_access_text_tip", "Please wait for the remote side to accept your session request..."),
         ].iter().cloned().collect();
 }

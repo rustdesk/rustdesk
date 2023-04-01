@@ -402,6 +402,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Accept sessions via password", "قبول درخواست با رمز عبور"),
         ("Accept sessions via click", "قبول درخواست با کلیک موس"),
         ("Accept sessions via both", "قبول درخواست با هر دو"),
+        ("Please wait for the remote side to accept your session request...", "...لطفا صبر کنید تا میزبان درخواست شما را قبول کند"),
         ("One-time Password", "رمز عبور یکبار مصرف"),
         ("Use one-time password", "استفاده از رمز عبور یکبار مصرف"),
         ("One-time password length", "طول رمز عبور یکبار مصرف"),
@@ -498,6 +499,5 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("session_unready_no_password_text_tip", ""),
         ("session_unready_wrong_password_title_tip", ""),
         ("session_unready_wrong_password_text_tip", ""),
-        ("no_password_access_text_tip", ""),
     ].iter().cloned().collect();
 }

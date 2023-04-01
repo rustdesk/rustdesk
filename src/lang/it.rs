@@ -402,6 +402,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Accept sessions via password", "Accetta sessioni via password"),
         ("Accept sessions via click", "Accetta sessioni via click"),
         ("Accept sessions via both", "Accetta sessioni con entrambi"),
+        ("Please wait for the remote side to accept your session request...", "Attendere che il lato remoto accetti la richiesta di sessione..."),
         ("One-time Password", "Password monouso"),
         ("Use one-time password", "Usa password monouso"),
         ("One-time password length", "Lunghezza password monouso"),
@@ -498,6 +499,5 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("session_unready_no_password_text_tip", ""),
         ("session_unready_wrong_password_title_tip", ""),
         ("session_unready_wrong_password_text_tip", ""),
-        ("no_password_access_text_tip", ""),
     ].iter().cloned().collect();
 }
