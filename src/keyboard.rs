@@ -366,6 +366,21 @@ pub fn get_keyboard_mode_enum() -> KeyboardMode {
 }
 
 #[inline]
+pub fn is_modifier(key: &rdev::Key) -> bool {
+    matches!(
+        key,
+        Key::ShiftLeft
+            | Key::ShiftRight
+            | Key::ControlLeft
+            | Key::ControlRight
+            | Key::MetaLeft
+            | Key::MetaRight
+            | Key::Alt
+            | Key::AltGr
+    )
+}
+
+#[inline]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn is_numpad_key(event: &Event) -> bool {
     matches!(event.event_type, EventType::KeyPress(key) | EventType::KeyRelease(key) if match key {
@@ -990,4 +1005,14 @@ pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -
         }
     }
     events
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn keycode_to_rdev_key(keycode: u32) -> Key {
+    #[cfg(target_os = "windows")]
+    return rdev::win_key_from_scancode(keycode);
+    #[cfg(target_os = "linux")]
+    return rdev::linux_key_from_code(keycode);
+    #[cfg(target_os = "macos")]
+    return rdev::macos_key_from_code(keycode.try_into().unwrap_or_default());
 }
