@@ -1297,7 +1297,6 @@ fn simulate_win2win_hotkey(code: u32, down: bool) {
         // Try convert unicode to virtual keycode first.
         // https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-vkkeyscanw
         let res = unsafe { winapi::um::winuser::VkKeyScanW(unicode) };
-        println!("REMOVE ME =============================== VkKeyScanW {} {}", unicode, res);
         if res as u16 != 0xFFFF {
             let vk = res & 0x00FF;
             let flag = res >> 8;
@@ -1321,7 +1320,6 @@ fn simulate_win2win_hotkey(code: u32, down: bool) {
     }
 
     let keycode: u16 = ((code >> 16) & 0x0000FFFF) as u16;
-    println!("REMOVE ME =============================== simulate_win2win_hotkey down {} {},{}", down, unicode, keycode);
     allow_err!(rdev::simulate_code(Some(keycode), None, down));
 }
 

@@ -517,11 +517,6 @@ pub fn event_to_key_events(
         }
     };
 
-    println!(
-        "REMOVE ME ==================================== key_events {:?}",
-        &key_events
-    );
-
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if keyboard_mode != KeyboardMode::Translate {
         let is_numpad_key = is_numpad_key(&event);
