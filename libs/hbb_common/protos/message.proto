@@ -203,11 +203,13 @@ message KeyEvent {
   bool press = 2;
   oneof union {
     ControlKey control_key = 3;
-    // high word, sym key code. win: virtual-key code, linux: keysym ?, macos: 
-    // low word, position key code. win: scancode, linux: key code, macos: key code
+    // position key code. win: scancode, linux: key code, macos: key code
     uint32 chr = 4;
     uint32 unicode = 5;
     string seq = 6;
+    // high word. virtual keycode
+    // low word. unicode
+    uint32 win2win_hotkey = 7;
   }
   repeated ControlKey modifiers = 8;
   KeyboardMode mode = 9;

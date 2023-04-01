@@ -1229,7 +1229,7 @@ sc delete {app_name}
 }
 
 pub fn run_after_install() -> ResultType<()> {
-    let (_, _, _, exe,_) = get_install_info();
+    let (_, _, _, exe, _) = get_install_info();
     run_cmds(get_after_install(&exe), true, "after_install")
 }
 
@@ -2130,7 +2130,25 @@ mod cert {
     }
 }
 
-pub fn get_char_by_vk(vk: u32) -> Option<char> {
+#[inline]
+pub fn get_char_from_vk(vk: u32) -> Option<char> {
+    get_char_from_unicode(get_unicode_from_vk(vk)?)
+}
+
+pub fn get_char_from_unicode(unicode: u16) -> Option<char> {
+    let buff = [unicode];
+    if let Some(chr) = String::from_utf16(&buff[..1]).ok()?.chars().next() {
+        if chr.is_control() {
+            return None;
+        } else {
+            Some(chr)
+        }
+    } else {
+        None
+    }
+}
+
+pub fn get_unicode_from_vk(vk: u32) -> Option<u16> {
     const BUF_LEN: i32 = 32;
     let mut buff = [0_u16; BUF_LEN as usize];
     let buff_ptr = buff.as_mut_ptr();
@@ -2155,19 +2173,7 @@ pub fn get_char_by_vk(vk: u32) -> Option<char> {
         ToUnicodeEx(vk, 0x00, &state as _, buff_ptr, BUF_LEN, 0, layout)
     };
     if len == 1 {
-        if let Some(chr) = String::from_utf16(&buff[..len as usize])
-            .ok()?
-            .chars()
-            .next()
-        {
-            if chr.is_control() {
-                return None;
-            } else {
-                Some(chr)
-            }
-        } else {
-            None
-        }
+        Some(buff[0])
     } else {
         None
     }
@@ -2190,10 +2196,10 @@ mod tests {
     }
 
     #[test]
-    fn test_get_char_by_vk() {
-        let chr = get_char_by_vk(0x41); // VK_A
+    fn test_get_unicode_char_by_vk() {
+        let chr = get_char_from_vk(0x41); // VK_A
         assert_eq!(chr, Some('a'));
-        let chr = get_char_by_vk(VK_ESCAPE as u32); // VK_ESC
+        let chr = get_char_from_vk(VK_ESCAPE as u32); // VK_ESC
         assert_eq!(chr, None)
     }
 }

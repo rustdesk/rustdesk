@@ -1,6 +1,8 @@
 use super::*;
 #[cfg(target_os = "linux")]
 use crate::common::IS_X11;
+#[cfg(target_os = "windows")]
+use crate::platform::windows::get_char_from_unicode;
 #[cfg(target_os = "macos")]
 use dispatch::Queue;
 use enigo::{Enigo, Key, KeyboardControllable, MouseButton, MouseControllable};
@@ -1280,9 +1282,50 @@ fn translate_keyboard_mode(evt: &KeyEvent) {
         Some(key_event::Union::Unicode(..)) => {
             // Do not handle unicode for now.
         }
+        #[cfg(target_os = "windows")]
+        Some(key_event::Union::Win2winHotkey(code)) => {
+            simulate_win2win_hotkey(*code, evt.down);
+        }
         _ => {
             log::debug!("Unreachable. Unexpected key event {:?}", &evt);
         }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn simulate_win2win_hotkey(code: u32, down: bool) {
+    let mut simulated = false;
+
+    let unicode: u16 = (code & 0x0000FFFF) as u16;
+    if unicode != 0 {
+        // Try convert unicode to virtual keycode first.
+        // https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-vkkeyscanw
+        let res = unsafe { winapi::um::winuser::VkKeyScanW(unicode) };
+        if res as u16 != 0xFFFF {
+            let vk = res & 0x00FF;
+            let flag = res >> 8;
+            let modifiers = [rdev::Key::ShiftLeft, rdev::Key::ControlLeft, rdev::Key::Alt];
+            let mod_len = modifiers.len();
+            for pos in 0..mod_len {
+                if flag & (0x0001 << pos) != 0 {
+                    allow_err!(rdev::simulate(&EventType::KeyPress(modifiers[pos])));
+                }
+            }
+            allow_err!(rdev::simulate_code(Some(vk as _), None, true));
+            allow_err!(rdev::simulate_code(Some(vk as _), None, false));
+            for pos in 0..mod_len {
+                let rpos = mod_len - 1 - pos;
+                if flag & (0x0001 << rpos) != 0 {
+                    allow_err!(rdev::simulate(&EventType::KeyRelease(modifiers[rpos])));
+                }
+            }
+            simulated = true;
+        }
+    }
+
+    if simulated {
+        let keycode: u16 = ((code >> 16) & 0x0000FFFF) as u16;
+        allow_err!(rdev::simulate_code(Some(keycode), None, down));
     }
 }
 
