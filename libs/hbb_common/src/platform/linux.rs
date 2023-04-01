@@ -41,6 +41,12 @@ pub fn is_desktop_wayland() -> bool {
 }
 
 #[inline]
+pub fn is_x11_wayland() -> bool {
+    let ds = get_display_server();
+    ds == DISPLAY_SERVER_X11 || ds == DISPLAY_SERVER_WAYLAND
+}
+
+#[inline]
 pub fn is_x11_or_headless() -> bool {
     !is_desktop_wayland()
 }
