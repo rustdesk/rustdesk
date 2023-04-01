@@ -48,18 +48,24 @@ impl Interface for Session {
     }
 
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str) {
-        if msgtype == "input-password" {
-            self.sender
-                .send(Data::Login((self.password.clone(), true)))
-                .ok();
-        } else if msgtype == "re-input-password" {
-            log::error!("{}: {}", title, text);
-            let pass = rpassword::prompt_password("Enter password: ").unwrap();
-            self.sender.send(Data::Login((pass, true))).ok();
-        } else if msgtype.contains("error") {
-            log::error!("{}: {}: {}", msgtype, title, text);
-        } else {
-            log::info!("{}: {}: {}", msgtype, title, text);
+        match msgtype {
+            "input-password" => {
+                self.sender
+                    .send(Data::Login((self.password.clone(), true)))
+                    .ok();
+            }
+            "re-input-password" => {
+                log::error!("{}: {}", title, text);
+                let password = rpassword::prompt_password("Enter password: ").unwrap();
+                let login_data = Data::Login((password, true));
+                self.sender.send(login_data).ok();
+            }
+            msg if msg.contains("error") => {
+                log::error!("{}: {}: {}", msgtype, title, text);
+            }
+            _ => {
+                log::info!("{}: {}: {}", msgtype, title, text);
+            }
         }
     }
 
