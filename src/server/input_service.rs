@@ -16,8 +16,18 @@ use std::{
     thread,
     time::{self, Instant},
 };
+#[cfg(target_os = "windows")]
+use winapi::um::winuser::{
+    ActivateKeyboardLayout, GetForegroundWindow, GetKeyboardLayout, GetWindowThreadProcessId,
+    VkKeyScanW,
+};
 
 const INVALID_CURSOR_POS: i32 = i32::MIN;
+
+#[cfg(target_os = "windows")]
+lazy_static::lazy_static! {
+    static ref LAST_HKL: Arc<Mutex<u32>> = Arc::new(Mutex::new(0));
+}
 
 #[derive(Default)]
 struct StateCursor {
@@ -1242,7 +1252,45 @@ fn translate_process_code(code: u32, down: bool) {
     };
 }
 
+#[cfg(target_os = "windows")]
+fn check_update_input_layout() {
+    unsafe {
+        let foreground_thread_id =
+            GetWindowThreadProcessId(GetForegroundWindow(), std::ptr::null_mut());
+        let layout = GetKeyboardLayout(foreground_thread_id);
+        let layout_u32 = layout as u32;
+        let mut last_layout_lock = LAST_HKL.lock().unwrap();
+        if *last_layout_lock == 0 || *last_layout_lock != layout_u32 {
+            let res = ActivateKeyboardLayout(layout, 0);
+            if res == layout {
+                *last_layout_lock = layout_u32;
+            } else {
+                log::error!("Failed to call ActivateKeyboardLayout, {}", layout_u32);
+            }
+        }
+    }
+}
+
 fn translate_keyboard_mode(evt: &KeyEvent) {
+    // --server could not detect the input layout change.
+    // This is a temporary workaround.
+    //
+    // There may be a better way to detect and handle the input layout change.
+    // while ((bRet = GetMessage(&msg, NULL, 0, 0)) != 0)
+    // {
+    //     ...
+    //     if (msg.message == WM_INPUTLANGCHANGE)
+    //     {
+    //         // handle WM_INPUTLANGCHANGE message here
+    //         check_update_input_layout();
+    //     }
+    //     TranslateMessage(&msg);
+    //     DispatchMessage(&msg);
+    //     ...
+    // }
+    #[cfg(target_os = "windows")]
+    check_update_input_layout();
+
     match &evt.union {
         Some(key_event::Union::Seq(seq)) => {
             // Fr -> US
@@ -1296,7 +1344,7 @@ fn simulate_win2win_hotkey(code: u32, down: bool) {
     if down {
         // Try convert unicode to virtual keycode first.
         // https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-vkkeyscanw
-        let res = unsafe { winapi::um::winuser::VkKeyScanW(unicode) };
+        let res = unsafe { VkKeyScanW(unicode) };
         if res as u16 != 0xFFFF {
             let vk = res & 0x00FF;
             let flag = res >> 8;

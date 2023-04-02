@@ -218,7 +218,7 @@ impl VideoRenderer {
     }
 
     pub fn on_rgba(&self, rgba: &Vec<u8>) {
-        if self.ptr == usize::default() {
+        if self.ptr == usize::default() || self.width == 0 || self.height == 0 {
             return;
         }
         if let Some(func) = &self.on_rgba_func {
