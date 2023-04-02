@@ -1274,7 +1274,20 @@ fn check_update_input_layout() {
 fn translate_keyboard_mode(evt: &KeyEvent) {
     // --server could not detect the input layout change.
     // This is a temporary workaround.
+    //
     // There may be a better way to detect and handle the input layout change.
+    // while ((bRet = GetMessage(&msg, NULL, 0, 0)) != 0)
+    // {
+    //     ...
+    //     if (msg.message == WM_INPUTLANGCHANGE)
+    //     {
+    //         // handle WM_INPUTLANGCHANGE message here
+    //         check_update_input_layout();
+    //     }
+    //     TranslateMessage(&msg);
+    //     DispatchMessage(&msg);
+    //     ...
+    // }
     #[cfg(target_os = "windows")]
     check_update_input_layout();
 
