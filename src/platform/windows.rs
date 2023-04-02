@@ -9,15 +9,15 @@ use hbb_common::{
     message_proto::Resolution,
     sleep, timeout, tokio,
 };
-use std::io::prelude::*;
-use std::path::Path;
-use std::ptr::null_mut;
 use std::{
     collections::HashMap,
     ffi::OsString,
-    fs, io, mem,
+    fs, io,
+    io::prelude::*,
+    mem,
     os::windows::process::CommandExt,
-    path::PathBuf,
+    path::*,
+    ptr::null_mut,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
@@ -936,8 +936,9 @@ pub fn copy_exe_cmd(src_exe: &str, exe: &str, path: &str) -> String {
 }
 
 pub fn update_me() -> ResultType<()> {
-    let (_, path, _, exe, dll) = get_install_info();
+    let (_, path, _, exe, _dll) = get_install_info();
     let src_exe = std::env::current_exe()?.to_str().unwrap_or("").to_owned();
+    #[cfg(not(feature = "flutter"))]
     let src_dll = std::env::current_exe()?
         .parent()
         .unwrap_or(&Path::new(&get_default_install_path()))
@@ -948,7 +949,7 @@ pub fn update_me() -> ResultType<()> {
     #[cfg(feature = "flutter")]
     let copy_dll = "".to_string();
     #[cfg(not(feature = "flutter"))]
-    let copy_dll = copy_raw_cmd(&src_dll, &dll, &path);
+    let copy_dll = copy_raw_cmd(&src_dll, &_dll, &path);
     let cmds = format!(
         "
         chcp 65001
@@ -1002,12 +1003,12 @@ pub fn install_me(options: &str, path: String, silent: bool, debug: bool) -> Res
     let mut path = path.trim_end_matches('\\').to_owned();
     let (subkey, _path, start_menu, exe, dll) = get_default_install_info();
     let mut exe = exe;
-    let mut dll = dll;
+    let mut _dll = dll;
     if path.is_empty() {
         path = _path;
     } else {
         exe = exe.replace(&_path, &path);
-        dll = dll.replace(&_path, &path);
+        _dll = _dll.replace(&_path, &path);
     }
     let mut version_major = "0";
     let mut version_minor = "0";
@@ -1131,6 +1132,7 @@ if exist \"{tmp_path}\\{app_name} Tray.lnk\" del /f /q \"{tmp_path}\\{app_name} 
         app_name = crate::get_app_name(),
     );
     let src_exe = std::env::current_exe()?.to_str().unwrap_or("").to_string();
+    #[cfg(not(feature = "flutter"))]
     let src_dll = std::env::current_exe()?
         .parent()
         .unwrap_or(&Path::new(&get_default_install_path()))
@@ -1138,11 +1140,10 @@ if exist \"{tmp_path}\\{app_name} Tray.lnk\" del /f /q \"{tmp_path}\\{app_name} 
         .to_str()
         .unwrap_or("")
         .to_owned();
-
     #[cfg(feature = "flutter")]
     let copy_dll = "".to_string();
     #[cfg(not(feature = "flutter"))]
-    let copy_dll = copy_raw_cmd(&src_dll, &dll, &path);
+    let copy_dll = copy_raw_cmd(&src_dll, &_dll, &path);
 
     let install_cert = if options.contains("driverCert") {
         format!("\"{}\" --install-cert \"RustDeskIddDriver.cer\"", src_exe)
