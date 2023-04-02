@@ -1236,10 +1236,10 @@ packages:
     dependency: "direct main"
     description:
       name: texture_rgba_renderer
-      sha256: "52bc9f217b7b07a760ee837d5a17329ad1f78ae8ed1e3fa612c6f1bed3c77f79"
+      sha256: cb048abdd800468ca40749ca10d1db9d1e6a055d1cde6234c05191293f0c7d61
       url: "https://pub.dev"
     source: hosted
-    version: "0.0.13"
+    version: "0.0.16"
   timing:
     dependency: transitive
     description:

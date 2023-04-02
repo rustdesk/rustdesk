@@ -261,7 +261,7 @@ class _PeerTabPageState extends State<PeerTabPage>
             },
             child: Icon(
               peerCardUiType.value == PeerUiType.grid
-                  ? Icons.list_rounded
+                  ? Icons.list
                   : Icons.grid_view_rounded,
               size: 18,
               color: textColor,
