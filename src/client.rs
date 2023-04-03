@@ -1943,13 +1943,13 @@ lazy_static::lazy_static! {
             link: "",
             try_again: false,
         }), (crate::server::LOGIN_MSG_DESKTOP_XORG_NOT_FOUND, LoginErrorMsgBox{
-            msgtype: "session-re-login",
+            msgtype: "info-nocancel-nocancel",
             title: "xorg_not_found_title_tip",
             text: "xorg_not_found_text_tip",
             link: LINK_HEADLESS_LINUX_SUPPORT,
             try_again: true,
         }), (crate::server::LOGIN_MSG_DESKTOP_NO_DESKTOP, LoginErrorMsgBox{
-            msgtype: "session-re-login",
+            msgtype: "info-nocancel-nocancel",
             title: "no_desktop_title_tip",
             text: "no_desktop_text_tip",
             link: LINK_HEADLESS_LINUX_SUPPORT,

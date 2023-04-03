@@ -64,11 +64,41 @@ pub fn stop_xdesktop() {
     *DESKTOP_MANAGER.lock().unwrap() = None;
 }
 
+fn detect_headless() -> Option<&'static str> {
+    match run_cmds(&format!("which {}", DesktopManager::get_xorg())) {
+        Ok(output) => {
+            if output.trim().is_empty() {
+                return Some(LOGIN_MSG_DESKTOP_XORG_NOT_FOUND);
+            }
+        }
+        _ => {
+            return Some(LOGIN_MSG_DESKTOP_XORG_NOT_FOUND);
+        }
+    }
+
+    match run_cmds("ls /usr/share/xsessions/") {
+        Ok(output) => {
+            if output.trim().is_empty() {
+                return Some(LOGIN_MSG_DESKTOP_NO_DESKTOP);
+            }
+        }
+        _ => {
+            return Some(LOGIN_MSG_DESKTOP_NO_DESKTOP);
+        }
+    }
+
+    None
+}
+
 pub fn try_start_desktop(_username: &str, _passsword: &str) -> String {
     if _username.is_empty() {
         let username = get_username();
         if username.is_empty() {
-            LOGIN_MSG_DESKTOP_SESSION_NOT_READY
+            if let Some(msg) = detect_headless() {
+                msg
+            } else {
+                LOGIN_MSG_DESKTOP_SESSION_NOT_READY
+            }
         } else {
             ""
         }
@@ -80,26 +110,8 @@ pub fn try_start_desktop(_username: &str, _passsword: &str) -> String {
             return "".to_owned();
         }
 
-        match run_cmds(&format!("which {}", DesktopManager::get_xorg())) {
-            Ok(output) => {
-                if output.trim().is_empty() {
-                    return LOGIN_MSG_DESKTOP_XORG_NOT_FOUND.to_owned();
-                }
-            }
-            _ => {
-                return LOGIN_MSG_DESKTOP_XORG_NOT_FOUND.to_owned();
-            }
-        }
-
-        match run_cmds("ls /usr/share/xsessions/") {
-            Ok(output) => {
-                if output.trim().is_empty() {
-                    return LOGIN_MSG_DESKTOP_NO_DESKTOP.to_owned();
-                }
-            }
-            _ => {
-                return LOGIN_MSG_DESKTOP_NO_DESKTOP.to_owned();
-            }
+        if let Some(msg) = detect_headless() {
+            return msg.to_owned();
         }
 
         match try_start_x_session(_username, _passsword) {
