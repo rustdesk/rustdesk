@@ -335,7 +335,12 @@ div.install-me, div.trust-me {
     margin-top: 0.5em;
     padding: 20px;
     color: white;
-    background: linear-gradient(left,#e242bc,#f4727c);
+
+    /*StratIS Customization*/
+    background: #58C285;
+    background: -webkit-linear-gradient(bottom left, #58C285, #39B7F5);
+    background: -moz-linear-gradient(bottom left, #58C285, #39B7F5);
+    background: linear-gradient(to top right, #58C285, #39B7F5);
 }
 
 div.trust-me > div:nth-child(1),
@@ -417,4 +422,3 @@ li:disabled, li:disabled:hover {
     color: color(lighter-text);
     background: color(menu);
 }
-
