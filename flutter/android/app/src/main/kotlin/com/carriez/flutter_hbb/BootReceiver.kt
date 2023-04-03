@@ -1,4 +1,4 @@
-package com.carriez.flutter_hbb
+package com.getryt.remote
 
 import android.Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
 import android.Manifest.permission.SYSTEM_ALERT_WINDOW
@@ -11,7 +11,7 @@ import android.widget.Toast
 import com.hjq.permissions.XXPermissions
 import io.flutter.embedding.android.FlutterActivity
 
-const val DEBUG_BOOT_COMPLETED = "com.carriez.flutter_hbb.DEBUG_BOOT_COMPLETED"
+const val DEBUG_BOOT_COMPLETED = "com.getryt.remote.DEBUG_BOOT_COMPLETED"
 
 class BootReceiver : BroadcastReceiver() {
     private val logTag = "tagBootReceiver"

@@ -7,7 +7,7 @@ project(runner LANGUAGES CXX)
 set(BINARY_NAME "rustdesk")
 # The unique GTK application identifier for this application. See:
 # https://wiki.gnome.org/HowDoI/ChooseApplicationID
-set(APPLICATION_ID "com.carriez.flutter_hbb")
+set(APPLICATION_ID "com.getryt.remote")
 
 # Explicitly opt into modern CMake behaviors to avoid warnings with recent
 # versions of CMake.

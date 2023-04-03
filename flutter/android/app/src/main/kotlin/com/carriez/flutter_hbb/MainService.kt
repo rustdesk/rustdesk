@@ -1,4 +1,4 @@
-package com.carriez.flutter_hbb
+package com.getryt.remote
 
 /**
  * Capture screen,get video and audio,send to rust.
