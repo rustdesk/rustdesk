@@ -1919,8 +1919,8 @@ lazy_static::lazy_static! {
             try_again: true,
         }), (crate::server::LOGIN_MSG_DESKTOP_XSESSION_FAILED, LoginErrorMsgBox{
             msgtype: "session-re-login",
-            title: "xsession_failed_title_tip",
-            text: "xsession_failed_text_tip",
+            title: "",
+            text: "",
             link: "",
             try_again: true,
         }), (crate::server::LOGIN_MSG_DESKTOP_SESSION_ANOTHER_USER, LoginErrorMsgBox{
@@ -1943,14 +1943,14 @@ lazy_static::lazy_static! {
             try_again: true,
         }), (crate::server::LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_EMPTY, LoginErrorMsgBox{
             msgtype: "session-login-password",
-            title: "session_not_ready_no_password_title_tip",
-            text: "session_not_ready_no_password_text_tip",
+            title: "",
+            text: "",
             link: "",
             try_again: true,
         }), (crate::server::LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_WRONG, LoginErrorMsgBox{
             msgtype: "session-login-re-password",
-            title: "session_not_ready_wrong_password_title_tip",
-            text: "session_not_ready_wrong_password_text_tip",
+            title: "",
+            text: "",
             link: "",
             try_again: true,
         }), (crate::server::LOGIN_MSG_NO_PASSWORD_ACCESS, LoginErrorMsgBox{
