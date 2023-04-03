@@ -970,17 +970,17 @@ void showOptions(
   final perms = gFFI.ffiModel.permissions;
   final hasHwcodec = bind.mainHasHwcodec();
   final List<bool> codecs = [];
-  if (hasHwcodec) {
-    try {
-      final Map codecsJson =
-          jsonDecode(await bind.sessionSupportedHwcodec(id: id));
-      final h264 = codecsJson['h264'] ?? false;
-      final h265 = codecsJson['h265'] ?? false;
-      codecs.add(h264);
-      codecs.add(h265);
-    } catch (e) {
-      debugPrint("Show Codec Preference err=$e");
-    }
+  try {
+    final Map codecsJson =
+        jsonDecode(await bind.sessionAlternativeCodecs(id: id));
+    final vp8 = codecsJson['vp8'] ?? false;
+    final h264 = codecsJson['h264'] ?? false;
+    final h265 = codecsJson['h265'] ?? false;
+    codecs.add(vp8);
+    codecs.add(h264);
+    codecs.add(h265);
+  } catch (e) {
+    debugPrint("Show Codec Preference err=$e");
   }
 
   dialogManager.show((setState, close) {
@@ -1041,15 +1041,16 @@ void showOptions(
       const Divider(color: MyTheme.border)
     ];
 
-    if (hasHwcodec && codecs.length == 2 && (codecs[0] || codecs[1])) {
-      radios.addAll([
-        getRadio(translate('Auto'), 'auto', codec, setCodec),
-        getRadio('VP9', 'vp9', codec, setCodec),
-      ]);
+    if (codecs.length == 3 && (codecs[0] || codecs[1] || codecs[2])) {
+      radios.add(getRadio(translate('Auto'), 'auto', codec, setCodec));
       if (codecs[0]) {
+        radios.add(getRadio('VP8', 'vp8', codec, setCodec));
+      }
+      radios.add(getRadio('VP9', 'vp9', codec, setCodec));
+      if (codecs[1]) {
         radios.add(getRadio('H264', 'h264', codec, setCodec));
       }
-      if (codecs[1]) {
+      if (codecs[2]) {
         radios.add(getRadio('H265', 'h265', codec, setCodec));
       }
       radios.add(const Divider(color: MyTheme.border));
