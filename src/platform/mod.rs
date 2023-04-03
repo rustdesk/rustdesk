@@ -17,6 +17,9 @@ pub mod delegate;
 #[cfg(target_os = "linux")]
 pub mod linux;
 
+#[cfg(all(target_os = "linux", feature = "linux_headless"))]
+pub mod linux_desktop_manager;
+
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::{message_proto::CursorData, ResultType};
 #[cfg(not(any(target_os = "macos", target_os = "android", target_os = "ios")))]

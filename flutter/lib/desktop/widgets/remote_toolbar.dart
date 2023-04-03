@@ -639,7 +639,7 @@ class _ControlMenu extends StatelessWidget {
         ffi: ffi,
         menuChildren: [
           requestElevation(),
-          osPassword(),
+          ffi.ffiModel.pi.is_headless ? osAccount() : osPassword(),
           transferFile(context),
           tcpTunneling(context),
           note(),
@@ -662,78 +662,20 @@ class _ControlMenu extends StatelessWidget {
         onPressed: () => showRequestElevationDialog(id, ffi.dialogManager));
   }
 
+  osAccount() {
+    return _MenuItemButton(
+        child: Text(translate('OS Account')),
+        trailingIcon: Transform.scale(scale: 0.8, child: Icon(Icons.edit)),
+        ffi: ffi,
+        onPressed: () => showSetOSAccount(id, ffi.dialogManager));
+  }
+
   osPassword() {
     return _MenuItemButton(
         child: Text(translate('OS Password')),
         trailingIcon: Transform.scale(scale: 0.8, child: Icon(Icons.edit)),
         ffi: ffi,
-        onPressed: () => _showSetOSPassword(id, false, ffi.dialogManager));
-  }
-
-  _showSetOSPassword(
-      String id, bool login, OverlayDialogManager dialogManager) async {
-    final controller = TextEditingController();
-    var password =
-        await bind.sessionGetOption(id: id, arg: 'os-password') ?? '';
-    var autoLogin =
-        await bind.sessionGetOption(id: id, arg: 'auto-login') != '';
-    controller.text = password;
-    dialogManager.show((setState, close) {
-      submit() {
-        var text = controller.text.trim();
-        bind.sessionPeerOption(id: id, name: 'os-password', value: text);
-        bind.sessionPeerOption(
-            id: id, name: 'auto-login', value: autoLogin ? 'Y' : '');
-        if (text != '' && login) {
-          bind.sessionInputOsPassword(id: id, value: text);
-        }
-        close();
-      }
-
-      return CustomAlertDialog(
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.password_rounded, color: MyTheme.accent),
-            Text(translate('OS Password')).paddingOnly(left: 10),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            PasswordWidget(controller: controller),
-            CheckboxListTile(
-              contentPadding: const EdgeInsets.all(0),
-              dense: true,
-              controlAffinity: ListTileControlAffinity.leading,
-              title: Text(
-                translate('Auto Login'),
-              ),
-              value: autoLogin,
-              onChanged: (v) {
-                if (v == null) return;
-                setState(() => autoLogin = v);
-              },
-            ),
-          ],
-        ),
-        actions: [
-          dialogButton(
-            "Cancel",
-            icon: Icon(Icons.close_rounded),
-            onPressed: close,
-            isOutline: true,
-          ),
-          dialogButton(
-            "OK",
-            icon: Icon(Icons.done_rounded),
-            onPressed: submit,
-          ),
-        ],
-        onSubmit: submit,
-        onCancel: close,
-      );
-    });
+        onPressed: () => showSetOSPassword(id, false, ffi.dialogManager));
   }
 
   transferFile(BuildContext context) {

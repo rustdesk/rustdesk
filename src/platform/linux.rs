@@ -225,6 +225,16 @@ fn stop_rustdesk_servers() {
     ));
 }
 
+#[inline]
+fn stop_subprocess() {
+    let _ = run_cmds(&format!(
+        r##"ps -ef | grep '/etc/rustdesk/xorg.conf' | grep -v grep | awk '{{printf("kill -9 %d\n", $2)}}' | bash"##,
+    ));
+    let _ = run_cmds(&format!(
+        r##"ps -ef | grep -E 'rustdesk +--cm-no-ui' | grep -v grep | awk '{{printf("kill -9 %d\n", $2)}}' | bash"##,
+    ));
+}
+
 fn should_start_server(
     try_x11: bool,
     uid: &mut String,
@@ -295,6 +305,7 @@ fn force_stop_server() {
 
 pub fn start_os_service() {
     stop_rustdesk_servers();
+    stop_subprocess();
     start_uinput_service();
 
     let running = Arc::new(AtomicBool::new(true));
@@ -329,6 +340,7 @@ pub fn start_os_service() {
                 &mut last_restart,
                 &mut server,
             ) {
+                stop_subprocess();
                 force_stop_server();
                 start_server(None, &mut server);
             }
@@ -345,6 +357,7 @@ pub fn start_os_service() {
                 &mut last_restart,
                 &mut user_server,
             ) {
+                stop_subprocess();
                 force_stop_server();
                 start_server(
                     Some((desktop.uid.clone(), desktop.username.clone())),
@@ -454,6 +467,7 @@ pub fn get_env_var(k: &str) -> String {
     }
 }
 
+// Headless is enabled, always return true.
 pub fn is_prelogin() -> bool {
     let n = get_active_userid().len();
     n < 4 && n > 1
@@ -769,6 +783,7 @@ mod desktop {
         pub protocal: String,
         pub display: String,
         pub xauth: String,
+        pub is_rustdesk_subprocess: bool,
     }
 
     impl Desktop {
@@ -784,7 +799,7 @@ mod desktop {
 
         #[inline]
         pub fn is_headless(&self) -> bool {
-            self.sid.is_empty()
+            self.sid.is_empty() || self.is_rustdesk_subprocess
         }
 
         fn get_display(&mut self) {
@@ -901,6 +916,16 @@ mod desktop {
             last
         }
 
+        fn set_is_subprocess(&mut self) {
+            self.is_rustdesk_subprocess = false;
+            let cmd = "ps -ef | grep 'rustdesk/xorg.conf' | grep -v grep | wc -l";
+            if let Ok(res) = run_cmds(cmd) {
+                if res.trim() != "0" {
+                    self.is_rustdesk_subprocess = true;
+                }
+            }
+        }
+
         pub fn refresh(&mut self) {
             if !self.sid.is_empty() && is_active(&self.sid) {
                 return;
@@ -909,6 +934,7 @@ mod desktop {
             let seat0_values = get_values_of_seat0(&[0, 1, 2]);
             if seat0_values[0].is_empty() {
                 *self = Self::default();
+                self.is_rustdesk_subprocess = false;
                 return;
             }
 
@@ -919,11 +945,13 @@ mod desktop {
             if self.is_login_wayland() {
                 self.display = "".to_owned();
                 self.xauth = "".to_owned();
+                self.is_rustdesk_subprocess = false;
                 return;
             }
 
             self.get_display();
             self.get_xauth();
+            self.set_is_subprocess();
         }
     }
 }

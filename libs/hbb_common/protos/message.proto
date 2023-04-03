@@ -53,6 +53,11 @@ message FileTransfer {
   bool show_hidden = 2;
 }
 
+message OSLogin {
+  string username = 1;
+  string password = 2;
+}
+
 message LoginRequest {
   string username = 1;
   bytes password = 2;
@@ -66,6 +71,7 @@ message LoginRequest {
   bool video_ack_required = 9;
   uint64 session_id = 10;
   string version = 11;
+  OSLogin os_login = 12;
 }
 
 message ChatMessage { string text = 1; }

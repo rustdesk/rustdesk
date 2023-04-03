@@ -3,6 +3,8 @@ use super::{input_service::*, *};
 use crate::clipboard_file::*;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::common::update_clipboard;
+#[cfg(all(target_os = "linux", feature = "linux_headless"))]
+use crate::platform::linux_desktop_manager;
 #[cfg(windows)]
 use crate::portable_service::client as portable_client;
 use crate::{
@@ -16,6 +18,8 @@ use crate::{
 use crate::{common::DEVICE_NAME, flutter::connection_manager::start_channel};
 use crate::{ipc, VERSION};
 use cidr_utils::cidr::IpCidr;
+#[cfg(all(target_os = "linux", feature = "linux_headless"))]
+use hbb_common::platform::linux::run_cmds;
 use hbb_common::{
     config::Config,
     fs,
@@ -56,6 +60,22 @@ lazy_static::lazy_static! {
 }
 pub static CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 pub static MOUSE_MOVE_TIME: AtomicI64 = AtomicI64::new(0);
+
+pub const LOGIN_MSG_DESKTOP_NOT_INITED: &str = "Desktop env is not inited";
+pub const LOGIN_MSG_DESKTOP_SESSION_NOT_READY: &str = "Desktop session not ready";
+pub const LOGIN_MSG_DESKTOP_XSESSION_FAILED: &str = "Desktop xsession failed";
+pub const LOGIN_MSG_DESKTOP_SESSION_ANOTHER_USER: &str = "Desktop session another user login";
+pub const LOGIN_MSG_DESKTOP_XORG_NOT_FOUND: &str = "Desktop xorg not found";
+// ls /usr/share/xsessions/
+pub const LOGIN_MSG_DESKTOP_NO_DESKTOP: &str = "Desktop none";
+pub const LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_EMPTY: &str =
+    "Desktop session not ready, password empty";
+pub const LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_WRONG: &str =
+    "Desktop session not ready, password wrong";
+pub const LOGIN_MSG_PASSWORD_EMPTY: &str = "Empty Password";
+pub const LOGIN_MSG_PASSWORD_WRONG: &str = "Wrong Password";
+pub const LOGIN_MSG_NO_PASSWORD_ACCESS: &str = "No Password Access";
+pub const LOGIN_MSG_OFFLINE: &str = "Offline";
 
 #[derive(Clone, Default)]
 pub struct ConnInner {
@@ -134,6 +154,10 @@ pub struct Connection {
     audio_input_device_before_voice_call: Option<String>,
     options_in_login: Option<OptionMessage>,
     pressed_modifiers: HashSet<rdev::Key>,
+    #[cfg(all(target_os = "linux", feature = "linux_headless"))]
+    rx_cm_stream_ready: mpsc::Receiver<()>,
+    #[cfg(all(target_os = "linux", feature = "linux_headless"))]
+    tx_desktop_ready: mpsc::Sender<()>,
 }
 
 impl ConnInner {
@@ -194,6 +218,10 @@ impl Connection {
         let (tx_video, mut rx_video) = mpsc::unbounded_channel::<(Instant, Arc<Message>)>();
         let (tx_input, _rx_input) = std_mpsc::channel();
         let mut hbbs_rx = crate::hbbs_http::sync::signal_receiver();
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        let (tx_cm_stream_ready, _rx_cm_stream_ready) = mpsc::channel(1);
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        let (_tx_desktop_ready, rx_desktop_ready) = mpsc::channel(1);
 
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let tx_cloned = tx.clone();
@@ -246,10 +274,16 @@ impl Connection {
             audio_input_device_before_voice_call: None,
             options_in_login: None,
             pressed_modifiers: Default::default(),
+            #[cfg(all(target_os = "linux", feature = "linux_headless"))]
+            rx_cm_stream_ready: _rx_cm_stream_ready,
+            #[cfg(all(target_os = "linux", feature = "linux_headless"))]
+            tx_desktop_ready: _tx_desktop_ready,
         };
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         tokio::spawn(async move {
-            if let Err(err) = start_ipc(rx_to_cm, tx_from_cm).await {
+            if let Err(err) =
+                start_ipc(rx_to_cm, tx_from_cm, rx_desktop_ready, tx_cm_stream_ready).await
+            {
                 log::error!("ipc to connection manager exit: {}", err);
             }
         });
@@ -856,6 +890,10 @@ impl Connection {
             if crate::platform::current_is_wayland() {
                 platform_additions.insert("is_wayland".into(), json!(true));
             }
+            #[cfg(feature = "linux_headless")]
+            if linux_desktop_manager::is_headless() {
+                platform_additions.insert("headless".into(), json!(true));
+            }
             if !platform_additions.is_empty() {
                 pi.platform_additions =
                     serde_json::to_string(&platform_additions).unwrap_or("".into());
@@ -874,7 +912,9 @@ impl Connection {
         #[cfg(target_os = "linux")]
         if !self.file_transfer.is_some() && !self.port_forward_socket.is_some() {
             let dtype = crate::platform::linux::get_display_server();
-            if dtype != "x11" && dtype != "wayland" {
+            if dtype != crate::platform::linux::DISPLAY_SERVER_X11
+                && dtype != crate::platform::linux::DISPLAY_SERVER_WAYLAND
+            {
                 res.set_error(format!(
                     "Unsupported display server type \"{}\", x11 or wayland expected",
                     dtype
@@ -1216,8 +1256,28 @@ impl Connection {
                 }
                 _ => {}
             }
+
+            #[cfg(all(target_os = "linux", feature = "linux_headless"))]
+            let desktop_err = match lr.os_login.as_ref() {
+                Some(os_login) => {
+                    linux_desktop_manager::try_start_desktop(&os_login.username, &os_login.password)
+                }
+                None => linux_desktop_manager::try_start_desktop("", ""),
+            };
+            #[cfg(all(target_os = "linux", feature = "linux_headless"))]
+            let is_headless = linux_desktop_manager::is_headless();
+            #[cfg(all(target_os = "linux", feature = "linux_headless"))]
+            let wait_ipc_timeout = 10_000;
+
+            // If err is LOGIN_MSG_DESKTOP_SESSION_NOT_READY, just keep this msg and go on checking password.
+            #[cfg(all(target_os = "linux", feature = "linux_headless"))]
+            if !desktop_err.is_empty() && desktop_err != LOGIN_MSG_DESKTOP_SESSION_NOT_READY {
+                self.send_login_error(desktop_err).await;
+                return true;
+            }
+
             if !hbb_common::is_ipv4_str(&lr.username) && lr.username != Config::get_id() {
-                self.send_login_error("Offline").await;
+                self.send_login_error(LOGIN_MSG_OFFLINE).await;
             } else if password::approve_mode() == ApproveMode::Click
                 || password::approve_mode() == ApproveMode::Both && !password::has_valid_password()
             {
@@ -1225,7 +1285,7 @@ impl Connection {
                 if hbb_common::get_version_number(&lr.version)
                     >= hbb_common::get_version_number("1.2.0")
                 {
-                    self.send_login_error("No Password Access").await;
+                    self.send_login_error(LOGIN_MSG_NO_PASSWORD_ACCESS).await;
                 }
                 return true;
             } else if password::approve_mode() == ApproveMode::Password
@@ -1234,12 +1294,38 @@ impl Connection {
                 self.send_login_error("Connection not allowed").await;
                 return false;
             } else if self.is_recent_session() {
-                self.try_start_cm(lr.my_id, lr.my_name, true);
-                self.send_logon_response().await;
-                if self.port_forward_socket.is_some() {
-                    return false;
+                #[cfg(all(target_os = "linux", feature = "linux_headless"))]
+                if desktop_err.is_empty() {
+                    #[cfg(target_os = "linux")]
+                    if is_headless {
+                        self.tx_desktop_ready.send(()).await.ok();
+                        let _res = timeout(wait_ipc_timeout, self.rx_cm_stream_ready.recv()).await;
+                    }
+                    self.try_start_cm(lr.my_id, lr.my_name, true);
+                    self.send_logon_response().await;
+                    if self.port_forward_socket.is_some() {
+                        return false;
+                    }
+                } else {
+                    self.send_login_error(desktop_err).await;
+                }
+                #[cfg(not(all(target_os = "linux", feature = "linux_headless")))]
+                {
+                    self.try_start_cm(lr.my_id, lr.my_name, true);
+                    self.send_logon_response().await;
+                    if self.port_forward_socket.is_some() {
+                        return false;
+                    }
                 }
             } else if lr.password.is_empty() {
+                #[cfg(all(target_os = "linux", feature = "linux_headless"))]
+                if desktop_err.is_empty() {
+                    self.try_start_cm(lr.my_id, lr.my_name, false);
+                } else {
+                    self.send_login_error(LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_EMPTY)
+                        .await;
+                }
+                #[cfg(not(all(target_os = "linux", feature = "linux_headless")))]
                 self.try_start_cm(lr.my_id, lr.my_name, false);
             } else {
                 let mut failure = LOGIN_FAILURES
@@ -1281,16 +1367,46 @@ impl Connection {
                         .lock()
                         .unwrap()
                         .insert(self.ip.clone(), failure);
-                    self.send_login_error("Wrong Password").await;
-                    self.try_start_cm(lr.my_id, lr.my_name, false);
+                    #[cfg(all(target_os = "linux", feature = "linux_headless"))]
+                    if desktop_err.is_empty() {
+                        self.send_login_error(LOGIN_MSG_PASSWORD_WRONG).await;
+                        self.try_start_cm(lr.my_id, lr.my_name, false);
+                    } else {
+                        self.send_login_error(LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_WRONG)
+                            .await;
+                    }
+                    #[cfg(not(all(target_os = "linux", feature = "linux_headless")))]
+                    {
+                        self.send_login_error(LOGIN_MSG_PASSWORD_WRONG).await;
+                        self.try_start_cm(lr.my_id, lr.my_name, false);
+                    }
                 } else {
                     if failure.0 != 0 {
                         LOGIN_FAILURES.lock().unwrap().remove(&self.ip);
                     }
-                    self.try_start_cm(lr.my_id, lr.my_name, true);
-                    self.send_logon_response().await;
-                    if self.port_forward_socket.is_some() {
-                        return false;
+                    #[cfg(all(target_os = "linux", feature = "linux_headless"))]
+                    if desktop_err.is_empty() {
+                        #[cfg(target_os = "linux")]
+                        if is_headless {
+                            self.tx_desktop_ready.send(()).await.ok();
+                            let _res =
+                                timeout(wait_ipc_timeout, self.rx_cm_stream_ready.recv()).await;
+                        }
+                        self.send_logon_response().await;
+                        self.try_start_cm(lr.my_id, lr.my_name, true);
+                        if self.port_forward_socket.is_some() {
+                            return false;
+                        }
+                    } else {
+                        self.send_login_error(desktop_err).await;
+                    }
+                    #[cfg(not(all(target_os = "linux", feature = "linux_headless")))]
+                    {
+                        self.send_logon_response().await;
+                        self.try_start_cm(lr.my_id, lr.my_name, true);
+                        if self.port_forward_socket.is_some() {
+                            return false;
+                        }
                     }
                 }
             }
@@ -2058,6 +2174,8 @@ pub fn insert_switch_sides_uuid(id: String, uuid: uuid::Uuid) {
 async fn start_ipc(
     mut rx_to_cm: mpsc::UnboundedReceiver<ipc::Data>,
     tx_from_cm: mpsc::UnboundedSender<ipc::Data>,
+    mut _rx_desktop_ready: mpsc::Receiver<()>,
+    tx_stream_ready: mpsc::Sender<()>,
 ) -> ResultType<()> {
     loop {
         if !crate::platform::is_prelogin() {
@@ -2073,6 +2191,34 @@ async fn start_ipc(
         if password::hide_cm() {
             args.push("--hide");
         };
+
+        #[cfg(target_os = "linux")]
+        #[cfg(not(feature = "linux_headless"))]
+        let user = None;
+        #[cfg(all(target_os = "linux", feature = "linux_headless"))]
+        let mut user = None;
+        // Cm run as user, wait until desktop session is ready.
+        #[cfg(all(target_os = "linux", feature = "linux_headless"))]
+        if linux_desktop_manager::is_headless() {
+            let mut username = linux_desktop_manager::get_username();
+            loop {
+                if !username.is_empty() {
+                    break;
+                }
+                let _res = timeout(1_000, _rx_desktop_ready.recv()).await;
+                username = linux_desktop_manager::get_username();
+            }
+            let uid = {
+                let output = run_cmds(&format!("id -u {}", &username))?;
+                let output = output.trim();
+                if output.is_empty() || !output.parse::<i32>().is_ok() {
+                    bail!("Invalid username {}", &username);
+                }
+                output.to_string()
+            };
+            user = Some((uid, username));
+            args = vec!["--cm-no-ui"];
+        }
         let run_done;
         if crate::platform::is_root() {
             let mut res = Ok(None);
@@ -2085,7 +2231,7 @@ async fn start_ipc(
                 #[cfg(target_os = "linux")]
                 {
                     log::debug!("Start cm");
-                    res = crate::platform::run_as_user(args.clone(), None);
+                    res = crate::platform::run_as_user(args.clone(), user.clone());
                 }
                 if res.is_ok() {
                     break;
@@ -2117,6 +2263,8 @@ async fn start_ipc(
             bail!("Failed to connect to connection manager");
         }
     }
+
+    let _res = tx_stream_ready.send(()).await;
     let mut stream = stream.unwrap();
     loop {
         tokio::select! {

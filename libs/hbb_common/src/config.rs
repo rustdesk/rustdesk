@@ -64,11 +64,15 @@ lazy_static::lazy_static! {
     pub static ref APP_HOME_DIR: Arc<RwLock<String>> = Default::default();
 }
 
-// #[cfg(any(target_os = "android", target_os = "ios"))]
+pub const LINK_DOCS_HOME: &str = "https://rustdesk.com/docs/en/";
+pub const LINK_DOCS_X11_REQUIRED: &str = "https://rustdesk.com/docs/en/manual/linux/#x11-required";
+pub const LINK_HEADLESS_LINUX_SUPPORT: &str =
+    "https://github.com/rustdesk/rustdesk/wiki/Headless-Linux-Support";
 lazy_static::lazy_static! {
     pub static ref HELPER_URL: HashMap<&'static str, &'static str> = HashMap::from([
-        ("rustdesk docs home", "https://rustdesk.com/docs/en/"),
-        ("rustdesk docs x11-required", "https://rustdesk.com/docs/en/manual/linux/#x11-required"),
+        ("rustdesk docs home", LINK_DOCS_HOME),
+        ("rustdesk docs x11-required", LINK_DOCS_X11_REQUIRED),
+        ("rustdesk x11 headless", LINK_HEADLESS_LINUX_SUPPORT),
         ]);
 }
 
@@ -915,7 +919,7 @@ impl PeerConfig {
                     decrypt_vec_or_original(&config.password, PASSWORD_ENC_VERSION);
                 config.password = password;
                 store = store || store2;
-                for opt in ["rdp_password", "os-password"] {
+                for opt in ["rdp_password", "os-username", "os-password"] {
                     if let Some(v) = config.options.get_mut(opt) {
                         let (encrypted, _, store2) =
                             decrypt_str_or_original(v, PASSWORD_ENC_VERSION);
@@ -939,7 +943,7 @@ impl PeerConfig {
         let _lock = CONFIG.read().unwrap();
         let mut config = self.clone();
         config.password = encrypt_vec_or_original(&config.password, PASSWORD_ENC_VERSION);
-        for opt in ["rdp_password", "os-password"] {
+        for opt in ["rdp_password", "os-username", "os-password"] {
             if let Some(v) = config.options.get_mut(opt) {
                 *v = encrypt_str_or_original(v, PASSWORD_ENC_VERSION)
             }

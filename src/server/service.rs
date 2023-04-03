@@ -221,6 +221,7 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
                     thread::sleep(interval - elapsed);
                 }
             }
+            log::info!("Service {} exit", sp.name());
         });
         self.0.write().unwrap().handle = Some(thread);
     }
@@ -256,6 +257,7 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
                 }
                 thread::sleep(time::Duration::from_millis(HIBERNATE_TIMEOUT));
             }
+            log::info!("Service {} exit", sp.name());
         });
         self.0.write().unwrap().handle = Some(thread);
     }

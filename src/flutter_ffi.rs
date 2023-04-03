@@ -136,9 +136,15 @@ pub fn session_get_option(id: String, arg: String) -> Option<String> {
     }
 }
 
-pub fn session_login(id: String, password: String, remember: bool) {
+pub fn session_login(
+    id: String,
+    os_username: String,
+    os_password: String,
+    password: String,
+    remember: bool,
+) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.login(password, remember);
+        session.login(os_username, os_password, password, remember);
     }
 }
 

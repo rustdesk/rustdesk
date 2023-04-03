@@ -199,8 +199,8 @@ async fn connect_and_login_2(
             },
             d = ui_receiver.recv() => {
                 match d {
-                    Some(Data::Login((password, remember))) => {
-                        interface.handle_login_from_ui(password, remember, &mut stream).await;
+                    Some(Data::Login((os_username, os_password, password, remember))) => {
+                        interface.handle_login_from_ui(os_username, os_password, password, remember, &mut stream).await;
                     }
                     _ => {}
                 }

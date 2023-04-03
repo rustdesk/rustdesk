@@ -404,7 +404,7 @@ impl sciter::EventHandler for SciterSession {
         fn is_file_transfer();
         fn is_port_forward();
         fn is_rdp();
-        fn login(String, bool);
+        fn login(String, String, String, bool);
         fn new_rdp();
         fn send_mouse(i32, i32, i32, bool, bool, bool, bool);
         fn enter();
