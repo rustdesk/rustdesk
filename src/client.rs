@@ -1926,8 +1926,8 @@ lazy_static::lazy_static! {
         use hbb_common::config::LINK_HEADLESS_LINUX_SUPPORT;
         let map = HashMap::from([(crate::server::LOGIN_MSG_DESKTOP_SESSION_NOT_READY, LoginErrorMsgBox{
             msgtype: "session-login",
-            title: "session_not_ready_title_tip",
-            text: "session_not_ready_text_tip",
+            title: "",
+            text: "",
             link: "",
             try_again: true,
         }), (crate::server::LOGIN_MSG_DESKTOP_XSESSION_FAILED, LoginErrorMsgBox{
@@ -1937,33 +1937,33 @@ lazy_static::lazy_static! {
             link: "",
             try_again: true,
         }), (crate::server::LOGIN_MSG_DESKTOP_SESSION_ANOTHER_USER, LoginErrorMsgBox{
-            msgtype: "info",
+            msgtype: "info-nocancel",
             title: "another_user_login_title_tip",
             text: "another_user_login_text_tip",
             link: "",
             try_again: false,
         }), (crate::server::LOGIN_MSG_DESKTOP_XORG_NOT_FOUND, LoginErrorMsgBox{
-            msgtype: "info-nocancel-nocancel",
+            msgtype: "info-nocancel",
             title: "xorg_not_found_title_tip",
             text: "xorg_not_found_text_tip",
             link: LINK_HEADLESS_LINUX_SUPPORT,
             try_again: true,
         }), (crate::server::LOGIN_MSG_DESKTOP_NO_DESKTOP, LoginErrorMsgBox{
-            msgtype: "info-nocancel-nocancel",
+            msgtype: "info-nocancel",
             title: "no_desktop_title_tip",
             text: "no_desktop_text_tip",
             link: LINK_HEADLESS_LINUX_SUPPORT,
             try_again: true,
         }), (crate::server::LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_EMPTY, LoginErrorMsgBox{
             msgtype: "session-login-password",
-            title: "session_unready_no_password_title_tip",
-            text: "session_unready_no_password_text_tip",
+            title: "session_not_ready_no_password_title_tip",
+            text: "session_not_ready_no_password_text_tip",
             link: "",
             try_again: true,
         }), (crate::server::LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_WRONG, LoginErrorMsgBox{
             msgtype: "session-login-re-password",
-            title: "session_unready_wrong_password_title_tip",
-            text: "session_unready_wrong_password_text_tip",
+            title: "session_not_ready_wrong_password_title_tip",
+            text: "session_not_ready_wrong_password_text_tip",
             link: "",
             try_again: true,
         }), (crate::server::LOGIN_MSG_NO_PASSWORD_ACCESS, LoginErrorMsgBox{
