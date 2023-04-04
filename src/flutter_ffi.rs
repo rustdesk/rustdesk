@@ -332,13 +332,13 @@ pub fn session_switch_display(id: String, value: i32) {
 pub fn session_handle_flutter_key_event(
     id: String,
     name: String,
-    keycode: i32,
-    scancode: i32,
+    platform_code: i32,
+    position_code: i32,
     lock_modes: i32,
     down_or_up: bool,
 ) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.handle_flutter_key_event(&name, keycode, scancode, lock_modes, down_or_up);
+        session.handle_flutter_key_event(&name, platform_code, position_code, lock_modes, down_or_up);
     }
 }
 

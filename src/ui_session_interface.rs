@@ -529,19 +529,19 @@ impl<T: InvokeUiSession> Session<T> {
     pub fn handle_flutter_key_event(
         &self,
         _name: &str,
-        keycode: i32,
-        scancode: i32,
+        platform_code: i32,
+        position_code: i32,
         lock_modes: i32,
         down_or_up: bool,
     ) {
-        if scancode < 0 || keycode < 0 {
+        if position_code < 0 || platform_code < 0 {
             return;
         }
-        let keycode: KeyCode = keycode as _;
-        let scancode: u32 = scancode as _;
+        let platform_code: KeyCode = platform_code as _;
+        let position_code: u32 = position_code as _;
 
         #[cfg(not(target_os = "windows"))]
-        let key = rdev::key_from_code(keycode) as rdev::Key;
+        let key = rdev::key_from_code(position_code) as rdev::Key;
         // Windows requires special handling
         #[cfg(target_os = "windows")]
         let key = rdev::get_win_key(keycode, scancode);
@@ -554,8 +554,8 @@ impl<T: InvokeUiSession> Session<T> {
         let event = Event {
             time: SystemTime::now(),
             unicode: None,
-            platform_code: keycode as _,
-            position_code: scancode as _,
+            platform_code: platform_code as _,
+            position_code: position_code as _,
             event_type: event_type,
         };
         keyboard::client::process_event(&event, Some(lock_modes));
