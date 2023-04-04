@@ -29,6 +29,16 @@ extern "C" fn breakdown_signal_handler(sig: i32) {
         info = "Always use software rendering will be set.".to_string();
         log::info!("{}", info);
     }
+    if stack.iter().any(|s| {
+        s.to_lowercase().contains("nvidia")
+            || s.to_lowercase().contains("amf")
+            || s.to_lowercase().contains("mfx")
+            || s.contains("cuProfilerStop")
+    }) {
+        Config::set_option("enable-hwcodec".to_string(), "N".to_string());
+        info = "Perhaps hwcodec causing the crash, disable it first".to_string();
+        log::info!("{}", info);
+    }
     log::error!(
         "Got signal {} and exit. stack:\n{}",
         sig,
