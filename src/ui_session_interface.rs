@@ -544,7 +544,7 @@ impl<T: InvokeUiSession> Session<T> {
         let key = rdev::key_from_code(position_code) as rdev::Key;
         // Windows requires special handling
         #[cfg(target_os = "windows")]
-        let key = rdev::get_win_key(keycode, scancode);
+        let key = rdev::get_win_key(platform_code, position_code);
 
         let event_type = if down_or_up {
             KeyPress(key)

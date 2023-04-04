@@ -109,6 +109,7 @@ impl Encoder {
                 }),
                 Err(e) => {
                     check_config_process(true);
+                    *CODEC_NAME.lock().unwrap() = CodecName::VP9;
                     Err(e)
                 }
             },
@@ -144,16 +145,18 @@ impl Encoder {
         let mut h265_name = None;
         #[cfg(feature = "hwcodec")]
         {
-            let best = HwEncoder::best();
-            let h264_useable =
-                decodings.len() > 0 && decodings.iter().all(|(_, s)| s.ability_h264 > 0);
-            let h265_useable =
-                decodings.len() > 0 && decodings.iter().all(|(_, s)| s.ability_h265 > 0);
-            if h264_useable {
-                h264_name = best.h264.map_or(None, |c| Some(c.name));
-            }
-            if h265_useable {
-                h265_name = best.h265.map_or(None, |c| Some(c.name));
+            if enable_hwcodec_option() {
+                let best = HwEncoder::best();
+                let h264_useable =
+                    decodings.len() > 0 && decodings.iter().all(|(_, s)| s.ability_h264 > 0);
+                let h265_useable =
+                    decodings.len() > 0 && decodings.iter().all(|(_, s)| s.ability_h265 > 0);
+                if h264_useable {
+                    h264_name = best.h264.map_or(None, |c| Some(c.name));
+                }
+                if h265_useable {
+                    h265_name = best.h265.map_or(None, |c| Some(c.name));
+                }
             }
         }
 
