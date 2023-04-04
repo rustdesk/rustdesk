@@ -537,8 +537,8 @@ impl<T: InvokeUiSession> Session<T> {
         if position_code < 0 || platform_code < 0 {
             return;
         }
-        let platform_code: KeyCode = platform_code as _;
-        let position_code: u32 = position_code as _;
+        let platform_code: u32 = platform_code as _;
+        let position_code: KeyCode = position_code as _;
 
         #[cfg(not(target_os = "windows"))]
         let key = rdev::key_from_code(position_code) as rdev::Key;
@@ -554,7 +554,7 @@ impl<T: InvokeUiSession> Session<T> {
         let event = Event {
             time: SystemTime::now(),
             unicode: None,
-            platform_code: platform_code as _,
+            platform_code: platform_code,
             position_code: position_code as _,
             event_type: event_type,
         };
