@@ -199,7 +199,7 @@ impl HwDecoder {
             }
         }
         if fail {
-            check_config_process(true);
+            check_config_process();
         }
         HwDecoders { h264, h265 }
     }
@@ -323,13 +323,11 @@ pub fn check_config() {
     log::error!("Failed to serialize codec info");
 }
 
-pub fn check_config_process(force_reset: bool) {
+pub fn check_config_process() {
     use hbb_common::sysinfo::{ProcessExt, System, SystemExt};
 
     std::thread::spawn(move || {
-        if force_reset {
-            HwCodecConfig::remove();
-        }
+        HwCodecConfig::remove();
         if let Ok(exe) = std::env::current_exe() {
             if let Some(file_name) = exe.file_name().to_owned() {
                 let s = System::new_all();

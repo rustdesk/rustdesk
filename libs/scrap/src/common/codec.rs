@@ -108,7 +108,7 @@ impl Encoder {
                     codec: Box::new(hw),
                 }),
                 Err(e) => {
-                    check_config_process(true);
+                    check_config_process();
                     *CODEC_NAME.lock().unwrap() = CodecName::VP9;
                     Err(e)
                 }
