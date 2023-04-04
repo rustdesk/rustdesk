@@ -20,7 +20,6 @@ import '../../models/input_model.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../../utils/image.dart';
-import '../widgets/dialog.dart';
 import '../widgets/gestures.dart';
 
 final initText = '\1' * 1024;
@@ -42,6 +41,8 @@ class _RemotePageState extends State<RemotePage> {
   double _scale = 1;
   double _mouseScrollIntegral = 0; // mouse scroll speed controller
   Orientation? _currentOrientation;
+
+  final _blockableOverlayState = BlockableOverlayState();
 
   final keyboardVisibilityController = KeyboardVisibilityController();
   late final StreamSubscription<bool> keyboardSubscription;
@@ -67,6 +68,7 @@ class _RemotePageState extends State<RemotePage> {
     gFFI.qualityMonitorModel.checkShowQualityMonitor(widget.id);
     keyboardSubscription =
         keyboardVisibilityController.onChange.listen(onSoftKeyboardChanged);
+    _blockableOverlayState.applyFfi(gFFI);
   }
 
   @override
