@@ -1371,6 +1371,35 @@ fn simulate_win2win_hotkey(code: u32, down: bool) {
     allow_err!(rdev::simulate_code(Some(keycode), None, down));
 }
 
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+fn is_win_linux_meta_key(_evt: &KeyEvent) -> bool {
+    false
+}
+
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+fn is_win_linux_meta_key(evt: &KeyEvent) -> bool {
+    match evt.mode.unwrap() {
+        KeyboardMode::Map | KeyboardMode::Translate => match &evt.union {
+            Some(key_event::Union::ControlKey(ck)) => {
+                return *ck == ControlKey::Meta.into();
+            }
+            Some(key_event::Union::Chr(code)) => {
+                let key = crate::keycode_to_rdev_key(*code);
+                return key == RdevKey::MetaLeft || key == RdevKey::MetaRight;
+            }
+            _ => {}
+        },
+        KeyboardMode::Legacy => match &evt.union {
+            Some(key_event::Union::ControlKey(ck)) => {
+                return *ck == ControlKey::Meta.into();
+            }
+            _ => {}
+        },
+        _ => {}
+    }
+    false
+}
+
 pub fn handle_key_(evt: &KeyEvent) {
     if EXITING.load(Ordering::SeqCst) {
         return;
@@ -1381,8 +1410,11 @@ pub fn handle_key_(evt: &KeyEvent) {
             Some(LockModesHandler::new(&evt))
         }
         _ => {
-            if evt.down {
-                Some(LockModesHandler::new(&evt))
+            // LockModesHandler should not be created when single meta is pressing and releasing.
+            // Because the drop function may insert "CapsLock Click" and "NumLock Click", which breaks single meta click.
+            // https://github.com/rustdesk/rustdesk/issues/3928#issuecomment-1496936687
+            if evt.down && !is_win_linux_meta_key(evt) {
+                Some(LockModesHandler::new(evt))
             } else {
                 None
             }
