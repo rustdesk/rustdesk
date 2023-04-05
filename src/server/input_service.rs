@@ -1410,6 +1410,9 @@ pub fn handle_key_(evt: &KeyEvent) {
             Some(LockModesHandler::new(&evt))
         }
         _ => {
+            // LockModesHandler should not be created when single meta is pressing and releasing.
+            // Because the drop function may insert "CapsLock Click" and "NumLock Click", which breaks single meta click.
+            // https://github.com/rustdesk/rustdesk/issues/3928#issuecomment-1496936687
             if evt.down && !is_win_linux_meta_key(evt) {
                 Some(LockModesHandler::new(evt))
             } else {
