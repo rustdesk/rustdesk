@@ -1371,13 +1371,13 @@ fn simulate_win2win_hotkey(code: u32, down: bool) {
     allow_err!(rdev::simulate_code(Some(keycode), None, down));
 }
 
-#[cfg(any(target_os = "android", target_os = "ios"))]
-fn is_meta_key(_evt: &KeyEvent) -> bool {
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+fn is_win_linux_meta_key(_evt: &KeyEvent) -> bool {
     false
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-fn is_meta_key(evt: &KeyEvent) -> bool {
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+fn is_win_linux_meta_key(evt: &KeyEvent) -> bool {
     match evt.mode.unwrap() {
         KeyboardMode::Map | KeyboardMode::Translate => match &evt.union {
             Some(key_event::Union::ControlKey(ck)) => {
@@ -1410,7 +1410,7 @@ pub fn handle_key_(evt: &KeyEvent) {
             Some(LockModesHandler::new(&evt))
         }
         _ => {
-            if evt.down && !is_meta_key(evt) {
+            if evt.down && !is_win_linux_meta_key(evt) {
                 Some(LockModesHandler::new(evt))
             } else {
                 None
