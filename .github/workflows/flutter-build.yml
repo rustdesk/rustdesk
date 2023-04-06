@@ -980,7 +980,7 @@ jobs:
         run: |
           for name in rustdesk*??.deb; do
               # use cp to duplicate deb files to fit other packages.
-              cp "$name" "${name%%.deb}--${{ matrix.job.arch }}-sciter.deb"
+              cp "$name" "${name%%.deb}-${{ matrix.job.arch }}-sciter.deb"
           done
 
       - name: Publish debian package
@@ -1103,11 +1103,11 @@ jobs:
             # edit to corresponding arch
             case ${{ matrix.job.arch }} in
               aarch64)
-                sed -i "s/Architecture: amd64/Architecture: arm64/g" ./build.py
+                export ARCH=arm64
                 sed -i "s/x64\/release/arm64\/release/g" ./build.py
               ;;
               armv7)
-                sed -i "s/Architecture: amd64/Architecture: arm/g" ./build.py
+                export ARCH=armhf
                 sed -i "s/x64\/release/arm\/release/g" ./build.py
               ;;
             esac
