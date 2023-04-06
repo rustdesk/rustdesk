@@ -1363,7 +1363,7 @@ impl UserDefaultConfig {
             "image_quality" => self.get_string(key, "balanced", vec!["best", "low", "custom"]),
             "codec-preference" => self.get_string(key, "auto", vec!["vp8", "vp9", "h264", "h265"]),
             "custom_image_quality" => self.get_double_string(key, 50.0, 10.0, 100.0),
-            "custom-fps" => self.get_double_string(key, 30.0, 10.0, 120.0),
+            "custom-fps" => self.get_double_string(key, 30.0, 5.0, 120.0),
             _ => self
                 .options
                 .get(key)

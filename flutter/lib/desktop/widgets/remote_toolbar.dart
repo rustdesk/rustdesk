@@ -1237,7 +1237,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
     final fpsOption =
         await bind.sessionGetOption(id: widget.id, arg: 'custom-fps');
     fpsInitValue = fpsOption == null ? 30 : double.tryParse(fpsOption) ?? 30;
-    if (fpsInitValue < 10 || fpsInitValue > 120) {
+    if (fpsInitValue < 5 || fpsInitValue > 120) {
       fpsInitValue = 30;
     }
     final RxDouble fpsSliderValue = RxDouble(fpsInitValue);
@@ -1260,9 +1260,9 @@ class _DisplayMenuState extends State<_DisplayMenu> {
         children: [
           Obx((() => Slider(
                 value: fpsSliderValue.value,
-                min: 10,
+                min: 5,
                 max: 120,
-                divisions: 22,
+                divisions: 23,
                 onChanged: (double value) {
                   fpsSliderValue.value = value;
                   debouncerFps.value = value;

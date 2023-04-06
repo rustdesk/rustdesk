@@ -1228,9 +1228,9 @@ class _DisplayState extends State<_Display> {
                   children: [
                     Slider(
                       value: fpsValue.value,
-                      min: 10.0,
+                      min: 5.0,
                       max: 120.0,
-                      divisions: 22,
+                      divisions: 23,
                       onChanged: (double value) async {
                         fpsValue.value = value;
                         await bind.mainSetUserDefaultOption(
