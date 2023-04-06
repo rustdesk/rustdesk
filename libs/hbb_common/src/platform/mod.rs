@@ -61,12 +61,13 @@ extern "C" fn breakdown_signal_handler(sig: i32) {
     exit(0);
 }
 
-pub fn register_breakdown_handler<T>(callback: T)
+pub fn register_breakdown_handler<T>(_callback: T)
 where
     T: Fn() + 'static,
 {
+    #[cfg(not(debug_assertions))]
     unsafe {
-        GLOBAL_CALLBACK = Some(Box::new(callback));
+        GLOBAL_CALLBACK = Some(Box::new(_callback));
         libc::signal(libc::SIGSEGV, breakdown_signal_handler as _);
     }
 }
