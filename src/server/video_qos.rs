@@ -221,7 +221,9 @@ impl VideoQoS {
     }
 
     pub fn reset(&mut self) {
-        *self = Default::default();
+        self.fps = FPS;
+        self.user_fps = FPS;
+        self.updated = true;
     }
 
     pub fn check_abr_config(&mut self) -> bool {
