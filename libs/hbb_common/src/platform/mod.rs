@@ -65,6 +65,7 @@ pub fn register_breakdown_handler<T>(callback: T)
 where
     T: Fn() + 'static,
 {
+    #[cfg(not(debug_assertions))]
     unsafe {
         GLOBAL_CALLBACK = Some(Box::new(callback));
         libc::signal(libc::SIGSEGV, breakdown_signal_handler as _);
