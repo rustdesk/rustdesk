@@ -43,12 +43,14 @@ use sha2::{Digest, Sha256};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use std::sync::atomic::Ordering;
 use std::{
-    collections::HashSet,
     num::NonZeroI64,
     sync::{atomic::AtomicI64, mpsc as std_mpsc},
 };
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use system_shutdown;
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use std::collections::HashSet;
 
 pub type Sender = mpsc::UnboundedSender<(Instant, Arc<Message>)>;
 
@@ -153,6 +155,7 @@ pub struct Connection {
     voice_call_request_timestamp: Option<NonZeroI64>,
     audio_input_device_before_voice_call: Option<String>,
     options_in_login: Option<OptionMessage>,
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pressed_modifiers: HashSet<rdev::Key>,
     #[cfg(all(target_os = "linux", feature = "linux_headless"))]
     rx_cm_stream_ready: mpsc::Receiver<()>,
@@ -273,6 +276,7 @@ impl Connection {
             voice_call_request_timestamp: None,
             audio_input_device_before_voice_call: None,
             options_in_login: None,
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             pressed_modifiers: Default::default(),
             #[cfg(all(target_os = "linux", feature = "linux_headless"))]
             rx_cm_stream_ready: _rx_cm_stream_ready,

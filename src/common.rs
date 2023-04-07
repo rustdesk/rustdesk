@@ -818,3 +818,21 @@ pub async fn get_key(sync: bool) -> String {
     }
     key
 }
+
+pub fn is_peer_version_ge(v: &str) -> bool {
+    #[cfg(not(any(feature = "flutter", feature = "cli")))]
+    if let Some(session) = crate::ui::CUR_SESSION.lock().unwrap().as_ref() {
+        return session.get_peer_version() >= hbb_common::get_version_number(v);
+    }
+
+    #[cfg(feature = "flutter")]
+    if let Some(session) = crate::flutter::SESSIONS
+        .read()
+        .unwrap()
+        .get(&*crate::flutter::CUR_SESSION_ID.read().unwrap())
+    {
+        return session.get_peer_version() >= hbb_common::get_version_number(v);
+    }
+
+    false
+}
