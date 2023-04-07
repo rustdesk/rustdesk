@@ -64,7 +64,7 @@ class InputModel {
   InputModel(this.parent);
 
   KeyEventResult handleRawKeyEvent(FocusNode data, RawKeyEvent e) {
-    if (!stateGlobal.grabKeyboard) {
+    if (isDesktop && !stateGlobal.grabKeyboard) {
       return KeyEventResult.handled;
     }
 
