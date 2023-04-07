@@ -339,24 +339,8 @@ pub fn get_keyboard_mode_enum() -> KeyboardMode {
         "translate" => KeyboardMode::Translate,
         "legacy" => KeyboardMode::Legacy,
         _ => {
-            // Set "map" as default mode if version > 1.2.0.
-            let mut is_peer_version_gt_1_2_0 = false;
-
-            #[cfg(not(any(feature = "flutter", feature = "cli")))]
-            if let Some(session) = CUR_SESSION.lock().unwrap().as_ref() {
-                is_peer_version_gt_1_2_0 =
-                    session.get_peer_version() > hbb_common::get_version_number("1.2.0");
-            }
-            #[cfg(feature = "flutter")]
-            if let Some(session) = SESSIONS
-                .read()
-                .unwrap()
-                .get(&*CUR_SESSION_ID.read().unwrap())
-            {
-                is_peer_version_gt_1_2_0 =
-                    session.get_peer_version() > hbb_common::get_version_number("1.2.0");
-            }
-            if is_peer_version_gt_1_2_0 {
+            // Set "map" as default mode if version >= 1.2.0.
+            if crate::is_peer_version_ge("1.2.0") {
                 KeyboardMode::Map
             } else {
                 KeyboardMode::Legacy
