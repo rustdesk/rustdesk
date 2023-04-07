@@ -462,12 +462,6 @@ impl Enigo {
         let current_window_thread_id =
             unsafe { GetWindowThreadProcessId(GetForegroundWindow(), std::ptr::null_mut()) };
         unsafe { LAYOUT = GetKeyboardLayout(current_window_thread_id) };
-        let keycode_and_shiftstate = unsafe { VkKeyScanExW(chr as _, LAYOUT) };
-        if keycode_and_shiftstate == (EVK_DECIMAL as i16) && chr == '.' {
-            // a workaround of italian keyboard shift + '.' issue
-            EVK_PERIOD as _
-        } else {
-            keycode_and_shiftstate as _
-        }
+        unsafe { VkKeyScanExW(chr as _, LAYOUT) as _ }
     }
 }
