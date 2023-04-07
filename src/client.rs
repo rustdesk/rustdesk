@@ -3,7 +3,10 @@ use std::{
     net::SocketAddr,
     ops::Deref,
     str::FromStr,
-    sync::{mpsc, Arc, Mutex, RwLock},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        mpsc, Arc, Mutex, RwLock,
+    },
 };
 
 pub use async_trait::async_trait;
@@ -1291,10 +1294,11 @@ impl LoginConfigHandler {
                 config.custom_image_quality[0]
             };
             msg.custom_image_quality = quality << 8;
+            #[cfg(feature = "flutter")]
+            if let Some(custom_fps) = self.options.get("custom-fps") {
+                msg.custom_fps = custom_fps.parse().unwrap_or(30);
+            }
             n += 1;
-        }
-        if let Some(custom_fps) = self.options.get("custom-fps") {
-            msg.custom_fps = custom_fps.parse().unwrap_or(30);
         }
         let view_only = self.get_toggle_option("view-only");
         if view_only {
@@ -1677,7 +1681,12 @@ pub type MediaSender = mpsc::Sender<MediaData>;
 /// * `video_callback` - The callback for video frame. Being called when a video frame is ready.
 pub fn start_video_audio_threads<F>(
     video_callback: F,
-) -> (MediaSender, MediaSender, Arc<ArrayQueue<VideoFrame>>)
+) -> (
+    MediaSender,
+    MediaSender,
+    Arc<ArrayQueue<VideoFrame>>,
+    Arc<AtomicUsize>,
+)
 where
     F: 'static + FnMut(&mut Vec<u8>) + Send,
 {
@@ -1685,21 +1694,48 @@ where
     let video_queue = Arc::new(ArrayQueue::<VideoFrame>::new(VIDEO_QUEUE_SIZE));
     let video_queue_cloned = video_queue.clone();
     let mut video_callback = video_callback;
+    let mut duration = std::time::Duration::ZERO;
+    let mut count = 0;
+    let fps = Arc::new(AtomicUsize::new(0));
+    let decode_fps = fps.clone();
+    let mut skip_beginning = 0;
 
     std::thread::spawn(move || {
         let mut video_handler = VideoHandler::new();
         loop {
             if let Ok(data) = video_receiver.recv() {
                 match data {
-                    MediaData::VideoFrame(vf) => {
-                        if let Ok(true) = video_handler.handle_frame(*vf) {
+                    MediaData::VideoFrame(_) | MediaData::VideoQueue => {
+                        let vf = if let MediaData::VideoFrame(vf) = data {
+                            *vf
+                        } else {
+                            if let Some(vf) = video_queue.pop() {
+                                vf
+                            } else {
+                                continue;
+                            }
+                        };
+                        let start = std::time::Instant::now();
+                        if let Ok(true) = video_handler.handle_frame(vf) {
                             video_callback(&mut video_handler.rgb);
-                        }
-                    }
-                    MediaData::VideoQueue => {
-                        if let Some(vf) = video_queue.pop() {
-                            if let Ok(true) = video_handler.handle_frame(vf) {
-                                video_callback(&mut video_handler.rgb);
+                            // fps calculation
+                            // The first frame will be very slow
+                            if skip_beginning < 5 {
+                                skip_beginning += 1;
+                                continue;
+                            }
+                            duration += start.elapsed();
+                            count += 1;
+                            if count % 10 == 0 {
+                                fps.store(
+                                    (count * 1000 / duration.as_millis()) as usize,
+                                    Ordering::Relaxed,
+                                );
+                            }
+                            // Clear to get real-time fps
+                            if count > 300 {
+                                count = 0;
+                                duration = Duration::ZERO;
                             }
                         }
                     }
@@ -1718,7 +1754,7 @@ where
         log::info!("Video decoder loop exits");
     });
     let audio_sender = start_audio_thread();
-    return (video_sender, audio_sender, video_queue_cloned);
+    return (video_sender, audio_sender, video_queue_cloned, decode_fps);
 }
 
 /// Start an audio thread

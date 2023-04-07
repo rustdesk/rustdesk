@@ -547,7 +547,7 @@ fn run(sp: GenericService) -> ResultType<()> {
         check_uac_switch(c.privacy_mode_id, c._capturer_privacy_mode_id)?;
 
         let mut video_qos = VIDEO_QOS.lock().unwrap();
-        if video_qos.check_if_updated() {
+        if video_qos.check_if_updated() && video_qos.target_bitrate > 0 {
             log::debug!(
                 "qos is updated, target_bitrate:{}, fps:{}",
                 video_qos.target_bitrate,
