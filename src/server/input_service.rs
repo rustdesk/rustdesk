@@ -124,13 +124,13 @@ impl Subscriber for MouseCursorSub {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 struct LockModesHandler {
     caps_lock_changed: bool,
     num_lock_changed: bool,
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
 struct LockModesHandler;
 
 impl LockModesHandler {
@@ -139,7 +139,7 @@ impl LockModesHandler {
         key_event.modifiers.contains(&modifier.into())
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     fn new(key_event: &KeyEvent, is_numpad_key: bool) -> Self {
         let mut en = ENIGO.lock().unwrap();
         let event_caps_enabled = Self::is_modifier_enabled(key_event, ControlKey::CapsLock);
@@ -167,8 +167,8 @@ impl LockModesHandler {
         }
     }
 
-    #[cfg(target_os = "macos")]
-    fn new(key_event: &KeyEvent) -> Self {
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    fn new(key_event: &KeyEvent, _is_numpad_key: bool) -> Self {
         let event_caps_enabled = Self::is_modifier_enabled(key_event, ControlKey::CapsLock);
         // Do not use the following code to detect `local_caps_enabled`.
         // Because the state of get_key_state will not affect simuation of `VIRTUAL_INPUT_STATE` in this file.
@@ -193,7 +193,7 @@ impl LockModesHandler {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 impl Drop for LockModesHandler {
     fn drop(&mut self) {
         let mut en = ENIGO.lock().unwrap();
@@ -1357,7 +1357,7 @@ fn simulate_win2win_hotkey(code: u32, down: bool) {
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "linux")))]
-fn skip_led_sync_control_key(_evt: &KeyEvent) -> bool {
+fn skip_led_sync_control_key(_key: &ControlKey) -> bool {
     false
 }
 
@@ -1401,7 +1401,7 @@ fn is_numpad_control_key(key: &ControlKey) -> bool {
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "linux")))]
-fn skip_led_sync_rdev_key(_evt: &KeyEvent) -> bool {
+fn skip_led_sync_rdev_key(_key: &RdevKey) -> bool {
     false
 }
 
@@ -1427,7 +1427,9 @@ pub fn handle_key_(evt: &KeyEvent) {
         return;
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let mut _lock_mode_handler = None;
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     match (&evt.union, evt.mode.enum_value_or(KeyboardMode::Legacy)) {
         (Some(key_event::Union::Unicode(..)) | Some(key_event::Union::Seq(..)), _) => {
             _lock_mode_handler = Some(LockModesHandler::new(&evt, false));
