@@ -350,6 +350,7 @@ pub fn get_keyboard_mode_enum() -> KeyboardMode {
 }
 
 #[inline]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn is_modifier(key: &rdev::Key) -> bool {
     matches!(
         key,

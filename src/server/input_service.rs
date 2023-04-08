@@ -1439,10 +1439,10 @@ pub fn handle_key_(evt: &KeyEvent) {
             }
         }
         (Some(key_event::Union::Chr(code)), KeyboardMode::Map | KeyboardMode::Translate) => {
-            let key = crate::keycode_to_rdev_key(*code);
+            let key = crate::keyboard::keycode_to_rdev_key(*code);
             if !skip_led_sync_rdev_key(&key) {
                 _lock_mode_handler =
-                    Some(LockModesHandler::new(evt, crate::is_numpad_rdev_key(&key)));
+                    Some(LockModesHandler::new(evt, crate::keyboard::is_numpad_rdev_key(&key)));
             }
         }
         _ => {}
