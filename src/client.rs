@@ -3,7 +3,10 @@ use std::{
     net::SocketAddr,
     ops::Deref,
     str::FromStr,
-    sync::{mpsc, Arc, Mutex, RwLock},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        mpsc, Arc, Mutex, RwLock,
+    },
 };
 
 pub use async_trait::async_trait;
@@ -44,9 +47,9 @@ use hbb_common::{
 };
 pub use helper::*;
 use scrap::{
-    codec::{Decoder, DecoderCfg},
+    codec::Decoder,
     record::{Recorder, RecorderContext},
-    ImageFormat, VpxDecoderConfig, VpxVideoCodecId,
+    ImageFormat,
 };
 
 use crate::{
@@ -917,12 +920,7 @@ impl VideoHandler {
     /// Create a new video handler.
     pub fn new() -> Self {
         VideoHandler {
-            decoder: Decoder::new(DecoderCfg {
-                vpx: VpxDecoderConfig {
-                    codec: VpxVideoCodecId::VP9,
-                    num_threads: (num_cpus::get() / 2) as _,
-                },
-            }),
+            decoder: Decoder::new(),
             rgb: Default::default(),
             recorder: Default::default(),
             record: false,
@@ -954,12 +952,7 @@ impl VideoHandler {
 
     /// Reset the decoder.
     pub fn reset(&mut self) {
-        self.decoder = Decoder::new(DecoderCfg {
-            vpx: VpxDecoderConfig {
-                codec: VpxVideoCodecId::VP9,
-                num_threads: 1,
-            },
-        });
+        self.decoder = Decoder::new();
     }
 
     /// Start or stop screen record.
@@ -973,7 +966,7 @@ impl VideoHandler {
                 filename: "".to_owned(),
                 width: w as _,
                 height: h as _,
-                codec_id: scrap::record::RecordCodecID::VP9,
+                format: scrap::CodecFormat::VP9,
                 tx: None,
             })
             .map_or(Default::default(), |r| Arc::new(Mutex::new(Some(r))));
@@ -999,7 +992,7 @@ pub struct LoginConfigHandler {
     pub conn_id: i32,
     features: Option<Features>,
     session_id: u64,
-    pub supported_encoding: Option<(bool, bool)>,
+    pub supported_encoding: SupportedEncoding,
     pub restarting_remote_device: bool,
     pub force_relay: bool,
     pub direct: Option<bool>,
@@ -1047,7 +1040,7 @@ impl LoginConfigHandler {
         self.remember = !config.password.is_empty();
         self.config = config;
         self.session_id = rand::random();
-        self.supported_encoding = None;
+        self.supported_encoding = Default::default();
         self.restarting_remote_device = false;
         self.force_relay = !self.get_option("force-always-relay").is_empty() || force_relay;
         self.direct = None;
@@ -1301,10 +1294,11 @@ impl LoginConfigHandler {
                 config.custom_image_quality[0]
             };
             msg.custom_image_quality = quality << 8;
+            #[cfg(feature = "flutter")]
+            if let Some(custom_fps) = self.options.get("custom-fps") {
+                msg.custom_fps = custom_fps.parse().unwrap_or(30);
+            }
             n += 1;
-        }
-        if let Some(custom_fps) = self.options.get("custom-fps") {
-            msg.custom_fps = custom_fps.parse().unwrap_or(30);
         }
         let view_only = self.get_toggle_option("view-only");
         if view_only {
@@ -1331,8 +1325,8 @@ impl LoginConfigHandler {
             msg.disable_clipboard = BoolOption::Yes.into();
             n += 1;
         }
-        let state = Decoder::video_codec_state(&self.id);
-        msg.video_codec_state = hbb_common::protobuf::MessageField::some(state);
+        msg.supported_decoding =
+            hbb_common::protobuf::MessageField::some(Decoder::supported_decodings(Some(&self.id)));
         n += 1;
 
         if n > 0 {
@@ -1565,10 +1559,7 @@ impl LoginConfigHandler {
         self.conn_id = pi.conn_id;
         // no matter if change, for update file time
         self.save_config(config);
-        #[cfg(any(feature = "hwcodec", feature = "mediacodec"))]
-        {
-            self.supported_encoding = Some((pi.encoding.h264, pi.encoding.h265));
-        }
+        self.supported_encoding = pi.encoding.clone().unwrap_or_default();
     }
 
     pub fn get_remote_dir(&self) -> String {
@@ -1591,7 +1582,12 @@ impl LoginConfigHandler {
     }
 
     /// Create a [`Message`] for login.
-    fn create_login_msg(&self, password: Vec<u8>) -> Message {
+    fn create_login_msg(
+        &self,
+        os_username: String,
+        os_password: String,
+        password: Vec<u8>,
+    ) -> Message {
         #[cfg(any(target_os = "android", target_os = "ios"))]
         let my_id = Config::get_id_or(crate::common::DEVICE_ID.lock().unwrap().clone());
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -1604,6 +1600,12 @@ impl LoginConfigHandler {
             option: self.get_option_message(true).into(),
             session_id: self.session_id,
             version: crate::VERSION.to_string(),
+            os_login: Some(OSLogin {
+                username: os_username,
+                password: os_password,
+                ..Default::default()
+            })
+            .into(),
             ..Default::default()
         };
         match self.conn_type {
@@ -1626,10 +1628,10 @@ impl LoginConfigHandler {
     }
 
     pub fn change_prefer_codec(&self) -> Message {
-        let state = scrap::codec::Decoder::video_codec_state(&self.id);
+        let decoding = scrap::codec::Decoder::supported_decodings(Some(&self.id));
         let mut misc = Misc::new();
         misc.set_option(OptionMessage {
-            video_codec_state: hbb_common::protobuf::MessageField::some(state),
+            supported_decoding: hbb_common::protobuf::MessageField::some(decoding),
             ..Default::default()
         });
         let mut msg_out = Message::new();
@@ -1679,7 +1681,12 @@ pub type MediaSender = mpsc::Sender<MediaData>;
 /// * `video_callback` - The callback for video frame. Being called when a video frame is ready.
 pub fn start_video_audio_threads<F>(
     video_callback: F,
-) -> (MediaSender, MediaSender, Arc<ArrayQueue<VideoFrame>>)
+) -> (
+    MediaSender,
+    MediaSender,
+    Arc<ArrayQueue<VideoFrame>>,
+    Arc<AtomicUsize>,
+)
 where
     F: 'static + FnMut(&mut Vec<u8>) + Send,
 {
@@ -1687,21 +1694,48 @@ where
     let video_queue = Arc::new(ArrayQueue::<VideoFrame>::new(VIDEO_QUEUE_SIZE));
     let video_queue_cloned = video_queue.clone();
     let mut video_callback = video_callback;
+    let mut duration = std::time::Duration::ZERO;
+    let mut count = 0;
+    let fps = Arc::new(AtomicUsize::new(0));
+    let decode_fps = fps.clone();
+    let mut skip_beginning = 0;
 
     std::thread::spawn(move || {
         let mut video_handler = VideoHandler::new();
         loop {
             if let Ok(data) = video_receiver.recv() {
                 match data {
-                    MediaData::VideoFrame(vf) => {
-                        if let Ok(true) = video_handler.handle_frame(*vf) {
+                    MediaData::VideoFrame(_) | MediaData::VideoQueue => {
+                        let vf = if let MediaData::VideoFrame(vf) = data {
+                            *vf
+                        } else {
+                            if let Some(vf) = video_queue.pop() {
+                                vf
+                            } else {
+                                continue;
+                            }
+                        };
+                        let start = std::time::Instant::now();
+                        if let Ok(true) = video_handler.handle_frame(vf) {
                             video_callback(&mut video_handler.rgb);
-                        }
-                    }
-                    MediaData::VideoQueue => {
-                        if let Some(vf) = video_queue.pop() {
-                            if let Ok(true) = video_handler.handle_frame(vf) {
-                                video_callback(&mut video_handler.rgb);
+                            // fps calculation
+                            // The first frame will be very slow
+                            if skip_beginning < 5 {
+                                skip_beginning += 1;
+                                continue;
+                            }
+                            duration += start.elapsed();
+                            count += 1;
+                            if count % 10 == 0 {
+                                fps.store(
+                                    (count * 1000 / duration.as_millis()) as usize,
+                                    Ordering::Relaxed,
+                                );
+                            }
+                            // Clear to get real-time fps
+                            if count > 300 {
+                                count = 0;
+                                duration = Duration::ZERO;
                             }
                         }
                     }
@@ -1720,7 +1754,7 @@ where
         log::info!("Video decoder loop exits");
     });
     let audio_sender = start_audio_thread();
-    return (video_sender, audio_sender, video_queue_cloned);
+    return (video_sender, audio_sender, video_queue_cloned, decode_fps);
 }
 
 /// Start an audio thread
@@ -1901,6 +1935,71 @@ fn _input_os_password(p: String, activate: bool, interface: impl Interface) {
     interface.send(Data::Message(msg_out));
 }
 
+#[derive(Copy, Clone)]
+struct LoginErrorMsgBox {
+    msgtype: &'static str,
+    title: &'static str,
+    text: &'static str,
+    link: &'static str,
+    try_again: bool,
+}
+
+lazy_static::lazy_static! {
+    static ref LOGIN_ERROR_MAP: Arc<HashMap<&'static str, LoginErrorMsgBox>> = {
+        use hbb_common::config::LINK_HEADLESS_LINUX_SUPPORT;
+        let map = HashMap::from([(crate::server::LOGIN_MSG_DESKTOP_SESSION_NOT_READY, LoginErrorMsgBox{
+            msgtype: "session-login",
+            title: "",
+            text: "",
+            link: "",
+            try_again: true,
+        }), (crate::server::LOGIN_MSG_DESKTOP_XSESSION_FAILED, LoginErrorMsgBox{
+            msgtype: "session-re-login",
+            title: "",
+            text: "",
+            link: "",
+            try_again: true,
+        }), (crate::server::LOGIN_MSG_DESKTOP_SESSION_ANOTHER_USER, LoginErrorMsgBox{
+            msgtype: "info-nocancel",
+            title: "another_user_login_title_tip",
+            text: "another_user_login_text_tip",
+            link: "",
+            try_again: false,
+        }), (crate::server::LOGIN_MSG_DESKTOP_XORG_NOT_FOUND, LoginErrorMsgBox{
+            msgtype: "info-nocancel",
+            title: "xorg_not_found_title_tip",
+            text: "xorg_not_found_text_tip",
+            link: LINK_HEADLESS_LINUX_SUPPORT,
+            try_again: true,
+        }), (crate::server::LOGIN_MSG_DESKTOP_NO_DESKTOP, LoginErrorMsgBox{
+            msgtype: "info-nocancel",
+            title: "no_desktop_title_tip",
+            text: "no_desktop_text_tip",
+            link: LINK_HEADLESS_LINUX_SUPPORT,
+            try_again: true,
+        }), (crate::server::LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_EMPTY, LoginErrorMsgBox{
+            msgtype: "session-login-password",
+            title: "",
+            text: "",
+            link: "",
+            try_again: true,
+        }), (crate::server::LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_WRONG, LoginErrorMsgBox{
+            msgtype: "session-login-re-password",
+            title: "",
+            text: "",
+            link: "",
+            try_again: true,
+        }), (crate::server::LOGIN_MSG_NO_PASSWORD_ACCESS, LoginErrorMsgBox{
+            msgtype: "wait-remote-accept-nook",
+            title: "Prompt",
+            text: "Please wait for the remote side to accept your session request...",
+            link: "",
+            try_again: true,
+        })]);
+        Arc::new(map)
+    };
+}
+
 /// Handle login error.
 /// Return true if the password is wrong, return false if there's an actual error.
 pub fn handle_login_error(
@@ -1908,19 +2007,27 @@ pub fn handle_login_error(
     err: &str,
     interface: &impl Interface,
 ) -> bool {
-    if err == "Wrong Password" {
+    if err == crate::server::LOGIN_MSG_PASSWORD_EMPTY {
+        lc.write().unwrap().password = Default::default();
+        interface.msgbox("input-password", "Password Required", "", "");
+        true
+    } else if err == crate::server::LOGIN_MSG_PASSWORD_WRONG {
         lc.write().unwrap().password = Default::default();
         interface.msgbox("re-input-password", err, "Do you want to enter again?", "");
         true
-    } else if err == "No Password Access" {
-        lc.write().unwrap().password = Default::default();
-        interface.msgbox(
-            "wait-remote-accept-nook",
-            "Prompt",
-            "Please wait for the remote side to accept your session request...",
-            "",
-        );
-        true
+    } else if LOGIN_ERROR_MAP.contains_key(err) {
+        if let Some(msgbox_info) = LOGIN_ERROR_MAP.get(err) {
+            interface.msgbox(
+                msgbox_info.msgtype,
+                msgbox_info.title,
+                msgbox_info.text,
+                msgbox_info.link,
+            );
+            msgbox_info.try_again
+        } else {
+            // unreachable!
+            false
+        }
     } else {
         if err.contains(SCRAP_X11_REQUIRED) {
             interface.msgbox("error", "Login Error", err, SCRAP_X11_REF_URL);
@@ -1968,16 +2075,21 @@ pub async fn handle_hash(
     if password.is_empty() {
         password = lc.read().unwrap().config.password.clone();
     }
-    if password.is_empty() {
+    let password = if password.is_empty() {
         // login without password, the remote side can click accept
-        send_login(lc.clone(), Vec::new(), peer).await;
         interface.msgbox("input-password", "Password Required", "", "");
+        Vec::new()
     } else {
         let mut hasher = Sha256::new();
         hasher.update(&password);
         hasher.update(&hash.challenge);
-        send_login(lc.clone(), hasher.finalize()[..].into(), peer).await;
-    }
+        hasher.finalize()[..].into()
+    };
+
+    let os_username = lc.read().unwrap().get_option("os-username");
+    let os_password = lc.read().unwrap().get_option("os-password");
+
+    send_login(lc.clone(), os_username, os_password, password, peer).await;
     lc.write().unwrap().hash = hash;
 }
 
@@ -1986,10 +2098,21 @@ pub async fn handle_hash(
 /// # Arguments
 ///
 /// * `lc` - Login config.
+/// * `os_username` - OS username.
+/// * `os_password` - OS password.
 /// * `password` - Password.
 /// * `peer` - [`Stream`] for communicating with peer.
-async fn send_login(lc: Arc<RwLock<LoginConfigHandler>>, password: Vec<u8>, peer: &mut Stream) {
-    let msg_out = lc.read().unwrap().create_login_msg(password);
+async fn send_login(
+    lc: Arc<RwLock<LoginConfigHandler>>,
+    os_username: String,
+    os_password: String,
+    password: Vec<u8>,
+    peer: &mut Stream,
+) {
+    let msg_out = lc
+        .read()
+        .unwrap()
+        .create_login_msg(os_username, os_password, password);
     allow_err!(peer.send(&msg_out).await);
 }
 
@@ -1998,25 +2121,40 @@ async fn send_login(lc: Arc<RwLock<LoginConfigHandler>>, password: Vec<u8>, peer
 /// # Arguments
 ///
 /// * `lc` - Login config.
+/// * `os_username` - OS username.
+/// * `os_password` - OS password.
 /// * `password` - Password.
 /// * `remember` - Whether to remember password.
 /// * `peer` - [`Stream`] for communicating with peer.
 pub async fn handle_login_from_ui(
     lc: Arc<RwLock<LoginConfigHandler>>,
+    os_username: String,
+    os_password: String,
     password: String,
     remember: bool,
     peer: &mut Stream,
 ) {
-    let mut hasher = Sha256::new();
-    hasher.update(password);
-    hasher.update(&lc.read().unwrap().hash.salt);
-    let res = hasher.finalize();
-    lc.write().unwrap().remember = remember;
-    lc.write().unwrap().password = res[..].into();
+    let mut hash_password = if password.is_empty() {
+        let mut password2 = lc.read().unwrap().password.clone();
+        if password2.is_empty() {
+            password2 = lc.read().unwrap().config.password.clone();
+        }
+        password2
+    } else {
+        let mut hasher = Sha256::new();
+        hasher.update(password);
+        hasher.update(&lc.read().unwrap().hash.salt);
+        let res = hasher.finalize();
+        lc.write().unwrap().remember = remember;
+        lc.write().unwrap().password = res[..].into();
+        res[..].into()
+    };
     let mut hasher2 = Sha256::new();
-    hasher2.update(&res[..]);
+    hasher2.update(&hash_password[..]);
     hasher2.update(&lc.read().unwrap().hash.challenge);
-    send_login(lc.clone(), hasher2.finalize()[..].into(), peer).await;
+    hash_password = hasher2.finalize()[..].to_vec();
+
+    send_login(lc.clone(), os_username, os_password, hash_password, peer).await;
 }
 
 async fn send_switch_login_request(
@@ -2030,7 +2168,7 @@ async fn send_switch_login_request(
         lr: hbb_common::protobuf::MessageField::some(
             lc.read()
                 .unwrap()
-                .create_login_msg(vec![])
+                .create_login_msg("".to_owned(), "".to_owned(), vec![])
                 .login_request()
                 .to_owned(),
         ),
@@ -2051,7 +2189,14 @@ pub trait Interface: Send + Clone + 'static + Sized {
         self.msgbox("error", "Error", err, "");
     }
     async fn handle_hash(&mut self, pass: &str, hash: Hash, peer: &mut Stream);
-    async fn handle_login_from_ui(&mut self, password: String, remember: bool, peer: &mut Stream);
+    async fn handle_login_from_ui(
+        &mut self,
+        os_username: String,
+        os_password: String,
+        password: String,
+        remember: bool,
+        peer: &mut Stream,
+    );
     async fn handle_test_delay(&mut self, t: TestDelay, peer: &mut Stream);
 
     fn get_login_config_handler(&self) -> Arc<RwLock<LoginConfigHandler>>;
@@ -2071,7 +2216,7 @@ pub trait Interface: Send + Clone + 'static + Sized {
 #[derive(Clone)]
 pub enum Data {
     Close,
-    Login((String, bool)),
+    Login((String, String, String, bool)),
     Message(Message),
     SendFiles((i32, String, String, i32, bool, bool)),
     RemoveDirAll((i32, String, bool, bool)),

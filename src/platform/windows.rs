@@ -9,16 +9,17 @@ use hbb_common::{
     message_proto::Resolution,
     sleep, timeout, tokio,
 };
-use std::io::prelude::*;
-use std::ptr::null_mut;
 use std::{
+    collections::HashMap,
     ffi::OsString,
-    fs, io, mem,
+    fs, io,
+    io::prelude::*,
+    mem,
     os::windows::process::CommandExt,
-    path::PathBuf,
+    path::*,
+    ptr::null_mut,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
-    collections::HashMap
 };
 use winapi::{
     ctypes::c_void,
@@ -717,7 +718,7 @@ pub fn is_share_rdp() -> bool {
 }
 
 pub fn set_share_rdp(enable: bool) {
-    let (subkey, _, _, _) = get_install_info();
+    let (subkey, _, _, _, _) = get_install_info();
     let cmd = format!(
         "reg add {} /f /v share_rdp /t REG_SZ /d \"{}\"",
         subkey,
@@ -810,11 +811,11 @@ fn get_valid_subkey() -> String {
     return get_subkey(&app_name, false);
 }
 
-pub fn get_install_info() -> (String, String, String, String) {
+pub fn get_install_info() -> (String, String, String, String, String) {
     get_install_info_with_subkey(get_valid_subkey())
 }
 
-fn get_default_install_info() -> (String, String, String, String) {
+fn get_default_install_info() -> (String, String, String, String, String) {
     get_install_info_with_subkey(get_subkey(&crate::get_app_name(), false))
 }
 
@@ -883,7 +884,7 @@ pub fn check_update_broker_process() -> ResultType<()> {
     Ok(())
 }
 
-fn get_install_info_with_subkey(subkey: String) -> (String, String, String, String) {
+fn get_install_info_with_subkey(subkey: String) -> (String, String, String, String, String) {
     let mut path = get_reg_of(&subkey, "InstallLocation");
     if path.is_empty() {
         path = get_default_install_path();
@@ -894,26 +895,32 @@ fn get_install_info_with_subkey(subkey: String) -> (String, String, String, Stri
         crate::get_app_name()
     );
     let exe = format!("{}\\{}.exe", path, crate::get_app_name());
-    (subkey, path, start_menu, exe)
+    let dll = format!("{}\\sciter.dll", path);
+    (subkey, path, start_menu, exe, dll)
 }
 
-pub fn copy_exe_cmd(src_exe: &str, _exe: &str, path: &str) -> String {
+pub fn copy_raw_cmd(src_raw: &str, _raw: &str, _path: &str) -> String {
     #[cfg(feature = "flutter")]
-    let main_exe = format!(
+    let main_raw = format!(
         "XCOPY \"{}\" \"{}\" /Y /E /H /C /I /K /R /Z",
-        PathBuf::from(src_exe)
+        PathBuf::from(src_raw)
             .parent()
             .unwrap()
             .to_string_lossy()
             .to_string(),
-        path
+        _path
     );
     #[cfg(not(feature = "flutter"))]
-    let main_exe = format!(
-        "copy /Y \"{src_exe}\" \"{exe}\"",
-        src_exe = src_exe,
-        exe = _exe
+    let main_raw = format!(
+        "copy /Y \"{src_raw}\" \"{raw}\"",
+        src_raw = src_raw,
+        raw = _raw
     );
+    return main_raw;
+}
+
+pub fn copy_exe_cmd(src_exe: &str, exe: &str, path: &str) -> String {
+    let main_exe = copy_raw_cmd(src_exe, exe, path);
 
     return format!(
         "
@@ -929,8 +936,20 @@ pub fn copy_exe_cmd(src_exe: &str, _exe: &str, path: &str) -> String {
 }
 
 pub fn update_me() -> ResultType<()> {
-    let (_, path, _, exe) = get_install_info();
+    let (_, path, _, exe, _dll) = get_install_info();
     let src_exe = std::env::current_exe()?.to_str().unwrap_or("").to_owned();
+    #[cfg(not(feature = "flutter"))]
+    let src_dll = std::env::current_exe()?
+        .parent()
+        .unwrap_or(&Path::new(&get_default_install_path()))
+        .join("sciter.dll")
+        .to_str()
+        .unwrap_or("")
+        .to_owned();
+    #[cfg(feature = "flutter")]
+    let copy_dll = "".to_string();
+    #[cfg(not(feature = "flutter"))]
+    let copy_dll = copy_raw_cmd(&src_dll, &_dll, &path);
     let cmds = format!(
         "
         chcp 65001
@@ -938,10 +957,12 @@ pub fn update_me() -> ResultType<()> {
         taskkill /F /IM {broker_exe}
         taskkill /F /IM {app_name}.exe /FI \"PID ne {cur_pid}\"
         {copy_exe}
+        {copy_dll}
         sc start {app_name}
         {lic}
     ",
         copy_exe = copy_exe_cmd(&src_exe, &exe, &path),
+        copy_dll = copy_dll,
         broker_exe = crate::win_privacy::INJECTED_PROCESS_EXE,
         app_name = crate::get_app_name(),
         lic = register_licence(),
@@ -980,12 +1001,14 @@ fn get_after_install(exe: &str) -> String {
 pub fn install_me(options: &str, path: String, silent: bool, debug: bool) -> ResultType<()> {
     let uninstall_str = get_uninstall(false);
     let mut path = path.trim_end_matches('\\').to_owned();
-    let (subkey, _path, start_menu, exe) = get_default_install_info();
+    let (subkey, _path, start_menu, exe, dll) = get_default_install_info();
     let mut exe = exe;
+    let mut _dll = dll;
     if path.is_empty() {
         path = _path;
     } else {
         exe = exe.replace(&_path, &path);
+        _dll = _dll.replace(&_path, &path);
     }
     let mut version_major = "0";
     let mut version_minor = "0";
@@ -1109,6 +1132,18 @@ if exist \"{tmp_path}\\{app_name} Tray.lnk\" del /f /q \"{tmp_path}\\{app_name} 
         app_name = crate::get_app_name(),
     );
     let src_exe = std::env::current_exe()?.to_str().unwrap_or("").to_string();
+    #[cfg(not(feature = "flutter"))]
+    let src_dll = std::env::current_exe()?
+        .parent()
+        .unwrap_or(&Path::new(&get_default_install_path()))
+        .join("sciter.dll")
+        .to_str()
+        .unwrap_or("")
+        .to_owned();
+    #[cfg(feature = "flutter")]
+    let copy_dll = "".to_string();
+    #[cfg(not(feature = "flutter"))]
+    let copy_dll = copy_raw_cmd(&src_dll, &_dll, &path);
 
     let install_cert = if options.contains("driverCert") {
         format!("\"{}\" --install-cert \"RustDeskIddDriver.cer\"", src_exe)
@@ -1122,6 +1157,7 @@ if exist \"{tmp_path}\\{app_name} Tray.lnk\" del /f /q \"{tmp_path}\\{app_name} 
 chcp 65001
 md \"{path}\"
 {copy_exe}
+{copy_dll}
 reg add {subkey} /f
 reg add {subkey} /f /v DisplayIcon /t REG_SZ /d \"{exe}\"
 reg add {subkey} /f /v DisplayName /t REG_SZ /d \"{app_name}\"
@@ -1181,6 +1217,7 @@ sc delete {app_name}
             &dels
         },
         copy_exe = copy_exe_cmd(&src_exe, &exe, &path),
+        copy_dll = copy_dll
     );
     run_cmds(cmds, debug, "install")?;
     std::thread::sleep(std::time::Duration::from_millis(2000));
@@ -1193,7 +1230,7 @@ sc delete {app_name}
 }
 
 pub fn run_after_install() -> ResultType<()> {
-    let (_, _, _, exe) = get_install_info();
+    let (_, _, _, exe, _) = get_install_info();
     run_cmds(get_after_install(&exe), true, "after_install")
 }
 
@@ -1227,7 +1264,7 @@ fn get_before_uninstall(kill_self: bool) -> String {
 }
 
 fn get_uninstall(kill_self: bool) -> String {
-    let (subkey, path, start_menu, _) = get_install_info();
+    let (subkey, path, start_menu, _, _) = get_install_info();
     format!(
         "
     {before_uninstall}
@@ -1331,7 +1368,7 @@ pub fn is_installed() -> bool {
         service::ServiceAccess,
         service_manager::{ServiceManager, ServiceManagerAccess},
     };
-    let (_, _, _, exe) = get_install_info();
+    let (_, _, _, exe, _) = get_install_info();
     if !std::fs::metadata(exe).is_ok() {
         return false;
     }
@@ -1347,7 +1384,7 @@ pub fn is_installed() -> bool {
 }
 
 pub fn get_installed_version() -> String {
-    let (_, _, _, exe) = get_install_info();
+    let (_, _, _, exe, _) = get_install_info();
     if let Ok(output) = std::process::Command::new(exe).arg("--version").output() {
         for line in String::from_utf8_lossy(&output.stdout).lines() {
             return line.to_owned();
@@ -1357,7 +1394,7 @@ pub fn get_installed_version() -> String {
 }
 
 fn get_reg(name: &str) -> String {
-    let (subkey, _, _, _) = get_install_info();
+    let (subkey, _, _, _, _) = get_install_info();
     get_reg_of(&subkey, name)
 }
 
@@ -1408,7 +1445,7 @@ pub fn bootstrap() {
 }
 
 fn register_licence() -> String {
-    let (subkey, _, _, _) = get_install_info();
+    let (subkey, _, _, _, _) = get_install_info();
     if let Ok(lic) = get_license_from_exe_name() {
         format!(
             "
@@ -1765,14 +1802,17 @@ pub fn send_message_to_hnwd(
 
 pub fn create_process_with_logon(user: &str, pwd: &str, exe: &str, arg: &str) -> ResultType<()> {
     let last_error_table = HashMap::from([
-        (ERROR_LOGON_FAILURE, "The user name or password is incorrect."),
-        (ERROR_ACCESS_DENIED, "Access is denied.")
+        (
+            ERROR_LOGON_FAILURE,
+            "The user name or password is incorrect.",
+        ),
+        (ERROR_ACCESS_DENIED, "Access is denied."),
     ]);
 
     unsafe {
         let user_split = user.split("\\").collect::<Vec<&str>>();
         let wuser = wide_string(user_split.get(1).unwrap_or(&user));
-        let wpc = wide_string(user_split.get(0).unwrap_or(&""));	
+        let wpc = wide_string(user_split.get(0).unwrap_or(&""));
         let wpwd = wide_string(pwd);
         let cmd = if arg.is_empty() {
             format!("\"{}\"", exe)
@@ -1804,7 +1844,7 @@ pub fn create_process_with_logon(user: &str, pwd: &str, exe: &str, arg: &str) ->
         {
             let last_error = GetLastError();
             bail!(
-                "CreateProcessWithLogonW failed : \"{}\", errno={}", 
+                "CreateProcessWithLogonW failed : \"{}\", errno={}",
                 last_error_table
                     .get(&last_error)
                     .unwrap_or(&"Unknown error"),
@@ -2091,7 +2131,25 @@ mod cert {
     }
 }
 
-pub fn get_char_by_vk(vk: u32) -> Option<char> {
+#[inline]
+pub fn get_char_from_vk(vk: u32) -> Option<char> {
+    get_char_from_unicode(get_unicode_from_vk(vk)?)
+}
+
+pub fn get_char_from_unicode(unicode: u16) -> Option<char> {
+    let buff = [unicode];
+    if let Some(chr) = String::from_utf16(&buff[..1]).ok()?.chars().next() {
+        if chr.is_control() {
+            return None;
+        } else {
+            Some(chr)
+        }
+    } else {
+        None
+    }
+}
+
+pub fn get_unicode_from_vk(vk: u32) -> Option<u16> {
     const BUF_LEN: i32 = 32;
     let mut buff = [0_u16; BUF_LEN as usize];
     let buff_ptr = buff.as_mut_ptr();
@@ -2116,19 +2174,7 @@ pub fn get_char_by_vk(vk: u32) -> Option<char> {
         ToUnicodeEx(vk, 0x00, &state as _, buff_ptr, BUF_LEN, 0, layout)
     };
     if len == 1 {
-        if let Some(chr) = String::from_utf16(&buff[..len as usize])
-            .ok()?
-            .chars()
-            .next()
-        {
-            if chr.is_control() {
-                return None;
-            } else {
-                Some(chr)
-            }
-        } else {
-            None
-        }
+        Some(buff[0])
     } else {
         None
     }
@@ -2151,10 +2197,10 @@ mod tests {
     }
 
     #[test]
-    fn test_get_char_by_vk() {
-        let chr = get_char_by_vk(0x41); // VK_A
+    fn test_get_unicode_char_by_vk() {
+        let chr = get_char_from_vk(0x41); // VK_A
         assert_eq!(chr, Some('a'));
-        let chr = get_char_by_vk(VK_ESCAPE as u32); // VK_ESC
+        let chr = get_char_from_vk(VK_ESCAPE as u32); // VK_ESC
         assert_eq!(chr, None)
     }
 }

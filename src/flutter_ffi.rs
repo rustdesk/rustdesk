@@ -136,9 +136,15 @@ pub fn session_get_option(id: String, arg: String) -> Option<String> {
     }
 }
 
-pub fn session_login(id: String, password: String, remember: bool) {
+pub fn session_login(
+    id: String,
+    os_username: String,
+    os_password: String,
+    password: String,
+    remember: bool,
+) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.login(password, remember);
+        session.login(os_username, os_password, password, remember);
     }
 }
 
@@ -326,13 +332,13 @@ pub fn session_switch_display(id: String, value: i32) {
 pub fn session_handle_flutter_key_event(
     id: String,
     name: String,
-    keycode: i32,
-    scancode: i32,
+    platform_code: i32,
+    position_code: i32,
     lock_modes: i32,
     down_or_up: bool,
 ) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.handle_flutter_key_event(&name, keycode, scancode, lock_modes, down_or_up);
+        session.handle_flutter_key_event(&name, platform_code, position_code, lock_modes, down_or_up);
     }
 }
 
@@ -969,6 +975,13 @@ pub fn main_has_hwcodec() -> SyncReturn<bool> {
     SyncReturn(has_hwcodec())
 }
 
+pub fn main_supported_hwdecodings() -> SyncReturn<String> {
+    let decoding = supported_hwdecodings();
+    let msg = HashMap::from([("h264", decoding.0), ("h265", decoding.1)]);
+
+    SyncReturn(serde_json::ser::to_string(&msg).unwrap_or("".to_owned()))
+}
+
 pub fn main_is_root() -> bool {
     is_root()
 }
@@ -1054,10 +1067,10 @@ pub fn session_send_note(id: String, note: String) {
     }
 }
 
-pub fn session_supported_hwcodec(id: String) -> String {
+pub fn session_alternative_codecs(id: String) -> String {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        let (h264, h265) = session.supported_hwcodec();
-        let msg = HashMap::from([("h264", h264), ("h265", h265)]);
+        let (vp8, h264, h265) = session.alternative_codecs();
+        let msg = HashMap::from([("vp8", vp8), ("h264", h264), ("h265", h265)]);
         serde_json::ser::to_string(&msg).unwrap_or("".to_owned())
     } else {
         String::new()

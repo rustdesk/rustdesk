@@ -16,8 +16,18 @@ use std::{
     thread,
     time::{self, Instant},
 };
+#[cfg(target_os = "windows")]
+use winapi::um::winuser::{
+    ActivateKeyboardLayout, GetForegroundWindow, GetKeyboardLayout, GetWindowThreadProcessId,
+    VkKeyScanW,
+};
 
 const INVALID_CURSOR_POS: i32 = i32::MIN;
+
+#[cfg(target_os = "windows")]
+lazy_static::lazy_static! {
+    static ref LAST_HKL: Arc<Mutex<u32>> = Arc::new(Mutex::new(0));
+}
 
 #[derive(Default)]
 struct StateCursor {
@@ -551,7 +561,7 @@ fn record_key_to_key(record_key: u64) -> Option<Key> {
     }
 }
 
-pub fn release_modifiers() {
+pub fn release_device_modifiers() {
     let mut en = ENIGO.lock().unwrap();
     for modifier in [
         Key::Shift,
@@ -1242,7 +1252,45 @@ fn translate_process_code(code: u32, down: bool) {
     };
 }
 
+#[cfg(target_os = "windows")]
+fn check_update_input_layout() {
+    unsafe {
+        let foreground_thread_id =
+            GetWindowThreadProcessId(GetForegroundWindow(), std::ptr::null_mut());
+        let layout = GetKeyboardLayout(foreground_thread_id);
+        let layout_u32 = layout as u32;
+        let mut last_layout_lock = LAST_HKL.lock().unwrap();
+        if *last_layout_lock == 0 || *last_layout_lock != layout_u32 {
+            let res = ActivateKeyboardLayout(layout, 0);
+            if res == layout {
+                *last_layout_lock = layout_u32;
+            } else {
+                log::error!("Failed to call ActivateKeyboardLayout, {}", layout_u32);
+            }
+        }
+    }
+}
+
 fn translate_keyboard_mode(evt: &KeyEvent) {
+    // --server could not detect the input layout change.
+    // This is a temporary workaround.
+    //
+    // There may be a better way to detect and handle the input layout change.
+    // while ((bRet = GetMessage(&msg, NULL, 0, 0)) != 0)
+    // {
+    //     ...
+    //     if (msg.message == WM_INPUTLANGCHANGE)
+    //     {
+    //         // handle WM_INPUTLANGCHANGE message here
+    //         check_update_input_layout();
+    //     }
+    //     TranslateMessage(&msg);
+    //     DispatchMessage(&msg);
+    //     ...
+    // }
+    #[cfg(target_os = "windows")]
+    check_update_input_layout();
+
     match &evt.union {
         Some(key_event::Union::Seq(seq)) => {
             // Fr -> US
@@ -1280,10 +1328,92 @@ fn translate_keyboard_mode(evt: &KeyEvent) {
         Some(key_event::Union::Unicode(..)) => {
             // Do not handle unicode for now.
         }
+        #[cfg(target_os = "windows")]
+        Some(key_event::Union::Win2winHotkey(code)) => {
+            simulate_win2win_hotkey(*code, evt.down);
+        }
         _ => {
             log::debug!("Unreachable. Unexpected key event {:?}", &evt);
         }
     }
+}
+
+#[cfg(target_os = "windows")]
+fn simulate_win2win_hotkey(code: u32, down: bool) {
+    let unicode: u16 = (code & 0x0000FFFF) as u16;
+    if down {
+        // Try convert unicode to virtual keycode first.
+        // https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-vkkeyscanw
+        let res = unsafe { VkKeyScanW(unicode) };
+        if res as u16 != 0xFFFF {
+            let vk = res & 0x00FF;
+            let flag = res >> 8;
+            let modifiers = [rdev::Key::ShiftLeft, rdev::Key::ControlLeft, rdev::Key::Alt];
+            let mod_len = modifiers.len();
+            for pos in 0..mod_len {
+                if flag & (0x0001 << pos) != 0 {
+                    allow_err!(rdev::simulate(&EventType::KeyPress(modifiers[pos])));
+                }
+            }
+            allow_err!(rdev::simulate_code(Some(vk as _), None, true));
+            allow_err!(rdev::simulate_code(Some(vk as _), None, false));
+            for pos in 0..mod_len {
+                let rpos = mod_len - 1 - pos;
+                if flag & (0x0001 << rpos) != 0 {
+                    allow_err!(rdev::simulate(&EventType::KeyRelease(modifiers[rpos])));
+                }
+            }
+            return;
+        }
+    }
+
+    let keycode: u16 = ((code >> 16) & 0x0000FFFF) as u16;
+    allow_err!(rdev::simulate_code(Some(keycode), None, down));
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+fn skip_led_sync_control_key(_evt: &KeyEvent) -> bool {
+    false
+}
+
+// LockModesHandler should not be created when single meta is pressing and releasing.
+// Because the drop function may insert "CapsLock Click" and "NumLock Click", which breaks single meta click.
+// https://github.com/rustdesk/rustdesk/issues/3928#issuecomment-1496936687
+// https://github.com/rustdesk/rustdesk/issues/3928#issuecomment-1500415822
+// https://github.com/rustdesk/rustdesk/issues/3928#issuecomment-1500773473
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+fn skip_led_sync_control_key(key: &ControlKey) -> bool {
+    [
+        ControlKey::Control,
+        ControlKey::Meta,
+        ControlKey::Shift,
+        ControlKey::Alt,
+        ControlKey::Tab,
+        ControlKey::Return,
+    ]
+    .contains(key)
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+fn skip_led_sync_rdev_key(_evt: &KeyEvent) -> bool {
+    false
+}
+
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+fn skip_led_sync_rdev_key(key: &RdevKey) -> bool {
+    [
+        RdevKey::ControlLeft,
+        RdevKey::ControlRight,
+        RdevKey::MetaLeft,
+        RdevKey::MetaRight,
+        RdevKey::ShiftRight,
+        RdevKey::ShiftRight,
+        RdevKey::Alt,
+        RdevKey::AltGr,
+        RdevKey::Tab,
+        RdevKey::Return,
+    ]
+    .contains(key)
 }
 
 pub fn handle_key_(evt: &KeyEvent) {
@@ -1291,17 +1421,24 @@ pub fn handle_key_(evt: &KeyEvent) {
         return;
     }
 
-    let _lock_mode_handler = match &evt.union {
-        Some(key_event::Union::Unicode(..)) | Some(key_event::Union::Seq(..)) => {
-            Some(LockModesHandler::new(&evt))
+    let mut _lock_mode_handler = None;
+    match (&evt.union, evt.mode.enum_value_or(KeyboardMode::Legacy)) {
+        (Some(key_event::Union::Unicode(..)) | Some(key_event::Union::Seq(..)), _) => {
+            _lock_mode_handler = Some(LockModesHandler::new(&evt));
         }
-        _ => {
-            if evt.down {
-                Some(LockModesHandler::new(&evt))
-            } else {
-                None
+        (Some(key_event::Union::ControlKey(ck)), _) => {
+            let key = ck.enum_value_or(ControlKey::Unknown);
+            if !skip_led_sync_control_key(&key) {
+                _lock_mode_handler = Some(LockModesHandler::new(&evt));
             }
         }
+        (Some(key_event::Union::Chr(code)), KeyboardMode::Map | KeyboardMode::Translate) => {
+            let key = crate::keycode_to_rdev_key(*code);
+            if !skip_led_sync_rdev_key(&key) {
+                _lock_mode_handler = Some(LockModesHandler::new(evt));
+            }
+        }
+        _ => {}
     };
 
     match evt.mode.unwrap() {

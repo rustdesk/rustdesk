@@ -24,6 +24,7 @@ message VideoFrame {
     YUV yuv = 8;
     EncodedVideoFrames h264s = 10;
     EncodedVideoFrames h265s = 11;
+    EncodedVideoFrames vp8s = 12;
   }
 }
 
@@ -52,6 +53,11 @@ message FileTransfer {
   bool show_hidden = 2;
 }
 
+message OSLogin {
+  string username = 1;
+  string password = 2;
+}
+
 message LoginRequest {
   string username = 1;
   bytes password = 2;
@@ -65,6 +71,7 @@ message LoginRequest {
   bool video_ack_required = 9;
   uint64 session_id = 10;
   string version = 11;
+  OSLogin os_login = 12;
 }
 
 message ChatMessage { string text = 1; }
@@ -76,6 +83,7 @@ message Features {
 message SupportedEncoding {
   bool h264 = 1;
   bool h265 = 2;
+  bool vp8 = 3;
 }
 
 message PeerInfo {
@@ -203,11 +211,13 @@ message KeyEvent {
   bool press = 2;
   oneof union {
     ControlKey control_key = 3;
-    // high word, sym key code. win: virtual-key code, linux: keysym ?, macos: 
-    // low word, position key code. win: scancode, linux: key code, macos: key code
+    // position key code. win: scancode, linux: key code, macos: key code
     uint32 chr = 4;
     uint32 unicode = 5;
     string seq = 6;
+    // high word. virtual keycode
+    // low word. unicode
+    uint32 win2win_hotkey = 7;
   }
   repeated ControlKey modifiers = 8;
   KeyboardMode mode = 9;
@@ -457,18 +467,20 @@ enum ImageQuality {
   Best = 4;
 }
 
-message VideoCodecState {
+message SupportedDecoding {
   enum PreferCodec {
     Auto = 0;
-    VPX = 1;
+    VP9 = 1;
     H264 = 2;
     H265 = 3;
+    VP8 = 4;
   }
 
-  int32 score_vpx = 1;
-  int32 score_h264 = 2;
-  int32 score_h265 = 3;
+  int32 ability_vp9 = 1;
+  int32 ability_h264 = 2;
+  int32 ability_h265 = 3;
   PreferCodec prefer = 4;
+  int32 ability_vp8 = 5;
 }
 
 message OptionMessage {
@@ -486,7 +498,7 @@ message OptionMessage {
   BoolOption disable_audio = 7;
   BoolOption disable_clipboard = 8;
   BoolOption enable_file_transfer = 9;
-  VideoCodecState video_codec_state = 10;
+  SupportedDecoding supported_decoding = 10;
   int32 custom_fps = 11;
   BoolOption disable_keyboard = 12;
 }

@@ -50,6 +50,7 @@ impl crate::TraitCapturer for Capturer {
 
 pub enum Frame<'a> {
     RAW(&'a [u8]),
+    VP8(&'a [u8]),
     VP9(&'a [u8]),
     Empty,
 }

@@ -64,7 +64,7 @@ class InputModel {
   InputModel(this.parent);
 
   KeyEventResult handleRawKeyEvent(FocusNode data, RawKeyEvent e) {
-    if (!stateGlobal.grabKeyboard) {
+    if (isDesktop && !stateGlobal.grabKeyboard) {
       return KeyEventResult.handled;
     }
 
@@ -117,44 +117,41 @@ class InputModel {
   }
 
   void mapKeyboardMode(RawKeyEvent e) {
-    int scanCode;
-    int keyCode;
+    int positionCode = -1;
+    int platformCode = -1;
     bool down;
 
     if (e.data is RawKeyEventDataMacOs) {
       RawKeyEventDataMacOs newData = e.data as RawKeyEventDataMacOs;
-      scanCode = newData.keyCode;
-      keyCode = newData.keyCode;
+      positionCode = newData.keyCode;
+      platformCode = newData.keyCode;
     } else if (e.data is RawKeyEventDataWindows) {
       RawKeyEventDataWindows newData = e.data as RawKeyEventDataWindows;
-      scanCode = newData.scanCode;
-      keyCode = newData.keyCode;
+      positionCode = newData.scanCode;
+      platformCode = newData.keyCode;
     } else if (e.data is RawKeyEventDataLinux) {
       RawKeyEventDataLinux newData = e.data as RawKeyEventDataLinux;
       // scanCode and keyCode of RawKeyEventDataLinux are incorrect.
       // 1. scanCode means keycode
       // 2. keyCode means keysym
-      scanCode = 0;
-      keyCode = newData.scanCode;
+      positionCode = newData.scanCode;
+      platformCode = newData.keyCode;
     } else if (e.data is RawKeyEventDataAndroid) {
       RawKeyEventDataAndroid newData = e.data as RawKeyEventDataAndroid;
-      scanCode = newData.scanCode + 8;
-      keyCode = newData.keyCode;
-    } else {
-      scanCode = -1;
-      keyCode = -1;
-    }
+      positionCode = newData.scanCode + 8;
+      platformCode = newData.keyCode;
+    } else {}
 
     if (e is RawKeyDownEvent) {
       down = true;
     } else {
       down = false;
     }
-    inputRawKey(e.character ?? '', keyCode, scanCode, down);
+    inputRawKey(e.character ?? '', platformCode, positionCode, down);
   }
 
   /// Send raw Key Event
-  void inputRawKey(String name, int keyCode, int scanCode, bool down) {
+  void inputRawKey(String name, int platformCode, int positionCode, bool down) {
     const capslock = 1;
     const numlock = 2;
     const scrolllock = 3;
@@ -174,8 +171,8 @@ class InputModel {
     bind.sessionHandleFlutterKeyEvent(
         id: id,
         name: name,
-        keycode: keyCode,
-        scancode: scanCode,
+        platformCode: platformCode,
+        positionCode: positionCode,
         lockModes: lockModes,
         downOrUp: down);
   }

@@ -1,5 +1,8 @@
+#[cfg(not(debug_assertions))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::platform::breakdown_callback;
 use hbb_common::log;
+#[cfg(not(debug_assertions))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::platform::register_breakdown_handler;
 
@@ -39,6 +42,7 @@ pub fn core_main() -> Option<Vec<String>> {
         }
         i += 1;
     }
+    #[cfg(not(debug_assertions))]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     register_breakdown_handler(breakdown_callback);
     #[cfg(target_os = "linux")]
@@ -224,6 +228,11 @@ pub fn core_main() -> Option<Vec<String>> {
             // call connection manager to establish connections
             // meanwhile, return true to call flutter window to show control panel
             crate::ui_interface::start_option_status_sync();
+        } else if args[0] == "--cm-no-ui" {
+            #[cfg(feature = "flutter")]
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            crate::flutter::connection_manager::start_cm_no_ui();
+            return None;
         }
     }
     //_async_logger_holder.map(|x| x.flush());

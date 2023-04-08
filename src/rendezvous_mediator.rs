@@ -72,6 +72,8 @@ impl RendezvousMediator {
                 allow_err!(super::lan::start_listening());
             });
         }
+        #[cfg(all(target_os = "linux", feature = "linux_headless"))]
+        crate::platform::linux_desktop_manager::start_xdesktop();
         loop {
             Config::reset_online();
             if Config::get_option("stop-service").is_empty() {
@@ -96,6 +98,10 @@ impl RendezvousMediator {
             }
             sleep(1.).await;
         }
+        // It should be better to call stop_xdesktop.
+        // But for server, it also is Ok without calling this method.
+        // #[cfg(all(target_os = "linux", feature = "linux_headless"))]
+        // crate::platform::linux_desktop_manager::stop_xdesktop();
     }
 
     pub async fn start(server: ServerPtr, host: String) -> ResultType<()> {

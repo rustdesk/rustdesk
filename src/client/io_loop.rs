@@ -29,10 +29,10 @@ use hbb_common::tokio::{
     time::{self, Duration, Instant, Interval},
 };
 use hbb_common::{allow_err, fs, get_time, log, message_proto::*, Stream};
+use scrap::CodecFormat;
 
 use crate::client::{
-    new_voice_call_request, Client, CodecFormat, MediaData, MediaSender, QualityStatus, MILLI1,
-    SEC30,
+    new_voice_call_request, Client, MediaData, MediaSender, QualityStatus, MILLI1, SEC30,
 };
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::common::{self, update_clipboard};
@@ -65,6 +65,8 @@ pub struct Remote<T: InvokeUiSession> {
     frame_count: Arc<AtomicUsize>,
     video_format: CodecFormat,
     elevation_requested: bool,
+    fps_control: FpsControl,
+    decode_fps: Arc<AtomicUsize>,
 }
 
 impl<T: InvokeUiSession> Remote<T> {
@@ -76,6 +78,7 @@ impl<T: InvokeUiSession> Remote<T> {
         receiver: mpsc::UnboundedReceiver<Data>,
         sender: mpsc::UnboundedSender<Data>,
         frame_count: Arc<AtomicUsize>,
+        decode_fps: Arc<AtomicUsize>,
     ) -> Self {
         Self {
             handler,
@@ -100,6 +103,8 @@ impl<T: InvokeUiSession> Remote<T> {
             stop_voice_call_sender: None,
             voice_call_request_timestamp: None,
             elevation_requested: false,
+            fps_control: Default::default(),
+            decode_fps,
         }
     }
 
@@ -147,6 +152,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 let mut rx_clip_client = rx_clip_client_lock.lock().await;
 
                 let mut status_timer = time::interval(Duration::new(1, 0));
+                let mut fps_instant = Instant::now();
 
                 loop {
                     tokio::select! {
@@ -224,9 +230,18 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                         }
                         _ = status_timer.tick() => {
-                            let speed = self.data_count.swap(0, Ordering::Relaxed);
+                            self.fps_control();
+                            let elapsed = fps_instant.elapsed().as_millis();
+                            if elapsed < 1000 {
+                                continue;
+                            }
+                            fps_instant = Instant::now();
+                            let mut speed = self.data_count.swap(0, Ordering::Relaxed);
+                            speed = speed * 1000 / elapsed as usize;
                             let speed = format!("{:.2}kB/s", speed as f32 / 1024 as f32);
-                            let fps = self.frame_count.swap(0, Ordering::Relaxed) as _;
+                            let mut fps = self.frame_count.swap(0, Ordering::Relaxed) as _;
+                            // Correcting the inaccuracy of status_timer
+                            fps = fps * 1000 / elapsed as i32;
                             self.handler.update_quality_status(QualityStatus {
                                 speed:Some(speed),
                                 fps:Some(fps),
@@ -360,9 +375,9 @@ impl<T: InvokeUiSession> Remote<T> {
                 allow_err!(peer.send(&msg).await);
                 return false;
             }
-            Data::Login((password, remember)) => {
+            Data::Login((os_username, os_password, password, remember)) => {
                 self.handler
-                    .handle_login_from_ui(password, remember, peer)
+                    .handle_login_from_ui(os_username, os_password, password, remember, peer)
                     .await;
             }
             Data::ToggleClipboardFile => {
@@ -817,14 +832,60 @@ impl<T: InvokeUiSession> Remote<T> {
     }
 
     fn contains_key_frame(vf: &VideoFrame) -> bool {
+        use video_frame::Union::*;
         match &vf.union {
             Some(vf) => match vf {
-                video_frame::Union::Vp9s(f) => f.frames.iter().any(|e| e.key),
-                video_frame::Union::H264s(f) => f.frames.iter().any(|e| e.key),
-                video_frame::Union::H265s(f) => f.frames.iter().any(|e| e.key),
+                Vp8s(f) | Vp9s(f) | H264s(f) | H265s(f) => f.frames.iter().any(|e| e.key),
                 _ => false,
             },
             None => false,
+        }
+    }
+    #[inline]
+    fn fps_control(&mut self) {
+        let len = self.video_queue.len();
+        let ctl = &mut self.fps_control;
+        // Current full speed decoding fps
+        let decode_fps = self.decode_fps.load(std::sync::atomic::Ordering::Relaxed);
+        // 500ms
+        let debounce = if decode_fps > 10 { decode_fps / 2 } else { 5 };
+        if len < debounce || decode_fps == 0 {
+            return;
+        }
+        let mut refresh = false;
+        // First setting , or the length of the queue still increases after setting, or exceed the size of the last setting again
+        if ctl.set_times < 10 // enough
+            && (ctl.set_times == 0
+                || (len > ctl.last_queue_size && ctl.last_set_instant.elapsed().as_secs() > 30))
+        {
+            // 80% fps to ensure decoding is faster than encoding
+            let mut custom_fps = decode_fps as i32 * 4 / 5;
+            if custom_fps < 1 {
+                custom_fps = 1;
+            }
+            // send custom fps
+            let mut misc = Misc::new();
+            misc.set_option(OptionMessage {
+                custom_fps,
+                ..Default::default()
+            });
+            let mut msg = Message::new();
+            msg.set_misc(misc);
+            self.sender.send(Data::Message(msg)).ok();
+            ctl.last_queue_size = len;
+            ctl.set_times += 1;
+            ctl.last_set_instant = Instant::now();
+            refresh = true;
+        }
+        // send refresh
+        if ctl.refresh_times < 10 // enough
+            && (refresh
+                || (len > self.video_queue.len() / 2
+                    && ctl.last_refresh_instant.elapsed().as_secs() > 30))
+        {
+            self.handler.refresh_video();
+            ctl.refresh_times += 1;
+            ctl.last_refresh_instant = Instant::now();
         }
     }
 
@@ -1256,6 +1317,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 },
                 Some(message::Union::MessageBox(msgbox)) => {
                     let mut link = msgbox.link;
+                    // Links from the remote side must be verified.
                     if !link.starts_with("rustdesk://") {
                         if let Some(v) = hbb_common::config::HELPER_URL.get(&link as &str) {
                             link = v.to_string();
@@ -1486,6 +1548,26 @@ impl RemoveJob {
             path: self.path.clone(),
             is_remote: self.is_remote,
             no_confirm: self.no_confirm,
+        }
+    }
+}
+
+struct FpsControl {
+    last_queue_size: usize,
+    set_times: usize,
+    refresh_times: usize,
+    last_set_instant: Instant,
+    last_refresh_instant: Instant,
+}
+
+impl Default for FpsControl {
+    fn default() -> Self {
+        Self {
+            last_queue_size: Default::default(),
+            set_times: Default::default(),
+            refresh_times: Default::default(),
+            last_set_instant: Instant::now(),
+            last_refresh_instant: Instant::now(),
         }
     }
 }

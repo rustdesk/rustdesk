@@ -225,9 +225,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                 children: [
                   Button(
                     isOutline: true,
-                    onTap: () {
-                      onConnect(isFileTransfer: true);
-                    },
+                    onTap: () => onConnect(isFileTransfer: true),
                     text: "Transfer File",
                   ),
                   const SizedBox(
