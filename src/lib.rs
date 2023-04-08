@@ -3,7 +3,7 @@
 pub mod platform;
 mod keyboard;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub use keyboard::keycode_to_rdev_key;
+pub use keyboard::{keycode_to_rdev_key, is_numpad_rdev_key, is_letter_rdev_key};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use platform::{get_cursor, get_cursor_data, get_cursor_pos, start_os_service};
 #[cfg(not(any(target_os = "ios")))]

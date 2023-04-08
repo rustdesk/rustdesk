@@ -366,24 +366,71 @@ pub fn is_modifier(key: &rdev::Key) -> bool {
 
 #[inline]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn is_numpad_rdev_key(key: &rdev::Key) -> bool {
+    matches!(
+        key,
+        Key::Kp0
+            | Key::Kp1
+            | Key::Kp2
+            | Key::Kp3
+            | Key::Kp4
+            | Key::Kp5
+            | Key::Kp6
+            | Key::Kp7
+            | Key::Kp8
+            | Key::Kp9
+            | Key::KpMinus
+            | Key::KpMultiply
+            | Key::KpDivide
+            | Key::KpPlus
+            | Key::KpDecimal
+    )
+}
+
+#[inline]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn is_letter_rdev_key(key: &rdev::Key) -> bool {
+    matches!(
+        key,
+        Key::KeyA
+            | Key::KeyB
+            | Key::KeyC
+            | Key::KeyD
+            | Key::KeyE
+            | Key::KeyF
+            | Key::KeyG
+            | Key::KeyH
+            | Key::KeyI
+            | Key::KeyJ
+            | Key::KeyK
+            | Key::KeyL
+            | Key::KeyM
+            | Key::KeyN
+            | Key::KeyO
+            | Key::KeyP
+            | Key::KeyQ
+            | Key::KeyR
+            | Key::KeyS
+            | Key::KeyT
+            | Key::KeyU
+            | Key::KeyV
+            | Key::KeyW
+            | Key::KeyX
+            | Key::KeyY
+            | Key::KeyZ
+    )
+}
+
+#[inline]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn is_numpad_key(event: &Event) -> bool {
-    matches!(event.event_type, EventType::KeyPress(key) | EventType::KeyRelease(key) if match key {
-        Key::Kp0 | Key::Kp1 | Key::Kp2 | Key::Kp3 | Key::Kp4 | Key::Kp5 | Key::Kp6 | Key::Kp7 | Key::Kp8 |
-        Key::Kp9 | Key::KpMinus | Key::KpMultiply | Key::KpDivide | Key::KpPlus | Key::KpDecimal => true,
-        _ => false
-    })
+    matches!(event.event_type, EventType::KeyPress(key) | EventType::KeyRelease(key) if is_numpad_rdev_key(&key))
 }
 
 #[inline]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn is_letter_key(event: &Event) -> bool {
-    matches!(event.event_type, EventType::KeyPress(key) | EventType::KeyRelease(key) if match key {
-        Key::KeyA | Key::KeyB | Key::KeyC | Key::KeyD | Key::KeyE | Key::KeyF | Key::KeyG | Key::KeyH |
-        Key::KeyI | Key::KeyJ | Key::KeyK | Key::KeyL | Key::KeyM | Key::KeyN | Key::KeyO | Key::KeyP |
-        Key::KeyQ | Key::KeyR | Key::KeyS | Key::KeyT | Key::KeyU | Key::KeyV | Key::KeyW | Key::KeyX |
-        Key::KeyY | Key::KeyZ => true,
-        _ => false
-    })
+    matches!(event.event_type, EventType::KeyPress(key) | EventType::KeyRelease(key) if is_letter_rdev_key(&key))
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]

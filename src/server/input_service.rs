@@ -8,13 +8,14 @@ use hbb_common::{config::COMPRESS_LEVEL, get_time, protobuf::EnumOrUnknown};
 use rdev::{self, EventType, Key as RdevKey, KeyCode, RawKey};
 #[cfg(target_os = "macos")]
 use rdev::{CGEventSourceStateID, CGEventTapLocation, VirtualInput};
-use std::time::Duration;
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+use std::collections::HashSet;
 use std::{
     convert::TryFrom,
     ops::Sub,
     sync::atomic::{AtomicBool, Ordering},
     thread,
-    time::{self, Instant},
+    time::{self, Duration, Instant},
 };
 #[cfg(target_os = "windows")]
 use winapi::um::winuser::{
@@ -153,7 +154,15 @@ impl LockModesHandler {
         #[cfg(not(target_os = "windows"))]
         let disable_numlock = false;
         #[cfg(target_os = "windows")]
-        let disable_numlock = is_numlock_disabled(key_event);
+        let disable_numlock = if key_event.mode == KeyboardMode::Legacy.into() {
+            // disable numlock if press home etc when numlock is on,
+            // because we will get numpad value (7,8,9 etc) if not
+            has_numpad_key(key_event)
+        } else {
+            false
+        };
+        let disable_numlock = false;
+        println!("REMOVE ME ======================= event_num_enabled {}, local_num_enabled {}", event_num_enabled, local_num_enabled);
         let num_lock_changed = event_num_enabled != local_num_enabled && !disable_numlock;
         if num_lock_changed {
             en.key_click(enigo::Key::NumLock);
@@ -1020,35 +1029,6 @@ fn has_numpad_key(key_event: &KeyEvent) -> bool {
         != 0
 }
 
-#[cfg(target_os = "windows")]
-fn is_rdev_numpad_key(key_event: &KeyEvent) -> bool {
-    let code = key_event.chr();
-    let key = rdev::get_win_key(code, 0);
-    match key {
-        RdevKey::Home
-        | RdevKey::UpArrow
-        | RdevKey::PageUp
-        | RdevKey::LeftArrow
-        | RdevKey::RightArrow
-        | RdevKey::End
-        | RdevKey::DownArrow
-        | RdevKey::PageDown
-        | RdevKey::Insert
-        | RdevKey::Delete => true,
-        _ => false,
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn is_numlock_disabled(key_event: &KeyEvent) -> bool {
-    // disable numlock if press home etc when numlock is on,
-    // because we will get numpad value (7,8,9 etc) if not
-    match key_event.mode.unwrap() {
-        KeyboardMode::Map => is_rdev_numpad_key(key_event),
-        _ => has_numpad_key(key_event),
-    }
-}
-
 fn map_keyboard_mode(evt: &KeyEvent) {
     #[cfg(windows)]
     crate::platform::windows::try_change_desktop();
@@ -1383,15 +1363,29 @@ fn skip_led_sync_control_key(_evt: &KeyEvent) -> bool {
 // https://github.com/rustdesk/rustdesk/issues/3928#issuecomment-1500773473
 #[cfg(any(target_os = "windows", target_os = "linux"))]
 fn skip_led_sync_control_key(key: &ControlKey) -> bool {
-    [
-        ControlKey::Control,
-        ControlKey::Meta,
-        ControlKey::Shift,
-        ControlKey::Alt,
-        ControlKey::Tab,
-        ControlKey::Return,
-    ]
-    .contains(key)
+    matches!(
+        key,
+        ControlKey::Control
+            | ControlKey::RControl
+            | ControlKey::Meta
+            | ControlKey::Shift
+            | ControlKey::RShift
+            | ControlKey::Alt
+            | ControlKey::RAlt
+            | ControlKey::Tab
+            | ControlKey::Return
+            | ControlKey::Numpad0
+            | ControlKey::Numpad1
+            | ControlKey::Numpad2
+            | ControlKey::Numpad3
+            | ControlKey::Numpad4
+            | ControlKey::Numpad5
+            | ControlKey::Numpad6
+            | ControlKey::Numpad7
+            | ControlKey::Numpad8
+            | ControlKey::Numpad9
+            | ControlKey::NumpadEnter
+    )
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "linux")))]
@@ -1401,25 +1395,28 @@ fn skip_led_sync_rdev_key(_evt: &KeyEvent) -> bool {
 
 #[cfg(any(target_os = "windows", target_os = "linux"))]
 fn skip_led_sync_rdev_key(key: &RdevKey) -> bool {
-    [
-        RdevKey::ControlLeft,
-        RdevKey::ControlRight,
-        RdevKey::MetaLeft,
-        RdevKey::MetaRight,
-        RdevKey::ShiftRight,
-        RdevKey::ShiftRight,
-        RdevKey::Alt,
-        RdevKey::AltGr,
-        RdevKey::Tab,
-        RdevKey::Return,
-    ]
-    .contains(key)
+    crate::is_numpad_rdev_key(key)
+        || matches!(
+            key,
+            RdevKey::ControlLeft
+                | RdevKey::ControlRight
+                | RdevKey::MetaLeft
+                | RdevKey::MetaRight
+                | RdevKey::ShiftLeft
+                | RdevKey::ShiftRight
+                | RdevKey::Alt
+                | RdevKey::AltGr
+                | RdevKey::Tab
+                | RdevKey::Return
+        )
 }
 
 pub fn handle_key_(evt: &KeyEvent) {
     if EXITING.load(Ordering::SeqCst) {
         return;
     }
+
+    println!("REMOVE ME ============================== {:?}", &evt);
 
     let mut _lock_mode_handler = None;
     match (&evt.union, evt.mode.enum_value_or(KeyboardMode::Legacy)) {
