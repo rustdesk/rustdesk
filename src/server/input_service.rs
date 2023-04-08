@@ -161,7 +161,7 @@ impl LockModesHandler {
         }
 
         let mut num_lock_changed = false;
-        if is_numpad_key || is_legacy_mode(key_event) {
+        if is_numpad_key {
             let event_num_enabled = Self::is_modifier_enabled(key_event, ControlKey::NumLock);
             let local_num_enabled = en.get_key_state(enigo::Key::NumLock);
             #[cfg(not(target_os = "windows"))]
@@ -1461,7 +1461,12 @@ pub fn handle_key_(evt: &KeyEvent) {
                 let is_numpad_key = false;
                 #[cfg(any(target_os = "windows", target_os = "linux"))]
                 let is_numpad_key = is_numpad_control_key(&key);
-                _lock_mode_handler = Some(LockModesHandler::new_handler(&evt, is_numpad_key));
+                // Legacy mode need to disable numlock if home/end/arraws/page down/page up
+                // are pressed.
+                _lock_mode_handler = Some(LockModesHandler::new_handler(
+                    &evt,
+                    is_numpad_key || is_legacy_mode(evt),
+                ));
             }
         }
         Some(key_event::Union::Chr(code)) => {
