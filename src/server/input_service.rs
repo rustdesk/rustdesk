@@ -160,14 +160,16 @@ impl LockModesHandler {
             en.key_click(enigo::Key::CapsLock);
         }
 
-        let event_num_enabled = Self::is_modifier_enabled(key_event, ControlKey::NumLock);
-        let local_num_enabled = en.get_key_state(enigo::Key::NumLock);
-        #[cfg(not(target_os = "windows"))]
-        let disable_numlock = false;
-        #[cfg(target_os = "windows")]
-        let disable_numlock = is_numlock_disabled(key_event);
-        let num_lock_changed =
-            is_numpad_key && event_num_enabled != local_num_enabled && !disable_numlock;
+        let mut num_lock_changed = false;
+        if is_numpad_key {
+            let event_num_enabled = Self::is_modifier_enabled(key_event, ControlKey::NumLock);
+            let local_num_enabled = en.get_key_state(enigo::Key::NumLock);
+            #[cfg(not(target_os = "windows"))]
+            let disable_numlock = false;
+            #[cfg(target_os = "windows")]
+            let disable_numlock = is_numlock_disabled(key_event);
+            num_lock_changed = event_num_enabled != local_num_enabled && !disable_numlock;
+        }
         if num_lock_changed {
             en.key_click(enigo::Key::NumLock);
         }
