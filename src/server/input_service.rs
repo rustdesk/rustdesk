@@ -140,7 +140,7 @@ impl LockModesHandler {
     }
 
     #[cfg(not(target_os = "macos"))]
-    fn new(key_event: &KeyEvent) -> Self {
+    fn new(key_event: &KeyEvent, is_numpad_key: bool) -> Self {
         let mut en = ENIGO.lock().unwrap();
         let event_caps_enabled = Self::is_modifier_enabled(key_event, ControlKey::CapsLock);
         let local_caps_enabled = en.get_key_state(enigo::Key::CapsLock);
@@ -154,16 +154,9 @@ impl LockModesHandler {
         #[cfg(not(target_os = "windows"))]
         let disable_numlock = false;
         #[cfg(target_os = "windows")]
-        let disable_numlock = if key_event.mode == KeyboardMode::Legacy.into() {
-            // disable numlock if press home etc when numlock is on,
-            // because we will get numpad value (7,8,9 etc) if not
-            has_numpad_key(key_event)
-        } else {
-            false
-        };
-        let disable_numlock = false;
-        println!("REMOVE ME ======================= event_num_enabled {}, local_num_enabled {}", event_num_enabled, local_num_enabled);
-        let num_lock_changed = event_num_enabled != local_num_enabled && !disable_numlock;
+        let disable_numlock = is_numlock_disabled(key_event);
+        let num_lock_changed =
+            is_numpad_key && event_num_enabled != local_num_enabled && !disable_numlock;
         if num_lock_changed {
             en.key_click(enigo::Key::NumLock);
         }
@@ -210,6 +203,18 @@ impl Drop for LockModesHandler {
         if self.num_lock_changed {
             en.key_click(enigo::Key::NumLock);
         }
+    }
+}
+
+#[inline]
+#[cfg(target_os = "windows")]
+fn is_numlock_disabled(key_event: &KeyEvent) -> bool {
+    // disable numlock if press home etc when numlock is on,
+    // because we will get numpad value (7,8,9 etc) if not
+    if key_event.mode.enum_value_or(KeyboardMode::Legacy) == KeyboardMode::Legacy {
+        has_numpad_key(key_event)
+    } else {
+        false
     }
 }
 
@@ -1374,7 +1379,14 @@ fn skip_led_sync_control_key(key: &ControlKey) -> bool {
             | ControlKey::RAlt
             | ControlKey::Tab
             | ControlKey::Return
-            | ControlKey::Numpad0
+    )
+}
+
+#[inline]
+fn is_numpad_control_key(key: &ControlKey) -> bool {
+    matches!(
+        key,
+        ControlKey::Numpad0
             | ControlKey::Numpad1
             | ControlKey::Numpad2
             | ControlKey::Numpad3
@@ -1395,20 +1407,19 @@ fn skip_led_sync_rdev_key(_evt: &KeyEvent) -> bool {
 
 #[cfg(any(target_os = "windows", target_os = "linux"))]
 fn skip_led_sync_rdev_key(key: &RdevKey) -> bool {
-    crate::is_numpad_rdev_key(key)
-        || matches!(
-            key,
-            RdevKey::ControlLeft
-                | RdevKey::ControlRight
-                | RdevKey::MetaLeft
-                | RdevKey::MetaRight
-                | RdevKey::ShiftLeft
-                | RdevKey::ShiftRight
-                | RdevKey::Alt
-                | RdevKey::AltGr
-                | RdevKey::Tab
-                | RdevKey::Return
-        )
+    matches!(
+        key,
+        RdevKey::ControlLeft
+            | RdevKey::ControlRight
+            | RdevKey::MetaLeft
+            | RdevKey::MetaRight
+            | RdevKey::ShiftLeft
+            | RdevKey::ShiftRight
+            | RdevKey::Alt
+            | RdevKey::AltGr
+            | RdevKey::Tab
+            | RdevKey::Return
+    )
 }
 
 pub fn handle_key_(evt: &KeyEvent) {
@@ -1416,23 +1427,22 @@ pub fn handle_key_(evt: &KeyEvent) {
         return;
     }
 
-    println!("REMOVE ME ============================== {:?}", &evt);
-
     let mut _lock_mode_handler = None;
     match (&evt.union, evt.mode.enum_value_or(KeyboardMode::Legacy)) {
         (Some(key_event::Union::Unicode(..)) | Some(key_event::Union::Seq(..)), _) => {
-            _lock_mode_handler = Some(LockModesHandler::new(&evt));
+            _lock_mode_handler = Some(LockModesHandler::new(&evt, false));
         }
         (Some(key_event::Union::ControlKey(ck)), _) => {
             let key = ck.enum_value_or(ControlKey::Unknown);
             if !skip_led_sync_control_key(&key) {
-                _lock_mode_handler = Some(LockModesHandler::new(&evt));
+                _lock_mode_handler = Some(LockModesHandler::new(&evt, is_numpad_control_key(&key)));
             }
         }
         (Some(key_event::Union::Chr(code)), KeyboardMode::Map | KeyboardMode::Translate) => {
             let key = crate::keycode_to_rdev_key(*code);
             if !skip_led_sync_rdev_key(&key) {
-                _lock_mode_handler = Some(LockModesHandler::new(evt));
+                _lock_mode_handler =
+                    Some(LockModesHandler::new(evt, crate::is_numpad_rdev_key(&key)));
             }
         }
         _ => {}
