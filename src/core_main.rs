@@ -1,3 +1,5 @@
+#[cfg(not(debug_assertions))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::platform::breakdown_callback;
 use hbb_common::log;
 #[cfg(not(debug_assertions))]
