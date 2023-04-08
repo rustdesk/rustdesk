@@ -1372,44 +1372,48 @@ fn simulate_win2win_hotkey(code: u32, down: bool) {
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "linux")))]
-fn skip_led_sync(_evt: &KeyEvent) -> bool {
+fn skip_led_sync_control_key(_evt: &KeyEvent) -> bool {
+    false
+}
+
+// LockModesHandler should not be created when single meta is pressing and releasing.
+// Because the drop function may insert "CapsLock Click" and "NumLock Click", which breaks single meta click.
+// https://github.com/rustdesk/rustdesk/issues/3928#issuecomment-1496936687
+// https://github.com/rustdesk/rustdesk/issues/3928#issuecomment-1500415822
+// https://github.com/rustdesk/rustdesk/issues/3928#issuecomment-1500773473
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+fn skip_led_sync_control_key(key: &ControlKey) -> bool {
+    [
+        ControlKey::Control,
+        ControlKey::Meta,
+        ControlKey::Shift,
+        ControlKey::Alt,
+        ControlKey::Tab,
+        ControlKey::Return,
+    ]
+    .contains(key)
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+fn skip_led_sync_rdev_key(_evt: &KeyEvent) -> bool {
     false
 }
 
 #[cfg(any(target_os = "windows", target_os = "linux"))]
-fn skip_led_sync(evt: &KeyEvent) -> bool {
-    match (&evt.union, evt.mode.enum_value_or(KeyboardMode::Legacy)) {
-        (Some(key_event::Union::ControlKey(ck)), _) => {
-            let key = ck.enum_value_or(ControlKey::Unknown);
-            return [
-                ControlKey::Control,
-                ControlKey::Meta,
-                ControlKey::Shift,
-                ControlKey::Alt,
-                ControlKey::Tab,
-                ControlKey::Return,
-            ]
-            .contains(&key);
-        }
-        (Some(key_event::Union::Chr(code)), KeyboardMode::Map | KeyboardMode::Translate) => {
-            let key = crate::keycode_to_rdev_key(*code);
-            return [
-                RdevKey::ControlLeft,
-                RdevKey::ControlRight,
-                RdevKey::MetaLeft,
-                RdevKey::MetaRight,
-                RdevKey::ShiftRight,
-                RdevKey::ShiftRight,
-                RdevKey::Alt,
-                RdevKey::AltGr,
-                RdevKey::Tab,
-                RdevKey::Return,
-            ]
-            .contains(&key);
-        }
-        _ => {}
-    }
-    false
+fn skip_led_sync_rdev_key(key: &RdevKey) -> bool {
+    [
+        RdevKey::ControlLeft,
+        RdevKey::ControlRight,
+        RdevKey::MetaLeft,
+        RdevKey::MetaRight,
+        RdevKey::ShiftRight,
+        RdevKey::ShiftRight,
+        RdevKey::Alt,
+        RdevKey::AltGr,
+        RdevKey::Tab,
+        RdevKey::Return,
+    ]
+    .contains(key)
 }
 
 pub fn handle_key_(evt: &KeyEvent) {
@@ -1417,22 +1421,24 @@ pub fn handle_key_(evt: &KeyEvent) {
         return;
     }
 
-    let _lock_mode_handler = match &evt.union {
-        Some(key_event::Union::Unicode(..)) | Some(key_event::Union::Seq(..)) => {
-            Some(LockModesHandler::new(&evt))
+    let mut _lock_mode_handler = None;
+    match (&evt.union, evt.mode.enum_value_or(KeyboardMode::Legacy)) {
+        (Some(key_event::Union::Unicode(..)) | Some(key_event::Union::Seq(..)), _) => {
+            _lock_mode_handler = Some(LockModesHandler::new(&evt));
         }
-        _ => {
-            // LockModesHandler should not be created when single meta is pressing and releasing.
-            // Because the drop function may insert "CapsLock Click" and "NumLock Click", which breaks single meta click.
-            // https://github.com/rustdesk/rustdesk/issues/3928#issuecomment-1496936687
-            // https://github.com/rustdesk/rustdesk/issues/3928#issuecomment-1500415822
-            // https://github.com/rustdesk/rustdesk/issues/3928#issuecomment-1500773473
-            if evt.down && !skip_led_sync(evt) {
-                Some(LockModesHandler::new(evt))
-            } else {
-                None
+        (Some(key_event::Union::ControlKey(ck)), _) => {
+            let key = ck.enum_value_or(ControlKey::Unknown);
+            if !skip_led_sync_control_key(&key) {
+                _lock_mode_handler = Some(LockModesHandler::new(&evt));
             }
         }
+        (Some(key_event::Union::Chr(code)), KeyboardMode::Map | KeyboardMode::Translate) => {
+            let key = crate::keycode_to_rdev_key(*code);
+            if !skip_led_sync_rdev_key(&key) {
+                _lock_mode_handler = Some(LockModesHandler::new(evt));
+            }
+        }
+        _ => {}
     };
 
     match evt.mode.unwrap() {
