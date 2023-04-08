@@ -8,8 +8,6 @@ use hbb_common::{config::COMPRESS_LEVEL, get_time, protobuf::EnumOrUnknown};
 use rdev::{self, EventType, Key as RdevKey, KeyCode, RawKey};
 #[cfg(target_os = "macos")]
 use rdev::{CGEventSourceStateID, CGEventTapLocation, VirtualInput};
-#[cfg(any(target_os = "windows", target_os = "linux"))]
-use std::collections::HashSet;
 use std::{
     convert::TryFrom,
     ops::Sub,
