@@ -222,7 +222,7 @@ impl Drop for LockModesHandler {
 fn is_numlock_disabled(key_event: &KeyEvent) -> bool {
     // disable numlock if press home etc when numlock is on,
     // because we will get numpad value (7,8,9 etc) if not
-    if key_event.mode.enum_value_or(KeyboardMode::Legacy) == KeyboardMode::Legacy {
+    if is_legacy_mode(&key_event) {
         has_numpad_key(key_event)
     } else {
         false
@@ -1434,6 +1434,12 @@ fn skip_led_sync_rdev_key(key: &RdevKey) -> bool {
     )
 }
 
+#[inline]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn is_legacy_mode(evt: &KeyEvent) -> bool {
+    evt.mode.enum_value_or(KeyboardMode::Legacy) == KeyboardMode::Legacy
+}
+
 pub fn handle_key_(evt: &KeyEvent) {
     if EXITING.load(Ordering::SeqCst) {
         return;
@@ -1442,11 +1448,11 @@ pub fn handle_key_(evt: &KeyEvent) {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let mut _lock_mode_handler = None;
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    match (&evt.union, evt.mode.enum_value_or(KeyboardMode::Legacy)) {
-        (Some(key_event::Union::Unicode(..)) | Some(key_event::Union::Seq(..)), _) => {
+    match &evt.union {
+        Some(key_event::Union::Unicode(..)) | Some(key_event::Union::Seq(..)) => {
             _lock_mode_handler = Some(LockModesHandler::new_handler(&evt, false));
         }
-        (Some(key_event::Union::ControlKey(ck)), _) => {
+        Some(key_event::Union::ControlKey(ck)) => {
             let key = ck.enum_value_or(ControlKey::Unknown);
             if !skip_led_sync_control_key(&key) {
                 #[cfg(target_os = "macos")]
@@ -1456,14 +1462,18 @@ pub fn handle_key_(evt: &KeyEvent) {
                 _lock_mode_handler = Some(LockModesHandler::new_handler(&evt, is_numpad_key));
             }
         }
-        (Some(key_event::Union::Chr(code)), KeyboardMode::Map | KeyboardMode::Translate) => {
-            let key = crate::keyboard::keycode_to_rdev_key(*code);
-            if !skip_led_sync_rdev_key(&key) {
-                #[cfg(target_os = "macos")]
-                let is_numpad_key = false;
-                #[cfg(any(target_os = "windows", target_os = "linux"))]
-                let is_numpad_key = crate::keyboard::is_numpad_rdev_key(&key);
-                _lock_mode_handler = Some(LockModesHandler::new_handler(evt, is_numpad_key));
+        Some(key_event::Union::Chr(code)) => {
+            if is_legacy_mode(&evt) {
+                _lock_mode_handler = Some(LockModesHandler::new_handler(evt, false));
+            } else {
+                let key = crate::keyboard::keycode_to_rdev_key(*code);
+                if !skip_led_sync_rdev_key(&key) {
+                    #[cfg(target_os = "macos")]
+                    let is_numpad_key = false;
+                    #[cfg(any(target_os = "windows", target_os = "linux"))]
+                    let is_numpad_key = crate::keyboard::is_numpad_rdev_key(&key);
+                    _lock_mode_handler = Some(LockModesHandler::new_handler(evt, is_numpad_key));
+                }
             }
         }
         _ => {}
