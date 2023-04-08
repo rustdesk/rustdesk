@@ -161,7 +161,7 @@ impl LockModesHandler {
         }
 
         let mut num_lock_changed = false;
-        if is_numpad_key {
+        if is_numpad_key || is_legacy_mode(key_event) {
             let event_num_enabled = Self::is_modifier_enabled(key_event, ControlKey::NumLock);
             let local_num_enabled = en.get_key_state(enigo::Key::NumLock);
             #[cfg(not(target_os = "windows"))]
