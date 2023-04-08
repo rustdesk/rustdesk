@@ -1394,6 +1394,7 @@ fn skip_led_sync_control_key(key: &ControlKey) -> bool {
 }
 
 #[inline]
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 fn is_numpad_control_key(key: &ControlKey) -> bool {
     matches!(
         key,
