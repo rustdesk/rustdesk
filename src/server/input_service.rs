@@ -128,13 +128,26 @@ struct LockModesHandler {
     num_lock_changed: bool,
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+#[cfg(target_os = "macos")]
 struct LockModesHandler;
 
 impl LockModesHandler {
     #[inline]
     fn is_modifier_enabled(key_event: &KeyEvent, modifier: ControlKey) -> bool {
         key_event.modifiers.contains(&modifier.into())
+    }
+
+    #[inline]
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+    fn new_handler(key_event: &KeyEvent, _is_numpad_key: bool) -> Self {
+        #[cfg(any(target_os = "windows", target_os = "linux"))]
+        {
+            Self::new(key_event, _is_numpad_key)
+        }
+        #[cfg(target_os = "macos")]
+        {
+            Self::new(key_event)
+        }
     }
 
     #[cfg(any(target_os = "windows", target_os = "linux"))]
@@ -165,8 +178,8 @@ impl LockModesHandler {
         }
     }
 
-    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
-    fn new(key_event: &KeyEvent, _is_numpad_key: bool) -> Self {
+    #[cfg(target_os = "macos")]
+    fn new(key_event: &KeyEvent) -> Self {
         let event_caps_enabled = Self::is_modifier_enabled(key_event, ControlKey::CapsLock);
         // Do not use the following code to detect `local_caps_enabled`.
         // Because the state of get_key_state will not affect simuation of `VIRTUAL_INPUT_STATE` in this file.
@@ -1430,19 +1443,26 @@ pub fn handle_key_(evt: &KeyEvent) {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     match (&evt.union, evt.mode.enum_value_or(KeyboardMode::Legacy)) {
         (Some(key_event::Union::Unicode(..)) | Some(key_event::Union::Seq(..)), _) => {
-            _lock_mode_handler = Some(LockModesHandler::new(&evt, false));
+            _lock_mode_handler = Some(LockModesHandler::new_handler(&evt, false));
         }
         (Some(key_event::Union::ControlKey(ck)), _) => {
             let key = ck.enum_value_or(ControlKey::Unknown);
             if !skip_led_sync_control_key(&key) {
-                _lock_mode_handler = Some(LockModesHandler::new(&evt, is_numpad_control_key(&key)));
+                #[cfg(target_os = "macos")]
+                let is_numpad_key = false;
+                #[cfg(any(target_os = "windows", target_os = "linux"))]
+                let is_numpad_key = is_numpad_control_key(&key);
+                _lock_mode_handler = Some(LockModesHandler::new_handler(&evt, is_numpad_key));
             }
         }
         (Some(key_event::Union::Chr(code)), KeyboardMode::Map | KeyboardMode::Translate) => {
             let key = crate::keyboard::keycode_to_rdev_key(*code);
             if !skip_led_sync_rdev_key(&key) {
-                _lock_mode_handler =
-                    Some(LockModesHandler::new(evt, crate::keyboard::is_numpad_rdev_key(&key)));
+                #[cfg(target_os = "macos")]
+                let is_numpad_key = false;
+                #[cfg(any(target_os = "windows", target_os = "linux"))]
+                let is_numpad_key = crate::keyboard::is_numpad_rdev_key(&key);
+                _lock_mode_handler = Some(LockModesHandler::new_handler(evt, is_numpad_key));
             }
         }
         _ => {}
