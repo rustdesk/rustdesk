@@ -38,7 +38,7 @@ RUN sudo apt-get install -y libclang-dev
 RUN sudo apt install -y gcc-multilib
 
 WORKDIR $WORKDIR
-ENV ANDROID_NDK_HOME=/opt/android/ndk/23.2.8568313
+ENV ANDROID_NDK_HOME=/opt/android/ndk/22.1.7171670
 
 # Somehow try to automate flutter pub get
 # https://rustdesk.com/docs/en/dev/build/android/
