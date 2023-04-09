@@ -359,9 +359,6 @@ impl Enigo {
     }
 
     fn key_to_keycode(&self, key: Key) -> u16 {
-        unsafe {
-            LAYOUT = std::ptr::null_mut();
-        }
         // do not use the codes from crate winapi they're
         // wrongly typed with i32 instead of i16 use the
         // ones provided by win/keycodes.rs that are prefixed
@@ -456,6 +453,9 @@ impl Enigo {
     }
 
     fn get_layoutdependent_keycode(&self, chr: char) -> u16 {
+        unsafe {
+            LAYOUT = std::ptr::null_mut();
+        }
         // NOTE VkKeyScanW uses the current keyboard LAYOUT
         // to specify a LAYOUT use VkKeyScanExW and GetKeyboardLayout
         // or load one with LoadKeyboardLayoutW
