@@ -2215,6 +2215,9 @@ async fn start_ipc(
         #[cfg(not(feature = "linux_headless"))]
         let user = None;
         #[cfg(all(target_os = "linux", feature = "linux_headless"))]
+        #[cfg(any(feature = "flatpak", feature = "appimage"))]
+        let user = None;
+        #[cfg(all(target_os = "linux", feature = "linux_headless"))]
         #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
         let mut user = None;
         // Cm run as user, wait until desktop session is ready.
