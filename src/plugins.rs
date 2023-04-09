@@ -1,13 +1,12 @@
 use std::{
     collections::HashMap,
-    ffi::CStr,
-    path::Path,
+    ffi::{c_char, CStr},
     sync::{Arc, RwLock},
 };
 
-use hbb_common::anyhow::{anyhow, Error};
+use hbb_common::{anyhow::Error, log::debug};
 use lazy_static::lazy_static;
-use libloading::Library;
+use libloading::{Library, Symbol};
 
 lazy_static! {
     pub static ref PLUGIN_REGISTRAR: Arc<PluginRegistar<PluginImpl>> =
@@ -15,6 +14,10 @@ lazy_static! {
 }
 // API needed to be implemented by plugins.
 pub type PluginInitFunc = fn() -> i32;
+// API needed to be implemented by plugins.
+pub type PluginIdFunc = fn() -> *const c_char;
+// API needed to be implemented by plugins.
+pub type PluginNameFunc = fn() -> *const c_char;
 // API needed to be implemented by plugins.
 pub type PluginDisposeFunc = fn() -> i32;
 
@@ -34,11 +37,22 @@ pub struct RustDeskPluginTable {
     pub dispose: Option<PluginDisposeFunc>,
 }
 
-#[derive(Default, Clone)]
 pub struct PluginImpl {
     vt: RustDeskPluginTable,
-    id: String,
-    name: String,
+    pub id: String,
+    pub name: String,
+    _inner: Option<Library>,
+}
+
+impl Default for PluginImpl {
+    fn default() -> Self {
+        Self {
+            _inner: None,
+            vt: Default::default(),
+            id: Default::default(),
+            name: Default::default(),
+        }
+    }
 }
 
 impl Plugin for PluginImpl {
@@ -100,6 +114,73 @@ impl TryFrom<Library> for PluginImpl {
     type Error = Error;
 
     fn try_from(library: Library) -> Result<Self, Self::Error> {
-        todo!()
+        let init: Symbol<PluginInitFunc> = unsafe { library.get(b"plugin_init")? };
+        let dispose: Symbol<PluginDisposeFunc> = unsafe { library.get(b"plugin_dispose")? };
+        let id_func: Symbol<PluginIdFunc> = unsafe { library.get(b"plugin_id")? };
+        let id_string = unsafe {
+            std::ffi::CStr::from_ptr(id_func())
+                .to_str()
+                .unwrap_or("")
+                .to_owned()
+        };
+        let name_func: Symbol<PluginNameFunc> = unsafe { library.get(b"plugin_name")? };
+        let name_string = unsafe {
+            std::ffi::CStr::from_ptr(name_func())
+                .to_str()
+                .unwrap_or("")
+                .to_owned()
+        };
+        debug!(
+            "Successfully loaded the plugin called {} with id {}.",
+            name_string, id_string
+        );
+        Ok(Self {
+            vt: RustDeskPluginTable {
+                init: Some(*init),
+                dispose: Some(*dispose),
+            },
+            id: id_string,
+            name: name_string,
+            _inner: Some(library),
+        })
     }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_plugin() {
+    use std::io::Write;
+
+    let code = "
+    const char* plugin_name(){return \"test_name\";};
+    const char* plugin_id(){return \"test_id\"; }
+    int plugin_init() {return 0;}
+    int plugin_dispose() {return 0;}
+    ";
+    let mut f = std::fs::File::create("test.c").unwrap();
+    f.write_all(code.as_bytes()).unwrap();
+    f.flush().unwrap();
+    let mut cmd = std::process::Command::new("cc");
+    cmd.arg("-fPIC")
+        .arg("-shared")
+        .arg("test.c")
+        .arg("-o")
+        .arg("libtest.so");
+    // Spawn the compiler process.
+    let mut child = cmd.spawn().unwrap();
+    // Wait for the compiler to finish.
+    let status = child.wait().unwrap();
+    assert!(status.success());
+    // Load the library.
+    let lib = unsafe { Library::new("./libtest.so").unwrap() };
+    let plugin: PluginImpl = lib.try_into().unwrap();
+    assert!(plugin._inner.is_some());
+    assert!(plugin.name == "test_name");
+    assert!(plugin.id == "test_id");
+    assert!(PLUGIN_REGISTRAR
+        .plugins
+        .write()
+        .unwrap()
+        .insert("test".to_owned(), plugin)
+        .is_none());
 }

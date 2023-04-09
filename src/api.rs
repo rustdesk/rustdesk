@@ -1,5 +1,3 @@
-use std::{ffi::CStr, os::raw::c_char};
-
 use crate::plugins::PLUGIN_REGISTRAR;
 
 // API provided by RustDesk.
