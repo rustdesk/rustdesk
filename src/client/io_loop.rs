@@ -852,7 +852,6 @@ impl<T: InvokeUiSession> Remote<T> {
         if len < debounce || decode_fps == 0 {
             return;
         }
-        let mut refresh = false;
         // First setting , or the length of the queue still increases after setting, or exceed the size of the last setting again
         if ctl.set_times < 10 // enough
             && (ctl.set_times == 0
@@ -875,14 +874,14 @@ impl<T: InvokeUiSession> Remote<T> {
             ctl.last_queue_size = len;
             ctl.set_times += 1;
             ctl.last_set_instant = Instant::now();
-            refresh = true;
         }
         // send refresh
         if ctl.refresh_times < 10 // enough
-            && (refresh
-                || (len > self.video_queue.len() / 2
-                    && ctl.last_refresh_instant.elapsed().as_secs() > 30))
+            && (len > self.video_queue.capacity() / 2
+                    && (ctl.refresh_times == 0 || ctl.last_refresh_instant.elapsed().as_secs() > 30))
         {
+            // Refresh causes client set_display, left frames cause flickering.
+            while let Some(_) = self.video_queue.pop() {}
             self.handler.refresh_video();
             ctl.refresh_times += 1;
             ctl.last_refresh_instant = Instant::now();
