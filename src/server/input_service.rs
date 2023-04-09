@@ -162,13 +162,15 @@ impl LockModesHandler {
 
         let mut num_lock_changed = false;
         if is_numpad_key {
-            let event_num_enabled = Self::is_modifier_enabled(key_event, ControlKey::NumLock);
             let local_num_enabled = en.get_key_state(enigo::Key::NumLock);
-            #[cfg(not(target_os = "windows"))]
-            let disable_numlock = false;
+            let event_num_enabled = Self::is_modifier_enabled(key_event, ControlKey::NumLock);
+            num_lock_changed = event_num_enabled != local_num_enabled;
+        } else if is_legacy_mode(key_event) {
             #[cfg(target_os = "windows")]
-            let disable_numlock = is_numlock_disabled(key_event);
-            num_lock_changed = event_num_enabled != local_num_enabled && !disable_numlock;
+            {
+                num_lock_changed =
+                    should_disable_numlock(key_event) && en.get_key_state(enigo::Key::NumLock);
+            }
         }
         if num_lock_changed {
             en.key_click(enigo::Key::NumLock);
@@ -221,14 +223,16 @@ impl Drop for LockModesHandler {
 
 #[inline]
 #[cfg(target_os = "windows")]
-fn is_numlock_disabled(key_event: &KeyEvent) -> bool {
+fn should_disable_numlock(evt: &KeyEvent) -> bool {
     // disable numlock if press home etc when numlock is on,
     // because we will get numpad value (7,8,9 etc) if not
-    if is_legacy_mode(&key_event) {
-        has_numpad_key(key_event)
-    } else {
-        false
+    match (&evt.union, evt.mode.enum_value_or(KeyboardMode::Legacy)) {
+        (Some(key_event::Union::ControlKey(ck)), KeyboardMode::Legacy) => {
+            return NUMPAD_KEY_MAP.contains_key(&ck.value());
+        }
+        _ => {}
     }
+    false
 }
 
 pub const NAME_CURSOR: &'static str = "mouse_cursor";
@@ -1037,16 +1041,6 @@ fn char_value_to_key(value: u32) -> Key {
     Key::Layout(std::char::from_u32(value).unwrap_or('\0'))
 }
 
-#[cfg(target_os = "windows")]
-fn has_numpad_key(key_event: &KeyEvent) -> bool {
-    key_event
-        .modifiers
-        .iter()
-        .filter(|&&ck| NUMPAD_KEY_MAP.get(&ck.value()).is_some())
-        .count()
-        != 0
-}
-
 fn map_keyboard_mode(evt: &KeyEvent) {
     #[cfg(windows)]
     crate::platform::windows::try_change_desktop();
@@ -1461,12 +1455,7 @@ pub fn handle_key_(evt: &KeyEvent) {
                 let is_numpad_key = false;
                 #[cfg(any(target_os = "windows", target_os = "linux"))]
                 let is_numpad_key = is_numpad_control_key(&key);
-                // Legacy mode need to disable numlock if home/end/arraws/page down/page up
-                // are pressed.
-                _lock_mode_handler = Some(LockModesHandler::new_handler(
-                    &evt,
-                    is_numpad_key || is_legacy_mode(evt),
-                ));
+                _lock_mode_handler = Some(LockModesHandler::new_handler(&evt, is_numpad_key));
             }
         }
         Some(key_event::Union::Chr(code)) => {
