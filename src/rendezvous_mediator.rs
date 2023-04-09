@@ -73,6 +73,7 @@ impl RendezvousMediator {
             });
         }
         #[cfg(all(target_os = "linux", feature = "linux_headless"))]
+        #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
         crate::platform::linux_desktop_manager::start_xdesktop();
         loop {
             Config::reset_online();
@@ -101,6 +102,7 @@ impl RendezvousMediator {
         // It should be better to call stop_xdesktop.
         // But for server, it also is Ok without calling this method.
         // #[cfg(all(target_os = "linux", feature = "linux_headless"))]
+        // #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
         // crate::platform::linux_desktop_manager::stop_xdesktop();
     }
 
