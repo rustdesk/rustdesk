@@ -681,7 +681,16 @@ jobs:
               x86_64)
                 # no need mock on x86_64
                 export VCPKG_ROOT=/opt/artifacts/vcpkg
-                cargo build --lib --features hwcodec,flutter,flutter_texture_render,linux_headless,${{ matrix.job.extra-build-features }} --release
+                case "${{ matrix.job.extra-build-features }}" in
+                  "flatpak")
+                    cargo build --lib --features hwcodec,flutter,flutter_texture_render,${{ matrix.job.extra-build-features }} --release
+                  ;;
+                  "appimage")
+                    cargo build --lib --features hwcodec,flutter,flutter_texture_render,${{ matrix.job.extra-build-features }} --release
+                  ;;
+                  "")
+                    cargo build --lib --features hwcodec,flutter,flutter_texture_render,linux_headless,${{ matrix.job.extra-build-features }} --release
+                  ;;
                 ;;
             esac
 
