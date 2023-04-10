@@ -262,7 +262,7 @@ def generate_control_file(version):
     content = """Package: rustdesk
 Version: %s
 Architecture: %s
-Maintainer: open-trade <info@rustdesk.com>
+Maintainer: rustdesk <info@rustdesk.com>
 Homepage: https://rustdesk.com
 Depends: libgtk-3-0, libxcb-randr0, libxdo3, libxfixes3, libxcb-shape0, libxcb-xfixes0, libasound2, libsystemd0, curl, libva-drm2, libva-x11-2, libvdpau1, libgstreamer-plugins-base1.0-0, libpam0g
 Description: A remote control software.
