@@ -75,7 +75,7 @@ pub struct PluginRegistar<P: Plugin> {
 }
 
 impl<P: Plugin> PluginRegistar<P> {
-    pub fn load_plugin(&self, path: *const i8) -> i32 {
+    pub fn load_plugin(&self, path: *const c_char) -> i32 {
         let p = unsafe { CStr::from_ptr(path) };
         let lib_path = p.to_str().unwrap_or("").to_owned();
         let lib = unsafe { libloading::Library::new(lib_path.as_str()) };
@@ -100,7 +100,7 @@ impl<P: Plugin> PluginRegistar<P> {
         -1
     }
 
-    pub fn unload_plugin(&self, path: *const i8) -> i32 {
+    pub fn unload_plugin(&self, path: *const c_char) -> i32 {
         let p = unsafe { CStr::from_ptr(path) };
         let lib_path = p.to_str().unwrap_or("").to_owned();
         match PLUGIN_REGISTRAR.plugins.write().unwrap().remove(&lib_path) {

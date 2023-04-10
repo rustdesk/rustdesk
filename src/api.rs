@@ -1,8 +1,10 @@
+use std::ffi::c_char;
+
 use crate::plugins::PLUGIN_REGISTRAR;
 
 // API provided by RustDesk.
-pub type LoadPluginFunc = fn(*const i8) -> i32;
-pub type UnloadPluginFunc = fn(*const i8) -> i32;
+pub type LoadPluginFunc = fn(*const c_char) -> i32;
+pub type UnloadPluginFunc = fn(*const c_char) -> i32;
 
 #[repr(C)]
 pub struct RustDeskApiTable {
@@ -11,12 +13,12 @@ pub struct RustDeskApiTable {
 }
 
 #[no_mangle]
-fn load_plugin(path: *const i8) -> i32 {
+fn load_plugin(path: *const c_char) -> i32 {
     PLUGIN_REGISTRAR.load_plugin(path)
 }
 
 #[no_mangle]
-fn unload_plugin(path: *const i8) -> i32 {
+fn unload_plugin(path: *const c_char) -> i32 {
     PLUGIN_REGISTRAR.unload_plugin(path)
 }
 
