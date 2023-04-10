@@ -43,6 +43,11 @@ mod license;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod port_forward;
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+mod plugins;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+mod api;
+
 mod tray;
 
 mod ui_cm_interface;
