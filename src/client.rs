@@ -95,9 +95,10 @@ lazy_static::lazy_static! {
     static ref TEXT_CLIPBOARD_STATE: Arc<Mutex<TextClipboardState>> = Arc::new(Mutex::new(TextClipboardState::new()));
 }
 
+#[inline]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn update_clipboard_text(text: String) {
-    *OLD_CLIPBOARD_TEXT.lock().unwrap() = text;
+pub fn get_old_clipboard_text() -> &'static Arc<Mutex<String>> {
+    &OLD_CLIPBOARD_TEXT
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -666,16 +667,10 @@ impl Client {
 
                         if let Some(msg) = check_clipboard(&mut ctx, Some(&OLD_CLIPBOARD_TEXT)) {
                             #[cfg(feature = "flutter")]
-                            crate::flutter::send_text_clipboard_msg(
-                                &*OLD_CLIPBOARD_TEXT.lock().unwrap(),
-                                msg,
-                            );
+                            crate::flutter::send_text_clipboard_msg(msg);
                             #[cfg(not(feature = "flutter"))]
                             if let Some(ctx) = &_ctx {
-                                if ctx.cfg.is_text_clipboard_required()
-                                    && *OLD_CLIPBOARD_TEXT.lock().unwrap()
-                                        != *ctx.old.lock().unwrap()
-                                {
+                                if ctx.cfg.is_text_clipboard_required() {
                                     let _ = ctx.tx.send(Data::Message(msg));
                                 }
                             }
@@ -2444,6 +2439,5 @@ pub(crate) struct ClientClipboardContext;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub(crate) struct ClientClipboardContext {
     pub cfg: SessionPermissionConfig,
-    pub old: Arc<Mutex<String>>,
     pub tx: UnboundedSender<Data>,
 }
