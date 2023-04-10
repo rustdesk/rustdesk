@@ -95,6 +95,12 @@ lazy_static::lazy_static! {
     static ref TEXT_CLIPBOARD_STATE: Arc<Mutex<TextClipboardState>> = Arc::new(Mutex::new(TextClipboardState::new()));
 }
 
+#[inline]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn get_old_clipboard_text() -> &'static Arc<Mutex<String>> {
+    &OLD_CLIPBOARD_TEXT
+}
+
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn get_key_state(key: enigo::Key) -> bool {
     use enigo::KeyboardControllable;
@@ -635,8 +641,13 @@ impl Client {
         TEXT_CLIPBOARD_STATE.lock().unwrap().running = false;
     }
 
+    // `try_start_clipboard` is called by all session when connection is established. (When handling peer info).
+    // This function only create one thread with a loop, the loop is shared by all sessions.
+    // After all sessions are end, the loop exists.
+    // 
+    // If clipboard update is detected, the text will be sent to all sessions by `send_text_clipboard_msg`.
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    fn try_start_clipboard(_conf_tx: Option<ClientClipboardContext>) {
+    fn try_start_clipboard(_ctx: Option<ClientClipboardContext>) {
         let mut clipboard_lock = TEXT_CLIPBOARD_STATE.lock().unwrap();
         if clipboard_lock.running {
             return;
@@ -661,16 +672,10 @@ impl Client {
 
                         if let Some(msg) = check_clipboard(&mut ctx, Some(&OLD_CLIPBOARD_TEXT)) {
                             #[cfg(feature = "flutter")]
-                            crate::flutter::send_text_clipboard_msg(
-                                &*OLD_CLIPBOARD_TEXT.lock().unwrap(),
-                                msg,
-                            );
+                            crate::flutter::send_text_clipboard_msg(msg);
                             #[cfg(not(feature = "flutter"))]
                             if let Some(ctx) = &_ctx {
-                                if ctx.cfg.is_text_clipboard_required()
-                                    && *OLD_CLIPBOARD_TEXT.lock().unwrap()
-                                        != *ctx.old.lock().unwrap()
-                                {
+                                if ctx.cfg.is_text_clipboard_required() {
                                     let _ = ctx.tx.send(Data::Message(msg));
                                 }
                             }
@@ -2439,6 +2444,5 @@ pub(crate) struct ClientClipboardContext;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub(crate) struct ClientClipboardContext {
     pub cfg: SessionPermissionConfig,
-    pub old: Arc<Mutex<String>>,
     pub tx: UnboundedSender<Data>,
 }

@@ -725,9 +725,9 @@ pub fn other_sessions_running(id: &str) -> bool {
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn send_text_clipboard_msg(text: &str, msg: Message) {
+pub fn send_text_clipboard_msg(msg: Message) {
     for (_id, session) in SESSIONS.read().unwrap().iter() {
-        if session.is_text_clipboard_required() && text != *session.old_clipboard.lock().unwrap() {
+        if session.is_text_clipboard_required() {
             session.send(Data::Message(msg.clone()));
         }
     }

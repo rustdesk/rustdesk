@@ -935,11 +935,12 @@ impl<T: InvokeUiSession> Remote<T> {
                             Client::try_start_clipboard(None);
                             #[cfg(not(feature = "flutter"))]
                             #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                            Client::try_start_clipboard(Some(ClientClipboardContext {
-                                cfg: permission_config.clone(),
-                                old: self.handler.old_clipboard.clone(),
-                                tx: sender.clone(),
-                            }));
+                            Client::try_start_clipboard(Some(
+                                crate::client::ClientClipboardContext {
+                                    cfg: permission_config.clone(),
+                                    tx: sender.clone(),
+                                },
+                            ));
 
                             #[cfg(not(any(target_os = "android", target_os = "ios")))]
                             tokio::spawn(async move {
@@ -972,7 +973,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 Some(message::Union::Clipboard(cb)) => {
                     if !self.handler.lc.read().unwrap().disable_clipboard.v {
                         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                        update_clipboard(cb, Some(&self.handler.old_clipboard));
+                        update_clipboard(cb, Some(&crate::client::get_old_clipboard_text()));
                         #[cfg(any(target_os = "android", target_os = "ios"))]
                         {
                             let content = if cb.compress {
