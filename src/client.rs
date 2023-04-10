@@ -641,6 +641,11 @@ impl Client {
         TEXT_CLIPBOARD_STATE.lock().unwrap().running = false;
     }
 
+    // `try_start_clipboard` is called by all session when connection is established. (When handling peer info).
+    // This function only create one thread with a loop, the loop is shared by all sessions.
+    // After all sessions are end, the loop exists.
+    // 
+    // If clipboard update is detected, the text will be sent to all sessions by `send_text_clipboard_msg`.
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn try_start_clipboard(_ctx: Option<ClientClipboardContext>) {
         let mut clipboard_lock = TEXT_CLIPBOARD_STATE.lock().unwrap();
