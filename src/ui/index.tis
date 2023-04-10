@@ -311,7 +311,7 @@ class MyIdMenu: Reactor.Component {
                 <li #stop-service class={service_stopped ? "line-through" : "selected"}><span>{svg_checkmark}</span>{translate("Enable Service")}</li>
                 {handler.is_rdp_service_open() ? <ShareRdp /> : ""}
                 <DirectServer />
-                {false && handler.using_public_server() && <li #allow-always-relay><span>{svg_checkmark}</span>{translate('Always connected via relay')}</li>}
+                {false && handler.using_public_server() && <li #allow-always-relay><span>{svg_checkmark}</span>{translate('Always connect via relay')}</li>}
                 {handler.is_ok_change_id() ? <div .separator /> : ""}
                 {username ? 
                 <li #logout>{translate('Logout')} ({username})</li> :
