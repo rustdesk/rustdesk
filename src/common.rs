@@ -187,9 +187,14 @@ pub fn update_clipboard(clipboard: Clipboard, old: Option<&Arc<Mutex<String>>>) 
         }
         match ClipboardContext::new() {
             Ok(mut ctx) => {
-                let side = if old.is_none() { "host" } else { "client" };
+                let host_side = "host";
+                let client_side = "client";
+                let side = if old.is_none() { host_side } else { client_side };
                 let old = if let Some(old) = old { old } else { &CONTENT };
                 *old.lock().unwrap() = content.clone();
+                if side == client_side {
+                    crate::client::update_clipboard_text(content.clone());
+                }
                 let _lock = ARBOARD_MTX.lock().unwrap();
                 allow_err!(ctx.set_text(content));
                 log::debug!("{} updated on {}", CLIPBOARD_NAME, side);

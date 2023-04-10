@@ -96,6 +96,11 @@ lazy_static::lazy_static! {
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn update_clipboard_text(text: String) {
+    *OLD_CLIPBOARD_TEXT.lock().unwrap() = text;
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn get_key_state(key: enigo::Key) -> bool {
     use enigo::KeyboardControllable;
     #[cfg(target_os = "macos")]
