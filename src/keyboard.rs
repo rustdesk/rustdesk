@@ -550,8 +550,9 @@ pub fn event_to_key_events(
     };
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    if keyboard_mode != KeyboardMode::Translate {
-        let is_numpad_key = is_numpad_key(&event);
+    let is_numpad_key = is_numpad_key(&event);
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    if keyboard_mode != KeyboardMode::Translate || is_numpad_key {
         let is_letter_key = is_letter_key(&event);
         for key_event in &mut key_events {
             if let Some(lock_modes) = _lock_modes {
