@@ -935,7 +935,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             Client::try_start_clipboard(None);
                             #[cfg(not(feature = "flutter"))]
                             #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                            Client::try_start_clipboard(Some(ClientClipboardContext {
+                            Client::try_start_clipboard(Some(crate::client::ClientClipboardContext {
                                 cfg: permission_config.clone(),
                                 old: self.handler.old_clipboard.clone(),
                                 tx: sender.clone(),
