@@ -4,7 +4,10 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use hbb_common::{anyhow::Error, log::debug};
+use hbb_common::{
+    anyhow::Error,
+    log::{debug, error},
+};
 use lazy_static::lazy_static;
 use libloading::{Library, Symbol};
 
@@ -82,6 +85,18 @@ impl<P: Plugin> PluginRegistar<P> {
         match lib {
             Ok(lib) => match lib.try_into() {
                 Ok(plugin) => {
+                    let plugin: PluginImpl = plugin;
+                    // try to initialize this plugin
+                    if let Some(init) = plugin.plugin_vt().init {
+                        let init_ret = init();
+                        if init_ret != 0 {
+                            error!(
+                                "Error when initializing the plugin {} with error code {}.",
+                                plugin.name, init_ret
+                            );
+                            return init_ret;
+                        }
+                    }
                     PLUGIN_REGISTRAR
                         .plugins
                         .write()
@@ -104,7 +119,12 @@ impl<P: Plugin> PluginRegistar<P> {
         let p = unsafe { CStr::from_ptr(path) };
         let lib_path = p.to_str().unwrap_or("").to_owned();
         match PLUGIN_REGISTRAR.plugins.write().unwrap().remove(&lib_path) {
-            Some(_) => 0,
+            Some(plugin) => {
+                if let Some(dispose) = plugin.plugin_vt().dispose {
+                    return dispose();
+                }
+                0
+            }
             None => -1,
         }
     }
