@@ -932,7 +932,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             #[cfg(not(any(target_os = "android", target_os = "ios")))]
                             Client::try_start_clipboard(Some(
                                 crate::client::ClientClipboardContext {
-                                    cfg: permission_config.clone(),
+                                    cfg: self.handler.get_permission_config(),
                                     tx: self.sender.clone(),
                                 },
                             ));
