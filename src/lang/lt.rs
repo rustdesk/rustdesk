@@ -383,7 +383,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
 		("Prompt", "Užuomina"),
 		("Please wait for confirmation of UAC...", "Palaukite UAC patvirtinimo..."),
 		("elevated_foreground_window_tip", "Dabartinis nuotolinio darbalaukio langas reikalauja didesnių privilegijų, todėl laikinai neįmanoma naudoti pelės ir klaviatūros. Galite paprašyti nuotolinio vartotojo sumažinti dabartinį langą arba spustelėti aukščio mygtuką ryšio valdymo lange. Norint išvengti šios problemos ateityje, rekomenduojama programinę įrangą įdiegti nuotoliniame įrenginyje."),
-		("Disconnected", "Atjungtas"),
+		("Disconnected", "Atsijungęs, seanso laikas:"),
 		("Other", "Kita"),
 		("Confirm before closing multiple tabs", "Patvirtinti prieš uždarant kelis skirtukus"),
 		("Keyboard Settings", "Klaviatūros nustatymai"),
