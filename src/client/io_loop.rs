@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 use std::num::NonZeroI64;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use std::sync::Mutex;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,
@@ -51,8 +49,6 @@ pub struct Remote<T: InvokeUiSession> {
     // Stop sending local audio to remote client.
     stop_voice_call_sender: Option<std::sync::mpsc::Sender<()>>,
     voice_call_request_timestamp: Option<NonZeroI64>,
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    old_clipboard: Arc<Mutex<String>>,
     read_jobs: Vec<fs::TransferJob>,
     write_jobs: Vec<fs::TransferJob>,
     remove_jobs: HashMap<i32, RemoveJob>,
@@ -87,8 +83,6 @@ impl<T: InvokeUiSession> Remote<T> {
             audio_sender,
             receiver,
             sender,
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            old_clipboard: Default::default(),
             read_jobs: Vec::new(),
             write_jobs: Vec::new(),
             remove_jobs: Default::default(),
@@ -941,10 +935,11 @@ impl<T: InvokeUiSession> Remote<T> {
                             Client::try_start_clipboard(None);
                             #[cfg(not(feature = "flutter"))]
                             #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                            Client::try_start_clipboard(Some((
-                                permission_config.clone(),
-                                sender.clone(),
-                            )));
+                            Client::try_start_clipboard(Some(ClientClipboardContext {
+                                cfg: permission_config.clone(),
+                                old: self.handler.old_clipboard.clone(),
+                                tx: sender.clone(),
+                            }));
 
                             #[cfg(not(any(target_os = "android", target_os = "ios")))]
                             tokio::spawn(async move {
@@ -977,7 +972,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 Some(message::Union::Clipboard(cb)) => {
                     if !self.handler.lc.read().unwrap().disable_clipboard.v {
                         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                        update_clipboard(cb, Some(&self.old_clipboard));
+                        update_clipboard(cb, Some(&self.handler.old_clipboard));
                         #[cfg(any(target_os = "android", target_os = "ios"))]
                         {
                             let content = if cb.compress {
