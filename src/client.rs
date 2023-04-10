@@ -690,6 +690,7 @@ impl Client {
         }
     }
 
+    #[inline]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn get_current_text_clipboard_msg() -> Option<Message> {
         let txt = &*OLD_CLIPBOARD_TEXT.lock().unwrap();

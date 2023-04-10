@@ -925,11 +925,6 @@ impl<T: InvokeUiSession> Remote<T> {
                         self.handler.handle_peer_info(pi);
                         self.check_clipboard_file_context();
                         if !(self.handler.is_file_transfer() || self.handler.is_port_forward()) {
-                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                            let sender = self.sender.clone();
-                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                            let permission_config = self.handler.get_permission_config();
-
                             #[cfg(feature = "flutter")]
                             #[cfg(not(any(target_os = "android", target_os = "ios")))]
                             Client::try_start_clipboard(None);
@@ -938,21 +933,22 @@ impl<T: InvokeUiSession> Remote<T> {
                             Client::try_start_clipboard(Some(
                                 crate::client::ClientClipboardContext {
                                     cfg: permission_config.clone(),
-                                    tx: sender.clone(),
+                                    tx: self.sender.clone(),
                                 },
                             ));
 
                             #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                            tokio::spawn(async move {
-                                // due to clipboard service interval time
-                                sleep(common::CLIPBOARD_INTERVAL as f32 / 1_000.).await;
-                                if permission_config.is_text_clipboard_required() {
-                                    if let Some(msg_out) = Client::get_current_text_clipboard_msg()
-                                    {
+                            if let Some(msg_out) = Client::get_current_text_clipboard_msg() {
+                                let sender = self.sender.clone();
+                                let permission_config = self.handler.get_permission_config();
+                                tokio::spawn(async move {
+                                    // due to clipboard service interval time
+                                    sleep(common::CLIPBOARD_INTERVAL as f32 / 1_000.).await;
+                                    if permission_config.is_text_clipboard_required() {
                                         sender.send(Data::Message(msg_out)).ok();
                                     }
-                                }
-                            });
+                                });
+                            }
                         }
 
                         if self.handler.is_file_transfer() {
