@@ -24,6 +24,7 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 pub use file_trait::FileManager;
+#[cfg(not(feature = "flutter"))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::tokio::sync::mpsc::UnboundedSender;
 use hbb_common::{
@@ -58,10 +59,10 @@ use crate::{
 };
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::{
-    common::{check_clipboard, ClipboardContext, CLIPBOARD_INTERVAL},
-    ui_session_interface::SessionPermissionConfig,
-};
+use crate::common::{check_clipboard, ClipboardContext, CLIPBOARD_INTERVAL};
+#[cfg(not(feature = "flutter"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::ui_session_interface::SessionPermissionConfig;
 
 pub use super::lang::*;
 

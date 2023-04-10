@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 use std::num::NonZeroI64;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use std::sync::Mutex;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,
