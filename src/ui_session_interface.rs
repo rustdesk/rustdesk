@@ -43,6 +43,8 @@ pub struct Session<T: InvokeUiSession> {
     pub server_keyboard_enabled: Arc<RwLock<bool>>,
     pub server_file_transfer_enabled: Arc<RwLock<bool>>,
     pub server_clipboard_enabled: Arc<RwLock<bool>>,
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    pub old_clipboard: Arc<Mutex<String>>,
 }
 
 #[derive(Clone)]

@@ -635,7 +635,7 @@ impl Client {
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    fn try_start_clipboard(_conf_tx: Option<(SessionPermissionConfig, UnboundedSender<Data>)>) {
+    fn try_start_clipboard(_conf_tx: Option<ClientClipboardContext>) {
         let mut clipboard_lock = TEXT_CLIPBOARD_STATE.lock().unwrap();
         if clipboard_lock.running {
             return;
@@ -660,11 +660,17 @@ impl Client {
 
                         if let Some(msg) = check_clipboard(&mut ctx, Some(&OLD_CLIPBOARD_TEXT)) {
                             #[cfg(feature = "flutter")]
-                            crate::flutter::send_text_clipboard_msg(msg);
+                            crate::flutter::send_text_clipboard_msg(
+                                &*OLD_CLIPBOARD_TEXT.lock().unwrap(),
+                                msg,
+                            );
                             #[cfg(not(feature = "flutter"))]
-                            if let Some((cfg, tx)) = &_conf_tx {
-                                if cfg.is_text_clipboard_required() {
-                                    let _ = tx.send(Data::Message(msg));
+                            if let Some(ctx) = &_ctx {
+                                if ctx.cfg.is_text_clipboard_required()
+                                    && *OLD_CLIPBOARD_TEXT.lock().unwrap()
+                                        != *ctx.old.lock().unwrap()
+                                {
+                                    let _ = ctx.tx.send(Data::Message(msg));
                                 }
                             }
                         }
@@ -2422,4 +2428,16 @@ fn decode_id_pk(signed: &[u8], key: &sign::PublicKey) -> ResultType<(String, [u8
     } else {
         bail!("Wrong public length");
     }
+}
+
+#[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub(crate) struct ClientClipboardContext;
+
+#[cfg(not(feature = "flutter"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub(crate) struct ClientClipboardContext {
+    pub cfg: SessionPermissionConfig,
+    pub old: Arc<Mutex<String>>,
+    pub tx: UnboundedSender<Data>,
 }
