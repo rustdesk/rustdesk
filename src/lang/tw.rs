@@ -491,5 +491,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("xorg_not_found_text_tip", "請安裝 Xorg"),
         ("no_desktop_title_tip", "沒有可用的桌面"),
         ("no_desktop_text_tip", "請安裝 GNOME 桌面"),
+        ("No need to elevate", ""),
     ].iter().cloned().collect();
 }
