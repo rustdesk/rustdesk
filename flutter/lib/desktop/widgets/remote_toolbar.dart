@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hbb/common/widgets/toolbar.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/consts.dart';
@@ -31,7 +32,6 @@ class MenubarState {
   final kStoreKey = 'remoteMenubarState';
   late RxBool show;
   late RxBool _pin;
-  RxString viewStyle = RxString(kRemoteViewStyleOriginal);
 
   MenubarState() {
     final s = bind.getLocalFlutterConfig(k: kStoreKey);
@@ -456,7 +456,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     return Theme.of(context).copyWith(
       menuButtonTheme: MenuButtonThemeData(
         style: ButtonStyle(
-          minimumSize: MaterialStatePropertyAll(Size(64, 36)),
+          minimumSize: MaterialStatePropertyAll(Size(64, 32)),
           textStyle: MaterialStatePropertyAll(
             TextStyle(fontWeight: FontWeight.normal),
           ),
@@ -637,229 +637,17 @@ class _ControlMenu extends StatelessWidget {
         color: _MenubarTheme.blueColor,
         hoverColor: _MenubarTheme.hoverBlueColor,
         ffi: ffi,
-        menuChildren: [
-          requestElevation(),
-          ffi.ffiModel.pi.is_headless ? osAccount() : osPassword(),
-          transferFile(context),
-          tcpTunneling(context),
-          note(),
-          Divider(),
-          ctrlAltDel(),
-          restart(),
-          insertLock(),
-          blockUserInput(),
-          switchSides(),
-          refresh(),
-        ]);
-  }
-
-  requestElevation() {
-    final visible = ffi.elevationModel.showRequestMenu;
-    if (!visible) return Offstage();
-    return _MenuItemButton(
-        child: Text(translate('Request Elevation')),
-        ffi: ffi,
-        onPressed: () => showRequestElevationDialog(id, ffi.dialogManager));
-  }
-
-  osAccount() {
-    return _MenuItemButton(
-        child: Text(translate('OS Account')),
-        trailingIcon: Transform.scale(scale: 0.8, child: Icon(Icons.edit)),
-        ffi: ffi,
-        onPressed: () => showSetOSAccount(id, ffi.dialogManager));
-  }
-
-  osPassword() {
-    return _MenuItemButton(
-        child: Text(translate('OS Password')),
-        trailingIcon: Transform.scale(scale: 0.8, child: Icon(Icons.edit)),
-        ffi: ffi,
-        onPressed: () => showSetOSPassword(id, false, ffi.dialogManager));
-  }
-
-  transferFile(BuildContext context) {
-    return _MenuItemButton(
-        child: Text(translate('Transfer File')),
-        ffi: ffi,
-        onPressed: () => connect(context, id, isFileTransfer: true));
-  }
-
-  tcpTunneling(BuildContext context) {
-    return _MenuItemButton(
-        child: Text(translate('TCP Tunneling')),
-        ffi: ffi,
-        onPressed: () => connect(context, id, isTcpTunneling: true));
-  }
-
-  note() {
-    final auditServer = bind.sessionGetAuditServerSync(id: id, typ: "conn");
-    final visible = auditServer.isNotEmpty;
-    if (!visible) return Offstage();
-    return _MenuItemButton(
-      child: Text(translate('Note')),
-      ffi: ffi,
-      onPressed: () => _showAuditDialog(id, ffi.dialogManager),
-    );
-  }
-
-  _showAuditDialog(String id, dialogManager) async {
-    final controller = TextEditingController();
-    dialogManager.show((setState, close) {
-      submit() {
-        var text = controller.text.trim();
-        if (text != '') {
-          bind.sessionSendNote(id: id, note: text);
-        }
-        close();
-      }
-
-      late final focusNode = FocusNode(
-        onKey: (FocusNode node, RawKeyEvent evt) {
-          if (evt.logicalKey.keyLabel == 'Enter') {
-            if (evt is RawKeyDownEvent) {
-              int pos = controller.selection.base.offset;
-              controller.text =
-                  '${controller.text.substring(0, pos)}\n${controller.text.substring(pos)}';
-              controller.selection =
-                  TextSelection.fromPosition(TextPosition(offset: pos + 1));
-            }
-            return KeyEventResult.handled;
-          }
-          if (evt.logicalKey.keyLabel == 'Esc') {
-            if (evt is RawKeyDownEvent) {
-              close();
-            }
-            return KeyEventResult.handled;
+        menuChildren: toolbarControls(context, id, ffi).map((e) {
+          if (e.divider) {
+            return Divider();
           } else {
-            return KeyEventResult.ignored;
+            return _MenuItemButton(
+                child: e.child,
+                onPressed: e.onPressed,
+                ffi: ffi,
+                trailingIcon: e.trailingIcon);
           }
-        },
-      );
-
-      return CustomAlertDialog(
-        title: Text(translate('Note')),
-        content: SizedBox(
-            width: 250,
-            height: 120,
-            child: TextField(
-              autofocus: true,
-              keyboardType: TextInputType.multiline,
-              textInputAction: TextInputAction.newline,
-              decoration: const InputDecoration.collapsed(
-                hintText: 'input note here',
-              ),
-              maxLines: null,
-              maxLength: 256,
-              controller: controller,
-              focusNode: focusNode,
-            )),
-        actions: [
-          dialogButton('Cancel', onPressed: close, isOutline: true),
-          dialogButton('OK', onPressed: submit)
-        ],
-        onSubmit: submit,
-        onCancel: close,
-      );
-    });
-  }
-
-  ctrlAltDel() {
-    final viewOnly = ffi.ffiModel.viewOnly;
-    final pi = ffi.ffiModel.pi;
-    final visible = !viewOnly &&
-        ffi.ffiModel.keyboard &&
-        (pi.platform == kPeerPlatformLinux || pi.sasEnabled);
-    if (!visible) return Offstage();
-    return _MenuItemButton(
-        child: Text('${translate("Insert")} Ctrl + Alt + Del'),
-        ffi: ffi,
-        onPressed: () => bind.sessionCtrlAltDel(id: id));
-  }
-
-  restart() {
-    final perms = ffi.ffiModel.permissions;
-    final pi = ffi.ffiModel.pi;
-    final visible = perms['restart'] != false &&
-        (pi.platform == kPeerPlatformLinux ||
-            pi.platform == kPeerPlatformWindows ||
-            pi.platform == kPeerPlatformMacOS);
-    if (!visible) return Offstage();
-    return _MenuItemButton(
-        child: Text(translate('Restart Remote Device')),
-        ffi: ffi,
-        onPressed: () => showRestartRemoteDevice(pi, id, ffi.dialogManager));
-  }
-
-  insertLock() {
-    final viewOnly = ffi.ffiModel.viewOnly;
-    final visible = !viewOnly && ffi.ffiModel.keyboard;
-    if (!visible) return Offstage();
-    return _MenuItemButton(
-        child: Text(translate('Insert Lock')),
-        ffi: ffi,
-        onPressed: () => bind.sessionLockScreen(id: id));
-  }
-
-  blockUserInput() {
-    final pi = ffi.ffiModel.pi;
-    final visible =
-        ffi.ffiModel.keyboard && pi.platform == kPeerPlatformWindows;
-    if (!visible) return Offstage();
-    return _MenuItemButton(
-        child: Obx(() => Text(translate(
-            '${BlockInputState.find(id).value ? 'Unb' : 'B'}lock user input'))),
-        ffi: ffi,
-        onPressed: () {
-          RxBool blockInput = BlockInputState.find(id);
-          bind.sessionToggleOption(
-              id: id, value: '${blockInput.value ? 'un' : ''}block-input');
-          blockInput.value = !blockInput.value;
-        });
-  }
-
-  switchSides() {
-    final pi = ffi.ffiModel.pi;
-    final visible = ffi.ffiModel.keyboard &&
-        pi.platform != kPeerPlatformAndroid &&
-        pi.platform != kPeerPlatformMacOS &&
-        version_cmp(pi.version, '1.2.0') >= 0;
-    if (!visible) return Offstage();
-    return _MenuItemButton(
-        child: Text(translate('Switch Sides')),
-        ffi: ffi,
-        onPressed: () => _showConfirmSwitchSidesDialog(id, ffi.dialogManager));
-  }
-
-  void _showConfirmSwitchSidesDialog(
-      String id, OverlayDialogManager dialogManager) async {
-    dialogManager.show((setState, close) {
-      submit() async {
-        await bind.sessionSwitchSides(id: id);
-        closeConnection(id: id);
-      }
-
-      return CustomAlertDialog(
-        content: msgboxContent('info', 'Switch Sides',
-            'Please confirm if you want to share your desktop?'),
-        actions: [
-          dialogButton('Cancel', onPressed: close, isOutline: true),
-          dialogButton('OK', onPressed: submit),
-        ],
-        onSubmit: submit,
-        onCancel: close,
-      );
-    });
-  }
-
-  refresh() {
-    final pi = ffi.ffiModel.pi;
-    final visible = pi.version.isNotEmpty;
-    if (!visible) return Offstage();
-    return _MenuItemButton(
-        child: Text(translate('Refresh')),
-        ffi: ffi,
-        onPressed: () => bind.sessionRefresh(id: id));
+        }).toList());
   }
 }
 
@@ -891,6 +679,8 @@ class _DisplayMenuState extends State<_DisplayMenu> {
 
   PeerInfo get pi => widget.ffi.ffiModel.pi;
   FfiModel get ffiModel => widget.ffi.ffiModel;
+  FFI get ffi => widget.ffi;
+  String get id => widget.id;
 
   @override
   Widget build(BuildContext context) {
@@ -909,30 +699,26 @@ class _DisplayMenuState extends State<_DisplayMenu> {
           codec(),
           resolutions(),
           Divider(),
-          showRemoteCursor(),
-          zoomCursor(),
-          showQualityMonitor(),
-          mute(),
-          fileCopyAndPaste(),
-          disableClipboard(),
-          lockAfterSessionEnd(),
-          privacyMode(),
-          swapKey(),
+          toggles(),
         ]);
   }
 
   adjustWindow() {
-    final visible = _isWindowCanBeAdjusted();
-    if (!visible) return Offstage();
-    return Column(
-      children: [
-        _MenuItemButton(
-            child: Text(translate('Adjust Window')),
-            onPressed: _doAdjustWindow,
-            ffi: widget.ffi),
-        Divider(),
-      ],
-    );
+    return futureBuilder(
+        future: _isWindowCanBeAdjusted(),
+        hasData: (data) {
+          final visible = data as bool;
+          if (!visible) return Offstage();
+          return Column(
+            children: [
+              _MenuItemButton(
+                  child: Text(translate('Adjust Window')),
+                  onPressed: _doAdjustWindow,
+                  ffi: widget.ffi),
+              Divider(),
+            ],
+          );
+        });
   }
 
   _doAdjustWindow() async {
@@ -1004,8 +790,9 @@ class _DisplayMenuState extends State<_DisplayMenu> {
     }
   }
 
-  _isWindowCanBeAdjusted() {
-    if (widget.state.viewStyle.value != kRemoteViewStyleOriginal) {
+  Future<bool> _isWindowCanBeAdjusted() async {
+    final viewStyle = await bind.sessionGetViewStyle(id: widget.id) ?? '';
+    if (viewStyle != kRemoteViewStyleOriginal) {
       return false;
     }
     final remoteCount = RemoteCountState.find().value;
@@ -1035,47 +822,34 @@ class _DisplayMenuState extends State<_DisplayMenu> {
   }
 
   viewStyle() {
-    return futureBuilder(future: () async {
-      final viewStyle = await bind.sessionGetViewStyle(id: widget.id) ?? '';
-      widget.state.viewStyle.value = viewStyle;
-      return viewStyle;
-    }(), hasData: (data) {
-      final groupValue = data as String;
-      onChanged(String? value) async {
-        if (value == null) return;
-        await bind.sessionSetViewStyle(id: widget.id, value: value);
-        widget.state.viewStyle.value = value;
-        widget.ffi.canvasModel.updateViewStyle();
-      }
-
-      return Column(children: [
-        _RadioMenuButton<String>(
-          child: Text(translate('Scale original')),
-          value: kRemoteViewStyleOriginal,
-          groupValue: groupValue,
-          onChanged: onChanged,
-          ffi: widget.ffi,
-        ),
-        _RadioMenuButton<String>(
-          child: Text(translate('Scale adaptive')),
-          value: kRemoteViewStyleAdaptive,
-          groupValue: groupValue,
-          onChanged: onChanged,
-          ffi: widget.ffi,
-        ),
-        Divider(),
-      ]);
-    });
+    return futureBuilder(
+        future: toolbarViewStyle(context, widget.id, widget.ffi),
+        hasData: (data) {
+          final v = data as List<TRadioMenu<String>>;
+          return Column(children: [
+            ...v
+                .map((e) => _RadioMenuButton<String>(
+                    value: e.value,
+                    groupValue: e.groupValue,
+                    onChanged: e.onChanged,
+                    child: e.child,
+                    ffi: ffi))
+                .toList(),
+            Divider(),
+          ]);
+        });
   }
 
   scrollStyle() {
-    final visible = widget.state.viewStyle.value == kRemoteViewStyleOriginal;
-    if (!visible) return Offstage();
     return futureBuilder(future: () async {
+      final viewStyle = await bind.sessionGetViewStyle(id: id) ?? '';
+      final visible = viewStyle == kRemoteViewStyleOriginal;
       final scrollStyle = await bind.sessionGetScrollStyle(id: widget.id) ?? '';
-      return scrollStyle;
+      return {'visible': visible, 'scrollStyle': scrollStyle};
     }(), hasData: (data) {
-      final groupValue = data as String;
+      final visible = data['visible'] as bool;
+      if (!visible) return Offstage();
+      final groupValue = data['scrollStyle'] as String;
       onChange(String? value) async {
         if (value == null) return;
         await bind.sessionSetScrollStyle(id: widget.id, value: value);
@@ -1104,269 +878,44 @@ class _DisplayMenuState extends State<_DisplayMenu> {
   }
 
   imageQuality() {
-    return futureBuilder(future: () async {
-      final imageQuality =
-          await bind.sessionGetImageQuality(id: widget.id) ?? '';
-      return imageQuality;
-    }(), hasData: (data) {
-      final groupValue = data as String;
-      onChanged(String? value) async {
-        if (value == null) return;
-        await bind.sessionSetImageQuality(id: widget.id, value: value);
-      }
-
-      return _SubmenuButton(
-        ffi: widget.ffi,
-        child: Text(translate('Image Quality')),
-        menuChildren: [
-          _RadioMenuButton<String>(
-            child: Text(translate('Good image quality')),
-            value: kRemoteImageQualityBest,
-            groupValue: groupValue,
-            onChanged: onChanged,
+    return futureBuilder(
+        future: toolbarImageQuality(context, widget.id, widget.ffi),
+        hasData: (data) {
+          final v = data as List<TRadioMenu<String>>;
+          return _SubmenuButton(
             ffi: widget.ffi,
-          ),
-          _RadioMenuButton<String>(
-            child: Text(translate('Balanced')),
-            value: kRemoteImageQualityBalanced,
-            groupValue: groupValue,
-            onChanged: onChanged,
-            ffi: widget.ffi,
-          ),
-          _RadioMenuButton<String>(
-            child: Text(translate('Optimize reaction time')),
-            value: kRemoteImageQualityLow,
-            groupValue: groupValue,
-            onChanged: onChanged,
-            ffi: widget.ffi,
-          ),
-          _RadioMenuButton<String>(
-            child: Text(translate('Custom')),
-            value: kRemoteImageQualityCustom,
-            groupValue: groupValue,
-            onChanged: (value) {
-              onChanged(value);
-              _customImageQualityDialog();
-            },
-            ffi: widget.ffi,
-          ),
-        ],
-      );
-    });
-  }
-
-  _customImageQualityDialog() async {
-    double qualityInitValue = 50;
-    double fpsInitValue = 30;
-    bool qualitySet = false;
-    bool fpsSet = false;
-    setCustomValues({double? quality, double? fps}) async {
-      if (quality != null) {
-        qualitySet = true;
-        await bind.sessionSetCustomImageQuality(
-            id: widget.id, value: quality.toInt());
-      }
-      if (fps != null) {
-        fpsSet = true;
-        await bind.sessionSetCustomFps(id: widget.id, fps: fps.toInt());
-      }
-      if (!qualitySet) {
-        qualitySet = true;
-        await bind.sessionSetCustomImageQuality(
-            id: widget.id, value: qualityInitValue.toInt());
-      }
-      if (!fpsSet) {
-        fpsSet = true;
-        await bind.sessionSetCustomFps(
-            id: widget.id, fps: fpsInitValue.toInt());
-      }
-    }
-
-    final btnClose = dialogButton('Close', onPressed: () async {
-      await setCustomValues();
-      widget.ffi.dialogManager.dismissAll();
-    });
-
-    // quality
-    final quality = await bind.sessionGetCustomImageQuality(id: widget.id);
-    qualityInitValue =
-        quality != null && quality.isNotEmpty ? quality[0].toDouble() : 50.0;
-    const qualityMinValue = 10.0;
-    const qualityMaxValue = 100.0;
-    if (qualityInitValue < qualityMinValue) {
-      qualityInitValue = qualityMinValue;
-    }
-    if (qualityInitValue > qualityMaxValue) {
-      qualityInitValue = qualityMaxValue;
-    }
-    final RxDouble qualitySliderValue = RxDouble(qualityInitValue);
-    final debouncerQuality = Debouncer<double>(
-      Duration(milliseconds: 1000),
-      onChanged: (double v) {
-        setCustomValues(quality: v);
-      },
-      initialValue: qualityInitValue,
-    );
-    final qualitySlider = Obx(() => Row(
-          children: [
-            Slider(
-              value: qualitySliderValue.value,
-              min: qualityMinValue,
-              max: qualityMaxValue,
-              divisions: 18,
-              onChanged: (double value) {
-                qualitySliderValue.value = value;
-                debouncerQuality.value = value;
-              },
-            ),
-            SizedBox(
-                width: 40,
-                child: Text(
-                  '${qualitySliderValue.value.round()}%',
-                  style: const TextStyle(fontSize: 15),
-                )),
-            SizedBox(
-                width: 50,
-                child: Text(
-                  translate('Bitrate'),
-                  style: const TextStyle(fontSize: 15),
-                ))
-          ],
-        ));
-    // fps
-    final fpsOption =
-        await bind.sessionGetOption(id: widget.id, arg: 'custom-fps');
-    fpsInitValue = fpsOption == null ? 30 : double.tryParse(fpsOption) ?? 30;
-    if (fpsInitValue < 5 || fpsInitValue > 120) {
-      fpsInitValue = 30;
-    }
-    final RxDouble fpsSliderValue = RxDouble(fpsInitValue);
-    final debouncerFps = Debouncer<double>(
-      Duration(milliseconds: 1000),
-      onChanged: (double v) {
-        setCustomValues(fps: v);
-      },
-      initialValue: qualityInitValue,
-    );
-    bool? direct;
-    try {
-      direct = ConnectionTypeState.find(widget.id).direct.value ==
-          ConnectionType.strDirect;
-    } catch (_) {}
-    final fpsSlider = Offstage(
-      offstage: (await bind.mainIsUsingPublicServer() && direct != true) ||
-          version_cmp(pi.version, '1.2.0') < 0,
-      child: Row(
-        children: [
-          Obx((() => Slider(
-                value: fpsSliderValue.value,
-                min: 5,
-                max: 120,
-                divisions: 23,
-                onChanged: (double value) {
-                  fpsSliderValue.value = value;
-                  debouncerFps.value = value;
-                },
-              ))),
-          SizedBox(
-              width: 40,
-              child: Obx(() => Text(
-                    '${fpsSliderValue.value.round()}',
-                    style: const TextStyle(fontSize: 15),
-                  ))),
-          SizedBox(
-              width: 50,
-              child: Text(
-                translate('FPS'),
-                style: const TextStyle(fontSize: 15),
-              ))
-        ],
-      ),
-    );
-
-    final content = Column(
-      children: [qualitySlider, fpsSlider],
-    );
-    msgBoxCommon(
-        widget.ffi.dialogManager, 'Custom Image Quality', content, [btnClose]);
+            child: Text(translate('Image Quality')),
+            menuChildren: v
+                .map((e) => _RadioMenuButton<String>(
+                    value: e.value,
+                    groupValue: e.groupValue,
+                    onChanged: e.onChanged,
+                    child: e.child,
+                    ffi: ffi))
+                .toList(),
+          );
+        });
   }
 
   codec() {
-    return futureBuilder(future: () async {
-      final alternativeCodecs =
-          await bind.sessionAlternativeCodecs(id: widget.id);
-      final codecPreference =
-          await bind.sessionGetOption(id: widget.id, arg: 'codec-preference') ??
-              '';
-      return {
-        'alternativeCodecs': alternativeCodecs,
-        'codecPreference': codecPreference
-      };
-    }(), hasData: (data) {
-      final List<bool> codecs = [];
-      try {
-        final Map codecsJson = jsonDecode(data['alternativeCodecs']);
-        final vp8 = codecsJson['vp8'] ?? false;
-        final h264 = codecsJson['h264'] ?? false;
-        final h265 = codecsJson['h265'] ?? false;
-        codecs.add(vp8);
-        codecs.add(h264);
-        codecs.add(h265);
-      } catch (e) {
-        debugPrint("Show Codec Preference err=$e");
-      }
-      final visible =
-          codecs.length == 3 && (codecs[0] || codecs[1] || codecs[2]);
-      if (!visible) return Offstage();
-      final groupValue = data['codecPreference'] as String;
-      onChanged(String? value) async {
-        if (value == null) return;
-        await bind.sessionPeerOption(
-            id: widget.id, name: 'codec-preference', value: value);
-        bind.sessionChangePreferCodec(id: widget.id);
-      }
+    return futureBuilder(
+        future: toolbarCodec(context, id, ffi),
+        hasData: (data) {
+          final v = data as List<TRadioMenu<String>>;
+          if (v.isEmpty) return Offstage();
 
-      return _SubmenuButton(
-          ffi: widget.ffi,
-          child: Text(translate('Codec')),
-          menuChildren: [
-            _RadioMenuButton<String>(
-              child: Text(translate('Auto')),
-              value: 'auto',
-              groupValue: groupValue,
-              onChanged: onChanged,
+          return _SubmenuButton(
               ffi: widget.ffi,
-            ),
-            _RadioMenuButton<String>(
-              child: Text(translate('VP8')),
-              value: 'vp8',
-              groupValue: groupValue,
-              onChanged: codecs[0] ? onChanged : null,
-              ffi: widget.ffi,
-            ),
-            _RadioMenuButton<String>(
-              child: Text(translate('VP9')),
-              value: 'vp9',
-              groupValue: groupValue,
-              onChanged: onChanged,
-              ffi: widget.ffi,
-            ),
-            _RadioMenuButton<String>(
-              child: Text(translate('H264')),
-              value: 'h264',
-              groupValue: groupValue,
-              onChanged: codecs[1] ? onChanged : null,
-              ffi: widget.ffi,
-            ),
-            _RadioMenuButton<String>(
-              child: Text(translate('H265')),
-              value: 'h265',
-              groupValue: groupValue,
-              onChanged: codecs[2] ? onChanged : null,
-              ffi: widget.ffi,
-            ),
-          ]);
-    });
+              child: Text(translate('Codec')),
+              menuChildren: v
+                  .map((e) => _RadioMenuButton(
+                      value: e.value,
+                      groupValue: e.groupValue,
+                      onChanged: e.onChanged,
+                      child: e.child,
+                      ffi: ffi))
+                  .toList());
+        });
   }
 
   resolutions() {
@@ -1387,7 +936,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
           Future.delayed(Duration(seconds: 3), () async {
             final display = ffiModel.display;
             if (w == display.width && h == display.height) {
-              if (_isWindowCanBeAdjusted()) {
+              if (await _isWindowCanBeAdjusted()) {
                 _doAdjustWindow();
               }
             }
@@ -1409,169 +958,21 @@ class _DisplayMenuState extends State<_DisplayMenu> {
         child: Text(translate("Resolution")));
   }
 
-  showRemoteCursor() {
-    if (pi.platform == kPeerPlatformAndroid) {
-      return Offstage();
-    }
-    final visible =
-        !widget.ffi.canvasModel.cursorEmbedded && !ffiModel.pi.is_wayland;
-    if (!visible) return Offstage();
-    final enabled = !ffiModel.viewOnly;
-    final state = ShowRemoteCursorState.find(widget.id);
-    final option = 'show-remote-cursor';
-    return _CheckboxMenuButton(
-        value: state.value,
-        onChanged: enabled
-            ? (value) async {
-                if (value == null) return;
-                await bind.sessionToggleOption(id: widget.id, value: option);
-                state.value =
-                    bind.sessionGetToggleOptionSync(id: widget.id, arg: option);
-              }
-            : null,
-        ffi: widget.ffi,
-        child: Text(translate('Show remote cursor')));
-  }
-
-  zoomCursor() {
-    if (pi.platform == kPeerPlatformAndroid) {
-      return Offstage();
-    }
-    final visible = widget.state.viewStyle.value != kRemoteViewStyleOriginal;
-    if (!visible) return Offstage();
-    final option = 'zoom-cursor';
-    final peerState = PeerBoolOption.find(widget.id, option);
-    return _CheckboxMenuButton(
-        value: peerState.value,
-        onChanged: (value) async {
-          if (value == null) return;
-          await bind.sessionToggleOption(id: widget.id, value: option);
-          peerState.value =
-              bind.sessionGetToggleOptionSync(id: widget.id, arg: option);
-        },
-        ffi: widget.ffi,
-        child: Text(translate('Zoom cursor')));
-  }
-
-  showQualityMonitor() {
-    final option = 'show-quality-monitor';
-    final value = bind.sessionGetToggleOptionSync(id: widget.id, arg: option);
-    return _CheckboxMenuButton(
-        value: value,
-        onChanged: (value) async {
-          if (value == null) return;
-          await bind.sessionToggleOption(id: widget.id, value: option);
-          widget.ffi.qualityMonitorModel.checkShowQualityMonitor(widget.id);
-        },
-        ffi: widget.ffi,
-        child: Text(translate('Show quality monitor')));
-  }
-
-  mute() {
-    final visible = perms['audio'] != false;
-    if (!visible) return Offstage();
-    final option = 'disable-audio';
-    final value = bind.sessionGetToggleOptionSync(id: widget.id, arg: option);
-    return _CheckboxMenuButton(
-        value: value,
-        onChanged: (value) {
-          if (value == null) return;
-          bind.sessionToggleOption(id: widget.id, value: option);
-        },
-        ffi: widget.ffi,
-        child: Text(translate('Mute')));
-  }
-
-  fileCopyAndPaste() {
-    final visible = Platform.isWindows &&
-        pi.platform == kPeerPlatformWindows &&
-        perms['file'] != false;
-    if (!visible) return Offstage();
-    final option = 'enable-file-transfer';
-    final value = bind.sessionGetToggleOptionSync(id: widget.id, arg: option);
-    return _CheckboxMenuButton(
-        value: value,
-        onChanged: (value) {
-          if (value == null) return;
-          bind.sessionToggleOption(id: widget.id, value: option);
-        },
-        ffi: widget.ffi,
-        child: Text(translate('Allow file copy and paste')));
-  }
-
-  disableClipboard() {
-    final visible = ffiModel.keyboard && perms['clipboard'] != false;
-    if (!visible) return Offstage();
-    final enabled = !ffiModel.viewOnly;
-    final option = 'disable-clipboard';
-    var value = bind.sessionGetToggleOptionSync(id: widget.id, arg: option);
-    if (ffiModel.viewOnly) value = true;
-    return _CheckboxMenuButton(
-        value: value,
-        onChanged: enabled
-            ? (value) {
-                if (value == null) return;
-                bind.sessionToggleOption(id: widget.id, value: option);
-              }
-            : null,
-        ffi: widget.ffi,
-        child: Text(translate('Disable clipboard')));
-  }
-
-  lockAfterSessionEnd() {
-    if (!ffiModel.keyboard) return Offstage();
-    final option = 'lock-after-session-end';
-    final value = bind.sessionGetToggleOptionSync(id: widget.id, arg: option);
-    return _CheckboxMenuButton(
-        value: value,
-        onChanged: (value) {
-          if (value == null) return;
-          bind.sessionToggleOption(id: widget.id, value: option);
-        },
-        ffi: widget.ffi,
-        child: Text(translate('Lock after session end')));
-  }
-
-  privacyMode() {
-    bool visible = ffiModel.keyboard && pi.features.privacyMode;
-    if (!visible) return Offstage();
-    final option = 'privacy-mode';
-    final rxValue = PrivacyModeState.find(widget.id);
-    return _CheckboxMenuButton(
-        value: rxValue.value,
-        onChanged: (value) {
-          if (value == null) return;
-          if (ffiModel.pi.currentDisplay != 0) {
-            msgBox(
-                widget.id,
-                'custom-nook-nocancel-hasclose',
-                'info',
-                'Please switch to Display 1 first',
-                '',
-                widget.ffi.dialogManager);
-            return;
-          }
-          bind.sessionToggleOption(id: widget.id, value: option);
-        },
-        ffi: widget.ffi,
-        child: Text(translate('Privacy mode')));
-  }
-
-  swapKey() {
-    final visible = ffiModel.keyboard &&
-        ((Platform.isMacOS && pi.platform != kPeerPlatformMacOS) ||
-            (!Platform.isMacOS && pi.platform == kPeerPlatformMacOS));
-    if (!visible) return Offstage();
-    final option = 'allow_swap_key';
-    final value = bind.sessionGetToggleOptionSync(id: widget.id, arg: option);
-    return _CheckboxMenuButton(
-        value: value,
-        onChanged: (value) {
-          if (value == null) return;
-          bind.sessionToggleOption(id: widget.id, value: option);
-        },
-        ffi: widget.ffi,
-        child: Text(translate('Swap control-command key')));
+  toggles() {
+    return futureBuilder(
+        future: toolbarDisplayToggle(context, id, ffi),
+        hasData: (data) {
+          final v = data as List<TToggleMenu>;
+          if (v.isEmpty) return Offstage();
+          return Column(
+              children: v
+                  .map((e) => _CheckboxMenuButton(
+                      value: e.value,
+                      onChanged: e.onChanged,
+                      child: e.child,
+                      ffi: ffi))
+                  .toList());
+        });
   }
 }
 
@@ -1799,19 +1200,22 @@ class _RecordMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var ffi = Provider.of<FfiModel>(context);
-    final visible = ffi.permissions['recording'] != false;
+    var recordingModel = Provider.of<RecordingModel>(context);
+    final visible =
+        recordingModel.start || ffi.permissions['recording'] != false;
     if (!visible) return Offstage();
-    return Consumer<RecordingModel>(
-      builder: (context, value, child) => _IconMenuButton(
-        assetName: 'assets/rec.svg',
-        tooltip:
-            value.start ? 'Stop session recording' : 'Start session recording',
-        onPressed: () => value.toggle(),
-        color: value.start ? _MenubarTheme.redColor : _MenubarTheme.blueColor,
-        hoverColor: value.start
-            ? _MenubarTheme.hoverRedColor
-            : _MenubarTheme.hoverBlueColor,
-      ),
+    return _IconMenuButton(
+      assetName: 'assets/rec.svg',
+      tooltip: recordingModel.start
+          ? 'Stop session recording'
+          : 'Start session recording',
+      onPressed: () => recordingModel.toggle(),
+      color: recordingModel.start
+          ? _MenubarTheme.redColor
+          : _MenubarTheme.blueColor,
+      hoverColor: recordingModel.start
+          ? _MenubarTheme.hoverRedColor
+          : _MenubarTheme.hoverBlueColor,
     );
   }
 }

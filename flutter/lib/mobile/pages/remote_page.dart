@@ -4,10 +4,13 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hbb/common/shared_state.dart';
+import 'package:flutter_hbb/common/widgets/toolbar.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/mobile/widgets/gesture_help.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_keyboard_visibility/flutter_keyboard_visibility.dart';
+import 'package:get/get.dart';
 import 'package:get/get_state_manager/src/rx_flutter/rx_obx_widget.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock/wakelock.dart';
@@ -69,6 +72,7 @@ class _RemotePageState extends State<RemotePage> {
     keyboardSubscription =
         keyboardVisibilityController.onChange.listen(onSoftKeyboardChanged);
     _blockableOverlayState.applyFfi(gFFI);
+    initSharedStates(widget.id);
   }
 
   @override
@@ -85,6 +89,7 @@ class _RemotePageState extends State<RemotePage> {
         overlays: SystemUiOverlay.values);
     Wakelock.disable();
     keyboardSubscription.cancel();
+    removeSharedStates(widget.id);
     super.dispose();
   }
 
@@ -543,150 +548,21 @@ class _RemotePageState extends State<RemotePage> {
     final size = MediaQuery.of(context).size;
     final x = 120.0;
     final y = size.height;
-    final more = <PopupMenuItem<String>>[];
-    final pi = gFFI.ffiModel.pi;
-    final perms = gFFI.ffiModel.permissions;
-    if (pi.version.isNotEmpty) {
-      more.add(PopupMenuItem<String>(
-          child: Text(translate('Refresh')), value: 'refresh'));
-    }
-    if (gFFI.ffiModel.pi.is_headless) {
-      more.add(
-        PopupMenuItem<String>(
-            child: Row(
-                children: ([
-              Text(translate('OS Account')),
-              TextButton(
-                style: flatButtonStyle,
-                onPressed: () {
-                  showSetOSAccount(id, gFFI.dialogManager);
-                },
-                child: Icon(Icons.edit, color: MyTheme.accent),
-              )
-            ])),
-            value: 'enter_os_account'),
-      );
-    } else {
-      more.add(
-        PopupMenuItem<String>(
-            child: Row(
-                children: ([
-              Text(translate('OS Password')),
-              TextButton(
-                style: flatButtonStyle,
-                onPressed: () {
-                  showSetOSPassword(id, false, gFFI.dialogManager);
-                },
-                child: Icon(Icons.edit, color: MyTheme.accent),
-              )
-            ])),
-            value: 'enter_os_password'),
-      );
-    }
-    if (!isWebDesktop) {
-      if (perms['keyboard'] != false && perms['clipboard'] != false) {
-        more.add(PopupMenuItem<String>(
-            child: Text(translate('Paste')), value: 'paste'));
-      }
-      more.add(PopupMenuItem<String>(
-          child: Text(translate('Reset canvas')), value: 'reset_canvas'));
-    }
-    if (perms['keyboard'] != false) {
-      // * Currently mobile does not enable map mode
-      // more.add(PopupMenuItem<String>(
-      //     child: Text(translate('Physical Keyboard Input Mode')),
-      //     value: 'input-mode'));
-      if (pi.platform == kPeerPlatformLinux || pi.sasEnabled) {
-        more.add(PopupMenuItem<String>(
-            child: Text('${translate('Insert')} Ctrl + Alt + Del'),
-            value: 'cad'));
-      }
-      more.add(PopupMenuItem<String>(
-          child: Text(translate('Insert Lock')), value: 'lock'));
-      if (pi.platform == kPeerPlatformWindows &&
-          await bind.sessionGetToggleOption(id: id, arg: 'privacy-mode') !=
-              true) {
-        more.add(PopupMenuItem<String>(
-            child: Text(translate(
-                '${gFFI.ffiModel.inputBlocked ? 'Unb' : 'B'}lock user input')),
-            value: 'block-input'));
-      }
-    }
-    if (perms["restart"] != false &&
-        (pi.platform == kPeerPlatformLinux ||
-            pi.platform == kPeerPlatformWindows ||
-            pi.platform == kPeerPlatformMacOS)) {
-      more.add(PopupMenuItem<String>(
-          child: Text(translate('Restart Remote Device')), value: 'restart'));
-    }
-    // Currently only support VP9
-    if (gFFI.recordingModel.start ||
-        (perms["recording"] != false &&
-            gFFI.qualityMonitorModel.data.codecFormat == "VP9")) {
-      more.add(PopupMenuItem<String>(
-          child: Row(
-            children: [
-              Text(translate(gFFI.recordingModel.start
-                  ? 'Stop session recording'
-                  : 'Start session recording')),
-              Padding(
-                padding: EdgeInsets.only(left: 12),
-                child: Icon(
-                    gFFI.recordingModel.start
-                        ? Icons.pause_circle_filled
-                        : Icons.videocam_outlined,
-                    color: MyTheme.accent),
-              )
-            ],
-          ),
-          value: 'record'));
-    }
+    final menus = toolbarControls(context, id, gFFI);
+    final more = menus
+        .asMap()
+        .entries
+        .map((e) => PopupMenuItem<int>(child: e.value.child, value: e.key))
+        .toList();
     () async {
-      var value = await showMenu(
+      var index = await showMenu(
         context: context,
         position: RelativeRect.fromLTRB(x, y, x, y),
         items: more,
         elevation: 8,
       );
-      if (value == 'cad') {
-        bind.sessionCtrlAltDel(id: widget.id);
-        // * Currently mobile does not enable map mode
-        // } else if (value == 'input-mode') {
-        //   changePhysicalKeyboardInputMode();
-      } else if (value == 'lock') {
-        bind.sessionLockScreen(id: widget.id);
-      } else if (value == 'block-input') {
-        bind.sessionToggleOption(
-            id: widget.id,
-            value: '${gFFI.ffiModel.inputBlocked ? 'un' : ''}block-input');
-        gFFI.ffiModel.inputBlocked = !gFFI.ffiModel.inputBlocked;
-      } else if (value == 'refresh') {
-        bind.sessionRefresh(id: widget.id);
-      } else if (value == 'paste') {
-        () async {
-          ClipboardData? data = await Clipboard.getData(Clipboard.kTextPlain);
-          if (data != null && data.text != null) {
-            bind.sessionInputString(id: widget.id, value: data.text ?? "");
-          }
-        }();
-      } else if (value == 'enter_os_password') {
-        // FIXME:
-        // null means no session of id
-        // empty string means no password
-        var password = await bind.sessionGetOption(id: id, arg: 'os-password');
-        if (password != null) {
-          bind.sessionInputOsPassword(id: widget.id, value: password);
-        } else {
-          showSetOSPassword(id, true, gFFI.dialogManager);
-        }
-      } else if (value == 'enter_os_account') {
-        showSetOSAccount(id, gFFI.dialogManager);
-      } else if (value == 'reset_canvas') {
-        gFFI.cursorModel.reset();
-      } else if (value == 'restart') {
-        showRestartRemoteDevice(pi, widget.id, gFFI.dialogManager);
-      } else if (value == 'record') {
-        gFFI.recordingModel.toggle();
+      if (index != null && index < menus.length) {
+        menus[index].onPressed.call();
       }
     }();
   }
@@ -941,14 +817,6 @@ class CursorPaint extends StatelessWidget {
 
 void showOptions(
     BuildContext context, String id, OverlayDialogManager dialogManager) async {
-  String quality =
-      await bind.sessionGetImageQuality(id: id) ?? kRemoteImageQualityBalanced;
-  if (quality == '') quality = kRemoteImageQualityBalanced;
-  String codec =
-      await bind.sessionGetOption(id: id, arg: 'codec-preference') ?? 'auto';
-  if (codec == '') codec = 'auto';
-  String viewStyle = await bind.sessionGetViewStyle(id: id) ?? '';
-
   var displays = <Widget>[];
   final pi = gFFI.ffiModel.pi;
   final image = gFFI.ffiModel.getConnectionImage();
@@ -991,107 +859,61 @@ void showOptions(
   if (displays.isNotEmpty) {
     displays.add(const Divider(color: MyTheme.border));
   }
-  final perms = gFFI.ffiModel.permissions;
-  final hasHwcodec = bind.mainHasHwcodec();
-  final List<bool> codecs = [];
-  try {
-    final Map codecsJson =
-        jsonDecode(await bind.sessionAlternativeCodecs(id: id));
-    final vp8 = codecsJson['vp8'] ?? false;
-    final h264 = codecsJson['h264'] ?? false;
-    final h265 = codecsJson['h265'] ?? false;
-    codecs.add(vp8);
-    codecs.add(h264);
-    codecs.add(h265);
-  } catch (e) {
-    debugPrint("Show Codec Preference err=$e");
-  }
+
+  List<TRadioMenu<String>> viewStyleRadios =
+      await toolbarViewStyle(context, id, gFFI);
+  List<TRadioMenu<String>> imageQualityRadios =
+      await toolbarImageQuality(context, id, gFFI);
+  List<TRadioMenu<String>> codecRadios = await toolbarCodec(context, id, gFFI);
+  List<TToggleMenu> displayToggles =
+      await toolbarDisplayToggle(context, id, gFFI);
 
   dialogManager.show((setState, close) {
-    final more = <Widget>[];
-    if (perms['audio'] != false) {
-      more.add(getToggle(id, setState, 'disable-audio', 'Mute'));
-    }
-    if (perms['keyboard'] != false) {
-      if (perms['clipboard'] != false) {
-        more.add(
-            getToggle(id, setState, 'disable-clipboard', 'Disable clipboard'));
-      }
-      more.add(getToggle(
-          id, setState, 'lock-after-session-end', 'Lock after session end'));
-      if (pi.platform == kPeerPlatformWindows) {
-        more.add(getToggle(id, setState, 'privacy-mode', 'Privacy mode'));
-      }
-    }
-    setQuality(String? value) {
-      if (value == null) return;
-      setState(() {
-        quality = value;
-        bind.sessionSetImageQuality(id: id, value: value);
-      });
-    }
-
-    setViewStyle(String? value) {
-      if (value == null) return;
-      setState(() {
-        viewStyle = value;
-        bind
-            .sessionSetViewStyle(id: id, value: value)
-            .then((_) => gFFI.canvasModel.updateViewStyle());
-      });
-    }
-
-    setCodec(String? value) {
-      if (value == null) return;
-      setState(() {
-        codec = value;
-        bind
-            .sessionPeerOption(id: id, name: "codec-preference", value: value)
-            .then((_) => bind.sessionChangePreferCodec(id: id));
-      });
-    }
-
+    var viewStyle =
+        (viewStyleRadios.isNotEmpty ? viewStyleRadios[0].groupValue : '').obs;
+    var imageQuality =
+        (imageQualityRadios.isNotEmpty ? imageQualityRadios[0].groupValue : '')
+            .obs;
+    var codec = (codecRadios.isNotEmpty ? codecRadios[0].groupValue : '').obs;
     final radios = [
-      getRadio(
-          'Scale original', kRemoteViewStyleOriginal, viewStyle, setViewStyle),
-      getRadio(
-          'Scale adaptive', kRemoteViewStyleAdaptive, viewStyle, setViewStyle),
+      for (var e in viewStyleRadios)
+        Obx(() => getRadio<String>(e.child, e.value, viewStyle.value, (v) {
+              e.onChanged?.call(v);
+              if (v != null) viewStyle.value = v;
+            })),
       const Divider(color: MyTheme.border),
-      getRadio(
-          'Good image quality', kRemoteImageQualityBest, quality, setQuality),
-      getRadio('Balanced', kRemoteImageQualityBalanced, quality, setQuality),
-      getRadio('Optimize reaction time', kRemoteImageQualityLow, quality,
-          setQuality),
-      const Divider(color: MyTheme.border)
+      for (var e in imageQualityRadios)
+        Obx(() => getRadio<String>(e.child, e.value, imageQuality.value, (v) {
+              e.onChanged?.call(v);
+              if (v != null) imageQuality.value = v;
+            })),
+      const Divider(color: MyTheme.border),
+      for (var e in codecRadios)
+        Obx(() => getRadio<String>(e.child, e.value, codec.value, (v) {
+              e.onChanged?.call(v);
+              if (v != null) codec.value = v;
+            })),
+      if (codecRadios.isNotEmpty) const Divider(color: MyTheme.border),
     ];
-
-    if (codecs.length == 3 && (codecs[0] || codecs[1] || codecs[2])) {
-      radios.add(getRadio(translate('Auto'), 'auto', codec, setCodec));
-      if (codecs[0]) {
-        radios.add(getRadio('VP8', 'vp8', codec, setCodec));
-      }
-      radios.add(getRadio('VP9', 'vp9', codec, setCodec));
-      if (codecs[1]) {
-        radios.add(getRadio('H264', 'h264', codec, setCodec));
-      }
-      if (codecs[2]) {
-        radios.add(getRadio('H265', 'h265', codec, setCodec));
-      }
-      radios.add(const Divider(color: MyTheme.border));
-    }
-
-    final toggles = [
-      getToggle(id, setState, 'show-quality-monitor', 'Show quality monitor'),
-    ];
-    if (!gFFI.canvasModel.cursorEmbedded && !pi.is_wayland) {
-      toggles.insert(0,
-          getToggle(id, setState, 'show-remote-cursor', 'Show remote cursor'));
-    }
+    final rxToggleValues = displayToggles.map((e) => e.value.obs).toList();
+    final toggles = displayToggles
+        .asMap()
+        .entries
+        .map((e) => Obx(() => CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            visualDensity: VisualDensity.compact,
+            value: rxToggleValues[e.key].value,
+            onChanged: (v) {
+              e.value.onChanged?.call(v);
+              if (v != null) rxToggleValues[e.key].value = v;
+            },
+            title: e.value.child)))
+        .toList();
 
     return CustomAlertDialog(
       content: Column(
           mainAxisSize: MainAxisSize.min,
-          children: displays + radios + toggles + more),
+          children: displays + radios + toggles),
     );
   }, clickMaskDismiss: true, backDismiss: true);
 }

@@ -77,29 +77,13 @@ class _RemotePageState extends State<RemotePage>
   late FFI _ffi;
 
   void _initStates(String id) {
-    PrivacyModeState.init(id);
-    BlockInputState.init(id);
-    CurrentDisplayState.init(id);
-    KeyboardEnabledState.init(id);
-    ShowRemoteCursorState.init(id);
-    RemoteCursorMovedState.init(id);
-    final optZoomCursor = 'zoom-cursor';
-    PeerBoolOption.init(id, optZoomCursor, () => false);
-    _zoomCursor = PeerBoolOption.find(id, optZoomCursor);
+    initSharedStates(id);
+    _zoomCursor = PeerBoolOption.find(id, 'zoom-cursor');
     _showRemoteCursor = ShowRemoteCursorState.find(id);
     _keyboardEnabled = KeyboardEnabledState.find(id);
     _remoteCursorMoved = RemoteCursorMovedState.find(id);
     _textureKey = newTextureId;
     _textureId = RxInt(-1);
-  }
-
-  void _removeStates(String id) {
-    PrivacyModeState.delete(id);
-    BlockInputState.delete(id);
-    CurrentDisplayState.delete(id);
-    ShowRemoteCursorState.delete(id);
-    KeyboardEnabledState.delete(id);
-    RemoteCursorMovedState.delete(id);
   }
 
   @override
@@ -217,7 +201,7 @@ class _RemotePageState extends State<RemotePage>
     }
     Get.delete<FFI>(tag: widget.id);
     super.dispose();
-    _removeStates(widget.id);
+    removeSharedStates(widget.id);
   }
 
   Widget buildBody(BuildContext context) {
