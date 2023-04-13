@@ -491,5 +491,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("xorg_not_found_text_tip", "لطفا Xorg را نصب کنید"),
         ("no_desktop_title_tip", "هیچ دسکتاپی در دسترس نیست"),
         ("no_desktop_text_tip", "لطفا دسکتاپ گنوم را نصب کنید"),
+        ("No need to elevate", ""),
     ].iter().cloned().collect();
 }

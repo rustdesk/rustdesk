@@ -113,7 +113,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Finished", "Fertiggestellt"),
         ("Speed", "Geschwindigkeit"),
         ("Custom Image Quality", "Benutzerdefinierte Bildqualität"),
-        ("Privacy mode", "Datenschutz-Modus"),
+        ("Privacy mode", "Datenschutzmodus"),
         ("Block user input", "Benutzereingaben blockieren"),
         ("Unblock user input", "Benutzereingaben freigeben"),
         ("Adjust Window", "Fenster anpassen"),
@@ -357,7 +357,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable Audio", "Audio aktivieren"),
         ("Unlock Network Settings", "Netzwerkeinstellungen entsperren"),
         ("Server", "Server"),
-        ("Direct IP Access", "Direkter IP-Zugriff"),
+        ("Direct IP Access", "Direkter IP-Zugang"),
         ("Proxy", "Proxy"),
         ("Apply", "Anwenden"),
         ("Disconnect all devices?", "Alle Geräte trennen?"),
@@ -491,5 +491,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("xorg_not_found_text_tip", "Bitte installieren Sie Xorg."),
         ("no_desktop_title_tip", "Es ist kein Desktop verfügbar."),
         ("no_desktop_text_tip", "Bitte installieren Sie den GNOME-Desktop."),
+        ("No need to elevate", "Erhöhung der Rechte nicht erforderlich"),
     ].iter().cloned().collect();
 }

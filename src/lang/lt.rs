@@ -491,5 +491,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("xorg_not_found_text_tip", "Prašom įdiegti Xorg"),
         ("no_desktop_title_tip", "Nėra pasiekiamų nuotolinių darbalaukių"),
         ("no_desktop_text_tip", "Prašom įdiegti GNOME Desktop"),
+        ("No need to elevate", ""),
     ].iter().cloned().collect();
 }
