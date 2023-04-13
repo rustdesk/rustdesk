@@ -31,6 +31,7 @@ default = ["use_dasp"]
 hwcodec = ["scrap/hwcodec"]
 mediacodec = ["scrap/mediacodec"]
 linux_headless = ["pam", "users"]
+virtual_display_driver = ["virtual_display"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -94,7 +95,7 @@ winit = "0.26"
 winapi = { version = "0.3", features = ["winuser", "wincrypt"] }
 winreg = "0.10"
 windows-service = "0.4"
-virtual_display = { path = "libs/virtual_display" }
+virtual_display = { path = "libs/virtual_display", optional = true }
 impersonate_system = { git = "https://github.com/21pages/impersonate-system" }
 shared_memory = "0.12"
 shutdown_hooks = "0.1"

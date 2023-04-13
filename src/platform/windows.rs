@@ -1,7 +1,8 @@
 use super::{CursorData, ResultType};
 use crate::common::PORTABLE_APPNAME_RUNTIME_ENV_KEY;
-use crate::ipc;
-use crate::license::*;
+#[cfg(feature = "privacy_win_mag")]
+use crate::privacy_mode::privacy_win_mag;
+use crate::{ipc, license::*, privacy_mode::WIN_MAG_INJECTED_PROCESS_EXE};
 use hbb_common::{
     allow_err, bail,
     config::{self, Config},
@@ -9,10 +10,12 @@ use hbb_common::{
     message_proto::Resolution,
     sleep, timeout, tokio,
 };
+#[cfg(feature = "privacy_win_mag")]
+use std::fs;
 use std::{
     collections::HashMap,
     ffi::OsString,
-    fs, io,
+    io,
     io::prelude::*,
     mem,
     os::windows::process::CommandExt,
@@ -836,10 +839,11 @@ fn get_default_install_path() -> String {
     format!("{}\\{}", pf, crate::get_app_name())
 }
 
+#[cfg(feature = "privacy_win_mag")]
 pub fn check_update_broker_process() -> ResultType<()> {
     // let (_, path, _, _) = get_install_info();
-    let process_exe = crate::win_privacy::INJECTED_PROCESS_EXE;
-    let origin_process_exe = crate::win_privacy::ORIGIN_PROCESS_EXE;
+    let process_exe = privacy_win_mag::INJECTED_PROCESS_EXE;
+    let origin_process_exe = privacy_win_mag::ORIGIN_PROCESS_EXE;
 
     let exe_file = std::env::current_exe()?;
     if exe_file.parent().is_none() {
@@ -922,17 +926,31 @@ pub fn copy_raw_cmd(src_raw: &str, _raw: &str, _path: &str) -> String {
 pub fn copy_exe_cmd(src_exe: &str, exe: &str, path: &str) -> String {
     let main_exe = copy_raw_cmd(src_exe, exe, path);
 
-    return format!(
-        "
-        {main_exe}
-        copy /Y \"{ORIGIN_PROCESS_EXE}\" \"{path}\\{broker_exe}\"
-        \"{src_exe}\" --extract \"{path}\"
-        ",
-        main_exe = main_exe,
-        path = path,
-        ORIGIN_PROCESS_EXE = crate::win_privacy::ORIGIN_PROCESS_EXE,
-        broker_exe = crate::win_privacy::INJECTED_PROCESS_EXE,
-    );
+    #[cfg(feature = "privacy_win_mag")]
+    {
+        format!(
+            "
+            {main_exe}
+            copy /Y \"{ORIGIN_PROCESS_EXE}\" \"{path}\\{broker_exe}\"
+            \"{src_exe}\" --extract \"{path}\"
+            ",
+            main_exe = main_exe,
+            path = path,
+            ORIGIN_PROCESS_EXE = privacy_win_mag::ORIGIN_PROCESS_EXE,
+            broker_exe = privacy_win_mag::INJECTED_PROCESS_EXE,
+        )
+    }
+    #[cfg(not(feature = "privacy_win_mag"))]
+    {
+        format!(
+            "
+            {main_exe}
+            \"{src_exe}\" --extract \"{path}\"
+            ",
+            main_exe = main_exe,
+            path = path,
+        )
+    }
 }
 
 pub fn update_me() -> ResultType<()> {
@@ -963,7 +981,7 @@ pub fn update_me() -> ResultType<()> {
     ",
         copy_exe = copy_exe_cmd(&src_exe, &exe, &path),
         copy_dll = copy_dll,
-        broker_exe = crate::win_privacy::INJECTED_PROCESS_EXE,
+        broker_exe = WIN_MAG_INJECTED_PROCESS_EXE,
         app_name = crate::get_app_name(),
         lic = register_licence(),
         cur_pid = get_current_pid(),
@@ -1257,7 +1275,7 @@ fn get_before_uninstall(kill_self: bool) -> String {
     netsh advfirewall firewall delete rule name=\"{app_name} Service\"
     ",
         app_name = app_name,
-        broker_exe = crate::win_privacy::INJECTED_PROCESS_EXE,
+        broker_exe = WIN_MAG_INJECTED_PROCESS_EXE,
         ext = ext,
         filter = filter,
     )
@@ -2178,6 +2196,14 @@ pub fn get_unicode_from_vk(vk: u32) -> Option<u16> {
     } else {
         None
     }
+}
+
+pub fn is_process_consent_running() -> ResultType<bool> {
+    let output = std::process::Command::new("cmd")
+        .args(&["/C", "tasklist | findstr consent.exe"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()?;
+    Ok(output.status.success() && !output.stdout.is_empty())
 }
 
 #[cfg(test)]

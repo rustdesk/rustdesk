@@ -20,6 +20,10 @@
 
 use super::{video_qos::VideoQoS, *};
 #[cfg(windows)]
+use crate::platform::windows::is_process_consent_running;
+#[cfg(all(windows, feature = "privacy_win_mag"))]
+use crate::privacy_mode::privacy_win_mag;
+#[cfg(all(windows, feature = "privacy_win_mag"))]
 use hbb_common::get_version_number;
 use hbb_common::tokio::sync::{
     mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
@@ -41,7 +45,7 @@ use std::{
     ops::{Deref, DerefMut},
     time::{self, Duration, Instant},
 };
-#[cfg(windows)]
+#[cfg(all(windows, feature = "virtual_display_driver"))]
 use virtual_display;
 
 pub const SCRAP_UBUNTU_HIGHER_REQUIRED: &str = "Wayland requires Ubuntu 21.04 or higher version.";
@@ -69,9 +73,9 @@ lazy_static::lazy_static! {
 }
 
 fn is_capturer_mag_supported() -> bool {
-    #[cfg(windows)]
+    #[cfg(all(windows, feature = "privacy_win_mag"))]
     return scrap::CapturerMag::is_supported();
-    #[cfg(not(windows))]
+    #[cfg(not(all(windows, feature = "privacy_win_mag")))]
     false
 }
 
@@ -92,10 +96,10 @@ pub fn get_privacy_mode_conn_id() -> i32 {
 }
 
 pub fn is_privacy_mode_supported() -> bool {
-    #[cfg(windows)]
+    #[cfg(all(windows, feature = "privacy_win_mag"))]
     return *IS_CAPTURER_MAGNIFIER_SUPPORTED
         && get_version_number(&crate::VERSION) > get_version_number("1.1.9");
-    #[cfg(not(windows))]
+    #[cfg(not(all(windows, feature = "privacy_win_mag")))]
     return false;
 }
 
@@ -201,15 +205,13 @@ fn create_capturer(
     _current: usize,
     _portable_service_running: bool,
 ) -> ResultType<Box<dyn TraitCapturer>> {
-    #[cfg(not(windows))]
+    #[cfg(not(all(windows, feature = "privacy_win_mag")))]
     let c: Option<Box<dyn TraitCapturer>> = None;
-    #[cfg(windows)]
+    #[cfg(all(windows, feature = "privacy_win_mag"))]
     let mut c: Option<Box<dyn TraitCapturer>> = None;
     if privacy_mode_id > 0 {
-        #[cfg(windows)]
+        #[cfg(all(windows, feature = "privacy_win_mag"))]
         {
-            use crate::win_privacy::*;
-
             match scrap::CapturerMag::new(
                 display.origin(),
                 display.width(),
@@ -220,7 +222,7 @@ fn create_capturer(
                     let mut ok = false;
                     let check_begin = Instant::now();
                     while check_begin.elapsed().as_secs() < 5 {
-                        match c1.exclude("", PRIVACY_WINDOW_NAME) {
+                        match c1.exclude("", privacy_win_mag::PRIVACY_WINDOW_NAME) {
                             Ok(false) => {
                                 ok = false;
                                 std::thread::sleep(std::time::Duration::from_millis(500));
@@ -229,7 +231,7 @@ fn create_capturer(
                                 bail!(
                                     "Failed to exclude privacy window {} - {}, err: {}",
                                     "",
-                                    PRIVACY_WINDOW_NAME,
+                                    privacy_win_mag::PRIVACY_WINDOW_NAME,
                                     e
                                 );
                             }
@@ -243,7 +245,7 @@ fn create_capturer(
                         bail!(
                             "Failed to exclude privacy window {} - {} ",
                             "",
-                            PRIVACY_WINDOW_NAME
+                            privacy_win_mag::PRIVACY_WINDOW_NAME
                         );
                     }
                     log::debug!("Create magnifier capture for {}", privacy_mode_id);
@@ -275,7 +277,8 @@ fn create_capturer(
     };
 }
 
-#[cfg(windows)]
+// to-do: do not close if in privacy mode.
+#[cfg(all(windows, feature = "virtual_display_driver"))]
 fn ensure_close_virtual_device() -> ResultType<()> {
     let num_displays = Display::all()?.len();
     if num_displays == 0 {
@@ -309,11 +312,11 @@ pub fn test_create_capturer(privacy_mode_id: i32, timeout_millis: u64) -> bool {
 fn check_uac_switch(privacy_mode_id: i32, capturer_privacy_mode_id: i32) -> ResultType<()> {
     if capturer_privacy_mode_id != 0 {
         if privacy_mode_id != capturer_privacy_mode_id {
-            if !crate::win_privacy::is_process_consent_running()? {
+            if !is_process_consent_running()? {
                 bail!("consent.exe is running");
             }
         }
-        if crate::win_privacy::is_process_consent_running()? {
+        if is_process_consent_running()? {
             bail!("consent.exe is running");
         }
     }
@@ -374,7 +377,7 @@ fn get_capturer(use_yuv: bool, portable_service_running: bool) -> ResultType<Cap
     let mut capturer_privacy_mode_id = privacy_mode_id;
     #[cfg(windows)]
     if capturer_privacy_mode_id != 0 {
-        if crate::win_privacy::is_process_consent_running()? {
+        if is_process_consent_running()? {
             capturer_privacy_mode_id = 0;
         }
     }
@@ -447,7 +450,7 @@ fn check_get_displays_changed_msg() -> Option<Message> {
 }
 
 fn run(sp: GenericService) -> ResultType<()> {
-    #[cfg(windows)]
+    #[cfg(all(windows, feature = "virtual_display_driver"))]
     ensure_close_virtual_device()?;
 
     // ensure_inited() is needed because release_resource() may be called.
@@ -922,12 +925,12 @@ pub async fn switch_to_primary() {
 }
 
 #[inline]
-#[cfg(not(windows))]
+#[cfg(not(all(windows, feature = "virtual_display_driver")))]
 fn try_get_displays() -> ResultType<Vec<Display>> {
     Ok(Display::all()?)
 }
 
-#[cfg(windows)]
+#[cfg(all(windows, feature = "virtual_display_driver"))]
 fn try_get_displays() -> ResultType<Vec<Display>> {
     let mut displays = Display::all()?;
     if displays.len() == 0 {
@@ -949,6 +952,8 @@ fn try_get_displays() -> ResultType<Vec<Display>> {
         }
         displays = Display::all()?;
     } else if displays.len() > 1 {
+        // to-do: do not close if in privacy mode.
+
         // If more than one displays exists, close RustDeskVirtualDisplay
         if virtual_display::is_device_created() {
             virtual_display::close_device()
@@ -991,7 +996,7 @@ fn start_uac_elevation_check() {
         if !crate::platform::is_installed() && !crate::platform::is_root() {
             std::thread::spawn(|| loop {
                 std::thread::sleep(std::time::Duration::from_secs(1));
-                if let Ok(uac) = crate::win_privacy::is_process_consent_running() {
+                if let Ok(uac) = is_process_consent_running() {
                     *IS_UAC_RUNNING.lock().unwrap() = uac;
                 }
                 if !crate::platform::is_elevated(None).unwrap_or(false) {
