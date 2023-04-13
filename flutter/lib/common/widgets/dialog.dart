@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:debounce_throttle/debounce_throttle.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:get/get.dart';
 
 import '../../common.dart';
@@ -879,7 +881,9 @@ void showRestartRemoteDevice(
       await dialogManager.show<bool>((setState, close) => CustomAlertDialog(
             title: Row(children: [
               Icon(Icons.warning_rounded, color: Colors.redAccent, size: 28),
-              Text(translate("Restart Remote Device")).paddingOnly(left: 10),
+              Flexible(
+                  child: Text(translate("Restart Remote Device"))
+                      .paddingOnly(left: 10)),
             ]),
             content: Text(
                 "${translate('Are you sure you want to restart')} \n${pi.username}@${pi.hostname}($id) ?"),
@@ -1046,4 +1050,222 @@ showSetOSAccount(
       onCancel: close,
     );
   });
+}
+
+showAuditDialog(String id, dialogManager) async {
+  final controller = TextEditingController();
+  dialogManager.show((setState, close) {
+    submit() {
+      var text = controller.text.trim();
+      if (text != '') {
+        bind.sessionSendNote(id: id, note: text);
+      }
+      close();
+    }
+
+    late final focusNode = FocusNode(
+      onKey: (FocusNode node, RawKeyEvent evt) {
+        if (evt.logicalKey.keyLabel == 'Enter') {
+          if (evt is RawKeyDownEvent) {
+            int pos = controller.selection.base.offset;
+            controller.text =
+                '${controller.text.substring(0, pos)}\n${controller.text.substring(pos)}';
+            controller.selection =
+                TextSelection.fromPosition(TextPosition(offset: pos + 1));
+          }
+          return KeyEventResult.handled;
+        }
+        if (evt.logicalKey.keyLabel == 'Esc') {
+          if (evt is RawKeyDownEvent) {
+            close();
+          }
+          return KeyEventResult.handled;
+        } else {
+          return KeyEventResult.ignored;
+        }
+      },
+    );
+
+    return CustomAlertDialog(
+      title: Text(translate('Note')),
+      content: SizedBox(
+          width: 250,
+          height: 120,
+          child: TextField(
+            autofocus: true,
+            keyboardType: TextInputType.multiline,
+            textInputAction: TextInputAction.newline,
+            decoration: const InputDecoration.collapsed(
+              hintText: 'input note here',
+            ),
+            maxLines: null,
+            maxLength: 256,
+            controller: controller,
+            focusNode: focusNode,
+          )),
+      actions: [
+        dialogButton('Cancel', onPressed: close, isOutline: true),
+        dialogButton('OK', onPressed: submit)
+      ],
+      onSubmit: submit,
+      onCancel: close,
+    );
+  });
+}
+
+void showConfirmSwitchSidesDialog(
+    String id, OverlayDialogManager dialogManager) async {
+  dialogManager.show((setState, close) {
+    submit() async {
+      await bind.sessionSwitchSides(id: id);
+      closeConnection(id: id);
+    }
+
+    return CustomAlertDialog(
+      content: msgboxContent('info', 'Switch Sides',
+          'Please confirm if you want to share your desktop?'),
+      actions: [
+        dialogButton('Cancel', onPressed: close, isOutline: true),
+        dialogButton('OK', onPressed: submit),
+      ],
+      onSubmit: submit,
+      onCancel: close,
+    );
+  });
+}
+
+customImageQualityDialog(String id, FFI ffi) async {
+  double qualityInitValue = 50;
+  double fpsInitValue = 30;
+  bool qualitySet = false;
+  bool fpsSet = false;
+  setCustomValues({double? quality, double? fps}) async {
+    if (quality != null) {
+      qualitySet = true;
+      await bind.sessionSetCustomImageQuality(id: id, value: quality.toInt());
+    }
+    if (fps != null) {
+      fpsSet = true;
+      await bind.sessionSetCustomFps(id: id, fps: fps.toInt());
+    }
+    if (!qualitySet) {
+      qualitySet = true;
+      await bind.sessionSetCustomImageQuality(
+          id: id, value: qualityInitValue.toInt());
+    }
+    if (!fpsSet) {
+      fpsSet = true;
+      await bind.sessionSetCustomFps(id: id, fps: fpsInitValue.toInt());
+    }
+  }
+
+  final btnClose = dialogButton('Close', onPressed: () async {
+    await setCustomValues();
+    ffi.dialogManager.dismissAll();
+  });
+
+  // quality
+  final quality = await bind.sessionGetCustomImageQuality(id: id);
+  qualityInitValue =
+      quality != null && quality.isNotEmpty ? quality[0].toDouble() : 50.0;
+  const qualityMinValue = 10.0;
+  const qualityMaxValue = 100.0;
+  if (qualityInitValue < qualityMinValue) {
+    qualityInitValue = qualityMinValue;
+  }
+  if (qualityInitValue > qualityMaxValue) {
+    qualityInitValue = qualityMaxValue;
+  }
+  final RxDouble qualitySliderValue = RxDouble(qualityInitValue);
+  final debouncerQuality = Debouncer<double>(
+    Duration(milliseconds: 1000),
+    onChanged: (double v) {
+      setCustomValues(quality: v);
+    },
+    initialValue: qualityInitValue,
+  );
+  final qualitySlider = Obx(() => Row(
+        children: [
+          Expanded(
+              flex: 3,
+              child: Slider(
+                value: qualitySliderValue.value,
+                min: qualityMinValue,
+                max: qualityMaxValue,
+                divisions: 18,
+                onChanged: (double value) {
+                  qualitySliderValue.value = value;
+                  debouncerQuality.value = value;
+                },
+              )),
+          Expanded(
+              flex: 1,
+              child: Text(
+                '${qualitySliderValue.value.round()}%',
+                style: const TextStyle(fontSize: 15),
+              )),
+          Expanded(
+              flex: 2,
+              child: Text(
+                translate('Bitrate'),
+                style: const TextStyle(fontSize: 15),
+              )),
+        ],
+      ));
+  // fps
+  final fpsOption = await bind.sessionGetOption(id: id, arg: 'custom-fps');
+  fpsInitValue = fpsOption == null ? 30 : double.tryParse(fpsOption) ?? 30;
+  if (fpsInitValue < 5 || fpsInitValue > 120) {
+    fpsInitValue = 30;
+  }
+  final RxDouble fpsSliderValue = RxDouble(fpsInitValue);
+  final debouncerFps = Debouncer<double>(
+    Duration(milliseconds: 1000),
+    onChanged: (double v) {
+      setCustomValues(fps: v);
+    },
+    initialValue: qualityInitValue,
+  );
+  bool? direct;
+  try {
+    direct =
+        ConnectionTypeState.find(id).direct.value == ConnectionType.strDirect;
+  } catch (_) {}
+  final fpsSlider = Offstage(
+    offstage: (await bind.mainIsUsingPublicServer() && direct != true) ||
+        version_cmp(ffi.ffiModel.pi.version, '1.2.0') < 0,
+    child: Row(
+      children: [
+        Expanded(
+            flex: 3,
+            child: Obx((() => Slider(
+                  value: fpsSliderValue.value,
+                  min: 5,
+                  max: 120,
+                  divisions: 23,
+                  onChanged: (double value) {
+                    fpsSliderValue.value = value;
+                    debouncerFps.value = value;
+                  },
+                )))),
+        Expanded(
+            flex: 1,
+            child: Obx(() => Text(
+                  '${fpsSliderValue.value.round()}',
+                  style: const TextStyle(fontSize: 15),
+                ))),
+        Expanded(
+            flex: 2,
+            child: Text(
+              translate('FPS'),
+              style: const TextStyle(fontSize: 15),
+            ))
+      ],
+    ),
+  );
+
+  final content = Column(
+    children: [qualitySlider, fpsSlider],
+  );
+  msgBoxCommon(ffi.dialogManager, 'Custom Image Quality', content, [btnClose]);
 }

@@ -504,13 +504,13 @@ void showLanguageSettings(OverlayDialogManager dialogManager) async {
       return CustomAlertDialog(
         content: Column(
           children: [
-                getRadio('Default', '', lang, setLang),
+                getRadio(Text(translate('Default')), '', lang, setLang),
                 Divider(color: MyTheme.border),
               ] +
               langs.map((e) {
                 final key = e[0] as String;
                 final name = e[1] as String;
-                return getRadio(name, key, lang, setLang);
+                return getRadio(Text(translate(name)), key, lang, setLang);
               }).toList(),
         ),
       );
@@ -536,9 +536,11 @@ void showThemeSettings(OverlayDialogManager dialogManager) async {
 
     return CustomAlertDialog(
       content: Column(children: [
-        getRadio('Light', ThemeMode.light, themeMode, setTheme),
-        getRadio('Dark', ThemeMode.dark, themeMode, setTheme),
-        getRadio('Follow System', ThemeMode.system, themeMode, setTheme)
+        getRadio(
+            Text(translate('Light')), ThemeMode.light, themeMode, setTheme),
+        getRadio(Text(translate('Dark')), ThemeMode.dark, themeMode, setTheme),
+        getRadio(Text(translate('Follow System')), ThemeMode.system, themeMode,
+            setTheme)
       ]),
     );
   }, backDismiss: true, clickMaskDismiss: true);

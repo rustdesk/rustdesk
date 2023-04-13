@@ -261,3 +261,23 @@ class PeerStringOption {
   static RxString find(String id, String opt) =>
       Get.find<RxString>(tag: tag(id, opt));
 }
+
+initSharedStates(String id) {
+  PrivacyModeState.init(id);
+  BlockInputState.init(id);
+  CurrentDisplayState.init(id);
+  KeyboardEnabledState.init(id);
+  ShowRemoteCursorState.init(id);
+  RemoteCursorMovedState.init(id);
+  PeerBoolOption.init(id, 'zoom-cursor', () => false);
+}
+
+removeSharedStates(String id) {
+  PrivacyModeState.delete(id);
+  BlockInputState.delete(id);
+  CurrentDisplayState.delete(id);
+  ShowRemoteCursorState.delete(id);
+  KeyboardEnabledState.delete(id);
+  RemoteCursorMovedState.delete(id);
+  PeerBoolOption.delete(id, 'zoom-cursor');
+}

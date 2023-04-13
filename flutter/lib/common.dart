@@ -43,6 +43,7 @@ final isIOS = Platform.isIOS;
 final isDesktop = Platform.isWindows || Platform.isMacOS || Platform.isLinux;
 var isWeb = false;
 var isWebDesktop = false;
+var isMobile = isAndroid || isIOS;
 var version = "";
 int androidVersion = 0;
 
@@ -1158,38 +1159,17 @@ class AndroidPermissionManager {
 // Used only for mobile, pages remote, settings, dialog
 // TODO remove argument contentPadding, it’s not used, getToggle() has not
 RadioListTile<T> getRadio<T>(
-    String name, T toValue, T curValue, void Function(T?) onChange,
+    Widget title, T toValue, T curValue, ValueChanged<T?>? onChange,
     {EdgeInsetsGeometry? contentPadding}) {
   return RadioListTile<T>(
     contentPadding: contentPadding ?? EdgeInsets.zero,
     visualDensity: VisualDensity.compact,
     controlAffinity: ListTileControlAffinity.trailing,
-    title: Text(translate(name)),
+    title: title,
     value: toValue,
     groupValue: curValue,
     onChanged: onChange,
   );
-}
-
-// TODO move this to mobile/widgets.
-// Used only for mobile, pages remote, settings, dialog
-CheckboxListTile getToggle(
-    String id, void Function(void Function()) setState, option, name,
-    {FFI? ffi}) {
-  final opt = bind.sessionGetToggleOptionSync(id: id, arg: option);
-  return CheckboxListTile(
-      contentPadding: EdgeInsets.zero,
-      visualDensity: VisualDensity.compact,
-      value: opt,
-      onChanged: (v) {
-        setState(() {
-          bind.sessionToggleOption(id: id, value: option);
-        });
-        if (option == "show-quality-monitor") {
-          (ffi ?? gFFI).qualityMonitorModel.checkShowQualityMonitor(id);
-        }
-      },
-      title: Text(translate(name)));
 }
 
 /// find ffi, tag is Remote ID
