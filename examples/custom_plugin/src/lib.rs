@@ -1,4 +1,4 @@
-use librustdesk::{api::RustDeskApiTable};
+use librustdesk::api::RustDeskApiTable;
 /// This file demonstrates how to write a custom plugin for RustDesk.
 use std::ffi::{c_char, c_int, CString};
 
@@ -8,8 +8,6 @@ lazy_static::lazy_static! {
     // Do your own logic based on the API provided by RustDesk.
     pub static ref API: RustDeskApiTable = RustDeskApiTable::default();
 }
-
-
 
 #[no_mangle]
 fn plugin_name() -> *const c_char {
