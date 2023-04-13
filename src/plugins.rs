@@ -4,7 +4,10 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use hbb_common::{anyhow::Error, log::debug};
+use hbb_common::{
+    anyhow::Error,
+    log::{debug, error},
+};
 use lazy_static::lazy_static;
 use libloading::{Library, Symbol};
 
@@ -82,6 +85,18 @@ impl<P: Plugin> PluginRegistar<P> {
         match lib {
             Ok(lib) => match lib.try_into() {
                 Ok(plugin) => {
+                    let plugin: PluginImpl = plugin;
+                    // try to initialize this plugin
+                    if let Some(init) = plugin.plugin_vt().init {
+                        let init_ret = init();
+                        if init_ret != 0 {
+                            error!(
+                                "Error when initializing the plugin {} with error code {}.",
+                                plugin.name, init_ret
+                            );
+                            return init_ret;
+                        }
+                    }
                     PLUGIN_REGISTRAR
                         .plugins
                         .write()
@@ -104,7 +119,12 @@ impl<P: Plugin> PluginRegistar<P> {
         let p = unsafe { CStr::from_ptr(path) };
         let lib_path = p.to_str().unwrap_or("").to_owned();
         match PLUGIN_REGISTRAR.plugins.write().unwrap().remove(&lib_path) {
-            Some(_) => 0,
+            Some(plugin) => {
+                if let Some(dispose) = plugin.plugin_vt().dispose {
+                    return dispose();
+                }
+                0
+            }
             None => -1,
         }
     }
@@ -150,33 +170,28 @@ impl TryFrom<Library> for PluginImpl {
 #[cfg(target_os = "linux")]
 fn test_plugin() {
     use std::io::Write;
-
-    let code = "
-    const char* plugin_name(){return \"test_name\";};
-    const char* plugin_id(){return \"test_id\"; }
-    int plugin_init() {return 0;}
-    int plugin_dispose() {return 0;}
-    ";
-    let mut f = std::fs::File::create("test.c").unwrap();
-    f.write_all(code.as_bytes()).unwrap();
-    f.flush().unwrap();
-    let mut cmd = std::process::Command::new("cc");
-    cmd.arg("-fPIC")
-        .arg("-shared")
-        .arg("test.c")
-        .arg("-o")
-        .arg("libtest.so");
+    let mut cmd = std::process::Command::new("cargo");
+    cmd.current_dir("./examples/custom_plugin");
+    // Strip this shared library.
+    cmd.env("RUSTFLAGS", "-C link-arg=-s");
+    cmd.arg("build");
     // Spawn the compiler process.
     let mut child = cmd.spawn().unwrap();
     // Wait for the compiler to finish.
     let status = child.wait().unwrap();
     assert!(status.success());
     // Load the library.
-    let lib = unsafe { Library::new("./libtest.so").unwrap() };
+    let lib = unsafe {
+        Library::new("./examples/custom_plugin/target/debug/libcustom_plugin.so").unwrap()
+    };
     let plugin: PluginImpl = lib.try_into().unwrap();
     assert!(plugin._inner.is_some());
-    assert!(plugin.name == "test_name");
-    assert!(plugin.id == "test_id");
+    assert!(plugin.name == "A Template Rust Plugin");
+    assert!(plugin.id == "TemplatePlugin");
+    println!(
+        "plugin vt size: {}",
+        std::mem::size_of::<RustDeskPluginTable>()
+    );
     assert!(PLUGIN_REGISTRAR
         .plugins
         .write()

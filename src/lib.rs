@@ -1,7 +1,7 @@
+mod keyboard;
 #[cfg(not(any(target_os = "ios")))]
 /// cbindgen:ignore
 pub mod platform;
-mod keyboard;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use platform::{get_cursor, get_cursor_data, get_cursor_pos, start_os_service};
 #[cfg(not(any(target_os = "ios")))]
@@ -20,7 +20,12 @@ pub use self::rendezvous_mediator::*;
 pub mod common;
 #[cfg(not(any(target_os = "ios")))]
 pub mod ipc;
-#[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli", feature = "flutter")))]
+#[cfg(not(any(
+    target_os = "android",
+    target_os = "ios",
+    feature = "cli",
+    feature = "flutter"
+)))]
 pub mod ui;
 mod version;
 pub use version::*;
@@ -44,9 +49,9 @@ mod license;
 mod port_forward;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-mod plugins;
+pub mod api;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-mod api;
+pub mod plugins;
 
 mod tray;
 

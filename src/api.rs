@@ -8,8 +8,8 @@ pub type UnloadPluginFunc = fn(*const c_char) -> i32;
 
 #[repr(C)]
 pub struct RustDeskApiTable {
-    pub register_plugin: LoadPluginFunc,
-    pub unload_plugin: UnloadPluginFunc,
+    pub(crate) register_plugin: LoadPluginFunc,
+    pub(crate) unload_plugin: UnloadPluginFunc,
 }
 
 #[no_mangle]
@@ -20,11 +20,6 @@ fn load_plugin(path: *const c_char) -> i32 {
 #[no_mangle]
 fn unload_plugin(path: *const c_char) -> i32 {
     PLUGIN_REGISTRAR.unload_plugin(path)
-}
-
-#[no_mangle]
-fn get_api_table() -> RustDeskApiTable {
-    RustDeskApiTable::default()
 }
 
 impl Default for RustDeskApiTable {
