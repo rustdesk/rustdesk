@@ -36,8 +36,8 @@ pub trait Plugin {
 #[repr(C)]
 #[derive(Default, Clone)]
 pub struct RustDeskPluginTable {
-    pub init: Option<PluginInitFunc>,
-    pub dispose: Option<PluginDisposeFunc>,
+    pub init: Option<PluginInitFunc>, // NonNull
+    pub dispose: Option<PluginDisposeFunc>, // NonNull
 }
 
 pub struct PluginImpl {

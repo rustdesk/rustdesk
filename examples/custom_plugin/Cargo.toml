@@ -10,9 +10,14 @@ name = "custom_plugin"
 path = "src/lib.rs"
 crate-type = ["cdylib"]
 
+
+[features]
+default = ["flutter"]
+flutter = []
+
 [dependencies]
 lazy_static = "1.4.0"
-rustdesk = { path = "../../", version = "1.2.0"}
+rustdesk = { path = "../../", version = "1.2.0", features = ["flutter"]}
 
 [profile.release]
 lto = true

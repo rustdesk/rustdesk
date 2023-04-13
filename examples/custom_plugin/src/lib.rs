@@ -9,6 +9,8 @@ lazy_static::lazy_static! {
     pub static ref API: RustDeskApiTable = RustDeskApiTable::default();
 }
 
+
+
 #[no_mangle]
 fn plugin_name() -> *const c_char {
     return PLUGIN_NAME.as_ptr();
