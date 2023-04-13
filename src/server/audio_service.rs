@@ -109,6 +109,7 @@ mod cpal_impl {
 
     lazy_static::lazy_static! {
         static ref HOST: Host = cpal::default_host();
+        static ref INPUT_BUFFER: Arc<Mutex<std::collections::VecDeque<f32>>> = Default::default();
     }
 
     #[derive(Default)]
@@ -242,18 +243,31 @@ mod cpal_impl {
             LowDelay,
         )?;
         let channels = config.channels();
+        // https://www.opus-codec.org/docs/html_api/group__opusencoder.html#gace941e4ef26ed844879fde342ffbe546
+        // https://chromium.googlesource.com/chromium/deps/opus/+/1.1.1/include/opus.h
+        let encode_len = sample_rate as usize * channels as usize / 100; // 10 ms
+        INPUT_BUFFER.lock().unwrap().clear();
+        let mut send_input_stream = move || {
+            let mut lock = INPUT_BUFFER.lock().unwrap();
+            while lock.len() >= encode_len {
+                let frame: Vec<f32> = lock.drain(0..encode_len).collect();
+                send(
+                    &frame,
+                    sample_rate_0,
+                    sample_rate,
+                    channels,
+                    &mut encoder,
+                    &sp,
+                );
+            }
+        };
+
         let stream = match config.sample_format() {
             cpal::SampleFormat::F32 => device.build_input_stream(
                 &config.into(),
                 move |data, _: &_| {
-                    send(
-                        data,
-                        sample_rate_0,
-                        sample_rate,
-                        channels,
-                        &mut encoder,
-                        &sp,
-                    );
+                    INPUT_BUFFER.lock().unwrap().extend(data);
+                    send_input_stream();
                 },
                 err_fn,
             )?,
@@ -261,14 +275,8 @@ mod cpal_impl {
                 &config.into(),
                 move |data: &[i16], _: &_| {
                     let buffer: Vec<_> = data.iter().map(|s| cpal::Sample::to_f32(s)).collect();
-                    send(
-                        &buffer,
-                        sample_rate_0,
-                        sample_rate,
-                        channels,
-                        &mut encoder,
-                        &sp,
-                    );
+                    INPUT_BUFFER.lock().unwrap().extend(buffer);
+                    send_input_stream();
                 },
                 err_fn,
             )?,
@@ -276,14 +284,8 @@ mod cpal_impl {
                 &config.into(),
                 move |data: &[u16], _: &_| {
                     let buffer: Vec<_> = data.iter().map(|s| cpal::Sample::to_f32(s)).collect();
-                    send(
-                        &buffer,
-                        sample_rate_0,
-                        sample_rate,
-                        channels,
-                        &mut encoder,
-                        &sp,
-                    );
+                    INPUT_BUFFER.lock().unwrap().extend(buffer);
+                    send_input_stream();
                 },
                 err_fn,
             )?,
