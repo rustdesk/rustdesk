@@ -28,7 +28,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable File Transfer", "Abilita trasferimento file"),
         ("Enable TCP Tunneling", "Abilita tunnel TCP"),
         ("IP Whitelisting", "IP autorizzati"),
-        ("ID/Relay Server", "ID server/Relay"),
+        ("ID/Relay Server", "Server ID/Relay"),
         ("Import Server Config", "Importa configurazione server dagli appunti"),
         ("Export Server Config", "Esporta configurazione server negli appunti"),
         ("Import server configuration successfully", "Configurazione server importata completata"),
