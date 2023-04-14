@@ -28,7 +28,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable File Transfer", "Abilita trasferimento file"),
         ("Enable TCP Tunneling", "Abilita tunnel TCP"),
         ("IP Whitelisting", "IP autorizzati"),
-        ("ID/Relay Server", "Server ID/Relay"),
+        ("ID/Relay Server", "ID server/Relay"),
         ("Import Server Config", "Importa configurazione server dagli appunti"),
         ("Export Server Config", "Esporta configurazione server negli appunti"),
         ("Import server configuration successfully", "Configurazione server importata completata"),
@@ -460,8 +460,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Resolution", "Risoluzione"),
         ("No transfers in progress", "Nessun trasferimento in corso"),
         ("Set one-time password length", "Imposta lunghezza password monouso"),
-        ("idd_driver_tip", "Installa il driver per lo schermo virtuale che sarà usato quando non si dispone di schermi fisici."),
-        ("confirm_idd_driver_tip", "È selezionata l'opzione per installare il driver per lo schermo virtuale.\nNota che verrà installato un certificato di test per l'attendibilità del driver dello schermo virtuale.\nQuesto certificato di test verrà utilizzato solo per l'attendibilità dei driver di RustDesk."),
+        ("idd_driver_tip", "Installa driver schermo virtuale che verrà usato quando non sono disponibili schermi fisici."),
+        ("confirm_idd_driver_tip", "È stata selezionata l'opzione per installare il driver schermo virtuale.\nNota che verrà installato un certificato di test per l'attendibilità del driver dello schermo virtuale.\nQuesto certificato di test verrà utilizzato solo per l'attendibilità dei driver di RustDesk."),
         ("RDP Settings", "Impostazioni RDP"),
         ("Sort by", "Ordina per"),
         ("New Connection", "Nuova connessione"),
@@ -491,5 +491,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("xorg_not_found_text_tip", "Installa Xorg."),
         ("no_desktop_title_tip", "Non c'è nessun desktop disponibile."),
         ("no_desktop_text_tip", "Installa il desktop GNOME."),
+        ("No need to elevate", "Elevazione dei privilegi non richiesta"),
     ].iter().cloned().collect();
 }
