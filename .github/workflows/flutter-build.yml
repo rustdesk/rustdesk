@@ -1447,6 +1447,9 @@ jobs:
             python
             ttf-arphic-uming
             libappindicator-gtk3
+            pam
+            gst-plugins-base
+            gst-plugin-pipewire
           scripts: |
             cd res && HBB=`pwd`/.. FLUTTER=1 makepkg -f
 
