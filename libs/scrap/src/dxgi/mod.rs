@@ -62,7 +62,7 @@ impl Capturer {
         let mut desc = unsafe { mem::MaybeUninit::uninit().assume_init() };
         let mut gdi_capturer = None;
 
-        let mut res = if display.gdi {
+        let mut res = if display.gdi.is_some() {
             wrap_hresult(1)
         } else {
             wrap_hresult(unsafe {
@@ -367,48 +367,60 @@ impl Displays {
         let mut i: DWORD = 0;
         loop {
             #[allow(invalid_value)]
-            let mut d: DISPLAY_DEVICEW = unsafe { std::mem::MaybeUninit::uninit().assume_init() };
-            d.cb = std::mem::size_of::<DISPLAY_DEVICEW>() as _;
-            let ok = unsafe { EnumDisplayDevicesW(std::ptr::null(), i, &mut d as _, 0) };
+            let mut dd: DISPLAY_DEVICEW = unsafe { std::mem::MaybeUninit::uninit().assume_init() };
+            dd.cb = std::mem::size_of::<DISPLAY_DEVICEW>() as _;
+            let ok = unsafe { EnumDisplayDevicesW(std::ptr::null(), i, &mut dd as _, 0) };
             if ok == FALSE {
                 break;
             }
             i += 1;
-            if 0 == (d.StateFlags & DISPLAY_DEVICE_ACTIVE)
-                || (d.StateFlags & DISPLAY_DEVICE_MIRRORING_DRIVER) > 0
+            if 0 == (dd.StateFlags & DISPLAY_DEVICE_ACTIVE)
+                || (dd.StateFlags & DISPLAY_DEVICE_MIRRORING_DRIVER) > 0
             {
                 continue;
             }
-            // let is_primary = (d.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE) > 0;
             let mut disp = Display {
                 inner: ComPtr(std::ptr::null_mut()),
                 adapter: ComPtr(std::ptr::null_mut()),
                 desc: unsafe { std::mem::zeroed() },
-                gdi: true,
+                gdi: None,
             };
-            disp.desc.DeviceName = d.DeviceName;
+            disp.desc.DeviceName = dd.DeviceName.clone();
             #[allow(invalid_value)]
-            let mut m: DEVMODEW = unsafe { std::mem::MaybeUninit::uninit().assume_init() };
-            m.dmSize = std::mem::size_of::<DEVMODEW>() as _;
-            m.dmDriverExtra = 0;
-            let ok = unsafe {
-                EnumDisplaySettingsExW(
-                    disp.desc.DeviceName.as_ptr(),
-                    ENUM_CURRENT_SETTINGS,
-                    &mut m as _,
-                    0,
-                )
-            };
-            if ok == FALSE {
-                continue;
+            let mut dm: DEVMODEW = unsafe { std::mem::MaybeUninit::uninit().assume_init() };
+            dm.dmSize = std::mem::size_of::<DEVMODEW>() as _;
+            dm.dmDriverExtra = 0;
+            unsafe {
+                if FALSE
+                    == EnumDisplaySettingsExW(
+                        disp.desc.DeviceName.as_ptr(),
+                        ENUM_CURRENT_SETTINGS,
+                        &mut dm as _,
+                        0,
+                    )
+                {
+                    if FALSE
+                        == EnumDisplaySettingsExW(
+                            disp.desc.DeviceName.as_ptr(),
+                            ENUM_REGISTRY_SETTINGS,
+                            &mut dm as _,
+                            0,
+                        )
+                    {
+                        continue;
+                    }
+                }
             }
-            disp.desc.DesktopCoordinates.left = unsafe { m.u1.s2().dmPosition.x };
-            disp.desc.DesktopCoordinates.top = unsafe { m.u1.s2().dmPosition.y };
+            disp.desc.DesktopCoordinates.left = unsafe { dm.u1.s2().dmPosition.x };
+            disp.desc.DesktopCoordinates.top = unsafe { dm.u1.s2().dmPosition.y };
             disp.desc.DesktopCoordinates.right =
-                disp.desc.DesktopCoordinates.left + m.dmPelsWidth as i32;
+                disp.desc.DesktopCoordinates.left + dm.dmPelsWidth as i32;
             disp.desc.DesktopCoordinates.bottom =
-                disp.desc.DesktopCoordinates.top + m.dmPelsHeight as i32;
+                disp.desc.DesktopCoordinates.top + dm.dmPelsHeight as i32;
             disp.desc.AttachedToDesktop = 1;
+
+            let is_primary = (dd.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE) > 0;
+            disp.gdi = Some(GdiDisplayInfo { dd, dm, is_primary });
             all.push(disp);
         }
         all
@@ -476,7 +488,7 @@ impl Displays {
             inner: ComPtr(inner),
             adapter: ComPtr(self.adapter.0),
             desc,
-            gdi: false,
+            gdi: None,
         }))
     }
 }
@@ -512,7 +524,13 @@ pub struct Display {
     inner: ComPtr<IDXGIOutput1>,
     adapter: ComPtr<IDXGIAdapter1>,
     desc: DXGI_OUTPUT_DESC,
-    gdi: bool,
+    gdi: Option<GdiDisplayInfo>,
+}
+
+pub struct GdiDisplayInfo {
+    pub dd: DISPLAY_DEVICEW,
+    pub dm: DEVMODEW,
+    pub is_primary: bool,
 }
 
 // optimized for updated region
@@ -535,6 +553,10 @@ impl Display {
 
     pub fn rotation(&self) -> DXGI_MODE_ROTATION {
         self.desc.Rotation
+    }
+
+    pub fn gdi(&self) -> &Option<GdiDisplayInfo> {
+        &self.gdi
     }
 
     fn create_gdi(&self) -> Option<CapturerGDI> {
