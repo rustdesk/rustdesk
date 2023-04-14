@@ -23,6 +23,8 @@ use super::{video_qos::VideoQoS, *};
 use crate::platform::windows::is_process_consent_running;
 #[cfg(all(windows, feature = "privacy_win_mag"))]
 use crate::privacy_mode::privacy_win_mag;
+#[cfg(all(windows, feature = "virtual_display_driver"))]
+use hbb_common::config::LocalConfig;
 #[cfg(all(windows, feature = "privacy_win_mag"))]
 use hbb_common::get_version_number;
 use hbb_common::tokio::sync::{
@@ -47,6 +49,9 @@ use std::{
 };
 #[cfg(all(windows, feature = "virtual_display_driver"))]
 use virtual_display;
+
+#[cfg(all(windows, feature = "virtual_display_driver"))]
+const VIRTUAL_DISPLAY_INDEX_FOR_HEADLESS: u32 = 0;
 
 pub const SCRAP_UBUNTU_HIGHER_REQUIRED: &str = "Wayland requires Ubuntu 21.04 or higher version.";
 pub const SCRAP_OTHER_VERSION_OR_X11_REQUIRED: &str =
@@ -936,21 +941,20 @@ fn try_get_displays() -> ResultType<Vec<Display>> {
     if displays.len() == 0 {
         log::debug!("no displays, create virtual display");
         // Try plugin monitor
-        if !virtual_display::is_device_created() {
-            if let Err(e) = virtual_display::create_device() {
-                log::debug!("Create device failed {}", e);
-            }
-        }
-        if virtual_display::is_device_created() {
-            if let Err(e) = virtual_display::plug_in_monitor() {
-                log::debug!("Plug in monitor failed {}", e);
-            } else {
-                if let Err(e) = virtual_display::update_monitor_modes() {
-                    log::debug!("Update monitor modes failed {}", e);
+        if LocalConfig::get_virtual_display_num() > 0 {
+            if !virtual_display::is_device_created() {
+                if let Err(e) = virtual_display::create_device() {
+                    log::debug!("Create device failed {}", e);
                 }
             }
+            if virtual_display::is_device_created() {
+                if let Err(e) = virtual_display::plug_in_monitor(VIRTUAL_DISPLAY_INDEX_FOR_HEADLESS)
+                {
+                    log::debug!("Plug in monitor failed {}", e);
+                }
+            }
+            displays = Display::all()?;
         }
-        displays = Display::all()?;
     } else if displays.len() > 1 {
         // to-do: do not close if in privacy mode.
 

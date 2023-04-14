@@ -18,18 +18,18 @@ fn prompt_input() -> u8 {
         .unwrap_or(0)
 }
 
-fn plug_in() {
+fn plug_in(monitor_index: u32) {
     println!("Plug in monitor begin");
-    if let Err(e) = virtual_display::plug_in_monitor() {
+    if let Err(e) = virtual_display::plug_in_monitor(monitor_index as _) {
         println!("{}", e);
     } else {
         println!("Plug in monitor done");
     }
 }
 
-fn plug_out() {
+fn plug_out(monitor_index: u32) {
     println!("Plug out monitor begin");
-    if let Err(e) = virtual_display::plug_out_monitor() {
+    if let Err(e) = virtual_display::plug_out_monitor(monitor_index as _) {
         println!("{}", e);
     } else {
         println!("Plug out monitor done");
@@ -38,7 +38,8 @@ fn plug_out() {
 
 fn main() {
     loop {
-        match prompt_input() as char {
+        let chr = prompt_input();
+        match chr as char {
             'x' => break,
             'i' => {
                 println!("Install or update driver begin");
@@ -81,8 +82,12 @@ fn main() {
                 virtual_display::close_device();
                 println!("Close device done");
             }
-            '1' => plug_in(),
-            '4' => plug_out(),
+            '1' => plug_in(0),
+            '2' => plug_in(1),
+            '3' => plug_in(2),
+            '4' => plug_out(0),
+            '5' => plug_out(1),
+            '6' => plug_out(2),
             _ => {}
         }
     }
