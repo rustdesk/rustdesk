@@ -22,7 +22,9 @@ noextract=()
 md5sums=() #generate with 'makepkg -g'
 
 package() {
-  pacman -S --noconfirm pam gst-plugins-base gst-plugin-pipewire
+  pacman -S --noconfirm gst-plugins-base || true
+  pacman -S --noconfirm gst-plugin-pipewire || true
+  pacman -S --noconfirm pam
   if [[ ${FLUTTER} ]]; then
 	  mkdir -p "${pkgdir}/usr/lib/rustdesk" && cp -r ${HBB}/flutter/build/linux/x64/release/bundle/* -t "${pkgdir}/usr/lib/rustdesk"
   fi
