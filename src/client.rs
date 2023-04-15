@@ -644,7 +644,7 @@ impl Client {
     // `try_start_clipboard` is called by all session when connection is established. (When handling peer info).
     // This function only create one thread with a loop, the loop is shared by all sessions.
     // After all sessions are end, the loop exists.
-    // 
+    //
     // If clipboard update is detected, the text will be sent to all sessions by `send_text_clipboard_msg`.
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn try_start_clipboard(_ctx: Option<ClientClipboardContext>) {
@@ -801,9 +801,17 @@ impl AudioHandler {
         let mut config: StreamConfig = config.into();
         config.channels = format0.channels as _;
         match sample_format {
-            cpal::SampleFormat::F32 => self.build_output_stream::<f32>(&config, &device)?,
+            cpal::SampleFormat::I8 => self.build_output_stream::<i8>(&config, &device)?,
             cpal::SampleFormat::I16 => self.build_output_stream::<i16>(&config, &device)?,
+            cpal::SampleFormat::I32 => self.build_output_stream::<i32>(&config, &device)?,
+            cpal::SampleFormat::I64 => self.build_output_stream::<i64>(&config, &device)?,
+            cpal::SampleFormat::U8 => self.build_output_stream::<u8>(&config, &device)?,
             cpal::SampleFormat::U16 => self.build_output_stream::<u16>(&config, &device)?,
+            cpal::SampleFormat::U32 => self.build_output_stream::<u32>(&config, &device)?,
+            cpal::SampleFormat::U64 => self.build_output_stream::<u64>(&config, &device)?,
+            cpal::SampleFormat::F32 => self.build_output_stream::<f32>(&config, &device)?,
+            cpal::SampleFormat::F64 => self.build_output_stream::<f64>(&config, &device)?,
+            f => bail!("unsupported audio format: {:?}", f),
         }
         self.sample_rate = (format0.sample_rate, config.sample_rate.0);
         Ok(())
@@ -880,7 +888,7 @@ impl AudioHandler {
 
     /// Build audio output stream for current device.
     #[cfg(not(any(target_os = "android", target_os = "linux")))]
-    fn build_output_stream<T: cpal::Sample>(
+    fn build_output_stream<T: cpal::Sample + cpal::SizedSample + cpal::FromSample<f32>>(
         &mut self,
         config: &StreamConfig,
         device: &Device,
@@ -891,6 +899,7 @@ impl AudioHandler {
         };
         let audio_buffer = self.audio_buffer.0.clone();
         let ready = self.ready.clone();
+        let timeout = None;
         let stream = device.build_output_stream(
             config,
             move |data: &mut [T], _: &_| {
@@ -908,12 +917,13 @@ impl AudioHandler {
                 let mut input = elems.into_iter();
                 for sample in data.iter_mut() {
                     *sample = match input.next() {
-                        Some(x) => T::from(&x),
-                        _ => T::from(&0.),
+                        Some(x) => T::from_sample(x),
+                        _ => T::from_sample(0.),
                     };
                 }
             },
             err_fn,
+            timeout,
         )?;
         stream.play()?;
         self.audio_stream = Some(Box::new(stream));
