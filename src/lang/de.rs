@@ -493,5 +493,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("no_desktop_text_tip", "Bitte installieren Sie den GNOME-Desktop."),
         ("No need to elevate", "Erhöhung der Rechte nicht erforderlich"),
         ("New RDP", "Neue RDP-Verbindung"),
+        ("Failed to listen on {}: {}", "Lauschen fehlgeschlagen auf Port {}: {}"),
     ].iter().cloned().collect();
 }
