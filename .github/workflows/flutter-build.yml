@@ -1,4 +1,5 @@
 name: Build the flutter version of the RustDesk 
+# 2023.04.14 22:30 UTC
 
 on:
   workflow_call:
@@ -13,7 +14,8 @@ env:
   TAG_NAME: "nightly"
   # vcpkg version: 2022.05.10
   # for multiarch gcc compatibility
-  VCPKG_COMMIT_ID: "14e7bb4ae24616ec54ff6b2f6ef4e8659434ea44"
+  #old VCPKG_COMMIT_ID: "14e7bb4ae24616ec54ff6b2f6ef4e8659434ea44"
+  VCPKG_COMMIT_ID: "69efe9cc2df0015f0bb2d37d55acde4a75c9a25b"
   VERSION: "1.2.0"
   NDK_VERSION: "r23"
   #signing keys env variable checks
@@ -130,6 +132,7 @@ jobs:
             ./SignOutput/rustdesk-*.exe
 
   # The fallback for the flutter version, we use Sciter for 32bit Windows.
+  # Also, build Sciter version for 64bit Windows.
   build-for-windows-sciter:
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
     runs-on: ${{ matrix.job.os }}
@@ -141,14 +144,23 @@ jobs:
         job:
           # - { target: i686-pc-windows-msvc        , os: windows-2019                  }
           # - { target: x86_64-pc-windows-gnu       , os: windows-2019                  }
-          - { target: i686-pc-windows-msvc, os: windows-2019, arch: x86 }
+          - { target: i686-pc-windows-msvc          , os: windows-2019, arch: x86       }
+          - { target: x86_64-pc-windows-msvc        , os: windows-2019, arch: x64       }
           # - { target: aarch64-pc-windows-msvc, os: windows-2019 }
     steps:
       - name: Checkout source code
         uses: actions/checkout@v3
 
-      - name: Install LLVM and Clang
+      - name: Install LLVM and Clang 32bit
+        if: matrix.job.arch == 'x86'
+
         uses: Kingtous/install-llvm-action-32bit@master
+        with:
+          version: ${{ env.LLVM_VERSION }}
+
+      - name: Install LLVM and Clang 64bit
+        if: matrix.job.arch == 'x64'
+        uses: KyleMayes/install-llvm-action@v1
         with:
           version: ${{ env.LLVM_VERSION }}
 
@@ -181,16 +193,29 @@ jobs:
         env:
           VCPKG_ROOT: C:\rustdesk_thirdpary_lib\vcpkg
         run: |
-          python3 res/inline-sciter.py
-          # Patch sciter x86
-          sed -i 's/branch = "dyn"/branch = "dyn_x86"/g' ./Cargo.toml
-          # Replace the link for the ico.
-          rm res/icon.ico && cp flutter/windows/runner/resources/app_icon.ico res/icon.ico
-          cargo build --features inline --release --bins
-          mkdir -p ./Release
-          mv ./target/release/rustdesk.exe ./Release/rustdesk.exe
-          curl -LJ -o ./Release/sciter.dll https://github.com/c-smile/sciter-sdk/raw/master/bin.win/x32/sciter.dll
-          echo "output_folder=./Release" >> $GITHUB_OUTPUT
+          if [[ "${{ matrix.job.arch }}" == "x86" ]]; then
+            python3 res/inline-sciter.py
+            # Patch sciter x86
+            sed -i 's/branch = "dyn"/branch = "dyn_x86"/g' ./Cargo.toml
+            # Replace the link for the ico.
+            rm res/icon.ico && cp flutter/windows/runner/resources/app_icon.ico res/icon.ico
+            cargo build --features inline --release --bins
+            mkdir -p ./Release
+            mv ./target/release/rustdesk.exe ./Release/rustdesk.exe
+            curl -LJ -o ./Release/sciter.dll https://github.com/c-smile/sciter-sdk/raw/master/bin.win/x32/sciter.dll
+            echo "output_folder=./Release" >> $GITHUB_OUTPUT
+          fi
+
+          if [[ "${{ matrix.job.arch }}" == "x64" ]]; then
+            python3 res/inline-sciter.py
+            # Replace the link for the ico.
+            rm res/icon.ico && cp flutter/windows/runner/resources/app_icon.ico res/icon.ico
+            cargo build --features inline --release --bins --target x86_64-pc-windows-msvc
+            mkdir -p ./Release
+            mv ./target/x86_64-pc-windows-msvc/release/rustdesk.exe ./Release/rustdesk.exe
+            curl -LJ -o ./Release/sciter.dll https://github.com/c-smile/sciter-sdk/raw/master/bin.win/x64/sciter.dll
+            echo "output_folder=./Release" >> $GITHUB_OUTPUT
+          fi
 
       - name: Sign rustdesk files
         uses: GermanBluefox/code-sign-action@v7
