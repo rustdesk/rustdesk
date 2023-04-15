@@ -492,5 +492,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("no_desktop_title_tip", "Non c'è nessun desktop disponibile."),
         ("no_desktop_text_tip", "Installa il desktop GNOME."),
         ("No need to elevate", "Elevazione dei privilegi non richiesta"),
+        ("System Sound", "Dispositivo audio sistema"),
+        ("Default", "Predefinita"),
     ].iter().cloned().collect();
 }
