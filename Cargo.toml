@@ -73,7 +73,7 @@ cidr-utils = "0.5"
 libloading = "0.7"
 
 [target.'cfg(not(any(target_os = "android", target_os = "linux")))'.dependencies]
-cpal = "0.14"
+cpal = "0.15"
 ringbuf = "0.3"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
