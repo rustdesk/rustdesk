@@ -492,5 +492,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("no_desktop_title_tip", "Pulpit jest niedostępny"),
         ("no_desktop_text_tip", "Proszę zainstalować pulpit GNOME"),
         ("No need to elevate", ""),
+        ("New RDP", ""),
     ].iter().cloned().collect();
 }
