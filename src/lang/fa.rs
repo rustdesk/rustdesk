@@ -492,5 +492,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("no_desktop_title_tip", "هیچ دسکتاپی در دسترس نیست"),
         ("no_desktop_text_tip", "لطفا دسکتاپ گنوم را نصب کنید"),
         ("No need to elevate", ""),
+        ("New RDP", ""),
     ].iter().cloned().collect();
 }
