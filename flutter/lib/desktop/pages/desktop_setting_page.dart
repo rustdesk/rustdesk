@@ -415,7 +415,7 @@ class _GeneralState extends State<_General> {
       List<String> keys = langsMap.keys.toList();
       List<String> values = langsMap.values.toList();
       keys.insert(0, '');
-      values.insert(0, translate('Default'));
+      values.insert(0, translate('System Language'));
       String currentKey = data['lang']!;
       if (!keys.contains(currentKey)) {
         currentKey = '';
