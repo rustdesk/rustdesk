@@ -504,7 +504,7 @@ void showLanguageSettings(OverlayDialogManager dialogManager) async {
       return CustomAlertDialog(
         content: Column(
           children: [
-                getRadio(Text(translate('Default')), '', lang, setLang),
+                getRadio(Text(translate('System Language')), '', lang, setLang),
                 Divider(color: MyTheme.border),
               ] +
               langs.map((e) {
