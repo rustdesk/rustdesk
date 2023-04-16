@@ -400,7 +400,7 @@ jobs:
         shell: bash
         run: |
           pushd /opt
-          git clone https://github.com/Kingtous/rustdesk_thirdparty_lib.git --depth=1
+          sudo git clone https://github.com/Kingtous/rustdesk_thirdparty_lib.git --depth=1
 
       - name: Restore bridge files
         uses: actions/download-artifact@master
@@ -422,8 +422,9 @@ jobs:
           key: ${{ matrix.job.target }}-${{ matrix.job.extra-build-features }}
 
       - name: Disable rust bridge build
+        shell: bash
         run: |
-          sed -i "s/gen_flutter_rust_bridge();/\/\//g" build.rs
+          sed -i build.rs.bak "s/gen_flutter_rust_bridge();/\/\//g" build.rs
 
       - name: Build rustdesk lib
         env:

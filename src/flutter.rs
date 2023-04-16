@@ -1,5 +1,4 @@
 use crate::{
-    api::SessionHook,
     client::*,
     flutter_ffi::EventToUI,
     ui_session_interface::{io_loop, InvokeUiSession, Session},
@@ -147,7 +146,8 @@ pub struct FlutterHandler {
     notify_rendered: Arc<RwLock<bool>>,
     renderer: Arc<RwLock<VideoRenderer>>,
     peer_info: Arc<RwLock<PeerInfo>>,
-    hooks: Arc<RwLock<HashMap<String, SessionHook>>>,
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    hooks: Arc<RwLock<HashMap<String, crate::api::SessionHook>>>,
 }
 
 #[cfg(not(feature = "flutter_texture_render"))]
@@ -159,7 +159,8 @@ pub struct FlutterHandler {
     pub rgba: Arc<RwLock<Vec<u8>>>,
     pub rgba_valid: Arc<AtomicBool>,
     peer_info: Arc<RwLock<PeerInfo>>,
-    hooks: Arc<RwLock<HashMap<String, SessionHook>>>,
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    hooks: Arc<RwLock<HashMap<String, crate::api::SessionHook>>>,
 }
 
 #[cfg(feature = "flutter_texture_render")]
@@ -280,6 +281,7 @@ impl FlutterHandler {
         serde_json::ser::to_string(&msg_vec).unwrap_or("".to_owned())
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub(crate) fn add_session_hook(&self, key: String, hook: crate::api::SessionHook) -> bool {
         let mut hooks = self.hooks.write().unwrap();
         if hooks.contains_key(&key) {
@@ -290,6 +292,7 @@ impl FlutterHandler {
         true
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub(crate) fn remove_session_hook(&self, key: &String) -> bool {
         let mut hooks = self.hooks.write().unwrap();
         if !hooks.contains_key(key) {
