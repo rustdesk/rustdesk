@@ -1,4 +1,4 @@
-use std::ffi::c_char;
+use std::ffi::{c_char};
 
 use crate::{
     flutter::{FlutterHandler, SESSIONS},
@@ -9,19 +9,18 @@ use crate::{
 // API provided by RustDesk.
 pub type LoadPluginFunc = fn(*const c_char) -> i32;
 pub type UnloadPluginFunc = fn(*const c_char) -> i32;
-pub type AddSessionFunc = fn(session: Session<FlutterHandler>) -> bool;
+pub type AddSessionFunc = fn(session_id: String) -> bool;
 pub type RemoveSessionFunc = fn(session_id: &String) -> bool;
 pub type AddSessionHookFunc = fn(session_id: String, key: String, hook: SessionHook) -> bool;
 pub type RemoveSessionHookFunc = fn(session_id: String, key: &String) -> bool;
 
 /// Hooks for session.
-#[repr(usize)]
 #[derive(Clone)]
 pub enum SessionHook {
-    OnSessionRgba(fn(&Session<FlutterHandler>, Vec<i8>) -> Vec<i8>) = 1,
+    OnSessionRgba(fn(String, Vec<i8>) -> Vec<i8>),
 }
 
-#[repr(C)]
+// #[repr(C)]
 pub struct RustDeskApiTable {
     pub(crate) load_plugin: LoadPluginFunc,
     pub(crate) unload_plugin: UnloadPluginFunc,
@@ -39,13 +38,14 @@ fn unload_plugin(path: *const c_char) -> i32 {
     PLUGIN_REGISTRAR.unload_plugin(path)
 }
 
-fn add_session(session: Session<FlutterHandler>) -> bool {
-    let mut sessions = SESSIONS.write().unwrap();
-    if sessions.contains_key(&session.id) {
-        return false;
-    }
-    let _ = sessions.insert(session.id.to_owned(), session);
-    true
+fn add_session(session_id: String) -> bool {
+    // let mut sessions = SESSIONS.write().unwrap();
+    // if sessions.contains_key(&session.id) {
+    //     return false;
+    // }
+    // let _ = sessions.insert(session.id.to_owned(), session);
+    // true
+    false
 }
 
 fn remove_session(session_id: &String) -> bool {
