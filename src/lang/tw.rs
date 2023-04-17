@@ -492,6 +492,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("no_desktop_title_tip", "沒有可用的桌面"),
         ("no_desktop_text_tip", "請安裝 GNOME 桌面"),
         ("No need to elevate", "不需要提升權限"),
-        ("New RDP", ""),
+        ("New RDP", "新的 RDP"),
     ].iter().cloned().collect();
 }
