@@ -15,7 +15,13 @@ osx = platform.platform().startswith(
     'Darwin') or platform.platform().startswith("macOS")
 hbb_name = 'rustdesk' + ('.exe' if windows else '')
 exe_path = 'target/release/' + hbb_name
-flutter_win_target_dir = 'flutter/build/windows/runner/Release/'
+if windows:
+    flutter_build_dir = 'build/windows/runner/Release/'
+elif osx:
+    flutter_build_dir = 'build/macos/Build/Products/Release/'
+else:
+    flutter_build_dir = 'build/linux/x64/release/bundle/'
+flutter_build_dir_2 = f'flutter/{flutter_build_dir}'
 skip_cargo = False
 
 def get_arch() -> str:
@@ -227,26 +233,26 @@ def download_extract_features(features, res_dir):
                 print(f'{feat} extract end')
 
 
-def external_resources(args):
+def external_resources(flutter, args, res_dir):
     features = parse_rc_features(args.feature)
     if not features:
         return
 
     print(f'Build with features {list(features.keys())}')
-    res_dir = 'resources'
     if os.path.isdir(res_dir) and not os.path.islink(res_dir):
         shutil.rmtree(res_dir)
     elif os.path.exists(res_dir):
         raise Exception(f'Find file {res_dir}, not a directory')
     os.makedirs(res_dir, exist_ok=True)
     download_extract_features(features, res_dir)
-    os.makedirs(flutter_win_target_dir, exist_ok=True)
-    for f in pathlib.Path(res_dir).iterdir():
-        print(f'{f}')
-        if f.is_file():
-            shutil.copy2(f, flutter_win_target_dir)
-        else:
-            shutil.copytree(f, f'{flutter_win_target_dir}{f.stem}')
+    if flutter:
+        os.makedirs(flutter_build_dir_2, exist_ok=True)
+        for f in pathlib.Path(res_dir).iterdir():
+            print(f'{f}')
+            if f.is_file():
+                shutil.copy2(f, flutter_build_dir_2)
+            else:
+                shutil.copytree(f, f'{flutter_build_dir_2}{f.stem}')
 
 
 def get_features(args):
@@ -305,7 +311,7 @@ def build_flutter_deb(version, features):
     system2('mkdir -p tmpdeb/usr/share/polkit-1/actions')
     system2('rm tmpdeb/usr/bin/rustdesk || true')
     system2(
-        'cp -r build/linux/x64/release/bundle/* tmpdeb/usr/lib/rustdesk/')
+        f'cp -r {flutter_build_dir}/* tmpdeb/usr/lib/rustdesk/')
     system2(
         'cp ../res/rustdesk.service tmpdeb/usr/share/rustdesk/files/systemd/')
     system2(
@@ -391,7 +397,7 @@ def build_flutter_arch_manjaro(version, features):
     ffi_bindgen_function_refactor()
     os.chdir('flutter')
     system2('flutter build linux --release')
-    system2('strip build/linux/x64/release/bundle/lib/librustdesk.so')
+    system2(f'strip {flutter_build_dir}/lib/librustdesk.so')
     os.chdir('../res')
     system2('HBB=`pwd`/.. FLUTTER=1 makepkg -f')
 
@@ -406,11 +412,11 @@ def build_flutter_windows(version, features):
     system2('flutter build windows --release')
     os.chdir('..')
     shutil.copy2('target/release/deps/dylib_virtual_display.dll',
-                 flutter_win_target_dir)
+                 flutter_build_dir_2)
     os.chdir('libs/portable')
     system2('pip3 install -r requirements.txt')
     system2(
-        f'python3 ./generate.py -f ../../{flutter_win_target_dir} -o . -e ../../{flutter_win_target_dir}/rustdesk.exe')
+        f'python3 ./generate.py -f ../../{flutter_build_dir_2} -o . -e ../../{flutter_build_dir_2}/rustdesk.exe')
     os.chdir('../..')
     if os.path.exists('./rustdesk_portable.exe'):
         os.replace('./target/release/rustdesk-portable-packer.exe',
@@ -447,6 +453,8 @@ def main():
     if package:
         build_deb_from_folder(version, package)
         return
+    res_dir = 'resources'
+    external_resources(flutter, args, res_dir)
     if windows:
         # build virtual display dynamic library
         os.chdir('libs/virtual_display/dylib')
@@ -454,7 +462,6 @@ def main():
         os.chdir('../../..')
 
         if flutter:
-            external_resources(args)
             build_flutter_windows(version, features)
             return
         system2('cargo build --release --features ' + features)
@@ -468,7 +475,11 @@ def main():
         else:
             print('Not signed')
         system2(
-            f'cp -rf target/release/RustDesk.exe rustdesk-{version}-win7-install.exe')
+            f'cp -rf target/release/RustDesk.exe {res_dir}')
+        os.chdir('libs/portable')
+        system2('pip3 install -r requirements.txt')
+        system2(
+            f'python3 ./generate.py -f ../../{res_dir} -o . -e ../../rustdesk-{version}-win7-install.exe')
     elif os.path.isfile('/usr/bin/pacman'):
         # pacman -S -needed base-devel
         system2("sed -i 's/pkgver=.*/pkgver=%s/g' res/PKGBUILD" % version)
