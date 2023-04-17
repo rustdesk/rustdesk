@@ -928,7 +928,6 @@ pub fn copy_exe_cmd(src_exe: &str, exe: &str, path: &str) -> String {
         "
         {main_exe}
         copy /Y \"{ORIGIN_PROCESS_EXE}\" \"{path}\\{broker_exe}\"
-        \"{src_exe}\" --extract \"{path}\"
         ",
         main_exe = main_exe,
         path = path,
