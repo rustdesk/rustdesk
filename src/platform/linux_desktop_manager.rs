@@ -1,5 +1,5 @@
 use super::{linux::*, ResultType};
-use crate::server::{
+use crate::client::{
     LOGIN_MSG_DESKTOP_NO_DESKTOP, LOGIN_MSG_DESKTOP_SESSION_ANOTHER_USER,
     LOGIN_MSG_DESKTOP_SESSION_NOT_READY, LOGIN_MSG_DESKTOP_XORG_NOT_FOUND,
     LOGIN_MSG_DESKTOP_XSESSION_FAILED,
@@ -152,7 +152,7 @@ fn try_start_x_session(username: &str, password: &str) -> ResultType<(String, bo
             desktop_manager.is_running(),
         ))
     } else {
-        bail!(crate::server::LOGIN_MSG_DESKTOP_NOT_INITED);
+        bail!(crate::client::LOGIN_MSG_DESKTOP_NOT_INITED);
     }
 }
 

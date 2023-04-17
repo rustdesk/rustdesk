@@ -17,7 +17,7 @@ use serde_derive::Serialize;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::ipc::Connection;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "ios")))]
 use crate::ipc::{self, Data};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::tokio::sync::mpsc::unbounded_channel;
@@ -150,7 +150,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
             recording,
             from_switch,
             #[cfg(not(any(target_os = "ios")))]
-            _tx,
+            tx,
             in_voice_call: false,
             incoming_voice_call: false,
         };

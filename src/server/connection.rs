@@ -1270,13 +1270,13 @@ impl Connection {
             // If err is LOGIN_MSG_DESKTOP_SESSION_NOT_READY, just keep this msg and go on checking password.
             #[cfg(all(target_os = "linux", feature = "linux_headless"))]
             #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
-            if !desktop_err.is_empty() && desktop_err != LOGIN_MSG_DESKTOP_SESSION_NOT_READY {
+            if !desktop_err.is_empty() && desktop_err != crate::client::LOGIN_MSG_DESKTOP_SESSION_NOT_READY {
                 self.send_login_error(desktop_err).await;
                 return true;
             }
 
             if !hbb_common::is_ipv4_str(&lr.username) && lr.username != Config::get_id() {
-                self.send_login_error(LOGIN_MSG_OFFLINE).await;
+                self.send_login_error(crate::client::LOGIN_MSG_OFFLINE).await;
             } else if password::approve_mode() == ApproveMode::Click
                 || password::approve_mode() == ApproveMode::Both && !password::has_valid_password()
             {
@@ -1284,7 +1284,7 @@ impl Connection {
                 if hbb_common::get_version_number(&lr.version)
                     >= hbb_common::get_version_number("1.2.0")
                 {
-                    self.send_login_error(LOGIN_MSG_NO_PASSWORD_ACCESS).await;
+                    self.send_login_error(crate::client::LOGIN_MSG_NO_PASSWORD_ACCESS).await;
                 }
                 return true;
             } else if password::approve_mode() == ApproveMode::Password
@@ -1323,7 +1323,7 @@ impl Connection {
                 if desktop_err.is_empty() {
                     self.try_start_cm(lr.my_id, lr.my_name, false);
                 } else {
-                    self.send_login_error(LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_EMPTY)
+                    self.send_login_error(crate::client::LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_EMPTY)
                         .await;
                 }
                 #[cfg(not(all(target_os = "linux", feature = "linux_headless")))]
@@ -1371,15 +1371,15 @@ impl Connection {
                     #[cfg(all(target_os = "linux", feature = "linux_headless"))]
                     #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
                     if desktop_err.is_empty() {
-                        self.send_login_error(LOGIN_MSG_PASSWORD_WRONG).await;
+                        self.send_login_error(crate::client::LOGIN_MSG_PASSWORD_WRONG).await;
                         self.try_start_cm(lr.my_id, lr.my_name, false);
                     } else {
-                        self.send_login_error(LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_WRONG)
+                        self.send_login_error(crate::client::LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_WRONG)
                             .await;
                     }
                     #[cfg(not(all(target_os = "linux", feature = "linux_headless")))]
                     {
-                        self.send_login_error(LOGIN_MSG_PASSWORD_WRONG).await;
+                        self.send_login_error(crate::client::LOGIN_MSG_PASSWORD_WRONG).await;
                         self.try_start_cm(lr.my_id, lr.my_name, false);
                     }
                 } else {

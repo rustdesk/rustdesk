@@ -3,7 +3,7 @@ use hbb_common::{allow_err, platform::linux::DISTRO};
 use scrap::{is_cursor_embedded, set_map_err, Capturer, Display, Frame, TraitCapturer};
 use std::io;
 
-use super::video_service::{
+use crate::client::{
     SCRAP_OTHER_VERSION_OR_X11_REQUIRED, SCRAP_UBUNTU_HIGHER_REQUIRED, SCRAP_X11_REQUIRED,
 };
 
