@@ -71,19 +71,23 @@ def parse_rc_features(feature):
             return 'osx' in platforms
         else:
             return 'linux' in platforms
-    
-    if isinstance(feature, str) and feature.upper() == 'ALL':
+        
+    def get_all_features():
+        features = []
         for (feat, feat_info) in available_features.items():
             if platform_check(feat_info['platform']):
-                apply_features[feat] = available_features[feat]
-        return apply_features
+                features.append(feat)
+        return features
+    
+    if isinstance(feature, str) and feature.upper() == 'ALL':
+        return get_all_features()
     elif isinstance(feature, list):
         if windows:
             # force add PrivacyMode
             feature.append('PrivacyMode')
         for feat in feature:
             if isinstance(feat, str) and feat.upper() == 'ALL':
-                return available_features
+                return get_all_features()
             if feat in available_features:
                 if platform_check(available_features[feat]['platform']):
                     apply_features[feat] = available_features[feat]
