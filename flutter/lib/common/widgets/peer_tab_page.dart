@@ -455,12 +455,12 @@ class _PeerSortDropdownState extends State<PeerSortDropdown> {
       borderRadius: BorderRadius.circular(5),
     );
 
-    final translated_text =
-        PeerSortType.values.map((e) => translate(e)).toList();
+    final translated_text = {
+      for (var e in PeerSortType.values) e: translate(e)
+    };
 
     final double max_width =
-        50 + translated_text.map((e) => e.length).reduce(max) * 10;
-
+        50 + translated_text.values.map((e) => e.length).reduce(max) * 10;
     return Container(
       padding: EdgeInsets.all(4.0),
       decoration: deco,
@@ -496,20 +496,20 @@ class _PeerSortDropdownState extends State<PeerSortDropdown> {
                 ),
                 enabled: false,
               ),
-              ...translated_text
+              ...translated_text.entries
                   .map<DropdownMenuItem<String>>(
-                    (String value) => DropdownMenuItem<String>(
-                      value: value,
+                    (MapEntry entry) => DropdownMenuItem<String>(
+                      value: entry.key,
                       child: Row(
                         children: [
                           Icon(
-                            value == peerSort.value
+                            entry.key == peerSort.value
                                 ? Icons.radio_button_checked_rounded
                                 : Icons.radio_button_off_rounded,
                             size: 18,
                           ).paddingOnly(right: 12),
                           Text(
-                            value,
+                            entry.value,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ],
