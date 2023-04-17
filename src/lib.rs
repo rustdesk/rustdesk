@@ -67,7 +67,7 @@ pub mod clipboard_file;
 #[cfg(all(windows, feature = "with_rc"))]
 pub mod rc;
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(windows)]
 pub mod privacy_win_mag;
 
 #[cfg(all(windows, feature = "virtual_display_driver"))]
