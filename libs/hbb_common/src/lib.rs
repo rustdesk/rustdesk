@@ -44,6 +44,8 @@ pub use libc;
 pub mod keyboard;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use sysinfo;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub use dlopen;
 
 #[cfg(feature = "quic")]
 pub type Stream = quic::Connection;

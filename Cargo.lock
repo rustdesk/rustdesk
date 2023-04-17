@@ -2776,6 +2776,7 @@ dependencies = [
  "confy",
  "directories-next",
  "dirs-next",
+ "dlopen",
  "env_logger 0.10.0",
  "filetime",
  "flexi_logger",
@@ -5118,7 +5119,6 @@ dependencies = [
  "dbus-crossroads",
  "default-net",
  "dispatch",
- "dlopen",
  "enigo",
  "errno",
  "evdev",
@@ -6451,7 +6451,6 @@ version = "0.1.0"
 dependencies = [
  "hbb_common",
  "lazy_static",
- "libloading",
 ]
 
 [[package]]

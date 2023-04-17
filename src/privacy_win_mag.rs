@@ -5,7 +5,6 @@ use crate::{
 use hbb_common::{allow_err, bail, lazy_static, log, tokio, ResultType};
 use std::{
     ffi::CString,
-    os::windows::process::CommandExt,
     sync::Mutex,
     time::{Duration, Instant},
 };
@@ -25,17 +24,21 @@ use winapi::{
             CreateProcessAsUserW, GetCurrentThreadId, QueueUserAPC, ResumeThread,
             PROCESS_INFORMATION, STARTUPINFOW,
         },
-        winbase::{
-            WTSGetActiveConsoleSessionId, CREATE_NO_WINDOW, CREATE_SUSPENDED, DETACHED_PROCESS,
-        },
+        winbase::{WTSGetActiveConsoleSessionId, CREATE_SUSPENDED, DETACHED_PROCESS},
         winnt::{MEM_COMMIT, PAGE_READWRITE},
         winuser::*,
     },
 };
 
 pub const ORIGIN_PROCESS_EXE: &'static str = "C:\\Windows\\System32\\RuntimeBroker.exe";
-pub const INJECTED_PROCESS_EXE: &'static str = "RuntimeBroker_rustdesk.exe";
+pub const WIN_MAG_INJECTED_PROCESS_EXE: &'static str = "RuntimeBroker_rustdesk.exe";
+pub const INJECTED_PROCESS_EXE: &'static str = WIN_MAG_INJECTED_PROCESS_EXE;
 pub const PRIVACY_WINDOW_NAME: &'static str = "RustDeskPrivacyWindow";
+
+pub const OCCUPIED: &'static str = "Privacy occupied by another one";
+pub const TURN_OFF_OTHER_ID: &'static str =
+    "Failed to turn off privacy mode that belongs to someone else";
+pub const NO_DISPLAYS: &'static str = "No displays";
 
 pub const GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT: u32 = 2;
 pub const GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS: u32 = 4;
@@ -315,14 +318,6 @@ fn wait_find_privacy_hwnd(msecs: u128) -> ResultType<HWND> {
 
         std::thread::sleep(Duration::from_millis(100));
     }
-}
-
-pub fn is_process_consent_running() -> ResultType<bool> {
-    let output = std::process::Command::new("cmd")
-        .args(&["/C", "tasklist | findstr consent.exe"])
-        .creation_flags(CREATE_NO_WINDOW)
-        .output()?;
-    Ok(output.status.success() && !output.stdout.is_empty())
 }
 
 #[tokio::main(flavor = "current_thread")]

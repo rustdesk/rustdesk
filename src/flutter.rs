@@ -3,17 +3,18 @@ use crate::{
     flutter_ffi::EventToUI,
     ui_session_interface::{io_loop, InvokeUiSession, Session},
 };
-#[cfg(feature = "flutter_texture_render")]
-use dlopen::{
-    symbor::{Library, Symbol},
-    Error as LibError,
-};
 use flutter_rust_bridge::StreamSink;
-#[cfg(feature = "flutter_texture_render")]
-use hbb_common::libc::c_void;
 use hbb_common::{
     bail, config::LocalConfig, get_version_number, log, message_proto::*,
     rendezvous_proto::ConnType, ResultType,
+};
+#[cfg(feature = "flutter_texture_render")]
+use hbb_common::{
+    dlopen::{
+        symbor::{Library, Symbol},
+        Error as LibError,
+    },
+    libc::c_void,
 };
 use serde_json::json;
 

@@ -504,7 +504,7 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
                 e
             );
         }
-        allow_err!(crate::win_privacy::start());
+        allow_err!(crate::privacy_win_mag::start());
     });
 
     match ipc::new_listener("_cm").await {
