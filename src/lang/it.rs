@@ -494,6 +494,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("No need to elevate", "Elevazione dei privilegi non richiesta"),
         ("System Sound", "Dispositivo audio sistema"),
         ("Default", "Predefinita"),
-        ("New RDP", ""),
+        ("New RDP", "Nuovo RDP"),
     ].iter().cloned().collect();
 }
