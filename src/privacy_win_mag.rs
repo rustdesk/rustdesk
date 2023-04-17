@@ -31,8 +31,14 @@ use winapi::{
 };
 
 pub const ORIGIN_PROCESS_EXE: &'static str = "C:\\Windows\\System32\\RuntimeBroker.exe";
-pub const INJECTED_PROCESS_EXE: &'static str = super::WIN_MAG_INJECTED_PROCESS_EXE;
+pub const WIN_MAG_INJECTED_PROCESS_EXE: &'static str = "RuntimeBroker_rustdesk.exe";
+pub const INJECTED_PROCESS_EXE: &'static str = WIN_MAG_INJECTED_PROCESS_EXE;
 pub const PRIVACY_WINDOW_NAME: &'static str = "RustDeskPrivacyWindow";
+
+pub const OCCUPIED: &'static str = "Privacy occupied by another one";
+pub const TURN_OFF_OTHER_ID: &'static str =
+    "Failed to turn off privacy mode that belongs to someone else";
+pub const NO_DISPLAYS: &'static str = "No displays";
 
 pub const GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT: u32 = 2;
 pub const GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS: u32 = 4;

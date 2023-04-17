@@ -1,8 +1,10 @@
 use super::{CursorData, ResultType};
 use crate::common::PORTABLE_APPNAME_RUNTIME_ENV_KEY;
-#[cfg(feature = "privacy_win_mag")]
-use crate::privacy_mode::privacy_win_mag;
-use crate::{ipc, license::*, privacy_mode::WIN_MAG_INJECTED_PROCESS_EXE};
+use crate::{
+    ipc,
+    license::*,
+    privacy_win_mag::{self, WIN_MAG_INJECTED_PROCESS_EXE},
+};
 use hbb_common::{
     allow_err, bail,
     config::{self, Config},
@@ -10,12 +12,10 @@ use hbb_common::{
     message_proto::Resolution,
     sleep, timeout, tokio,
 };
-#[cfg(feature = "privacy_win_mag")]
-use std::fs;
 use std::{
     collections::HashMap,
     ffi::OsString,
-    io,
+    fs, io,
     io::prelude::*,
     mem,
     os::windows::process::CommandExt,
@@ -839,7 +839,6 @@ fn get_default_install_path() -> String {
     format!("{}\\{}", pf, crate::get_app_name())
 }
 
-#[cfg(feature = "privacy_win_mag")]
 pub fn check_update_broker_process() -> ResultType<()> {
     // let (_, path, _, _) = get_install_info();
     let process_exe = privacy_win_mag::INJECTED_PROCESS_EXE;
@@ -925,32 +924,17 @@ pub fn copy_raw_cmd(src_raw: &str, _raw: &str, _path: &str) -> String {
 
 pub fn copy_exe_cmd(src_exe: &str, exe: &str, path: &str) -> String {
     let main_exe = copy_raw_cmd(src_exe, exe, path);
-
-    #[cfg(feature = "privacy_win_mag")]
-    {
-        format!(
-            "
-            {main_exe}
-            copy /Y \"{ORIGIN_PROCESS_EXE}\" \"{path}\\{broker_exe}\"
-            \"{src_exe}\" --extract \"{path}\"
-            ",
-            main_exe = main_exe,
-            path = path,
-            ORIGIN_PROCESS_EXE = privacy_win_mag::ORIGIN_PROCESS_EXE,
-            broker_exe = privacy_win_mag::INJECTED_PROCESS_EXE,
-        )
-    }
-    #[cfg(not(feature = "privacy_win_mag"))]
-    {
-        format!(
-            "
-            {main_exe}
-            \"{src_exe}\" --extract \"{path}\"
-            ",
-            main_exe = main_exe,
-            path = path,
-        )
-    }
+    format!(
+        "
+        {main_exe}
+        copy /Y \"{ORIGIN_PROCESS_EXE}\" \"{path}\\{broker_exe}\"
+        \"{src_exe}\" --extract \"{path}\"
+        ",
+        main_exe = main_exe,
+        path = path,
+        ORIGIN_PROCESS_EXE = privacy_win_mag::ORIGIN_PROCESS_EXE,
+        broker_exe = privacy_win_mag::INJECTED_PROCESS_EXE,
+    )
 }
 
 pub fn update_me() -> ResultType<()> {

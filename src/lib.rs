@@ -68,4 +68,4 @@ pub mod clipboard_file;
 pub mod rc;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub mod privacy_mode;
+pub mod privacy_win_mag;

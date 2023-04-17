@@ -2346,11 +2346,11 @@ fn try_activate_screen() {
 
 mod privacy_mode {
     use super::*;
-    #[cfg(all(windows, feature = "privacy_win_mag"))]
-    use crate::privacy_mode::privacy_win_mag;
+    #[cfg(windows)]
+    use crate::privacy_win_mag;
 
     pub(super) fn turn_off_privacy(_conn_id: i32) -> Message {
-        #[cfg(all(windows, feature = "privacy_win_mag"))]
+        #[cfg(windows)]
         {
             let res = privacy_win_mag::turn_off_privacy(_conn_id, None);
             match res {
@@ -2365,19 +2365,19 @@ mod privacy_mode {
                 }
             }
         }
-        #[cfg(not(all(windows, feature = "privacy_win_mag")))]
+        #[cfg(not(windows))]
         {
             crate::common::make_privacy_mode_msg(back_notification::PrivacyModeState::PrvOffFailed)
         }
     }
 
     pub(super) fn turn_on_privacy(_conn_id: i32) -> ResultType<bool> {
-        #[cfg(all(windows, feature = "privacy_win_mag"))]
+        #[cfg(windows)]
         {
             let plugin_exist = privacy_win_mag::turn_on_privacy(_conn_id)?;
             Ok(plugin_exist)
         }
-        #[cfg(not(all(windows, feature = "privacy_win_mag")))]
+        #[cfg(not(windows))]
         {
             Ok(true)
         }

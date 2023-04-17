@@ -20,12 +20,10 @@
 
 use super::{video_qos::VideoQoS, *};
 #[cfg(windows)]
-use crate::platform::windows::is_process_consent_running;
-#[cfg(all(windows, feature = "privacy_win_mag"))]
-use crate::privacy_mode::privacy_win_mag;
+use crate::{platform::windows::is_process_consent_running, privacy_win_mag};
 #[cfg(all(windows, feature = "virtual_display_driver"))]
 use hbb_common::config::LocalConfig;
-#[cfg(all(windows, feature = "privacy_win_mag"))]
+#[cfg(windows)]
 use hbb_common::get_version_number;
 use hbb_common::tokio::sync::{
     mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
@@ -78,9 +76,9 @@ lazy_static::lazy_static! {
 }
 
 fn is_capturer_mag_supported() -> bool {
-    #[cfg(all(windows, feature = "privacy_win_mag"))]
+    #[cfg(windows)]
     return scrap::CapturerMag::is_supported();
-    #[cfg(not(all(windows, feature = "privacy_win_mag")))]
+    #[cfg(not(windows))]
     false
 }
 
@@ -101,10 +99,10 @@ pub fn get_privacy_mode_conn_id() -> i32 {
 }
 
 pub fn is_privacy_mode_supported() -> bool {
-    #[cfg(all(windows, feature = "privacy_win_mag"))]
+    #[cfg(windows)]
     return *IS_CAPTURER_MAGNIFIER_SUPPORTED
         && get_version_number(&crate::VERSION) > get_version_number("1.1.9");
-    #[cfg(not(all(windows, feature = "privacy_win_mag")))]
+    #[cfg(not(windows))]
     return false;
 }
 
@@ -210,12 +208,12 @@ fn create_capturer(
     _current: usize,
     _portable_service_running: bool,
 ) -> ResultType<Box<dyn TraitCapturer>> {
-    #[cfg(not(all(windows, feature = "privacy_win_mag")))]
+    #[cfg(not(windows))]
     let c: Option<Box<dyn TraitCapturer>> = None;
-    #[cfg(all(windows, feature = "privacy_win_mag"))]
+    #[cfg(windows)]
     let mut c: Option<Box<dyn TraitCapturer>> = None;
     if privacy_mode_id > 0 {
-        #[cfg(all(windows, feature = "privacy_win_mag"))]
+        #[cfg(windows)]
         {
             match scrap::CapturerMag::new(
                 display.origin(),
@@ -942,21 +940,39 @@ fn try_get_displays() -> ResultType<Vec<Display>> {
         log::debug!("no displays, create virtual display");
         // Try plugin monitor
         if LocalConfig::get_virtual_display_num() > 0 {
-            if !virtual_display::is_device_created() {
-                if let Err(e) = virtual_display::create_device() {
+            let mut device_already_created = false;
+            if let Err(e) = virtual_display::create_device() {
+                if e.to_string().contains("Device is already created") {
+                    device_already_created = true;
+                } else {
                     log::debug!("Create device failed {}", e);
                 }
             }
-            if virtual_display::is_device_created() {
+            if device_already_created || virtual_display::is_device_created() {
+                // Reboot is not required for this case.
+                let mut _reboot_required = false;
+                virtual_display::install_update_driver(&mut _reboot_required)?;
                 if let Err(e) = virtual_display::plug_in_monitor(VIRTUAL_DISPLAY_INDEX_FOR_HEADLESS)
                 {
                     log::debug!("Plug in monitor failed {}", e);
+                } else {
+                    let modes = [virtual_display::MonitorMode {
+                        width: 1920,
+                        height: 1080,
+                        sync: 60,
+                    }];
+                    if let Err(e) = virtual_display::update_monitor_modes(
+                        VIRTUAL_DISPLAY_INDEX_FOR_HEADLESS,
+                        &modes,
+                    ) {
+                        log::debug!("Update monitor modes failed {}", e);
+                    }
                 }
             }
             displays = Display::all()?;
         }
     } else if displays.len() > 1 {
-        // to-do: do not close if in privacy mode.
+        // to-do: do not close if in idd privacy mode.
 
         // If more than one displays exists, close RustDeskVirtualDisplay
         if virtual_display::is_device_created() {

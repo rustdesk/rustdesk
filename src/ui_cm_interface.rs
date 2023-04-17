@@ -495,7 +495,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tokio::main(flavor = "current_thread")]
 pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
-    #[cfg(all(windows, feature = "privacy_win_mag"))]
+    #[cfg(windows)]
     std::thread::spawn(move || {
         log::info!("try create privacy mode window");
         if let Err(e) = crate::platform::windows::check_update_broker_process() {
@@ -504,7 +504,7 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
                 e
             );
         }
-        allow_err!(crate::privacy_mode::privacy_win_mag::start());
+        allow_err!(crate::privacy_win_mag::start());
     });
 
     match ipc::new_listener("_cm").await {
