@@ -65,22 +65,6 @@ lazy_static::lazy_static! {
 pub static CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 pub static MOUSE_MOVE_TIME: AtomicI64 = AtomicI64::new(0);
 
-pub const LOGIN_MSG_DESKTOP_NOT_INITED: &str = "Desktop env is not inited";
-pub const LOGIN_MSG_DESKTOP_SESSION_NOT_READY: &str = "Desktop session not ready";
-pub const LOGIN_MSG_DESKTOP_XSESSION_FAILED: &str = "Desktop xsession failed";
-pub const LOGIN_MSG_DESKTOP_SESSION_ANOTHER_USER: &str = "Desktop session another user login";
-pub const LOGIN_MSG_DESKTOP_XORG_NOT_FOUND: &str = "Desktop xorg not found";
-// ls /usr/share/xsessions/
-pub const LOGIN_MSG_DESKTOP_NO_DESKTOP: &str = "Desktop none";
-pub const LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_EMPTY: &str =
-    "Desktop session not ready, password empty";
-pub const LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_WRONG: &str =
-    "Desktop session not ready, password wrong";
-pub const LOGIN_MSG_PASSWORD_EMPTY: &str = "Empty Password";
-pub const LOGIN_MSG_PASSWORD_WRONG: &str = "Wrong Password";
-pub const LOGIN_MSG_NO_PASSWORD_ACCESS: &str = "No Password Access";
-pub const LOGIN_MSG_OFFLINE: &str = "Offline";
-
 #[derive(Clone, Default)]
 pub struct ConnInner {
     id: i32,

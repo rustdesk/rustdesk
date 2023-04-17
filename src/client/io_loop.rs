@@ -36,6 +36,7 @@ use crate::client::{
 use crate::common::{self, update_clipboard};
 use crate::common::{get_default_sound_input, set_sound_input};
 use crate::ui_session_interface::{InvokeUiSession, Session};
+#[cfg(not(any(target_os = "ios")))]
 use crate::{audio_service, ConnInner, CLIENT_SERVER};
 use crate::{client::Data, client::Interface};
 
@@ -303,60 +304,65 @@ impl<T: InvokeUiSession> Remote<T> {
         if let Some(device) = default_sound_device {
             set_sound_input(device);
         }
-        // Create a channel to receive error or closed message
-        let (tx, rx) = std::sync::mpsc::channel();
-        let (tx_audio_data, mut rx_audio_data) = hbb_common::tokio::sync::mpsc::unbounded_channel();
-        // Create a stand-alone inner, add subscribe to audio service
-        let conn_id = CLIENT_SERVER.write().unwrap().get_new_id();
-        let client_conn_inner = ConnInner::new(conn_id.clone(), Some(tx_audio_data), None);
-        // now we subscribe
-        CLIENT_SERVER.write().unwrap().subscribe(
-            audio_service::NAME,
-            client_conn_inner.clone(),
-            true,
-        );
-        let tx_audio = self.sender.clone();
-        std::thread::spawn(move || {
-            loop {
-                // check if client is closed
-                match rx.try_recv() {
-                    Ok(_) | Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                        log::debug!("Exit voice call audio service of client");
-                        // unsubscribe
-                        CLIENT_SERVER.write().unwrap().subscribe(
-                            audio_service::NAME,
-                            client_conn_inner,
-                            false,
-                        );
-                        break;
-                    }
-                    _ => {}
-                }
-                match rx_audio_data.try_recv() {
-                    Ok((_instant, msg)) => match &msg.union {
-                        Some(message::Union::AudioFrame(frame)) => {
-                            let mut msg = Message::new();
-                            msg.set_audio_frame(frame.clone());
-                            tx_audio.send(Data::Message(msg)).ok();
-                        }
-                        Some(message::Union::Misc(misc)) => {
-                            let mut msg = Message::new();
-                            msg.set_misc(misc.clone());
-                            tx_audio.send(Data::Message(msg)).ok();
+        // iOS does not have this server.
+        #[cfg(not(any(target_os = "ios")))]
+        {
+            // Create a channel to receive error or closed message
+            let (tx, rx) = std::sync::mpsc::channel();
+            let (tx_audio_data, mut rx_audio_data) = hbb_common::tokio::sync::mpsc::unbounded_channel();
+            // Create a stand-alone inner, add subscribe to audio service
+            let conn_id = CLIENT_SERVER.write().unwrap().get_new_id();
+            let client_conn_inner = ConnInner::new(conn_id.clone(), Some(tx_audio_data), None);
+            // now we subscribe
+            CLIENT_SERVER.write().unwrap().subscribe(
+                audio_service::NAME,
+                client_conn_inner.clone(),
+                true,
+            );
+            let tx_audio = self.sender.clone();
+            std::thread::spawn(move || {
+                loop {
+                    // check if client is closed
+                    match rx.try_recv() {
+                        Ok(_) | Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                            log::debug!("Exit voice call audio service of client");
+                            // unsubscribe
+                            CLIENT_SERVER.write().unwrap().subscribe(
+                                audio_service::NAME,
+                                client_conn_inner,
+                                false,
+                            );
+                            break;
                         }
                         _ => {}
-                    },
-                    Err(err) => {
-                        if err == TryRecvError::Empty {
-                            // ignore
-                        } else {
-                            log::debug!("Failed to record local audio channel: {}", err);
+                    }
+                    match rx_audio_data.try_recv() {
+                        Ok((_instant, msg)) => match &msg.union {
+                            Some(message::Union::AudioFrame(frame)) => {
+                                let mut msg = Message::new();
+                                msg.set_audio_frame(frame.clone());
+                                tx_audio.send(Data::Message(msg)).ok();
+                            }
+                            Some(message::Union::Misc(misc)) => {
+                                let mut msg = Message::new();
+                                msg.set_misc(misc.clone());
+                                tx_audio.send(Data::Message(msg)).ok();
+                            }
+                            _ => {}
+                        },
+                        Err(err) => {
+                            if err == TryRecvError::Empty {
+                                // ignore
+                            } else {
+                                log::debug!("Failed to record local audio channel: {}", err);
+                            }
                         }
                     }
                 }
-            }
-        });
-        Some(tx)
+            });
+            return Some(tx);
+        }
+        None
     }
 
     async fn handle_msg_from_ui(&mut self, data: Data, peer: &mut Stream) -> bool {

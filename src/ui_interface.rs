@@ -26,7 +26,10 @@ use hbb_common::{
 
 #[cfg(feature = "flutter")]
 use crate::hbbs_http::account;
-use crate::{common::SOFTWARE_UPDATE_URL, ipc};
+use crate::{common::SOFTWARE_UPDATE_URL};
+#[cfg(not(any(target_os = "ios")))]
+use crate::ipc;
+
 
 type Message = RendezvousMessage;
 
@@ -569,6 +572,7 @@ pub fn create_shortcut(_id: String) {
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[inline]
 pub fn discover() {
+    #[cfg(not(any(target_os = "ios")))]
     std::thread::spawn(move || {
         allow_err!(crate::lan::discover());
     });
@@ -922,7 +926,8 @@ pub fn option_synced() -> bool {
     OPTION_SYNCED.lock().unwrap().clone()
 }
 
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+#[cfg(any(target_os = "android", feature = "flutter"))]
+#[cfg(not(any(target_os = "ios")))]
 #[tokio::main(flavor = "current_thread")]
 pub(crate) async fn send_to_cm(data: &ipc::Data) {
     if let Ok(mut c) = ipc::connect(1000, "_cm").await {

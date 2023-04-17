@@ -55,7 +55,6 @@ use scrap::{
 
 use crate::{
     common::{self, is_keyboard_mode_supported},
-    server::video_service::{SCRAP_X11_REF_URL, SCRAP_X11_REQUIRED},
 };
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -73,6 +72,27 @@ pub mod io_loop;
 pub const MILLI1: Duration = Duration::from_millis(1);
 pub const SEC30: Duration = Duration::from_secs(30);
 pub const VIDEO_QUEUE_SIZE: usize = 120;
+
+pub const LOGIN_MSG_DESKTOP_NOT_INITED: &str = "Desktop env is not inited";
+pub const LOGIN_MSG_DESKTOP_SESSION_NOT_READY: &str = "Desktop session not ready";
+pub const LOGIN_MSG_DESKTOP_XSESSION_FAILED: &str = "Desktop xsession failed";
+pub const LOGIN_MSG_DESKTOP_SESSION_ANOTHER_USER: &str = "Desktop session another user login";
+pub const LOGIN_MSG_DESKTOP_XORG_NOT_FOUND: &str = "Desktop xorg not found";
+// ls /usr/share/xsessions/
+pub const LOGIN_MSG_DESKTOP_NO_DESKTOP: &str = "Desktop none";
+pub const LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_EMPTY: &str =
+    "Desktop session not ready, password empty";
+pub const LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_WRONG: &str =
+    "Desktop session not ready, password wrong";
+pub const LOGIN_MSG_PASSWORD_EMPTY: &str = "Empty Password";
+pub const LOGIN_MSG_PASSWORD_WRONG: &str = "Wrong Password";
+pub const LOGIN_MSG_NO_PASSWORD_ACCESS: &str = "No Password Access";
+pub const LOGIN_MSG_OFFLINE: &str = "Offline";
+pub const SCRAP_UBUNTU_HIGHER_REQUIRED: &str = "Wayland requires Ubuntu 21.04 or higher version.";
+pub const SCRAP_OTHER_VERSION_OR_X11_REQUIRED: &str =
+    "Wayland requires higher version of linux distro. Please try X11 desktop or change your OS.";
+pub const SCRAP_X11_REQUIRED: &str = "x11 expected";
+pub const SCRAP_X11_REF_URL: &str = "https://rustdesk.com/docs/en/manual/linux/#x11-required";
 
 /// Client of the remote desktop.
 pub struct Client;
@@ -1970,49 +1990,49 @@ struct LoginErrorMsgBox {
 lazy_static::lazy_static! {
     static ref LOGIN_ERROR_MAP: Arc<HashMap<&'static str, LoginErrorMsgBox>> = {
         use hbb_common::config::LINK_HEADLESS_LINUX_SUPPORT;
-        let map = HashMap::from([(crate::server::LOGIN_MSG_DESKTOP_SESSION_NOT_READY, LoginErrorMsgBox{
+        let map = HashMap::from([(LOGIN_MSG_DESKTOP_SESSION_NOT_READY, LoginErrorMsgBox{
             msgtype: "session-login",
             title: "",
             text: "",
             link: "",
             try_again: true,
-        }), (crate::server::LOGIN_MSG_DESKTOP_XSESSION_FAILED, LoginErrorMsgBox{
+        }), (LOGIN_MSG_DESKTOP_XSESSION_FAILED, LoginErrorMsgBox{
             msgtype: "session-re-login",
             title: "",
             text: "",
             link: "",
             try_again: true,
-        }), (crate::server::LOGIN_MSG_DESKTOP_SESSION_ANOTHER_USER, LoginErrorMsgBox{
+        }), (LOGIN_MSG_DESKTOP_SESSION_ANOTHER_USER, LoginErrorMsgBox{
             msgtype: "info-nocancel",
             title: "another_user_login_title_tip",
             text: "another_user_login_text_tip",
             link: "",
             try_again: false,
-        }), (crate::server::LOGIN_MSG_DESKTOP_XORG_NOT_FOUND, LoginErrorMsgBox{
+        }), (LOGIN_MSG_DESKTOP_XORG_NOT_FOUND, LoginErrorMsgBox{
             msgtype: "info-nocancel",
             title: "xorg_not_found_title_tip",
             text: "xorg_not_found_text_tip",
             link: LINK_HEADLESS_LINUX_SUPPORT,
             try_again: true,
-        }), (crate::server::LOGIN_MSG_DESKTOP_NO_DESKTOP, LoginErrorMsgBox{
+        }), (LOGIN_MSG_DESKTOP_NO_DESKTOP, LoginErrorMsgBox{
             msgtype: "info-nocancel",
             title: "no_desktop_title_tip",
             text: "no_desktop_text_tip",
             link: LINK_HEADLESS_LINUX_SUPPORT,
             try_again: true,
-        }), (crate::server::LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_EMPTY, LoginErrorMsgBox{
+        }), (LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_EMPTY, LoginErrorMsgBox{
             msgtype: "session-login-password",
             title: "",
             text: "",
             link: "",
             try_again: true,
-        }), (crate::server::LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_WRONG, LoginErrorMsgBox{
+        }), (LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_WRONG, LoginErrorMsgBox{
             msgtype: "session-login-re-password",
             title: "",
             text: "",
             link: "",
             try_again: true,
-        }), (crate::server::LOGIN_MSG_NO_PASSWORD_ACCESS, LoginErrorMsgBox{
+        }), (LOGIN_MSG_NO_PASSWORD_ACCESS, LoginErrorMsgBox{
             msgtype: "wait-remote-accept-nook",
             title: "Prompt",
             text: "Please wait for the remote side to accept your session request...",
@@ -2030,11 +2050,11 @@ pub fn handle_login_error(
     err: &str,
     interface: &impl Interface,
 ) -> bool {
-    if err == crate::server::LOGIN_MSG_PASSWORD_EMPTY {
+    if err == LOGIN_MSG_PASSWORD_EMPTY {
         lc.write().unwrap().password = Default::default();
         interface.msgbox("input-password", "Password Required", "", "");
         true
-    } else if err == crate::server::LOGIN_MSG_PASSWORD_WRONG {
+    } else if err == LOGIN_MSG_PASSWORD_WRONG {
         lc.write().unwrap().password = Default::default();
         interface.msgbox("re-input-password", err, "Do you want to enter again?", "");
         true

@@ -3,9 +3,9 @@ extern crate scrap;
 
 use std::fs::File;
 
+use scrap::{i420_to_rgb, Display};
 #[cfg(windows)]
 use scrap::{CapturerMag, TraitCapturer};
-use scrap::{i420_to_rgb, Display};
 
 fn main() {
     let n = Display::all().unwrap().len();
