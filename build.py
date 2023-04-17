@@ -41,11 +41,13 @@ def get_version():
 def parse_rc_features(feature):
     available_features = {
         'IddDriver': {
+            'platform': ['windows'],
             'zip_url': 'https://github.com/fufesou/RustDeskIddDriver/releases/download/v0.3/RustDeskIddDriver_x64.zip',
             'checksum_url': 'https://github.com/fufesou/RustDeskIddDriver/releases/download/v0.3/checksum_md5',
             'exclude': ['README.md', 'certmgr.exe', 'install_cert_runas_admin.bat'],
         },
         'PrivacyMode': {
+            'platform': ['windows'],
             'zip_url': 'https://github.com/fufesou/RustDeskTempTopMostWindow/releases/download/v0.1'
                        '/TempTopMostWindow_x64_pic_en.zip',
             'checksum_url': 'https://github.com/fufesou/RustDeskTempTopMostWindow/releases/download/v0.1/checksum_md5',
@@ -55,16 +57,30 @@ def parse_rc_features(feature):
     apply_features = {}
     if not feature:
         feature = []
+
+    def platform_check(platforms):
+        if windows:
+            return 'windows' in platforms
+        elif osx:
+            return 'osx' in platforms
+        else:
+            return 'linux' in platforms
+    
     if isinstance(feature, str) and feature.upper() == 'ALL':
-        return available_features
+        for (feat, feat_info) in available_features.items():
+            if platform_check(feat_info['platform']):
+                apply_features[feat] = available_features[feat]
+        return apply_features
     elif isinstance(feature, list):
-        # force add PrivacyMode
-        feature.append('PrivacyMode')
+        if windows:
+            # force add PrivacyMode
+            feature.append('PrivacyMode')
         for feat in feature:
             if isinstance(feat, str) and feat.upper() == 'ALL':
                 return available_features
             if feat in available_features:
-                apply_features[feat] = available_features[feat]
+                if platform_check(available_features[feat]['platform']):
+                    apply_features[feat] = available_features[feat]
             else:
                 print(f'Unrecognized feature {feat}')
         return apply_features
@@ -211,7 +227,7 @@ def download_extract_features(features, res_dir):
                 print(f'{feat} extract end')
 
 
-def pre_resources(args):
+def external_resources(args):
     features = parse_rc_features(args.feature)
     if not features:
         return
@@ -432,14 +448,13 @@ def main():
         build_deb_from_folder(version, package)
         return
     if windows:
-        pre_resources(args)
-
         # build virtual display dynamic library
         os.chdir('libs/virtual_display/dylib')
         system2('cargo build --release')
         os.chdir('../../..')
 
         if flutter:
+            external_resources(args)
             build_flutter_windows(version, features)
             return
         system2('cargo build --release --features ' + features)
