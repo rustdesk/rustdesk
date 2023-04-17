@@ -1141,8 +1141,6 @@ pub struct LocalConfig {
     // Various data for flutter ui
     #[serde(default)]
     ui_flutter: HashMap<String, String>,
-    #[serde(default)]
-    virtual_display_num: usize,
 }
 
 impl LocalConfig {
@@ -1244,19 +1242,6 @@ impl LocalConfig {
             }
             config.store();
         }
-    }
-
-    pub fn get_virtual_display_num() -> usize {
-        LOCAL_CONFIG.read().unwrap().virtual_display_num
-    }
-
-    pub fn set_virtual_display_num(virtual_display_num: usize) {
-        let mut lock = LOCAL_CONFIG.write().unwrap();
-        if lock.virtual_display_num == virtual_display_num {
-            return;
-        }
-        lock.virtual_display_num = virtual_display_num;
-        lock.store();
     }
 }
 

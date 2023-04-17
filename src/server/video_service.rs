@@ -19,10 +19,10 @@
 // https://slhck.info/video/2017/03/01/rate-control.html
 
 use super::{video_qos::VideoQoS, *};
+#[cfg(all(windows, feature = "virtual_display_driver"))]
+use crate::virtual_display_manager;
 #[cfg(windows)]
 use crate::{platform::windows::is_process_consent_running, privacy_win_mag};
-#[cfg(all(windows, feature = "virtual_display_driver"))]
-use hbb_common::config::LocalConfig;
 #[cfg(windows)]
 use hbb_common::get_version_number;
 use hbb_common::tokio::sync::{
@@ -45,11 +45,6 @@ use std::{
     ops::{Deref, DerefMut},
     time::{self, Duration, Instant},
 };
-#[cfg(all(windows, feature = "virtual_display_driver"))]
-use virtual_display;
-
-#[cfg(all(windows, feature = "virtual_display_driver"))]
-const VIRTUAL_DISPLAY_INDEX_FOR_HEADLESS: u32 = 0;
 
 pub const SCRAP_UBUNTU_HIGHER_REQUIRED: &str = "Wayland requires Ubuntu 21.04 or higher version.";
 pub const SCRAP_OTHER_VERSION_OR_X11_REQUIRED: &str =
@@ -284,15 +279,8 @@ fn create_capturer(
 #[cfg(all(windows, feature = "virtual_display_driver"))]
 fn ensure_close_virtual_device() -> ResultType<()> {
     let num_displays = Display::all()?.len();
-    if num_displays == 0 {
-        // Device may sometimes be uninstalled by user in "Device Manager" Window.
-        // Closing device will clear the instance data.
-        virtual_display::close_device();
-    } else if num_displays > 1 {
-        // Try close device, if display device changed.
-        if virtual_display::is_device_created() {
-            virtual_display::close_device();
-        }
+    if num_displays > 1 {
+        virtual_display_manager::plug_out_headless();
     }
     Ok(())
 }
@@ -938,46 +926,14 @@ fn try_get_displays() -> ResultType<Vec<Display>> {
     let mut displays = Display::all()?;
     if displays.len() == 0 {
         log::debug!("no displays, create virtual display");
-        // Try plugin monitor
-        if LocalConfig::get_virtual_display_num() > 0 {
-            let mut device_already_created = false;
-            if let Err(e) = virtual_display::create_device() {
-                if e.to_string().contains("Device is already created") {
-                    device_already_created = true;
-                } else {
-                    log::debug!("Create device failed {}", e);
-                }
-            }
-            if device_already_created || virtual_display::is_device_created() {
-                // Reboot is not required for this case.
-                let mut _reboot_required = false;
-                virtual_display::install_update_driver(&mut _reboot_required)?;
-                if let Err(e) = virtual_display::plug_in_monitor(VIRTUAL_DISPLAY_INDEX_FOR_HEADLESS)
-                {
-                    log::debug!("Plug in monitor failed {}", e);
-                } else {
-                    let modes = [virtual_display::MonitorMode {
-                        width: 1920,
-                        height: 1080,
-                        sync: 60,
-                    }];
-                    if let Err(e) = virtual_display::update_monitor_modes(
-                        VIRTUAL_DISPLAY_INDEX_FOR_HEADLESS,
-                        &modes,
-                    ) {
-                        log::debug!("Update monitor modes failed {}", e);
-                    }
-                }
-            }
+        if let Err(e) = virtual_display_manager::plug_in_headless() {
+            log::error!("plug in headless failed {}", e);
+        } else {
             displays = Display::all()?;
         }
     } else if displays.len() > 1 {
-        // to-do: do not close if in idd privacy mode.
-
         // If more than one displays exists, close RustDeskVirtualDisplay
-        if virtual_display::is_device_created() {
-            virtual_display::close_device()
-        }
+        let _res = virtual_display_manager::plug_in_headless();
     }
     Ok(displays)
 }

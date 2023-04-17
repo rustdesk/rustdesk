@@ -3,7 +3,7 @@ use virtual_display;
 
 fn prompt_input() -> u8 {
     println!("Press  key          execute:");
-    println!("       1. 'x'       1. exit");
+    println!("       1. 'q'       1. quit");
     println!("       2. 'i'       2. install or update driver");
     println!("       3. 'u'       3. uninstall driver");
     println!("       4. 'c'       4. create device");
@@ -40,7 +40,7 @@ fn main() {
     loop {
         let chr = prompt_input();
         match chr as char {
-            'x' => break,
+            'q' => break,
             'i' => {
                 println!("Install or update driver begin");
                 let mut reboot_required = false;

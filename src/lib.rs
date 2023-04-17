@@ -69,3 +69,6 @@ pub mod rc;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub mod privacy_win_mag;
+
+#[cfg(all(windows, feature = "virtual_display_driver"))]
+pub mod virtual_display_manager;
