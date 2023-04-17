@@ -242,6 +242,7 @@ def get_features(args):
     features = ['inline'] if not args.flutter else []
     if windows:
         features.extend(get_rc_features(args))
+        features.append('virtual_display_driver')
     if args.hwcodec:
         features.append('hwcodec')
     if args.flutter:
