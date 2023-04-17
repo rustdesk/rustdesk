@@ -19,7 +19,6 @@ path = "src/naming.rs"
 inline = []
 hbbs = []
 cli = []
-with_rc = ["simple_rc"]
 flutter_texture_render = []
 appimage = []
 flatpak = []
@@ -135,7 +134,7 @@ jni = "0.19"
 flutter_rust_bridge = "1.61.1"
 
 [workspace]
-members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/virtual_display/dylib", "libs/simple_rc", "libs/portable"]
+members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/virtual_display/dylib", "libs/portable"]
 exclude = ["vdi/host", "examples/custom_plugin"]
 
 [package.metadata.winres]

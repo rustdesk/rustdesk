@@ -145,10 +145,6 @@ pub fn core_main() -> Option<Vec<String>> {
                     args.len() > 1,
                 ));
                 return None;
-            } else if args[0] == "--extract" {
-                #[cfg(feature = "with_rc")]
-                hbb_common::allow_err!(crate::rc::extract_resources(&args[1]));
-                return None;
             } else if args[0] == "--install-cert" {
                 #[cfg(windows)]
                 hbb_common::allow_err!(crate::platform::windows::install_cert(&args[1]));

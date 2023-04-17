@@ -64,9 +64,6 @@ mod hbbs_http;
 #[cfg(windows)]
 pub mod clipboard_file;
 
-#[cfg(all(windows, feature = "with_rc"))]
-pub mod rc;
-
 #[cfg(windows)]
 pub mod privacy_win_mag;
 

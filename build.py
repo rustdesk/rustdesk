@@ -211,11 +211,10 @@ def download_extract_features(features, res_dir):
                 print(f'{feat} extract end')
 
 
-def get_rc_features(args):
-    flutter = args.flutter
+def pre_resources(args):
     features = parse_rc_features(args.feature)
     if not features:
-        return []
+        return
 
     print(f'Build with features {list(features.keys())}')
     res_dir = 'resources'
@@ -225,23 +224,18 @@ def get_rc_features(args):
         raise Exception(f'Find file {res_dir}, not a directory')
     os.makedirs(res_dir, exist_ok=True)
     download_extract_features(features, res_dir)
-    if flutter:
-        os.makedirs(flutter_win_target_dir, exist_ok=True)
-        for f in pathlib.Path(res_dir).iterdir():
-            print(f'{f}')
-            if f.is_file():
-                shutil.copy2(f, flutter_win_target_dir)
-            else:
-                shutil.copytree(f, f'{flutter_win_target_dir}{f.stem}')
-        return []
-    else:
-        return ['with_rc']
+    os.makedirs(flutter_win_target_dir, exist_ok=True)
+    for f in pathlib.Path(res_dir).iterdir():
+        print(f'{f}')
+        if f.is_file():
+            shutil.copy2(f, flutter_win_target_dir)
+        else:
+            shutil.copytree(f, f'{flutter_win_target_dir}{f.stem}')
 
 
 def get_features(args):
     features = ['inline'] if not args.flutter else []
     if windows:
-        features.extend(get_rc_features(args))
         features.append('virtual_display_driver')
     if args.hwcodec:
         features.append('hwcodec')
@@ -438,6 +432,8 @@ def main():
         build_deb_from_folder(version, package)
         return
     if windows:
+        pre_resources(args)
+
         # build virtual display dynamic library
         os.chdir('libs/virtual_display/dylib')
         system2('cargo build --release')
