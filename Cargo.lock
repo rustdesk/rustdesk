@@ -5163,7 +5163,6 @@ dependencies = [
  "sha2",
  "shared_memory",
  "shutdown_hooks",
- "simple_rc",
  "sys-locale",
  "system_shutdown",
  "tao",
@@ -5570,17 +5569,6 @@ name = "simd-adler32"
 version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "238abfbb77c1915110ad968465608b68e869e0772622c9656714e73e5a1a522f"
-
-[[package]]
-name = "simple_rc"
-version = "0.1.0"
-dependencies = [
- "confy",
- "hbb_common",
- "serde 1.0.159",
- "serde_derive",
- "walkdir",
-]
 
 [[package]]
 name = "siphasher"
