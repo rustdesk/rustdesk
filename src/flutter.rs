@@ -29,20 +29,20 @@ use std::{
 
 /// tag "main" for [Desktop Main Page] and [Mobile (Client and Server)] (the mobile don't need multiple windows, only one global event stream is needed)
 /// tag "cm" only for [Desktop CM Page]
-pub(super) const APP_TYPE_MAIN: &str = "main";
+pub(crate) const APP_TYPE_MAIN: &str = "main";
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub(super) const APP_TYPE_CM: &str = "cm";
+pub(crate) const APP_TYPE_CM: &str = "cm";
 #[cfg(any(target_os = "android", target_os = "ios"))]
-pub(super) const APP_TYPE_CM: &str = "main";
+pub(crate) const APP_TYPE_CM: &str = "main";
 
-pub(super) const APP_TYPE_DESKTOP_REMOTE: &str = "remote";
-pub(super) const APP_TYPE_DESKTOP_FILE_TRANSFER: &str = "file transfer";
-pub(super) const APP_TYPE_DESKTOP_PORT_FORWARD: &str = "port forward";
+pub(crate) const APP_TYPE_DESKTOP_REMOTE: &str = "remote";
+pub(crate) const APP_TYPE_DESKTOP_FILE_TRANSFER: &str = "file transfer";
+pub(crate) const APP_TYPE_DESKTOP_PORT_FORWARD: &str = "port forward";
 
 lazy_static::lazy_static! {
     pub(crate) static ref CUR_SESSION_ID: RwLock<String> = Default::default();
     pub(crate) static ref SESSIONS: RwLock<HashMap<String, Session<FlutterHandler>>> = Default::default();
-    pub(crate) static ref GLOBAL_EVENT_STREAM: RwLock<HashMap<String, StreamSink<String>>> = Default::default(); // rust to dart event channel
+    static ref GLOBAL_EVENT_STREAM: RwLock<HashMap<String, StreamSink<String>>> = Default::default(); // rust to dart event channel
 }
 
 #[cfg(all(target_os = "windows", feature = "flutter_texture_render"))]
@@ -249,14 +249,18 @@ impl FlutterHandler {
     ///
     /// * `name` - The name of the event.
     /// * `event` - Fields of the event content.
-    fn push_event(&self, name: &str, event: Vec<(&str, &str)>) {
+    pub fn push_event(&self, name: &str, event: Vec<(&str, &str)>) -> Option<bool> {
         let mut h: HashMap<&str, &str> = event.iter().cloned().collect();
         assert!(h.get("name").is_none());
         h.insert("name", name);
         let out = serde_json::ser::to_string(&h).unwrap_or("".to_owned());
-        if let Some(stream) = &*self.event_stream.read().unwrap() {
-            stream.add(EventToUI::Event(out));
-        }
+        Some(
+            self.event_stream
+                .read()
+                .unwrap()
+                .as_ref()?
+                .add(EventToUI::Event(out)),
+        )
     }
 
     pub(crate) fn close_event_stream(&mut self) {
@@ -627,7 +631,7 @@ impl InvokeUiSession for FlutterHandler {
     }
 
     fn on_voice_call_closed(&self, reason: &str) {
-        self.push_event("on_voice_call_closed", [("reason", reason)].into())
+        let _res = self.push_event("on_voice_call_closed", [("reason", reason)].into());
     }
 
     fn on_voice_call_waiting(&self) {
@@ -1007,3 +1011,29 @@ pub fn session_register_texture(id: *const char, ptr: usize) {
 #[no_mangle]
 #[cfg(not(feature = "flutter_texture_render"))]
 pub fn session_register_texture(_id: *const char, _ptr: usize) {}
+
+pub fn push_session_event(peer: &str, name: &str, event: Vec<(&str, &str)>) -> Option<bool> {
+    SESSIONS.read().unwrap().get(peer)?.push_event(name, event)
+}
+
+pub fn push_global_event(channel: &str, event: String) -> Option<bool> {
+    Some(GLOBAL_EVENT_STREAM.read().unwrap().get(channel)?.add(event))
+}
+
+pub fn start_global_event_stream(s: StreamSink<String>, app_type: String) -> ResultType<()> {
+    if let Some(_) = GLOBAL_EVENT_STREAM
+        .write()
+        .unwrap()
+        .insert(app_type.clone(), s)
+    {
+        log::warn!(
+            "Global event stream of type {} is started before, but now removed",
+            app_type
+        );
+    }
+    Ok(())
+}
+
+pub fn stop_global_event_stream(app_type: String) {
+    let _ = GLOBAL_EVENT_STREAM.write().unwrap().remove(&app_type);
+}

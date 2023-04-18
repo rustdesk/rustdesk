@@ -1,0 +1,126 @@
+use hbb_common::ResultType;
+use serde_derive::Deserialize;
+use serde_json;
+use std::collections::HashMap;
+use std::ffi::{c_char, CStr};
+
+#[derive(Debug, Deserialize)]
+pub struct UiButton {
+    key: String,
+    text: String,
+    icon: String,
+    tooltip: String,
+    action: String, // The action to be triggered when the button is clicked.
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UiCheckbox {
+    key: String,
+    text: String,
+    tooltip: String,
+    action: String, // The action to be triggered when the checkbox is checked or unchecked.
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "t", content = "c")]
+pub enum UiType {
+    Button(UiButton),
+    Checkbox(UiCheckbox),
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Location {
+    core: String,
+    ui: HashMap<String, UiType>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ConfigItem {
+    key: String,
+    value: String,
+    default: String,
+    description: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Configs {
+    pub local: Vec<ConfigItem>,
+    pub session: Vec<ConfigItem>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Config {
+    pub host: Configs,
+    pub client: Configs,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Desc {
+    id: String,
+    name: String,
+    version: String,
+    description: String,
+    author: String,
+    home: String,
+    license: String,
+    published: String,
+    released: String,
+    github: String,
+    location: Location,
+    config: Config,
+}
+
+impl Desc {
+    pub fn from_cstr(s: *const c_char) -> ResultType<Self> {
+        let s = unsafe { CStr::from_ptr(s) };
+        Ok(serde_json::from_str(s.to_str()?)?)
+    }
+
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn version(&self) -> &str {
+        &self.version
+    }
+
+    pub fn description(&self) -> &str {
+        &self.description
+    }
+
+    pub fn author(&self) -> &str {
+        &self.author
+    }
+
+    pub fn home(&self) -> &str {
+        &self.home
+    }
+
+    pub fn license(&self) -> &str {
+        &self.license
+    }
+
+    pub fn published(&self) -> &str {
+        &self.published
+    }
+
+    pub fn released(&self) -> &str {
+        &self.released
+    }
+
+    pub fn github(&self) -> &str {
+        &self.github
+    }
+
+    pub fn location(&self) -> &Location {
+        &self.location
+    }
+
+    pub fn config(&self) -> &Config {
+        &self.config
+    }
+}

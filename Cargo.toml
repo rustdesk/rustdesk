@@ -31,6 +31,7 @@ hwcodec = ["scrap/hwcodec"]
 mediacodec = ["scrap/mediacodec"]
 linux_headless = ["pam", "users"]
 virtual_display_driver = ["virtual_display"]
+plugin_framework = []
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -69,7 +70,6 @@ hex = "0.4"
 reqwest = { version = "0.11", features = ["blocking", "json", "rustls-tls"], default-features=false }
 chrono = "0.4"
 cidr-utils = "0.5"
-libloading = "0.7"
 
 [target.'cfg(not(any(target_os = "android", target_os = "linux")))'.dependencies]
 cpal = "0.15"

@@ -240,6 +240,14 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::Message(msg));
     }
 
+    pub fn send_plugin(&self, plugin: Plugin) {
+        let mut misc = Misc::new();
+        misc.set_plugin(plugin);
+        let mut msg_out = Message::new();
+        msg_out.set_misc(misc);
+        self.send(Data::Message(msg_out));
+    }
+
     pub fn get_audit_server(&self, typ: String) -> String {
         if self.lc.read().unwrap().conn_id <= 0
             || LocalConfig::get_option("access_token").is_empty()
