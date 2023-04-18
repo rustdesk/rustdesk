@@ -49,8 +49,10 @@ mod license;
 mod port_forward;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(any(feature = "flutter"))]
 pub mod api;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(any(feature = "flutter"))]
 pub mod plugins;
 
 mod tray;

@@ -17,6 +17,7 @@ use serde_derive::Serialize;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::ipc::Connection;
+#[cfg(not(any(target_os = "ios")))]
 use crate::ipc::{self, Data};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::tokio::sync::mpsc::unbounded_channel;
@@ -56,6 +57,7 @@ pub struct Client {
     pub in_voice_call: bool,
     pub incoming_voice_call: bool,
     #[serde(skip)]
+    #[cfg(not(any(target_os = "ios")))]
     tx: UnboundedSender<Data>,
 }
 
@@ -129,6 +131,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         restart: bool,
         recording: bool,
         from_switch: bool,
+        #[cfg(not(any(target_os = "ios")))]
         tx: mpsc::UnboundedSender<Data>,
     ) {
         let client = Client {
@@ -146,6 +149,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
             restart,
             recording,
             from_switch,
+            #[cfg(not(any(target_os = "ios")))]
             tx,
             in_voice_call: false,
             incoming_voice_call: false,
@@ -222,6 +226,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
 }
 
 #[inline]
+#[cfg(not(any(target_os = "ios")))]
 pub fn check_click_time(id: i32) {
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
         allow_err!(client.tx.send(Data::ClickTime(0)));
@@ -234,6 +239,7 @@ pub fn get_click_time() -> i64 {
 }
 
 #[inline]
+#[cfg(not(any(target_os = "ios")))]
 pub fn authorize(id: i32) {
     if let Some(client) = CLIENTS.write().unwrap().get_mut(&id) {
         client.authorized = true;
@@ -242,6 +248,7 @@ pub fn authorize(id: i32) {
 }
 
 #[inline]
+#[cfg(not(any(target_os = "ios")))]
 pub fn close(id: i32) {
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
         allow_err!(client.tx.send(Data::Close));
@@ -255,6 +262,7 @@ pub fn remove(id: i32) {
 
 // server mode send chat to peer
 #[inline]
+#[cfg(not(any(target_os = "ios")))]
 pub fn send_chat(id: i32, text: String) {
     let clients = CLIENTS.read().unwrap();
     if let Some(client) = clients.get(&id) {
@@ -263,6 +271,7 @@ pub fn send_chat(id: i32, text: String) {
 }
 
 #[inline]
+#[cfg(not(any(target_os = "ios")))]
 pub fn switch_permission(id: i32, name: String, enabled: bool) {
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
         allow_err!(client.tx.send(Data::SwitchPermission { name, enabled }));
@@ -285,6 +294,7 @@ pub fn get_clients_length() -> usize {
 
 #[inline]
 #[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "ios")))]
 pub fn switch_back(id: i32) {
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
         allow_err!(client.tx.send(Data::SwitchSidesBack));
@@ -594,6 +604,7 @@ pub async fn start_listen<T: InvokeUiCM>(
     cm.remove_connection(current_id, true);
 }
 
+#[cfg(not(any(target_os = "ios")))]
 async fn handle_fs(fs: ipc::FS, write_jobs: &mut Vec<fs::TransferJob>, tx: &UnboundedSender<Data>) {
     match fs {
         ipc::FS::ReadDir {
@@ -739,6 +750,7 @@ async fn handle_fs(fs: ipc::FS, write_jobs: &mut Vec<fs::TransferJob>, tx: &Unbo
     }
 }
 
+#[cfg(not(any(target_os = "ios")))]
 async fn read_dir(dir: &str, include_hidden: bool, tx: &UnboundedSender<Data>) {
     let path = {
         if dir.is_empty() {
@@ -756,6 +768,7 @@ async fn read_dir(dir: &str, include_hidden: bool, tx: &UnboundedSender<Data>) {
     }
 }
 
+#[cfg(not(any(target_os = "ios")))]
 async fn handle_result<F: std::fmt::Display, S: std::fmt::Display>(
     res: std::result::Result<std::result::Result<(), F>, S>,
     id: i32,
@@ -775,6 +788,7 @@ async fn handle_result<F: std::fmt::Display, S: std::fmt::Display>(
     }
 }
 
+#[cfg(not(any(target_os = "ios")))]
 async fn remove_file(path: String, id: i32, file_num: i32, tx: &UnboundedSender<Data>) {
     handle_result(
         spawn_blocking(move || fs::remove_file(&path)).await,
@@ -785,6 +799,7 @@ async fn remove_file(path: String, id: i32, file_num: i32, tx: &UnboundedSender<
     .await;
 }
 
+#[cfg(not(any(target_os = "ios")))]
 async fn create_dir(path: String, id: i32, tx: &UnboundedSender<Data>) {
     handle_result(
         spawn_blocking(move || fs::create_dir(&path)).await,
@@ -795,6 +810,7 @@ async fn create_dir(path: String, id: i32, tx: &UnboundedSender<Data>) {
     .await;
 }
 
+#[cfg(not(any(target_os = "ios")))]
 async fn remove_dir(path: String, id: i32, recursive: bool, tx: &UnboundedSender<Data>) {
     let path = fs::get_path(&path);
     handle_result(
@@ -813,6 +829,7 @@ async fn remove_dir(path: String, id: i32, recursive: bool, tx: &UnboundedSender
     .await;
 }
 
+#[cfg(not(any(target_os = "ios")))]
 fn send_raw(msg: Message, tx: &UnboundedSender<Data>) {
     match msg.write_to_bytes() {
         Ok(bytes) => {
@@ -859,6 +876,8 @@ pub fn elevate_portable(_id: i32) {
 #[inline]
 pub fn handle_incoming_voice_call(id: i32, accept: bool) {
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
+        // Not handled in iOS yet.
+        #[cfg(not(any(target_os = "ios")))]
         allow_err!(client.tx.send(Data::VoiceCallResponse(accept)));
     };
 }
@@ -867,6 +886,8 @@ pub fn handle_incoming_voice_call(id: i32, accept: bool) {
 #[inline]
 pub fn close_voice_call(id: i32) {
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
+        // Not handled in iOS yet.
+        #[cfg(not(any(target_os = "ios")))]
         allow_err!(client.tx.send(Data::CloseVoiceCall("".to_owned())));
     };
 }

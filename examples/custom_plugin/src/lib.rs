@@ -1,4 +1,4 @@
-use librustdesk::{api::RustDeskApiTable};
+use librustdesk::api::RustDeskApiTable;
 /// This file demonstrates how to write a custom plugin for RustDesk.
 use std::ffi::{c_char, c_int, CString};
 

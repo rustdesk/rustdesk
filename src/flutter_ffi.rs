@@ -844,11 +844,13 @@ fn main_broadcast_message(data: &HashMap<&str, &str>) {
 
 pub fn main_change_theme(dark: String) {
     main_broadcast_message(&HashMap::from([("name", "theme"), ("dark", &dark)]));
+    #[cfg(not(any(target_os = "ios")))]
     send_to_cm(&crate::ipc::Data::Theme(dark));
 }
 
 pub fn main_change_language(lang: String) {
     main_broadcast_message(&HashMap::from([("name", "language"), ("lang", &lang)]));
+    #[cfg(not(any(target_os = "ios")))]
     send_to_cm(&crate::ipc::Data::Language(lang));
 }
 
@@ -1138,6 +1140,8 @@ pub fn main_get_mouse_time() -> f64 {
 }
 
 pub fn main_wol(id: String) {
+    // TODO: move send_wol outside.
+    #[cfg(not(any(target_os = "ios")))]
     crate::lan::send_wol(id)
 }
 
@@ -1147,10 +1151,12 @@ pub fn main_create_shortcut(_id: String) {
 }
 
 pub fn cm_send_chat(conn_id: i32, msg: String) {
+    #[cfg(not(any(target_os = "ios")))]
     crate::ui_cm_interface::send_chat(conn_id, msg);
 }
 
 pub fn cm_login_res(conn_id: i32, res: bool) {
+    #[cfg(not(any(target_os = "ios")))]
     if res {
         crate::ui_cm_interface::authorize(conn_id);
     } else {
@@ -1159,22 +1165,29 @@ pub fn cm_login_res(conn_id: i32, res: bool) {
 }
 
 pub fn cm_close_connection(conn_id: i32) {
+    #[cfg(not(any(target_os = "ios")))]
     crate::ui_cm_interface::close(conn_id);
 }
 
 pub fn cm_remove_disconnected_connection(conn_id: i32) {
+    #[cfg(not(any(target_os = "ios")))]
     crate::ui_cm_interface::remove(conn_id);
 }
 
 pub fn cm_check_click_time(conn_id: i32) {
+    #[cfg(not(any(target_os = "ios")))]
     crate::ui_cm_interface::check_click_time(conn_id)
 }
 
 pub fn cm_get_click_time() -> f64 {
-    crate::ui_cm_interface::get_click_time() as _
+    #[cfg(not(any(target_os = "ios")))]
+    return crate::ui_cm_interface::get_click_time() as _;
+    #[cfg(any(target_os = "ios"))]
+    return 0 as _;
 }
 
 pub fn cm_switch_permission(conn_id: i32, name: String, enabled: bool) {
+    #[cfg(not(any(target_os = "ios")))]
     crate::ui_cm_interface::switch_permission(conn_id, name, enabled)
 }
 
@@ -1183,10 +1196,12 @@ pub fn cm_can_elevate() -> SyncReturn<bool> {
 }
 
 pub fn cm_elevate_portable(conn_id: i32) {
+    #[cfg(not(any(target_os = "ios")))]
     crate::ui_cm_interface::elevate_portable(conn_id);
 }
 
 pub fn cm_switch_back(conn_id: i32) {
+    #[cfg(not(any(target_os = "ios")))]
     crate::ui_cm_interface::switch_back(conn_id);
 }
 
@@ -1222,6 +1237,7 @@ fn handle_query_onlines(onlines: Vec<String>, offlines: Vec<String>) {
 }
 
 pub fn query_onlines(ids: Vec<String>) {
+    #[cfg(not(any(target_os = "ios")))]
     crate::rendezvous_mediator::query_online_states(ids, handle_query_onlines)
 }
 

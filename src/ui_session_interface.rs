@@ -263,7 +263,10 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn is_xfce(&self) -> bool {
-        crate::platform::is_xfce()
+        #[cfg(not(any(target_os = "ios")))]
+        return crate::platform::is_xfce();
+        #[cfg(any(target_os = "ios"))]
+        false
     }
 
     pub fn get_supported_keyboard_modes(&self) -> Vec<KeyboardMode> {
@@ -526,6 +529,17 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::Message(msg_out));
     }
 
+    #[cfg(any(target_os = "ios"))]
+    pub fn handle_flutter_key_event(
+        &self,
+        _name: &str,
+        platform_code: i32,
+        position_code: i32,
+        lock_modes: i32,
+        down_or_up: bool,
+    ) {}
+
+    #[cfg(not(any(target_os = "ios")))]
     pub fn handle_flutter_key_event(
         &self,
         _name: &str,
@@ -755,6 +769,10 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::ElevateWithLogon(username, password));
     }
 
+    #[cfg(any(target_os = "ios"))]
+    pub fn switch_sides(&self) {}
+
+    #[cfg(not(any(target_os = "ios")))]
     #[tokio::main(flavor = "current_thread")]
     pub async fn switch_sides(&self) {
         match crate::ipc::connect(1000, "").await {
