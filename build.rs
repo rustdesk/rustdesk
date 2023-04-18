@@ -123,9 +123,11 @@ fn main() {
     build_manifest();
     #[cfg(windows)]
     build_windows();
-    #[cfg(target_os = "macos")]
-    build_mac();
-    #[cfg(target_os = "macos")]
-    println!("cargo:rustc-link-lib=framework=ApplicationServices");
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
+    if target_os == "macos" {
+        #[cfg(target_os = "macos")]
+        build_mac();
+        println!("cargo:rustc-link-lib=framework=ApplicationServices");
+    }
     println!("cargo:rerun-if-changed=build.rs");
 }

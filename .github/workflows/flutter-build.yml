@@ -431,7 +431,7 @@ jobs:
           VCPKG_ROOT: /opt/rustdesk_thirdparty_lib/vcpkg
         run: |
           rustup target add ${{ matrix.job.target }} 
-          cargo build --release --target aarch64-apple-ios --lib
+          cargo build --features flutter --release --target aarch64-apple-ios --lib
 
       - name: Build rustdesk
         shell: bash
