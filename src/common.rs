@@ -840,3 +840,17 @@ pub fn is_peer_version_ge(v: &str) -> bool {
 
     false
 }
+
+pub fn pk_to_fingerprint(pk: Vec<u8>) -> String {
+    let s: String = pk.iter().map(|u| format!("{:02x}", u)).collect();
+    s.chars()
+        .enumerate()
+        .map(|(i, c)| {
+            if i > 0 && i % 4 == 0 {
+                format!(" {}", c)
+            } else {
+                format!("{}", c)
+            }
+        })
+        .collect()
+}

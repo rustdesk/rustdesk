@@ -364,6 +364,7 @@ class MyIdMenu: Reactor.Component {
         var name = handler.get_app_name();
         msgbox("custom-nocancel-nook-hasclose", translate("About") + " " + name, "<div style='line-height: 2em'> \
             <div>Version: " + handler.get_version() + " \
+            <div>Fingerprint: " + handler.get_fingerprint() + " \
             <div .link .custom-event url='https://rustdesk.com/privacy'>Privacy Statement</div> \
             <div .link .custom-event url='https://rustdesk.com'>Website</div> \
             <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em;'>Copyright &copy; 2022 Purslane Ltd.\

@@ -144,6 +144,8 @@ impl InvokeUiSession for SciterHandler {
         self.call("setConnectionType", &make_args!(is_secured, direct));
     }
 
+    fn set_fingerprint(&self, _fingerprint: String) {}
+
     fn job_error(&self, id: i32, err: String, file_num: i32) {
         self.call("jobError", &make_args!(id, err, file_num));
     }

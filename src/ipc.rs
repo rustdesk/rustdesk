@@ -383,6 +383,12 @@ async fn handle(data: Data, stream: &mut Connection) {
                     ));
                 } else if name == "rendezvous_servers" {
                     value = Some(Config::get_rendezvous_servers().join(","));
+                } else if name == "fingerprint" {
+                    value = if Config::get_key_confirmed() {
+                        Some(crate::common::pk_to_fingerprint(Config::get_key_pair().1))
+                    } else {
+                        None
+                    };
                 } else {
                     value = None;
                 }
@@ -688,6 +694,12 @@ pub fn get_permanent_password() -> String {
     } else {
         Config::get_permanent_password()
     }
+}
+
+pub fn get_fingerprint() -> String {
+    get_config("fingerprint")
+        .unwrap_or_default()
+        .unwrap_or_default()
 }
 
 pub fn set_permanent_password(v: String) -> ResultType<()> {

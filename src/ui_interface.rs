@@ -24,12 +24,11 @@ use hbb_common::{
     rendezvous_proto::*,
 };
 
+use crate::common::SOFTWARE_UPDATE_URL;
 #[cfg(feature = "flutter")]
 use crate::hbbs_http::account;
-use crate::{common::SOFTWARE_UPDATE_URL};
 #[cfg(not(any(target_os = "ios")))]
 use crate::ipc;
-
 
 type Message = RendezvousMessage;
 
@@ -515,8 +514,7 @@ pub fn get_error() -> String {
     #[cfg(target_os = "linux")]
     {
         let dtype = crate::platform::linux::get_display_server();
-        if crate::platform::linux::DISPLAY_SERVER_WAYLAND == dtype
-        {
+        if crate::platform::linux::DISPLAY_SERVER_WAYLAND == dtype {
             return crate::server::wayland::common_get_error();
         }
         if dtype != crate::platform::linux::DISPLAY_SERVER_X11 {
@@ -850,6 +848,17 @@ pub fn set_user_default_option(key: String, value: String) {
 pub fn get_user_default_option(key: String) -> String {
     use hbb_common::config::UserDefaultConfig;
     UserDefaultConfig::load().get(&key)
+}
+
+pub fn get_fingerprint() -> String {
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    if Config::get_key_confirmed() {
+        return crate::common::pk_to_fingerprint(Config::get_key_pair().1);
+    } else {
+        return "".to_owned();
+    }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return ipc::get_fingerprint();
 }
 
 // notice: avoiding create ipc connection repeatedly,

@@ -492,6 +492,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("no_desktop_title_tip", ""),
         ("no_desktop_text_tip", ""),
         ("No need to elevate", ""),
+        ("System Sound", ""),
+        ("Default", ""),
         ("New RDP", ""),
+        ("Fingerprint", ""),
+        ("Copy Fingerprint", ""),
+        ("no fingerprints", ""),
     ].iter().cloned().collect();
 }

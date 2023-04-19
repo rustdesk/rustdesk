@@ -495,5 +495,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("System Sound", "Dispositivo audio sistema"),
         ("Default", "Predefinita"),
         ("New RDP", "Nuovo RDP"),
+        ("Fingerprint", ""),
+        ("Copy Fingerprint", ""),
+        ("no fingerprints", ""),
     ].iter().cloned().collect();
 }
