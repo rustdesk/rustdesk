@@ -1001,6 +1001,7 @@ pub fn session_next_rgba(id: *const char) {
     }
 }
 
+#[inline]
 #[no_mangle]
 #[cfg(feature = "flutter_texture_render")]
 pub fn session_register_texture(id: *const char, ptr: usize) {
@@ -1012,14 +1013,17 @@ pub fn session_register_texture(id: *const char, ptr: usize) {
     }
 }
 
+#[inline]
 #[no_mangle]
 #[cfg(not(feature = "flutter_texture_render"))]
 pub fn session_register_texture(_id: *const char, _ptr: usize) {}
 
+#[inline]
 pub fn push_session_event(peer: &str, name: &str, event: Vec<(&str, &str)>) -> Option<bool> {
     SESSIONS.read().unwrap().get(peer)?.push_event(name, event)
 }
 
+#[inline]
 pub fn push_global_event(channel: &str, event: String) -> Option<bool> {
     Some(GLOBAL_EVENT_STREAM.read().unwrap().get(channel)?.add(event))
 }

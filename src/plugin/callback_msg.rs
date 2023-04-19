@@ -1,6 +1,6 @@
 use super::cstr_to_string;
 use crate::flutter::{self, APP_TYPE_CM, APP_TYPE_MAIN, SESSIONS};
-use hbb_common::{lazy_static, log, message_proto::Plugin};
+use hbb_common::{lazy_static, log, message_proto::PluginRequest};
 use serde_json;
 use std::{collections::HashMap, ffi::c_char, sync::Arc};
 
@@ -66,7 +66,7 @@ pub fn callback_msg(
                 let content_slice =
                     unsafe { std::slice::from_raw_parts(content as *const u8, len) };
                 let content_vec = Vec::from(content_slice);
-                let plugin = Plugin {
+                let plugin = PluginRequest {
                     id,
                     content: bytes::Bytes::from(content_vec),
                     ..Default::default()

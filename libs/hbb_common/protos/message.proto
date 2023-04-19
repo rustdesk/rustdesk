@@ -600,9 +600,15 @@ message SwitchSidesResponse {
 
 message SwitchBack {}
 
-message Plugin {
+message PluginRequest {
   string id = 1;
   bytes content = 2;
+}
+
+message PluginResponse {
+  string id = 1;
+  string name = 2;
+  string msg = 3;
 }
 
 message Misc {
@@ -626,7 +632,8 @@ message Misc {
     SwitchSidesRequest switch_sides_request = 21;
     SwitchBack switch_back = 22;
     Resolution change_resolution = 24;
-    Plugin plugin = 25;
+    PluginRequest plugin_request = 25;
+    PluginResponse plugin_response = 26;
   }
 }
 
