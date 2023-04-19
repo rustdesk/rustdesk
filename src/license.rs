@@ -37,6 +37,11 @@ pub fn get_license_from_string(s: &str) -> ResultType<License> {
         s
     };
     if s.contains("host=") {
+        let s = if s.contains("#") {
+            &s[0..s.find("#").unwrap_or(s.len())]
+        } else {
+            s
+        };
         let strs: Vec<&str> = s.split("host=").collect();
         if strs.len() == 2 {
             let strs2: Vec<&str> = strs[1].split(",key=").collect();
