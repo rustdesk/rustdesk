@@ -10,6 +10,7 @@ use crate::{
 };
 use flutter_rust_bridge::{StreamSink, SyncReturn};
 use hbb_common::{
+    allow_err,
     config::{self, LocalConfig, PeerConfig, PeerInfoSerde, ONLINE},
     fs, log,
     message_proto::KeyboardMode,
@@ -48,10 +49,12 @@ fn initialize(app_dir: &str) {
     }
 }
 
+#[inline]
 pub fn start_global_event_stream(s: StreamSink<String>, app_type: String) -> ResultType<()> {
     super::flutter::start_global_event_stream(s, app_type)
 }
 
+#[inline]
 pub fn stop_global_event_stream(app_type: String) {
     super::flutter::stop_global_event_stream(app_type)
 }
@@ -1389,6 +1392,15 @@ pub fn main_start_ipc_url_server() {
 pub fn send_url_scheme(_url: String) {
     #[cfg(target_os = "macos")]
     std::thread::spawn(move || crate::handle_url_scheme(_url));
+}
+
+#[inline]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn plugin_event(id: String, event: Vec<u8>) {
+    #[cfg(feature = "plugin_framework")]
+    {
+        allow_err!(crate::plugin::handle_ui_event(&id, &event));
+    }
 }
 
 #[cfg(target_os = "android")]

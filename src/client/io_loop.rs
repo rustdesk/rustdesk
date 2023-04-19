@@ -311,7 +311,8 @@ impl<T: InvokeUiSession> Remote<T> {
         {
             // Create a channel to receive error or closed message
             let (tx, rx) = std::sync::mpsc::channel();
-            let (tx_audio_data, mut rx_audio_data) = hbb_common::tokio::sync::mpsc::unbounded_channel();
+            let (tx_audio_data, mut rx_audio_data) =
+                hbb_common::tokio::sync::mpsc::unbounded_channel();
             // Create a stand-alone inner, add subscribe to audio service
             let conn_id = CLIENT_SERVER.write().unwrap().get_new_id();
             let client_conn_inner = ConnInner::new(conn_id.clone(), Some(tx_audio_data), None);
@@ -1296,6 +1297,22 @@ impl<T: InvokeUiSession> Remote<T> {
                     Some(misc::Union::SwitchBack(_)) => {
                         #[cfg(feature = "flutter")]
                         self.handler.switch_back(&self.handler.id);
+                    }
+                    #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    Some(misc::Union::PluginRequest(p)) => {
+                        allow_err!(crate::plugin::handle_server_event(&p.id, &p.content));
+                        // to-do: show message box on UI when error occurs?
+                    }
+                    #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    Some(misc::Union::PluginResponse(p)) => {
+                        let name = if p.name.is_empty() {
+                            "plugin".to_string()
+                        } else {
+                            p.name
+                        };
+                        self.handler.msgbox("custom-nocancel", &name, &p.msg, "");
                     }
                     _ => {}
                 },
