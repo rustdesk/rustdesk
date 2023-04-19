@@ -492,11 +492,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("no_desktop_title_tip", "Нет доступных рабочих столов"),
         ("no_desktop_text_tip", "Установите GNOME Desktop"),
         ("No need to elevate", "Повышение прав не требуется"),
-        ("System Sound", ""),
-        ("Default", ""),
-        ("New RDP", ""),
-        ("Fingerprint", ""),
-        ("Copy Fingerprint", ""),
-        ("no fingerprints", ""),
+        ("System Sound", "Системный звук"),
+        ("Default", "По умолчанию"),
+        ("New RDP", "Новый RDP"),
+        ("Fingerprint", "Отпечаток"),
+        ("Copy Fingerprint", "Копировать отпечаток"),
+        ("no fingerprints", "отпечатки отсутствуют"),
     ].iter().cloned().collect();
 }
