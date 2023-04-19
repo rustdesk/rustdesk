@@ -288,8 +288,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_service_will_start_tip", "L'attivazione di Cattura schermo avvierà automaticamente il servizio, consentendo ad altri dispositivi di richiedere una connessione da questo dispositivo."),
         ("android_stop_service_tip", "La chiusura del servizio chiuderà automaticamente tutte le connessioni stabilite."),
         ("android_version_audio_tip", "L'attuale versione di Android non supporta l'acquisizione audio, esegui l'aggiornamento ad Android 10 o versioni successive."),
-        ("android_start_service_tip", ""),
-        ("android_permission_may_not_change_tip", ""),
+        ("android_start_service_tip", "Per avviare il servizio di condivisione dello schermo seleziona [Avvia servizio] o abilita l'autorizzazione [Cattura schermo]."),
+        ("android_permission_may_not_change_tip", "Le autorizzazioni per le connessioni stabilite non possono essere modificate istantaneamente fino alla riconnessione."),
         ("Account", "Account"),
         ("Overwrite", "Sovrascrivi"),
         ("This file exists, skip or overwrite this file?", "Questo file esiste, vuoi ignorarlo o sovrascrivere questo file?"),
@@ -495,8 +495,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("System Sound", "Dispositivo audio sistema"),
         ("Default", "Predefinita"),
         ("New RDP", "Nuovo RDP"),
-        ("Fingerprint", ""),
-        ("Copy Fingerprint", ""),
-        ("no fingerprints", ""),
+        ("Fingerprint", "Firma digitale"),
+        ("Copy Fingerprint", "Copia firma digitale"),
+        ("no fingerprints", "Nessuna firma digitale"),
     ].iter().cloned().collect();
 }
