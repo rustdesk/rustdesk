@@ -55,6 +55,10 @@ pub mod api;
 #[cfg(any(feature = "flutter"))]
 pub mod plugins;
 
+#[cfg(all(feature = "flutter", feature = "plugin_framework"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub mod plugin;
+
 mod tray;
 
 mod ui_cm_interface;

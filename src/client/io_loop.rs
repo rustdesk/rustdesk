@@ -362,7 +362,10 @@ impl<T: InvokeUiSession> Remote<T> {
             });
             return Some(tx);
         }
-        None
+        #[cfg(target_os = "ios")]
+        {
+            None
+        }
     }
 
     async fn handle_msg_from_ui(&mut self, data: Data, peer: &mut Stream) -> bool {

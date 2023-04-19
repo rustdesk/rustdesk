@@ -48,30 +48,16 @@ fn initialize(app_dir: &str) {
     }
 }
 
-pub enum EventToUI {
-    Event(String),
-    Rgba,
-}
-
 pub fn start_global_event_stream(s: StreamSink<String>, app_type: String) -> ResultType<()> {
-    if let Some(_) = flutter::GLOBAL_EVENT_STREAM
-        .write()
-        .unwrap()
-        .insert(app_type.clone(), s)
-    {
-        log::warn!(
-            "Global event stream of type {} is started before, but now removed",
-            app_type
-        );
-    }
-    Ok(())
+    super::flutter::start_global_event_stream(s, app_type)
 }
 
 pub fn stop_global_event_stream(app_type: String) {
-    let _ = flutter::GLOBAL_EVENT_STREAM
-        .write()
-        .unwrap()
-        .remove(&app_type);
+    super::flutter::stop_global_event_stream(app_type)
+}
+pub enum EventToUI {
+    Event(String),
+    Rgba,
 }
 
 pub fn host_stop_system_key_propagate(_stopped: bool) {
@@ -338,7 +324,13 @@ pub fn session_handle_flutter_key_event(
     down_or_up: bool,
 ) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.handle_flutter_key_event(&name, platform_code, position_code, lock_modes, down_or_up);
+        session.handle_flutter_key_event(
+            &name,
+            platform_code,
+            position_code,
+            lock_modes,
+            down_or_up,
+        );
     }
 }
 
@@ -739,20 +731,18 @@ pub fn main_load_recent_peers() {
             .drain(..)
             .map(|(id, _, p)| peer_to_map(id, p))
             .collect();
-        if let Some(s) = flutter::GLOBAL_EVENT_STREAM
-            .read()
-            .unwrap()
-            .get(flutter::APP_TYPE_MAIN)
-        {
-            let data = HashMap::from([
-                ("name", "load_recent_peers".to_owned()),
-                (
-                    "peers",
-                    serde_json::ser::to_string(&peers).unwrap_or("".to_owned()),
-                ),
-            ]);
-            s.add(serde_json::ser::to_string(&data).unwrap_or("".to_owned()));
-        };
+
+        let data = HashMap::from([
+            ("name", "load_recent_peers".to_owned()),
+            (
+                "peers",
+                serde_json::ser::to_string(&peers).unwrap_or("".to_owned()),
+            ),
+        ]);
+        let _res = flutter::push_global_event(
+            flutter::APP_TYPE_MAIN,
+            serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
+        );
     }
 }
 
@@ -790,38 +780,33 @@ pub fn main_load_fav_peers() {
                 }
             })
             .collect();
-        if let Some(s) = flutter::GLOBAL_EVENT_STREAM
-            .read()
-            .unwrap()
-            .get(flutter::APP_TYPE_MAIN)
-        {
-            let data = HashMap::from([
-                ("name", "load_fav_peers".to_owned()),
-                (
-                    "peers",
-                    serde_json::ser::to_string(&peers).unwrap_or("".to_owned()),
-                ),
-            ]);
-            s.add(serde_json::ser::to_string(&data).unwrap_or("".to_owned()));
-        };
+
+        let data = HashMap::from([
+            ("name", "load_fav_peers".to_owned()),
+            (
+                "peers",
+                serde_json::ser::to_string(&peers).unwrap_or("".to_owned()),
+            ),
+        ]);
+        let _res = flutter::push_global_event(
+            flutter::APP_TYPE_MAIN,
+            serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
+        );
     }
 }
 
 pub fn main_load_lan_peers() {
-    if let Some(s) = flutter::GLOBAL_EVENT_STREAM
-        .read()
-        .unwrap()
-        .get(flutter::APP_TYPE_MAIN)
-    {
-        let data = HashMap::from([
-            ("name", "load_lan_peers".to_owned()),
-            (
-                "peers",
-                serde_json::to_string(&get_lan_peers()).unwrap_or_default(),
-            ),
-        ]);
-        s.add(serde_json::ser::to_string(&data).unwrap_or("".to_owned()));
-    };
+    let data = HashMap::from([
+        ("name", "load_lan_peers".to_owned()),
+        (
+            "peers",
+            serde_json::to_string(&get_lan_peers()).unwrap_or_default(),
+        ),
+    ]);
+    let _res = flutter::push_global_event(
+        flutter::APP_TYPE_MAIN,
+        serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
+    );
 }
 
 pub fn main_remove_discovered(id: String) {
@@ -835,10 +820,9 @@ fn main_broadcast_message(data: &HashMap<&str, &str>) {
         flutter::APP_TYPE_DESKTOP_PORT_FORWARD,
     ];
 
+    let event = serde_json::ser::to_string(&data).unwrap_or("".to_owned());
     for app in apps {
-        if let Some(s) = flutter::GLOBAL_EVENT_STREAM.read().unwrap().get(app) {
-            s.add(serde_json::ser::to_string(data).unwrap_or("".to_owned()));
-        };
+        let _res = flutter::push_global_event(app, event.clone());
     }
 }
 
@@ -1222,18 +1206,15 @@ unsafe extern "C" fn translate(name: *const c_char, locale: *const c_char) -> *c
 }
 
 fn handle_query_onlines(onlines: Vec<String>, offlines: Vec<String>) {
-    if let Some(s) = flutter::GLOBAL_EVENT_STREAM
-        .read()
-        .unwrap()
-        .get(flutter::APP_TYPE_MAIN)
-    {
-        let data = HashMap::from([
-            ("name", "callback_query_onlines".to_owned()),
-            ("onlines", onlines.join(",")),
-            ("offlines", offlines.join(",")),
-        ]);
-        s.add(serde_json::ser::to_string(&data).unwrap_or("".to_owned()));
-    };
+    let data = HashMap::from([
+        ("name", "callback_query_onlines".to_owned()),
+        ("onlines", onlines.join(",")),
+        ("offlines", offlines.join(",")),
+    ]);
+    let _res = flutter::push_global_event(
+        flutter::APP_TYPE_MAIN,
+        serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
+    );
 }
 
 pub fn query_onlines(ids: Vec<String>) {

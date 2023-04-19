@@ -600,6 +600,11 @@ message SwitchSidesResponse {
 
 message SwitchBack {}
 
+message Plugin {
+  string id = 1;
+  bytes content = 2;
+}
+
 message Misc {
   oneof union {
     ChatMessage chat_message = 4;
@@ -621,6 +626,7 @@ message Misc {
     SwitchSidesRequest switch_sides_request = 21;
     SwitchBack switch_back = 22;
     Resolution change_resolution = 24;
+    Plugin plugin = 25;
   }
 }
 

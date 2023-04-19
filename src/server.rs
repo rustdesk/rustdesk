@@ -451,17 +451,13 @@ pub async fn start_ipc_url_server() {
                     Ok(Some(data)) => match data {
                         #[cfg(feature = "flutter")]
                         Data::UrlLink(url) => {
-                            if let Some(stream) = crate::flutter::GLOBAL_EVENT_STREAM
-                                .read()
-                                .unwrap()
-                                .get(crate::flutter::APP_TYPE_MAIN)
-                            {
-                                let mut m = HashMap::new();
-                                m.insert("name", "on_url_scheme_received");
-                                m.insert("url", url.as_str());
-                                stream.add(serde_json::to_string(&m).unwrap());
-                            } else {
-                                log::warn!("No main window app found!");
+                            let mut m = HashMap::new();
+                            m.insert("name", "on_url_scheme_received");
+                            m.insert("url", url.as_str());
+                            let event = serde_json::to_string(&m).unwrap();
+                            match crate::flutter::push_global_event(crate::flutter::APP_TYPE_MAIN, event) {
+                                None => log::warn!("No main window app found!"),
+                                Some(..) => {}
                             }
                         }
                         _ => {

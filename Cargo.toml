@@ -31,6 +31,7 @@ hwcodec = ["scrap/hwcodec"]
 mediacodec = ["scrap/mediacodec"]
 linux_headless = ["pam", "users"]
 virtual_display_driver = ["virtual_display"]
+plugin_framework = []
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

@@ -71,22 +71,18 @@ fn handle_client_message(builder: &mut IfaceBuilder<()>) {
         move |_, _, (_uni_links,): (String,)| {
             #[cfg(feature = "flutter")]
             {
-                use crate::flutter::{self, APP_TYPE_MAIN};
-
-                if let Some(stream) = flutter::GLOBAL_EVENT_STREAM
-                    .write()
-                    .unwrap()
-                    .get(APP_TYPE_MAIN)
-                {
-                    let data = HashMap::from([
-                        ("name", "new_connection"),
-                        ("uni_links", _uni_links.as_str()),
-                    ]);
-                    if !stream.add(serde_json::ser::to_string(&data).unwrap_or("".to_string())) {
-                        log::error!("failed to add dbus message to flutter global dbus stream.");
+                use crate::flutter;
+                let data = HashMap::from([
+                    ("name", "new_connection"),
+                    ("uni_links", _uni_links.as_str()),
+                ]);
+                let event = serde_json::ser::to_string(&data).unwrap_or("".to_string());
+                match crate::flutter::push_global_event(flutter::APP_TYPE_MAIN, event) {
+                    None => log::error!("failed to find main event stream"),
+                    Some(false) => {
+                        log::error!("failed to add dbus message to flutter global dbus stream.")
                     }
-                } else {
-                    log::error!("failed to find main event stream");
+                    Some(true) => {}
                 }
             }
             return Ok((DBUS_METHOD_RETURN_SUCCESS.to_string(),));
