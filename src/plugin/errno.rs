@@ -19,7 +19,7 @@ pub const ERR_CALL_INVALID_ARGS: i32 = 10301;
 pub const ERR_PEER_ID_MISMATCH: i32 = 10302;
 
 // ======================================================
-// errors that must be handled by plugin
+// errors that should be handled by the plugin
 
 pub const ERR_PLUGIN_HANDLE_BASE: i32 = 20000;
 
