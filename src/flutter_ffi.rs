@@ -921,6 +921,10 @@ pub fn main_get_permanent_password() -> String {
     ui_interface::permanent_password()
 }
 
+pub fn main_get_fingerprint() -> String {
+    get_fingerprint()
+}
+
 pub fn main_get_online_statue() -> i64 {
     ONLINE.lock().unwrap().values().max().unwrap_or(&0).clone()
 }

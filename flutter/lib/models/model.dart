@@ -224,6 +224,8 @@ class FfiModel with ChangeNotifier {
         parent.target?.chatModel.onVoiceCallIncoming();
       } else if (name == "update_voice_call_state") {
         parent.target?.serverModel.updateVoiceCallState(evt);
+      } else if (name == "fingerprint") {
+        FingerprintState.find(peerId).value = evt['fingerprint'] ?? '';
       } else {
         debugPrint("Unknown event name: $name");
       }

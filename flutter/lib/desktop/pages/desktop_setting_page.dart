@@ -1390,11 +1390,18 @@ class _AboutState extends State<_About> {
       final license = await bind.mainGetLicense();
       final version = await bind.mainGetVersion();
       final buildDate = await bind.mainGetBuildDate();
-      return {'license': license, 'version': version, 'buildDate': buildDate};
+      final fingerprint = await bind.mainGetFingerprint();
+      return {
+        'license': license,
+        'version': version,
+        'buildDate': buildDate,
+        'fingerprint': fingerprint
+      };
     }(), hasData: (data) {
       final license = data['license'].toString();
       final version = data['version'].toString();
       final buildDate = data['buildDate'].toString();
+      final fingerprint = data['fingerprint'].toString();
       const linkStyle = TextStyle(decoration: TextDecoration.underline);
       final scrollController = ScrollController();
       return DesktopScrollWrapper(
@@ -1414,6 +1421,9 @@ class _AboutState extends State<_About> {
                           .marginSymmetric(vertical: 4.0)),
                   SelectionArea(
                       child: Text('${translate('Build Date')}: $buildDate')
+                          .marginSymmetric(vertical: 4.0)),
+                  SelectionArea(
+                      child: Text('${translate('Fingerprint')}: $fingerprint')
                           .marginSymmetric(vertical: 4.0)),
                   InkWell(
                       onTap: () {

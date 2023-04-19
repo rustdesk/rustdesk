@@ -201,6 +201,13 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
         ),
         onPressed: () => ffi.recordingModel.toggle()));
   }
+  // fingerprint
+  if (!isDesktop) {
+    v.add(TTextMenu(
+      child: Text(translate('Copy Fingerprint')),
+      onPressed: () => onCopyFingerprint(FingerprintState.find(id).value),
+    ));
+  }
   return v;
 }
 

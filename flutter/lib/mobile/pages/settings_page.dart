@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:settings_ui/settings_ui.dart';
@@ -45,6 +46,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _autoRecordIncomingSession = false;
   var _localIP = "";
   var _directAccessPort = "";
+  var _fingerprint = "";
 
   @override
   void initState() {
@@ -133,6 +135,12 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
       if (directAccessPort != _directAccessPort) {
         update = true;
         _directAccessPort = directAccessPort;
+      }
+
+      final fingerprint = await bind.mainGetFingerprint();
+      if (_fingerprint != fingerprint) {
+        update = true;
+        _fingerprint = fingerprint;
       }
 
       if (update) {
@@ -462,6 +470,14 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                       )),
                 ),
                 leading: Icon(Icons.info)),
+            SettingsTile.navigation(
+                onPressed: (context) => onCopyFingerprint(_fingerprint),
+                title: Text(translate("Fingerprint")),
+                value: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Text(_fingerprint),
+                ),
+                leading: Icon(Icons.fingerprint)),
           ],
         ),
       ],
