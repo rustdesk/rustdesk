@@ -71,7 +71,7 @@ fn handle_client_message(builder: &mut IfaceBuilder<()>) {
         move |_, _, (_uni_links,): (String,)| {
             #[cfg(feature = "flutter")]
             {
-                use crate::flutter::{self, APP_TYPE_MAIN};
+                use crate::flutter;
                 let data = HashMap::from([
                     ("name", "new_connection"),
                     ("uni_links", _uni_links.as_str()),
