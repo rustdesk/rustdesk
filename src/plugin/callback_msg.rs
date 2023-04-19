@@ -1,13 +1,8 @@
 use super::cstr_to_string;
 use crate::flutter::{self, APP_TYPE_CM, APP_TYPE_MAIN, SESSIONS};
-use hbb_common::{lazy_static, libc, log, message_proto::Plugin, ResultType};
-use serde_derive::{Deserialize, Serialize};
+use hbb_common::{lazy_static, log, message_proto::Plugin};
 use serde_json;
-use std::{
-    collections::HashMap,
-    ffi::{c_char, CStr},
-    sync::Arc,
-};
+use std::{collections::HashMap, ffi::c_char, sync::Arc};
 
 const MSG_TO_PEER_TARGET: &str = "peer";
 const MSG_TO_UI_TARGET: &str = "ui";
@@ -85,7 +80,7 @@ pub fn callback_msg(
             let content = std::string::String::from_utf8(content_slice[2..].to_vec())
                 .unwrap_or("".to_string());
             let mut m = HashMap::new();
-            m.insert("name", "plugin");
+            m.insert("name", "plugin_event");
             m.insert("peer", &peer);
             m.insert("content", &content);
             let event = serde_json::to_string(&m).unwrap_or("".to_string());
@@ -99,7 +94,7 @@ pub fn callback_msg(
                 || channel & MSG_TO_UI_FLUTTER_CHANNEL_FORWARD != 0
             {
                 let _res = flutter::push_session_event(
-                    APP_TYPE_CM,
+                    &peer,
                     "plugin",
                     vec![("peer", &peer), ("content", &content)],
                 );

@@ -1,10 +1,10 @@
 use hbb_common::ResultType;
-use serde_derive::Deserialize;
+use serde_derive::{Deserialize, Serialize};
 use serde_json;
 use std::collections::HashMap;
 use std::ffi::{c_char, CStr};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct UiButton {
     key: String,
     text: String,
@@ -13,7 +13,7 @@ pub struct UiButton {
     action: String, // The action to be triggered when the button is clicked.
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct UiCheckbox {
     key: String,
     text: String,
@@ -21,7 +21,7 @@ pub struct UiCheckbox {
     action: String, // The action to be triggered when the checkbox is checked or unchecked.
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "t", content = "c")]
 pub enum UiType {
     Button(UiButton),
@@ -30,28 +30,21 @@ pub enum UiType {
 
 #[derive(Debug, Deserialize)]
 pub struct Location {
-    core: String,
-    ui: HashMap<String, UiType>,
+    pub ui: HashMap<String, UiType>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct ConfigItem {
-    key: String,
-    value: String,
-    default: String,
-    description: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct Configs {
-    pub local: Vec<ConfigItem>,
-    pub session: Vec<ConfigItem>,
+    pub key: String,
+    pub value: String,
+    pub default: String,
+    pub description: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
-    pub host: Configs,
-    pub client: Configs,
+    pub local: Vec<ConfigItem>,
+    pub peer: Vec<ConfigItem>,
 }
 
 #[derive(Debug, Deserialize)]

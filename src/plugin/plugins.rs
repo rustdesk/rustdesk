@@ -1,19 +1,13 @@
 use std::{
     collections::HashMap,
-    ffi::{c_char, CStr},
-    path::PathBuf,
+    ffi::c_char,
+    path::Path,
     sync::{Arc, RwLock},
 };
 
 use super::{callback_msg, desc::Desc};
-use hbb_common::{
-    anyhow::Error,
-    bail,
-    dlopen::symbor::Library,
-    lazy_static, libc, log,
-    log::{debug, error},
-    ResultType,
-};
+use crate::flutter;
+use hbb_common::{bail, dlopen::symbor::Library, lazy_static, libc, log, ResultType};
 
 lazy_static::lazy_static! {
     pub static ref PLUGINS: Arc<RwLock<HashMap<String, Plugin>>> = Default::default();
@@ -109,7 +103,7 @@ make_plugin!(
     fn_call: PluginFuncCall
 );
 
-pub fn load_plugins(dir: &str) -> ResultType<()> {
+pub fn load_plugins<P: AsRef<Path>>(dir: P) -> ResultType<()> {
     for entry in std::fs::read_dir(dir)? {
         match entry {
             Ok(entry) => {
@@ -156,7 +150,39 @@ fn load_plugin(path: &str) -> ResultType<()> {
     let desc = desc_res?;
     let id = desc.id().to_string();
     (plugin.fn_set_cb_msg)(callback_msg::callback_msg);
+    update_config(&desc);
+    reload_ui(&desc);
     plugin.desc = Some(desc);
     PLUGINS.write().unwrap().insert(id, plugin);
     Ok(())
+}
+
+fn update_config(desc: &Desc) {
+    super::config::set_local_items(desc.id(), &desc.config().local);
+    super::config::set_peer_items(desc.id(), &desc.config().peer);
+}
+
+fn reload_ui(desc: &Desc) {
+    for (location, ui) in desc.location().ui.iter() {
+        let v: Vec<&str> = location.split('|').collect();
+        // The first element is the "client" or "host".
+        // The second element is the "main", "remote", "cm", "file transfer", "port forward".
+        if v.len() >= 2 {
+            let available_channels = vec![
+                flutter::APP_TYPE_MAIN,
+                flutter::APP_TYPE_DESKTOP_REMOTE,
+                flutter::APP_TYPE_CM,
+                flutter::APP_TYPE_DESKTOP_FILE_TRANSFER,
+                flutter::APP_TYPE_DESKTOP_PORT_FORWARD,
+            ];
+            if available_channels.contains(&v[1]) {
+                if let Ok(ui) = serde_json::to_string(&ui) {
+                    let mut m = HashMap::new();
+                    m.insert("name", "plugin_reload");
+                    m.insert("ui", &ui);
+                    flutter::push_global_event(v[1], serde_json::to_string(&m).unwrap());
+                }
+            }
+        }
+    }
 }
