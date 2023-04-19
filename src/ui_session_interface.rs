@@ -14,10 +14,12 @@ use rdev::{Event, EventType::*, KeyCode};
 use uuid::Uuid;
 
 use hbb_common::config::{Config, LocalConfig, PeerConfig};
+#[cfg(not(feature = "flutter"))]
+use hbb_common::fs;
 use hbb_common::rendezvous_proto::ConnType;
 use hbb_common::tokio::{self, sync::mpsc};
 use hbb_common::{allow_err, message_proto::*};
-use hbb_common::{fs, get_version_number, log, Stream};
+use hbb_common::{get_version_number, log, Stream};
 
 use crate::client::io_loop::Remote;
 use crate::client::{
@@ -25,7 +27,7 @@ use crate::client::{
     input_os_password, load_config, send_mouse, start_video_audio_threads, FileManager, Key,
     LoginConfigHandler, QualityStatus, KEY_MAP,
 };
-use crate::common::{self, GrabState};
+use crate::common::GrabState;
 use crate::keyboard;
 use crate::{client::Data, client::Interface};
 
@@ -155,6 +157,7 @@ impl<T: InvokeUiSession> Session<T> {
         self.lc.read().unwrap().get_toggle_option(&name)
     }
 
+    #[cfg(not(feature = "flutter"))]
     pub fn is_privacy_mode_supported(&self) -> bool {
         self.lc.read().unwrap().is_privacy_mode_supported()
     }
@@ -198,6 +201,7 @@ impl<T: InvokeUiSession> Session<T> {
         self.lc.read().unwrap().remember
     }
 
+    #[cfg(not(feature = "flutter"))]
     pub fn set_write_override(
         &mut self,
         job_id: i32,
@@ -240,6 +244,8 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::Message(msg));
     }
 
+    #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn send_plugin(&self, plugin: Plugin) {
         let mut misc = Misc::new();
         misc.set_plugin(plugin);
@@ -270,16 +276,13 @@ impl<T: InvokeUiSession> Session<T> {
         });
     }
 
+    #[cfg(not(feature = "flutter"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn is_xfce(&self) -> bool {
         #[cfg(not(any(target_os = "ios")))]
         return crate::platform::is_xfce();
         #[cfg(any(target_os = "ios"))]
         false
-    }
-
-    pub fn get_supported_keyboard_modes(&self) -> Vec<KeyboardMode> {
-        let version = self.get_peer_version();
-        common::get_supported_keyboard_modes(version)
     }
 
     pub fn remove_port_forward(&self, port: i32) {
@@ -310,6 +313,7 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::AddPortForward(pf));
     }
 
+    #[cfg(not(feature = "flutter"))]
     pub fn get_id(&self) -> String {
         self.id.clone()
     }
@@ -369,6 +373,7 @@ impl<T: InvokeUiSession> Session<T> {
         input_os_password(pass, activate, self.clone());
     }
 
+    #[cfg(not(feature = "flutter"))]
     pub fn get_chatbox(&self) -> String {
         #[cfg(feature = "inline")]
         return crate::ui::inline::get_chatbox();
@@ -545,7 +550,8 @@ impl<T: InvokeUiSession> Session<T> {
         position_code: i32,
         lock_modes: i32,
         down_or_up: bool,
-    ) {}
+    ) {
+    }
 
     #[cfg(not(any(target_os = "ios")))]
     pub fn handle_flutter_key_event(
@@ -675,6 +681,7 @@ impl<T: InvokeUiSession> Session<T> {
         }));
     }
 
+    #[cfg(not(feature = "flutter"))]
     pub fn get_icon_path(&self, file_type: i32, ext: String) -> String {
         let mut path = Config::icon_path();
         if file_type == FileType::DirLink as i32 {
