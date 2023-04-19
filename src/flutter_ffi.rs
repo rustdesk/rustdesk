@@ -48,6 +48,13 @@ fn initialize(app_dir: &str) {
     }
 }
 
+pub fn start_global_event_stream(s: StreamSink<String>, app_type: String) -> ResultType<()> {
+    super::flutter::start_global_event_stream(s, app_type)
+}
+
+pub fn stop_global_event_stream(app_type: String) {
+    super::flutter::stop_global_event_stream(app_type)
+}
 pub enum EventToUI {
     Event(String),
     Rgba,
