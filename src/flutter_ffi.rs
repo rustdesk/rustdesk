@@ -1398,7 +1398,7 @@ pub fn send_url_scheme(_url: String) {
 pub fn plugin_event(id: String, event: Vec<u8>) {
     #[cfg(feature = "plugin_framework")]
     {
-        crate::plugin::handle_ui_event(&id, &event);
+        allow_err!(crate::plugin::handle_ui_event(&id, &event));
     }
 }
 

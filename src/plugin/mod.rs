@@ -1,14 +1,15 @@
 use hbb_common::ResultType;
-use std::ffi::{c_char, CStr};
+use std::ffi::{c_char, c_void, CStr};
 
 mod callback_msg;
 mod config;
 pub mod desc;
-mod plugins;
 mod errno;
+mod plugins;
 
 pub use plugins::{
-    handle_client_event, handle_ui_event, load_plugin, load_plugins, reload_plugin, unload_plugin,
+    handle_client_event, handle_server_event, handle_ui_event, load_plugin, load_plugins,
+    reload_plugin, unload_plugin,
 };
 
 #[inline]
@@ -27,5 +28,5 @@ fn get_code_msg_from_ret(ret: *const c_void) -> (i32, String) {
         .to_str()
         .unwrap_or("")
         .to_string();
-    Ok((code, msg))
+    (code, msg)
 }

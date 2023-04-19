@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    ffi::c_char,
+    ffi::{c_char, c_void},
     path::Path,
     sync::{Arc, RwLock},
 };
@@ -176,13 +176,13 @@ pub fn load_plugin(path: &str) -> ResultType<()> {
 fn handle_event(method: &[u8], id: &str, event: &[u8]) -> ResultType<()> {
     match PLUGINS.read().unwrap().get(id) {
         Some(plugin) => {
-            let ret = (plugin.fn_call)(method.as_ptr() as _, event.as_ptr(), event.len());
+            let ret = (plugin.fn_call)(method.as_ptr() as _, event.as_ptr() as _, event.len());
             if ret.is_null() {
                 Ok(())
             } else {
                 let (code, msg) = get_code_msg_from_ret(ret);
                 unsafe {
-                    libc::free(ret);
+                    libc::free(ret as _);
                 }
                 bail!(
                     "Failed to handle plugin event, id: {}, method: {}, code: {}, msg: {}",
@@ -213,7 +213,7 @@ pub fn handle_client_event(id: &str, event: &[u8]) -> Option<Message> {
         Some(plugin) => {
             let ret = (plugin.fn_call)(
                 METHOD_HANDLE_PEER.as_ptr() as _,
-                event.as_ptr(),
+                event.as_ptr() as _,
                 event.len(),
             );
             if ret.is_null() {
@@ -221,13 +221,10 @@ pub fn handle_client_event(id: &str, event: &[u8]) -> Option<Message> {
             } else {
                 let (code, msg) = get_code_msg_from_ret(ret);
                 unsafe {
-                    libc::free(ret);
+                    libc::free(ret as _);
                 }
                 if code > ERR_RUSTDESK_HANDLE_BASE && code < ERR_PLUGIN_HANDLE_BASE {
-                    let name = match PLUGINS.read().unwrap().get(id) {
-                        Some(plugin) => plugin.desc.as_ref().unwrap().name(),
-                        None => "",
-                    };
+                    let name = plugin.desc.as_ref().unwrap().name();
                     match code {
                         ERR_CALL_NOT_SUPPORTED_METHOD => Some(make_plugin_response(
                             id,
