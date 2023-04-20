@@ -12,6 +12,8 @@ pub use plugins::{
     reload_plugin, unload_plugin,
 };
 
+pub use config::{LocalConfig, PeerConfig};
+
 #[inline]
 fn cstr_to_string(cstr: *const c_char) -> ResultType<String> {
     Ok(String::from_utf8(unsafe {

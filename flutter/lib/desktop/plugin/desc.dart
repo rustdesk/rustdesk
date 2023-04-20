@@ -1,49 +1,75 @@
 import 'dart:collection';
 
-class UiButton {
-  String key;
-  String text;
-  String icon;
-  String tooltip;
-  String action;
-
-  UiButton(this.key, this.text, this.icon, this.tooltip, this.action);
-  UiButton.fromJson(Map<String, dynamic> json)
-      : key = json['key'] ?? '',
-        text = json['text'] ?? '',
-        icon = json['icon'] ?? '',
-        tooltip = json['tooltip'] ?? '',
-        action = json['action'] ?? '';
-}
-
-class UiCheckbox {
-  String key;
-  String text;
-  String tooltip;
-  String action;
-
-  UiCheckbox(this.key, this.text, this.tooltip, this.action);
-  UiCheckbox.fromJson(Map<String, dynamic> json)
-      : key = json['key'] ?? '',
-        text = json['text'] ?? '',
-        tooltip = json['tooltip'] ?? '',
-        action = json['action'] ?? '';
-}
+const String kValueTrue = '1';
+const String kValueFalse = '0';
 
 class UiType {
-  UiButton? button;
-  UiCheckbox? checkbox;
+  String key;
+  String text;
+  String tooltip;
+  String action;
+
+  UiType(this.key, this.text, this.tooltip, this.action);
 
   UiType.fromJson(Map<String, dynamic> json)
-      : button = json['t'] == 'Button' ? UiButton.fromJson(json['c']) : null,
-        checkbox =
-            json['t'] != 'Checkbox' ? UiCheckbox.fromJson(json['c']) : null;
+      : key = json['key'] ?? '',
+        text = json['text'] ?? '',
+        tooltip = json['tooltip'] ?? '',
+        action = json['action'] ?? '';
+
+  static UiType? create(Map<String, dynamic> json) {
+    if (json['t'] == 'Button') {
+      return UiButton.fromJson(json['c']);
+    } else if (json['t'] == 'Checkbox') {
+      return UiCheckbox.fromJson(json['c']);
+    } else {
+      return null;
+    }
+  }
+}
+
+class UiButton extends UiType {
+  String icon;
+
+  UiButton(
+      {required String key,
+      required String text,
+      required this.icon,
+      required String tooltip,
+      required String action})
+      : super(key, text, tooltip, action);
+
+  UiButton.fromJson(Map<String, dynamic> json)
+      : icon = json['icon'] ?? '',
+        super.fromJson(json);
+}
+
+class UiCheckbox extends UiType {
+  UiCheckbox(
+      {required String key,
+      required String text,
+      required String tooltip,
+      required String action})
+      : super(key, text, tooltip, action);
+
+  UiCheckbox.fromJson(Map<String, dynamic> json) : super.fromJson(json);
 }
 
 class Location {
+  // location key:
+  //  host|main|settings|display|others
+  //  client|remote|toolbar|display
   HashMap<String, UiType> ui;
 
   Location(this.ui);
+  Location.fromJson(Map<String, dynamic> json) : ui = HashMap() {
+    json.forEach((key, value) {
+      var ui = UiType.create(value);
+      if (ui != null) {
+        this.ui[ui.key] = ui;
+      }
+    });
+  }
 }
 
 class ConfigItem {
@@ -58,6 +84,11 @@ class ConfigItem {
         value = json['value'] ?? '',
         description = json['description'] ?? '',
         defaultValue = json['default'] ?? '';
+
+  static String get trueValue => kValueTrue;
+  static String get falseValue => kValueFalse;
+  static bool isTrue(String value) => value == kValueTrue;
+  static bool isFalse(String value) => value == kValueFalse;
 }
 
 class Config {

@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -9,6 +8,8 @@ import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
+import 'package:flutter_hbb/desktop/plugin/widget.dart';
+import 'package:flutter_hbb/desktop/plugin/common.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
@@ -641,7 +642,7 @@ class _ControlMenu extends StatelessWidget {
           if (e.divider) {
             return Divider();
           } else {
-            return _MenuItemButton(
+            return MenuButton(
                 child: e.child,
                 onPressed: e.onPressed,
                 ffi: ffi,
@@ -656,13 +657,19 @@ class _DisplayMenu extends StatefulWidget {
   final FFI ffi;
   final MenubarState state;
   final Function(bool) setFullscreen;
+  final LocationItem pluginItem;
   _DisplayMenu(
       {Key? key,
       required this.id,
       required this.ffi,
       required this.state,
       required this.setFullscreen})
-      : super(key: key);
+      : pluginItem = LocationItem.createLocationItem(
+          id,
+          ffi,
+          kLocationClientRemoteToolbarDisplay,
+        ),
+        super(key: key);
 
   @override
   State<_DisplayMenu> createState() => _DisplayMenuState();
@@ -700,6 +707,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
           resolutions(),
           Divider(),
           toggles(),
+          widget.pluginItem,
         ]);
   }
 
@@ -711,7 +719,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
           if (!visible) return Offstage();
           return Column(
             children: [
-              _MenuItemButton(
+              MenuButton(
                   child: Text(translate('Adjust Window')),
                   onPressed: _doAdjustWindow,
                   ffi: widget.ffi),
@@ -828,7 +836,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
           final v = data as List<TRadioMenu<String>>;
           return Column(children: [
             ...v
-                .map((e) => _RadioMenuButton<String>(
+                .map((e) => RdoMenuButton<String>(
                     value: e.value,
                     groupValue: e.groupValue,
                     onChanged: e.onChanged,
@@ -858,14 +866,14 @@ class _DisplayMenuState extends State<_DisplayMenu> {
 
       final enabled = widget.ffi.canvasModel.imageOverflow.value;
       return Column(children: [
-        _RadioMenuButton<String>(
+        RdoMenuButton<String>(
           child: Text(translate('ScrollAuto')),
           value: kRemoteScrollStyleAuto,
           groupValue: groupValue,
           onChanged: enabled ? (value) => onChange(value) : null,
           ffi: widget.ffi,
         ),
-        _RadioMenuButton<String>(
+        RdoMenuButton<String>(
           child: Text(translate('Scrollbar')),
           value: kRemoteScrollStyleBar,
           groupValue: groupValue,
@@ -886,7 +894,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
             ffi: widget.ffi,
             child: Text(translate('Image Quality')),
             menuChildren: v
-                .map((e) => _RadioMenuButton<String>(
+                .map((e) => RdoMenuButton<String>(
                     value: e.value,
                     groupValue: e.groupValue,
                     onChanged: e.onChanged,
@@ -908,7 +916,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
               ffi: widget.ffi,
               child: Text(translate('Codec')),
               menuChildren: v
-                  .map((e) => _RadioMenuButton(
+                  .map((e) => RdoMenuButton(
                       value: e.value,
                       groupValue: e.groupValue,
                       onChanged: e.onChanged,
@@ -948,7 +956,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
     return _SubmenuButton(
         ffi: widget.ffi,
         menuChildren: resolutions
-            .map((e) => _RadioMenuButton(
+            .map((e) => RdoMenuButton(
                 value: '${e.width}x${e.height}',
                 groupValue: groupValue,
                 onChanged: onChanged,
@@ -966,7 +974,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
           if (v.isEmpty) return Offstage();
           return Column(
               children: v
-                  .map((e) => _CheckboxMenuButton(
+                  .map((e) => CkbMenuButton(
                       value: e.value,
                       onChanged: e.onChanged,
                       child: e.child,
@@ -1026,7 +1034,7 @@ class _KeyboardMenu extends StatelessWidget {
         KeyboardModeMenu(key: _kKeyMapMode, menu: 'Map mode'),
         KeyboardModeMenu(key: _kKeyTranslateMode, menu: 'Translate mode'),
       ];
-      List<_RadioMenuButton> list = [];
+      List<RdoMenuButton> list = [];
       final enabled = !ffi.ffiModel.viewOnly;
       onChanged(String? value) async {
         if (value == null) return;
@@ -1049,7 +1057,7 @@ class _KeyboardMenu extends StatelessWidget {
         if (mode.key == _kKeyTranslateMode) {
           text = '$text beta';
         }
-        list.add(_RadioMenuButton<String>(
+        list.add(RdoMenuButton<String>(
           child: Text(text),
           value: mode.key,
           groupValue: groupValue,
@@ -1069,7 +1077,7 @@ class _KeyboardMenu extends StatelessWidget {
     return Column(
       children: [
         Divider(),
-        _MenuItemButton(
+        MenuButton(
           child: Text(
               '${translate('Local keyboard type')}: ${KBLayoutType.value}'),
           trailingIcon: const Icon(Icons.settings),
@@ -1085,7 +1093,7 @@ class _KeyboardMenu extends StatelessWidget {
   view_mode() {
     final ffiModel = ffi.ffiModel;
     final enabled = version_cmp(pi.version, '1.2.0') >= 0 && ffiModel.keyboard;
-    return _CheckboxMenuButton(
+    return CkbMenuButton(
         value: ffiModel.viewOnly,
         onChanged: enabled
             ? (value) async {
@@ -1129,7 +1137,7 @@ class _ChatMenuState extends State<_ChatMenu> {
   }
 
   textChat() {
-    return _MenuItemButton(
+    return MenuButton(
         child: Text(translate('Text chat')),
         ffi: widget.ffi,
         onPressed: () {
@@ -1148,7 +1156,7 @@ class _ChatMenuState extends State<_ChatMenu> {
   }
 
   voiceCall() {
-    return _MenuItemButton(
+    return MenuButton(
       child: Text(translate('Voice call')),
       ffi: widget.ffi,
       onPressed: () => bind.sessionRequestVoiceCall(id: widget.id),
@@ -1403,12 +1411,12 @@ class _SubmenuButton extends StatelessWidget {
   }
 }
 
-class _MenuItemButton extends StatelessWidget {
+class MenuButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final Widget? trailingIcon;
   final Widget? child;
   final FFI ffi;
-  _MenuItemButton(
+  MenuButton(
       {Key? key,
       this.onPressed,
       this.trailingIcon,
@@ -1431,12 +1439,12 @@ class _MenuItemButton extends StatelessWidget {
   }
 }
 
-class _CheckboxMenuButton extends StatelessWidget {
+class CkbMenuButton extends StatelessWidget {
   final bool? value;
   final ValueChanged<bool?>? onChanged;
   final Widget? child;
   final FFI ffi;
-  const _CheckboxMenuButton(
+  const CkbMenuButton(
       {Key? key,
       required this.value,
       required this.onChanged,
@@ -1460,13 +1468,13 @@ class _CheckboxMenuButton extends StatelessWidget {
   }
 }
 
-class _RadioMenuButton<T> extends StatelessWidget {
+class RdoMenuButton<T> extends StatelessWidget {
   final T value;
   final T? groupValue;
   final ValueChanged<T?>? onChanged;
   final Widget? child;
   final FFI ffi;
-  const _RadioMenuButton(
+  const RdoMenuButton(
       {Key? key,
       required this.value,
       required this.groupValue,

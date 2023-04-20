@@ -1405,6 +1405,58 @@ pub fn plugin_event(_id: String, _event: Vec<u8>) {
     }
 }
 
+#[inline]
+pub fn plugin_get_session_option(_id: String, _peer: String, _key: String) -> SyncReturn<Option<String>> {
+    #[cfg(feature = "plugin_framework")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        return SyncReturn(crate::plugin::PeerConfig::get(&_id, &_peer, &_key));
+    }
+    #[cfg(any(
+        not(feature = "plugin_framework"),
+        target_os = "android",
+        target_os = "ios"
+    ))]
+    {
+        return SyncReturn(None);
+    }
+}
+
+#[inline]
+pub fn plugin_set_session_option(_id: String, _peer: String, _key: String, _value: String) {
+    #[cfg(feature = "plugin_framework")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        crate::plugin::PeerConfig::set(&_id, &_peer, &_key, &_value);
+    }
+}
+
+#[inline]
+pub fn plugin_get_local_option(_id: String, _key: String) -> SyncReturn<Option<String>> {
+    #[cfg(feature = "plugin_framework")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        return SyncReturn(crate::plugin::LocalConfig::get(&_id, &_key));
+    }
+    #[cfg(any(
+        not(feature = "plugin_framework"),
+        target_os = "android",
+        target_os = "ios"
+    ))]
+    {
+        return SyncReturn(None);
+    }
+}
+
+#[inline]
+pub fn plugin_set_local_option(_id: String, _key: String, _value: String) {
+    #[cfg(feature = "plugin_framework")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        crate::plugin::LocalConfig::set(&_id, &_key, &_value);
+    }
+}
+
 #[cfg(target_os = "android")]
 pub mod server_side {
     use hbb_common::{config, log};

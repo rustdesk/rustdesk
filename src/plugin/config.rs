@@ -15,9 +15,9 @@ lazy_static::lazy_static! {
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
-struct LocalConfig(HashMap<String, String>);
+pub struct LocalConfig(HashMap<String, String>);
 #[derive(Debug, Default, Serialize, Deserialize)]
-struct PeerConfig(HashMap<String, String>);
+pub struct PeerConfig(HashMap<String, String>);
 type PeersConfig = HashMap<String, PeerConfig>;
 
 #[inline]

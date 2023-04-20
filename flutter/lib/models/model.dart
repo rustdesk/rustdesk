@@ -16,8 +16,9 @@ import 'package:flutter_hbb/models/peer_tab_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/models/user_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
-import 'package:flutter_hbb/plugin/event.dart';
-import 'package:flutter_hbb/plugin/reloader.dart';
+import 'package:flutter_hbb/desktop/plugin/event.dart';
+import 'package:flutter_hbb/desktop/plugin/desc.dart';
+import 'package:flutter_hbb/desktop/plugin/widget.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:tuple/tuple.dart';
 import 'package:image/image.dart' as img2;
@@ -229,7 +230,7 @@ class FfiModel with ChangeNotifier {
       } else if (name == "fingerprint") {
         FingerprintState.find(peerId).value = evt['fingerprint'] ?? '';
       } else if (name == "plugin_desc") {
-        handleReloading(evt, peerId);
+        updateDesc(evt);
       } else if (name == "plugin_event") {
         handlePluginEvent(
             evt, peerId, (Map<String, dynamic> e) => handleMsgBox(e, peerId));
