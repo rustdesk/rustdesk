@@ -8,7 +8,7 @@ import 'package:toggle_switch/toggle_switch.dart';
 import 'package:wakelock/wakelock.dart';
 
 import '../../common.dart';
-import '../widgets/dialog.dart';
+import '../../common/widgets/dialog.dart';
 
 class FileManagerPage extends StatefulWidget {
   FileManagerPage({Key? key, required this.id}) : super(key: key);

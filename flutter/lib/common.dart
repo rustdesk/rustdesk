@@ -43,6 +43,7 @@ final isIOS = Platform.isIOS;
 final isDesktop = Platform.isWindows || Platform.isMacOS || Platform.isLinux;
 var isWeb = false;
 var isWebDesktop = false;
+var isMobile = isAndroid || isIOS;
 var version = "";
 int androidVersion = 0;
 
@@ -186,6 +187,71 @@ class MyTheme {
   static const Color button = Color(0xFF2C8CFF);
   static const Color hoverBorder = Color(0xFF999999);
 
+  // ListTile
+  static const ListTileThemeData listTileTheme = ListTileThemeData(
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.all(
+        Radius.circular(5),
+      ),
+    ),
+  );
+
+  // Checkbox
+  static const CheckboxThemeData checkboxTheme = CheckboxThemeData(
+    splashRadius: 0,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.all(
+        Radius.circular(5),
+      ),
+    ),
+  );
+
+  // TextButton
+  // Value is used to calculate "dialog.actionsPadding"
+  static const double mobileTextButtonPaddingLR = 20;
+
+  // TextButton on mobile needs a fixed padding, otherwise small buttons
+  // like "OK" has a larger left/right padding.
+  static TextButtonThemeData mobileTextButtonTheme = TextButtonThemeData(
+    style: TextButton.styleFrom(
+      padding: EdgeInsets.symmetric(horizontal: mobileTextButtonPaddingLR),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8.0),
+      ),
+    ),
+  );
+
+  // Dialogs
+  static const double dialogPadding = 24;
+
+  // padding bottom depends on content (some dialogs has no content)
+  static EdgeInsets dialogTitlePadding({bool content = true}) {
+    final double p = dialogPadding;
+
+    return EdgeInsets.fromLTRB(p, p, p, content ? 0 : p);
+  }
+
+  // padding bottom depends on actions (mobile has dialogs without actions)
+  static EdgeInsets dialogContentPadding({bool actions = true}) {
+    final double p = dialogPadding;
+
+    return isDesktop
+        ? EdgeInsets.fromLTRB(p, p, p, actions ? (p - 4) : p)
+        : EdgeInsets.fromLTRB(p, p, p, actions ? (p / 2) : p);
+  }
+
+  static EdgeInsets dialogActionsPadding() {
+    final double p = dialogPadding;
+
+    return isDesktop
+        ? EdgeInsets.fromLTRB(p, 0, p, (p - 4))
+        : EdgeInsets.fromLTRB(p, 0, (p - mobileTextButtonPaddingLR), (p / 2));
+  }
+
+  static EdgeInsets dialogButtonPadding = isDesktop
+      ? EdgeInsets.only(left: dialogPadding)
+      : EdgeInsets.only(left: dialogPadding / 3);
+
   static ThemeData lightTheme = ThemeData(
     brightness: Brightness.light,
     hoverColor: Color.fromARGB(255, 224, 224, 224),
@@ -236,7 +302,7 @@ class MyTheme {
               ),
             ),
           )
-        : null,
+        : mobileTextButtonTheme,
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: MyTheme.accent,
@@ -254,21 +320,8 @@ class MyTheme {
         ),
       ),
     ),
-    checkboxTheme: const CheckboxThemeData(
-      splashRadius: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.all(
-          Radius.circular(5),
-        ),
-      ),
-    ),
-    listTileTheme: ListTileThemeData(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.all(
-          Radius.circular(5),
-        ),
-      ),
-    ),
+    checkboxTheme: checkboxTheme,
+    listTileTheme: listTileTheme,
     menuBarTheme: MenuBarThemeData(
         style:
             MenuStyle(backgroundColor: MaterialStatePropertyAll(Colors.white))),
@@ -334,7 +387,7 @@ class MyTheme {
               ),
             ),
           )
-        : null,
+        : mobileTextButtonTheme,
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: MyTheme.accent,
@@ -357,21 +410,8 @@ class MyTheme {
         ),
       ),
     ),
-    checkboxTheme: const CheckboxThemeData(
-      splashRadius: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.all(
-          Radius.circular(5),
-        ),
-      ),
-    ),
-    listTileTheme: ListTileThemeData(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.all(
-          Radius.circular(5),
-        ),
-      ),
-    ),
+    checkboxTheme: checkboxTheme,
+    listTileTheme: listTileTheme,
     menuBarTheme: MenuBarThemeData(
         style: MenuStyle(
             backgroundColor: MaterialStatePropertyAll(Color(0xFF121212)))),
@@ -757,6 +797,7 @@ void showToast(String text, {Duration timeout = const Duration(seconds: 2)}) {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
               child: Text(
                 text,
+                textAlign: TextAlign.center,
                 style: const TextStyle(
                     decoration: TextDecoration.none,
                     fontWeight: FontWeight.w300,
@@ -771,6 +812,10 @@ void showToast(String text, {Duration timeout = const Duration(seconds: 2)}) {
   });
 }
 
+// TODO
+// - Remove argument "contentPadding", no need for it, all should look the same.
+// - Remove "required" for argument "content". See simple confirm dialog "delete peer", only title and actions are used. No need to "content: SizedBox.shrink()".
+// - Make dead code alive, transform arguments "onSubmit" and "onCancel" into correspondenting buttons "ConfirmOkButton", "CancelButton".
 class CustomAlertDialog extends StatelessWidget {
   const CustomAlertDialog(
       {Key? key,
@@ -798,8 +843,8 @@ class CustomAlertDialog extends StatelessWidget {
     Future.delayed(Duration.zero, () {
       if (!scopeNode.hasFocus) scopeNode.requestFocus();
     });
-    const double padding = 30;
     bool tabTapped = false;
+
     return FocusScope(
       node: scopeNode,
       autofocus: true,
@@ -824,22 +869,18 @@ class CustomAlertDialog extends StatelessWidget {
         return KeyEventResult.ignored;
       },
       child: AlertDialog(
-        scrollable: true,
-        title: title,
-        titlePadding: EdgeInsets.fromLTRB(padding, 24, padding, 0),
-        contentPadding: EdgeInsets.fromLTRB(
-          contentPadding ?? padding,
-          25,
-          contentPadding ?? padding,
-          actions is List ? 10 : padding,
-        ),
-        content: ConstrainedBox(
-          constraints: contentBoxConstraints,
-          child: content,
-        ),
-        actions: actions,
-        actionsPadding: EdgeInsets.fromLTRB(padding, 0, padding, padding),
-      ),
+          scrollable: true,
+          title: title,
+          content: ConstrainedBox(
+            constraints: contentBoxConstraints,
+            child: content,
+          ),
+          actions: actions,
+          titlePadding: MyTheme.dialogTitlePadding(content: content != null),
+          contentPadding:
+              MyTheme.dialogContentPadding(actions: actions is List),
+          actionsPadding: MyTheme.dialogActionsPadding(),
+          buttonPadding: MyTheme.dialogButtonPadding),
     );
   }
 }
@@ -1115,36 +1156,21 @@ class AndroidPermissionManager {
   }
 }
 
+// TODO move this to mobile/widgets.
+// Used only for mobile, pages remote, settings, dialog
+// TODO remove argument contentPadding, it’s not used, getToggle() has not
 RadioListTile<T> getRadio<T>(
-    String name, T toValue, T curValue, void Function(T?) onChange,
+    Widget title, T toValue, T curValue, ValueChanged<T?>? onChange,
     {EdgeInsetsGeometry? contentPadding}) {
   return RadioListTile<T>(
-    contentPadding: contentPadding,
+    contentPadding: contentPadding ?? EdgeInsets.zero,
+    visualDensity: VisualDensity.compact,
     controlAffinity: ListTileControlAffinity.trailing,
-    title: Text(translate(name)),
+    title: title,
     value: toValue,
     groupValue: curValue,
     onChanged: onChange,
-    dense: true,
   );
-}
-
-CheckboxListTile getToggle(
-    String id, void Function(void Function()) setState, option, name,
-    {FFI? ffi}) {
-  final opt = bind.sessionGetToggleOptionSync(id: id, arg: option);
-  return CheckboxListTile(
-      value: opt,
-      onChanged: (v) {
-        setState(() {
-          bind.sessionToggleOption(id: id, value: option);
-        });
-        if (option == "show-quality-monitor") {
-          (ffi ?? gFFI).qualityMonitorModel.checkShowQualityMonitor(id);
-        }
-      },
-      dense: true,
-      title: Text(translate(name)));
 }
 
 /// find ffi, tag is Remote ID
@@ -1522,14 +1548,14 @@ bool checkArguments() {
     return false;
   }
   String? id =
-      kBootArgs.length < connectIndex + 1 ? null : kBootArgs[connectIndex + 1];
+      kBootArgs.length <= connectIndex + 1 ? null : kBootArgs[connectIndex + 1];
   String? password =
-      kBootArgs.length < connectIndex + 2 ? null : kBootArgs[connectIndex + 2];
+      kBootArgs.length <= connectIndex + 2 ? null : kBootArgs[connectIndex + 2];
   if (password != null && password.startsWith("--")) {
     password = null;
   }
   final switchUuidIndex = kBootArgs.indexOf("--switch_uuid");
-  String? switchUuid = kBootArgs.length < switchUuidIndex + 1
+  String? switchUuid = kBootArgs.length <= switchUuidIndex + 1
       ? null
       : kBootArgs[switchUuidIndex + 1];
   if (id != null) {
@@ -1574,8 +1600,10 @@ bool callUniLinksUriHandler(Uri uri) {
     final peerId = uri.path.substring("/new/".length);
     var param = uri.queryParameters;
     String? switch_uuid = param["switch_uuid"];
+    String? password = param["password"];
     Future.delayed(Duration.zero, () {
-      rustDeskWinManager.newRemoteDesktop(peerId, switch_uuid: switch_uuid);
+      rustDeskWinManager.newRemoteDesktop(peerId,
+          password: password, switch_uuid: switch_uuid);
     });
     return true;
   }
@@ -2006,4 +2034,13 @@ Widget futureBuilder(
           return Container();
         }
       });
+}
+
+void onCopyFingerprint(String value) {
+  if (value.isNotEmpty) {
+    Clipboard.setData(ClipboardData(text: value));
+    showToast('$value\n${translate("Copied")}');
+  } else {
+    showToast(translate("no fingerprints"));
+  }
 }

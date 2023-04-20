@@ -3,7 +3,7 @@ use hbb_common::{allow_err, platform::linux::DISTRO};
 use scrap::{is_cursor_embedded, set_map_err, Capturer, Display, Frame, TraitCapturer};
 use std::io;
 
-use super::video_service::{
+use crate::client::{
     SCRAP_OTHER_VERSION_OR_X11_REQUIRED, SCRAP_UBUNTU_HIGHER_REQUIRED, SCRAP_X11_REQUIRED,
 };
 
@@ -224,19 +224,6 @@ pub(super) fn get_primary() -> ResultType<usize> {
         unsafe {
             let cap_display_info = &*cap_display_info;
             Ok(cap_display_info.primary)
-        }
-    } else {
-        bail!("Failed to get capturer display info");
-    }
-}
-
-pub(super) fn get_display_num() -> ResultType<usize> {
-    let addr = *CAP_DISPLAY_INFO.read().unwrap();
-    if addr != 0 {
-        let cap_display_info: *const CapDisplayInfo = addr as _;
-        unsafe {
-            let cap_display_info = &*cap_display_info;
-            Ok(cap_display_info.num)
         }
     } else {
         bail!("Failed to get capturer display info");

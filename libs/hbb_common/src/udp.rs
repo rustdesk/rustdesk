@@ -32,7 +32,7 @@ fn new_socket(addr: SocketAddr, reuse: bool, buf_size: usize) -> Result<Socket, 
     if buf_size > 0 {
         socket.set_recv_buffer_size(buf_size).ok();
     }
-    log::info!(
+    log::debug!(
         "Receive buf size of udp {}: {:?}",
         addr,
         socket.recv_buffer_size()

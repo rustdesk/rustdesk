@@ -48,18 +48,24 @@ impl Interface for Session {
     }
 
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str) {
-        if msgtype == "input-password" {
-            self.sender
-                .send(Data::Login((self.password.clone(), true)))
-                .ok();
-        } else if msgtype == "re-input-password" {
-            log::error!("{}: {}", title, text);
-            let pass = rpassword::prompt_password("Enter password: ").unwrap();
-            self.sender.send(Data::Login((pass, true))).ok();
-        } else if msgtype.contains("error") {
-            log::error!("{}: {}: {}", msgtype, title, text);
-        } else {
-            log::info!("{}: {}: {}", msgtype, title, text);
+        match msgtype {
+            "input-password" => {
+                self.sender
+                    .send(Data::Login((self.password.clone(), true)))
+                    .ok();
+            }
+            "re-input-password" => {
+                log::error!("{}: {}", title, text);
+                let password = rpassword::prompt_password("Enter password: ").unwrap();
+                let login_data = Data::Login((password, true));
+                self.sender.send(login_data).ok();
+            }
+            msg if msg.contains("error") => {
+                log::error!("{}: {}: {}", msgtype, title, text);
+            }
+            _ => {
+                log::info!("{}: {}: {}", msgtype, title, text);
+            }
         }
     }
 
@@ -79,8 +85,8 @@ impl Interface for Session {
         handle_hash(self.lc.clone(), &pass, hash, self, peer).await;
     }
 
-    async fn handle_login_from_ui(&mut self, password: String, remember: bool, peer: &mut Stream) {
-        handle_login_from_ui(self.lc.clone(), password, remember, peer).await;
+    async fn handle_login_from_ui(&mut self, os_username: String, os_password: String, password: String, remember: bool, peer: &mut Stream) {
+        handle_login_from_ui(self.lc.clone(), os_username, os_password, password, remember, peer).await;
     }
 
     async fn handle_test_delay(&mut self, t: TestDelay, peer: &mut Stream) {

@@ -45,8 +45,12 @@ class InputModel {
   var command = false;
 
   // trackpad
-  var trackpadScrollDistance = Offset.zero;
+  final _trackpadSpeed = 0.02;
+  var _trackpadLastDelta = Offset.zero;
+  var _trackpadScrollUnsent = Offset.zero;
+  var _stopFling = true;
   Timer? _flingTimer;
+  final _flingBaseDelay = 10;
 
   // mouse
   final isPhysicalMouse = false.obs;
@@ -55,10 +59,12 @@ class InputModel {
 
   get id => parent.target?.id ?? "";
 
+  bool get keyboardPerm => parent.target!.ffiModel.keyboard;
+
   InputModel(this.parent);
 
   KeyEventResult handleRawKeyEvent(FocusNode data, RawKeyEvent e) {
-    if (!stateGlobal.grabKeyboard) {
+    if (isDesktop && !stateGlobal.grabKeyboard) {
       return KeyEventResult.handled;
     }
 
@@ -111,44 +117,41 @@ class InputModel {
   }
 
   void mapKeyboardMode(RawKeyEvent e) {
-    int scanCode;
-    int keyCode;
+    int positionCode = -1;
+    int platformCode = -1;
     bool down;
 
     if (e.data is RawKeyEventDataMacOs) {
       RawKeyEventDataMacOs newData = e.data as RawKeyEventDataMacOs;
-      scanCode = newData.keyCode;
-      keyCode = newData.keyCode;
+      positionCode = newData.keyCode;
+      platformCode = newData.keyCode;
     } else if (e.data is RawKeyEventDataWindows) {
       RawKeyEventDataWindows newData = e.data as RawKeyEventDataWindows;
-      scanCode = newData.scanCode;
-      keyCode = newData.keyCode;
+      positionCode = newData.scanCode;
+      platformCode = newData.keyCode;
     } else if (e.data is RawKeyEventDataLinux) {
       RawKeyEventDataLinux newData = e.data as RawKeyEventDataLinux;
       // scanCode and keyCode of RawKeyEventDataLinux are incorrect.
       // 1. scanCode means keycode
       // 2. keyCode means keysym
-      scanCode = 0;
-      keyCode = newData.scanCode;
+      positionCode = newData.scanCode;
+      platformCode = newData.keyCode;
     } else if (e.data is RawKeyEventDataAndroid) {
       RawKeyEventDataAndroid newData = e.data as RawKeyEventDataAndroid;
-      scanCode = newData.scanCode + 8;
-      keyCode = newData.keyCode;
-    } else {
-      scanCode = -1;
-      keyCode = -1;
-    }
+      positionCode = newData.scanCode + 8;
+      platformCode = newData.keyCode;
+    } else {}
 
     if (e is RawKeyDownEvent) {
       down = true;
     } else {
       down = false;
     }
-    inputRawKey(e.character ?? '', keyCode, scanCode, down);
+    inputRawKey(e.character ?? '', platformCode, positionCode, down);
   }
 
   /// Send raw Key Event
-  void inputRawKey(String name, int keyCode, int scanCode, bool down) {
+  void inputRawKey(String name, int platformCode, int positionCode, bool down) {
     const capslock = 1;
     const numlock = 2;
     const scrolllock = 3;
@@ -168,8 +171,8 @@ class InputModel {
     bind.sessionHandleFlutterKeyEvent(
         id: id,
         name: name,
-        keycode: keyCode,
-        scancode: scanCode,
+        platformCode: platformCode,
+        positionCode: positionCode,
         lockModes: lockModes,
         downOrUp: down);
   }
@@ -199,7 +202,7 @@ class InputModel {
   /// [down] indicates the key's state(down or up).
   /// [press] indicates a click event(down and up).
   void inputKey(String name, {bool? down, bool? press}) {
-    if (!parent.target!.ffiModel.keyboard()) return;
+    if (!keyboardPerm) return;
     bind.sessionInputKey(
         id: id,
         name: name,
@@ -282,7 +285,7 @@ class InputModel {
 
   /// Send mouse press event.
   void sendMouse(String type, MouseButtons button) {
-    if (!parent.target!.ffiModel.keyboard()) return;
+    if (!keyboardPerm) return;
     bind.sessionSendMouse(
         id: id,
         msg: json.encode(modify({'type': type, 'buttons': button.value})));
@@ -299,7 +302,7 @@ class InputModel {
 
   /// Send mouse movement event with distance in [x] and [y].
   void moveMouse(double x, double y) {
-    if (!parent.target!.ffiModel.keyboard()) return;
+    if (!keyboardPerm) return;
     var x2 = x.toInt();
     var y2 = y.toInt();
     bind.sessionSendMouse(
@@ -307,6 +310,7 @@ class InputModel {
   }
 
   void onPointHoverImage(PointerHoverEvent e) {
+    _stopFling = true;
     if (e.kind != ui.PointerDeviceKind.mouse) return;
     if (!isPhysicalMouse.value) {
       isPhysicalMouse.value = true;
@@ -324,17 +328,33 @@ class InputModel {
     }
   }
 
-  void onPointerPanZoomStart(PointerPanZoomStartEvent e) {}
+  void onPointerPanZoomStart(PointerPanZoomStartEvent e) {
+    _stopFling = true;
+  }
 
   // https://docs.flutter.dev/release/breaking-changes/trackpad-gestures
   // TODO(support zoom in/out)
   void onPointerPanZoomUpdate(PointerPanZoomUpdateEvent e) {
     var delta = e.panDelta;
-    trackpadScrollDistance += delta;
+    _trackpadLastDelta = delta;
+    _trackpadScrollUnsent += (delta * _trackpadSpeed);
+    var x = _trackpadScrollUnsent.dx.truncate();
+    var y = _trackpadScrollUnsent.dy.truncate();
+    _trackpadScrollUnsent -= Offset(_trackpadScrollUnsent.dx - x.toDouble(),
+        _trackpadScrollUnsent.dy - y.toDouble());
+
+    if (x == 0 && y == 0) {
+      x = delta.dx > 1 ? 1 : (delta.dx < -1 ? -1 : 0);
+      y = delta.dy > 1 ? 1 : (delta.dy < -1 ? -1 : 0);
+      if (x.abs() > y.abs()) {
+        y = 0;
+      } else {
+        x = 0;
+      }
+    }
+
     bind.sessionSendMouse(
-        id: id,
-        msg:
-            '{"type": "trackpad", "x": "${delta.dx.toInt()}", "y": "${delta.dy.toInt()}"}');
+        id: id, msg: '{"type": "trackpad", "x": "$x", "y": "$y"}');
   }
 
   // Simple simulation for fling.
@@ -357,18 +377,68 @@ class InputModel {
     });
   }
 
-  void onPointerPanZoomEnd(PointerPanZoomEndEvent e) {
-    var x = _signOrZero(trackpadScrollDistance.dx);
-    var y = _signOrZero(trackpadScrollDistance.dy);
-    var dx = trackpadScrollDistance.dx.abs() ~/ 40;
-    var dy = trackpadScrollDistance.dy.abs() ~/ 40;
-    _scheduleFling(x, y, dx, dy);
+  void _scheduleFling2(double x, double y, int delay) {
+    if ((x == 0 && y == 0) || _stopFling) {
+      return;
+    }
 
-    trackpadScrollDistance = Offset.zero;
+    _flingTimer = Timer(Duration(milliseconds: delay), () {
+      if (_stopFling) {
+        return;
+      }
+
+      final d = 0.95;
+      x *= d;
+      y *= d;
+      final dx0 = x * _trackpadSpeed * 2;
+      final dy0 = y * _trackpadSpeed * 2;
+
+      // Try set delta (x,y) and delay.
+      var dx = dx0.toInt();
+      var dy = dy0.toInt();
+      var delay = _flingBaseDelay;
+
+      // Try set min delta (x,y), and increase delay.
+      if (dx == 0 && dy == 0) {
+        final thr = 25;
+        var vx = thr;
+        var vy = thr;
+        if (dx0 != 0) {
+          vx = 1.0 ~/ dx0.abs();
+        }
+        if (dy0 != 0) {
+          vy = 1.0 ~/ dy0.abs();
+        }
+        if (vx < vy && vx < thr) {
+          delay *= vx;
+          dx = dx0 > 0 ? 1 : (dx0 < 0 ? -1 : 0);
+        } else if (vy < thr) {
+          delay *= vy;
+          dy = dy0 > 0 ? 1 : (dy0 < 0 ? -1 : 0);
+        }
+      }
+
+      if (dx == 0 && dy == 0) {
+        return;
+      }
+
+      bind.sessionSendMouse(
+          id: id, msg: '{"type": "trackpad", "x": "$dx", "y": "$dy"}');
+      _scheduleFling2(x, y, delay);
+    });
+  }
+
+  void onPointerPanZoomEnd(PointerPanZoomEndEvent e) {
+    _stopFling = false;
+    _trackpadScrollUnsent = Offset.zero;
+    _scheduleFling2(
+        _trackpadLastDelta.dx, _trackpadLastDelta.dy, _flingBaseDelay);
+    _trackpadLastDelta = Offset.zero;
   }
 
   void onPointDownImage(PointerDownEvent e) {
     debugPrint("onPointDownImage");
+    _stopFling = true;
     if (e.kind != ui.PointerDeviceKind.mouse) {
       if (isPhysicalMouse.value) {
         isPhysicalMouse.value = false;

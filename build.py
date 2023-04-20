@@ -15,8 +15,20 @@ osx = platform.platform().startswith(
     'Darwin') or platform.platform().startswith("macOS")
 hbb_name = 'rustdesk' + ('.exe' if windows else '')
 exe_path = 'target/release/' + hbb_name
-flutter_win_target_dir = 'flutter/build/windows/runner/Release/'
+if windows:
+    flutter_build_dir = 'build/windows/runner/Release/'
+elif osx:
+    flutter_build_dir = 'build/macos/Build/Products/Release/'
+else:
+    flutter_build_dir = 'build/linux/x64/release/bundle/'
+flutter_build_dir_2 = f'flutter/{flutter_build_dir}'
 skip_cargo = False
+
+def get_arch() -> str:
+    custom_arch = os.environ.get("ARCH")
+    if custom_arch is None:
+        return "amd64"
+    return custom_arch
 
 def system2(cmd):
     err = os.system(cmd)
@@ -35,11 +47,13 @@ def get_version():
 def parse_rc_features(feature):
     available_features = {
         'IddDriver': {
-            'zip_url': 'https://github.com/fufesou/RustDeskIddDriver/releases/download/v0.1/RustDeskIddDriver_x64.zip',
-            'checksum_url': 'https://github.com/fufesou/RustDeskIddDriver/releases/download/v0.1/checksum_md5',
+            'platform': ['windows'],
+            'zip_url': 'https://github.com/fufesou/RustDeskIddDriver/releases/download/v0.3/RustDeskIddDriver_x64.zip',
+            'checksum_url': 'https://github.com/fufesou/RustDeskIddDriver/releases/download/v0.3/checksum_md5',
             'exclude': ['README.md', 'certmgr.exe', 'install_cert_runas_admin.bat'],
         },
         'PrivacyMode': {
+            'platform': ['windows'],
             'zip_url': 'https://github.com/fufesou/RustDeskTempTopMostWindow/releases/download/v0.1'
                        '/TempTopMostWindow_x64_pic_en.zip',
             'checksum_url': 'https://github.com/fufesou/RustDeskTempTopMostWindow/releases/download/v0.1/checksum_md5',
@@ -49,16 +63,34 @@ def parse_rc_features(feature):
     apply_features = {}
     if not feature:
         feature = []
+
+    def platform_check(platforms):
+        if windows:
+            return 'windows' in platforms
+        elif osx:
+            return 'osx' in platforms
+        else:
+            return 'linux' in platforms
+        
+    def get_all_features():
+        features = []
+        for (feat, feat_info) in available_features.items():
+            if platform_check(feat_info['platform']):
+                features.append(feat)
+        return features
+    
     if isinstance(feature, str) and feature.upper() == 'ALL':
-        return available_features
+        return get_all_features()
     elif isinstance(feature, list):
-        # force add PrivacyMode
-        feature.append('PrivacyMode')
+        if windows:
+            # force add PrivacyMode
+            feature.append('PrivacyMode')
         for feat in feature:
             if isinstance(feat, str) and feat.upper() == 'ALL':
-                return available_features
+                return get_all_features()
             if feat in available_features:
-                apply_features[feat] = available_features[feat]
+                if platform_check(available_features[feat]['platform']):
+                    apply_features[feat] = available_features[feat]
             else:
                 print(f'Unrecognized feature {feat}')
         return apply_features
@@ -105,6 +137,10 @@ def make_parser():
         '--skip-cargo',
         action='store_true',
         help='Skip cargo build process, only flutter version + Linux supported currently'
+    )
+    parser.add_argument(
+        "--package",
+        type=str
     )
     return parser
 
@@ -201,14 +237,12 @@ def download_extract_features(features, res_dir):
                 print(f'{feat} extract end')
 
 
-def get_rc_features(args):
-    flutter = args.flutter
+def external_resources(flutter, args, res_dir):
     features = parse_rc_features(args.feature)
     if not features:
-        return []
+        return
 
     print(f'Build with features {list(features.keys())}')
-    res_dir = 'resources'
     if os.path.isdir(res_dir) and not os.path.islink(res_dir):
         shutil.rmtree(res_dir)
     elif os.path.exists(res_dir):
@@ -216,22 +250,19 @@ def get_rc_features(args):
     os.makedirs(res_dir, exist_ok=True)
     download_extract_features(features, res_dir)
     if flutter:
-        os.makedirs(flutter_win_target_dir, exist_ok=True)
+        os.makedirs(flutter_build_dir_2, exist_ok=True)
         for f in pathlib.Path(res_dir).iterdir():
             print(f'{f}')
             if f.is_file():
-                shutil.copy2(f, flutter_win_target_dir)
+                shutil.copy2(f, flutter_build_dir_2)
             else:
-                shutil.copytree(f, f'{flutter_win_target_dir}{f.stem}')
-        return []
-    else:
-        return ['with_rc']
+                shutil.copytree(f, f'{flutter_build_dir_2}{f.stem}')
 
 
 def get_features(args):
     features = ['inline'] if not args.flutter else []
     if windows:
-        features.extend(get_rc_features(args))
+        features.append('virtual_display_driver')
     if args.hwcodec:
         features.append('hwcodec')
     if args.flutter:
@@ -251,13 +282,13 @@ def generate_control_file(version):
 
     content = """Package: rustdesk
 Version: %s
-Architecture: amd64
-Maintainer: open-trade <info@rustdesk.com>
+Architecture: %s
+Maintainer: rustdesk <info@rustdesk.com>
 Homepage: https://rustdesk.com
-Depends: libgtk-3-0, libxcb-randr0, libxdo3, libxfixes3, libxcb-shape0, libxcb-xfixes0, libasound2, libsystemd0, curl, libva-drm2, libva-x11-2, libvdpau1, libgstreamer-plugins-base1.0-0
+Depends: libgtk-3-0, libxcb-randr0, libxdo3, libxfixes3, libxcb-shape0, libxcb-xfixes0, libasound2, libsystemd0, curl, libva-drm2, libva-x11-2, libvdpau1, libgstreamer-plugins-base1.0-0, libpam0g
 Description: A remote control software.
 
-""" % version
+""" % (version, get_arch())
     file = open(control_file_path, "w")
     file.write(content)
     file.close()
@@ -277,12 +308,54 @@ def build_flutter_deb(version, features):
     system2('flutter build linux --release')
     system2('mkdir -p tmpdeb/usr/bin/')
     system2('mkdir -p tmpdeb/usr/lib/rustdesk')
+    system2('mkdir -p tmpdeb/etc/rustdesk/')
+    system2('mkdir -p tmpdeb/etc/pam.d/')
     system2('mkdir -p tmpdeb/usr/share/rustdesk/files/systemd/')
     system2('mkdir -p tmpdeb/usr/share/applications/')
     system2('mkdir -p tmpdeb/usr/share/polkit-1/actions')
     system2('rm tmpdeb/usr/bin/rustdesk || true')
     system2(
-        'cp -r build/linux/x64/release/bundle/* tmpdeb/usr/lib/rustdesk/')
+        f'cp -r {flutter_build_dir}/* tmpdeb/usr/lib/rustdesk/')
+    system2(
+        'cp ../res/rustdesk.service tmpdeb/usr/share/rustdesk/files/systemd/')
+    system2(
+        'cp ../res/128x128@2x.png tmpdeb/usr/share/rustdesk/files/rustdesk.png')
+    system2(
+        'cp ../res/rustdesk.desktop tmpdeb/usr/share/applications/rustdesk.desktop')
+    system2(
+        'cp ../res/rustdesk-link.desktop tmpdeb/usr/share/applications/rustdesk-link.desktop')
+    system2(
+        'cp ../res/com.rustdesk.RustDesk.policy tmpdeb/usr/share/polkit-1/actions/')
+    system2(
+        'cp ../res/startwm.sh tmpdeb/etc/rustdesk/')
+    system2(
+        'cp ../res/xorg.conf tmpdeb/etc/rustdesk/')
+    system2(
+        'cp ../res/pam.d/rustdesk.debian tmpdeb/etc/pam.d/rustdesk')
+    system2(
+        "echo \"#!/bin/sh\" >> tmpdeb/usr/share/rustdesk/files/polkit && chmod a+x tmpdeb/usr/share/rustdesk/files/polkit")
+
+    system2('mkdir -p tmpdeb/DEBIAN')
+    generate_control_file(version)
+    system2('cp -a ../res/DEBIAN/* tmpdeb/DEBIAN/')
+    md5_file('usr/share/rustdesk/files/systemd/rustdesk.service')
+    system2('dpkg-deb -b tmpdeb rustdesk.deb;')
+
+    system2('/bin/rm -rf tmpdeb/')
+    system2('/bin/rm -rf ../res/DEBIAN/control')
+    os.rename('rustdesk.deb', '../rustdesk-%s.deb' % version)
+    os.chdir("..")
+
+def build_deb_from_folder(version, binary_folder):
+    os.chdir('flutter')
+    system2('mkdir -p tmpdeb/usr/bin/')
+    system2('mkdir -p tmpdeb/usr/lib/rustdesk')
+    system2('mkdir -p tmpdeb/usr/share/rustdesk/files/systemd/')
+    system2('mkdir -p tmpdeb/usr/share/applications/')
+    system2('mkdir -p tmpdeb/usr/share/polkit-1/actions')
+    system2('rm tmpdeb/usr/bin/rustdesk || true')
+    system2(
+        f'cp -r ../{binary_folder}/* tmpdeb/usr/lib/rustdesk/')
     system2(
         'cp ../res/rustdesk.service tmpdeb/usr/share/rustdesk/files/systemd/')
     system2(
@@ -307,7 +380,6 @@ def build_flutter_deb(version, features):
     os.rename('rustdesk.deb', '../rustdesk-%s.deb' % version)
     os.chdir("..")
 
-
 def build_flutter_dmg(version, features):
     if not skip_cargo:
         # set minimum osx build target, now is 10.14, which is the same as the flutter xcode project
@@ -329,7 +401,7 @@ def build_flutter_arch_manjaro(version, features):
     ffi_bindgen_function_refactor()
     os.chdir('flutter')
     system2('flutter build linux --release')
-    system2('strip build/linux/x64/release/bundle/lib/librustdesk.so')
+    system2(f'strip {flutter_build_dir}/lib/librustdesk.so')
     os.chdir('../res')
     system2('HBB=`pwd`/.. FLUTTER=1 makepkg -f')
 
@@ -344,11 +416,11 @@ def build_flutter_windows(version, features):
     system2('flutter build windows --release')
     os.chdir('..')
     shutil.copy2('target/release/deps/dylib_virtual_display.dll',
-                 flutter_win_target_dir)
+                 flutter_build_dir_2)
     os.chdir('libs/portable')
     system2('pip3 install -r requirements.txt')
     system2(
-        f'python3 ./generate.py -f ../../{flutter_win_target_dir} -o . -e ../../{flutter_win_target_dir}/rustdesk.exe')
+        f'python3 ./generate.py -f ../../{flutter_build_dir_2} -o . -e ../../{flutter_build_dir_2}/rustdesk.exe')
     os.chdir('../..')
     if os.path.exists('./rustdesk_portable.exe'):
         os.replace('./target/release/rustdesk-portable-packer.exe',
@@ -381,6 +453,12 @@ def main():
     if args.skip_cargo:
         skip_cargo = True
     portable = args.portable
+    package = args.package
+    if package:
+        build_deb_from_folder(version, package)
+        return
+    res_dir = 'resources'
+    external_resources(flutter, args, res_dir)
     if windows:
         # build virtual display dynamic library
         os.chdir('libs/virtual_display/dylib')
@@ -401,7 +479,12 @@ def main():
         else:
             print('Not signed')
         system2(
-            f'cp -rf target/release/RustDesk.exe rustdesk-{version}-win7-install.exe')
+            f'cp -rf target/release/RustDesk.exe {res_dir}')
+        os.chdir('libs/portable')
+        system2('pip3 install -r requirements.txt')
+        system2(
+            f'python3 ./generate.py -f ../../{res_dir} -o . -e ../../{res_dir}/rustdesk-{version}-win7-install.exe')
+        system2('mv ../../{res_dir}/rustdesk-{version}-win7-install.exe ../..')
     elif os.path.isfile('/usr/bin/pacman'):
         # pacman -S -needed base-devel
         system2("sed -i 's/pkgver=.*/pkgver=%s/g' res/PKGBUILD" % version)
@@ -506,12 +589,21 @@ def main():
                     'cp res/rustdesk.desktop tmpdeb/usr/share/applications/rustdesk.desktop')
                 system2(
                     'cp res/rustdesk-link.desktop tmpdeb/usr/share/applications/rustdesk-link.desktop')
-                system2('cp -a res/DEBIAN/* tmpdeb/DEBIAN/')
+                os.system('mkdir -p tmpdeb/etc/rustdesk/')
+                os.system('cp -a res/startwm.sh tmpdeb/etc/rustdesk/')
+                os.system('mkdir -p tmpdeb/etc/X11/rustdesk/')
+                os.system('cp res/xorg.conf tmpdeb/etc/X11/rustdesk/')
+                os.system('cp -a DEBIAN/* tmpdeb/DEBIAN/')
+                os.system('mkdir -p tmpdeb/etc/pam.d/')
+                os.system('cp pam.d/rustdesk.debian tmpdeb/etc/pam.d/rustdesk')
                 system2('strip tmpdeb/usr/bin/rustdesk')
                 system2('mkdir -p tmpdeb/usr/lib/rustdesk')
                 system2('mv tmpdeb/usr/bin/rustdesk tmpdeb/usr/lib/rustdesk/')
                 system2('cp libsciter-gtk.so tmpdeb/usr/lib/rustdesk/')
                 md5_file('usr/share/rustdesk/files/systemd/rustdesk.service')
+                md5_file('etc/rustdesk/startwm.sh')
+                md5_file('etc/X11/rustdesk/xorg.conf')
+                md5_file('etc/pam.d/rustdesk')
                 md5_file('usr/lib/rustdesk/libsciter-gtk.so')
                 system2('dpkg-deb -b tmpdeb rustdesk.deb; /bin/rm -rf tmpdeb/')
                 os.rename('rustdesk.deb', 'rustdesk-%s.deb' % version)

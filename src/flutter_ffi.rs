@@ -9,6 +9,9 @@ use crate::{
     ui_interface::{self, *},
 };
 use flutter_rust_bridge::{StreamSink, SyncReturn};
+#[cfg(feature = "plugin_framework")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use hbb_common::allow_err;
 use hbb_common::{
     config::{self, LocalConfig, PeerConfig, PeerInfoSerde, ONLINE},
     fs, log,
@@ -48,30 +51,18 @@ fn initialize(app_dir: &str) {
     }
 }
 
+#[inline]
+pub fn start_global_event_stream(s: StreamSink<String>, app_type: String) -> ResultType<()> {
+    super::flutter::start_global_event_stream(s, app_type)
+}
+
+#[inline]
+pub fn stop_global_event_stream(app_type: String) {
+    super::flutter::stop_global_event_stream(app_type)
+}
 pub enum EventToUI {
     Event(String),
     Rgba,
-}
-
-pub fn start_global_event_stream(s: StreamSink<String>, app_type: String) -> ResultType<()> {
-    if let Some(_) = flutter::GLOBAL_EVENT_STREAM
-        .write()
-        .unwrap()
-        .insert(app_type.clone(), s)
-    {
-        log::warn!(
-            "Global event stream of type {} is started before, but now removed",
-            app_type
-        );
-    }
-    Ok(())
-}
-
-pub fn stop_global_event_stream(app_type: String) {
-    let _ = flutter::GLOBAL_EVENT_STREAM
-        .write()
-        .unwrap()
-        .remove(&app_type);
 }
 
 pub fn host_stop_system_key_propagate(_stopped: bool) {
@@ -136,9 +127,15 @@ pub fn session_get_option(id: String, arg: String) -> Option<String> {
     }
 }
 
-pub fn session_login(id: String, password: String, remember: bool) {
+pub fn session_login(
+    id: String,
+    os_username: String,
+    os_password: String,
+    password: String,
+    remember: bool,
+) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.login(password, remember);
+        session.login(os_username, os_password, password, remember);
     }
 }
 
@@ -168,14 +165,12 @@ pub fn session_reconnect(id: String, force_relay: bool) {
 }
 
 pub fn session_toggle_option(id: String, value: String) {
-    let mut is_found = false;
     if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
-        is_found = true;
         log::warn!("toggle option {}", &value);
         session.toggle_option(value.clone());
     }
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    if is_found && value == "disable-clipboard" {
+    if SESSIONS.read().unwrap().get(&id).is_some() && value == "disable-clipboard" {
         crate::flutter::update_text_clipboard_required();
     }
 }
@@ -328,20 +323,26 @@ pub fn session_switch_display(id: String, value: i32) {
 pub fn session_handle_flutter_key_event(
     id: String,
     name: String,
-    keycode: i32,
-    scancode: i32,
+    platform_code: i32,
+    position_code: i32,
     lock_modes: i32,
     down_or_up: bool,
 ) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.handle_flutter_key_event(&name, keycode, scancode, lock_modes, down_or_up);
+        session.handle_flutter_key_event(
+            &name,
+            platform_code,
+            position_code,
+            lock_modes,
+            down_or_up,
+        );
     }
 }
 
-pub fn session_enter_or_leave(id: String, enter: bool) {
+pub fn session_enter_or_leave(_id: String, _enter: bool) {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        if enter {
+    if let Some(session) = SESSIONS.read().unwrap().get(&_id) {
+        if _enter {
             session.enter();
         } else {
             session.leave();
@@ -735,20 +736,18 @@ pub fn main_load_recent_peers() {
             .drain(..)
             .map(|(id, _, p)| peer_to_map(id, p))
             .collect();
-        if let Some(s) = flutter::GLOBAL_EVENT_STREAM
-            .read()
-            .unwrap()
-            .get(flutter::APP_TYPE_MAIN)
-        {
-            let data = HashMap::from([
-                ("name", "load_recent_peers".to_owned()),
-                (
-                    "peers",
-                    serde_json::ser::to_string(&peers).unwrap_or("".to_owned()),
-                ),
-            ]);
-            s.add(serde_json::ser::to_string(&data).unwrap_or("".to_owned()));
-        };
+
+        let data = HashMap::from([
+            ("name", "load_recent_peers".to_owned()),
+            (
+                "peers",
+                serde_json::ser::to_string(&peers).unwrap_or("".to_owned()),
+            ),
+        ]);
+        let _res = flutter::push_global_event(
+            flutter::APP_TYPE_MAIN,
+            serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
+        );
     }
 }
 
@@ -786,38 +785,33 @@ pub fn main_load_fav_peers() {
                 }
             })
             .collect();
-        if let Some(s) = flutter::GLOBAL_EVENT_STREAM
-            .read()
-            .unwrap()
-            .get(flutter::APP_TYPE_MAIN)
-        {
-            let data = HashMap::from([
-                ("name", "load_fav_peers".to_owned()),
-                (
-                    "peers",
-                    serde_json::ser::to_string(&peers).unwrap_or("".to_owned()),
-                ),
-            ]);
-            s.add(serde_json::ser::to_string(&data).unwrap_or("".to_owned()));
-        };
+
+        let data = HashMap::from([
+            ("name", "load_fav_peers".to_owned()),
+            (
+                "peers",
+                serde_json::ser::to_string(&peers).unwrap_or("".to_owned()),
+            ),
+        ]);
+        let _res = flutter::push_global_event(
+            flutter::APP_TYPE_MAIN,
+            serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
+        );
     }
 }
 
 pub fn main_load_lan_peers() {
-    if let Some(s) = flutter::GLOBAL_EVENT_STREAM
-        .read()
-        .unwrap()
-        .get(flutter::APP_TYPE_MAIN)
-    {
-        let data = HashMap::from([
-            ("name", "load_lan_peers".to_owned()),
-            (
-                "peers",
-                serde_json::to_string(&get_lan_peers()).unwrap_or_default(),
-            ),
-        ]);
-        s.add(serde_json::ser::to_string(&data).unwrap_or("".to_owned()));
-    };
+    let data = HashMap::from([
+        ("name", "load_lan_peers".to_owned()),
+        (
+            "peers",
+            serde_json::to_string(&get_lan_peers()).unwrap_or_default(),
+        ),
+    ]);
+    let _res = flutter::push_global_event(
+        flutter::APP_TYPE_MAIN,
+        serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
+    );
 }
 
 pub fn main_remove_discovered(id: String) {
@@ -831,20 +825,21 @@ fn main_broadcast_message(data: &HashMap<&str, &str>) {
         flutter::APP_TYPE_DESKTOP_PORT_FORWARD,
     ];
 
+    let event = serde_json::ser::to_string(&data).unwrap_or("".to_owned());
     for app in apps {
-        if let Some(s) = flutter::GLOBAL_EVENT_STREAM.read().unwrap().get(app) {
-            s.add(serde_json::ser::to_string(data).unwrap_or("".to_owned()));
-        };
+        let _res = flutter::push_global_event(app, event.clone());
     }
 }
 
 pub fn main_change_theme(dark: String) {
     main_broadcast_message(&HashMap::from([("name", "theme"), ("dark", &dark)]));
+    #[cfg(not(any(target_os = "ios")))]
     send_to_cm(&crate::ipc::Data::Theme(dark));
 }
 
 pub fn main_change_language(lang: String) {
     main_broadcast_message(&HashMap::from([("name", "language"), ("lang", &lang)]));
+    #[cfg(not(any(target_os = "ios")))]
     send_to_cm(&crate::ipc::Data::Language(lang));
 }
 
@@ -931,6 +926,10 @@ pub fn main_get_permanent_password() -> String {
     ui_interface::permanent_password()
 }
 
+pub fn main_get_fingerprint() -> String {
+    get_fingerprint()
+}
+
 pub fn main_get_online_statue() -> i64 {
     ONLINE.lock().unwrap().values().max().unwrap_or(&0).clone()
 }
@@ -969,6 +968,13 @@ pub fn main_remove_peer(id: String) {
 
 pub fn main_has_hwcodec() -> SyncReturn<bool> {
     SyncReturn(has_hwcodec())
+}
+
+pub fn main_supported_hwdecodings() -> SyncReturn<String> {
+    let decoding = supported_hwdecodings();
+    let msg = HashMap::from([("h264", decoding.0), ("h265", decoding.1)]);
+
+    SyncReturn(serde_json::ser::to_string(&msg).unwrap_or("".to_owned()))
 }
 
 pub fn main_is_root() -> bool {
@@ -1056,10 +1062,10 @@ pub fn session_send_note(id: String, note: String) {
     }
 }
 
-pub fn session_supported_hwcodec(id: String) -> String {
+pub fn session_alternative_codecs(id: String) -> String {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        let (h264, h265) = session.supported_hwcodec();
-        let msg = HashMap::from([("h264", h264), ("h265", h265)]);
+        let (vp8, h264, h265) = session.alternative_codecs();
+        let msg = HashMap::from([("vp8", vp8), ("h264", h264), ("h265", h265)]);
         serde_json::ser::to_string(&msg).unwrap_or("".to_owned())
     } else {
         String::new()
@@ -1127,6 +1133,8 @@ pub fn main_get_mouse_time() -> f64 {
 }
 
 pub fn main_wol(id: String) {
+    // TODO: move send_wol outside.
+    #[cfg(not(any(target_os = "ios")))]
     crate::lan::send_wol(id)
 }
 
@@ -1136,10 +1144,12 @@ pub fn main_create_shortcut(_id: String) {
 }
 
 pub fn cm_send_chat(conn_id: i32, msg: String) {
+    #[cfg(not(any(target_os = "ios")))]
     crate::ui_cm_interface::send_chat(conn_id, msg);
 }
 
 pub fn cm_login_res(conn_id: i32, res: bool) {
+    #[cfg(not(any(target_os = "ios")))]
     if res {
         crate::ui_cm_interface::authorize(conn_id);
     } else {
@@ -1148,22 +1158,29 @@ pub fn cm_login_res(conn_id: i32, res: bool) {
 }
 
 pub fn cm_close_connection(conn_id: i32) {
+    #[cfg(not(any(target_os = "ios")))]
     crate::ui_cm_interface::close(conn_id);
 }
 
 pub fn cm_remove_disconnected_connection(conn_id: i32) {
+    #[cfg(not(any(target_os = "ios")))]
     crate::ui_cm_interface::remove(conn_id);
 }
 
 pub fn cm_check_click_time(conn_id: i32) {
+    #[cfg(not(any(target_os = "ios")))]
     crate::ui_cm_interface::check_click_time(conn_id)
 }
 
 pub fn cm_get_click_time() -> f64 {
-    crate::ui_cm_interface::get_click_time() as _
+    #[cfg(not(any(target_os = "ios")))]
+    return crate::ui_cm_interface::get_click_time() as _;
+    #[cfg(any(target_os = "ios"))]
+    return 0 as _;
 }
 
 pub fn cm_switch_permission(conn_id: i32, name: String, enabled: bool) {
+    #[cfg(not(any(target_os = "ios")))]
     crate::ui_cm_interface::switch_permission(conn_id, name, enabled)
 }
 
@@ -1172,10 +1189,12 @@ pub fn cm_can_elevate() -> SyncReturn<bool> {
 }
 
 pub fn cm_elevate_portable(conn_id: i32) {
+    #[cfg(not(any(target_os = "ios")))]
     crate::ui_cm_interface::elevate_portable(conn_id);
 }
 
 pub fn cm_switch_back(conn_id: i32) {
+    #[cfg(not(any(target_os = "ios")))]
     crate::ui_cm_interface::switch_back(conn_id);
 }
 
@@ -1196,21 +1215,19 @@ unsafe extern "C" fn translate(name: *const c_char, locale: *const c_char) -> *c
 }
 
 fn handle_query_onlines(onlines: Vec<String>, offlines: Vec<String>) {
-    if let Some(s) = flutter::GLOBAL_EVENT_STREAM
-        .read()
-        .unwrap()
-        .get(flutter::APP_TYPE_MAIN)
-    {
-        let data = HashMap::from([
-            ("name", "callback_query_onlines".to_owned()),
-            ("onlines", onlines.join(",")),
-            ("offlines", offlines.join(",")),
-        ]);
-        s.add(serde_json::ser::to_string(&data).unwrap_or("".to_owned()));
-    };
+    let data = HashMap::from([
+        ("name", "callback_query_onlines".to_owned()),
+        ("onlines", onlines.join(",")),
+        ("offlines", offlines.join(",")),
+    ]);
+    let _res = flutter::push_global_event(
+        flutter::APP_TYPE_MAIN,
+        serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
+    );
 }
 
 pub fn query_onlines(ids: Vec<String>) {
+    #[cfg(not(any(target_os = "ios")))]
     crate::rendezvous_mediator::query_online_states(ids, handle_query_onlines)
 }
 
@@ -1379,6 +1396,67 @@ pub fn send_url_scheme(_url: String) {
     std::thread::spawn(move || crate::handle_url_scheme(_url));
 }
 
+#[inline]
+pub fn plugin_event(_id: String, _event: Vec<u8>) {
+    #[cfg(feature = "plugin_framework")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        allow_err!(crate::plugin::handle_ui_event(&_id, &_event));
+    }
+}
+
+#[inline]
+pub fn plugin_get_session_option(_id: String, _peer: String, _key: String) -> SyncReturn<Option<String>> {
+    #[cfg(feature = "plugin_framework")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        return SyncReturn(crate::plugin::PeerConfig::get(&_id, &_peer, &_key));
+    }
+    #[cfg(any(
+        not(feature = "plugin_framework"),
+        target_os = "android",
+        target_os = "ios"
+    ))]
+    {
+        return SyncReturn(None);
+    }
+}
+
+#[inline]
+pub fn plugin_set_session_option(_id: String, _peer: String, _key: String, _value: String) {
+    #[cfg(feature = "plugin_framework")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        crate::plugin::PeerConfig::set(&_id, &_peer, &_key, &_value);
+    }
+}
+
+#[inline]
+pub fn plugin_get_local_option(_id: String, _key: String) -> SyncReturn<Option<String>> {
+    #[cfg(feature = "plugin_framework")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        return SyncReturn(crate::plugin::LocalConfig::get(&_id, &_key));
+    }
+    #[cfg(any(
+        not(feature = "plugin_framework"),
+        target_os = "android",
+        target_os = "ios"
+    ))]
+    {
+        return SyncReturn(None);
+    }
+}
+
+#[inline]
+pub fn plugin_set_local_option(_id: String, _key: String, _value: String) {
+    #[cfg(feature = "plugin_framework")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        crate::plugin::LocalConfig::set(&_id, &_key, &_value);
+    }
+}
+
 #[cfg(target_os = "android")]
 pub mod server_side {
     use hbb_common::{config, log};
@@ -1405,7 +1483,7 @@ pub mod server_side {
 
     #[no_mangle]
     pub unsafe extern "system" fn Java_com_carriez_flutter_1hbb_MainService_startService(
-        env: JNIEnv,
+        _env: JNIEnv,
         _class: JClass,
     ) {
         log::debug!("startService from jvm");

@@ -17,7 +17,7 @@ import '../../consts.dart';
 import '../../common/widgets/overlay.dart';
 import '../../common/widgets/remote_input.dart';
 import '../../common.dart';
-import '../../mobile/widgets/dialog.dart';
+import '../../common/widgets/dialog.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
@@ -77,29 +77,13 @@ class _RemotePageState extends State<RemotePage>
   late FFI _ffi;
 
   void _initStates(String id) {
-    PrivacyModeState.init(id);
-    BlockInputState.init(id);
-    CurrentDisplayState.init(id);
-    KeyboardEnabledState.init(id);
-    ShowRemoteCursorState.init(id);
-    RemoteCursorMovedState.init(id);
-    final optZoomCursor = 'zoom-cursor';
-    PeerBoolOption.init(id, optZoomCursor, () => false);
-    _zoomCursor = PeerBoolOption.find(id, optZoomCursor);
+    initSharedStates(id);
+    _zoomCursor = PeerBoolOption.find(id, 'zoom-cursor');
     _showRemoteCursor = ShowRemoteCursorState.find(id);
     _keyboardEnabled = KeyboardEnabledState.find(id);
     _remoteCursorMoved = RemoteCursorMovedState.find(id);
     _textureKey = newTextureId;
     _textureId = RxInt(-1);
-  }
-
-  void _removeStates(String id) {
-    PrivacyModeState.delete(id);
-    BlockInputState.delete(id);
-    CurrentDisplayState.delete(id);
-    ShowRemoteCursorState.delete(id);
-    KeyboardEnabledState.delete(id);
-    RemoteCursorMovedState.delete(id);
   }
 
   @override
@@ -158,12 +142,7 @@ class _RemotePageState extends State<RemotePage>
     //   _isCustomCursorInited = true;
     // }
 
-    _ffi.dialogManager.setOverlayState(_blockableOverlayState);
-    _ffi.chatModel.setOverlayState(_blockableOverlayState);
-    // make remote page penetrable automatically, effective for chat over remote
-    _blockableOverlayState.onMiddleBlockedClick = () {
-      _blockableOverlayState.setMiddleBlocked(false);
-    };
+    _blockableOverlayState.applyFfi(_ffi);
   }
 
   @override
@@ -222,7 +201,7 @@ class _RemotePageState extends State<RemotePage>
     }
     Get.delete<FFI>(tag: widget.id);
     super.dispose();
-    _removeStates(widget.id);
+    removeSharedStates(widget.id);
   }
 
   Widget buildBody(BuildContext context) {
@@ -310,7 +289,7 @@ class _RemotePageState extends State<RemotePage>
   }
 
   void leaveView(PointerExitEvent evt) {
-    if (_ffi.ffiModel.keyboard()) {
+    if (_ffi.ffiModel.keyboard) {
       _ffi.inputModel.tryMoveEdgeOnExit(evt.position);
     }
 

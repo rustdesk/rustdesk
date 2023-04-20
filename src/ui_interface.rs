@@ -9,8 +9,12 @@ use hbb_common::password_security;
 use hbb_common::{
     allow_err,
     config::{self, Config, LocalConfig, PeerConfig},
-    directories_next, log, sleep,
-    tokio::{self, sync::mpsc, time},
+    directories_next, log, tokio,
+};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use hbb_common::{
+    sleep,
+    tokio::{sync::mpsc, time},
 };
 
 use hbb_common::{
@@ -20,9 +24,11 @@ use hbb_common::{
     rendezvous_proto::*,
 };
 
+use crate::common::SOFTWARE_UPDATE_URL;
 #[cfg(feature = "flutter")]
 use crate::hbbs_http::account;
-use crate::{common::SOFTWARE_UPDATE_URL, ipc};
+#[cfg(not(any(target_os = "ios")))]
+use crate::ipc;
 
 type Message = RendezvousMessage;
 
@@ -339,8 +345,8 @@ pub fn get_socks() -> Vec<String> {
 }
 
 #[inline]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn set_socks(proxy: String, username: String, password: String) {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     ipc::set_socks(config::Socks5Server {
         proxy,
         username,
@@ -348,6 +354,9 @@ pub fn set_socks(proxy: String, username: String, password: String) {
     })
     .ok();
 }
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub fn set_socks(_: String, _: String, _: String) {}
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[inline]
@@ -505,10 +514,10 @@ pub fn get_error() -> String {
     #[cfg(target_os = "linux")]
     {
         let dtype = crate::platform::linux::get_display_server();
-        if "wayland" == dtype {
+        if crate::platform::linux::DISPLAY_SERVER_WAYLAND == dtype {
             return crate::server::wayland::common_get_error();
         }
-        if dtype != "x11" {
+        if dtype != crate::platform::linux::DISPLAY_SERVER_X11 {
             return format!(
                 "{} {}, {}",
                 crate::client::translate("Unsupported display server".to_owned()),
@@ -561,6 +570,7 @@ pub fn create_shortcut(_id: String) {
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[inline]
 pub fn discover() {
+    #[cfg(not(any(target_os = "ios")))]
     std::thread::spawn(move || {
         allow_err!(crate::lan::discover());
     });
@@ -745,6 +755,13 @@ pub fn has_hwcodec() -> bool {
     return true;
 }
 
+#[cfg(feature = "flutter")]
+#[inline]
+pub fn supported_hwdecodings() -> (bool, bool) {
+    let decoding = scrap::codec::Decoder::supported_decodings(None);
+    (decoding.ability_h264 > 0, decoding.ability_h265 > 0)
+}
+
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[inline]
 pub fn is_root() -> bool {
@@ -791,14 +808,15 @@ pub fn check_zombie(children: Children) {
     }
 }
 
+// Make sure `SENDER` is inited here.
+#[inline]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn start_option_status_sync() {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        let _sender = SENDER.lock().unwrap();
-    }
+    let _sender = SENDER.lock().unwrap();
 }
 
 // not call directly
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn check_connect_status(reconnect: bool) -> mpsc::UnboundedSender<ipc::Data> {
     let (tx, rx) = mpsc::unbounded_channel::<ipc::Data>();
     std::thread::spawn(move || check_connect_status_(reconnect, rx));
@@ -832,8 +850,20 @@ pub fn get_user_default_option(key: String) -> String {
     UserDefaultConfig::load().get(&key)
 }
 
+pub fn get_fingerprint() -> String {
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    if Config::get_key_confirmed() {
+        return crate::common::pk_to_fingerprint(Config::get_key_pair().1);
+    } else {
+        return "".to_owned();
+    }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return ipc::get_fingerprint();
+}
+
 // notice: avoiding create ipc connection repeatedly,
 // because windows named pipe has serious memory leak issue.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tokio::main(flavor = "current_thread")]
 async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc::Data>) {
     let mut key_confirmed = false;
@@ -905,7 +935,8 @@ pub fn option_synced() -> bool {
     OPTION_SYNCED.lock().unwrap().clone()
 }
 
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+#[cfg(any(target_os = "android", feature = "flutter"))]
+#[cfg(not(any(target_os = "ios")))]
 #[tokio::main(flavor = "current_thread")]
 pub(crate) async fn send_to_cm(data: &ipc::Data) {
     if let Ok(mut c) = ipc::connect(1000, "_cm").await {

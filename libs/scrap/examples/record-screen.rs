@@ -18,7 +18,7 @@ use webm::mux;
 use webm::mux::Track;
 
 use scrap::vpxcodec as vpx_encode;
-use scrap::{TraitCapturer, Capturer, Display, STRIDE_ALIGN};
+use scrap::{Capturer, Display, TraitCapturer, STRIDE_ALIGN};
 
 const USAGE: &'static str = "
 Simple WebM screen capture.

@@ -869,7 +869,7 @@ class _TabState extends State<_Tab> with RestorationMixin {
       return ConstrainedBox(
           constraints: BoxConstraints(maxWidth: widget.maxLabelWidth ?? 200),
           child: Text(
-            widget.label.value,
+            translate(widget.label.value),
             textAlign: TextAlign.center,
             style: TextStyle(
                 color: isSelected

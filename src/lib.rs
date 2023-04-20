@@ -1,7 +1,7 @@
+mod keyboard;
 #[cfg(not(any(target_os = "ios")))]
 /// cbindgen:ignore
 pub mod platform;
-mod keyboard;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use platform::{get_cursor, get_cursor_data, get_cursor_pos, start_os_service};
 #[cfg(not(any(target_os = "ios")))]
@@ -20,7 +20,12 @@ pub use self::rendezvous_mediator::*;
 pub mod common;
 #[cfg(not(any(target_os = "ios")))]
 pub mod ipc;
-#[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli", feature = "flutter")))]
+#[cfg(not(any(
+    target_os = "android",
+    target_os = "ios",
+    feature = "cli",
+    feature = "flutter"
+)))]
 pub mod ui;
 mod version;
 pub use version::*;
@@ -43,6 +48,17 @@ mod license;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod port_forward;
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(any(feature = "flutter"))]
+pub mod api;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(any(feature = "flutter"))]
+pub mod plugins;
+
+#[cfg(all(feature = "flutter", feature = "plugin_framework"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub mod plugin;
+
 mod tray;
 
 mod ui_cm_interface;
@@ -54,7 +70,8 @@ mod hbbs_http;
 #[cfg(windows)]
 pub mod clipboard_file;
 
-#[cfg(all(windows, feature = "with_rc"))]
-pub mod rc;
-#[cfg(target_os = "windows")]
-pub mod win_privacy;
+#[cfg(windows)]
+pub mod privacy_win_mag;
+
+#[cfg(all(windows, feature = "virtual_display_driver"))]
+pub mod virtual_display_manager;

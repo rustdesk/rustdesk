@@ -20,7 +20,6 @@ use hbb_common::{
 
 use crate::{
     client::*,
-    ui_interface::has_hwcodec,
     ui_session_interface::{InvokeUiSession, Session},
 };
 
@@ -145,6 +144,8 @@ impl InvokeUiSession for SciterHandler {
         self.call("setConnectionType", &make_args!(is_secured, direct));
     }
 
+    fn set_fingerprint(&self, _fingerprint: String) {}
+
     fn job_error(&self, id: i32, err: String, file_num: i32) {
         self.call("jobError", &make_args!(id, err, file_num));
     }
@@ -197,7 +198,14 @@ impl InvokeUiSession for SciterHandler {
         self.call("confirmDeleteFiles", &make_args!(id, i, name));
     }
 
-    fn override_file_confirm(&self, id: i32, file_num: i32, to: String, is_upload: bool, is_identical: bool) {
+    fn override_file_confirm(
+        &self,
+        id: i32,
+        file_num: i32,
+        to: String,
+        is_upload: bool,
+        is_identical: bool,
+    ) {
         self.call(
             "overrideFileConfirm",
             &make_args!(id, file_num, to, is_upload, is_identical),
@@ -398,7 +406,7 @@ impl sciter::EventHandler for SciterSession {
         fn is_file_transfer();
         fn is_port_forward();
         fn is_rdp();
-        fn login(String, bool);
+        fn login(String, String, String, bool);
         fn new_rdp();
         fn send_mouse(i32, i32, i32, bool, bool, bool, bool);
         fn enter();
@@ -451,8 +459,7 @@ impl sciter::EventHandler for SciterSession {
         fn set_write_override(i32, i32, bool, bool, bool);
         fn get_keyboard_mode();
         fn save_keyboard_mode(String);
-        fn has_hwcodec();
-        fn supported_hwcodec();
+        fn alternative_codecs();
         fn change_prefer_codec();
         fn restart_remote_device();
         fn request_voice_call();
@@ -504,10 +511,6 @@ impl SciterSession {
         v
     }
 
-    fn has_hwcodec(&self) -> bool {
-        has_hwcodec()
-    }
-
     pub fn t(&self, name: String) -> String {
         crate::client::translate(name)
     }
@@ -516,9 +519,10 @@ impl SciterSession {
         super::get_icon()
     }
 
-    fn supported_hwcodec(&self) -> Value {
-        let (h264, h265) = self.0.supported_hwcodec();
+    fn alternative_codecs(&self) -> Value {
+        let (vp8, h264, h265) = self.0.alternative_codecs();
         let mut v = Value::array(0);
+        v.push(vp8);
         v.push(h264);
         v.push(h265);
         v

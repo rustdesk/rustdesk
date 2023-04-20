@@ -388,6 +388,15 @@ class BlockableOverlayState extends OverlayKeyState {
       _middleBlocked.value = blocked;
     }
   }
+
+  void applyFfi(FFI ffi) {
+    ffi.dialogManager.setOverlayState(this);
+    ffi.chatModel.setOverlayState(this);
+    // make remote page penetrable automatically, effective for chat over remote
+    onMiddleBlockedClick = () {
+      setMiddleBlocked(false);
+    };
+  }
 }
 
 class BlockableOverlay extends StatelessWidget {

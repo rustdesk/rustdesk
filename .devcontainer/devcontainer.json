@@ -10,7 +10,7 @@
     "features": {
         "ghcr.io/devcontainers/features/java:1": {},
         "ghcr.io/akhildevelops/devcontainer-features/android-cli:latest": {
-            "PACKAGES": "platform-tools,ndk;22.1.7171670"
+            "PACKAGES": "platform-tools,ndk;23.2.8568313"
         }
     },
     "customizations": {

@@ -3,7 +3,7 @@ Version:    1.2.0
 Release:    0
 Summary:    RPM package
 License:    GPL-3.0
-Requires:   gtk3 libxcb libxdo libXfixes alsa-lib curl libappindicator-gtk3 libvdpau libva
+Requires:   gtk3 libxcb libxdo libXfixes alsa-lib curl libappindicator-gtk3 libvdpau libva pam gstreamer1-plugins-base
 Provides:   libdesktop_drop_plugin.so()(64bit), libdesktop_multi_window_plugin.so()(64bit), libflutter_custom_cursor_plugin.so()(64bit), libflutter_linux_gtk.so()(64bit), libscreen_retriever_plugin.so()(64bit), libtray_manager_plugin.so()(64bit), liburl_launcher_linux_plugin.so()(64bit), libwindow_manager_plugin.so()(64bit), libwindow_size_plugin.so()(64bit), libtexture_rgba_renderer_plugin.so()(64bit)
 
 %description

@@ -16,6 +16,9 @@ import 'package:flutter_hbb/models/peer_tab_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/models/user_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
+import 'package:flutter_hbb/desktop/plugin/event.dart';
+import 'package:flutter_hbb/desktop/plugin/desc.dart';
+import 'package:flutter_hbb/desktop/plugin/widget.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:tuple/tuple.dart';
 import 'package:image/image.dart' as img2;
@@ -25,7 +28,7 @@ import 'package:get/get.dart';
 
 import '../common.dart';
 import '../utils/image.dart' as img;
-import '../mobile/widgets/dialog.dart';
+import '../common/widgets/dialog.dart';
 import 'input_model.dart';
 import 'platform_model.dart';
 
@@ -93,7 +96,7 @@ class FfiModel with ChangeNotifier {
     notifyListeners();
   }
 
-  bool keyboard() => _permissions['keyboard'] != false;
+  bool get keyboard => _permissions['keyboard'] != false;
 
   clear() {
     _pi = PeerInfo();
@@ -224,6 +227,15 @@ class FfiModel with ChangeNotifier {
         parent.target?.chatModel.onVoiceCallIncoming();
       } else if (name == "update_voice_call_state") {
         parent.target?.serverModel.updateVoiceCallState(evt);
+      } else if (name == "fingerprint") {
+        FingerprintState.find(peerId).value = evt['fingerprint'] ?? '';
+      } else if (name == "plugin_desc") {
+        updateDesc(evt);
+      } else if (name == "plugin_event") {
+        handlePluginEvent(
+            evt, peerId, (Map<String, dynamic> e) => handleMsgBox(e, peerId));
+      } else if (name == "plugin_reload") {
+        handleReloading(evt, peerId);
       } else {
         debugPrint("Unknown event name: $name");
       }
@@ -293,6 +305,11 @@ class FfiModel with ChangeNotifier {
       wrongPasswordDialog(id, dialogManager, type, title, text);
     } else if (type == 'input-password') {
       enterPasswordDialog(id, dialogManager);
+    } else if (type == 'session-login' || type == 'session-re-login') {
+      enterUserLoginDialog(id, dialogManager);
+    } else if (type == 'session-login-password' ||
+        type == 'session-login-password') {
+      enterUserLoginAndPasswordDialog(id, dialogManager);
     } else if (type == 'restarting') {
       showMsgBox(id, type, title, text, link, false, dialogManager,
           hasCancel: false);
@@ -452,6 +469,16 @@ class FfiModel with ChangeNotifier {
       setViewOnly(peerId,
           bind.sessionGetToggleOptionSync(id: peerId, arg: 'view-only'));
     }
+    if (connType == ConnType.defaultConn) {
+      final platform_additions = evt['platform_additions'];
+      if (platform_additions != null && platform_additions != '') {
+        try {
+          _pi.platform_additions = json.decode(platform_additions);
+        } catch (e) {
+          debugPrint('Failed to decode platform_additions $e');
+        }
+      }
+    }
     notifyListeners();
   }
 
@@ -525,11 +552,18 @@ class FfiModel with ChangeNotifier {
 
   void setViewOnly(String id, bool value) {
     if (version_cmp(_pi.version, '1.2.0') < 0) return;
-    if (value) {
-      ShowRemoteCursorState.find(id).value = value;
-    } else {
-      ShowRemoteCursorState.find(id).value =
-          bind.sessionGetToggleOptionSync(id: id, arg: 'show-remote-cursor');
+    // tmp fix for https://github.com/rustdesk/rustdesk/pull/3706#issuecomment-1481242389
+    // because below rx not used in mobile version, so not initialized, below code will cause crash
+    // current our flutter code quality is fucking shit now. !!!!!!!!!!!!!!!!
+    try {
+      if (value) {
+        ShowRemoteCursorState.find(id).value = value;
+      } else {
+        ShowRemoteCursorState.find(id).value =
+            bind.sessionGetToggleOptionSync(id: id, arg: 'show-remote-cursor');
+      }
+    } catch (e) {
+      //
     }
     if (_viewOnly != value) {
       _viewOnly = value;
@@ -554,7 +588,13 @@ class ImageModel with ChangeNotifier {
   addCallbackOnFirstImage(Function(String) cb) => callbacksOnFirstImage.add(cb);
 
   onRgba(Uint8List rgba) {
-    if (_waitForImage[id]!) {
+    final waitforImage = _waitForImage[id];
+    if (waitforImage == null) {
+      debugPrint('Exception, peer $id not found for waiting image');
+      return;
+    }
+
+    if (waitforImage == true) {
       _waitForImage[id] = false;
       parent.target?.dialogManager.dismissAll();
       if (isDesktop) {
@@ -878,7 +918,7 @@ class CanvasModel with ChangeNotifier {
     }
 
     // If keyboard is not permitted, do not move cursor when mouse is moving.
-    if (parent.target != null && parent.target!.ffiModel.keyboard()) {
+    if (parent.target != null && parent.target!.ffiModel.keyboard) {
       // Draw cursor if is not desktop.
       if (!isDesktop) {
         parent.target!.cursorModel.moveLocal(x, y);
@@ -1542,6 +1582,7 @@ class FFI {
       id = 'pf_$id';
     } else {
       chatModel.resetClientMode();
+      connType = ConnType.defaultConn;
       canvasModel.id = id;
       imageModel.id = id;
       cursorModel.id = id;
@@ -1602,8 +1643,14 @@ class FFI {
   }
 
   /// Login with [password], choose if the client should [remember] it.
-  void login(String id, String password, bool remember) {
-    bind.sessionLogin(id: id, password: password, remember: remember);
+  void login(String osUsername, String osPassword, String id, String password,
+      bool remember) {
+    bind.sessionLogin(
+        id: id,
+        osUsername: osUsername,
+        osPassword: osPassword,
+        password: password,
+        remember: remember);
   }
 
   /// Close the remote session.
@@ -1687,6 +1734,10 @@ class PeerInfo {
   List<Display> displays = [];
   Features features = Features();
   List<Resolution> resolutions = [];
+  Map<String, dynamic> platform_additions = {};
+
+  bool get is_wayland => platform_additions['is_wayland'] == true;
+  bool get is_headless => platform_additions['headless'] == true;
 }
 
 const canvasKey = 'canvas';

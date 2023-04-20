@@ -1,4 +1,5 @@
 pub use self::vpxcodec::*;
+use hbb_common::message_proto::{video_frame, VideoFrame};
 
 cfg_if! {
     if #[cfg(quartz)] {
@@ -63,6 +64,9 @@ pub fn would_block_if_equal(old: &mut Vec<u8>, b: &[u8]) -> std::io::Result<()> 
 
 pub trait TraitCapturer {
     fn set_use_yuv(&mut self, use_yuv: bool);
+
+    // We doesn't support
+    #[cfg(not(any(target_os = "ios")))]
     fn frame<'a>(&'a mut self, timeout: std::time::Duration) -> std::io::Result<Frame<'a>>;
 
     #[cfg(windows)]
@@ -74,7 +78,7 @@ pub trait TraitCapturer {
 #[cfg(x11)]
 #[inline]
 pub fn is_x11() -> bool {
-    "x11" == hbb_common::platform::linux::get_display_server()
+    hbb_common::platform::linux::is_x11_or_headless()
 }
 
 #[cfg(x11)]
@@ -91,4 +95,56 @@ pub fn is_cursor_embedded() -> bool {
 #[inline]
 pub fn is_cursor_embedded() -> bool {
     false
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CodecName {
+    VP8,
+    VP9,
+    H264(String),
+    H265(String),
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum CodecFormat {
+    VP8,
+    VP9,
+    H264,
+    H265,
+    Unknown,
+}
+
+impl From<&VideoFrame> for CodecFormat {
+    fn from(it: &VideoFrame) -> Self {
+        match it.union {
+            Some(video_frame::Union::Vp8s(_)) => CodecFormat::VP8,
+            Some(video_frame::Union::Vp9s(_)) => CodecFormat::VP9,
+            Some(video_frame::Union::H264s(_)) => CodecFormat::H264,
+            Some(video_frame::Union::H265s(_)) => CodecFormat::H265,
+            _ => CodecFormat::Unknown,
+        }
+    }
+}
+
+impl From<&CodecName> for CodecFormat {
+    fn from(value: &CodecName) -> Self {
+        match value {
+            CodecName::VP8 => Self::VP8,
+            CodecName::VP9 => Self::VP9,
+            CodecName::H264(_) => Self::H264,
+            CodecName::H265(_) => Self::H265,
+        }
+    }
+}
+
+impl ToString for CodecFormat {
+    fn to_string(&self) -> String {
+        match self {
+            CodecFormat::VP8 => "VP8".into(),
+            CodecFormat::VP9 => "VP9".into(),
+            CodecFormat::H264 => "H264".into(),
+            CodecFormat::H265 => "H265".into(),
+            CodecFormat::Unknown => "Unknow".into(),
+        }
+    }
 }

@@ -1,7 +1,7 @@
 use super::*;
 use std::time::Duration;
 pub const FPS: u8 = 30;
-pub const MIN_FPS: u8 = 10;
+pub const MIN_FPS: u8 = 1;
 pub const MAX_FPS: u8 = 120;
 trait Percent {
     fn as_percent(&self) -> u32;
@@ -221,7 +221,9 @@ impl VideoQoS {
     }
 
     pub fn reset(&mut self) {
-        *self = Default::default();
+        self.fps = FPS;
+        self.user_fps = FPS;
+        self.updated = true;
     }
 
     pub fn check_abr_config(&mut self) -> bool {

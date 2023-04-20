@@ -301,7 +301,7 @@ class _GeneralState extends State<_General> {
 
   Widget audio(BuildContext context) {
     String getDefault() {
-      if (Platform.isWindows) return 'System Sound';
+      if (Platform.isWindows) return translate('System Sound');
       return '';
     }
 
@@ -322,7 +322,7 @@ class _GeneralState extends State<_General> {
     return futureBuilder(future: () async {
       List<String> devices = (await bind.mainGetSoundInputs()).toList();
       if (Platform.isWindows) {
-        devices.insert(0, 'System Sound');
+        devices.insert(0, translate('System Sound'));
       }
       String current = await getValue();
       return {'devices': devices, 'current': current};
@@ -415,7 +415,7 @@ class _GeneralState extends State<_General> {
       List<String> keys = langsMap.keys.toList();
       List<String> values = langsMap.values.toList();
       keys.insert(0, '');
-      values.insert(0, 'Default');
+      values.insert(0, translate('Default'));
       String currentKey = data['lang']!;
       if (!keys.contains(currentKey)) {
         currentKey = '';
@@ -1228,9 +1228,9 @@ class _DisplayState extends State<_Display> {
                   children: [
                     Slider(
                       value: fpsValue.value,
-                      min: 10.0,
+                      min: 5.0,
                       max: 120.0,
-                      divisions: 22,
+                      divisions: 23,
                       onChanged: (double value) async {
                         fpsValue.value = value;
                         await bind.mainSetUserDefaultOption(
@@ -1258,9 +1258,6 @@ class _DisplayState extends State<_Display> {
   }
 
   Widget codec(BuildContext context) {
-    if (!bind.mainHasHwcodec()) {
-      return Offstage();
-    }
     final key = 'codec-preference';
     onChanged(String value) async {
       await bind.mainSetUserDefaultOption(key: key, value: value);
@@ -1268,7 +1265,28 @@ class _DisplayState extends State<_Display> {
     }
 
     final groupValue = bind.mainGetUserDefaultOption(key: key);
-
+    var hwRadios = [];
+    try {
+      final Map codecsJson = jsonDecode(bind.mainSupportedHwdecodings());
+      final h264 = codecsJson['h264'] ?? false;
+      final h265 = codecsJson['h265'] ?? false;
+      if (h264) {
+        hwRadios.add(_Radio(context,
+            value: 'h264',
+            groupValue: groupValue,
+            label: 'H264',
+            onChanged: onChanged));
+      }
+      if (h265) {
+        hwRadios.add(_Radio(context,
+            value: 'h265',
+            groupValue: groupValue,
+            label: 'H265',
+            onChanged: onChanged));
+      }
+    } catch (e) {
+      debugPrint("failed to parse supported hwdecodings, err=$e");
+    }
     return _Card(title: 'Default Codec', children: [
       _Radio(context,
           value: 'auto',
@@ -1276,20 +1294,16 @@ class _DisplayState extends State<_Display> {
           label: 'Auto',
           onChanged: onChanged),
       _Radio(context,
+          value: 'vp8',
+          groupValue: groupValue,
+          label: 'VP8',
+          onChanged: onChanged),
+      _Radio(context,
           value: 'vp9',
           groupValue: groupValue,
           label: 'VP9',
           onChanged: onChanged),
-      _Radio(context,
-          value: 'h264',
-          groupValue: groupValue,
-          label: 'H264',
-          onChanged: onChanged),
-      _Radio(context,
-          value: 'h265',
-          groupValue: groupValue,
-          label: 'H265',
-          onChanged: onChanged),
+      ...hwRadios,
     ]);
   }
 
@@ -1376,11 +1390,18 @@ class _AboutState extends State<_About> {
       final license = await bind.mainGetLicense();
       final version = await bind.mainGetVersion();
       final buildDate = await bind.mainGetBuildDate();
-      return {'license': license, 'version': version, 'buildDate': buildDate};
+      final fingerprint = await bind.mainGetFingerprint();
+      return {
+        'license': license,
+        'version': version,
+        'buildDate': buildDate,
+        'fingerprint': fingerprint
+      };
     }(), hasData: (data) {
       final license = data['license'].toString();
       final version = data['version'].toString();
       final buildDate = data['buildDate'].toString();
+      final fingerprint = data['fingerprint'].toString();
       const linkStyle = TextStyle(decoration: TextDecoration.underline);
       final scrollController = ScrollController();
       return DesktopScrollWrapper(
@@ -1400,6 +1421,9 @@ class _AboutState extends State<_About> {
                           .marginSymmetric(vertical: 4.0)),
                   SelectionArea(
                       child: Text('${translate('Build Date')}: $buildDate')
+                          .marginSymmetric(vertical: 4.0)),
+                  SelectionArea(
+                      child: Text('${translate('Fingerprint')}: $fingerprint')
                           .marginSymmetric(vertical: 4.0)),
                   InkWell(
                       onTap: () {

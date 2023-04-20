@@ -19,6 +19,8 @@ import '../../common/widgets/peer_tab_page.dart';
 import '../../models/platform_model.dart';
 import '../widgets/button.dart';
 
+import 'package:flutter_hbb/common/widgets/dialog.dart';
+
 /// Connection page for connecting to a remote peer.
 class ConnectionPage extends StatefulWidget {
   const ConnectionPage({Key? key}) : super(key: key);
@@ -223,9 +225,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                 children: [
                   Button(
                     isOutline: true,
-                    onTap: () {
-                      onConnect(isFileTransfer: true);
-                    },
+                    onTap: () => onConnect(isFileTransfer: true),
                     text: "Transfer File",
                   ),
                   const SizedBox(

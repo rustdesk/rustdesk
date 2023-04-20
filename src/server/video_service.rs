@@ -19,6 +19,10 @@
 // https://slhck.info/video/2017/03/01/rate-control.html
 
 use super::{video_qos::VideoQoS, *};
+#[cfg(all(windows, feature = "virtual_display_driver"))]
+use crate::virtual_display_manager;
+#[cfg(windows)]
+use crate::{platform::windows::is_process_consent_running, privacy_win_mag};
 #[cfg(windows)]
 use hbb_common::get_version_number;
 use hbb_common::tokio::sync::{
@@ -31,7 +35,7 @@ use scrap::{
     codec::{Encoder, EncoderCfg, HwEncoderConfig},
     record::{Recorder, RecorderContext},
     vpxcodec::{VpxEncoderConfig, VpxVideoCodecId},
-    Display, TraitCapturer,
+    CodecName, Display, TraitCapturer,
 };
 #[cfg(windows)]
 use std::sync::Once;
@@ -41,14 +45,6 @@ use std::{
     ops::{Deref, DerefMut},
     time::{self, Duration, Instant},
 };
-#[cfg(windows)]
-use virtual_display;
-
-pub const SCRAP_UBUNTU_HIGHER_REQUIRED: &str = "Wayland requires Ubuntu 21.04 or higher version.";
-pub const SCRAP_OTHER_VERSION_OR_X11_REQUIRED: &str =
-    "Wayland requires higher version of linux distro. Please try X11 desktop or change your OS.";
-pub const SCRAP_X11_REQUIRED: &str = "x11 expected";
-pub const SCRAP_X11_REF_URL: &str = "https://rustdesk.com/docs/en/manual/linux/#x11-required";
 
 pub const NAME: &'static str = "video";
 
@@ -208,8 +204,6 @@ fn create_capturer(
     if privacy_mode_id > 0 {
         #[cfg(windows)]
         {
-            use crate::win_privacy::*;
-
             match scrap::CapturerMag::new(
                 display.origin(),
                 display.width(),
@@ -220,7 +214,7 @@ fn create_capturer(
                     let mut ok = false;
                     let check_begin = Instant::now();
                     while check_begin.elapsed().as_secs() < 5 {
-                        match c1.exclude("", PRIVACY_WINDOW_NAME) {
+                        match c1.exclude("", privacy_win_mag::PRIVACY_WINDOW_NAME) {
                             Ok(false) => {
                                 ok = false;
                                 std::thread::sleep(std::time::Duration::from_millis(500));
@@ -229,7 +223,7 @@ fn create_capturer(
                                 bail!(
                                     "Failed to exclude privacy window {} - {}, err: {}",
                                     "",
-                                    PRIVACY_WINDOW_NAME,
+                                    privacy_win_mag::PRIVACY_WINDOW_NAME,
                                     e
                                 );
                             }
@@ -243,7 +237,7 @@ fn create_capturer(
                         bail!(
                             "Failed to exclude privacy window {} - {} ",
                             "",
-                            PRIVACY_WINDOW_NAME
+                            privacy_win_mag::PRIVACY_WINDOW_NAME
                         );
                     }
                     log::debug!("Create magnifier capture for {}", privacy_mode_id);
@@ -275,18 +269,12 @@ fn create_capturer(
     };
 }
 
-#[cfg(windows)]
+// to-do: do not close if in privacy mode.
+#[cfg(all(windows, feature = "virtual_display_driver"))]
 fn ensure_close_virtual_device() -> ResultType<()> {
     let num_displays = Display::all()?.len();
-    if num_displays == 0 {
-        // Device may sometimes be uninstalled by user in "Device Manager" Window.
-        // Closing device will clear the instance data.
-        virtual_display::close_device();
-    } else if num_displays > 1 {
-        // Try close device, if display device changed.
-        if virtual_display::is_device_created() {
-            virtual_display::close_device();
-        }
+    if num_displays > 1 {
+        virtual_display_manager::plug_out_headless();
     }
     Ok(())
 }
@@ -309,11 +297,11 @@ pub fn test_create_capturer(privacy_mode_id: i32, timeout_millis: u64) -> bool {
 fn check_uac_switch(privacy_mode_id: i32, capturer_privacy_mode_id: i32) -> ResultType<()> {
     if capturer_privacy_mode_id != 0 {
         if privacy_mode_id != capturer_privacy_mode_id {
-            if !crate::win_privacy::is_process_consent_running()? {
+            if !is_process_consent_running()? {
                 bail!("consent.exe is running");
             }
         }
-        if crate::win_privacy::is_process_consent_running()? {
+        if is_process_consent_running()? {
             bail!("consent.exe is running");
         }
     }
@@ -374,7 +362,7 @@ fn get_capturer(use_yuv: bool, portable_service_running: bool) -> ResultType<Cap
     let mut capturer_privacy_mode_id = privacy_mode_id;
     #[cfg(windows)]
     if capturer_privacy_mode_id != 0 {
-        if crate::win_privacy::is_process_consent_running()? {
+        if is_process_consent_running()? {
             capturer_privacy_mode_id = 0;
         }
     }
@@ -431,7 +419,7 @@ fn check_displays_new() -> Option<Vec<Display>> {
     }
 }
 
-fn check_displays_changed() -> Option<Message> {
+fn check_get_displays_changed_msg() -> Option<Message> {
     let displays = check_displays_new()?;
     let (current, displays) = get_displays_2(&displays);
     let mut pi = PeerInfo {
@@ -447,7 +435,7 @@ fn check_displays_changed() -> Option<Message> {
 }
 
 fn run(sp: GenericService) -> ResultType<()> {
-    #[cfg(windows)]
+    #[cfg(all(windows, feature = "virtual_display_driver"))]
     ensure_close_virtual_device()?;
 
     // ensure_inited() is needed because release_resource() may be called.
@@ -468,21 +456,29 @@ fn run(sp: GenericService) -> ResultType<()> {
     drop(video_qos);
     log::info!("init bitrate={}, abr enabled:{}", bitrate, abr);
 
-    let encoder_cfg = match Encoder::current_hw_encoder_name() {
-        Some(codec_name) => EncoderCfg::HW(HwEncoderConfig {
-            codec_name,
-            width: c.width,
-            height: c.height,
-            bitrate: bitrate as _,
-        }),
-        None => EncoderCfg::VPX(VpxEncoderConfig {
-            width: c.width as _,
-            height: c.height as _,
-            timebase: [1, 1000], // Output timestamp precision
-            bitrate,
-            codec: VpxVideoCodecId::VP9,
-            num_threads: (num_cpus::get() / 2) as _,
-        }),
+    let encoder_cfg = match Encoder::negotiated_codec() {
+        scrap::CodecName::H264(name) | scrap::CodecName::H265(name) => {
+            EncoderCfg::HW(HwEncoderConfig {
+                name,
+                width: c.width,
+                height: c.height,
+                bitrate: bitrate as _,
+            })
+        }
+        name @ (scrap::CodecName::VP8 | scrap::CodecName::VP9) => {
+            EncoderCfg::VPX(VpxEncoderConfig {
+                width: c.width as _,
+                height: c.height as _,
+                timebase: [1, 1000], // Output timestamp precision
+                bitrate,
+                codec: if name == scrap::CodecName::VP8 {
+                    VpxVideoCodecId::VP8
+                } else {
+                    VpxVideoCodecId::VP9
+                },
+                num_threads: (num_cpus::get() / 2) as _,
+            })
+        }
     };
 
     let mut encoder;
@@ -526,7 +522,7 @@ fn run(sp: GenericService) -> ResultType<()> {
     let mut try_gdi = 1;
     #[cfg(windows)]
     log::info!("gdi: {}", c.is_gdi());
-    let codec_name = Encoder::current_hw_encoder_name();
+    let codec_name = Encoder::negotiated_codec();
     let recorder = get_recorder(c.width, c.height, &codec_name);
     #[cfg(windows)]
     start_uac_elevation_check();
@@ -539,7 +535,7 @@ fn run(sp: GenericService) -> ResultType<()> {
         check_uac_switch(c.privacy_mode_id, c._capturer_privacy_mode_id)?;
 
         let mut video_qos = VIDEO_QOS.lock().unwrap();
-        if video_qos.check_if_updated() {
+        if video_qos.check_if_updated() && video_qos.target_bitrate > 0 {
             log::debug!(
                 "qos is updated, target_bitrate:{}, fps:{}",
                 video_qos.target_bitrate,
@@ -557,7 +553,7 @@ fn run(sp: GenericService) -> ResultType<()> {
             *SWITCH.lock().unwrap() = true;
             bail!("SWITCH");
         }
-        if codec_name != Encoder::current_hw_encoder_name() {
+        if codec_name != Encoder::negotiated_codec() {
             bail!("SWITCH");
         }
         #[cfg(windows)]
@@ -585,11 +581,8 @@ fn run(sp: GenericService) -> ResultType<()> {
                 bail!("SWITCH");
             }
 
-            if let Some(msg_out) = check_displays_changed() {
+            if let Some(msg_out) = check_get_displays_changed_msg() {
                 sp.send(msg_out);
-            }
-
-            if c.ndisplay != get_display_num() {
                 log::info!("Displays changed");
                 *SWITCH.lock().unwrap() = true;
                 bail!("SWITCH");
@@ -606,8 +599,14 @@ fn run(sp: GenericService) -> ResultType<()> {
                 let time = now - start;
                 let ms = (time.as_secs() * 1000 + time.subsec_millis() as u64) as i64;
                 match frame {
+                    scrap::Frame::VP8(data) => {
+                        let send_conn_ids =
+                            handle_one_frame_encoded(VpxVideoCodecId::VP8, &sp, data, ms)?;
+                        frame_controller.set_send(now, send_conn_ids);
+                    }
                     scrap::Frame::VP9(data) => {
-                        let send_conn_ids = handle_one_frame_encoded(&sp, data, ms)?;
+                        let send_conn_ids =
+                            handle_one_frame_encoded(VpxVideoCodecId::VP9, &sp, data, ms)?;
                         frame_controller.set_send(now, send_conn_ids);
                     }
                     scrap::Frame::RAW(data) => {
@@ -720,12 +719,11 @@ fn run(sp: GenericService) -> ResultType<()> {
 fn get_recorder(
     width: usize,
     height: usize,
-    codec_name: &Option<String>,
+    codec_name: &CodecName,
 ) -> Arc<Mutex<Option<Recorder>>> {
     #[cfg(not(target_os = "ios"))]
     let recorder = if !Config::get_option("allow-auto-record-incoming").is_empty() {
         use crate::hbbs_http::record_upload;
-        use scrap::record::RecordCodecID::*;
 
         let tx = if record_upload::is_enable() {
             let (tx, rx) = std::sync::mpsc::channel();
@@ -734,16 +732,6 @@ fn get_recorder(
         } else {
             None
         };
-        let codec_id = match codec_name {
-            Some(name) => {
-                if name.contains("264") {
-                    H264
-                } else {
-                    H265
-                }
-            }
-            None => VP9,
-        };
         Recorder::new(RecorderContext {
             server: true,
             id: Config::get_id(),
@@ -751,7 +739,7 @@ fn get_recorder(
             filename: "".to_owned(),
             width,
             height,
-            codec_id,
+            format: codec_name.into(),
             tx,
         })
         .map_or(Default::default(), |r| Arc::new(Mutex::new(Some(r))))
@@ -776,20 +764,6 @@ fn check_privacy_mode_changed(sp: &GenericService, privacy_mode_id: i32) -> Resu
         bail!("SWITCH");
     }
     Ok(())
-}
-
-#[inline]
-#[cfg(any(target_os = "android", target_os = "ios"))]
-fn create_msg(vp9s: Vec<EncodedVideoFrame>) -> Message {
-    let mut msg_out = Message::new();
-    let mut vf = VideoFrame::new();
-    vf.set_vp9s(EncodedVideoFrames {
-        frames: vp9s.into(),
-        ..Default::default()
-    });
-    vf.timestamp = hbb_common::get_time();
-    msg_out.set_video_frame(vf);
-    msg_out
 }
 
 #[inline]
@@ -824,6 +798,7 @@ fn handle_one_frame(
 #[inline]
 #[cfg(any(target_os = "android", target_os = "ios"))]
 pub fn handle_one_frame_encoded(
+    codec: VpxVideoCodecId,
     sp: &GenericService,
     frame: &[u8],
     ms: i64,
@@ -835,30 +810,14 @@ pub fn handle_one_frame_encoded(
         }
         Ok(())
     })?;
-    let mut send_conn_ids: HashSet<i32> = Default::default();
-    let vp9_frame = EncodedVideoFrame {
+    let vpx_frame = EncodedVideoFrame {
         data: frame.to_vec().into(),
         key: true,
         pts: ms,
         ..Default::default()
     };
-    send_conn_ids = sp.send_video_frame(create_msg(vec![vp9_frame]));
+    let send_conn_ids = sp.send_video_frame(scrap::VpxEncoder::create_msg(codec, vec![vpx_frame]));
     Ok(send_conn_ids)
-}
-
-fn get_display_num() -> usize {
-    #[cfg(target_os = "linux")]
-    {
-        if !scrap::is_x11() {
-            return if let Ok(n) = super::wayland::get_display_num() {
-                n
-            } else {
-                0
-            };
-        }
-    }
-
-    LAST_SYNC_DISPLAYS.read().unwrap().len()
 }
 
 pub(super) fn get_displays_2(all: &Vec<Display>) -> (usize, Vec<DisplayInfo>) {
@@ -951,37 +910,24 @@ pub async fn switch_to_primary() {
 }
 
 #[inline]
-#[cfg(not(windows))]
+#[cfg(not(all(windows, feature = "virtual_display_driver")))]
 fn try_get_displays() -> ResultType<Vec<Display>> {
     Ok(Display::all()?)
 }
 
-#[cfg(windows)]
+#[cfg(all(windows, feature = "virtual_display_driver"))]
 fn try_get_displays() -> ResultType<Vec<Display>> {
     let mut displays = Display::all()?;
     if displays.len() == 0 {
         log::debug!("no displays, create virtual display");
-        // Try plugin monitor
-        if !virtual_display::is_device_created() {
-            if let Err(e) = virtual_display::create_device() {
-                log::debug!("Create device failed {}", e);
-            }
+        if let Err(e) = virtual_display_manager::plug_in_headless() {
+            log::error!("plug in headless failed {}", e);
+        } else {
+            displays = Display::all()?;
         }
-        if virtual_display::is_device_created() {
-            if let Err(e) = virtual_display::plug_in_monitor() {
-                log::debug!("Plug in monitor failed {}", e);
-            } else {
-                if let Err(e) = virtual_display::update_monitor_modes() {
-                    log::debug!("Update monitor modes failed {}", e);
-                }
-            }
-        }
-        displays = Display::all()?;
     } else if displays.len() > 1 {
         // If more than one displays exists, close RustDeskVirtualDisplay
-        if virtual_display::is_device_created() {
-            virtual_display::close_device()
-        }
+        let _res = virtual_display_manager::plug_in_headless();
     }
     Ok(displays)
 }
@@ -1020,7 +966,7 @@ fn start_uac_elevation_check() {
         if !crate::platform::is_installed() && !crate::platform::is_root() {
             std::thread::spawn(|| loop {
                 std::thread::sleep(std::time::Duration::from_secs(1));
-                if let Ok(uac) = crate::win_privacy::is_process_consent_running() {
+                if let Ok(uac) = is_process_consent_running() {
                     *IS_UAC_RUNNING.lock().unwrap() = uac;
                 }
                 if !crate::platform::is_elevated(None).unwrap_or(false) {

@@ -59,7 +59,7 @@ def main():
          b = toks[1].replace('ControlKey(ControlKey::', '').replace("Chr('", '').replace("' as _)),", '').replace(')),', '')
          KEY_MAP[0] += '  "%s": "%s",\n'%(a, b)
    print()
-   print('export function checkIfRetry(msgtype: string, title: string, text: string) {')
+   print('export function checkIfRetry(msgtype: string, title: string, text: string,  retry_for_relay: boolean) {')
    print('  return %s'%check_if_retry[0].replace('to_lowercase', 'toLowerCase').replace('contains', 'indexOf').replace('!', '').replace('")', '") < 0'))
    print(';}')
    print()

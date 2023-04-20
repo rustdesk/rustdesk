@@ -1,0 +1,88 @@
+name: Build vcpkg dependencies for linux clients
+
+on: 
+  workflow_call:
+
+jobs:
+  build-vcpkg-deps-linux:
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        job:
+          - { arch: armv7, os: ubuntu-20.04 }
+          - { arch: x86_64, os: ubuntu-20.04 }
+          - { arch: aarch64, os: ubuntu-20.04 }
+    steps:
+      - name: Create vcpkg artifacts folder
+        run: mkdir -p /opt/artifacts
+
+      - name: Cache Vcpkg
+        id: cache-vcpkg
+        uses: actions/cache@v3
+        with:
+          path: /opt/artifacts
+          key: vcpkg-${{ matrix.job.arch }}
+
+      - uses: Kingtous/run-on-arch-action@amd64-support
+        name: Run vcpkg install on ${{ matrix.job.arch }}
+        id: vcpkg
+        with:
+          arch: ${{ matrix.job.arch }}
+          distro: ubuntu18.04
+          githubToken: ${{ github.token }}
+          setup: |
+            ls -l "/opt/artifacts"
+          dockerRunArgs: |
+            --volume "/opt/artifacts:/artifacts"
+          shell: /bin/bash
+          install: |
+            apt update -y
+            case "${{ matrix.job.arch }}" in
+              x86_64)
+                # CMake 3.15+
+                apt install -y gpg wget ca-certificates
+                echo 'deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ bionic main' | tee /etc/apt/sources.list.d/kitware.list >/dev/null
+                wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null
+                apt update -y
+                apt install -y curl zip unzip tar git cmake g++ gcc build-essential pkg-config wget nasm yasm ninja-build libjpeg8-dev
+                cmake --version
+                gcc -v
+                ;;
+              aarch64|armv7)
+                apt install -y curl zip unzip git
+            esac
+          run: |
+            # disable git safe.directory
+            git config --global --add safe.directory "*"
+            case "${{ matrix.job.arch }}" in
+              x86_64)
+                export VCPKG_FORCE_SYSTEM_BINARIES=1
+                pushd /artifacts
+                git clone https://github.com/microsoft/vcpkg.git || true
+                pushd vcpkg
+                git reset --hard ${{ env.VCPKG_COMMIT_ID }}
+                ./bootstrap-vcpkg.sh
+                ./vcpkg install libvpx libyuv opus
+                ;;
+              aarch64)
+                pushd /artifacts
+                rm -rf rustdesk_thirdparty_lib
+                git clone https://github.com/Kingtous/rustdesk_thirdparty_lib.git --depth=1
+                mkdir -p /artifacts/vcpkg/installed
+                mv ./rustdesk_thirdparty_lib/vcpkg/installed/arm64-linux /artifacts/vcpkg/installed/arm64-linux
+                ;;
+              armv7)
+                pushd /artifacts
+                rm -rf rustdesk_thirdparty_lib
+                git clone https://github.com/Kingtous/rustdesk_thirdparty_lib.git --depth=1
+                mkdir -p /artifacts/vcpkg/installed
+                mv ./rustdesk_thirdparty_lib/vcpkg/installed/arm-linux /artifacts/vcpkg/installed/arm-linux
+                ;;
+            esac
+      - name: Upload artifacts
+        uses: actions/upload-artifact@master
+        with:
+          name: vcpkg-artifact-${{ matrix.job.arch }}
+          path: |
+            /opt/artifacts/vcpkg/installed

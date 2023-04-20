@@ -121,6 +121,29 @@ class ConnectionTypeState {
       Get.find<ConnectionType>(tag: tag(id));
 }
 
+class FingerprintState {
+  static String tag(String id) => 'fingerprint_$id';
+
+  static void init(String id) {
+    final key = tag(id);
+    if (!Get.isRegistered(tag: key)) {
+      final RxString state = ''.obs;
+      Get.put(state, tag: key);
+    } else {
+      Get.find<RxString>(tag: key).value = '';
+    }
+  }
+
+  static void delete(String id) {
+    final key = tag(id);
+    if (Get.isRegistered(tag: key)) {
+      Get.delete(tag: key);
+    }
+  }
+
+  static RxString find(String id) => Get.find<RxString>(tag: tag(id));
+}
+
 class ShowRemoteCursorState {
   static String tag(String id) => 'show_remote_cursor_$id';
 
@@ -260,4 +283,26 @@ class PeerStringOption {
 
   static RxString find(String id, String opt) =>
       Get.find<RxString>(tag: tag(id, opt));
+}
+
+initSharedStates(String id) {
+  PrivacyModeState.init(id);
+  BlockInputState.init(id);
+  CurrentDisplayState.init(id);
+  KeyboardEnabledState.init(id);
+  ShowRemoteCursorState.init(id);
+  RemoteCursorMovedState.init(id);
+  FingerprintState.init(id);
+  PeerBoolOption.init(id, 'zoom-cursor', () => false);
+}
+
+removeSharedStates(String id) {
+  PrivacyModeState.delete(id);
+  BlockInputState.delete(id);
+  CurrentDisplayState.delete(id);
+  ShowRemoteCursorState.delete(id);
+  KeyboardEnabledState.delete(id);
+  RemoteCursorMovedState.delete(id);
+  FingerprintState.delete(id);
+  PeerBoolOption.delete(id, 'zoom-cursor');
 }
