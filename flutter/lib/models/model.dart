@@ -16,6 +16,8 @@ import 'package:flutter_hbb/models/peer_tab_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/models/user_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
+import 'package:flutter_hbb/plugin/event.dart';
+import 'package:flutter_hbb/plugin/reloader.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:tuple/tuple.dart';
 import 'package:image/image.dart' as img2;
@@ -226,6 +228,13 @@ class FfiModel with ChangeNotifier {
         parent.target?.serverModel.updateVoiceCallState(evt);
       } else if (name == "fingerprint") {
         FingerprintState.find(peerId).value = evt['fingerprint'] ?? '';
+      } else if (name == "plugin_desc") {
+        handleReloading(evt, peerId);
+      } else if (name == "plugin_event") {
+        handlePluginEvent(
+            evt, peerId, (Map<String, dynamic> e) => handleMsgBox(e, peerId));
+      } else if (name == "plugin_reload") {
+        handleReloading(evt, peerId);
       } else {
         debugPrint("Unknown event name: $name");
       }
