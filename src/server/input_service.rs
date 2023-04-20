@@ -1292,7 +1292,8 @@ fn simulate_win2win_hotkey(code: u32, down: bool) {
     }
 
     let keycode: u16 = ((code >> 16) & 0x0000FFFF) as u16;
-    allow_err!(rdev::simulate_code(Some(keycode), None, down));
+    let scan = rdev::vk_to_scancode(keycode as _);
+    allow_err!(rdev::simulate_code(None, Some(scan), down));
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "linux")))]
