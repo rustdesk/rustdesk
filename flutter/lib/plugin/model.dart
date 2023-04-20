@@ -15,6 +15,8 @@ class LocationModel with ChangeNotifier {
     uiList.add(ui);
     notifyListeners();
   }
+
+  bool get isEmpty => uiList.isEmpty;
 }
 
 void addLocation(PluginId id, String location, UiType ui) {

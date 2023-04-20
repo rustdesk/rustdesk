@@ -40,8 +40,5 @@ void handleReloading(Map<String, dynamic> evt, String peer) {
     return;
   }
   final ui = UiType.fromJson(evt);
-  if (!ui.isValid) {
-    return;
-  }
   addLocation(evt['id']!, evt['location']!, ui);
 }
