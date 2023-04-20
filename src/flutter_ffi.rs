@@ -1397,9 +1397,9 @@ pub fn send_url_scheme(_url: String) {
 }
 
 #[inline]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn plugin_event(_id: String, _event: Vec<u8>) {
     #[cfg(feature = "plugin_framework")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         allow_err!(crate::plugin::handle_ui_event(&_id, &_event));
     }
