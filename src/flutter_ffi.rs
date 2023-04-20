@@ -9,6 +9,9 @@ use crate::{
     ui_interface::{self, *},
 };
 use flutter_rust_bridge::{StreamSink, SyncReturn};
+#[cfg(feature = "plugin_framework")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use hbb_common::allow_err;
 use hbb_common::{
     config::{self, LocalConfig, PeerConfig, PeerInfoSerde, ONLINE},
     fs, log,
