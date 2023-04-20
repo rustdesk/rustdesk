@@ -827,21 +827,32 @@ impl AudioHandler {
         log::info!("Default output format: {:?}", config);
         log::info!("Remote input format: {:?}", format0);
         let config: StreamConfig = config.into();
-        self.device_channel = config.channels;
-        match sample_format {
-            cpal::SampleFormat::I8 => self.build_output_stream::<i8>(&config, &device)?,
-            cpal::SampleFormat::I16 => self.build_output_stream::<i16>(&config, &device)?,
-            cpal::SampleFormat::I32 => self.build_output_stream::<i32>(&config, &device)?,
-            cpal::SampleFormat::I64 => self.build_output_stream::<i64>(&config, &device)?,
-            cpal::SampleFormat::U8 => self.build_output_stream::<u8>(&config, &device)?,
-            cpal::SampleFormat::U16 => self.build_output_stream::<u16>(&config, &device)?,
-            cpal::SampleFormat::U32 => self.build_output_stream::<u32>(&config, &device)?,
-            cpal::SampleFormat::U64 => self.build_output_stream::<u64>(&config, &device)?,
-            cpal::SampleFormat::F32 => self.build_output_stream::<f32>(&config, &device)?,
-            cpal::SampleFormat::F64 => self.build_output_stream::<f64>(&config, &device)?,
-            f => bail!("unsupported audio format: {:?}", f),
-        }
         self.sample_rate = (format0.sample_rate, config.sample_rate.0);
+        let mut build_output_stream = |config: StreamConfig| match sample_format {
+            cpal::SampleFormat::I8 => self.build_output_stream::<i8>(&config, &device),
+            cpal::SampleFormat::I16 => self.build_output_stream::<i16>(&config, &device),
+            cpal::SampleFormat::I32 => self.build_output_stream::<i32>(&config, &device),
+            cpal::SampleFormat::I64 => self.build_output_stream::<i64>(&config, &device),
+            cpal::SampleFormat::U8 => self.build_output_stream::<u8>(&config, &device),
+            cpal::SampleFormat::U16 => self.build_output_stream::<u16>(&config, &device),
+            cpal::SampleFormat::U32 => self.build_output_stream::<u32>(&config, &device),
+            cpal::SampleFormat::U64 => self.build_output_stream::<u64>(&config, &device),
+            cpal::SampleFormat::F32 => self.build_output_stream::<f32>(&config, &device),
+            cpal::SampleFormat::F64 => self.build_output_stream::<f64>(&config, &device),
+            f => bail!("unsupported audio format: {:?}", f),
+        };
+        if config.channels > format0.channels as _ {
+            let no_rechannel_config = StreamConfig {
+                channels: format0.channels as _,
+                ..config.clone()
+            };
+            if let Err(_) = build_output_stream(no_rechannel_config) {
+                build_output_stream(config)?;
+            }
+        } else {
+            build_output_stream(config)?;
+        }
+
         Ok(())
     }
 
@@ -926,6 +937,7 @@ impl AudioHandler {
         config: &StreamConfig,
         device: &Device,
     ) -> ResultType<()> {
+        self.device_channel = config.channels;
         let err_fn = move |err| {
             // too many errors, will improve later
             log::trace!("an error occurred on stream: {}", err);
