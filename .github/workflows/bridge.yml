@@ -1,5 +1,6 @@
 # This yaml shares the build bridge steps with ci and nightly.
 name: Build flutter-rust-bridge
+# 2023-04-19 15:48:00+00:00
 
 on:
   workflow_call:
@@ -22,6 +23,7 @@ jobs:
 
       - name: Install prerequisites
         run: |
+          sudo apt install ca-certificates -y        
           sudo apt update -y
           sudo apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang cmake libclang-dev ninja-build llvm-dev libclang-10-dev llvm-10-dev pkg-config
 
