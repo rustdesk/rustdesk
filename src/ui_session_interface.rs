@@ -1,12 +1,14 @@
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use std::collections::HashMap;
-use std::ops::{Deref, DerefMut};
-use std::str::FromStr;
-use std::sync::{
-    atomic::{AtomicBool, AtomicUsize, Ordering},
-    Arc, Mutex, RwLock,
+use std::{collections::HashMap, sync::atomic::AtomicBool};
+use std::{
+    ops::{Deref, DerefMut},
+    str::FromStr,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc, Mutex, RwLock,
+    },
+    time::{Duration, SystemTime},
 };
-use std::time::{Duration, SystemTime};
 
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -27,10 +29,12 @@ use crate::client::{
     input_os_password, load_config, send_mouse, start_video_audio_threads, FileManager, Key,
     LoginConfigHandler, QualityStatus, KEY_MAP,
 };
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::common::GrabState;
 use crate::keyboard;
 use crate::{client::Data, client::Interface};
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub static IS_IN: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone, Default)]
@@ -55,6 +59,7 @@ pub struct SessionPermissionConfig {
     pub server_clipboard_enabled: Arc<RwLock<bool>>,
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 impl SessionPermissionConfig {
     pub fn is_text_clipboard_required(&self) -> bool {
         *self.server_clipboard_enabled.read().unwrap()
@@ -64,6 +69,7 @@ impl SessionPermissionConfig {
 }
 
 impl<T: InvokeUiSession> Session<T> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn get_permission_config(&self) -> SessionPermissionConfig {
         SessionPermissionConfig {
             lc: self.lc.clone(),
@@ -89,6 +95,7 @@ impl<T: InvokeUiSession> Session<T> {
             .eq(&ConnType::PORT_FORWARD)
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn is_rdp(&self) -> bool {
         self.lc.read().unwrap().conn_type.eq(&ConnType::RDP)
     }
@@ -162,6 +169,7 @@ impl<T: InvokeUiSession> Session<T> {
         self.lc.read().unwrap().is_privacy_mode_supported()
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn is_text_clipboard_required(&self) -> bool {
         *self.server_clipboard_enabled.read().unwrap()
             && *self.server_keyboard_enabled.read().unwrap()
@@ -488,6 +496,7 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::Message(msg_out));
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn enter(&self) {
         #[cfg(target_os = "windows")]
         {
@@ -502,6 +511,7 @@ impl<T: InvokeUiSession> Session<T> {
         keyboard::client::change_grab_status(GrabState::Run);
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn leave(&self) {
         #[cfg(target_os = "windows")]
         {
