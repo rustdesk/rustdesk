@@ -315,7 +315,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Start the screen sharing service on boot, requires special permissions", "Bildschirmfreigabedienst beim Booten starten, erfordert zusätzliche Berechtigungen"),
         ("Connection not allowed", "Verbindung abgelehnt"),
         ("Legacy mode", "Kompatibilitätsmodus"),
-        ("Map mode", "Kartenmodus"),
+        ("Map mode", "Zuordnungsmodus"),
         ("Translate mode", "Übersetzungsmodus"),
         ("Use permanent password", "Permanentes Passwort verwenden"),
         ("Use both passwords", "Beide Passwörter verwenden"),
