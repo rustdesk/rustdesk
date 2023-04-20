@@ -165,6 +165,7 @@ impl OboePlayer {
         }
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn is_null(&self) -> bool {
         self.raw.is_null()
     }
