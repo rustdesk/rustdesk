@@ -38,9 +38,14 @@ class UiType {
       : button = json['t'] == 'Button' ? UiButton.fromJson(json['c']) : null,
         checkbox =
             json['t'] != 'Checkbox' ? UiCheckbox.fromJson(json['c']) : null;
+
+  bool get isValid => button != null || checkbox != null;
 }
 
 class Location {
+  // location key:
+  //  host|main|settings|display|others
+  //  client|remote|toolbar|display
   HashMap<String, UiType> ui;
 
   Location(this.ui);
