@@ -8,6 +8,8 @@ import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
+import 'package:flutter_hbb/desktop/plugin/widget.dart';
+import 'package:flutter_hbb/desktop/plugin/common.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
@@ -655,13 +657,19 @@ class _DisplayMenu extends StatefulWidget {
   final FFI ffi;
   final MenubarState state;
   final Function(bool) setFullscreen;
+  final LocationItem pluginItem;
   _DisplayMenu(
       {Key? key,
       required this.id,
       required this.ffi,
       required this.state,
       required this.setFullscreen})
-      : super(key: key);
+      : pluginItem = LocationItem.createLocationItem(
+          id,
+          ffi,
+          kLocationClientRemoteToolbarDisplay,
+        ),
+        super(key: key);
 
   @override
   State<_DisplayMenu> createState() => _DisplayMenuState();
@@ -699,6 +707,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
           resolutions(),
           Divider(),
           toggles(),
+          widget.pluginItem,
         ]);
   }
 

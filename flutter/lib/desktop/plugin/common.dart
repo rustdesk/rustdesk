@@ -2,6 +2,12 @@ import 'dart:convert';
 
 typedef PluginId = String;
 
+// ui location
+const String kLocationHostMainDisplayOthers =
+    'host|main|settings|display|others';
+const String kLocationClientRemoteToolbarDisplay =
+    'client|remote|toolbar|display';
+
 class MsgFromUi {
   String remotePeerId;
   String localPeerId;

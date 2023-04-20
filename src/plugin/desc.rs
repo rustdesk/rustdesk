@@ -8,7 +8,7 @@ use std::ffi::{c_char, CStr};
 pub struct UiButton {
     key: String,
     text: String,
-    icon: String,
+    icon: String,   // icon can be int in flutter, but string in other ui framework. And it is flexible to use string.
     tooltip: String,
     action: String, // The action to be triggered when the button is clicked.
 }

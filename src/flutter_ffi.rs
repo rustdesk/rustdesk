@@ -1406,7 +1406,7 @@ pub fn plugin_event(_id: String, _event: Vec<u8>) {
 }
 
 #[inline]
-pub fn plugin_get_session_option(_id: String, _peer: String, _key: String) -> SyncReturn<String> {
+pub fn plugin_get_session_option(_id: String, _peer: String, _key: String) -> SyncReturn<Option<String>> {
     #[cfg(feature = "plugin_framework")]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
@@ -1417,7 +1417,9 @@ pub fn plugin_get_session_option(_id: String, _peer: String, _key: String) -> Sy
         target_os = "android",
         target_os = "ios"
     ))]
-    return SyncReturn("".to_owned());
+    {
+        return SyncReturn(None);
+    }
 }
 
 #[inline]
@@ -1430,18 +1432,20 @@ pub fn plugin_set_session_option(_id: String, _peer: String, _key: String, _valu
 }
 
 #[inline]
-pub fn plugin_get_local_option(_id: String, _key: String) -> SyncReturn<String> {
+pub fn plugin_get_local_option(_id: String, _key: String) -> SyncReturn<Option<String>> {
     #[cfg(feature = "plugin_framework")]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
-        allow_err!(crate::plugin::LocalConfig::get(&_id, &key));
+        return SyncReturn(crate::plugin::LocalConfig::get(&_id, &_key));
     }
     #[cfg(any(
         not(feature = "plugin_framework"),
         target_os = "android",
         target_os = "ios"
     ))]
-    return SyncReturn("".to_owned());
+    {
+        return SyncReturn(None);
+    }
 }
 
 #[inline]
