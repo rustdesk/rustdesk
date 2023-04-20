@@ -753,6 +753,7 @@ pub struct AudioHandler {
     #[cfg(not(any(target_os = "android", target_os = "linux")))]
     audio_stream: Option<Box<dyn StreamTrait>>,
     channels: u16,
+    device_channel: u16,
     #[cfg(not(any(target_os = "android", target_os = "linux")))]
     ready: Arc<std::sync::Mutex<bool>>,
 }
@@ -825,8 +826,8 @@ impl AudioHandler {
         let sample_format = config.sample_format();
         log::info!("Default output format: {:?}", config);
         log::info!("Remote input format: {:?}", format0);
-        let mut config: StreamConfig = config.into();
-        config.channels = format0.channels as _;
+        let config: StreamConfig = config.into();
+        self.device_channel = config.channels;
         match sample_format {
             cpal::SampleFormat::I8 => self.build_output_stream::<i8>(&config, &device)?,
             cpal::SampleFormat::I16 => self.build_output_stream::<i16>(&config, &device)?,
@@ -884,20 +885,25 @@ impl AudioHandler {
                     let sample_rate0 = self.sample_rate.0;
                     let sample_rate = self.sample_rate.1;
                     let audio_buffer = self.audio_buffer.0.clone();
+                    let mut buffer = buffer[0..n].to_owned();
                     if sample_rate != sample_rate0 {
-                        let buffer = crate::resample_channels(
+                        buffer = crate::audio_resample(
                             &buffer[0..n],
                             sample_rate0,
                             sample_rate,
                             channels,
                         );
-                        audio_buffer.lock().unwrap().push_slice_overwrite(&buffer);
-                    } else {
-                        audio_buffer
-                            .lock()
-                            .unwrap()
-                            .push_slice_overwrite(&buffer[0..n]);
                     }
+                    if self.channels != self.device_channel {
+                        buffer = crate::audio_rechannel(
+                            buffer,
+                            sample_rate,
+                            sample_rate,
+                            self.channels,
+                            self.device_channel,
+                        );
+                    }
+                    audio_buffer.lock().unwrap().push_slice_overwrite(&buffer);
                 }
                 #[cfg(target_os = "android")]
                 {

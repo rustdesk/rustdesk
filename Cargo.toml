@@ -71,6 +71,7 @@ reqwest = { version = "0.11", features = ["blocking", "json", "rustls-tls"], def
 chrono = "0.4"
 cidr-utils = "0.5"
 libloading = "0.7"
+fon = "0.6"
 
 [target.'cfg(not(any(target_os = "android", target_os = "linux")))'.dependencies]
 cpal = "0.15"
