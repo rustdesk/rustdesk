@@ -28,12 +28,12 @@ pub enum UiType {
     Checkbox(UiCheckbox),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Location {
     pub ui: HashMap<String, UiType>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConfigItem {
     pub key: String,
     pub value: String,
@@ -41,13 +41,13 @@ pub struct ConfigItem {
     pub description: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
     pub local: Vec<ConfigItem>,
     pub peer: Vec<ConfigItem>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Desc {
     id: String,
     name: String,

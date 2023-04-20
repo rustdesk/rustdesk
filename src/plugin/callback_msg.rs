@@ -99,7 +99,7 @@ pub fn callback_msg(
             {
                 let _res = flutter::push_session_event(
                     &peer,
-                    "plugin",
+                    "plugin_event",
                     vec![("peer", &peer), ("content", &content)],
                 );
             }

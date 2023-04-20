@@ -165,7 +165,9 @@ pub fn load_plugin(path: &str) -> ResultType<()> {
     let desc = desc_res?;
     let id = desc.id().to_string();
     // to-do validate plugin
+    // to-do check the plugin id (make sure it does not use another plugin's id)
     (plugin.fn_set_cb_msg)(callback_msg::callback_msg);
+    update_ui_plugin_desc(&desc);
     update_config(&desc);
     reload_ui(&desc);
     plugin.desc = Some(desc);
@@ -287,10 +289,27 @@ fn reload_ui(desc: &Desc) {
                 if let Ok(ui) = serde_json::to_string(&ui) {
                     let mut m = HashMap::new();
                     m.insert("name", "plugin_reload");
+                    m.insert("id", desc.id());
+                    m.insert("location", &location);
                     m.insert("ui", &ui);
                     flutter::push_global_event(v[1], serde_json::to_string(&m).unwrap());
                 }
             }
         }
+    }
+}
+
+fn update_ui_plugin_desc(desc: &Desc) {
+    // This function is rarely used. There's no need to care about serialization efficiency here.
+    if let Ok(desc_str) = serde_json::to_string(desc) {
+        let mut m = HashMap::new();
+        m.insert("name", "plugin_desc");
+        m.insert("desc", &desc_str);
+        flutter::push_global_event(flutter::APP_TYPE_MAIN, serde_json::to_string(&m).unwrap());
+        flutter::push_global_event(
+            flutter::APP_TYPE_DESKTOP_REMOTE,
+            serde_json::to_string(&m).unwrap(),
+        );
+        flutter::push_global_event(flutter::APP_TYPE_CM, serde_json::to_string(&m).unwrap());
     }
 }
