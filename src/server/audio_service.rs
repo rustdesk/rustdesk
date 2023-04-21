@@ -140,21 +140,28 @@ mod cpal_impl {
     }
 
     fn send(
-        data: &[f32],
+        data: Vec<f32>,
         sample_rate0: u32,
         sample_rate: u32,
-        channels: u16,
+        device_channel: u16,
+        encode_channel: u16,
         encoder: &mut Encoder,
         sp: &GenericService,
     ) {
-        let buffer;
-        let data = if sample_rate0 != sample_rate {
-            buffer = crate::common::resample_channels(data, sample_rate0, sample_rate, channels);
-            &buffer
-        } else {
-            data
-        };
-        send_f32(data, encoder, sp);
+        let mut data = data;
+        if sample_rate0 != sample_rate {
+            data = crate::common::audio_resample(&data, sample_rate0, sample_rate, device_channel);
+        }
+        if device_channel != encode_channel {
+            data = crate::common::audio_rechannel(
+                data,
+                sample_rate,
+                sample_rate,
+                device_channel,
+                encode_channel,
+            )
+        }
+        send_f32(&data, encoder, sp);
     }
 
     #[cfg(windows)]
@@ -230,23 +237,24 @@ mod cpal_impl {
         } else {
             48000
         };
+        let ch = if config.channels() > 1 { Stereo } else { Mono };
         let stream = match config.sample_format() {
-            I8 => build_input_stream::<i8>(device, &config, sp, sample_rate)?,
-            I16 => build_input_stream::<i16>(device, &config, sp, sample_rate)?,
-            I32 => build_input_stream::<i32>(device, &config, sp, sample_rate)?,
-            I64 => build_input_stream::<i64>(device, &config, sp, sample_rate)?,
-            U8 => build_input_stream::<u8>(device, &config, sp, sample_rate)?,
-            U16 => build_input_stream::<u16>(device, &config, sp, sample_rate)?,
-            U32 => build_input_stream::<u32>(device, &config, sp, sample_rate)?,
-            U64 => build_input_stream::<u64>(device, &config, sp, sample_rate)?,
-            F32 => build_input_stream::<f32>(device, &config, sp, sample_rate)?,
-            F64 => build_input_stream::<f64>(device, &config, sp, sample_rate)?,
+            I8 => build_input_stream::<i8>(device, &config, sp, sample_rate, ch)?,
+            I16 => build_input_stream::<i16>(device, &config, sp, sample_rate, ch)?,
+            I32 => build_input_stream::<i32>(device, &config, sp, sample_rate, ch)?,
+            I64 => build_input_stream::<i64>(device, &config, sp, sample_rate, ch)?,
+            U8 => build_input_stream::<u8>(device, &config, sp, sample_rate, ch)?,
+            U16 => build_input_stream::<u16>(device, &config, sp, sample_rate, ch)?,
+            U32 => build_input_stream::<u32>(device, &config, sp, sample_rate, ch)?,
+            U64 => build_input_stream::<u64>(device, &config, sp, sample_rate, ch)?,
+            F32 => build_input_stream::<f32>(device, &config, sp, sample_rate, ch)?,
+            F64 => build_input_stream::<f64>(device, &config, sp, sample_rate, ch)?,
             f => bail!("unsupported audio format: {:?}", f),
         };
         stream.play()?;
         Ok((
             Box::new(stream),
-            Arc::new(create_format_msg(sample_rate, config.channels())),
+            Arc::new(create_format_msg(sample_rate, ch as _)),
         ))
     }
 
@@ -255,6 +263,7 @@ mod cpal_impl {
         config: &cpal::SupportedStreamConfig,
         sp: GenericService,
         sample_rate: u32,
+        encode_channel: magnum_opus::Channels,
     ) -> ResultType<cpal::Stream>
     where
         T: cpal::SizedSample + dasp::sample::ToSample<f32>,
@@ -268,19 +277,17 @@ mod cpal_impl {
         unsafe {
             AUDIO_ZERO_COUNT = 0;
         }
-        let mut encoder = Encoder::new(
-            sample_rate,
-            if config.channels() > 1 { Stereo } else { Mono },
-            LowDelay,
-        )?;
-        let channels = config.channels();
+        let device_channel = config.channels();
+        let mut encoder = Encoder::new(sample_rate, encode_channel, LowDelay)?;
         // https://www.opus-codec.org/docs/html_api/group__opusencoder.html#gace941e4ef26ed844879fde342ffbe546
         // https://chromium.googlesource.com/chromium/deps/opus/+/1.1.1/include/opus.h
-        let encode_len = sample_rate as usize * channels as usize / 100; // 10 ms
+        let frame_size = sample_rate as usize / 100; // 10 ms
+        let encode_len = frame_size * encode_channel as usize;
+        let rechannel_len = encode_len * device_channel as usize / encode_channel as usize;
         INPUT_BUFFER.lock().unwrap().clear();
         let timeout = None;
         let stream_config = StreamConfig {
-            channels,
+            channels: device_channel,
             sample_rate: config.sample_rate(),
             buffer_size: BufferSize::Default,
         };
@@ -290,13 +297,14 @@ mod cpal_impl {
                 let buffer: Vec<f32> = data.iter().map(|s| T::to_sample(*s)).collect();
                 let mut lock = INPUT_BUFFER.lock().unwrap();
                 lock.extend(buffer);
-                while lock.len() >= encode_len {
-                    let frame: Vec<f32> = lock.drain(0..encode_len).collect();
+                while lock.len() >= rechannel_len {
+                    let frame: Vec<f32> = lock.drain(0..rechannel_len).collect();
                     send(
-                        &frame,
+                        frame,
                         sample_rate_0,
                         sample_rate,
-                        channels,
+                        device_channel,
+                        encode_channel as _,
                         &mut encoder,
                         &sp,
                     );
