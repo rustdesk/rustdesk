@@ -1256,8 +1256,10 @@ fn translate_keyboard_mode(evt: &KeyEvent) {
                     simulate_(&EventType::KeyRelease(RdevKey::ShiftRight));
                 }
                 for chr in seq.chars() {
+                    // char in rust is 4 bytes.
+                    // But for this case, char comes from keyboard. We only need 2 bytes.
                     #[cfg(target_os = "windows")]
-                    rdev::simulate_char(chr, true).ok();
+                    rdev::simulate_unicode(chr as _).ok();
                     #[cfg(target_os = "linux")]
                     en.key_click(Key::Layout(chr));
                 }
