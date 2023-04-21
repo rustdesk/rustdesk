@@ -66,7 +66,6 @@ class PluginItem extends StatelessWidget {
   final FFI ffi;
   final String location;
   final PluginModel pluginModel;
-  final KvModel kvModel;
 
   PluginItem({
     Key? key,
@@ -75,20 +74,16 @@ class PluginItem extends StatelessWidget {
     required this.ffi,
     required this.location,
     required this.pluginModel,
-  })  : kvModel = addKvModel(location, pluginId, peerId),
-        super(key: key);
+  }) : super(key: key);
 
   bool get isEmpty => pluginModel.isEmpty;
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider.value(value: pluginModel),
-        ChangeNotifierProvider.value(value: kvModel),
-      ],
-      child: Consumer2<PluginModel, KvModel>(
-        builder: (context, pluginModel, kvModel, child) {
+    return ChangeNotifierProvider.value(
+      value: pluginModel,
+      child: Consumer<PluginModel>(
+        builder: (context, pluginModel, child) {
           return Column(
             children: pluginModel.uiList.map((ui) => _buildItem(ui)).toList(),
           );
@@ -144,34 +139,50 @@ class PluginItem extends StatelessWidget {
     );
   }
 
-  Widget _buildCheckboxMenuButton(UiCheckbox ui) {
-    var v = kvModel.get(ui.key);
+  String? getOption(OptionModel model, String key) {
+    var v = model.value;
     if (v == null) {
       if (peerId.isEmpty) {
-        v = bind.pluginGetLocalOption(id: pluginId, key: ui.key);
+        v = bind.pluginGetLocalOption(id: pluginId, key: key);
       } else {
-        v = bind.pluginGetSessionOption(
-            id: pluginId, peer: peerId, key: ui.key);
+        v = bind.pluginGetSessionOption(id: pluginId, peer: peerId, key: key);
       }
     }
-    if (v == null) {
-      // session or plugin not found
-      return Container();
+    return v;
+  }
+
+  Widget _buildCheckboxMenuButton(UiCheckbox ui) {
+    getChild(OptionModel model) {
+      final v = getOption(model, ui.key);
+      if (v == null) {
+        // session or plugin not found
+        return Container();
+      }
+      return CkbMenuButton(
+        value: ConfigItem.isTrue(v),
+        onChanged: (v) {
+          if (v != null) {
+            bind.pluginEvent(
+              id: pluginId,
+              peer: peerId,
+              event: _makeEvent(ui.key, v: v),
+            );
+          }
+        },
+        // to-do: RustDesk translate or plugin translate ?
+        child: Text(ui.text),
+        ffi: ffi,
+      );
     }
-    return CkbMenuButton(
-      value: ConfigItem.isTrue(v),
-      onChanged: (v) {
-        if (v != null) {
-          bind.pluginEvent(
-            id: pluginId,
-            peer: peerId,
-            event: _makeEvent(ui.key, v: v),
-          );
-        }
-      },
-      // to-do: RustDesk translate or plugin translate ?
-      child: Text(ui.text),
-      ffi: ffi,
+
+    final optionModel = addOptionModel(location, pluginId, peerId, ui.key);
+    return ChangeNotifierProvider.value(
+      value: optionModel,
+      child: Consumer<OptionModel>(
+        builder: (context, model, child) {
+          return getChild(model);
+        },
+      ),
     );
   }
 }

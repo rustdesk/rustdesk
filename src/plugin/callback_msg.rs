@@ -107,6 +107,7 @@ pub fn callback_msg(
             if let Ok(s) =
                 std::str::from_utf8(unsafe { std::slice::from_raw_parts(content as _, len) })
             {
+                // No need to merge the msgs. Handling the msg one by one is ok.
                 if let Ok(msg) = serde_json::from_str::<MsgToConfig>(s) {
                     match &msg.r#type as _ {
                         config::CONFIG_TYPE_LOCAL => {
