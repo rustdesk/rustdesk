@@ -9,8 +9,6 @@ const String kLocationClientRemoteToolbarDisplay =
     'client|remote|toolbar|display';
 
 class MsgFromUi {
-  String remotePeerId;
-  String localPeerId;
   String id;
   String name;
   String location;
@@ -19,8 +17,6 @@ class MsgFromUi {
   String action;
 
   MsgFromUi({
-    required this.remotePeerId,
-    required this.localPeerId,
     required this.id,
     required this.name,
     required this.location,
@@ -31,8 +27,6 @@ class MsgFromUi {
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
-      'remote_peer_id': remotePeerId,
-      'local_peer_id': localPeerId,
       'id': id,
       'name': name,
       'location': location,

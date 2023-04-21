@@ -1397,16 +1397,20 @@ pub fn send_url_scheme(_url: String) {
 }
 
 #[inline]
-pub fn plugin_event(_id: String, _event: Vec<u8>) {
+pub fn plugin_event(_id: String, _peer: String, _event: Vec<u8>) {
     #[cfg(feature = "plugin_framework")]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
-        allow_err!(crate::plugin::handle_ui_event(&_id, &_event));
+        allow_err!(crate::plugin::handle_ui_event(&_id, &_peer, &_event));
     }
 }
 
 #[inline]
-pub fn plugin_get_session_option(_id: String, _peer: String, _key: String) -> SyncReturn<Option<String>> {
+pub fn plugin_get_session_option(
+    _id: String,
+    _peer: String,
+    _key: String,
+) -> SyncReturn<Option<String>> {
     #[cfg(feature = "plugin_framework")]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
@@ -1427,7 +1431,7 @@ pub fn plugin_set_session_option(_id: String, _peer: String, _key: String, _valu
     #[cfg(feature = "plugin_framework")]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
-        crate::plugin::PeerConfig::set(&_id, &_peer, &_key, &_value);
+        let _res = crate::plugin::PeerConfig::set(&_id, &_peer, &_key, &_value);
     }
 }
 
@@ -1453,7 +1457,7 @@ pub fn plugin_set_local_option(_id: String, _key: String, _value: String) {
     #[cfg(feature = "plugin_framework")]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
-        crate::plugin::LocalConfig::set(&_id, &_key, &_value);
+        let _res = crate::plugin::LocalConfig::set(&_id, &_key, &_value);
     }
 }
 

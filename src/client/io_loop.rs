@@ -1301,7 +1301,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     Some(misc::Union::PluginRequest(p)) => {
-                        allow_err!(crate::plugin::handle_server_event(&p.id, &p.content));
+                        allow_err!(crate::plugin::handle_server_event(&p.id, &self.handler.id, &p.content));
                         // to-do: show message box on UI when error occurs?
                     }
                     #[cfg(all(feature = "flutter", feature = "plugin_framework"))]

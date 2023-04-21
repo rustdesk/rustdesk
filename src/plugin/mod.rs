@@ -12,6 +12,11 @@ pub use plugins::{
     reload_plugin, unload_plugin,
 };
 
+const MSG_TO_UI_TYPE_PLUGIN_DESC: &str = "plugin_desc";
+const MSG_TO_UI_TYPE_PLUGIN_EVENT: &str = "plugin_event";
+const MSG_TO_UI_TYPE_PLUGIN_RELOAD: &str = "plugin_reload";
+const MSG_TO_UI_TYPE_PLUGIN_OPTION: &str = "plugin_option";
+
 pub use config::{LocalConfig, PeerConfig};
 
 #[inline]

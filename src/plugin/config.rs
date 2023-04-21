@@ -14,6 +14,9 @@ lazy_static::lazy_static! {
     static ref CONFIG_PEER_ITEMS: Arc<Mutex<HashMap<String, Vec<ConfigItem>>>> = Default::default();
 }
 
+pub(super) const CONFIG_TYPE_LOCAL: &str = "local";
+pub(super) const CONFIG_TYPE_PEER: &str = "peer";
+
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct LocalConfig(HashMap<String, String>);
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -73,14 +76,6 @@ impl LocalConfig {
     }
 
     #[inline]
-    fn save(id: &str) -> ResultType<()> {
-        match CONFIG_LOCAL.lock().unwrap().get(id) {
-            Some(config) => hbb_common::config::store_path(Self::path(id), config),
-            None => bail!("No such plugin {}", id),
-        }
-    }
-
-    #[inline]
     pub fn get(id: &str, key: &str) -> Option<String> {
         if let Some(conf) = CONFIG_LOCAL.lock().unwrap().get(id) {
             return conf.get(key).map(|s| s.to_owned());
@@ -133,17 +128,6 @@ impl PeerConfig {
                 peers.insert(peer.to_owned(), conf);
                 CONFIG_PEERS.lock().unwrap().insert(id.to_owned(), peers);
             }
-        }
-    }
-
-    #[inline]
-    fn save(id: &str, peer: &str) -> ResultType<()> {
-        match CONFIG_PEERS.lock().unwrap().get(id) {
-            Some(peers) => match peers.get(peer) {
-                Some(config) => hbb_common::config::store_path(Self::path(id, peer), config),
-                None => bail!("No such peer {}", peer),
-            },
-            None => bail!("No such plugin {}", id),
         }
     }
 

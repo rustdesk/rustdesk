@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:provider/provider.dart';
+// to-do: do not depend on desktop
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 
@@ -65,6 +66,7 @@ class PluginItem extends StatelessWidget {
   final FFI ffi;
   final String location;
   final PluginModel pluginModel;
+  final KvModel kvModel;
 
   PluginItem({
     Key? key,
@@ -73,42 +75,49 @@ class PluginItem extends StatelessWidget {
     required this.ffi,
     required this.location,
     required this.pluginModel,
-  }) : super(key: key);
+  })  : kvModel = addKvModel(location, pluginId, peerId),
+        super(key: key);
 
   bool get isEmpty => pluginModel.isEmpty;
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider.value(
-      value: pluginModel,
-      child: Consumer<PluginModel>(builder: (context, model, child) {
-        return Column(
-          children: model.uiList.map((ui) => _buildItem(ui)).toList(),
-        );
-      }),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: pluginModel),
+        ChangeNotifierProvider.value(value: kvModel),
+      ],
+      child: Consumer2<PluginModel, KvModel>(
+        builder: (context, pluginModel, kvModel, child) {
+          return Column(
+            children: pluginModel.uiList.map((ui) => _buildItem(ui)).toList(),
+          );
+        },
+      ),
     );
   }
 
-  // to-do: add plugin icon and tooltip
   Widget _buildItem(UiType ui) {
+    late Widget child;
     switch (ui.runtimeType) {
       case UiButton:
-        return _buildMenuButton(ui as UiButton);
+        child = _buildMenuButton(ui as UiButton);
+        break;
       case UiCheckbox:
-        return _buildCheckboxMenuButton(ui as UiCheckbox);
+        child = _buildCheckboxMenuButton(ui as UiCheckbox);
+        break;
       default:
-        return Container();
+        child = Container();
     }
+    // to-do: add plugin icon and tooltip
+    return child;
   }
 
   Uint8List _makeEvent(
-    String localPeerId,
     String key, {
     bool? v,
   }) {
     final event = MsgFromUi(
-      remotePeerId: peerId,
-      localPeerId: localPeerId,
       id: pluginId,
       name: getDesc(pluginId)?.name ?? '',
       location: location,
@@ -122,15 +131,11 @@ class PluginItem extends StatelessWidget {
 
   Widget _buildMenuButton(UiButton ui) {
     return MenuButton(
-      onPressed: () {
-        () async {
-          final localPeerId = await bind.mainGetMyId();
-          bind.pluginEvent(
-            id: pluginId,
-            event: _makeEvent(localPeerId, ui.key),
-          );
-        }();
-      },
+      onPressed: () => bind.pluginEvent(
+        id: pluginId,
+        peer: peerId,
+        event: _makeEvent(ui.key),
+      ),
       trailingIcon: Icon(
           IconData(int.parse(ui.icon, radix: 16), fontFamily: 'MaterialIcons')),
       // to-do: RustDesk translate or plugin translate ?
@@ -140,8 +145,15 @@ class PluginItem extends StatelessWidget {
   }
 
   Widget _buildCheckboxMenuButton(UiCheckbox ui) {
-    final v =
-        bind.pluginGetSessionOption(id: pluginId, peer: peerId, key: ui.key);
+    var v = kvModel.get(ui.key);
+    if (v == null) {
+      if (peerId.isEmpty) {
+        v = bind.pluginGetLocalOption(id: pluginId, key: ui.key);
+      } else {
+        v = bind.pluginGetSessionOption(
+            id: pluginId, peer: peerId, key: ui.key);
+      }
+    }
     if (v == null) {
       // session or plugin not found
       return Container();
@@ -150,16 +162,14 @@ class PluginItem extends StatelessWidget {
       value: ConfigItem.isTrue(v),
       onChanged: (v) {
         if (v != null) {
-          () async {
-            final localPeerId = await bind.mainGetMyId();
-            bind.pluginEvent(
-              id: pluginId,
-              event: _makeEvent(localPeerId, ui.key, v: v),
-            );
-          }();
+          bind.pluginEvent(
+            id: pluginId,
+            peer: peerId,
+            event: _makeEvent(ui.key, v: v),
+          );
         }
       },
-      // to-do: rustdesk translate or plugin translate ?
+      // to-do: RustDesk translate or plugin translate ?
       child: Text(ui.text),
       ffi: ffi,
     );
@@ -170,6 +180,10 @@ void handleReloading(Map<String, dynamic> evt, String peer) {
   if (evt['id'] == null || evt['location'] == null) {
     return;
   }
-  final ui = UiType.fromJson(evt);
-  addLocationUi(evt['location']!, evt['id']!, ui);
+  addLocationUi(evt['location']!, evt['id']!, UiType.fromJson(evt));
+}
+
+void handleOption(Map<String, dynamic> evt, String peer) {
+  updateOption(
+      evt['location'], evt['id'], evt['peer'] ?? '', evt['key'], evt['value']);
 }

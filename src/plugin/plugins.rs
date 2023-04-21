@@ -5,8 +5,8 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use super::{callback_msg, desc::Desc, errno::*, get_code_msg_from_ret};
-use crate::flutter;
+use super::{desc::Desc, errno::*, *};
+use crate::{flutter, ui_interface::get_id};
 use hbb_common::{
     bail,
     dlopen::symbor::Library,
@@ -20,6 +20,7 @@ const METHOD_HANDLE_PEER: &[u8; 12] = b"handle_peer\0";
 
 lazy_static::lazy_static! {
     pub static ref PLUGINS: Arc<RwLock<HashMap<String, Plugin>>> = Default::default();
+    pub static ref LOCAL_PEER_ID: Arc<RwLock<String>> = Default::default();
 }
 
 /// Initialize the plugins.
@@ -59,22 +60,32 @@ type PluginFuncCallbackMsg = fn(
     len: usize,
 );
 pub type PluginFuncSetCallbackMsg = fn(PluginFuncCallbackMsg);
+/// Callback to get the id of local peer id.
+/// The returned string is utf8 string(null terminated).
+/// Don't free the returned ptr.
+type GetIdFuncCallback = fn() -> *const c_char;
+pub type PluginFuncGetIdCallback = fn(GetIdFuncCallback);
 /// The main function of the plugin.
 /// method: The method. "handle_ui" or "handle_peer"
+/// peer:  The peer id.
 /// args: The arguments.
 ///
 /// Return null ptr if success.
 /// Return the error message if failed.  `i32-String` without dash, i32 is a signed little-endian number, the String is utf8 string.
 /// The plugin allocate memory with `libc::malloc` and return the pointer.
-pub type PluginFuncCall =
-    fn(method: *const c_char, args: *const c_void, len: usize) -> *const c_void;
+pub type PluginFuncCall = fn(
+    method: *const c_char,
+    peer: *const c_char,
+    args: *const c_void,
+    len: usize,
+) -> *const c_void;
 
 macro_rules! make_plugin {
     ($($field:ident : $tp:ty),+) => {
         pub struct Plugin {
             _lib: Library,
             path: String,
-            desc: Option<Desc>,
+            desc_v: Option<Desc>,
             $($field: $tp),+
         }
 
@@ -101,7 +112,7 @@ macro_rules! make_plugin {
                 Ok(Self {
                     _lib: lib,
                     path: path.to_string(),
-                    desc: None,
+                    desc_v: None,
                     $( $field ),+
                 })
             }
@@ -110,12 +121,13 @@ macro_rules! make_plugin {
 }
 
 make_plugin!(
-    fn_init: PluginFuncInit,
-    fn_reset: PluginFuncReset,
-    fn_clear: PluginFuncClear,
-    fn_desc: PluginFuncDesc,
-    fn_set_cb_msg: PluginFuncSetCallbackMsg,
-    fn_call: PluginFuncCall
+    init: PluginFuncInit,
+    reset: PluginFuncReset,
+    clear: PluginFuncClear,
+    desc: PluginFuncDesc,
+    call: PluginFuncCall,
+    set_cb_msg: PluginFuncSetCallbackMsg,
+    set_cb_get_id: PluginFuncGetIdCallback
 );
 
 pub fn load_plugins<P: AsRef<Path>>(dir: P) -> ResultType<()> {
@@ -142,7 +154,7 @@ pub fn load_plugins<P: AsRef<Path>>(dir: P) -> ResultType<()> {
 
 pub fn unload_plugin(id: &str) {
     if let Some(plugin) = PLUGINS.write().unwrap().remove(id) {
-        let _ret = (plugin.fn_clear)();
+        let _ret = (plugin.clear)();
     }
 }
 
@@ -155,9 +167,24 @@ pub fn reload_plugin(id: &str) -> ResultType<()> {
     load_plugin(&path)
 }
 
+#[no_mangle]
+fn get_local_peer_id() -> *const c_char {
+    let mut id = (*LOCAL_PEER_ID.read().unwrap()).clone();
+    if id.is_empty() {
+        let mut lock = LOCAL_PEER_ID.write().unwrap();
+        id = (*lock).clone();
+        if id.is_empty() {
+            id = get_id();
+            id.push('\0');
+            *lock = id.clone();
+        }
+    }
+    id.as_ptr() as _
+}
+
 pub fn load_plugin(path: &str) -> ResultType<()> {
     let mut plugin = Plugin::new(path)?;
-    let desc = (plugin.fn_desc)();
+    let desc = (plugin.desc)();
     let desc_res = Desc::from_cstr(desc);
     unsafe {
         libc::free(desc as _);
@@ -166,19 +193,27 @@ pub fn load_plugin(path: &str) -> ResultType<()> {
     let id = desc.id().to_string();
     // to-do validate plugin
     // to-do check the plugin id (make sure it does not use another plugin's id)
-    (plugin.fn_set_cb_msg)(callback_msg::callback_msg);
+    (plugin.set_cb_msg)(callback_msg::callback_msg);
+    (plugin.set_cb_get_id)(get_local_peer_id as _);
     update_ui_plugin_desc(&desc);
     update_config(&desc);
     reload_ui(&desc);
-    plugin.desc = Some(desc);
+    plugin.desc_v = Some(desc);
     PLUGINS.write().unwrap().insert(id, plugin);
     Ok(())
 }
 
-fn handle_event(method: &[u8], id: &str, event: &[u8]) -> ResultType<()> {
+fn handle_event(method: &[u8], id: &str, peer: &str, event: &[u8]) -> ResultType<()> {
+    let mut peer: String = peer.to_owned();
+    peer.push('\0');
     match PLUGINS.read().unwrap().get(id) {
         Some(plugin) => {
-            let ret = (plugin.fn_call)(method.as_ptr() as _, event.as_ptr() as _, event.len());
+            let ret = (plugin.call)(
+                method.as_ptr() as _,
+                peer.as_ptr() as _,
+                event.as_ptr() as _,
+                event.len(),
+            );
             if ret.is_null() {
                 Ok(())
             } else {
@@ -200,21 +235,24 @@ fn handle_event(method: &[u8], id: &str, event: &[u8]) -> ResultType<()> {
 }
 
 #[inline]
-pub fn handle_ui_event(id: &str, event: &[u8]) -> ResultType<()> {
-    handle_event(METHOD_HANDLE_UI, id, event)
+pub fn handle_ui_event(id: &str, peer: &str, event: &[u8]) -> ResultType<()> {
+    handle_event(METHOD_HANDLE_UI, id, peer, event)
 }
 
 #[inline]
-pub fn handle_server_event(id: &str, event: &[u8]) -> ResultType<()> {
-    handle_event(METHOD_HANDLE_PEER, id, event)
+pub fn handle_server_event(id: &str, peer: &str, event: &[u8]) -> ResultType<()> {
+    handle_event(METHOD_HANDLE_PEER, id, peer, event)
 }
 
 #[inline]
-pub fn handle_client_event(id: &str, event: &[u8]) -> Option<Message> {
+pub fn handle_client_event(id: &str, peer: &str, event: &[u8]) -> Option<Message> {
+    let mut peer: String = peer.to_owned();
+    peer.push('\0');
     match PLUGINS.read().unwrap().get(id) {
         Some(plugin) => {
-            let ret = (plugin.fn_call)(
+            let ret = (plugin.call)(
                 METHOD_HANDLE_PEER.as_ptr() as _,
+                peer.as_ptr() as _,
                 event.as_ptr() as _,
                 event.len(),
             );
@@ -226,7 +264,7 @@ pub fn handle_client_event(id: &str, event: &[u8]) -> Option<Message> {
                     libc::free(ret as _);
                 }
                 if code > ERR_RUSTDESK_HANDLE_BASE && code < ERR_PLUGIN_HANDLE_BASE {
-                    let name = plugin.desc.as_ref().unwrap().name();
+                    let name = plugin.desc_v.as_ref().unwrap().name();
                     match code {
                         ERR_CALL_NOT_SUPPORTED_METHOD => Some(make_plugin_response(
                             id,
@@ -288,7 +326,7 @@ fn reload_ui(desc: &Desc) {
             if available_channels.contains(&v[1]) {
                 if let Ok(ui) = serde_json::to_string(&ui) {
                     let mut m = HashMap::new();
-                    m.insert("name", "plugin_reload");
+                    m.insert("name", MSG_TO_UI_TYPE_PLUGIN_RELOAD);
                     m.insert("id", desc.id());
                     m.insert("location", &location);
                     m.insert("ui", &ui);
@@ -303,7 +341,7 @@ fn update_ui_plugin_desc(desc: &Desc) {
     // This function is rarely used. There's no need to care about serialization efficiency here.
     if let Ok(desc_str) = serde_json::to_string(desc) {
         let mut m = HashMap::new();
-        m.insert("name", "plugin_desc");
+        m.insert("name", MSG_TO_UI_TYPE_PLUGIN_DESC);
         m.insert("desc", &desc_str);
         flutter::push_global_event(flutter::APP_TYPE_MAIN, serde_json::to_string(&m).unwrap());
         flutter::push_global_event(
