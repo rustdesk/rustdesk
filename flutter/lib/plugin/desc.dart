@@ -1,4 +1,5 @@
 import 'dart:collection';
+import 'package:flutter/foundation.dart';
 
 const String kValueTrue = '1';
 const String kValueFalse = '0';
@@ -154,13 +155,27 @@ class Desc {
                 .toList());
 }
 
-final mapPluginDesc = <String, Desc>{};
+class DescModel with ChangeNotifier {
+  final data = <String, Desc>{};
 
-void updateDesc(Map<String, dynamic> desc) {
-  Desc d = Desc.fromJson(desc);
-  mapPluginDesc[d.id] = d;
+  DescModel._();
+
+  void _updateDesc(Map<String, dynamic> desc) {
+    Desc d = Desc.fromJson(desc);
+    data[d.id] = d;
+    notifyListeners();
+  }
+
+  Desc? _getDesc(String id) {
+    return data[id];
+  }
+
+  Map<String, Desc> get all => data;
+
+  static final DescModel _instance = DescModel._();
+  static DescModel get instance => _instance;
 }
 
-Desc? getDesc(String id) {
-  return mapPluginDesc[id];
-}
+void updateDesc(Map<String, dynamic> desc) =>
+    DescModel.instance._updateDesc(desc);
+Desc? getDesc(String id) => DescModel.instance._getDesc(id);

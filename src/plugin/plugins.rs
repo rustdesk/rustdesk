@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     ffi::{c_char, c_void},
-    path::Path,
+    path::PathBuf,
     sync::{Arc, RwLock},
 };
 
@@ -19,8 +19,14 @@ const METHOD_HANDLE_UI: &[u8; 10] = b"handle_ui\0";
 const METHOD_HANDLE_PEER: &[u8; 12] = b"handle_peer\0";
 
 lazy_static::lazy_static! {
+    static ref PLUGIN_INFO: Arc<RwLock<HashMap<String, PluginInfo>>> = Default::default();
     pub static ref PLUGINS: Arc<RwLock<HashMap<String, Plugin>>> = Default::default();
     pub static ref LOCAL_PEER_ID: Arc<RwLock<String>> = Default::default();
+}
+
+struct PluginInfo {
+    path: String,
+    desc: Desc,
 }
 
 /// Initialize the plugins.
@@ -84,8 +90,6 @@ macro_rules! make_plugin {
     ($($field:ident : $tp:ty),+) => {
         pub struct Plugin {
             _lib: Library,
-            path: String,
-            desc_v: Option<Desc>,
             $($field: $tp),+
         }
 
@@ -111,8 +115,6 @@ macro_rules! make_plugin {
 
                 Ok(Self {
                     _lib: lib,
-                    path: path.to_string(),
-                    desc_v: None,
                     $( $field ),+
                 })
             }
@@ -130,26 +132,43 @@ make_plugin!(
     set_cb_get_id: PluginFuncGetIdCallback
 );
 
-pub fn load_plugins<P: AsRef<Path>>(dir: P) -> ResultType<()> {
-    for entry in std::fs::read_dir(dir)? {
-        match entry {
-            Ok(entry) => {
-                let path = entry.path();
-                if path.is_file() {
-                    let path = path.to_str().unwrap_or("");
-                    if path.ends_with(".so") {
-                        if let Err(e) = load_plugin(path) {
-                            log::error!("{e}");
+pub fn load_plugins() -> ResultType<()> {
+    let exe = std::env::current_exe()?.to_string_lossy().to_string();
+    match PathBuf::from(&exe).parent() {
+        Some(dir) => {
+            for entry in std::fs::read_dir(dir)? {
+                match entry {
+                    Ok(entry) => {
+                        let path = entry.path();
+                        if path.is_file() {
+                            let path = path.to_str().unwrap_or("");
+                            if path.ends_with(".so") {
+                                if let Err(e) = load_plugin(Some(path), None) {
+                                    log::error!("{e}");
+                                }
+                            }
                         }
+                    }
+                    Err(e) => {
+                        log::error!("Failed to read dir entry, {}", e);
                     }
                 }
             }
-            Err(e) => {
-                log::error!("Failed to read dir entry, {}", e);
-            }
+            Ok(())
+        }
+        None => {
+            bail!("Failed to get parent dir of {}", exe);
         }
     }
-    Ok(())
+}
+
+pub fn unload_plugins() {
+    let mut plugins = PLUGINS.write().unwrap();
+    for (id, plugin) in plugins.iter() {
+        let _ret = (plugin.clear)();
+        log::info!("Plugin {} unloaded", id);
+    }
+    plugins.clear();
 }
 
 pub fn unload_plugin(id: &str) {
@@ -159,12 +178,12 @@ pub fn unload_plugin(id: &str) {
 }
 
 pub fn reload_plugin(id: &str) -> ResultType<()> {
-    let path = match PLUGINS.read().unwrap().get(id) {
+    let path = match PLUGIN_INFO.read().unwrap().get(id) {
         Some(plugin) => plugin.path.clone(),
         None => bail!("Plugin {} not found", id),
     };
     unload_plugin(id);
-    load_plugin(&path)
+    load_plugin(Some(&path), Some(id))
 }
 
 #[no_mangle]
@@ -182,8 +201,8 @@ fn get_local_peer_id() -> *const c_char {
     id.as_ptr() as _
 }
 
-pub fn load_plugin(path: &str) -> ResultType<()> {
-    let mut plugin = Plugin::new(path)?;
+fn load_plugin_path(path: &str) -> ResultType<()> {
+    let plugin = Plugin::new(path)?;
     let desc = (plugin.desc)();
     let desc_res = Desc::from_cstr(desc);
     unsafe {
@@ -198,9 +217,26 @@ pub fn load_plugin(path: &str) -> ResultType<()> {
     update_ui_plugin_desc(&desc);
     update_config(&desc);
     reload_ui(&desc);
-    plugin.desc_v = Some(desc);
+    let plugin_info = PluginInfo {
+        path: path.to_string(),
+        desc,
+    };
+    PLUGIN_INFO.write().unwrap().insert(id.clone(), plugin_info);
     PLUGINS.write().unwrap().insert(id, plugin);
     Ok(())
+}
+
+pub fn load_plugin(path: Option<&str>, id: Option<&str>) -> ResultType<()> {
+    match (path, id) {
+        (Some(path), _) => load_plugin_path(path),
+        (None, Some(id)) => match PLUGIN_INFO.read().unwrap().get(id) {
+            Some(plugin) => load_plugin_path(&plugin.path),
+            None => bail!("Plugin {} not found", id),
+        },
+        (None, None) => {
+            bail!("path and id are both None");
+        }
+    }
 }
 
 fn handle_event(method: &[u8], id: &str, peer: &str, event: &[u8]) -> ResultType<()> {
@@ -264,19 +300,23 @@ pub fn handle_client_event(id: &str, peer: &str, event: &[u8]) -> Option<Message
                     libc::free(ret as _);
                 }
                 if code > ERR_RUSTDESK_HANDLE_BASE && code < ERR_PLUGIN_HANDLE_BASE {
-                    let name = plugin.desc_v.as_ref().unwrap().name();
+                    let name = match PLUGIN_INFO.read().unwrap().get(id) {
+                        Some(plugin) => plugin.desc.name(),
+                        None => "???",
+                    }
+                    .to_owned();
                     match code {
                         ERR_CALL_NOT_SUPPORTED_METHOD => Some(make_plugin_response(
                             id,
-                            name,
+                            &name,
                             "plugin method is not supported",
                         )),
                         ERR_CALL_INVALID_ARGS => Some(make_plugin_response(
                             id,
-                            name,
+                            &name,
                             "plugin arguments is invalid",
                         )),
-                        _ => Some(make_plugin_response(id, name, &msg)),
+                        _ => Some(make_plugin_response(id, &name, &msg)),
                     }
                 } else {
                     log::error!(

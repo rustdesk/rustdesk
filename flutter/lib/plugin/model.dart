@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import './common.dart';
 import './desc.dart';
 
-final Map<String, LocationModel> locationModels = {};
-final Map<String, OptionModel> optionModels = {};
+final Map<String, LocationModel> _locationModels = {};
+final Map<String, OptionModel> _optionModels = {};
 
 class OptionModel with ChangeNotifier {
   String? v;
@@ -46,31 +46,48 @@ class LocationModel with ChangeNotifier {
     }
   }
 
+  void clear() {
+    pluginModels.clear();
+    notifyListeners();
+  }
+
   bool get isEmpty => pluginModels.isEmpty;
 }
 
 void addLocationUi(String location, PluginId id, UiType ui) {
-  locationModels[location]?.add(id, ui);
+  _locationModels[location]?.add(id, ui);
 }
 
 LocationModel addLocation(String location) {
-  if (locationModels[location] == null) {
-    locationModels[location] = LocationModel();
+  if (_locationModels[location] == null) {
+    _locationModels[location] = LocationModel();
   }
-  return locationModels[location]!;
+  return _locationModels[location]!;
+}
+
+void clearPlugin(PluginId pluginId) {
+  for (var element in _locationModels.values) {
+    element.pluginModels.remove(pluginId);
+  }
+}
+
+void clearLocations() {
+  for (var element in _locationModels.values) {
+    element.clear();
+  }
 }
 
 OptionModel addOptionModel(
     String location, PluginId pluginId, String peer, String key) {
   final k = OptionModel.key(location, pluginId, peer, key);
-  if (optionModels[k] == null) {
-    optionModels[k] = OptionModel();
+  if (_optionModels[k] == null) {
+    _optionModels[k] = OptionModel();
   }
-  return optionModels[k]!;
+  return _optionModels[k]!;
 }
 
 void updateOption(
     String location, PluginId id, String peer, String key, String value) {
   final k = OptionModel.key(location, id, peer, key);
-  optionModels[k]?.value = value;
+  _optionModels[k]?.value = value;
 }
