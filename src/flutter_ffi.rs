@@ -1414,7 +1414,7 @@ pub fn plugin_get_session_option(
     #[cfg(feature = "plugin_framework")]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
-        return SyncReturn(crate::plugin::PeerConfig::get(&_id, &_peer, &_key));
+        SyncReturn(crate::plugin::PeerConfig::get(&_id, &_peer, &_key))
     }
     #[cfg(any(
         not(feature = "plugin_framework"),
@@ -1422,7 +1422,7 @@ pub fn plugin_get_session_option(
         target_os = "ios"
     ))]
     {
-        return SyncReturn(None);
+        SyncReturn(None)
     }
 }
 
@@ -1440,7 +1440,7 @@ pub fn plugin_get_local_option(_id: String, _key: String) -> SyncReturn<Option<S
     #[cfg(feature = "plugin_framework")]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
-        return SyncReturn(crate::plugin::LocalConfig::get(&_id, &_key));
+        SyncReturn(crate::plugin::LocalConfig::get(&_id, &_key))
     }
     #[cfg(any(
         not(feature = "plugin_framework"),
@@ -1448,7 +1448,7 @@ pub fn plugin_get_local_option(_id: String, _key: String) -> SyncReturn<Option<S
         target_os = "ios"
     ))]
     {
-        return SyncReturn(None);
+        SyncReturn(None)
     }
 }
 
@@ -1458,6 +1458,94 @@ pub fn plugin_set_local_option(_id: String, _key: String, _value: String) {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         let _res = crate::plugin::LocalConfig::set(&_id, &_key, &_value);
+    }
+}
+
+#[inline]
+pub fn plugin_reload(_id: String) {
+    #[cfg(feature = "plugin_framework")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        // to-do:
+        // reload plugin
+    }
+}
+
+#[inline]
+pub fn plugin_id_enable(_id: String, v: bool) {
+    #[cfg(feature = "plugin_framework")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        if v {
+            allow_err!(crate::plugin::ManagerConfig::set_plugin_enabled(&_id, true));
+            allow_err!(crate::plugin::reload_plugin(&_id));
+        } else {
+            allow_err!(crate::plugin::ManagerConfig::set_plugin_enabled(&_id, false));
+            crate::plugin::unload_plugin(&_id);
+        }
+    }
+}
+
+pub fn plugin_id_is_enabled(_id: String) -> SyncReturn<bool> {
+    #[cfg(feature = "plugin_framework")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        SyncReturn(
+            crate::plugin::ManagerConfig::get_plugin_status(&_id, |s| s.enabled).unwrap_or(false),
+        )
+    }
+    #[cfg(any(
+        not(feature = "plugin_framework"),
+        target_os = "android",
+        target_os = "ios"
+    ))]
+    {
+        SyncReturn(false)
+    }
+}
+
+pub fn plugin_enable(v: bool) {
+    #[cfg(feature = "plugin_framework")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        allow_err!(crate::plugin::ManagerConfig::set_enabled(v));
+        if v {
+            allow_err!(crate::plugin::load_plugins());
+        } else {
+            crate::plugin::unload_plugins();
+        }
+    }
+}
+
+pub fn plugin_is_enabled() -> SyncReturn<bool> {
+    #[cfg(feature = "plugin_framework")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        SyncReturn(crate::plugin::ManagerConfig::is_enabled())
+    }
+    #[cfg(any(
+        not(feature = "plugin_framework"),
+        target_os = "android",
+        target_os = "ios"
+    ))]
+    {
+        SyncReturn(false)
+    }
+}
+
+pub fn plugin_feature_is_enabled() -> SyncReturn<bool> {
+    #[cfg(feature = "plugin_framework")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        SyncReturn(true)
+    }
+    #[cfg(any(
+        not(feature = "plugin_framework"),
+        target_os = "android",
+        target_os = "ios"
+    ))]
+    {
+        SyncReturn(false)
     }
 }
 
