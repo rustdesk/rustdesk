@@ -3,17 +3,19 @@ import './common.dart';
 import './desc.dart';
 
 final Map<String, LocationModel> locationModels = {};
-final Map<String, KvModel> kvModels = {};
+final Map<String, OptionModel> optionModels = {};
 
-class KvModel with ChangeNotifier {
-  final Map<String, String> kv = {};
+class OptionModel with ChangeNotifier {
+  String? v;
 
-  String? get(String key) => kv.remove(key);
-
-  void set(String key, String value) {
-    kv[key] = value;
+  String? get value => v;
+  set value(String? v) {
+    this.v = v;
     notifyListeners();
   }
+
+  static String key(String location, PluginId id, String peer, String k) =>
+      '$location|$id|$peer|$k';
 }
 
 class PluginModel with ChangeNotifier {
@@ -58,19 +60,17 @@ LocationModel addLocation(String location) {
   return locationModels[location]!;
 }
 
-String makeKvModelInstance(String location, PluginId id, String peer) =>
-    '$location|$id|$peer';
-
-KvModel addKvModel(String location, PluginId pluginId, String peer) {
-  final instance = makeKvModelInstance(location, pluginId, peer);
-  if (kvModels[instance] == null) {
-    kvModels[instance] = KvModel();
+OptionModel addOptionModel(
+    String location, PluginId pluginId, String peer, String key) {
+  final k = OptionModel.key(location, pluginId, peer, key);
+  if (optionModels[k] == null) {
+    optionModels[k] = OptionModel();
   }
-  return kvModels[instance]!;
+  return optionModels[k]!;
 }
 
 void updateOption(
     String location, PluginId id, String peer, String key, String value) {
-  final instance = makeKvModelInstance(location, id, peer);
-  kvModels[instance]?.set(key, value);
+  final k = OptionModel.key(location, id, peer, key);
+  optionModels[k]?.value = value;
 }
