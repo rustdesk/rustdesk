@@ -322,7 +322,19 @@ fn patch(path: PathBuf) -> PathBuf {
                         .trim()
                         .to_owned();
                     if user != "root" {
-                        return format!("/home/{user}").into();
+                        let cmd = format!("getent passwd '{}' | awk -F':' '{{print $6}}'", user);
+                        if let Ok(output) = std::process::Command::new(cmd).output() {
+                            let home_dir = String::from_utf8_lossy(&output.stdout)
+                                .to_string()
+                                .trim()
+                                .to_owned();
+                            if home_dir.is_empty() {
+                                return format!("/home/{user}").into();
+                            } else {
+                                log::info!("config::patch: got home dir from: {}", home_dir);
+                                return home_dir.into();
+                            }
+                        }
                     }
                 }
             }
