@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:collection';
 import 'package:flutter/foundation.dart';
 
@@ -64,7 +65,7 @@ class Location {
 
   Location(this.ui);
   Location.fromJson(Map<String, dynamic> json) : ui = HashMap() {
-    json.forEach((key, value) {
+    (json['ui'] as Map<String, dynamic>).forEach((key, value) {
       var ui = UiType.create(value);
       if (ui != null) {
         this.ui[ui.key] = ui;
@@ -93,12 +94,12 @@ class ConfigItem {
 }
 
 class Config {
-  List<ConfigItem> local;
+  List<ConfigItem> shared;
   List<ConfigItem> peer;
 
-  Config(this.local, this.peer);
+  Config(this.shared, this.peer);
   Config.fromJson(Map<String, dynamic> json)
-      : local = (json['local'] as List<dynamic>)
+      : shared = (json['shared'] as List<dynamic>)
             .map((e) => ConfigItem.fromJson(e))
             .toList(),
         peer = (json['peer'] as List<dynamic>)
@@ -145,14 +146,8 @@ class Desc {
         published = json['published'] ?? '',
         released = json['released'] ?? '',
         github = json['github'] ?? '',
-        location = Location(HashMap<String, UiType>.from(json['location'])),
-        config = Config(
-            (json['config'] as List<dynamic>)
-                .map((e) => ConfigItem.fromJson(e))
-                .toList(),
-            (json['config'] as List<dynamic>)
-                .map((e) => ConfigItem.fromJson(e))
-                .toList());
+        location = Location.fromJson(json['location']),
+        config = Config.fromJson(json['config']);
 }
 
 class DescModel with ChangeNotifier {
@@ -161,9 +156,13 @@ class DescModel with ChangeNotifier {
   DescModel._();
 
   void _updateDesc(Map<String, dynamic> desc) {
-    Desc d = Desc.fromJson(desc);
-    data[d.id] = d;
-    notifyListeners();
+    try {
+      Desc d = Desc.fromJson(json.decode(desc['desc']));
+      data[d.id] = d;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('DescModel json.decode fail(): $e');
+    }
   }
 
   Desc? _getDesc(String id) {

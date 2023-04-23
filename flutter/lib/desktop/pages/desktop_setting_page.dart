@@ -1434,27 +1434,38 @@ class _PluginState extends State<_Plugin> {
     final scrollController = ScrollController();
     buildCards(DescModel model) {
       final cards = <Widget>[
-        _Card(title: 'Plugin', children: [
-          _checkbox('Enable', bind.pluginIsEnabled, (bool v) async {
-            if (!v) {
-              clearLocations();
-            }
-            await bind.pluginEnable(v: v);
-          }),
-        ]),
+        _Card(
+          title: 'Plugin',
+          children: [
+            _checkbox(
+              'Enable',
+              () => bind.pluginIsEnabled() ?? false,
+              (bool v) async {
+                if (!v) {
+                  clearLocations();
+                }
+                await bind.pluginEnable(v: v);
+              },
+            ),
+          ],
+        ),
       ];
       model.all.forEach((key, value) {
         cards.add(_Card(title: key, children: [
-          _Button('Reload', () {
-            bind.pluginReload(id: key);
-          }),
-          _checkbox('Enable', () => bind.pluginIdIsEnabled(id: key),
-              (bool v) async {
-            if (!v) {
-              clearPlugin(key);
-            }
-            await bind.pluginIdEnable(id: key, v: v);
-          }),
+          _Button(
+            'Reload',
+            () => bind.pluginReload(id: key),
+          ),
+          _checkbox(
+            'Enable',
+            () => bind.pluginIdIsEnabled(id: key),
+            (bool v) async {
+              if (!v) {
+                clearPlugin(key);
+              }
+              await bind.pluginIdEnable(id: key, v: v);
+            },
+          ),
         ]));
       });
       return cards;

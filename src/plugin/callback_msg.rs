@@ -110,8 +110,8 @@ pub fn callback_msg(
                 // No need to merge the msgs. Handling the msg one by one is ok.
                 if let Ok(msg) = serde_json::from_str::<MsgToConfig>(s) {
                     match &msg.r#type as _ {
-                        config::CONFIG_TYPE_LOCAL => {
-                            match config::LocalConfig::set(&msg.id, &msg.key, &msg.value) {
+                        config::CONFIG_TYPE_SHARED => {
+                            match config::SharedConfig::set(&msg.id, &msg.key, &msg.value) {
                                 Ok(_) => {
                                     if let Some(ui) = &msg.ui {
                                         // No need to set the peer id for location config.
