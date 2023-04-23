@@ -104,7 +104,7 @@ macro_rules! make_plugin {
 
                 $(let $field = match unsafe { lib.symbol::<$tp>(stringify!($field)) } {
                         Ok(m) => {
-                            log::info!("method found {}", stringify!($field));
+                            log::debug!("{} method found {}", path, stringify!($field));
                             *m
                         },
                         Err(e) => {
@@ -132,6 +132,13 @@ make_plugin!(
     set_cb_get_id: PluginFuncGetIdCallback
 );
 
+#[cfg(target_os = "windows")]
+const DYLIB_SUFFIX: &str = ".dll";
+#[cfg(target_os = "linux")]
+const DYLIB_SUFFIX: &str = ".so";
+#[cfg(target_os = "macos")]
+const DYLIB_SUFFIX: &str = ".dylib";
+
 pub fn load_plugins() -> ResultType<()> {
     let exe = std::env::current_exe()?.to_string_lossy().to_string();
     match PathBuf::from(&exe).parent() {
@@ -141,10 +148,12 @@ pub fn load_plugins() -> ResultType<()> {
                     Ok(entry) => {
                         let path = entry.path();
                         if path.is_file() {
-                            let path = path.to_str().unwrap_or("");
-                            if path.ends_with(".so") {
-                                if let Err(e) = load_plugin(Some(path), None) {
-                                    log::error!("{e}");
+                            let filename = entry.file_name();
+                            let filename = filename.to_str().unwrap_or("");
+                            if filename.starts_with("plugin_") && filename.ends_with(DYLIB_SUFFIX) {
+                                if let Err(e) = load_plugin(Some(path.to_str().unwrap_or("")), None)
+                                {
+                                    log::error!("Failed to load plugin {}, {}", filename, e);
                                 }
                             }
                         }
@@ -214,16 +223,26 @@ fn load_plugin_path(path: &str) -> ResultType<()> {
     // to-do check the plugin id (make sure it does not use another plugin's id)
     (plugin.set_cb_msg)(callback_msg::callback_msg);
     (plugin.set_cb_get_id)(get_local_peer_id as _);
+    // Ui may be not ready now, so we need to update again once ui is ready.
     update_ui_plugin_desc(&desc);
     update_config(&desc);
+    // Ui may be not ready now, so we need to reload again once ui is ready.
     reload_ui(&desc);
     let plugin_info = PluginInfo {
         path: path.to_string(),
         desc,
     };
     PLUGIN_INFO.write().unwrap().insert(id.clone(), plugin_info);
-    PLUGINS.write().unwrap().insert(id, plugin);
+    PLUGINS.write().unwrap().insert(id.clone(), plugin);
+    log::info!("Plugin {} loaded", id);
     Ok(())
+}
+
+pub fn sync_ui() {
+    for plugin in PLUGIN_INFO.read().unwrap().values() {
+        update_ui_plugin_desc(&plugin.desc);
+        reload_ui(&plugin.desc);
+    }
 }
 
 pub fn load_plugin(path: Option<&str>, id: Option<&str>) -> ResultType<()> {
@@ -346,7 +365,7 @@ fn make_plugin_response(id: &str, name: &str, msg: &str) -> Message {
 }
 
 fn update_config(desc: &Desc) {
-    super::config::set_local_items(desc.id(), &desc.config().local);
+    super::config::set_shared_items(desc.id(), &desc.config().shared);
     super::config::set_peer_items(desc.id(), &desc.config().peer);
 }
 
