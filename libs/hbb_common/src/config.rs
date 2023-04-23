@@ -328,13 +328,12 @@ fn patch(path: PathBuf) -> PathBuf {
                                 .to_string()
                                 .trim()
                                 .to_owned();
-                            if home_dir.is_empty() {
-                                return format!("/home/{user}").into();
-                            } else {
+                            if !home_dir.is_empty() {
                                 log::info!("config::patch: got home dir from: {}", home_dir);
                                 return home_dir.into();
                             }
                         }
+                        return format!("/home/{user}").into();
                     }
                 }
             }

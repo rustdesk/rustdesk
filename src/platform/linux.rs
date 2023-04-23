@@ -455,7 +455,8 @@ pub fn get_user_home_by_name(username: &str) -> Option<PathBuf> {
     return match get_user_by_name(username) {
         None => {
             log::debug!("no uid found for user: {}", username);
-            None }
+            None
+        }
         Some(user) => {
             log::debug!("user '{:?}' (uid {:?}) with home dir: {:?}", user.uid(), user.name(), user.home_dir());
             let home = user.home_dir();
@@ -866,48 +867,37 @@ mod desktop {
                 for line in output.lines() {
                     let mut auth_found = false;
 
-                    if let Some(pid) = line.split_whitespace().nth(1) {
-                        for v in line.split_whitespace() {
-                            if v == "-auth" {
-                                log::debug!("- auth parameter detected");
-                                auth_found = true;
-                            } else if auth_found {
-                                if std::path::Path::new(v).is_absolute()
-                                    && std::path::Path::new(v).exists() {
+                    for v in line.split_whitespace() {
+                        if v == "-auth" {
+                            log::debug!("- auth parameter detected");
+                            auth_found = true;
+                        } else if auth_found {
+                            if std::path::Path::new(v).is_absolute()
+                                && std::path::Path::new(v).exists() {
 
-                                    self.xauth = v.to_string();
-                                    log::debug!("+ auth file with absolute path detected: {}", self.xauth);
-                                } else {
-                                    log::debug!("- auth file with relative path detected: {}", v);
-                                    if let Some(pid) = line.split_whitespace().nth(1) {
-                                        let mut base_dir: String = String::from("/home"); // default pattern
-                                        let home_dir = get_env_from_pid("HOME", pid);
-                                        if home_dir.is_empty() {
-                                            if let Some(home) = get_user_home_by_name(&self.username) {
-                                                base_dir = home.as_path().to_string_lossy().to_string();
-                                            };
-                                        } else {
-                                            base_dir = home_dir;
-                                        }
-                                        if Path::new(&base_dir).exists() {
-                                            self.xauth = format!("{}/{}", base_dir, v);
-                                            log::debug!("+ auth file with home path added: {}", self.xauth);
+                                self.xauth = v.to_string();
+                                log::debug!("+ auth file with absolute path detected: {}", self.xauth);
+                            } else {
+                                log::debug!("- auth file with relative path detected: {}", v);
+                                if let Some(pid) = line.split_whitespace().nth(1) {
+                                    let mut base_dir: String = String::from("/home"); // default pattern
+                                    let home_dir = get_env_from_pid("HOME", pid);
+                                    if home_dir.is_empty() {
+                                        if let Some(home) = get_user_home_by_name(&self.username) {
+                                            base_dir = home.as_path().to_string_lossy().to_string();
                                         };
                                     } else {
-                                        // unreachable!
+                                        base_dir = home_dir;
                                     }
+                                    if Path::new(&base_dir).exists() {
+                                        self.xauth = format!("{}/{}", base_dir, v);
+                                        log::debug!("+ auth file with home path added: {}", self.xauth);
+                                    };
+                                } else {
+                                    // unreachable!
                                 }
-                                return;
                             }
-                        }
-
-                        // get from environment variable if parameter wasn't found
-                        let xauth = get_env_from_pid("XAUTHORITY", pid);
-                        if !xauth.is_empty() {
-                            if Path::new(&xauth).exists() {
-                                log::debug!("+ auth file from environment detected: {}", xauth);
-                                self.xauth = xauth;
-                            };
+                            return;
                         }
                     }
                 }
