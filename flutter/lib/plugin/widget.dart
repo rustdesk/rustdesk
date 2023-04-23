@@ -131,8 +131,15 @@ class PluginItem extends StatelessWidget {
         peer: peerId,
         event: _makeEvent(ui.key),
       ),
-      trailingIcon: Icon(
-          IconData(int.parse(ui.icon, radix: 16), fontFamily: 'MaterialIcons')),
+      // to-do: support trailing icon, but it will cause tree shake error.
+      // ```
+      // This application cannot tree shake icons fonts. It has non-constant instances of IconData at the following locations:
+      // Target release_macos_bundle_flutter_assets failed: Exception: Avoid non-constant invocations of IconData or try to build again with --no-tree-shake-icons.
+      // ```
+      //
+      // trailingIcon: Icon(
+      //     IconData(int.parse(ui.icon, radix: 16), fontFamily: 'MaterialIcons')),
+      //
       // to-do: RustDesk translate or plugin translate ?
       child: Text(ui.text),
       ffi: ffi,
