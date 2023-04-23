@@ -123,6 +123,7 @@ class _RemotePageState extends State<RemotePage>
       });
     }
     _ffi.ffiModel.updateEventListener(widget.id);
+    bind.pluginSyncUi(syncTo: kAppTypeDesktopRemote);
     _ffi.qualityMonitorModel.checkShowQualityMonitor(widget.id);
     // Session option should be set after models.dart/FFI.start
     _showRemoteCursor.value = bind.sessionGetToggleOptionSync(

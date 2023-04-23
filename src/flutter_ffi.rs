@@ -1573,12 +1573,12 @@ pub fn plugin_feature_is_enabled() -> SyncReturn<bool> {
     }
 }
 
-pub fn plugin_sync_ui() {
+pub fn plugin_sync_ui(_sync_to: String) {
     #[cfg(feature = "plugin_framework")]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         if plugin_feature_is_enabled().0 {
-            crate::plugin::sync_ui();
+            crate::plugin::sync_ui(_sync_to);
         }
     }
 }

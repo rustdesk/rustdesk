@@ -36,7 +36,6 @@ pub struct Location {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConfigItem {
     pub key: String,
-    pub value: String,
     pub default: String,
     pub description: String,
 }

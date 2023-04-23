@@ -224,10 +224,10 @@ fn load_plugin_path(path: &str) -> ResultType<()> {
     (plugin.set_cb_msg)(callback_msg::callback_msg);
     (plugin.set_cb_get_id)(get_local_peer_id as _);
     // Ui may be not ready now, so we need to update again once ui is ready.
-    update_ui_plugin_desc(&desc);
+    update_ui_plugin_desc(&desc, None);
     update_config(&desc);
     // Ui may be not ready now, so we need to reload again once ui is ready.
-    reload_ui(&desc);
+    reload_ui(&desc, None);
     let plugin_info = PluginInfo {
         path: path.to_string(),
         desc,
@@ -238,10 +238,10 @@ fn load_plugin_path(path: &str) -> ResultType<()> {
     Ok(())
 }
 
-pub fn sync_ui() {
+pub fn sync_ui(sync_to: String) {
     for plugin in PLUGIN_INFO.read().unwrap().values() {
-        update_ui_plugin_desc(&plugin.desc);
-        reload_ui(&plugin.desc);
+        update_ui_plugin_desc(&plugin.desc, Some(&sync_to));
+        reload_ui(&plugin.desc, Some(&sync_to));
     }
 }
 
@@ -369,44 +369,70 @@ fn update_config(desc: &Desc) {
     super::config::set_peer_items(desc.id(), &desc.config().peer);
 }
 
-fn reload_ui(desc: &Desc) {
+fn reload_ui(desc: &Desc, sync_to: Option<&str>) {
     for (location, ui) in desc.location().ui.iter() {
-        let v: Vec<&str> = location.split('|').collect();
-        // The first element is the "client" or "host".
-        // The second element is the "main", "remote", "cm", "file transfer", "port forward".
-        if v.len() >= 2 {
-            let available_channels = vec![
-                flutter::APP_TYPE_MAIN,
-                flutter::APP_TYPE_DESKTOP_REMOTE,
-                flutter::APP_TYPE_CM,
-                flutter::APP_TYPE_DESKTOP_FILE_TRANSFER,
-                flutter::APP_TYPE_DESKTOP_PORT_FORWARD,
-            ];
-            if available_channels.contains(&v[1]) {
-                if let Ok(ui) = serde_json::to_string(&ui) {
-                    let mut m = HashMap::new();
-                    m.insert("name", MSG_TO_UI_TYPE_PLUGIN_RELOAD);
-                    m.insert("id", desc.id());
-                    m.insert("location", &location);
-                    m.insert("ui", &ui);
-                    flutter::push_global_event(v[1], serde_json::to_string(&m).unwrap());
+        if let Ok(ui) = serde_json::to_string(&ui) {
+            let make_event = |ui: &str| {
+                let mut m = HashMap::new();
+                m.insert("name", MSG_TO_UI_TYPE_PLUGIN_RELOAD);
+                m.insert("id", desc.id());
+                m.insert("location", &location);
+                // Do not depend on the "location" and plugin desc on the ui side.
+                // Send the ui field to ensure the ui is valid.
+                m.insert("ui", ui);
+                serde_json::to_string(&m).unwrap_or("".to_owned())
+            };
+            match sync_to {
+                Some(channel) => {
+                    let _res = flutter::push_global_event(channel, make_event(&ui));
+                }
+                None => {
+                    let v: Vec<&str> = location.split('|').collect();
+                    // The first element is the "client" or "host".
+                    // The second element is the "main", "remote", "cm", "file transfer", "port forward".
+                    if v.len() >= 2 {
+                        let available_channels = vec![
+                            flutter::APP_TYPE_MAIN,
+                            flutter::APP_TYPE_DESKTOP_REMOTE,
+                            flutter::APP_TYPE_CM,
+                            flutter::APP_TYPE_DESKTOP_FILE_TRANSFER,
+                            flutter::APP_TYPE_DESKTOP_PORT_FORWARD,
+                        ];
+                        if available_channels.contains(&v[1]) {
+                            let _res = flutter::push_global_event(v[1], make_event(&ui));
+                        }
+                    }
                 }
             }
         }
     }
 }
 
-fn update_ui_plugin_desc(desc: &Desc) {
+fn update_ui_plugin_desc(desc: &Desc, sync_to: Option<&str>) {
     // This function is rarely used. There's no need to care about serialization efficiency here.
     if let Ok(desc_str) = serde_json::to_string(desc) {
         let mut m = HashMap::new();
         m.insert("name", MSG_TO_UI_TYPE_PLUGIN_DESC);
         m.insert("desc", &desc_str);
-        flutter::push_global_event(flutter::APP_TYPE_MAIN, serde_json::to_string(&m).unwrap());
-        flutter::push_global_event(
-            flutter::APP_TYPE_DESKTOP_REMOTE,
-            serde_json::to_string(&m).unwrap(),
-        );
-        flutter::push_global_event(flutter::APP_TYPE_CM, serde_json::to_string(&m).unwrap());
+        let event = serde_json::to_string(&m).unwrap_or("".to_owned());
+        match sync_to {
+            Some(channel) => {
+                let _res = flutter::push_global_event(channel, serde_json::to_string(&m).unwrap());
+            }
+            None => {
+                let _res = flutter::push_global_event(
+                    flutter::APP_TYPE_MAIN,
+                    serde_json::to_string(&m).unwrap(),
+                );
+                let _res = flutter::push_global_event(
+                    flutter::APP_TYPE_DESKTOP_REMOTE,
+                    serde_json::to_string(&m).unwrap(),
+                );
+                let _res = flutter::push_global_event(
+                    flutter::APP_TYPE_CM,
+                    serde_json::to_string(&m).unwrap(),
+                );
+            }
+        }
     }
 }
