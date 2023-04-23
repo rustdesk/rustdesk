@@ -143,7 +143,7 @@ class PluginItem extends StatelessWidget {
     var v = model.value;
     if (v == null) {
       if (peerId.isEmpty) {
-        v = bind.pluginGetLocalOption(id: pluginId, key: key);
+        v = bind.pluginGetSharedOption(id: pluginId, key: key);
       } else {
         v = bind.pluginGetSessionOption(id: pluginId, peer: peerId, key: key);
       }
