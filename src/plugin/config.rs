@@ -1,17 +1,16 @@
-use crate::plugins::Plugin;
-
 use super::desc::ConfigItem;
-use hbb_common::{bail, config::Config as HbbConfig, lazy_static, ResultType};
+use hbb_common::{allow_err, bail, config::Config as HbbConfig, lazy_static, log, ResultType};
 use serde_derive::{Deserialize, Serialize};
 use std::{
     ops::{Deref, DerefMut},
+    str::FromStr,
     sync::{Arc, Mutex},
     {collections::HashMap, path::PathBuf},
 };
 
 lazy_static::lazy_static! {
-    static ref CONFIG_LOCAL: Arc<Mutex<HashMap<String, LocalConfig>>> = Default::default();
-    static ref CONFIG_LOCAL_ITEMS: Arc<Mutex<HashMap<String, Vec<ConfigItem>>>> = Default::default();
+    static ref CONFIG_SHARED: Arc<Mutex<HashMap<String, SharedConfig>>> = Default::default();
+    static ref CONFIG_SHARED_ITEMS: Arc<Mutex<HashMap<String, Vec<ConfigItem>>>> = Default::default();
     static ref CONFIG_PEERS: Arc<Mutex<HashMap<String, PeersConfig>>> = Default::default();
     static ref CONFIG_PEER_ITEMS: Arc<Mutex<HashMap<String, Vec<ConfigItem>>>> = Default::default();
     static ref CONFIG_MANAGER: Arc<Mutex<ManagerConfig>> = {
@@ -20,11 +19,11 @@ lazy_static::lazy_static! {
     };
 }
 
-pub(super) const CONFIG_TYPE_LOCAL: &str = "local";
+pub(super) const CONFIG_TYPE_SHARED: &str = "shared";
 pub(super) const CONFIG_TYPE_PEER: &str = "peer";
 
 #[derive(Debug, Default, Serialize, Deserialize)]
-pub struct LocalConfig(HashMap<String, String>);
+pub struct SharedConfig(HashMap<String, String>);
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct PeerConfig(HashMap<String, String>);
 type PeersConfig = HashMap<String, PeerConfig>;
@@ -34,7 +33,7 @@ fn path_plugins(id: &str) -> PathBuf {
     HbbConfig::path("plugins").join(id)
 }
 
-impl Deref for LocalConfig {
+impl Deref for SharedConfig {
     type Target = HashMap<String, String>;
 
     fn deref(&self) -> &Self::Target {
@@ -42,7 +41,7 @@ impl Deref for LocalConfig {
     }
 }
 
-impl DerefMut for LocalConfig {
+impl DerefMut for SharedConfig {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
@@ -62,32 +61,32 @@ impl DerefMut for PeerConfig {
     }
 }
 
-impl LocalConfig {
+impl SharedConfig {
     #[inline]
     fn path(id: &str) -> PathBuf {
-        path_plugins(id).join("local.toml")
+        path_plugins(id).join("shared.toml")
     }
 
     #[inline]
     pub fn load(id: &str) {
-        let mut conf = hbb_common::config::load_path::<LocalConfig>(Self::path(id));
-        if let Some(items) = CONFIG_LOCAL_ITEMS.lock().unwrap().get(id) {
+        let mut conf = hbb_common::config::load_path::<SharedConfig>(Self::path(id));
+        if let Some(items) = CONFIG_SHARED_ITEMS.lock().unwrap().get(id) {
             for item in items {
                 if !conf.contains_key(&item.key) {
                     conf.insert(item.key.to_owned(), item.default.to_owned());
                 }
             }
         }
-        CONFIG_LOCAL.lock().unwrap().insert(id.to_owned(), conf);
+        CONFIG_SHARED.lock().unwrap().insert(id.to_owned(), conf);
     }
 
     #[inline]
     pub fn get(id: &str, key: &str) -> Option<String> {
-        if let Some(conf) = CONFIG_LOCAL.lock().unwrap().get(id) {
+        if let Some(conf) = CONFIG_SHARED.lock().unwrap().get(id) {
             return conf.get(key).map(|s| s.to_owned());
         }
         Self::load(id);
-        CONFIG_LOCAL
+        CONFIG_SHARED
             .lock()
             .unwrap()
             .get(id)?
@@ -97,7 +96,7 @@ impl LocalConfig {
 
     #[inline]
     pub fn set(id: &str, key: &str, value: &str) -> ResultType<()> {
-        match CONFIG_LOCAL.lock().unwrap().get_mut(id) {
+        match CONFIG_SHARED.lock().unwrap().get_mut(id) {
             Some(config) => {
                 config.insert(key.to_owned(), value.to_owned());
                 hbb_common::config::store_path(Self::path(id), config)
@@ -170,8 +169,8 @@ impl PeerConfig {
 }
 
 #[inline]
-pub(super) fn set_local_items(id: &str, items: &Vec<ConfigItem>) {
-    CONFIG_LOCAL_ITEMS
+pub(super) fn set_shared_items(id: &str, items: &Vec<ConfigItem>) {
+    CONFIG_SHARED_ITEMS
         .lock()
         .unwrap()
         .insert(id.to_owned(), items.clone());
@@ -196,14 +195,18 @@ const MANAGER_VERSION: &str = "0.1.0";
 pub struct ManagerConfig {
     pub version: String,
     pub enabled: bool,
+    #[serde(default)]
+    pub options: HashMap<String, String>,
+    #[serde(default)]
     pub plugins: HashMap<String, PluginStatus>,
 }
 
 impl Default for ManagerConfig {
     fn default() -> Self {
         Self {
-            version: "0.1.0".to_owned(),
+            version: MANAGER_VERSION.to_owned(),
             enabled: true,
+            options: HashMap::new(),
             plugins: HashMap::new(),
         }
     }
@@ -217,31 +220,65 @@ impl ManagerConfig {
     }
 
     #[inline]
-    pub fn is_enabled() -> bool {
-        CONFIG_MANAGER.lock().unwrap().enabled
+    pub fn get_option(key: &str) -> Option<String> {
+        if key == "enabled" {
+            Some(CONFIG_MANAGER.lock().unwrap().enabled.to_string())
+        } else {
+            CONFIG_MANAGER
+                .lock()
+                .unwrap()
+                .options
+                .get(key)
+                .map(|s| s.to_owned())
+        }
     }
 
     #[inline]
-    pub fn set_enabled(enabled: bool) -> ResultType<()> {
+    pub fn set_option(key: &str, value: &str) -> ResultType<()> {
         let mut lock = CONFIG_MANAGER.lock().unwrap();
-        lock.enabled = enabled;
+        if key == "enabled" {
+            let enabled = bool::from_str(value).unwrap_or(false);
+            lock.enabled = enabled;
+            if enabled {
+                allow_err!(super::load_plugins());
+            } else {
+                super::unload_plugins();
+            }
+        } else {
+            lock.options.insert(key.to_owned(), value.to_owned());
+        }
         hbb_common::config::store_path(Self::path(), &*lock)
     }
 
     #[inline]
-    pub fn get_plugin_status<T>(id: &str, f: fn(&PluginStatus) -> T) -> Option<T> {
+    pub fn get_plugin_option(id: &str, key: &str) -> Option<String> {
         let lock = CONFIG_MANAGER.lock().unwrap();
-        lock.plugins.get(id).map(f)
+        let status = lock.plugins.get(id)?;
+        match key {
+            "enabled" => Some(status.enabled.to_string()),
+            _ => None,
+        }
     }
 
-    pub fn set_plugin_enabled(id: &str, enabled: bool) -> ResultType<()> {
+    pub fn set_plugin_option(id: &str, key: &str, value: &str) -> ResultType<()> {
         let mut lock = CONFIG_MANAGER.lock().unwrap();
         if let Some(status) = lock.plugins.get_mut(id) {
-            status.enabled = enabled;
-            hbb_common::config::store_path(Self::path(), &*lock)
+            match key {
+                "enabled" => {
+                    let enabled = bool::from_str(value).unwrap_or(false);
+                    status.enabled = enabled;
+                    if enabled {
+                        allow_err!(super::load_plugin(None, Some(id)));
+                    } else {
+                        super::unload_plugin(id);
+                    }
+                }
+                _ => bail!("No such option {}", key),
+            }
         } else {
             bail!("No such plugin {}", id)
         }
+        hbb_common::config::store_path(Self::path(), &*lock)
     }
 
     #[inline]
@@ -256,6 +293,8 @@ impl ManagerConfig {
     pub fn remove_plugin(id: &str) -> ResultType<()> {
         let mut lock = CONFIG_MANAGER.lock().unwrap();
         lock.plugins.remove(id);
-        hbb_common::config::store_path(Self::path(), &*lock)
+        hbb_common::config::store_path(Self::path(), &*lock)?;
+        // to-do: remove plugin config dir
+        Ok(())
     }
 }

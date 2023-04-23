@@ -341,6 +341,7 @@ class ServerModel with ChangeNotifier {
     _isStart = true;
     notifyListeners();
     parent.target?.ffiModel.updateEventListener("");
+    bind.pluginSyncUi();
     await parent.target?.invokeMethod("init_service");
     // ugly is here, because for desktop, below is useless
     await bind.mainStartService();

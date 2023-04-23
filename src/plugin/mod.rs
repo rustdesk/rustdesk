@@ -5,11 +5,12 @@ mod callback_msg;
 mod config;
 pub mod desc;
 mod errno;
+pub mod ipc;
 mod plugins;
 
 pub use plugins::{
     handle_client_event, handle_server_event, handle_ui_event, load_plugin, load_plugins,
-    reload_plugin, unload_plugin, unload_plugins,
+    reload_plugin, sync_ui, unload_plugin, unload_plugins,
 };
 
 const MSG_TO_UI_TYPE_PLUGIN_DESC: &str = "plugin_desc";
@@ -17,7 +18,7 @@ const MSG_TO_UI_TYPE_PLUGIN_EVENT: &str = "plugin_event";
 const MSG_TO_UI_TYPE_PLUGIN_RELOAD: &str = "plugin_reload";
 const MSG_TO_UI_TYPE_PLUGIN_OPTION: &str = "plugin_option";
 
-pub use config::{LocalConfig, ManagerConfig, PeerConfig};
+pub use config::{ManagerConfig, PeerConfig, SharedConfig};
 
 #[inline]
 fn cstr_to_string(cstr: *const c_char) -> ResultType<String> {

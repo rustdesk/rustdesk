@@ -8,6 +8,9 @@ use parity_tokio_ipc::{
 };
 use serde_derive::{Deserialize, Serialize};
 
+#[cfg(all(feature = "flutter", feature = "plugin_framework"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::plugin::ipc::Plugin;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use clipboard::ClipboardFile;
 use hbb_common::{
@@ -215,6 +218,9 @@ pub enum Data {
     StartVoiceCall,
     VoiceCallResponse(bool),
     CloseVoiceCall(String),
+    #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    Plugin(Plugin),
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -453,6 +459,9 @@ async fn handle(data: Data, stream: &mut Connection) {
                     .await
             );
         }
+        #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        Data::Plugin(plugin) => crate::plugin::ipc::handle_plugin(plugin, stream).await,
         _ => {}
     }
 }
