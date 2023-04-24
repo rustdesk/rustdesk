@@ -863,22 +863,18 @@ mod desktop {
                 "ps -u {} -f | grep 'Xorg' | grep -v 'grep'",
                 &self.uid
             )) {
-                log::debug!("extracting xauth file for Xorg running with uid: {}", self.uid);
                 for line in output.lines() {
                     let mut auth_found = false;
 
                     for v in line.split_whitespace() {
                         if v == "-auth" {
-                            log::debug!("- auth parameter detected");
                             auth_found = true;
                         } else if auth_found {
                             if std::path::Path::new(v).is_absolute()
                                 && std::path::Path::new(v).exists() {
 
                                 self.xauth = v.to_string();
-                                log::debug!("+ auth file with absolute path detected: {}", self.xauth);
                             } else {
-                                log::debug!("- auth file with relative path detected: {}", v);
                                 if let Some(pid) = line.split_whitespace().nth(1) {
                                     let mut base_dir: String = String::from("/home"); // default pattern
                                     let home_dir = get_env_from_pid("HOME", pid);
@@ -891,7 +887,6 @@ mod desktop {
                                     }
                                     if Path::new(&base_dir).exists() {
                                         self.xauth = format!("{}/{}", base_dir, v);
-                                        log::debug!("+ auth file with home path added: {}", self.xauth);
                                     };
                                 } else {
                                     // unreachable!
@@ -902,11 +897,9 @@ mod desktop {
                     }
                 }
             }
-            log::debug!("- auth file detected by Xorg: {}", self.xauth);
         }
 
         fn get_xauth(&mut self) {
-            log::debug!("guessing xauth file...");
             // try by direct access to window manager process by name
             let display_envs = vec![
                 GNOME_SESSION_BINARY,
@@ -916,10 +909,7 @@ mod desktop {
             ];
             for diplay_env in display_envs {
                 self.xauth = get_env_tries("XAUTHORITY", &self.uid, diplay_env, 10);
-                if self.xauth.is_empty() {
-                    log::debug!("- nothing for {} {} (GNOME)", self.uid, diplay_env);
-                } else {
-                    log::debug!("+ found {} for {} {} (GNOME)", self.xauth, self.uid, diplay_env);
+                if !self.xauth.is_empty() {
                     break;
                 }
             }
@@ -933,13 +923,11 @@ mod desktop {
             if self.xauth.is_empty() {
                 let gdm = format!("/run/user/{}/gdm/Xauthority", self.uid);
                 self.xauth = if std::path::Path::new(&gdm).exists() {
-                    log::debug!("+ found gdm for {}: {}", self.uid, gdm);
                     gdm
                 } else {
                     let username = &self.username;
                     match get_user_home_by_name(username)  {
                         None => {
-                            log::debug!("- user home dir not detected: {}", username);
                             if username == "root" {
                                 format!("/{}/.Xauthority", username)
                             } else {
