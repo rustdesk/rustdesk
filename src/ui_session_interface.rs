@@ -1116,7 +1116,8 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>) {
     let (sender, mut receiver) = mpsc::unbounded_channel::<Data>();
     *handler.sender.write().unwrap() = Some(sender.clone());
     let token = LocalConfig::get_option("access_token");
-    let key = crate::get_key(false).await;
+    //let key = crate::get_key(false).await;
+    let key = hbb_common::config::RS_PUB_KEY;
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if handler.is_port_forward() {
         if handler.is_rdp() {
