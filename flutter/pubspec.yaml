@@ -84,7 +84,11 @@ dependencies:
       url: https://github.com/Kingtous/flutter_improved_scrolling
       ref: 62f09545149f320616467c306c8c5f71714a18e6
   uni_links: ^0.5.1
-  uni_links_desktop: ^0.1.4
+  uni_links_desktop: 
+    git:
+      url: https://github.com/Kingtous/rustdesk_uni_links_desktop 
+      # v0.1.6 + multiwindow patch
+      ref: 276b2206d0a7bd7574bc6f061d804c9b7be1d031
   path: ^1.8.1
   auto_size_text: ^3.0.0
   bot_toast: ^4.0.3
