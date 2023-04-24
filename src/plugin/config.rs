@@ -1,18 +1,20 @@
-use super::desc::ConfigItem;
+use super::{cstr_to_string, str_to_cstr_ret};
 use hbb_common::{allow_err, bail, config::Config as HbbConfig, lazy_static, log, ResultType};
 use serde_derive::{Deserialize, Serialize};
 use std::{
+    collections::HashMap,
+    ffi::c_char,
+    fs,
     ops::{Deref, DerefMut},
+    path::PathBuf,
+    ptr,
     str::FromStr,
     sync::{Arc, Mutex},
-    {collections::HashMap, path::PathBuf},
 };
 
 lazy_static::lazy_static! {
     static ref CONFIG_SHARED: Arc<Mutex<HashMap<String, SharedConfig>>> = Default::default();
-    static ref CONFIG_SHARED_ITEMS: Arc<Mutex<HashMap<String, Vec<ConfigItem>>>> = Default::default();
     static ref CONFIG_PEERS: Arc<Mutex<HashMap<String, PeersConfig>>> = Default::default();
-    static ref CONFIG_PEER_ITEMS: Arc<Mutex<HashMap<String, Vec<ConfigItem>>>> = Default::default();
     static ref CONFIG_MANAGER: Arc<Mutex<ManagerConfig>> = {
         let conf = hbb_common::config::load_path::<ManagerConfig>(ManagerConfig::path());
         Arc::new(Mutex::new(conf))
@@ -68,25 +70,34 @@ impl SharedConfig {
     }
 
     #[inline]
-    pub fn load(id: &str) {
+    fn load(id: &str) {
+        let mut lock = CONFIG_SHARED.lock().unwrap();
+        if lock.contains_key(id) {
+            return;
+        }
         let conf = hbb_common::config::load_path::<HashMap<String, String>>(Self::path(id));
         let mut conf = SharedConfig(conf);
-        if let Some(items) = CONFIG_SHARED_ITEMS.lock().unwrap().get(id) {
-            for item in items {
+        if let Some(desc_conf) = super::plugins::get_desc_conf(id) {
+            for item in desc_conf.shared.iter() {
                 if !conf.contains_key(&item.key) {
                     conf.insert(item.key.to_owned(), item.default.to_owned());
                 }
             }
         }
-        CONFIG_SHARED.lock().unwrap().insert(id.to_owned(), conf);
+        lock.insert(id.to_owned(), conf);
+    }
+
+    #[inline]
+    fn load_if_not_exists(id: &str) {
+        if CONFIG_SHARED.lock().unwrap().contains_key(id) {
+            return;
+        }
+        Self::load(id);
     }
 
     #[inline]
     pub fn get(id: &str, key: &str) -> Option<String> {
-        if let Some(conf) = CONFIG_SHARED.lock().unwrap().get(id) {
-            return conf.get(key).map(|s| s.to_owned());
-        }
-        Self::load(id);
+        Self::load_if_not_exists(id);
         CONFIG_SHARED
             .lock()
             .unwrap()
@@ -97,12 +108,16 @@ impl SharedConfig {
 
     #[inline]
     pub fn set(id: &str, key: &str, value: &str) -> ResultType<()> {
+        Self::load_if_not_exists(id);
         match CONFIG_SHARED.lock().unwrap().get_mut(id) {
             Some(config) => {
                 config.insert(key.to_owned(), value.to_owned());
                 hbb_common::config::store_path(Self::path(id), config)
             }
-            None => bail!("No such plugin {}", id),
+            None => {
+                // unreachable
+                bail!("No such plugin {}", id)
+            }
         }
     }
 }
@@ -116,35 +131,47 @@ impl PeerConfig {
     }
 
     #[inline]
-    pub fn load(id: &str, peer: &str) {
+    fn load(id: &str, peer: &str) {
+        let mut lock = CONFIG_PEERS.lock().unwrap();
+        if let Some(peers) = lock.get(id) {
+            if peers.contains_key(peer) {
+                return;
+            }
+        }
+
         let conf = hbb_common::config::load_path::<HashMap<String, String>>(Self::path(id, peer));
         let mut conf = PeerConfig(conf);
-        if let Some(items) = CONFIG_PEER_ITEMS.lock().unwrap().get(id) {
-            for item in items {
+        if let Some(desc_conf) = super::plugins::get_desc_conf(id) {
+            for item in desc_conf.peer.iter() {
                 if !conf.contains_key(&item.key) {
                     conf.insert(item.key.to_owned(), item.default.to_owned());
                 }
             }
         }
-        
-        if let Some(peers) = CONFIG_PEERS.lock().unwrap().get_mut(id) {
+
+        if let Some(peers) = lock.get_mut(id) {
             peers.insert(peer.to_owned(), conf);
             return;
         }
 
         let mut peers = HashMap::new();
         peers.insert(peer.to_owned(), conf);
-        CONFIG_PEERS.lock().unwrap().insert(id.to_owned(), peers);
+        lock.insert(id.to_owned(), peers);
+    }
+
+    #[inline]
+    fn load_if_not_exists(id: &str, peer: &str) {
+        if let Some(peers) = CONFIG_PEERS.lock().unwrap().get(id) {
+            if peers.contains_key(peer) {
+                return;
+            }
+        }
+        Self::load(id, peer);
     }
 
     #[inline]
     pub fn get(id: &str, peer: &str, key: &str) -> Option<String> {
-        if let Some(peers) = CONFIG_PEERS.lock().unwrap().get(id) {
-            if let Some(conf) = peers.get(peer) {
-                return conf.get(key).map(|s| s.to_owned());
-            }
-        }
-        Self::load(id, peer);
+        Self::load_if_not_exists(id, peer);
         CONFIG_PEERS
             .lock()
             .unwrap()
@@ -156,33 +183,24 @@ impl PeerConfig {
 
     #[inline]
     pub fn set(id: &str, peer: &str, key: &str, value: &str) -> ResultType<()> {
+        Self::load_if_not_exists(id, peer);
         match CONFIG_PEERS.lock().unwrap().get_mut(id) {
             Some(peers) => match peers.get_mut(peer) {
                 Some(config) => {
                     config.insert(key.to_owned(), value.to_owned());
                     hbb_common::config::store_path(Self::path(id, peer), config)
                 }
-                None => bail!("No such peer {}", peer),
+                None => {
+                    // unreachable
+                    bail!("No such peer {}", peer)
+                }
             },
-            None => bail!("No such plugin {}", id),
+            None => {
+                // unreachable
+                bail!("No such plugin {}", id)
+            }
         }
     }
-}
-
-#[inline]
-pub(super) fn set_shared_items(id: &str, items: &Vec<ConfigItem>) {
-    CONFIG_SHARED_ITEMS
-        .lock()
-        .unwrap()
-        .insert(id.to_owned(), items.clone());
-}
-
-#[inline]
-pub(super) fn set_peer_items(id: &str, items: &Vec<ConfigItem>) {
-    CONFIG_PEER_ITEMS
-        .lock()
-        .unwrap()
-        .insert(id.to_owned(), items.clone());
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -234,21 +252,31 @@ impl ManagerConfig {
         }
     }
 
-    #[inline]
-    pub fn set_option(key: &str, value: &str) -> ResultType<()> {
+    fn set_option_enabled(enabled: bool) -> ResultType<()> {
         let mut lock = CONFIG_MANAGER.lock().unwrap();
+        lock.enabled = enabled;
+        hbb_common::config::store_path(Self::path(), &*lock)
+    }
+
+    fn set_option_not_enabled(key: &str, value: &str) -> ResultType<()> {
+        let mut lock = CONFIG_MANAGER.lock().unwrap();
+        lock.options.insert(key.to_owned(), value.to_owned());
+        hbb_common::config::store_path(Self::path(), &*lock)
+    }
+
+    #[inline]
+    pub fn set_option(key: &str, value: &str) {
         if key == "enabled" {
             let enabled = bool::from_str(value).unwrap_or(false);
-            lock.enabled = enabled;
+            allow_err!(Self::set_option_enabled(enabled));
             if enabled {
                 allow_err!(super::load_plugins());
             } else {
                 super::unload_plugins();
             }
         } else {
-            lock.options.insert(key.to_owned(), value.to_owned());
+            allow_err!(Self::set_option_not_enabled(key, value));
         }
-        hbb_common::config::store_path(Self::path(), &*lock)
     }
 
     #[inline]
@@ -261,25 +289,29 @@ impl ManagerConfig {
         }
     }
 
-    pub fn set_plugin_option(id: &str, key: &str, value: &str) -> ResultType<()> {
+    fn set_plugin_option_enabled(id: &str, enabled: bool) -> ResultType<()> {
         let mut lock = CONFIG_MANAGER.lock().unwrap();
         if let Some(status) = lock.plugins.get_mut(id) {
-            match key {
-                "enabled" => {
-                    let enabled = bool::from_str(value).unwrap_or(false);
-                    status.enabled = enabled;
-                    if enabled {
-                        allow_err!(super::load_plugin(None, Some(id)));
-                    } else {
-                        super::unload_plugin(id);
-                    }
-                }
-                _ => bail!("No such option {}", key),
-            }
+            status.enabled = enabled;
         } else {
-            bail!("No such plugin {}", id)
+            lock.plugins.insert(id.to_owned(), PluginStatus { enabled });
         }
         hbb_common::config::store_path(Self::path(), &*lock)
+    }
+
+    pub fn set_plugin_option(id: &str, key: &str, value: &str) {
+        match key {
+            "enabled" => {
+                let enabled = bool::from_str(value).unwrap_or(false);
+                allow_err!(Self::set_plugin_option_enabled(id, enabled));
+                if enabled {
+                    allow_err!(super::load_plugin(None, Some(id)));
+                } else {
+                    super::unload_plugin(id);
+                }
+            }
+            _ => log::error!("No such option {}", key),
+        }
     }
 
     #[inline]
@@ -291,11 +323,58 @@ impl ManagerConfig {
     }
 
     #[inline]
-    pub fn remove_plugin(id: &str) -> ResultType<()> {
+    pub fn remove_plugin(id: &str, uninstall: bool) -> ResultType<()> {
         let mut lock = CONFIG_MANAGER.lock().unwrap();
         lock.plugins.remove(id);
         hbb_common::config::store_path(Self::path(), &*lock)?;
-        // to-do: remove plugin config dir
+        if uninstall {
+            allow_err!(fs::remove_dir_all(path_plugins(id)));
+        }
         Ok(())
     }
+
+    pub fn remove_plugins(uninstall: bool) {
+        let mut lock = CONFIG_MANAGER.lock().unwrap();
+        lock.plugins.clear();
+        allow_err!(hbb_common::config::store_path(Self::path(), &*lock));
+        if uninstall {
+            allow_err!(fs::remove_dir_all(HbbConfig::path("plugins")));
+        }
+    }
+}
+
+// Return shared config if peer is nullptr.
+pub(super) fn cb_get_conf(
+    peer: *const c_char,
+    id: *const c_char,
+    key: *const c_char,
+) -> *const c_char {
+    match (cstr_to_string(id), cstr_to_string(key)) {
+        (Ok(id), Ok(key)) => {
+            if peer.is_null() {
+                SharedConfig::load_if_not_exists(&id);
+                if let Some(conf) = CONFIG_SHARED.lock().unwrap().get(&id) {
+                    if let Some(value) = conf.get(&key) {
+                        return str_to_cstr_ret(value);
+                    }
+                }
+            } else {
+                match cstr_to_string(peer) {
+                    Ok(peer) => {
+                        PeerConfig::load_if_not_exists(&id, &peer);
+                        if let Some(conf) = CONFIG_PEERS.lock().unwrap().get(&id) {
+                            if let Some(conf) = conf.get(&peer) {
+                                if let Some(value) = conf.get(&key) {
+                                    return str_to_cstr_ret(value);
+                                }
+                            }
+                        }
+                    }
+                    Err(_) => {}
+                }
+            }
+        }
+        _ => {}
+    }
+    ptr::null()
 }

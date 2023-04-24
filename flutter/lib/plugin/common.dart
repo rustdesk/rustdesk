@@ -3,8 +3,7 @@ import 'dart:convert';
 typedef PluginId = String;
 
 // ui location
-const String kLocationHostMainDisplayOthers =
-    'host|main|settings|display|others';
+const String kLocationHostMainPlugin = 'host|main|settings|plugin';
 const String kLocationClientRemoteToolbarDisplay =
     'client|remote|toolbar|display';
 

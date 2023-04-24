@@ -1,18 +1,19 @@
+use super::{desc::Desc, errno::*, *};
+#[cfg(not(debug_assertions))]
+use crate::common::is_server;
+use crate::{flutter, ui_interface::get_id};
+use hbb_common::{
+    allow_err, bail,
+    dlopen::symbor::Library,
+    lazy_static, log,
+    message_proto::{Message, Misc, PluginResponse},
+    ResultType,
+};
 use std::{
     collections::HashMap,
     ffi::{c_char, c_void},
     path::PathBuf,
     sync::{Arc, RwLock},
-};
-
-use super::{desc::Desc, errno::*, *};
-use crate::{flutter, ui_interface::get_id};
-use hbb_common::{
-    bail,
-    dlopen::symbor::Library,
-    lazy_static, libc, log,
-    message_proto::{Message, Misc, PluginResponse},
-    ResultType,
 };
 
 const METHOD_HANDLE_UI: &[u8; 10] = b"handle_ui\0";
@@ -58,19 +59,27 @@ pub type PluginFuncDesc = fn() -> *const c_char;
 /// id:      The id of this plugin.
 /// content: The content.
 /// len:     The length of the content.
-type PluginFuncCallbackMsg = fn(
+type CallbackMsg = fn(
     peer: *const c_char,
     target: *const c_char,
     id: *const c_char,
     content: *const c_void,
     len: usize,
 );
-pub type PluginFuncSetCallbackMsg = fn(PluginFuncCallbackMsg);
 /// Callback to get the id of local peer id.
 /// The returned string is utf8 string(null terminated).
 /// Don't free the returned ptr.
-type GetIdFuncCallback = fn() -> *const c_char;
-pub type PluginFuncGetIdCallback = fn(GetIdFuncCallback);
+type CallbackGetId = fn() -> *const c_char;
+/// Callback to get the config.
+/// peer, key are utf8 strings(null terminated).
+///
+/// peer: The peer id.
+/// id:  The id of this plugin.
+/// key:  The key of the config.
+///
+/// The returned string is utf8 string(null terminated) and must be freed by caller.
+type CallbackGetConf =
+    fn(peer: *const c_char, id: *const c_char, key: *const c_char) -> *const c_char;
 /// The main function of the plugin.
 /// method: The method. "handle_ui" or "handle_peer"
 /// peer:  The peer id.
@@ -86,10 +95,21 @@ pub type PluginFuncCall = fn(
     len: usize,
 ) -> *const c_void;
 
+#[repr(C)]
+struct Callbacks {
+    msg: CallbackMsg,
+    get_id: CallbackGetId,
+    get_conf: CallbackGetConf,
+}
+type PluginFuncSetCallbacks = fn(Callbacks);
+
 macro_rules! make_plugin {
     ($($field:ident : $tp:ty),+) => {
+        #[allow(dead_code)]
         pub struct Plugin {
             _lib: Library,
+            id: Option<String>,
+            path: String,
             $($field: $tp),+
         }
 
@@ -115,8 +135,53 @@ macro_rules! make_plugin {
 
                 Ok(Self {
                     _lib: lib,
+                    id: None,
+                    path: path.to_string(),
                     $( $field ),+
                 })
+            }
+
+            fn desc(&self) -> ResultType<Desc> {
+                let desc_ret = (self.desc)();
+                let desc = Desc::from_cstr(desc_ret);
+                free_c_ptr(desc_ret as _);
+                desc
+            }
+
+            fn init(&self, path: &str) -> ResultType<()> {
+                let init_ret = (self.init)();
+                if !init_ret.is_null() {
+                    let (code, msg) = get_code_msg_from_ret(init_ret);
+                    free_c_ptr(init_ret as _);
+                    bail!(
+                        "Failed to init plugin {}, code: {}, msg: {}",
+                        path,
+                        code,
+                        msg
+                    );
+                }
+                Ok(())
+            }
+
+            fn clear(&self, id: &str) {
+                let clear_ret = (self.clear)();
+                if !clear_ret.is_null() {
+                    let (code, msg) = get_code_msg_from_ret(clear_ret);
+                    free_c_ptr(clear_ret as _);
+                    log::error!(
+                        "Failed to clear plugin {}, code: {}, msg: {}",
+                        id,
+                        code,
+                        msg
+                    );
+                }
+            }
+        }
+
+        impl Drop for Plugin {
+            fn drop(&mut self) {
+                let id = self.id.as_ref().unwrap_or(&self.path);
+                self.clear(id);
             }
         }
     }
@@ -128,8 +193,7 @@ make_plugin!(
     clear: PluginFuncClear,
     desc: PluginFuncDesc,
     call: PluginFuncCall,
-    set_cb_msg: PluginFuncSetCallbackMsg,
-    set_cb_get_id: PluginFuncGetIdCallback
+    set_cbs: PluginFuncSetCallbacks
 );
 
 #[cfg(target_os = "windows")]
@@ -172,17 +236,18 @@ pub fn load_plugins() -> ResultType<()> {
 }
 
 pub fn unload_plugins() {
-    let mut plugins = PLUGINS.write().unwrap();
-    for (id, plugin) in plugins.iter() {
-        let _ret = (plugin.clear)();
-        log::info!("Plugin {} unloaded", id);
+    log::info!("Plugins unloaded");
+    PLUGINS.write().unwrap().clear();
+    if change_manager() {
+        super::config::ManagerConfig::remove_plugins(false);
     }
-    plugins.clear();
 }
 
 pub fn unload_plugin(id: &str) {
-    if let Some(plugin) = PLUGINS.write().unwrap().remove(id) {
-        let _ret = (plugin.clear)();
+    log::info!("Plugin {} unloaded", id);
+    PLUGINS.write().unwrap().remove(id);
+    if change_manager() {
+        allow_err!(super::config::ManagerConfig::remove_plugin(id, false));
     }
 }
 
@@ -196,7 +261,7 @@ pub fn reload_plugin(id: &str) -> ResultType<()> {
 }
 
 #[no_mangle]
-fn get_local_peer_id() -> *const c_char {
+fn cb_get_local_peer_id() -> *const c_char {
     let mut id = (*LOCAL_PEER_ID.read().unwrap()).clone();
     if id.is_empty() {
         let mut lock = LOCAL_PEER_ID.write().unwrap();
@@ -212,28 +277,38 @@ fn get_local_peer_id() -> *const c_char {
 
 fn load_plugin_path(path: &str) -> ResultType<()> {
     let plugin = Plugin::new(path)?;
-    let desc = (plugin.desc)();
-    let desc_res = Desc::from_cstr(desc);
-    unsafe {
-        libc::free(desc as _);
-    }
-    let desc = desc_res?;
-    let id = desc.id().to_string();
+    let desc = plugin.desc()?;
+
     // to-do validate plugin
     // to-do check the plugin id (make sure it does not use another plugin's id)
-    (plugin.set_cb_msg)(callback_msg::callback_msg);
-    (plugin.set_cb_get_id)(get_local_peer_id as _);
+
+    plugin.init(path)?;
+
+    if change_manager() {
+        super::config::ManagerConfig::add_plugin(desc.id())?;
+    }
+
+    // set callbacks
+    (plugin.set_cbs)(Callbacks {
+        msg: callback_msg::cb_msg,
+        get_id: cb_get_local_peer_id,
+        get_conf: config::cb_get_conf,
+    });
+
+    // update ui
     // Ui may be not ready now, so we need to update again once ui is ready.
     update_ui_plugin_desc(&desc, None);
-    update_config(&desc);
-    // Ui may be not ready now, so we need to reload again once ui is ready.
     reload_ui(&desc, None);
+
+    // add plugins
+    let id = desc.id().to_string();
     let plugin_info = PluginInfo {
         path: path.to_string(),
         desc,
     };
     PLUGIN_INFO.write().unwrap().insert(id.clone(), plugin_info);
     PLUGINS.write().unwrap().insert(id.clone(), plugin);
+
     log::info!("Plugin {} loaded", id);
     Ok(())
 }
@@ -248,10 +323,13 @@ pub fn sync_ui(sync_to: String) {
 pub fn load_plugin(path: Option<&str>, id: Option<&str>) -> ResultType<()> {
     match (path, id) {
         (Some(path), _) => load_plugin_path(path),
-        (None, Some(id)) => match PLUGIN_INFO.read().unwrap().get(id) {
-            Some(plugin) => load_plugin_path(&plugin.path),
-            None => bail!("Plugin {} not found", id),
-        },
+        (None, Some(id)) => {
+            let path = match PLUGIN_INFO.read().unwrap().get(id) {
+                Some(plugin) => plugin.path.clone(),
+                None => bail!("Plugin {} not found", id),
+            };
+            load_plugin_path(&path)
+        }
         (None, None) => {
             bail!("path and id are both None");
         }
@@ -273,9 +351,7 @@ fn handle_event(method: &[u8], id: &str, peer: &str, event: &[u8]) -> ResultType
                 Ok(())
             } else {
                 let (code, msg) = get_code_msg_from_ret(ret);
-                unsafe {
-                    libc::free(ret as _);
-                }
+                free_c_ptr(ret as _);
                 bail!(
                     "Failed to handle plugin event, id: {}, method: {}, code: {}, msg: {}",
                     id,
@@ -315,9 +391,7 @@ pub fn handle_client_event(id: &str, peer: &str, event: &[u8]) -> Option<Message
                 None
             } else {
                 let (code, msg) = get_code_msg_from_ret(ret);
-                unsafe {
-                    libc::free(ret as _);
-                }
+                free_c_ptr(ret as _);
                 if code > ERR_RUSTDESK_HANDLE_BASE && code < ERR_PLUGIN_HANDLE_BASE {
                     let name = match PLUGIN_INFO.read().unwrap().get(id) {
                         Some(plugin) => plugin.desc.name(),
@@ -364,9 +438,13 @@ fn make_plugin_response(id: &str, name: &str, msg: &str) -> Message {
     msg_out
 }
 
-fn update_config(desc: &Desc) {
-    super::config::set_shared_items(desc.id(), &desc.config().shared);
-    super::config::set_peer_items(desc.id(), &desc.config().peer);
+#[inline]
+fn change_manager() -> bool {
+    #[cfg(debug_assertions)]
+    let change_manager = true;
+    #[cfg(not(debug_assertions))]
+    let change_manager = is_server();
+    change_manager
 }
 
 fn reload_ui(desc: &Desc, sync_to: Option<&str>) {
@@ -417,22 +495,22 @@ fn update_ui_plugin_desc(desc: &Desc, sync_to: Option<&str>) {
         let event = serde_json::to_string(&m).unwrap_or("".to_owned());
         match sync_to {
             Some(channel) => {
-                let _res = flutter::push_global_event(channel, serde_json::to_string(&m).unwrap());
+                let _res = flutter::push_global_event(channel, event.clone());
             }
             None => {
-                let _res = flutter::push_global_event(
-                    flutter::APP_TYPE_MAIN,
-                    serde_json::to_string(&m).unwrap(),
-                );
-                let _res = flutter::push_global_event(
-                    flutter::APP_TYPE_DESKTOP_REMOTE,
-                    serde_json::to_string(&m).unwrap(),
-                );
-                let _res = flutter::push_global_event(
-                    flutter::APP_TYPE_CM,
-                    serde_json::to_string(&m).unwrap(),
-                );
+                let _res = flutter::push_global_event(flutter::APP_TYPE_MAIN, event.clone());
+                let _res =
+                    flutter::push_global_event(flutter::APP_TYPE_DESKTOP_REMOTE, event.clone());
+                let _res = flutter::push_global_event(flutter::APP_TYPE_CM, event.clone());
             }
         }
     }
+}
+
+pub(super) fn get_desc_conf(id: &str) -> Option<super::desc::Config> {
+    PLUGIN_INFO
+        .read()
+        .unwrap()
+        .get(id)
+        .map(|info| info.desc.config().clone())
 }

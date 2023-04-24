@@ -1,4 +1,4 @@
-use hbb_common::ResultType;
+use hbb_common::{libc, ResultType};
 use std::ffi::{c_char, c_void, CStr};
 
 mod callback_msg;
@@ -28,6 +28,21 @@ fn cstr_to_string(cstr: *const c_char) -> ResultType<String> {
 }
 
 #[inline]
+pub fn str_to_cstr_ret(s: &str) -> *const c_char {
+    let mut s = s.as_bytes().to_vec();
+    s.push(0);
+    unsafe {
+        let r = libc::malloc(s.len()) as *mut c_char;
+        libc::memcpy(
+            r as *mut libc::c_void,
+            s.as_ptr() as *const libc::c_void,
+            s.len(),
+        );
+        r
+    }
+}
+
+#[inline]
 fn get_code_msg_from_ret(ret: *const c_void) -> (i32, String) {
     assert!(ret.is_null() == false);
     let code_bytes = unsafe { std::slice::from_raw_parts(ret as *const u8, 4) };
@@ -37,4 +52,13 @@ fn get_code_msg_from_ret(ret: *const c_void) -> (i32, String) {
         .unwrap_or("")
         .to_string();
     (code, msg)
+}
+
+#[inline]
+fn free_c_ptr(ret: *mut c_void) {
+    if !ret.is_null() {
+        unsafe {
+            libc::free(ret);
+        }
+    }
 }

@@ -657,7 +657,7 @@ class _DisplayMenu extends StatefulWidget {
   final FFI ffi;
   final MenubarState state;
   final Function(bool) setFullscreen;
-  final LocationItem pluginItem;
+  final Widget pluginItem;
   _DisplayMenu(
       {Key? key,
       required this.id,
@@ -668,6 +668,7 @@ class _DisplayMenu extends StatefulWidget {
           id,
           ffi,
           kLocationClientRemoteToolbarDisplay,
+          true,
         ),
         super(key: key);
 

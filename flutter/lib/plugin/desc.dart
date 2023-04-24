@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:collection';
 import 'package:flutter/foundation.dart';
 
+import './common.dart';
+
 const String kValueTrue = '1';
 const String kValueFalse = '0';
 
@@ -59,7 +61,7 @@ class UiCheckbox extends UiType {
 
 class Location {
   // location key:
-  //  host|main|settings|display|others
+  //  host|main|settings|plugin
   //  client|remote|toolbar|display
   HashMap<String, UiType> ui;
 
@@ -76,14 +78,12 @@ class Location {
 
 class ConfigItem {
   String key;
-  String value;
   String description;
   String defaultValue;
 
-  ConfigItem(this.key, this.value, this.defaultValue, this.description);
+  ConfigItem(this.key, this.defaultValue, this.description);
   ConfigItem.fromJson(Map<String, dynamic> json)
       : key = json['key'] ?? '',
-        value = json['value'] ?? '',
         description = json['description'] ?? '',
         defaultValue = json['default'] ?? '';
 
@@ -151,7 +151,7 @@ class Desc {
 }
 
 class DescModel with ChangeNotifier {
-  final data = <String, Desc>{};
+  final data = <PluginId, Desc>{};
 
   DescModel._();
 
@@ -169,7 +169,7 @@ class DescModel with ChangeNotifier {
     return data[id];
   }
 
-  Map<String, Desc> get all => data;
+  Map<PluginId, Desc> get all => data;
 
   static final DescModel _instance = DescModel._();
   static DescModel get instance => _instance;

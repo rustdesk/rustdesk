@@ -2,8 +2,10 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:provider/provider.dart';
+import 'package:get/get.dart';
 // to-do: do not depend on desktop
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
@@ -12,11 +14,15 @@ import './desc.dart';
 import './model.dart';
 import './common.dart';
 
+// dup to flutter\lib\desktop\pages\desktop_setting_page.dart
+const double _kCheckBoxLeftMargin = 10;
+
 class LocationItem extends StatelessWidget {
   final String peerId;
   final FFI ffi;
   final String location;
   final LocationModel locationModel;
+  final bool isMenu;
 
   LocationItem({
     Key? key,
@@ -24,19 +30,23 @@ class LocationItem extends StatelessWidget {
     required this.ffi,
     required this.location,
     required this.locationModel,
+    required this.isMenu,
   }) : super(key: key);
 
   bool get isEmpty => locationModel.isEmpty;
 
-  static LocationItem createLocationItem(
-      String peerId, FFI ffi, String location) {
-    final model = addLocation(location);
-    return LocationItem(
-      peerId: peerId,
-      ffi: ffi,
-      location: location,
-      locationModel: model,
-    );
+  static Widget createLocationItem(
+      String peerId, FFI ffi, String location, bool isMenu) {
+    final model = getLocationModel(location);
+    return model == null
+        ? Container()
+        : LocationItem(
+            peerId: peerId,
+            ffi: ffi,
+            location: location,
+            locationModel: model,
+            isMenu: isMenu,
+          );
   }
 
   @override
@@ -59,23 +69,26 @@ class LocationItem extends StatelessWidget {
         ffi: ffi,
         location: location,
         pluginModel: model,
+        isMenu: isMenu,
       );
 }
 
 class PluginItem extends StatelessWidget {
   final PluginId pluginId;
   final String peerId;
-  final FFI ffi;
+  final FFI? ffi;
   final String location;
   final PluginModel pluginModel;
+  final isMenu;
 
   PluginItem({
     Key? key,
     required this.pluginId,
     required this.peerId,
-    required this.ffi,
+    this.ffi,
     required this.location,
     required this.pluginModel,
+    required this.isMenu,
   }) : super(key: key);
 
   bool get isEmpty => pluginModel.isEmpty;
@@ -95,74 +108,88 @@ class PluginItem extends StatelessWidget {
   }
 
   Widget _buildItem(UiType ui) {
-    late Widget child;
+    Widget? child;
     switch (ui.runtimeType) {
       case UiButton:
-        child = _buildMenuButton(ui as UiButton);
+        if (isMenu) {
+          if (ffi != null) {
+            child = _buildMenuButton(ui as UiButton, ffi!);
+          }
+        } else {
+          child = _buildButton(ui as UiButton);
+        }
         break;
       case UiCheckbox:
-        child = _buildCheckboxMenuButton(ui as UiCheckbox);
+        if (isMenu) {
+          if (ffi != null) {
+            child = _buildCheckboxMenuButton(ui as UiCheckbox, ffi!);
+          }
+        } else {
+          child = _buildCheckbox(ui as UiCheckbox);
+        }
         break;
       default:
-        child = Container();
+        break;
     }
     // to-do: add plugin icon and tooltip
-    return child;
+    return child ?? Container();
   }
 
-  Uint8List _makeEvent(
-    String key, {
-    bool? v,
-  }) {
-    final event = MsgFromUi(
-      id: pluginId,
-      name: getDesc(pluginId)?.name ?? '',
-      location: location,
-      key: key,
-      value:
-          v != null ? (v ? ConfigItem.trueValue : ConfigItem.falseValue) : '',
-      action: '',
-    );
-    return Uint8List.fromList(event.toString().codeUnits);
-  }
-
-  Widget _buildMenuButton(UiButton ui) {
-    return MenuButton(
+  Widget _buildButton(UiButton ui) {
+    return TextButton(
       onPressed: () => bind.pluginEvent(
         id: pluginId,
         peer: peerId,
         event: _makeEvent(ui.key),
       ),
-      // to-do: support trailing icon, but it will cause tree shake error.
-      // ```
-      // This application cannot tree shake icons fonts. It has non-constant instances of IconData at the following locations:
-      // Target release_macos_bundle_flutter_assets failed: Exception: Avoid non-constant invocations of IconData or try to build again with --no-tree-shake-icons.
-      // ```
-      //
-      // trailingIcon: Icon(
-      //     IconData(int.parse(ui.icon, radix: 16), fontFamily: 'MaterialIcons')),
-      //
-      // to-do: RustDesk translate or plugin translate ?
       child: Text(ui.text),
-      ffi: ffi,
     );
   }
 
-  String? getOption(OptionModel model, String key) {
-    var v = model.value;
-    if (v == null) {
-      if (peerId.isEmpty) {
-        v = bind.pluginGetSharedOption(id: pluginId, key: key);
-      } else {
-        v = bind.pluginGetSessionOption(id: pluginId, peer: peerId, key: key);
+  Widget _buildCheckbox(UiCheckbox ui) {
+    getChild(OptionModel model) {
+      final v = _getOption(model, ui.key);
+      if (v == null) {
+        // session or plugin not found
+        return Container();
       }
+
+      onChanged(bool value) {
+        bind.pluginEvent(
+          id: pluginId,
+          peer: peerId,
+          event: _makeEvent(ui.key, v: value),
+        );
+      }
+
+      final value = ConfigItem.isTrue(v);
+      return GestureDetector(
+        child: Row(
+          children: [
+            Checkbox(
+              value: value,
+              onChanged: (_) => onChanged(!value),
+            ).marginOnly(right: 5),
+            Expanded(
+              child: Text(translate(ui.text)),
+            )
+          ],
+        ).marginOnly(left: _kCheckBoxLeftMargin),
+        onTap: () => onChanged(!value),
+      );
     }
-    return v;
+
+    return ChangeNotifierProvider.value(
+      value: getOptionModel(location, pluginId, peerId, ui.key),
+      child: Consumer<OptionModel>(
+        builder: (context, model, child) => getChild(model),
+      ),
+    );
   }
 
-  Widget _buildCheckboxMenuButton(UiCheckbox ui) {
+  Widget _buildCheckboxMenuButton(UiCheckbox ui, FFI ffi) {
     getChild(OptionModel model) {
-      final v = getOption(model, ui.key);
+      final v = _getOption(model, ui.key);
       if (v == null) {
         // session or plugin not found
         return Container();
@@ -184,15 +211,62 @@ class PluginItem extends StatelessWidget {
       );
     }
 
-    final optionModel = addOptionModel(location, pluginId, peerId, ui.key);
     return ChangeNotifierProvider.value(
-      value: optionModel,
+      value: getOptionModel(location, pluginId, peerId, ui.key),
       child: Consumer<OptionModel>(
-        builder: (context, model, child) {
-          return getChild(model);
-        },
+        builder: (context, model, child) => getChild(model),
       ),
     );
+  }
+
+  Widget _buildMenuButton(UiButton ui, FFI ffi) {
+    return MenuButton(
+      onPressed: () => bind.pluginEvent(
+        id: pluginId,
+        peer: peerId,
+        event: _makeEvent(ui.key),
+      ),
+      // to-do: support trailing icon, but it will cause tree shake error.
+      // ```
+      // This application cannot tree shake icons fonts. It has non-constant instances of IconData at the following locations:
+      // Target release_macos_bundle_flutter_assets failed: Exception: Avoid non-constant invocations of IconData or try to build again with --no-tree-shake-icons.
+      // ```
+      //
+      // trailingIcon: Icon(
+      //     IconData(int.parse(ui.icon, radix: 16), fontFamily: 'MaterialIcons')),
+      //
+      // to-do: RustDesk translate or plugin translate ?
+      child: Text(ui.text),
+      ffi: ffi,
+    );
+  }
+
+  Uint8List _makeEvent(
+    String key, {
+    bool? v,
+  }) {
+    final event = MsgFromUi(
+      id: pluginId,
+      name: getDesc(pluginId)?.name ?? '',
+      location: location,
+      key: key,
+      value:
+          v != null ? (v ? ConfigItem.trueValue : ConfigItem.falseValue) : '',
+      action: '',
+    );
+    return Uint8List.fromList(event.toString().codeUnits);
+  }
+
+  String? _getOption(OptionModel model, String key) {
+    var v = model.value;
+    if (v == null) {
+      if (peerId.isEmpty) {
+        v = bind.pluginGetSharedOption(id: pluginId, key: key);
+      } else {
+        v = bind.pluginGetSessionOption(id: pluginId, peer: peerId, key: key);
+      }
+    }
+    return v;
   }
 }
 

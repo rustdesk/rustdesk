@@ -1,4 +1,6 @@
 use super::*;
+#[cfg(target_os = "macos")]
+use crate::common::is_server;
 #[cfg(target_os = "linux")]
 use crate::common::IS_X11;
 #[cfg(target_os = "macos")]
@@ -377,7 +379,6 @@ pub fn try_stop_record_cursor_pos() {
 #[cfg(target_os = "macos")]
 lazy_static::lazy_static! {
     static ref QUEUE: Queue = Queue::main();
-    static ref IS_SERVER: bool =  std::env::args().nth(1) == Some("--server".to_owned());
 }
 
 #[cfg(target_os = "macos")]
@@ -520,7 +521,7 @@ pub fn handle_mouse(evt: &MouseEvent, conn: i32) {
         };
     }
     #[cfg(target_os = "macos")]
-    if !*IS_SERVER {
+    if !is_server() {
         // having GUI, run main GUI thread, otherwise crash
         let evt = evt.clone();
         QUEUE.exec_async(move || handle_mouse_(&evt));
@@ -902,7 +903,7 @@ pub async fn lock_screen() {
 
 pub fn handle_key(evt: &KeyEvent) {
     #[cfg(target_os = "macos")]
-    if !*IS_SERVER {
+    if !is_server() {
         // having GUI, run main GUI thread, otherwise crash
         let evt = evt.clone();
         QUEUE.exec_async(move || handle_key_(&evt));
@@ -928,7 +929,7 @@ fn reset_input() {
 
 #[cfg(target_os = "macos")]
 pub fn reset_input_ondisconn() {
-    if !*IS_SERVER {
+    if !is_server() {
         QUEUE.exec_async(reset_input);
     } else {
         reset_input();

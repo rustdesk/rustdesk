@@ -55,15 +55,16 @@ class LocationModel with ChangeNotifier {
 }
 
 void addLocationUi(String location, PluginId id, UiType ui) {
-  _locationModels[location]?.add(id, ui);
-}
-
-LocationModel addLocation(String location) {
   if (_locationModels[location] == null) {
     _locationModels[location] = LocationModel();
   }
-  return _locationModels[location]!;
+  _locationModels[location]?.add(id, ui);
 }
+
+LocationModel? getLocationModel(String location) => _locationModels[location];
+
+PluginModel? getPluginModel(String location, PluginId id) =>
+    _locationModels[location]?.pluginModels[id];
 
 void clearPlugin(PluginId pluginId) {
   for (var element in _locationModels.values) {
@@ -77,7 +78,7 @@ void clearLocations() {
   }
 }
 
-OptionModel addOptionModel(
+OptionModel getOptionModel(
     String location, PluginId pluginId, String peer, String key) {
   final k = OptionModel.key(location, pluginId, peer, key);
   if (_optionModels[k] == null) {
