@@ -69,7 +69,8 @@ impl SharedConfig {
 
     #[inline]
     pub fn load(id: &str) {
-        let mut conf = hbb_common::config::load_path::<SharedConfig>(Self::path(id));
+        let conf = hbb_common::config::load_path::<HashMap<String, String>>(Self::path(id));
+        let mut conf = SharedConfig(conf);
         if let Some(items) = CONFIG_SHARED_ITEMS.lock().unwrap().get(id) {
             for item in items {
                 if !conf.contains_key(&item.key) {
@@ -116,7 +117,8 @@ impl PeerConfig {
 
     #[inline]
     pub fn load(id: &str, peer: &str) {
-        let mut conf = hbb_common::config::load_path::<PeerConfig>(Self::path(id, peer));
+        let conf = hbb_common::config::load_path::<HashMap<String, String>>(Self::path(id, peer));
+        let mut conf = PeerConfig(conf);
         if let Some(items) = CONFIG_PEER_ITEMS.lock().unwrap().get(id) {
             for item in items {
                 if !conf.contains_key(&item.key) {
@@ -124,16 +126,15 @@ impl PeerConfig {
                 }
             }
         }
-        match CONFIG_PEERS.lock().unwrap().get_mut(id) {
-            Some(peers) => {
-                peers.insert(peer.to_owned(), conf);
-            }
-            None => {
-                let mut peers = HashMap::new();
-                peers.insert(peer.to_owned(), conf);
-                CONFIG_PEERS.lock().unwrap().insert(id.to_owned(), peers);
-            }
+        
+        if let Some(peers) = CONFIG_PEERS.lock().unwrap().get_mut(id) {
+            peers.insert(peer.to_owned(), conf);
+            return;
         }
+
+        let mut peers = HashMap::new();
+        peers.insert(peer.to_owned(), conf);
+        CONFIG_PEERS.lock().unwrap().insert(id.to_owned(), peers);
     }
 
     #[inline]

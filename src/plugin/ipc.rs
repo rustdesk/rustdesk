@@ -1,6 +1,6 @@
 // to-do: Interdependence(This mod and crate::ipc) is not good practice here.
 use crate::ipc::{connect, Connection, Data};
-use hbb_common::{allow_err, bail, bytes, log, tokio, ResultType};
+use hbb_common::{allow_err, log, tokio, ResultType};
 use serde_derive::{Deserialize, Serialize};
 #[cfg(not(windows))]
 use std::{fs::File, io::prelude::*};

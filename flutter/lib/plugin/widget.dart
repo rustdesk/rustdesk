@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/models/model.dart';
@@ -198,7 +200,14 @@ void handleReloading(Map<String, dynamic> evt, String peer) {
   if (evt['id'] == null || evt['location'] == null) {
     return;
   }
-  addLocationUi(evt['location']!, evt['id']!, UiType.fromJson(evt));
+  try {
+    final ui = UiType.create(json.decode(evt['ui'] as String));
+    if (ui != null) {
+      addLocationUi(evt['location']!, evt['id']!, ui);
+    }
+  } catch (e) {
+    debugPrint('Failed handleReloading, json decode of ui, $e ');
+  }
 }
 
 void handleOption(Map<String, dynamic> evt, String peer) {
