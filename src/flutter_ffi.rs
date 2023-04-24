@@ -1466,6 +1466,7 @@ pub fn plugin_reload(_id: String) {
     #[cfg(feature = "plugin_framework")]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
+        allow_err!(crate::plugin::ipc::reload_plugin(&_id,));
         allow_err!(crate::plugin::reload_plugin(&_id));
     }
 }
@@ -1474,7 +1475,8 @@ pub fn plugin_id_uninstall(_id: String) {
     #[cfg(feature = "plugin_framework")]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
-        // to-do: uninstall plugin
+        crate::plugin::unload_plugin(&_id);
+        allow_err!(crate::plugin::ipc::uninstall_plugin(&_id));
     }
 }
 
@@ -1485,11 +1487,11 @@ pub fn plugin_id_enable(_id: String, _v: bool) {
     {
         allow_err!(crate::plugin::ipc::set_manager_plugin_config(
             &_id,
-            "enable",
+            "enabled",
             _v.to_string()
         ));
         if _v {
-            allow_err!(crate::plugin::reload_plugin(&_id));
+            allow_err!(crate::plugin::load_plugin(None, Some(&_id)));
         } else {
             crate::plugin::unload_plugin(&_id);
         }
@@ -1522,7 +1524,7 @@ pub fn plugin_enable(_v: bool) {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         allow_err!(crate::plugin::ipc::set_manager_config(
-            "enable",
+            "enabled",
             _v.to_string()
         ));
         if _v {

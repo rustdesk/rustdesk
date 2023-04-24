@@ -59,6 +59,10 @@ lazy_static::lazy_static! {
     pub static ref DEVICE_NAME: Arc<Mutex<String>> = Default::default();
 }
 
+lazy_static::lazy_static! {
+    static ref IS_SERVER: bool = std::env::args().nth(1) == Some("--server".to_owned());
+}
+
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 lazy_static::lazy_static! {
     static ref ARBOARD_MTX: Arc<Mutex<()>> = Arc::new(Mutex::new(()));
@@ -75,6 +79,11 @@ pub fn global_init() -> bool {
 }
 
 pub fn global_clean() {}
+
+#[inline]
+pub fn is_server() -> bool {
+    *IS_SERVER
+}
 
 #[inline]
 pub fn valid_for_numlock(evt: &KeyEvent) -> bool {

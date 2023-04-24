@@ -12,7 +12,7 @@ pub enum Plugin {
     ManagerConfig(String, Option<String>),
     ManagerPluginConfig(String, String, Option<String>),
     Reload(String),
-    Uninstall,
+    Uninstall(String),
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -43,6 +43,16 @@ pub async fn get_manager_plugin_config(id: &str, name: &str) -> ResultType<Optio
 #[tokio::main(flavor = "current_thread")]
 pub async fn set_manager_plugin_config(id: &str, name: &str, value: String) -> ResultType<()> {
     set_manager_plugin_config_async(id, name, value).await
+}
+
+#[tokio::main(flavor = "current_thread")]
+pub async fn reload_plugin(id: &str) -> ResultType<()> {
+    reload_plugin_async(id).await
+}
+
+#[tokio::main(flavor = "current_thread")]
+pub async fn uninstall_plugin(id: &str) -> ResultType<()> {
+    uninstall_plugin_async(id).await
 }
 
 async fn get_config_async(id: &str, name: &str, ms_timeout: u64) -> ResultType<Option<String>> {
@@ -131,6 +141,19 @@ async fn set_manager_plugin_config_async(id: &str, name: &str, value: String) ->
     Ok(())
 }
 
+async fn reload_plugin_async(id: &str) -> ResultType<()> {
+    let mut c = connect(1000, "").await?;
+    c.send(&Data::Plugin(Plugin::Reload(id.to_owned()))).await?;
+    Ok(())
+}
+
+async fn uninstall_plugin_async(id: &str) -> ResultType<()> {
+    let mut c = connect(1000, "").await?;
+    c.send(&Data::Plugin(Plugin::Uninstall(id.to_owned())))
+        .await?;
+    Ok(())
+}
+
 pub async fn handle_plugin(plugin: Plugin, stream: &mut Connection) {
     match plugin {
         Plugin::Config(id, name, value) => match value {
@@ -156,7 +179,7 @@ pub async fn handle_plugin(plugin: Plugin, stream: &mut Connection) {
                 );
             }
             Some(value) => {
-                allow_err!(crate::plugin::ManagerConfig::set_option(&name, &value));
+                crate::plugin::ManagerConfig::set_option(&name, &value);
             }
         },
         Plugin::ManagerPluginConfig(id, name, value) => match value {
@@ -169,16 +192,16 @@ pub async fn handle_plugin(plugin: Plugin, stream: &mut Connection) {
                 );
             }
             Some(value) => {
-                allow_err!(crate::plugin::ManagerConfig::set_plugin_option(
-                    &id, &name, &value
-                ));
+                crate::plugin::ManagerConfig::set_plugin_option(&id, &name, &value);
             }
         },
         Plugin::Reload(id) => {
             allow_err!(crate::plugin::reload_plugin(&id));
         }
-        Plugin::Uninstall => {
+        Plugin::Uninstall(_id) => {
             // to-do: uninstall plugin
+            // 1. unload 2. remove configs 3. remove config files
+            // allow_err!(crate::plugin::unload_plugin(&id));
         }
     }
 }

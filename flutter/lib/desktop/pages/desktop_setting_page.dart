@@ -12,6 +12,8 @@ import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/plugin/desc.dart';
 import 'package:flutter_hbb/plugin/model.dart';
+import 'package:flutter_hbb/plugin/common.dart';
+import 'package:flutter_hbb/plugin/widget.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -1394,6 +1396,103 @@ class _AccountState extends State<_Account> {
   }
 }
 
+class _Checkbox extends StatefulWidget {
+  final String label;
+  final bool Function() getValue;
+  final Future<void> Function(bool) setValue;
+
+  const _Checkbox(
+      {Key? key,
+      required this.label,
+      required this.getValue,
+      required this.setValue})
+      : super(key: key);
+
+  @override
+  State<_Checkbox> createState() => _CheckboxState();
+}
+
+class _CheckboxState extends State<_Checkbox> {
+  var value = false;
+
+  @override
+  initState() {
+    super.initState();
+    value = widget.getValue();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    onChanged(bool b) async {
+      await widget.setValue(b);
+      setState(() {
+        value = widget.getValue();
+      });
+    }
+
+    return GestureDetector(
+      child: Row(
+        children: [
+          Checkbox(
+            value: value,
+            onChanged: (_) => onChanged(!value),
+          ).marginOnly(right: 5),
+          Expanded(
+            child: Text(translate(widget.label)),
+          )
+        ],
+      ).marginOnly(left: _kCheckBoxLeftMargin),
+      onTap: () => onChanged(!value),
+    );
+  }
+}
+
+class PluginCard extends StatefulWidget {
+  final PluginId pluginId;
+  final Desc desc;
+  const PluginCard({
+    Key? key,
+    required this.pluginId,
+    required this.desc,
+  }) : super(key: key);
+
+  @override
+  State<PluginCard> createState() => PluginCardState();
+}
+
+class PluginCardState extends State<PluginCard> {
+  @override
+  Widget build(BuildContext context) {
+    final children = [
+      _Button(
+        'Reload',
+        () => bind.pluginReload(id: widget.pluginId),
+      ),
+      _Checkbox(
+        label: 'Enable',
+        getValue: () => bind.pluginIdIsEnabled(id: widget.pluginId),
+        setValue: (bool v) async {
+          if (!v) {
+            clearPlugin(widget.pluginId);
+          }
+          await bind.pluginIdEnable(id: widget.pluginId, v: v);
+        },
+      ),
+    ];
+    final model = getPluginModel(kLocationHostMainPlugin, widget.pluginId);
+    if (model != null) {
+      children.add(PluginItem(
+        pluginId: widget.pluginId,
+        peerId: '',
+        location: kLocationHostMainPlugin,
+        pluginModel: model,
+        isMenu: false,
+      ));
+    }
+    return _Card(title: widget.desc.name, children: children);
+  }
+}
+
 class _Plugin extends StatefulWidget {
   const _Plugin({Key? key}) : super(key: key);
 
@@ -1403,44 +1502,15 @@ class _Plugin extends StatefulWidget {
 
 class _PluginState extends State<_Plugin> {
   // temp checkbox widget
-  Widget _checkbox(
-    String label,
-    bool Function() getValue,
-    Future<void> Function(bool) setValue,
-  ) {
-    final value = getValue();
-    onChanged(bool b) async {
-      await setValue(b);
-      setState(() {});
-    }
 
-    return GestureDetector(
-        child: Row(
-          children: [
-            Checkbox(
-              value: bind.pluginIsEnabled(),
-              onChanged: (_) => onChanged(!value),
-            ).marginOnly(right: 5),
-            Expanded(
-              child: Text(translate(label)),
-            )
-          ],
-        ).marginOnly(left: _kCheckBoxLeftMargin),
-        onTap: () => onChanged(!value));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scrollController = ScrollController();
-    buildCards(DescModel model) {
-      final cards = <Widget>[
+  List<Widget> _buildCards(DescModel model) => [
         _Card(
           title: 'Plugin',
           children: [
-            _checkbox(
-              'Enable',
-              () => bind.pluginIsEnabled() ?? false,
-              (bool v) async {
+            _Checkbox(
+              label: 'Enable',
+              getValue: () => bind.pluginIsEnabled() ?? false,
+              setValue: (bool v) async {
                 if (!v) {
                   clearLocations();
                 }
@@ -1449,28 +1519,14 @@ class _PluginState extends State<_Plugin> {
             ),
           ],
         ),
+        ...model.all.entries
+            .map((entry) => PluginCard(pluginId: entry.key, desc: entry.value))
+            .toList(),
       ];
-      model.all.forEach((key, value) {
-        cards.add(_Card(title: key, children: [
-          _Button(
-            'Reload',
-            () => bind.pluginReload(id: key),
-          ),
-          _checkbox(
-            'Enable',
-            () => bind.pluginIdIsEnabled(id: key),
-            (bool v) async {
-              if (!v) {
-                clearPlugin(key);
-              }
-              await bind.pluginIdEnable(id: key, v: v);
-            },
-          ),
-        ]));
-      });
-      return cards;
-    }
 
+  @override
+  Widget build(BuildContext context) {
+    final scrollController = ScrollController();
     return DesktopScrollWrapper(
       scrollController: scrollController,
       child: ChangeNotifierProvider.value(
@@ -1479,7 +1535,7 @@ class _PluginState extends State<_Plugin> {
           return ListView(
             physics: DraggableNeverScrollableScrollPhysics(),
             controller: scrollController,
-            children: buildCards(model),
+            children: _buildCards(model),
           ).marginOnly(bottom: _kListViewBottomMargin);
         }),
       ),

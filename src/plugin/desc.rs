@@ -40,7 +40,7 @@ pub struct ConfigItem {
     pub description: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub shared: Vec<ConfigItem>,
     pub peer: Vec<ConfigItem>,
