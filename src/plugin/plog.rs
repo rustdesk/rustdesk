@@ -13,7 +13,7 @@ fn is_level(level: *const c_char, level_bytes: &[u8]) -> bool {
 }
 
 #[no_mangle]
-pub(super) extern "C" fn log(level: *const c_char, msg: *const c_char) {
+pub(super) extern "C" fn plugin_log(level: *const c_char, msg: *const c_char) {
     if level.is_null() || msg.is_null() {
         return;
     }

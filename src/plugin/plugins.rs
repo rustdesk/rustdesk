@@ -302,7 +302,7 @@ fn load_plugin_path(path: &str) -> ResultType<()> {
             msg: callback_msg::cb_msg,
             get_conf: config::cb_get_conf,
             get_id: config::cb_get_local_peer_id,
-            log: super::plog::log,
+            log: super::plog::plugin_log,
         },
     };
     plugin.init(&init_data, path)?;
