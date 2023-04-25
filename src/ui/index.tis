@@ -365,11 +365,11 @@ class MyIdMenu: Reactor.Component {
         msgbox("custom-nocancel-nook-hasclose", translate("About") + " " + name, "<div style='line-height: 2em'> \
             <div>Version: " + handler.get_version() + " \
             <div>Fingerprint: " + handler.get_fingerprint() + " \
-            <div .link .custom-event url='https://rustdesk.com/privacy'>Privacy Statement</div> \
-            <div .link .custom-event url='https://rustdesk.com'>Website</div> \
-            <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em;'>Copyright &copy; 2022 Purslane Ltd.\
+            <div .link .custom-event url='https://rustdesk.com/privacy'>" + translate("Privacy Statement") + "</div> \
+            <div .link .custom-event url='https://rustdesk.com'>" + translate("Website") + "</div> \
+	    <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em;'>Copyright &copy; 2022 Purslane Ltd.\
             <br />" + handler.get_license() + " \
-            <p style='font-weight: bold'>Made with heart in this chaotic world!</p>\
+            <p style='font-weight: bold'>" + translate("Slogan_tip") + "</p>\
             </div>\
         </div>", "", function(el) {
             if (el && el.attributes) {
