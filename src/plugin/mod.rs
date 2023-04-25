@@ -5,6 +5,7 @@ mod callback_msg;
 mod config;
 pub mod desc;
 mod errno;
+mod plog;
 pub mod ipc;
 mod plugins;
 

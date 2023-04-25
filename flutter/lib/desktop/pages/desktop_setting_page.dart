@@ -1466,7 +1466,11 @@ class PluginCardState extends State<PluginCard> {
     final children = [
       _Button(
         'Reload',
-        () => bind.pluginReload(id: widget.pluginId),
+        () async {
+          clearPlugin(widget.pluginId);
+          await bind.pluginReload(id: widget.pluginId);
+          setState(() {});
+        },
       ),
       _Checkbox(
         label: 'Enable',
@@ -1476,6 +1480,7 @@ class PluginCardState extends State<PluginCard> {
             clearPlugin(widget.pluginId);
           }
           await bind.pluginIdEnable(id: widget.pluginId, v: v);
+          setState(() {});
         },
       ),
     ];

@@ -60,7 +60,8 @@ struct MsgToConfig {
 /// id:      The id of this plugin.
 /// content: The content.
 /// len:     The length of the content.
-pub fn cb_msg(
+#[no_mangle]
+pub extern "C" fn cb_msg(
     peer: *const c_char,
     target: *const c_char,
     id: *const c_char,

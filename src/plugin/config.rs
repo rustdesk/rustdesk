@@ -20,6 +20,7 @@ lazy_static::lazy_static! {
         Arc::new(Mutex::new(conf))
     };
 }
+use crate::ui_interface::get_id;
 
 pub(super) const CONFIG_TYPE_SHARED: &str = "shared";
 pub(super) const CONFIG_TYPE_PEER: &str = "peer";
@@ -343,8 +344,12 @@ impl ManagerConfig {
     }
 }
 
+pub(super) extern "C" fn cb_get_local_peer_id() -> *const c_char {
+    str_to_cstr_ret(&get_id())
+}
+
 // Return shared config if peer is nullptr.
-pub(super) fn cb_get_conf(
+pub(super) extern "C" fn cb_get_conf(
     peer: *const c_char,
     id: *const c_char,
     key: *const c_char,

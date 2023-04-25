@@ -51,6 +51,11 @@ class LocationModel with ChangeNotifier {
     notifyListeners();
   }
 
+  void remove(PluginId id) {
+    pluginModels.remove(id);
+    notifyListeners();
+  }
+
   bool get isEmpty => pluginModels.isEmpty;
 }
 
@@ -68,7 +73,7 @@ PluginModel? getPluginModel(String location, PluginId id) =>
 
 void clearPlugin(PluginId pluginId) {
   for (var element in _locationModels.values) {
-    element.pluginModels.remove(pluginId);
+    element.remove(pluginId);
   }
 }
 
