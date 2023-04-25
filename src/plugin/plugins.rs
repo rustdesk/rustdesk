@@ -1,7 +1,7 @@
 use super::{desc::Desc, errno::*, *};
 #[cfg(not(debug_assertions))]
 use crate::common::is_server;
-use crate::{flutter, ui_interface::get_id};
+use crate::flutter;
 use hbb_common::{
     allow_err, bail,
     dlopen::symbor::Library,
@@ -21,8 +21,7 @@ const METHOD_HANDLE_PEER: &[u8; 12] = b"handle_peer\0";
 
 lazy_static::lazy_static! {
     static ref PLUGIN_INFO: Arc<RwLock<HashMap<String, PluginInfo>>> = Default::default();
-    pub static ref PLUGINS: Arc<RwLock<HashMap<String, Plugin>>> = Default::default();
-    pub static ref LOCAL_PEER_ID: Arc<RwLock<String>> = Default::default();
+    static ref PLUGINS: Arc<RwLock<HashMap<String, Plugin>>> = Default::default();
 }
 
 struct PluginInfo {
@@ -32,25 +31,29 @@ struct PluginInfo {
 
 /// Initialize the plugins.
 ///
-/// Return null ptr if success.
-/// Return the error message if failed.  `i32-String` without dash, i32 is a signed little-endian number, the String is utf8 string.
-/// The plugin allocate memory with `libc::malloc` and return the pointer.
-pub type PluginFuncInit = fn() -> *const c_void;
-/// Reset the plugin.
+/// data: The initialize data.
 ///
 /// Return null ptr if success.
 /// Return the error message if failed.  `i32-String` without dash, i32 is a signed little-endian number, the String is utf8 string.
 /// The plugin allocate memory with `libc::malloc` and return the pointer.
-pub type PluginFuncReset = fn() -> *const c_void;
+type PluginFuncInit = extern "C" fn(data: *const InitData) -> *const c_void;
+/// Reset the plugin.
+///
+/// data: The initialize data.
+///
+/// Return null ptr if success.
+/// Return the error message if failed.  `i32-String` without dash, i32 is a signed little-endian number, the String is utf8 string.
+/// The plugin allocate memory with `libc::malloc` and return the pointer.
+type PluginFuncReset = extern "C" fn(data: *const InitData) -> *const c_void;
 /// Clear the plugin.
 ///
 /// Return null ptr if success.
 /// Return the error message if failed.  `i32-String` without dash, i32 is a signed little-endian number, the String is utf8 string.
 /// The plugin allocate memory with `libc::malloc` and return the pointer.
-pub type PluginFuncClear = fn() -> *const c_void;
+type PluginFuncClear = extern "C" fn() -> *const c_void;
 /// Get the description of the plugin.
 /// Return the description. The plugin allocate memory with `libc::malloc` and return the pointer.
-pub type PluginFuncDesc = fn() -> *const c_char;
+type PluginFuncDesc = extern "C" fn() -> *const c_char;
 /// Callback to send message to peer or ui.
 /// peer, target, id are utf8 strings(null terminated).
 ///
@@ -59,17 +62,13 @@ pub type PluginFuncDesc = fn() -> *const c_char;
 /// id:      The id of this plugin.
 /// content: The content.
 /// len:     The length of the content.
-type CallbackMsg = fn(
+type CallbackMsg = extern "C" fn(
     peer: *const c_char,
     target: *const c_char,
     id: *const c_char,
     content: *const c_void,
     len: usize,
 );
-/// Callback to get the id of local peer id.
-/// The returned string is utf8 string(null terminated).
-/// Don't free the returned ptr.
-type CallbackGetId = fn() -> *const c_char;
 /// Callback to get the config.
 /// peer, key are utf8 strings(null terminated).
 ///
@@ -79,7 +78,17 @@ type CallbackGetId = fn() -> *const c_char;
 ///
 /// The returned string is utf8 string(null terminated) and must be freed by caller.
 type CallbackGetConf =
-    fn(peer: *const c_char, id: *const c_char, key: *const c_char) -> *const c_char;
+    extern "C" fn(peer: *const c_char, id: *const c_char, key: *const c_char) -> *const c_char;
+/// Get local peer id.
+///
+/// The returned string is utf8 string(null terminated) and must be freed by caller.
+type CallbackGetId = extern "C" fn() -> *const c_char;
+/// Callback to log.
+///
+/// level, msg are utf8 strings(null terminated).
+/// level: "error", "warn", "info", "debug", "trace".
+/// msg:   The message.
+type CallbackLog = extern "C" fn(level: *const c_char, msg: *const c_char);
 /// The main function of the plugin.
 /// method: The method. "handle_ui" or "handle_peer"
 /// peer:  The peer id.
@@ -88,20 +97,41 @@ type CallbackGetConf =
 /// Return null ptr if success.
 /// Return the error message if failed.  `i32-String` without dash, i32 is a signed little-endian number, the String is utf8 string.
 /// The plugin allocate memory with `libc::malloc` and return the pointer.
-pub type PluginFuncCall = fn(
+type PluginFuncCall = extern "C" fn(
     method: *const c_char,
     peer: *const c_char,
     args: *const c_void,
     len: usize,
 ) -> *const c_void;
 
+/// The plugin callbacks.
+/// msg: The callback to send message to peer or ui.
+/// get_conf: The callback to get the config.
+/// log: The callback to log.
 #[repr(C)]
+#[derive(Copy, Clone)]
 struct Callbacks {
     msg: CallbackMsg,
-    get_id: CallbackGetId,
     get_conf: CallbackGetConf,
+    get_id: CallbackGetId,
+    log: CallbackLog,
 }
-type PluginFuncSetCallbacks = fn(Callbacks);
+
+/// The plugin initialize data.
+/// version: The version of the plugin, can't be nullptr.
+/// local_peer_id: The local peer id, can't be nullptr.
+/// cbs: The callbacks.
+#[repr(C)]
+struct InitData {
+    version: *const c_char,
+    cbs: Callbacks,
+}
+
+impl Drop for InitData {
+    fn drop(&mut self) {
+        free_c_ptr(self.version as _);
+    }
+}
 
 macro_rules! make_plugin {
     ($($field:ident : $tp:ty),+) => {
@@ -148,8 +178,8 @@ macro_rules! make_plugin {
                 desc
             }
 
-            fn init(&self, path: &str) -> ResultType<()> {
-                let init_ret = (self.init)();
+            fn init(&self, data: &InitData, path: &str) -> ResultType<()> {
+                let init_ret = (self.init)(data as _);
                 if !init_ret.is_null() {
                     let (code, msg) = get_code_msg_from_ret(init_ret);
                     free_c_ptr(init_ret as _);
@@ -192,8 +222,7 @@ make_plugin!(
     reset: PluginFuncReset,
     clear: PluginFuncClear,
     desc: PluginFuncDesc,
-    call: PluginFuncCall,
-    set_cbs: PluginFuncSetCallbacks
+    call: PluginFuncCall
 );
 
 #[cfg(target_os = "windows")]
@@ -260,21 +289,6 @@ pub fn reload_plugin(id: &str) -> ResultType<()> {
     load_plugin(Some(&path), Some(id))
 }
 
-#[no_mangle]
-fn cb_get_local_peer_id() -> *const c_char {
-    let mut id = (*LOCAL_PEER_ID.read().unwrap()).clone();
-    if id.is_empty() {
-        let mut lock = LOCAL_PEER_ID.write().unwrap();
-        id = (*lock).clone();
-        if id.is_empty() {
-            id = get_id();
-            id.push('\0');
-            *lock = id.clone();
-        }
-    }
-    id.as_ptr() as _
-}
-
 fn load_plugin_path(path: &str) -> ResultType<()> {
     let plugin = Plugin::new(path)?;
     let desc = plugin.desc()?;
@@ -282,18 +296,20 @@ fn load_plugin_path(path: &str) -> ResultType<()> {
     // to-do validate plugin
     // to-do check the plugin id (make sure it does not use another plugin's id)
 
-    plugin.init(path)?;
+    let init_data = InitData {
+        version: str_to_cstr_ret(crate::VERSION),
+        cbs: Callbacks {
+            msg: callback_msg::cb_msg,
+            get_conf: config::cb_get_conf,
+            get_id: config::cb_get_local_peer_id,
+            log: super::plog::log,
+        },
+    };
+    plugin.init(&init_data, path)?;
 
     if change_manager() {
         super::config::ManagerConfig::add_plugin(desc.id())?;
     }
-
-    // set callbacks
-    (plugin.set_cbs)(Callbacks {
-        msg: callback_msg::cb_msg,
-        get_id: cb_get_local_peer_id,
-        get_conf: config::cb_get_conf,
-    });
 
     // update ui
     // Ui may be not ready now, so we need to update again once ui is ready.
