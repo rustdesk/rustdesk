@@ -7,8 +7,6 @@ use crate::{
 };
 
 // API provided by RustDesk.
-pub type LoadPluginFunc = fn(*const c_char) -> i32;
-pub type UnloadPluginFunc = fn(*const c_char) -> i32;
 pub type AddSessionFunc = fn(session_id: String) -> bool;
 pub type RemoveSessionFunc = fn(session_id: &String) -> bool;
 pub type AddSessionHookFunc = fn(session_id: String, key: String, hook: SessionHook) -> bool;
@@ -22,8 +20,6 @@ pub enum SessionHook {
 
 // #[repr(C)]
 pub struct RustDeskApiTable {
-    pub(crate) load_plugin: LoadPluginFunc,
-    pub(crate) unload_plugin: UnloadPluginFunc,
     pub add_session: AddSessionFunc,
     pub remove_session: RemoveSessionFunc,
     pub add_session_hook: AddSessionHookFunc,
@@ -39,11 +35,14 @@ fn unload_plugin(path: *const c_char) -> i32 {
 }
 
 fn add_session(session_id: String) -> bool {
-    // let mut sessions = SESSIONS.write().unwrap();
-    // if sessions.contains_key(&session.id) {
-    //     return false;
-    // }
-    // let _ = sessions.insert(session.id.to_owned(), session);
+    let mut sessions = SESSIONS.write().unwrap();
+    // Create a dummy session in SESSIONS.
+    let mut session: Session<FlutterHandler> = Session::default();
+    session.id = session_id;
+    if sessions.contains_key(&session.id) {
+        return false;
+    }
+    let _ = sessions.insert(session.id.to_owned(), session);
     // true
     false
 }
@@ -76,8 +75,6 @@ fn remove_session_hook(session_id: String, key: &String) -> bool {
 impl Default for RustDeskApiTable {
     fn default() -> Self {
         Self {
-            load_plugin,
-            unload_plugin,
             add_session,
             remove_session,
             add_session_hook,

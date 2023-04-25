@@ -8,6 +8,7 @@ mod errno;
 pub mod ipc;
 mod plog;
 mod plugins;
+pub mod api;
 
 pub use plugins::{
     handle_client_event, handle_listen_event, handle_server_event, handle_ui_event, load_plugin,
