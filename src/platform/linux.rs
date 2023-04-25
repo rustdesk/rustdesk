@@ -9,6 +9,7 @@ use hbb_common::{
     regex::{Captures, Regex},
 };
 use std::{
+    string::String,
     cell::RefCell,
     path::{Path, PathBuf},
     process::{Child, Command},
@@ -18,6 +19,7 @@ use std::{
     },
     time::{Duration, Instant},
 };
+use users::{get_user_by_name, os::unix::UserExt};
 
 type Xdo = *const c_void;
 
@@ -449,12 +451,36 @@ pub fn get_active_username() -> String {
     get_values_of_seat0(&[2])[0].clone()
 }
 
+pub fn get_user_home_by_name(username: &str) -> Option<PathBuf> {
+    return match get_user_by_name(username) {
+        None => {
+            None
+        }
+        Some(user) => {
+            let home = user.home_dir();
+            if Path::is_dir(home) {
+                Some(PathBuf::from(home))
+            } else {
+                None
+            }
+        }
+    }
+}
+
 pub fn get_active_user_home() -> Option<PathBuf> {
     let username = get_active_username();
     if !username.is_empty() {
-        let home = PathBuf::from(format!("/home/{}", username));
-        if home.exists() {
-            return Some(home);
+        match get_user_home_by_name(&username) {
+            None => {
+                // fallback to most common default pattern
+                let home = PathBuf::from(format!("/home/{}", username));
+                if home.exists() {
+                    return Some(home);
+                }
+            }
+            Some(home) => {
+                return Some(home);
+            }
         }
     }
     None
@@ -774,6 +800,8 @@ mod desktop {
 
     pub const XFCE4_PANEL: &str = "xfce4-panel";
     pub const GNOME_SESSION_BINARY: &str = "gnome-session-binary";
+    pub const SDDM_GREETER: &str = "sddm-greeter";
+    pub const PLASMA_X11: &str = "startplasma-x11";
 
     #[derive(Debug, Clone, Default)]
     pub struct Desktop {
@@ -803,10 +831,19 @@ mod desktop {
         }
 
         fn get_display(&mut self) {
-            self.display = get_env_tries("DISPLAY", &self.uid, GNOME_SESSION_BINARY, 10);
-            if self.display.is_empty() {
-                self.display = get_env_tries("DISPLAY", &self.uid, XFCE4_PANEL, 10);
+            let display_envs = vec![
+                GNOME_SESSION_BINARY,
+                XFCE4_PANEL,
+                SDDM_GREETER,
+                PLASMA_X11,
+            ];
+            for diplay_env in display_envs {
+                self.display = get_env_tries("DISPLAY", &self.uid, diplay_env, 10);
+                if !self.display.is_empty() {
+                    break;
+                }
             }
+
             if self.display.is_empty() {
                 self.display = Self::get_display_by_user(&self.username);
             }
@@ -826,20 +863,29 @@ mod desktop {
             )) {
                 for line in output.lines() {
                     let mut auth_found = false;
+
                     for v in line.split_whitespace() {
                         if v == "-auth" {
                             auth_found = true;
                         } else if auth_found {
-                            if std::path::Path::new(v).is_absolute() {
+                            if std::path::Path::new(v).is_absolute()
+                                && std::path::Path::new(v).exists() {
+
                                 self.xauth = v.to_string();
                             } else {
                                 if let Some(pid) = line.split_whitespace().nth(1) {
+                                    let mut base_dir: String = String::from("/home"); // default pattern
                                     let home_dir = get_env_from_pid("HOME", pid);
                                     if home_dir.is_empty() {
-                                        self.xauth = format!("/home/{}/{}", self.username, v);
+                                        if let Some(home) = get_user_home_by_name(&self.username) {
+                                            base_dir = home.as_path().to_string_lossy().to_string();
+                                        };
                                     } else {
-                                        self.xauth = format!("{}/{}", home_dir, v);
+                                        base_dir = home_dir;
                                     }
+                                    if Path::new(&base_dir).exists() {
+                                        self.xauth = format!("{}/{}", base_dir, v);
+                                    };
                                 } else {
                                     // unreachable!
                                 }
@@ -852,28 +898,47 @@ mod desktop {
         }
 
         fn get_xauth(&mut self) {
-            self.xauth = get_env_tries("XAUTHORITY", &self.uid, GNOME_SESSION_BINARY, 10);
-            if self.xauth.is_empty() {
-                get_env_tries("XAUTHORITY", &self.uid, XFCE4_PANEL, 10);
+            // try by direct access to window manager process by name
+            let display_envs = vec![
+                GNOME_SESSION_BINARY,
+                XFCE4_PANEL,
+                SDDM_GREETER,
+                PLASMA_X11,
+            ];
+            for diplay_env in display_envs {
+                self.xauth = get_env_tries("XAUTHORITY", &self.uid, diplay_env, 10);
+                if !self.xauth.is_empty() {
+                    break;
+                }
             }
+
+            // get from Xorg process, parameter and environment
             if self.xauth.is_empty() {
                 self.get_xauth_from_xorg();
             }
 
-            let gdm = format!("/run/user/{}/gdm/Xauthority", self.uid);
+            // fallback to default file name
             if self.xauth.is_empty() {
+                let gdm = format!("/run/user/{}/gdm/Xauthority", self.uid);
                 self.xauth = if std::path::Path::new(&gdm).exists() {
                     gdm
                 } else {
                     let username = &self.username;
-                    if username == "root" {
-                        format!("/{}/.Xauthority", username)
-                    } else {
-                        let tmp = format!("/home/{}/.Xauthority", username);
-                        if std::path::Path::new(&tmp).exists() {
-                            tmp
-                        } else {
-                            format!("/var/lib/{}/.Xauthority", username)
+                    match get_user_home_by_name(username)  {
+                        None => {
+                            if username == "root" {
+                                format!("/{}/.Xauthority", username)
+                            } else {
+                                let tmp = format!("/home/{}/.Xauthority", username);
+                                if std::path::Path::new(&tmp).exists() {
+                                    tmp
+                                } else {
+                                    format!("/var/lib/{}/.Xauthority", username)
+                                }
+                            }
+                        }
+                        Some(home) => {
+                            format!("{}/.Xauthority", home.as_path().to_string_lossy().to_string())
                         }
                     }
                 };
