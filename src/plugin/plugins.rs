@@ -302,7 +302,7 @@ fn load_plugin_path(path: &str) -> ResultType<()> {
             msg: callback_msg::cb_msg,
             get_conf: config::cb_get_conf,
             get_id: config::cb_get_local_peer_id,
-            log: super::plog::log,
+            log: super::plog::plugin_log,
         },
     };
     plugin.init(&init_data, path)?;
@@ -409,6 +409,12 @@ pub fn handle_client_event(id: &str, peer: &str, event: &[u8]) -> Option<Message
                 let (code, msg) = get_code_msg_from_ret(ret);
                 free_c_ptr(ret as _);
                 if code > ERR_RUSTDESK_HANDLE_BASE && code < ERR_PLUGIN_HANDLE_BASE {
+                    log::debug!(
+                        "Plugin {} failed to handle client event, code: {}, msg: {}",
+                        id,
+                        code,
+                        msg
+                    );
                     let name = match PLUGIN_INFO.read().unwrap().get(id) {
                         Some(plugin) => plugin.desc.name(),
                         None => "???",
@@ -429,7 +435,8 @@ pub fn handle_client_event(id: &str, peer: &str, event: &[u8]) -> Option<Message
                     }
                 } else {
                     log::error!(
-                        "Failed to handle client event, code: {}, msg: {}",
+                        "Plugin {} failed to handle client event, code: {}, msg: {}",
+                        id,
                         code,
                         msg
                     );

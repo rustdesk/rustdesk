@@ -61,7 +61,7 @@ struct MsgToConfig {
 /// content: The content.
 /// len:     The length of the content.
 #[no_mangle]
-pub extern "C" fn cb_msg(
+pub(super) extern "C" fn cb_msg(
     peer: *const c_char,
     target: *const c_char,
     id: *const c_char,
