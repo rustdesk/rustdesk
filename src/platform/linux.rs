@@ -454,11 +454,9 @@ pub fn get_active_username() -> String {
 pub fn get_user_home_by_name(username: &str) -> Option<PathBuf> {
     return match get_user_by_name(username) {
         None => {
-            log::debug!("no uid found for user: {}", username);
             None
         }
         Some(user) => {
-            log::debug!("user '{:?}' (uid {:?}) with home dir: {:?}", user.uid(), user.name(), user.home_dir());
             let home = user.home_dir();
             if Path::is_dir(home) {
                 Some(PathBuf::from(home))
