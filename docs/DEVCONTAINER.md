@@ -10,5 +10,5 @@ Command|Build Type|Mode
 `.devcontainer/build.sh --debug linux`|Linux|debug
 `.devcontainer/build.sh --release linux`|Linux|release
 `.devcontainer/build.sh --debug android`|android-arm64|debug
-`.devcontainer/build.sh --release android`|android-arm64|debug
+`.devcontainer/build.sh --release android`|android-arm64|release
 
