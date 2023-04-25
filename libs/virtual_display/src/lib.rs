@@ -24,7 +24,7 @@ pub type DownLoadDriver = fn() -> ResultType<()>;
 pub type CreateDevice = fn() -> ResultType<()>;
 pub type InstallUpdateDriver = fn(&mut bool) -> ResultType<()>;
 pub type UninstallDriver = fn(&mut bool) -> ResultType<()>;
-pub type PlugInMonitor = fn(u32) -> ResultType<()>;
+pub type PlugInMonitor = fn(u32, u32, u32) -> ResultType<()>;
 pub type PlugOutMonitor = fn(u32) -> ResultType<()>;
 pub type UpdateMonitorModes = fn(u32, u32, PMonitorMode) -> ResultType<()>;
 
@@ -169,7 +169,7 @@ pub fn plug_in_monitor(monitor_index: u32) -> ResultType<()> {
         .unwrap()
         .plug_in_monitor
         .ok_or(anyhow::Error::msg("plug_in_monitor method not found"))?;
-    f(monitor_index)?;
+    f(monitor_index, 0, 20)?;
     lock.insert(monitor_index);
     Ok(())
 }
