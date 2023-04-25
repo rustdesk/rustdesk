@@ -19,6 +19,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:flutter_hbb/desktop/widgets/scroll_wrapper.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../../common/widgets/dialog.dart';
 import '../../common/widgets/login.dart';
@@ -1874,6 +1875,9 @@ Widget _lock(
                     bool checked = await bind.mainCheckSuperUserPermission();
                     if (checked) {
                       onUnlock();
+                    }
+                    if (Platform.isMacOS) {
+                      await windowManager.show();
                     }
                   },
                 ).marginSymmetric(horizontal: 2, vertical: 4),
