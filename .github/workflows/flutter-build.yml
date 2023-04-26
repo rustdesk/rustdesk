@@ -438,7 +438,7 @@ build-rustdesk-lib-linux-amd64:
           
           
           
- build-rustdesk-linux-amd64:
+  build-rustdesk-linux-amd64:
     needs: [build-rustdesk-lib-linux-amd64]
     name: build-rustdesk ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: ubuntu-20.04
