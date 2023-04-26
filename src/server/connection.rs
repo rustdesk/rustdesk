@@ -1813,11 +1813,9 @@ impl Connection {
                     #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     Some(misc::Union::PluginRequest(p)) => {
-                        if let Some(msg) =
-                            crate::plugin::handle_client_event(&p.id, &self.lr.my_id, &p.content)
-                        {
-                            self.send(msg).await;
-                        }
+                        let msg =
+                            crate::plugin::handle_client_event(&p.id, &self.lr.my_id, &p.content);
+                        self.send(msg).await;
                     }
                     _ => {}
                 },
