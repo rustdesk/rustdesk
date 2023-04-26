@@ -83,8 +83,6 @@ pub(super) extern "C" fn cb_msg(
     cb_msg_field!(target);
     cb_msg_field!(id);
 
-    println!("REMOVE ME ========================== cb_msg peer: {}, target: {}", peer, target);
-
     match &target as _ {
         MSG_TO_PEER_TARGET => {
             if let Some(session) = SESSIONS.write().unwrap().get_mut(&peer) {
@@ -101,10 +99,9 @@ pub(super) extern "C" fn cb_msg(
         }
         MSG_TO_UI_TARGET => {
             let content_slice = unsafe { std::slice::from_raw_parts(content as *const u8, len) };
-            let channel = u16::from_be_bytes([content_slice[0], content_slice[1]]);
+            let channel = u16::from_le_bytes([content_slice[0], content_slice[1]]);
             let content = std::string::String::from_utf8(content_slice[2..].to_vec())
                 .unwrap_or("".to_string());
-            println!("REMOVE ME ========================== cb_msg peer: {}, to ui: {}", peer, &content);
             push_event_to_ui(channel, &peer, &content);
         }
         MSG_TO_CONFIG_TARGET => {
@@ -113,7 +110,6 @@ pub(super) extern "C" fn cb_msg(
             {
                 // No need to merge the msgs. Handling the msg one by one is ok.
                 if let Ok(msg) = serde_json::from_str::<MsgToConfig>(s) {
-                    println!("REMOVE ME ========================== cb_msg peer: {}, config: {:?}", peer, &msg);
                     match &msg.r#type as _ {
                         config::CONFIG_TYPE_SHARED => {
                             match config::SharedConfig::set(&msg.id, &msg.key, &msg.value) {
@@ -169,7 +165,7 @@ fn push_event_to_ui(channel: u16, peer: &str, content: &str) {
             let _res = flutter::push_global_event(v as _, event.to_string());
         }
     }
-    if is_peer_channel(channel) {
+    if !peer.is_empty() && is_peer_channel(channel) {
         let _res = flutter::push_session_event(
             &peer,
             MSG_TO_UI_TYPE_PLUGIN_EVENT,
@@ -180,21 +176,26 @@ fn push_event_to_ui(channel: u16, peer: &str, content: &str) {
 
 fn push_option_to_ui(channel: u16, peer: &str, msg: &MsgToConfig, ui: &ConfigToUi) {
     let v = [
-        ("name", MSG_TO_UI_TYPE_PLUGIN_OPTION),
-        ("id", &msg.id),
+        ("id", &msg.id as &str),
         ("location", &ui.location),
         ("key", &msg.key),
         ("value", &msg.value),
     ];
-    let event = serde_json::to_string(&HashMap::from(v)).unwrap_or("".to_string());
+
+    // Send main and cm
+    let mut m = HashMap::from(v);
+    m.insert("name", MSG_TO_UI_TYPE_PLUGIN_OPTION);
+    let event = serde_json::to_string(&m).unwrap_or("".to_string());
     for (k, v) in MSG_TO_UI_FLUTTER_CHANNELS.iter() {
         if channel & k != 0 {
             let _res = flutter::push_global_event(v as _, event.to_string());
         }
     }
-    let mut v = v.to_vec();
-    v.push(("peer", &peer));
-    if is_peer_channel(channel) {
-        let _res = flutter::push_session_event(&peer, MSG_TO_UI_TYPE_PLUGIN_OPTION, v.to_vec());
+
+    // Send remote, transfer and forward
+    if !peer.is_empty() && is_peer_channel(channel) {
+        let mut v = v.to_vec();
+        v.push(("peer", &peer));
+        let _res = flutter::push_session_event(&peer, MSG_TO_UI_TYPE_PLUGIN_OPTION, v);
     }
 }
