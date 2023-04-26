@@ -605,7 +605,7 @@ message PluginRequest {
   bytes content = 2;
 }
 
-message PluginResponse {
+message PluginFailure {
   string id = 1;
   string name = 2;
   string msg = 3;
@@ -633,7 +633,7 @@ message Misc {
     SwitchBack switch_back = 22;
     Resolution change_resolution = 24;
     PluginRequest plugin_request = 25;
-    PluginResponse plugin_response = 26;
+    PluginFailure plugin_failure = 26;
   }
 }
 

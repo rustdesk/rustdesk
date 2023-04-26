@@ -6,7 +6,7 @@ use hbb_common::{
     allow_err, bail,
     dlopen::symbor::Library,
     lazy_static, log,
-    message_proto::{Message, Misc, PluginResponse},
+    message_proto::{Message, Misc, PluginFailure, PluginRequest},
     ResultType,
 };
 use std::{
@@ -89,19 +89,42 @@ type CallbackGetId = extern "C" fn() -> *const c_char;
 /// level: "error", "warn", "info", "debug", "trace".
 /// msg:   The message.
 type CallbackLog = extern "C" fn(level: *const c_char, msg: *const c_char);
-/// The main function of the plugin.
+/// The main function of the plugin on the client(self) side.
+///
 /// method: The method. "handle_ui" or "handle_peer"
 /// peer:  The peer id.
 /// args: The arguments.
+/// len:  The length of the arguments.
 ///
 /// Return null ptr if success.
 /// Return the error message if failed.  `i32-String` without dash, i32 is a signed little-endian number, the String is utf8 string.
 /// The plugin allocate memory with `libc::malloc` and return the pointer.
-type PluginFuncCall = extern "C" fn(
+type PluginFuncClientCall = extern "C" fn(
     method: *const c_char,
     peer: *const c_char,
     args: *const c_void,
     len: usize,
+) -> *const c_void;
+/// The main function of the plugin on the server(remote) side.
+///
+/// method: The method. "handle_ui" or "handle_peer"
+/// peer:  The peer id.
+/// args: The arguments.
+/// len:  The length of the arguments.
+/// out:  The output.
+///       The plugin allocate memory with `libc::malloc` and return the pointer.
+/// out_len: The length of the output.
+///
+/// Return null ptr if success.
+/// Return the error message if failed.  `i32-String` without dash, i32 is a signed little-endian number, the String is utf8 string.
+/// The plugin allocate memory with `libc::malloc` and return the pointer.
+type PluginFuncServerCall = extern "C" fn(
+    method: *const c_char,
+    peer: *const c_char,
+    args: *const c_void,
+    len: usize,
+    out: *mut *mut c_void,
+    out_len: *mut usize,
 ) -> *const c_void;
 
 /// The plugin callbacks.
@@ -222,7 +245,8 @@ make_plugin!(
     reset: PluginFuncReset,
     clear: PluginFuncClear,
     desc: PluginFuncDesc,
-    call: PluginFuncCall
+    client_call: PluginFuncClientCall,
+    server_call: PluginFuncServerCall
 );
 
 #[cfg(target_os = "windows")]
@@ -357,7 +381,7 @@ fn handle_event(method: &[u8], id: &str, peer: &str, event: &[u8]) -> ResultType
     peer.push('\0');
     match PLUGINS.read().unwrap().get(id) {
         Some(plugin) => {
-            let ret = (plugin.call)(
+            let ret = (plugin.client_call)(
                 method.as_ptr() as _,
                 peer.as_ptr() as _,
                 event.as_ptr() as _,
@@ -392,19 +416,25 @@ pub fn handle_server_event(id: &str, peer: &str, event: &[u8]) -> ResultType<()>
 }
 
 #[inline]
-pub fn handle_client_event(id: &str, peer: &str, event: &[u8]) -> Option<Message> {
+pub fn handle_client_event(id: &str, peer: &str, event: &[u8]) -> Message {
     let mut peer: String = peer.to_owned();
     peer.push('\0');
     match PLUGINS.read().unwrap().get(id) {
         Some(plugin) => {
-            let ret = (plugin.call)(
+            let mut out = std::ptr::null_mut();
+            let mut out_len: usize = 0;
+            let ret = (plugin.server_call)(
                 METHOD_HANDLE_PEER.as_ptr() as _,
                 peer.as_ptr() as _,
                 event.as_ptr() as _,
                 event.len(),
+                &mut out as _,
+                &mut out_len as _,
             );
             if ret.is_null() {
-                None
+                let msg = make_plugin_request(id, out, out_len);
+                free_c_ptr(out as _);
+                msg
             } else {
                 let (code, msg) = get_code_msg_from_ret(ret);
                 free_c_ptr(ret as _);
@@ -421,17 +451,13 @@ pub fn handle_client_event(id: &str, peer: &str, event: &[u8]) -> Option<Message
                     }
                     .to_owned();
                     match code {
-                        ERR_CALL_NOT_SUPPORTED_METHOD => Some(make_plugin_response(
-                            id,
-                            &name,
-                            "plugin method is not supported",
-                        )),
-                        ERR_CALL_INVALID_ARGS => Some(make_plugin_response(
-                            id,
-                            &name,
-                            "plugin arguments is invalid",
-                        )),
-                        _ => Some(make_plugin_response(id, &name, &msg)),
+                        ERR_CALL_NOT_SUPPORTED_METHOD => {
+                            make_plugin_failure(id, &name, "Plugin method is not supported")
+                        }
+                        ERR_CALL_INVALID_ARGS => {
+                            make_plugin_failure(id, &name, "Plugin arguments is invalid")
+                        }
+                        _ => make_plugin_failure(id, &name, &msg),
                     }
                 } else {
                     log::error!(
@@ -440,17 +466,33 @@ pub fn handle_client_event(id: &str, peer: &str, event: &[u8]) -> Option<Message
                         code,
                         msg
                     );
-                    None
+                    let msg = make_plugin_request(id, out, out_len);
+                    free_c_ptr(out as _);
+                    msg
                 }
             }
         }
-        None => Some(make_plugin_response(id, "", "plugin not found")),
+        None => make_plugin_failure(id, "", "Plugin not found"),
     }
 }
 
-fn make_plugin_response(id: &str, name: &str, msg: &str) -> Message {
+fn make_plugin_request(id: &str, content: *const c_void, len: usize) -> Message {
     let mut misc = Misc::new();
-    misc.set_plugin_response(PluginResponse {
+    misc.set_plugin_request(PluginRequest {
+        id: id.to_owned(),
+        content: unsafe { std::slice::from_raw_parts(content as *const u8, len) }
+            .clone()
+            .into(),
+        ..Default::default()
+    });
+    let mut msg_out = Message::new();
+    msg_out.set_misc(misc);
+    msg_out
+}
+
+fn make_plugin_failure(id: &str, name: &str, msg: &str) -> Message {
+    let mut misc = Misc::new();
+    misc.set_plugin_failure(PluginFailure {
         id: id.to_owned(),
         name: name.to_owned(),
         msg: msg.to_owned(),

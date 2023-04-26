@@ -36,13 +36,13 @@ lazy_static::lazy_static! {
     };
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct ConfigToUi {
     channel: u16,
     location: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct MsgToConfig {
     id: String,
     r#type: String,
@@ -83,6 +83,8 @@ pub(super) extern "C" fn cb_msg(
     cb_msg_field!(target);
     cb_msg_field!(id);
 
+    println!("REMOVE ME ========================== cb_msg peer: {}, target: {}", peer, target);
+
     match &target as _ {
         MSG_TO_PEER_TARGET => {
             if let Some(session) = SESSIONS.write().unwrap().get_mut(&peer) {
@@ -102,6 +104,7 @@ pub(super) extern "C" fn cb_msg(
             let channel = u16::from_be_bytes([content_slice[0], content_slice[1]]);
             let content = std::string::String::from_utf8(content_slice[2..].to_vec())
                 .unwrap_or("".to_string());
+            println!("REMOVE ME ========================== cb_msg peer: {}, to ui: {}", peer, &content);
             push_event_to_ui(channel, &peer, &content);
         }
         MSG_TO_CONFIG_TARGET => {
@@ -110,6 +113,7 @@ pub(super) extern "C" fn cb_msg(
             {
                 // No need to merge the msgs. Handling the msg one by one is ok.
                 if let Ok(msg) = serde_json::from_str::<MsgToConfig>(s) {
+                    println!("REMOVE ME ========================== cb_msg peer: {}, config: {:?}", peer, &msg);
                     match &msg.r#type as _ {
                         config::CONFIG_TYPE_SHARED => {
                             match config::SharedConfig::set(&msg.id, &msg.key, &msg.value) {
