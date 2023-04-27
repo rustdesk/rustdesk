@@ -9,6 +9,7 @@ use hbb_common::{
     message_proto::{Message, Misc, PluginFailure, PluginRequest},
     ResultType,
 };
+use serde_derive::Serialize;
 use std::{
     collections::HashMap,
     ffi::{c_char, c_void},
@@ -18,6 +19,7 @@ use std::{
 
 const METHOD_HANDLE_UI: &[u8; 10] = b"handle_ui\0";
 const METHOD_HANDLE_PEER: &[u8; 12] = b"handle_peer\0";
+pub const METHOD_HANDLE_LISTEN_EVENT: &[u8; 20] = b"handle_listen_event\0";
 
 lazy_static::lazy_static! {
     static ref PLUGIN_INFO: Arc<RwLock<HashMap<String, PluginInfo>>> = Default::default();
@@ -249,6 +251,11 @@ make_plugin!(
     server_call: PluginFuncServerCall
 );
 
+#[derive(Serialize)]
+pub struct MsgListenEvent {
+    pub event: String,
+}
+
 #[cfg(target_os = "windows")]
 const DYLIB_SUFFIX: &str = ".dll";
 #[cfg(target_os = "linux")]
@@ -413,6 +420,55 @@ pub fn handle_ui_event(id: &str, peer: &str, event: &[u8]) -> ResultType<()> {
 #[inline]
 pub fn handle_server_event(id: &str, peer: &str, event: &[u8]) -> ResultType<()> {
     handle_event(METHOD_HANDLE_PEER, id, peer, event)
+}
+
+#[inline]
+pub fn handle_listen_event(event: &str, peer: &str) {
+    let mut plugins = Vec::new();
+    for info in PLUGIN_INFO.read().unwrap().values() {
+        if info.desc.listen_events().contains(&event.to_string()) {
+            plugins.push(info.desc.id().to_string());
+        }
+    }
+
+    if plugins.is_empty() {
+        return;
+    }
+
+    if let Ok(mut evt) = serde_json::to_string(&MsgListenEvent {
+        event: event.to_string(),
+    }) {
+        let mut evt_bytes = evt.as_bytes().to_vec();
+        evt_bytes.push(0);
+        let mut peer: String = peer.to_owned();
+        peer.push('\0');
+        for id in plugins {
+            match PLUGINS.read().unwrap().get(&id) {
+                Some(plugin) => {
+                    let ret = (plugin.client_call)(
+                        METHOD_HANDLE_LISTEN_EVENT.as_ptr() as _,
+                        peer.as_ptr() as _,
+                        evt_bytes.as_ptr() as _,
+                        evt_bytes.len(),
+                    );
+                    if !ret.is_null() {
+                        let (code, msg) = get_code_msg_from_ret(ret);
+                        free_c_ptr(ret as _);
+                        log::error!(
+                            "Failed to handle plugin listen event, id: {}, event: {}, code: {}, msg: {}",
+                            id,
+                            event,
+                            code,
+                            msg
+                        );
+                    }
+                }
+                None => {
+                    log::error!("Plugin {} not found when handle_listen_event", id);
+                }
+            }
+        }
+    }
 }
 
 #[inline]
