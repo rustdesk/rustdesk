@@ -306,6 +306,16 @@ class Header: Reactor.Component {
         if (pi.current_display == me.index) return;
         handler.switch_display(me.index);
     }
+    
+    event keyup (evt) {
+        if((pi.displays || []).length > 0 && evt.keyCode == 220)
+        { 
+            if (pi.displays.length > pi.current_display) 
+                handler.switch_display(pi.current_display + 1);
+            else
+                handler.switch_display(1);
+        }
+    }
 
     event click $(#transfer-file) {
         handler.transfer_file();
