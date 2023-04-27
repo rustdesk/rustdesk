@@ -565,10 +565,12 @@ impl Connection {
         }
         #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        crate::plugin::handle_listen_event(
-            crate::plugin::EVENT_ON_CONN_CLOSE_SERVER,
-            &conn.lr.my_id,
-        );
+        {
+            crate::plugin::handle_listen_event(
+                crate::plugin::EVENT_ON_CONN_CLOSE_SERVER.to_owned(),
+                conn.lr.my_id.clone(),
+            );
+        }
         video_service::notify_video_frame_fetched(id, None);
         scrap::codec::Encoder::update(id, scrap::codec::EncodingUpdate::Remove);
         video_service::VIDEO_QOS.lock().unwrap().reset();

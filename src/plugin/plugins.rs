@@ -422,8 +422,7 @@ pub fn handle_server_event(id: &str, peer: &str, event: &[u8]) -> ResultType<()>
     handle_event(METHOD_HANDLE_PEER, id, peer, event)
 }
 
-#[inline]
-pub fn handle_listen_event(event: &str, peer: &str) {
+fn _handle_listen_event(event: String, peer: String) {
     let mut plugins = Vec::new();
     for info in PLUGIN_INFO.read().unwrap().values() {
         if info.desc.listen_events().contains(&event.to_string()) {
@@ -435,9 +434,7 @@ pub fn handle_listen_event(event: &str, peer: &str) {
         return;
     }
 
-    if let Ok(mut evt) = serde_json::to_string(&MsgListenEvent {
-        event: event.to_string(),
-    }) {
+    if let Ok(mut evt) = serde_json::to_string(&MsgListenEvent { event }) {
         let mut evt_bytes = evt.as_bytes().to_vec();
         evt_bytes.push(0);
         let mut peer: String = peer.to_owned();
@@ -469,6 +466,11 @@ pub fn handle_listen_event(event: &str, peer: &str) {
             }
         }
     }
+}
+
+#[inline]
+pub fn handle_listen_event(event: String, peer: String) {
+    std::thread::spawn(|| _handle_listen_event(event, peer));
 }
 
 #[inline]
