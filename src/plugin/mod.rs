@@ -5,19 +5,24 @@ mod callback_msg;
 mod config;
 pub mod desc;
 mod errno;
-mod plog;
 pub mod ipc;
+mod plog;
 mod plugins;
 
 pub use plugins::{
-    handle_client_event, handle_server_event, handle_ui_event, load_plugin, load_plugins,
-    reload_plugin, sync_ui, unload_plugin, unload_plugins,
+    handle_client_event, handle_listen_event, handle_server_event, handle_ui_event, load_plugin,
+    load_plugins, reload_plugin, sync_ui, unload_plugin, unload_plugins,
 };
 
 const MSG_TO_UI_TYPE_PLUGIN_DESC: &str = "plugin_desc";
 const MSG_TO_UI_TYPE_PLUGIN_EVENT: &str = "plugin_event";
 const MSG_TO_UI_TYPE_PLUGIN_RELOAD: &str = "plugin_reload";
 const MSG_TO_UI_TYPE_PLUGIN_OPTION: &str = "plugin_option";
+
+pub const EVENT_ON_CONN_CLIENT: &str = "on_conn_client";
+pub const EVENT_ON_CONN_SERVER: &str = "on_conn_server";
+pub const EVENT_ON_CONN_CLOSE_CLIENT: &str = "on_conn_close_client";
+pub const EVENT_ON_CONN_CLOSE_SERVER: &str = "on_conn_close_server";
 
 pub use config::{ManagerConfig, PeerConfig, SharedConfig};
 
@@ -29,7 +34,7 @@ fn cstr_to_string(cstr: *const c_char) -> ResultType<String> {
 }
 
 #[inline]
-pub fn str_to_cstr_ret(s: &str) -> *const c_char {
+fn str_to_cstr_ret(s: &str) -> *const c_char {
     let mut s = s.as_bytes().to_vec();
     s.push(0);
     unsafe {

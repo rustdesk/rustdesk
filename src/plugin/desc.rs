@@ -60,6 +60,7 @@ pub struct Desc {
     github: String,
     location: Location,
     config: Config,
+    listen_events: Vec<String>,
 }
 
 impl Desc {
@@ -114,5 +115,9 @@ impl Desc {
 
     pub fn config(&self) -> &Config {
         &self.config
+    }
+
+    pub fn listen_events(&self) -> &Vec<String> {
+        &self.listen_events
     }
 }

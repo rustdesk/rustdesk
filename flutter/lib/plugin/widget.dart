@@ -260,10 +260,15 @@ class PluginItem extends StatelessWidget {
   String? _getOption(OptionModel model, String key) {
     var v = model.value;
     if (v == null) {
-      if (peerId.isEmpty) {
-        v = bind.pluginGetSharedOption(id: pluginId, key: key);
-      } else {
-        v = bind.pluginGetSessionOption(id: pluginId, peer: peerId, key: key);
+      try {
+        if (peerId.isEmpty) {
+          v = bind.pluginGetSharedOption(id: pluginId, key: key);
+        } else {
+          v = bind.pluginGetSessionOption(id: pluginId, peer: peerId, key: key);
+        }
+      } catch (e) {
+        debugPrint('Failed to get option "$key", $e');
+        v = null;
       }
     }
     return v;

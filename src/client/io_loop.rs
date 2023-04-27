@@ -961,6 +961,14 @@ impl<T: InvokeUiSession> Remote<T> {
                                     }
                                 });
                             }
+
+                            // on connection established client
+                            #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
+                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                            crate::plugin::handle_listen_event(
+                                crate::plugin::EVENT_ON_CONN_CLIENT.to_owned(),
+                                self.handler.id.clone(),
+                            )
                         }
 
                         if self.handler.is_file_transfer() {
