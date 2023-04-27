@@ -434,7 +434,9 @@ fn _handle_listen_event(event: String, peer: String) {
         return;
     }
 
-    if let Ok(mut evt) = serde_json::to_string(&MsgListenEvent { event }) {
+    if let Ok(evt) = serde_json::to_string(&MsgListenEvent {
+        event: event.clone(),
+    }) {
         let mut evt_bytes = evt.as_bytes().to_vec();
         evt_bytes.push(0);
         let mut peer: String = peer.to_owned();
