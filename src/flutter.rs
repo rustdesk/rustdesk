@@ -502,6 +502,7 @@ impl InvokeUiSession for FlutterHandler {
     #[cfg(not(feature = "flutter_texture_render"))]
     fn on_rgba(&self, rgba: &mut scrap::ImageRgb) {
         // Give a chance for plugins or etc to hook a rgba data.
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         for (key, hook) in self.hooks.read().unwrap().iter() {
             match hook {
                 SessionHook::OnSessionRgba(cb) => {
