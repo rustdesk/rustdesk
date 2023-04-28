@@ -317,7 +317,7 @@ pub mod server {
                 }
                 if first_frame_captured {
                     if !utils::counter_equal(shmem.as_ptr().add(ADDR_CAPTURE_FRAME_COUNTER)) {
-                        std::thread::sleep(spf);
+                        std::thread::sleep(std::time::Duration::from_millis(1));
                         continue;
                     }
                 }
