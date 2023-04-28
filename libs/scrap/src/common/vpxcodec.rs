@@ -130,9 +130,11 @@ impl EncoderApi for VpxEncoder {
                 c.kf_mode = vpx_kf_mode::VPX_KF_DISABLED; // reduce bandwidth a lot
 
                 /*
-                VPX encoder支持two-pass encode，这是为了rate control的。
-                对于两遍编码，就是需要整个编码过程做两次，第一次会得到一些新的控制参数来进行第二遍的编码，
-                这样可以在相同的bitrate下得到最好的PSNR
+                The VPX encoder supports two-pass encoding for rate control purposes.
+                In two-pass encoding, the entire encoding process is performed twice.
+                The first pass generates new control parameters for the second pass.
+                
+                This approach enables the best PSNR at the same bit rate.
                 */
 
                 let mut ctx = Default::default();
@@ -538,16 +540,21 @@ impl Image {
         self.inner().stride[iplane]
     }
 
-    pub fn to(&self, fmt: ImageFormat, stride: usize, dst: &mut Vec<u8>) {
-        let h = self.height();
-        let w = self.width();
+    #[inline]
+    pub fn get_bytes_per_row(w: usize, fmt: ImageFormat, stride: usize) -> usize {
         let bytes_per_pixel = match fmt {
             ImageFormat::Raw => 3,
             ImageFormat::ARGB | ImageFormat::ABGR => 4,
         };
         // https://github.com/lemenkov/libyuv/blob/6900494d90ae095d44405cd4cc3f346971fa69c9/source/convert_argb.cc#L128
         // https://github.com/lemenkov/libyuv/blob/6900494d90ae095d44405cd4cc3f346971fa69c9/source/convert_argb.cc#L129
-        let bytes_per_row = (w * bytes_per_pixel + stride - 1) & !(stride - 1);
+        (w * bytes_per_pixel + stride - 1) & !(stride - 1)
+    }
+
+    pub fn to(&self, fmt: ImageFormat, stride: usize, dst: &mut Vec<u8>) {
+        let h = self.height();
+        let w = self.width();
+        let bytes_per_row = Self::get_bytes_per_row(w, fmt, stride);
         dst.resize(h * bytes_per_row, 0);
         let img = self.inner();
         unsafe {

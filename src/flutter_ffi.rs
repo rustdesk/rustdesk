@@ -539,7 +539,7 @@ pub fn session_change_resolution(id: String, width: i32, height: i32) {
     }
 }
 
-pub fn session_set_size(_id: String, _width: i32, _height: i32) {
+pub fn session_set_size(_id: String, _width: usize, _height: usize) {
     #[cfg(feature = "flutter_texture_render")]
     if let Some(session) = SESSIONS.write().unwrap().get_mut(&_id) {
         session.set_size(_width, _height);

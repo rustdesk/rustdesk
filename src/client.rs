@@ -996,16 +996,19 @@ impl VideoHandler {
         }
     }
 
+    #[inline]
+    pub fn get_video_format() -> (ImageFormat, usize) {
+        (ImageFormat::ARGB, crate::DST_STRIDE_RGBA)
+    }
+
     /// Handle a new video frame.
     #[inline]
     pub fn handle_frame(&mut self, vf: VideoFrame) -> ResultType<bool> {
         match &vf.union {
             Some(frame) => {
-                let res = self.decoder.handle_video_frame(
-                    frame,
-                    (ImageFormat::ARGB, crate::DST_STRIDE_RGBA),
-                    &mut self.rgb,
-                );
+                let res =
+                    self.decoder
+                        .handle_video_frame(frame, Self::get_video_format(), &mut self.rgb);
                 if self.record {
                     self.recorder
                         .lock()
@@ -1749,6 +1752,7 @@ pub type MediaSender = mpsc::Sender<MediaData>;
 ///
 /// * `video_callback` - The callback for video frame. Being called when a video frame is ready.
 pub fn start_video_audio_threads<F>(
+    peer: String,
     video_callback: F,
 ) -> (
     MediaSender,
@@ -1806,6 +1810,11 @@ where
                                 count = 0;
                                 duration = Duration::ZERO;
                             }
+                        }
+                        if video_handler.decoder.too_many_frames_without_keyframe() {
+                            log::warn!("Too many frames without keyframe, reset");
+                            #[cfg(feature = "flutter")]
+                            crate::flutter_ffi::session_refresh(peer.clone());
                         }
                     }
                     MediaData::Reset => {

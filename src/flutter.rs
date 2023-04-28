@@ -179,8 +179,9 @@ pub type FlutterRgbaRendererPluginOnRgba = unsafe extern "C" fn(
 struct VideoRenderer {
     // TextureRgba pointer in flutter native.
     ptr: usize,
-    width: i32,
-    height: i32,
+    width: usize,
+    height: usize,
+    size: usize,
     on_rgba_func: Option<Symbol<'static, FlutterRgbaRendererPluginOnRgba>>,
 }
 
@@ -209,6 +210,7 @@ impl Default for VideoRenderer {
             ptr: 0,
             width: 0,
             height: 0,
+            size: 0,
             on_rgba_func,
         }
     }
@@ -217,15 +219,24 @@ impl Default for VideoRenderer {
 #[cfg(feature = "flutter_texture_render")]
 impl VideoRenderer {
     #[inline]
-    pub fn set_size(&mut self, width: i32, height: i32) {
+    pub fn set_size(&mut self, width: usize, height: usize) {
         self.width = width;
         self.height = height;
+        let fmt = crate::client::VideoHandler::get_video_format();
+        let bytes_per_row = scrap::Image::get_bytes_per_row(width, fmt.0, fmt.1);
+        self.size = bytes_per_row * height;
     }
 
     pub fn on_rgba(&self, rgba: &Vec<u8>) {
         if self.ptr == usize::default() || self.width == 0 || self.height == 0 {
             return;
         }
+
+        let rgba_len = rgba.len();
+        if rgba_len != self.size as usize {
+            return;
+        }
+
         if let Some(func) = &self.on_rgba_func {
             unsafe {
                 func(
@@ -315,7 +326,7 @@ impl FlutterHandler {
 
     #[inline]
     #[cfg(feature = "flutter_texture_render")]
-    pub fn set_size(&mut self, width: i32, height: i32) {
+    pub fn set_size(&mut self, width: usize, height: usize) {
         *self.notify_rendered.write().unwrap() = false;
         self.renderer.write().unwrap().set_size(width, height);
     }
@@ -1047,5 +1058,4 @@ pub fn stop_global_event_stream(app_type: String) {
 }
 
 #[no_mangle]
-unsafe extern "C" fn get_rgba() {
-}
+unsafe extern "C" fn get_rgba() {}
