@@ -21,7 +21,7 @@ pub type NR = super::native::NativeReturnValue;
 pub type PluginNativeHandlerRegistrar = NativeHandlerRegistrar<Box<dyn Callable + Send + Sync>>;
 
 lazy_static! {
-    static ref NATIVE_HANDLERS_REGISTRAR: Arc<PluginNativeHandlerRegistrar> =
+    pub static ref NATIVE_HANDLERS_REGISTRAR: Arc<PluginNativeHandlerRegistrar> =
         Arc::new(PluginNativeHandlerRegistrar::default());
 }
 
@@ -34,6 +34,7 @@ impl Default for PluginNativeHandlerRegistrar {
     fn default() -> Self {
         Self {
             handlers: Arc::new(RwLock::new(vec![Box::new(
+                // Add prebuilt native handlers here.
                 PluginNativeSessionHandler::default(),
             )])),
         }
@@ -104,10 +105,7 @@ where
     }
 }
 
-impl<C> Callable for NativeHandlerRegistrar<C>
-where
-    C: Callable,
-{
+impl Callable for PluginNativeHandlerRegistrar {
     fn call(
         &self,
         method: &String,
