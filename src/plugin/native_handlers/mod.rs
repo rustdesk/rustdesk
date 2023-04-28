@@ -61,7 +61,7 @@ pub(self) trait PluginNativeHandler {
     ) -> Option<NR>;
 }
 
-pub(crate) trait Callable {
+pub trait Callable {
     fn call(
         &self,
         method: &String,

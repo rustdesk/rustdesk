@@ -147,7 +147,7 @@ pub struct FlutterHandler {
     renderer: Arc<RwLock<VideoRenderer>>,
     peer_info: Arc<RwLock<PeerInfo>>,
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    hooks: Arc<RwLock<HashMap<String, crate::api::SessionHook>>>,
+    hooks: Arc<RwLock<HashMap<String, SessionHook>>>,
 }
 
 #[cfg(not(feature = "flutter_texture_render"))]
@@ -160,7 +160,7 @@ pub struct FlutterHandler {
     pub rgba_valid: Arc<AtomicBool>,
     peer_info: Arc<RwLock<PeerInfo>>,
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    hooks: Arc<RwLock<HashMap<String, crate::api::SessionHook>>>,
+    hooks: Arc<RwLock<HashMap<String, SessionHook>>>,
 }
 
 #[cfg(feature = "flutter_texture_render")]
@@ -294,7 +294,7 @@ impl FlutterHandler {
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    pub(crate) fn add_session_hook(&self, key: String, hook: crate::api::SessionHook) -> bool {
+    pub(crate) fn add_session_hook(&self, key: String, hook: SessionHook) -> bool {
         let mut hooks = self.hooks.write().unwrap();
         if hooks.contains_key(&key) {
             // Already has the hook with this key.
@@ -501,6 +501,14 @@ impl InvokeUiSession for FlutterHandler {
     #[inline]
     #[cfg(not(feature = "flutter_texture_render"))]
     fn on_rgba(&self, rgba: &mut scrap::ImageRgb) {
+        // Give a chance for plugins or etc to hook a rgba data.
+        for (key, hook) in self.hooks.read().unwrap().iter() {
+            match hook {
+                SessionHook::OnSessionRgba(cb) => {
+                    cb(key.to_owned(), rgba);
+                },
+            }
+        }
         // If the current rgba is not fetched by flutter, i.e., is valid.
         // We give up sending a new event to flutter.
         if self.rgba_valid.load(Ordering::Relaxed) {
@@ -1056,3 +1064,9 @@ pub fn stop_global_event_stream(app_type: String) {
 
 #[no_mangle]
 unsafe extern "C" fn get_rgba() {}
+
+/// Hooks for session.
+#[derive(Clone)]
+pub enum SessionHook {
+    OnSessionRgba(fn(String, &mut scrap::ImageRgb)),
+}
