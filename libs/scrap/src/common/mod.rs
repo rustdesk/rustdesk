@@ -51,6 +51,26 @@ pub enum ImageFormat {
     ARGB,
 }
 
+pub struct ImageRgb {
+    pub raw: Vec<u8>,
+    pub fmt: ImageFormat,
+    pub w: usize,
+    pub h: usize,
+    pub stride: usize,
+}
+
+impl ImageRgb {
+    pub fn new(fmt: ImageFormat, stride: usize) -> Self {
+        Self {
+            raw: Vec::new(),
+            fmt,
+            w: 0,
+            h: 0,
+            stride,
+        }
+    }
+}
+
 #[inline]
 pub fn would_block_if_equal(old: &mut Vec<u8>, b: &[u8]) -> std::io::Result<()> {
     // does this really help?
