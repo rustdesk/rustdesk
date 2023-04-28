@@ -82,3 +82,60 @@ pub fn get_license_from_string(s: &str) -> ResultType<License> {
     }
     bail!("Failed to parse");
 }
+
+#[cfg(test)]
+#[cfg(target_os = "windows")]
+mod test {
+    #[test]
+    fn test_filename_license_string() {
+        assert_eq!(
+            get_license_from_string("rustdesk.exe"),
+            Ok(License {
+                host: "".to_owned(),
+                key: "".to_owned(),
+                api: "".to_owned(),
+            })
+        );
+        assert_eq!(
+            get_license_from_string("rustdesk"),
+            Ok(License {
+                host: "".to_owned(),
+                key: "".to_owned(),
+                api: "".to_owned(),
+            })
+        );
+        assert_eq!(
+            get_license_from_string("rustdesk-host=server.example.net.exe"),
+            Ok(License {
+                host: "server.example.net".to_owned(),
+                key: "".to_owned(),
+                api: "".to_owned(),
+            })
+        );
+        assert_eq!(
+            get_license_from_string("rustdesk-host=server.example.net,.exe"),
+            Ok(License {
+                host: "server.example.net".to_owned(),
+                key: "".to_owned(),
+                api: "".to_owned(),
+            })
+        );
+        // key in these tests is "foobar.,2" base64 encoded
+        assert_eq!(
+            get_license_from_string("rustdesk-host=server.example.net,key=Zm9vYmFyLiwyCg==.exe"),
+            Ok(License {
+                host: "server.example.net".to_owned(),
+                key: "Zm9vYmFyLiwyCg==".to_owned(),
+                api: "".to_owned(),
+            })
+        );
+        assert_eq!(
+            get_license_from_string("rustdesk-host=server.example.net,key=Zm9vYmFyLiwyCg==,.exe"),
+            Ok(License {
+                host: "server.example.net".to_owned(),
+                key: "Zm9vYmFyLiwyCg==".to_owned(),
+                api: "".to_owned(),
+            })
+        );
+    }
+}
