@@ -17,6 +17,8 @@ pub const ERR_CALL_NOT_SUPPORTED_METHOD: i32 = 10202;
 // failed on calling
 pub const ERR_CALL_INVALID_ARGS: i32 = 10301;
 pub const ERR_PEER_ID_MISMATCH: i32 = 10302;
+// no handlers on calling
+pub const ERR_NOT_HANDLED: i32 = 10401;
 
 // ======================================================
 // errors that should be handled by the plugin
