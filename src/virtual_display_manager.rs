@@ -59,12 +59,15 @@ pub fn plug_in_headless() -> ResultType<()> {
     Ok(())
 }
 
-pub fn plug_out_headless() {
+pub fn plug_out_headless() -> bool {
     let mut manager = VIRTUAL_DISPLAY_MANAGER.lock().unwrap();
     if let Some(index) = manager.headless_index.take() {
         if let Err(e) = virtual_display::plug_out_monitor(index) {
             log::error!("Plug out monitor failed {}", e);
         }
+        true
+    } else {
+        false
     }
 }
 
