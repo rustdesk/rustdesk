@@ -536,11 +536,11 @@ impl Image {
     pub fn to(&self, rgb: &mut ImageRgb) {
         rgb.w = self.width();
         rgb.h = self.height();
-        let bytes_per_row = Self::get_bytes_per_row(rgb.w, rgb.fmt, rgb.stride);
+        let bytes_per_row = Self::get_bytes_per_row(rgb.w, rgb.fmt, rgb.stride());
         rgb.raw.resize(rgb.h * bytes_per_row, 0);
         let img = self.inner();
         unsafe {
-            match rgb.fmt {
+            match rgb.fmt() {
                 ImageFormat::Raw => {
                     super::I420ToRAW(
                         img.planes[0],

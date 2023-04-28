@@ -50,9 +50,10 @@ impl MediaCodecDecoder {
         MediaCodecDecoders { h264, h265 }
     }
 
+    // rgb [in/out] fmt and stride must be set in ImageRgb
     pub fn decode(&mut self, data: &[u8], rgb: &mut ImageRgb) -> ResultType<bool> {
         // take dst_stride into account please
-        let dst_stride = rgb.stride;
+        let dst_stride = rgb.stride();
         match self.dequeue_input_buffer(Duration::from_millis(10))? {
             Some(mut input_buffer) => {
                 let mut buf = input_buffer.buffer_mut();
@@ -90,7 +91,7 @@ impl MediaCodecDecoder {
                 let u_ptr = buf[u..].as_ptr();
                 let v_ptr = buf[v..].as_ptr();
                 unsafe {
-                    match rgb.fmt {
+                    match rgb.fmt() {
                         ImageFormat::ARGB => {
                             I420ToARGB(
                                 y_ptr,

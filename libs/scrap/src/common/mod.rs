@@ -53,21 +53,31 @@ pub enum ImageFormat {
 
 pub struct ImageRgb {
     pub raw: Vec<u8>,
-    pub fmt: ImageFormat,
     pub w: usize,
     pub h: usize,
-    pub stride: usize,
+    fmt: ImageFormat,
+    stride: usize,
 }
 
 impl ImageRgb {
     pub fn new(fmt: ImageFormat, stride: usize) -> Self {
         Self {
             raw: Vec::new(),
-            fmt,
             w: 0,
             h: 0,
+            fmt,
             stride,
         }
+    }
+
+    #[inline]
+    pub fn fmt(&self) -> ImageFormat {
+        self.fmt
+    }
+
+    #[inline]
+    pub fn stride(&self) -> usize {
+        self.stride
     }
 }
 

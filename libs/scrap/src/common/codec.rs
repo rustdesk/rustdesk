@@ -287,6 +287,7 @@ impl Decoder {
         }
     }
 
+    // rgb [in/out] fmt and stride must be set in ImageRgb
     pub fn handle_video_frame(
         &mut self,
         frame: &video_frame::Union,
@@ -335,6 +336,7 @@ impl Decoder {
         }
     }
 
+    // rgb [in/out] fmt and stride must be set in ImageRgb
     fn handle_vpxs_video_frame(
         decoder: &mut VpxDecoder,
         vpxs: &EncodedVideoFrames,
@@ -359,6 +361,7 @@ impl Decoder {
         }
     }
 
+    // rgb [in/out] fmt and stride must be set in ImageRgb
     #[cfg(feature = "hwcodec")]
     fn handle_hw_video_frame(
         decoder: &mut HwDecoder,
@@ -378,6 +381,7 @@ impl Decoder {
         return Ok(ret);
     }
 
+    // rgb [in/out] fmt and stride must be set in ImageRgb
     #[cfg(feature = "mediacodec")]
     fn handle_mediacodec_video_frame(
         decoder: &mut MediaCodecDecoder,

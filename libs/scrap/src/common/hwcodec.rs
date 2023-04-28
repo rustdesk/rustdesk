@@ -227,15 +227,16 @@ pub struct HwDecoderImage<'a> {
 }
 
 impl HwDecoderImage<'_> {
+    // rgb [in/out] fmt and stride must be set in ImageRgb
     pub fn to_fmt(&self, rgb: &mut ImageRgb, i420: &mut Vec<u8>) -> ResultType<()> {
         let frame = self.frame;
         rgb.w = frame.width as _;
         rgb.h = frame.height as _;
         // take dst_stride into account when you convert
-        let dst_stride = rgb.stride;
+        let dst_stride = rgb.stride();
         match frame.pixfmt {
             AVPixelFormat::AV_PIX_FMT_NV12 => hw::hw_nv12_to(
-                rgb.fmt,
+                rgb.fmt(),
                 frame.width as _,
                 frame.height as _,
                 &frame.data[0],
@@ -248,7 +249,7 @@ impl HwDecoderImage<'_> {
             ),
             AVPixelFormat::AV_PIX_FMT_YUV420P => {
                 hw::hw_i420_to(
-                    rgb.fmt,
+                    rgb.fmt(),
                     frame.width as _,
                     frame.height as _,
                     &frame.data[0],
