@@ -274,7 +274,7 @@ fn create_capturer(
 fn ensure_close_virtual_device() -> ResultType<()> {
     let num_displays = Display::all()?.len();
     if num_displays > 1 {
-        virtual_display_manager::plug_out_headless();
+        let _res = virtual_display_manager::plug_out_headless();
     }
     Ok(())
 }
