@@ -1,6 +1,8 @@
 use std::io::{self, Read};
+#[cfg(windows)]
 use virtual_display;
 
+#[cfg(windows)]
 fn prompt_input() -> u8 {
     println!("Press  key          execute:");
     println!("       1. 'q'       1. quit");
@@ -18,6 +20,7 @@ fn prompt_input() -> u8 {
         .unwrap_or(0)
 }
 
+#[cfg(windows)]
 fn plug_in(monitor_index: u32) {
     println!("Plug in monitor begin");
     if let Err(e) = virtual_display::plug_in_monitor(monitor_index as _) {
@@ -27,6 +30,7 @@ fn plug_in(monitor_index: u32) {
     }
 }
 
+#[cfg(windows)]
 fn plug_out(monitor_index: u32) {
     println!("Plug out monitor begin");
     if let Err(e) = virtual_display::plug_out_monitor(monitor_index as _) {
@@ -36,6 +40,7 @@ fn plug_out(monitor_index: u32) {
     }
 }
 
+#[cfg(windows)]
 fn main() {
     loop {
         let chr = prompt_input();
@@ -92,3 +97,6 @@ fn main() {
         }
     }
 }
+
+#[cfg(not(windows))]
+fn main() {}
