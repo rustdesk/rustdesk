@@ -10,7 +10,7 @@ use std::{
 use crate::ImageFormat;
 use crate::{
     codec::{EncoderApi, EncoderCfg},
-    I420ToABGR, I420ToARGB,
+    I420ToABGR, I420ToARGB, ImageRgb,
 };
 
 /// MediaCodec mime type name
@@ -50,13 +50,10 @@ impl MediaCodecDecoder {
         MediaCodecDecoders { h264, h265 }
     }
 
-    // take dst_stride into account please
-    pub fn decode(
-        &mut self,
-        data: &[u8],
-        (fmt, dst_stride): (ImageFormat, usize),
-        raw: &mut Vec<u8>,
-    ) -> ResultType<bool> {
+    // rgb [in/out] fmt and stride must be set in ImageRgb
+    pub fn decode(&mut self, data: &[u8], rgb: &mut ImageRgb) -> ResultType<bool> {
+        // take dst_stride into account please
+        let dst_stride = rgb.stride();
         match self.dequeue_input_buffer(Duration::from_millis(10))? {
             Some(mut input_buffer) => {
                 let mut buf = input_buffer.buffer_mut();
@@ -89,12 +86,12 @@ impl MediaCodecDecoder {
                 let bps = 4;
                 let u = buf.len() * 2 / 3;
                 let v = buf.len() * 5 / 6;
-                raw.resize(h * w * bps, 0);
+                rgb.raw.resize(h * w * bps, 0);
                 let y_ptr = buf.as_ptr();
                 let u_ptr = buf[u..].as_ptr();
                 let v_ptr = buf[v..].as_ptr();
                 unsafe {
-                    match fmt {
+                    match rgb.fmt() {
                         ImageFormat::ARGB => {
                             I420ToARGB(
                                 y_ptr,
@@ -103,7 +100,7 @@ impl MediaCodecDecoder {
                                 stride / 2,
                                 v_ptr,
                                 stride / 2,
-                                raw.as_mut_ptr(),
+                                rgb.raw.as_mut_ptr(),
                                 (w * bps) as _,
                                 w as _,
                                 h as _,
@@ -117,7 +114,7 @@ impl MediaCodecDecoder {
                                 stride / 2,
                                 v_ptr,
                                 stride / 2,
-                                raw.as_mut_ptr(),
+                                rgb.raw.as_mut_ptr(),
                                 (w * bps) as _,
                                 w as _,
                                 h as _,

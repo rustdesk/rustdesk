@@ -179,8 +179,9 @@ pub type FlutterRgbaRendererPluginOnRgba = unsafe extern "C" fn(
 struct VideoRenderer {
     // TextureRgba pointer in flutter native.
     ptr: usize,
-    width: i32,
-    height: i32,
+    width: usize,
+    height: usize,
+    size: usize,
     on_rgba_func: Option<Symbol<'static, FlutterRgbaRendererPluginOnRgba>>,
 }
 
@@ -209,6 +210,7 @@ impl Default for VideoRenderer {
             ptr: 0,
             width: 0,
             height: 0,
+            size: 0,
             on_rgba_func,
         }
     }
@@ -217,24 +219,30 @@ impl Default for VideoRenderer {
 #[cfg(feature = "flutter_texture_render")]
 impl VideoRenderer {
     #[inline]
-    pub fn set_size(&mut self, width: i32, height: i32) {
+    pub fn set_size(&mut self, width: usize, height: usize) {
         self.width = width;
         self.height = height;
     }
 
-    pub fn on_rgba(&self, rgba: &Vec<u8>) {
-        if self.ptr == usize::default() || self.width == 0 || self.height == 0 {
+    pub fn on_rgba(&self, rgba: &mut scrap::ImageRgb) {
+        if self.ptr == usize::default() {
             return;
         }
+
+        // It is also Ok to skip this check.
+        if self.width != rgba.w || self.height != rgba.h {
+            return;
+        }
+
         if let Some(func) = &self.on_rgba_func {
             unsafe {
                 func(
                     self.ptr as _,
-                    rgba.as_ptr() as _,
-                    rgba.len() as _,
-                    self.width as _,
-                    self.height as _,
-                    crate::DST_STRIDE_RGBA as _,
+                    rgba.raw.as_ptr() as _,
+                    rgba.raw.len() as _,
+                    rgba.w as _,
+                    rgba.h as _,
+                    rgba.stride() as _,
                 )
             };
         }
@@ -315,7 +323,7 @@ impl FlutterHandler {
 
     #[inline]
     #[cfg(feature = "flutter_texture_render")]
-    pub fn set_size(&mut self, width: i32, height: i32) {
+    pub fn set_size(&mut self, width: usize, height: usize) {
         *self.notify_rendered.write().unwrap() = false;
         self.renderer.write().unwrap().set_size(width, height);
     }
@@ -492,7 +500,7 @@ impl InvokeUiSession for FlutterHandler {
 
     #[inline]
     #[cfg(not(feature = "flutter_texture_render"))]
-    fn on_rgba(&self, data: &mut Vec<u8>) {
+    fn on_rgba(&self, rgba: &mut scrap::ImageRgb) {
         // If the current rgba is not fetched by flutter, i.e., is valid.
         // We give up sending a new event to flutter.
         if self.rgba_valid.load(Ordering::Relaxed) {
@@ -500,7 +508,7 @@ impl InvokeUiSession for FlutterHandler {
         }
         self.rgba_valid.store(true, Ordering::Relaxed);
         // Return the rgba buffer to the video handler for reusing allocated rgba buffer.
-        std::mem::swap::<Vec<u8>>(data, &mut *self.rgba.write().unwrap());
+        std::mem::swap::<Vec<u8>>(&mut rgba.raw, &mut *self.rgba.write().unwrap());
         if let Some(stream) = &*self.event_stream.read().unwrap() {
             stream.add(EventToUI::Rgba);
         }
@@ -508,8 +516,8 @@ impl InvokeUiSession for FlutterHandler {
 
     #[inline]
     #[cfg(feature = "flutter_texture_render")]
-    fn on_rgba(&self, data: &mut Vec<u8>) {
-        self.renderer.read().unwrap().on_rgba(data);
+    fn on_rgba(&self, rgba: &mut scrap::ImageRgb) {
+        self.renderer.read().unwrap().on_rgba(rgba);
         if *self.notify_rendered.read().unwrap() {
             return;
         }
@@ -1047,5 +1055,4 @@ pub fn stop_global_event_stream(app_type: String) {
 }
 
 #[no_mangle]
-unsafe extern "C" fn get_rgba() {
-}
+unsafe extern "C" fn get_rgba() {}

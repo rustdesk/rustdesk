@@ -79,7 +79,7 @@ class PluginItem extends StatelessWidget {
   final FFI? ffi;
   final String location;
   final PluginModel pluginModel;
-  final isMenu;
+  final bool isMenu;
 
   PluginItem({
     Key? key,

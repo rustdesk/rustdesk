@@ -926,7 +926,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn update_block_input_state(&self, on: bool);
     fn job_progress(&self, id: i32, file_num: i32, speed: f64, finished_size: f64);
     fn adapt_size(&self);
-    fn on_rgba(&self, data: &mut Vec<u8>);
+    fn on_rgba(&self, rgba: &mut scrap::ImageRgb);
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool);
     #[cfg(any(target_os = "android", target_os = "ios"))]
     fn clipboard(&self, content: String);
@@ -1207,7 +1207,7 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>) {
     let frame_count_cl = frame_count.clone();
     let ui_handler = handler.ui_handler.clone();
     let (video_sender, audio_sender, video_queue, decode_fps) =
-        start_video_audio_threads(move |data: &mut Vec<u8>| {
+        start_video_audio_threads(move |data: &mut scrap::ImageRgb| {
             frame_count_cl.fetch_add(1, Ordering::Relaxed);
             ui_handler.on_rgba(data);
         });

@@ -7,7 +7,7 @@ use hbb_common::message_proto::{EncodedVideoFrame, EncodedVideoFrames, Message, 
 use hbb_common::ResultType;
 
 use crate::STRIDE_ALIGN;
-use crate::{codec::EncoderApi, ImageFormat};
+use crate::{codec::EncoderApi, ImageFormat, ImageRgb};
 
 use super::vpx::{vp8e_enc_control_id::*, vpx_codec_err_t::*, *};
 use hbb_common::bytes::Bytes;
@@ -130,9 +130,11 @@ impl EncoderApi for VpxEncoder {
                 c.kf_mode = vpx_kf_mode::VPX_KF_DISABLED; // reduce bandwidth a lot
 
                 /*
-                VPX encoder支持two-pass encode，这是为了rate control的。
-                对于两遍编码，就是需要整个编码过程做两次，第一次会得到一些新的控制参数来进行第二遍的编码，
-                这样可以在相同的bitrate下得到最好的PSNR
+                The VPX encoder supports two-pass encoding for rate control purposes.
+                In two-pass encoding, the entire encoding process is performed twice.
+                The first pass generates new control parameters for the second pass.
+
+                This approach enables the best PSNR at the same bit rate.
                 */
 
                 let mut ctx = Default::default();
@@ -416,25 +418,6 @@ impl VpxDecoder {
         Ok(Self { ctx })
     }
 
-    pub fn decode2rgb(&mut self, data: &[u8], fmt: ImageFormat) -> Result<Vec<u8>> {
-        let mut img = Image::new();
-        for frame in self.decode(data)? {
-            drop(img);
-            img = frame;
-        }
-        for frame in self.flush()? {
-            drop(img);
-            img = frame;
-        }
-        if img.is_null() {
-            Ok(Vec::new())
-        } else {
-            let mut out = Default::default();
-            img.to(fmt, 1, &mut out);
-            Ok(out)
-        }
-    }
-
     /// Feed some compressed data to the encoder
     ///
     /// The `data` slice is sent to the decoder
@@ -538,20 +521,26 @@ impl Image {
         self.inner().stride[iplane]
     }
 
-    pub fn to(&self, fmt: ImageFormat, stride: usize, dst: &mut Vec<u8>) {
-        let h = self.height();
-        let w = self.width();
+    #[inline]
+    pub fn get_bytes_per_row(w: usize, fmt: ImageFormat, stride: usize) -> usize {
         let bytes_per_pixel = match fmt {
             ImageFormat::Raw => 3,
             ImageFormat::ARGB | ImageFormat::ABGR => 4,
         };
         // https://github.com/lemenkov/libyuv/blob/6900494d90ae095d44405cd4cc3f346971fa69c9/source/convert_argb.cc#L128
         // https://github.com/lemenkov/libyuv/blob/6900494d90ae095d44405cd4cc3f346971fa69c9/source/convert_argb.cc#L129
-        let bytes_per_row = (w * bytes_per_pixel + stride - 1) & !(stride - 1);
-        dst.resize(h * bytes_per_row, 0);
+        (w * bytes_per_pixel + stride - 1) & !(stride - 1)
+    }
+
+    // rgb [in/out] fmt and stride must be set in ImageRgb
+    pub fn to(&self, rgb: &mut ImageRgb) {
+        rgb.w = self.width();
+        rgb.h = self.height();
+        let bytes_per_row = Self::get_bytes_per_row(rgb.w, rgb.fmt, rgb.stride());
+        rgb.raw.resize(rgb.h * bytes_per_row, 0);
         let img = self.inner();
         unsafe {
-            match fmt {
+            match rgb.fmt() {
                 ImageFormat::Raw => {
                     super::I420ToRAW(
                         img.planes[0],
@@ -560,7 +549,7 @@ impl Image {
                         img.stride[1],
                         img.planes[2],
                         img.stride[2],
-                        dst.as_mut_ptr(),
+                        rgb.raw.as_mut_ptr(),
                         bytes_per_row as _,
                         self.width() as _,
                         self.height() as _,
@@ -574,7 +563,7 @@ impl Image {
                         img.stride[1],
                         img.planes[2],
                         img.stride[2],
-                        dst.as_mut_ptr(),
+                        rgb.raw.as_mut_ptr(),
                         bytes_per_row as _,
                         self.width() as _,
                         self.height() as _,
@@ -588,7 +577,7 @@ impl Image {
                         img.stride[1],
                         img.planes[2],
                         img.stride[2],
-                        dst.as_mut_ptr(),
+                        rgb.raw.as_mut_ptr(),
                         bytes_per_row as _,
                         self.width() as _,
                         self.height() as _,

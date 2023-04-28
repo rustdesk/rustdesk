@@ -50,7 +50,7 @@ pub use helper::*;
 use scrap::{
     codec::Decoder,
     record::{Recorder, RecorderContext},
-    ImageFormat,
+    ImageFormat, ImageRgb,
 };
 
 use crate::common::{self, is_keyboard_mode_supported};
@@ -980,7 +980,7 @@ impl AudioHandler {
 /// Video handler for the [`Client`].
 pub struct VideoHandler {
     decoder: Decoder,
-    pub rgb: Vec<u8>,
+    pub rgb: ImageRgb,
     recorder: Arc<Mutex<Option<Recorder>>>,
     record: bool,
 }
@@ -990,7 +990,7 @@ impl VideoHandler {
     pub fn new() -> Self {
         VideoHandler {
             decoder: Decoder::new(),
-            rgb: Default::default(),
+            rgb: ImageRgb::new(ImageFormat::ARGB, crate::DST_STRIDE_RGBA),
             recorder: Default::default(),
             record: false,
         }
@@ -1001,11 +1001,7 @@ impl VideoHandler {
     pub fn handle_frame(&mut self, vf: VideoFrame) -> ResultType<bool> {
         match &vf.union {
             Some(frame) => {
-                let res = self.decoder.handle_video_frame(
-                    frame,
-                    (ImageFormat::ARGB, crate::DST_STRIDE_RGBA),
-                    &mut self.rgb,
-                );
+                let res = self.decoder.handle_video_frame(frame, &mut self.rgb);
                 if self.record {
                     self.recorder
                         .lock()
@@ -1757,7 +1753,7 @@ pub fn start_video_audio_threads<F>(
     Arc<AtomicUsize>,
 )
 where
-    F: 'static + FnMut(&mut Vec<u8>) + Send,
+    F: 'static + FnMut(&mut scrap::ImageRgb) + Send,
 {
     let (video_sender, video_receiver) = mpsc::channel::<MediaData>();
     let video_queue = Arc::new(ArrayQueue::<VideoFrame>::new(VIDEO_QUEUE_SIZE));

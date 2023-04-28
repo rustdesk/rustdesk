@@ -10,7 +10,7 @@ use crate::hwcodec::*;
 use crate::mediacodec::{
     MediaCodecDecoder, MediaCodecDecoders, H264_DECODER_SUPPORT, H265_DECODER_SUPPORT,
 };
-use crate::{vpxcodec::*, CodecName, ImageFormat};
+use crate::{vpxcodec::*, CodecName, ImageRgb};
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::sysinfo::{System, SystemExt};
@@ -287,23 +287,23 @@ impl Decoder {
         }
     }
 
+    // rgb [in/out] fmt and stride must be set in ImageRgb
     pub fn handle_video_frame(
         &mut self,
         frame: &video_frame::Union,
-        fmt: (ImageFormat, usize),
-        rgb: &mut Vec<u8>,
+        rgb: &mut ImageRgb,
     ) -> ResultType<bool> {
         match frame {
             video_frame::Union::Vp8s(vp8s) => {
-                Decoder::handle_vpxs_video_frame(&mut self.vp8, vp8s, fmt, rgb)
+                Decoder::handle_vpxs_video_frame(&mut self.vp8, vp8s, rgb)
             }
             video_frame::Union::Vp9s(vp9s) => {
-                Decoder::handle_vpxs_video_frame(&mut self.vp9, vp9s, fmt, rgb)
+                Decoder::handle_vpxs_video_frame(&mut self.vp9, vp9s, rgb)
             }
             #[cfg(feature = "hwcodec")]
             video_frame::Union::H264s(h264s) => {
                 if let Some(decoder) = &mut self.hw.h264 {
-                    Decoder::handle_hw_video_frame(decoder, h264s, fmt, rgb, &mut self.i420)
+                    Decoder::handle_hw_video_frame(decoder, h264s, rgb, &mut self.i420)
                 } else {
                     Err(anyhow!("don't support h264!"))
                 }
@@ -311,7 +311,7 @@ impl Decoder {
             #[cfg(feature = "hwcodec")]
             video_frame::Union::H265s(h265s) => {
                 if let Some(decoder) = &mut self.hw.h265 {
-                    Decoder::handle_hw_video_frame(decoder, h265s, fmt, rgb, &mut self.i420)
+                    Decoder::handle_hw_video_frame(decoder, h265s, rgb, &mut self.i420)
                 } else {
                     Err(anyhow!("don't support h265!"))
                 }
@@ -319,7 +319,7 @@ impl Decoder {
             #[cfg(feature = "mediacodec")]
             video_frame::Union::H264s(h264s) => {
                 if let Some(decoder) = &mut self.media_codec.h264 {
-                    Decoder::handle_mediacodec_video_frame(decoder, h264s, fmt, rgb)
+                    Decoder::handle_mediacodec_video_frame(decoder, h264s, rgb)
                 } else {
                     Err(anyhow!("don't support h264!"))
                 }
@@ -327,7 +327,7 @@ impl Decoder {
             #[cfg(feature = "mediacodec")]
             video_frame::Union::H265s(h265s) => {
                 if let Some(decoder) = &mut self.media_codec.h265 {
-                    Decoder::handle_mediacodec_video_frame(decoder, h265s, fmt, rgb)
+                    Decoder::handle_mediacodec_video_frame(decoder, h265s, rgb)
                 } else {
                     Err(anyhow!("don't support h265!"))
                 }
@@ -336,11 +336,11 @@ impl Decoder {
         }
     }
 
+    // rgb [in/out] fmt and stride must be set in ImageRgb
     fn handle_vpxs_video_frame(
         decoder: &mut VpxDecoder,
         vpxs: &EncodedVideoFrames,
-        fmt: (ImageFormat, usize),
-        rgb: &mut Vec<u8>,
+        rgb: &mut ImageRgb,
     ) -> ResultType<bool> {
         let mut last_frame = Image::new();
         for vpx in vpxs.frames.iter() {
@@ -356,24 +356,24 @@ impl Decoder {
         if last_frame.is_null() {
             Ok(false)
         } else {
-            last_frame.to(fmt.0, fmt.1, rgb);
+            last_frame.to(rgb);
             Ok(true)
         }
     }
 
+    // rgb [in/out] fmt and stride must be set in ImageRgb
     #[cfg(feature = "hwcodec")]
     fn handle_hw_video_frame(
         decoder: &mut HwDecoder,
         frames: &EncodedVideoFrames,
-        fmt: (ImageFormat, usize),
-        raw: &mut Vec<u8>,
+        rgb: &mut ImageRgb,
         i420: &mut Vec<u8>,
     ) -> ResultType<bool> {
         let mut ret = false;
         for h264 in frames.frames.iter() {
             for image in decoder.decode(&h264.data)? {
                 // TODO: just process the last frame
-                if image.to_fmt(fmt, raw, i420).is_ok() {
+                if image.to_fmt(rgb, i420).is_ok() {
                     ret = true;
                 }
             }
@@ -381,16 +381,16 @@ impl Decoder {
         return Ok(ret);
     }
 
+    // rgb [in/out] fmt and stride must be set in ImageRgb
     #[cfg(feature = "mediacodec")]
     fn handle_mediacodec_video_frame(
         decoder: &mut MediaCodecDecoder,
         frames: &EncodedVideoFrames,
-        fmt: (ImageFormat, usize),
-        raw: &mut Vec<u8>,
+        rgb: &mut ImageRgb,
     ) -> ResultType<bool> {
         let mut ret = false;
         for h264 in frames.frames.iter() {
-            return decoder.decode(&h264.data, fmt, raw);
+            return decoder.decode(&h264.data, rgb);
         }
         return Ok(false);
     }
