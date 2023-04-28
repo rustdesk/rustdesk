@@ -224,7 +224,7 @@ impl VideoRenderer {
         self.height = height;
     }
 
-    pub fn on_rgba(&self, rgba: &scrap::ImageRgb) {
+    pub fn on_rgba(&self, rgba: &mut scrap::ImageRgb) {
         if self.ptr == usize::default() {
             return;
         }
@@ -500,7 +500,7 @@ impl InvokeUiSession for FlutterHandler {
 
     #[inline]
     #[cfg(not(feature = "flutter_texture_render"))]
-    fn on_rgba(&self, rgba: &scrap::ImageRgb) {
+    fn on_rgba(&self, rgba: &mut scrap::ImageRgb) {
         // If the current rgba is not fetched by flutter, i.e., is valid.
         // We give up sending a new event to flutter.
         if self.rgba_valid.load(Ordering::Relaxed) {
@@ -508,7 +508,7 @@ impl InvokeUiSession for FlutterHandler {
         }
         self.rgba_valid.store(true, Ordering::Relaxed);
         // Return the rgba buffer to the video handler for reusing allocated rgba buffer.
-        std::mem::swap::<Vec<u8>>(rgba.raw, &mut *self.rgba.write().unwrap());
+        std::mem::swap::<Vec<u8>>(&mut rgba.raw, &mut *self.rgba.write().unwrap());
         if let Some(stream) = &*self.event_stream.read().unwrap() {
             stream.add(EventToUI::Rgba);
         }
@@ -516,7 +516,7 @@ impl InvokeUiSession for FlutterHandler {
 
     #[inline]
     #[cfg(feature = "flutter_texture_render")]
-    fn on_rgba(&self, rgba: &scrap::ImageRgb) {
+    fn on_rgba(&self, rgba: &mut scrap::ImageRgb) {
         self.renderer.read().unwrap().on_rgba(rgba);
         if *self.notify_rendered.read().unwrap() {
             return;
