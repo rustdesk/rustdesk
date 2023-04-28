@@ -27,6 +27,8 @@ use hbb_common::{
 #[cfg(any(feature = "hwcodec", feature = "mediacodec"))]
 use hbb_common::{config::Config2, lazy_static};
 
+const FRAME_THRESHOLD_WITHOUT_KEY_FRAME: usize = 80;
+
 lazy_static::lazy_static! {
     static ref PEER_DECODINGS: Arc<Mutex<HashMap<i32, SupportedDecoding>>> = Default::default();
     static ref CODEC_NAME: Arc<Mutex<CodecName>> = Arc::new(Mutex::new(CodecName::VP9));
@@ -77,6 +79,8 @@ impl DerefMut for Encoder {
 }
 
 pub struct Decoder {
+    count: usize,
+    count_since_last_keyframe: i32,
     vp8: VpxDecoder,
     vp9: VpxDecoder,
     #[cfg(feature = "hwcodec")]
@@ -256,6 +260,15 @@ impl Decoder {
         decoding
     }
 
+    #[inline]
+    pub fn too_many_frames_without_keyframe(&self) -> bool {
+        self.count_since_last_keyframe < 0 && self.count > FRAME_THRESHOLD_WITHOUT_KEY_FRAME
+    }
+
+    pub fn reset_count(&mut self) {
+        self.count = 0;
+    }
+
     pub fn new() -> Decoder {
         let vp8 = VpxDecoder::new(VpxDecoderConfig {
             codec: VpxVideoCodecId::VP8,
@@ -268,6 +281,8 @@ impl Decoder {
         })
         .unwrap();
         Decoder {
+            count: 0,
+            count_since_last_keyframe: -1,
             vp8,
             vp9,
             #[cfg(feature = "hwcodec")]
@@ -295,15 +310,34 @@ impl Decoder {
     ) -> ResultType<bool> {
         match frame {
             video_frame::Union::Vp8s(vp8s) => {
-                Decoder::handle_vpxs_video_frame(&mut self.vp8, vp8s, rgb)
+                self.count += vp8s.frames.len();
+                Decoder::handle_vpxs_video_frame(
+                    &mut self.vp8,
+                    vp8s,
+                    rgb,
+                    &mut self.count_since_last_keyframe,
+                )
             }
             video_frame::Union::Vp9s(vp9s) => {
-                Decoder::handle_vpxs_video_frame(&mut self.vp9, vp9s, rgb)
+                self.count += vp9s.frames.len();
+                Decoder::handle_vpxs_video_frame(
+                    &mut self.vp9,
+                    vp9s,
+                    rgb,
+                    &mut self.count_since_last_keyframe,
+                )
             }
             #[cfg(feature = "hwcodec")]
             video_frame::Union::H264s(h264s) => {
                 if let Some(decoder) = &mut self.hw.h264 {
-                    Decoder::handle_hw_video_frame(decoder, h264s, rgb, &mut self.i420)
+                    self.count += h264s.frames.len();
+                    Decoder::handle_hw_video_frame(
+                        decoder,
+                        h264s,
+                        rgb,
+                        &mut self.i420,
+                        &mut self.count_since_last_keyframe,
+                    )
                 } else {
                     Err(anyhow!("don't support h264!"))
                 }
@@ -311,7 +345,14 @@ impl Decoder {
             #[cfg(feature = "hwcodec")]
             video_frame::Union::H265s(h265s) => {
                 if let Some(decoder) = &mut self.hw.h265 {
-                    Decoder::handle_hw_video_frame(decoder, h265s, rgb, &mut self.i420)
+                    self.count += h265s.frames.len();
+                    Decoder::handle_hw_video_frame(
+                        decoder,
+                        h265s,
+                        rgb,
+                        &mut self.i420,
+                        &mut self.count_since_last_keyframe,
+                    )
                 } else {
                     Err(anyhow!("don't support h265!"))
                 }
@@ -319,7 +360,13 @@ impl Decoder {
             #[cfg(feature = "mediacodec")]
             video_frame::Union::H264s(h264s) => {
                 if let Some(decoder) = &mut self.media_codec.h264 {
-                    Decoder::handle_mediacodec_video_frame(decoder, h264s, rgb)
+                    self.count += h264s.frames.len();
+                    Decoder::handle_mediacodec_video_frame(
+                        decoder,
+                        h264s,
+                        rgb,
+                        &mut self.count_since_last_keyframe,
+                    )
                 } else {
                     Err(anyhow!("don't support h264!"))
                 }
@@ -327,7 +374,13 @@ impl Decoder {
             #[cfg(feature = "mediacodec")]
             video_frame::Union::H265s(h265s) => {
                 if let Some(decoder) = &mut self.media_codec.h265 {
-                    Decoder::handle_mediacodec_video_frame(decoder, h265s, rgb)
+                    self.count += h265s.frames.len();
+                    Decoder::handle_mediacodec_video_frame(
+                        decoder,
+                        h265s,
+                        rgb,
+                        &mut self.count_since_last_keyframe,
+                    )
                 } else {
                     Err(anyhow!("don't support h265!"))
                 }
@@ -336,14 +389,34 @@ impl Decoder {
         }
     }
 
+    #[inline]
+    fn go_on_key_frame(is_key: bool, count_since_last_key: &mut i32) -> bool {
+        if is_key {
+            *count_since_last_key = 0;
+        } else {
+            // Return false to skip this frame if we have not seen a key frame.
+            if *count_since_last_key < 0 {
+                return false;
+            }
+        }
+        if *count_since_last_key < i32::max_value() {
+            *count_since_last_key += 1;
+        }
+        true
+    }
+
     // rgb [in/out] fmt and stride must be set in ImageRgb
     fn handle_vpxs_video_frame(
         decoder: &mut VpxDecoder,
         vpxs: &EncodedVideoFrames,
         rgb: &mut ImageRgb,
+        count_since_last_key: &mut i32,
     ) -> ResultType<bool> {
         let mut last_frame = Image::new();
         for vpx in vpxs.frames.iter() {
+            if !Self::go_on_key_frame(vpx.key, count_since_last_key) {
+                continue;
+            }
             for frame in decoder.decode(&vpx.data)? {
                 drop(last_frame);
                 last_frame = frame;
@@ -368,10 +441,14 @@ impl Decoder {
         frames: &EncodedVideoFrames,
         rgb: &mut ImageRgb,
         i420: &mut Vec<u8>,
+        count_since_last_key: &mut i32,
     ) -> ResultType<bool> {
         let mut ret = false;
         for h264 in frames.frames.iter() {
             for image in decoder.decode(&h264.data)? {
+                if !Self::go_on_key_frame(h264.key, count_since_last_key) {
+                    continue;
+                }
                 // TODO: just process the last frame
                 if image.to_fmt(rgb, i420).is_ok() {
                     ret = true;
@@ -387,9 +464,13 @@ impl Decoder {
         decoder: &mut MediaCodecDecoder,
         frames: &EncodedVideoFrames,
         rgb: &mut ImageRgb,
+        count_since_last_key: &mut i32,
     ) -> ResultType<bool> {
         let mut ret = false;
         for h264 in frames.frames.iter() {
+            if !Self::go_on_key_frame(h264.key, count_since_last_key) {
+                continue;
+            }
             return decoder.decode(&h264.data, rgb);
         }
         return Ok(false);

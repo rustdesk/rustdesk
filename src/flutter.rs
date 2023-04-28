@@ -181,7 +181,6 @@ struct VideoRenderer {
     ptr: usize,
     width: usize,
     height: usize,
-    size: usize,
     on_rgba_func: Option<Symbol<'static, FlutterRgbaRendererPluginOnRgba>>,
 }
 
@@ -210,7 +209,6 @@ impl Default for VideoRenderer {
             ptr: 0,
             width: 0,
             height: 0,
-            size: 0,
             on_rgba_func,
         }
     }

@@ -1745,6 +1745,7 @@ pub type MediaSender = mpsc::Sender<MediaData>;
 ///
 /// * `video_callback` - The callback for video frame. Being called when a video frame is ready.
 pub fn start_video_audio_threads<F>(
+    peer: String,
     video_callback: F,
 ) -> (
     MediaSender,
@@ -1801,6 +1802,16 @@ where
                             if count > 300 {
                                 count = 0;
                                 duration = Duration::ZERO;
+                            }
+                            if video_handler.decoder.too_many_frames_without_keyframe() {
+                                log::warn!("Too many frames without keyframe, refresh");
+                                // Refresh may not be a very good idea, but it works most of the time.
+                                // A better way to request the server to send a key frame.
+                                #[cfg(feature = "flutter")]
+                                crate::flutter_ffi::session_refresh(peer.clone());
+                                // to-do: what if #[cfg(not(feature = "flutter"))]
+
+                                video_handler.decoder.reset_count();
                             }
                         }
                     }
