@@ -927,7 +927,9 @@ fn try_get_displays() -> ResultType<Vec<Display>> {
         }
     } else if displays.len() > 1 {
         // If more than one displays exists, close RustDeskVirtualDisplay
-        let _res = virtual_display_manager::plug_in_headless();
+        if virtual_display_manager::plug_out_headless() {
+            displays = Display::all()?;
+        }
     }
     Ok(displays)
 }
