@@ -480,7 +480,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("identical_file_tip", "Ten plik jest identyczny z plikiem na drugim komputerze."),
         ("show_monitors_tip", "Pokaż monitory w zasobniku"),
         ("View Mode", "Tryb widoku"),
-        ("login_linux_tip", "Zaloguj do zdalnego konta Linux"),
+        ("login_linux_tip", "Musisz zalogować się na zdalne konto, by zezwolić na sesję pulpitu X"),
         ("verify_rustdesk_password_tip", "Weryfikuj hasło RustDesk"),
         ("remember_account_tip", "Zapamiętaj to konto"),
         ("os_account_desk_tip", "To konto jest używane do logowania do zdalnych systemów i włącza bezobsługowe sesje pulpitu"),
@@ -495,8 +495,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("System Sound", "Dźwięk Systemowy"),
         ("Default", "Domyślne"),
         ("New RDP", "Nowe RDP"),
-        ("Fingerprint", ""),
-        ("Copy Fingerprint", ""),
-        ("no fingerprints", ""),
+        ("Fingerprint", "Sygnatura"),
+        ("Copy Fingerprint", "Skopiuj sygnaturę"),
+        ("no fingerprints", "brak sygnatur"),
     ].iter().cloned().collect();
 }
