@@ -848,7 +848,6 @@ pub async fn post_request(url: String, body: String, header: &str) -> ResultType
     #[cfg(target_os = "linux")]
     {
         let mut data = vec![
-            "curl",
             "-sS",
             "-X",
             "POST",
