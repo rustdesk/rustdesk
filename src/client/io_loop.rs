@@ -124,8 +124,10 @@ impl<T: InvokeUiSession> Remote<T> {
             Ok((mut peer, direct, pk)) => {
                 self.handler.set_connection_type(peer.is_secured(), direct); // flutter -> connection_ready
                 self.handler.set_connection_info(direct, false);
-                self.handler
-                    .set_fingerprint(crate::common::pk_to_fingerprint(pk.unwrap_or_default()));
+                if conn_type == ConnType::DEFAULT_CONN {
+                    self.handler
+                        .set_fingerprint(crate::common::pk_to_fingerprint(pk.unwrap_or_default()));
+                }
 
                 // just build for now
                 #[cfg(not(windows))]
