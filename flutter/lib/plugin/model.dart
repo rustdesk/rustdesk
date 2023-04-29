@@ -23,7 +23,16 @@ class PluginModel with ChangeNotifier {
   final Map<String, String> opts = {};
 
   void add(UiType ui) {
-    uiList.add(ui);
+    bool found = false;
+    for (int i = 0; i < uiList.length; i++) {
+      if (uiList[i].key == ui.key) {
+        uiList[i] = ui;
+        found = true;
+      }
+    }
+    if (!found) {
+      uiList.add(ui);
+    }
     notifyListeners();
   }
 
