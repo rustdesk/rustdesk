@@ -183,6 +183,14 @@ class _RemotePageState extends State<RemotePage>
   }
 
   @override
+  void onWindowMaximize() {
+    super.onWindowMaximize();
+    if (!Platform.isLinux) {
+      Wakelock.enable();
+    }
+  }
+
+  @override
   void onWindowMinimize() {
     super.onWindowMinimize();
     if (!Platform.isLinux) {
