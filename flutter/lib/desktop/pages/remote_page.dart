@@ -182,6 +182,7 @@ class _RemotePageState extends State<RemotePage>
     }
   }
 
+  // When the window is unminimized, onWindowMaximize or onWindowRestore can be called when the old state was maximized or not.
   @override
   void onWindowMaximize() {
     super.onWindowMaximize();
