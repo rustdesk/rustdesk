@@ -218,6 +218,8 @@ class RustDeskMultiWindowManager {
         }
         await WindowController.fromWindowId(wId).setPreventClose(false);
         await WindowController.fromWindowId(wId).close();
+        // unregister the sub window in the main window.
+        unregisterActiveWindow(wId);
       } catch (e) {
         debugPrint("$e");
         return;

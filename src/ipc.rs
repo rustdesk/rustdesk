@@ -36,6 +36,8 @@ pub enum PrivacyModeState {
     OffByPeer,
     OffUnknown,
 }
+// IPC actions here.
+pub const IPC_ACTION_CLOSE: &str = "close";
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "t", content = "c")]
@@ -869,6 +871,14 @@ pub async fn send_url_scheme(url: String) -> ResultType<()> {
         .send(&Data::UrlLink(url))
         .await?;
     Ok(())
+}
+
+// Emit `close` events to ipc.
+pub fn close_all_instances() -> ResultType<bool> {
+    match crate::ipc::send_url_scheme(IPC_ACTION_CLOSE.to_owned()) {
+        Ok(_) => Ok(true),
+        Err(err) => Err(err),
+    }
 }
 
 #[cfg(test)]
