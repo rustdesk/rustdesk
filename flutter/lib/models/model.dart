@@ -20,11 +20,13 @@ import 'package:flutter_hbb/plugin/event.dart';
 import 'package:flutter_hbb/plugin/desc.dart';
 import 'package:flutter_hbb/plugin/widget.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
+import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:tuple/tuple.dart';
 import 'package:image/image.dart' as img2;
 import 'package:flutter_custom_cursor/cursor_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../common.dart';
 import '../utils/image.dart' as img;
@@ -210,13 +212,7 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'portable_service_running') {
         parent.target?.elevationModel.onPortableServiceRunning(evt);
       } else if (name == 'on_url_scheme_received') {
-        final url = evt['url'].toString();
-        // If we invoke uri with blank path, we just bring the main window to the top.
-        if (url.isEmpty) {
-          window_on_top(null);
-        } else {
-          parseRustdeskUri(url);
-        }
+        onUrlSchemeReceived(evt);
       } else if (name == 'on_voice_call_waiting') {
         // Waiting for the response from the peer.
         parent.target?.chatModel.onVoiceCallWaiting();
@@ -247,6 +243,30 @@ class FfiModel with ChangeNotifier {
         debugPrint('Unknown event name: $name');
       }
     };
+  }
+
+  onUrlSchemeReceived(Map<String, dynamic> evt) {
+    final url = evt['url'].toString().trim();
+    // If we invoke uri with blank path, we just bring the main window to the top.
+    if (url.isEmpty) {
+      window_on_top(null);
+    } else if (url.startsWith(kUniLinksPrefix)) {
+      parseRustdeskUri(url);
+    } else {
+      // action
+      switch (url) {
+        case kUrlActionClose:
+          debugPrint("closing all instances");
+          Future.microtask(() async {
+            await rustDeskWinManager.closeAllSubWindows();
+            windowManager.close();
+          });
+          break;
+        default:
+          debugPrint("Unknown url received: $url");
+          break;
+      }
+    }
   }
 
   /// Bind the event listener to receive events from the Rust core.

@@ -211,6 +211,7 @@ pub fn uninstall(show_new_window: bool) -> bool {
                 );
                 if uninstalled {
                     crate::ipc::set_option("stop-service", "Y");
+                    let _ = crate::ipc::close_all_instances();
                     // leave ipc a little time
                     std::thread::sleep(std::time::Duration::from_millis(300));
                     std::process::Command::new("launchctl")
