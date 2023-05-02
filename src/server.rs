@@ -454,7 +454,7 @@ pub async fn start_ipc_url_server() {
                             let mut m = HashMap::new();
                             m.insert("name", "on_url_scheme_received");
                             m.insert("url", url.as_str());
-                            let event = serde_json::to_string(&m).unwrap();
+                            let event = serde_json::to_string(&m).unwrap_or("".to_owned());
                             match crate::flutter::push_global_event(crate::flutter::APP_TYPE_MAIN, event) {
                                 None => log::warn!("No main window app found!"),
                                 Some(..) => {}

@@ -5876,7 +5876,7 @@ dependencies = [
 [[package]]
 name = "tao"
 version = "0.18.1"
-source = "git+https://github.com/tauri-apps/tao?branch=muda#0c1417884161d165b8852fbf11be5492edef9fe7"
+source = "git+https://github.com/Kingtous/tao?branch=muda#dea701661a182cf2d944d5d05b5d299c78079871"
 dependencies = [
  "bitflags",
  "cairo-rs",
@@ -5921,7 +5921,7 @@ dependencies = [
 [[package]]
 name = "tao-macros"
 version = "0.1.1"
-source = "git+https://github.com/tauri-apps/tao?branch=muda#0c1417884161d165b8852fbf11be5492edef9fe7"
+source = "git+https://github.com/Kingtous/tao?branch=muda#dea701661a182cf2d944d5d05b5d299c78079871"
 dependencies = [
  "proc-macro2 1.0.54",
  "quote 1.0.26",

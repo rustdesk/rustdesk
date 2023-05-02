@@ -113,7 +113,7 @@ objc_id = "0.1"
 
 [target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
 tray-icon = "0.4"
-tao = { git = "https://github.com/tauri-apps/tao", branch = "muda" }
+tao = { git = "https://github.com/Kingtous/tao", branch = "muda" }
 image = "0.24"
 
 [target.'cfg(target_os = "linux")'.dependencies]

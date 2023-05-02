@@ -6,7 +6,7 @@ use cocoa::{
     base::{id, nil, YES},
     foundation::{NSAutoreleasePool, NSString},
 };
-use objc::runtime::Class;
+use objc::runtime::{Class, NO};
 use objc::{
     class,
     declare::ClassDecl,
@@ -107,7 +107,7 @@ pub unsafe fn set_delegate(handler: Option<Box<dyn AppHandler>>) {
     );
     decl.add_method(
         sel!(handleEvent:withReplyEvent:),
-        handle_apple_event as extern "C" fn(&Object, Sel, u64, u64),
+        handle_apple_event as extern "C" fn(&Object, Sel, u64, u64) -> BOOL,
     );
     let decl = decl.register();
     let delegate: id = msg_send![decl, alloc];
@@ -183,11 +183,27 @@ extern "C" fn handle_menu_item(this: &mut Object, _: Sel, item: id) {
     }
 }
 
-extern "C" fn handle_apple_event(_this: &Object, _cmd: Sel, event: u64, _reply: u64) {
+#[no_mangle]
+extern "C" fn handle_apple_event(_this: &Object, _cmd: Sel, event: u64, _reply: u64) -> BOOL {
     let event = event as *mut Object;
     let url = fruitbasket::parse_url_event(event);
     log::debug!("an event was received: {}", url);
     std::thread::spawn(move || crate::handle_url_scheme(url));
+    YES
+}
+
+// Customize the service opening logic.
+#[no_mangle]
+fn service_should_handle_reopen(
+    obj: &Object,
+    sel: Sel,
+    sender: id,
+    has_visible_windows: BOOL,
+  ) -> BOOL {
+    log::debug!("Invoking the main rustdesk process");
+    std::thread::spawn(move || crate::handle_url_scheme("".to_string())); 
+    // Prevent default logic. 
+    NO
 }
 
 unsafe fn make_menu_item(title: &str, key: &str, tag: u32) -> *mut Object {
