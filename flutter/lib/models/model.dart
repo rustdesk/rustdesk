@@ -211,7 +211,12 @@ class FfiModel with ChangeNotifier {
         parent.target?.elevationModel.onPortableServiceRunning(evt);
       } else if (name == 'on_url_scheme_received') {
         final url = evt['url'].toString();
-        parseRustdeskUri(url);
+        // If we invoke uri with blank path, we just bring the main window to the top.
+        if (url.isEmpty) {
+          window_on_top(null);
+        } else {
+          parseRustdeskUri(url);
+        }
       } else if (name == 'on_voice_call_waiting') {
         // Waiting for the response from the peer.
         parent.target?.chatModel.onVoiceCallWaiting();

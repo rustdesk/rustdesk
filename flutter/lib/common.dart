@@ -1581,13 +1581,7 @@ bool checkArguments() {
 /// Returns true if we successfully handle the uri provided.
 /// [Functions]
 /// 1. New Connection: rustdesk://connection/new/your_peer_id
-/// 2. Bring the main window to the top: empty uriPath
 bool parseRustdeskUri(String uriPath) {
-  // If we invoke uri with blank path, we just bring the main window to tht top.
-  if (uriPath.isEmpty) {
-    window_on_top(null);
-    return true;
-  }
   final uri = Uri.tryParse(uriPath);
   if (uri == null) {
     debugPrint("uri is not valid: $uriPath");
