@@ -3,7 +3,7 @@
 pub const ERR_SUCCESS: i32 = 0;
 
 // ======================================================
-// errors that will be handled by RustDesk
+// Errors from the plugins, must be handled by RustDesk
 
 pub const ERR_RUSTDESK_HANDLE_BASE: i32 = 10000;
 
@@ -21,10 +21,23 @@ pub const ERR_PEER_ID_MISMATCH: i32 = 10302;
 pub const ERR_NOT_HANDLED: i32 = 10401;
 
 // ======================================================
-// errors that should be handled by the plugin
+// Errors from RustDesk callbacks.
 
-pub const ERR_PLUGIN_HANDLE_BASE: i32 = 20000;
+pub const ERR_CALLBACK_HANDLE_BASE: i32 = 20000;
+pub const ERR_CALLBACK_PLUGIN_ID: i32 = 20001;
+pub const ERR_CALLBACK_INVALID_ARGS: i32 = 20002;
+pub const ERR_CALLBACK_INVALID_MSG: i32 = 20003;
+pub const ERR_CALLBACK_TARGET: i32 = 20004;
+pub const ERR_CALLBACK_TARGET_TYPE: i32 = 20005;
+pub const ERR_CALLBACK_PEER_NOT_FOUND: i32 = 20006;
 
-pub const EER_CALL_FAILED: i32 = 200021;
-pub const ERR_PEER_ON_FAILED: i32 = 30012;
-pub const ERR_PEER_OFF_FAILED: i32 = 30012;
+pub const ERR_CALLBACK_FAILED: i32 = 21001;
+
+// ======================================================
+// Errors from the plugins, should be handled by the plugins.
+
+pub const ERR_PLUGIN_HANDLE_BASE: i32 = 30000;
+
+pub const EER_CALL_FAILED: i32 = 300021;
+pub const ERR_PEER_ON_FAILED: i32 = 40012;
+pub const ERR_PEER_OFF_FAILED: i32 = 40012;

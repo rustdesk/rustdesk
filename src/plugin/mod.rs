@@ -2,6 +2,7 @@ use hbb_common::{libc, ResultType};
 use std::ffi::{c_char, c_void, CStr};
 
 mod callback_msg;
+mod callback_ext;
 mod config;
 pub mod desc;
 mod errno;
@@ -47,6 +48,22 @@ fn str_to_cstr_ret(s: &str) -> *const c_char {
             s.len(),
         );
         r
+    }
+}
+
+#[inline]
+pub fn make_return_code_msg(code: i32, msg: &str) -> *const c_void {
+    let mut out = code.to_le_bytes().to_vec();
+    out.extend(msg.as_bytes());
+    out.push(0);
+    unsafe {
+        let r = libc::malloc(out.len()) as *mut c_char;
+        libc::memcpy(
+            r as *mut libc::c_void,
+            out.as_ptr() as *const libc::c_void,
+            out.len(),
+        );
+        r as *const c_void
     }
 }
 

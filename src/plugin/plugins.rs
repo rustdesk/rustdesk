@@ -14,7 +14,7 @@ use std::{
     collections::HashMap,
     ffi::{c_char, c_void},
     path::PathBuf,
-    sync::{Arc, RwLock}, os::raw::c_uint,
+    sync::{Arc, RwLock},
 };
 
 const METHOD_HANDLE_UI: &[u8; 10] = b"handle_ui\0";
@@ -64,13 +64,17 @@ type PluginFuncDesc = extern "C" fn() -> *const c_char;
 /// id:      The id of this plugin.
 /// content: The content.
 /// len:     The length of the content.
+///
+/// Return null ptr if success.
+/// Return the error message if failed.  `i32-String` without dash, i32 is a signed little-endian number, the String is utf8 string.
+/// The plugin allocate memory with `libc::malloc` and return the pointer.
 type CallbackMsg = extern "C" fn(
     peer: *const c_char,
     target: *const c_char,
     id: *const c_char,
     content: *const c_void,
     len: usize,
-);
+) -> *const c_void;
 /// Callback to get the config.
 /// peer, key are utf8 strings(null terminated).
 ///
@@ -93,12 +97,17 @@ type CallbackGetId = extern "C" fn() -> *const c_char;
 type CallbackLog = extern "C" fn(level: *const c_char, msg: *const c_char);
 
 /// Callback to the librustdesk core.
-/// 
+///
 /// method: the method name of this callback.
 /// json: the json data for the parameters. The argument *must* be non-null.
 /// raw: the binary data for this call, nullable.
 /// raw_len: the length of this binary data, only valid when we pass raw data to `raw`.
-type CallbackNative = extern "C" fn(method: *const c_char, json: *const c_char, raw: *const c_void, raw_len: usize) -> super::native::NativeReturnValue;
+type CallbackNative = extern "C" fn(
+    method: *const c_char,
+    json: *const c_char,
+    raw: *const c_void,
+    raw_len: usize,
+) -> super::native::NativeReturnValue;
 /// The main function of the plugin on the client(self) side.
 ///
 /// method: The method. "handle_ui" or "handle_peer"
@@ -148,7 +157,7 @@ struct Callbacks {
     get_conf: CallbackGetConf,
     get_id: CallbackGetId,
     log: CallbackLog,
-    native: CallbackNative
+    native: CallbackNative,
 }
 
 /// The plugin initialize data.
@@ -343,7 +352,7 @@ fn load_plugin_path(path: &str) -> ResultType<()> {
             get_conf: config::cb_get_conf,
             get_id: config::cb_get_local_peer_id,
             log: super::plog::plugin_log,
-            native: super::native::cb_native_data
+            native: super::native::cb_native_data,
         },
     };
     plugin.init(&init_data, path)?;
