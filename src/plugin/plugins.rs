@@ -157,7 +157,7 @@ struct Callbacks {
     get_conf: CallbackGetConf,
     get_id: CallbackGetId,
     log: CallbackLog,
-    native: CallbackNative,
+    // native: CallbackNative,
 }
 
 /// The plugin initialize data.
@@ -352,7 +352,7 @@ fn load_plugin_path(path: &str) -> ResultType<()> {
             get_conf: config::cb_get_conf,
             get_id: config::cb_get_local_peer_id,
             log: super::plog::plugin_log,
-            native: super::native::cb_native_data,
+            // native: super::native::cb_native_data,
         },
     };
     plugin.init(&init_data, path)?;
