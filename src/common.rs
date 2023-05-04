@@ -832,47 +832,16 @@ pub fn get_audit_server(api: String, custom: String, typ: String) -> String {
 }
 
 pub async fn post_request(url: String, body: String, header: &str) -> ResultType<String> {
-    #[cfg(not(target_os = "linux"))]
-    {
-        let mut req = reqwest::Client::new().post(url);
-        if !header.is_empty() {
-            let tmp: Vec<&str> = header.split(": ").collect();
-            if tmp.len() == 2 {
-                req = req.header(tmp[0], tmp[1]);
-            }
+    let mut req = reqwest::Client::new().post(url);
+    if !header.is_empty() {
+        let tmp: Vec<&str> = header.split(": ").collect();
+        if tmp.len() == 2 {
+            req = req.header(tmp[0], tmp[1]);
         }
-        req = req.header("Content-Type", "application/json");
-        let to = std::time::Duration::from_secs(12);
-        Ok(req.body(body).timeout(to).send().await?.text().await?)
     }
-    #[cfg(target_os = "linux")]
-    {
-        let mut data = vec![
-            "-sS",
-            "-X",
-            "POST",
-            &url,
-            "-H",
-            "Content-Type: application/json",
-            "-d",
-            &body,
-            "--connect-timeout",
-            "12",
-        ];
-        if !header.is_empty() {
-            data.push("-H");
-            data.push(header);
-        }
-        let output = async_process::Command::new("curl")
-            .args(&data)
-            .output()
-            .await?;
-        let res = String::from_utf8_lossy(&output.stdout).to_string();
-        if !res.is_empty() {
-            return Ok(res);
-        }
-        hbb_common::bail!(String::from_utf8_lossy(&output.stderr).to_string());
-    }
+    req = req.header("Content-Type", "application/json");
+    let to = std::time::Duration::from_secs(12);
+    Ok(req.body(body).timeout(to).send().await?.text().await?)
 }
 
 #[tokio::main(flavor = "current_thread")]
