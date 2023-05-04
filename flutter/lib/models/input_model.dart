@@ -311,7 +311,7 @@ class InputModel {
 
   void onPointHoverImage(PointerHoverEvent e) {
     _stopFling = true;
-    if (e.kind != ui.PointerDeviceKind.mouse  && e.kind != ui.PointerDeviceKind.touch) return;
+    if (e.kind != ui.PointerDeviceKind.mouse) return;
     if (!isPhysicalMouse.value) {
       isPhysicalMouse.value = true;
     }
@@ -439,7 +439,7 @@ class InputModel {
   void onPointDownImage(PointerDownEvent e) {
     debugPrint("onPointDownImage");
     _stopFling = true;
-    if (e.kind != ui.PointerDeviceKind.mouse && e.kind != ui.PointerDeviceKind.touch) {
+    if (e.kind != ui.PointerDeviceKind.mouse) {
       if (isPhysicalMouse.value) {
         isPhysicalMouse.value = false;
       }
@@ -450,7 +450,7 @@ class InputModel {
   }
 
   void onPointUpImage(PointerUpEvent e) {
-    if (e.kind != ui.PointerDeviceKind.mouse  && e.kind != ui.PointerDeviceKind.touch) return;
+    if (e.kind != ui.PointerDeviceKind.mouse) return;
     if (isPhysicalMouse.value) {
       handleMouse(getEvent(e, _kMouseEventUp));
     }
