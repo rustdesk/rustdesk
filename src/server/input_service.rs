@@ -506,10 +506,26 @@ fn get_modifier_state(key: Key, en: &mut Enigo) -> bool {
     }
 }
 
+#[inline]
+fn update_latest_peer_input_cursor(evt: &MouseEvent, conn: i32, is_checked_movement: bool) {
+    if is_checked_movement || evt.mask & 0x7 == 0 {
+        let time = get_time();
+        *LATEST_PEER_INPUT_CURSOR.lock().unwrap() = Input {
+            time,
+            conn,
+            x: evt.x,
+            y: evt.y,
+        };
+    }
+}
+
 pub fn handle_mouse(evt: &MouseEvent, conn: i32) {
     if !active_mouse_(conn) {
         return;
     }
+    #[cfg(windows)]
+    update_latest_peer_input_cursor(evt, conn, false);
+
     #[cfg(target_os = "macos")]
     if !is_server() {
         // having GUI, run main GUI thread, otherwise crash
@@ -674,7 +690,7 @@ fn fix_modifiers(modifiers: &[EnumOrUnknown<ControlKey>], en: &mut Enigo, ck: i3
 }
 
 #[inline]
-fn get_last_input_cusor_pos() -> (i32, i32) {
+fn get_last_input_cursor_pos() -> (i32, i32) {
     let lock = LATEST_PEER_INPUT_CURSOR.lock().unwrap();
     (lock.x, lock.y)
 }
@@ -695,7 +711,7 @@ fn active_mouse_(conn: i32) -> bool {
     // Check if input is in valid range
     match crate::get_cursor_pos() {
         Some((x, y)) => {
-            let (last_in_x, last_in_y) = get_last_input_cusor_pos();
+            let (last_in_x, last_in_y) = get_last_input_cursor_pos();
             let mut can_active = in_active_dist(last_in_x, x) && in_active_dist(last_in_y, y);
             // The cursor may not have been moved to last input position if system is busy now.
             // While this is not a common case, we check it again after some time later.
@@ -715,7 +731,7 @@ fn active_mouse_(conn: i32) -> bool {
                     std::thread::sleep(std::time::Duration::from_micros(sleep_interval));
                     // Sleep here can also somehow suppress delay accumulation.
                     if let Some((x2, y2)) = crate::get_cursor_pos() {
-                        let (last_in_x, last_in_y) = get_last_input_cusor_pos();
+                        let (last_in_x, last_in_y) = get_last_input_cursor_pos();
                         can_active = in_active_dist(last_in_x, x2) && in_active_dist(last_in_y, y2);
                         if can_active {
                             break;
@@ -734,7 +750,8 @@ fn active_mouse_(conn: i32) -> bool {
     }
 }
 
-pub fn handle_mouse_(evt: &MouseEvent, conn: i32) {
+// _conn is used by `update_latest_peer_input_cursor`, which is only enabled on "not Win".
+pub fn handle_mouse_(evt: &MouseEvent, _conn: i32) {
     if EXITING.load(Ordering::SeqCst) {
         return;
     }
@@ -769,12 +786,8 @@ pub fn handle_mouse_(evt: &MouseEvent, conn: i32) {
     match evt_type {
         0 => {
             en.mouse_move_to(evt.x, evt.y);
-            *LATEST_PEER_INPUT_CURSOR.lock().unwrap() = Input {
-                time: get_time(),
-                conn,
-                x: evt.x,
-                y: evt.y,
-            };
+            #[cfg(not(windows))]
+            update_latest_peer_input_cursor(evt, _conn, true);
         }
         1 => match buttons {
             0x01 => {
