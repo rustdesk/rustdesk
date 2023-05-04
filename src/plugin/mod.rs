@@ -9,7 +9,7 @@ pub mod ipc;
 mod plog;
 mod plugins;
 pub mod native;
-mod native_handlers;
+pub mod native_handlers;
 
 pub use plugins::{
     handle_client_event, handle_listen_event, handle_server_event, handle_ui_event, load_plugin,
