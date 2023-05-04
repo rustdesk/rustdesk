@@ -28,7 +28,7 @@ pub(super) fn ext_support_callback(
                 if crate::server::plugin_block_input(peer, block) == block {
                     null()
                 } else {
-                    make_return_code_msg(errno::ERR_CALLBACK_FAILED, "Failed to block input")
+                    make_return_code_msg(errno::ERR_CALLBACK_FAILED, "")
                 }
             } else {
                 make_return_code_msg(

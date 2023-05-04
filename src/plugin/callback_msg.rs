@@ -79,7 +79,7 @@ macro_rules! early_return_value {
         match $e {
             Err(e) => return make_return_code_msg(
                 errno::$code,
-                &format!("Failed to {} '{:?}'", format_args!($($arg)*), e),
+                &format!("Failed to {} '{}'", format_args!($($arg)*), e),
             ),
             Ok(v) => v,
         }
