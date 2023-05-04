@@ -6,12 +6,14 @@ use serde_json;
 use std::{
     collections::HashMap,
     ffi::{c_char, c_void},
+    ptr::null,
     sync::Arc,
 };
 
 const MSG_TO_PEER_TARGET: &str = "peer";
 const MSG_TO_UI_TARGET: &str = "ui";
 const MSG_TO_CONFIG_TARGET: &str = "config";
+const MSG_TO_EXT_SUPPORT_TARGET: &str = "ext-support";
 
 #[allow(dead_code)]
 const MSG_TO_UI_FLUTTER_CHANNEL_MAIN: u16 = 0x01 << 0;
@@ -44,12 +46,44 @@ struct ConfigToUi {
 
 #[derive(Debug, Deserialize)]
 struct MsgToConfig {
-    id: String,
     r#type: String,
     key: String,
     value: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     ui: Option<ConfigToUi>, // If not None, send msg to ui.
+}
+
+#[derive(Debug, Deserialize)]
+pub(super) struct MsgToExtSupport {
+    pub r#type: String,
+    pub data: Vec<u8>,
+}
+
+macro_rules! cb_msg_field {
+    ($field: ident) => {
+        let $field = match cstr_to_string($field) {
+            Err(e) => {
+                log::error!("Failed to convert {} to string, {}", stringify!($field), e);
+                return make_return_code_msg(
+                    errno::ERR_CALLBACK_INVALID_ARGS,
+                    &format!("Failed to convert {} to string, {}", stringify!($field), e),
+                );
+            }
+            Ok(v) => v,
+        };
+    };
+}
+
+macro_rules! early_return_value {
+    ($e:expr, $code: ident, $($arg:tt)*) => {
+        match $e {
+            Err(e) => return make_return_code_msg(
+                errno::$code,
+                &format!("Failed to {} '{}'", format_args!($($arg)*), e),
+            ),
+            Ok(v) => v,
+        }
+    };
 }
 
 /// Callback to send message to peer or ui.
@@ -60,6 +94,10 @@ struct MsgToConfig {
 /// id:      The id of this plugin.
 /// content: The content.
 /// len:     The length of the content.
+///
+/// Return null ptr if success.
+/// Return the error message if failed.  `i32-String` without dash, i32 is a signed little-endian number, the String is utf8 string.
+/// The plugin allocate memory with `libc::malloc` and return the pointer.
 #[no_mangle]
 pub(super) extern "C" fn cb_msg(
     peer: *const c_char,
@@ -67,18 +105,7 @@ pub(super) extern "C" fn cb_msg(
     id: *const c_char,
     content: *const c_void,
     len: usize,
-) {
-    macro_rules! cb_msg_field {
-        ($field: ident) => {
-            let $field = match cstr_to_string($field) {
-                Err(e) => {
-                    log::error!("Failed to convert {} to string, {}", stringify!($field), e);
-                    return;
-                }
-                Ok(v) => v,
-            };
-        };
-    }
+) -> *const c_void {
     cb_msg_field!(peer);
     cb_msg_field!(target);
     cb_msg_field!(id);
@@ -95,6 +122,12 @@ pub(super) extern "C" fn cb_msg(
                     ..Default::default()
                 };
                 session.send_plugin_request(request);
+                null()
+            } else {
+                make_return_code_msg(
+                    errno::ERR_CALLBACK_PEER_NOT_FOUND,
+                    &format!("Failed to find session for peer '{}'", peer),
+                )
             }
         }
         MSG_TO_UI_TARGET => {
@@ -103,47 +136,69 @@ pub(super) extern "C" fn cb_msg(
             let content = std::string::String::from_utf8(content_slice[2..].to_vec())
                 .unwrap_or("".to_string());
             push_event_to_ui(channel, &peer, &content);
+            null()
         }
         MSG_TO_CONFIG_TARGET => {
-            if let Ok(s) =
-                std::str::from_utf8(unsafe { std::slice::from_raw_parts(content as _, len) })
-            {
-                // No need to merge the msgs. Handling the msg one by one is ok.
-                if let Ok(msg) = serde_json::from_str::<MsgToConfig>(s) {
-                    match &msg.r#type as _ {
-                        config::CONFIG_TYPE_SHARED => {
-                            match config::SharedConfig::set(&msg.id, &msg.key, &msg.value) {
-                                Ok(_) => {
-                                    if let Some(ui) = &msg.ui {
-                                        // No need to set the peer id for location config.
-                                        push_option_to_ui(ui.channel, "", &msg, ui);
-                                    }
-                                }
-                                Err(e) => {
-                                    log::error!("Failed to set local config, {}", e);
-                                }
-                            }
-                        }
-                        config::CONFIG_TYPE_PEER => {
-                            match config::PeerConfig::set(&msg.id, &peer, &msg.key, &msg.value) {
-                                Ok(_) => {
-                                    if let Some(ui) = &msg.ui {
-                                        push_option_to_ui(ui.channel, &peer, &msg, ui);
-                                    }
-                                }
-                                Err(e) => {
-                                    log::error!("Failed to set peer config, {}", e);
-                                }
-                            }
-                        }
-                        _ => {}
+            let s = early_return_value!(
+                std::str::from_utf8(unsafe { std::slice::from_raw_parts(content as _, len) }),
+                ERR_CALLBACK_INVALID_MSG,
+                "parse msg string"
+            );
+            // No need to merge the msgs. Handling the msg one by one is ok.
+            let msg = early_return_value!(
+                serde_json::from_str::<MsgToConfig>(s),
+                ERR_CALLBACK_INVALID_MSG,
+                "parse msg '{}'",
+                s
+            );
+            match &msg.r#type as _ {
+                config::CONFIG_TYPE_SHARED => {
+                    let _r = early_return_value!(
+                        config::SharedConfig::set(&id, &msg.key, &msg.value),
+                        ERR_CALLBACK_INVALID_MSG,
+                        "set local config"
+                    );
+                    if let Some(ui) = &msg.ui {
+                        // No need to set the peer id for location config.
+                        push_option_to_ui(ui.channel, &id, "", &msg, ui);
                     }
+                    null()
                 }
+                config::CONFIG_TYPE_PEER => {
+                    let _r = early_return_value!(
+                        config::PeerConfig::set(&id, &peer, &msg.key, &msg.value),
+                        ERR_CALLBACK_INVALID_MSG,
+                        "set peer config"
+                    );
+                    if let Some(ui) = &msg.ui {
+                        push_option_to_ui(ui.channel, &id, &peer, &msg, ui);
+                    }
+                    null()
+                }
+                _ => make_return_code_msg(
+                    errno::ERR_CALLBACK_TARGET_TYPE,
+                    &format!("Unknown target type '{}'", &msg.r#type),
+                ),
             }
         }
-        _ => {
-            log::error!("Unknown target {}", target);
+        MSG_TO_EXT_SUPPORT_TARGET => {
+            let s = early_return_value!(
+                std::str::from_utf8(unsafe { std::slice::from_raw_parts(content as _, len) }),
+                ERR_CALLBACK_INVALID_MSG,
+                "parse msg string"
+            );
+            let msg = early_return_value!(
+                serde_json::from_str::<MsgToExtSupport>(s),
+                ERR_CALLBACK_INVALID_MSG,
+                "parse msg '{}'",
+                s
+            );
+            super::callback_ext::ext_support_callback(&id, &peer, &msg)
         }
+        _ => make_return_code_msg(
+            errno::ERR_CALLBACK_TARGET,
+            &format!("Unknown target '{}'", target),
+        ),
     }
 }
 
@@ -174,9 +229,9 @@ fn push_event_to_ui(channel: u16, peer: &str, content: &str) {
     }
 }
 
-fn push_option_to_ui(channel: u16, peer: &str, msg: &MsgToConfig, ui: &ConfigToUi) {
+fn push_option_to_ui(channel: u16, id: &str, peer: &str, msg: &MsgToConfig, ui: &ConfigToUi) {
     let v = [
-        ("id", &msg.id as &str),
+        ("id", id),
         ("location", &ui.location),
         ("key", &msg.key),
         ("value", &msg.value),

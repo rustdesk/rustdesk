@@ -65,6 +65,43 @@ lazy_static::lazy_static! {
 pub static CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 pub static MOUSE_MOVE_TIME: AtomicI64 = AtomicI64::new(0);
 
+#[cfg(all(feature = "flutter", feature = "plugin_framework"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+lazy_static::lazy_static! {
+    static ref PLUGIN_BLOCK_INPUT_TXS: Arc<Mutex<HashMap<String, std_mpsc::Sender<MessageInput>>>> = Default::default();
+    static ref PLUGIN_BLOCK_INPUT_TX_RX: (Arc<Mutex<std_mpsc::Sender<bool>>>, Arc<Mutex<std_mpsc::Receiver<bool>>>) = {
+        let (tx, rx) = std_mpsc::channel();
+        (Arc::new(Mutex::new(tx)), Arc::new(Mutex::new(rx)))
+    };
+}
+
+// Block input is required for some special cases, such as privacy mode.
+#[cfg(all(feature = "flutter", feature = "plugin_framework"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn plugin_block_input(peer: &str, block: bool) -> bool {
+    if let Some(tx) = PLUGIN_BLOCK_INPUT_TXS.lock().unwrap().get(peer) {
+        let _ = tx.send(if block {
+            MessageInput::BlockOnPlugin(peer.to_string())
+        } else {
+            MessageInput::BlockOffPlugin(peer.to_string())
+        });
+        match PLUGIN_BLOCK_INPUT_TX_RX
+            .1
+            .lock()
+            .unwrap()
+            .recv_timeout(std::time::Duration::from_millis(3_000))
+        {
+            Ok(b) => b == block,
+            Err(..) => {
+                log::error!("plugin_block_input timeout");
+                false
+            }
+        }
+    } else {
+        false
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct ConnInner {
     id: i32,
@@ -79,6 +116,12 @@ enum MessageInput {
     Key((KeyEvent, bool)),
     BlockOn,
     BlockOff,
+    #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    BlockOnPlugin(String),
+    #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    BlockOffPlugin(String),
 }
 
 #[derive(Clone, Debug)]
@@ -646,6 +689,30 @@ impl Connection {
                             );
                         }
                     }
+                    #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    MessageInput::BlockOnPlugin(peer) => {
+                        if crate::platform::block_input(true) {
+                            block_input_mode = true;
+                        }
+                        let _r = PLUGIN_BLOCK_INPUT_TX_RX
+                            .0
+                            .lock()
+                            .unwrap()
+                            .send(block_input_mode);
+                    }
+                    #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    MessageInput::BlockOffPlugin(peer) => {
+                        if crate::platform::block_input(false) {
+                            block_input_mode = false;
+                        }
+                        let _r = PLUGIN_BLOCK_INPUT_TX_RX
+                            .0
+                            .lock()
+                            .unwrap()
+                            .send(block_input_mode);
+                    }
                 },
                 Err(err) => {
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -944,6 +1011,12 @@ impl Connection {
             }
         }
         self.authorized = true;
+        #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        PLUGIN_BLOCK_INPUT_TXS
+            .lock()
+            .unwrap()
+            .insert(self.lr.my_id.clone(), self.tx_input.clone());
 
         pi.username = username;
         pi.sas_enabled = sas_enabled;
