@@ -506,12 +506,9 @@ fn get_modifier_state(key: Key, en: &mut Enigo) -> bool {
     }
 }
 
-pub fn handle_mouse(evt: &MouseEvent, conn: i32) {
-    if !active_mouse_(conn) {
-        return;
-    }
-    let evt_type = evt.mask & 0x7;
-    if evt_type == 0 {
+#[inline]
+fn update_latest_peer_input_cursor(evt: &MouseEvent, conn: i32, is_checked_movement: bool) {
+    if is_checked_movement || evt.mask & 0x7 == 0 {
         let time = get_time();
         *LATEST_PEER_INPUT_CURSOR.lock().unwrap() = Input {
             time,
@@ -520,17 +517,26 @@ pub fn handle_mouse(evt: &MouseEvent, conn: i32) {
             y: evt.y,
         };
     }
+}
+
+pub fn handle_mouse(evt: &MouseEvent, conn: i32) {
+    if !active_mouse_(conn) {
+        return;
+    }
+    #[cfg(windows)]
+    update_latest_peer_input_cursor(evt, conn, false);
+
     #[cfg(target_os = "macos")]
     if !is_server() {
         // having GUI, run main GUI thread, otherwise crash
         let evt = evt.clone();
-        QUEUE.exec_async(move || handle_mouse_(&evt));
+        QUEUE.exec_async(move || handle_mouse_(&evt, conn));
         return;
     }
     #[cfg(windows)]
     crate::portable_service::client::handle_mouse(evt);
     #[cfg(not(windows))]
-    handle_mouse_(evt);
+    handle_mouse_(evt, conn);
 }
 
 pub fn fix_key_down_timeout_loop() {
@@ -683,6 +689,12 @@ fn fix_modifiers(modifiers: &[EnumOrUnknown<ControlKey>], en: &mut Enigo, ck: i3
     }
 }
 
+#[inline]
+fn get_last_input_cursor_pos() -> (i32, i32) {
+    let lock = LATEST_PEER_INPUT_CURSOR.lock().unwrap();
+    (lock.x, lock.y)
+}
+
 fn active_mouse_(conn: i32) -> bool {
     // out of time protection
     if LATEST_SYS_CURSOR_POS.lock().unwrap().0.elapsed() > MOUSE_MOVE_PROTECTION_TIMEOUT {
@@ -699,20 +711,32 @@ fn active_mouse_(conn: i32) -> bool {
     // Check if input is in valid range
     match crate::get_cursor_pos() {
         Some((x, y)) => {
-            let (last_in_x, last_in_y) = {
-                let lock = LATEST_PEER_INPUT_CURSOR.lock().unwrap();
-                (lock.x, lock.y)
-            };
+            let (last_in_x, last_in_y) = get_last_input_cursor_pos();
             let mut can_active = in_active_dist(last_in_x, x) && in_active_dist(last_in_y, y);
             // The cursor may not have been moved to last input position if system is busy now.
             // While this is not a common case, we check it again after some time later.
             if !can_active {
-                // 10 micros may be enough for system to move cursor.
-                // We do not care about the situation which system is too slow(more than 10 micros is required).
-                std::thread::sleep(std::time::Duration::from_micros(10));
-                // Sleep here can also somehow suppress delay accumulation.
-                if let Some((x2, y2)) = crate::get_cursor_pos() {
-                    can_active = in_active_dist(last_in_x, x2) && in_active_dist(last_in_y, y2);
+                // 100 micros may be enough for system to move cursor.
+                // Mouse inputs on macOS are asynchronous. 1. Put in a queue to process in main thread. 2. Send event async.
+                // More reties are needed on macOS.
+                #[cfg(not(target_os = "macos"))]
+                let retries = 10;
+                #[cfg(target_os = "macos")]
+                let retries = 100;
+                #[cfg(not(target_os = "macos"))]
+                let sleep_interval: u64 = 10;
+                #[cfg(target_os = "macos")]
+                let sleep_interval: u64 = 30;
+                for _retry in 0..retries {
+                    std::thread::sleep(std::time::Duration::from_micros(sleep_interval));
+                    // Sleep here can also somehow suppress delay accumulation.
+                    if let Some((x2, y2)) = crate::get_cursor_pos() {
+                        let (last_in_x, last_in_y) = get_last_input_cursor_pos();
+                        can_active = in_active_dist(last_in_x, x2) && in_active_dist(last_in_y, y2);
+                        if can_active {
+                            break;
+                        }
+                    }
                 }
             }
             if !can_active {
@@ -726,7 +750,8 @@ fn active_mouse_(conn: i32) -> bool {
     }
 }
 
-pub fn handle_mouse_(evt: &MouseEvent) {
+// _conn is used by `update_latest_peer_input_cursor`, which is only enabled on "not Win".
+pub fn handle_mouse_(evt: &MouseEvent, _conn: i32) {
     if EXITING.load(Ordering::SeqCst) {
         return;
     }
@@ -761,6 +786,8 @@ pub fn handle_mouse_(evt: &MouseEvent) {
     match evt_type {
         0 => {
             en.mouse_move_to(evt.x, evt.y);
+            #[cfg(not(windows))]
+            update_latest_peer_input_cursor(evt, _conn, true);
         }
         1 => match buttons {
             0x01 => {

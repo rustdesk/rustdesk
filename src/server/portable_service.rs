@@ -454,7 +454,7 @@ pub mod server {
                                     }
                                     Mouse(v) => {
                                         if let Ok(evt) = MouseEvent::parse_from_bytes(&v) {
-                                            crate::input_service::handle_mouse_(&evt);
+                                            crate::input_service::handle_mouse_(&evt, 0);
                                         }
                                     }
                                     Key(v) => {
@@ -894,7 +894,7 @@ pub mod client {
         if RUNNING.lock().unwrap().clone() {
             handle_mouse_(evt).ok();
         } else {
-            crate::input_service::handle_mouse_(evt);
+            crate::input_service::handle_mouse_(evt, 0);
         }
     }
 
