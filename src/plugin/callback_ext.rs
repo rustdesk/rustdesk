@@ -3,7 +3,7 @@
 // -----------------------------------------------------------------------------
 
 use super::*;
-use std::{ffi::c_void, ptr::null, str::FromStr};
+use std::{ffi::c_void, ptr::null};
 
 const EXT_SUPPORT_BLOCK_INPUT: &str = "block-input";
 
@@ -18,21 +18,17 @@ pub(super) fn ext_support_callback(
             // let supported = supported_plugins.contains(&id);
             let supported = true;
             if supported {
-                match bool::from_str(&msg.data) {
-                    Ok(block) => {
-                        if crate::server::plugin_block_input(peer, block) == block {
-                            null()
-                        } else {
-                            make_return_code_msg(
-                                errno::ERR_CALLBACK_FAILED,
-                                "Failed to block input",
-                            )
-                        }
-                    }
-                    Err(err) => make_return_code_msg(
+                if msg.data.len() != 1 {
+                    return make_return_code_msg(
                         errno::ERR_CALLBACK_INVALID_ARGS,
-                        &format!("Failed to parse data: {}", err),
-                    ),
+                        "Invalid data length",
+                    );
+                }
+                let block = msg.data[0] != 0;
+                if crate::server::plugin_block_input(peer, block) == block {
+                    null()
+                } else {
+                    make_return_code_msg(errno::ERR_CALLBACK_FAILED, "Failed to block input")
                 }
             } else {
                 make_return_code_msg(

@@ -56,7 +56,7 @@ struct MsgToConfig {
 #[derive(Debug, Deserialize)]
 pub(super) struct MsgToExtSupport {
     pub r#type: String,
-    pub data: String,
+    pub data: Vec<u8>,
 }
 
 macro_rules! cb_msg_field {
