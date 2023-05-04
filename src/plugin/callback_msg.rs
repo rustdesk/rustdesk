@@ -6,6 +6,7 @@ use serde_json;
 use std::{
     collections::HashMap,
     ffi::{c_char, c_void},
+    ptr::null,
     sync::Arc,
 };
 
@@ -62,9 +63,11 @@ macro_rules! cb_msg_field {
     ($field: ident) => {
         let $field = match cstr_to_string($field) {
             Err(e) => {
-                let msg = format!("Failed to convert {} to string, {}", stringify!($field), e);
-                log::error!("{}", &msg);
-                return PluginReturn::new(errno::ERR_CALLBACK_INVALID_ARGS, &msg);
+                log::error!("Failed to convert {} to string, {}", stringify!($field), e);
+                return make_return_code_msg(
+                    errno::ERR_CALLBACK_INVALID_ARGS,
+                    &format!("Failed to convert {} to string, {}", stringify!($field), e),
+                );
             }
             Ok(v) => v,
         };
@@ -74,7 +77,7 @@ macro_rules! cb_msg_field {
 macro_rules! early_return_value {
     ($e:expr, $code: ident, $($arg:tt)*) => {
         match $e {
-            Err(e) => return PluginReturn::new(
+            Err(e) => return make_return_code_msg(
                 errno::$code,
                 &format!("Failed to {} '{}'", format_args!($($arg)*), e),
             ),
@@ -102,7 +105,7 @@ pub(super) extern "C" fn cb_msg(
     id: *const c_char,
     content: *const c_void,
     len: usize,
-) -> PluginReturn {
+) -> *const c_void {
     cb_msg_field!(peer);
     cb_msg_field!(target);
     cb_msg_field!(id);
@@ -119,9 +122,9 @@ pub(super) extern "C" fn cb_msg(
                     ..Default::default()
                 };
                 session.send_plugin_request(request);
-                PluginReturn::success()
+                null()
             } else {
-                PluginReturn::new(
+                make_return_code_msg(
                     errno::ERR_CALLBACK_PEER_NOT_FOUND,
                     &format!("Failed to find session for peer '{}'", peer),
                 )
@@ -133,7 +136,7 @@ pub(super) extern "C" fn cb_msg(
             let content = std::string::String::from_utf8(content_slice[2..].to_vec())
                 .unwrap_or("".to_string());
             push_event_to_ui(channel, &peer, &content);
-            PluginReturn::success()
+            null()
         }
         MSG_TO_CONFIG_TARGET => {
             let s = early_return_value!(
@@ -159,7 +162,7 @@ pub(super) extern "C" fn cb_msg(
                         // No need to set the peer id for location config.
                         push_option_to_ui(ui.channel, &id, "", &msg, ui);
                     }
-                    PluginReturn::success()
+                    null()
                 }
                 config::CONFIG_TYPE_PEER => {
                     let _r = early_return_value!(
@@ -170,9 +173,9 @@ pub(super) extern "C" fn cb_msg(
                     if let Some(ui) = &msg.ui {
                         push_option_to_ui(ui.channel, &id, &peer, &msg, ui);
                     }
-                    PluginReturn::success()
+                    null()
                 }
-                _ => PluginReturn::new(
+                _ => make_return_code_msg(
                     errno::ERR_CALLBACK_TARGET_TYPE,
                     &format!("Unknown target type '{}'", &msg.r#type),
                 ),
@@ -192,7 +195,7 @@ pub(super) extern "C" fn cb_msg(
             );
             super::callback_ext::ext_support_callback(&id, &peer, &msg)
         }
-        _ => PluginReturn::new(
+        _ => make_return_code_msg(
             errno::ERR_CALLBACK_TARGET,
             &format!("Unknown target '{}'", target),
         ),
