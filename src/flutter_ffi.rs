@@ -1405,6 +1405,13 @@ pub fn plugin_event(_id: String, _peer: String, _event: Vec<u8>) {
     }
 }
 
+pub fn plugin_register_event_stream(id: String, event2ui: StreamSink<EventToUI>) {
+    #[cfg(feature = "plugin_framework")]
+    {
+        crate::plugin::native_handlers::session::session_register_event_stream(id, event2ui);
+    }
+}
+
 #[inline]
 pub fn plugin_get_session_option(
     _id: String,

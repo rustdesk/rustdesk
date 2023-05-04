@@ -691,7 +691,7 @@ pub fn session_add(
     switch_uuid: &str,
     force_relay: bool,
     password: String,
-) -> ResultType<()> {
+) -> ResultType<Session<FlutterHandler>> {
     let session_id = get_session_id(id.to_owned());
     LocalConfig::set_remote_id(&session_id);
 
@@ -725,11 +725,11 @@ pub fn session_add(
         .unwrap()
         .initialize(session_id, conn_type, switch_uuid, force_relay);
 
-    if let Some(same_id_session) = SESSIONS.write().unwrap().insert(id.to_owned(), session) {
+    if let Some(same_id_session) = SESSIONS.write().unwrap().insert(id.to_owned(), session.clone()) {
         same_id_session.close();
     }
 
-    Ok(())
+    Ok(session)
 }
 
 /// start a session with the given id.
