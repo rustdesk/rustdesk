@@ -38,7 +38,7 @@ struct PluginInfo {
 /// Return null ptr if success.
 /// Return the error message if failed.  `i32-String` without dash, i32 is a signed little-endian number, the String is utf8 string.
 /// The plugin allocate memory with `libc::malloc` and return the pointer.
-type PluginFuncInit = extern "C" fn(data: *const InitData) -> *const c_void;
+type PluginFuncInit = extern "C" fn(data: *const InitData) -> PluginReturn;
 /// Reset the plugin.
 ///
 /// data: The initialize data.
@@ -46,13 +46,13 @@ type PluginFuncInit = extern "C" fn(data: *const InitData) -> *const c_void;
 /// Return null ptr if success.
 /// Return the error message if failed.  `i32-String` without dash, i32 is a signed little-endian number, the String is utf8 string.
 /// The plugin allocate memory with `libc::malloc` and return the pointer.
-type PluginFuncReset = extern "C" fn(data: *const InitData) -> *const c_void;
+type PluginFuncReset = extern "C" fn(data: *const InitData) -> PluginReturn;
 /// Clear the plugin.
 ///
 /// Return null ptr if success.
 /// Return the error message if failed.  `i32-String` without dash, i32 is a signed little-endian number, the String is utf8 string.
 /// The plugin allocate memory with `libc::malloc` and return the pointer.
-type PluginFuncClear = extern "C" fn() -> *const c_void;
+type PluginFuncClear = extern "C" fn() -> PluginReturn;
 /// Get the description of the plugin.
 /// Return the description. The plugin allocate memory with `libc::malloc` and return the pointer.
 type PluginFuncDesc = extern "C" fn() -> *const c_char;
@@ -74,7 +74,7 @@ type CallbackMsg = extern "C" fn(
     id: *const c_char,
     content: *const c_void,
     len: usize,
-) -> *const c_void;
+) -> PluginReturn;
 /// Callback to get the config.
 /// peer, key are utf8 strings(null terminated).
 ///
@@ -123,7 +123,7 @@ type PluginFuncClientCall = extern "C" fn(
     peer: *const c_char,
     args: *const c_void,
     len: usize,
-) -> *const c_void;
+) -> PluginReturn;
 /// The main function of the plugin on the server(remote) side.
 ///
 /// method: The method. "handle_ui" or "handle_peer"
@@ -144,7 +144,7 @@ type PluginFuncServerCall = extern "C" fn(
     len: usize,
     out: *mut *mut c_void,
     out_len: *mut usize,
-) -> *const c_void;
+) -> PluginReturn;
 
 /// The plugin callbacks.
 /// msg: The callback to send message to peer or ui.
@@ -223,13 +223,13 @@ macro_rules! make_plugin {
 
             fn init(&self, data: &InitData, path: &str) -> ResultType<()> {
                 let init_ret = (self.init)(data as _);
-                if !init_ret.is_null() {
-                    let (code, msg) = get_code_msg_from_ret(init_ret);
-                    free_c_ptr(init_ret as _);
+                if !init_ret.is_success() {
+                    let msg = cstr_to_string(init_ret.msg).unwrap_or_default();
+                    free_c_ptr(init_ret.msg as _);
                     bail!(
                         "Failed to init plugin {}, code: {}, msg: {}",
                         path,
-                        code,
+                        init_ret.code,
                         msg
                     );
                 }
@@ -238,13 +238,13 @@ macro_rules! make_plugin {
 
             fn clear(&self, id: &str) {
                 let clear_ret = (self.clear)();
-                if !clear_ret.is_null() {
-                    let (code, msg) = get_code_msg_from_ret(clear_ret);
-                    free_c_ptr(clear_ret as _);
+                if !clear_ret.is_success() {
+                    let msg = cstr_to_string(clear_ret.msg).unwrap_or_default();
+                    free_c_ptr(clear_ret.msg as _);
                     log::error!(
                         "Failed to clear plugin {}, code: {}, msg: {}",
                         id,
-                        code,
+                        clear_ret.code,
                         msg
                     );
                 }
@@ -413,16 +413,16 @@ fn handle_event(method: &[u8], id: &str, peer: &str, event: &[u8]) -> ResultType
                 event.as_ptr() as _,
                 event.len(),
             );
-            if ret.is_null() {
+            if ret.is_success() {
                 Ok(())
             } else {
-                let (code, msg) = get_code_msg_from_ret(ret);
-                free_c_ptr(ret as _);
+                let msg = cstr_to_string(ret.msg).unwrap_or_default();
+                free_c_ptr(ret.msg as _);
                 bail!(
                     "Failed to handle plugin event, id: {}, method: {}, code: {}, msg: {}",
                     id,
                     std::string::String::from_utf8(method.to_vec()).unwrap_or_default(),
-                    code,
+                    ret.code,
                     msg
                 );
             }
@@ -469,14 +469,14 @@ fn _handle_listen_event(event: String, peer: String) {
                         evt_bytes.as_ptr() as _,
                         evt_bytes.len(),
                     );
-                    if !ret.is_null() {
-                        let (code, msg) = get_code_msg_from_ret(ret);
-                        free_c_ptr(ret as _);
+                    if !ret.is_success() {
+                        let msg = cstr_to_string(ret.msg).unwrap_or_default();
+                        free_c_ptr(ret.msg as _);
                         log::error!(
                             "Failed to handle plugin listen event, id: {}, event: {}, code: {}, msg: {}",
                             id,
                             event,
-                            code,
+                            ret.code,
                             msg
                         );
                     }
@@ -510,18 +510,18 @@ pub fn handle_client_event(id: &str, peer: &str, event: &[u8]) -> Message {
                 &mut out as _,
                 &mut out_len as _,
             );
-            if ret.is_null() {
+            if ret.is_success() {
                 let msg = make_plugin_request(id, out, out_len);
                 free_c_ptr(out as _);
                 msg
             } else {
-                let (code, msg) = get_code_msg_from_ret(ret);
-                free_c_ptr(ret as _);
-                if code > ERR_RUSTDESK_HANDLE_BASE && code < ERR_PLUGIN_HANDLE_BASE {
+                let msg = cstr_to_string(ret.msg).unwrap_or_default();
+                free_c_ptr(ret.msg as _);
+                if ret.code > ERR_RUSTDESK_HANDLE_BASE && ret.code < ERR_PLUGIN_HANDLE_BASE {
                     log::debug!(
                         "Plugin {} failed to handle client event, code: {}, msg: {}",
                         id,
-                        code,
+                        ret.code,
                         msg
                     );
                     let name = match PLUGIN_INFO.read().unwrap().get(id) {
@@ -529,7 +529,7 @@ pub fn handle_client_event(id: &str, peer: &str, event: &[u8]) -> Message {
                         None => "???",
                     }
                     .to_owned();
-                    match code {
+                    match ret.code {
                         ERR_CALL_NOT_SUPPORTED_METHOD => {
                             make_plugin_failure(id, &name, "Plugin method is not supported")
                         }
@@ -542,7 +542,7 @@ pub fn handle_client_event(id: &str, peer: &str, event: &[u8]) -> Message {
                     log::error!(
                         "Plugin {} failed to handle client event, code: {}, msg: {}",
                         id,
-                        code,
+                        ret.code,
                         msg
                     );
                     let msg = make_plugin_request(id, out, out_len);
