@@ -1,5 +1,4 @@
 name: CI
-
 # env:
 #   MIN_SUPPORTED_RUST_VERSION: "1.46.0"
 #   CICD_INTERMEDIATES_DIR: "_cicd-intermediates"
@@ -25,7 +24,7 @@ jobs:
   #   name: Ensure 'cargo fmt' has been run
   #   runs-on: ubuntu-20.04
   #   steps:
-  #   - uses: actions-rs/toolchain@v1
+  #   - uses: deep-soft/rust-toolchain-actions-rs@v2
   #     with:
   #       toolchain: stable
   #       default: true
@@ -42,7 +41,7 @@ jobs:
   #     uses: actions/checkout@v3
 
   #   - name: Install rust toolchain (v${{ env.MIN_SUPPORTED_RUST_VERSION }})
-  #     uses: actions-rs/toolchain@v1
+  #     uses: deep-soft/rust-toolchain-actions-rs@v2
   #     with:
   #       toolchain: ${{ env.MIN_SUPPORTED_RUST_VERSION }}
   #       default: true
@@ -102,7 +101,7 @@ jobs:
       shell: bash        
 
     - name: Install Rust toolchain
-      uses: actions-rs/toolchain@v1
+      uses: deep-soft/rust-toolchain-actions-rs@v2
       with:
         toolchain: stable
         target: ${{ matrix.job.target }}
