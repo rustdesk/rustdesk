@@ -147,7 +147,7 @@ pub enum DataPortableService {
     Ping,
     Pong,
     ConnCount(Option<usize>),
-    Mouse(Vec<u8>),
+    Mouse((Vec<u8>, i32)),
     Key(Vec<u8>),
     RequestStart,
     WillClose,

@@ -1088,7 +1088,7 @@ impl Connection {
                 }
                 let mut s = s.write().unwrap();
                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                try_start_record_cursor_pos();
+                let _h = try_start_record_cursor_pos();
                 s.add_connection(self.inner.clone(), &noperms);
             }
         }
