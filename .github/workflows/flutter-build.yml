@@ -1,4 +1,5 @@
 name: Build the flutter version of the RustDesk 
+#2023-05-05
 
 on:
   workflow_call:
@@ -61,7 +62,7 @@ jobs:
           mv -Force engine/*  C:/hostedtoolcache/windows/flutter/stable-${{ env.FLUTTER_VERSION }}-x64/bin/cache/artifacts/engine/windows-x64-release/
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: deep-soft/rust-toolchain-actions-rs@v2
         with:
           toolchain: stable
           target: ${{ matrix.job.target }}
@@ -153,7 +154,7 @@ jobs:
           version: ${{ env.LLVM_VERSION }}
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: deep-soft/rust-toolchain-actions-rs@v2
         with:
           toolchain: nightly-${{ matrix.job.target }}
           target: ${{ matrix.job.target }}
@@ -293,7 +294,7 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: deep-soft/rust-toolchain-actions-rs@v2
         with:
           toolchain: stable
           target: ${{ matrix.job.target }}
@@ -409,7 +410,7 @@ jobs:
           path: ./
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: deep-soft/rust-toolchain-actions-rs@v2
         with:
           toolchain: stable
           target: ${{ matrix.job.target }}
@@ -509,7 +510,7 @@ jobs:
           path: ./
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: deep-soft/rust-toolchain-actions-rs@v2
         with:
           toolchain: stable
           override: true
@@ -671,7 +672,7 @@ jobs:
           df
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: deep-soft/rust-toolchain-actions-rs@v2
         with:
           toolchain: stable
           target: ${{ matrix.job.target }}
@@ -841,7 +842,7 @@ jobs:
           df
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: deep-soft/rust-toolchain-actions-rs@v2
         with:
           toolchain: stable
           target: ${{ matrix.job.target }}
@@ -989,7 +990,7 @@ jobs:
           df
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: deep-soft/rust-toolchain-actions-rs@v2
         with:
           toolchain: stable
           target: ${{ matrix.job.target }}
