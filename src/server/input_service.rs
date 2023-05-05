@@ -672,6 +672,11 @@ fn fix_modifiers(modifiers: &[EnumOrUnknown<ControlKey>], en: &mut Enigo, ck: i3
 }
 
 #[inline]
+pub fn update_latest_input_cursor_time() {
+    LATEST_PEER_INPUT_CURSOR.lock().unwrap().time = get_time();
+}
+
+#[inline]
 fn get_last_input_cursor_pos() -> (i32, i32) {
     let lock = LATEST_PEER_INPUT_CURSOR.lock().unwrap();
     (lock.x, lock.y)

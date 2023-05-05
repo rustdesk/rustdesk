@@ -903,6 +903,7 @@ pub mod client {
 
     pub fn handle_mouse(evt: &MouseEvent, conn: i32) {
         if RUNNING.lock().unwrap().clone() {
+            crate::input_service::update_latest_input_cursor_time();
             handle_mouse_(evt, conn).ok();
         } else {
             crate::input_service::handle_mouse_(evt, conn);
