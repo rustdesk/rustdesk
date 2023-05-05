@@ -1357,14 +1357,14 @@ jobs:
       #     files: |
       #       res/rustdesk*.zst
 
-      - name: Publish fedora28/centos8 package
-        if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true'
-        uses: softprops/action-gh-release@v1
-        with:
-          prerelease: true
-          tag_name: ${{ env.TAG_NAME }}
-          files: |
-            /opt/artifacts/rpm/*.rpm
+      # - name: Publish fedora28/centos8 package
+      #   if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true'
+      #   uses: softprops/action-gh-release@v1
+      #   with:
+      #     prerelease: true
+      #     tag_name: ${{ env.TAG_NAME }}
+      #     files: |
+      #       /opt/artifacts/rpm/*.rpm
 
   # build-rustdesk-linux-amd64:
   #   needs: [build-rustdesk-lib-linux-amd64]
