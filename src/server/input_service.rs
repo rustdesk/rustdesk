@@ -341,13 +341,13 @@ const MOUSE_ACTIVE_DISTANCE: i32 = 5;
 
 static RECORD_CURSOR_POS_RUNNING: AtomicBool = AtomicBool::new(false);
 
-pub fn try_start_record_cursor_pos() {
+pub fn try_start_record_cursor_pos() -> Option<thread::JoinHandle<()>> {
     if RECORD_CURSOR_POS_RUNNING.load(Ordering::SeqCst) {
-        return;
+        return None;
     }
 
     RECORD_CURSOR_POS_RUNNING.store(true, Ordering::SeqCst);
-    thread::spawn(|| {
+    let handle = thread::spawn(|| {
         let interval = time::Duration::from_millis(33);
         loop {
             if !RECORD_CURSOR_POS_RUNNING.load(Ordering::SeqCst) {
@@ -365,6 +365,7 @@ pub fn try_start_record_cursor_pos() {
         }
         update_last_cursor_pos(INVALID_CURSOR_POS, INVALID_CURSOR_POS);
     });
+    Some(handle)
 }
 
 pub fn try_stop_record_cursor_pos() {
@@ -506,26 +507,7 @@ fn get_modifier_state(key: Key, en: &mut Enigo) -> bool {
     }
 }
 
-#[inline]
-fn update_latest_peer_input_cursor(evt: &MouseEvent, conn: i32, is_checked_movement: bool) {
-    if is_checked_movement || evt.mask & 0x7 == 0 {
-        let time = get_time();
-        *LATEST_PEER_INPUT_CURSOR.lock().unwrap() = Input {
-            time,
-            conn,
-            x: evt.x,
-            y: evt.y,
-        };
-    }
-}
-
 pub fn handle_mouse(evt: &MouseEvent, conn: i32) {
-    if !active_mouse_(conn) {
-        return;
-    }
-    #[cfg(windows)]
-    update_latest_peer_input_cursor(evt, conn, false);
-
     #[cfg(target_os = "macos")]
     if !is_server() {
         // having GUI, run main GUI thread, otherwise crash
@@ -534,7 +516,7 @@ pub fn handle_mouse(evt: &MouseEvent, conn: i32) {
         return;
     }
     #[cfg(windows)]
-    crate::portable_service::client::handle_mouse(evt);
+    crate::portable_service::client::handle_mouse(evt, conn);
     #[cfg(not(windows))]
     handle_mouse_(evt, conn);
 }
@@ -689,6 +671,13 @@ fn fix_modifiers(modifiers: &[EnumOrUnknown<ControlKey>], en: &mut Enigo, ck: i3
     }
 }
 
+// Update time to avoid send cursor position event to the peer.
+// See `run_pos` --> `set_cursor_position` --> `exclude`
+#[inline]
+pub fn update_latest_input_cursor_time() {
+    LATEST_PEER_INPUT_CURSOR.lock().unwrap().time = get_time();
+}
+
 #[inline]
 fn get_last_input_cursor_pos() -> (i32, i32) {
     let lock = LATEST_PEER_INPUT_CURSOR.lock().unwrap();
@@ -750,8 +739,11 @@ fn active_mouse_(conn: i32) -> bool {
     }
 }
 
-// _conn is used by `update_latest_peer_input_cursor`, which is only enabled on "not Win".
-pub fn handle_mouse_(evt: &MouseEvent, _conn: i32) {
+pub fn handle_mouse_(evt: &MouseEvent, conn: i32) {
+    if !active_mouse_(conn) {
+        return;
+    }
+
     if EXITING.load(Ordering::SeqCst) {
         return;
     }
@@ -786,8 +778,12 @@ pub fn handle_mouse_(evt: &MouseEvent, _conn: i32) {
     match evt_type {
         0 => {
             en.mouse_move_to(evt.x, evt.y);
-            #[cfg(not(windows))]
-            update_latest_peer_input_cursor(evt, _conn, true);
+            *LATEST_PEER_INPUT_CURSOR.lock().unwrap() = Input {
+                conn,
+                time: get_time(),
+                x: evt.x,
+                y: evt.y,
+            };
         }
         1 => match buttons {
             0x01 => {
