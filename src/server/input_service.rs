@@ -671,6 +671,8 @@ fn fix_modifiers(modifiers: &[EnumOrUnknown<ControlKey>], en: &mut Enigo, ck: i3
     }
 }
 
+// Update time to avoid send cursor position event to the peer.
+// See `run_pos` --> `set_cursor_position` --> `exclude`
 #[inline]
 pub fn update_latest_input_cursor_time() {
     LATEST_PEER_INPUT_CURSOR.lock().unwrap().time = get_time();
