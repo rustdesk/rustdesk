@@ -2,6 +2,7 @@ name: CI
 # env:
 #   MIN_SUPPORTED_RUST_VERSION: "1.46.0"
 #   CICD_INTERMEDIATES_DIR: "_cicd-intermediates"
+#2023-05-05
 
 on:
   workflow_dispatch:
