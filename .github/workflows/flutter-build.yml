@@ -1699,11 +1699,11 @@ jobs:
     #         flatpak-builder --user --force-clean --repo=repo ./build ./rustdesk.json
     #         flatpak build-bundle ./repo rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.flatpak com.rustdesk.RustDesk
 
-    #   - name: Publish flatpak package
-    #     uses: softprops/action-gh-release@v1
-    #     if: env.UPLOAD_ARTIFACT == 'true'
-    #     with:
-    #       prerelease: true
-    #       tag_name: ${{ env.TAG_NAME }}
-    #       files: |
-    #         flatpak/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.flatpak
+      - name: Publish flatpak package
+        uses: softprops/action-gh-release@v1
+        if: env.UPLOAD_ARTIFACT == 'true'
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            flatpak/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.flatpak
