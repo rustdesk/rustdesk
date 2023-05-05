@@ -1,4 +1,5 @@
 name: Flutter Windows History Build
+#2023-05-05
 
 on: [workflow_dispatch]
 
@@ -49,7 +50,7 @@ jobs:
           Expand-Archive windows-x64-flutter-release.zip -DestinationPath engine
           mv -Force engine/*  C:/hostedtoolcache/windows/flutter/stable-3.0.5-x64/bin/cache/artifacts/engine/windows-x64-release/
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: deep-soft/rust-toolchain-actions-rs@v2
         with:
           toolchain: "1.62"
           target: ${{ matrix.job.target }}
@@ -138,7 +139,7 @@ jobs:
           Expand-Archive windows-x64-flutter-release.zip -DestinationPath engine
           mv -Force engine/*  C:/hostedtoolcache/windows/flutter/stable-3.0.5-x64/bin/cache/artifacts/engine/windows-x64-release/
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: deep-soft/rust-toolchain-actions-rs@v2
         with:
           toolchain: "1.62"
           target: ${{ matrix.job.target }}
@@ -227,7 +228,7 @@ jobs:
           Expand-Archive windows-x64-flutter-release.zip -DestinationPath engine
           mv -Force engine/*  C:/hostedtoolcache/windows/flutter/stable-3.0.5-x64/bin/cache/artifacts/engine/windows-x64-release/
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: deep-soft/rust-toolchain-actions-rs@v2
         with:
           toolchain: "1.62"
           target: ${{ matrix.job.target }}
@@ -316,7 +317,7 @@ jobs:
           Expand-Archive windows-x64-flutter-release.zip -DestinationPath engine
           mv -Force engine/*  C:/hostedtoolcache/windows/flutter/stable-3.0.5-x64/bin/cache/artifacts/engine/windows-x64-release/
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: deep-soft/rust-toolchain-actions-rs@v2
         with:
           toolchain: "1.62"
           target: ${{ matrix.job.target }}
