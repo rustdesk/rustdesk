@@ -1545,42 +1545,6 @@ pub fn plugin_id_is_enabled(_id: String) -> SyncReturn<bool> {
     }
 }
 
-pub fn plugin_enable(_v: bool) {
-    #[cfg(feature = "plugin_framework")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        allow_err!(crate::plugin::ipc::set_manager_config(
-            "enabled",
-            _v.to_string()
-        ));
-        if _v {
-            allow_err!(crate::plugin::load_plugins());
-        } else {
-            crate::plugin::unload_plugins();
-        }
-    }
-}
-
-pub fn plugin_is_enabled() -> SyncReturn<Option<bool>> {
-    #[cfg(feature = "plugin_framework")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        let r = match crate::plugin::ipc::get_manager_config("enabled") {
-            Ok(Some(enabled)) => Some(bool::from_str(&enabled).unwrap_or(false)),
-            _ => None,
-        };
-        SyncReturn(r)
-    }
-    #[cfg(any(
-        not(feature = "plugin_framework"),
-        target_os = "android",
-        target_os = "ios"
-    ))]
-    {
-        SyncReturn(Some(false))
-    }
-}
-
 pub fn plugin_feature_is_enabled() -> SyncReturn<bool> {
     #[cfg(feature = "plugin_framework")]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]

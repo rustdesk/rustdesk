@@ -1512,18 +1512,7 @@ class _PluginState extends State<_Plugin> {
   List<Widget> _buildCards(DescModel model) => [
         _Card(
           title: 'Plugin',
-          children: [
-            _Checkbox(
-              label: 'Enable',
-              getValue: () => bind.pluginIsEnabled() ?? false,
-              setValue: (bool v) async {
-                if (!v) {
-                  clearLocations();
-                }
-                await bind.pluginEnable(v: v);
-              },
-            ),
-          ],
+          children: [],
         ),
         ...model.all.entries
             .map((entry) => PluginCard(pluginId: entry.key, desc: entry.value))
