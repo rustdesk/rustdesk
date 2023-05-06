@@ -10,12 +10,13 @@ use serde_json::Map;
 
 use crate::return_if_not_method;
 
-use self::session::PluginNativeSessionHandler;
+use self::{session::PluginNativeSessionHandler, ui::PluginNativeUIHandler};
 
 use super::cstr_to_string;
 
 mod macros;
 pub mod session;
+pub mod ui;
 
 pub type NR = super::native::NativeReturnValue;
 pub type PluginNativeHandlerRegistrar = NativeHandlerRegistrar<Box<dyn Callable + Send + Sync>>;
@@ -33,10 +34,11 @@ pub struct NativeHandlerRegistrar<H> {
 impl Default for PluginNativeHandlerRegistrar {
     fn default() -> Self {
         Self {
-            handlers: Arc::new(RwLock::new(vec![Box::new(
+            handlers: Arc::new(RwLock::new(vec![
                 // Add prebuilt native handlers here.
-                PluginNativeSessionHandler::default(),
-            )])),
+                Box::new(PluginNativeSessionHandler::default()),
+                Box::new(PluginNativeUIHandler::default()),
+            ])),
         }
     }
 }
