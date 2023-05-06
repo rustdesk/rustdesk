@@ -38,7 +38,7 @@ dependencies:
   wakelock: ^0.6.2
   device_info_plus: ^4.1.2
   #firebase_analytics: ^9.1.5
-  package_info_plus: ^3.1.0
+  package_info_plus: ^1.4.2
   url_launcher: ^6.0.9
   toggle_switch: ^1.4.0
   dash_chat_2: ^0.0.14
@@ -109,9 +109,6 @@ dev_dependencies:
   freezed: ^2.0.3
   flutter_lints: ^2.0.0
   ffigen: ^7.2.4
-
-dependency_overrides:
-  intl: ^0.17.0-nullsafety.2
 
 # rerun: flutter pub run flutter_launcher_icons
 flutter_icons:
