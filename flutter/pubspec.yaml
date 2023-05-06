@@ -70,7 +70,8 @@ dependencies:
   get: ^4.6.5
   visibility_detector: ^0.3.3
   contextmenu: ^3.0.0
-  desktop_drop: ^0.3.3
+  # Disable desktop_drop for now, because it may cause crash on Win11 when destructing.
+  # desktop_drop: ^0.4.1
   scroll_pos: ^0.3.0
   debounce_throttle: ^2.0.0
   file_picker: ^5.1.0
