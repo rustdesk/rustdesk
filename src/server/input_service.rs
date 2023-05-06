@@ -675,7 +675,6 @@ fn fix_modifiers(modifiers: &[EnumOrUnknown<ControlKey>], en: &mut Enigo, ck: i3
 // See `run_pos` --> `set_cursor_position` --> `exclude`
 #[inline]
 pub fn update_latest_input_cursor_time(conn: i32) {
-    log_fo_file(&format!("update_latest_input_cursor_time process id {}", std::process::id()));
     let mut lock = LATEST_PEER_INPUT_CURSOR.lock().unwrap();
     lock.conn = conn;
     lock.time = get_time();
