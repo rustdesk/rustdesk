@@ -1,5 +1,5 @@
 name: 📝 Task
-description: Create a task for the team to work on
+description: Create a task for the team to work on, used internally only. We will delete tasks created by non-team members.
 title: "[Task]: "
 labels: [Task]
 body:
