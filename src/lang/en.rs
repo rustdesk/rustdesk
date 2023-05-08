@@ -2,10 +2,10 @@ lazy_static::lazy_static! {
 pub static ref T: std::collections::HashMap<&'static str, &'static str> =
     [
         ("desk_tip", "Your desktop can be accessed with this ID and password."),
-        ("connecting_status", "Connecting to the Getryt network..."),
+        ("connecting_status", "Connecting to the GetRytRemote network..."),
         ("not_ready_status", "Not ready. Please check your connection"),
         ("id_change_tip", "Only a-z, A-Z, 0-9 and _ (underscore) characters allowed. The first letter must be a-z, A-Z. Length between 6 and 16."),
-        ("install_tip", "Due to UAC, Getryt can not work properly as the remote side in some cases. To avoid UAC, please click the button below to install Getryt to the system."),
+        ("install_tip", "Due to UAC, GetRytRemote can not work properly as the remote side in some cases. To avoid UAC, please click the button below to install GetRytRemote to the system."),
         ("config_acc", "In order to control your Desktop remotely, you need to grant RustDesk \"Accessibility\" permissions."),
         ("config_screen", "In order to access your Desktop remotely, you need to grant RustDesk \"Screen Recording\" permissions."),
         ("agreement_tip", "By starting the installation, you accept the license agreement."),
@@ -47,7 +47,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("relay_hint_tip", "It may not be possible to connect directly, you can try to connect via relay. \nIn addition, if you want to use relay on your first try, you can add the \"/r\" suffix to the ID, or select the option \"Always connect via relay\" in the peer card."),
         ("No transfers in progress", ""),
         ("idd_driver_tip", "Install virtual display driver which is used when you have no physical displays."),
-        ("confirm_idd_driver_tip", "The option to install the virtual display driver is checked. Note that a test certificate will be installed to trust the virtual display driver. This test certificate will only be used to trust Getryt drivers."),
+        ("confirm_idd_driver_tip", "The option to install the virtual display driver is checked. Note that a test certificate will be installed to trust the virtual display driver. This test certificate will only be used to trust GetRytRemote drivers."),
         ("empty_recent_tip", "Oops, no recent sessions!\nTime to plan a new one."),
         ("empty_favorite_tip", "No favorite peers yet?\nLet's find someone to connect with and add it to your favorites!"),
         ("empty_lan_tip", "Oh no, it looks like we haven't discovered any peers yet."),
