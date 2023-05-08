@@ -119,12 +119,3 @@ jobs:
           # certificatename: '${{ secrets.WINDOWS_PFX_NAME }}'
           folder: './SignOutput'
           recursive: false
-
-      - name: Publish Release
-        uses: softprops/action-gh-release@v1
-        if: env.UPLOAD_ARTIFACT == 'true'
-        with:
-          prerelease: true
-          tag_name: ${{ env.TAG_NAME }}
-          files: |
-            ./SignOutput/rustdesk-*.exe
