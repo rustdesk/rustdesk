@@ -64,7 +64,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("another_user_login_text_tip", "Disconnect"),
         ("xorg_not_found_title_tip", "Xorg not found"),
         ("xorg_not_found_text_tip", "Please install Xorg"),
-        ("no_desktop_title_tip", "No desktop is avaliable"),
+        ("no_desktop_title_tip", "No desktop is available"),
         ("no_desktop_text_tip", "Please install GNOME desktop"),
         ].iter().cloned().collect();
 }
