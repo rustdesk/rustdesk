@@ -293,7 +293,7 @@ class _InstallPageBodyState extends State<_InstallPageBody>
         ),
       ];
       gFFI.dialogManager.show(
-        (setState, close) => CustomAlertDialog(
+        (setState, close, context) => CustomAlertDialog(
           title: null,
           content: SelectionArea(
               child:

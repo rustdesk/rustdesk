@@ -643,7 +643,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                     MenuButton(
                       onPressed: () {
                         final name = TextEditingController();
-                        _ffi.dialogManager.show((setState, close) {
+                        _ffi.dialogManager.show((setState, close, context) {
                           submit() {
                             if (name.value.text.isNotEmpty) {
                               controller.createDir(PathUtil.join(

@@ -65,7 +65,7 @@ void changeIdDialog() {
     RegexValidationRule('allowed characters', RegExp(r'^\w*$'))
   ];
 
-  gFFI.dialogManager.show((setState, close) {
+  gFFI.dialogManager.show((setState, close, context) {
     submit() async {
       debugPrint("onSubmit");
       newId = controller.text.trim();
@@ -175,7 +175,7 @@ void changeWhiteList({Function()? callback}) async {
   var controller = TextEditingController(text: newWhiteListField);
   var msg = "";
   var isInProgress = false;
-  gFFI.dialogManager.show((setState, close) {
+  gFFI.dialogManager.show((setState, close, context) {
     return CustomAlertDialog(
       title: Text(translate("IP Whitelisting")),
       content: Column(
@@ -255,7 +255,7 @@ void changeWhiteList({Function()? callback}) async {
 Future<String> changeDirectAccessPort(
     String currentIP, String currentPort) async {
   final controller = TextEditingController(text: currentPort);
-  await gFFI.dialogManager.show((setState, close) {
+  await gFFI.dialogManager.show((setState, close, context) {
     return CustomAlertDialog(
       title: Text(translate("Change Local Port")),
       content: Column(
@@ -425,7 +425,7 @@ class _PasswordWidgetState extends State<PasswordWidget> {
 void wrongPasswordDialog(
     String id, OverlayDialogManager dialogManager, type, title, text) {
   dialogManager.dismissAll();
-  dialogManager.show((setState, close) {
+  dialogManager.show((setState, close, context) {
     cancel() {
       close();
       closeConnection();
@@ -498,7 +498,7 @@ _connectDialog(
     rememberAccount = await bind.sessionGetRemember(id: id) ?? false;
   }
   dialogManager.dismissAll();
-  dialogManager.show((setState, close) {
+  dialogManager.show((setState, close, context) {
     cancel() {
       close();
       closeConnection();
@@ -653,7 +653,7 @@ void showWaitUacDialog(
   dialogManager.dismissAll();
   dialogManager.show(
       tag: '$id-wait-uac',
-      (setState, close) => CustomAlertDialog(
+      (setState, close, context) => CustomAlertDialog(
             title: null,
             content: msgboxContent(type, 'Wait', 'wait_accept_uac_tip'),
           ));
@@ -769,7 +769,7 @@ void showRequestElevationDialog(String id, OverlayDialogManager dialogManager) {
       ]));
 
   dialogManager.dismissAll();
-  dialogManager.show(tag: '$id-request-elevation', (setState, close) {
+  dialogManager.show(tag: '$id-request-elevation', (setState, close, context) {
     void submit() {
       if (groupValue.value == 'logon') {
         if (userController.text.isEmpty) {
@@ -813,7 +813,7 @@ void showOnBlockDialog(
       dialogManager.existing('$id-request-elevation')) {
     return;
   }
-  dialogManager.show(tag: '$id-$type', (setState, close) {
+  dialogManager.show(tag: '$id-$type', (setState, close, context) {
     void submit() {
       close();
       showRequestElevationDialog(id, dialogManager);
@@ -835,7 +835,7 @@ void showOnBlockDialog(
 
 void showElevationError(String id, String type, String title, String text,
     OverlayDialogManager dialogManager) {
-  dialogManager.show(tag: '$id-$type', (setState, close) {
+  dialogManager.show(tag: '$id-$type', (setState, close, context) {
     void submit() {
       close();
       showRequestElevationDialog(id, dialogManager);
@@ -859,7 +859,7 @@ void showElevationError(String id, String type, String title, String text,
 void showWaitAcceptDialog(String id, String type, String title, String text,
     OverlayDialogManager dialogManager) {
   dialogManager.dismissAll();
-  dialogManager.show((setState, close) {
+  dialogManager.show((setState, close, context) {
     onCancel() {
       closeConnection();
     }
@@ -878,7 +878,7 @@ void showWaitAcceptDialog(String id, String type, String title, String text,
 void showRestartRemoteDevice(
     PeerInfo pi, String id, OverlayDialogManager dialogManager) async {
   final res =
-      await dialogManager.show<bool>((setState, close) => CustomAlertDialog(
+      await dialogManager.show<bool>((setState, close, context) => CustomAlertDialog(
             title: Row(children: [
               Icon(Icons.warning_rounded, color: Colors.redAccent, size: 28),
               Flexible(
@@ -915,7 +915,7 @@ showSetOSPassword(
   var password = await bind.sessionGetOption(id: id, arg: 'os-password') ?? '';
   var autoLogin = await bind.sessionGetOption(id: id, arg: 'auto-login') != '';
   controller.text = password;
-  dialogManager.show((setState, close) {
+  dialogManager.show((setState, close, context) {
     submit() {
       var text = controller.text.trim();
       bind.sessionPeerOption(id: id, name: 'os-password', value: text);
@@ -983,7 +983,7 @@ showSetOSAccount(
   var password = await bind.sessionGetOption(id: id, arg: 'os-password') ?? '';
   usernameController.text = username;
   passwdController.text = password;
-  dialogManager.show((setState, close) {
+  dialogManager.show((setState, close, context) {
     submit() {
       final username = usernameController.text.trim();
       final password = usernameController.text.trim();
@@ -1115,7 +1115,7 @@ showAuditDialog(String id, dialogManager) async {
 
 void showConfirmSwitchSidesDialog(
     String id, OverlayDialogManager dialogManager) async {
-  dialogManager.show((setState, close) {
+  dialogManager.show((setState, close, context) {
     submit() async {
       await bind.sessionSwitchSides(id: id);
       closeConnection(id: id);

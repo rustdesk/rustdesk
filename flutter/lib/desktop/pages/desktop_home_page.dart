@@ -589,7 +589,7 @@ void setPasswordDialog() async {
     MinCharactersValidationRule(8),
   ];
 
-  gFFI.dialogManager.show((setState, close) {
+  gFFI.dialogManager.show((setState, close, context) {
     submit() {
       setState(() {
         errMsg0 = "";

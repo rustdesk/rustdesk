@@ -687,7 +687,7 @@ Future<bool> toggleMaximize(bool isMainWindow) async {
 
 Future<bool> closeConfirmDialog() async {
   var confirm = true;
-  final res = await gFFI.dialogManager.show<bool>((setState, close) {
+  final res = await gFFI.dialogManager.show<bool>((setState, close, context) {
     submit() {
       final opt = "enable-confirm-closing-tabs";
       String value = bool2option(opt, confirm);

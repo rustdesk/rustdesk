@@ -197,7 +197,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
                   } else if (v == "folder") {
                     final name = TextEditingController();
                     gFFI.dialogManager
-                        .show((setState, close) => CustomAlertDialog(
+                        .show((setState, close, context) => CustomAlertDialog(
                                 title: Text(translate("Create Folder")),
                                 content: Column(
                                   mainAxisSize: MainAxisSize.min,

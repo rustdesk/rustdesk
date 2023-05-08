@@ -318,7 +318,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                       kRequestIgnoreBatteryOptimizations);
                 } else {
                   final res = await gFFI.dialogManager
-                      .show<bool>((setState, close) => CustomAlertDialog(
+                      .show<bool>((setState, close, context) => CustomAlertDialog(
                             title: Text(translate("Open System Setting")),
                             content: Text(translate(
                                 "android_open_battery_optimizations_tip")),
@@ -505,7 +505,7 @@ void showLanguageSettings(OverlayDialogManager dialogManager) async {
   try {
     final langs = json.decode(await bind.mainGetLangs()) as List<dynamic>;
     var lang = bind.mainGetLocalOption(key: "lang");
-    dialogManager.show((setState, close) {
+    dialogManager.show((setState, close, context) {
       setLang(v) {
         if (lang != v) {
           setState(() {
@@ -539,7 +539,7 @@ void showLanguageSettings(OverlayDialogManager dialogManager) async {
 void showThemeSettings(OverlayDialogManager dialogManager) async {
   var themeMode = MyTheme.getThemeModePreference();
 
-  dialogManager.show((setState, close) {
+  dialogManager.show((setState, close, context) {
     setTheme(v) {
       if (themeMode != v) {
         setState(() {
@@ -563,7 +563,7 @@ void showThemeSettings(OverlayDialogManager dialogManager) async {
 }
 
 void showAbout(OverlayDialogManager dialogManager) {
-  dialogManager.show((setState, close) {
+  dialogManager.show((setState, close, context) {
     return CustomAlertDialog(
       title: Text('${translate('About')} RustDesk'),
       content: Wrap(direction: Axis.vertical, spacing: 12, children: [

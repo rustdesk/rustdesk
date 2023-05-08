@@ -1,4 +1,8 @@
+import 'dart:convert';
 import 'dart:ffi';
+
+import 'package:ffi/ffi.dart';
+import 'package:flutter_hbb/plugin/utils/dialogs.dart';
 
 abstract class NativeHandler {
   bool onEvent(Map<String, dynamic> evt);
@@ -37,7 +41,13 @@ class NativeUiHandler extends NativeHandler {
   }
 
   void onSelectPeers(OnSelectPeersCallbackDart cb, int userData) async {
-    // TODO: design a UI interface to pick peers.
-    cb(0, Pointer.fromAddress(0), 0, Pointer.fromAddress(userData));
+    showPeerSelectionDialog(onPeersCallback: (peers) {
+      String json = jsonEncode(<String, dynamic> {
+        "peers": peers
+      });
+      final native = json.toNativeUtf8();
+      cb(0, native.cast(), native.length, Pointer.fromAddress(userData));
+      malloc.free(native);
+    });
   }
 }

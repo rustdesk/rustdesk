@@ -2016,7 +2016,7 @@ void changeSocks5Proxy() async {
   RxBool obscure = true.obs;
 
   var isInProgress = false;
-  gFFI.dialogManager.show((setState, close) {
+  gFFI.dialogManager.show((setState, close, context) {
     submit() async {
       setState(() {
         proxyMsg = '';
