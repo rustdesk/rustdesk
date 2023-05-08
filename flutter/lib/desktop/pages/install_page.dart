@@ -206,7 +206,7 @@ class _InstallPageBodyState extends State<_InstallPageBody>
                 ),
               ),
               GestureDetector(
-                  onTap: () => launchUrlString('http://rustdesk.com/privacy'),
+                  onTap: () => launchUrlString('https://getryt.io/'),
                   child: Row(
                     children: [
                       Text(translate('End-user license agreement'),
@@ -245,18 +245,18 @@ class _InstallPageBodyState extends State<_InstallPageBody>
                         translate('Accept and Install'),
                         style: TextStyle(fontSize: btnFontSize),
                       ))),
-                  Offstage(
-                    offstage: bind.installShowRunWithoutInstall(),
-                    child: Obx(() => OutlinedButton(
-                            onPressed: btnEnabled.value
-                                ? () => bind.installRunWithoutInstall()
-                                : null,
-                            style: buttonStyle,
-                            child: Text(translate('Run without install'),
-                                style: TextStyle(
-                                    color: textColor, fontSize: btnFontSize)))
-                        .marginOnly(left: 2 * em)),
-                  ),
+                  // Offstage(
+                  //   offstage: bind.installShowRunWithoutInstall(),
+                  //   child: Obx(() => OutlinedButton(
+                  //           onPressed: btnEnabled.value
+                  //               ? () => bind.installRunWithoutInstall()
+                  //               : null,
+                  //           style: buttonStyle,
+                  //           child: Text(translate('Run without install'),
+                  //               style: TextStyle(
+                  //                   color: textColor, fontSize: btnFontSize)))
+                  //       .marginOnly(left: 2 * em)),
+                  // ),
                 ],
               )
             ],
