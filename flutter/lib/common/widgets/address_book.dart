@@ -224,7 +224,7 @@ class _AddressBookState extends State<AddressBook> {
     final style = TextStyle(fontSize: 14.0);
     String? errorMsg;
 
-    gFFI.dialogManager.show((setState, close) {
+    gFFI.dialogManager.show((setState, close, context) {
       submit() async {
         setState(() {
           isInProgress = true;
@@ -334,7 +334,7 @@ class _AddressBookState extends State<AddressBook> {
     var msg = "";
     var isInProgress = false;
     TextEditingController controller = TextEditingController(text: field);
-    gFFI.dialogManager.show((setState, close) {
+    gFFI.dialogManager.show((setState, close, context) {
       submit() async {
         setState(() {
           msg = "";

@@ -391,7 +391,7 @@ Future<bool?> loginDialog() async {
   final autoLogin = true.obs;
   final RxString curOP = ''.obs;
 
-  final res = await gFFI.dialogManager.show<bool>((setState, close) {
+  final res = await gFFI.dialogManager.show<bool>((setState, close, context) {
     username.addListener(() {
       if (usernameMsg != null) {
         setState(() => usernameMsg = null);
@@ -530,7 +530,7 @@ Future<bool?> verificationCodeDialog(UserPayload? user) async {
   final focusNode = FocusNode()..requestFocus();
   Timer(Duration(milliseconds: 100), () => focusNode..requestFocus());
 
-  final res = await gFFI.dialogManager.show<bool>((setState, close) {
+  final res = await gFFI.dialogManager.show<bool>((setState, close, context) {
     bool validate() {
       return code.text.length >= 6;
     }

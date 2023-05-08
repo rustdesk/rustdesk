@@ -868,7 +868,7 @@ void showOptions(
   List<TToggleMenu> displayToggles =
       await toolbarDisplayToggle(context, id, gFFI);
 
-  dialogManager.show((setState, close) {
+  dialogManager.show((setState, close, context) {
     var viewStyle =
         (viewStyleRadios.isNotEmpty ? viewStyleRadios[0].groupValue : '').obs;
     var imageQuality =

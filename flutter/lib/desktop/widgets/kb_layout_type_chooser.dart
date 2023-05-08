@@ -204,7 +204,7 @@ showKBLayoutTypeChooser(
   String localPlatform,
   OverlayDialogManager dialogManager,
 ) {
-  dialogManager.show((setState, close) {
+  dialogManager.show((setState, close, context) {
     return CustomAlertDialog(
       title:
           Text('${translate('Select local keyboard type')} ($localPlatform)'),

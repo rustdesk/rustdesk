@@ -383,7 +383,7 @@ class FfiModel with ChangeNotifier {
 
   void showRelayHintDialog(String id, String type, String title, String text,
       OverlayDialogManager dialogManager) {
-    dialogManager.show(tag: '$id-$type', (setState, close) {
+    dialogManager.show(tag: '$id-$type', (setState, close, context) {
       onClose() {
         closeConnection();
         close();

@@ -152,7 +152,7 @@ class FileModel {
       String title, String content, bool showCheckbox, bool isIdentical) async {
     fileConfirmCheckboxRemember = false;
     return await parent.target?.dialogManager.show<bool?>(
-        (setState, Function(bool? v) close) {
+        (setState, Function(bool? v) close, context) {
       cancel() => close(false);
       submit() => close(true);
       return CustomAlertDialog(
@@ -547,7 +547,7 @@ class FileController {
 
   Future<bool?> showRemoveDialog(
       String title, String content, bool showCheckbox) async {
-    return await dialogManager?.show<bool>((setState, Function(bool v) close) {
+    return await dialogManager?.show<bool>((setState, Function(bool v) close, context) {
       cancel() => close(false);
       submit() => close(true);
       return CustomAlertDialog(
