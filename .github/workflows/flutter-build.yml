@@ -130,107 +130,107 @@ jobs:
             ./SignOutput/rustdesk-*.exe
 
   # The fallback for the flutter version, we use Sciter for 32bit Windows.
-  build-for-windows-sciter:
-    name: ${{ matrix.job.target }} (${{ matrix.job.os }})
-    runs-on: ${{ matrix.job.os }}
-    # Temporarily disable this action due to additional test is needed.
-    # if: false 
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          # - { target: i686-pc-windows-msvc        , os: windows-2019                  }
-          # - { target: x86_64-pc-windows-gnu       , os: windows-2019                  }
-          - { target: i686-pc-windows-msvc, os: windows-2019, arch: x86 }
-          # - { target: aarch64-pc-windows-msvc, os: windows-2019 }
-    steps:
-      - name: Checkout source code
-        uses: actions/checkout@v3
+  # build-for-windows-sciter:
+  #   name: ${{ matrix.job.target }} (${{ matrix.job.os }})
+  #   runs-on: ${{ matrix.job.os }}
+  #   # Temporarily disable this action due to additional test is needed.
+  #   # if: false 
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       job:
+  #         # - { target: i686-pc-windows-msvc        , os: windows-2019                  }
+  #         # - { target: x86_64-pc-windows-gnu       , os: windows-2019                  }
+  #         - { target: i686-pc-windows-msvc, os: windows-2019, arch: x86 }
+  #         # - { target: aarch64-pc-windows-msvc, os: windows-2019 }
+  #   steps:
+  #     - name: Checkout source code
+  #       uses: actions/checkout@v3
 
-      - name: Install LLVM and Clang
-        uses: Kingtous/install-llvm-action-32bit@master
-        with:
-          version: ${{ env.LLVM_VERSION }}
+  #     - name: Install LLVM and Clang
+  #       uses: Kingtous/install-llvm-action-32bit@master
+  #       with:
+  #         version: ${{ env.LLVM_VERSION }}
 
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly-${{ matrix.job.target }}
-          target: ${{ matrix.job.target }}
-          override: true
-          profile: minimal # minimal component installation (ie, no documentation)
+  #     - name: Install Rust toolchain
+  #       uses: actions-rs/toolchain@v1
+  #       with:
+  #         toolchain: nightly-${{ matrix.job.target }}
+  #         target: ${{ matrix.job.target }}
+  #         override: true
+  #         profile: minimal # minimal component installation (ie, no documentation)
 
-      - uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: ${{ matrix.job.os }}-sciter
+  #     - uses: Swatinem/rust-cache@v2
+  #       with:
+  #         prefix-key: ${{ matrix.job.os }}-sciter
 
-      - name: Restore from cache and install vcpkg
-        uses: lukka/run-vcpkg@v7
-        with:
-          setupOnly: true
-          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+  #     - name: Restore from cache and install vcpkg
+  #       uses: lukka/run-vcpkg@v7
+  #       with:
+  #         setupOnly: true
+  #         vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
 
-      - name: Install vcpkg dependencies
-        run: |
-          cd C:\
-          git clone https://github.com/Kingtous/rustdesk_thirdpary_lib --depth=1 
+  #     - name: Install vcpkg dependencies
+  #       run: |
+  #         cd C:\
+  #         git clone https://github.com/Kingtous/rustdesk_thirdpary_lib --depth=1 
 
-      - name: Build rustdesk
-        id: build
-        shell: bash
-        env:
-          VCPKG_ROOT: C:\rustdesk_thirdpary_lib\vcpkg
-        run: |
-          python3 res/inline-sciter.py
-          # Patch sciter x86
-          sed -i 's/branch = "dyn"/branch = "dyn_x86"/g' ./Cargo.toml
-          # Replace the link for the ico.
-          rm res/icon.ico && cp flutter/windows/runner/resources/app_icon.ico res/icon.ico
-          cargo build --features inline --release --bins
-          mkdir -p ./Release
-          mv ./target/release/rustdesk.exe ./Release/rustdesk.exe
-          curl -LJ -o ./Release/sciter.dll https://github.com/c-smile/sciter-sdk/raw/master/bin.win/x32/sciter.dll
-          echo "output_folder=./Release" >> $GITHUB_OUTPUT
+  #     - name: Build rustdesk
+  #       id: build
+  #       shell: bash
+  #       env:
+  #         VCPKG_ROOT: C:\rustdesk_thirdpary_lib\vcpkg
+  #       run: |
+  #         python3 res/inline-sciter.py
+  #         # Patch sciter x86
+  #         sed -i 's/branch = "dyn"/branch = "dyn_x86"/g' ./Cargo.toml
+  #         # Replace the link for the ico.
+  #         rm res/icon.ico && cp flutter/windows/runner/resources/app_icon.ico res/icon.ico
+  #         cargo build --features inline --release --bins
+  #         mkdir -p ./Release
+  #         mv ./target/release/rustdesk.exe ./Release/rustdesk.exe
+  #         curl -LJ -o ./Release/sciter.dll https://github.com/c-smile/sciter-sdk/raw/master/bin.win/x32/sciter.dll
+  #         echo "output_folder=./Release" >> $GITHUB_OUTPUT
 
-      - name: Sign rustdesk files
-        uses: GermanBluefox/code-sign-action@v7
-        if: env.UPLOAD_ARTIFACT == 'true'
-        with:
-          certificate: '${{ secrets.WINDOWS_PFX_BASE64 }}'
-          password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
-          certificatesha1: '${{ secrets.WINDOWS_PFX_SHA1_THUMBPRINT }}'
-          # certificatename: '${{ secrets.CERTNAME }}'
-          folder: './Release/'
-          recursive: true
+  #     - name: Sign rustdesk files
+  #       uses: GermanBluefox/code-sign-action@v7
+  #       if: env.UPLOAD_ARTIFACT == 'true'
+  #       with:
+  #         certificate: '${{ secrets.WINDOWS_PFX_BASE64 }}'
+  #         password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
+  #         certificatesha1: '${{ secrets.WINDOWS_PFX_SHA1_THUMBPRINT }}'
+  #         # certificatename: '${{ secrets.CERTNAME }}'
+  #         folder: './Release/'
+  #         recursive: true
 
-      - name: Build self-extracted executable
-        shell: bash
-        run: |
-          pushd ./libs/portable
-          pip3 install -r requirements.txt
-          python3 ./generate.py -f ../../Release/ -o . -e ../../Release/rustdesk.exe
-          popd
-          mkdir -p ./SignOutput
-          mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.exe
+  #     - name: Build self-extracted executable
+  #       shell: bash
+  #       run: |
+  #         pushd ./libs/portable
+  #         pip3 install -r requirements.txt
+  #         python3 ./generate.py -f ../../Release/ -o . -e ../../Release/rustdesk.exe
+  #         popd
+  #         mkdir -p ./SignOutput
+  #         mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.exe
       
-      - name: Sign rustdesk self-extracted file
-        uses: GermanBluefox/code-sign-action@v7
-        with:
-          certificate: '${{ secrets.WINDOWS_PFX_BASE64 }}'
-          password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
-          certificatesha1: '${{ secrets.WINDOWS_PFX_SHA1_THUMBPRINT }}'
-          # certificatename: '${{ secrets.WINDOWS_PFX_NAME }}'
-          folder: './SignOutput'
-          recursive: false
+  #     - name: Sign rustdesk self-extracted file
+  #       uses: GermanBluefox/code-sign-action@v7
+  #       with:
+  #         certificate: '${{ secrets.WINDOWS_PFX_BASE64 }}'
+  #         password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
+  #         certificatesha1: '${{ secrets.WINDOWS_PFX_SHA1_THUMBPRINT }}'
+  #         # certificatename: '${{ secrets.WINDOWS_PFX_NAME }}'
+  #         folder: './SignOutput'
+  #         recursive: false
 
-      - name: Publish Release
-        uses: softprops/action-gh-release@v1
-        if: env.UPLOAD_ARTIFACT == 'true'
-        with:
-          prerelease: true
-          tag_name: ${{ env.TAG_NAME }}
-          files: |
-            ./SignOutput/rustdesk-*.exe
+  #     - name: Publish Release
+  #       uses: softprops/action-gh-release@v1
+  #       if: env.UPLOAD_ARTIFACT == 'true'
+  #       with:
+  #         prerelease: true
+  #         tag_name: ${{ env.TAG_NAME }}
+  #         files: |
+  #           ./SignOutput/rustdesk-*.exe
 
   # build-for-macOS:
   #   name: ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-args }}]
