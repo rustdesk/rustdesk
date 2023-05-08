@@ -35,6 +35,7 @@ use hbb_common::{
 #[cfg(not(windows))]
 use scrap::Capturer;
 use scrap::{
+    aom::AomEncoderConfig,
     codec::{Encoder, EncoderCfg, HwEncoderConfig},
     record::{Recorder, RecorderContext},
     vpxcodec::{VpxEncoderConfig, VpxVideoCodecId},
@@ -549,6 +550,11 @@ fn run(sp: GenericService) -> ResultType<()> {
                 num_threads: (num_cpus::get() / 2) as _,
             })
         }
+        scrap::CodecName::AV1 => EncoderCfg::AOM(AomEncoderConfig {
+            width: c.width as _,
+            height: c.height as _,
+            bitrate: bitrate as _,
+        }),
     };
 
     let mut encoder;

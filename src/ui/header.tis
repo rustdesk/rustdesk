@@ -162,7 +162,7 @@ class Header: Reactor.Component {
 
     function renderDisplayPop() {
         var codecs = handler.alternative_codecs();
-        var show_codec = codecs[0] || codecs[1] || codecs[2];
+        var show_codec = codecs[0] || codecs[1] || codecs[2] || codecs[3];
 
         var cursor_embedded = false;
         if ((pi.displays || []).length > 0) {
@@ -188,8 +188,9 @@ class Header: Reactor.Component {
                 <li #auto type="codec-preference"><span>{svg_checkmark}</span>Auto</li>
                 {codecs[0] ? <li #vp8 type="codec-preference"><span>{svg_checkmark}</span>VP8</li> : ""}
                 <li #vp9 type="codec-preference"><span>{svg_checkmark}</span>VP9</li>
-                {codecs[1] ? <li #h264 type="codec-preference"><span>{svg_checkmark}</span>H264</li> : ""}
-                {codecs[2] ? <li #h265 type="codec-preference"><span>{svg_checkmark}</span>H265</li> : ""}
+                {codecs[1] ? <li #av1 type="codec-preference"><span>{svg_checkmark}</span>AV1</li> : ""}
+                {codecs[2] ? <li #h264 type="codec-preference"><span>{svg_checkmark}</span>H264</li> : ""}
+                {codecs[3] ? <li #h265 type="codec-preference"><span>{svg_checkmark}</span>H265</li> : ""}
                 </div> : ""}
                 <div .separator />
                 {!cursor_embedded && <li #show-remote-cursor .toggle-option><span>{svg_checkmark}</span>{translate('Show remote cursor')}</li>}

@@ -1,6 +1,7 @@
 use docopt::Docopt;
 use hbb_common::env_logger::{init_from_env, Env, DEFAULT_FILTER_ENV};
 use scrap::{
+    aom::{AomDecoder, AomDecoderConfig, AomEncoder, AomEncoderConfig},
     codec::{EncoderApi, EncoderCfg},
     Capturer, Display, TraitCapturer, VpxDecoder, VpxDecoderConfig, VpxEncoder, VpxEncoderConfig,
     VpxVideoCodecId::{self, *},
@@ -51,6 +52,7 @@ fn main() {
         width, height, bitrate_k, args.flag_hw_pixfmt
     );
     [VP8, VP9].map(|c| test_vpx(c, &yuvs, width, height, bitrate_k, yuv_count));
+    test_av1(&yuvs, width, height, bitrate_k, yuv_count);
     #[cfg(feature = "hwcodec")]
     {
         use hwcodec::AVPixelFormat;
@@ -105,34 +107,29 @@ fn test_vpx(
         num_threads: (num_cpus::get() / 2) as _,
     });
     let mut encoder = VpxEncoder::new(config).unwrap();
-    let start = Instant::now();
-    for yuv in yuvs {
-        let _ = encoder
-            .encode(start.elapsed().as_millis() as _, yuv, STRIDE_ALIGN)
-            .unwrap();
-        let _ = encoder.flush().unwrap();
-    }
-    println!(
-        "{:?} encode: {:?}",
-        codec_id,
-        start.elapsed() / yuv_count as _
-    );
-
-    // prepare data separately
     let mut vpxs = vec![];
     let start = Instant::now();
+    let mut size = 0;
     for yuv in yuvs {
         for ref frame in encoder
             .encode(start.elapsed().as_millis() as _, yuv, STRIDE_ALIGN)
             .unwrap()
         {
+            size += frame.data.len();
             vpxs.push(frame.data.to_vec());
         }
         for ref frame in encoder.flush().unwrap() {
+            size += frame.data.len();
             vpxs.push(frame.data.to_vec());
         }
     }
     assert_eq!(vpxs.len(), yuv_count);
+    println!(
+        "{:?} encode: {:?}, {} byte",
+        codec_id,
+        start.elapsed() / yuv_count as _,
+        size / yuv_count
+    );
 
     let mut decoder = VpxDecoder::new(VpxDecoderConfig {
         codec: codec_id,
@@ -149,6 +146,43 @@ fn test_vpx(
         codec_id,
         start.elapsed() / yuv_count as _
     );
+}
+
+fn test_av1(yuvs: &Vec<Vec<u8>>, width: usize, height: usize, bitrate_k: usize, yuv_count: usize) {
+    let config = EncoderCfg::AOM(AomEncoderConfig {
+        width: width as _,
+        height: height as _,
+        bitrate: bitrate_k as _,
+    });
+    let mut encoder = AomEncoder::new(config).unwrap();
+    let start = Instant::now();
+    let mut size = 0;
+    let mut av1s = vec![];
+    for yuv in yuvs {
+        for ref frame in encoder
+            .encode(start.elapsed().as_millis() as _, yuv, STRIDE_ALIGN)
+            .unwrap()
+        {
+            size += frame.data.len();
+            av1s.push(frame.data.to_vec());
+        }
+    }
+    assert_eq!(av1s.len(), yuv_count);
+    println!(
+        "AV1 encode: {:?}, {} byte",
+        start.elapsed() / yuv_count as _,
+        size / yuv_count
+    );
+    let mut decoder = AomDecoder::new(AomDecoderConfig {
+        num_threads: (num_cpus::get() / 2) as _,
+    })
+    .unwrap();
+    let start = Instant::now();
+    for av1 in av1s {
+        let _ = decoder.decode(&av1);
+        let _ = decoder.flush();
+    }
+    println!("AV1 decode: {:?}", start.elapsed() / yuv_count as _);
 }
 
 #[cfg(feature = "hwcodec")]
@@ -221,14 +255,19 @@ mod hw {
         ctx.name = info.name;
         let mut encoder = Encoder::new(ctx.clone()).unwrap();
         let start = Instant::now();
+        let mut size = 0;
         for yuv in yuvs {
-            let _ = encoder.encode(yuv).unwrap();
+            let frames = encoder.encode(yuv).unwrap();
+            for frame in frames {
+                size += frame.data.len();
+            }
         }
         println!(
-            "{}{}: {:?}",
+            "{}{}: {:?}, {} byte",
             if best { "*" } else { "" },
             ctx.name,
-            start.elapsed() / yuvs.len() as _
+            start.elapsed() / yuvs.len() as _,
+            size / yuvs.len(),
         );
     }
 

@@ -844,7 +844,7 @@ impl<T: InvokeUiSession> Remote<T> {
         use video_frame::Union::*;
         match &vf.union {
             Some(vf) => match vf {
-                Vp8s(f) | Vp9s(f) | H264s(f) | H265s(f) => f.frames.iter().any(|e| e.key),
+                Vp8s(f) | Vp9s(f) | Av1s(f) | H264s(f) | H265s(f) => f.frames.iter().any(|e| e.key),
                 _ => false,
             },
             None => false,

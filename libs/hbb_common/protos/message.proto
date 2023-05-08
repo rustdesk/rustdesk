@@ -25,6 +25,7 @@ message VideoFrame {
     EncodedVideoFrames h264s = 10;
     EncodedVideoFrames h265s = 11;
     EncodedVideoFrames vp8s = 12;
+    EncodedVideoFrames av1s = 13;
   }
 }
 
@@ -85,6 +86,7 @@ message SupportedEncoding {
   bool h264 = 1;
   bool h265 = 2;
   bool vp8 = 3;
+  bool av1 = 4;
 }
 
 message PeerInfo {
@@ -477,6 +479,7 @@ message SupportedDecoding {
     H264 = 2;
     H265 = 3;
     VP8 = 4;
+    AV1 = 5;
   }
 
   int32 ability_vp9 = 1;
@@ -484,6 +487,7 @@ message SupportedDecoding {
   int32 ability_h265 = 3;
   PreferCodec prefer = 4;
   int32 ability_vp8 = 5;
+  int32 ability_av1 = 6;
 }
 
 message OptionMessage {
