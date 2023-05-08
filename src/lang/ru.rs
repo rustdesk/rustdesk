@@ -499,6 +499,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Copy Fingerprint", "Копировать отпечаток"),
         ("no fingerprints", "отпечатки отсутствуют"),
         ("Select a peer", ""),
-        ("Select peers", "")
+        ("Select peers", ""),
+        ("Plugins", "")
     ].iter().cloned().collect();
 }
