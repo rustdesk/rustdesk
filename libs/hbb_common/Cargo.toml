@@ -35,6 +35,7 @@ chrono = "0.4"
 backtrace = "0.3"
 libc = "0.2"
 dlopen = "0.1"
+toml = "0.7"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 mac_address = "1.1"
@@ -55,5 +56,4 @@ winapi = { version = "0.3", features = ["winuser"] }
 osascript = "0.3"
 
 [dev-dependencies]
-toml = "0.7"
 serde_json = "1.0"

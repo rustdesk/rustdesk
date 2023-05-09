@@ -1,4 +1,4 @@
-use hbb_common::{libc, tokio, ResultType};
+use hbb_common::{libc, tokio, ResultType, allow_err, log};
 use std::{
     env,
     ffi::{c_char, c_int, c_void, CStr},
@@ -37,6 +37,8 @@ pub const EVENT_ON_CONN_CLIENT: &str = "on_conn_client";
 pub const EVENT_ON_CONN_SERVER: &str = "on_conn_server";
 pub const EVENT_ON_CONN_CLOSE_CLIENT: &str = "on_conn_close_client";
 pub const EVENT_ON_CONN_CLOSE_SERVER: &str = "on_conn_close_server";
+
+static PLUGIN_SOURCE_LOCAL_DIR: &str = "plugins";
 
 pub use config::{ManagerConfig, PeerConfig, SharedConfig};
 
@@ -91,14 +93,17 @@ pub fn init() {
     std::thread::spawn(move || manager::start_ipc());
     if is_server() {
         manager::remove_plugins();
+        allow_err!(plugins::load_plugins());
     }
-    load_plugin_list(true);
+    load_plugin_list();
 }
 
 #[inline]
 fn get_plugins_dir() -> ResultType<PathBuf> {
     // to-do: linux and macos
-    Ok(PathBuf::from(env::var("ProgramData")?).join(manager::PLUGIN_SOURCE_LOCAL_URL))
+    Ok(PathBuf::from(env::var("ProgramData")?)
+        .join("RustDesk")
+        .join(PLUGIN_SOURCE_LOCAL_DIR))
 }
 
 #[inline]

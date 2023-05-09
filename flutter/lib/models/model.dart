@@ -231,6 +231,7 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'fingerprint') {
         FingerprintState.find(peerId).value = evt['fingerprint'] ?? '';
       } else if (name == 'plugin_manager') {
+        debugPrint('REMOVE ME ==================== plugin_manager $evt');
         pluginManager.handleEvent(evt);
       } else if (name == 'plugin_event') {
         handlePluginEvent(

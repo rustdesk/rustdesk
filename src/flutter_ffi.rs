@@ -1570,7 +1570,7 @@ pub fn plugin_list_reload() {
     #[cfg(feature = "plugin_framework")]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
-        crate::plugin::load_plugin_list(false);
+        crate::plugin::load_plugin_list();
     }
 }
 

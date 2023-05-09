@@ -3,7 +3,7 @@
 
 use super::{desc::Meta as PluginMeta, ipc::InstallStatus, *};
 use crate::{common::is_server, flutter};
-use hbb_common::{allow_err, bail, log, tokio};
+use hbb_common::{allow_err, bail, config::load_path, log, tokio, toml};
 use serde_derive::{Deserialize, Serialize};
 use serde_json;
 use std::{
@@ -21,7 +21,7 @@ lazy_static::lazy_static! {
     static ref PLUGIN_INFO: Arc<Mutex<HashMap<String, PluginInfo>>> = Arc::new(Mutex::new(HashMap::new()));
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct ManagerMeta {
     pub version: String,
     pub description: String,
@@ -45,24 +45,47 @@ pub struct PluginInfo {
 }
 
 static PLUGIN_SOURCE_LOCAL: &str = "local";
-pub(super) static PLUGIN_SOURCE_LOCAL_URL: &str = "plugins";
 
+#[cfg(not(debug_assertions))]
 fn get_plugin_source_list() -> Vec<PluginSource> {
     // Only one source for now.
     vec![PluginSource {
         name: "rustdesk".to_string(),
-        #[cfg(debug_assertions)]
-        url: PLUGIN_SOURCE_LOCAL_URL.to_string(),
-        #[cfg(not(debug_assertions))]
         url: "https://github.com/fufesou/rustdesk-plugins".to_string(),
         description: "".to_string(),
     }]
 }
 
+#[cfg(debug_assertions)]
+fn get_source_plugins() -> HashMap<String, PluginInfo> {
+    let meta_file = super::get_plugins_dir().unwrap().join("meta.toml");
+    let mut plugins = HashMap::new();
+    let meta = load_path::<ManagerMeta>(meta_file);
+    let source = PluginSource {
+        name: "rustdesk".to_string(),
+        url: "https://github.com/fufesou/rustdesk-plugins".to_string(),
+        description: "".to_string(),
+    };
+    for plugin in meta.plugins.iter() {
+        plugins.insert(
+            plugin.id.clone(),
+            PluginInfo {
+                source: source.clone(),
+                plugin: plugin.clone(),
+                installed_version: "".to_string(),
+                install_time: "".to_string(),
+                invalid_reason: "".to_string(),
+            },
+        );
+    }
+    plugins
+}
+
+#[cfg(not(debug_assertions))]
 fn get_source_plugins() -> HashMap<String, PluginInfo> {
     let mut plugins = HashMap::new();
     for source in get_plugin_source_list().into_iter() {
-        let url = format!("{}/meta.json", source.url);
+        let url = format!("{}/meta.toml", source.url);
         match reqwest::blocking::get(&url) {
             Ok(resp) => {
                 if !resp.status().is_success() {
@@ -109,16 +132,8 @@ fn send_plugin_list_event(plugins: &HashMap<String, PluginInfo>) {
     }
 }
 
-pub fn load_plugin_list(load_local: bool) {
+pub fn load_plugin_list() {
     let mut plugin_info_lock = PLUGIN_INFO.lock().unwrap();
-
-    if load_local {
-        if is_server() {
-            allow_err!(super::plugins::load_plugins());
-            return;
-        }
-    }
-
     let mut plugins = get_source_plugins();
     for (id, info) in super::plugins::get_plugin_infos().read().unwrap().iter() {
         if let Some(p) = plugins.get_mut(id) {
@@ -130,7 +145,7 @@ pub fn load_plugin_list(load_local: bool) {
                 PluginInfo {
                     source: PluginSource {
                         name: PLUGIN_SOURCE_LOCAL.to_string(),
-                        url: PLUGIN_SOURCE_LOCAL_URL.to_string(),
+                        url: PLUGIN_SOURCE_LOCAL_DIR.to_string(),
                         description: "".to_string(),
                     },
                     plugin: info.desc.meta().clone(),
@@ -163,9 +178,7 @@ pub fn install_plugin(id: &str) -> ResultType<()> {
     }
 }
 
-pub(super) fn remove_plugins() {
-    
-}
+pub(super) fn remove_plugins() {}
 
 // 1. Add to uninstall list.
 // 2. Try remove.

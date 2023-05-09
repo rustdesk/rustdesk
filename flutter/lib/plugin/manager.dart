@@ -1,6 +1,7 @@
 // The plugin manager is a singleton class that manages the plugins.
 // 1. It merge metadata and the desc of plugins.
 
+import 'dart:convert';
 import 'dart:collection';
 import 'package:flutter/material.dart';
 
@@ -211,17 +212,19 @@ class PluginManager with ChangeNotifier {
     }
   }
 
-  void _handlePluginList(List<dynamic> evt) {
+  void _handlePluginList(String pluginList) {
     _plugins.clear();
-
-    for (var p in evt) {
-      final plugin = _getPluginFromEvent(p);
-      if (plugin == null) {
-        continue;
+    try {
+      for (var p in json.decode(pluginList) as List<dynamic>) {
+        final plugin = _getPluginFromEvent(p);
+        if (plugin == null) {
+          continue;
+        }
+        _plugins.add(plugin);
       }
-      _plugins.add(plugin);
+    } catch (e) {
+      debugPrint('Failed to decode plugin list \'$pluginList\'');
     }
-
     notifyListeners();
   }
 
