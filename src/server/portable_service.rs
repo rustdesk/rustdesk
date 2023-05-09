@@ -555,7 +555,7 @@ pub mod client {
                     if let Some(dir) = PathBuf::from(&exe).parent() {
                         if set_path_permission(&PathBuf::from(dir), "RX").is_err() {
                             *SHMEM.lock().unwrap() = None;
-                            bail!("Failed to set permission of {:?}", dir);
+                            bail!("Failed to set permissions of {:?}", dir);
                         }
                     }
                 }
