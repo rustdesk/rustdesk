@@ -94,11 +94,11 @@ jobs:
       uses: lukka/run-vcpkg@v7
       with:
         setupOnly: true
-        vcpkgGitCommitId: '1d4128f08e30cec31b94500840c7eca8ebc579cb'
+        vcpkgGitCommitId: '501db0f17ef6df184fcdbfbe0f87cde2313b6ab1' #2023.04.15
     
     - name: Install vcpkg dependencies
       run: |
-        $VCPKG_ROOT/vcpkg install libvpx libyuv opus
+        $VCPKG_ROOT/vcpkg install libvpx libyuv opus aom
       shell: bash        
 
     - name: Install Rust toolchain
