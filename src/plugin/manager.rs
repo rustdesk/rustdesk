@@ -2,8 +2,10 @@
 // 2. Install or uninstall.
 
 use super::{desc::Meta as PluginMeta, ipc::InstallStatus, *};
-use crate::{common::is_server, flutter};
-use hbb_common::{allow_err, bail, config::load_path, log, tokio, toml};
+use crate::flutter;
+#[cfg(not(debug_assertions))]
+use hbb_common::toml;
+use hbb_common::{allow_err, bail, config::load_path, log, tokio};
 use serde_derive::{Deserialize, Serialize};
 use serde_json;
 use std::{
@@ -38,7 +40,7 @@ pub struct PluginSource {
 #[derive(Debug, Serialize)]
 pub struct PluginInfo {
     pub source: PluginSource,
-    pub plugin: PluginMeta,
+    pub meta: PluginMeta,
     pub installed_version: String,
     pub install_time: String,
     pub invalid_reason: String,
@@ -60,18 +62,18 @@ fn get_plugin_source_list() -> Vec<PluginSource> {
 fn get_source_plugins() -> HashMap<String, PluginInfo> {
     let meta_file = super::get_plugins_dir().unwrap().join("meta.toml");
     let mut plugins = HashMap::new();
-    let meta = load_path::<ManagerMeta>(meta_file);
+    let manager_meta = load_path::<ManagerMeta>(meta_file);
     let source = PluginSource {
         name: "rustdesk".to_string(),
         url: "https://github.com/fufesou/rustdesk-plugins".to_string(),
         description: "".to_string(),
     };
-    for plugin in meta.plugins.iter() {
+    for meta in manager_meta.plugins.iter() {
         plugins.insert(
-            plugin.id.clone(),
+            meta.id.clone(),
             PluginInfo {
                 source: source.clone(),
-                plugin: plugin.clone(),
+                meta: meta.clone(),
                 installed_version: "".to_string(),
                 install_time: "".to_string(),
                 invalid_reason: "".to_string(),
@@ -95,22 +97,24 @@ fn get_source_plugins() -> HashMap<String, PluginInfo> {
                         resp.status()
                     );
                 }
-                match resp.json::<ManagerMeta>() {
-                    Ok(meta) => {
-                        for plugin in meta.plugins.iter() {
-                            plugins.insert(
-                                plugin.id.clone(),
-                                PluginInfo {
-                                    source: source.clone(),
-                                    plugin: plugin.clone(),
-                                    installed_version: "".to_string(),
-                                    install_time: "".to_string(),
-                                    invalid_reason: "".to_string(),
-                                },
-                            );
+                if let Ok(text) = resp.text() {
+                    match toml::from_str::<ManagerMeta>(&text) {
+                        Ok(manager_meta) => {
+                            for meta in manager_meta.plugins.iter() {
+                                plugins.insert(
+                                    meta.id.clone(),
+                                    PluginInfo {
+                                        source: source.clone(),
+                                        meta: meta.clone(),
+                                        installed_version: "".to_string(),
+                                        install_time: "".to_string(),
+                                        invalid_reason: "".to_string(),
+                                    },
+                                );
+                            }
                         }
+                        Err(e) => log::error!("Failed to parse plugin list from '{}', {}", url, e),
                     }
-                    Err(e) => log::error!("Failed to parse plugin list from '{}', {}", url, e),
                 }
             }
             Err(e) => log::error!("Failed to get plugin list from '{}', {}", url, e),
@@ -121,7 +125,7 @@ fn get_source_plugins() -> HashMap<String, PluginInfo> {
 
 fn send_plugin_list_event(plugins: &HashMap<String, PluginInfo>) {
     let mut plugin_list = plugins.values().collect::<Vec<_>>();
-    plugin_list.sort_by(|a, b| a.plugin.name.cmp(&b.plugin.name));
+    plugin_list.sort_by(|a, b| a.meta.name.cmp(&b.meta.name));
     if let Ok(plugin_list) = serde_json::to_string(&plugin_list) {
         let mut m = HashMap::new();
         m.insert("name", MSG_TO_UI_TYPE_PLUGIN_MANAGER);
@@ -148,7 +152,7 @@ pub fn load_plugin_list() {
                         url: PLUGIN_SOURCE_LOCAL_DIR.to_string(),
                         description: "".to_string(),
                     },
-                    plugin: info.desc.meta().clone(),
+                    meta: info.desc.meta().clone(),
                     installed_version: info.desc.meta().version.clone(),
                     install_time: info.install_time.clone(),
                     invalid_reason: "".to_string(),
@@ -165,7 +169,7 @@ pub fn install_plugin(id: &str) -> ResultType<()> {
         Some(plugin) => {
             let _plugin_url = format!(
                 "{}/plugins/{}/{}_{}.zip",
-                plugin.source.url, plugin.plugin.id, plugin.plugin.id, plugin.plugin.version
+                plugin.source.url, plugin.meta.id, plugin.meta.id, plugin.meta.version
             );
             #[cfg(windows)]
             let _res =

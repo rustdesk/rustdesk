@@ -1,4 +1,4 @@
-use hbb_common::{libc, tokio, ResultType, allow_err, log};
+use hbb_common::{allow_err, libc, log, ResultType};
 use std::{
     env,
     ffi::{c_char, c_int, c_void, CStr},

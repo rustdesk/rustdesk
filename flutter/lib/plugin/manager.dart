@@ -223,7 +223,7 @@ class PluginManager with ChangeNotifier {
         _plugins.add(plugin);
       }
     } catch (e) {
-      debugPrint('Failed to decode plugin list \'$pluginList\'');
+      debugPrint('Failed to decode $e,  plugin list \'$pluginList\'');
     }
     notifyListeners();
   }
@@ -245,6 +245,22 @@ class PluginManager with ChangeNotifier {
     if (m == null) {
       return null;
     }
+
+    late DateTime lastReleased;
+    late DateTime published;
+    try {
+      lastReleased = DateTime.parse(
+          m['publish_info']?['last_released'] ?? '1970-01-01T00+00:00');
+    } catch (e) {
+      lastReleased = DateTime.utc(1970);
+    }
+    try {
+      published = DateTime.parse(
+          m['publish_info']?['published'] ?? '1970-01-01T00+00:00');
+    } catch (e) {
+      published = DateTime.utc(1970);
+    }
+
     final meta = Meta(
       id: m['id'],
       name: m['name'],
@@ -254,17 +270,22 @@ class PluginManager with ChangeNotifier {
       home: m['home'] ?? '',
       license: m['license'] ?? '',
       source: m['source'] ?? '',
-      publishInfo: PublishInfo(
-          lastReleased: DateTime.parse(
-              m['publish_info']?['lastReleased'] ?? '1970-01-01T00+00:00'),
-          published: DateTime.parse(
-              m['publish_info']?['published'] ?? '1970-01-01T00+00:00')),
+      publishInfo:
+          PublishInfo(lastReleased: lastReleased, published: published),
     );
+
+    late DateTime installTime;
+    try {
+      installTime =
+          DateTime.parse(evt['install_time'] ?? '1970-01-01T00+00:00');
+    } catch (e) {
+      installTime = DateTime.utc(1970);
+    }
     return PluginInfo(
       sourceInfo: source,
       meta: meta,
       installedVersion: evt['installed_version'],
-      installTime: evt['install_time'],
+      installTime: installTime,
       invalidReason: evt['invalid_reason'] ?? '',
     );
   }
