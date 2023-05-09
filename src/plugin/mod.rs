@@ -1,6 +1,8 @@
-use hbb_common::{libc, ResultType};
+use hbb_common::{libc, tokio, ResultType};
 use std::{
+    env,
     ffi::{c_char, c_int, c_void, CStr},
+    path::PathBuf,
     ptr::null,
 };
 
@@ -10,20 +12,26 @@ mod config;
 pub mod desc;
 mod errno;
 pub mod ipc;
+mod manager;
 pub mod native;
 pub mod native_handlers;
 mod plog;
 mod plugins;
 
+pub use manager::{
+    install::install_plugin as privileged_install_plugin, install_plugin as user_install_plugin,
+    load_plugin_list, uninstall_plugin,
+};
 pub use plugins::{
     handle_client_event, handle_listen_event, handle_server_event, handle_ui_event, load_plugin,
-    load_plugins, reload_plugin, sync_ui, unload_plugin, unload_plugins,
+    reload_plugin, sync_ui, unload_plugin, unload_plugins,
 };
 
 const MSG_TO_UI_TYPE_PLUGIN_DESC: &str = "plugin_desc";
 const MSG_TO_UI_TYPE_PLUGIN_EVENT: &str = "plugin_event";
 const MSG_TO_UI_TYPE_PLUGIN_RELOAD: &str = "plugin_reload";
 const MSG_TO_UI_TYPE_PLUGIN_OPTION: &str = "plugin_option";
+const MSG_TO_UI_TYPE_PLUGIN_MANAGER: &str = "plugin_manager";
 
 pub const EVENT_ON_CONN_CLIENT: &str = "on_conn_client";
 pub const EVENT_ON_CONN_SERVER: &str = "on_conn_server";
@@ -31,6 +39,8 @@ pub const EVENT_ON_CONN_CLOSE_CLIENT: &str = "on_conn_close_client";
 pub const EVENT_ON_CONN_CLOSE_SERVER: &str = "on_conn_close_server";
 
 pub use config::{ManagerConfig, PeerConfig, SharedConfig};
+
+use crate::common::is_server;
 
 /// Common plugin return.
 ///
@@ -75,6 +85,25 @@ impl PluginReturn {
             (self.code as _, msg)
         }
     }
+}
+
+pub fn init() {
+    std::thread::spawn(move || manager::start_ipc());
+    if is_server() {
+        manager::remove_plugins();
+    }
+    load_plugin_list(true);
+}
+
+#[inline]
+fn get_plugins_dir() -> ResultType<PathBuf> {
+    // to-do: linux and macos
+    Ok(PathBuf::from(env::var("ProgramData")?).join(manager::PLUGIN_SOURCE_LOCAL_URL))
+}
+
+#[inline]
+fn get_plugin_dir(id: &str) -> ResultType<PathBuf> {
+    Ok(get_plugins_dir()?.join(id))
 }
 
 #[inline]

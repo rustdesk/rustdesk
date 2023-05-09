@@ -10,7 +10,7 @@ import 'package:get/get.dart';
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 
-import './desc.dart';
+import './manager.dart';
 import './model.dart';
 import './common.dart';
 
@@ -247,7 +247,7 @@ class PluginItem extends StatelessWidget {
   }) {
     final event = MsgFromUi(
       id: pluginId,
-      name: getDesc(pluginId)?.name ?? '',
+      name: pluginManager.getPlugin(pluginId)?.meta.name ?? '',
       location: location,
       key: key,
       value:

@@ -280,7 +280,7 @@ impl ManagerConfig {
                 let enabled = bool::from_str(value).unwrap_or(false);
                 allow_err!(Self::set_plugin_option_enabled(id, enabled));
                 if enabled {
-                    allow_err!(super::load_plugin(None, Some(id)));
+                    allow_err!(super::load_plugin(id));
                 } else {
                     super::unload_plugin(id);
                 }

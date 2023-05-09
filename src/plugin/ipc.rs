@@ -6,13 +6,24 @@ use serde_derive::{Deserialize, Serialize};
 use std::{fs::File, io::prelude::*};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub enum InstallStatus {
+    Downloading(u8),
+    Installing,
+    Finished,
+    FailedCreating,
+    FailedDownloading,
+    FailedInstalling,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "t", content = "c")]
 pub enum Plugin {
     Config(String, String, Option<String>),
     ManagerConfig(String, Option<String>),
     ManagerPluginConfig(String, String, Option<String>),
+    Load(String),
     Reload(String),
-    Uninstall(String),
+    InstallStatus((String, InstallStatus)),
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -46,13 +57,13 @@ pub async fn set_manager_plugin_config(id: &str, name: &str, value: String) -> R
 }
 
 #[tokio::main(flavor = "current_thread")]
-pub async fn reload_plugin(id: &str) -> ResultType<()> {
-    reload_plugin_async(id).await
+pub async fn load_plugin(id: &str) -> ResultType<()> {
+    load_plugin_async(id).await
 }
 
 #[tokio::main(flavor = "current_thread")]
-pub async fn uninstall_plugin(id: &str) -> ResultType<()> {
-    uninstall_plugin_async(id).await
+pub async fn reload_plugin(id: &str) -> ResultType<()> {
+    reload_plugin_async(id).await
 }
 
 async fn get_config_async(id: &str, name: &str, ms_timeout: u64) -> ResultType<Option<String>> {
@@ -141,16 +152,15 @@ async fn set_manager_plugin_config_async(id: &str, name: &str, value: String) ->
     Ok(())
 }
 
-async fn reload_plugin_async(id: &str) -> ResultType<()> {
+async fn load_plugin_async(id: &str) -> ResultType<()> {
     let mut c = connect(1000, "").await?;
-    c.send(&Data::Plugin(Plugin::Reload(id.to_owned()))).await?;
+    c.send(&Data::Plugin(Plugin::Load(id.to_owned()))).await?;
     Ok(())
 }
 
-async fn uninstall_plugin_async(id: &str) -> ResultType<()> {
+async fn reload_plugin_async(id: &str) -> ResultType<()> {
     let mut c = connect(1000, "").await?;
-    c.send(&Data::Plugin(Plugin::Uninstall(id.to_owned())))
-        .await?;
+    c.send(&Data::Plugin(Plugin::Reload(id.to_owned()))).await?;
     Ok(())
 }
 
@@ -158,7 +168,7 @@ pub async fn handle_plugin(plugin: Plugin, stream: &mut Connection) {
     match plugin {
         Plugin::Config(id, name, value) => match value {
             None => {
-                let value = crate::plugin::SharedConfig::get(&id, &name);
+                let value = super::SharedConfig::get(&id, &name);
                 allow_err!(
                     stream
                         .send(&Data::Plugin(Plugin::Config(id, name, value)))
@@ -166,12 +176,12 @@ pub async fn handle_plugin(plugin: Plugin, stream: &mut Connection) {
                 );
             }
             Some(value) => {
-                allow_err!(crate::plugin::SharedConfig::set(&id, &name, &value));
+                allow_err!(super::SharedConfig::set(&id, &name, &value));
             }
         },
         Plugin::ManagerConfig(name, value) => match value {
             None => {
-                let value = crate::plugin::ManagerConfig::get_option(&name);
+                let value = super::ManagerConfig::get_option(&name);
                 allow_err!(
                     stream
                         .send(&Data::Plugin(Plugin::ManagerConfig(name, value)))
@@ -179,12 +189,12 @@ pub async fn handle_plugin(plugin: Plugin, stream: &mut Connection) {
                 );
             }
             Some(value) => {
-                crate::plugin::ManagerConfig::set_option(&name, &value);
+                super::ManagerConfig::set_option(&name, &value);
             }
         },
         Plugin::ManagerPluginConfig(id, name, value) => match value {
             None => {
-                let value = crate::plugin::ManagerConfig::get_plugin_option(&id, &name);
+                let value = super::ManagerConfig::get_plugin_option(&id, &name);
                 allow_err!(
                     stream
                         .send(&Data::Plugin(Plugin::ManagerPluginConfig(id, name, value)))
@@ -192,16 +202,15 @@ pub async fn handle_plugin(plugin: Plugin, stream: &mut Connection) {
                 );
             }
             Some(value) => {
-                crate::plugin::ManagerConfig::set_plugin_option(&id, &name, &value);
+                super::ManagerConfig::set_plugin_option(&id, &name, &value);
             }
         },
+        Plugin::Load(id) => {
+            allow_err!(super::load_plugin(&id));
+        }
         Plugin::Reload(id) => {
-            allow_err!(crate::plugin::reload_plugin(&id));
+            allow_err!(super::reload_plugin(&id));
         }
-        Plugin::Uninstall(_id) => {
-            // to-do: uninstall plugin
-            // 1. unload 2. remove configs 3. remove config files
-            // allow_err!(crate::plugin::unload_plugin(&id));
-        }
+        _ => {}
     }
 }

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import './common.dart';
-import './desc.dart';
+import './manager.dart';
 
 final Map<String, LocationModel> _locationModels = {};
 final Map<String, OptionModel> _optionModels = {};

@@ -1497,17 +1497,8 @@ pub fn plugin_reload(_id: String) {
     }
 }
 
-pub fn plugin_id_uninstall(_id: String) {
-    #[cfg(feature = "plugin_framework")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        crate::plugin::unload_plugin(&_id);
-        allow_err!(crate::plugin::ipc::uninstall_plugin(&_id));
-    }
-}
-
 #[inline]
-pub fn plugin_id_enable(_id: String, _v: bool) {
+pub fn plugin_enable(_id: String, _v: bool) {
     #[cfg(feature = "plugin_framework")]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
@@ -1517,14 +1508,14 @@ pub fn plugin_id_enable(_id: String, _v: bool) {
             _v.to_string()
         ));
         if _v {
-            allow_err!(crate::plugin::load_plugin(None, Some(&_id)));
+            allow_err!(crate::plugin::load_plugin(&_id));
         } else {
             crate::plugin::unload_plugin(&_id);
         }
     }
 }
 
-pub fn plugin_id_is_enabled(_id: String) -> SyncReturn<bool> {
+pub fn plugin_is_enabled(_id: String) -> SyncReturn<bool> {
     #[cfg(feature = "plugin_framework")]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
@@ -1571,6 +1562,29 @@ pub fn plugin_sync_ui(_sync_to: String) {
     {
         if plugin_feature_is_enabled().0 {
             crate::plugin::sync_ui(_sync_to);
+        }
+    }
+}
+
+pub fn plugin_list_reload() {
+    #[cfg(feature = "plugin_framework")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        crate::plugin::load_plugin_list(false);
+    }
+}
+
+pub fn plugin_install(id: String, b: bool) {
+    #[cfg(feature = "plugin_framework")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        if b {
+            allow_err!(crate::plugin::user_install_plugin(&id));
+        } else {
+            // to-do: uninstall plugin
+            // 1. unload 2. remove configs 3. remove config files
+            // allow_err!(super::unload_plugin(&id));
+            crate::plugin::uninstall_plugin(&id);
         }
     }
 }

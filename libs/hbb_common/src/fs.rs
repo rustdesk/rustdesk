@@ -10,7 +10,7 @@ use crate::{bail, get_version_number, message_proto::*, ResultType, Stream};
 // https://doc.rust-lang.org/std/os/windows/fs/trait.MetadataExt.html
 use crate::{
     compress::{compress, decompress},
-    config::{Config, COMPRESS_LEVEL},
+    config::Config,
 };
 
 pub fn read_dir(path: &Path, include_hidden: bool) -> ResultType<FileDirectory> {
@@ -481,7 +481,7 @@ impl TransferJob {
         } else {
             self.finished_size += offset as u64;
             if !is_compressed_file(name) {
-                let tmp = compress(&buf, COMPRESS_LEVEL);
+                let tmp = compress(&buf);
                 if tmp.len() < buf.len() {
                     buf = tmp;
                     compressed = true;

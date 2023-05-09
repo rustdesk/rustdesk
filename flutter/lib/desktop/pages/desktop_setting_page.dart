@@ -10,7 +10,7 @@ import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
-import 'package:flutter_hbb/plugin/desc.dart';
+import 'package:flutter_hbb/plugin/manager.dart';
 import 'package:flutter_hbb/plugin/model.dart';
 import 'package:flutter_hbb/plugin/common.dart';
 import 'package:flutter_hbb/plugin/widget.dart';
@@ -1449,12 +1449,10 @@ class _CheckboxState extends State<_Checkbox> {
 }
 
 class PluginCard extends StatefulWidget {
-  final PluginId pluginId;
-  final Desc desc;
+  final PluginInfo plugin;
   const PluginCard({
     Key? key,
-    required this.pluginId,
-    required this.desc,
+    required this.plugin,
   }) : super(key: key);
 
   @override
@@ -1462,40 +1460,43 @@ class PluginCard extends StatefulWidget {
 }
 
 class PluginCardState extends State<PluginCard> {
+  PluginId get pluginId => widget.plugin.meta.id;
+  String get pluginName => widget.plugin.meta.name;
+
   @override
   Widget build(BuildContext context) {
     final children = [
       _Button(
         'Reload',
         () async {
-          clearPlugin(widget.pluginId);
-          await bind.pluginReload(id: widget.pluginId);
+          clearPlugin(pluginId);
+          await bind.pluginReload(id: pluginId);
           setState(() {});
         },
       ),
       _Checkbox(
         label: 'Enable',
-        getValue: () => bind.pluginIdIsEnabled(id: widget.pluginId),
+        getValue: () => bind.pluginIsEnabled(id: pluginId),
         setValue: (bool v) async {
           if (!v) {
-            clearPlugin(widget.pluginId);
+            clearPlugin(pluginId);
           }
-          await bind.pluginIdEnable(id: widget.pluginId, v: v);
+          await bind.pluginEnable(id: pluginId, v: v);
           setState(() {});
         },
       ),
     ];
-    final model = getPluginModel(kLocationHostMainPlugin, widget.pluginId);
+    final model = getPluginModel(kLocationHostMainPlugin, pluginId);
     if (model != null) {
       children.add(PluginItem(
-        pluginId: widget.pluginId,
+        pluginId: pluginId,
         peerId: '',
         location: kLocationHostMainPlugin,
         pluginModel: model,
         isMenu: false,
       ));
     }
-    return _Card(title: widget.desc.name, children: children);
+    return _Card(title: pluginName, children: children);
   }
 }
 
@@ -1509,14 +1510,12 @@ class _Plugin extends StatefulWidget {
 class _PluginState extends State<_Plugin> {
   // temp checkbox widget
 
-  List<Widget> _buildCards(DescModel model) => [
+  List<Widget> _buildCards(PluginManager model) => [
         _Card(
           title: 'Plugin',
           children: [],
         ),
-        ...model.all.entries
-            .map((entry) => PluginCard(pluginId: entry.key, desc: entry.value))
-            .toList(),
+        ...model.plugins.map((entry) => PluginCard(plugin: entry)).toList(),
       ];
 
   @override
@@ -1525,8 +1524,8 @@ class _PluginState extends State<_Plugin> {
     return DesktopScrollWrapper(
       scrollController: scrollController,
       child: ChangeNotifierProvider.value(
-        value: DescModel.instance,
-        child: Consumer<DescModel>(builder: (context, model, child) {
+        value: pluginManager,
+        child: Consumer<PluginManager>(builder: (context, model, child) {
           return ListView(
             physics: DraggableNeverScrollableScrollPhysics(),
             controller: scrollController,

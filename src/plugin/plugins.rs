@@ -15,6 +15,7 @@ use std::{
     ffi::{c_char, c_void},
     path::PathBuf,
     sync::{Arc, RwLock},
+    time::SystemTime,
 };
 
 const METHOD_HANDLE_UI: &[u8; 10] = b"handle_ui\0";
@@ -26,9 +27,10 @@ lazy_static::lazy_static! {
     static ref PLUGINS: Arc<RwLock<HashMap<String, Plugin>>> = Default::default();
 }
 
-struct PluginInfo {
-    path: String,
-    desc: Desc,
+pub(super) struct PluginInfo {
+    pub path: String,
+    pub install_time: String,
+    pub desc: Desc,
 }
 
 /// Initialize the plugins.
@@ -136,6 +138,11 @@ struct Callbacks {
     native: CallbackNative,
 }
 
+#[derive(Serialize)]
+struct InitInfo {
+    is_server: bool,
+}
+
 /// The plugin initialize data.
 /// version: The version of the plugin, can't be nullptr.
 /// local_peer_id: The local peer id, can't be nullptr.
@@ -143,6 +150,7 @@ struct Callbacks {
 #[repr(C)]
 struct InitData {
     version: *const c_char,
+    info: *const c_char,
     cbs: Callbacks,
 }
 
@@ -255,34 +263,54 @@ const DYLIB_SUFFIX: &str = ".so";
 #[cfg(target_os = "macos")]
 const DYLIB_SUFFIX: &str = ".dylib";
 
-pub fn load_plugins() -> ResultType<()> {
-    let exe = std::env::current_exe()?.to_string_lossy().to_string();
-    match PathBuf::from(&exe).parent() {
-        Some(dir) => {
-            for entry in std::fs::read_dir(dir)? {
-                match entry {
-                    Ok(entry) => {
-                        let path = entry.path();
-                        if path.is_file() {
-                            let filename = entry.file_name();
-                            let filename = filename.to_str().unwrap_or("");
-                            if filename.starts_with("plugin_") && filename.ends_with(DYLIB_SUFFIX) {
-                                if let Err(e) = load_plugin(Some(path.to_str().unwrap_or("")), None)
-                                {
+pub(super) fn load_plugins() -> ResultType<()> {
+    let plugins_dir = super::get_plugins_dir()?;
+    if !plugins_dir.exists() {
+        std::fs::create_dir_all(&plugins_dir)?;
+    } else {
+        for entry in std::fs::read_dir(plugins_dir)? {
+            match entry {
+                Ok(entry) => {
+                    let plugin_dir = entry.path();
+                    if plugin_dir.is_dir() {
+                        load_plugin_dir(&plugin_dir);
+                    }
+                }
+                Err(e) => {
+                    log::error!("Failed to read plugins dir entry, {}", e);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn load_plugin_dir(dir: &PathBuf) {
+    if let Ok(rd) = std::fs::read_dir(dir) {
+        for entry in rd {
+            match entry {
+                Ok(entry) => {
+                    let path = entry.path();
+                    if path.is_file() {
+                        let filename = entry.file_name();
+                        let filename = filename.to_str().unwrap_or("");
+                        if filename.starts_with("plugin_") && filename.ends_with(DYLIB_SUFFIX) {
+                            if let Some(path) = path.to_str() {
+                                if let Err(e) = load_plugin_path(path) {
                                     log::error!("Failed to load plugin {}, {}", filename, e);
                                 }
                             }
                         }
                     }
-                    Err(e) => {
-                        log::error!("Failed to read dir entry, {}", e);
-                    }
+                }
+                Err(e) => {
+                    log::error!(
+                        "Failed to read '{}' dir entry, {}",
+                        dir.file_stem().and_then(|f| f.to_str()).unwrap_or(""),
+                        e
+                    );
                 }
             }
-            Ok(())
-        }
-        None => {
-            bail!("Failed to get parent dir of {}", exe);
         }
     }
 }
@@ -309,7 +337,7 @@ pub fn reload_plugin(id: &str) -> ResultType<()> {
         None => bail!("Plugin {} not found", id),
     };
     unload_plugin(id);
-    load_plugin(Some(&path), Some(id))
+    load_plugin_path(&path)
 }
 
 fn load_plugin_path(path: &str) -> ResultType<()> {
@@ -319,8 +347,21 @@ fn load_plugin_path(path: &str) -> ResultType<()> {
     // to-do validate plugin
     // to-do check the plugin id (make sure it does not use another plugin's id)
 
+    let init_info = serde_json::to_string(&InitInfo {
+        is_server: crate::common::is_server(),
+    })?;
+    let ptr_info = str_to_cstr_ret(&init_info);
+    let ptr_version = str_to_cstr_ret(crate::VERSION);
+    let _call_on_ret = crate::common::SimpleCallOnReturn {
+        b: true,
+        f: Box::new(move || {
+            free_c_ptr(ptr_info as _);
+            free_c_ptr(ptr_version as _);
+        }),
+    };
     let init_data = InitData {
-        version: str_to_cstr_ret(crate::VERSION),
+        version: ptr_version as _,
+        info: ptr_info as _,
         cbs: Callbacks {
             msg: callback_msg::cb_msg,
             get_conf: config::cb_get_conf,
@@ -332,7 +373,7 @@ fn load_plugin_path(path: &str) -> ResultType<()> {
     plugin.init(&init_data, path)?;
 
     if change_manager() {
-        super::config::ManagerConfig::add_plugin(desc.id())?;
+        super::config::ManagerConfig::add_plugin(&desc.meta().id)?;
     }
 
     // update ui
@@ -340,10 +381,18 @@ fn load_plugin_path(path: &str) -> ResultType<()> {
     update_ui_plugin_desc(&desc, None);
     reload_ui(&desc, None);
 
+    let install_time = PathBuf::from(path)
+        .metadata()
+        .and_then(|d| d.created())
+        .unwrap_or(SystemTime::UNIX_EPOCH);
+    let install_time = chrono::DateTime::<chrono::Local>::from(install_time)
+        .format("%Y-%m-%d %H:%M:%S")
+        .to_string();
     // add plugins
-    let id = desc.id().to_string();
+    let id = desc.meta().id.clone();
     let plugin_info = PluginInfo {
         path: path.to_string(),
+        install_time,
         desc,
     };
     PLUGIN_INFO.write().unwrap().insert(id.clone(), plugin_info);
@@ -360,20 +409,10 @@ pub fn sync_ui(sync_to: String) {
     }
 }
 
-pub fn load_plugin(path: Option<&str>, id: Option<&str>) -> ResultType<()> {
-    match (path, id) {
-        (Some(path), _) => load_plugin_path(path),
-        (None, Some(id)) => {
-            let path = match PLUGIN_INFO.read().unwrap().get(id) {
-                Some(plugin) => plugin.path.clone(),
-                None => bail!("Plugin {} not found", id),
-            };
-            load_plugin_path(&path)
-        }
-        (None, None) => {
-            bail!("path and id are both None");
-        }
-    }
+#[inline]
+pub fn load_plugin(id: &str) -> ResultType<()> {
+    load_plugin_dir(&super::get_plugin_dir(id)?);
+    Ok(())
 }
 
 fn handle_event(method: &[u8], id: &str, peer: &str, event: &[u8]) -> ResultType<()> {
@@ -418,7 +457,7 @@ fn _handle_listen_event(event: String, peer: String) {
     let mut plugins = Vec::new();
     for info in PLUGIN_INFO.read().unwrap().values() {
         if info.desc.listen_events().contains(&event.to_string()) {
-            plugins.push(info.desc.id().to_string());
+            plugins.push(info.desc.meta().id.clone());
         }
     }
 
@@ -496,7 +535,7 @@ pub fn handle_client_event(id: &str, peer: &str, event: &[u8]) -> Message {
                         msg
                     );
                     let name = match PLUGIN_INFO.read().unwrap().get(id) {
-                        Some(plugin) => plugin.desc.name(),
+                        Some(plugin) => &plugin.desc.meta().name,
                         None => "???",
                     }
                     .to_owned();
@@ -568,7 +607,7 @@ fn reload_ui(desc: &Desc, sync_to: Option<&str>) {
             let make_event = |ui: &str| {
                 let mut m = HashMap::new();
                 m.insert("name", MSG_TO_UI_TYPE_PLUGIN_RELOAD);
-                m.insert("id", desc.id());
+                m.insert("id", &desc.meta().id);
                 m.insert("location", &location);
                 // Do not depend on the "location" and plugin desc on the ui side.
                 // Send the ui field to ensure the ui is valid.
@@ -620,6 +659,10 @@ fn update_ui_plugin_desc(desc: &Desc, sync_to: Option<&str>) {
             }
         }
     }
+}
+
+pub(super) fn get_plugin_infos() -> Arc<RwLock<HashMap<String, PluginInfo>>> {
+    PLUGIN_INFO.clone()
 }
 
 pub(super) fn get_desc_conf(id: &str) -> Option<super::desc::Config> {
