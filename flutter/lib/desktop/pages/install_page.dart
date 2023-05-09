@@ -138,14 +138,14 @@ class _InstallPageBodyState extends State<_InstallPageBody>
                       constraints: BoxConstraints(maxHeight: 3 * em),
                     ),
                   )),
-                  Obx(() => OutlinedButton(
-                          onPressed:
-                              btnEnabled.value ? selectInstallPath : null,
-                          style: buttonStyle,
-                          child: Text(translate('Change Path'),
-                              style: TextStyle(
-                                  color: textColor, fontSize: btnFontSize)))
-                      .marginOnly(left: em))
+                  // Obx(() => OutlinedButton(
+                  //         onPressed:
+                  //             btnEnabled.value ? selectInstallPath : null,
+                  //         style: buttonStyle,
+                  //         child: Text(translate('Change Path'),
+                  //             style: TextStyle(
+                  //                 color: textColor, fontSize: btnFontSize)))
+                  //     .marginOnly(left: em))
                 ],
               ).marginSymmetric(vertical: 2 * em),
               TextButton(
@@ -224,15 +224,15 @@ class _InstallPageBodyState extends State<_InstallPageBody>
                             offstage: !showProgress.value,
                             child: LinearProgressIndicator(),
                           ))),
-                  Obx(() => OutlinedButton(
-                          onPressed: btnEnabled.value
-                              ? () => windowManager.close()
-                              : null,
-                          style: buttonStyle,
-                          child: Text(translate('Cancel'),
-                              style: TextStyle(
-                                  color: textColor, fontSize: btnFontSize)))
-                      .marginOnly(right: 2 * em)),
+                  // Obx(() => OutlinedButton(
+                  //         onPressed: btnEnabled.value
+                  //             ? () => windowManager.close()
+                  //             : null,
+                  //         style: buttonStyle,
+                  //         child: Text(translate('Cancel'),
+                  //             style: TextStyle(
+                  //                 color: textColor, fontSize: btnFontSize)))
+                  //     .marginOnly(right: 2 * em)),
                   Obx(() => ElevatedButton(
                       onPressed: btnEnabled.value ? install : null,
                       style: ElevatedButton.styleFrom(
