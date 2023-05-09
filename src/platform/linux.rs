@@ -603,7 +603,11 @@ pub fn block_input(_v: bool) -> bool {
 }
 
 pub fn is_installed() -> bool {
-    true
+    if let Ok(p) = std::env::current_exe() {
+        p.to_str().unwrap_or_default().starts_with("/usr")
+    } else {
+        false
+    }
 }
 
 pub(super) fn get_env_tries(name: &str, uid: &str, process: &str, n: usize) -> String {
