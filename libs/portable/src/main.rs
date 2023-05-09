@@ -9,8 +9,8 @@ use bin_reader::BinaryReader;
 
 pub mod bin_reader;
 
-const APP_PREFIX: &str = "GetRytRemote";
-const APPNAME_RUNTIME_ENV_KEY: &str = "GETRYT_APPNAME";
+const APP_PREFIX: &str = "rustdesk";
+const APPNAME_RUNTIME_ENV_KEY: &str = "RUSTDESK_APPNAME";
 
 fn setup(reader: BinaryReader, dir: Option<PathBuf>, clear: bool) -> Option<PathBuf> {
     let dir = if let Some(dir) = dir {

@@ -62,7 +62,7 @@ class _HomePageState extends State<HomePage> {
           // backgroundColor: MyTheme.grayBg,
           appBar: AppBar(
             centerTitle: true,
-            title: Text("GetRytRemote"),
+            title: Text("RustDesk"),
             actions: _pages.elementAt(_selectedIndex).appBarActions,
           ),
           bottomNavigationBar: BottomNavigationBar(
@@ -98,7 +98,7 @@ class WebHomePage extends StatelessWidget {
       // backgroundColor: MyTheme.grayBg,
       appBar: AppBar(
         centerTitle: true,
-        title: Text("GetRytRemote" + (isWeb ? " (Beta) " : "")),
+        title: Text("RustDesk" + (isWeb ? " (Beta) " : "")),
         actions: connectionPage.appBarActions,
       ),
       body: connectionPage,
