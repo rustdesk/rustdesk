@@ -1851,6 +1851,7 @@ Widget _lock(
   String label,
   Function() onUnlock,
 ) {
+bool checked = true;
   return Offstage(
       offstage: !locked,
       child: Row(
@@ -1872,7 +1873,9 @@ Widget _lock(
                             Text(translate(label)).marginOnly(left: 5),
                           ]).marginSymmetric(vertical: 2)),
                   onPressed: () async {
-                    bool checked = await bind.mainCheckSuperUserPermission();
+                    if (!Platform.isLinux){
+            					 bool checked = await bind.mainCheckSuperUserPermission();
+				                          }
                     if (checked) {
                       onUnlock();
                     }
