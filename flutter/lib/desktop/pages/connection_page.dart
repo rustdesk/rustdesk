@@ -245,6 +245,7 @@ class _ConnectionPageState extends State<ConnectionPage>
 
   Widget buildStatus() {
     final em = 14.0;
+    bool checked = true;
     return ConstrainedBox(
       constraints: BoxConstraints.tightFor(height: 3 * em),
       child: Obx(() => Row(
@@ -276,8 +277,10 @@ class _ConnectionPageState extends State<ConnectionPage>
                 offstage: !svcStopped.value,
                 child: InkWell(
                         onTap: () async {
-                          bool checked = !bind.mainIsInstalled() ||
-                              await bind.mainCheckSuperUserPermission();
+                          if (!Platform.isLinux){
+                          checked = !bind.mainIsInstalled() ||
+                             await bind.mainCheckSuperUserPermission();
+                                                }
                           if (checked) {
                             bind.mainSetOption(key: "stop-service", value: "");
                             bind.mainSetOption(key: "access-mode", value: "");
