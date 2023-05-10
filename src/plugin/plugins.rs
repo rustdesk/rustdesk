@@ -3,7 +3,7 @@ use super::{desc::Desc, errno::*, *};
 use crate::common::is_server;
 use crate::flutter;
 use hbb_common::{
-    allow_err, bail,
+    bail,
     dlopen::symbor::Library,
     lazy_static, log,
     message_proto::{Message, Misc, PluginFailure, PluginRequest},
@@ -15,7 +15,6 @@ use std::{
     ffi::{c_char, c_void},
     path::PathBuf,
     sync::{Arc, RwLock},
-    time::SystemTime,
 };
 
 const METHOD_HANDLE_UI: &[u8; 10] = b"handle_ui\0";
@@ -29,7 +28,7 @@ lazy_static::lazy_static! {
 
 pub(super) struct PluginInfo {
     pub path: String,
-    pub install_time: String,
+    pub uninstalled: bool,
     pub desc: Desc,
 }
 
@@ -307,7 +306,7 @@ fn load_plugin_dir(dir: &PathBuf) {
                 Err(e) => {
                     log::error!(
                         "Failed to read '{}' dir entry, {}",
-                        dir.file_stem().and_then(|f| f.to_str()).unwrap_or(""),
+                        dir.file_name().and_then(|f| f.to_str()).unwrap_or(""),
                         e
                     );
                 }
@@ -316,20 +315,18 @@ fn load_plugin_dir(dir: &PathBuf) {
     }
 }
 
-pub fn unload_plugins() {
-    log::info!("Plugins unloaded");
-    PLUGINS.write().unwrap().clear();
-    if change_manager() {
-        super::config::ManagerConfig::remove_plugins(false);
-    }
-}
-
 pub fn unload_plugin(id: &str) {
     log::info!("Plugin {} unloaded", id);
     PLUGINS.write().unwrap().remove(id);
-    if change_manager() {
-        allow_err!(super::config::ManagerConfig::remove_plugin(id, false));
-    }
+}
+
+pub(super) fn mark_uninstalled(id: &str, uninstalled: bool) {
+    log::info!("Plugin {} uninstall", id);
+    PLUGIN_INFO
+        .write()
+        .unwrap()
+        .get_mut(id)
+        .map(|info| info.uninstalled = uninstalled);
 }
 
 pub fn reload_plugin(id: &str) -> ResultType<()> {
@@ -364,7 +361,7 @@ fn load_plugin_path(path: &str) -> ResultType<()> {
     };
     plugin.init(&init_data, path)?;
 
-    if change_manager() {
+    if is_server() {
         super::config::ManagerConfig::add_plugin(&desc.meta().id)?;
     }
 
@@ -372,18 +369,11 @@ fn load_plugin_path(path: &str) -> ResultType<()> {
     // Ui may be not ready now, so we need to update again once ui is ready.
     reload_ui(&desc, None);
 
-    let install_time = PathBuf::from(path)
-        .metadata()
-        .and_then(|d| d.created())
-        .unwrap_or(SystemTime::UNIX_EPOCH);
-    let install_time = chrono::DateTime::<chrono::Local>::from(install_time)
-        .format("%Y-%m-%d %H:%M:%S")
-        .to_string();
     // add plugins
     let id = desc.meta().id.clone();
     let plugin_info = PluginInfo {
         path: path.to_string(),
-        install_time,
+        uninstalled: false,
         desc,
     };
     PLUGIN_INFO.write().unwrap().insert(id.clone(), plugin_info);
@@ -582,15 +572,6 @@ fn make_plugin_failure(id: &str, name: &str, msg: &str) -> Message {
     msg_out
 }
 
-#[inline]
-fn change_manager() -> bool {
-    #[cfg(debug_assertions)]
-    let change_manager = true;
-    #[cfg(not(debug_assertions))]
-    let change_manager = is_server();
-    change_manager
-}
-
 fn reload_ui(desc: &Desc, sync_to: Option<&str>) {
     for (location, ui) in desc.location().ui.iter() {
         if let Ok(ui) = serde_json::to_string(&ui) {
@@ -640,4 +621,12 @@ pub(super) fn get_desc_conf(id: &str) -> Option<super::desc::Config> {
         .unwrap()
         .get(id)
         .map(|info| info.desc.config().clone())
+}
+
+pub(super) fn get_version(id: &str) -> Option<String> {
+    PLUGIN_INFO
+        .read()
+        .unwrap()
+        .get(id)
+        .map(|info| info.desc.meta().version.clone())
 }

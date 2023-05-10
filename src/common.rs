@@ -1,6 +1,6 @@
 use std::{
     future::Future,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, RwLock},
 };
 
 #[derive(Debug, Eq, PartialEq)]
@@ -61,6 +61,7 @@ lazy_static::lazy_static! {
 
 lazy_static::lazy_static! {
     static ref IS_SERVER: bool = std::env::args().nth(1) == Some("--server".to_owned());
+    static ref SERVER_RUNNING: Arc<RwLock<bool>> = Default::default();
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -94,8 +95,13 @@ pub fn global_init() -> bool {
 pub fn global_clean() {}
 
 #[inline]
+pub fn set_server_running(b: bool) {
+    *SERVER_RUNNING.write().unwrap() = b;
+}
+
+#[inline]
 pub fn is_server() -> bool {
-    *IS_SERVER
+    *IS_SERVER || *SERVER_RUNNING.read().unwrap()
 }
 
 #[inline]

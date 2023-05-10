@@ -144,16 +144,19 @@ class PluginInfo with ChangeNotifier {
   SourceInfo sourceInfo;
   Meta meta;
   String installedVersion; // It is empty if not installed.
-  DateTime installTime;
+  String failedMsg;
   String invalidReason; // It is empty if valid.
 
   PluginInfo({
     required this.sourceInfo,
     required this.meta,
     required this.installedVersion,
-    required this.installTime,
     required this.invalidReason,
+    this.failedMsg = '',
   });
+
+  bool get installed => installedVersion.isNotEmpty;
+  bool get needUpdate => installed && installedVersion != meta.version;
 
   void update(PluginInfo plugin) {
     assert(plugin.meta.id == meta.id, 'Plugin id not match');
@@ -164,8 +167,26 @@ class PluginInfo with ChangeNotifier {
     sourceInfo = plugin.sourceInfo;
     meta = plugin.meta;
     installedVersion = plugin.installedVersion;
-    installTime = plugin.installTime;
     invalidReason = plugin.invalidReason;
+    notifyListeners();
+  }
+
+  void setInstall(String msg) {
+    if (msg == "finished") {
+      msg = '';
+    }
+    failedMsg = msg;
+    if (msg.isEmpty) {
+      installedVersion = meta.version;
+    }
+    notifyListeners();
+  }
+
+  void setUninstall(String msg) {
+    failedMsg = msg;
+    if (msg.isEmpty) {
+      installedVersion = '';
+    }
     notifyListeners();
   }
 }
@@ -194,9 +215,25 @@ class PluginManager with ChangeNotifier {
       _handlePluginList(evt['plugin_list']);
     } else if (evt['plugin_update'] != null) {
       _handlePluginUpdate(evt['plugin_update']);
+    } else if (evt['plugin_install'] != null && evt['id'] != null) {
+      _handlePluginInstall(evt['id'], evt['plugin_install']);
+    } else if (evt['plugin_uninstall'] != null && evt['id'] != null) {
+      _handlePluginUninstall(evt['id'], evt['plugin_uninstall']);
     } else {
       debugPrint('Failed to handle manager event: $evt');
     }
+  }
+
+  void _sortPlugins() {
+    plugins.sort((a, b) {
+      if (a.installed) {
+        return -1;
+      } else if (b.installed) {
+        return 1;
+      } else {
+        return 0;
+      }
+    });
   }
 
   void _handlePluginUpdate(Map<String, dynamic> evt) {
@@ -207,6 +244,8 @@ class PluginManager with ChangeNotifier {
     for (var i = 0; i < _plugins.length; i++) {
       if (_plugins[i].meta.id == plugin.meta.id) {
         _plugins[i].update(plugin);
+        _sortPlugins();
+        notifyListeners();
         return;
       }
     }
@@ -225,7 +264,30 @@ class PluginManager with ChangeNotifier {
     } catch (e) {
       debugPrint('Failed to decode $e,  plugin list \'$pluginList\'');
     }
+    _sortPlugins();
     notifyListeners();
+  }
+
+  void _handlePluginInstall(String id, String msg) {
+    for (var i = 0; i < _plugins.length; i++) {
+      if (_plugins[i].meta.id == id) {
+        _plugins[i].setInstall(msg);
+        _sortPlugins();
+        notifyListeners();
+        return;
+      }
+    }
+  }
+
+  void _handlePluginUninstall(String id, String msg) {
+    for (var i = 0; i < _plugins.length; i++) {
+      if (_plugins[i].meta.id == id) {
+        _plugins[i].setUninstall(msg);
+        _sortPlugins();
+        notifyListeners();
+        return;
+      }
+    }
   }
 
   PluginInfo? _getPluginFromEvent(Map<String, dynamic> evt) {
@@ -273,19 +335,10 @@ class PluginManager with ChangeNotifier {
       publishInfo:
           PublishInfo(lastReleased: lastReleased, published: published),
     );
-
-    late DateTime installTime;
-    try {
-      installTime =
-          DateTime.parse(evt['install_time'] ?? '1970-01-01T00+00:00');
-    } catch (e) {
-      installTime = DateTime.utc(1970);
-    }
     return PluginInfo(
       sourceInfo: source,
       meta: meta,
       installedVersion: evt['installed_version'],
-      installTime: installTime,
       invalidReason: evt['invalid_reason'] ?? '',
     );
   }

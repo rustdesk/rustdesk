@@ -1466,11 +1466,18 @@ class _PluginState extends State<_Plugin> {
           return ListView(
             physics: DraggableNeverScrollableScrollPhysics(),
             controller: scrollController,
-            children: model.plugins
-                .map((entry) => DesktopSettingsCard(plugin: entry))
-                .toList(),
+            children: model.plugins.map((entry) => pluginCard(entry)).toList(),
           ).marginOnly(bottom: _kListViewBottomMargin);
         }),
+      ),
+    );
+  }
+
+  Widget pluginCard(PluginInfo plugin) {
+    return ChangeNotifierProvider.value(
+      value: plugin,
+      child: Consumer<PluginInfo>(
+        builder: (context, model, child) => DesktopSettingsCard(plugin: model),
       ),
     );
   }

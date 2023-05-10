@@ -24,6 +24,7 @@ pub enum Plugin {
     Load(String),
     Reload(String),
     InstallStatus((String, InstallStatus)),
+    Uninstall(String),
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -64,6 +65,11 @@ pub async fn load_plugin(id: &str) -> ResultType<()> {
 #[tokio::main(flavor = "current_thread")]
 pub async fn reload_plugin(id: &str) -> ResultType<()> {
     reload_plugin_async(id).await
+}
+
+#[tokio::main(flavor = "current_thread")]
+pub async fn uninstall_plugin(id: &str) -> ResultType<()> {
+    uninstall_plugin_async(id).await
 }
 
 async fn get_config_async(id: &str, name: &str, ms_timeout: u64) -> ResultType<Option<String>> {
@@ -164,6 +170,13 @@ async fn reload_plugin_async(id: &str) -> ResultType<()> {
     Ok(())
 }
 
+async fn uninstall_plugin_async(id: &str) -> ResultType<()> {
+    let mut c = connect(1000, "").await?;
+    c.send(&Data::Plugin(Plugin::Uninstall(id.to_owned())))
+        .await?;
+    Ok(())
+}
+
 pub async fn handle_plugin(plugin: Plugin, stream: &mut Connection) {
     match plugin {
         Plugin::Config(id, name, value) => match value {
@@ -206,10 +219,14 @@ pub async fn handle_plugin(plugin: Plugin, stream: &mut Connection) {
             }
         },
         Plugin::Load(id) => {
+            allow_err!(super::config::ManagerConfig::set_uninstall(&id, false));
             allow_err!(super::load_plugin(&id));
         }
         Plugin::Reload(id) => {
             allow_err!(super::reload_plugin(&id));
+        }
+        Plugin::Uninstall(id) => {
+            super::manager::uninstall_plugin(&id, false);
         }
         _ => {}
     }

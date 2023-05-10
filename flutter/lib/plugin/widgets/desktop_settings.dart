@@ -28,10 +28,13 @@ class DesktopSettingsCard extends StatefulWidget {
 
 class _DesktopSettingsCardState extends State<DesktopSettingsCard> {
   PluginInfo get plugin => widget.plugin;
-  bool get installed => plugin.installedVersion.isNotEmpty;
+  bool get installed => plugin.installed;
+
+  bool isEnabled = false;
 
   @override
   Widget build(BuildContext context) {
+    isEnabled = bind.pluginIsEnabled(id: plugin.meta.id);
     return Row(
       children: [
         Flexible(
@@ -70,7 +73,7 @@ class _DesktopSettingsCardState extends State<DesktopSettingsCard> {
       child: Row(
         children: [
           Text(
-            translate(widget.plugin.meta.name),
+            widget.plugin.meta.name,
             textAlign: TextAlign.start,
             style: const TextStyle(
               fontSize: _kTitleFontSize,
@@ -95,24 +98,25 @@ class _DesktopSettingsCardState extends State<DesktopSettingsCard> {
     return Container(
       child: ElevatedButton(
         onPressed: onPressed,
-        child: Text(label),
+        child: Text(translate(label)),
       ),
     );
   }
 
   Widget headerInstallEnable() {
-    final installButton = headerButton(installed ? 'uninstall' : 'install', () {
-      bind.pluginInstall(
-        id: plugin.meta.id,
-        b: !installed,
-      );
-    });
+    final installButton = headerButton(
+      installed ? 'Uninstall' : 'Install',
+      () {
+        bind.pluginInstall(
+          id: plugin.meta.id,
+          b: !installed,
+        );
+      },
+    );
 
     if (installed) {
-      final needUpdate =
-          plugin.installedVersion.compareTo(plugin.meta.version) < 0;
-      final updateButton = needUpdate
-          ? headerButton('update', () {
+      final updateButton = plugin.needUpdate
+          ? headerButton('Update', () {
               bind.pluginInstall(
                 id: plugin.meta.id,
                 b: !installed,
@@ -120,10 +124,9 @@ class _DesktopSettingsCardState extends State<DesktopSettingsCard> {
             })
           : Container();
 
-      final isEnabled = bind.pluginIsEnabled(id: plugin.meta.id);
       final enableButton = !installed
           ? Container()
-          : headerButton(isEnabled ? 'disable' : 'enable', () {
+          : headerButton(isEnabled ? 'Disable' : 'Enable', () {
               if (isEnabled) {
                 clearPlugin(plugin.meta.id);
               }
@@ -175,7 +178,7 @@ class _DesktopSettingsCardState extends State<DesktopSettingsCard> {
   }
 
   Widget more() {
-    if (!installed) {
+    if (!(installed && isEnabled)) {
       return Container();
     }
 

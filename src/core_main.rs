@@ -245,7 +245,7 @@ pub fn core_main() -> Option<Vec<String>> {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             if args[0] == "--plugin-install" {
                 if args.len() == 3 {
-                    crate::plugin::privileged_install_plugin(&args[1], &args[2]);
+                    crate::plugin::install_plugin_with_url(&args[1], &args[2]);
                 }
                 return None;
             } else if args[0] == "--plugin-uninstall" {

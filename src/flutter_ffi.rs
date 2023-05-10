@@ -1580,12 +1580,11 @@ pub fn plugin_install(id: String, b: bool) {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         if b {
-            allow_err!(crate::plugin::user_install_plugin(&id));
+            if let Err(e) = crate::plugin::install_plugin(&id) {
+                log::error!("Failed to install plugin '{}': {}", id, e);
+            }
         } else {
-            // to-do: uninstall plugin
-            // 1. unload 2. remove configs 3. remove config files
-            // allow_err!(super::unload_plugin(&id));
-            crate::plugin::uninstall_plugin(&id);
+            crate::plugin::uninstall_plugin(&id, true);
         }
     }
 }

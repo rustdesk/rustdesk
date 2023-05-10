@@ -8,12 +8,14 @@ use serde_derive::{Deserialize, Serialize};
 use serde_json;
 use std::{
     collections::HashMap,
+    fs,
     sync::{Arc, Mutex},
 };
 
 const MSG_TO_UI_PLUGIN_MANAGER_LIST: &str = "plugin_list";
 const MSG_TO_UI_PLUGIN_MANAGER_UPDATE: &str = "plugin_update";
 const MSG_TO_UI_PLUGIN_MANAGER_INSTALL: &str = "plugin_install";
+const MSG_TO_UI_PLUGIN_MANAGER_UNINSTALL: &str = "plugin_uninstall";
 
 const IPC_PLUGIN_POSTFIX: &str = "_plugin";
 
@@ -40,7 +42,6 @@ pub struct PluginInfo {
     pub source: PluginSource,
     pub meta: PluginMeta,
     pub installed_version: String,
-    pub install_time: String,
     pub invalid_reason: String,
 }
 
@@ -78,7 +79,6 @@ fn get_source_plugins() -> HashMap<String, PluginInfo> {
                                         source: source.clone(),
                                         meta: meta.clone(),
                                         installed_version: "".to_string(),
-                                        install_time: "".to_string(),
                                         invalid_reason: "".to_string(),
                                     },
                                 );
@@ -110,9 +110,18 @@ fn send_plugin_list_event(plugins: &HashMap<String, PluginInfo>) {
 pub fn load_plugin_list() {
     let mut plugin_info_lock = PLUGIN_INFO.lock().unwrap();
     let mut plugins = get_source_plugins();
-    for (id, info) in super::plugins::get_plugin_infos().read().unwrap().iter() {
+
+    // A big read lock is needed to prevent race conditions.
+    // Loading plugin list may be slow.
+    // Users may call uninstall plugin in the middle.
+    let plugin_infos = super::plugins::get_plugin_infos();
+    let plugin_infos_read_lock = plugin_infos.read().unwrap();
+    for (id, info) in plugin_infos_read_lock.iter() {
+        if info.uninstalled {
+            continue;
+        }
+
         if let Some(p) = plugins.get_mut(id) {
-            p.install_time = info.install_time.clone();
             p.installed_version = info.desc.meta().version.clone();
             p.invalid_reason = "".to_string();
         } else {
@@ -126,7 +135,6 @@ pub fn load_plugin_list() {
                     },
                     meta: info.desc.meta().clone(),
                     installed_version: info.desc.meta().version.clone(),
-                    install_time: info.install_time.clone(),
                     invalid_reason: "".to_string(),
                 },
             );
@@ -139,14 +147,34 @@ pub fn load_plugin_list() {
 pub fn install_plugin(id: &str) -> ResultType<()> {
     match PLUGIN_INFO.lock().unwrap().get(id) {
         Some(plugin) => {
-            let _plugin_url = format!(
-                "{}/plugins/{}/{}_{}.zip",
-                plugin.source.url, plugin.meta.id, plugin.meta.id, plugin.meta.version
-            );
-            // to-do: Support args with space in quotes. 'arg 1' and "arg 2"
             #[cfg(windows)]
-            let _res =
-                crate::platform::elevate(&format!("--plugin-install {} {}", id, _plugin_url))?;
+            {
+                let mut same_plugin_exists = false;
+                if let Some(version) = super::plugins::get_version(id) {
+                    if version == plugin.meta.version {
+                        same_plugin_exists = true;
+                    }
+                }
+
+                // to-do: Support args with space in quotes. 'arg 1' and "arg 2"
+                let plugin_url = format!(
+                    "{}/plugins/{}/{}_{}.zip",
+                    plugin.source.url, plugin.meta.id, plugin.meta.id, plugin.meta.version
+                );
+                let args = if same_plugin_exists {
+                    format!("--plugin-install {}", id)
+                } else {
+                    format!("--plugin-install {} {}", id, plugin_url)
+                };
+                let allowed = crate::platform::elevate(&args)?;
+
+                if allowed && same_plugin_exists {
+                    super::ipc::load_plugin(id)?;
+                    super::plugins::load_plugin(id)?;
+                    super::plugins::mark_uninstalled(id, false);
+                    push_install_event(id, "finished");
+                }
+            }
             Ok(())
         }
         None => {
@@ -155,24 +183,91 @@ pub fn install_plugin(id: &str) -> ResultType<()> {
     }
 }
 
-pub(super) fn remove_plugins() {}
-
-// 1. Add to uninstall list.
-// 2. Try remove.
-// 2. Remove on the next start.
-pub fn uninstall_plugin(id: &str) {
-    // to-do: add to uninstall list.
-    super::plugins::unload_plugin(id);
+fn get_uninstalled_plugins() -> ResultType<Vec<String>> {
+    let plugins_dir = super::get_plugins_dir()?;
+    let mut plugins = Vec::new();
+    if plugins_dir.exists() {
+        for entry in std::fs::read_dir(plugins_dir)? {
+            match entry {
+                Ok(entry) => {
+                    let plugin_dir = entry.path();
+                    if plugin_dir.is_dir() {
+                        if let Some(id) = plugin_dir.file_name().and_then(|n| n.to_str()) {
+                            if super::config::ManagerConfig::is_uninstalled(id) {
+                                plugins.push(id.to_string());
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    log::error!("Failed to read plugins dir entry, {}", e);
+                }
+            }
+        }
+    }
+    Ok(plugins)
 }
 
-fn push_install_event(id: &str, msg: &str) {
+pub(super) fn remove_plugins() -> ResultType<()> {
+    for id in get_uninstalled_plugins()?.iter() {
+        super::config::remove(id as _);
+        if let Ok(dir) = super::get_plugin_dir(id as _) {
+            allow_err!(fs::remove_dir_all(dir));
+        }
+    }
+    Ok(())
+}
+
+pub fn uninstall_plugin(id: &str, called_by_ui: bool) {
+    if called_by_ui {
+        match crate::platform::elevate(&format!("--plugin-uninstall {}", id)) {
+            Ok(true) => {
+                if let Err(e) = super::ipc::uninstall_plugin(id) {
+                    log::error!("Failed to uninstall plugin '{}': {}", id, e);
+                    push_uninstall_event(id, "failed");
+                    return;
+                }
+                super::plugins::unload_plugin(id);
+                super::plugins::mark_uninstalled(id, true);
+                super::config::remove(id);
+                push_uninstall_event(id, "");
+            }
+            Ok(false) => {
+                return;
+            }
+            Err(e) => {
+                log::error!("Failed to uninstall plugin '{}': {}", id, e);
+                push_uninstall_event(id, "failed");
+                return;
+            }
+        }
+    }
+
+    if is_server() {
+        super::plugins::unload_plugin(&id);
+        // allow_err is Ok here.
+        allow_err!(super::config::ManagerConfig::set_uninstall(&id, true));
+    }
+}
+
+fn push_event(id: &str, r#type: &str, msg: &str) {
     let mut m = HashMap::new();
     m.insert("name", MSG_TO_UI_TYPE_PLUGIN_MANAGER);
     m.insert("id", id);
-    m.insert(MSG_TO_UI_PLUGIN_MANAGER_INSTALL, msg);
+    m.insert(r#type, msg);
     if let Ok(event) = serde_json::to_string(&m) {
         let _res = flutter::push_global_event(flutter::APP_TYPE_MAIN, event.clone());
     }
+}
+
+#[inline]
+fn push_uninstall_event(id: &str, msg: &str) {
+    push_event(id, MSG_TO_UI_PLUGIN_MANAGER_UNINSTALL, msg);
+}
+
+#[inline]
+fn push_install_event(id: &str, msg: &str) {
+    push_event(id, MSG_TO_UI_PLUGIN_MANAGER_INSTALL, msg);
 }
 
 async fn handle_conn(mut stream: crate::ipc::Connection) {
@@ -197,7 +292,7 @@ async fn handle_conn(mut stream: crate::ipc::Connection) {
                                     InstallStatus::Finished => {
                                         allow_err!(super::plugins::load_plugin(&id));
                                         allow_err!(super::ipc::load_plugin_async(id).await);
-                                        load_plugin_list();
+                                        std::thread::spawn(load_plugin_list);
                                         push_install_event(&id, "finished");
                                     }
                                     InstallStatus::FailedCreating => {
@@ -329,7 +424,7 @@ pub(super) mod install {
         Ok(())
     }
 
-    pub fn install_plugin(id: &str, url: &str) {
+    pub fn install_plugin_with_url(id: &str, url: &str) {
         let plugin_dir = match super::super::get_plugin_dir(id) {
             Ok(d) => d,
             Err(e) => {

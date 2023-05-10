@@ -1,4 +1,4 @@
-use hbb_common::{allow_err, libc, log, ResultType};
+use hbb_common::{libc, log, ResultType};
 use std::{
     env,
     ffi::{c_char, c_int, c_void, CStr},
@@ -19,12 +19,11 @@ mod plog;
 mod plugins;
 
 pub use manager::{
-    install::install_plugin as privileged_install_plugin, install_plugin as user_install_plugin,
-    load_plugin_list, uninstall_plugin,
+    install::install_plugin_with_url, install_plugin, load_plugin_list, uninstall_plugin,
 };
 pub use plugins::{
     handle_client_event, handle_listen_event, handle_server_event, handle_ui_event, load_plugin,
-    reload_plugin, sync_ui, unload_plugin, unload_plugins,
+    reload_plugin, sync_ui, unload_plugin,
 };
 
 const MSG_TO_UI_TYPE_PLUGIN_EVENT: &str = "plugin_event";
@@ -92,9 +91,13 @@ pub fn init() {
     if !is_server() {
         std::thread::spawn(move || manager::start_ipc());
     } else {
-        manager::remove_plugins();
+        if let Err(e) = manager::remove_plugins() {
+            log::error!("Failed to remove plugins: {}", e);
+        }
     }
-    allow_err!(plugins::load_plugins());
+    if let Err(e) = plugins::load_plugins() {
+        log::error!("Failed to load plugins: {}", e);
+    }
 }
 
 #[inline]
