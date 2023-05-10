@@ -12,6 +12,7 @@ use crate::mediacodec::{
 };
 use crate::{
     aom::{self, AomDecoder, AomDecoderConfig, AomEncoder, AomEncoderConfig},
+    common::GoogleImage,
     vpxcodec::{self, VpxDecoder, VpxDecoderConfig, VpxEncoder, VpxEncoderConfig, VpxVideoCodecId},
     CodecName, ImageRgb,
 };

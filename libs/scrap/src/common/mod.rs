@@ -1,5 +1,6 @@
 pub use self::vpxcodec::*;
 use hbb_common::message_proto::{video_frame, VideoFrame};
+use std::slice;
 
 cfg_if! {
     if #[cfg(quartz)] {
@@ -182,6 +183,154 @@ impl ToString for CodecFormat {
             CodecFormat::H264 => "H264".into(),
             CodecFormat::H265 => "H265".into(),
             CodecFormat::Unknown => "Unknow".into(),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum Error {
+    FailedCall(String),
+    BadPtr(String),
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl std::error::Error for Error {}
+
+pub type Result<T> = std::result::Result<T, Error>;
+
+#[macro_export]
+macro_rules! generate_call_macro {
+    ($func_name:ident) => {
+        macro_rules! $func_name {
+            ($x:expr) => {{
+                let result = unsafe { $x };
+                let result_int = unsafe { std::mem::transmute::<_, i32>(result) };
+                if result_int != 0 {
+                    return Err(crate::Error::FailedCall(format!(
+                        "errcode={} {}:{}:{}:{}",
+                        result_int,
+                        module_path!(),
+                        file!(),
+                        line!(),
+                        column!()
+                    ))
+                    .into());
+                }
+                result
+            }};
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! generate_call_ptr_macro {
+    ($func_name:ident) => {
+        macro_rules! $func_name {
+            ($x:expr) => {{
+                let result = unsafe { $x };
+                let result_int = unsafe { std::mem::transmute::<_, isize>(result) };
+                if result_int == 0 {
+                    return Err(crate::Error::BadPtr(format!(
+                        "errcode={} {}:{}:{}:{}",
+                        result_int,
+                        module_path!(),
+                        file!(),
+                        line!(),
+                        column!()
+                    ))
+                    .into());
+                }
+                result
+            }};
+        }
+    };
+}
+
+pub trait GoogleImage {
+    fn width(&self) -> usize;
+    fn height(&self) -> usize;
+    fn stride(&self) -> Vec<i32>;
+    fn planes(&self) -> Vec<*mut u8>;
+    fn get_bytes_per_row(w: usize, fmt: ImageFormat, stride: usize) -> usize {
+        let bytes_per_pixel = match fmt {
+            ImageFormat::Raw => 3,
+            ImageFormat::ARGB | ImageFormat::ABGR => 4,
+        };
+        // https://github.com/lemenkov/libyuv/blob/6900494d90ae095d44405cd4cc3f346971fa69c9/source/convert_argb.cc#L128
+        // https://github.com/lemenkov/libyuv/blob/6900494d90ae095d44405cd4cc3f346971fa69c9/source/convert_argb.cc#L129
+        (w * bytes_per_pixel + stride - 1) & !(stride - 1)
+    }
+    // rgb [in/out] fmt and stride must be set in ImageRgb
+    fn to(&self, rgb: &mut ImageRgb) {
+        rgb.w = self.width();
+        rgb.h = self.height();
+        let bytes_per_row = Self::get_bytes_per_row(rgb.w, rgb.fmt, rgb.stride());
+        rgb.raw.resize(rgb.h * bytes_per_row, 0);
+        let stride = self.stride();
+        let planes = self.planes();
+        unsafe {
+            match rgb.fmt() {
+                ImageFormat::Raw => {
+                    super::I420ToRAW(
+                        planes[0],
+                        stride[0],
+                        planes[1],
+                        stride[1],
+                        planes[2],
+                        stride[2],
+                        rgb.raw.as_mut_ptr(),
+                        bytes_per_row as _,
+                        self.width() as _,
+                        self.height() as _,
+                    );
+                }
+                ImageFormat::ARGB => {
+                    super::I420ToARGB(
+                        planes[0],
+                        stride[0],
+                        planes[1],
+                        stride[1],
+                        planes[2],
+                        stride[2],
+                        rgb.raw.as_mut_ptr(),
+                        bytes_per_row as _,
+                        self.width() as _,
+                        self.height() as _,
+                    );
+                }
+                ImageFormat::ABGR => {
+                    super::I420ToABGR(
+                        planes[0],
+                        stride[0],
+                        planes[1],
+                        stride[1],
+                        planes[2],
+                        stride[2],
+                        rgb.raw.as_mut_ptr(),
+                        bytes_per_row as _,
+                        self.width() as _,
+                        self.height() as _,
+                    );
+                }
+            }
+        }
+    }
+    fn data(&self) -> (&[u8], &[u8], &[u8]) {
+        unsafe {
+            let stride = self.stride();
+            let planes = self.planes();
+            let h = (self.height() as usize + 1) & !1;
+            let n = stride[0] as usize * h;
+            let y = slice::from_raw_parts(planes[0], n);
+            let n = stride[1] as usize * (h >> 1);
+            let u = slice::from_raw_parts(planes[1], n);
+            let v = slice::from_raw_parts(planes[2], n);
+            (y, u, v)
         }
     }
 }

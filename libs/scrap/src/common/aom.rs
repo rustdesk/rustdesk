@@ -6,7 +6,8 @@
 
 include!(concat!(env!("OUT_DIR"), "/aom_ffi.rs"));
 
-use crate::{codec::EncoderApi, EncodeFrame, ImageFormat, ImageRgb, STRIDE_ALIGN};
+use crate::{codec::EncoderApi, EncodeFrame, STRIDE_ALIGN};
+use crate::{common::GoogleImage, generate_call_macro, generate_call_ptr_macro, Error, Result};
 use hbb_common::{
     anyhow::{anyhow, Context},
     bytes::Bytes,
@@ -14,6 +15,9 @@ use hbb_common::{
     ResultType,
 };
 use std::{ptr, slice};
+
+generate_call_macro!(call_aom);
+generate_call_ptr_macro!(call_aom_ptr);
 
 impl Default for aom_codec_enc_cfg_t {
     fn default() -> Self {
@@ -31,60 +35,6 @@ impl Default for aom_image_t {
     fn default() -> Self {
         unsafe { std::mem::zeroed() }
     }
-}
-
-#[derive(Debug)]
-pub enum Error {
-    FailedCall(String),
-    BadPtr(String),
-}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
-        write!(f, "{:?}", self)
-    }
-}
-
-impl std::error::Error for Error {}
-
-pub type Result<T> = std::result::Result<T, Error>;
-
-macro_rules! call_aom {
-    ($x:expr) => {{
-        let result = unsafe { $x }; // original expression
-        let result_int = unsafe { std::mem::transmute::<_, i32>(result) };
-        if result_int != 0 {
-            return Err(Error::FailedCall(format!(
-                "errcode={} {}:{}:{}:{}",
-                result_int,
-                module_path!(),
-                file!(),
-                line!(),
-                column!()
-            ))
-            .into());
-        }
-        result
-    }};
-}
-
-macro_rules! call_aom_ptr {
-    ($x:expr) => {{
-        let result = unsafe { $x }; // original expression
-        let result_int = unsafe { std::mem::transmute::<_, isize>(result) };
-        if result_int == 0 {
-            return Err(Error::BadPtr(format!(
-                "errcode={} {}:{}:{}:{}",
-                result_int,
-                module_path!(),
-                file!(),
-                line!(),
-                column!()
-            ))
-            .into());
-        }
-        result
-    }};
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -509,16 +459,6 @@ impl Image {
     }
 
     #[inline]
-    pub fn width(&self) -> usize {
-        self.inner().d_w as _
-    }
-
-    #[inline]
-    pub fn height(&self) -> usize {
-        self.inner().d_h as _
-    }
-
-    #[inline]
     pub fn format(&self) -> aom_img_fmt_t {
         self.inner().fmt
     }
@@ -527,90 +467,27 @@ impl Image {
     pub fn inner(&self) -> &aom_image_t {
         unsafe { &*self.0 }
     }
+}
 
+impl GoogleImage for Image {
     #[inline]
-    pub fn stride(&self, iplane: usize) -> i32 {
-        self.inner().stride[iplane]
+    fn width(&self) -> usize {
+        self.inner().d_w as _
     }
 
     #[inline]
-    pub fn get_bytes_per_row(w: usize, fmt: ImageFormat, stride: usize) -> usize {
-        let bytes_per_pixel = match fmt {
-            ImageFormat::Raw => 3,
-            ImageFormat::ARGB | ImageFormat::ABGR => 4,
-        };
-        // https://github.com/lemenkov/libyuv/blob/6900494d90ae095d44405cd4cc3f346971fa69c9/source/convert_argb.cc#L128
-        // https://github.com/lemenkov/libyuv/blob/6900494d90ae095d44405cd4cc3f346971fa69c9/source/convert_argb.cc#L129
-        (w * bytes_per_pixel + stride - 1) & !(stride - 1)
-    }
-
-    // rgb [in/out] fmt and stride must be set in ImageRgb
-    pub fn to(&self, rgb: &mut ImageRgb) {
-        rgb.w = self.width();
-        rgb.h = self.height();
-        let bytes_per_row = Self::get_bytes_per_row(rgb.w, rgb.fmt, rgb.stride());
-        rgb.raw.resize(rgb.h * bytes_per_row, 0);
-        let img = self.inner();
-        unsafe {
-            match rgb.fmt() {
-                ImageFormat::Raw => {
-                    super::I420ToRAW(
-                        img.planes[0],
-                        img.stride[0],
-                        img.planes[1],
-                        img.stride[1],
-                        img.planes[2],
-                        img.stride[2],
-                        rgb.raw.as_mut_ptr(),
-                        bytes_per_row as _,
-                        self.width() as _,
-                        self.height() as _,
-                    );
-                }
-                ImageFormat::ARGB => {
-                    super::I420ToARGB(
-                        img.planes[0],
-                        img.stride[0],
-                        img.planes[1],
-                        img.stride[1],
-                        img.planes[2],
-                        img.stride[2],
-                        rgb.raw.as_mut_ptr(),
-                        bytes_per_row as _,
-                        self.width() as _,
-                        self.height() as _,
-                    );
-                }
-                ImageFormat::ABGR => {
-                    super::I420ToABGR(
-                        img.planes[0],
-                        img.stride[0],
-                        img.planes[1],
-                        img.stride[1],
-                        img.planes[2],
-                        img.stride[2],
-                        rgb.raw.as_mut_ptr(),
-                        bytes_per_row as _,
-                        self.width() as _,
-                        self.height() as _,
-                    );
-                }
-            }
-        }
+    fn height(&self) -> usize {
+        self.inner().d_h as _
     }
 
     #[inline]
-    pub fn data(&self) -> (&[u8], &[u8], &[u8]) {
-        unsafe {
-            let img = self.inner();
-            let h = (img.d_h as usize + 1) & !1;
-            let n = img.stride[0] as usize * h;
-            let y = slice::from_raw_parts(img.planes[0], n);
-            let n = img.stride[1] as usize * (h >> 1);
-            let u = slice::from_raw_parts(img.planes[1], n);
-            let v = slice::from_raw_parts(img.planes[2], n);
-            (y, u, v)
-        }
+    fn stride(&self) -> Vec<i32> {
+        self.inner().stride.iter().map(|x| *x as i32).collect()
+    }
+
+    #[inline]
+    fn planes(&self) -> Vec<*mut u8> {
+        self.inner().planes.iter().map(|p| *p as *mut u8).collect()
     }
 }
 
