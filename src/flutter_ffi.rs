@@ -1498,7 +1498,7 @@ pub fn plugin_reload(_id: String) {
 }
 
 #[inline]
-pub fn plugin_enable(_id: String, _v: bool) {
+pub fn plugin_enable(_id: String, _v: bool) -> SyncReturn<()> {
     #[cfg(feature = "plugin_framework")]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
@@ -1512,6 +1512,7 @@ pub fn plugin_enable(_id: String, _v: bool) {
         } else {
             crate::plugin::unload_plugin(&_id);
         }
+        SyncReturn(())
     }
 }
 

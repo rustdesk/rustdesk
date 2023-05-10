@@ -11,9 +11,7 @@ import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/plugin/manager.dart';
-import 'package:flutter_hbb/plugin/model.dart';
-import 'package:flutter_hbb/plugin/common.dart';
-import 'package:flutter_hbb/plugin/widget.dart';
+import 'package:flutter_hbb/plugin/widgets/desktop_settings.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -1448,58 +1446,6 @@ class _CheckboxState extends State<_Checkbox> {
   }
 }
 
-class PluginCard extends StatefulWidget {
-  final PluginInfo plugin;
-  const PluginCard({
-    Key? key,
-    required this.plugin,
-  }) : super(key: key);
-
-  @override
-  State<PluginCard> createState() => PluginCardState();
-}
-
-class PluginCardState extends State<PluginCard> {
-  PluginId get pluginId => widget.plugin.meta.id;
-  String get pluginName => widget.plugin.meta.name;
-
-  @override
-  Widget build(BuildContext context) {
-    final children = [
-      _Button(
-        'Reload',
-        () async {
-          clearPlugin(pluginId);
-          await bind.pluginReload(id: pluginId);
-          setState(() {});
-        },
-      ),
-      _Checkbox(
-        label: 'Enable',
-        getValue: () => bind.pluginIsEnabled(id: pluginId),
-        setValue: (bool v) async {
-          if (!v) {
-            clearPlugin(pluginId);
-          }
-          await bind.pluginEnable(id: pluginId, v: v);
-          setState(() {});
-        },
-      ),
-    ];
-    final model = getPluginModel(kLocationHostMainPlugin, pluginId);
-    if (model != null) {
-      children.add(PluginItem(
-        pluginId: pluginId,
-        peerId: '',
-        location: kLocationHostMainPlugin,
-        pluginModel: model,
-        isMenu: false,
-      ));
-    }
-    return _Card(title: pluginName, children: children);
-  }
-}
-
 class _Plugin extends StatefulWidget {
   const _Plugin({Key? key}) : super(key: key);
 
@@ -1508,18 +1454,9 @@ class _Plugin extends StatefulWidget {
 }
 
 class _PluginState extends State<_Plugin> {
-  // temp checkbox widget
-
-  List<Widget> _buildCards(PluginManager model) => [
-        _Card(
-          title: 'Plugin',
-          children: [],
-        ),
-        ...model.plugins.map((entry) => PluginCard(plugin: entry)).toList(),
-      ];
-
   @override
   Widget build(BuildContext context) {
+    bind.pluginListReload();
     final scrollController = ScrollController();
     return DesktopScrollWrapper(
       scrollController: scrollController,
@@ -1529,7 +1466,9 @@ class _PluginState extends State<_Plugin> {
           return ListView(
             physics: DraggableNeverScrollableScrollPhysics(),
             controller: scrollController,
-            children: _buildCards(model),
+            children: model.plugins
+                .map((entry) => DesktopSettingsCard(plugin: entry))
+                .toList(),
           ).marginOnly(bottom: _kListViewBottomMargin);
         }),
       ),

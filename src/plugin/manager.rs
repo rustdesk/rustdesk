@@ -3,9 +3,7 @@
 
 use super::{desc::Meta as PluginMeta, ipc::InstallStatus, *};
 use crate::flutter;
-#[cfg(not(debug_assertions))]
-use hbb_common::toml;
-use hbb_common::{allow_err, bail, config::load_path, log, tokio};
+use hbb_common::{allow_err, bail, log, tokio, toml};
 use serde_derive::{Deserialize, Serialize};
 use serde_json;
 use std::{
@@ -48,42 +46,15 @@ pub struct PluginInfo {
 
 static PLUGIN_SOURCE_LOCAL: &str = "local";
 
-#[cfg(not(debug_assertions))]
 fn get_plugin_source_list() -> Vec<PluginSource> {
     // Only one source for now.
     vec![PluginSource {
         name: "rustdesk".to_string(),
-        url: "https://github.com/fufesou/rustdesk-plugins".to_string(),
+        url: "https://raw.githubusercontent.com/fufesou/rustdesk-plugins/main".to_string(),
         description: "".to_string(),
     }]
 }
 
-#[cfg(debug_assertions)]
-fn get_source_plugins() -> HashMap<String, PluginInfo> {
-    let meta_file = super::get_plugins_dir().unwrap().join("meta.toml");
-    let mut plugins = HashMap::new();
-    let manager_meta = load_path::<ManagerMeta>(meta_file);
-    let source = PluginSource {
-        name: "rustdesk".to_string(),
-        url: "https://github.com/fufesou/rustdesk-plugins".to_string(),
-        description: "".to_string(),
-    };
-    for meta in manager_meta.plugins.iter() {
-        plugins.insert(
-            meta.id.clone(),
-            PluginInfo {
-                source: source.clone(),
-                meta: meta.clone(),
-                installed_version: "".to_string(),
-                install_time: "".to_string(),
-                invalid_reason: "".to_string(),
-            },
-        );
-    }
-    plugins
-}
-
-#[cfg(not(debug_assertions))]
 fn get_source_plugins() -> HashMap<String, PluginInfo> {
     let mut plugins = HashMap::new();
     for source in get_plugin_source_list().into_iter() {
@@ -142,7 +113,8 @@ pub fn load_plugin_list() {
     for (id, info) in super::plugins::get_plugin_infos().read().unwrap().iter() {
         if let Some(p) = plugins.get_mut(id) {
             p.install_time = info.install_time.clone();
-            p.invalid_reason = info.desc.meta().version.clone();
+            p.installed_version = info.desc.meta().version.clone();
+            p.invalid_reason = "".to_string();
         } else {
             plugins.insert(
                 id.to_string(),
@@ -171,9 +143,10 @@ pub fn install_plugin(id: &str) -> ResultType<()> {
                 "{}/plugins/{}/{}_{}.zip",
                 plugin.source.url, plugin.meta.id, plugin.meta.id, plugin.meta.version
             );
+            // to-do: Support args with space in quotes. 'arg 1' and "arg 2"
             #[cfg(windows)]
             let _res =
-                crate::platform::elevate(&format!("--plugin-install '{}' '{}'", id, _plugin_url))?;
+                crate::platform::elevate(&format!("--plugin-install {} {}", id, _plugin_url))?;
             Ok(())
         }
         None => {
@@ -223,7 +196,8 @@ async fn handle_conn(mut stream: crate::ipc::Connection) {
                                     }
                                     InstallStatus::Finished => {
                                         allow_err!(super::plugins::load_plugin(&id));
-                                        allow_err!(super::ipc::load_plugin(id));
+                                        allow_err!(super::ipc::load_plugin_async(id).await);
+                                        load_plugin_list();
                                         push_install_event(&id, "finished");
                                     }
                                     InstallStatus::FailedCreating => {
@@ -373,15 +347,31 @@ pub(super) mod install {
         }
 
         let filename = plugin_dir.join(format!("{}.zip", id));
+
+        // download
         if !download_file(id, url, &filename) {
             return;
         }
+
+        let filename_to_remove = filename.clone();
+        let _call_on_ret = crate::common::SimpleCallOnReturn {
+            b: true,
+            f: Box::new(move || {
+                if let Err(e) = std::fs::remove_file(&filename_to_remove) {
+                    log::error!("Failed to remove plugin file: {}", e);
+                }
+            }),
+        };
+
+        // install
         send_install_status(id, InstallStatus::Installing);
         if let Err(e) = do_install_file(&filename, &plugin_dir) {
             log::error!("Failed to install plugin: {}", e);
             send_install_status(id, InstallStatus::FailedInstalling);
             return;
         }
+
+        // finished
         send_install_status(id, InstallStatus::Finished);
     }
 }

@@ -30,7 +30,7 @@ pub enum UiType {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Location {
-    pub ui: HashMap<String, UiType>,
+    pub ui: HashMap<String, Vec<UiType>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

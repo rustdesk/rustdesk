@@ -157,6 +157,7 @@ struct InitData {
 impl Drop for InitData {
     fn drop(&mut self) {
         free_c_ptr(self.version as _);
+        free_c_ptr(self.info as _);
     }
 }
 
@@ -350,18 +351,9 @@ fn load_plugin_path(path: &str) -> ResultType<()> {
     let init_info = serde_json::to_string(&InitInfo {
         is_server: crate::common::is_server(),
     })?;
-    let ptr_info = str_to_cstr_ret(&init_info);
-    let ptr_version = str_to_cstr_ret(crate::VERSION);
-    let _call_on_ret = crate::common::SimpleCallOnReturn {
-        b: true,
-        f: Box::new(move || {
-            free_c_ptr(ptr_info as _);
-            free_c_ptr(ptr_version as _);
-        }),
-    };
     let init_data = InitData {
-        version: ptr_version as _,
-        info: ptr_info as _,
+        version: str_to_cstr_ret(crate::VERSION),
+        info: str_to_cstr_ret(&init_info) as _,
         cbs: Callbacks {
             msg: callback_msg::cb_msg,
             get_conf: config::cb_get_conf,
@@ -378,7 +370,6 @@ fn load_plugin_path(path: &str) -> ResultType<()> {
 
     // update ui
     // Ui may be not ready now, so we need to update again once ui is ready.
-    update_ui_plugin_desc(&desc, None);
     reload_ui(&desc, None);
 
     let install_time = PathBuf::from(path)
@@ -404,7 +395,6 @@ fn load_plugin_path(path: &str) -> ResultType<()> {
 
 pub fn sync_ui(sync_to: String) {
     for plugin in PLUGIN_INFO.read().unwrap().values() {
-        update_ui_plugin_desc(&plugin.desc, Some(&sync_to));
         reload_ui(&plugin.desc, Some(&sync_to));
     }
 }
@@ -635,27 +625,6 @@ fn reload_ui(desc: &Desc, sync_to: Option<&str>) {
                         }
                     }
                 }
-            }
-        }
-    }
-}
-
-fn update_ui_plugin_desc(desc: &Desc, sync_to: Option<&str>) {
-    // This function is rarely used. There's no need to care about serialization efficiency here.
-    if let Ok(desc_str) = serde_json::to_string(desc) {
-        let mut m = HashMap::new();
-        m.insert("name", MSG_TO_UI_TYPE_PLUGIN_DESC);
-        m.insert("desc", &desc_str);
-        let event = serde_json::to_string(&m).unwrap_or("".to_owned());
-        match sync_to {
-            Some(channel) => {
-                let _res = flutter::push_global_event(channel, event.clone());
-            }
-            None => {
-                let _res = flutter::push_global_event(flutter::APP_TYPE_MAIN, event.clone());
-                let _res =
-                    flutter::push_global_event(flutter::APP_TYPE_DESKTOP_REMOTE, event.clone());
-                let _res = flutter::push_global_event(flutter::APP_TYPE_CM, event.clone());
             }
         }
     }

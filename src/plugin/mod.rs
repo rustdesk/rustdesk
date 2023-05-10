@@ -27,7 +27,6 @@ pub use plugins::{
     reload_plugin, sync_ui, unload_plugin, unload_plugins,
 };
 
-const MSG_TO_UI_TYPE_PLUGIN_DESC: &str = "plugin_desc";
 const MSG_TO_UI_TYPE_PLUGIN_EVENT: &str = "plugin_event";
 const MSG_TO_UI_TYPE_PLUGIN_RELOAD: &str = "plugin_reload";
 const MSG_TO_UI_TYPE_PLUGIN_OPTION: &str = "plugin_option";
@@ -90,12 +89,12 @@ impl PluginReturn {
 }
 
 pub fn init() {
-    std::thread::spawn(move || manager::start_ipc());
-    if is_server() {
+    if !is_server() {
+        std::thread::spawn(move || manager::start_ipc());
+    } else {
         manager::remove_plugins();
-        allow_err!(plugins::load_plugins());
     }
-    load_plugin_list();
+    allow_err!(plugins::load_plugins());
 }
 
 #[inline]
@@ -134,10 +133,10 @@ fn str_to_cstr_ret(s: &str) -> *const c_char {
 }
 
 #[inline]
-fn free_c_ptr(ret: *mut c_void) {
-    if !ret.is_null() {
+fn free_c_ptr(p: *mut c_void) {
+    if !p.is_null() {
         unsafe {
-            libc::free(ret);
+            libc::free(p);
         }
     }
 }

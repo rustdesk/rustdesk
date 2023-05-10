@@ -152,7 +152,7 @@ async fn set_manager_plugin_config_async(id: &str, name: &str, value: String) ->
     Ok(())
 }
 
-async fn load_plugin_async(id: &str) -> ResultType<()> {
+pub async fn load_plugin_async(id: &str) -> ResultType<()> {
     let mut c = connect(1000, "").await?;
     c.send(&Data::Plugin(Plugin::Load(id.to_owned()))).await?;
     Ok(())
