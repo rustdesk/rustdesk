@@ -1,6 +1,7 @@
 use hbb_common::{libc, log, ResultType};
+#[cfg(target_os = "windows")]
+use std::env;
 use std::{
-    env,
     ffi::{c_char, c_int, c_void, CStr},
     path::PathBuf,
     ptr::null,

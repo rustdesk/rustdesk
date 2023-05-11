@@ -190,19 +190,30 @@ pub fn install_plugin(id: &str) -> ResultType<()> {
                 if !same_plugin_exists {
                     args.push(&plugin_url);
                 }
-                allowed_install = match crate::platform::run_as_root(&args) {
-                    Ok(child) => match child.wait() {
-                        Ok(0) => true,
-                        Ok(code) => {
-                            log::error!("Failed to wait install process, process code: {}", code);
-                            true
+                allowed_install = match crate::platform::elevate(args) {
+                    Ok(Some(mut child)) => match child.wait() {
+                        Ok(status) => {
+                            if status.success() {
+                                true
+                            } else {
+                                log::error!(
+                                    "Failed to wait install process, process status: {:?}",
+                                    status
+                                );
+                                false
+                            }
                         }
                         Err(e) => {
                             log::error!("Failed to wait install process, error: {}", e);
                             false
                         }
                     },
-                }
+                    Ok(None) => false,
+                    Err(e) => {
+                        log::error!("Failed to run install process, error: {}", e);
+                        false
+                    }
+                };
             }
 
             if allowed_install && same_plugin_exists {
@@ -256,7 +267,6 @@ pub(super) fn remove_plugins() -> ResultType<()> {
 
 pub fn uninstall_plugin(id: &str, called_by_ui: bool) {
     if called_by_ui {
-        #[cfg(target_os = "windows")]
         match crate::platform::check_super_user_permission() {
             Ok(true) => {
                 if let Err(e) = super::ipc::uninstall_plugin(id) {

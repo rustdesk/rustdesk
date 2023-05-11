@@ -2,8 +2,6 @@
 use crate::ipc::{connect, Connection, Data};
 use hbb_common::{allow_err, log, tokio, ResultType};
 use serde_derive::{Deserialize, Serialize};
-#[cfg(not(windows))]
-use std::{fs::File, io::prelude::*};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum InstallStatus {
