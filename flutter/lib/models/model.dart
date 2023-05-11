@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -1067,7 +1068,7 @@ class CursorData {
               height: (height * scale).toInt(),
               interpolation: img2.Interpolation.average,
             )
-            .getBytes(format: img2.Format.bgra);
+            .getBytes(order: img2.ChannelOrder.bgra);
       } else {
         data = Uint8List.fromList(
           img2.encodePng(
@@ -1133,13 +1134,13 @@ class PredefinedCursor {
       () async {
         final defaultImg = _image2!;
         // This function is called only one time, no need to care about the performance.
-        Uint8List data = defaultImg.getBytes(format: img2.Format.rgba);
+        Uint8List data = defaultImg.getBytes(order: img2.ChannelOrder.rgba);
         _image = await img.decodeImageFromPixels(
             data, defaultImg.width, defaultImg.height, ui.PixelFormat.rgba8888);
 
         double scale = 1.0;
         if (Platform.isWindows) {
-          data = _image2!.getBytes(format: img2.Format.bgra);
+          data = _image2!.getBytes(order: img2.ChannelOrder.bgra);
         } else {
           data = Uint8List.fromList(img2.encodePng(_image2!));
         }
@@ -1358,9 +1359,9 @@ class CursorModel with ChangeNotifier {
       Uint8List rgba, ui.Image image, int id, int w, int h) async {
     Uint8List? data;
     img2.Image imgOrigin =
-        img2.Image.fromBytes(w, h, rgba, format: img2.Format.rgba);
+        img2.Image.fromBytes(width: w, height:h, bytes: rgba.buffer, order: img2.ChannelOrder.rgba);
     if (Platform.isWindows) {
-      data = imgOrigin.getBytes(format: img2.Format.bgra);
+      data = imgOrigin.getBytes(order: img2.ChannelOrder.bgra);
     } else {
       ByteData? imgBytes =
           await image.toByteData(format: ui.ImageByteFormat.png);

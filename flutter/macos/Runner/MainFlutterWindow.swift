@@ -7,7 +7,7 @@ import desktop_multi_window
 import desktop_drop
 import device_info_plus_macos
 import flutter_custom_cursor
-import package_info_plus_macos
+import package_info_plus
 import path_provider_foundation
 import screen_retriever
 import sqflite

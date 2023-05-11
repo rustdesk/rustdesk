@@ -36,9 +36,10 @@ dependencies:
   provider: ^6.0.3
   tuple: ^2.0.0
   wakelock: ^0.6.2
+  # Keep this version for the compatibility of some old systems like win7.
   device_info_plus: ^4.1.2
   #firebase_analytics: ^9.1.5
-  package_info_plus: ^1.4.2
+  package_info_plus: ^3.1.2
   url_launcher: ^6.0.9
   toggle_switch: ^1.4.0
   dash_chat_2: ^0.0.15
@@ -47,9 +48,9 @@ dependencies:
   flutter_breadcrumb: ^1.0.1
   http: ^0.13.4
   qr_code_scanner: ^1.0.0
-  zxing2: ^0.1.0
+  zxing2: ^0.2.0
   image_picker: ^0.8.5
-  image: ^3.1.3
+  image: ^4.0.17
   back_button_interceptor: ^6.0.1
   flutter_rust_bridge: ^1.61.1
   window_manager:
@@ -68,13 +69,14 @@ dependencies:
       path: plugins/window_size
       ref: a738913c8ce2c9f47515382d40827e794a334274
   get: ^4.6.5
-  visibility_detector: ^0.3.3
+  visibility_detector: ^0.4.0+2
   contextmenu: ^3.0.0
-  desktop_drop: ^0.3.3
-  scroll_pos: ^0.3.0
+  # Disable desktop_drop for now, because it may cause crash on Win11 when destructing.
+  # desktop_drop: ^0.4.1
+  scroll_pos: ^0.4.0
   debounce_throttle: ^2.0.0
   file_picker: ^5.1.0
-  flutter_svg: ^1.1.5
+  flutter_svg: ^2.0.5
   flutter_improved_scrolling:
     # currently, we use flutter 3.7.0+.
     #
@@ -94,7 +96,7 @@ dependencies:
   bot_toast: ^4.0.3
   win32: any
   password_strength: ^0.2.0
-  flutter_launcher_icons: ^0.11.0
+  flutter_launcher_icons: ^0.13.1
   flutter_keyboard_visibility: ^5.4.0
   texture_rgba_renderer: ^0.0.16
   percent_indicator: ^4.2.2
