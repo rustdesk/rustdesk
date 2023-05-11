@@ -660,17 +660,17 @@ pub fn check_super_user_permission() -> ResultType<bool> {
     Ok(status.success() && status.code() == Some(0))
 }
 
-pub fn elevate(arg: Vec<&str>) -> ResultType<Option<Child>> {
+pub fn elevate(args: Vec<&str>) -> ResultType<Option<Child>> {
     let cmd = std::env::current_exe()?;
     match cmd.to_str() {
         Some(cmd) => {
-            let mut args = vec![cmd];
-            args.append(&mut arg.clone());
+            let mut args_with_exe = vec![cmd];
+            args_with_exe.append(&mut args.clone());
             // -E required for opensuse
             if is_opensuse() {
-                args.insert(0, "-E");
+                args_with_exe.insert(0, "-E");
             }
-            let task = Command::new("pkexec").args(args).spawn()?;
+            let task = Command::new("pkexec").args(args_with_exe).spawn()?;
             Ok(Some(task))
         }
         None => {

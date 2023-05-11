@@ -20,11 +20,11 @@ const MSG_TO_UI_PLUGIN_MANAGER_UNINSTALL: &str = "plugin_uninstall";
 const IPC_PLUGIN_POSTFIX: &str = "_plugin";
 
 #[cfg(target_os = "windows")]
-const PLUGIN_PLATFORM: &str = "Windows";
+const PLUGIN_PLATFORM: &str = "windows";
 #[cfg(target_os = "linux")]
-const PLUGIN_PLATFORM: &str = "Linux";
+const PLUGIN_PLATFORM: &str = "linux";
 #[cfg(target_os = "macos")]
-const PLUGIN_PLATFORM: &str = "MacOS";
+const PLUGIN_PLATFORM: &str = "macos";
 
 lazy_static::lazy_static! {
     static ref PLUGIN_INFO: Arc<Mutex<HashMap<String, PluginInfo>>> = Arc::new(Mutex::new(HashMap::new()));
@@ -67,38 +67,82 @@ fn get_source_plugins() -> HashMap<String, PluginInfo> {
     let mut plugins = HashMap::new();
     for source in get_plugin_source_list().into_iter() {
         let url = format!("{}/meta.toml", source.url);
-        match reqwest::blocking::get(&url) {
-            Ok(resp) => {
-                if !resp.status().is_success() {
-                    log::error!(
-                        "Failed to get plugin list from '{}', status code: {}",
-                        url,
-                        resp.status()
+        // match reqwest::blocking::get(&url) {
+        //     Ok(resp) => {
+        //         if !resp.status().is_success() {
+        //             log::error!(
+        //                 "Failed to get plugin list from '{}', status code: {}",
+        //                 url,
+        //                 resp.status()
+        //             );
+        //         }
+        //         if let Ok(text) = resp.text() {
+        //             match toml::from_str::<ManagerMeta>(&text) {
+        //                 Ok(manager_meta) => {
+        //                     for meta in manager_meta.plugins.iter() {
+        //                         if !meta.platforms.to_uppercase().contains(&PLUGIN_PLATFORM.to_uppercase()) {
+        //                             continue;
+        //                         }
+        //                         plugins.insert(
+        //                             meta.id.clone(),
+        //                             PluginInfo {
+        //                                 source: source.clone(),
+        //                                 meta: meta.clone(),
+        //                                 installed_version: "".to_string(),
+        //                                 invalid_reason: "".to_string(),
+        //                             },
+        //                         );
+        //                     }
+        //                 }
+        //                 Err(e) => log::error!("Failed to parse plugin list from '{}', {}", url, e),
+        //             }
+        //         }
+        //     }
+        //     Err(e) => log::error!("Failed to get plugin list from '{}', {}", url, e),
+        // }
+
+        let text = r#"
+version = "v0.1.0"
+description = ""
+
+[[plugins]]
+id = "RustDesk.c.privacy-mode"
+name = "Privacy Mode"
+version = "v0.1.0"
+description = "This plugin can enable private mode to prevent others from seeing your operations."
+platforms = "Windows,Linux,MacOS"
+author = "RustDesk"
+home = ""
+license = "MIT"
+source = ""
+
+[plugins.publish_info]
+published = "2023-05-07 14:00:00"
+last_released = "2023-05-07 14:00:00"
+        "#
+        .to_string();
+        match toml::from_str::<ManagerMeta>(&text) {
+            Ok(manager_meta) => {
+                for meta in manager_meta.plugins.iter() {
+                    if !meta
+                        .platforms
+                        .to_uppercase()
+                        .contains(&PLUGIN_PLATFORM.to_uppercase())
+                    {
+                        continue;
+                    }
+                    plugins.insert(
+                        meta.id.clone(),
+                        PluginInfo {
+                            source: source.clone(),
+                            meta: meta.clone(),
+                            installed_version: "".to_string(),
+                            invalid_reason: "".to_string(),
+                        },
                     );
                 }
-                if let Ok(text) = resp.text() {
-                    match toml::from_str::<ManagerMeta>(&text) {
-                        Ok(manager_meta) => {
-                            for meta in manager_meta.plugins.iter() {
-                                if !meta.platforms.contains(PLUGIN_PLATFORM) {
-                                    continue;
-                                }
-                                plugins.insert(
-                                    meta.id.clone(),
-                                    PluginInfo {
-                                        source: source.clone(),
-                                        meta: meta.clone(),
-                                        installed_version: "".to_string(),
-                                        invalid_reason: "".to_string(),
-                                    },
-                                );
-                            }
-                        }
-                        Err(e) => log::error!("Failed to parse plugin list from '{}', {}", url, e),
-                    }
-                }
             }
-            Err(e) => log::error!("Failed to get plugin list from '{}', {}", url, e),
+            Err(e) => log::error!("Failed to parse plugin list from '{}', {}", url, e),
         }
     }
     plugins
@@ -154,6 +198,71 @@ pub fn load_plugin_list() {
     *plugin_info_lock = plugins;
 }
 
+#[cfg(target_os = "windows")]
+fn elevate_install(
+    plugin_id: &str,
+    plugin_url: &str,
+    same_plugin_exists: bool,
+) -> ResultType<bool> {
+    // to-do: Support args with space in quotes. 'arg 1' and "arg 2"
+    let args = if same_plugin_exists {
+        format!("--plugin-install {}", plugin_id)
+    } else {
+        format!("--plugin-install {} {}", plugin_id, plugin_url)
+    };
+    Ok(crate::platform::elevate(&args)?)
+}
+
+#[cfg(target_os = "linux")]
+fn elevate_install(
+    plugin_id: &str,
+    plugin_url: &str,
+    same_plugin_exists: bool,
+) -> ResultType<bool> {
+    let mut args = vec!["--plugin-install", plugin_id];
+    if !same_plugin_exists {
+        args.push(&plugin_url);
+    }
+    allowed_install = match crate::platform::elevate(args) {
+        Ok(Some(mut child)) => match child.wait() {
+            Ok(status) => {
+                if status.success() {
+                    true
+                } else {
+                    log::error!(
+                        "Failed to wait install process, process status: {:?}",
+                        status
+                    );
+                    false
+                }
+            }
+            Err(e) => {
+                log::error!("Failed to wait install process, error: {}", e);
+                false
+            }
+        },
+        Ok(None) => false,
+        Err(e) => {
+            log::error!("Failed to run install process, error: {}", e);
+            false
+        }
+    };
+    Ok(allowed_install)
+}
+
+#[cfg(target_os = "macos")]
+fn elevate_install(
+    plugin_id: &str,
+    plugin_url: &str,
+    same_plugin_exists: bool,
+) -> ResultType<bool> {
+    let mut args = vec!["--plugin-install", plugin_id];
+    if !same_plugin_exists {
+        args.push(&plugin_url);
+    }
+    Ok(crate::platform::elevate(args)?)
+}
+
 pub fn install_plugin(id: &str) -> ResultType<()> {
     match PLUGIN_INFO.lock().unwrap().get(id) {
         Some(plugin) => {
@@ -163,7 +272,6 @@ pub fn install_plugin(id: &str) -> ResultType<()> {
                     same_plugin_exists = true;
                 }
             }
-
             let plugin_url = format!(
                 "{}/plugins/{}/{}/{}_{}.zip",
                 plugin.source.url,
@@ -172,50 +280,7 @@ pub fn install_plugin(id: &str) -> ResultType<()> {
                 plugin.meta.id,
                 plugin.meta.version
             );
-
-            let allowed_install;
-            #[cfg(windows)]
-            {
-                // to-do: Support args with space in quotes. 'arg 1' and "arg 2"
-                let args = if same_plugin_exists {
-                    format!("--plugin-install {}", id)
-                } else {
-                    format!("--plugin-install {} {}", id, plugin_url)
-                };
-                allowed_install = crate::platform::elevate(&args)?;
-            }
-            #[cfg(target_os = "linux")]
-            {
-                let mut args = vec!["--plugin-install", id];
-                if !same_plugin_exists {
-                    args.push(&plugin_url);
-                }
-                allowed_install = match crate::platform::elevate(args) {
-                    Ok(Some(mut child)) => match child.wait() {
-                        Ok(status) => {
-                            if status.success() {
-                                true
-                            } else {
-                                log::error!(
-                                    "Failed to wait install process, process status: {:?}",
-                                    status
-                                );
-                                false
-                            }
-                        }
-                        Err(e) => {
-                            log::error!("Failed to wait install process, error: {}", e);
-                            false
-                        }
-                    },
-                    Ok(None) => false,
-                    Err(e) => {
-                        log::error!("Failed to run install process, error: {}", e);
-                        false
-                    }
-                };
-            }
-
+            let allowed_install = elevate_install(id, &plugin_url, same_plugin_exists)?;
             if allowed_install && same_plugin_exists {
                 super::ipc::load_plugin(id)?;
                 super::plugins::load_plugin(id)?;
