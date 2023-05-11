@@ -188,7 +188,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relayed and encrypted connection", "Vermittelte und verschlüsselte Verbindung"),
         ("Direct and unencrypted connection", "Direkte und unverschlüsselte Verbindung"),
         ("Relayed and unencrypted connection", "Vermittelte und unverschlüsselte Verbindung"),
-        ("Enter Remote ID", "Remote-ID eingeben"),
+        ("Enter Remote ID", "Entfernte ID eingeben"),
         ("Enter your password", "Geben Sie Ihr Passwort ein"),
         ("Logging in...", "Anmelden …"),
         ("Enable RDP session sharing", "RDP-Sitzungsfreigabe aktivieren"),
@@ -289,7 +289,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_stop_service_tip", "Durch das Deaktivieren des Dienstes werden automatisch alle hergestellten Verbindungen getrennt."),
         ("android_version_audio_tip", "Ihre Android-Version unterstützt keine Audioaufnahme, bitte aktualisieren Sie auf Android 10 oder höher, falls möglich."),
         ("android_start_service_tip", "Tippen Sie auf \"Vermittlungsdienst starten\" oder aktivieren Sie die Berechtigung \"Bildschirmaufnahme\", um den Bildschirmfreigabedienst zu starten."),
-        ("android_permission_may_not_change_tip", "Die Berechtigungen für bestehende Verbindungen können nicht sofort geändert werden, bis die Verbindung wiederhergestellt ist."),
+        ("android_permission_may_not_change_tip", "Die Berechtigungen für bestehende Verbindungen werden erst nach einer erneuten Verbindung geändert."),
         ("Account", "Konto"),
         ("Overwrite", "Überschreiben"),
         ("This file exists, skip or overwrite this file?", "Diese Datei existiert; überspringen oder überschreiben?"),
@@ -461,7 +461,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("No transfers in progress", "Keine Übertragungen im Gange"),
         ("Set one-time password length", "Länge des Einmalpassworts festlegen"),
         ("idd_driver_tip", "Installieren Sie den virtuellen Anzeigetreiber, der verwendet wird, wenn Sie keine physischen Anzeigen haben."),
-        ("confirm_idd_driver_tip", "Die Option zur Installation des virtuellen Anzeigetreibers ist aktiviert. Beachten Sie, dass ein Testzertifikat installiert wird, um dem virtuellen Anzeigetreiber zu vertrauen. Dieses Testzertifikat wird nur verwendet, um Rustdesk-Treibern zu vertrauen."),
+        ("confirm_idd_driver_tip", "Die Option zur Installation des virtuellen Anzeigetreibers ist aktiviert. Beachten Sie, dass ein Testzertifikat installiert wird, um dem virtuellen Anzeigetreiber zu vertrauen. Dieses Testzertifikat wird nur verwendet, um RustDesk-Treibern zu vertrauen."),
         ("RDP Settings", "RDP-Einstellungen"),
         ("Sort by", "Sortieren nach"),
         ("New Connection", "Neue Verbindung"),
@@ -498,8 +498,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Fingerprint", "Fingerabdruck"),
         ("Copy Fingerprint", "Fingerabdruck kopieren"),
         ("no fingerprints", "Keine Fingerabdrücke"),
-        ("Select a peer", ""),
-        ("Select peers", ""),
-        ("Plugins", "")
+        ("Select a peer", "Gegenstelle auswählen"),
+        ("Select peers", "Gegenstellen auswählen"),
+        ("Plugins", "Plugins")
     ].iter().cloned().collect();
 }
