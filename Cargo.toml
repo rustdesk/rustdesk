@@ -90,9 +90,9 @@ system_shutdown = "4.0"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 trayicon = { git = "https://github.com/open-trade/trayicon-rs", features = ["winit"] }
-winit = "0.28"
+winit = "0.26"
 winapi = { version = "0.3", features = ["winuser", "wincrypt"] }
-winreg = "0.50"
+winreg = "0.10"
 windows-service = "0.6"
 virtual_display = { path = "libs/virtual_display", optional = true }
 impersonate_system = { git = "https://github.com/21pages/impersonate-system" }
