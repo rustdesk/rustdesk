@@ -309,7 +309,8 @@ class _PortForwardPageState extends State<PortForwardPage>
                       child: SizedBox(
                         width: 120,
                         child: ElevatedButton(
-                          onPressed: () => bind.sessionNewRdp(id: widget.id),
+                          onPressed: () =>
+                              bind.sessionNewRdp(id: "pf_${widget.id}"),
                           child: Text(
                             translate('New RDP'),
                           ),
