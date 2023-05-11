@@ -313,14 +313,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.0.0"
-  desktop_drop:
-    dependency: "direct main"
-    description:
-      name: desktop_drop
-      sha256: "0cd056191b701a2b5ba040f2306349e461fafdaa5df4569b2228cdf87b58eced"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.3.3"
   desktop_multi_window:
     dependency: "direct main"
     description:
@@ -1283,11 +1275,12 @@ packages:
   uni_links_desktop:
     dependency: "direct main"
     description:
-      name: uni_links_desktop
-      sha256: "205484c01890259b56d9271bcf299adf9889e881616c976f13061e29e94bb9f0"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.1.4"
+      path: "."
+      ref: "276b2206d0a7bd7574bc6f061d804c9b7be1d031"
+      resolved-ref: "276b2206d0a7bd7574bc6f061d804c9b7be1d031"
+      url: "https://github.com/Kingtous/rustdesk_uni_links_desktop"
+    source: git
+    version: "0.1.6"
   uni_links_platform_interface:
     dependency: transitive
     description:
@@ -1571,5 +1564,5 @@ packages:
     source: hosted
     version: "0.1.1"
 sdks:
-  dart: ">=2.18.0 <3.0.0"
+  dart: ">=2.18.0 <4.0.0"
   flutter: ">=3.3.0"

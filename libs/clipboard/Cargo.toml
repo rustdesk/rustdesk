@@ -10,7 +10,7 @@ build= "build.rs"
 cc = "1.0"
 
 [dependencies]
-thiserror = "1.0.30"
+thiserror = "1.0"
 lazy_static = "1.4"
 serde = "1.0"
 serde_derive = "1.0"

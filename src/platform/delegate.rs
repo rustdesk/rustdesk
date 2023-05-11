@@ -195,10 +195,10 @@ extern "C" fn handle_apple_event(_this: &Object, _cmd: Sel, event: u64, _reply: 
 // Customize the service opening logic.
 #[no_mangle]
 fn service_should_handle_reopen(
-    obj: &Object,
-    sel: Sel,
-    sender: id,
-    has_visible_windows: BOOL,
+    _obj: &Object,
+    _sel: Sel,
+    _sender: id,
+    _has_visible_windows: BOOL,
   ) -> BOOL {
     log::debug!("Invoking the main rustdesk process");
     std::thread::spawn(move || crate::handle_url_scheme("".to_string())); 
