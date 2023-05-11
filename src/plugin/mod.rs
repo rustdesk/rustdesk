@@ -101,9 +101,26 @@ pub fn init() {
 }
 
 #[inline]
+#[cfg(target_os = "windows")]
+fn get_share_dir() -> ResultType<PathBuf> {
+    Ok(PathBuf::from(env::var("ProgramData")?))
+}
+
+#[inline]
+#[cfg(target_os = "linux")]
+fn get_share_dir() -> ResultType<PathBuf> {
+    Ok(PathBuf::from("/usr/share"))
+}
+
+#[inline]
+#[cfg(target_os = "macos")]
+fn get_share_dir() -> ResultType<PathBuf> {
+    Ok(PathBuf::from("/Library/Application Support"))
+}
+
+#[inline]
 fn get_plugins_dir() -> ResultType<PathBuf> {
-    // to-do: linux and macos
-    Ok(PathBuf::from(env::var("ProgramData")?)
+    Ok(get_share_dir()?
         .join("RustDesk")
         .join(PLUGIN_SOURCE_LOCAL_DIR))
 }

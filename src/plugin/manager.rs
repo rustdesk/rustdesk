@@ -19,6 +19,13 @@ const MSG_TO_UI_PLUGIN_MANAGER_UNINSTALL: &str = "plugin_uninstall";
 
 const IPC_PLUGIN_POSTFIX: &str = "_plugin";
 
+#[cfg(target_os = "windows")]
+const PLUGIN_PLATFORM: &str = "Windows";
+#[cfg(target_os = "linux")]
+const PLUGIN_PLATFORM: &str = "Linux";
+#[cfg(target_os = "macos")]
+const PLUGIN_PLATFORM: &str = "MacOS";
+
 lazy_static::lazy_static! {
     static ref PLUGIN_INFO: Arc<Mutex<HashMap<String, PluginInfo>>> = Arc::new(Mutex::new(HashMap::new()));
 }
@@ -73,6 +80,9 @@ fn get_source_plugins() -> HashMap<String, PluginInfo> {
                     match toml::from_str::<ManagerMeta>(&text) {
                         Ok(manager_meta) => {
                             for meta in manager_meta.plugins.iter() {
+                                if !meta.platforms.contains(PLUGIN_PLATFORM) {
+                                    continue;
+                                }
                                 plugins.insert(
                                     meta.id.clone(),
                                     PluginInfo {
@@ -147,33 +157,59 @@ pub fn load_plugin_list() {
 pub fn install_plugin(id: &str) -> ResultType<()> {
     match PLUGIN_INFO.lock().unwrap().get(id) {
         Some(plugin) => {
+            let mut same_plugin_exists = false;
+            if let Some(version) = super::plugins::get_version(id) {
+                if version == plugin.meta.version {
+                    same_plugin_exists = true;
+                }
+            }
+
+            let plugin_url = format!(
+                "{}/plugins/{}/{}/{}_{}.zip",
+                plugin.source.url,
+                plugin.meta.id,
+                PLUGIN_PLATFORM,
+                plugin.meta.id,
+                plugin.meta.version
+            );
+
+            let allowed_install;
             #[cfg(windows)]
             {
-                let mut same_plugin_exists = false;
-                if let Some(version) = super::plugins::get_version(id) {
-                    if version == plugin.meta.version {
-                        same_plugin_exists = true;
-                    }
-                }
-
                 // to-do: Support args with space in quotes. 'arg 1' and "arg 2"
-                let plugin_url = format!(
-                    "{}/plugins/{}/{}_{}.zip",
-                    plugin.source.url, plugin.meta.id, plugin.meta.id, plugin.meta.version
-                );
                 let args = if same_plugin_exists {
                     format!("--plugin-install {}", id)
                 } else {
                     format!("--plugin-install {} {}", id, plugin_url)
                 };
-                let allowed = crate::platform::elevate(&args)?;
-
-                if allowed && same_plugin_exists {
-                    super::ipc::load_plugin(id)?;
-                    super::plugins::load_plugin(id)?;
-                    super::plugins::mark_uninstalled(id, false);
-                    push_install_event(id, "finished");
+                allowed_install = crate::platform::elevate(&args)?;
+            }
+            #[cfg(target_os = "linux")]
+            {
+                let mut args = vec!["--plugin-install", id];
+                if !same_plugin_exists {
+                    args.push(&plugin_url);
                 }
+                allowed_install = match crate::platform::run_as_root(&args) {
+                    Ok(child) => match child.wait() {
+                        Ok(0) => true,
+                        Ok(code) => {
+                            log::error!("Failed to wait install process, process code: {}", code);
+                            true
+                        }
+                        Err(e) => {
+                            log::error!("Failed to wait install process, error: {}", e);
+                            false
+                        }
+                    },
+                }
+            }
+
+            if allowed_install && same_plugin_exists {
+                super::ipc::load_plugin(id)?;
+                super::plugins::load_plugin(id)?;
+                super::plugins::mark_uninstalled(id, false);
+                push_install_event(id, "finished");
             }
             Ok(())
         }
@@ -220,7 +256,8 @@ pub(super) fn remove_plugins() -> ResultType<()> {
 
 pub fn uninstall_plugin(id: &str, called_by_ui: bool) {
     if called_by_ui {
-        match crate::platform::elevate(&format!("--plugin-uninstall {}", id)) {
+        #[cfg(target_os = "windows")]
+        match crate::platform::check_super_user_permission() {
             Ok(true) => {
                 if let Err(e) = super::ipc::uninstall_plugin(id) {
                     log::error!("Failed to uninstall plugin '{}': {}", id, e);
@@ -236,7 +273,11 @@ pub fn uninstall_plugin(id: &str, called_by_ui: bool) {
                 return;
             }
             Err(e) => {
-                log::error!("Failed to uninstall plugin '{}': {}", id, e);
+                log::error!(
+                    "Failed to uninstall plugin '{}', check permission error: {}",
+                    id,
+                    e
+                );
                 push_uninstall_event(id, "failed");
                 return;
             }

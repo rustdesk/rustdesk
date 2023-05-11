@@ -58,6 +58,8 @@ pub struct Meta {
     pub name: String,
     pub version: String,
     pub description: String,
+    #[serde(default)]
+    pub platforms: String,
     pub author: String,
     pub home: String,
     pub license: String,

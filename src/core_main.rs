@@ -248,9 +248,6 @@ pub fn core_main() -> Option<Vec<String>> {
                     crate::plugin::install_plugin_with_url(&args[1], &args[2]);
                 }
                 return None;
-            } else if args[0] == "--plugin-uninstall" {
-                // Do nothing
-                return None;
             }
         }
     }

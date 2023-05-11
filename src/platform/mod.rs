@@ -54,6 +54,27 @@ pub fn get_active_username() -> String {
 #[cfg(target_os = "android")]
 pub const PA_SAMPLE_RATE: u32 = 48000;
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub fn run_as_root(arg: Vec<&str>) -> ResultType<Option<Child>> {
+    let cmd = std::env::current_exe()?;
+    match cmd.to_str() {
+        Some(cmd) => {
+            let mut args = vec![cmd];
+            args.append(&mut arg.clone());
+            // -E required for opensuse
+            #[cfg(target_os = "linux")]
+            if is_opensuse() {
+                args.insert(0, "-E");
+            }
+            let task = Command::new("sudo").args(args).spawn()?;
+            Ok(Some(task))
+        }
+        None => {
+            bail!("Failed to get current exe as str");
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
