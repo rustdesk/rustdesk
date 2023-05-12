@@ -35,7 +35,7 @@ fn initialize(app_dir: &str) {
     {
         android_logger::init_once(
             android_logger::Config::default()
-                .with_min_level(log::Level::Debug) // limit log level
+                .with_max_level(log::LevelFilter::Debug) // limit log level
                 .with_tag("ffi"), // logs will show under mytag tag
         );
         #[cfg(feature = "mediacodec")]
@@ -1607,7 +1607,8 @@ pub mod server_side {
         app_dir: JString,
     ) {
         log::debug!("startServer from jvm");
-        if let Ok(app_dir) = env.get_string(app_dir) {
+        let mut env = env;
+        if let Ok(app_dir) = env.get_string(&app_dir) {
             *config::APP_DIR.write().unwrap() = app_dir.into();
         }
         std::thread::spawn(move || start_server(true));
@@ -1630,14 +1631,16 @@ pub mod server_side {
         locale: JString,
         input: JString,
     ) -> jstring {
-        let res = if let (Ok(input), Ok(locale)) = (env.get_string(input), env.get_string(locale)) {
+        let mut env = env;
+        let res = if let (Ok(input), Ok(locale)) = (env.get_string(&input), env.get_string(&locale))
+        {
             let input: String = input.into();
             let locale: String = locale.into();
             crate::client::translate_locale(input, &locale)
         } else {
             "".into()
         };
-        return env.new_string(res).unwrap_or(input).into_inner();
+        return env.new_string(res).unwrap_or(input).into_raw();
     }
 
     #[no_mangle]
