@@ -5220,7 +5220,7 @@ dependencies = [
  "image",
  "impersonate_system",
  "include_dir",
- "jni 0.21.1",
+ "jni 0.19.0",
  "lazy_static",
  "libloading 0.8.0",
  "libpulse-binding",
