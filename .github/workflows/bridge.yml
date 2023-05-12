@@ -5,6 +5,9 @@ name: Build flutter-rust-bridge
 on:
   workflow_call:
 
+env:
+  FLUTTER_VERSION: "3.10.0"
+  
 jobs:
   generate_bridge:
     runs-on: ${{ matrix.job.os }}
@@ -51,7 +54,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: "stable"
-          flutter-version: "3.7.0"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
       - name: Install flutter rust bridge deps
