@@ -4,7 +4,7 @@ import FlutterMacOS
 import desktop_multi_window
 // import bitsdojo_window_macos
 
-// Disable desktop_drop for now: import desktop_drop
+import desktop_drop
 import device_info_plus_macos
 import flutter_custom_cursor
 import package_info_plus_macos
