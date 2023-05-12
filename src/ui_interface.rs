@@ -77,12 +77,11 @@ pub fn install_me(_options: String, _path: String, _silent: bool, _debug: bool) 
 pub fn update_me(_path: String) {
     #[cfg(target_os = "linux")]
     {
-        std::process::Command::new("pkexec")
-            .args(&["apt", "install", "-f", &_path])
-            .spawn()
-            .ok();
-        std::fs::remove_file(&_path).ok();
-        crate::run_me(Vec::<&str>::new()).ok();
+        allow_err!(crate::platform::linux::exec_privileged(&[
+            "apt", "install", "-f", &_path
+        ]));
+        allow_err!(std::fs::remove_file(&_path));
+        allow_err!(crate::run_me(Vec::<&str>::new()));
     }
     #[cfg(windows)]
     {
