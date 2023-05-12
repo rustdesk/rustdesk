@@ -72,6 +72,7 @@ chrono = "0.4"
 cidr-utils = "0.5"
 libloading = "0.8"
 fon = "0.6"
+zip = "0.6.5"
 
 [target.'cfg(not(any(target_os = "android", target_os = "linux")))'.dependencies]
 cpal = "0.15"

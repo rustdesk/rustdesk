@@ -3,7 +3,7 @@ use super::{desc::Desc, errno::*, *};
 use crate::common::is_server;
 use crate::flutter;
 use hbb_common::{
-    allow_err, bail,
+    bail,
     dlopen::symbor::Library,
     lazy_static, log,
     message_proto::{Message, Misc, PluginFailure, PluginRequest},
@@ -26,9 +26,10 @@ lazy_static::lazy_static! {
     static ref PLUGINS: Arc<RwLock<HashMap<String, Plugin>>> = Default::default();
 }
 
-struct PluginInfo {
-    path: String,
-    desc: Desc,
+pub(super) struct PluginInfo {
+    pub path: String,
+    pub uninstalled: bool,
+    pub desc: Desc,
 }
 
 /// Initialize the plugins.
@@ -136,6 +137,11 @@ struct Callbacks {
     native: CallbackNative,
 }
 
+#[derive(Serialize)]
+struct InitInfo {
+    is_server: bool,
+}
+
 /// The plugin initialize data.
 /// version: The version of the plugin, can't be nullptr.
 /// local_peer_id: The local peer id, can't be nullptr.
@@ -143,12 +149,14 @@ struct Callbacks {
 #[repr(C)]
 struct InitData {
     version: *const c_char,
+    info: *const c_char,
     cbs: Callbacks,
 }
 
 impl Drop for InitData {
     fn drop(&mut self) {
         free_c_ptr(self.version as _);
+        free_c_ptr(self.info as _);
     }
 }
 
@@ -255,52 +263,70 @@ const DYLIB_SUFFIX: &str = ".so";
 #[cfg(target_os = "macos")]
 const DYLIB_SUFFIX: &str = ".dylib";
 
-pub fn load_plugins() -> ResultType<()> {
-    let exe = std::env::current_exe()?.to_string_lossy().to_string();
-    match PathBuf::from(&exe).parent() {
-        Some(dir) => {
-            for entry in std::fs::read_dir(dir)? {
-                match entry {
-                    Ok(entry) => {
-                        let path = entry.path();
-                        if path.is_file() {
-                            let filename = entry.file_name();
-                            let filename = filename.to_str().unwrap_or("");
-                            if filename.starts_with("plugin_") && filename.ends_with(DYLIB_SUFFIX) {
-                                if let Err(e) = load_plugin(Some(path.to_str().unwrap_or("")), None)
-                                {
+pub(super) fn load_plugins() -> ResultType<()> {
+    let plugins_dir = super::get_plugins_dir()?;
+    if !plugins_dir.exists() {
+        std::fs::create_dir_all(&plugins_dir)?;
+    } else {
+        for entry in std::fs::read_dir(plugins_dir)? {
+            match entry {
+                Ok(entry) => {
+                    let plugin_dir = entry.path();
+                    if plugin_dir.is_dir() {
+                        load_plugin_dir(&plugin_dir);
+                    }
+                }
+                Err(e) => {
+                    log::error!("Failed to read plugins dir entry, {}", e);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn load_plugin_dir(dir: &PathBuf) {
+    if let Ok(rd) = std::fs::read_dir(dir) {
+        for entry in rd {
+            match entry {
+                Ok(entry) => {
+                    let path = entry.path();
+                    if path.is_file() {
+                        let filename = entry.file_name();
+                        let filename = filename.to_str().unwrap_or("");
+                        if filename.starts_with("plugin_") && filename.ends_with(DYLIB_SUFFIX) {
+                            if let Some(path) = path.to_str() {
+                                if let Err(e) = load_plugin_path(path) {
                                     log::error!("Failed to load plugin {}, {}", filename, e);
                                 }
                             }
                         }
                     }
-                    Err(e) => {
-                        log::error!("Failed to read dir entry, {}", e);
-                    }
+                }
+                Err(e) => {
+                    log::error!(
+                        "Failed to read '{}' dir entry, {}",
+                        dir.file_name().and_then(|f| f.to_str()).unwrap_or(""),
+                        e
+                    );
                 }
             }
-            Ok(())
         }
-        None => {
-            bail!("Failed to get parent dir of {}", exe);
-        }
-    }
-}
-
-pub fn unload_plugins() {
-    log::info!("Plugins unloaded");
-    PLUGINS.write().unwrap().clear();
-    if change_manager() {
-        super::config::ManagerConfig::remove_plugins(false);
     }
 }
 
 pub fn unload_plugin(id: &str) {
     log::info!("Plugin {} unloaded", id);
     PLUGINS.write().unwrap().remove(id);
-    if change_manager() {
-        allow_err!(super::config::ManagerConfig::remove_plugin(id, false));
-    }
+}
+
+pub(super) fn mark_uninstalled(id: &str, uninstalled: bool) {
+    log::info!("Plugin {} uninstall", id);
+    PLUGIN_INFO
+        .write()
+        .unwrap()
+        .get_mut(id)
+        .map(|info| info.uninstalled = uninstalled);
 }
 
 pub fn reload_plugin(id: &str) -> ResultType<()> {
@@ -309,7 +335,7 @@ pub fn reload_plugin(id: &str) -> ResultType<()> {
         None => bail!("Plugin {} not found", id),
     };
     unload_plugin(id);
-    load_plugin(Some(&path), Some(id))
+    load_plugin_path(&path)
 }
 
 fn load_plugin_path(path: &str) -> ResultType<()> {
@@ -319,8 +345,12 @@ fn load_plugin_path(path: &str) -> ResultType<()> {
     // to-do validate plugin
     // to-do check the plugin id (make sure it does not use another plugin's id)
 
+    let init_info = serde_json::to_string(&InitInfo {
+        is_server: crate::common::is_server(),
+    })?;
     let init_data = InitData {
         version: str_to_cstr_ret(crate::VERSION),
+        info: str_to_cstr_ret(&init_info) as _,
         cbs: Callbacks {
             msg: callback_msg::cb_msg,
             get_conf: config::cb_get_conf,
@@ -331,19 +361,19 @@ fn load_plugin_path(path: &str) -> ResultType<()> {
     };
     plugin.init(&init_data, path)?;
 
-    if change_manager() {
-        super::config::ManagerConfig::add_plugin(desc.id())?;
+    if is_server() {
+        super::config::ManagerConfig::add_plugin(&desc.meta().id)?;
     }
 
     // update ui
     // Ui may be not ready now, so we need to update again once ui is ready.
-    update_ui_plugin_desc(&desc, None);
     reload_ui(&desc, None);
 
     // add plugins
-    let id = desc.id().to_string();
+    let id = desc.meta().id.clone();
     let plugin_info = PluginInfo {
         path: path.to_string(),
+        uninstalled: false,
         desc,
     };
     PLUGIN_INFO.write().unwrap().insert(id.clone(), plugin_info);
@@ -355,25 +385,14 @@ fn load_plugin_path(path: &str) -> ResultType<()> {
 
 pub fn sync_ui(sync_to: String) {
     for plugin in PLUGIN_INFO.read().unwrap().values() {
-        update_ui_plugin_desc(&plugin.desc, Some(&sync_to));
         reload_ui(&plugin.desc, Some(&sync_to));
     }
 }
 
-pub fn load_plugin(path: Option<&str>, id: Option<&str>) -> ResultType<()> {
-    match (path, id) {
-        (Some(path), _) => load_plugin_path(path),
-        (None, Some(id)) => {
-            let path = match PLUGIN_INFO.read().unwrap().get(id) {
-                Some(plugin) => plugin.path.clone(),
-                None => bail!("Plugin {} not found", id),
-            };
-            load_plugin_path(&path)
-        }
-        (None, None) => {
-            bail!("path and id are both None");
-        }
-    }
+#[inline]
+pub fn load_plugin(id: &str) -> ResultType<()> {
+    load_plugin_dir(&super::get_plugin_dir(id)?);
+    Ok(())
 }
 
 fn handle_event(method: &[u8], id: &str, peer: &str, event: &[u8]) -> ResultType<()> {
@@ -418,7 +437,7 @@ fn _handle_listen_event(event: String, peer: String) {
     let mut plugins = Vec::new();
     for info in PLUGIN_INFO.read().unwrap().values() {
         if info.desc.listen_events().contains(&event.to_string()) {
-            plugins.push(info.desc.id().to_string());
+            plugins.push(info.desc.meta().id.clone());
         }
     }
 
@@ -496,7 +515,7 @@ pub fn handle_client_event(id: &str, peer: &str, event: &[u8]) -> Message {
                         msg
                     );
                     let name = match PLUGIN_INFO.read().unwrap().get(id) {
-                        Some(plugin) => plugin.desc.name(),
+                        Some(plugin) => &plugin.desc.meta().name,
                         None => "???",
                     }
                     .to_owned();
@@ -553,22 +572,13 @@ fn make_plugin_failure(id: &str, name: &str, msg: &str) -> Message {
     msg_out
 }
 
-#[inline]
-fn change_manager() -> bool {
-    #[cfg(debug_assertions)]
-    let change_manager = true;
-    #[cfg(not(debug_assertions))]
-    let change_manager = is_server();
-    change_manager
-}
-
 fn reload_ui(desc: &Desc, sync_to: Option<&str>) {
     for (location, ui) in desc.location().ui.iter() {
         if let Ok(ui) = serde_json::to_string(&ui) {
             let make_event = |ui: &str| {
                 let mut m = HashMap::new();
                 m.insert("name", MSG_TO_UI_TYPE_PLUGIN_RELOAD);
-                m.insert("id", desc.id());
+                m.insert("id", &desc.meta().id);
                 m.insert("location", &location);
                 // Do not depend on the "location" and plugin desc on the ui side.
                 // Send the ui field to ensure the ui is valid.
@@ -601,25 +611,8 @@ fn reload_ui(desc: &Desc, sync_to: Option<&str>) {
     }
 }
 
-fn update_ui_plugin_desc(desc: &Desc, sync_to: Option<&str>) {
-    // This function is rarely used. There's no need to care about serialization efficiency here.
-    if let Ok(desc_str) = serde_json::to_string(desc) {
-        let mut m = HashMap::new();
-        m.insert("name", MSG_TO_UI_TYPE_PLUGIN_DESC);
-        m.insert("desc", &desc_str);
-        let event = serde_json::to_string(&m).unwrap_or("".to_owned());
-        match sync_to {
-            Some(channel) => {
-                let _res = flutter::push_global_event(channel, event.clone());
-            }
-            None => {
-                let _res = flutter::push_global_event(flutter::APP_TYPE_MAIN, event.clone());
-                let _res =
-                    flutter::push_global_event(flutter::APP_TYPE_DESKTOP_REMOTE, event.clone());
-                let _res = flutter::push_global_event(flutter::APP_TYPE_CM, event.clone());
-            }
-        }
-    }
+pub(super) fn get_plugin_infos() -> Arc<RwLock<HashMap<String, PluginInfo>>> {
+    PLUGIN_INFO.clone()
 }
 
 pub(super) fn get_desc_conf(id: &str) -> Option<super::desc::Config> {
@@ -628,4 +621,12 @@ pub(super) fn get_desc_conf(id: &str) -> Option<super::desc::Config> {
         .unwrap()
         .get(id)
         .map(|info| info.desc.config().clone())
+}
+
+pub(super) fn get_version(id: &str) -> Option<String> {
+    PLUGIN_INFO
+        .read()
+        .unwrap()
+        .get(id)
+        .map(|info| info.desc.meta().version.clone())
 }

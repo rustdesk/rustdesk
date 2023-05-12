@@ -9,10 +9,10 @@ use hbb_common::{
     regex::{Captures, Regex},
 };
 use std::{
-    string::String,
     cell::RefCell,
     path::{Path, PathBuf},
     process::{Child, Command},
+    string::String,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -453,9 +453,7 @@ pub fn get_active_username() -> String {
 
 pub fn get_user_home_by_name(username: &str) -> Option<PathBuf> {
     return match get_user_by_name(username) {
-        None => {
-            None
-        }
+        None => None,
         Some(user) => {
             let home = user.home_dir();
             if Path::is_dir(home) {
@@ -464,7 +462,7 @@ pub fn get_user_home_by_name(username: &str) -> Option<PathBuf> {
                 None
             }
         }
-    }
+    };
 }
 
 pub fn get_active_user_home() -> Option<PathBuf> {
@@ -662,6 +660,25 @@ pub fn check_super_user_permission() -> ResultType<bool> {
     Ok(status.success() && status.code() == Some(0))
 }
 
+pub fn elevate(args: Vec<&str>) -> ResultType<Option<Child>> {
+    let cmd = std::env::current_exe()?;
+    match cmd.to_str() {
+        Some(cmd) => {
+            let mut args_with_exe = vec![cmd];
+            args_with_exe.append(&mut args.clone());
+            // -E required for opensuse
+            if is_opensuse() {
+                args_with_exe.insert(0, "-E");
+            }
+            let task = Command::new("pkexec").args(args_with_exe).spawn()?;
+            Ok(Some(task))
+        }
+        None => {
+            hbb_common::bail!("Failed to get current exe as str");
+        }
+    }
+}
+
 type GtkSettingsPtr = *mut c_void;
 type GObjectPtr = *mut c_void;
 #[link(name = "gtk-3")]
@@ -835,12 +852,7 @@ mod desktop {
         }
 
         fn get_display(&mut self) {
-            let display_envs = vec![
-                GNOME_SESSION_BINARY,
-                XFCE4_PANEL,
-                SDDM_GREETER,
-                PLASMA_X11,
-            ];
+            let display_envs = vec![GNOME_SESSION_BINARY, XFCE4_PANEL, SDDM_GREETER, PLASMA_X11];
             for diplay_env in display_envs {
                 self.display = get_env_tries("DISPLAY", &self.uid, diplay_env, 10);
                 if !self.display.is_empty() {
@@ -873,8 +885,8 @@ mod desktop {
                             auth_found = true;
                         } else if auth_found {
                             if std::path::Path::new(v).is_absolute()
-                                && std::path::Path::new(v).exists() {
-
+                                && std::path::Path::new(v).exists()
+                            {
                                 self.xauth = v.to_string();
                             } else {
                                 if let Some(pid) = line.split_whitespace().nth(1) {
@@ -903,12 +915,7 @@ mod desktop {
 
         fn get_xauth(&mut self) {
             // try by direct access to window manager process by name
-            let display_envs = vec![
-                GNOME_SESSION_BINARY,
-                XFCE4_PANEL,
-                SDDM_GREETER,
-                PLASMA_X11,
-            ];
+            let display_envs = vec![GNOME_SESSION_BINARY, XFCE4_PANEL, SDDM_GREETER, PLASMA_X11];
             for diplay_env in display_envs {
                 self.xauth = get_env_tries("XAUTHORITY", &self.uid, diplay_env, 10);
                 if !self.xauth.is_empty() {
@@ -928,7 +935,7 @@ mod desktop {
                     gdm
                 } else {
                     let username = &self.username;
-                    match get_user_home_by_name(username)  {
+                    match get_user_home_by_name(username) {
                         None => {
                             if username == "root" {
                                 format!("/{}/.Xauthority", username)
@@ -942,7 +949,10 @@ mod desktop {
                             }
                         }
                         Some(home) => {
-                            format!("{}/.Xauthority", home.as_path().to_string_lossy().to_string())
+                            format!(
+                                "{}/.Xauthority",
+                                home.as_path().to_string_lossy().to_string()
+                            )
                         }
                     }
                 };

@@ -42,31 +42,45 @@ extern "C" bool InputMonitoringAuthStatus(bool prompt) {
     #endif
 }
 
+extern "C" bool Elevate(char* process, char** args) {
+    AuthorizationRef authRef;
+    OSStatus status;
+
+    status = AuthorizationCreate(NULL, kAuthorizationEmptyEnvironment,
+                                kAuthorizationFlagDefaults, &authRef);
+    if (status != errAuthorizationSuccess) {
+        printf("Failed to create AuthorizationRef\n");
+        return false;
+    }
+
+    AuthorizationItem authItem = {kAuthorizationRightExecute, 0, NULL, 0};
+    AuthorizationRights authRights = {1, &authItem};
+    AuthorizationFlags flags = kAuthorizationFlagDefaults |
+                                kAuthorizationFlagInteractionAllowed |
+                                kAuthorizationFlagPreAuthorize |
+                                kAuthorizationFlagExtendRights;
+    status = AuthorizationCopyRights(authRef, &authRights, kAuthorizationEmptyEnvironment, flags, NULL);
+    if (status != errAuthorizationSuccess) {
+        printf("Failed to authorize\n");
+        return false;
+    }
+
+    if (process != NULL) {
+        FILE *pipe = NULL;
+        status = AuthorizationExecuteWithPrivileges(authRef, process, kAuthorizationFlagDefaults, args, &pipe);
+        if (status != errAuthorizationSuccess) {
+            printf("Failed to run as root\n");
+            AuthorizationFree(authRef, kAuthorizationFlagDefaults);
+            return false;
+        }
+    }
+
+    AuthorizationFree(authRef, kAuthorizationFlagDefaults);
+    return true;
+}
+
 extern "C" bool MacCheckAdminAuthorization() {
-  AuthorizationRef authRef;
-  OSStatus status;
-
-  status = AuthorizationCreate(NULL, kAuthorizationEmptyEnvironment,
-                               kAuthorizationFlagDefaults, &authRef);
-  if (status != errAuthorizationSuccess) {
-    printf("Failed to create AuthorizationRef\n");
-    return false;
-  }
-
-  AuthorizationItem authItem = {kAuthorizationRightExecute, 0, NULL, 0};
-  AuthorizationRights authRights = {1, &authItem};
-  AuthorizationFlags flags = kAuthorizationFlagDefaults |
-                             kAuthorizationFlagInteractionAllowed |
-                             kAuthorizationFlagPreAuthorize |
-                             kAuthorizationFlagExtendRights;
-  status = AuthorizationCopyRights(authRef, &authRights, kAuthorizationEmptyEnvironment, flags, NULL);
-  if (status != errAuthorizationSuccess) {
-    printf("Failed to authorize\n");
-    return false;
-  }
-
-  AuthorizationFree(authRef, kAuthorizationFlagDefaults);
-  return true;
+    return Elevate(NULL, NULL);
 }
 
 extern "C" float BackingScaleFactor() {

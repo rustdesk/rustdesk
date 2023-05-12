@@ -112,7 +112,7 @@ pub fn core_main() -> Option<Vec<String>> {
         #[cfg(not(debug_assertions))]
         let load_plugins = crate::platform::is_installed();
         if load_plugins {
-            hbb_common::allow_err!(crate::plugin::load_plugins());
+            crate::plugin::init();
         }
     }
     if args.is_empty() {
@@ -240,6 +240,15 @@ pub fn core_main() -> Option<Vec<String>> {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             crate::flutter::connection_manager::start_cm_no_ui();
             return None;
+        } else {
+            #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            if args[0] == "--plugin-install" {
+                if args.len() == 3 {
+                    crate::plugin::install_plugin_with_url(&args[1], &args[2]);
+                }
+                return None;
+            }
         }
     }
     //_async_logger_holder.map(|x| x.flush());

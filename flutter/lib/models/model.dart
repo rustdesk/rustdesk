@@ -17,8 +17,8 @@ import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/models/user_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/plugin/event.dart';
-import 'package:flutter_hbb/plugin/desc.dart';
-import 'package:flutter_hbb/plugin/widget.dart';
+import 'package:flutter_hbb/plugin/manager.dart';
+import 'package:flutter_hbb/plugin/widgets/desc_ui.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:tuple/tuple.dart';
@@ -230,8 +230,8 @@ class FfiModel with ChangeNotifier {
         parent.target?.serverModel.updateVoiceCallState(evt);
       } else if (name == 'fingerprint') {
         FingerprintState.find(peerId).value = evt['fingerprint'] ?? '';
-      } else if (name == 'plugin_desc') {
-        updateDesc(evt);
+      } else if (name == 'plugin_manager') {
+        pluginManager.handleEvent(evt);
       } else if (name == 'plugin_event') {
         handlePluginEvent(
             evt, peerId, (Map<String, dynamic> e) => handleMsgBox(e, peerId));

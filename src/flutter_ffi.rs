@@ -1497,17 +1497,8 @@ pub fn plugin_reload(_id: String) {
     }
 }
 
-pub fn plugin_id_uninstall(_id: String) {
-    #[cfg(feature = "plugin_framework")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        crate::plugin::unload_plugin(&_id);
-        allow_err!(crate::plugin::ipc::uninstall_plugin(&_id));
-    }
-}
-
 #[inline]
-pub fn plugin_id_enable(_id: String, _v: bool) {
+pub fn plugin_enable(_id: String, _v: bool) -> SyncReturn<()> {
     #[cfg(feature = "plugin_framework")]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
@@ -1517,14 +1508,15 @@ pub fn plugin_id_enable(_id: String, _v: bool) {
             _v.to_string()
         ));
         if _v {
-            allow_err!(crate::plugin::load_plugin(None, Some(&_id)));
+            allow_err!(crate::plugin::load_plugin(&_id));
         } else {
             crate::plugin::unload_plugin(&_id);
         }
     }
+    SyncReturn(())
 }
 
-pub fn plugin_id_is_enabled(_id: String) -> SyncReturn<bool> {
+pub fn plugin_is_enabled(_id: String) -> SyncReturn<bool> {
     #[cfg(feature = "plugin_framework")]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
@@ -1542,42 +1534,6 @@ pub fn plugin_id_is_enabled(_id: String) -> SyncReturn<bool> {
     ))]
     {
         SyncReturn(false)
-    }
-}
-
-pub fn plugin_enable(_v: bool) {
-    #[cfg(feature = "plugin_framework")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        allow_err!(crate::plugin::ipc::set_manager_config(
-            "enabled",
-            _v.to_string()
-        ));
-        if _v {
-            allow_err!(crate::plugin::load_plugins());
-        } else {
-            crate::plugin::unload_plugins();
-        }
-    }
-}
-
-pub fn plugin_is_enabled() -> SyncReturn<Option<bool>> {
-    #[cfg(feature = "plugin_framework")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        let r = match crate::plugin::ipc::get_manager_config("enabled") {
-            Ok(Some(enabled)) => Some(bool::from_str(&enabled).unwrap_or(false)),
-            _ => None,
-        };
-        SyncReturn(r)
-    }
-    #[cfg(any(
-        not(feature = "plugin_framework"),
-        target_os = "android",
-        target_os = "ios"
-    ))]
-    {
-        SyncReturn(Some(false))
     }
 }
 
@@ -1607,6 +1563,28 @@ pub fn plugin_sync_ui(_sync_to: String) {
     {
         if plugin_feature_is_enabled().0 {
             crate::plugin::sync_ui(_sync_to);
+        }
+    }
+}
+
+pub fn plugin_list_reload() {
+    #[cfg(feature = "plugin_framework")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        crate::plugin::load_plugin_list();
+    }
+}
+
+pub fn plugin_install(id: String, b: bool) {
+    #[cfg(feature = "plugin_framework")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        if b {
+            if let Err(e) = crate::plugin::install_plugin(&id) {
+                log::error!("Failed to install plugin '{}': {}", id, e);
+            }
+        } else {
+            crate::plugin::uninstall_plugin(&id, true);
         }
     }
 }

@@ -126,6 +126,7 @@ void runMainApp(bool startService) async {
     // await windowManager.ensureInitialized();
     gFFI.serverModel.startService();
     bind.pluginSyncUi(syncTo: kAppTypeMain);
+    bind.pluginListReload();
   }
   gFFI.userModel.refreshCurrentUser();
   runApp(App());

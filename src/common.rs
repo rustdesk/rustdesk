@@ -1,6 +1,6 @@
 use std::{
     future::Future,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, RwLock},
 };
 
 #[derive(Debug, Eq, PartialEq)]
@@ -19,7 +19,7 @@ use hbb_common::compress::decompress;
 use hbb_common::{
     allow_err,
     compress::compress as compress_func,
-    config::{self, Config, COMPRESS_LEVEL, RENDEZVOUS_TIMEOUT},
+    config::{self, Config, RENDEZVOUS_TIMEOUT},
     get_version_number, log,
     message_proto::*,
     protobuf::Enum,
@@ -61,11 +61,25 @@ lazy_static::lazy_static! {
 
 lazy_static::lazy_static! {
     static ref IS_SERVER: bool = std::env::args().nth(1) == Some("--server".to_owned());
+    static ref SERVER_RUNNING: Arc<RwLock<bool>> = Default::default();
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 lazy_static::lazy_static! {
     static ref ARBOARD_MTX: Arc<Mutex<()>> = Arc::new(Mutex::new(()));
+}
+
+pub struct SimpleCallOnReturn {
+    pub b: bool,
+    pub f: Box<dyn Fn() + 'static>,
+}
+
+impl Drop for SimpleCallOnReturn {
+    fn drop(&mut self) {
+        if self.b {
+            (self.f)();
+        }
+    }
 }
 
 pub fn global_init() -> bool {
@@ -81,8 +95,13 @@ pub fn global_init() -> bool {
 pub fn global_clean() {}
 
 #[inline]
+pub fn set_server_running(b: bool) {
+    *SERVER_RUNNING.write().unwrap() = b;
+}
+
+#[inline]
 pub fn is_server() -> bool {
-    *IS_SERVER
+    *IS_SERVER || *SERVER_RUNNING.read().unwrap()
 }
 
 #[inline]
@@ -98,7 +117,7 @@ pub fn valid_for_numlock(evt: &KeyEvent) -> bool {
 
 pub fn create_clipboard_msg(content: String) -> Message {
     let bytes = content.into_bytes();
-    let compressed = compress_func(&bytes, COMPRESS_LEVEL);
+    let compressed = compress_func(&bytes);
     let compress = compressed.len() < bytes.len();
     let content = if compress { compressed } else { bytes };
     let mut msg = Message::new();

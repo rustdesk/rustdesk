@@ -1,6 +1,9 @@
-use hbb_common::{libc, ResultType};
+use hbb_common::{libc, log, ResultType};
+#[cfg(target_os = "windows")]
+use std::env;
 use std::{
     ffi::{c_char, c_int, c_void, CStr},
+    path::PathBuf,
     ptr::null,
 };
 
@@ -10,27 +13,35 @@ mod config;
 pub mod desc;
 mod errno;
 pub mod ipc;
+mod manager;
 pub mod native;
 pub mod native_handlers;
 mod plog;
 mod plugins;
 
+pub use manager::{
+    install::install_plugin_with_url, install_plugin, load_plugin_list, uninstall_plugin,
+};
 pub use plugins::{
     handle_client_event, handle_listen_event, handle_server_event, handle_ui_event, load_plugin,
-    load_plugins, reload_plugin, sync_ui, unload_plugin, unload_plugins,
+    reload_plugin, sync_ui, unload_plugin,
 };
 
-const MSG_TO_UI_TYPE_PLUGIN_DESC: &str = "plugin_desc";
 const MSG_TO_UI_TYPE_PLUGIN_EVENT: &str = "plugin_event";
 const MSG_TO_UI_TYPE_PLUGIN_RELOAD: &str = "plugin_reload";
 const MSG_TO_UI_TYPE_PLUGIN_OPTION: &str = "plugin_option";
+const MSG_TO_UI_TYPE_PLUGIN_MANAGER: &str = "plugin_manager";
 
 pub const EVENT_ON_CONN_CLIENT: &str = "on_conn_client";
 pub const EVENT_ON_CONN_SERVER: &str = "on_conn_server";
 pub const EVENT_ON_CONN_CLOSE_CLIENT: &str = "on_conn_close_client";
 pub const EVENT_ON_CONN_CLOSE_SERVER: &str = "on_conn_close_server";
 
+static PLUGIN_SOURCE_LOCAL_DIR: &str = "plugins";
+
 pub use config::{ManagerConfig, PeerConfig, SharedConfig};
+
+use crate::common::is_server;
 
 /// Common plugin return.
 ///
@@ -77,6 +88,49 @@ impl PluginReturn {
     }
 }
 
+pub fn init() {
+    if !is_server() {
+        std::thread::spawn(move || manager::start_ipc());
+    } else {
+        if let Err(e) = manager::remove_plugins() {
+            log::error!("Failed to remove plugins: {}", e);
+        }
+    }
+    if let Err(e) = plugins::load_plugins() {
+        log::error!("Failed to load plugins: {}", e);
+    }
+}
+
+#[inline]
+#[cfg(target_os = "windows")]
+fn get_share_dir() -> ResultType<PathBuf> {
+    Ok(PathBuf::from(env::var("ProgramData")?))
+}
+
+#[inline]
+#[cfg(target_os = "linux")]
+fn get_share_dir() -> ResultType<PathBuf> {
+    Ok(PathBuf::from("/usr/share"))
+}
+
+#[inline]
+#[cfg(target_os = "macos")]
+fn get_share_dir() -> ResultType<PathBuf> {
+    Ok(PathBuf::from("/Library/Application Support"))
+}
+
+#[inline]
+fn get_plugins_dir() -> ResultType<PathBuf> {
+    Ok(get_share_dir()?
+        .join("RustDesk")
+        .join(PLUGIN_SOURCE_LOCAL_DIR))
+}
+
+#[inline]
+fn get_plugin_dir(id: &str) -> ResultType<PathBuf> {
+    Ok(get_plugins_dir()?.join(id))
+}
+
 #[inline]
 fn cstr_to_string(cstr: *const c_char) -> ResultType<String> {
     Ok(String::from_utf8(unsafe {
@@ -100,10 +154,10 @@ fn str_to_cstr_ret(s: &str) -> *const c_char {
 }
 
 #[inline]
-fn free_c_ptr(ret: *mut c_void) {
-    if !ret.is_null() {
+fn free_c_ptr(p: *mut c_void) {
+    if !p.is_null() {
         unsafe {
-            libc::free(ret);
+            libc::free(p);
         }
     }
 }

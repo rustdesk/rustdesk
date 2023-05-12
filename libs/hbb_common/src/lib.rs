@@ -46,6 +46,7 @@ pub mod keyboard;
 pub use sysinfo;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use dlopen;
+pub use toml;
 
 #[cfg(feature = "quic")]
 pub type Stream = quic::Connection;
