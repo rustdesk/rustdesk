@@ -754,6 +754,7 @@ pub struct AudioHandler {
     #[cfg(not(any(target_os = "android", target_os = "linux")))]
     audio_stream: Option<Box<dyn StreamTrait>>,
     channels: u16,
+    #[cfg(not(any(target_os = "android", target_os = "linux")))]
     device_channel: u16,
     #[cfg(not(any(target_os = "android", target_os = "linux")))]
     ready: Arc<std::sync::Mutex<bool>>,
