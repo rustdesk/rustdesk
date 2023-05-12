@@ -76,7 +76,7 @@ dependencies:
   desktop_drop: 
     git:
       url: https://github.com/Kingtous/mixin-flutter-plugins.git
-      ref: 5720b83b511d7642ad15908b51d9aba8192528e7
+      ref: ba76531701885d9de8a69ee0167e1610cf76e440
       path: ./packages/desktop_drop
   scroll_pos: ^0.4.0
   debounce_throttle: ^2.0.0
