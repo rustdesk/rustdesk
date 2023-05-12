@@ -501,10 +501,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Select a peer", "Выберите удалённый узел"),
         ("Select peers", "Выберите удалённые узлы"),
         ("Plugins", "Плагины"),
-        ("Uninstall", ""),
-        ("Update", ""),
-        ("Enable", ""),
-        ("Disable", ""),
-        ("Options", ""),
+        ("Uninstall", "Удалить"),
+        ("Update", "Обновить"),
+        ("Enable", "Включить"),
+        ("Disable", "Отключить"),
+        ("Options", "Настройки"),
     ].iter().cloned().collect();
 }
