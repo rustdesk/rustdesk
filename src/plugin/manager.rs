@@ -67,82 +67,38 @@ fn get_source_plugins() -> HashMap<String, PluginInfo> {
     let mut plugins = HashMap::new();
     for source in get_plugin_source_list().into_iter() {
         let url = format!("{}/meta.toml", source.url);
-        // match reqwest::blocking::get(&url) {
-        //     Ok(resp) => {
-        //         if !resp.status().is_success() {
-        //             log::error!(
-        //                 "Failed to get plugin list from '{}', status code: {}",
-        //                 url,
-        //                 resp.status()
-        //             );
-        //         }
-        //         if let Ok(text) = resp.text() {
-        //             match toml::from_str::<ManagerMeta>(&text) {
-        //                 Ok(manager_meta) => {
-        //                     for meta in manager_meta.plugins.iter() {
-        //                         if !meta.platforms.to_uppercase().contains(&PLUGIN_PLATFORM.to_uppercase()) {
-        //                             continue;
-        //                         }
-        //                         plugins.insert(
-        //                             meta.id.clone(),
-        //                             PluginInfo {
-        //                                 source: source.clone(),
-        //                                 meta: meta.clone(),
-        //                                 installed_version: "".to_string(),
-        //                                 invalid_reason: "".to_string(),
-        //                             },
-        //                         );
-        //                     }
-        //                 }
-        //                 Err(e) => log::error!("Failed to parse plugin list from '{}', {}", url, e),
-        //             }
-        //         }
-        //     }
-        //     Err(e) => log::error!("Failed to get plugin list from '{}', {}", url, e),
-        // }
-
-        let text = r#"
-version = "v0.1.0"
-description = ""
-
-[[plugins]]
-id = "RustDesk.c.privacy-mode"
-name = "Privacy Mode"
-version = "v0.1.0"
-description = "This plugin can enable private mode to prevent others from seeing your operations."
-platforms = "Windows,Linux,MacOS"
-author = "RustDesk"
-home = ""
-license = "MIT"
-source = ""
-
-[plugins.publish_info]
-published = "2023-05-07 14:00:00"
-last_released = "2023-05-07 14:00:00"
-        "#
-        .to_string();
-        match toml::from_str::<ManagerMeta>(&text) {
-            Ok(manager_meta) => {
-                for meta in manager_meta.plugins.iter() {
-                    if !meta
-                        .platforms
-                        .to_uppercase()
-                        .contains(&PLUGIN_PLATFORM.to_uppercase())
-                    {
-                        continue;
-                    }
-                    plugins.insert(
-                        meta.id.clone(),
-                        PluginInfo {
-                            source: source.clone(),
-                            meta: meta.clone(),
-                            installed_version: "".to_string(),
-                            invalid_reason: "".to_string(),
-                        },
+        match reqwest::blocking::get(&url) {
+            Ok(resp) => {
+                if !resp.status().is_success() {
+                    log::error!(
+                        "Failed to get plugin list from '{}', status code: {}",
+                        url,
+                        resp.status()
                     );
                 }
+                if let Ok(text) = resp.text() {
+                    match toml::from_str::<ManagerMeta>(&text) {
+                        Ok(manager_meta) => {
+                            for meta in manager_meta.plugins.iter() {
+                                if !meta.platforms.to_uppercase().contains(&PLUGIN_PLATFORM.to_uppercase()) {
+                                    continue;
+                                }
+                                plugins.insert(
+                                    meta.id.clone(),
+                                    PluginInfo {
+                                        source: source.clone(),
+                                        meta: meta.clone(),
+                                        installed_version: "".to_string(),
+                                        invalid_reason: "".to_string(),
+                                    },
+                                );
+                            }
+                        }
+                        Err(e) => log::error!("Failed to parse plugin list from '{}', {}", url, e),
+                    }
+                }
             }
-            Err(e) => log::error!("Failed to parse plugin list from '{}', {}", url, e),
+            Err(e) => log::error!("Failed to get plugin list from '{}', {}", url, e),
         }
     }
     plugins
