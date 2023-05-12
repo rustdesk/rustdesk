@@ -179,7 +179,7 @@ fn elevate_install(
     if !same_plugin_exists {
         args.push(&plugin_url);
     }
-    allowed_install = match crate::platform::elevate(args) {
+    let allowed_install = match crate::platform::elevate(args) {
         Ok(Some(mut child)) => match child.wait() {
             Ok(status) => {
                 if status.success() {
