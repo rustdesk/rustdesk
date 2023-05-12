@@ -41,8 +41,10 @@ dependencies:
   #firebase_analytics: ^9.1.5
   package_info_plus: ^3.1.2
   url_launcher: ^6.0.9
-  toggle_switch: ^1.4.0
-  dash_chat_2: ^0.0.15
+  toggle_switch: ^2.1.0
+  dash_chat_2: 
+    git:
+      url: https://github.com/Kingtous/Dash-Chat-2.git
   draggable_float_widget: ^0.0.2
   settings_ui: ^2.0.2
   flutter_breadcrumb: ^1.0.1
