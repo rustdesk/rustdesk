@@ -80,7 +80,11 @@ fn get_source_plugins() -> HashMap<String, PluginInfo> {
                     match toml::from_str::<ManagerMeta>(&text) {
                         Ok(manager_meta) => {
                             for meta in manager_meta.plugins.iter() {
-                                if !meta.platforms.to_uppercase().contains(&PLUGIN_PLATFORM.to_uppercase()) {
+                                if !meta
+                                    .platforms
+                                    .to_uppercase()
+                                    .contains(&PLUGIN_PLATFORM.to_uppercase())
+                                {
                                     continue;
                                 }
                                 plugins.insert(
@@ -166,10 +170,10 @@ fn elevate_install(
     } else {
         format!("--plugin-install {} {}", plugin_id, plugin_url)
     };
-    Ok(crate::platform::elevate(&args)?)
+    crate::platform::elevate(&args)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn elevate_install(
     plugin_id: &str,
     plugin_url: &str,
@@ -179,44 +183,7 @@ fn elevate_install(
     if !same_plugin_exists {
         args.push(&plugin_url);
     }
-    let allowed_install = match crate::platform::elevate(args) {
-        Ok(Some(mut child)) => match child.wait() {
-            Ok(status) => {
-                if status.success() {
-                    true
-                } else {
-                    log::error!(
-                        "Failed to wait install process, process status: {:?}",
-                        status
-                    );
-                    false
-                }
-            }
-            Err(e) => {
-                log::error!("Failed to wait install process, error: {}", e);
-                false
-            }
-        },
-        Ok(None) => false,
-        Err(e) => {
-            log::error!("Failed to run install process, error: {}", e);
-            false
-        }
-    };
-    Ok(allowed_install)
-}
-
-#[cfg(target_os = "macos")]
-fn elevate_install(
-    plugin_id: &str,
-    plugin_url: &str,
-    same_plugin_exists: bool,
-) -> ResultType<bool> {
-    let mut args = vec!["--plugin-install", plugin_id];
-    if !same_plugin_exists {
-        args.push(&plugin_url);
-    }
-    Ok(crate::platform::elevate(args)?)
+    crate::platform::elevate(args)
 }
 
 pub fn install_plugin(id: &str) -> ResultType<()> {
