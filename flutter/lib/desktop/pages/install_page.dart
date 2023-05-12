@@ -24,13 +24,13 @@ class _InstallPageState extends State<InstallPage> {
   void initState() {
     super.initState();
     Get.put<DesktopTabController>(tabController);
-    const lable = "install";
+    const label = "install";
     tabController.add(TabInfo(
-        key: lable,
-        label: lable,
+        key: label,
+        label: label,
         closable: false,
         page: _InstallPageBody(
-          key: const ValueKey(lable),
+          key: const ValueKey(label),
         )));
   }
 
