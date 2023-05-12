@@ -51,7 +51,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: "stable"
-          flutter-version: ${{ env.FLUTTER_VERSION }}
+          flutter-version: "3.7.0"
           cache: true
 
       - name: Install flutter rust bridge deps
