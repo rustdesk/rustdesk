@@ -1512,8 +1512,8 @@ pub fn plugin_enable(_id: String, _v: bool) -> SyncReturn<()> {
         } else {
             crate::plugin::unload_plugin(&_id);
         }
-        SyncReturn(())
     }
+    SyncReturn(())
 }
 
 pub fn plugin_is_enabled(_id: String) -> SyncReturn<bool> {
