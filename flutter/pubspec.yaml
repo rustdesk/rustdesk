@@ -73,14 +73,17 @@ dependencies:
   get: ^4.6.5
   visibility_detector: ^0.4.0+2
   contextmenu: ^3.0.0
-  # Disable desktop_drop for now, because it may cause crash on Win11 when destructing.
-  # desktop_drop: ^0.4.1
+  desktop_drop: 
+    git:
+      url: https://github.com/Kingtous/mixin-flutter-plugins.git
+      ref: 5720b83b511d7642ad15908b51d9aba8192528e7
+      path: ./packages/desktop_drop
   scroll_pos: ^0.4.0
   debounce_throttle: ^2.0.0
   file_picker: ^5.1.0
   flutter_svg: ^2.0.5
   flutter_improved_scrolling:
-    # currently, we use flutter 3.7.0+.
+    # currently, we use flutter 3.10.0+.
     #
     # for flutter 3.0.5, please use official version(just comment code below).
     # if build rustdesk by flutter >=3.3, please use our custom pub below (uncomment code below).
@@ -103,8 +106,6 @@ dependencies:
   texture_rgba_renderer: ^0.0.16
   percent_indicator: ^4.2.2
   dropdown_button2: ^2.0.0
-  fluentui_system_icons: ^1.1.201
-  desktop_drop: ^0.4.1
 
 dev_dependencies:
   icons_launcher: ^2.0.4
