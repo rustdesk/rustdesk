@@ -793,10 +793,16 @@ impl Connection {
         self.send(msg_out).await;
     }
 
+    #[inline]
+    async fn sleep_to_ensure_msg_recved() {
+        sleep(1.).await;
+    }
+
     async fn check_privacy_mode_on(&mut self) -> bool {
         if video_service::get_privacy_mode_conn_id() > 0 {
             self.send_login_error("Someone turns on privacy mode, exit")
                 .await;
+            Self::sleep_to_ensure_msg_recved().await;
             false
         } else {
             true
@@ -828,7 +834,7 @@ impl Connection {
                 true,
                 json!({ "ip":addr.ip() }),
             );
-            sleep(1.).await;
+            Self::sleep_to_ensure_msg_recved().await;
             return false;
         }
         true
