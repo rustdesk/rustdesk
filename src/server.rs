@@ -118,15 +118,6 @@ async fn accept_connection_(server: ServerPtr, socket: Stream, secure: bool) -> 
     Ok(())
 }
 
-async fn check_privacy_mode_on(stream: &mut Stream) -> ResultType<()> {
-    if video_service::get_privacy_mode_conn_id() > 0 {
-        let msg_out =
-            crate::common::make_privacy_mode_msg(back_notification::PrivacyModeState::PrvOnByOther);
-        timeout(CONNECT_TIMEOUT, stream.send(&msg_out)).await??;
-    }
-    Ok(())
-}
-
 pub async fn create_tcp_connection(
     server: ServerPtr,
     stream: Stream,
@@ -134,8 +125,6 @@ pub async fn create_tcp_connection(
     secure: bool,
 ) -> ResultType<()> {
     let mut stream = stream;
-    check_privacy_mode_on(&mut stream).await?;
-
     let id = {
         let mut w = server.write().unwrap();
         w.id_count += 1;

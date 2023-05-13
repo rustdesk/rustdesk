@@ -322,6 +322,7 @@ impl Connection {
             tx_desktop_ready: _tx_desktop_ready,
         };
         if !conn.on_open(addr).await {
+            conn.sleep_to_ensure_msg_recved().await;
             return;
         }
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -793,8 +794,22 @@ impl Connection {
         self.send(msg_out).await;
     }
 
-    async fn on_open(&mut self, addr: SocketAddr) -> bool {
-        log::debug!("#{} Connection opened from {}.", self.inner.id, addr);
+    #[inline]
+    async fn sleep_to_ensure_msg_recved() {
+        sleep(1.).await;
+    }
+
+    async fn check_privacy_mode_on(&mut self) -> bool {
+        if video_service::get_privacy_mode_conn_id() > 0 {
+            self.send_login_error("Someone turns on privacy mode, exit")
+                .await;
+            false
+        } else {
+            true
+        }
+    }
+
+    async fn check_whitelist(&mut self, addr: &SocketAddr) -> bool {
         let whitelist: Vec<String> = Config::get_option("whitelist")
             .split(",")
             .filter(|x| !x.is_empty())
@@ -819,7 +834,17 @@ impl Connection {
                 true,
                 json!({ "ip":addr.ip() }),
             );
-            sleep(1.).await;
+            return false;
+        }
+        true
+    }
+
+    async fn on_open(&mut self, addr: SocketAddr) -> bool {
+        log::debug!("#{} Connection opened from {}.", self.inner.id, addr);
+        if !self.check_privacy_mode_on().await {
+            return false;
+        }
+        if !self.check_whitelist(&addr).await {
             return false;
         }
         self.ip = addr.ip().to_string();
