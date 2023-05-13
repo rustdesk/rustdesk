@@ -798,8 +798,7 @@ impl Connection {
             self.send_login_error("Someone turns on privacy mode, exit")
                 .await;
             false
-        }
-        {
+        } else {
             true
         }
     }
