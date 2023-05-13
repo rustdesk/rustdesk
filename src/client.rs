@@ -96,6 +96,17 @@ pub const SCRAP_OTHER_VERSION_OR_X11_REQUIRED: &str =
 pub const SCRAP_X11_REQUIRED: &str = "x11 expected";
 pub const SCRAP_X11_REF_URL: &str = "https://rustdesk.com/docs/en/manual/linux/#x11-required";
 
+#[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub(crate) struct ClientClipboardContext;
+
+#[cfg(not(feature = "flutter"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub(crate) struct ClientClipboardContext {
+    pub cfg: SessionPermissionConfig,
+    pub tx: UnboundedSender<Data>,
+}
+
 /// Client of the remote desktop.
 pub struct Client;
 
@@ -529,18 +540,8 @@ impl Client {
                     if let Some(message::Union::SignedId(si)) = msg_in.union {
                         if let Ok((id, their_pk_b)) = decode_id_pk(&si.id, &sign_pk) {
                             if id == peer_id {
-                                let their_pk_b = box_::PublicKey(their_pk_b);
-                                let (our_pk_b, out_sk_b) = box_::gen_keypair();
-                                let key = secretbox::gen_key();
-                                let nonce = box_::Nonce([0u8; box_::NONCEBYTES]);
-                                let sealed_key = box_::seal(&key.0, &nonce, &their_pk_b, &out_sk_b);
-                                let mut msg_out = Message::new();
-                                msg_out.set_public_key(PublicKey {
-                                    asymmetric_value: Vec::from(our_pk_b.0).into(),
-                                    symmetric_value: sealed_key.into(),
-                                    ..Default::default()
-                                });
-                                timeout(CONNECT_TIMEOUT, conn.send(&msg_out)).await??;
+                                let (msg, key) = create_symmetric_key_msg(their_pk_b);
+                                timeout(CONNECT_TIMEOUT, conn.send(&msg)).await??;
                                 conn.set_key(key);
                             } else {
                                 log::error!("Handshake failed: sign failure");
@@ -2489,13 +2490,17 @@ fn decode_id_pk(signed: &[u8], key: &sign::PublicKey) -> ResultType<(String, [u8
     }
 }
 
-#[cfg(feature = "flutter")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub(crate) struct ClientClipboardContext;
-
-#[cfg(not(feature = "flutter"))]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub(crate) struct ClientClipboardContext {
-    pub cfg: SessionPermissionConfig,
-    pub tx: UnboundedSender<Data>,
+fn create_symmetric_key_msg(their_pk_b: [u8; 32]) -> (Message, secretbox::Key) {
+    let their_pk_b = box_::PublicKey(their_pk_b);
+    let (our_pk_b, out_sk_b) = box_::gen_keypair();
+    let key = secretbox::gen_key();
+    let nonce = box_::Nonce([0u8; box_::NONCEBYTES]);
+    let sealed_key = box_::seal(&key.0, &nonce, &their_pk_b, &out_sk_b);
+    let mut msg_out = Message::new();
+    msg_out.set_public_key(PublicKey {
+        asymmetric_value: Vec::from(our_pk_b.0).into(),
+        symmetric_value: sealed_key.into(),
+        ..Default::default()
+    });
+    (msg_out, key)
 }
