@@ -322,7 +322,8 @@ impl Connection {
             tx_desktop_ready: _tx_desktop_ready,
         };
         if !conn.on_open(addr).await {
-            conn.sleep_to_ensure_msg_recved().await;
+            // sleep to ensure msg got received.
+            sleep(1.).await;
             return;
         }
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -792,11 +793,6 @@ impl Connection {
         let mut msg_out = Message::new();
         msg_out.set_misc(misc);
         self.send(msg_out).await;
-    }
-
-    #[inline]
-    async fn sleep_to_ensure_msg_recved() {
-        sleep(1.).await;
     }
 
     async fn check_privacy_mode_on(&mut self) -> bool {
