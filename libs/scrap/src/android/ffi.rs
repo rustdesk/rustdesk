@@ -49,10 +49,11 @@ impl FrameRaw {
         self.enable = value;
     }
 
-    fn update(&mut self, data: *mut u8) {
+    fn update(&mut self, data: *mut u8, len: usize) {
         if self.enable.not() {
             return;
         }
+        self.len = len;
         self.ptr.store(data, SeqCst);
         self.last_update = Instant::now();
     }
@@ -98,8 +99,9 @@ pub extern "system" fn Java_com_carriez_flutter_1hbb_MainService_onVideoFrameUpd
     buffer: JObject,
 ) {
     let jb = JByteBuffer::from(buffer);
-    let slice = env.get_direct_buffer_address(&jb).unwrap();
-    VIDEO_RAW.lock().unwrap().update(slice);
+    let data = env.get_direct_buffer_address(&jb).unwrap();
+    let len = env.get_direct_buffer_capacity(&jb).unwrap();
+    VIDEO_RAW.lock().unwrap().update(data, len);
 }
 
 #[no_mangle]
@@ -109,8 +111,9 @@ pub extern "system" fn Java_com_carriez_flutter_1hbb_MainService_onAudioFrameUpd
     buffer: JObject,
 ) {
     let jb = JByteBuffer::from(buffer);
-    let slice = env.get_direct_buffer_address(&jb).unwrap();
-    AUDIO_RAW.lock().unwrap().update(slice);
+    let data = env.get_direct_buffer_address(&jb).unwrap();
+    let len = env.get_direct_buffer_capacity(&jb).unwrap();
+    AUDIO_RAW.lock().unwrap().update(data, len);
 }
 
 #[no_mangle]
