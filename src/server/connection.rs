@@ -793,8 +793,18 @@ impl Connection {
         self.send(msg_out).await;
     }
 
-    async fn on_open(&mut self, addr: SocketAddr) -> bool {
-        log::debug!("#{} Connection opened from {}.", self.inner.id, addr);
+    async fn check_privacy_mode_on(&mut self) -> bool {
+        if video_service::get_privacy_mode_conn_id() > 0 {
+            self.send_login_error("Someone turns on privacy mode, exit")
+                .await;
+            false
+        }
+        {
+            true
+        }
+    }
+
+    async fn check_whitelist(&mut self, addr: &SocketAddr) -> bool {
         let whitelist: Vec<String> = Config::get_option("whitelist")
             .split(",")
             .filter(|x| !x.is_empty())
@@ -820,6 +830,17 @@ impl Connection {
                 json!({ "ip":addr.ip() }),
             );
             sleep(1.).await;
+            return false;
+        }
+        true
+    }
+
+    async fn on_open(&mut self, addr: SocketAddr) -> bool {
+        log::debug!("#{} Connection opened from {}.", self.inner.id, addr);
+        if !self.check_privacy_mode_on().await {
+            return false;
+        }
+        if !self.check_whitelist(&addr).await {
             return false;
         }
         self.ip = addr.ip().to_string();
