@@ -322,6 +322,7 @@ impl Connection {
             tx_desktop_ready: _tx_desktop_ready,
         };
         if !conn.on_open(addr).await {
+            conn.sleep_to_ensure_msg_recved().await;
             return;
         }
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -802,7 +803,6 @@ impl Connection {
         if video_service::get_privacy_mode_conn_id() > 0 {
             self.send_login_error("Someone turns on privacy mode, exit")
                 .await;
-            Self::sleep_to_ensure_msg_recved().await;
             false
         } else {
             true
@@ -834,7 +834,6 @@ impl Connection {
                 true,
                 json!({ "ip":addr.ip() }),
             );
-            Self::sleep_to_ensure_msg_recved().await;
             return false;
         }
         true
