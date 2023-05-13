@@ -1717,7 +1717,6 @@ impl LoginConfigHandler {
         self.force_relay = false;
         if direct && !received {
             let errno = errno::errno().0;
-            log::info!("errno is {}", errno);
             // TODO: check mac and ios
             if cfg!(windows) && errno == 10054 || !cfg!(windows) && errno == 104 {
                 self.force_relay = true;
