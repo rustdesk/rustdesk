@@ -321,6 +321,9 @@ impl Connection {
             #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
             tx_desktop_ready: _tx_desktop_ready,
         };
+        if !conn.on_open(addr).await {
+            return;
+        }
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         tokio::spawn(async move {
             if let Err(err) =
@@ -331,10 +334,6 @@ impl Connection {
         });
         #[cfg(target_os = "android")]
         start_channel(rx_to_cm, tx_from_cm);
-
-        if !conn.on_open(addr).await {
-            return;
-        }
         if !conn.keyboard {
             conn.send_permission(Permission::Keyboard, false).await;
         }
@@ -818,9 +817,7 @@ impl Connection {
             Self::post_alarm_audit(
                 AlarmAuditType::IpWhitelist, //"ip whitelist",
                 true,
-                json!({
-                            "ip":addr.ip(),
-                }),
+                json!({ "ip":addr.ip() }),
             );
             sleep(1.).await;
             return false;
