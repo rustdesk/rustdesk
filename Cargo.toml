@@ -1,5 +1,5 @@
 [package]
-name = "GetRytRemote"
+name = "rustdesk"
 version = "1.2.0"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
