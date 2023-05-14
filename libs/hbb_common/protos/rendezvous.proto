@@ -163,6 +163,10 @@ message OnlineResponse {
   bytes states = 1;
 }
 
+message KeyExchange {
+  repeated bytes keys = 1; 
+}
+
 message RendezvousMessage {
   oneof union {
     RegisterPeer register_peer = 6;
@@ -184,5 +188,6 @@ message RendezvousMessage {
     PeerDiscovery peer_discovery = 22;
     OnlineRequest online_request = 23;
     OnlineResponse online_response = 24;
+    KeyExchange key_exchange = 25;
   }
 }

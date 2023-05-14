@@ -10,7 +10,7 @@ use bytes::Bytes;
 pub use connection::*;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::config::Config2;
-use hbb_common::tcp::new_listener;
+use hbb_common::tcp::{self, new_listener};
 use hbb_common::{
     allow_err,
     anyhow::{anyhow, Context},
@@ -21,7 +21,7 @@ use hbb_common::{
     protobuf::{Enum, Message as _},
     rendezvous_proto::*,
     socket_client,
-    sodiumoxide::crypto::{box_, secretbox, sign},
+    sodiumoxide::crypto::{box_, sign},
     timeout, tokio, ResultType, Stream,
 };
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -158,21 +158,11 @@ pub async fn create_tcp_connection(
                 if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
                     if let Some(message::Union::PublicKey(pk)) = msg_in.union {
                         if pk.asymmetric_value.len() == box_::PUBLICKEYBYTES {
-                            let nonce = box_::Nonce([0u8; box_::NONCEBYTES]);
-                            let mut pk_ = [0u8; box_::PUBLICKEYBYTES];
-                            pk_[..].copy_from_slice(&pk.asymmetric_value);
-                            let their_pk_b = box_::PublicKey(pk_);
-                            let symmetric_key =
-                                box_::open(&pk.symmetric_value, &nonce, &their_pk_b, &our_sk_b)
-                                    .map_err(|_| {
-                                        anyhow!("Handshake failed: box decryption failure")
-                                    })?;
-                            if symmetric_key.len() != secretbox::KEYBYTES {
-                                bail!("Handshake failed: invalid secret key length from peer");
-                            }
-                            let mut key = [0u8; secretbox::KEYBYTES];
-                            key[..].copy_from_slice(&symmetric_key);
-                            stream.set_key(secretbox::Key(key));
+                            stream.set_key(tcp::Encrypt::decode(
+                                &pk.symmetric_value,
+                                &pk.asymmetric_value,
+                                &our_sk_b,
+                            )?);
                         } else if pk.asymmetric_value.is_empty() {
                             Config::set_key_confirmed(false);
                             log::info!("Force to update pk");
@@ -445,7 +435,10 @@ pub async fn start_ipc_url_server() {
                             m.insert("name", "on_url_scheme_received");
                             m.insert("url", url.as_str());
                             let event = serde_json::to_string(&m).unwrap_or("".to_owned());
-                            match crate::flutter::push_global_event(crate::flutter::APP_TYPE_MAIN, event) {
+                            match crate::flutter::push_global_event(
+                                crate::flutter::APP_TYPE_MAIN,
+                                event,
+                            ) {
                                 None => log::warn!("No main window app found!"),
                                 Some(..) => {}
                             }

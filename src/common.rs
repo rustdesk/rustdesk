@@ -19,13 +19,15 @@ use hbb_common::compress::decompress;
 use hbb_common::{
     allow_err,
     compress::compress as compress_func,
-    config::{self, Config, RENDEZVOUS_TIMEOUT},
+    config::{self, Config, CONNECT_TIMEOUT, READ_TIMEOUT},
     get_version_number, log,
     message_proto::*,
     protobuf::Enum,
     protobuf::Message as _,
     rendezvous_proto::*,
-    sleep, socket_client, tokio, ResultType,
+    sleep, socket_client,
+    tcp::FramedStream,
+    tokio, ResultType,
 };
 // #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 use hbb_common::{config::RENDEZVOUS_PORT, futures::future::join_all};
@@ -231,7 +233,7 @@ pub fn update_clipboard(clipboard: Clipboard, old: Option<&Arc<Mutex<String>>>) 
 
 pub async fn send_opts_after_login(
     config: &crate::client::LoginConfigHandler,
-    peer: &mut hbb_common::tcp::FramedStream,
+    peer: &mut FramedStream,
 ) {
     if let Some(opts) = config.get_option_message_after_login() {
         let mut misc = Misc::new();
@@ -551,11 +553,8 @@ async fn test_nat_type_() -> ResultType<bool> {
     let mut port1 = 0;
     let mut port2 = 0;
     for i in 0..2 {
-        let mut socket = socket_client::connect_tcp(
-            if i == 0 { &*server1 } else { &*server2 },
-            RENDEZVOUS_TIMEOUT,
-        )
-        .await?;
+        let server = if i == 0 { &*server1 } else { &*server2 };
+        let mut socket = socket_client::connect_tcp(server, CONNECT_TIMEOUT).await?;
         if i == 0 {
             Config::set_option(
                 "local-ip-addr".to_owned(),
@@ -563,21 +562,20 @@ async fn test_nat_type_() -> ResultType<bool> {
             );
         }
         socket.send(&msg_out).await?;
-        if let Some(Ok(bytes)) = socket.next_timeout(RENDEZVOUS_TIMEOUT).await {
-            if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
-                if let Some(rendezvous_message::Union::TestNatResponse(tnr)) = msg_in.union {
-                    if i == 0 {
-                        port1 = tnr.port;
-                    } else {
-                        port2 = tnr.port;
-                    }
-                    if let Some(cu) = tnr.cu.as_ref() {
-                        Config::set_option(
-                            "rendezvous-servers".to_owned(),
-                            cu.rendezvous_servers.join(","),
-                        );
-                        Config::set_serial(cu.serial);
-                    }
+        if let Some(msg_in) = get_next_nonkeyexchange_msg(&mut socket, None).await {
+            if let Some(rendezvous_message::Union::TestNatResponse(tnr)) = msg_in.union {
+                log::debug!("Got nat response from {}: port={}", server, tnr.port);
+                if i == 0 {
+                    port1 = tnr.port;
+                } else {
+                    port2 = tnr.port;
+                }
+                if let Some(cu) = tnr.cu.as_ref() {
+                    Config::set_option(
+                        "rendezvous-servers".to_owned(),
+                        cu.rendezvous_servers.join(","),
+                    );
+                    Config::set_serial(cu.serial);
                 }
             }
         } else {
@@ -654,7 +652,7 @@ async fn test_rendezvous_server_() {
             let tm = std::time::Instant::now();
             if socket_client::connect_tcp(
                 crate::check_port(&host, RENDEZVOUS_PORT),
-                RENDEZVOUS_TIMEOUT,
+                CONNECT_TIMEOUT,
             )
             .await
             .is_ok()
@@ -765,7 +763,7 @@ async fn check_software_update_() -> hbb_common::ResultType<()> {
 
     let rendezvous_server = format!("rs-sg.rustdesk.com:{}", config::RENDEZVOUS_PORT);
     let (mut socket, rendezvous_server) =
-        socket_client::new_udp_for(&rendezvous_server, RENDEZVOUS_TIMEOUT).await?;
+        socket_client::new_udp_for(&rendezvous_server, CONNECT_TIMEOUT).await?;
 
     let mut msg_out = RendezvousMessage::new();
     msg_out.set_software_update(SoftwareUpdate {
@@ -774,12 +772,14 @@ async fn check_software_update_() -> hbb_common::ResultType<()> {
     });
     socket.send(&msg_out, rendezvous_server).await?;
     use hbb_common::protobuf::Message;
-    if let Some(Ok((bytes, _))) = socket.next_timeout(30_000).await {
-        if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
-            if let Some(rendezvous_message::Union::SoftwareUpdate(su)) = msg_in.union {
-                let version = hbb_common::get_version_from_url(&su.url);
-                if get_version_number(&version) > get_version_number(crate::VERSION) {
-                    *SOFTWARE_UPDATE_URL.lock().unwrap() = su.url;
+    for _ in 0..2 {
+        if let Some(Ok((bytes, _))) = socket.next_timeout(READ_TIMEOUT).await {
+            if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
+                if let Some(rendezvous_message::Union::SoftwareUpdate(su)) = msg_in.union {
+                    let version = hbb_common::get_version_from_url(&su.url);
+                    if get_version_number(&version) > get_version_number(crate::VERSION) {
+                        *SOFTWARE_UPDATE_URL.lock().unwrap() = su.url;
+                    }
                 }
             }
         }
@@ -1001,4 +1001,28 @@ pub fn pk_to_fingerprint(pk: Vec<u8>) -> String {
             }
         })
         .collect()
+}
+
+#[inline]
+pub async fn get_next_nonkeyexchange_msg(
+    conn: &mut FramedStream,
+    timeout: Option<u64>,
+) -> Option<RendezvousMessage> {
+    let timeout = timeout.unwrap_or(READ_TIMEOUT);
+    for _ in 0..2 {
+        if let Some(Ok(bytes)) = conn.next_timeout(timeout).await {
+            if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
+                match &msg_in.union {
+                    Some(rendezvous_message::Union::KeyExchange(_)) => {
+                        continue;
+                    }
+                    _ => {
+                        return Some(msg_in);
+                    }
+                }
+            }
+        }
+        break;
+    }
+    None
 }
