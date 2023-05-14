@@ -26,7 +26,7 @@ package() {
 	  mkdir -p "${pkgdir}/usr/lib/rustdesk" && cp -r ${HBB}/flutter/build/linux/x64/release/bundle/* -t "${pkgdir}/usr/lib/rustdesk"
   fi
   mkdir -p "${pkgdir}/usr/bin"
-  ln -s "${pkgdir}/usr/lib/rustdesk/rustdesk" "${pkgdir}/usr/bin/rustdesk"
+  pushd ${pkgdir} && ln -s /usr/lib/rustdesk/rustdesk usr/bin/rustdesk && popd
   install -Dm 644 $HBB/res/rustdesk.service -t "${pkgdir}/usr/share/rustdesk/files"
   install -Dm 644 $HBB/res/rustdesk.desktop -t "${pkgdir}/usr/share/rustdesk/files"
   install -Dm 644 $HBB/res/rustdesk-link.desktop -t "${pkgdir}/usr/share/rustdesk/files"
