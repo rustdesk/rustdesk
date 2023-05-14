@@ -3,7 +3,7 @@ use std::sync::{Arc, RwLock};
 use crate::client::*;
 use hbb_common::{
     allow_err, bail,
-    config::READ_TIMEOUT,
+    config::CONNECT_TIMEOUT,
     futures::{SinkExt, StreamExt},
     log,
     message_proto::*,
@@ -161,7 +161,7 @@ async fn connect_and_login_2(
     let mut received = false;
     loop {
         tokio::select! {
-            res = timeout(READ_TIMEOUT, stream.next()) => match res {
+            res = timeout(CONNECT_TIMEOUT, stream.next()) => match res {
                 Err(_) => {
                     bail!("Timeout");
                 }

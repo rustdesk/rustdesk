@@ -1,7 +1,7 @@
 use crate::client::*;
 use hbb_common::{
     config::PeerConfig,
-    config::READ_TIMEOUT,
+    config::CONNECT_TIMEOUT,
     futures::{SinkExt, StreamExt},
     log,
     message_proto::*,
@@ -111,7 +111,7 @@ pub async fn connect_test(id: &str, key: String, token: String) {
             // rpassword::prompt_password("Input anything to exit").ok();
             loop {
                 tokio::select! {
-                    res = hbb_common::timeout(READ_TIMEOUT, stream.next()) => match res {
+                    res = hbb_common::timeout(CONNECT_TIMEOUT, stream.next()) => match res {
                         Err(_) => {
                             log::error!("Timeout");
                             break;

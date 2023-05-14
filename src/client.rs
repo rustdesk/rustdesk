@@ -31,10 +31,7 @@ use hbb_common::{
     allow_err,
     anyhow::{anyhow, Context},
     bail,
-    config::{
-        Config, PeerConfig, PeerInfoSerde, CONNECT_TIMEOUT, READ_TIMEOUT, RELAY_PORT,
-        RENDEZVOUS_TIMEOUT,
-    },
+    config::{Config, PeerConfig, PeerInfoSerde, CONNECT_TIMEOUT, RELAY_PORT, RENDEZVOUS_TIMEOUT},
     get_version_number, log,
     message_proto::{option_message::BoolOption, *},
     protobuf::Message as _,
@@ -527,7 +524,7 @@ impl Client {
                 return Ok(option_pk);
             }
         };
-        match timeout(READ_TIMEOUT, conn.next()).await? {
+        match timeout(CONNECT_TIMEOUT, conn.next()).await? {
             Some(res) => {
                 let bytes = match res {
                     Ok(bytes) => bytes,

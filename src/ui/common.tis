@@ -330,7 +330,7 @@ handler.msgbox_retry = function(type, title, text, link, hasRetry) {
 function retryConnect(cancelTimer=false) {
     if (cancelTimer) self.timer(0, retryConnect);
     if (!is_port_forward) connecting();
-    handler.reconnect();
+    handler.reconnect(false);
 }
 /******************** end of msgbox ****************************************/
 
