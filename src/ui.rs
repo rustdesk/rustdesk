@@ -580,6 +580,10 @@ impl UI {
         has_hwcodec()
     }
 
+    fn has_gpucodec(&self) -> bool {
+        has_gpucodec()
+    }
+
     fn get_langs(&self) -> String {
         get_langs()
     }
@@ -680,6 +684,7 @@ impl sciter::EventHandler for UI {
         fn get_lan_peers();
         fn get_uuid();
         fn has_hwcodec();
+        fn has_gpucodec();
         fn get_langs();
         fn default_video_save_directory();
         fn handle_relay_id(String);

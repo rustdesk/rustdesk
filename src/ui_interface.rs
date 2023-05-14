@@ -830,11 +830,29 @@ pub fn has_hwcodec() -> bool {
     return true;
 }
 
+#[inline]
+pub fn has_gpucodec() -> bool {
+    cfg!(feature = "gpucodec")
+}
+
 #[cfg(feature = "flutter")]
 #[inline]
 pub fn supported_hwdecodings() -> (bool, bool) {
-    let decoding = scrap::codec::Decoder::supported_decodings(None);
-    (decoding.ability_h264 > 0, decoding.ability_h265 > 0)
+    let decoding = scrap::codec::Decoder::supported_decodings(None, true, None);
+    #[allow(unused_mut)]
+    let (mut h264, mut h265) = (decoding.ability_h264 > 0, decoding.ability_h265 > 0);
+    #[cfg(feature = "gpucodec")]
+    {
+        // supported_decodings check runtime luid
+        let gpu = scrap::gpucodec::GpuDecoder::possible_available_without_check();
+        if gpu.0 {
+            h264 = true;
+        }
+        if gpu.1 {
+            h265 = true;
+        }
+    }
+    (h264, h265)
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]

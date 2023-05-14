@@ -6,6 +6,7 @@ use bytes::Bytes;
 use rdev::{Event, EventType::*, KeyCode};
 use std::{
     collections::HashMap,
+    ffi::c_void,
     ops::{Deref, DerefMut},
     str::FromStr,
     sync::{Arc, Mutex, RwLock},
@@ -435,7 +436,9 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn alternative_codecs(&self) -> (bool, bool, bool, bool) {
-        let decoder = scrap::codec::Decoder::supported_decodings(None);
+        let luid = self.lc.read().unwrap().adapter_luid;
+        let decoder =
+            scrap::codec::Decoder::supported_decodings(None, cfg!(feature = "flutter"), luid);
         let mut vp8 = decoder.ability_vp8 > 0;
         let mut av1 = decoder.ability_av1 > 0;
         let mut h264 = decoder.ability_h264 > 0;
@@ -449,7 +452,7 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn change_prefer_codec(&self) {
-        let msg = self.lc.write().unwrap().change_prefer_codec();
+        let msg = self.lc.write().unwrap().update_supported_decodings();
         self.send(Data::Message(msg));
     }
 
@@ -1286,6 +1289,8 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn on_voice_call_incoming(&self);
     fn get_rgba(&self, display: usize) -> *const u8;
     fn next_rgba(&self, display: usize);
+    #[cfg(all(feature = "gpucodec", feature = "flutter"))]
+    fn on_texture(&self, display: usize, texture: *mut c_void);
 }
 
 impl<T: InvokeUiSession> Deref for Session<T> {
@@ -1567,12 +1572,20 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
     let (video_sender, audio_sender, video_queue_map, decode_fps_map, chroma) =
         start_video_audio_threads(
             handler.clone(),
-            move |display: usize, data: &mut scrap::ImageRgb| {
+            move |display: usize,
+                  data: &mut scrap::ImageRgb,
+                  _texture: *mut c_void,
+                  pixelbuffer: bool| {
                 let mut write_lock = frame_count_map_cl.write().unwrap();
                 let count = write_lock.get(&display).unwrap_or(&0) + 1;
                 write_lock.insert(display, count);
                 drop(write_lock);
-                ui_handler.on_rgba(display, data);
+                if pixelbuffer {
+                    ui_handler.on_rgba(display, data);
+                } else {
+                    #[cfg(all(feature = "gpucodec", feature = "flutter"))]
+                    ui_handler.on_texture(display, _texture);
+                }
             },
         );
 

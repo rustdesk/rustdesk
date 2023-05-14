@@ -116,6 +116,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "amf"
+version = "0.1.0"
+source = "git+https://github.com/21pages/gpucodec#90800ce41bee33cd898ec36a86c2e32a407e3f02"
+dependencies = [
+ "bindgen 0.59.2",
+ "cc",
+ "gpu_common",
+ "log",
+]
+
+[[package]]
 name = "android-tzdata"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2633,6 +2644,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "gpu_common"
+version = "0.1.0"
+source = "git+https://github.com/21pages/gpucodec#90800ce41bee33cd898ec36a86c2e32a407e3f02"
+dependencies = [
+ "bindgen 0.59.2",
+ "cc",
+ "log",
+ "serde 1.0.190",
+ "serde_derive",
+ "serde_json 1.0.107",
+]
+
+[[package]]
+name = "gpucodec"
+version = "0.1.0"
+source = "git+https://github.com/21pages/gpucodec#90800ce41bee33cd898ec36a86c2e32a407e3f02"
+dependencies = [
+ "amf",
+ "bindgen 0.59.2",
+ "cc",
+ "gpu_common",
+ "log",
+ "nv",
+ "serde 1.0.190",
+ "serde_derive",
+ "serde_json 1.0.107",
+ "vpl",
+]
+
+[[package]]
 name = "gstreamer"
 version = "0.16.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3012,8 +3053,8 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 
 [[package]]
 name = "hwcodec"
-version = "0.1.3"
-source = "git+https://github.com/21pages/hwcodec?branch=stable#83300549075158e5a3fa6c59ea527af3330e48ff"
+version = "0.2.0"
+source = "git+https://github.com/21pages/hwcodec?branch=stable#da8aec8e8abb6a5506e027484023e6e2ad1f47eb"
 dependencies = [
  "bindgen 0.59.2",
  "cc",
@@ -4050,6 +4091,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2819ce041d2ee131036f4fc9d6ae7ae125a3a40e97ba64d04fe799ad9dabbb44"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "nv"
+version = "0.1.0"
+source = "git+https://github.com/21pages/gpucodec#90800ce41bee33cd898ec36a86c2e32a407e3f02"
+dependencies = [
+ "bindgen 0.59.2",
+ "cc",
+ "gpu_common",
+ "log",
 ]
 
 [[package]]
@@ -5519,6 +5571,7 @@ dependencies = [
  "cfg-if 1.0.0",
  "dbus",
  "docopt",
+ "gpucodec",
  "gstreamer",
  "gstreamer-app",
  "gstreamer-video",
@@ -6692,6 +6745,17 @@ version = "0.1.0"
 dependencies = [
  "hbb_common",
  "lazy_static",
+]
+
+[[package]]
+name = "vpl"
+version = "0.1.0"
+source = "git+https://github.com/21pages/gpucodec#90800ce41bee33cd898ec36a86c2e32a407e3f02"
+dependencies = [
+ "bindgen 0.59.2",
+ "cc",
+ "gpu_common",
+ "log",
 ]
 
 [[package]]

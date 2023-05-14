@@ -77,6 +77,7 @@ pub fn stop_global_event_stream(app_type: String) {
 pub enum EventToUI {
     Event(String),
     Rgba(usize),
+    Texture(usize),
 }
 
 pub fn host_stop_system_key_propagate(_stopped: bool) {
@@ -1268,6 +1269,10 @@ pub fn main_has_hwcodec() -> SyncReturn<bool> {
     SyncReturn(has_hwcodec())
 }
 
+pub fn main_has_gpucodec() -> SyncReturn<bool> {
+    SyncReturn(has_gpucodec())
+}
+
 pub fn main_supported_hwdecodings() -> SyncReturn<String> {
     let decoding = supported_hwdecodings();
     let msg = HashMap::from([("h264", decoding.0), ("h265", decoding.1)]);
@@ -1584,12 +1589,22 @@ pub fn session_next_rgba(session_id: SessionID, display: usize) -> SyncReturn<()
     SyncReturn(super::flutter::session_next_rgba(session_id, display))
 }
 
-pub fn session_register_texture(
+pub fn session_register_pixelbuffer_texture(
     session_id: SessionID,
     display: usize,
     ptr: usize,
 ) -> SyncReturn<()> {
-    SyncReturn(super::flutter::session_register_texture(
+    SyncReturn(super::flutter::session_register_pixelbuffer_texture(
+        session_id, display, ptr,
+    ))
+}
+
+pub fn session_register_gpu_texture(
+    session_id: SessionID,
+    display: usize,
+    ptr: usize,
+) -> SyncReturn<()> {
+    SyncReturn(super::flutter::session_register_gpu_texture(
         session_id, display, ptr,
     ))
 }
@@ -1729,15 +1744,8 @@ pub fn main_hide_docker() -> SyncReturn<bool> {
     SyncReturn(true)
 }
 
-pub fn main_use_texture_render() -> SyncReturn<bool> {
-    #[cfg(not(feature = "flutter_texture_render"))]
-    {
-        SyncReturn(false)
-    }
-    #[cfg(feature = "flutter_texture_render")]
-    {
-        SyncReturn(true)
-    }
+pub fn main_has_pixelbuffer_texture_render() -> SyncReturn<bool> {
+    SyncReturn(cfg!(feature = "flutter_texture_render"))
 }
 
 pub fn main_has_file_clipboard() -> SyncReturn<bool> {
@@ -1749,6 +1757,10 @@ pub fn main_has_file_clipboard() -> SyncReturn<bool> {
         )
     ));
     SyncReturn(ret)
+}
+
+pub fn main_has_gpu_texture_render() -> SyncReturn<bool> {
+    SyncReturn(cfg!(feature = "gpucodec"))
 }
 
 pub fn cm_init() {

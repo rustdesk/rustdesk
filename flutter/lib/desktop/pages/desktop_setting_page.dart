@@ -388,10 +388,12 @@ class _GeneralState extends State<_General> {
   }
 
   Widget hwcodec() {
+    final hwcodec = bind.mainHasHwcodec();
+    final gpucodec = bind.mainHasGpucodec();
     return Offstage(
-      offstage: !bind.mainHasHwcodec(),
+      offstage: !(hwcodec || gpucodec),
       child: _Card(title: 'Hardware Codec', children: [
-        _OptionCheckBox(context, 'Enable hardware codec', 'enable-hwcodec'),
+        _OptionCheckBox(context, 'Enable hardware codec', 'enable-hwcodec')
       ]),
     );
   }
