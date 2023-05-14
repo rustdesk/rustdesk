@@ -505,7 +505,7 @@ impl InvokeUiSession for FlutterHandler {
             match hook {
                 SessionHook::OnSessionRgba(cb) => {
                     cb(key.to_owned(), rgba);
-                },
+                }
             }
         }
         // If the current rgba is not fetched by flutter, i.e., is valid.
@@ -688,6 +688,7 @@ pub fn session_add(
     id: &str,
     is_file_transfer: bool,
     is_port_forward: bool,
+    is_rdp: bool,
     switch_uuid: &str,
     force_relay: bool,
     password: String,
@@ -704,11 +705,14 @@ pub fn session_add(
         ..Default::default()
     };
 
-    // TODO rdp
     let conn_type = if is_file_transfer {
         ConnType::FILE_TRANSFER
     } else if is_port_forward {
-        ConnType::PORT_FORWARD
+        if is_rdp {
+            ConnType::RDP
+        } else {
+            ConnType::PORT_FORWARD
+        }
     } else {
         ConnType::DEFAULT_CONN
     };
@@ -725,7 +729,11 @@ pub fn session_add(
         .unwrap()
         .initialize(session_id, conn_type, switch_uuid, force_relay);
 
-    if let Some(same_id_session) = SESSIONS.write().unwrap().insert(id.to_owned(), session.clone()) {
+    if let Some(same_id_session) = SESSIONS
+        .write()
+        .unwrap()
+        .insert(id.to_owned(), session.clone())
+    {
         same_id_session.close();
     }
 

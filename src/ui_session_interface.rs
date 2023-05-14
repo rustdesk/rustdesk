@@ -88,11 +88,11 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn is_port_forward(&self) -> bool {
-        self.lc
+        let conn_type = self.lc
             .read()
             .unwrap()
-            .conn_type
-            .eq(&ConnType::PORT_FORWARD)
+            .conn_type;
+        conn_type == ConnType::PORT_FORWARD || conn_type == ConnType::RDP
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
