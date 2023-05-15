@@ -17,6 +17,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+pub const METHOD_HANDLE_SIGNATURE_VERIFICATION: &[u8; 30] = b"handle_signature_verification\0";
 const METHOD_HANDLE_UI: &[u8; 10] = b"handle_ui\0";
 const METHOD_HANDLE_PEER: &[u8; 12] = b"handle_peer\0";
 pub const METHOD_HANDLE_LISTEN_EVENT: &[u8; 20] = b"handle_listen_event\0";
@@ -93,19 +94,21 @@ type CallbackNative = extern "C" fn(
     raw: *const c_void,
     raw_len: usize,
 ) -> super::native::NativeReturnValue;
-/// The main function of the plugin on the client(self) side.
+/// The main function of the plugin.
 ///
 /// method: The method. "handle_ui" or "handle_peer"
 /// peer:  The peer id.
 /// args: The arguments.
 /// len:  The length of the arguments.
-type PluginFuncClientCall = extern "C" fn(
+type PluginFuncCall = extern "C" fn(
     method: *const c_char,
     peer: *const c_char,
     args: *const c_void,
     len: usize,
 ) -> PluginReturn;
-/// The main function of the plugin on the server(remote) side.
+/// The main function of the plugin.
+/// This function is called mainly for handling messages from the peer,
+/// and then send messages back to the peer.
 ///
 /// method: The method. "handle_ui" or "handle_peer"
 /// peer:  The peer id.
@@ -114,7 +117,7 @@ type PluginFuncClientCall = extern "C" fn(
 /// out:  The output.
 ///       The plugin allocate memory with `libc::malloc` and return the pointer.
 /// out_len: The length of the output.
-type PluginFuncServerCall = extern "C" fn(
+type PluginFuncCallWithOutData = extern "C" fn(
     method: *const c_char,
     peer: *const c_char,
     args: *const c_void,
@@ -138,6 +141,7 @@ struct Callbacks {
 }
 
 #[derive(Serialize)]
+#[repr(C)]
 struct InitInfo {
     is_server: bool,
 }
@@ -247,8 +251,8 @@ make_plugin!(
     reset: PluginFuncReset,
     clear: PluginFuncClear,
     desc: PluginFuncDesc,
-    client_call: PluginFuncClientCall,
-    server_call: PluginFuncServerCall
+    call: PluginFuncCall,
+    server_with_out_data: PluginFuncCallWithOutData
 );
 
 #[derive(Serialize)]
@@ -400,7 +404,7 @@ fn handle_event(method: &[u8], id: &str, peer: &str, event: &[u8]) -> ResultType
     peer.push('\0');
     match PLUGINS.read().unwrap().get(id) {
         Some(plugin) => {
-            let mut ret = (plugin.client_call)(
+            let mut ret = (plugin.call)(
                 method.as_ptr() as _,
                 peer.as_ptr() as _,
                 event.as_ptr() as _,
@@ -455,7 +459,7 @@ fn _handle_listen_event(event: String, peer: String) {
         for id in plugins {
             match PLUGINS.read().unwrap().get(&id) {
                 Some(plugin) => {
-                    let mut ret = (plugin.client_call)(
+                    let mut ret = (plugin.call)(
                         METHOD_HANDLE_LISTEN_EVENT.as_ptr() as _,
                         peer.as_ptr() as _,
                         evt_bytes.as_ptr() as _,
@@ -493,7 +497,7 @@ pub fn handle_client_event(id: &str, peer: &str, event: &[u8]) -> Message {
         Some(plugin) => {
             let mut out = std::ptr::null_mut();
             let mut out_len: usize = 0;
-            let mut ret = (plugin.server_call)(
+            let mut ret = (plugin.server_with_out_data)(
                 METHOD_HANDLE_PEER.as_ptr() as _,
                 peer.as_ptr() as _,
                 event.as_ptr() as _,

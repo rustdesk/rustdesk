@@ -9,10 +9,13 @@ use std::{
     sync::Arc,
 };
 
+const MSG_TO_RUSTDESK_TARGET: &str = "rustdesk";
 const MSG_TO_PEER_TARGET: &str = "peer";
 const MSG_TO_UI_TARGET: &str = "ui";
 const MSG_TO_CONFIG_TARGET: &str = "config";
 const MSG_TO_EXT_SUPPORT_TARGET: &str = "ext-support";
+
+const MSG_TO_RUSTDESK_SIGNATURE_VERIFICATION: &str = "signature_verification";
 
 #[allow(dead_code)]
 const MSG_TO_UI_FLUTTER_CHANNEL_MAIN: u16 = 0x01 << 0;
@@ -35,6 +38,18 @@ lazy_static::lazy_static! {
         ]);
         Arc::new(channels)
     };
+}
+
+#[derive(Deserialize)]
+pub struct MsgToRustDesk {
+    pub r#type: String,
+    pub data: Vec<u8>,
+}
+
+#[derive(Deserialize)]
+pub struct SignatureVerification {
+    pub version: String,
+    pub data: Vec<u8>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -191,6 +206,43 @@ pub(super) extern "C" fn cb_msg(
                 s
             );
             super::callback_ext::ext_support_callback(&id, &peer, &msg)
+        }
+        MSG_TO_RUSTDESK_TARGET => {
+            let s = early_return_value!(
+                std::str::from_utf8(unsafe { std::slice::from_raw_parts(content as _, len) }),
+                ERR_CALLBACK_INVALID_MSG,
+                "parse msg string"
+            );
+            let msg_to_rustdesk = early_return_value!(
+                serde_json::from_str::<MsgToRustDesk>(s),
+                ERR_CALLBACK_INVALID_MSG,
+                "parse msg '{}'",
+                s
+            );
+            match &msg_to_rustdesk.r#type as &str {
+                MSG_TO_RUSTDESK_SIGNATURE_VERIFICATION => {
+                    // let signature_data = early_return_value!(
+                    //     std::str::from_utf8(&msg_to_rustdesk.data),
+                    //     ERR_CALLBACK_INVALID_MSG,
+                    //     "parse signature data string"
+                    // );
+                    // let signature_data = early_return_value!(
+                    //     serde_json::from_str::<SignatureVerification>(signature_data),
+                    //     ERR_CALLBACK_INVALID_MSG,
+                    //     "parse signature data '{}'",
+                    //     s
+                    // );
+                    // to-do: Request server to sign the data.
+                    PluginReturn::success()
+                }
+                t => PluginReturn::new(
+                    errno::ERR_CALLBACK_TARGET_TYPE,
+                    &format!(
+                        "Unknown target type '{}' for target {}",
+                        t, MSG_TO_RUSTDESK_TARGET
+                    ),
+                ),
+            }
         }
         _ => PluginReturn::new(
             errno::ERR_CALLBACK_TARGET,
