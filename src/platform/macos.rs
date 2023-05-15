@@ -17,15 +17,11 @@ use core_graphics::{
     display::{kCGNullWindowID, kCGWindowListOptionOnScreenOnly, CGWindowListCopyWindowInfo},
     window::{kCGWindowName, kCGWindowOwnerPID},
 };
-use hbb_common::{allow_err, anyhow::anyhow, bail, libc, log, message_proto::Resolution};
+use hbb_common::{allow_err, anyhow::anyhow, bail, log, message_proto::Resolution};
 use include_dir::{include_dir, Dir};
 use objc::{class, msg_send, sel, sel_impl};
 use scrap::{libc::c_void, quartz::ffi::*};
-use std::{
-    ffi::{c_char, CString},
-    mem::size_of,
-    path::PathBuf,
-};
+use std::{ffi::c_char, path::PathBuf};
 
 static PRIVILEGES_SCRIPTS_DIR: Dir =
     include_dir!("$CARGO_MANIFEST_DIR/src/platform/privileges_scripts");
@@ -39,7 +35,6 @@ extern "C" {
     fn AXIsProcessTrustedWithOptions(options: CFDictionaryRef) -> BOOL;
     fn InputMonitoringAuthStatus(_: BOOL) -> BOOL;
     fn MacCheckAdminAuthorization() -> BOOL;
-    fn Elevate(process: *const c_char, args: *const *const c_char) -> BOOL;
     fn MacGetModeNum(display: u32, numModes: *mut u32) -> BOOL;
     fn MacGetModes(
         display: u32,
@@ -677,25 +672,28 @@ pub fn check_super_user_permission() -> ResultType<bool> {
     unsafe { Ok(MacCheckAdminAuthorization() == YES) }
 }
 
-pub fn elevate(args: Vec<&str>) -> ResultType<bool> {
+pub fn elevate(args: Vec<&str>, prompt: &str) -> ResultType<bool> {
     let cmd = std::env::current_exe()?;
     match cmd.to_str() {
         Some(cmd) => {
-            let cmd = CString::new(cmd)?;
-            let mut cstring_args = Vec::new();
-            for arg in args.iter() {
-                cstring_args.push(CString::new(*arg)?);
+            let mut cmd_with_args = cmd.to_string();
+            for arg in args {
+                cmd_with_args = format!("{} {}", cmd_with_args, arg);
             }
-            unsafe {
-                let args_ptr: *mut *const c_char =
-                    libc::malloc((cstring_args.len() + 1) * size_of::<*const c_char>()) as _;
-                for i in 0..cstring_args.len() {
-                    *args_ptr.add(i) = cstring_args[i].as_ptr() as _;
+            let script = format!(
+                r#"do shell script "{}" with prompt "{}" with administrator privileges"#,
+                cmd_with_args, prompt
+            );
+            match std::process::Command::new("osascript")
+                .arg("-e")
+                .arg(script)
+                .arg(&get_active_username())
+                .status()
+            {
+                Err(e) => {
+                    bail!("Failed to run osascript: {}", e);
                 }
-                *args_ptr.add(cstring_args.len()) = std::ptr::null() as _;
-                let r = Elevate(cmd.as_ptr() as _, args_ptr as _);
-                libc::free(args_ptr as _);
-                Ok(r == YES)
+                Ok(status) => Ok(status.success() && status.code() == Some(0)),
             }
         }
         None => {

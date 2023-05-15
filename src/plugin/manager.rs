@@ -173,7 +173,7 @@ fn elevate_install(
     crate::platform::elevate(&args)
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn elevate_install(
     plugin_id: &str,
     plugin_url: &str,
