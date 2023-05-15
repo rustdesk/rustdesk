@@ -158,19 +158,6 @@ class PluginInfo with ChangeNotifier {
   bool get installed => installedVersion.isNotEmpty;
   bool get needUpdate => installed && installedVersion != meta.version;
 
-  void update(PluginInfo plugin) {
-    assert(plugin.meta.id == meta.id, 'Plugin id not match');
-    if (plugin.meta.id != meta.id) {
-      // log error
-      return;
-    }
-    sourceInfo = plugin.sourceInfo;
-    meta = plugin.meta;
-    installedVersion = plugin.installedVersion;
-    invalidReason = plugin.invalidReason;
-    notifyListeners();
-  }
-
   void setInstall(String msg) {
     if (msg == "finished") {
       msg = '';
@@ -213,8 +200,6 @@ class PluginManager with ChangeNotifier {
   void handleEvent(Map<String, dynamic> evt) {
     if (evt['plugin_list'] != null) {
       _handlePluginList(evt['plugin_list']);
-    } else if (evt['plugin_update'] != null) {
-      _handlePluginUpdate(evt['plugin_update']);
     } else if (evt['plugin_install'] != null && evt['id'] != null) {
       _handlePluginInstall(evt['id'], evt['plugin_install']);
     } else if (evt['plugin_uninstall'] != null && evt['id'] != null) {
@@ -236,21 +221,6 @@ class PluginManager with ChangeNotifier {
     });
   }
 
-  void _handlePluginUpdate(Map<String, dynamic> evt) {
-    final plugin = _getPluginFromEvent(evt);
-    if (plugin == null) {
-      return;
-    }
-    for (var i = 0; i < _plugins.length; i++) {
-      if (_plugins[i].meta.id == plugin.meta.id) {
-        _plugins[i].update(plugin);
-        _sortPlugins();
-        notifyListeners();
-        return;
-      }
-    }
-  }
-
   void _handlePluginList(String pluginList) {
     _plugins.clear();
     try {
@@ -269,6 +239,7 @@ class PluginManager with ChangeNotifier {
   }
 
   void _handlePluginInstall(String id, String msg) {
+    debugPrint('Plugin \'$id\' install msg $msg');
     for (var i = 0; i < _plugins.length; i++) {
       if (_plugins[i].meta.id == id) {
         _plugins[i].setInstall(msg);
@@ -280,6 +251,7 @@ class PluginManager with ChangeNotifier {
   }
 
   void _handlePluginUninstall(String id, String msg) {
+    debugPrint('Plugin \'$id\' uninstall msg $msg');
     for (var i = 0; i < _plugins.length; i++) {
       if (_plugins[i].meta.id == id) {
         _plugins[i].setUninstall(msg);

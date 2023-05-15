@@ -8,9 +8,8 @@ use std::{
 use flutter_rust_bridge::StreamSink;
 
 use crate::{
-    define_method_prefix,
-    flutter::{FlutterHandler},
-    ui_session_interface::Session, plugin::MSG_TO_UI_TYPE_PLUGIN_EVENT, flutter_ffi::EventToUI,
+    define_method_prefix, flutter::FlutterHandler, flutter_ffi::EventToUI,
+    plugin::MSG_TO_UI_TYPE_PLUGIN_EVENT, ui_session_interface::Session,
 };
 
 const MSG_TO_UI_TYPE_SESSION_CREATED: &str = "session_created";
@@ -18,12 +17,12 @@ const MSG_TO_UI_TYPE_SESSION_CREATED: &str = "session_created";
 use super::PluginNativeHandler;
 
 pub type OnSessionRgbaCallback = unsafe extern "C" fn(
-    *const c_char, // Session ID
-    *mut c_void,   // raw data
-    *mut usize,    // width
-    *mut usize,    // height,
-    *mut usize,    // stride,
-    *mut scrap::ImageFormat,    // ImageFormat
+    *const c_char,           // Session ID
+    *mut c_void,             // raw data
+    *mut usize,              // width
+    *mut usize,              // height,
+    *mut usize,              // stride,
+    *mut scrap::ImageFormat, // ImageFormat
 );
 
 #[derive(Default)]
@@ -124,7 +123,7 @@ impl PluginNativeHandler for PluginNativeSessionHandler {
 impl PluginNativeSessionHandler {
     fn create_session(&self, session_id: String) -> String {
         let session =
-            crate::flutter::session_add(&session_id, false, false, "", false, "".to_owned());
+            crate::flutter::session_add(&session_id, false, false, false, "", false, "".to_owned());
         if let Ok(session) = session {
             let mut sessions = self.sessions.write().unwrap();
             sessions.push(session);
@@ -132,7 +131,10 @@ impl PluginNativeSessionHandler {
             let mut m = HashMap::new();
             m.insert("name", MSG_TO_UI_TYPE_SESSION_CREATED);
             m.insert("session_id", &session_id);
-            crate::flutter::push_global_event(crate::flutter::APP_TYPE_DESKTOP_REMOTE, serde_json::to_string(&m).unwrap_or("".to_string()));
+            crate::flutter::push_global_event(
+                crate::flutter::APP_TYPE_DESKTOP_REMOTE,
+                serde_json::to_string(&m).unwrap_or("".to_string()),
+            );
             return session_id;
         } else {
             return "".to_string();
@@ -200,7 +202,7 @@ impl PluginNativeSessionHandler {
             if session.id == session_id {
                 *session.event_stream.write().unwrap() = Some(stream);
                 break;
-            }            
+            }
         }
     }
 }

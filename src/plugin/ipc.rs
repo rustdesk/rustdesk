@@ -217,7 +217,6 @@ pub async fn handle_plugin(plugin: Plugin, stream: &mut Connection) {
             }
         },
         Plugin::Load(id) => {
-            allow_err!(super::config::ManagerConfig::set_uninstall(&id, false));
             allow_err!(super::load_plugin(&id));
         }
         Plugin::Reload(id) => {

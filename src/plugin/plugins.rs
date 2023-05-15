@@ -345,6 +345,14 @@ fn load_plugin_path(path: &str) -> ResultType<()> {
     // to-do validate plugin
     // to-do check the plugin id (make sure it does not use another plugin's id)
 
+    let id = desc.meta().id.clone();
+    let plugin_info = PluginInfo {
+        path: path.to_string(),
+        uninstalled: false,
+        desc: desc.clone(),
+    };
+    PLUGIN_INFO.write().unwrap().insert(id.clone(), plugin_info);
+
     let init_info = serde_json::to_string(&InitInfo {
         is_server: crate::common::is_server(),
     })?;
@@ -359,7 +367,10 @@ fn load_plugin_path(path: &str) -> ResultType<()> {
             native: super::native::cb_native_data,
         },
     };
-    plugin.init(&init_data, path)?;
+    // If do not load the plugin when init failed, the ui will not show the installed plugin.
+    if let Err(e) = plugin.init(&init_data, path) {
+        log::error!("Failed to init plugin '{}', {}", desc.meta().id, e);
+    }
 
     if is_server() {
         super::config::ManagerConfig::add_plugin(&desc.meta().id)?;
@@ -370,13 +381,6 @@ fn load_plugin_path(path: &str) -> ResultType<()> {
     reload_ui(&desc, None);
 
     // add plugins
-    let id = desc.meta().id.clone();
-    let plugin_info = PluginInfo {
-        path: path.to_string(),
-        uninstalled: false,
-        desc,
-    };
-    PLUGIN_INFO.write().unwrap().insert(id.clone(), plugin_info);
     PLUGINS.write().unwrap().insert(id.clone(), plugin);
 
     log::info!("Plugin {} loaded", id);

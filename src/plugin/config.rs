@@ -217,7 +217,6 @@ impl PeerConfig {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PluginStatus {
     pub enabled: bool,
-    pub uninstalled: bool,
 }
 
 const MANAGER_VERSION: &str = "0.1.0";
@@ -268,9 +267,16 @@ impl ManagerConfig {
     #[inline]
     pub fn get_plugin_option(id: &str, key: &str) -> Option<String> {
         let lock = CONFIG_MANAGER.lock().unwrap();
-        let status = lock.plugins.get(id)?;
         match key {
-            "enabled" => Some(status.enabled.to_string()),
+            "enabled" => {
+                let enabled = lock
+                    .plugins
+                    .get(id)
+                    .map(|status| status.enabled.to_owned())
+                    .unwrap_or(true.to_owned())
+                    .to_string();
+                Some(enabled)
+            }
             _ => None,
         }
     }
@@ -280,13 +286,7 @@ impl ManagerConfig {
         if let Some(status) = lock.plugins.get_mut(id) {
             status.enabled = enabled;
         } else {
-            lock.plugins.insert(
-                id.to_owned(),
-                PluginStatus {
-                    enabled,
-                    uninstalled: false,
-                },
-            );
+            lock.plugins.insert(id.to_owned(), PluginStatus { enabled });
         }
         hbb_common::config::store_path(Self::path(), &*lock)
     }
@@ -309,13 +309,8 @@ impl ManagerConfig {
     #[inline]
     pub fn add_plugin(id: &str) -> ResultType<()> {
         let mut lock = CONFIG_MANAGER.lock().unwrap();
-        lock.plugins.insert(
-            id.to_owned(),
-            PluginStatus {
-                enabled: true,
-                uninstalled: false,
-            },
-        );
+        lock.plugins
+            .insert(id.to_owned(), PluginStatus { enabled: true });
         hbb_common::config::store_path(Self::path(), &*lock)
     }
 
@@ -324,35 +319,6 @@ impl ManagerConfig {
         let mut lock = CONFIG_MANAGER.lock().unwrap();
         lock.plugins.remove(id);
         hbb_common::config::store_path(Self::path(), &*lock)
-    }
-
-    #[inline]
-    pub fn is_uninstalled(id: &str) -> bool {
-        CONFIG_MANAGER
-            .lock()
-            .unwrap()
-            .plugins
-            .get(id)
-            .map(|p| p.uninstalled)
-            .unwrap_or(false)
-    }
-
-    #[inline]
-    pub fn set_uninstall(id: &str, uninstall: bool) -> ResultType<()> {
-        let mut lock = CONFIG_MANAGER.lock().unwrap();
-        if let Some(status) = lock.plugins.get_mut(id) {
-            status.uninstalled = uninstall;
-        } else {
-            lock.plugins.insert(
-                id.to_owned(),
-                PluginStatus {
-                    enabled: true,
-                    uninstalled: uninstall,
-                },
-            );
-        }
-        hbb_common::config::store_path(Self::path(), &*lock)?;
-        Ok(())
     }
 }
 
