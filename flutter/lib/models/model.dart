@@ -1597,6 +1597,7 @@ class FFI {
   void start(String id,
       {bool isFileTransfer = false,
       bool isPortForward = false,
+      bool isRdp = false,
       String? switchUuid,
       String? password,
       bool? forceRelay}) {
@@ -1619,6 +1620,7 @@ class FFI {
       id: id,
       isFileTransfer: isFileTransfer,
       isPortForward: isPortForward,
+      isRdp: isRdp,
       switchUuid: switchUuid ?? "",
       forceRelay: forceRelay ?? false,
       password: password ?? "",

@@ -903,7 +903,6 @@ fn get_install_info_with_subkey(subkey: String) -> (String, String, String, Stri
 }
 
 pub fn copy_raw_cmd(src_raw: &str, _raw: &str, _path: &str) -> String {
-    #[cfg(feature = "flutter")]
     let main_raw = format!(
         "XCOPY \"{}\" \"{}\" /Y /E /H /C /I /K /R /Z",
         PathBuf::from(src_raw)
@@ -912,12 +911,6 @@ pub fn copy_raw_cmd(src_raw: &str, _raw: &str, _path: &str) -> String {
             .to_string_lossy()
             .to_string(),
         _path
-    );
-    #[cfg(not(feature = "flutter"))]
-    let main_raw = format!(
-        "copy /Y \"{src_raw}\" \"{raw}\"",
-        src_raw = src_raw,
-        raw = _raw
     );
     return main_raw;
 }
@@ -939,18 +932,6 @@ pub fn copy_exe_cmd(src_exe: &str, exe: &str, path: &str) -> String {
 pub fn update_me() -> ResultType<()> {
     let (_, path, _, exe, _dll) = get_install_info();
     let src_exe = std::env::current_exe()?.to_str().unwrap_or("").to_owned();
-    #[cfg(not(feature = "flutter"))]
-    let src_dll = std::env::current_exe()?
-        .parent()
-        .unwrap_or(&Path::new(&get_default_install_path()))
-        .join("sciter.dll")
-        .to_str()
-        .unwrap_or("")
-        .to_owned();
-    #[cfg(feature = "flutter")]
-    let copy_dll = "".to_string();
-    #[cfg(not(feature = "flutter"))]
-    let copy_dll = copy_raw_cmd(&src_dll, &_dll, &path);
     let cmds = format!(
         "
         chcp 65001
@@ -958,12 +939,10 @@ pub fn update_me() -> ResultType<()> {
         taskkill /F /IM {broker_exe}
         taskkill /F /IM {app_name}.exe /FI \"PID ne {cur_pid}\"
         {copy_exe}
-        {copy_dll}
         sc start {app_name}
         {lic}
     ",
         copy_exe = copy_exe_cmd(&src_exe, &exe, &path),
-        copy_dll = copy_dll,
         broker_exe = WIN_MAG_INJECTED_PROCESS_EXE,
         app_name = crate::get_app_name(),
         lic = register_licence(),
@@ -1133,18 +1112,6 @@ if exist \"{tmp_path}\\{app_name} Tray.lnk\" del /f /q \"{tmp_path}\\{app_name} 
         app_name = crate::get_app_name(),
     );
     let src_exe = std::env::current_exe()?.to_str().unwrap_or("").to_string();
-    #[cfg(not(feature = "flutter"))]
-    let src_dll = std::env::current_exe()?
-        .parent()
-        .unwrap_or(&Path::new(&get_default_install_path()))
-        .join("sciter.dll")
-        .to_str()
-        .unwrap_or("")
-        .to_owned();
-    #[cfg(feature = "flutter")]
-    let copy_dll = "".to_string();
-    #[cfg(not(feature = "flutter"))]
-    let copy_dll = copy_raw_cmd(&src_dll, &_dll, &path);
 
     let install_cert = if options.contains("driverCert") {
         format!("\"{}\" --install-cert \"RustDeskIddDriver.cer\"", src_exe)
@@ -1158,7 +1125,6 @@ if exist \"{tmp_path}\\{app_name} Tray.lnk\" del /f /q \"{tmp_path}\\{app_name} 
 chcp 65001
 md \"{path}\"
 {copy_exe}
-{copy_dll}
 reg add {subkey} /f
 reg add {subkey} /f /v DisplayIcon /t REG_SZ /d \"{exe}\"
 reg add {subkey} /f /v DisplayName /t REG_SZ /d \"{app_name}\"
@@ -1218,7 +1184,6 @@ sc delete {app_name}
             &dels
         },
         copy_exe = copy_exe_cmd(&src_exe, &exe, &path),
-        copy_dll = copy_dll
     );
     run_cmds(cmds, debug, "install")?;
     std::thread::sleep(std::time::Duration::from_millis(2000));

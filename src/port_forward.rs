@@ -92,6 +92,7 @@ pub async fn listen(
                         break;
                     }
                     Some(Data::NewRDP) => {
+                        println!("receive run_rdp from ui_receiver");
                         run_rdp(addr.port());
                     }
                     _ => {}
