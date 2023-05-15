@@ -89,7 +89,7 @@ mod test {
     #[test]
     fn test_filename_license_string() {
         assert_eq!(
-            get_license_from_string("GetRytRemote.exe"),
+            get_license_from_string("rustdesk.exe"),
             Ok(License {
                 host: "".to_owned(),
                 key: "".to_owned(),
@@ -97,7 +97,7 @@ mod test {
             })
         );
         assert_eq!(
-            get_license_from_string("GetRytRemote"),
+            get_license_from_string("rustdesk"),
             Ok(License {
                 host: "".to_owned(),
                 key: "".to_owned(),
