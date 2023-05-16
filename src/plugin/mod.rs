@@ -1,4 +1,4 @@
-use hbb_common::{libc, log, ResultType};
+use hbb_common::{bail, libc, log, ResultType};
 #[cfg(target_os = "windows")]
 use std::env;
 use std::{
@@ -133,6 +133,10 @@ fn get_plugin_dir(id: &str) -> ResultType<PathBuf> {
 
 #[inline]
 fn cstr_to_string(cstr: *const c_char) -> ResultType<String> {
+    assert!(!cstr.is_null(), "cstr must be a valid pointer");
+    if cstr.is_null() {
+        bail!("failed to convert string, the pointer is null");
+    }
     Ok(String::from_utf8(unsafe {
         CStr::from_ptr(cstr).to_bytes().to_vec()
     })?)

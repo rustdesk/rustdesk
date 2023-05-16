@@ -17,6 +17,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+pub const METHOD_HANDLE_STATUS: &[u8; 14] = b"handle_status\0";
 pub const METHOD_HANDLE_SIGNATURE_VERIFICATION: &[u8; 30] = b"handle_signature_verification\0";
 const METHOD_HANDLE_UI: &[u8; 10] = b"handle_ui\0";
 const METHOD_HANDLE_PEER: &[u8; 12] = b"handle_peer\0";
@@ -252,7 +253,7 @@ make_plugin!(
     clear: PluginFuncClear,
     desc: PluginFuncDesc,
     call: PluginFuncCall,
-    server_with_out_data: PluginFuncCallWithOutData
+    call_with_out_data: PluginFuncCallWithOutData
 );
 
 #[derive(Serialize)]
@@ -290,6 +291,7 @@ pub(super) fn load_plugins() -> ResultType<()> {
 }
 
 fn load_plugin_dir(dir: &PathBuf) {
+    log::debug!("Begin load plugin dir: {}", dir.display());
     if let Ok(rd) = std::fs::read_dir(dir) {
         for entry in rd {
             match entry {
@@ -343,6 +345,8 @@ pub fn reload_plugin(id: &str) -> ResultType<()> {
 }
 
 fn load_plugin_path(path: &str) -> ResultType<()> {
+    log::info!("Begin load plugin {}", path);
+
     let plugin = Plugin::new(path)?;
     let desc = plugin.desc()?;
 
@@ -383,7 +387,7 @@ fn load_plugin_path(path: &str) -> ResultType<()> {
     PLUGIN_INFO.write().unwrap().insert(id.clone(), plugin_info);
     PLUGINS.write().unwrap().insert(id.clone(), plugin);
 
-    log::info!("Plugin {} loaded", id);
+    log::info!("Plugin {} loaded, {}", id, path);
     Ok(())
 }
 
@@ -399,30 +403,43 @@ pub fn load_plugin(id: &str) -> ResultType<()> {
     Ok(())
 }
 
+#[inline]
 fn handle_event(method: &[u8], id: &str, peer: &str, event: &[u8]) -> ResultType<()> {
     let mut peer: String = peer.to_owned();
     peer.push('\0');
+    plugin_call(id, method, &peer, event)
+}
+
+pub fn plugin_call(id: &str, method: &[u8], peer: &str, event: &[u8]) -> ResultType<()> {
+    let mut ret = plugin_call_get_return(id, method, peer, event)?;
+    if ret.is_success() {
+        Ok(())
+    } else {
+        let (code, msg) = ret.get_code_msg();
+        bail!(
+            "Failed to handle plugin event, id: {}, method: {}, code: {}, msg: {}",
+            id,
+            std::string::String::from_utf8(method.to_vec()).unwrap_or_default(),
+            code,
+            msg
+        );
+    }
+}
+
+#[inline]
+pub fn plugin_call_get_return(
+    id: &str,
+    method: &[u8],
+    peer: &str,
+    event: &[u8],
+) -> ResultType<PluginReturn> {
     match PLUGINS.read().unwrap().get(id) {
-        Some(plugin) => {
-            let mut ret = (plugin.call)(
-                method.as_ptr() as _,
-                peer.as_ptr() as _,
-                event.as_ptr() as _,
-                event.len(),
-            );
-            if ret.is_success() {
-                Ok(())
-            } else {
-                let (code, msg) = ret.get_code_msg();
-                bail!(
-                    "Failed to handle plugin event, id: {}, method: {}, code: {}, msg: {}",
-                    id,
-                    std::string::String::from_utf8(method.to_vec()).unwrap_or_default(),
-                    code,
-                    msg
-                );
-            }
-        }
+        Some(plugin) => Ok((plugin.call)(
+            method.as_ptr() as _,
+            peer.as_ptr() as _,
+            event.as_ptr() as _,
+            event.len(),
+        )),
         None => bail!("Plugin {} not found", id),
     }
 }
@@ -497,7 +514,7 @@ pub fn handle_client_event(id: &str, peer: &str, event: &[u8]) -> Message {
         Some(plugin) => {
             let mut out = std::ptr::null_mut();
             let mut out_len: usize = 0;
-            let mut ret = (plugin.server_with_out_data)(
+            let mut ret = (plugin.call_with_out_data)(
                 METHOD_HANDLE_PEER.as_ptr() as _,
                 peer.as_ptr() as _,
                 event.as_ptr() as _,
