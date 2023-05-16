@@ -49,7 +49,7 @@ impl<T: Subscriber + From<ConnInner>> ServiceInner<T> {
         for (_, s) in self.new_subscribes.drain() {
             self.subscribes.insert(s.id(), s);
         }
-        assert!(self.new_subscribes.is_empty());
+        debug_assert!(self.new_subscribes.is_empty());
     }
 
     #[inline]

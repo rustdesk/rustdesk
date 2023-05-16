@@ -109,7 +109,7 @@ impl SharedMemory {
 
     pub fn write(&self, addr: usize, data: &[u8]) {
         unsafe {
-            assert!(addr + data.len() <= self.inner.len());
+            debug_assert!(addr + data.len() <= self.inner.len());
             let ptr = self.inner.as_ptr().add(addr);
             let shared_mem_slice = slice::from_raw_parts_mut(ptr, data.len());
             shared_mem_slice.copy_from_slice(data);

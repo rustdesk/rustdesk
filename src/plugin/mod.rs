@@ -79,7 +79,7 @@ impl PluginReturn {
         if self.is_success() {
             (self.code, "".to_owned())
         } else {
-            assert!(!self.msg.is_null());
+            debug_assert!(!self.msg.is_null(), "msg is null");
             let msg = cstr_to_string(self.msg).unwrap_or_default();
             free_c_ptr(self.msg as _);
             self.msg = null();
