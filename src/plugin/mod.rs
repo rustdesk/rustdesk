@@ -97,8 +97,15 @@ pub fn init() {
             log::error!("Failed to remove plugins: {}", e);
         }
     }
-    if let Err(e) = plugins::load_plugins() {
-        log::error!("Failed to load plugins: {}", e);
+    match manager::get_uninstall_id_set() {
+        Ok(ids) => {
+            if let Err(e) = plugins::load_plugins(&ids) {
+                log::error!("Failed to load plugins: {}", e);
+            }
+        }
+        Err(e) => {
+            log::error!("Failed to load plugins: {}", e);
+        }
     }
 }
 

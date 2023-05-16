@@ -11,7 +11,7 @@ use hbb_common::{
 };
 use serde_derive::Serialize;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     ffi::{c_char, c_void},
     path::PathBuf,
     sync::{Arc, RwLock},
@@ -263,7 +263,7 @@ const DYLIB_SUFFIX: &str = ".so";
 #[cfg(target_os = "macos")]
 const DYLIB_SUFFIX: &str = ".dylib";
 
-pub(super) fn load_plugins() -> ResultType<()> {
+pub(super) fn load_plugins(uninstalled_ids: &HashSet<String>) -> ResultType<()> {
     let plugins_dir = super::get_plugins_dir()?;
     if !plugins_dir.exists() {
         std::fs::create_dir_all(&plugins_dir)?;
@@ -273,7 +273,16 @@ pub(super) fn load_plugins() -> ResultType<()> {
                 Ok(entry) => {
                     let plugin_dir = entry.path();
                     if plugin_dir.is_dir() {
-                        load_plugin_dir(&plugin_dir);
+                        if let Some(plugin_id) = plugin_dir.file_name().and_then(|f| f.to_str()) {
+                            if uninstalled_ids.contains(plugin_id) {
+                                log::debug!(
+                                    "Ignore loading '{}' as it should be uninstalled",
+                                    plugin_id
+                                );
+                                continue;
+                            }
+                            load_plugin_dir(&plugin_dir);
+                        }
                     }
                 }
                 Err(e) => {
