@@ -108,7 +108,7 @@ fn rust_args_to_c_args(args: Vec<String>, outlen: *mut c_int) -> *mut *mut c_cha
 
     // Make sure we're not wasting space.
     out.shrink_to_fit();
-    assert!(out.len() == out.capacity());
+    debug_assert!(out.len() == out.capacity());
 
     // Get the pointer to our vector.
     let len = out.len();
@@ -257,7 +257,7 @@ impl FlutterHandler {
     /// * `event` - Fields of the event content.
     pub fn push_event(&self, name: &str, event: Vec<(&str, &str)>) -> Option<bool> {
         let mut h: HashMap<&str, &str> = event.iter().cloned().collect();
-        assert!(h.get("name").is_none());
+        debug_assert!(h.get("name").is_none());
         h.insert("name", name);
         let out = serde_json::ser::to_string(&h).unwrap_or("".to_owned());
         Some(
@@ -858,7 +858,7 @@ pub mod connection_manager {
     impl FlutterHandler {
         fn push_event(&self, name: &str, event: Vec<(&str, &str)>) {
             let mut h: HashMap<&str, &str> = event.iter().cloned().collect();
-            assert!(h.get("name").is_none());
+            debug_assert!(h.get("name").is_none());
             h.insert("name", name);
 
             if let Some(s) = GLOBAL_EVENT_STREAM.read().unwrap().get(super::APP_TYPE_CM) {

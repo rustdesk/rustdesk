@@ -349,7 +349,9 @@ impl Encrypt {
         their_pk_b: &[u8],
         our_sk_b: &box_::SecretKey,
     ) -> ResultType<Key> {
-        assert!(their_pk_b.len() == box_::PUBLICKEYBYTES);
+        if their_pk_b.len() != box_::PUBLICKEYBYTES {
+            anyhow::bail!("Handshake failed: pk length {}", their_pk_b.len());
+        }
         let nonce = box_::Nonce([0u8; box_::NONCEBYTES]);
         let mut pk_ = [0u8; box_::PUBLICKEYBYTES];
         pk_[..].copy_from_slice(their_pk_b);
