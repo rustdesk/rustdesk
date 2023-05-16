@@ -76,13 +76,17 @@ impl PluginReturn {
         }
     }
 
-    pub fn get_code_msg(&mut self) -> (i32, String) {
+    pub fn get_code_msg(&mut self, id: &str) -> (i32, String) {
         if self.is_success() {
             (self.code, "".to_owned())
         } else {
             if self.msg.is_null() {
-                log::warn!("The message pointer from the plugin is null, but the error code is {}", self.code);
-                return (self.code, "".to_owned())
+                log::warn!(
+                    "The message pointer from the plugin '{}' is null, but the error code is {}",
+                    id,
+                    self.code
+                );
+                return (self.code, "".to_owned());
             }
             let msg = cstr_to_string(self.msg).unwrap_or_default();
             free_c_ptr(self.msg as _);
