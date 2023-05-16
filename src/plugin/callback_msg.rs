@@ -279,7 +279,6 @@ fn request_plugin_sign(id: String, msg_to_rustdesk: MsgToRustDesk) -> PluginRetu
         "parse signature data '{}'",
         signature_data
     );
-    // to-do: Request server to sign the data.
     thread::spawn(move || {
         let sign_url = format!("{}/lic/web/api/plugin-sign", get_api_server());
         let client = reqwest::blocking::Client::new();
@@ -319,7 +318,6 @@ fn request_plugin_sign(id: String, msg_to_rustdesk: MsgToRustDesk) -> PluginRetu
                                             id,
                                             ret.code,
                                         );
-                                        return PluginReturn::success();
                                     }
                                     let msg = cstr_to_string(ret.msg).unwrap_or_default();
                                     free_c_ptr(ret.msg as _);
