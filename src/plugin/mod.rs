@@ -81,7 +81,7 @@ impl PluginReturn {
             (self.code, "".to_owned())
         } else {
             if self.msg.is_null() {
-                log::warn!("The message pointer is null");
+                log::warn!("The message pointer from the plugin is null, but the error code is {}", self.code);
                 return (self.code, "".to_owned())
             }
             let msg = cstr_to_string(self.msg).unwrap_or_default();

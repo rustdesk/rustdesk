@@ -312,6 +312,15 @@ fn request_plugin_sign(id: String, msg_to_rustdesk: MsgToRustDesk) -> PluginRetu
                             ) {
                                 Ok(ret) => {
                                     debug_assert!(!ret.msg.is_null(), "msg is null");
+                                    if ret.msg.is_null() {
+                                        // unreachable
+                                        log::error!(
+                                            "The returned message pointer of plugin status is null, plugin id: '{}', code: {}",
+                                            id,
+                                            ret.code,
+                                        );
+                                        return PluginReturn::success();
+                                    }
                                     let msg = cstr_to_string(ret.msg).unwrap_or_default();
                                     free_c_ptr(ret.msg as _);
                                     if ret.code == super::errno::ERR_SUCCESS {
