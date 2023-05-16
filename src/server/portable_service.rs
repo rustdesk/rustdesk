@@ -555,7 +555,7 @@ pub mod client {
                     if let Some(dir) = PathBuf::from(&exe).parent() {
                         if set_path_permission(&PathBuf::from(dir), "RX").is_err() {
                             *SHMEM.lock().unwrap() = None;
-                            bail!("Failed to set permissions of {:?}", dir);
+                            bail!("Failed to set permission of {:?}", dir);
                         }
                     }
                 }
@@ -566,9 +566,9 @@ pub mod client {
                             .home_dir()
                             .join("AppData")
                             .join("Local")
-                            .join("RustDesk-sciter");
+                            .join("rustdesk-sciter");
                         if std::fs::create_dir_all(&dir).is_ok() {
-                            let dst = dir.join("RustDeskP.exe");
+                            let dst = dir.join("rustdesk.exe");
                             if std::fs::copy(&exe, &dst).is_ok() {
                                 if dst.exists() {
                                     if set_path_permission(&dir, "RX").is_ok() {
