@@ -11,7 +11,7 @@ use hbb_common::{
 };
 use serde_derive::Serialize;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     ffi::{c_char, c_void},
     path::PathBuf,
     sync::{Arc, RwLock},
@@ -263,7 +263,7 @@ const DYLIB_SUFFIX: &str = ".so";
 #[cfg(target_os = "macos")]
 const DYLIB_SUFFIX: &str = ".dylib";
 
-pub(super) fn load_plugins() -> ResultType<()> {
+pub(super) fn load_plugins(uninstalled_ids: &HashSet<String>) -> ResultType<()> {
     let plugins_dir = super::get_plugins_dir()?;
     if !plugins_dir.exists() {
         std::fs::create_dir_all(&plugins_dir)?;
@@ -273,7 +273,16 @@ pub(super) fn load_plugins() -> ResultType<()> {
                 Ok(entry) => {
                     let plugin_dir = entry.path();
                     if plugin_dir.is_dir() {
-                        load_plugin_dir(&plugin_dir);
+                        if let Some(plugin_id) = plugin_dir.file_name().and_then(|f| f.to_str()) {
+                            if uninstalled_ids.contains(plugin_id) {
+                                log::debug!(
+                                    "Ignore loading '{}' as it should be uninstalled",
+                                    plugin_id
+                                );
+                                continue;
+                            }
+                            load_plugin_dir(&plugin_dir);
+                        }
                     }
                 }
                 Err(e) => {
@@ -345,6 +354,14 @@ fn load_plugin_path(path: &str) -> ResultType<()> {
     // to-do validate plugin
     // to-do check the plugin id (make sure it does not use another plugin's id)
 
+    let id = desc.meta().id.clone();
+    let plugin_info = PluginInfo {
+        path: path.to_string(),
+        uninstalled: false,
+        desc: desc.clone(),
+    };
+    PLUGIN_INFO.write().unwrap().insert(id.clone(), plugin_info);
+
     let init_info = serde_json::to_string(&InitInfo {
         is_server: crate::common::is_server(),
     })?;
@@ -359,7 +376,10 @@ fn load_plugin_path(path: &str) -> ResultType<()> {
             native: super::native::cb_native_data,
         },
     };
-    plugin.init(&init_data, path)?;
+    // If do not load the plugin when init failed, the ui will not show the installed plugin.
+    if let Err(e) = plugin.init(&init_data, path) {
+        log::error!("Failed to init plugin '{}', {}", desc.meta().id, e);
+    }
 
     if is_server() {
         super::config::ManagerConfig::add_plugin(&desc.meta().id)?;
@@ -370,13 +390,6 @@ fn load_plugin_path(path: &str) -> ResultType<()> {
     reload_ui(&desc, None);
 
     // add plugins
-    let id = desc.meta().id.clone();
-    let plugin_info = PluginInfo {
-        path: path.to_string(),
-        uninstalled: false,
-        desc,
-    };
-    PLUGIN_INFO.write().unwrap().insert(id.clone(), plugin_info);
     PLUGINS.write().unwrap().insert(id.clone(), plugin);
 
     log::info!("Plugin {} loaded", id);

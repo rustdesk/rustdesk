@@ -20,7 +20,8 @@ mod plog;
 mod plugins;
 
 pub use manager::{
-    install::install_plugin_with_url, install_plugin, load_plugin_list, uninstall_plugin,
+    install::{change_uninstall_plugin, install_plugin_with_url},
+    install_plugin, load_plugin_list, remove_uninstalled, uninstall_plugin,
 };
 pub use plugins::{
     handle_client_event, handle_listen_event, handle_server_event, handle_ui_event, load_plugin,
@@ -92,12 +93,19 @@ pub fn init() {
     if !is_server() {
         std::thread::spawn(move || manager::start_ipc());
     } else {
-        if let Err(e) = manager::remove_plugins() {
+        if let Err(e) = remove_uninstalled() {
             log::error!("Failed to remove plugins: {}", e);
         }
     }
-    if let Err(e) = plugins::load_plugins() {
-        log::error!("Failed to load plugins: {}", e);
+    match manager::get_uninstall_id_set() {
+        Ok(ids) => {
+            if let Err(e) = plugins::load_plugins(&ids) {
+                log::error!("Failed to load plugins: {}", e);
+            }
+        }
+        Err(e) => {
+            log::error!("Failed to load plugins: {}", e);
+        }
     }
 }
 
@@ -129,6 +137,11 @@ fn get_plugins_dir() -> ResultType<PathBuf> {
 #[inline]
 fn get_plugin_dir(id: &str) -> ResultType<PathBuf> {
     Ok(get_plugins_dir()?.join(id))
+}
+
+#[inline]
+fn get_uninstall_file_path() -> ResultType<PathBuf> {
+    Ok(get_plugins_dir()?.join("uninstall_list"))
 }
 
 #[inline]

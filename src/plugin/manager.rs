@@ -7,13 +7,13 @@ use hbb_common::{allow_err, bail, log, tokio, toml};
 use serde_derive::{Deserialize, Serialize};
 use serde_json;
 use std::{
-    collections::HashMap,
-    fs,
+    collections::{HashMap, HashSet},
+    fs::{read_to_string, remove_dir_all, OpenOptions},
+    io::Write,
     sync::{Arc, Mutex},
 };
 
 const MSG_TO_UI_PLUGIN_MANAGER_LIST: &str = "plugin_list";
-const MSG_TO_UI_PLUGIN_MANAGER_UPDATE: &str = "plugin_update";
 const MSG_TO_UI_PLUGIN_MANAGER_INSTALL: &str = "plugin_install";
 const MSG_TO_UI_PLUGIN_MANAGER_UNINSTALL: &str = "plugin_uninstall";
 
@@ -186,6 +186,18 @@ fn elevate_install(
     crate::platform::elevate(args)
 }
 
+#[inline]
+#[cfg(target_os = "windows")]
+fn elevate_uninstall(plugin_id: &str) -> ResultType<bool> {
+    crate::platform::elevate(&format!("--plugin-uninstall {}", plugin_id))
+}
+
+#[inline]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn elevate_install(plugin_id: &str) -> ResultType<bool> {
+    crate::platform::elevate(vec!["--plugin-uninstall", plugin_id])
+}
+
 pub fn install_plugin(id: &str) -> ResultType<()> {
     match PLUGIN_INFO.lock().unwrap().get(id) {
         Some(plugin) => {
@@ -218,7 +230,7 @@ pub fn install_plugin(id: &str) -> ResultType<()> {
     }
 }
 
-fn get_uninstalled_plugins() -> ResultType<Vec<String>> {
+fn get_uninstalled_plugins(uninstalled_plugin_set: &HashSet<String>) -> ResultType<Vec<String>> {
     let plugins_dir = super::get_plugins_dir()?;
     let mut plugins = Vec::new();
     if plugins_dir.exists() {
@@ -228,7 +240,7 @@ fn get_uninstalled_plugins() -> ResultType<Vec<String>> {
                     let plugin_dir = entry.path();
                     if plugin_dir.is_dir() {
                         if let Some(id) = plugin_dir.file_name().and_then(|n| n.to_str()) {
-                            if super::config::ManagerConfig::is_uninstalled(id) {
+                            if uninstalled_plugin_set.contains(id) {
                                 plugins.push(id.to_string());
                             }
                         }
@@ -243,19 +255,24 @@ fn get_uninstalled_plugins() -> ResultType<Vec<String>> {
     Ok(plugins)
 }
 
-pub(super) fn remove_plugins() -> ResultType<()> {
-    for id in get_uninstalled_plugins()?.iter() {
+pub fn remove_uninstalled() -> ResultType<()> {
+    let mut uninstalled_plugin_set = get_uninstall_id_set()?;
+    for id in get_uninstalled_plugins(&uninstalled_plugin_set)?.iter() {
         super::config::remove(id as _);
         if let Ok(dir) = super::get_plugin_dir(id as _) {
-            allow_err!(fs::remove_dir_all(dir));
+            allow_err!(remove_dir_all(dir.clone()));
+            if !dir.exists() {
+                uninstalled_plugin_set.remove(id);
+            }
         }
     }
+    allow_err!(update_uninstall_id_set(uninstalled_plugin_set));
     Ok(())
 }
 
 pub fn uninstall_plugin(id: &str, called_by_ui: bool) {
     if called_by_ui {
-        match crate::platform::check_super_user_permission() {
+        match elevate_uninstall(id) {
             Ok(true) => {
                 if let Err(e) = super::ipc::uninstall_plugin(id) {
                     log::error!("Failed to uninstall plugin '{}': {}", id, e);
@@ -284,8 +301,6 @@ pub fn uninstall_plugin(id: &str, called_by_ui: bool) {
 
     if is_server() {
         super::plugins::unload_plugin(&id);
-        // allow_err is Ok here.
-        allow_err!(super::config::ManagerConfig::set_uninstall(&id, true));
     }
 }
 
@@ -379,6 +394,28 @@ pub async fn start_ipc() {
     }
 }
 
+pub(super) fn get_uninstall_id_set() -> ResultType<HashSet<String>> {
+    let uninstall_file_path = super::get_uninstall_file_path()?;
+    if !uninstall_file_path.exists() {
+        std::fs::create_dir_all(&super::get_plugins_dir()?)?;
+        return Ok(HashSet::new());
+    }
+    let s = read_to_string(uninstall_file_path)?;
+    Ok(serde_json::from_str::<HashSet<String>>(&s)?)
+}
+
+fn update_uninstall_id_set(set: HashSet<String>) -> ResultType<()> {
+    let content = serde_json::to_string(&set)?;
+    let file = OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .create(true)
+        .open(super::get_uninstall_file_path()?)?;
+    let mut writer = std::io::BufWriter::new(file);
+    writer.write_all(content.as_bytes())?;
+    Ok(())
+}
+
 // install process
 pub(super) mod install {
     use super::IPC_PLUGIN_POSTFIX;
@@ -463,7 +500,27 @@ pub(super) mod install {
         Ok(())
     }
 
+    pub fn change_uninstall_plugin(id: &str, add: bool) {
+        match super::get_uninstall_id_set() {
+            Ok(mut set) => {
+                if add {
+                    set.insert(id.to_string());
+                } else {
+                    set.remove(id);
+                }
+                if let Err(e) = super::update_uninstall_id_set(set) {
+                    log::error!("Failed to write uninstall list, {}", e);
+                }
+            }
+            Err(e) => log::error!(
+                "Failed to get plugins dir, unable to read uninstall list, {}",
+                e
+            ),
+        }
+    }
+
     pub fn install_plugin_with_url(id: &str, url: &str) {
+        log::info!("Installing plugin '{}', url: {}", id, url);
         let plugin_dir = match super::super::get_plugin_dir(id) {
             Ok(d) => d,
             Err(e) => {
@@ -480,12 +537,14 @@ pub(super) mod install {
             }
         }
 
-        let filename = plugin_dir.join(format!("{}.zip", id));
-
-        // download
-        if !download_file(id, url, &filename) {
-            return;
-        }
+        let filename = match url.rsplit('/').next() {
+            Some(filename) => plugin_dir.join(filename),
+            None => {
+                send_install_status(id, InstallStatus::FailedDownloading);
+                log::error!("Failed to download plugin file, invalid url: {}", url);
+                return;
+            }
+        };
 
         let filename_to_remove = filename.clone();
         let _call_on_ret = crate::common::SimpleCallOnReturn {
@@ -496,6 +555,11 @@ pub(super) mod install {
                 }
             }),
         };
+
+        // download
+        if !download_file(id, url, &filename) {
+            return;
+        }
 
         // install
         send_install_status(id, InstallStatus::Installing);

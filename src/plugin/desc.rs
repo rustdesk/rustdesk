@@ -4,7 +4,7 @@ use serde_json;
 use std::collections::HashMap;
 use std::ffi::{c_char, CStr};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UiButton {
     key: String,
     text: String,
@@ -13,7 +13,7 @@ pub struct UiButton {
     action: String, // The action to be triggered when the button is clicked.
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UiCheckbox {
     key: String,
     text: String,
@@ -21,14 +21,14 @@ pub struct UiCheckbox {
     action: String, // The action to be triggered when the checkbox is checked or unchecked.
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "t", content = "c")]
 pub enum UiType {
     Button(UiButton),
     Checkbox(UiCheckbox),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Location {
     pub ui: HashMap<String, Vec<UiType>>,
 }
@@ -67,7 +67,7 @@ pub struct Meta {
     pub publish_info: PublishInfo,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Desc {
     meta: Meta,
     need_reboot: bool,
