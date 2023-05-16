@@ -279,7 +279,6 @@ fn request_plugin_sign(id: String, msg_to_rustdesk: MsgToRustDesk) -> PluginRetu
         "parse signature data '{}'",
         signature_data
     );
-    // to-do: Request server to sign the data.
     thread::spawn(move || {
         let sign_url = format!("{}/lic/web/api/plugin-sign", get_api_server());
         let client = reqwest::blocking::Client::new();
@@ -311,7 +310,16 @@ fn request_plugin_sign(id: String, msg_to_rustdesk: MsgToRustDesk) -> PluginRetu
                                 &[],
                             ) {
                                 Ok(ret) => {
-                                    assert!(!ret.msg.is_null());
+                                    debug_assert!(!ret.msg.is_null(), "msg is null");
+                                    if ret.msg.is_null() {
+                                        // unreachable
+                                        log::error!(
+                                            "The returned message pointer of plugin status is null, plugin id: '{}', code: {}",
+                                            id,
+                                            ret.code,
+                                        );
+                                        return;
+                                    }
                                     let msg = cstr_to_string(ret.msg).unwrap_or_default();
                                     free_c_ptr(ret.msg as _);
                                     if ret.code == super::errno::ERR_SUCCESS {

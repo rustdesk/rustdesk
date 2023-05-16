@@ -76,11 +76,18 @@ impl PluginReturn {
         }
     }
 
-    pub fn get_code_msg(&mut self) -> (i32, String) {
+    pub fn get_code_msg(&mut self, id: &str) -> (i32, String) {
         if self.is_success() {
             (self.code, "".to_owned())
         } else {
-            debug_assert!(!self.msg.is_null(), "msg is null");
+            if self.msg.is_null() {
+                log::warn!(
+                    "The message pointer from the plugin '{}' is null, but the error code is {}",
+                    id,
+                    self.code
+                );
+                return (self.code, "".to_owned());
+            }
             let msg = cstr_to_string(self.msg).unwrap_or_default();
             free_c_ptr(self.msg as _);
             self.msg = null();
@@ -146,7 +153,6 @@ fn get_uninstall_file_path() -> ResultType<PathBuf> {
 
 #[inline]
 fn cstr_to_string(cstr: *const c_char) -> ResultType<String> {
-    assert!(!cstr.is_null(), "cstr must be a valid pointer");
     if cstr.is_null() {
         bail!("failed to convert string, the pointer is null");
     }
