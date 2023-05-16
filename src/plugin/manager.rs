@@ -186,6 +186,19 @@ fn elevate_install(
     crate::platform::elevate(args)
 }
 
+#[cfg(target_os = "macos")]
+fn elevate_install(
+    plugin_id: &str,
+    plugin_url: &str,
+    same_plugin_exists: bool,
+) -> ResultType<bool> {
+    let mut args = vec!["--plugin-install", plugin_id];
+    if !same_plugin_exists {
+        args.push(&plugin_url);
+    }
+    crate::platform::elevate(args, "RustDesk wants to install then plugin")
+}
+
 #[inline]
 #[cfg(target_os = "windows")]
 fn elevate_uninstall(plugin_id: &str) -> ResultType<bool> {
@@ -193,9 +206,18 @@ fn elevate_uninstall(plugin_id: &str) -> ResultType<bool> {
 }
 
 #[inline]
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-fn elevate_install(plugin_id: &str) -> ResultType<bool> {
+#[cfg(target_os = "linux")]
+fn elevate_uninstall(plugin_id: &str) -> ResultType<bool> {
     crate::platform::elevate(vec!["--plugin-uninstall", plugin_id])
+}
+
+#[inline]
+#[cfg(target_os = "macos")]
+fn elevate_uninstall(plugin_id: &str) -> ResultType<bool> {
+    crate::platform::elevate(
+        vec!["--plugin-uninstall", plugin_id],
+        "RustDesk wants to uninstall the plugin",
+    )
 }
 
 pub fn install_plugin(id: &str) -> ResultType<()> {
