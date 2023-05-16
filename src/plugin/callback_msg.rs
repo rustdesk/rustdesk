@@ -308,7 +308,7 @@ fn request_plugin_sign(id: String, msg_to_rustdesk: MsgToRustDesk) -> PluginRetu
                                 "",
                                 &[],
                             ) {
-                                Ok(mut ret) => {
+                                Ok(ret) => {
                                     assert!(!ret.msg.is_null());
                                     let msg = cstr_to_string(ret.msg).unwrap_or_default();
                                     free_c_ptr(ret.msg as _);
