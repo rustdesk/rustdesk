@@ -143,7 +143,7 @@ pub enum NetworkType {
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
 pub struct Config {
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub id: String, // use
     #[serde(default)]
     enc_id: String, // store
@@ -434,11 +434,14 @@ impl Config {
             config.id = id;
             id_valid = true;
             store |= store2;
-        } else if crate::get_modified_time(&Self::file_(""))
-            .checked_sub(std::time::Duration::from_secs(30)) // allow modification during installation
-            .unwrap_or_else(crate::get_exe_time)
-            < crate::get_exe_time()
-            && !config.id.is_empty()
+        } else if
+        // Comment out for forward compatible
+        // crate::get_modified_time(&Self::file_(""))
+        // .checked_sub(std::time::Duration::from_secs(30)) // allow modification during installation
+        // .unwrap_or_else(crate::get_exe_time)
+        // < crate::get_exe_time()
+        // &&
+        !config.id.is_empty()
             && config.enc_id.is_empty()
             && !decrypt_str_or_original(&config.id, PASSWORD_ENC_VERSION).1
         {
