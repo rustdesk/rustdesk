@@ -327,6 +327,13 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   initState() {
     super.initState();
 
+    Future.delayed(Duration.zero, () async {
+      _fractionX.value = double.tryParse(await bind.sessionGetOption(
+                  id: widget.id, arg: 'remote-menubar-drag-x') ??
+              '0.5') ??
+          0.5;
+    });
+
     _debouncerHide = Debouncer<int>(
       Duration(milliseconds: 5000),
       onChanged: _debouncerHideProc,
@@ -380,6 +387,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             elevation: _MenubarTheme.elevation,
             shadowColor: MyTheme.color(context).shadow,
             child: _DraggableShowHide(
+              id: widget.id,
               dragging: _dragging,
               fractionX: _fractionX,
               show: show,
@@ -1501,11 +1509,13 @@ class RdoMenuButton<T> extends StatelessWidget {
 }
 
 class _DraggableShowHide extends StatefulWidget {
+  final String id;
   final RxDouble fractionX;
   final RxBool dragging;
   final RxBool show;
   const _DraggableShowHide({
     Key? key,
+    required this.id,
     required this.fractionX,
     required this.dragging,
     required this.show,
@@ -1518,6 +1528,30 @@ class _DraggableShowHide extends StatefulWidget {
 class _DraggableShowHideState extends State<_DraggableShowHide> {
   Offset position = Offset.zero;
   Size size = Size.zero;
+  double left = 0.0;
+  double right = 1.0;
+
+  @override
+  initState() {
+    super.initState();
+
+    final confLeft = double.tryParse(
+        bind.mainGetLocalOption(key: 'remote-menubar-drag-left'));
+    if (confLeft == null) {
+      bind.mainSetLocalOption(
+          key: 'remote-menubar-drag-left', value: left.toString());
+    } else {
+      left = confLeft;
+    }
+    final confRight = double.tryParse(
+        bind.mainGetLocalOption(key: 'remote-menubar-drag-right'));
+    if (confRight == null) {
+      bind.mainSetLocalOption(
+          key: 'remote-menubar-drag-right', value: right.toString());
+    } else {
+      right = confRight;
+    }
+  }
 
   Widget _buildDraggable(BuildContext context) {
     return Draggable(
@@ -1541,12 +1575,17 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
         final mediaSize = MediaQueryData.fromWindow(ui.window).size;
         widget.fractionX.value +=
             (details.offset.dx - position.dx) / (mediaSize.width - size.width);
-        if (widget.fractionX.value < 0.35) {
-          widget.fractionX.value = 0.35;
+        if (widget.fractionX.value < left) {
+          widget.fractionX.value = left;
         }
-        if (widget.fractionX.value > 0.65) {
-          widget.fractionX.value = 0.65;
+        if (widget.fractionX.value > right) {
+          widget.fractionX.value = right;
         }
+        bind.sessionPeerOption(
+          id: widget.id,
+          name: 'remote-menubar-drag-x',
+          value: widget.fractionX.value.toString(),
+        );
         widget.dragging.value = false;
       },
     );
