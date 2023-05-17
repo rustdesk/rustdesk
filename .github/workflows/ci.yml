@@ -170,19 +170,21 @@ jobs:
       run: |
         # test only library unit tests and binary for arm-type targets
         unset CARGO_TEST_OPTIONS
-        unset CARGO_TEST_OPTIONS ; case ${{ matrix.job.target }} in arm-* | aarch64-*) CARGO_TEST_OPTIONS="--lib --bin ${PROJECT_NAME}" ;; esac;
-        echo ::set-output name=CARGO_TEST_OPTIONS::${CARGO_TEST_OPTIONS}
 
-    - name: Build tests
+        case ${{ matrix.job.target }} in
+          arm-* | aarch64-*)
+            CARGO_TEST_OPTIONS="--lib --bin ${PROJECT_NAME}"
+            ;;
+          *)
+            CARGO_TEST_OPTIONS="--workspace --no-fail-fast -- --skip test_get_cursor_pos --skip test_get_key_state"
+            ;;
+        esac;
+
+        echo ::set-output name=CARGO_TEST_OPTIONS::${CARGO_TEST_OPTIONS}  
+
+    - name: Run tests
       uses: actions-rs/cargo@v1
       with:
         use-cross: ${{ matrix.job.use-cross }}
-        command: build
-        args: --locked --tests --target=${{ matrix.job.target }}        
-
-    # - name: Run tests
-    #   uses: actions-rs/cargo@v1
-    #   with:
-    #     use-cross: ${{ matrix.job.use-cross }}
-    #     command: test
-    #     args: --locked --target=${{ matrix.job.target }} ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}}
+        command: test
+        args: --locked --target=${{ matrix.job.target }} ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}}
