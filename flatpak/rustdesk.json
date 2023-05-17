@@ -9,7 +9,7 @@
     "shared-modules/libappindicator/libappindicator-gtk3-12.10.json",
     "xdotool.json",
     {
-      "name": "GetRytRemote",
+      "name": "rustdesk",
       "buildsystem": "simple",
       "build-commands": [
         "bsdtar -zxvf rustdesk-1.2.0.deb",
