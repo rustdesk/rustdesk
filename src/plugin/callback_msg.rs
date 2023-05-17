@@ -80,7 +80,6 @@ pub(super) struct MsgToExtSupport {
 
 #[derive(Debug, Serialize)]
 struct PluginSignReq {
-    peer_id: String,
     plugin_id: String,
     version: String,
     msg: Vec<u8>,
@@ -283,7 +282,6 @@ fn request_plugin_sign(id: String, msg_to_rustdesk: MsgToRustDesk) -> PluginRetu
         let sign_url = format!("{}/lic/web/api/plugin-sign", get_api_server());
         let client = reqwest::blocking::Client::new();
         let req = PluginSignReq {
-            peer_id: crate::ui_interface::get_id(),
             plugin_id: id.clone(),
             version: signature_data.version,
             msg: signature_data.data,
