@@ -41,6 +41,7 @@ message DisplayInfo {
   string name = 5;
   bool online = 6;
   bool cursor_embedded = 7;
+  Resolution original_resolution = 8;
 }
 
 message PortForward {
@@ -444,6 +445,8 @@ message SwitchDisplay {
   int32 height = 5;
   bool cursor_embedded = 6;
   SupportedResolutions resolutions = 7;
+  // Do not care about the origin point for now.
+  Resolution original_resolution = 8;
 }
 
 message PermissionInfo {
@@ -501,6 +504,7 @@ message OptionMessage {
   SupportedDecoding supported_decoding = 10;
   int32 custom_fps = 11;
   BoolOption disable_keyboard = 12;
+  Resolution custom_resolution = 13;
 }
 
 message TestDelay {

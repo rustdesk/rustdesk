@@ -62,8 +62,55 @@ lazy_static::lazy_static! {
     pub static ref IS_UAC_RUNNING: Arc<Mutex<bool>> = Default::default();
     pub static ref IS_FOREGROUND_WINDOW_ELEVATED: Arc<Mutex<bool>> = Default::default();
     pub static ref LAST_SYNC_DISPLAYS: Arc<RwLock<Vec<DisplayInfo>>> = Default::default();
+    static ref ORIGINAL_RESOLUTIONS: Arc<RwLock<HashMap<String, (i32, i32)>>> = Default::default();
 }
 
+#[inline]
+pub fn set_original_resolution(display_name: &str, wh: (i32, i32)) -> (i32, i32) {
+    let mut original_resolutions = ORIGINAL_RESOLUTIONS.write().unwrap();
+    match original_resolutions.get(display_name) {
+        Some(r) => r.clone(),
+        None => {
+            original_resolutions.insert(display_name.to_owned(), wh.clone());
+            wh
+        }
+    }
+}
+
+#[inline]
+fn get_original_resolution(display_name: &str) -> Option<(i32, i32)> {
+    ORIGINAL_RESOLUTIONS
+        .read()
+        .unwrap()
+        .get(display_name)
+        .map(|r| r.clone())
+}
+
+#[inline]
+fn get_or_set_original_resolution(display_name: &str, wh: (i32, i32)) -> (i32, i32) {
+    let r = get_original_resolution(display_name);
+    if let Some(r) = r {
+        return r;
+    }
+    set_original_resolution(display_name, wh)
+}
+
+#[inline]
+pub fn reset_resolutions() {
+    for (name, (w, h)) in ORIGINAL_RESOLUTIONS.read().unwrap().iter() {
+        if let Err(e) = crate::platform::change_resolution(name, *w as _, *h as _) {
+            log::error!(
+                "Failed to reset resolution of display '{}' to ({},{}): {}",
+                name,
+                w,
+                h,
+                e
+            );
+        }
+    }
+}
+
+#[inline]
 fn is_capturer_mag_supported() -> bool {
     #[cfg(windows)]
     return scrap::CapturerMag::is_supported();
@@ -71,22 +118,27 @@ fn is_capturer_mag_supported() -> bool {
     false
 }
 
+#[inline]
 pub fn capture_cursor_embedded() -> bool {
     scrap::is_cursor_embedded()
 }
 
+#[inline]
 pub fn notify_video_frame_fetched(conn_id: i32, frame_tm: Option<Instant>) {
     FRAME_FETCHED_NOTIFIER.0.send((conn_id, frame_tm)).unwrap()
 }
 
+#[inline]
 pub fn set_privacy_mode_conn_id(conn_id: i32) {
     *PRIVACY_MODE_CONN_ID.lock().unwrap() = conn_id
 }
 
+#[inline]
 pub fn get_privacy_mode_conn_id() -> i32 {
     *PRIVACY_MODE_CONN_ID.lock().unwrap()
 }
 
+#[inline]
 pub fn is_privacy_mode_supported() -> bool {
     #[cfg(windows)]
     return *IS_CAPTURER_MAGNIFIER_SUPPORTED
@@ -491,6 +543,10 @@ fn run(sp: GenericService) -> ResultType<()> {
     if *SWITCH.lock().unwrap() {
         log::debug!("Broadcasting display switch");
         let mut misc = Misc::new();
+        let display_name = get_current_display_name();
+
+        // to-do: check if is virtual display
+
         misc.set_switch_display(SwitchDisplay {
             display: c.current as _,
             x: c.origin.0 as _,
@@ -500,11 +556,18 @@ fn run(sp: GenericService) -> ResultType<()> {
             cursor_embedded: capture_cursor_embedded(),
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             resolutions: Some(SupportedResolutions {
-                resolutions: get_current_display_name()
-                    .map(|name| crate::platform::resolutions(&name))
+                resolutions: display_name
+                    .as_ref()
+                    .map(|name| crate::platform::resolutions(name))
                     .unwrap_or(vec![]),
                 ..SupportedResolutions::default()
             })
+            .into(),
+            original_resolution: Some(update_get_original_resolution(
+                &display_name.unwrap_or_default(),
+                c.width,
+                c.height,
+            ))
             .into(),
             ..Default::default()
         });
@@ -820,6 +883,16 @@ pub fn handle_one_frame_encoded(
     Ok(send_conn_ids)
 }
 
+#[inline]
+fn update_get_original_resolution(display_name: &str, w: usize, h: usize) -> Resolution {
+    let wh = get_or_set_original_resolution(display_name, (w as _, h as _));
+    Resolution {
+        width: wh.0,
+        height: wh.1,
+        ..Default::default()
+    }
+}
+
 pub(super) fn get_displays_2(all: &Vec<Display>) -> (usize, Vec<DisplayInfo>) {
     let mut displays = Vec::new();
     let mut primary = 0;
@@ -835,6 +908,12 @@ pub(super) fn get_displays_2(all: &Vec<Display>) -> (usize, Vec<DisplayInfo>) {
             name: d.name(),
             online: d.is_online(),
             cursor_embedded: false,
+            original_resolution: Some(update_get_original_resolution(
+                &d.name(),
+                d.width(),
+                d.height(),
+            ))
+            .into(),
             ..Default::default()
         });
     }

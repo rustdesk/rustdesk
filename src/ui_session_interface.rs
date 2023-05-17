@@ -88,10 +88,7 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn is_port_forward(&self) -> bool {
-        let conn_type = self.lc
-            .read()
-            .unwrap()
-            .conn_type;
+        let conn_type = self.lc.read().unwrap().conn_type;
         conn_type == ConnType::PORT_FORWARD || conn_type == ConnType::RDP
     }
 
@@ -833,6 +830,10 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn change_resolution(&self, width: i32, height: i32) {
+        self.lc
+            .write()
+            .unwrap()
+            .set_custom_resolution(Some((width, height)));
         let mut misc = Misc::new();
         misc.set_change_resolution(Resolution {
             width,

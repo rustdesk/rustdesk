@@ -29,6 +29,10 @@ const _kKeyLegacyMode = 'legacy';
 const _kKeyMapMode = 'map';
 const _kKeyTranslateMode = 'translate';
 
+const _kResolutionOrigin = 'Origin';
+const _kResolutionCustom = 'Custom';
+const _kResolutionFitLocal = 'FitLocal';
+
 class MenubarState {
   final kStoreKey = 'remoteMenubarState';
   late RxBool show;
@@ -692,6 +696,8 @@ class _DisplayMenuState extends State<_DisplayMenu> {
   int get windowId => stateGlobal.windowId;
 
   Map<String, bool> get perms => widget.ffi.ffiModel.permissions;
+  RxBool _isOrignalResolution = true.obs;
+  RxBool _isFitLocalResolution = false.obs;
 
   PeerInfo get pi => widget.ffi.ffiModel.pi;
   FfiModel get ffiModel => widget.ffi.ffiModel;
@@ -943,6 +949,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
     final groupValue = "${display.width}x${display.height}";
     onChanged(String? value) async {
       if (value == null) return;
+
       final list = value.split('x');
       if (list.length == 2) {
         final w = int.tryParse(list[0]);
@@ -964,14 +971,37 @@ class _DisplayMenuState extends State<_DisplayMenu> {
 
     return _SubmenuButton(
         ffi: widget.ffi,
-        menuChildren: resolutions
-            .map((e) => RdoMenuButton(
-                value: '${e.width}x${e.height}',
+        menuChildren: [
+              RdoMenuButton(
+                value: _kResolutionOrigin,
                 groupValue: groupValue,
                 onChanged: onChanged,
                 ffi: widget.ffi,
-                child: Text('${e.width}x${e.height}')))
-            .toList(),
+                child: Text('Origin'),
+              ),
+              RdoMenuButton(
+                value: _kResolutionFitLocal,
+                groupValue: groupValue,
+                onChanged: onChanged,
+                ffi: widget.ffi,
+                child: Text('Fit local'),
+              ),
+              // RdoMenuButton(
+              //   value: _kResolutionCustom,
+              //   groupValue: groupValue,
+              //   onChanged: onChanged,
+              //   ffi: widget.ffi,
+              //   child: Text('Custom resolution'),
+              // ),
+            ] +
+            resolutions
+                .map((e) => RdoMenuButton(
+                    value: '${e.width}x${e.height}',
+                    groupValue: groupValue,
+                    onChanged: onChanged,
+                    ffi: widget.ffi,
+                    child: Text('${e.width}x${e.height}')))
+                .toList(),
         child: Text(translate("Resolution")));
   }
 

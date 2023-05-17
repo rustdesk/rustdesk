@@ -1888,6 +1888,10 @@ pub fn change_resolution(name: &str, width: usize, height: usize) -> ResultType<
         if FALSE == EnumDisplaySettingsW(NULL as _, ENUM_CURRENT_SETTINGS, &mut dm) {
             bail!("EnumDisplaySettingsW failed, errno={}", GetLastError());
         }
+
+        // to-do: check if need change
+        println!("REMOVE ME ========================== dm ({},{}) to ({},{})", dm.dmPelsWidth, dm.dmPelsHeight, width, height);
+
         let wname = wide_string(name);
         let len = if wname.len() <= dm.dmDeviceName.len() {
             wname.len()

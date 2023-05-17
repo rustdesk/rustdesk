@@ -1,10 +1,10 @@
 #[cfg(not(debug_assertions))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::platform::breakdown_callback;
+use hbb_common::log;
 #[cfg(not(debug_assertions))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::platform::register_breakdown_handler;
-use hbb_common::{allow_err, log};
 
 /// shared by flutter and sciter main function
 ///
@@ -270,7 +270,7 @@ fn init_plugins(args: &Vec<String>) {
             crate::plugin::init();
         }
     } else if "--service" == (&args[0] as &str) {
-        allow_err!(crate::plugin::remove_uninstalled());
+        hbb_common::allow_err!(crate::plugin::remove_uninstalled());
     }
 }
 

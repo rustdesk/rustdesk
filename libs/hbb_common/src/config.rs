@@ -192,6 +192,12 @@ pub struct Config2 {
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
+pub struct Resolution {
+    pub w: i32,
+    pub h: i32,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
 pub struct PeerConfig {
     #[serde(default, deserialize_with = "deserialize_vec_u8")]
     pub password: Vec<u8>,
@@ -245,6 +251,9 @@ pub struct PeerConfig {
     pub keyboard_mode: String,
     #[serde(flatten)]
     pub view_only: ViewOnly,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_resolution: Option<Resolution>,
 
     // The other scalar value must before this
     #[serde(default, deserialize_with = "PeerConfig::deserialize_options")]
