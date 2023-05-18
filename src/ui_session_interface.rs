@@ -829,11 +829,12 @@ impl<T: InvokeUiSession> Session<T> {
         }
     }
 
+    #[inline]
+    pub fn set_custom_resolution(&mut self, wh: Option<(i32, i32)>) {
+        self.lc.write().unwrap().set_custom_resolution(wh);
+    }
+
     pub fn change_resolution(&self, width: i32, height: i32) {
-        self.lc
-            .write()
-            .unwrap()
-            .set_custom_resolution(Some((width, height)));
         let mut misc = Misc::new();
         misc.set_change_resolution(Resolution {
             width,

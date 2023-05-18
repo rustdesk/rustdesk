@@ -880,6 +880,18 @@ pub fn main_handle_relay_id(id: String) -> String {
     handle_relay_id(id)
 }
 
+pub fn main_get_current_display() -> SyncReturn<String> {
+    let display_info = match crate::video_service::get_current_display() {
+        Ok((_, _, display)) => serde_json::to_string(&HashMap::from([
+            ("w", display.width()),
+            ("h", display.height()),
+        ]))
+        .unwrap_or_default(),
+        Err(..) => "".to_string(),
+    };
+    SyncReturn(display_info)
+}
+
 pub fn session_add_port_forward(
     id: String,
     local_port: i32,
@@ -1426,10 +1438,10 @@ pub fn plugin_event(_id: String, _peer: String, _event: Vec<u8>) {
     }
 }
 
-pub fn plugin_register_event_stream(id: String, event2ui: StreamSink<EventToUI>) {
+pub fn plugin_register_event_stream(_id: String, _event2ui: StreamSink<EventToUI>) {
     #[cfg(feature = "plugin_framework")]
     {
-        crate::plugin::native_handlers::session::session_register_event_stream(id, event2ui);
+        crate::plugin::native_handlers::session::session_register_event_stream(_id, _event2ui);
     }
 }
 
@@ -1577,16 +1589,16 @@ pub fn plugin_list_reload() {
     }
 }
 
-pub fn plugin_install(id: String, b: bool) {
+pub fn plugin_install(_id: String, _b: bool) {
     #[cfg(feature = "plugin_framework")]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
-        if b {
+        if _b {
             if let Err(e) = crate::plugin::install_plugin(&id) {
                 log::error!("Failed to install plugin '{}': {}", id, e);
             }
         } else {
-            crate::plugin::uninstall_plugin(&id, true);
+            crate::plugin::uninstall_plugin(&_id, true);
         }
     }
 }

@@ -1211,6 +1211,14 @@ impl<T: InvokeUiSession> Remote<T> {
                                 s.cursor_embedded,
                             );
                         }
+                        let custom_resolution = if s.width != s.original_resolution.width
+                            || s.height != s.original_resolution.height
+                        {
+                            Some((s.width, s.height))
+                        } else {
+                            None
+                        };
+                        self.handler.set_custom_resolution(custom_resolution);
                     }
                     Some(misc::Union::CloseReason(c)) => {
                         self.handler.msgbox("error", "Connection Error", &c, "");

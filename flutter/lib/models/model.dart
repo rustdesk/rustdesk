@@ -295,11 +295,15 @@ class FfiModel with ChangeNotifier {
   handleSwitchDisplay(Map<String, dynamic> evt, String peerId) {
     _pi.currentDisplay = int.parse(evt['display']);
     var newDisplay = Display();
-    newDisplay.x = double.parse(evt['x']);
-    newDisplay.y = double.parse(evt['y']);
-    newDisplay.width = int.parse(evt['width']);
-    newDisplay.height = int.parse(evt['height']);
-    newDisplay.cursorEmbedded = int.parse(evt['cursor_embedded']) == 1;
+    newDisplay.x = double.tryParse(evt['x']) ?? newDisplay.x;
+    newDisplay.y = double.tryParse(evt['y']) ?? newDisplay.y;
+    newDisplay.width = int.tryParse(evt['width']) ?? newDisplay.width;
+    newDisplay.height = int.tryParse(evt['height']) ?? newDisplay.height;
+    newDisplay.cursorEmbedded = int.tryParse(evt['cursor_embedded']) == 1;
+    newDisplay.originalWidth =
+        int.tryParse(evt['original_width']) ?? newDisplay.originalWidth;
+    newDisplay.originalHeight =
+        int.tryParse(evt['original_height']) ?? newDisplay.originalHeight;
 
     _updateCurDisplay(peerId, newDisplay);
 
@@ -466,14 +470,7 @@ class FfiModel with ChangeNotifier {
       _pi.displays = [];
       List<dynamic> displays = json.decode(evt['displays']);
       for (int i = 0; i < displays.length; ++i) {
-        Map<String, dynamic> d0 = displays[i];
-        var d = Display();
-        d.x = d0['x'].toDouble();
-        d.y = d0['y'].toDouble();
-        d.width = d0['width'];
-        d.height = d0['height'];
-        d.cursorEmbedded = d0['cursor_embedded'] == 1;
-        _pi.displays.add(d);
+        _pi.displays.add(evtToDisplay(displays[i]));
       }
       stateGlobal.displaysCount.value = _pi.displays.length;
       if (_pi.currentDisplay < _pi.displays.length) {
@@ -533,20 +530,25 @@ class FfiModel with ChangeNotifier {
     }
   }
 
+  Display evtToDisplay(Map<String, dynamic> evt) {
+    var d = Display();
+    d.x = evt['x']?.toDouble() ?? d.x;
+    d.y = evt['y']?.toDouble() ?? d.y;
+    d.width = evt['width'] ?? d.width;
+    d.height = evt['height'] ?? d.height;
+    d.cursorEmbedded = evt['cursor_embedded'] == 1;
+    d.originalWidth = evt['original_width'] ?? d.originalWidth;
+    d.originalHeight = evt['original_height'] ?? d.originalHeight;
+    return d;
+  }
+
   /// Handle the peer info synchronization event based on [evt].
   handleSyncPeerInfo(Map<String, dynamic> evt, String peerId) async {
     if (evt['displays'] != null) {
       List<dynamic> displays = json.decode(evt['displays']);
       List<Display> newDisplays = [];
       for (int i = 0; i < displays.length; ++i) {
-        Map<String, dynamic> d0 = displays[i];
-        var d = Display();
-        d.x = d0['x'].toDouble();
-        d.y = d0['y'].toDouble();
-        d.width = d0['width'];
-        d.height = d0['height'];
-        d.cursorEmbedded = d0['cursor_embedded'] == 1;
-        newDisplays.add(d);
+        newDisplays.add(evtToDisplay(displays[i]));
       }
       _pi.displays = newDisplays;
       stateGlobal.displaysCount.value = _pi.displays.length;
@@ -1718,6 +1720,8 @@ class Display {
   int width = 0;
   int height = 0;
   bool cursorEmbedded = false;
+  int originalWidth = 0;
+  int originalHeight = 0;
 
   Display() {
     width = (isDesktop || isWebDesktop)
@@ -1740,6 +1744,9 @@ class Display {
       other.width == width &&
       other.height == height &&
       other.cursorEmbedded == cursorEmbedded;
+
+  bool get isOriginalResolution =>
+      width == originalWidth && height == originalHeight;
 }
 
 class Resolution {
