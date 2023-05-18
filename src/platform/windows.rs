@@ -1890,6 +1890,17 @@ pub fn current_resolution(name: &str) -> ResultType<Resolution> {
     }
 }
 
+#[inline]
+fn is_device_name(device_name: &str, name: &str) -> bool {
+    if name.len() == device_name.len() {
+        name == device_name
+    } else if name.len() > device_name.len() {
+        false
+    } else {
+        &device_name[..name.len()] == name && device_name.as_bytes()[name.len() as usize] == 0
+    }
+}
+
 pub fn is_virtual_display(name: &str) -> ResultType<bool> {
     let mut dd: DISPLAY_DEVICEW = unsafe { std::mem::zeroed() };
     dd.cb = std::mem::size_of::<DISPLAY_DEVICEW>() as DWORD;
@@ -1900,7 +1911,7 @@ pub fn is_virtual_display(name: &str) -> ResultType<bool> {
             break;
         }
         if let Ok(device_name) = String::from_utf16(&dd.DeviceName) {
-            if device_name == name {
+            if is_device_name(&device_name, name) {
                 return match std::string::String::from_utf16(&dd.DeviceString) {
                     Ok(s) => Ok(&s[..IDD_DEVICE_STRING.len()] == IDD_DEVICE_STRING),
                     Err(e) => bail!("convert the device string of '{}' to string: {}", name, e),
