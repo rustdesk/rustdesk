@@ -29,10 +29,6 @@ const _kKeyLegacyMode = 'legacy';
 const _kKeyMapMode = 'map';
 const _kKeyTranslateMode = 'translate';
 
-const _kResolutionOrigin = 'Origin';
-const _kResolutionCustom = 'Custom';
-const _kResolutionFitLocal = 'FitLocal';
-
 class MenubarState {
   final kStoreKey = 'remoteMenubarState';
   late RxBool show;
@@ -1002,10 +998,6 @@ class _ResolutionsMenu extends StatefulWidget {
 class _ResolutionsMenuState extends State<_ResolutionsMenu> {
   String _groupValue = '';
   Resolution? _localResolution;
-  late final _customWidth =
-      TextEditingController(text: display.width.toString());
-  late final _customHeight =
-      TextEditingController(text: display.height.toString());
 
   PeerInfo get pi => widget.ffi.ffiModel.pi;
   FfiModel get ffiModel => widget.ffi.ffiModel;
@@ -1020,8 +1012,9 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
   @override
   Widget build(BuildContext context) {
     final isVirtualDisplay = display.isVirtualDisplayResolution;
-    final visible =
-        ffiModel.keyboard && (isVirtualDisplay || resolutions.length > 1);
+    // final visible =
+    //     ffiModel.keyboard && (isVirtualDisplay || resolutions.length > 1);
+    final visible = ffiModel.keyboard && resolutions.length > 1;
     if (!visible) return Offstage();
     _groupValue = '${display.width}x${display.height}';
     _getLocalResolution();
@@ -1034,10 +1027,20 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
         menuChildren: <Widget>[
               _OriginalResolutionMenuButton(showOriginalBtn),
               _FitLocalResolutionMenuButton(showFitLocalBtn),
-              _customResolutionMenuButton(isVirtualDisplay),
+              // _customResolutionMenuButton(isVirtualDisplay),
+              _menuDivider(showOriginalBtn, showFitLocalBtn, isVirtualDisplay),
             ] +
             _supportedResolutionMenuButtons(),
         child: Text(translate("Resolution")));
+  }
+
+  _menuDivider(
+      bool showOriginalBtn, bool showFitLocalBtn, bool isVirtualDisplay) {
+    return Offstage(
+      // offstage: !(showOriginalBtn || showFitLocalBtn || isVirtualDisplay),
+      offstage: !(showOriginalBtn || showFitLocalBtn),
+      child: Divider(),
+    );
   }
 
   _getLocalResolution() {
@@ -1057,53 +1060,38 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
 
   _onChanged(String? value) async {
     if (value == null) return;
-
-    int? w;
-    int? h;
-    if (value == _kResolutionOrigin) {
-      w = display.originalWidth;
-      h = display.originalHeight;
-    } else if (value == _kResolutionFitLocal) {
-      final resolution = _getBestFitResolution();
-      if (resolution != null) {
-        w = resolution.width;
-        h = resolution.height;
-      }
-    } else if (value == _kResolutionCustom) {
-      w = int.tryParse(_customWidth.value as String);
-      h = int.tryParse(_customHeight.value as String);
-    } else {
-      final list = value.split('x');
-      if (list.length == 2) {
-        w = int.tryParse(list[0]);
-        h = int.tryParse(list[1]);
+    final list = value.split('x');
+    if (list.length == 2) {
+      final w = int.tryParse(list[0]);
+      final h = int.tryParse(list[1]);
+      if (w != null && h != null) {
+        await _changeResolution(w, h);
       }
     }
+  }
 
-    if (w != null && h != null) {
-      await bind.sessionChangeResolution(
-        id: widget.id,
-        width: w,
-        height: h,
-      );
-      Future.delayed(Duration(seconds: 3), () async {
-        final display = ffiModel.display;
-        if (w == display.width && h == display.height) {
-          if (await widget.screenAdjustor.isWindowCanBeAdjusted()) {
-            widget.screenAdjustor.doAdjustWindow();
-          }
+  _changeResolution(int w, int h) async {
+    await bind.sessionChangeResolution(
+      id: widget.id,
+      width: w,
+      height: h,
+    );
+    Future.delayed(Duration(seconds: 3), () async {
+      final display = ffiModel.display;
+      if (w == display.width && h == display.height) {
+        if (await widget.screenAdjustor.isWindowCanBeAdjusted()) {
+          widget.screenAdjustor.doAdjustWindow();
         }
-      });
-    }
+      }
+    });
   }
 
   Widget _OriginalResolutionMenuButton(bool showOriginalBtn) {
     return Offstage(
       offstage: !showOriginalBtn,
-      child: RdoMenuButton(
-        value: _kResolutionOrigin,
-        groupValue: _groupValue,
-        onChanged: _onChanged,
+      child: MenuButton(
+        onPressed: () =>
+            _changeResolution(display.originalWidth, display.originalHeight),
         ffi: widget.ffi,
         child: Text(
             '${translate('Original')} ${display.originalWidth}x${display.originalHeight}'),
@@ -1114,10 +1102,13 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
   Widget _FitLocalResolutionMenuButton(bool showFitLocalBtn) {
     return Offstage(
       offstage: !showFitLocalBtn,
-      child: RdoMenuButton(
-        value: _kResolutionFitLocal,
-        groupValue: _groupValue,
-        onChanged: _onChanged,
+      child: MenuButton(
+        onPressed: () {
+          final resolution = _getBestFitResolution();
+          if (resolution != null) {
+            _changeResolution(resolution.width, resolution.height);
+          }
+        },
         ffi: widget.ffi,
         child: Text(
             '${translate('Fit Local')} ${_localResolution?.width ?? 0}x${_localResolution?.height ?? 0}'),
@@ -1137,50 +1128,61 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
   Widget _customResolutionMenuButton(bool showCustomBtn) {
     return Offstage(
       offstage: !showCustomBtn,
-      child: RdoMenuButton(
-        value: _kResolutionCustom,
-        groupValue: _groupValue,
-        onChanged: _onChanged,
+      child: MenuButton(
+        onPressed: () => _customResolutionDialog(),
         ffi: widget.ffi,
-        child: _customResolutionWidget(),
+        child:
+            Text('${translate('Custom')} ${display.width}x${display.height}'),
       ),
     );
   }
 
-  Widget _customResolutionWidget() {
-    return Column(
-      children: [
-        Text(translate('Custom')),
-        Container(
-          width: 5,
-        ),
-        // _resolutionInput(_customWidth),
-        Container(
-          width: 3,
-        ),
-        Text('x'),
-        Container(
-          width: 3,
-        ),
-        // _resolutionInput(_customHeight),
-      ],
-    );
-  }
+  _customResolutionDialog() async {
+    OverlayDialogManager dialogManager = widget.ffi.dialogManager;
+    dialogManager.dismissAll();
+    dialogManager.show((setState, close, context) {
+      cancel() {
+        close();
+      }
 
-  TextField _resolutionInput(TextEditingController controller) {
-    return TextField(
-      decoration: InputDecoration(
-        border: InputBorder.none,
-        isDense: true,
-      ),
-      keyboardType: TextInputType.number,
-      inputFormatters: <TextInputFormatter>[
-        FilteringTextInputFormatter.digitsOnly,
-        LengthLimitingTextInputFormatter(4),
-        FilteringTextInputFormatter.allow(RegExp(r'[0-9]')),
-      ],
-      controller: controller,
-    );
+      return CustomAlertDialog(
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.password_rounded, color: MyTheme.accent),
+            Text(translate('Custom width x height')).paddingOnly(left: 10),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Slider(
+              value: display.width.toDouble(),
+              min: 256,
+              max: 8192,
+              divisions: 1,
+              onChanged: (double value) {},
+            ),
+            Slider(
+              value: display.height.toDouble(),
+              min: 256,
+              max: 8192,
+              divisions: 1,
+              onChanged: (double value) {},
+            ),
+          ],
+        ),
+        actions: [
+          dialogButton(
+            'Cancel',
+            icon: Icon(Icons.close_rounded),
+            onPressed: cancel,
+            isOutline: true,
+          ),
+        ],
+        onCancel: cancel,
+      );
+    });
   }
 
   Resolution? _getBestFitResolution() {
