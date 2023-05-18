@@ -329,70 +329,101 @@ class _CmHeaderState extends State<_CmHeader>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // icon
-        Container(
-          width: 90,
-          height: 90,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(color: str2color(client.name)),
-          child: Text(
-            client.name[0],
-            style: TextStyle(
-                fontWeight: FontWeight.bold, color: Colors.white, fontSize: 65),
-          ),
-        ).marginOnly(left: 4.0, right: 8.0),
-        Expanded(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.start,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              FittedBox(
-                  child: Text(
-                client.name,
-                style: TextStyle(
-                  color: MyTheme.cmIdColor,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 20,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                maxLines: 1,
-              )),
-              FittedBox(
-                  child: Text("(${client.peerId})",
-                      style:
-                          TextStyle(color: MyTheme.cmIdColor, fontSize: 14))),
-              SizedBox(
-                height: 16.0,
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10.0),
+        gradient: LinearGradient(
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+          colors: [
+            Color(0xff00bfe1),
+            Color(0xff0071ff),
+          ],
+        ),
+      ),
+      margin: EdgeInsets.all(5.0),
+      padding: EdgeInsets.all(10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 70,
+            height: 70,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: str2color(client.name),
+              borderRadius: BorderRadius.circular(15.0),
+            ),
+            child: Text(
+              client.name[0],
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+                fontSize: 55,
               ),
-              FittedBox(
-                  child: Row(
-                children: [
-                  Text(client.authorized
+            ),
+          ).marginOnly(right: 10.0),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                FittedBox(
+                    child: Text(
+                  client.name,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  maxLines: 1,
+                )),
+                FittedBox(
+                  child: Text(
+                    "(${client.peerId})",
+                    style: TextStyle(color: Colors.white, fontSize: 14),
+                  ),
+                ).marginOnly(bottom: 10.0),
+                FittedBox(
+                    child: Row(
+                  children: [
+                    Text(
+                      client.authorized
                           ? client.disconnected
                               ? translate("Disconnected")
                               : translate("Connected")
-                          : "${translate("Request access to your device")}...")
-                      .marginOnly(right: 8.0),
-                  if (client.authorized)
-                    Obx(() => Text(
-                        formatDurationToTime(Duration(seconds: _time.value))))
-                ],
-              ))
-            ],
+                          : "${translate("Request access to your device")}...",
+                      style: TextStyle(color: Colors.white),
+                    ).marginOnly(right: 8.0),
+                    if (client.authorized)
+                      Obx(
+                        () => Text(
+                          formatDurationToTime(
+                            Duration(seconds: _time.value),
+                          ),
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      )
+                  ],
+                ))
+              ],
+            ),
           ),
-        ),
-        Offstage(
-          offstage: !client.authorized || client.type_() != ClientType.remote,
-          child: IconButton(
+          Offstage(
+            offstage: !client.authorized || client.type_() != ClientType.remote,
+            child: IconButton(
               onPressed: () => checkClickTime(
                   client.id, () => gFFI.chatModel.toggleCMChatPage(client.id)),
-              icon: Icon(Icons.message_outlined),
-              splashRadius: kDesktopIconButtonSplashRadius),
-        )
-      ],
+              icon: Icon(
+                Icons.message_rounded,
+                color: Colors.white,
+              ),
+              splashRadius: kDesktopIconButtonSplashRadius,
+            ),
+          )
+        ],
+      ),
     );
   }
 
@@ -452,7 +483,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: EdgeInsets.only(top: 16.0, bottom: 8.0, left: 5.0, right: 5.0),
+      margin: EdgeInsets.all(5.0),
       padding: EdgeInsets.all(5.0),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10.0),
