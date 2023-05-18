@@ -39,9 +39,9 @@ pub fn get_license_from_string(s: &str) -> ResultType<License> {
     /*
      * The following code tokenizes the file name based on commas and
      * extracts relevant parts sequentially.
-     * 
+     *
      * host= is expected to be the first part.
-     * 
+     *
      * Since Windows renames files adding (1), (2) etc. before the .exe
      * in case of duplicates, which causes the host or key values to be
      * garbled.
@@ -86,56 +86,46 @@ pub fn get_license_from_string(s: &str) -> ResultType<License> {
 #[cfg(test)]
 #[cfg(target_os = "windows")]
 mod test {
+    use super::*;
+
     #[test]
     fn test_filename_license_string() {
+        assert!(get_license_from_string("rustdesk.exe").is_err());
+        assert!(get_license_from_string("rustdesk").is_err());
         assert_eq!(
-            get_license_from_string("rustdesk.exe"),
-            Ok(License {
-                host: "".to_owned(),
-                key: "".to_owned(),
-                api: "".to_owned(),
-            })
-        );
-        assert_eq!(
-            get_license_from_string("rustdesk"),
-            Ok(License {
-                host: "".to_owned(),
-                key: "".to_owned(),
-                api: "".to_owned(),
-            })
-        );
-        assert_eq!(
-            get_license_from_string("rustdesk-host=server.example.net.exe"),
-            Ok(License {
+            get_license_from_string("rustdesk-host=server.example.net.exe").unwrap(),
+            License {
                 host: "server.example.net".to_owned(),
                 key: "".to_owned(),
                 api: "".to_owned(),
-            })
+            }
         );
         assert_eq!(
-            get_license_from_string("rustdesk-host=server.example.net,.exe"),
-            Ok(License {
+            get_license_from_string("rustdesk-host=server.example.net,.exe").unwrap(),
+            License {
                 host: "server.example.net".to_owned(),
                 key: "".to_owned(),
                 api: "".to_owned(),
-            })
+            }
         );
         // key in these tests is "foobar.,2" base64 encoded
         assert_eq!(
-            get_license_from_string("rustdesk-host=server.example.net,key=Zm9vYmFyLiwyCg==.exe"),
-            Ok(License {
+            get_license_from_string("rustdesk-host=server.example.net,key=Zm9vYmFyLiwyCg==.exe")
+                .unwrap(),
+            License {
                 host: "server.example.net".to_owned(),
                 key: "Zm9vYmFyLiwyCg==".to_owned(),
                 api: "".to_owned(),
-            })
+            }
         );
         assert_eq!(
-            get_license_from_string("rustdesk-host=server.example.net,key=Zm9vYmFyLiwyCg==,.exe"),
-            Ok(License {
+            get_license_from_string("rustdesk-host=server.example.net,key=Zm9vYmFyLiwyCg==,.exe")
+                .unwrap(),
+            License {
                 host: "server.example.net".to_owned(),
                 key: "Zm9vYmFyLiwyCg==".to_owned(),
                 api: "".to_owned(),
-            })
+            }
         );
     }
 }
