@@ -1043,6 +1043,8 @@ impl Connection {
         })
         .into();
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        video_service::try_reset_current_display();
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         {
             pi.resolutions = Some(SupportedResolutions {
                 resolutions: video_service::get_current_display_name()

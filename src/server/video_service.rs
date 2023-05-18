@@ -561,11 +561,6 @@ fn run(sp: GenericService) -> ResultType<()> {
         log::debug!("Broadcasting display switch");
         let mut misc = Misc::new();
         let display_name = get_current_display_name().unwrap_or_default();
-        println!(
-            "REMOVE ME ============================ display_name: {:?}, is_virtual: {}",
-            display_name,
-            is_virtual_display(&display_name)
-        );
         let original_resolution = get_original_resolution(&display_name, c.width, c.height);
         misc.set_switch_display(SwitchDisplay {
             display: c.current as _,
@@ -967,16 +962,21 @@ pub fn is_inited_msg() -> Option<Message> {
     None
 }
 
+// switch to primary display if long time (30 seconds) no users
+#[inline]
+pub fn try_reset_current_display() {
+    if LAST_ACTIVE.lock().unwrap().elapsed().as_secs() >= 30 {
+        *CURRENT_DISPLAY.lock().unwrap() = usize::MAX;
+    }
+    *LAST_ACTIVE.lock().unwrap() = time::Instant::now();
+}
+
 pub async fn get_displays() -> ResultType<(usize, Vec<DisplayInfo>)> {
     #[cfg(target_os = "linux")]
     {
         if !scrap::is_x11() {
             return super::wayland::get_displays().await;
         }
-    }
-    // switch to primary display if long time (30 seconds) no users
-    if LAST_ACTIVE.lock().unwrap().elapsed().as_secs() >= 30 {
-        *CURRENT_DISPLAY.lock().unwrap() = usize::MAX;
     }
     Ok(get_displays_2(&try_get_displays()?))
 }
@@ -1071,6 +1071,8 @@ pub fn get_current_display() -> ResultType<(usize, usize, Display)> {
     get_current_display_2(try_get_displays()?)
 }
 
+// `try_reset_current_display` is needed because `get_displays` may change the current display,
+// which may cause the mismatch of current display and the current display name.
 pub fn get_current_display_name() -> ResultType<String> {
     Ok(get_current_display_2(try_get_displays()?)?.2.name())
 }
