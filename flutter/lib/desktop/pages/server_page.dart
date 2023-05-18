@@ -70,25 +70,28 @@ class _DesktopServerPageState extends State<DesktopServerPage>
   Widget build(BuildContext context) {
     super.build(context);
     return MultiProvider(
-        providers: [
-          ChangeNotifierProvider.value(value: gFFI.serverModel),
-          ChangeNotifierProvider.value(value: gFFI.chatModel),
-        ],
-        child: Consumer<ServerModel>(
-            builder: (context, serverModel, child) => Container(
-                decoration: BoxDecoration(
-                    border: Border.all(color: MyTheme.color(context).border!)),
-                child: Scaffold(
-                  backgroundColor: Theme.of(context).colorScheme.background,
-                  body: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.start,
-                      children: [
-                        Expanded(child: ConnectionManager()),
-                      ],
-                    ),
-                  ),
-                ))));
+      providers: [
+        ChangeNotifierProvider.value(value: gFFI.serverModel),
+        ChangeNotifierProvider.value(value: gFFI.chatModel),
+      ],
+      child: Consumer<ServerModel>(
+        builder: (context, serverModel, child) => Container(
+          decoration: BoxDecoration(
+              border: Border.all(color: MyTheme.color(context).border!)),
+          child: Scaffold(
+            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [
+                  Expanded(child: ConnectionManager()),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -408,23 +411,39 @@ class _PrivilegeBoard extends StatefulWidget {
 
 class _PrivilegeBoardState extends State<_PrivilegeBoard> {
   late final client = widget.client;
-  Widget buildPermissionTile(bool enabled, ImageProvider icon,
-      Function(bool)? onTap, String tooltipText) {
+  Widget buildPermissionTile(bool enabled, String assetPath,
+      Function(bool)? onTap, String permissionText, String tooltipText) {
     return Row(
       children: [
         Tooltip(
           message: tooltipText,
-          child: Image(
-            image: icon,
-            width: 50,
-            height: 50,
-            fit: BoxFit.scaleDown,
-          ),
-        ),
+          child: Container(
+            decoration: BoxDecoration(
+              color: MyTheme.accent,
+              borderRadius: BorderRadius.all(
+                Radius.circular(10.0),
+              ),
+            ),
+            child: SvgPicture.asset(
+              assetPath,
+              color: Colors.white,
+              width: 40.0,
+              height: 40.0,
+            ),
+          ).paddingOnly(left: 5.0, bottom: 5.0),
+        ).paddingOnly(right: 8.0),
+        SizedBox(
+            child: Text(
+              permissionText,
+              style: TextStyle(fontSize: 18),
+            ),
+            width: 250),
         Switch(
           value: enabled,
-          onChanged: (v) =>
-              checkClickTime(widget.client.id, () => onTap?.call(v)),
+          onChanged: (v) => checkClickTime(
+            widget.client.id,
+            () => onTap?.call(v),
+          ),
         ),
       ],
     );
@@ -433,62 +452,113 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: EdgeInsets.only(top: 16.0, bottom: 8.0),
+      margin: EdgeInsets.only(top: 16.0, bottom: 8.0, left: 5.0, right: 5.0),
+      padding: EdgeInsets.all(5.0),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10.0),
+        color: Theme.of(context).colorScheme.background,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            spreadRadius: 1,
+            blurRadius: 1,
+            offset: Offset(0, 1.5), // changes position of shadow
+          ),
+        ],
+      ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Text(
             translate("Permissions"),
-            style: TextStyle(fontSize: 16),
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center,
           ).marginOnly(left: 4.0),
           SizedBox(
             height: 8.0,
           ),
           FittedBox(
               child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              buildPermissionTile(client.keyboard, iconKeyboard, (enabled) {
-                bind.cmSwitchPermission(
-                    connId: client.id, name: "keyboard", enabled: enabled);
-                setState(() {
-                  client.keyboard = enabled;
-                });
-              }, translate('Allow using keyboard and mouse')),
-              buildPermissionTile(client.clipboard, iconClipboard, (enabled) {
-                bind.cmSwitchPermission(
-                    connId: client.id, name: "clipboard", enabled: enabled);
-                setState(() {
-                  client.clipboard = enabled;
-                });
-              }, translate('Allow using clipboard')),
-              buildPermissionTile(client.audio, iconAudio, (enabled) {
-                bind.cmSwitchPermission(
-                    connId: client.id, name: "audio", enabled: enabled);
-                setState(() {
-                  client.audio = enabled;
-                });
-              }, translate('Allow hearing sound')),
-              buildPermissionTile(client.file, iconFile, (enabled) {
-                bind.cmSwitchPermission(
-                    connId: client.id, name: "file", enabled: enabled);
-                setState(() {
-                  client.file = enabled;
-                });
-              }, translate('Allow file copy and paste')),
-              buildPermissionTile(client.restart, iconRestart, (enabled) {
-                bind.cmSwitchPermission(
-                    connId: client.id, name: "restart", enabled: enabled);
-                setState(() {
-                  client.restart = enabled;
-                });
-              }, translate('Allow remote restart')),
-              buildPermissionTile(client.recording, iconRecording, (enabled) {
-                bind.cmSwitchPermission(
-                    connId: client.id, name: "recording", enabled: enabled);
-                setState(() {
-                  client.recording = enabled;
-                });
-              }, translate('Allow recording session'))
+              buildPermissionTile(
+                client.keyboard,
+                "assets/keyboard.svg",
+                (enabled) {
+                  bind.cmSwitchPermission(
+                      connId: client.id, name: "keyboard", enabled: enabled);
+                  setState(() {
+                    client.keyboard = enabled;
+                  });
+                },
+                translate("Input Control"),
+                translate('Allow using keyboard and mouse'),
+              ),
+              buildPermissionTile(
+                client.clipboard,
+                "assets/clipboard.svg",
+                (enabled) {
+                  bind.cmSwitchPermission(
+                      connId: client.id, name: "clipboard", enabled: enabled);
+                  setState(() {
+                    client.clipboard = enabled;
+                  });
+                },
+                translate("Clipboard"),
+                translate('Allow using clipboard'),
+              ),
+              buildPermissionTile(
+                client.audio,
+                "assets/audio.svg",
+                (enabled) {
+                  bind.cmSwitchPermission(
+                      connId: client.id, name: "audio", enabled: enabled);
+                  setState(() {
+                    client.audio = enabled;
+                  });
+                },
+                translate("Audio"),
+                translate('Allow hearing sound'),
+              ),
+              buildPermissionTile(
+                client.file,
+                "assets/file.svg",
+                (enabled) {
+                  bind.cmSwitchPermission(
+                      connId: client.id, name: "file", enabled: enabled);
+                  setState(() {
+                    client.file = enabled;
+                  });
+                },
+                translate("File"),
+                translate('Allow file copy and paste'),
+              ),
+              buildPermissionTile(
+                client.restart,
+                "assets/restart.svg",
+                (enabled) {
+                  bind.cmSwitchPermission(
+                      connId: client.id, name: "restart", enabled: enabled);
+                  setState(() {
+                    client.restart = enabled;
+                  });
+                },
+                translate("Restart"),
+                translate('Allow remote restart'),
+              ),
+              buildPermissionTile(
+                client.recording,
+                "assets/rec.svg",
+                (enabled) {
+                  bind.cmSwitchPermission(
+                      connId: client.id, name: "recording", enabled: enabled);
+                  setState(() {
+                    client.recording = enabled;
+                  });
+                },
+                translate("Recording"),
+                translate('Allow recording session'),
+              )
             ],
           )),
         ],
