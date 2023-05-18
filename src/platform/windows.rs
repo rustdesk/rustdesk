@@ -1891,25 +1891,25 @@ pub fn current_resolution(name: &str) -> ResultType<Resolution> {
 }
 
 pub fn is_virtual_display(name: &str) -> ResultType<bool> {
-    let device_name = str_to_device_name(name);
     let mut dd: DISPLAY_DEVICEW = unsafe { std::mem::zeroed() };
-    dd.cb = std::mem::size_of::<DISPLAY_DEVICEW>() as _;
-    let ok = unsafe { EnumDisplayDevicesW(device_name.as_ptr(), 0, &mut dd as _, 0) };
-    if ok == FALSE {
-        bail!(
-            "enumerate display devices with device name '{}', errno {}",
-            name,
-            unsafe { GetLastError() }
-        );
+    dd.cb = std::mem::size_of::<DISPLAY_DEVICEW>() as DWORD;
+    let mut i_dev_num = 0;
+    loop {
+        let result = unsafe { EnumDisplayDevicesW(null_mut(), i_dev_num, &mut dd, 0) };
+        if result == 0 {
+            break;
+        }
+        if let Ok(device_name) = String::from_utf16(&dd.DeviceName) {
+            if device_name == name {
+                return match std::string::String::from_utf16(&dd.DeviceString) {
+                    Ok(s) => Ok(&s[..IDD_DEVICE_STRING.len()] == IDD_DEVICE_STRING),
+                    Err(e) => bail!("convert the device string of '{}' to string: {}", name, e),
+                };
+            }
+        }
+        i_dev_num += 1;
     }
-    match std::string::String::from_utf16(&dd.DeviceString) {
-        Ok(s) => Ok(&s[..IDD_DEVICE_STRING.len()] == IDD_DEVICE_STRING),
-        Err(e) => bail!(
-            "convert the device string of '{}' to string: {}",
-            name,
-            e
-        ),
-    }
+    bail!("No such display '{}'", name)
 }
 
 pub fn change_resolution(name: &str, width: usize, height: usize) -> ResultType<()> {
