@@ -1126,66 +1126,6 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
           child: Text('${e.width}x${e.height}')))
       .toList();
 
-  Widget _customResolutionMenuButton(bool showCustomBtn) {
-    return Offstage(
-      offstage: !showCustomBtn,
-      child: MenuButton(
-        onPressed: () => _customResolutionDialog(),
-        ffi: widget.ffi,
-        child: Text(
-            '${translate('resolution_custom_tip')} ${display.width}x${display.height}'),
-      ),
-    );
-  }
-
-  _customResolutionDialog() async {
-    OverlayDialogManager dialogManager = widget.ffi.dialogManager;
-    dialogManager.dismissAll();
-    dialogManager.show((setState, close, context) {
-      cancel() {
-        close();
-      }
-
-      return CustomAlertDialog(
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.password_rounded, color: MyTheme.accent),
-            Text(translate('Custom width x height')).paddingOnly(left: 10),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Slider(
-              value: display.width.toDouble(),
-              min: 256,
-              max: 8192,
-              divisions: 1,
-              onChanged: (double value) {},
-            ),
-            Slider(
-              value: display.height.toDouble(),
-              min: 256,
-              max: 8192,
-              divisions: 1,
-              onChanged: (double value) {},
-            ),
-          ],
-        ),
-        actions: [
-          dialogButton(
-            'Cancel',
-            icon: Icon(Icons.close_rounded),
-            onPressed: cancel,
-            isOutline: true,
-          ),
-        ],
-        onCancel: cancel,
-      );
-    });
-  }
-
   Resolution? _getBestFitResolution() {
     if (_localResolution == null) {
       return null;
