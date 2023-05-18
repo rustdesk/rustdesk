@@ -203,11 +203,12 @@ class ChatModel with ChangeNotifier {
       notifyListeners();
       await windowManager.show();
       await windowManager.setSizeAlignment(
-          kConnectionManagerWindowSize, Alignment.topRight);
+          kConnectionManagerWindowSizeClosedChat, Alignment.topRight);
     } else {
       requestChatInputFocus();
       await windowManager.show();
-      await windowManager.setSizeAlignment(Size(600, 400), Alignment.topRight);
+      await windowManager.setSizeAlignment(
+          kConnectionManagerWindowSizeOpenChat, Alignment.topRight);
       _isShowCMChatPage = !_isShowCMChatPage;
       notifyListeners();
     }

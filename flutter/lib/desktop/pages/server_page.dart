@@ -408,17 +408,12 @@ class _PrivilegeBoard extends StatefulWidget {
 
 class _PrivilegeBoardState extends State<_PrivilegeBoard> {
   late final client = widget.client;
-  Widget buildPermissionIcon(
-      bool enabled, ImageProvider icon, Function(bool)? onTap, String tooltip) {
-    return Tooltip(
-      message: tooltip,
-      child: Ink(
-        decoration:
-            BoxDecoration(color: enabled ? MyTheme.accent80 : Colors.grey),
-        padding: EdgeInsets.all(4.0),
-        child: InkWell(
-          onTap: () =>
-              checkClickTime(widget.client.id, () => onTap?.call(!enabled)),
+  Widget buildPermissionTile(bool enabled, ImageProvider icon,
+      Function(bool)? onTap, String tooltipText) {
+    return Row(
+      children: [
+        Tooltip(
+          message: tooltipText,
           child: Image(
             image: icon,
             width: 50,
@@ -426,7 +421,12 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
             fit: BoxFit.scaleDown,
           ),
         ),
-      ).marginSymmetric(horizontal: 4.0),
+        Switch(
+          value: enabled,
+          onChanged: (v) =>
+              checkClickTime(widget.client.id, () => onTap?.call(v)),
+        ),
+      ],
     );
   }
 
@@ -445,44 +445,44 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
             height: 8.0,
           ),
           FittedBox(
-              child: Row(
+              child: Column(
             children: [
-              buildPermissionIcon(client.keyboard, iconKeyboard, (enabled) {
+              buildPermissionTile(client.keyboard, iconKeyboard, (enabled) {
                 bind.cmSwitchPermission(
                     connId: client.id, name: "keyboard", enabled: enabled);
                 setState(() {
                   client.keyboard = enabled;
                 });
               }, translate('Allow using keyboard and mouse')),
-              buildPermissionIcon(client.clipboard, iconClipboard, (enabled) {
+              buildPermissionTile(client.clipboard, iconClipboard, (enabled) {
                 bind.cmSwitchPermission(
                     connId: client.id, name: "clipboard", enabled: enabled);
                 setState(() {
                   client.clipboard = enabled;
                 });
               }, translate('Allow using clipboard')),
-              buildPermissionIcon(client.audio, iconAudio, (enabled) {
+              buildPermissionTile(client.audio, iconAudio, (enabled) {
                 bind.cmSwitchPermission(
                     connId: client.id, name: "audio", enabled: enabled);
                 setState(() {
                   client.audio = enabled;
                 });
               }, translate('Allow hearing sound')),
-              buildPermissionIcon(client.file, iconFile, (enabled) {
+              buildPermissionTile(client.file, iconFile, (enabled) {
                 bind.cmSwitchPermission(
                     connId: client.id, name: "file", enabled: enabled);
                 setState(() {
                   client.file = enabled;
                 });
               }, translate('Allow file copy and paste')),
-              buildPermissionIcon(client.restart, iconRestart, (enabled) {
+              buildPermissionTile(client.restart, iconRestart, (enabled) {
                 bind.cmSwitchPermission(
                     connId: client.id, name: "restart", enabled: enabled);
                 setState(() {
                   client.restart = enabled;
                 });
               }, translate('Allow remote restart')),
-              buildPermissionIcon(client.recording, iconRecording, (enabled) {
+              buildPermissionTile(client.recording, iconRecording, (enabled) {
                 bind.cmSwitchPermission(
                     connId: client.id, name: "recording", enabled: enabled);
                 setState(() {
