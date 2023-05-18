@@ -301,9 +301,9 @@ class FfiModel with ChangeNotifier {
     newDisplay.height = int.tryParse(evt['height']) ?? newDisplay.height;
     newDisplay.cursorEmbedded = int.tryParse(evt['cursor_embedded']) == 1;
     newDisplay.originalWidth =
-        int.tryParse(evt['original_width']) ?? newDisplay.originalWidth;
+        int.tryParse(evt['original_width']) ?? kInvalidResolutionValue;
     newDisplay.originalHeight =
-        int.tryParse(evt['original_height']) ?? newDisplay.originalHeight;
+        int.tryParse(evt['original_height']) ?? kInvalidResolutionValue;
 
     _updateCurDisplay(peerId, newDisplay);
 
@@ -537,8 +537,8 @@ class FfiModel with ChangeNotifier {
     d.width = evt['width'] ?? d.width;
     d.height = evt['height'] ?? d.height;
     d.cursorEmbedded = evt['cursor_embedded'] == 1;
-    d.originalWidth = evt['original_width'] ?? d.originalWidth;
-    d.originalHeight = evt['original_height'] ?? d.originalHeight;
+    d.originalWidth = evt['original_width'] ?? kInvalidResolutionValue;
+    d.originalHeight = evt['original_height'] ?? kInvalidResolutionValue;
     return d;
   }
 
@@ -1714,14 +1714,17 @@ class FFI {
   }
 }
 
+const kInvalidResolutionValue = -1;
+const kVirtualDisplayResolutionValue = 0;
+
 class Display {
   double x = 0;
   double y = 0;
   int width = 0;
   int height = 0;
   bool cursorEmbedded = false;
-  int originalWidth = 0;
-  int originalHeight = 0;
+  int originalWidth = kInvalidResolutionValue;
+  int originalHeight = kInvalidResolutionValue;
 
   Display() {
     width = (isDesktop || isWebDesktop)
@@ -1745,6 +1748,12 @@ class Display {
       other.height == height &&
       other.cursorEmbedded == cursorEmbedded;
 
+  bool get isOriginalResolutionSet =>
+      originalWidth != kInvalidResolutionValue &&
+      originalHeight != kInvalidResolutionValue;
+  bool get isVirtualDisplayResolution =>
+      originalWidth == kVirtualDisplayResolutionValue &&
+      originalHeight == kVirtualDisplayResolutionValue;
   bool get isOriginalResolution =>
       width == originalWidth && height == originalHeight;
 }

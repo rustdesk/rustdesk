@@ -25,9 +25,12 @@ use crate::virtual_display_manager;
 use crate::{platform::windows::is_process_consent_running, privacy_win_mag};
 #[cfg(windows)]
 use hbb_common::get_version_number;
-use hbb_common::tokio::sync::{
-    mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
-    Mutex as TokioMutex,
+use hbb_common::{
+    protobuf::MessageField,
+    tokio::sync::{
+        mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
+        Mutex as TokioMutex,
+    },
 };
 #[cfg(not(windows))]
 use scrap::Capturer;
@@ -65,8 +68,9 @@ lazy_static::lazy_static! {
     static ref ORIGINAL_RESOLUTIONS: Arc<RwLock<HashMap<String, (i32, i32)>>> = Default::default();
 }
 
+// Not virtual display
 #[inline]
-pub fn set_original_resolution(display_name: &str, wh: (i32, i32)) -> (i32, i32) {
+fn set_original_resolution_(display_name: &str, wh: (i32, i32)) -> (i32, i32) {
     let mut original_resolutions = ORIGINAL_RESOLUTIONS.write().unwrap();
     match original_resolutions.get(display_name) {
         Some(r) => r.clone(),
@@ -77,8 +81,9 @@ pub fn set_original_resolution(display_name: &str, wh: (i32, i32)) -> (i32, i32)
     }
 }
 
+// Not virtual display
 #[inline]
-fn get_original_resolution(display_name: &str) -> Option<(i32, i32)> {
+fn get_original_resolution_(display_name: &str) -> Option<(i32, i32)> {
     ORIGINAL_RESOLUTIONS
         .read()
         .unwrap()
@@ -86,13 +91,25 @@ fn get_original_resolution(display_name: &str) -> Option<(i32, i32)> {
         .map(|r| r.clone())
 }
 
+// Not virtual display
 #[inline]
-fn get_or_set_original_resolution(display_name: &str, wh: (i32, i32)) -> (i32, i32) {
-    let r = get_original_resolution(display_name);
+fn get_or_set_original_resolution_(display_name: &str, wh: (i32, i32)) -> (i32, i32) {
+    let r = get_original_resolution_(display_name);
     if let Some(r) = r {
         return r;
     }
-    set_original_resolution(display_name, wh)
+    set_original_resolution_(display_name, wh)
+}
+
+// Not virtual display
+#[inline]
+fn update_get_original_resolution_(display_name: &str, w: usize, h: usize) -> Resolution {
+    let wh = get_or_set_original_resolution_(display_name, (w as _, h as _));
+    Resolution {
+        width: wh.0,
+        height: wh.1,
+        ..Default::default()
+    }
 }
 
 #[inline]
@@ -543,10 +560,13 @@ fn run(sp: GenericService) -> ResultType<()> {
     if *SWITCH.lock().unwrap() {
         log::debug!("Broadcasting display switch");
         let mut misc = Misc::new();
-        let display_name = get_current_display_name();
-
-        // to-do: check if is virtual display
-
+        let display_name = get_current_display_name().unwrap_or_default();
+        println!(
+            "REMOVE ME ============================ display_name: {:?}, is_virtual: {}",
+            display_name,
+            is_virtual_display(&display_name)
+        );
+        let original_resolution = get_original_resolution(&display_name, c.width, c.height);
         misc.set_switch_display(SwitchDisplay {
             display: c.current as _,
             x: c.origin.0 as _,
@@ -556,19 +576,15 @@ fn run(sp: GenericService) -> ResultType<()> {
             cursor_embedded: capture_cursor_embedded(),
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             resolutions: Some(SupportedResolutions {
-                resolutions: display_name
-                    .as_ref()
-                    .map(|name| crate::platform::resolutions(name))
-                    .unwrap_or(vec![]),
+                resolutions: if display_name.is_empty() {
+                    vec![]
+                } else {
+                    crate::platform::resolutions(&display_name)
+                },
                 ..SupportedResolutions::default()
             })
             .into(),
-            original_resolution: Some(update_get_original_resolution(
-                &display_name.unwrap_or_default(),
-                c.width,
-                c.height,
-            ))
-            .into(),
+            original_resolution,
             ..Default::default()
         });
         let mut msg_out = Message::new();
@@ -884,13 +900,35 @@ pub fn handle_one_frame_encoded(
 }
 
 #[inline]
-fn update_get_original_resolution(display_name: &str, w: usize, h: usize) -> Resolution {
-    let wh = get_or_set_original_resolution(display_name, (w as _, h as _));
-    Resolution {
-        width: wh.0,
-        height: wh.1,
-        ..Default::default()
+fn get_original_resolution(display_name: &str, w: usize, h: usize) -> MessageField<Resolution> {
+    Some(if is_virtual_display(&display_name) {
+        Resolution {
+            width: 0,
+            height: 0,
+            ..Default::default()
+        }
+    } else {
+        update_get_original_resolution_(&display_name, w, h)
+    })
+    .into()
+}
+
+#[inline]
+#[cfg(target_os = "windows")]
+fn is_virtual_display(name: &str) -> bool {
+    match crate::platform::windows::is_virtual_display(&name) {
+        Ok(b) => b,
+        Err(e) => {
+            log::error!("Failed to check is virtual display for '{}': {}", &name, e);
+            false
+        }
     }
+}
+
+#[inline]
+#[cfg(not(target_os = "windows"))]
+fn is_virtual_display(_name: &str) -> bool {
+    false
 }
 
 pub(super) fn get_displays_2(all: &Vec<Display>) -> (usize, Vec<DisplayInfo>) {
@@ -900,20 +938,17 @@ pub(super) fn get_displays_2(all: &Vec<Display>) -> (usize, Vec<DisplayInfo>) {
         if d.is_primary() {
             primary = i;
         }
+        let display_name = d.name();
+        let original_resolution = get_original_resolution(&display_name, d.width(), d.height());
         displays.push(DisplayInfo {
             x: d.origin().0 as _,
             y: d.origin().1 as _,
             width: d.width() as _,
             height: d.height() as _,
-            name: d.name(),
+            name: display_name,
             online: d.is_online(),
             cursor_embedded: false,
-            original_resolution: Some(update_get_original_resolution(
-                &d.name(),
-                d.width(),
-                d.height(),
-            ))
-            .into(),
+            original_resolution,
             ..Default::default()
         });
     }

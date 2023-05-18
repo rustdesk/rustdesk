@@ -1019,17 +1019,22 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
 
   @override
   Widget build(BuildContext context) {
-    final visible = ffiModel.keyboard && resolutions.length > 1;
+    final isVirtualDisplay = display.isVirtualDisplayResolution;
+    final visible =
+        ffiModel.keyboard && (isVirtualDisplay || resolutions.length > 1);
     if (!visible) return Offstage();
-    _groupValue = "${display.width}x${display.height}";
-
+    _groupValue = '${display.width}x${display.height}';
     _getLocalResolution();
+    final showOriginalBtn =
+        display.isOriginalResolutionSet && !display.isOriginalResolution;
+    final showFitLocalBtn = !_isRemoteResolutionFitLocal();
+
     return _SubmenuButton(
         ffi: widget.ffi,
         menuChildren: <Widget>[
-              _OriginalResolutionMenuButton(),
-              _FitLocalResolutionMenuButton(),
-              _customResolutionMenuButton(),
+              _OriginalResolutionMenuButton(showOriginalBtn),
+              _FitLocalResolutionMenuButton(showFitLocalBtn),
+              _customResolutionMenuButton(isVirtualDisplay),
             ] +
             _supportedResolutionMenuButtons(),
         child: Text(translate("Resolution")));
@@ -1065,8 +1070,6 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
         h = resolution.height;
       }
     } else if (value == _kResolutionCustom) {
-      debugPrint(
-          'REMOVE ME ======================= ${_customWidth.value} ${_customHeight.value}');
       w = int.tryParse(_customWidth.value as String);
       h = int.tryParse(_customHeight.value as String);
     } else {
@@ -1094,9 +1097,9 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
     }
   }
 
-  Widget _OriginalResolutionMenuButton() {
+  Widget _OriginalResolutionMenuButton(bool showOriginalBtn) {
     return Offstage(
-      offstage: display.isOriginalResolution,
+      offstage: !showOriginalBtn,
       child: RdoMenuButton(
         value: _kResolutionOrigin,
         groupValue: _groupValue,
@@ -1108,16 +1111,16 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
     );
   }
 
-  Widget _FitLocalResolutionMenuButton() {
+  Widget _FitLocalResolutionMenuButton(bool showFitLocalBtn) {
     return Offstage(
-      offstage: _isRemoteResolutionFitLocal(),
+      offstage: !showFitLocalBtn,
       child: RdoMenuButton(
         value: _kResolutionFitLocal,
         groupValue: _groupValue,
         onChanged: _onChanged,
         ffi: widget.ffi,
         child: Text(
-            '${translate('Fit Local')} ${display.originalWidth}x${display.originalHeight}'),
+            '${translate('Fit Local')} ${_localResolution?.width ?? 0}x${_localResolution?.height ?? 0}'),
       ),
     );
   }
@@ -1131,9 +1134,9 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
           child: Text('${e.width}x${e.height}')))
       .toList();
 
-  Widget _customResolutionMenuButton() {
+  Widget _customResolutionMenuButton(bool showCustomBtn) {
     return Offstage(
-      offstage: _isRemoteResolutionFitLocal(),
+      offstage: !showCustomBtn,
       child: RdoMenuButton(
         value: _kResolutionCustom,
         groupValue: _groupValue,
@@ -1148,18 +1151,18 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
     return Column(
       children: [
         Text(translate('Custom')),
-        SizedBox(
+        Container(
           width: 5,
         ),
-        _resolutionInput(_customWidth),
-        SizedBox(
+        // _resolutionInput(_customWidth),
+        Container(
           width: 3,
         ),
         Text('x'),
-        SizedBox(
+        Container(
           width: 3,
         ),
-        _resolutionInput(_customHeight),
+        // _resolutionInput(_customHeight),
       ],
     );
   }
@@ -1185,21 +1188,21 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
       return null;
     }
 
+    if (display.isVirtualDisplayResolution) {
+      return _localResolution!;
+    }
+
     squareDistance(Resolution lhs, Resolution rhs) =>
         (lhs.width - rhs.width) * (lhs.width - rhs.width) +
         (lhs.height - rhs.height) * (lhs.height - rhs.height);
 
-    Resolution? res;
+    Resolution res = Resolution(display.width, display.height);
     for (final r in resolutions) {
       if (r.width <= _localResolution!.width &&
           r.height <= _localResolution!.height) {
-        if (res == null) {
+        if (squareDistance(r, _localResolution!) <
+            squareDistance(res, _localResolution!)) {
           res = r;
-        } else {
-          if (squareDistance(r, _localResolution!) <
-              squareDistance(res, _localResolution!)) {
-            res = r;
-          }
         }
       }
     }
