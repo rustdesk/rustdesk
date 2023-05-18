@@ -36,7 +36,7 @@ def main():
 
 
 def expand():
-  for fn in glob.glob('./src/lang/*'):
+  for fn in glob.glob('./src/lang/*.rs'):
     lang = os.path.basename(fn)[:-3]
     if lang in ['en','template']: continue
     print(lang)

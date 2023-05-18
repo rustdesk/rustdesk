@@ -1023,15 +1023,16 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
     final showFitLocalBtn = !_isRemoteResolutionFitLocal();
 
     return _SubmenuButton(
-        ffi: widget.ffi,
-        menuChildren: <Widget>[
-              _OriginalResolutionMenuButton(showOriginalBtn),
-              _FitLocalResolutionMenuButton(showFitLocalBtn),
-              // _customResolutionMenuButton(isVirtualDisplay),
-              _menuDivider(showOriginalBtn, showFitLocalBtn, isVirtualDisplay),
-            ] +
-            _supportedResolutionMenuButtons(),
-        child: Text(translate("Resolution")));
+      ffi: widget.ffi,
+      menuChildren: <Widget>[
+            _OriginalResolutionMenuButton(showOriginalBtn),
+            _FitLocalResolutionMenuButton(showFitLocalBtn),
+            // _customResolutionMenuButton(isVirtualDisplay),
+            _menuDivider(showOriginalBtn, showFitLocalBtn, isVirtualDisplay),
+          ] +
+          _supportedResolutionMenuButtons(),
+      child: Text(translate("Resolution")),
+    );
   }
 
   _menuDivider(
@@ -1094,7 +1095,7 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
             _changeResolution(display.originalWidth, display.originalHeight),
         ffi: widget.ffi,
         child: Text(
-            '${translate('Original')} ${display.originalWidth}x${display.originalHeight}'),
+            '${translate('resolution_original_tip')} ${display.originalWidth}x${display.originalHeight}'),
       ),
     );
   }
@@ -1111,7 +1112,7 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
         },
         ffi: widget.ffi,
         child: Text(
-            '${translate('Fit Local')} ${_localResolution?.width ?? 0}x${_localResolution?.height ?? 0}'),
+            '${translate('resolution_fit_local_tip')} ${_localResolution?.width ?? 0}x${_localResolution?.height ?? 0}'),
       ),
     );
   }
@@ -1131,8 +1132,8 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
       child: MenuButton(
         onPressed: () => _customResolutionDialog(),
         ffi: widget.ffi,
-        child:
-            Text('${translate('Custom')} ${display.width}x${display.height}'),
+        child: Text(
+            '${translate('resolution_custom_tip')} ${display.width}x${display.height}'),
       ),
     );
   }

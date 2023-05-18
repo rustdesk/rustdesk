@@ -506,5 +506,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable", "Aktivieren"),
         ("Disable", "Deaktivieren"),
         ("Options", "Einstellungen"),
+        ("resolution_original_tip", ""),
+        ("resolution_fit_local_tip", ""),
+        ("resolution_custom_tip", ""),
     ].iter().cloned().collect();
 }
