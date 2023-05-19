@@ -997,7 +997,6 @@ class _ResolutionsMenu extends StatefulWidget {
 
 const double _kCustonResolutionEditingWidth = 42;
 const _kCustomResolutionValue = 'custom';
-String? _lastResolutionGroupValue;
 
 class _ResolutionsMenuState extends State<_ResolutionsMenu> {
   String _groupValue = '';
@@ -1043,7 +1042,9 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
   }
 
   _setGroupValue() {
-    if (_lastResolutionGroupValue == _kCustomResolutionValue) {
+    final lastGroupValue =
+        stateGlobal.getLastResolutionGroupValue(widget.id, pi.currentDisplay);
+    if (lastGroupValue == _kCustomResolutionValue) {
       _groupValue = _kCustomResolutionValue;
     } else {
       _groupValue = '${display.width}x${display.height}';
@@ -1053,8 +1054,7 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
   _menuDivider(
       bool showOriginalBtn, bool showFitLocalBtn, bool isVirtualDisplay) {
     return Offstage(
-      // offstage: !(showOriginalBtn || showFitLocalBtn || isVirtualDisplay),
-      offstage: !(showOriginalBtn || showFitLocalBtn),
+      offstage: !(showOriginalBtn || showFitLocalBtn || isVirtualDisplay),
       child: Divider(),
     );
   }
@@ -1075,7 +1075,8 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
   }
 
   _onChanged(String? value) async {
-    _lastResolutionGroupValue = value;
+    stateGlobal.setLastResolutionGroupValue(
+        widget.id, pi.currentDisplay, value);
     if (value == null) return;
 
     int? w;
@@ -1092,7 +1093,7 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
     }
 
     if (w != null && h != null) {
-      if (w != display.width && h != display.height) {
+      if (w != display.width || h != display.height) {
         await _changeResolution(w, h);
       }
     }
@@ -1145,24 +1146,27 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
   }
 
   Widget _customResolutionMenuButton(isVirtualDisplay) {
-    return RdoMenuButton(
-      value: _kCustomResolutionValue,
-      groupValue: _groupValue,
-      onChanged: _onChanged,
-      ffi: widget.ffi,
-      child: Row(
-        children: [
-          Text('${translate('resolution_custom_tip')} '),
-          SizedBox(
-            width: _kCustonResolutionEditingWidth,
-            child: _resolutionInput(_customWidth),
-          ),
-          Text(' x '),
-          SizedBox(
-            width: _kCustonResolutionEditingWidth,
-            child: _resolutionInput(_customHeight),
-          ),
-        ],
+    return Offstage(
+      offstage: !isVirtualDisplay,
+      child: RdoMenuButton(
+        value: _kCustomResolutionValue,
+        groupValue: _groupValue,
+        onChanged: _onChanged,
+        ffi: widget.ffi,
+        child: Row(
+          children: [
+            Text('${translate('resolution_custom_tip')} '),
+            SizedBox(
+              width: _kCustonResolutionEditingWidth,
+              child: _resolutionInput(_customWidth),
+            ),
+            Text(' x '),
+            SizedBox(
+              width: _kCustonResolutionEditingWidth,
+              child: _resolutionInput(_customHeight),
+            ),
+          ],
+        ),
       ),
     );
   }

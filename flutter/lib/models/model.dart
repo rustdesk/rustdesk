@@ -503,6 +503,9 @@ class FfiModel with ChangeNotifier {
         }
       }
     }
+
+    stateGlobal.resetLastResolutionGroupValues(peerId);
+
     notifyListeners();
   }
 
