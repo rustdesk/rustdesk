@@ -1556,11 +1556,11 @@ mod tests {
             scroll_style = "scrollbar"
             custom_resolution = true
             "#;
-            let mut compare_config = default_peer_config.clone();
-            compare_config.view_style = "adaptive".to_string();
-            compare_config.scroll_style = "scrollbar".to_string();
+            let mut cfg_to_compare = default_peer_config.clone();
+            cfg_to_compare.view_style = "adaptive".to_string();
+            cfg_to_compare.scroll_style = "scrollbar".to_string();
             let cfg = toml::from_str::<PeerConfig>(wrong_type_str);
-            assert_eq!(cfg, Ok(compare_config), "Failed to test wrong_type_str");
+            assert_eq!(cfg, Ok(cfg_to_compare), "Failed to test wrong_type_str");
 
             let wrong_field_str = r#"
             [custom_resolution]
@@ -1569,10 +1569,10 @@ mod tests {
             hello = "world"
             [ui_flutter]
             "#;
-            let mut compare_config = default_peer_config.clone();
-            compare_config.custom_resolution = Some(Resolution { w: 1920, h: 1080 });
+            let mut cfg_to_compare = default_peer_config.clone();
+            cfg_to_compare.custom_resolution = Some(Resolution { w: 1920, h: 1080 });
             let cfg = toml::from_str::<PeerConfig>(wrong_field_str);
-            assert_eq!(cfg, Ok(compare_config), "Failed to test wrong_field_str");
+            assert_eq!(cfg, Ok(cfg_to_compare), "Failed to test wrong_field_str");
         }
     }
 }
