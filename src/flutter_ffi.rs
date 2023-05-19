@@ -881,6 +881,7 @@ pub fn main_handle_relay_id(id: String) -> String {
 }
 
 pub fn main_get_current_display() -> SyncReturn<String> {
+    #[cfg(not(target_os = "ios"))]
     let display_info = match crate::video_service::get_current_display() {
         Ok((_, _, display)) => serde_json::to_string(&HashMap::from([
             ("w", display.width()),
@@ -889,6 +890,8 @@ pub fn main_get_current_display() -> SyncReturn<String> {
         .unwrap_or_default(),
         Err(..) => "".to_string(),
     };
+    #[cfg(target_os = "ios")]
+    let display_info = "".to_owned();
     SyncReturn(display_info)
 }
 
