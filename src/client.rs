@@ -31,9 +31,11 @@ use hbb_common::{
     allow_err,
     anyhow::{anyhow, Context},
     bail,
-    config::{Config, PeerConfig, PeerInfoSerde, CONNECT_TIMEOUT, READ_TIMEOUT, RELAY_PORT},
+    config::{
+        Config, PeerConfig, PeerInfoSerde, Resolution, CONNECT_TIMEOUT, READ_TIMEOUT, RELAY_PORT,
+    },
     get_version_number, log,
-    message_proto::{option_message::BoolOption, *},
+    message_proto::{option_message::BoolOption, Resolution as ProtoResolution, *},
     protobuf::Message as _,
     rand,
     rendezvous_proto::*,
@@ -1400,6 +1402,16 @@ impl LoginConfigHandler {
             msg.disable_clipboard = BoolOption::Yes.into();
             n += 1;
         }
+        if let Some(r) = self.get_custom_resolution() {
+            if r.0 > 0 && r.1 > 0 {
+                msg.custom_resolution = Some(ProtoResolution {
+                    width: r.0,
+                    height: r.1,
+                    ..Default::default()
+                })
+                .into();
+            }
+        }
         msg.supported_decoding =
             hbb_common::protobuf::MessageField::some(Decoder::supported_decodings(Some(&self.id)));
         n += 1;
@@ -1569,6 +1581,18 @@ impl LoginConfigHandler {
         } else {
             "".to_owned()
         }
+    }
+
+    #[inline]
+    pub fn get_custom_resolution(&self) -> Option<(i32, i32)> {
+        self.config.custom_resolution.as_ref().map(|r| (r.w, r.h))
+    }
+
+    #[inline]
+    pub fn set_custom_resolution(&mut self, wh: Option<(i32, i32)>) {
+        let mut config = self.load_config();
+        config.custom_resolution = wh.map(|r| Resolution { w: r.0, h: r.1 });
+        self.save_config(config);
     }
 
     /// Get user name.

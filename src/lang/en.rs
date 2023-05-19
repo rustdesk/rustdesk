@@ -66,5 +66,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("xorg_not_found_text_tip", "Please install Xorg"),
         ("no_desktop_title_tip", "No desktop is available"),
         ("no_desktop_text_tip", "Please install GNOME desktop"),
+        ("resolution_original_tip", "Original resolution"),
+        ("resolution_fit_local_tip", "Fit local resolution"),
+        ("resolution_custom_tip", "Custom resolution"),
         ].iter().cloned().collect();
 }

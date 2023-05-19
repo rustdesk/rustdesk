@@ -506,5 +506,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable", "启用"),
         ("Disable", "禁用"),
         ("Options", "选项"),
+        ("resolution_original_tip", "原始分辨率"),
+        ("resolution_fit_local_tip", "适应本地分辨率"),
+        ("resolution_custom_tip", "自定义分辨率"),
     ].iter().cloned().collect();
 }
