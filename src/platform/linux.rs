@@ -789,7 +789,7 @@ pub fn resolutions(name: &str) -> Vec<Resolution> {
                 if let Some(caps) = re.captures(&xrandr_output) {
                     if let Some(resolutions) = caps.name("resolutions") {
                         let resolution_pat =
-                            r"\s*(?P<width>\d+)x(?P<height>\d+)\s+(?P<rates>(\d+\.\d+[*+ ]*)+)\s*\n";
+                            r"\s*(?P<width>\d+)x(?P<height>\d+)\s+(?P<rates>(\d+\.\d+[\S ]*)+)\s*\n";
                         let resolution_re = Regex::new(&format!(r"{}", resolution_pat)).unwrap();
                         for resolution_caps in resolution_re.captures_iter(resolutions.as_str()) {
                             if let Some((width, height)) =
