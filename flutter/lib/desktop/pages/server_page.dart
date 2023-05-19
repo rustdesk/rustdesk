@@ -12,6 +12,7 @@ import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 
 import '../../common.dart';
 import '../../common/widgets/chat_page.dart';
@@ -139,41 +140,45 @@ class ConnectionManagerState extends State<ConnectionManager> {
             onPointerDown: pointerHandler,
             onPointerMove: pointerHandler,
             child: DesktopTab(
-                showTitle: false,
-                showMaximize: false,
-                showMinimize: true,
-                showClose: true,
-                onWindowCloseButton: handleWindowCloseButton,
-                controller: serverModel.tabController,
-                maxLabelWidth: 100,
-                tail: buildScrollJumper(),
-                selectedTabBackgroundColor:
-                    Theme.of(context).hintColor.withOpacity(0.2),
-                tabBuilder: (key, icon, label, themeConf) {
-                  final client = serverModel.clients.firstWhereOrNull(
-                      (client) => client.id.toString() == key);
-                  return Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Tooltip(
-                          message: key,
-                          waitDuration: Duration(seconds: 1),
-                          child: label),
-                      Obx(() => Offstage(
-                          offstage:
-                              !(client?.hasUnreadChatMessage.value ?? false),
-                          child:
-                              Icon(Icons.circle, color: Colors.red, size: 10)))
-                    ],
-                  );
-                },
-                pageViewBuilder: (pageView) => Row(children: [
-                      Expanded(child: pageView),
-                      Consumer<ChatModel>(
-                          builder: (_, model, child) => model.isShowCMChatPage
-                              ? Expanded(child: Scaffold(body: ChatPage()))
-                              : Offstage())
-                    ])));
+              showTitle: false,
+              showMaximize: false,
+              showMinimize: true,
+              showClose: true,
+              onWindowCloseButton: handleWindowCloseButton,
+              controller: serverModel.tabController,
+              maxLabelWidth: 100,
+              tail: buildScrollJumper(),
+              selectedTabBackgroundColor:
+                  Theme.of(context).hintColor.withOpacity(0.2),
+              tabBuilder: (key, icon, label, themeConf) {
+                final client = serverModel.clients
+                    .firstWhereOrNull((client) => client.id.toString() == key);
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Tooltip(
+                        message: key,
+                        waitDuration: Duration(seconds: 1),
+                        child: label),
+                    Obx(() => Offstage(
+                        offstage:
+                            !(client?.hasUnreadChatMessage.value ?? false),
+                        child: Icon(Icons.circle, color: Colors.red, size: 10)))
+                  ],
+                );
+              },
+              pageViewBuilder: (pageView) => Row(
+                children: [
+                  Consumer<ChatModel>(
+                      builder: (_, model, child) => model.isShowCMChatPage
+                          ? Container(
+                              width: 400, child: Scaffold(body: ChatPage()))
+                          : Offstage()),
+                  Expanded(child: pageView),
+                ],
+              ),
+            ),
+          );
   }
 
   Widget buildTitleBar() {
@@ -251,10 +256,11 @@ Widget buildConnectionCard(Client client) {
                   ? Offstage()
                   : _PrivilegeBoard(client: client),
               Expanded(
-                  child: Align(
-                alignment: Alignment.bottomCenter,
-                child: _CmControlPanel(client: client),
-              ))
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: _CmControlPanel(client: client),
+                ),
+              )
             ],
           ).paddingSymmetric(vertical: 8.0, horizontal: 8.0));
 }
@@ -341,7 +347,7 @@ class _CmHeaderState extends State<_CmHeader>
           ],
         ),
       ),
-      margin: EdgeInsets.all(5.0),
+      margin: EdgeInsets.symmetric(horizontal: 5.0, vertical: 10.0),
       padding: EdgeInsets.all(10),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -416,7 +422,7 @@ class _CmHeaderState extends State<_CmHeader>
               onPressed: () => checkClickTime(
                   client.id, () => gFFI.chatModel.toggleCMChatPage(client.id)),
               icon: Icon(
-                Icons.message_rounded,
+                FluentIcons.chat_32_filled,
                 color: Colors.white,
               ),
               splashRadius: kDesktopIconButtonSplashRadius,
@@ -442,25 +448,14 @@ class _PrivilegeBoard extends StatefulWidget {
 
 class _PrivilegeBoardState extends State<_PrivilegeBoard> {
   late final client = widget.client;
-  Widget buildPermissionTile(bool enabled, String assetPath,
+  Widget buildPermissionTile(bool enabled, IconData iconData,
       Function(bool)? onTap, String permissionText, String tooltipText) {
     return Row(
       children: [
         Tooltip(
           message: tooltipText,
-          child: Container(
-            decoration: BoxDecoration(
-              color: MyTheme.accent,
-              borderRadius: BorderRadius.all(
-                Radius.circular(10.0),
-              ),
-            ),
-            child: SvgPicture.asset(
-              assetPath,
-              color: Colors.white,
-              width: 40.0,
-              height: 40.0,
-            ),
+          child: Icon(
+            iconData,
           ).paddingOnly(left: 5.0, bottom: 5.0),
         ).paddingOnly(right: 8.0),
         SizedBox(
@@ -514,7 +509,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
             children: [
               buildPermissionTile(
                 client.keyboard,
-                "assets/keyboard.svg",
+                FluentIcons.keyboard_24_filled,
                 (enabled) {
                   bind.cmSwitchPermission(
                       connId: client.id, name: "keyboard", enabled: enabled);
@@ -527,7 +522,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
               ),
               buildPermissionTile(
                 client.clipboard,
-                "assets/clipboard.svg",
+                FluentIcons.clipboard_24_filled,
                 (enabled) {
                   bind.cmSwitchPermission(
                       connId: client.id, name: "clipboard", enabled: enabled);
@@ -540,7 +535,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
               ),
               buildPermissionTile(
                 client.audio,
-                "assets/audio.svg",
+                FluentIcons.speaker_1_24_filled,
                 (enabled) {
                   bind.cmSwitchPermission(
                       connId: client.id, name: "audio", enabled: enabled);
@@ -553,7 +548,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
               ),
               buildPermissionTile(
                 client.file,
-                "assets/file.svg",
+                FluentIcons.arrow_sort_24_filled,
                 (enabled) {
                   bind.cmSwitchPermission(
                       connId: client.id, name: "file", enabled: enabled);
@@ -566,7 +561,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
               ),
               buildPermissionTile(
                 client.restart,
-                "assets/restart.svg",
+                FluentIcons.arrow_clockwise_24_filled,
                 (enabled) {
                   bind.cmSwitchPermission(
                       connId: client.id, name: "restart", enabled: enabled);
@@ -579,7 +574,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
               ),
               buildPermissionTile(
                 client.recording,
-                "assets/rec.svg",
+                FluentIcons.record_24_filled,
                 (enabled) {
                   bind.cmSwitchPermission(
                       connId: client.id, name: "recording", enabled: enabled);
@@ -681,11 +676,17 @@ class _CmControlPanel extends StatelessWidget {
         Row(
           children: [
             Expanded(
-                child: buildButton(context,
-                    color: Colors.redAccent,
-                    onClick: handleDisconnect,
-                    text: 'Disconnect',
-                    textColor: Colors.white)),
+              child: buildButton(context,
+                  color: Colors.redAccent,
+                  onClick: handleDisconnect,
+                  text: 'Disconnect',
+                  icon: Icon(
+                    FluentIcons.plug_disconnected_20_filled,
+                    color: Colors.white,
+                    size: 14,
+                  ),
+                  textColor: Colors.white),
+            ),
           ],
         )
       ],
@@ -789,16 +790,19 @@ class _CmControlPanel extends StatelessWidget {
     return Container(
       height: 30,
       decoration: BoxDecoration(
-          color: color, borderRadius: BorderRadius.circular(4), border: border),
+          color: color,
+          borderRadius: BorderRadius.circular(10.0),
+          border: border),
       child: InkWell(
-          onTap: () => checkClickTime(client.id, onClick),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Offstage(offstage: icon == null, child: icon),
-              textWidget,
-            ],
-          )),
+        onTap: () => checkClickTime(client.id, onClick),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Offstage(offstage: icon == null, child: icon).marginOnly(right: 5),
+            textWidget,
+          ],
+        ),
+      ),
     ).marginAll(4);
   }
 

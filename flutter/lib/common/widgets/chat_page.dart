@@ -1,7 +1,9 @@
 import 'package:dash_chat_2/dash_chat_2.dart';
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
+import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 
 import '../../mobile/pages/home_page.dart';
@@ -43,12 +45,28 @@ class ChatPage extends StatelessWidget implements PageShape {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider.value(
-        value: chatModel,
-        child: Container(
-            color: Theme.of(context).scaffoldBackgroundColor,
-            child: Consumer<ChatModel>(builder: (context, chatModel, child) {
-              final currentUser = chatModel.currentUser;
-              return Stack(
+      value: chatModel,
+      child: Container(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        padding: EdgeInsets.all(20.0),
+        child: Consumer<ChatModel>(
+          builder: (context, chatModel, child) {
+            final currentUser = chatModel.currentUser;
+            return Container(
+              padding: EdgeInsets.symmetric(vertical: 5.0),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10.0),
+                color: Theme.of(context).colorScheme.background,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    spreadRadius: 1,
+                    blurRadius: 1,
+                    offset: Offset(0, 1.5), // changes position of shadow
+                  ),
+                ],
+              ),
+              child: Stack(
                 children: [
                   LayoutBuilder(builder: (context, constraints) {
                     final chat = DashChat(
@@ -61,40 +79,40 @@ class ChatPage extends StatelessWidget implements PageShape {
                               .messages[chatModel.currentID]?.chatMessages ??
                           [],
                       inputOptions: InputOptions(
-                          sendOnEnter: true,
-                          focusNode: chatModel.inputNode,
-                          inputTextStyle: TextStyle(
-                              fontSize: 14,
-                              color: Theme.of(context)
-                                  .textTheme
-                                  .titleLarge
-                                  ?.color),
-                          inputDecoration: isDesktop
-                              ? InputDecoration(
-                                  isDense: true,
-                                  hintText:
-                                      "${translate('Write a message')}",
-                                  filled: true,
-                                  fillColor:
-                                      Theme.of(context).colorScheme.background,
-                                  contentPadding: EdgeInsets.all(10),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(6),
-                                    borderSide: const BorderSide(
-                                      width: 0,
-                                      style: BorderStyle.none,
-                                    ),
+                        sendOnEnter: true,
+                        focusNode: chatModel.inputNode,
+                        inputTextStyle: TextStyle(
+                            fontSize: 14,
+                            color:
+                                Theme.of(context).textTheme.titleLarge?.color),
+                        inputDecoration: isDesktop
+                            ? InputDecoration(
+                                isDense: true,
+                                hintText: translate('Write a message'),
+                                filled: true,
+                                fillColor:
+                                    Theme.of(context).colorScheme.background,
+                                contentPadding: EdgeInsets.all(10),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10.0),
+                                  borderSide: const BorderSide(
+                                    width: 1,
+                                    style: BorderStyle.solid,
                                   ),
-                                )
-                              : defaultInputDecoration(
-                                  hintText:
-                                      "${translate('Write a message')}",
-                                  fillColor:
-                                      Theme.of(context).colorScheme.background),
-                          sendButtonBuilder: defaultSendButton(
-                              padding: EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 0),
-                              color: Theme.of(context).colorScheme.primary)),
+                                ),
+                              )
+                            : defaultInputDecoration(
+                                hintText: translate('Write a message'),
+                                fillColor:
+                                    Theme.of(context).colorScheme.background,
+                              ),
+                        sendButtonBuilder: defaultSendButton(
+                          padding:
+                              EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+                          color: Theme.of(context).colorScheme.primary,
+                          icon: FluentIcons.send_24_filled,
+                        ),
+                      ),
                       messageOptions: MessageOptions(
                           showOtherUsersAvatar: false,
                           textColor: Colors.white,
@@ -104,32 +122,34 @@ class ChatPage extends StatelessWidget implements PageShape {
                                 message.user.id == currentUser.id;
                             return Column(
                               crossAxisAlignment: isOwnMessage
-                                  ? CrossAxisAlignment.end
-                                  : CrossAxisAlignment.start,
+                                  ? CrossAxisAlignment.start
+                                  : CrossAxisAlignment.end,
                               children: <Widget>[
                                 Text(message.text,
                                     style: TextStyle(color: Colors.white)),
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 5),
-                                  child: Text(
-                                    "${message.createdAt.hour}:${message.createdAt.minute}",
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 10,
-                                    ),
+                                Text(
+                                  "${message.createdAt.hour}:${message.createdAt.minute}",
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 8,
                                   ),
-                                ),
+                                ).marginOnly(top: 3),
                               ],
                             );
                           },
-                          messageDecorationBuilder: (_, __, ___) =>
-                              defaultMessageDecoration(
-                                color: MyTheme.accent80,
-                                borderTopLeft: 8,
-                                borderTopRight: 8,
-                                borderBottomRight: 8,
-                                borderBottomLeft: 8,
-                              )),
+                          messageDecorationBuilder: (message, __, ___) {
+                            final isOwnMessage =
+                                message.user.id == currentUser.id;
+                            return defaultMessageDecoration(
+                              color: isOwnMessage
+                                  ? Color.fromARGB(170, 71, 97, 129)
+                                  : MyTheme.accent80,
+                              borderTopLeft: 8,
+                              borderTopRight: 8,
+                              borderBottomRight: isOwnMessage ? 8 : 2,
+                              borderBottomLeft: isOwnMessage ? 2 : 8,
+                            );
+                          }),
                     );
                     return SelectionArea(child: chat);
                   }),
@@ -148,9 +168,14 @@ class ChatPage extends StatelessWidget implements PageShape {
                                 style: TextStyle(color: MyTheme.accent50),
                               ),
                             ],
-                          )),
+                          ),
+                        ),
                 ],
-              );
-            })));
+              ),
+            );
+          },
+        ),
+      ),
+    );
   }
 }
