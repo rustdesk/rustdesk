@@ -56,10 +56,6 @@ use windows_service::{
 use winreg::enums::*;
 use winreg::RegKey;
 
-// This string is defined here.
-//  https://github.com/fufesou/RustDeskIddDriver/blob/b370aad3f50028b039aad211df60c8051c4a64d6/RustDeskIddDriver/RustDeskIddDriver.inf#LL73C1-L73C40
-const IDD_DEVICE_STRING: &'static str = "RustDeskIddDriver Device\0";
-
 pub fn get_cursor_pos() -> Option<(i32, i32)> {
     unsafe {
         #[allow(invalid_value)]
@@ -1890,38 +1886,7 @@ pub fn current_resolution(name: &str) -> ResultType<Resolution> {
     }
 }
 
-#[inline]
-fn is_device_name(device_name: &str, name: &str) -> bool {
-    if name.len() == device_name.len() {
-        name == device_name
-    } else if name.len() > device_name.len() {
-        false
-    } else {
-        &device_name[..name.len()] == name && device_name.as_bytes()[name.len() as usize] == 0
-    }
-}
 
-pub fn is_virtual_display(name: &str) -> ResultType<bool> {
-    let mut dd: DISPLAY_DEVICEW = unsafe { std::mem::zeroed() };
-    dd.cb = std::mem::size_of::<DISPLAY_DEVICEW>() as DWORD;
-    let mut i_dev_num = 0;
-    loop {
-        let result = unsafe { EnumDisplayDevicesW(null_mut(), i_dev_num, &mut dd, 0) };
-        if result == 0 {
-            break;
-        }
-        if let Ok(device_name) = String::from_utf16(&dd.DeviceName) {
-            if is_device_name(&device_name, name) {
-                return match std::string::String::from_utf16(&dd.DeviceString) {
-                    Ok(s) => Ok(&s[..IDD_DEVICE_STRING.len()] == IDD_DEVICE_STRING),
-                    Err(e) => bail!("convert the device string of '{}' to string: {}", name, e),
-                };
-            }
-        }
-        i_dev_num += 1;
-    }
-    bail!("No such display '{}'", name)
-}
 
 pub fn change_resolution(name: &str, width: usize, height: usize) -> ResultType<()> {
     let device_name = str_to_device_name(name);

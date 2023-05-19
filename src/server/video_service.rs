@@ -897,7 +897,11 @@ pub fn handle_one_frame_encoded(
 
 #[inline]
 fn get_original_resolution(display_name: &str, w: usize, h: usize) -> MessageField<Resolution> {
-    Some(if is_virtual_display(&display_name) {
+    #[cfg(target_os = "windows")]
+    let is_virtual_display = crate::virtual_display_manager::is_virtual_display(&display_name);
+    #[cfg(not(target_os = "windows"))]
+    let is_virtual_display = false;
+    Some(if is_virtual_display {
         Resolution {
             width: 0,
             height: 0,
@@ -907,24 +911,6 @@ fn get_original_resolution(display_name: &str, w: usize, h: usize) -> MessageFie
         update_get_original_resolution_(&display_name, w, h)
     })
     .into()
-}
-
-#[inline]
-#[cfg(target_os = "windows")]
-fn is_virtual_display(name: &str) -> bool {
-    match crate::platform::windows::is_virtual_display(&name) {
-        Ok(b) => b,
-        Err(e) => {
-            log::error!("Failed to check is virtual display for '{}': {}", &name, e);
-            false
-        }
-    }
-}
-
-#[inline]
-#[cfg(not(target_os = "windows"))]
-fn is_virtual_display(_name: &str) -> bool {
-    false
 }
 
 pub(super) fn get_displays_2(all: &Vec<Display>) -> (usize, Vec<DisplayInfo>) {

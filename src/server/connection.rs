@@ -1940,6 +1940,16 @@ impl Connection {
     fn change_resolution(&mut self, r: &Resolution) {
         if self.keyboard {
             if let Ok(name) = video_service::get_current_display_name() {
+                #[cfg(target_os = "windows")]
+                if let Some(_ok) =
+                    crate::virtual_display_manager::change_resolution_if_is_virtual_display(
+                        &name,
+                        r.width as _,
+                        r.height as _,
+                    )
+                {
+                    return;
+                }
                 if let Err(e) =
                     crate::platform::change_resolution(&name, r.width as _, r.height as _)
                 {
