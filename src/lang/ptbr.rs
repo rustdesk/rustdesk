@@ -478,7 +478,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Empty Password", "Senha Vazia"),
         ("Me", "Eu"),
         ("identical_file_tip", "Este arquivo é idêntico ao do parceiro."),
-        ("show_monitors_tip", "Mostrar monitores na barra de ferramentas."),
+        ("show_monitors_tip", "Mostrar monitores na barra de ferramentas"),
         ("View Mode", "Modo de Visualização"),
         ("login_linux_tip", "Você precisa fazer login na conta Linux remota para habilitar uma sessão de desktop X"),
         ("verify_rustdesk_password_tip", "Verifique a senha do RustDesk"),
