@@ -74,17 +74,23 @@ pub fn plug_out_headless() -> bool {
 }
 
 fn get_new_device_name(device_names: &HashSet<String>) -> String {
-    let device_names_af = windows::get_device_names();
-    let diff_names: Vec<_> = device_names_af.difference(&device_names).collect();
-    if diff_names.len() != 1 {
-        log::error!(
-            "Failed to get diff device names after plugin virtual display : {:?}",
-            &diff_names
-        );
-        "".to_string()
-    } else {
-        diff_names[0].clone()
+    for _ in 0..3 {
+        let device_names_af = windows::get_device_names();
+        let diff_names: Vec<_> = device_names_af.difference(&device_names).collect();
+        if diff_names.len() == 1 {
+            return diff_names[0].clone();
+        } else if diff_names.len() > 1 {
+            log::error!(
+                "Failed to get diff device names after plugin virtual display, more than one diff names: {:?}",
+                &diff_names
+            );
+            return "".to_string();
+        }
+        // Sleep is needed here to wait for the virtual display to be ready.
+        std::thread::sleep(std::time::Duration::from_millis(50));
     }
+    log::error!("Failed to get diff device names after plugin virtual display",);
+    "".to_string()
 }
 
 pub fn plug_in_peer_request(modes: Vec<Vec<virtual_display::MonitorMode>>) -> ResultType<Vec<u32>> {
@@ -214,7 +220,7 @@ mod windows {
             {
                 continue;
             }
-            
+
             let mut dm: DEVMODEW = unsafe { std::mem::zeroed() };
             dm.dmSize = std::mem::size_of::<DEVMODEW>() as _;
             dm.dmDriverExtra = 0;
