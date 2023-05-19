@@ -995,9 +995,18 @@ class _ResolutionsMenu extends StatefulWidget {
   State<_ResolutionsMenu> createState() => _ResolutionsMenuState();
 }
 
+const double _kCustonResolutionEditingWidth = 42;
+const _kCustomResolutionValue = 'custom';
+String? _lastResolutionGroupValue;
+
 class _ResolutionsMenuState extends State<_ResolutionsMenu> {
   String _groupValue = '';
   Resolution? _localResolution;
+
+  late final TextEditingController _customWidth =
+      TextEditingController(text: display.width.toString());
+  late final TextEditingController _customHeight =
+      TextEditingController(text: display.height.toString());
 
   PeerInfo get pi => widget.ffi.ffiModel.pi;
   FfiModel get ffiModel => widget.ffi.ffiModel;
@@ -1012,27 +1021,33 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
   @override
   Widget build(BuildContext context) {
     final isVirtualDisplay = display.isVirtualDisplayResolution;
-    // final visible =
-    //     ffiModel.keyboard && (isVirtualDisplay || resolutions.length > 1);
-    final visible = ffiModel.keyboard && resolutions.length > 1;
+    final visible =
+        ffiModel.keyboard && (isVirtualDisplay || resolutions.length > 1);
     if (!visible) return Offstage();
-    _groupValue = '${display.width}x${display.height}';
     _getLocalResolution();
     final showOriginalBtn =
         display.isOriginalResolutionSet && !display.isOriginalResolution;
     final showFitLocalBtn = !_isRemoteResolutionFitLocal();
-
+    _setGroupValue();
     return _SubmenuButton(
       ffi: widget.ffi,
       menuChildren: <Widget>[
             _OriginalResolutionMenuButton(showOriginalBtn),
             _FitLocalResolutionMenuButton(showFitLocalBtn),
-            // _customResolutionMenuButton(isVirtualDisplay),
+            _customResolutionMenuButton(isVirtualDisplay),
             _menuDivider(showOriginalBtn, showFitLocalBtn, isVirtualDisplay),
           ] +
           _supportedResolutionMenuButtons(),
       child: Text(translate("Resolution")),
     );
+  }
+
+  _setGroupValue() {
+    if (_lastResolutionGroupValue == _kCustomResolutionValue) {
+      _groupValue = _kCustomResolutionValue;
+    } else {
+      _groupValue = '${display.width}x${display.height}';
+    }
   }
 
   _menuDivider(
@@ -1060,12 +1075,24 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
   }
 
   _onChanged(String? value) async {
+    _lastResolutionGroupValue = value;
     if (value == null) return;
-    final list = value.split('x');
-    if (list.length == 2) {
-      final w = int.tryParse(list[0]);
-      final h = int.tryParse(list[1]);
-      if (w != null && h != null) {
+
+    int? w;
+    int? h;
+    if (value == _kCustomResolutionValue) {
+      w = int.tryParse(_customWidth.text);
+      h = int.tryParse(_customHeight.text);
+    } else {
+      final list = value.split('x');
+      if (list.length == 2) {
+        w = int.tryParse(list[0]);
+        h = int.tryParse(list[1]);
+      }
+    }
+
+    if (w != null && h != null) {
+      if (w != display.width && h != display.height) {
         await _changeResolution(w, h);
       }
     }
@@ -1114,6 +1141,46 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
         child: Text(
             '${translate('resolution_fit_local_tip')} ${_localResolution?.width ?? 0}x${_localResolution?.height ?? 0}'),
       ),
+    );
+  }
+
+  Widget _customResolutionMenuButton(isVirtualDisplay) {
+    return RdoMenuButton(
+      value: _kCustomResolutionValue,
+      groupValue: _groupValue,
+      onChanged: _onChanged,
+      ffi: widget.ffi,
+      child: Row(
+        children: [
+          Text('${translate('resolution_custom_tip')} '),
+          SizedBox(
+            width: _kCustonResolutionEditingWidth,
+            child: _resolutionInput(_customWidth),
+          ),
+          Text(' x '),
+          SizedBox(
+            width: _kCustonResolutionEditingWidth,
+            child: _resolutionInput(_customHeight),
+          ),
+        ],
+      ),
+    );
+  }
+
+  TextField _resolutionInput(TextEditingController controller) {
+    return TextField(
+      decoration: InputDecoration(
+        border: InputBorder.none,
+        isDense: true,
+        contentPadding: EdgeInsets.fromLTRB(3, 3, 3, 3),
+      ),
+      keyboardType: TextInputType.number,
+      inputFormatters: <TextInputFormatter>[
+        FilteringTextInputFormatter.digitsOnly,
+        LengthLimitingTextInputFormatter(4),
+        FilteringTextInputFormatter.allow(RegExp(r'[0-9]')),
+      ],
+      controller: controller,
     );
   }
 
@@ -1655,14 +1722,14 @@ class RdoMenuButton<T> extends StatelessWidget {
   final ValueChanged<T?>? onChanged;
   final Widget? child;
   final FFI ffi;
-  const RdoMenuButton(
-      {Key? key,
-      required this.value,
-      required this.groupValue,
-      required this.onChanged,
-      required this.child,
-      required this.ffi})
-      : super(key: key);
+  const RdoMenuButton({
+    Key? key,
+    required this.value,
+    required this.groupValue,
+    required this.child,
+    required this.ffi,
+    this.onChanged,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
