@@ -1456,7 +1456,7 @@ impl ConfigOidc {
 
     fn _load_env(mut self) -> Self {
         use std::env;
-        for (k, mut v) in &mut self.providers {
+        for (k, v) in &mut self.providers {
             if let Ok(client_id) = env::var(format!("OIDC-{}-CLIENT-ID", k.to_uppercase())) {
                 v.client_id = client_id;
             }

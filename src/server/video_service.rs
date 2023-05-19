@@ -897,9 +897,9 @@ pub fn handle_one_frame_encoded(
 
 #[inline]
 fn get_original_resolution(display_name: &str, w: usize, h: usize) -> MessageField<Resolution> {
-    #[cfg(target_os = "windows")]
+    #[cfg(all(windows, feature = "virtual_display_driver"))]
     let is_virtual_display = crate::virtual_display_manager::is_virtual_display(&display_name);
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(all(windows, feature = "virtual_display_driver")))]
     let is_virtual_display = false;
     Some(if is_virtual_display {
         Resolution {
