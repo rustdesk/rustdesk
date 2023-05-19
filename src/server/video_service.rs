@@ -113,6 +113,7 @@ fn update_get_original_resolution_(display_name: &str, w: usize, h: usize) -> Re
 }
 
 #[inline]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn reset_resolutions() {
     for (name, (w, h)) in ORIGINAL_RESOLUTIONS.read().unwrap().iter() {
         if let Err(e) = crate::platform::change_resolution(name, *w as _, *h as _) {

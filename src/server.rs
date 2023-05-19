@@ -8,12 +8,10 @@ use std::{
 use bytes::Bytes;
 
 pub use connection::*;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use hbb_common::config::Config2;
 use hbb_common::tcp::{self, new_listener};
 use hbb_common::{
     allow_err,
-    anyhow::{anyhow, Context},
+    anyhow::Context,
     bail,
     config::{Config, CONNECT_TIMEOUT, RELAY_PORT},
     log,
@@ -24,6 +22,8 @@ use hbb_common::{
     sodiumoxide::crypto::{box_, sign},
     timeout, tokio, ResultType, Stream,
 };
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use hbb_common::{anyhow::anyhow, config::Config2};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use service::ServiceTmpl;
 use service::{GenericService, Service, Subscriber};

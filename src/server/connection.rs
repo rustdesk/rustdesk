@@ -1936,6 +1936,7 @@ impl Connection {
         true
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn change_resolution(&mut self, r: &Resolution) {
         if self.keyboard {
             if let Ok(name) = video_service::get_current_display_name() {
@@ -2148,6 +2149,7 @@ impl Connection {
                 }
             }
         }
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if let Some(custom_resolution) = o.custom_resolution.as_ref() {
             if custom_resolution.width > 0 && custom_resolution.height > 0 {
                 self.change_resolution(&custom_resolution);
