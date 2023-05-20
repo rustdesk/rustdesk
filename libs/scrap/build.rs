@@ -1,7 +1,27 @@
 use std::{
     env, fs,
     path::{Path, PathBuf},
+    println,
 };
+
+#[cfg(all(target_os = "linux", feature = "linux-pkg-config"))]
+fn link_pkg_config(name: &str) -> Vec<PathBuf> {
+    // sometimes an override is needed
+    let pc_name = match name {
+        "libvpx" => "vpx",
+        _ => name,
+    };
+    let lib = pkg_config::probe_library(pc_name)
+        .expect(format!(
+            "unable to find '{pc_name}' development headers with pkg-config (feature linux-pkg-config is enabled).
+            try installing '{pc_name}-dev' from your system package manager.").as_str());
+
+    lib.include_paths
+}
+#[cfg(not(all(target_os = "linux", feature = "linux-pkg-config")))]
+fn link_pkg_config(_name: &str) -> Vec<PathBuf> {
+    unimplemented!()
+}
 
 /// Link vcppkg package.
 fn link_vcpkg(mut path: PathBuf, name: &str) -> PathBuf {
@@ -102,8 +122,16 @@ fn link_homebrew_m1(name: &str) -> PathBuf {
 }
 
 /// Find package. By default, it will try to find vcpkg first, then homebrew(currently only for Mac M1).
+/// If building for linux and feature "linux-pkg-config" is enabled, will try to use pkg-config
+/// unless check fails (e.g. NO_PKG_CONFIG_libyuv=1)
 fn find_package(name: &str) -> Vec<PathBuf> {
-    if let Ok(vcpkg_root) = std::env::var("VCPKG_ROOT") {
+    let no_pkg_config_var_name = format!("NO_PKG_CONFIG_{name}");
+    println!("cargo:rerun-if-env-changed={no_pkg_config_var_name}");
+    if cfg!(all(target_os = "linux", feature = "linux-pkg-config"))
+        && std::env::var(no_pkg_config_var_name).as_deref() != Ok("1") {
+
+            link_pkg_config(name)
+    } else if let Ok(vcpkg_root) = std::env::var("VCPKG_ROOT") {
         vec![link_vcpkg(vcpkg_root.into(), name)]
     } else {
         // Try using homebrew

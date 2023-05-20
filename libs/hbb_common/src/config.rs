@@ -105,12 +105,9 @@ macro_rules! serde_field_string {
         where
             D: de::Deserializer<'de>,
         {
-            let s: &str = de::Deserialize::deserialize(deserializer).unwrap_or_default();
-            Ok(if s.is_empty() {
-                Self::$default_func()
-            } else {
-                s.to_owned()
-            })
+            let s: String =
+                de::Deserialize::deserialize(deserializer).unwrap_or(Self::$default_func());
+            Ok(s)
         }
     };
 }
@@ -192,6 +189,12 @@ pub struct Config2 {
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
+pub struct Resolution {
+    pub w: i32,
+    pub h: i32,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
 pub struct PeerConfig {
     #[serde(default, deserialize_with = "deserialize_vec_u8")]
     pub password: Vec<u8>,
@@ -245,6 +248,13 @@ pub struct PeerConfig {
     pub keyboard_mode: String,
     #[serde(flatten)]
     pub view_only: ViewOnly,
+
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_option_resolution"
+    )]
+    pub custom_resolution: Option<Resolution>,
 
     // The other scalar value must before this
     #[serde(default, deserialize_with = "PeerConfig::deserialize_options")]
@@ -1446,7 +1456,7 @@ impl ConfigOidc {
 
     fn _load_env(mut self) -> Self {
         use std::env;
-        for (k, mut v) in &mut self.providers {
+        for (k, v) in &mut self.providers {
             if let Ok(client_id) = env::var(format!("OIDC-{}-CLIENT-ID", k.to_uppercase())) {
                 v.client_id = client_id;
             }
@@ -1486,6 +1496,7 @@ deserialize_default!(deserialize_option_string, Option<String>);
 deserialize_default!(deserialize_hashmap_string_string,  HashMap<String, String>);
 deserialize_default!(deserialize_hashmap_string_bool,  HashMap<String, bool>);
 deserialize_default!(deserialize_hashmap_string_configoidcprovider,  HashMap<String, ConfigOidcProvider>);
+deserialize_default!(deserialize_option_resolution, Option<Resolution>);
 
 #[cfg(test)]
 mod tests {
@@ -1533,5 +1544,35 @@ mod tests {
                 ..Default::default()
             })
         );
+    }
+
+    #[test]
+    fn test_peer_config_deserialize() {
+        let default_peer_config = toml::from_str::<PeerConfig>("").unwrap();
+        // test custom_resolution
+        {
+            let wrong_type_str = r#"
+            view_style = "adaptive"
+            scroll_style = "scrollbar"
+            custom_resolution = true
+            "#;
+            let mut cfg_to_compare = default_peer_config.clone();
+            cfg_to_compare.view_style = "adaptive".to_string();
+            cfg_to_compare.scroll_style = "scrollbar".to_string();
+            let cfg = toml::from_str::<PeerConfig>(wrong_type_str);
+            assert_eq!(cfg, Ok(cfg_to_compare), "Failed to test wrong_type_str");
+
+            let wrong_field_str = r#"
+            [custom_resolution]
+            w = 1920
+            h = 1080
+            hello = "world"
+            [ui_flutter]
+            "#;
+            let mut cfg_to_compare = default_peer_config.clone();
+            cfg_to_compare.custom_resolution = Some(Resolution { w: 1920, h: 1080 });
+            let cfg = toml::from_str::<PeerConfig>(wrong_field_str);
+            assert_eq!(cfg, Ok(cfg_to_compare), "Failed to test wrong_field_str");
+        }
     }
 }

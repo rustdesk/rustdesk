@@ -1831,21 +1831,25 @@ pub fn set_path_permission(dir: &PathBuf, permission: &str) -> ResultType<()> {
     Ok(())
 }
 
+#[inline]
+fn str_to_device_name(name: &str) -> [u16; 32] {
+    let mut device_name: Vec<u16> = wide_string(name);
+    if device_name.len() < 32 {
+        device_name.resize(32, 0);
+    }
+    let mut result = [0; 32];
+    result.copy_from_slice(&device_name[..32]);
+    result
+}
+
 pub fn resolutions(name: &str) -> Vec<Resolution> {
     unsafe {
         let mut dm: DEVMODEW = std::mem::zeroed();
-        let wname = wide_string(name);
-        let len = if wname.len() <= dm.dmDeviceName.len() {
-            wname.len()
-        } else {
-            dm.dmDeviceName.len()
-        };
-        std::ptr::copy_nonoverlapping(wname.as_ptr(), dm.dmDeviceName.as_mut_ptr(), len);
-        dm.dmSize = std::mem::size_of::<DEVMODEW>() as _;
         let mut v = vec![];
         let mut num = 0;
+        let device_name = str_to_device_name(name);
         loop {
-            if EnumDisplaySettingsW(NULL as _, num, &mut dm) == 0 {
+            if EnumDisplaySettingsW(device_name.as_ptr(), num, &mut dm) == 0 {
                 break;
             }
             let r = Resolution {
@@ -1866,8 +1870,8 @@ pub fn current_resolution(name: &str) -> ResultType<Resolution> {
     unsafe {
         let mut dm: DEVMODEW = std::mem::zeroed();
         dm.dmSize = std::mem::size_of::<DEVMODEW>() as _;
-        let wname = wide_string(name);
-        if EnumDisplaySettingsW(wname.as_ptr(), ENUM_CURRENT_SETTINGS, &mut dm) == 0 {
+        let device_name = str_to_device_name(name);
+        if EnumDisplaySettingsW(device_name.as_ptr(), ENUM_CURRENT_SETTINGS, &mut dm) == 0 {
             bail!(
                 "failed to get currrent resolution, errno={}",
                 GetLastError()
@@ -1882,25 +1886,26 @@ pub fn current_resolution(name: &str) -> ResultType<Resolution> {
     }
 }
 
+
+
 pub fn change_resolution(name: &str, width: usize, height: usize) -> ResultType<()> {
+    let device_name = str_to_device_name(name);
     unsafe {
         let mut dm: DEVMODEW = std::mem::zeroed();
-        if FALSE == EnumDisplaySettingsW(NULL as _, ENUM_CURRENT_SETTINGS, &mut dm) {
+        if FALSE == EnumDisplaySettingsW(device_name.as_ptr() as _, ENUM_CURRENT_SETTINGS, &mut dm)
+        {
             bail!("EnumDisplaySettingsW failed, errno={}", GetLastError());
         }
-        let wname = wide_string(name);
-        let len = if wname.len() <= dm.dmDeviceName.len() {
-            wname.len()
-        } else {
-            dm.dmDeviceName.len()
-        };
-        std::ptr::copy_nonoverlapping(wname.as_ptr(), dm.dmDeviceName.as_mut_ptr(), len);
-        dm.dmSize = std::mem::size_of::<DEVMODEW>() as _;
+        // dmPelsWidth and dmPelsHeight is the same to width and height
+        // Because this process is running in dpi awareness mode.
+        if dm.dmPelsWidth == width as u32 && dm.dmPelsHeight == height as u32 {
+            return Ok(());
+        }
         dm.dmPelsWidth = width as _;
         dm.dmPelsHeight = height as _;
         dm.dmFields = DM_PELSHEIGHT | DM_PELSWIDTH;
         let res = ChangeDisplaySettingsExW(
-            wname.as_ptr(),
+            device_name.as_ptr(),
             &mut dm,
             NULL as _,
             CDS_UPDATEREGISTRY | CDS_GLOBAL | CDS_RESET,

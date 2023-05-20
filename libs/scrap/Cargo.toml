@@ -12,6 +12,7 @@ edition = "2018"
 [features]
 wayland = ["gstreamer", "gstreamer-app", "gstreamer-video", "dbus", "tracing"]
 mediacodec = ["ndk"]
+linux-pkg-config = ["dep:pkg-config"]
 
 [dependencies]
 block = "0.1"
@@ -43,6 +44,7 @@ quest = "0.3"
 [build-dependencies]
 target_build_utils = "0.3"
 bindgen = "0.65"
+pkg-config = { version = "0.3.27", optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 dbus = { version = "0.9", optional = true }

@@ -18,6 +18,7 @@ use hbb_common::protobuf::Message as _;
 use hbb_common::rendezvous_proto::ConnType;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::sleep;
+#[cfg(not(target_os = "ios"))]
 use hbb_common::tokio::sync::mpsc::error::TryRecvError;
 #[cfg(windows)]
 use hbb_common::tokio::sync::Mutex as TokioMutex;
@@ -1211,6 +1212,14 @@ impl<T: InvokeUiSession> Remote<T> {
                                 s.cursor_embedded,
                             );
                         }
+                        let custom_resolution = if s.width != s.original_resolution.width
+                            || s.height != s.original_resolution.height
+                        {
+                            Some((s.width, s.height))
+                        } else {
+                            None
+                        };
+                        self.handler.set_custom_resolution(custom_resolution);
                     }
                     Some(misc::Union::CloseReason(c)) => {
                         self.handler.msgbox("error", "Connection Error", &c, "");

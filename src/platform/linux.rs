@@ -774,6 +774,12 @@ pub fn resolutions(name: &str) -> Vec<Resolution> {
                 Virtual2 disconnected (normal left inverted right x axis y axis)
                 Virtual3 disconnected (normal left inverted right x axis y axis)
 
+                Screen 0: minimum 320 x 200, current 1920 x 1080, maximum 16384 x 16384
+                eDP-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis) 344mm x 193mm
+                1920x1080     60.01*+  60.01    59.97    59.96    59.93  
+                1680x1050     59.95    59.88  
+                1600x1024     60.17  
+
                 XWAYLAND0 connected primary 1920x984+0+0 (normal left inverted right x axis y axis) 0mm x 0mm
                 Virtual1 connected primary 1920x984+0+0 (normal left inverted right x axis y axis) 0mm x 0mm
                 HDMI-0 connected (normal left inverted right x axis y axis)
@@ -783,7 +789,7 @@ pub fn resolutions(name: &str) -> Vec<Resolution> {
                 if let Some(caps) = re.captures(&xrandr_output) {
                     if let Some(resolutions) = caps.name("resolutions") {
                         let resolution_pat =
-                            r"\s*(?P<width>\d+)x(?P<height>\d+)\s+(?P<rates>(\d+\.\d+[* ]*)+)\s*\n";
+                            r"\s*(?P<width>\d+)x(?P<height>\d+)\s+(?P<rates>(\d+\.\d+\D*)+)\s*\n";
                         let resolution_re = Regex::new(&format!(r"{}", resolution_pat)).unwrap();
                         for resolution_caps in resolution_re.captures_iter(resolutions.as_str()) {
                             if let Some((width, height)) =

@@ -286,6 +286,8 @@ impl FlutterHandler {
             h.insert("width", d.width);
             h.insert("height", d.height);
             h.insert("cursor_embedded", if d.cursor_embedded { 1 } else { 0 });
+            h.insert("original_width", d.original_resolution.width);
+            h.insert("original_height", d.original_resolution.height);
             msg_vec.push(h);
         }
         serde_json::ser::to_string(&msg_vec).unwrap_or("".to_owned())
@@ -618,6 +620,14 @@ impl InvokeUiSession for FlutterHandler {
                     .to_string(),
                 ),
                 ("resolutions", &resolutions),
+                (
+                    "original_width",
+                    &display.original_resolution.width.to_string(),
+                ),
+                (
+                    "original_height",
+                    &display.original_resolution.height.to_string(),
+                ),
             ],
         );
     }

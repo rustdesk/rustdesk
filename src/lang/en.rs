@@ -53,7 +53,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("empty_lan_tip", "Oh no, it looks like we haven't discovered any peers yet."),
         ("empty_address_book_tip", "Oh dear, it appears that there are currently no peers listed in your address book."),
         ("identical_file_tip", "This file is identical with the peer's one."),
-        ("show_monitors_tip", "Show monitors in toolbar."),
+        ("show_monitors_tip", "Show monitors in toolbar"),
         ("enter_rustdesk_passwd_tip", "Enter RustDesk password"),
         ("remember_rustdesk_passwd_tip", "Remember RustDesk password"),
         ("login_linux_tip", "You need to login to remote Linux account to enable a X desktop session"),
@@ -66,5 +66,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("xorg_not_found_text_tip", "Please install Xorg"),
         ("no_desktop_title_tip", "No desktop is available"),
         ("no_desktop_text_tip", "Please install GNOME desktop"),
+        ("resolution_original_tip", "Original resolution"),
+        ("resolution_fit_local_tip", "Fit local resolution"),
+        ("resolution_custom_tip", "Custom resolution"),
         ].iter().cloned().collect();
 }
