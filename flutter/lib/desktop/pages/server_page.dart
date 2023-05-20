@@ -461,7 +461,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
       message: tooltipText,
       child: Container(
         decoration: BoxDecoration(
-          color: enabled ? MyTheme.accent : Colors.blueGrey,
+          color: enabled ? MyTheme.accent : Colors.grey[700],
           borderRadius: BorderRadius.circular(10.0),
         ),
         padding: EdgeInsets.all(4.0),
