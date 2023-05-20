@@ -3558,9 +3558,10 @@ dependencies = [
 [[package]]
 name = "magnum-opus"
 version = "0.4.0"
-source = "git+https://github.com/rustdesk/magnum-opus#79be072c939168e907fe851690759dcfd6a326af"
+source = "git+https://github.com/rustdesk/magnum-opus#5cd2bf989c148662fa3a2d9d539a71d71fd1d256"
 dependencies = [
  "bindgen 0.59.2",
+ "pkg-config",
  "target_build_utils",
 ]
 
@@ -5431,6 +5432,7 @@ dependencies = [
  "log",
  "ndk 0.7.0",
  "num_cpus",
+ "pkg-config",
  "quest",
  "repng",
  "serde 1.0.163",
