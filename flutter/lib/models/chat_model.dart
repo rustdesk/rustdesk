@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dash_chat_2/dash_chat_2.dart';
 import 'package:draggable_float_widget/draggable_float_widget.dart';
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get_rx/src/rx_types/rx_types.dart';
@@ -104,21 +105,23 @@ class ChatModel with ChangeNotifier {
 
     final overlay = OverlayEntry(builder: (context) {
       return DraggableFloatWidget(
-          config: DraggableFloatWidgetBaseConfig(
-            initPositionYInTop: false,
-            initPositionYMarginBorder: 100,
-            borderTopContainTopBar: true,
-          ),
-          child: FloatingActionButton(
-              onPressed: () {
-                if (chatWindowOverlayEntry == null) {
-                  showChatWindowOverlay();
-                } else {
-                  hideChatWindowOverlay();
-                }
-              },
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              child: Icon(Icons.message)));
+        config: DraggableFloatWidgetBaseConfig(
+          initPositionYInTop: false,
+          initPositionYMarginBorder: 100,
+          borderTopContainTopBar: true,
+        ),
+        child: FloatingActionButton(
+          onPressed: () {
+            if (chatWindowOverlayEntry == null) {
+              showChatWindowOverlay();
+            } else {
+              hideChatWindowOverlay();
+            }
+          },
+          backgroundColor: Theme.of(context).colorScheme.primary,
+          child: Icon(FluentIcons.chat_24_filled),
+        ),
+      );
     });
     overlayState.insert(overlay);
     chatIconOverlayEntry = overlay;

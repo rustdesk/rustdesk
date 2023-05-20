@@ -348,7 +348,12 @@ class _CmHeaderState extends State<_CmHeader>
         ),
       ),
       margin: EdgeInsets.symmetric(horizontal: 5.0, vertical: 10.0),
-      padding: EdgeInsets.all(10),
+      padding: EdgeInsets.only(
+        top: 10.0,
+        bottom: 10.0,
+        left: 10.0,
+        right: 5.0,
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -420,7 +425,9 @@ class _CmHeaderState extends State<_CmHeader>
             offstage: !client.authorized || client.type_() != ClientType.remote,
             child: IconButton(
               onPressed: () => checkClickTime(
-                  client.id, () => gFFI.chatModel.toggleCMChatPage(client.id)),
+                client.id,
+                () => gFFI.chatModel.toggleCMChatPage(client.id),
+              ),
               icon: Icon(
                 FluentIcons.chat_32_filled,
                 color: Colors.white,
@@ -448,36 +455,34 @@ class _PrivilegeBoard extends StatefulWidget {
 
 class _PrivilegeBoardState extends State<_PrivilegeBoard> {
   late final client = widget.client;
-  Widget buildPermissionTile(bool enabled, IconData iconData,
+  Widget buildPermissionIcon(bool enabled, IconData iconData,
       Function(bool)? onTap, String permissionText, String tooltipText) {
-    return Row(
-      children: [
-        Tooltip(
-          message: tooltipText,
+    return Tooltip(
+      message: tooltipText,
+      child: Container(
+        decoration: BoxDecoration(
+          color: enabled ? MyTheme.accent : Colors.blueGrey,
+          borderRadius: BorderRadius.circular(10.0),
+        ),
+        padding: EdgeInsets.all(4.0),
+        child: InkWell(
+          onTap: () =>
+              checkClickTime(widget.client.id, () => onTap?.call(!enabled)),
           child: Icon(
             iconData,
-          ).paddingOnly(left: 5.0, bottom: 5.0),
-        ).paddingOnly(right: 8.0),
-        SizedBox(
-            child: Text(
-              permissionText,
-              style: TextStyle(fontSize: 18),
-            ),
-            width: 250),
-        Switch(
-          value: enabled,
-          onChanged: (v) => checkClickTime(
-            widget.client.id,
-            () => onTap?.call(v),
+            size: 30.0,
+            color: Colors.white,
           ),
         ),
-      ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Container(
+      width: double.infinity,
+      height: 200.0,
       margin: EdgeInsets.all(5.0),
       padding: EdgeInsets.all(5.0),
       decoration: BoxDecoration(
@@ -488,7 +493,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
             color: Colors.black.withOpacity(0.2),
             spreadRadius: 1,
             blurRadius: 1,
-            offset: Offset(0, 1.5), // changes position of shadow
+            offset: Offset(0, 1.5),
           ),
         ],
       ),
@@ -499,101 +504,102 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
             translate("Permissions"),
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             textAlign: TextAlign.center,
-          ).marginOnly(left: 4.0),
-          SizedBox(
-            height: 8.0,
+          ).marginOnly(left: 4.0, bottom: 8.0),
+          Expanded(
+            child: GridView.count(
+              crossAxisCount: 3,
+              padding: EdgeInsets.symmetric(horizontal: 20.0),
+              mainAxisSpacing: 20.0,
+              crossAxisSpacing: 20.0,
+              children: [
+                buildPermissionIcon(
+                  client.keyboard,
+                  FluentIcons.keyboard_24_filled,
+                  (enabled) {
+                    bind.cmSwitchPermission(
+                        connId: client.id, name: "keyboard", enabled: enabled);
+                    setState(() {
+                      client.keyboard = enabled;
+                    });
+                  },
+                  translate("Input Control"),
+                  translate('Allow using keyboard and mouse'),
+                ),
+                buildPermissionIcon(
+                  client.clipboard,
+                  FluentIcons.clipboard_24_filled,
+                  (enabled) {
+                    bind.cmSwitchPermission(
+                        connId: client.id, name: "clipboard", enabled: enabled);
+                    setState(() {
+                      client.clipboard = enabled;
+                    });
+                  },
+                  translate("Clipboard"),
+                  translate('Allow using clipboard'),
+                ),
+                buildPermissionIcon(
+                  client.audio,
+                  FluentIcons.speaker_1_24_filled,
+                  (enabled) {
+                    bind.cmSwitchPermission(
+                        connId: client.id, name: "audio", enabled: enabled);
+                    setState(() {
+                      client.audio = enabled;
+                    });
+                  },
+                  translate("Audio"),
+                  translate('Allow hearing sound'),
+                ),
+                buildPermissionIcon(
+                  client.file,
+                  FluentIcons.arrow_sort_24_filled,
+                  (enabled) {
+                    bind.cmSwitchPermission(
+                        connId: client.id, name: "file", enabled: enabled);
+                    setState(() {
+                      client.file = enabled;
+                    });
+                  },
+                  translate("File"),
+                  translate('Allow file copy and paste'),
+                ),
+                buildPermissionIcon(
+                  client.restart,
+                  FluentIcons.arrow_sync_circle_20_filled,
+                  (enabled) {
+                    bind.cmSwitchPermission(
+                        connId: client.id, name: "restart", enabled: enabled);
+                    setState(() {
+                      client.restart = enabled;
+                    });
+                  },
+                  translate("Restart"),
+                  translate('Allow remote restart'),
+                ),
+                buildPermissionIcon(
+                  client.recording,
+                  FluentIcons.record_stop_24_filled,
+                  (enabled) {
+                    bind.cmSwitchPermission(
+                        connId: client.id, name: "recording", enabled: enabled);
+                    setState(() {
+                      client.recording = enabled;
+                    });
+                  },
+                  translate("Recording"),
+                  translate('Allow recording session'),
+                )
+              ],
+            ),
           ),
-          FittedBox(
-              child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              buildPermissionTile(
-                client.keyboard,
-                FluentIcons.keyboard_24_filled,
-                (enabled) {
-                  bind.cmSwitchPermission(
-                      connId: client.id, name: "keyboard", enabled: enabled);
-                  setState(() {
-                    client.keyboard = enabled;
-                  });
-                },
-                translate("Input Control"),
-                translate('Allow using keyboard and mouse'),
-              ),
-              buildPermissionTile(
-                client.clipboard,
-                FluentIcons.clipboard_24_filled,
-                (enabled) {
-                  bind.cmSwitchPermission(
-                      connId: client.id, name: "clipboard", enabled: enabled);
-                  setState(() {
-                    client.clipboard = enabled;
-                  });
-                },
-                translate("Clipboard"),
-                translate('Allow using clipboard'),
-              ),
-              buildPermissionTile(
-                client.audio,
-                FluentIcons.speaker_1_24_filled,
-                (enabled) {
-                  bind.cmSwitchPermission(
-                      connId: client.id, name: "audio", enabled: enabled);
-                  setState(() {
-                    client.audio = enabled;
-                  });
-                },
-                translate("Audio"),
-                translate('Allow hearing sound'),
-              ),
-              buildPermissionTile(
-                client.file,
-                FluentIcons.arrow_sort_24_filled,
-                (enabled) {
-                  bind.cmSwitchPermission(
-                      connId: client.id, name: "file", enabled: enabled);
-                  setState(() {
-                    client.file = enabled;
-                  });
-                },
-                translate("File"),
-                translate('Allow file copy and paste'),
-              ),
-              buildPermissionTile(
-                client.restart,
-                FluentIcons.arrow_clockwise_24_filled,
-                (enabled) {
-                  bind.cmSwitchPermission(
-                      connId: client.id, name: "restart", enabled: enabled);
-                  setState(() {
-                    client.restart = enabled;
-                  });
-                },
-                translate("Restart"),
-                translate('Allow remote restart'),
-              ),
-              buildPermissionTile(
-                client.recording,
-                FluentIcons.record_24_filled,
-                (enabled) {
-                  bind.cmSwitchPermission(
-                      connId: client.id, name: "recording", enabled: enabled);
-                  setState(() {
-                    client.recording = enabled;
-                  });
-                },
-                translate("Recording"),
-                translate('Allow recording session'),
-              )
-            ],
-          )),
         ],
       ),
     );
   }
 }
 
-const double bigMargin = 15;
+const double buttonBottomMargin = 8;
 
 class _CmControlPanel extends StatelessWidget {
   final Client client;
@@ -620,12 +626,18 @@ class _CmControlPanel extends StatelessWidget {
       children: [
         Offstage(
           offstage: !client.inVoiceCall,
-          child: buildButton(context,
-              color: Colors.red,
-              onClick: () => closeVoiceCall(),
-              icon: Icon(Icons.phone_disabled_rounded, color: Colors.white),
-              text: "Stop voice call",
-              textColor: Colors.white),
+          child: buildButton(
+            context,
+            color: Colors.red,
+            onClick: () => closeVoiceCall(),
+            icon: Icon(
+              FluentIcons.call_end_20_filled,
+              color: Colors.white,
+              size: 14,
+            ),
+            text: "Stop voice call",
+            textColor: Colors.white,
+          ),
         ),
         Offstage(
           offstage: !client.incomingVoiceCall,
@@ -635,18 +647,27 @@ class _CmControlPanel extends StatelessWidget {
                 child: buildButton(context,
                     color: MyTheme.accent,
                     onClick: () => handleVoiceCall(true),
-                    icon: Icon(Icons.phone_enabled, color: Colors.white),
+                    icon: Icon(
+                      FluentIcons.call_20_filled,
+                      color: Colors.white,
+                      size: 14,
+                    ),
                     text: "Accept",
                     textColor: Colors.white),
               ),
               Expanded(
-                child: buildButton(context,
-                    color: Colors.red,
-                    onClick: () => handleVoiceCall(false),
-                    icon:
-                        Icon(Icons.phone_disabled_rounded, color: Colors.white),
-                    text: "Dismiss",
-                    textColor: Colors.white),
+                child: buildButton(
+                  context,
+                  color: Colors.red,
+                  onClick: () => handleVoiceCall(false),
+                  icon: Icon(
+                    FluentIcons.call_dismiss_20_filled,
+                    color: Colors.white,
+                    size: 14,
+                  ),
+                  text: "Dismiss",
+                  textColor: Colors.white,
+                ),
               )
             ],
           ),
@@ -662,16 +683,21 @@ class _CmControlPanel extends StatelessWidget {
         ),
         Offstage(
           offstage: !showElevation,
-          child: buildButton(context, color: Colors.green[700], onClick: () {
-            handleElevate(context);
-            windowManager.minimize();
-          },
-              icon: Icon(
-                Icons.security_sharp,
-                color: Colors.white,
-              ),
-              text: 'Elevate',
-              textColor: Colors.white),
+          child: buildButton(
+            context,
+            color: MyTheme.accent,
+            onClick: () {
+              handleElevate(context);
+              windowManager.minimize();
+            },
+            icon: Icon(
+              FluentIcons.shield_checkmark_20_filled,
+              color: Colors.white,
+              size: 14,
+            ),
+            text: 'Elevate',
+            textColor: Colors.white,
+          ),
         ),
         Row(
           children: [
@@ -690,9 +716,7 @@ class _CmControlPanel extends StatelessWidget {
           ],
         )
       ],
-    )
-        .marginOnly(bottom: showElevation ? 0 : bigMargin)
-        .marginSymmetric(horizontal: showElevation ? 0 : bigMargin);
+    ).marginOnly(bottom: buttonBottomMargin);
   }
 
   buildDisconnected(BuildContext context) {
@@ -706,7 +730,7 @@ class _CmControlPanel extends StatelessWidget {
                 text: 'Close',
                 textColor: Colors.white)),
       ],
-    ).marginOnly(bottom: 15).marginSymmetric(horizontal: bigMargin);
+    ).marginOnly(bottom: buttonBottomMargin);
   }
 
   buildUnAuthorized(BuildContext context) {
@@ -728,8 +752,9 @@ class _CmControlPanel extends StatelessWidget {
           },
               text: 'Accept',
               icon: Icon(
-                Icons.security_sharp,
+                FluentIcons.shield_checkmark_20_filled,
                 color: Colors.white,
+                size: 14,
               ),
               textColor: Colors.white),
         ),
@@ -740,26 +765,33 @@ class _CmControlPanel extends StatelessWidget {
               Expanded(
                 child: Column(
                   children: [
-                    buildButton(context, color: MyTheme.accent, onClick: () {
-                      handleAccept(context);
-                      windowManager.minimize();
-                    }, text: 'Accept', textColor: Colors.white),
+                    buildButton(
+                      context,
+                      color: MyTheme.accent,
+                      onClick: () {
+                        handleAccept(context);
+                        windowManager.minimize();
+                      },
+                      text: 'Accept',
+                      textColor: Colors.white,
+                    ),
                   ],
                 ),
               ),
             Expanded(
-                child: buildButton(context,
-                    color: Colors.transparent,
-                    border: Border.all(color: Colors.grey),
-                    onClick: handleDisconnect,
-                    text: 'Cancel',
-                    textColor: null)),
+              child: buildButton(
+                context,
+                color: Colors.transparent,
+                border: Border.all(color: Colors.grey),
+                onClick: handleDisconnect,
+                text: 'Cancel',
+                textColor: null,
+              ),
+            ),
           ],
         ),
       ],
-    )
-        .marginOnly(bottom: showElevation ? 0 : bigMargin)
-        .marginSymmetric(horizontal: showElevation ? 0 : bigMargin);
+    ).marginOnly(bottom: buttonBottomMargin);
   }
 
   Widget buildButton(
@@ -788,7 +820,7 @@ class _CmControlPanel extends StatelessWidget {
       );
     }
     return Container(
-      height: 30,
+      height: 28,
       decoration: BoxDecoration(
           color: color,
           borderRadius: BorderRadius.circular(10.0),

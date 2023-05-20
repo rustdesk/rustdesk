@@ -57,14 +57,6 @@ class ChatPage extends StatelessWidget implements PageShape {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(10.0),
                 color: Theme.of(context).colorScheme.background,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
-                    spreadRadius: 1,
-                    blurRadius: 1,
-                    offset: Offset(0, 1.5), // changes position of shadow
-                  ),
-                ],
               ),
               child: Stack(
                 children: [
@@ -109,12 +101,13 @@ class ChatPage extends StatelessWidget implements PageShape {
                         sendButtonBuilder: defaultSendButton(
                           padding:
                               EdgeInsets.symmetric(horizontal: 6, vertical: 0),
-                          color: Theme.of(context).colorScheme.primary,
+                          color: MyTheme.accent,
                           icon: FluentIcons.send_24_filled,
                         ),
                       ),
                       messageOptions: MessageOptions(
                           showOtherUsersAvatar: false,
+                          showOtherUsersName: false,
                           textColor: Colors.white,
                           maxWidth: constraints.maxWidth * 0.7,
                           messageTextBuilder: (message, _, __) {
@@ -128,7 +121,7 @@ class ChatPage extends StatelessWidget implements PageShape {
                                 Text(message.text,
                                     style: TextStyle(color: Colors.white)),
                                 Text(
-                                  "${message.createdAt.hour}:${message.createdAt.minute}",
+                                  "${message.createdAt.hour}:${message.createdAt.minute.toString().padLeft(2, '0')}",
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 8,
@@ -142,8 +135,8 @@ class ChatPage extends StatelessWidget implements PageShape {
                                 message.user.id == currentUser.id;
                             return defaultMessageDecoration(
                               color: isOwnMessage
-                                  ? Color.fromARGB(170, 71, 97, 129)
-                                  : MyTheme.accent80,
+                                  ? Colors.blueGrey
+                                  : MyTheme.accent,
                               borderTopLeft: 8,
                               borderTopRight: 8,
                               borderBottomRight: isOwnMessage ? 8 : 2,
@@ -165,7 +158,7 @@ class ChatPage extends StatelessWidget implements PageShape {
                               SizedBox(width: 5),
                               Text(
                                 "${currentUser.firstName}   ${currentUser.id}",
-                                style: TextStyle(color: MyTheme.accent50),
+                                style: TextStyle(color: MyTheme.accent),
                               ),
                             ],
                           ),

@@ -183,6 +183,8 @@ class MyTheme {
     ),
   );
 
+  static const SwitchThemeData switchTheme = SwitchThemeData(splashRadius: 0);
+
   // Checkbox
   static const CheckboxThemeData checkboxTheme = CheckboxThemeData(
     splashRadius: 0,
@@ -307,6 +309,7 @@ class MyTheme {
         ),
       ),
     ),
+    switchTheme: switchTheme,
     checkboxTheme: checkboxTheme,
     listTileTheme: listTileTheme,
     menuBarTheme: MenuBarThemeData(
@@ -346,12 +349,16 @@ class MyTheme {
           )
         : null,
     textTheme: const TextTheme(
-        titleLarge: TextStyle(fontSize: 19),
-        titleSmall: TextStyle(fontSize: 14),
-        bodySmall: TextStyle(fontSize: 12, height: 1.25),
-        bodyMedium: TextStyle(fontSize: 14, height: 1.25),
-        labelLarge: TextStyle(
-            fontSize: 16.0, fontWeight: FontWeight.bold, color: accent80)),
+      titleLarge: TextStyle(fontSize: 19),
+      titleSmall: TextStyle(fontSize: 14),
+      bodySmall: TextStyle(fontSize: 12, height: 1.25),
+      bodyMedium: TextStyle(fontSize: 14, height: 1.25),
+      labelLarge: TextStyle(
+        fontSize: 16.0,
+        fontWeight: FontWeight.bold,
+        color: accent80,
+      ),
+    ),
     cardColor: Color(0xFF24252B),
     visualDensity: VisualDensity.adaptivePlatformDensity,
     tabBarTheme: const TabBarTheme(
@@ -397,6 +404,7 @@ class MyTheme {
         ),
       ),
     ),
+    switchTheme: switchTheme,
     checkboxTheme: checkboxTheme,
     listTileTheme: listTileTheme,
     menuBarTheme: MenuBarThemeData(
