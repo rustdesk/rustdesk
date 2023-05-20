@@ -205,21 +205,25 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[macro_export]
 macro_rules! generate_call_macro {
-    ($func_name:ident) => {
+    ($func_name:ident, $allow_err:expr) => {
         macro_rules! $func_name {
             ($x:expr) => {{
                 let result = unsafe { $x };
                 let result_int = unsafe { std::mem::transmute::<_, i32>(result) };
                 if result_int != 0 {
-                    return Err(crate::Error::FailedCall(format!(
+                    let message = format!(
                         "errcode={} {}:{}:{}:{}",
                         result_int,
                         module_path!(),
                         file!(),
                         line!(),
                         column!()
-                    ))
-                    .into());
+                    );
+                    if $allow_err {
+                        log::warn!("Failed to call {}, {}", stringify!($func_name), message);
+                    } else {
+                        return Err(crate::Error::FailedCall(message).into());
+                    }
                 }
                 result
             }};

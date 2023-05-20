@@ -3,6 +3,7 @@
 // https://github.com/rust-av/vpx-rs/blob/master/src/decoder.rs
 
 use hbb_common::anyhow::{anyhow, Context};
+use hbb_common::log;
 use hbb_common::message_proto::{EncodedVideoFrame, EncodedVideoFrames, Message, VideoFrame};
 use hbb_common::ResultType;
 
@@ -15,7 +16,7 @@ use hbb_common::bytes::Bytes;
 use std::os::raw::{c_int, c_uint};
 use std::{ptr, slice};
 
-generate_call_macro!(call_vpx);
+generate_call_macro!(call_vpx, false);
 generate_call_ptr_macro!(call_vpx_ptr);
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]

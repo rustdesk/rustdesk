@@ -11,12 +11,14 @@ use crate::{common::GoogleImage, generate_call_macro, generate_call_ptr_macro, E
 use hbb_common::{
     anyhow::{anyhow, Context},
     bytes::Bytes,
+    log,
     message_proto::{EncodedVideoFrame, EncodedVideoFrames, Message, VideoFrame},
     ResultType,
 };
 use std::{ptr, slice};
 
-generate_call_macro!(call_aom);
+generate_call_macro!(call_aom, false);
+generate_call_macro!(call_aom_allow_err, true);
 generate_call_ptr_macro!(call_aom_ptr);
 
 impl Default for aom_codec_enc_cfg_t {
@@ -145,7 +147,7 @@ mod webrtc {
         use aome_enc_control_id::*;
         macro_rules! call_ctl {
             ($ctx:expr, $av1e:expr, $arg:expr) => {{
-                call_aom!(aom_codec_control($ctx, $av1e as i32, $arg));
+                call_aom_allow_err!(aom_codec_control($ctx, $av1e as i32, $arg));
             }};
         }
 
@@ -168,6 +170,7 @@ mod webrtc {
         } else {
             AV1E_SET_TILE_COLUMNS
         };
+        // Failed on android
         call_ctl!(ctx, tile_set, (cfg.g_threads as f64 * 1.0f64).log2().ceil());
         call_ctl!(ctx, AV1E_SET_ROW_MT, 1);
         call_ctl!(ctx, AV1E_SET_ENABLE_OBMC, 0);
