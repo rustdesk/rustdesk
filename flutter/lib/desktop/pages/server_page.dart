@@ -456,7 +456,7 @@ class _PrivilegeBoard extends StatefulWidget {
 class _PrivilegeBoardState extends State<_PrivilegeBoard> {
   late final client = widget.client;
   Widget buildPermissionIcon(bool enabled, IconData iconData,
-      Function(bool)? onTap, String permissionText, String tooltipText) {
+      Function(bool)? onTap, String tooltipText) {
     return Tooltip(
       message: tooltipText,
       child: Container(
@@ -522,7 +522,6 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                       client.keyboard = enabled;
                     });
                   },
-                  translate("Input Control"),
                   translate('Allow using keyboard and mouse'),
                 ),
                 buildPermissionIcon(
@@ -535,7 +534,6 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                       client.clipboard = enabled;
                     });
                   },
-                  translate("Clipboard"),
                   translate('Allow using clipboard'),
                 ),
                 buildPermissionIcon(
@@ -548,7 +546,6 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                       client.audio = enabled;
                     });
                   },
-                  translate("Audio"),
                   translate('Allow hearing sound'),
                 ),
                 buildPermissionIcon(
@@ -561,7 +558,6 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                       client.file = enabled;
                     });
                   },
-                  translate("File"),
                   translate('Allow file copy and paste'),
                 ),
                 buildPermissionIcon(
@@ -574,7 +570,6 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                       client.restart = enabled;
                     });
                   },
-                  translate("Restart"),
                   translate('Allow remote restart'),
                 ),
                 buildPermissionIcon(
@@ -587,7 +582,6 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                       client.recording = enabled;
                     });
                   },
-                  translate("Recording"),
                   translate('Allow recording session'),
                 )
               ],
