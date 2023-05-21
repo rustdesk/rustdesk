@@ -469,14 +469,28 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
           color: enabled ? MyTheme.accent : Colors.grey[700],
           borderRadius: BorderRadius.circular(10.0),
         ),
-        padding: EdgeInsets.all(4.0),
+        padding: EdgeInsets.all(8.0),
         child: InkWell(
           onTap: () =>
               checkClickTime(widget.client.id, () => onTap?.call(!enabled)),
-          child: Icon(
-            iconData,
-            size: 30.0,
-            color: Colors.white,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              Icon(
+                iconData,
+                size: 30.0,
+                color: Colors.white,
+              ),
+              Text(
+                enabled ? "ON" : "OFF",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontWeight: FontWeight.w200,
+                  color: Colors.white,
+                  fontSize: 10.0,
+                ),
+              )
+            ],
           ),
         ),
       ),
