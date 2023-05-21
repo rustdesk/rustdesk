@@ -137,7 +137,7 @@ pub fn is_virtual_display(name: &str) -> bool {
             return true;
         }
     }
-    for (k, v) in lock.peer_index_name.iter() {
+    for (_, v) in lock.peer_index_name.iter() {
         if windows::is_device_name(v, name) {
             return true;
         }
