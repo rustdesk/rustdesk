@@ -81,14 +81,7 @@ class _DesktopServerPageState extends State<DesktopServerPage>
               border: Border.all(color: MyTheme.color(context).border!)),
           child: Scaffold(
             backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-            body: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: [
-                  Expanded(child: ConnectionManager()),
-                ],
-              ),
-            ),
+            body: ConnectionManager(),
           ),
         ),
       ),
@@ -170,11 +163,22 @@ class ConnectionManagerState extends State<ConnectionManager> {
               pageViewBuilder: (pageView) => Row(
                 children: [
                   Consumer<ChatModel>(
-                      builder: (_, model, child) => model.isShowCMChatPage
-                          ? Container(
-                              width: 400, child: Scaffold(body: ChatPage()))
-                          : Offstage()),
-                  Expanded(child: pageView),
+                    builder: (_, model, child) => model.isShowCMChatPage
+                        ? Expanded(
+                            child: ChatPage(),
+                            flex: (kConnectionManagerWindowSizeOpenChat.width -
+                                    kConnectionManagerWindowSizeClosedChat
+                                        .width)
+                                .toInt(),
+                          )
+                        : Offstage(),
+                  ),
+                  Expanded(
+                      child: pageView,
+                      flex: kConnectionManagerWindowSizeClosedChat.width
+                              .toInt() -
+                          4 // prevent stretch of the page view when chat is open,
+                      ),
                 ],
               ),
             ),
@@ -246,23 +250,24 @@ class ConnectionManagerState extends State<ConnectionManager> {
 
 Widget buildConnectionCard(Client client) {
   return Consumer<ServerModel>(
-      builder: (context, value, child) => Column(
-            mainAxisAlignment: MainAxisAlignment.start,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            key: ValueKey(client.id),
-            children: [
-              _CmHeader(client: client),
-              client.type_() != ClientType.remote || client.disconnected
-                  ? Offstage()
-                  : _PrivilegeBoard(client: client),
-              Expanded(
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: _CmControlPanel(client: client),
-                ),
-              )
-            ],
-          ).paddingSymmetric(vertical: 8.0, horizontal: 8.0));
+    builder: (context, value, child) => Column(
+      mainAxisAlignment: MainAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      key: ValueKey(client.id),
+      children: [
+        _CmHeader(client: client),
+        client.type_() != ClientType.remote || client.disconnected
+            ? Offstage()
+            : _PrivilegeBoard(client: client),
+        Expanded(
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: _CmControlPanel(client: client),
+          ),
+        )
+      ],
+    ).paddingSymmetric(vertical: 4.0, horizontal: 8.0),
+  );
 }
 
 class _AppIcon extends StatelessWidget {
