@@ -288,8 +288,8 @@ class ServerModel with ChangeNotifier {
   /// Toggle the screen sharing service.
   toggleService() async {
     if (_isStart) {
-      final res =
-          await parent.target?.dialogManager.show<bool>((setState, close, context) {
+      final res = await parent.target?.dialogManager
+          .show<bool>((setState, close, context) {
         submit() => close(true);
         return CustomAlertDialog(
           title: Row(children: [
@@ -311,8 +311,8 @@ class ServerModel with ChangeNotifier {
         stopService();
       }
     } else {
-      final res =
-          await parent.target?.dialogManager.show<bool>((setState, close, context) {
+      final res = await parent.target?.dialogManager
+          .show<bool>((setState, close, context) {
         submit() => close(true);
         return CustomAlertDialog(
           title: Row(children: [

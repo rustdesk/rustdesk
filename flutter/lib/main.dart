@@ -233,21 +233,21 @@ void runConnectionManagerScreen(bool hide) async {
 }
 
 void showCmWindow() {
-  WindowOptions windowOptions =
-      getHiddenTitleBarWindowOptions(size: kConnectionManagerWindowSize);
+  WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
+      size: kConnectionManagerWindowSizeClosedChat);
   windowManager.waitUntilReadyToShow(windowOptions, () async {
     bind.mainHideDocker();
     await windowManager.show();
     await Future.wait([windowManager.focus(), windowManager.setOpacity(1)]);
     // ensure initial window size to be changed
     await windowManager.setSizeAlignment(
-        kConnectionManagerWindowSize, Alignment.topRight);
+        kConnectionManagerWindowSizeClosedChat, Alignment.topRight);
   });
 }
 
 void hideCmWindow() {
-  WindowOptions windowOptions =
-      getHiddenTitleBarWindowOptions(size: kConnectionManagerWindowSize);
+  WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
+      size: kConnectionManagerWindowSizeClosedChat);
   windowManager.setOpacity(0);
   windowManager.waitUntilReadyToShow(windowOptions, () async {
     bind.mainHideDocker();

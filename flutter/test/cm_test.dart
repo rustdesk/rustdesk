@@ -45,12 +45,12 @@ void main(List<String> args) async {
       ],
       supportedLocales: supportedLocales,
       home: const DesktopServerPage()));
-  WindowOptions windowOptions =
-      getHiddenTitleBarWindowOptions(size: kConnectionManagerWindowSize);
+  WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
+      size: kConnectionManagerWindowSizeClosedChat);
   windowManager.waitUntilReadyToShow(windowOptions, () async {
     await windowManager.show();
     // ensure initial window size to be changed
-    await windowManager.setSize(kConnectionManagerWindowSize);
+    await windowManager.setSize(kConnectionManagerWindowSizeClosedChat);
     await Future.wait([
       windowManager.setAlignment(Alignment.topRight),
       windowManager.focus(),
