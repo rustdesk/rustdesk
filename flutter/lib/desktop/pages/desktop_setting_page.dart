@@ -1322,6 +1322,11 @@ class _DisplayState extends State<_Display> {
           groupValue: groupValue,
           label: 'VP9',
           onChanged: onChanged),
+      _Radio(context,
+          value: 'av1',
+          groupValue: groupValue,
+          label: 'AV1',
+          onChanged: onChanged),
       ...hwRadios,
     ]);
   }

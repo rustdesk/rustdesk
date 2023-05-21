@@ -48,8 +48,8 @@ Chat with us: [知乎](https://www.zhihu.com/people/rustdesk) | [Discord](https:
 
 - 安装[vcpkg](https://github.com/microsoft/vcpkg), 正确设置`VCPKG_ROOT`环境变量
 
-  - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
-  - Linux/Osx: vcpkg install libvpx libyuv opus
+  - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
+  - Linux/Osx: vcpkg install libvpx libyuv opus aom
 
 - 运行 `cargo run`
 
@@ -80,11 +80,11 @@ sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-c
 ```sh
 git clone https://github.com/microsoft/vcpkg
 cd vcpkg
-git checkout 2021.12.01
+git checkout 2023.04.15
 cd ..
 vcpkg/bootstrap-vcpkg.sh
 export VCPKG_ROOT=$HOME/vcpkg
-vcpkg/vcpkg install libvpx libyuv opus
+vcpkg/vcpkg install libvpx libyuv opus aom
 ```
 
 ### 修复 libvpx (仅仅针对 Fedora)

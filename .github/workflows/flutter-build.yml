@@ -11,9 +11,9 @@ env:
   LLVM_VERSION: "15.0.6"
   FLUTTER_VERSION: "3.7.0"
   TAG_NAME: "nightly"
-  # vcpkg version: 2022.05.10
+  # vcpkg version: 2023.04.15
   # for multiarch gcc compatibility
-  VCPKG_COMMIT_ID: "14e7bb4ae24616ec54ff6b2f6ef4e8659434ea44"
+  VCPKG_COMMIT_ID: "501db0f17ef6df184fcdbfbe0f87cde2313b6ab1"
   VERSION: "1.2.0"
   NDK_VERSION: "r23"
   #signing keys env variable checks
@@ -319,7 +319,7 @@ jobs:
 
       - name: Install vcpkg dependencies
         run: |
-          $VCPKG_ROOT/vcpkg install libvpx libyuv opus
+          $VCPKG_ROOT/vcpkg install libvpx libyuv opus aom
 
       - name: Show version information (Rust, cargo, Clang)
         shell: bash

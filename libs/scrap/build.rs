@@ -128,9 +128,9 @@ fn find_package(name: &str) -> Vec<PathBuf> {
     let no_pkg_config_var_name = format!("NO_PKG_CONFIG_{name}");
     println!("cargo:rerun-if-env-changed={no_pkg_config_var_name}");
     if cfg!(all(target_os = "linux", feature = "linux-pkg-config"))
-        && std::env::var(no_pkg_config_var_name).as_deref() != Ok("1") {
-
-            link_pkg_config(name)
+        && std::env::var(no_pkg_config_var_name).as_deref() != Ok("1")
+    {
+        link_pkg_config(name)
     } else if let Ok(vcpkg_root) = std::env::var("VCPKG_ROOT") {
         vec![link_vcpkg(vcpkg_root.into(), name)]
     } else {
@@ -144,16 +144,17 @@ fn generate_bindings(
     include_paths: &[PathBuf],
     ffi_rs: &Path,
     exact_file: &Path,
+    regex: &str,
 ) {
     let mut b = bindgen::builder()
         .header(ffi_header.to_str().unwrap())
-        .allowlist_type("^[vV].*")
-        .allowlist_var("^[vV].*")
-        .allowlist_function("^[vV].*")
-        .rustified_enum("^v.*")
+        .allowlist_type(regex)
+        .allowlist_var(regex)
+        .allowlist_function(regex)
+        .rustified_enum(regex)
         .trust_clang_mangling(false)
         .layout_tests(false) // breaks 32/64-bit compat
-        .generate_comments(false); // vpx comments have prefix /*!\
+        .generate_comments(false); // comments have prefix /*!\
 
     for dir in include_paths {
         b = b.clang_arg(format!("-I{}", dir.display()));
@@ -163,22 +164,22 @@ fn generate_bindings(
     fs::copy(ffi_rs, exact_file).ok(); // ignore failure
 }
 
-fn gen_vpx() {
-    let includes = find_package("libvpx");
+fn gen_vcpkg_package(package: &str, ffi_header: &str, generated: &str, regex: &str) {
+    let includes = find_package(package);
     let src_dir = env::var_os("CARGO_MANIFEST_DIR").unwrap();
     let src_dir = Path::new(&src_dir);
     let out_dir = env::var_os("OUT_DIR").unwrap();
     let out_dir = Path::new(&out_dir);
 
-    let ffi_header = src_dir.join("vpx_ffi.h");
+    let ffi_header = src_dir.join("src").join("bindings").join(ffi_header);
     println!("rerun-if-changed={}", ffi_header.display());
     for dir in &includes {
         println!("rerun-if-changed={}", dir.display());
     }
 
-    let ffi_rs = out_dir.join("vpx_ffi.rs");
-    let exact_file = src_dir.join("generated").join("vpx_ffi.rs");
-    generate_bindings(&ffi_header, &includes, &ffi_rs, &exact_file);
+    let ffi_rs = out_dir.join(generated);
+    let exact_file = src_dir.join("generated").join(generated);
+    generate_bindings(&ffi_header, &includes, &ffi_rs, &exact_file, regex);
 }
 
 fn main() {
@@ -194,7 +195,8 @@ fn main() {
     env::set_var("CARGO_CFG_TARGET_FEATURE", "crt-static");
 
     find_package("libyuv");
-    gen_vpx();
+    gen_vcpkg_package("libvpx", "vpx_ffi.h", "vpx_ffi.rs", "^[vV].*");
+    gen_vcpkg_package("aom", "aom_ffi.h", "aom_ffi.rs", "^(aom|AOM|OBU|AV1).*");
 
     // there is problem with cfg(target_os) in build.rs, so use our workaround
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();

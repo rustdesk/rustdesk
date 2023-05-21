@@ -520,9 +520,10 @@ impl SciterSession {
     }
 
     fn alternative_codecs(&self) -> Value {
-        let (vp8, h264, h265) = self.0.alternative_codecs();
+        let (vp8, av1, h264, h265) = self.0.alternative_codecs();
         let mut v = Value::array(0);
         v.push(vp8);
+        v.push(av1);
         v.push(h264);
         v.push(h265);
         v
