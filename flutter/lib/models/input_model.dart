@@ -347,7 +347,7 @@ class InputModel {
         return;
       }
 
-      final d = 0.95;
+      final d = 0.93;
       x *= d;
       y *= d;
       final dx0 = x * _trackpadSpeed;
