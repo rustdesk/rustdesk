@@ -45,7 +45,7 @@ class InputModel {
   var command = false;
 
   // trackpad
-  final _trackpadSpeed = 0.02;
+  final _trackpadSpeed = 0.06;
   var _trackpadLastDelta = Offset.zero;
   var _trackpadScrollUnsent = Offset.zero;
   var _stopFling = true;
@@ -320,14 +320,6 @@ class InputModel {
     }
   }
 
-  int _signOrZero(num x) {
-    if (x == 0) {
-      return 0;
-    } else {
-      return x > 0 ? 1 : -1;
-    }
-  }
-
   void onPointerPanZoomStart(PointerPanZoomStartEvent e) {
     _stopFling = true;
   }
@@ -340,44 +332,12 @@ class InputModel {
     _trackpadScrollUnsent += (delta * _trackpadSpeed);
     var x = _trackpadScrollUnsent.dx.truncate();
     var y = _trackpadScrollUnsent.dy.truncate();
-    _trackpadScrollUnsent -= Offset(_trackpadScrollUnsent.dx - x.toDouble(),
-        _trackpadScrollUnsent.dy - y.toDouble());
-
-    if (x == 0 && y == 0) {
-      x = delta.dx > 1 ? 1 : (delta.dx < -1 ? -1 : 0);
-      y = delta.dy > 1 ? 1 : (delta.dy < -1 ? -1 : 0);
-      if (x.abs() > y.abs()) {
-        y = 0;
-      } else {
-        x = 0;
-      }
-    }
-
+    _trackpadScrollUnsent -= Offset(x.toDouble(), y.toDouble());
     bind.sessionSendMouse(
         id: id, msg: '{"type": "trackpad", "x": "$x", "y": "$y"}');
   }
 
-  // Simple simulation for fling.
-  void _scheduleFling(var x, y, dx, dy) {
-    if (dx <= 0 && dy <= 0) {
-      return;
-    }
-    _flingTimer = Timer(Duration(milliseconds: 10), () {
-      bind.sessionSendMouse(
-          id: id, msg: '{"type": "trackpad", "x": "$x", "y": "$y"}');
-      dx--;
-      dy--;
-      if (dx == 0) {
-        x = 0;
-      }
-      if (dy == 0) {
-        y = 0;
-      }
-      _scheduleFling(x, y, dx, dy);
-    });
-  }
-
-  void _scheduleFling2(double x, double y, int delay) {
+  void _scheduleFling(double x, double y, int delay) {
     if ((x == 0 && y == 0) || _stopFling) {
       return;
     }
@@ -387,16 +347,21 @@ class InputModel {
         return;
       }
 
-      final d = 0.95;
+      final d = 0.93;
       x *= d;
       y *= d;
-      final dx0 = x * _trackpadSpeed * 2;
-      final dy0 = y * _trackpadSpeed * 2;
+      final dx0 = x * _trackpadSpeed;
+      final dy0 = y * _trackpadSpeed;
 
       // Try set delta (x,y) and delay.
-      var dx = dx0.toInt();
-      var dy = dy0.toInt();
+      var dx = dx0.truncate();
+      var dy = dy0.truncate();
       var delay = _flingBaseDelay;
+
+      setMinDelta(double v) {
+        double minThr = _trackpadSpeed * 2;
+        return v > minThr ? 1 : (v < -minThr ? -1 : 0);
+      }
 
       // Try set min delta (x,y), and increase delay.
       if (dx == 0 && dy == 0) {
@@ -409,12 +374,12 @@ class InputModel {
         if (dy0 != 0) {
           vy = 1.0 ~/ dy0.abs();
         }
-        if (vx < vy && vx < thr) {
-          delay *= vx;
-          dx = dx0 > 0 ? 1 : (dx0 < 0 ? -1 : 0);
+        if (vx < vy) {
+          delay *= (vx < thr ? vx : thr);
+          dx = setMinDelta(dx0);
         } else if (vy < thr) {
-          delay *= vy;
-          dy = dy0 > 0 ? 1 : (dy0 < 0 ? -1 : 0);
+          delay *= (vy < thr ? vy : thr);
+          dy = setMinDelta(dy0);
         }
       }
 
@@ -424,15 +389,20 @@ class InputModel {
 
       bind.sessionSendMouse(
           id: id, msg: '{"type": "trackpad", "x": "$dx", "y": "$dy"}');
-      _scheduleFling2(x, y, delay);
+      _scheduleFling(x, y, delay);
     });
   }
 
   void onPointerPanZoomEnd(PointerPanZoomEndEvent e) {
     _stopFling = false;
     _trackpadScrollUnsent = Offset.zero;
-    _scheduleFling2(
-        _trackpadLastDelta.dx, _trackpadLastDelta.dy, _flingBaseDelay);
+    // 2.0 is an experience value
+    double minFlingValue = 2.0;
+    if (_trackpadLastDelta.dx.abs() > minFlingValue ||
+        _trackpadLastDelta.dy.abs() > minFlingValue) {
+      _scheduleFling(
+          _trackpadLastDelta.dx, _trackpadLastDelta.dy, _flingBaseDelay);
+    }
     _trackpadLastDelta = Offset.zero;
   }
 
