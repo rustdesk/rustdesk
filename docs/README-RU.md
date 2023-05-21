@@ -24,6 +24,8 @@ RustDesk приветствует вклад каждого. Ознакомьт�
 
 [**СКАЧАТЬ ПРИЛОЖЕНИЕ**](https://github.com/rustdesk/rustdesk/releases)
 
+[**ночные сборки (актуальные)**](https://github.com/rustdesk/rustdesk/releases/tag/nightly)
+
 [<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png" alt="Get it on F-Droid" height="80">](https://f-droid.org/en/packages/com.carriez.flutter_hbb)
 
 ## Бесплатные общедоступные серверы
