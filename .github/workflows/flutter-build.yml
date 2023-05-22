@@ -9,10 +9,10 @@ on:
 
 env:
   LLVM_VERSION: "15.0.6"
-  FLUTTER_VERSION: "3.10.0"
+  FLUTTER_VERSION: "3.10.1"
   # for arm64 linux
-  FLUTTER_ELINUX_VERSION: "3.7.0"
-  FLUTTER_ELINUX_COMMIT_ID: "51a1d685901f79fbac51665a967c3a1a789ecee5"
+  FLUTTER_ELINUX_VERSION: "3.10.1"
+  FLUTTER_ELINUX_COMMIT_ID: "410b3ca42f2cd0c485edf517a1666652bab442d4"
   TAG_NAME: "nightly"
   # vcpkg version: 2023.04.15
   # for multiarch gcc compatibility
@@ -1169,7 +1169,7 @@ jobs:
           # disable git safe.directory
           git config --global --add safe.directory "*"
           pushd /opt
-          # clone repo and reset to flutter 3.7.0
+          # clone repo and reset to flutter ${{ env.FLUTTER_VERSION }}
           git clone https://github.com/sony/flutter-elinux.git || true
           pushd flutter-elinux
             git fetch
@@ -1205,8 +1205,8 @@ jobs:
             # Patch arm64 engine for flutter 3.6.0+
             flutter-elinux precache --linux
             pushd /tmp
-            curl -O https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.7.0-stable.tar.xz
-            tar -xvf flutter_linux_3.7.0-stable.tar.xz flutter/bin/cache/artifacts/engine/linux-x64/shader_lib
+            curl -O https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${{ env.FLUTTER_ELINUX_VERSION }}-stable.tar.xz
+            tar -xvf flutter_linux_${{ env.FLUTTER_ELINUX_VERSION }}-stable.tar.xz flutter/bin/cache/artifacts/engine/linux-x64/shader_lib
             cp -R flutter/bin/cache/artifacts/engine/linux-x64/shader_lib /opt/flutter-elinux/flutter/bin/cache/artifacts/engine/linux-arm64
             popd
             # edit to corresponding arch

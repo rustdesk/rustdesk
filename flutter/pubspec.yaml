@@ -56,9 +56,10 @@ dependencies:
   back_button_interceptor: ^6.0.1
   flutter_rust_bridge: ^1.61.1
   window_manager:
-    git:
-      url: https://github.com/Kingtous/rustdesk_window_manager
-      ref: 94ff0eeb7e20e93f50022b2090f0b6ffb725c7df
+    # git:
+    # url: https://github.com/Kingtous/rustdesk_window_manager
+    path: ../../rustdesk_window_manager
+    # ref: 94ff0eeb7e20e93f50022b2090f0b6ffb725c7df
   desktop_multi_window:
     git:
       url: https://github.com/Kingtous/rustdesk_desktop_multi_window
@@ -106,6 +107,7 @@ dependencies:
   texture_rgba_renderer: ^0.0.16
   percent_indicator: ^4.2.2
   dropdown_button2: ^2.0.0
+  fluentui_system_icons: ^1.1.201
 
 dev_dependencies:
   icons_launcher: ^2.0.4
