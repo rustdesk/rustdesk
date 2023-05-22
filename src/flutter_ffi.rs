@@ -1597,8 +1597,8 @@ pub fn plugin_install(_id: String, _b: bool) {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         if _b {
-            if let Err(e) = crate::plugin::install_plugin(&id) {
-                log::error!("Failed to install plugin '{}': {}", id, e);
+            if let Err(e) = crate::plugin::install_plugin(&_id) {
+                log::error!("Failed to install plugin '{}': {}", _id, e);
             }
         } else {
             crate::plugin::uninstall_plugin(&_id, true);
