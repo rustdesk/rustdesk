@@ -725,8 +725,14 @@ fn run(sp: GenericService) -> ResultType<()> {
                     would_block_count += 1;
                     if !scrap::is_x11() {
                         if would_block_count >= 100 {
-                            super::wayland::release_resource();
-                            bail!("Wayland capturer none 100 times, try restart capture");
+                            // to-do: Unknown reason for WouldBlock 100 times (seconds = 100 * 1 / fps)
+                            // https://github.com/rustdesk/rustdesk/blob/63e6b2f8ab51743e77a151e2b7ff18816f5fa2fb/libs/scrap/src/common/wayland.rs#L81
+                            //
+                            // Do not reset the capturer for now, as it will cause the prompt to show every few minutes.
+                            // https://github.com/rustdesk/rustdesk/issues/4276
+                            //
+                            // super::wayland::release_resource();
+                            // bail!("Wayland capturer none 100 times, try restart capture");
                         }
                     }
                 }
