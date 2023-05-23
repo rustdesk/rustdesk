@@ -56,14 +56,13 @@ dependencies:
   back_button_interceptor: ^6.0.1
   flutter_rust_bridge: ^1.61.1
   window_manager:
-    # git:
-    # url: https://github.com/Kingtous/rustdesk_window_manager
-    path: ../../rustdesk_window_manager
-    # ref: 94ff0eeb7e20e93f50022b2090f0b6ffb725c7df
+    git:
+      url: https://github.com/Kingtous/rustdesk_window_manager
+      ref: 8cb5bf683e6b7b3f73280449900fe8d2c6bfe011
   desktop_multi_window:
     git:
       url: https://github.com/Kingtous/rustdesk_desktop_multi_window
-      ref: 6cd00db1d68443aeeb13dc89f6a090a0ad5dbb3e
+      ref: 30518303e28702bf6b8110465293c05d21bc4cd2
   freezed_annotation: ^2.0.3
   flutter_custom_cursor: ^0.0.4
   window_size:
