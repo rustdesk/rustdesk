@@ -101,10 +101,8 @@ fn main() -> io::Result<()> {
     let mut vpx = vpx_encode::VpxEncoder::new(EncoderCfg::VPX(vpx_encode::VpxEncoderConfig {
         width,
         height,
-        timebase: [1, 1000],
         bitrate: args.flag_bv,
         codec: vpx_codec,
-        num_threads: 0,
     }))
     .unwrap();
 
