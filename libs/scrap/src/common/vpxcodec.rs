@@ -522,6 +522,7 @@ mod webrtc {
             );
             call_ctl!(ctx, VP9E_SET_AQ_MODE, if ADAPTIVE_QP_MODE { 3 } else { 0 });
             call_ctl!(ctx, VP9E_SET_FRAME_PARALLEL_DECODING, 0);
+            #[cfg(not(any(target_arch = "arm", target_arch = "aarch64", target_os = "android")))]
             call_ctl!(ctx, VP9E_SET_SVC_GF_TEMPORAL_REF, 0);
             call_ctl!(
                 ctx,
