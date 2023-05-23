@@ -502,12 +502,12 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Select peers", "همتایان را انتخاب کنید"),
         ("Plugins", "پلاگین ها"),
         ("Uninstall", "حذف نصب"),
-        ("Update", "Update"),
+        ("Update", "به روز رسانی"),
         ("Enable", "فعال کردن"),
         ("Disable", "غیر فعال کردن"),
         ("Options", "گزینه ها"),
-        ("resolution_original_tip", ""),
-        ("resolution_fit_local_tip", ""),
-        ("resolution_custom_tip", ""),
+        ("resolution_original_tip", "وضوح اصلی"),
+        ("resolution_fit_local_tip", "متناسب با وضوح محلی"),
+        ("resolution_custom_tip", "وضوح سفارشی"),
     ].iter().cloned().collect();
 }
