@@ -658,7 +658,7 @@ pub fn current_resolution(name: &str) -> ResultType<Resolution> {
     }
 }
 
-pub fn change_resolution(name: &str, width: usize, height: usize) -> ResultType<()> {
+pub fn change_resolution_directly(name: &str, width: usize, height: usize) -> ResultType<()> {
     let display = name.parse::<u32>().map_err(|e| anyhow!(e))?;
     unsafe {
         if NO == MacSetMode(display, width as _, height as _) {
