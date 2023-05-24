@@ -1867,10 +1867,10 @@ pub fn resolutions(name: &str) -> Vec<Resolution> {
 }
 
 pub fn current_resolution(name: &str) -> ResultType<Resolution> {
+    let device_name = str_to_device_name(name);
     unsafe {
         let mut dm: DEVMODEW = std::mem::zeroed();
         dm.dmSize = std::mem::size_of::<DEVMODEW>() as _;
-        let device_name = str_to_device_name(name);
         if EnumDisplaySettingsW(device_name.as_ptr(), ENUM_CURRENT_SETTINGS, &mut dm) == 0 {
             bail!(
                 "failed to get currrent resolution, errno={}",
@@ -1886,21 +1886,10 @@ pub fn current_resolution(name: &str) -> ResultType<Resolution> {
     }
 }
 
-
-
-pub fn change_resolution(name: &str, width: usize, height: usize) -> ResultType<()> {
+pub(super) fn change_resolution_directly(name: &str, width: usize, height: usize) -> ResultType<()> {
     let device_name = str_to_device_name(name);
     unsafe {
         let mut dm: DEVMODEW = std::mem::zeroed();
-        if FALSE == EnumDisplaySettingsW(device_name.as_ptr() as _, ENUM_CURRENT_SETTINGS, &mut dm)
-        {
-            bail!("EnumDisplaySettingsW failed, errno={}", GetLastError());
-        }
-        // dmPelsWidth and dmPelsHeight is the same to width and height
-        // Because this process is running in dpi awareness mode.
-        if dm.dmPelsWidth == width as u32 && dm.dmPelsHeight == height as u32 {
-            return Ok(());
-        }
         dm.dmPelsWidth = width as _;
         dm.dmPelsHeight = height as _;
         dm.dmFields = DM_PELSHEIGHT | DM_PELSWIDTH;
