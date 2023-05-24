@@ -30,6 +30,8 @@ fn setup(reader: BinaryReader, dir: Option<PathBuf>, clear: bool) -> Option<Path
     for file in reader.files.iter() {
         file.write_to_file(&dir);
     }
+    #[cfg(windows)]
+    windows::copy_runtime_broker(&dir);
     #[cfg(linux)]
     reader.configure_permission(&dir);
     Some(dir.join(&reader.exe))
@@ -78,5 +80,32 @@ fn main() {
             args = vec!["--quick_support".to_owned()];
         }
         execute(exe, args);
+    }
+}
+
+mod windows {
+    use std::{fs, path::PathBuf, process::Command};
+
+    // Used for privacy mode(magnifier impl).
+    pub const RUNTIME_BROKER_EXE: &'static str = "C:\\Windows\\System32\\RuntimeBroker.exe";
+    pub const WIN_MAG_INJECTED_PROCESS_EXE: &'static str = "RuntimeBroker_rustdesk.exe";
+
+    pub(super) fn copy_runtime_broker(dir: &PathBuf) {
+        let src = RUNTIME_BROKER_EXE;
+        let tgt = WIN_MAG_INJECTED_PROCESS_EXE;
+        let target_file = dir.join(tgt);
+        if target_file.exists() {
+            if let (Ok(src_file), Ok(tgt_file)) = (fs::read(src), fs::read(&target_file)) {
+                let src_md5 = format!("{:x}", md5::compute(&src_file));
+                let tgt_md5 = format!("{:x}", md5::compute(&tgt_file));
+                if src_md5 == tgt_md5 {
+                    return;
+                }
+            }
+        }
+        let _allow_err = Command::new("taskkill")
+            .args(&["/F", "/IM", "RuntimeBroker_rustdesk.exe"])
+            .output();
+        let _allow_err = std::fs::copy(src, &format!("{}\\{}", dir.to_string_lossy(), tgt));
     }
 }
