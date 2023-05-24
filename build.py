@@ -50,7 +50,7 @@ def parse_rc_features(feature):
             'platform': ['windows'],
             'zip_url': 'https://github.com/fufesou/RustDeskIddDriver/releases/download/v0.3/RustDeskIddDriver_x64.zip',
             'checksum_url': 'https://github.com/fufesou/RustDeskIddDriver/releases/download/v0.3/checksum_md5',
-            'exclude': ['README.md', 'certmgr.exe', 'install_cert_runas_admin.bat'],
+            'exclude': ['README.md', 'certmgr.exe', 'install_cert_runas_admin.bat', 'RustDeskIddApp.exe'],
         },
         'PrivacyMode': {
             'platform': ['windows'],
