@@ -40,7 +40,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
         label: params['id'],
         selectedIcon: selectedIcon,
         unselectedIcon: unselectedIcon,
-        onTabCloseButton: () => () => tabController.closeBy(params['id']),
+        onTabCloseButton: () => tabController.closeBy(params['id']),
         page: FileManagerPage(
           key: ValueKey(params['id']),
           id: params['id'],
