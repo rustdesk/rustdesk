@@ -2,12 +2,12 @@ import 'dart:async';
 
 import 'package:dash_chat_2/dash_chat_2.dart';
 import 'package:draggable_float_widget/draggable_float_widget.dart';
-import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get_rx/src/rx_types/rx_types.dart';
 import 'package:get/get.dart';
 import 'package:window_manager/window_manager.dart';
+ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../consts.dart';
 import '../common.dart';
@@ -119,7 +119,7 @@ class ChatModel with ChangeNotifier {
             }
           },
           backgroundColor: Theme.of(context).colorScheme.primary,
-          child: Icon(FluentIcons.chat_24_filled),
+          child: SvgPicture.asset('assets/chat2.svg'),
         ),
       );
     });

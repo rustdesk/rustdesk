@@ -1,5 +1,4 @@
 import 'package:dash_chat_2/dash_chat_2.dart';
-import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
@@ -102,7 +101,7 @@ class ChatPage extends StatelessWidget implements PageShape {
                           padding:
                               EdgeInsets.symmetric(horizontal: 6, vertical: 0),
                           color: MyTheme.accent,
-                          icon: FluentIcons.send_24_filled,
+                          icon: Icons.send_rounded,
                         ),
                       ),
                       messageOptions: MessageOptions(
