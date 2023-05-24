@@ -47,7 +47,7 @@ class ChatPage extends StatelessWidget implements PageShape {
       value: chatModel,
       child: Container(
         color: Theme.of(context).scaffoldBackgroundColor,
-        padding: EdgeInsets.only(top: 14.0, bottom: 14.0, left: 14.0),
+        padding: EdgeInsets.all(14.0),
         child: Consumer<ChatModel>(
           builder: (context, chatModel, child) {
             final currentUser = chatModel.currentUser;
