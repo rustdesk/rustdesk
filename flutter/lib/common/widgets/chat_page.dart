@@ -47,7 +47,7 @@ class ChatPage extends StatelessWidget implements PageShape {
       value: chatModel,
       child: Container(
         color: Theme.of(context).scaffoldBackgroundColor,
-        padding: EdgeInsets.only(top: 14.0, bottom: 14.0, left: 14.0),
+        padding: EdgeInsets.all(14.0),
         child: Consumer<ChatModel>(
           builder: (context, chatModel, child) {
             final currentUser = chatModel.currentUser;
@@ -105,43 +105,43 @@ class ChatPage extends StatelessWidget implements PageShape {
                         ),
                       ),
                       messageOptions: MessageOptions(
-                          showOtherUsersAvatar: false,
-                          showOtherUsersName: false,
-                          textColor: Colors.white,
-                          maxWidth: constraints.maxWidth * 0.7,
-                          messageTextBuilder: (message, _, __) {
-                            final isOwnMessage =
-                                message.user.id == currentUser.id;
-                            return Column(
-                              crossAxisAlignment: isOwnMessage
-                                  ? CrossAxisAlignment.start
-                                  : CrossAxisAlignment.end,
-                              children: <Widget>[
-                                Text(message.text,
-                                    style: TextStyle(color: Colors.white)),
-                                Text(
-                                  "${message.createdAt.hour}:${message.createdAt.minute.toString().padLeft(2, '0')}",
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 8,
-                                  ),
-                                ).marginOnly(top: 3),
-                              ],
-                            );
-                          },
-                          messageDecorationBuilder: (message, __, ___) {
-                            final isOwnMessage =
-                                message.user.id == currentUser.id;
-                            return defaultMessageDecoration(
-                              color: isOwnMessage
-                                  ? Colors.blueGrey
-                                  : MyTheme.accent,
-                              borderTopLeft: 8,
-                              borderTopRight: 8,
-                              borderBottomRight: isOwnMessage ? 8 : 2,
-                              borderBottomLeft: isOwnMessage ? 2 : 8,
-                            );
-                          }),
+                        showOtherUsersAvatar: false,
+                        showOtherUsersName: false,
+                        textColor: Colors.white,
+                        maxWidth: constraints.maxWidth * 0.7,
+                        messageTextBuilder: (message, _, __) {
+                          final isOwnMessage = message.user.id.isBlank!;
+                          return Column(
+                            crossAxisAlignment: isOwnMessage
+                                ? CrossAxisAlignment.end
+                                : CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Text(message.text,
+                                  style: TextStyle(color: Colors.white)),
+                              Text(
+                                "${message.createdAt.hour}:${message.createdAt.minute.toString().padLeft(2, '0')}",
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 8,
+                                ),
+                              ).marginOnly(top: 3),
+                            ],
+                          );
+                        },
+                        messageDecorationBuilder:
+                            (message, previousMessage, nextMessage) {
+                          final isOwnMessage = message.user.id.isBlank!;
+                          print("message.user.id = ${message.user.id}\n");
+                          return defaultMessageDecoration(
+                            color:
+                                isOwnMessage ? MyTheme.accent : Colors.blueGrey,
+                            borderTopLeft: 8,
+                            borderTopRight: 8,
+                            borderBottomRight: isOwnMessage ? 2 : 8,
+                            borderBottomLeft: isOwnMessage ? 8 : 2,
+                          );
+                        },
+                      ),
                     );
                     return SelectionArea(child: chat);
                   }),
