@@ -535,7 +535,7 @@ jobs:
           VCPKG_ROOT: /opt/rustdesk_thirdparty_lib/vcpkg
         run: |
           rustup target add ${{ matrix.job.target }} 
-          cargo install cargo-ndk
+          cargo install cargo-ndk --version 3.1.2
           case ${{ matrix.job.target }} in
             aarch64-linux-android)
               ./flutter/ndk_arm64.sh
