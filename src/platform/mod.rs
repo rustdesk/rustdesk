@@ -46,6 +46,7 @@ pub fn breakdown_callback() {
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn change_resolution(name: &str, width: usize, height: usize) -> ResultType<()> {
+    let cur_resolution = current_resolution(name)?;
     // For MacOS
     // to-do: Make sure the following comparison works. 
     // For Linux
@@ -57,7 +58,6 @@ pub fn change_resolution(name: &str, width: usize, height: usize) -> ResultType<
         return Ok(());
     }
     hbb_common::log::warn!("Change resolution of '{}' to ({},{})", name, width, height);
-    let cur_resolution = current_resolution(name)?;
     change_resolution_directly(name, width, height)
 }
 
