@@ -10,6 +10,7 @@ on:
 env:
   LLVM_VERSION: "15.0.6"
   FLUTTER_VERSION: "3.10.1"
+  FLUTTER_RUST_BRIDGE_VERSION: "1.75.3"
   # for arm64 linux
   FLUTTER_ELINUX_VERSION: "3.10.1"
   FLUTTER_ELINUX_COMMIT_ID: "410b3ca42f2cd0c485edf517a1666652bab442d4"
@@ -77,7 +78,7 @@ jobs:
 
       - name: Install flutter rust bridge deps
         run: |
-          cargo install flutter_rust_bridge_codegen
+          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }}
           Push-Location flutter ; flutter pub get ; Pop-Location
           ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart
 
@@ -310,7 +311,7 @@ jobs:
       - name: Install flutter rust bridge deps
         shell: bash
         run: |
-          cargo install flutter_rust_bridge_codegen
+          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }}
           pushd flutter && flutter pub get && popd
           ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart
 

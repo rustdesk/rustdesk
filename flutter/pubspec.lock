@@ -579,10 +579,10 @@ packages:
     dependency: "direct main"
     description:
       name: flutter_rust_bridge
-      sha256: "5aea0f3980dcd314f1890ef0d2392263817899cc15e543734b5d4dbe66b761eb"
+      sha256: "36e11b79ac7011d9203313468c5827fe1215b0fa03df384cfe2891a68ed74ed5"
       url: "https://pub.dev"
     source: hosted
-    version: "1.62.0"
+    version: "1.75.3"
   flutter_svg:
     dependency: "direct main"
     description:

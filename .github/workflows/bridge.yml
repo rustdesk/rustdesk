@@ -7,6 +7,7 @@ on:
 
 env:
   FLUTTER_VERSION: "3.10.1"
+  FLUTTER_RUST_BRIDGE_VERSION: "1.75.3"
   
 jobs:
   generate_bridge:
@@ -60,7 +61,7 @@ jobs:
       - name: Install flutter rust bridge deps
         shell: bash
         run: |
-          cargo install flutter_rust_bridge_codegen
+          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }}
           pushd flutter && flutter pub get && popd
 
       - name: Run flutter rust bridge
