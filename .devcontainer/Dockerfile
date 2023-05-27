@@ -8,10 +8,10 @@ WORKDIR /
 
 RUN git clone https://github.com/microsoft/vcpkg 
 WORKDIR vcpkg
-RUN git checkout 134505003bb46e20fbace51ccfb69243fbbc5f82
+RUN git checkout 2023.04.15
 RUN /vcpkg/bootstrap-vcpkg.sh -disableMetrics
 ENV VCPKG_ROOT=/vcpkg
-RUN $VCPKG_ROOT/vcpkg --disable-metrics install libvpx libyuv opus
+RUN $VCPKG_ROOT/vcpkg --disable-metrics install libvpx libyuv opus aom
 
 WORKDIR /
 RUN wget https://github.com/rustdesk/doc.rustdesk.com/releases/download/console/dep.tar.gz && tar xzf dep.tar.gz
@@ -27,8 +27,8 @@ RUN $HOME/.cargo/bin/rustup target add aarch64-linux-android
 RUN $HOME/.cargo/bin/cargo install cargo-ndk
 
 # Install Flutter
-RUN wget https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.7.3-stable.tar.xz
-RUN tar xf flutter_linux_3.7.3-stable.tar.xz && rm flutter_linux_3.7.3-stable.tar.xz
+RUN wget https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.10.1-stable.tar.xz
+RUN tar xf flutter_linux_3.10.1-stable.tar.xz && rm flutter_linux_3.10.1-stable.tar.xz
 ENV PATH="$PATH:$HOME/flutter/bin"
 RUN dart pub global activate ffigen 5.0.1
 
