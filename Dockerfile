@@ -3,9 +3,9 @@ FROM debian
 WORKDIR /
 RUN apt update -y && apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake unzip zip sudo libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev cmake ninja-build
 
-RUN git clone https://github.com/microsoft/vcpkg && cd vcpkg && git checkout 134505003bb46e20fbace51ccfb69243fbbc5f82
+RUN git clone https://github.com/microsoft/vcpkg && cd vcpkg && git checkout 2023.04.15
 RUN /vcpkg/bootstrap-vcpkg.sh -disableMetrics
-RUN /vcpkg/vcpkg --disable-metrics install libvpx libyuv opus
+RUN /vcpkg/vcpkg --disable-metrics install libvpx libyuv opus aom
 
 RUN groupadd -r user && useradd -r -g user user --home /home/user && mkdir -p /home/user && chown user /home/user && echo "user  ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/user
 WORKDIR /home/user
