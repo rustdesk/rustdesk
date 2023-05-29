@@ -472,10 +472,11 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              Icon(
-                iconData,
-                size: 30.0,
-                color: Colors.white,
+              Expanded(
+                child: Icon(
+                  iconData,
+                  color: Colors.white,
+                ),
               ),
               Text(
                 enabled ? "ON" : "OFF",
