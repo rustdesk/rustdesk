@@ -71,13 +71,19 @@ class DraggableChatWindow extends StatelessWidget {
                   onPressed: () {
                     chatModel.hideChatWindowOverlay();
                   },
-                  icon: const Icon(Icons.keyboard_arrow_down)),
+                  icon: const Icon(
+                    Icons.keyboard_arrow_down,
+                    color: Colors.white,
+                  )),
               IconButton(
                   onPressed: () {
                     chatModel.hideChatWindowOverlay();
                     chatModel.hideChatIconOverlay();
                   },
-                  icon: const Icon(Icons.close))
+                  icon: const Icon(
+                    Icons.close,
+                    color: Colors.white,
+                  ))
             ],
           )
         ],

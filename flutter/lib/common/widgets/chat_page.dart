@@ -47,7 +47,6 @@ class ChatPage extends StatelessWidget implements PageShape {
       value: chatModel,
       child: Container(
         color: Theme.of(context).scaffoldBackgroundColor,
-        padding: EdgeInsets.all(14.0),
         child: Consumer<ChatModel>(
           builder: (context, chatModel, child) {
             final currentUser = chatModel.currentUser;
@@ -76,27 +75,20 @@ class ChatPage extends StatelessWidget implements PageShape {
                             fontSize: 14,
                             color:
                                 Theme.of(context).textTheme.titleLarge?.color),
-                        inputDecoration: isDesktop
-                            ? InputDecoration(
-                                isDense: true,
-                                hintText: translate('Write a message'),
-                                filled: true,
-                                fillColor:
-                                    Theme.of(context).colorScheme.background,
-                                contentPadding: EdgeInsets.all(10),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10.0),
-                                  borderSide: const BorderSide(
-                                    width: 1,
-                                    style: BorderStyle.solid,
-                                  ),
-                                ),
-                              )
-                            : defaultInputDecoration(
-                                hintText: translate('Write a message'),
-                                fillColor:
-                                    Theme.of(context).colorScheme.background,
-                              ),
+                        inputDecoration: InputDecoration(
+                          isDense: true,
+                          hintText: translate('Write a message'),
+                          filled: true,
+                          fillColor: Theme.of(context).colorScheme.background,
+                          contentPadding: EdgeInsets.all(10),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10.0),
+                            borderSide: const BorderSide(
+                              width: 1,
+                              style: BorderStyle.solid,
+                            ),
+                          ),
+                        ),
                         sendButtonBuilder: defaultSendButton(
                           padding:
                               EdgeInsets.symmetric(horizontal: 6, vertical: 0),
