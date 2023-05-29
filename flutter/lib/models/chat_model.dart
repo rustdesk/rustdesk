@@ -7,7 +7,7 @@ import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get_rx/src/rx_types/rx_types.dart';
 import 'package:get/get.dart';
 import 'package:window_manager/window_manager.dart';
- import 'package:flutter_svg/flutter_svg.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../consts.dart';
 import '../common.dart';
@@ -180,6 +180,13 @@ class ChatModel with ChangeNotifier {
       }
       showChatWindowOverlay(chatInitPos: chatInitPos);
     } else {
+      hideChatIconOverlay();
+      hideChatWindowOverlay();
+    }
+  }
+
+  hideChatOverlay() {
+    if (!_isChatOverlayHide()) {
       hideChatIconOverlay();
       hideChatWindowOverlay();
     }
