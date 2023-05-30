@@ -5,6 +5,7 @@ use hbb_common::{
 };
 use reqwest::blocking::Client;
 use serde_derive::{Deserialize, Serialize};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
@@ -30,21 +31,80 @@ pub struct OidcAuthUrl {
     url: Url,
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Deserialize, Serialize, Default, Clone)]
+pub struct DeviceInfo {
+    /// Linux , Windows , Android ...
+    #[serde(default)]
+    pub os: String,
+
+    /// `browser` or `client`
+    #[serde(default)]
+    pub r#type: String,
+
+    /// device name from rustdesk client,
+    /// browser info(name + version) from browser
+    #[serde(default)]
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct WhitelistItem {
+    data: String, // ip / device uuid
+    info: DeviceInfo,
+    exp: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct UserInfo {
+    #[serde(default)]
+    pub settings: UserSettings,
+    #[serde(default)]
+    pub login_ip_whitelist: Vec<WhitelistItem>,
+    #[serde(default)]
+    pub login_device_whitelist: Vec<WhitelistItem>,
+    #[serde(default)]
+    pub other: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct UserSettings {
+    #[serde(default)]
+    pub email_verification: bool,
+    #[serde(default)]
+    pub email_alarm_notification: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize_repr, Deserialize_repr)]
+#[repr(i64)]
+pub enum UserStatus {
+    Disabled = 0,
+    Normal = 1,
+    Unverified = -1,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize_repr, Deserialize_repr)]
+#[repr(i64)]
+pub enum UserRole {
+    Owner = 10,
+    Admin = 1,
+    Member = 0,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserPayload {
-    pub id: String,
     pub name: String,
     pub email: Option<String>,
     pub note: Option<String>,
-    pub status: Option<i64>,
-    pub grp: Option<String>,
-    pub is_admin: Option<bool>,
+    pub status: UserStatus,
+    pub info: UserInfo,
+    pub role: UserRole,
+    pub is_admin: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthBody {
     pub access_token: String,
-    pub token_type: String,
+    pub r#type: String,
     pub user: UserPayload,
 }
 
@@ -128,7 +188,7 @@ impl OidcSession {
         std::thread::sleep(std::time::Duration::from_secs_f32(secs));
     }
 
-    fn auth_task(op: String, id: String, uuid: String) {
+    fn auth_task(op: String, id: String, uuid: String, remember_me: bool) {
         let auth_request_res = Self::auth(&op, &id, &uuid);
         log::info!("Request oidc auth result: {:?}", &auth_request_res);
         let code_url = match auth_request_res {
@@ -167,14 +227,16 @@ impl OidcSession {
         while OIDC_SESSION.read().unwrap().keep_querying && begin.elapsed() < query_timeout {
             match Self::query(&code_url.code, &id, &uuid) {
                 Ok(HbbHttpResponse::<_>::Data(auth_body)) => {
-                    LocalConfig::set_option(
-                        "access_token".to_owned(),
-                        auth_body.access_token.clone(),
-                    );
-                    LocalConfig::set_option(
-                        "user_info".to_owned(),
-                        serde_json::to_string(&auth_body.user).unwrap_or_default(),
-                    );
+                    if remember_me {
+                        LocalConfig::set_option(
+                            "access_token".to_owned(),
+                            auth_body.access_token.clone(),
+                        );
+                        LocalConfig::set_option(
+                            "user_info".to_owned(),
+                            serde_json::to_string(&auth_body.user).unwrap_or_default(),
+                        );
+                    }
                     OIDC_SESSION
                         .write()
                         .unwrap()
@@ -226,12 +288,12 @@ impl OidcSession {
         }
     }
 
-    pub fn account_auth(op: String, id: String, uuid: String) {
+    pub fn account_auth(op: String, id: String, uuid: String, remember_me: bool) {
         Self::auth_cancel();
         Self::wait_stop_querying();
         OIDC_SESSION.write().unwrap().before_task();
-        std::thread::spawn(|| {
-            Self::auth_task(op, id, uuid);
+        std::thread::spawn(move || {
+            Self::auth_task(op, id, uuid, remember_me);
             OIDC_SESSION.write().unwrap().after_task();
         });
     }
