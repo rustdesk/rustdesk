@@ -124,7 +124,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("ScrollAuto", "Rolagem automática"),
         ("Good image quality", "Qualidade visual boa"),
         ("Balanced", "Balanceada"),
-        ("Optimize reaction time", "Otimizar tempo de reação"),
+        ("Optimize reaction time", "Otimizar tempo de resposta"),
         ("Custom", "Personalizado"),
         ("Show remote cursor", "Mostrar cursor remoto"),
         ("Show quality monitor", "Exibir monitor de qualidade"),
