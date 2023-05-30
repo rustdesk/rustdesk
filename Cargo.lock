@@ -5250,6 +5250,7 @@ dependencies = [
  "serde 1.0.163",
  "serde_derive",
  "serde_json 1.0.96",
+ "serde_repr",
  "sha2",
  "shared_memory",
  "shutdown_hooks",

@@ -95,11 +95,13 @@ class ConfigOP {
 class WidgetOP extends StatefulWidget {
   final ConfigOP config;
   final RxString curOP;
+  final RxBool autoLogin;
   final Function(String) cbLogin;
   const WidgetOP({
     Key? key,
     required this.config,
     required this.curOP,
+    required this.autoLogin,
     required this.cbLogin,
   }) : super(key: key);
 
@@ -188,7 +190,7 @@ class _WidgetOPState extends State<WidgetOP> {
           onTap: () async {
             _resetState();
             widget.curOP.value = widget.config.op;
-            await bind.mainAccountAuth(op: widget.config.op);
+            await bind.mainAccountAuth(op: widget.config.op, rememberMe: widget.autoLogin.value);
             _beginQueryState();
           },
         ),
@@ -254,12 +256,14 @@ class _WidgetOPState extends State<WidgetOP> {
 class LoginWidgetOP extends StatelessWidget {
   final List<ConfigOP> ops;
   final RxString curOP;
+  final RxBool autoLogin;
   final Function(String) cbLogin;
 
   LoginWidgetOP({
     Key? key,
     required this.ops,
     required this.curOP,
+    required this.autoLogin,
     required this.cbLogin,
   }) : super(key: key);
 
@@ -270,6 +274,7 @@ class LoginWidgetOP extends StatelessWidget {
               WidgetOP(
                 config: op,
                 curOP: curOP,
+                autoLogin: autoLogin,
                 cbLogin: cbLogin,
               ),
               const Divider(
@@ -500,6 +505,7 @@ Future<bool?> loginDialog() async {
               ConfigOP(op: 'Okta', iconWidth: 38),
             ],
             curOP: curOP,
+            autoLogin: autoLogin,
             cbLogin: (String username) {
               gFFI.userModel.userName.value = username;
               close(true);

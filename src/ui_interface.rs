@@ -822,8 +822,8 @@ fn check_connect_status(reconnect: bool) -> mpsc::UnboundedSender<ipc::Data> {
 }
 
 #[cfg(feature = "flutter")]
-pub fn account_auth(op: String, id: String, uuid: String) {
-    account::OidcSession::account_auth(op, id, uuid);
+pub fn account_auth(op: String, id: String, uuid: String, remember_me: bool) {
+    account::OidcSession::account_auth(op, id, uuid, remember_me);
 }
 
 #[cfg(feature = "flutter")]
