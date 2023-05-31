@@ -95,13 +95,11 @@ class ConfigOP {
 class WidgetOP extends StatefulWidget {
   final ConfigOP config;
   final RxString curOP;
-  final RxBool autoLogin;
   final Function(String) cbLogin;
   const WidgetOP({
     Key? key,
     required this.config,
     required this.curOP,
-    required this.autoLogin,
     required this.cbLogin,
   }) : super(key: key);
 
@@ -190,7 +188,7 @@ class _WidgetOPState extends State<WidgetOP> {
           onTap: () async {
             _resetState();
             widget.curOP.value = widget.config.op;
-            await bind.mainAccountAuth(op: widget.config.op, rememberMe: widget.autoLogin.value);
+            await bind.mainAccountAuth(op: widget.config.op, rememberMe: true);
             _beginQueryState();
           },
         ),
@@ -256,14 +254,12 @@ class _WidgetOPState extends State<WidgetOP> {
 class LoginWidgetOP extends StatelessWidget {
   final List<ConfigOP> ops;
   final RxString curOP;
-  final RxBool autoLogin;
   final Function(String) cbLogin;
 
   LoginWidgetOP({
     Key? key,
     required this.ops,
     required this.curOP,
-    required this.autoLogin,
     required this.cbLogin,
   }) : super(key: key);
 
@@ -274,7 +270,6 @@ class LoginWidgetOP extends StatelessWidget {
               WidgetOP(
                 config: op,
                 curOP: curOP,
-                autoLogin: autoLogin,
                 cbLogin: cbLogin,
               ),
               const Divider(
@@ -305,7 +300,6 @@ class LoginWidgetUserPass extends StatelessWidget {
   final String? passMsg;
   final bool isInProgress;
   final RxString curOP;
-  final RxBool autoLogin;
   final Function() onLogin;
   final FocusNode? userFocusNode;
   const LoginWidgetUserPass({
@@ -317,7 +311,6 @@ class LoginWidgetUserPass extends StatelessWidget {
     required this.passMsg,
     required this.isInProgress,
     required this.curOP,
-    required this.autoLogin,
     required this.onLogin,
   }) : super(key: key);
 
@@ -340,19 +333,6 @@ class LoginWidgetUserPass extends StatelessWidget {
               autoFocus: false,
               errorText: passMsg,
             ),
-            Obx(() => CheckboxListTile(
-                  contentPadding: const EdgeInsets.all(0),
-                  dense: true,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  title: Text(
-                    translate("Remember me"),
-                  ),
-                  value: autoLogin.value,
-                  onChanged: (v) {
-                    if (v == null) return;
-                    autoLogin.value = v;
-                  },
-                )),
             Offstage(
                 offstage: !isInProgress,
                 child: const LinearProgressIndicator()),
@@ -393,7 +373,6 @@ Future<bool?> loginDialog() async {
   String? usernameMsg;
   String? passwordMsg;
   var isInProgress = false;
-  final autoLogin = true.obs;
   final RxString curOP = ''.obs;
 
   final res = await gFFI.dialogManager.show<bool>((setState, close, context) {
@@ -432,7 +411,6 @@ Future<bool?> loginDialog() async {
             password: password.text,
             id: await bind.mainGetMyId(),
             uuid: await bind.mainGetUuid(),
-            autoLogin: autoLogin.value,
             type: HttpType.kAuthReqTypeAccount));
 
         switch (resp.type) {
@@ -483,7 +461,6 @@ Future<bool?> loginDialog() async {
             passMsg: passwordMsg,
             isInProgress: isInProgress,
             curOP: curOP,
-            autoLogin: autoLogin,
             onLogin: onLogin,
             userFocusNode: userFocusNode,
           ),
@@ -505,7 +482,6 @@ Future<bool?> loginDialog() async {
               ConfigOP(op: 'Okta', iconWidth: 38),
             ],
             curOP: curOP,
-            autoLogin: autoLogin,
             cbLogin: (String username) {
               gFFI.userModel.userName.value = username;
               close(true);
