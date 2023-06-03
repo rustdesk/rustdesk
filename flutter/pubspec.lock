@@ -292,12 +292,11 @@ packages:
   dash_chat_2:
     dependency: "direct main"
     description:
-      path: "."
-      ref: HEAD
-      resolved-ref: "8d850ab63532c36ed1d594ad4c81d4391ec3b1e1"
-      url: "https://github.com/Kingtous/Dash-Chat-2.git"
-    source: git
-    version: "0.0.16"
+      name: dash_chat_2
+      sha256: e9e08b2a030d340d60f7adbeb977d3d6481db1f172b51440bfa02488b92fa19c
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.0.17"
   debounce_throttle:
     dependency: "direct main"
     description:
@@ -1495,9 +1494,9 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "8cb5bf683e6b7b3f73280449900fe8d2c6bfe011"
-      resolved-ref: "8cb5bf683e6b7b3f73280449900fe8d2c6bfe011"
-      url: "https://github.com/Kingtous/rustdesk_window_manager"
+      ref: HEAD
+      resolved-ref: "2c4b242e668acf4e652b09b13f650bcfbbaa3871"
+      url: "https://github.com/rustdesk-org/window_manager"
     source: git
     version: "0.3.4"
   window_size:

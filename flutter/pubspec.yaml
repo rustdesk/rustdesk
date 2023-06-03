@@ -39,9 +39,7 @@ dependencies:
   package_info_plus: ^3.1.2
   url_launcher: ^6.0.9
   toggle_switch: ^2.1.0
-  dash_chat_2: 
-    git:
-      url: https://github.com/Kingtous/Dash-Chat-2.git
+  dash_chat_2: ^0.0.17
   draggable_float_widget: ^0.0.2
   settings_ui: ^2.0.2
   flutter_breadcrumb: ^1.0.1
@@ -54,8 +52,7 @@ dependencies:
   flutter_rust_bridge: "<1.76.0"
   window_manager:
     git:
-      url: https://github.com/Kingtous/rustdesk_window_manager
-      ref: 8cb5bf683e6b7b3f73280449900fe8d2c6bfe011
+      url: https://github.com/rustdesk-org/window_manager
   desktop_multi_window:
     git:
       url: https://github.com/Kingtous/rustdesk_desktop_multi_window
