@@ -309,18 +309,18 @@ packages:
     dependency: "direct main"
     description:
       path: "packages/desktop_drop"
-      ref: ba76531701885d9de8a69ee0167e1610cf76e440
-      resolved-ref: ba76531701885d9de8a69ee0167e1610cf76e440
-      url: "https://github.com/Kingtous/mixin-flutter-plugins.git"
+      ref: HEAD
+      resolved-ref: "21725af7fd5be4e928acfb84146ebd10d1364a97"
+      url: "https://github.com/rustdesk-org/flutter-plugins"
     source: git
     version: "0.4.1"
   desktop_multi_window:
     dependency: "direct main"
     description:
       path: "."
-      ref: "30518303e28702bf6b8110465293c05d21bc4cd2"
+      ref: HEAD
       resolved-ref: "30518303e28702bf6b8110465293c05d21bc4cd2"
-      url: "https://github.com/Kingtous/rustdesk_desktop_multi_window"
+      url: "https://github.com/rustdesk-org/rustdesk_desktop_multi_window"
     source: git
     version: "0.1.0"
   device_info_plus:
@@ -484,9 +484,9 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "62f09545149f320616467c306c8c5f71714a18e6"
+      ref: HEAD
       resolved-ref: "62f09545149f320616467c306c8c5f71714a18e6"
-      url: "https://github.com/Kingtous/flutter_improved_scrolling"
+      url: "https://github.com/rustdesk-org/flutter_improved_scrolling"
     source: git
     version: "0.0.3"
   flutter_keyboard_visibility:
@@ -1237,9 +1237,9 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "276b2206d0a7bd7574bc6f061d804c9b7be1d031"
-      resolved-ref: "276b2206d0a7bd7574bc6f061d804c9b7be1d031"
-      url: "https://github.com/Kingtous/rustdesk_uni_links_desktop"
+      ref: HEAD
+      resolved-ref: e1d25263ae7c214ff52a66a9cf28aea8f408742e
+      url: "https://github.com/rustdesk-org/uni_links_desktop"
     source: git
     version: "0.1.6"
   uni_links_platform_interface:

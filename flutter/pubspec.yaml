@@ -55,8 +55,7 @@ dependencies:
       url: https://github.com/rustdesk-org/window_manager
   desktop_multi_window:
     git:
-      url: https://github.com/Kingtous/rustdesk_desktop_multi_window
-      ref: 30518303e28702bf6b8110465293c05d21bc4cd2
+      url: https://github.com/rustdesk-org/rustdesk_desktop_multi_window
   freezed_annotation: ^2.0.3
   flutter_custom_cursor: ^0.0.4
   window_size:
@@ -69,8 +68,7 @@ dependencies:
   contextmenu: ^3.0.0
   desktop_drop: 
     git:
-      url: https://github.com/Kingtous/mixin-flutter-plugins.git
-      ref: ba76531701885d9de8a69ee0167e1610cf76e440
+      url: https://github.com/rustdesk-org/flutter-plugins
       path: ./packages/desktop_drop
   scroll_pos: ^0.4.0
   debounce_throttle: ^2.0.0
@@ -82,14 +80,11 @@ dependencies:
     # for flutter 3.0.5, please use official version(just comment code below).
     # if build rustdesk by flutter >=3.3, please use our custom pub below (uncomment code below).
     git:
-      url: https://github.com/Kingtous/flutter_improved_scrolling
-      ref: 62f09545149f320616467c306c8c5f71714a18e6
+      url: https://github.com/rustdesk-org/flutter_improved_scrolling
   uni_links: ^0.5.1
   uni_links_desktop: 
     git:
-      url: https://github.com/Kingtous/rustdesk_uni_links_desktop 
-      # v0.1.6 + multiwindow patch
-      ref: 276b2206d0a7bd7574bc6f061d804c9b7be1d031
+      url: https://github.com/rustdesk-org/uni_links_desktop
   path: ^1.8.1
   auto_size_text: ^3.0.0
   bot_toast: ^4.0.3
