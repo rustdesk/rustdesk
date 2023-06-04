@@ -541,8 +541,8 @@ class _ImagePaintState extends State<ImagePaint> {
           imageWidget = Stack(
             children: [
               Positioned(
-                left: c.x,
-                top: c.y,
+                left: c.x.toInt().toDouble(),
+                top: c.y.toInt().toDouble(),
                 width: c.getDisplayWidth() * s,
                 height: c.getDisplayHeight() * s,
                 child: Texture(textureId: widget.textureId.value),
