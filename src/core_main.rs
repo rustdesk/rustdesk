@@ -22,12 +22,11 @@ pub fn core_main() -> Option<Vec<String>> {
     let mut _is_flutter_connect = false;
     let mut arg_exe = Default::default();
     for arg in std::env::args() {
-        // to-do: how to pass to flutter?
         if i == 0 {
             arg_exe = arg;
         } else if i > 0 {
             #[cfg(feature = "flutter")]
-            if arg == "--connect" {
+            if arg == "--connect" || arg == "--play" {
                 _is_flutter_connect = true;
             }
             if arg == "--elevate" {
@@ -309,12 +308,17 @@ fn import_config(path: &str) {
 #[cfg(feature = "flutter")]
 fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<String>> {
     args.position(|element| {
-        return element == "--connect";
+        return element == "--connect" || element == "--play";
     })?;
-    let peer_id = args.next().unwrap_or("".to_string());
+    let mut peer_id = args.next().unwrap_or("".to_string());
     if peer_id.is_empty() {
         eprintln!("please provide a valid peer id");
         return None;
+    }
+    let app_name = crate::get_app_name();
+    let ext = format!(".{}", app_name.to_lowercase());
+    if peer_id.ends_with(&ext) {
+        peer_id = peer_id.replace(ext, "");
     }
     let mut switch_uuid = None;
     while let Some(item) = args.next() {
