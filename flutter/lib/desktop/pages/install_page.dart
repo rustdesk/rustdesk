@@ -232,7 +232,7 @@ class _InstallPageBodyState extends State<_InstallPageBody>
                           child: Text(translate('Cancel'),
                               style: TextStyle(
                                   color: textColor, fontSize: btnFontSize)))
-                      .marginOnly(right: 2 * em)),
+                      .marginSymmetric(horizontal: 2 * em)),
                   Obx(() => ElevatedButton(
                       onPressed: btnEnabled.value ? install : null,
                       style: ElevatedButton.styleFrom(
