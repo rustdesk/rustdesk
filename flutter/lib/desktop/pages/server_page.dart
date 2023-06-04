@@ -459,7 +459,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
   Widget buildPermissionIcon(bool enabled, IconData iconData,
       Function(bool)? onTap, String tooltipText) {
     return Tooltip(
-      message: tooltipText,
+      message: "$tooltipText: ${enabled ? "ON" : "OFF"}",
       child: Container(
         decoration: BoxDecoration(
           color: enabled ? MyTheme.accent : Colors.grey[700],
@@ -476,17 +476,9 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                 child: Icon(
                   iconData,
                   color: Colors.white,
+                  size: 32,
                 ),
               ),
-              Text(
-                enabled ? "ON" : "OFF",
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontWeight: FontWeight.w200,
-                  color: Colors.white,
-                  fontSize: 10.0,
-                ),
-              )
             ],
           ),
         ),
@@ -829,13 +821,13 @@ class _CmControlPanel extends StatelessWidget {
         ),
       );
     }
+    final borderRadius = BorderRadius.circular(10.0);
     return Container(
       height: 28,
       decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(10.0),
-          border: border),
+          color: color, borderRadius: borderRadius, border: border),
       child: InkWell(
+        borderRadius: borderRadius,
         onTap: () => checkClickTime(client.id, onClick),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
