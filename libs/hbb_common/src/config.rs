@@ -107,6 +107,9 @@ macro_rules! serde_field_string {
         {
             let s: String =
                 de::Deserialize::deserialize(deserializer).unwrap_or(Self::$default_func());
+            if s.is_empty() {
+                return Ok(Self::$default_func());
+            }
             Ok(s)
         }
     };
@@ -206,22 +209,26 @@ pub struct PeerConfig {
     pub size_pf: Size,
     #[serde(
         default = "PeerConfig::default_view_style",
-        deserialize_with = "PeerConfig::deserialize_view_style"
+        deserialize_with = "PeerConfig::deserialize_view_style",
+        skip_serializing_if = "String::is_empty"
     )]
     pub view_style: String,
     #[serde(
         default = "PeerConfig::default_scroll_style",
-        deserialize_with = "PeerConfig::deserialize_scroll_style"
+        deserialize_with = "PeerConfig::deserialize_scroll_style",
+        skip_serializing_if = "String::is_empty"
     )]
     pub scroll_style: String,
     #[serde(
         default = "PeerConfig::default_image_quality",
-        deserialize_with = "PeerConfig::deserialize_image_quality"
+        deserialize_with = "PeerConfig::deserialize_image_quality",
+        skip_serializing_if = "String::is_empty"
     )]
     pub image_quality: String,
     #[serde(
         default = "PeerConfig::default_custom_image_quality",
-        deserialize_with = "PeerConfig::deserialize_custom_image_quality"
+        deserialize_with = "PeerConfig::deserialize_custom_image_quality",
+        skip_serializing_if = "Vec::is_empty"
     )]
     pub custom_image_quality: Vec<i32>,
     #[serde(flatten)]
@@ -244,7 +251,11 @@ pub struct PeerConfig {
     pub enable_file_transfer: EnableFileTransfer,
     #[serde(flatten)]
     pub show_quality_monitor: ShowQualityMonitor,
-    #[serde(default, deserialize_with = "deserialize_string")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_string",
+        skip_serializing_if = "String::is_empty"
+    )]
     pub keyboard_mode: String,
     #[serde(flatten)]
     pub view_only: ViewOnly,
