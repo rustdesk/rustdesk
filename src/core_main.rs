@@ -318,7 +318,7 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
     let app_name = crate::get_app_name();
     let ext = format!(".{}", app_name.to_lowercase());
     if peer_id.ends_with(&ext) {
-        peer_id = peer_id.replace(ext, "");
+        peer_id = peer_id.replace(&ext, "");
     }
     let mut switch_uuid = None;
     while let Some(item) = args.next() {
