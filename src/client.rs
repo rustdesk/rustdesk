@@ -35,7 +35,7 @@ use hbb_common::{
         Config, PeerConfig, PeerInfoSerde, Resolution, CONNECT_TIMEOUT, READ_TIMEOUT, RELAY_PORT,
     },
     get_version_number, log,
-    message_proto::{option_message::BoolOption, Resolution as ProtoResolution, *},
+    message_proto::{option_message::BoolOption, *},
     protobuf::Message as _,
     rand,
     rendezvous_proto::*,
@@ -1353,7 +1353,9 @@ impl LoginConfigHandler {
     ///
     /// * `ignore_default` - If `true`, ignore the default value of the option.
     fn get_option_message(&self, ignore_default: bool) -> Option<OptionMessage> {
-        if self.conn_type.eq(&ConnType::FILE_TRANSFER) || self.conn_type.eq(&ConnType::PORT_FORWARD) || self.conn_type.eq(&ConnType::RDP)
+        if self.conn_type.eq(&ConnType::FILE_TRANSFER)
+            || self.conn_type.eq(&ConnType::PORT_FORWARD)
+            || self.conn_type.eq(&ConnType::RDP)
         {
             return None;
         }
@@ -1402,16 +1404,6 @@ impl LoginConfigHandler {
             msg.disable_clipboard = BoolOption::Yes.into();
             n += 1;
         }
-        if let Some(r) = self.get_custom_resolution() {
-            if r.0 > 0 && r.1 > 0 {
-                msg.custom_resolution = Some(ProtoResolution {
-                    width: r.0,
-                    height: r.1,
-                    ..Default::default()
-                })
-                .into();
-            }
-        }
         msg.supported_decoding =
             hbb_common::protobuf::MessageField::some(Decoder::supported_decodings(Some(&self.id)));
         n += 1;
@@ -1424,7 +1416,9 @@ impl LoginConfigHandler {
     }
 
     pub fn get_option_message_after_login(&self) -> Option<OptionMessage> {
-        if self.conn_type.eq(&ConnType::FILE_TRANSFER) || self.conn_type.eq(&ConnType::PORT_FORWARD) || self.conn_type.eq(&ConnType::RDP)
+        if self.conn_type.eq(&ConnType::FILE_TRANSFER)
+            || self.conn_type.eq(&ConnType::PORT_FORWARD)
+            || self.conn_type.eq(&ConnType::RDP)
         {
             return None;
         }
@@ -1584,14 +1578,27 @@ impl LoginConfigHandler {
     }
 
     #[inline]
-    pub fn get_custom_resolution(&self) -> Option<(i32, i32)> {
-        self.config.custom_resolution.as_ref().map(|r| (r.w, r.h))
+    pub fn get_custom_resolution(&self, display: i32) -> Option<(i32, i32)> {
+        self.config
+            .custom_resolutions
+            .get(&display.to_string())
+            .map(|r| (r.w, r.h))
     }
 
     #[inline]
-    pub fn set_custom_resolution(&mut self, wh: Option<(i32, i32)>) {
+    pub fn set_custom_resolution(&mut self, display: i32, wh: Option<(i32, i32)>) {
+        let display = display.to_string();
         let mut config = self.load_config();
-        config.custom_resolution = wh.map(|r| Resolution { w: r.0, h: r.1 });
+        match wh {
+            Some((w, h)) => {
+                config
+                    .custom_resolutions
+                    .insert(display, Resolution { w, h });
+            }
+            None => {
+                config.custom_resolutions.remove(&display);
+            }
+        }
         self.save_config(config);
     }
 

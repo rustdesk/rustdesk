@@ -1029,12 +1029,14 @@ pub(super) fn get_current_display_2(mut all: Vec<Display>) -> ResultType<(usize,
     return Ok((n, current, all.remove(current)));
 }
 
+#[inline]
 pub fn get_current_display() -> ResultType<(usize, usize, Display)> {
     get_current_display_2(try_get_displays()?)
 }
 
 // `try_reset_current_display` is needed because `get_displays` may change the current display,
 // which may cause the mismatch of current display and the current display name.
+#[inline]
 pub fn get_current_display_name() -> ResultType<String> {
     Ok(get_current_display_2(try_get_displays()?)?.2.name())
 }
