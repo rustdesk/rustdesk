@@ -776,9 +776,9 @@ pub fn resolutions(name: &str) -> Vec<Resolution> {
 
                 Screen 0: minimum 320 x 200, current 1920 x 1080, maximum 16384 x 16384
                 eDP-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis) 344mm x 193mm
-                1920x1080     60.01*+  60.01    59.97    59.96    59.93  
-                1680x1050     59.95    59.88  
-                1600x1024     60.17  
+                1920x1080     60.01*+  60.01    59.97    59.96    59.93
+                1680x1050     59.95    59.88
+                1600x1024     60.17
 
                 XWAYLAND0 connected primary 1920x984+0+0 (normal left inverted right x axis y axis) 0mm x 0mm
                 Virtual1 connected primary 1920x984+0+0 (normal left inverted right x axis y axis) 0mm x 0mm
@@ -1058,5 +1058,20 @@ mod desktop {
             self.get_xauth();
             self.set_is_subprocess();
         }
+    }
+}
+
+pub struct WakeLock(Option<keepawake::AwakeHandle>);
+
+impl WakeLock {
+    pub fn new(display: bool, idle: bool, sleep: bool) -> Self {
+        WakeLock(
+            keepawake::Builder::new()
+                .display(display)
+                .idle(idle)
+                .sleep(sleep)
+                .create()
+                .ok(),
+        )
     }
 }
