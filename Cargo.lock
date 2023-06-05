@@ -3301,7 +3301,7 @@ dependencies = [
  "anyhow",
  "apple-sys",
  "cfg-if 1.0.0",
- "core-foundation 0.9.3",
+ "core-foundation",
  "shadow-rs",
  "windows 0.48.0",
  "winres",

@@ -283,6 +283,7 @@ pub fn set_option(key: String, value: String) {
                 return;
             }
         }
+        /*
         #[cfg(any(target_os = "windows"))]
         {
             if crate::platform::is_installed() {
@@ -294,6 +295,7 @@ pub fn set_option(key: String, value: String) {
                 return;
             }
         }
+        */
     }
     if value.is_empty() {
         options.remove(&key);

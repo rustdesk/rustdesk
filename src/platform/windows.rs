@@ -1309,11 +1309,13 @@ pub fn add_recent_document(path: &str) {
 }
 
 pub fn is_installed() -> bool {
+    let (_, _, _, exe) = get_install_info();
+    std::fs::metadata(exe).is_ok()
+    /*
     use windows_service::{
         service::ServiceAccess,
         service_manager::{ServiceManager, ServiceManagerAccess},
     };
-    let (_, _, _, exe) = get_install_info();
     if !std::fs::metadata(exe).is_ok() {
         return false;
     }
@@ -1326,6 +1328,7 @@ pub fn is_installed() -> bool {
         }
     }
     return false;
+    */
 }
 
 pub fn get_reg(name: &str) -> String {
