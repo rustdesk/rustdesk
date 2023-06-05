@@ -101,10 +101,6 @@ class _InstallPageBodyState extends State<_InstallPageBody>
         shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.all(Radius.circular(button_radius)),
     ));
-    final inputBorder = OutlineInputBorder(
-        borderRadius: BorderRadius.zero,
-        borderSide:
-            BorderSide(color: isDarkTheme ? Colors.white70 : Colors.black12));
     final textColor = isDarkTheme ? null : Colors.black87;
     final dividerColor = isDarkTheme ? Colors.white70 : Colors.black87;
     return Scaffold(
@@ -123,30 +119,23 @@ class _InstallPageBodyState extends State<_InstallPageBody>
               ),
               Row(
                 children: [
-                  Text('${translate('Installation Path')}: '),
+                  Text('${translate('Installation Path')}:')
+                      .marginOnly(right: 10),
                   Expanded(
-                      child: TextField(
-                    controller: controller,
-                    readOnly: true,
-                    style: TextStyle(
-                        fontSize: 1.5 * em, fontWeight: FontWeight.w400),
-                    decoration: InputDecoration(
-                      isDense: true,
-                      contentPadding: EdgeInsets.all(0.75 * em),
-                      enabledBorder: inputBorder,
-                      border: inputBorder,
-                      focusedBorder: inputBorder,
-                      constraints: BoxConstraints(maxHeight: 3 * em),
-                    ),
-                  )),
+                    child: TextField(
+                      controller: controller,
+                      readOnly: true,
+                      decoration: InputDecoration(
+                        contentPadding: EdgeInsets.all(0.75 * em),
+                      ),
+                    ).marginOnly(right: 10),
+                  ),
                   Obx(() => OutlinedButton(
-                          onPressed:
-                              btnEnabled.value ? selectInstallPath : null,
-                          style: buttonStyle,
-                          child: Text(translate('Change Path'),
-                              style: TextStyle(
-                                  color: textColor, fontSize: btnFontSize)))
-                      .marginOnly(left: em))
+                      onPressed: btnEnabled.value ? selectInstallPath : null,
+                      style: buttonStyle,
+                      child: Text(translate('Change Path'),
+                          style: TextStyle(
+                              color: textColor, fontSize: btnFontSize))))
                 ],
               ).marginSymmetric(vertical: 2 * em),
               InkWell(
