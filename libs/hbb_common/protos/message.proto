@@ -508,7 +508,8 @@ message OptionMessage {
   SupportedDecoding supported_decoding = 10;
   int32 custom_fps = 11;
   BoolOption disable_keyboard = 12;
-  Resolution custom_resolution = 13;
+// Position 13 is used for Resolution. Remove later.
+// Resolution custom_resolution = 13;
 }
 
 message TestDelay {
