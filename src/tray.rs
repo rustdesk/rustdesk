@@ -50,7 +50,8 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
 
     let tray_menu = Menu::new();
     let quit_i = MenuItem::new(crate::client::translate("Exit".to_owned()), true, None);
-    tray_menu.append_items(&[&quit_i]);
+    let open_i = MenuItem::new(crate::client::translate("Open".to_owned()), true, None);
+    tray_menu.append_items(&[&open_i, &quit_i]);
 
     let _tray_icon = Some(
         TrayIconBuilder::new()
@@ -68,13 +69,31 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
     let tray_channel = TrayEvent::receiver();
     let mut docker_hiden = false;
 
+    let open_func = move || {
+        #[cfg(target_os = "macos")]
+        crate::platform::macos::handle_application_should_open_untitled_file();
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            use std::process::Command;
+            Command::new("cmd")
+                .arg("/c")
+                .arg("start rustdesk://")
+                .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
+                .spawn()
+                .ok();
+        }
+    };
+
     event_loop.run(move |_event, _, control_flow| {
         if !docker_hiden {
             #[cfg(target_os = "macos")]
             crate::platform::macos::hide_dock();
             docker_hiden = true;
         }
-        *control_flow = ControlFlow::Wait;
+        *control_flow = ControlFlow::WaitUntil(
+            std::time::Instant::now() + std::time::Duration::from_millis(100),
+        );
 
         if let Ok(event) = menu_channel.try_recv() {
             if event.id == quit_i.id() {
@@ -82,25 +101,15 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
                 crate::platform::macos::uninstall(false);
                 #[cfg(any(target_os = "linux", target_os = "windows"))]
                 crate::platform::uninstall_service(false).ok();
+            } else if event.id == open_i.id() {
+                open_func();
             }
-            println!("{event:?}");
         }
 
         if let Ok(event) = tray_channel.try_recv() {
-            if event.event == ClickEvent::Double {
-                #[cfg(target_os = "macos")]
-                crate::platform::macos::handle_application_should_open_untitled_file();
-                #[cfg(target_os = "windows")]
-                {
-                    use std::os::windows::process::CommandExt;
-                    use std::process::Command;
-                    Command::new("cmd")
-                        .arg("/c")
-                        .arg("start rustdesk://")
-                        .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
-                        .spawn()
-                        .ok();
-                }
+            #[cfg(target_os = "windows")]
+            if event.event == ClickEvent::Left {
+                open_func();
             }
         }
     });
