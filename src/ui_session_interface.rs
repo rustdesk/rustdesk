@@ -911,7 +911,16 @@ impl<T: InvokeUiSession> Session<T> {
     pub fn change_resolution(&self, display: i32, width: i32, height: i32) {
         *self.last_change_display.lock().unwrap() =
             ChangeDisplayRecord::new(display, width, height);
+        self.do_change_resolution(display, width, height);
+    }
 
+    fn try_change_init_resolution(&self, display: i32) {
+        if let Some((w, h)) = self.lc.read().unwrap().get_custom_resolution(display) {
+            self.do_change_resolution(display, w, h);
+        }
+    }
+
+    fn do_change_resolution(&self, display: i32, width: i32, height: i32) {
         let mut misc = Misc::new();
         misc.set_change_resolution(Resolution {
             width,
@@ -1081,6 +1090,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
                 self.msgbox("error", "Remote Error", "No Display", "");
                 return;
             }
+            self.try_change_init_resolution(pi.current_display);
             let p = self.lc.read().unwrap().should_auto_login();
             if !p.is_empty() {
                 input_os_password(p, true, self.clone());

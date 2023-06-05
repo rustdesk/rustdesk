@@ -35,7 +35,7 @@ use hbb_common::{
         Config, PeerConfig, PeerInfoSerde, Resolution, CONNECT_TIMEOUT, READ_TIMEOUT, RELAY_PORT,
     },
     get_version_number, log,
-    message_proto::{option_message::BoolOption, Resolution as ProtoResolution, *},
+    message_proto::{option_message::BoolOption, *},
     protobuf::Message as _,
     rand,
     rendezvous_proto::*,
@@ -1403,16 +1403,6 @@ impl LoginConfigHandler {
         if view_only || self.get_toggle_option("disable-clipboard") {
             msg.disable_clipboard = BoolOption::Yes.into();
             n += 1;
-        }
-        if let Some(r) = self.get_custom_resolution(0) {
-            if r.0 > 0 && r.1 > 0 {
-                msg.custom_resolution = Some(ProtoResolution {
-                    width: r.0,
-                    height: r.1,
-                    ..Default::default()
-                })
-                .into();
-            }
         }
         msg.supported_decoding =
             hbb_common::protobuf::MessageField::some(Decoder::supported_decodings(Some(&self.id)));
