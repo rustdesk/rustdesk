@@ -206,14 +206,20 @@ class _InstallPageBodyState extends State<_InstallPageBody>
                   ),
                 ),
               ),
-              GestureDetector(
-                  onTap: () => launchUrlString('http://rustdesk.com/privacy'),
-                  child: Row(
-                    children: [
-                      Text(translate('End-user license agreement'),
-                          style: const TextStyle(
-                              decoration: TextDecoration.underline))
-                    ],
+              InkWell(
+                  hoverColor: Colors.transparent,
+                  onTap: () => launchUrlString('https://rustdesk.com/privacy'),
+                  child: Tooltip(
+                    message: 'https://rustdesk.com/privacy',
+                    child: Row(children: [
+                      Icon(Icons.launch_outlined, size: 16)
+                          .marginOnly(right: 5),
+                      Text(
+                        translate('End-user license agreement'),
+                        style: const TextStyle(
+                            decoration: TextDecoration.underline),
+                      )
+                    ]),
                   )).marginOnly(top: 2 * em),
               Row(children: [Text(translate('agreement_tip'))])
                   .marginOnly(top: em),
