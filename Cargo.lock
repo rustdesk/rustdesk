@@ -6100,7 +6100,7 @@ dependencies = [
 [[package]]
 name = "tray-icon"
 version = "0.5.1"
-source = "git+https://github.com/tauri-apps/tray-icon#16330c278904c63a8f9ba98978604fc8e76d825d"
+source = "git+https://github.com/rustdesk-org/tray-icon#ef98e7b98abed2e3da614277eced12a85bfb717c"
 dependencies = [
  "cocoa",
  "core-graphics",
