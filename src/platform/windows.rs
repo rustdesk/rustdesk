@@ -42,7 +42,6 @@ use winapi::{
         winnt::{
             TokenElevation, HANDLE, PROCESS_QUERY_LIMITED_INFORMATION, TOKEN_ELEVATION, TOKEN_QUERY,
         },
-        winreg::HKEY_CURRENT_USER,
         winuser::*,
     },
 };
@@ -963,14 +962,9 @@ pub fn update_me() -> ResultType<()> {
 fn get_after_install(exe: &str) -> String {
     let app_name = crate::get_app_name();
     let ext = app_name.to_lowercase();
-
     // reg delete HKEY_CURRENT_USER\Software\Classes for
     // https://github.com/rustdesk/rustdesk/commit/f4bdfb6936ae4804fc8ab1cf560db192622ad01a
     // and https://github.com/leanflutter/uni_links_desktop/blob/1b72b0226cec9943ca8a84e244c149773f384e46/lib/src/protocol_registrar_impl_windows.dart#L30
-    let hcu = winreg::RegKey::predef(HKEY_CURRENT_USER);
-    hcu.delete_subkey_all(format!("Software\\Classes\\{}", exe))
-        .ok();
-
     format!("
     chcp 65001
     reg add HKEY_CLASSES_ROOT\\.{ext} /f
@@ -1245,10 +1239,18 @@ fn get_before_uninstall(kill_self: bool) -> String {
 }
 
 fn get_uninstall(kill_self: bool) -> String {
+    let mut uninstall_cert_cmd = "".to_string();
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(exe_path) = exe.to_str() {
+            uninstall_cert_cmd = format!("\"{}\" --uninstall-cert", exe_path);
+        }
+    }
+
     let (subkey, path, start_menu, _, _) = get_install_info();
     format!(
         "
     {before_uninstall}
+    {uninstall_cert_cmd}
     reg delete {subkey} /f
     if exist \"{path}\" rd /s /q \"{path}\"
     if exist \"{start_menu}\" rd /s /q \"{start_menu}\"
@@ -1256,6 +1258,7 @@ fn get_uninstall(kill_self: bool) -> String {
     if exist \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{app_name} Tray.lnk\" del /f /q \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{app_name} Tray.lnk\"
     ",
         before_uninstall=get_before_uninstall(kill_self),
+        uninstall_cert_cmd = uninstall_cert_cmd,
         subkey=subkey,
         app_name = crate::get_app_name(),
         path = path,
@@ -1264,7 +1267,6 @@ fn get_uninstall(kill_self: bool) -> String {
 }
 
 pub fn uninstall_me(kill_self: bool) -> ResultType<()> {
-    allow_err!(cert::uninstall_certs());
     run_cmds(get_uninstall(kill_self), true, "uninstall")
 }
 
@@ -1901,7 +1903,11 @@ pub fn current_resolution(name: &str) -> ResultType<Resolution> {
     }
 }
 
-pub(super) fn change_resolution_directly(name: &str, width: usize, height: usize) -> ResultType<()> {
+pub(super) fn change_resolution_directly(
+    name: &str,
+    width: usize,
+    height: usize,
+) -> ResultType<()> {
     let device_name = str_to_device_name(name);
     unsafe {
         let mut dm: DEVMODEW = std::mem::zeroed();
@@ -1954,6 +1960,11 @@ pub fn install_cert(cert_file: &str) -> ResultType<()> {
         );
     }
     Ok(())
+}
+
+#[inline]
+pub fn uninstall_cert() -> ResultType<()> {
+    cert::uninstall_cert()
 }
 
 mod cert {
@@ -2096,7 +2107,7 @@ mod cert {
         Ok(thumbprints)
     }
 
-    pub fn uninstall_certs() -> ResultType<()> {
+    pub fn uninstall_cert() -> ResultType<()> {
         let thumbprints = get_thumbprints_to_rm()?;
         let reg_cert_key = unsafe { open_reg_cert_store()? };
         for thumbprint in thumbprints.iter() {
@@ -2176,7 +2187,7 @@ mod tests {
 
     #[test]
     fn test_uninstall_cert() {
-        println!("uninstall driver certs: {:?}", cert::uninstall_certs());
+        println!("uninstall driver certs: {:?}", cert::uninstall_cert());
     }
 
     #[test]
