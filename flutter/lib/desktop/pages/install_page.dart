@@ -106,16 +106,10 @@ class _InstallPageBodyState extends State<_InstallPageBody>
         backgroundColor: null,
         body: SingleChildScrollView(
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Text(
-                    translate('Installation'),
-                    style: TextStyle(
-                        fontSize: 2 * em, fontWeight: FontWeight.w500),
-                  ),
-                ],
-              ),
+              Text(translate('Installation'),
+                  style: Theme.of(context).textTheme.headlineMedium),
               Row(
                 children: [
                   Text('${translate('Installation Path')}:')
