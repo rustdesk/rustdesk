@@ -70,6 +70,12 @@ class _InstallPageBodyState extends State<_InstallPageBody>
   final RxBool showProgress = false.obs;
   final RxBool btnEnabled = true.obs;
 
+  // todo move to theme.
+  final buttonStyle = OutlinedButton.styleFrom(
+    textStyle: TextStyle(fontSize: 14, fontWeight: FontWeight.normal),
+    padding: EdgeInsets.symmetric(vertical: 15, horizontal: 12),
+  );
+
   @override
   void initState() {
     windowManager.addListener(this);
@@ -94,14 +100,7 @@ class _InstallPageBodyState extends State<_InstallPageBody>
   @override
   Widget build(BuildContext context) {
     final double em = 13;
-    final btnFontSize = 0.9 * em;
-    final double button_radius = 6;
     final isDarkTheme = MyTheme.currentThemeMode() == ThemeMode.dark;
-    final buttonStyle = OutlinedButton.styleFrom(
-        shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.all(Radius.circular(button_radius)),
-    ));
-    final textColor = isDarkTheme ? null : Colors.black87;
     final dividerColor = isDarkTheme ? Colors.white70 : Colors.black87;
     return Scaffold(
         backgroundColor: null,
@@ -130,12 +129,14 @@ class _InstallPageBodyState extends State<_InstallPageBody>
                       ),
                     ).marginOnly(right: 10),
                   ),
-                  Obx(() => OutlinedButton(
+                  Obx(
+                    () => OutlinedButton.icon(
+                      icon: Icon(Icons.folder_outlined, size: 16),
                       onPressed: btnEnabled.value ? selectInstallPath : null,
                       style: buttonStyle,
-                      child: Text(translate('Change Path'),
-                          style: TextStyle(
-                              color: textColor, fontSize: btnFontSize))))
+                      label: Text(translate('Change Path')),
+                    ),
+                  )
                 ],
               ).marginSymmetric(vertical: 2 * em),
               InkWell(
@@ -217,38 +218,35 @@ class _InstallPageBodyState extends State<_InstallPageBody>
                             offstage: !showProgress.value,
                             child: LinearProgressIndicator(),
                           ))),
-                  Obx(() => OutlinedButton(
-                          onPressed: btnEnabled.value
-                              ? () => windowManager.close()
-                              : null,
-                          style: buttonStyle,
-                          child: Text(translate('Cancel'),
-                              style: TextStyle(
-                                  color: textColor, fontSize: btnFontSize)))
-                      .marginSymmetric(horizontal: 2 * em)),
-                  Obx(() => ElevatedButton(
+                  Obx(
+                    () => OutlinedButton.icon(
+                      icon: Icon(Icons.close_rounded, size: 16),
+                      label: Text(translate('Cancel')),
+                      onPressed:
+                          btnEnabled.value ? () => windowManager.close() : null,
+                      style: buttonStyle,
+                    ).marginOnly(right: 10),
+                  ),
+                  Obx(
+                    () => ElevatedButton.icon(
+                      icon: Icon(Icons.done_rounded, size: 16),
+                      label: Text(translate('Accept and Install')),
                       onPressed: btnEnabled.value ? install : null,
-                      style: ElevatedButton.styleFrom(
-                          primary: MyTheme.button,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.all(
-                                Radius.circular(button_radius)),
-                          )),
-                      child: Text(
-                        translate('Accept and Install'),
-                        style: TextStyle(fontSize: btnFontSize),
-                      ))),
+                      style: buttonStyle,
+                    ),
+                  ),
                   Offstage(
                     offstage: bind.installShowRunWithoutInstall(),
-                    child: Obx(() => OutlinedButton(
-                            onPressed: btnEnabled.value
-                                ? () => bind.installRunWithoutInstall()
-                                : null,
-                            style: buttonStyle,
-                            child: Text(translate('Run without install'),
-                                style: TextStyle(
-                                    color: textColor, fontSize: btnFontSize)))
-                        .marginOnly(left: 2 * em)),
+                    child: Obx(
+                      () => OutlinedButton.icon(
+                        icon: Icon(Icons.screen_share_outlined, size: 16),
+                        label: Text(translate('Run without install')),
+                        onPressed: btnEnabled.value
+                            ? () => bind.installRunWithoutInstall()
+                            : null,
+                        style: buttonStyle,
+                      ).marginOnly(left: 10),
+                    ),
                   ),
                 ],
               )
@@ -271,21 +269,21 @@ class _InstallPageBodyState extends State<_InstallPageBody>
     if (driverCert.isTrue) {
       final tag = 'install-info-install-cert-confirm';
       final btns = [
-        dialogButton(
-          'Cancel',
-          icon: Icon(Icons.close_rounded),
+        OutlinedButton.icon(
+          icon: Icon(Icons.close_rounded, size: 16),
+          label: Text(translate('Cancel')),
           onPressed: () => gFFI.dialogManager.dismissByTag(tag),
-          isOutline: true,
+          style: buttonStyle,
         ),
-        dialogButton(
-          'OK',
-          icon: Icon(Icons.done_rounded),
+        ElevatedButton.icon(
+          icon: Icon(Icons.done_rounded, size: 16),
+          label: Text(translate('OK')),
           onPressed: () {
             gFFI.dialogManager.dismissByTag(tag);
             do_install();
           },
-          isOutline: false,
-        ),
+          style: buttonStyle,
+        )
       ];
       gFFI.dialogManager.show(
         (setState, close, context) => CustomAlertDialog(
