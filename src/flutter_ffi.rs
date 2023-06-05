@@ -535,9 +535,9 @@ pub fn session_switch_sides(id: String) {
     }
 }
 
-pub fn session_change_resolution(id: String, width: i32, height: i32) {
+pub fn session_change_resolution(id: String, display: i32, width: i32, height: i32) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.change_resolution(width, height);
+        session.change_resolution(display, width, height);
     }
 }
 

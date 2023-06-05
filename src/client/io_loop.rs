@@ -1201,7 +1201,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                     }
                     Some(misc::Union::SwitchDisplay(s)) => {
-                        self.handler.ui_handler.switch_display(&s);
+                        self.handler.handle_peer_switch_display(&s);
                         self.video_sender.send(MediaData::Reset).ok();
                         if s.width > 0 && s.height > 0 {
                             self.handler.set_display(
@@ -1212,14 +1212,6 @@ impl<T: InvokeUiSession> Remote<T> {
                                 s.cursor_embedded,
                             );
                         }
-                        let custom_resolution = if s.width != s.original_resolution.width
-                            || s.height != s.original_resolution.height
-                        {
-                            Some((s.width, s.height))
-                        } else {
-                            None
-                        };
-                        self.handler.set_custom_resolution(custom_resolution);
                     }
                     Some(misc::Union::CloseReason(c)) => {
                         self.handler.msgbox("error", "Connection Error", &c, "");

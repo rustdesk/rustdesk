@@ -995,7 +995,7 @@ class _ResolutionsMenu extends StatefulWidget {
   State<_ResolutionsMenu> createState() => _ResolutionsMenuState();
 }
 
-const double _kCustonResolutionEditingWidth = 42;
+const double _kCustomResolutionEditingWidth = 42;
 const _kCustomResolutionValue = 'custom';
 
 class _ResolutionsMenuState extends State<_ResolutionsMenu> {
@@ -1102,6 +1102,7 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
   _changeResolution(int w, int h) async {
     await bind.sessionChangeResolution(
       id: widget.id,
+      display: pi.currentDisplay,
       width: w,
       height: h,
     );
@@ -1157,12 +1158,12 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
           children: [
             Text('${translate('resolution_custom_tip')} '),
             SizedBox(
-              width: _kCustonResolutionEditingWidth,
+              width: _kCustomResolutionEditingWidth,
               child: _resolutionInput(_customWidth),
             ),
             Text(' x '),
             SizedBox(
-              width: _kCustonResolutionEditingWidth,
+              width: _kCustomResolutionEditingWidth,
               child: _resolutionInput(_customHeight),
             ),
           ],

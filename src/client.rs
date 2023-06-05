@@ -1353,7 +1353,9 @@ impl LoginConfigHandler {
     ///
     /// * `ignore_default` - If `true`, ignore the default value of the option.
     fn get_option_message(&self, ignore_default: bool) -> Option<OptionMessage> {
-        if self.conn_type.eq(&ConnType::FILE_TRANSFER) || self.conn_type.eq(&ConnType::PORT_FORWARD) || self.conn_type.eq(&ConnType::RDP)
+        if self.conn_type.eq(&ConnType::FILE_TRANSFER)
+            || self.conn_type.eq(&ConnType::PORT_FORWARD)
+            || self.conn_type.eq(&ConnType::RDP)
         {
             return None;
         }
@@ -1402,7 +1404,7 @@ impl LoginConfigHandler {
             msg.disable_clipboard = BoolOption::Yes.into();
             n += 1;
         }
-        if let Some(r) = self.get_custom_resolution() {
+        if let Some(r) = self.get_custom_resolution(0) {
             if r.0 > 0 && r.1 > 0 {
                 msg.custom_resolution = Some(ProtoResolution {
                     width: r.0,
@@ -1424,7 +1426,9 @@ impl LoginConfigHandler {
     }
 
     pub fn get_option_message_after_login(&self) -> Option<OptionMessage> {
-        if self.conn_type.eq(&ConnType::FILE_TRANSFER) || self.conn_type.eq(&ConnType::PORT_FORWARD) || self.conn_type.eq(&ConnType::RDP)
+        if self.conn_type.eq(&ConnType::FILE_TRANSFER)
+            || self.conn_type.eq(&ConnType::PORT_FORWARD)
+            || self.conn_type.eq(&ConnType::RDP)
         {
             return None;
         }
@@ -1584,14 +1588,26 @@ impl LoginConfigHandler {
     }
 
     #[inline]
-    pub fn get_custom_resolution(&self) -> Option<(i32, i32)> {
-        self.config.custom_resolution.as_ref().map(|r| (r.w, r.h))
+    pub fn get_custom_resolution(&self, display: i32) -> Option<(i32, i32)> {
+        self.config
+            .custom_resolutions
+            .get(&display)
+            .map(|r| (r.w, r.h))
     }
 
     #[inline]
-    pub fn set_custom_resolution(&mut self, wh: Option<(i32, i32)>) {
+    pub fn set_custom_resolution(&mut self, display: i32, wh: Option<(i32, i32)>) {
         let mut config = self.load_config();
-        config.custom_resolution = wh.map(|r| Resolution { w: r.0, h: r.1 });
+        match wh {
+            Some((w, h)) => {
+                config
+                    .custom_resolutions
+                    .insert(display, Resolution { w, h });
+            }
+            None => {
+                config.custom_resolutions.remove(&display);
+            }
+        }
         self.save_config(config);
     }
 

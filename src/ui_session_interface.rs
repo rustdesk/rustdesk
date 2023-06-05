@@ -15,13 +15,21 @@ use bytes::Bytes;
 use rdev::{Event, EventType::*, KeyCode};
 use uuid::Uuid;
 
-use hbb_common::config::{Config, LocalConfig, PeerConfig};
 #[cfg(not(feature = "flutter"))]
 use hbb_common::fs;
-use hbb_common::rendezvous_proto::ConnType;
-use hbb_common::tokio::{self, sync::mpsc};
-use hbb_common::{allow_err, message_proto::*};
-use hbb_common::{get_version_number, log, Stream};
+use hbb_common::{
+    allow_err,
+    config::{Config, LocalConfig, PeerConfig},
+    get_version_number, log,
+    message_proto::*,
+    rendezvous_proto::ConnType,
+    tokio::{
+        self,
+        sync::mpsc,
+        time::{Duration as TokioDuration, Instant},
+    },
+    Stream,
+};
 
 use crate::client::io_loop::Remote;
 use crate::client::{
@@ -37,6 +45,8 @@ use crate::{client::Data, client::Interface};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub static IS_IN: AtomicBool = AtomicBool::new(false);
 
+const CHANGE_RESOLUTION_VALID_TIMEOUT_SECS: u64 = 15;
+
 #[derive(Clone, Default)]
 pub struct Session<T: InvokeUiSession> {
     pub id: String,
@@ -49,6 +59,7 @@ pub struct Session<T: InvokeUiSession> {
     pub server_keyboard_enabled: Arc<RwLock<bool>>,
     pub server_file_transfer_enabled: Arc<RwLock<bool>>,
     pub server_clipboard_enabled: Arc<RwLock<bool>>,
+    pub last_change_display: Arc<Mutex<ChangeDisplayRecord>>,
 }
 
 #[derive(Clone)]
@@ -57,6 +68,43 @@ pub struct SessionPermissionConfig {
     pub server_keyboard_enabled: Arc<RwLock<bool>>,
     pub server_file_transfer_enabled: Arc<RwLock<bool>>,
     pub server_clipboard_enabled: Arc<RwLock<bool>>,
+}
+
+pub struct ChangeDisplayRecord {
+    time: Instant,
+    display: i32,
+    width: i32,
+    height: i32,
+}
+
+impl Default for ChangeDisplayRecord {
+    fn default() -> Self {
+        Self {
+            time: Instant::now()
+                - TokioDuration::from_secs(CHANGE_RESOLUTION_VALID_TIMEOUT_SECS + 1),
+            display: 0,
+            width: 0,
+            height: 0,
+        }
+    }
+}
+
+impl ChangeDisplayRecord {
+    fn new(display: i32, width: i32, height: i32) -> Self {
+        Self {
+            time: Instant::now(),
+            display,
+            width,
+            height,
+        }
+    }
+
+    pub fn is_the_same_record(&self, display: i32, width: i32, height: i32) -> bool {
+        self.time.elapsed().as_secs() < CHANGE_RESOLUTION_VALID_TIMEOUT_SECS
+            && self.display == display
+            && self.width == width
+            && self.height == height
+    }
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -485,9 +533,16 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn switch_display(&self, display: i32) {
+        let (w, h) = match self.lc.read().unwrap().get_custom_resolution(display) {
+            Some((w, h)) => (w, h),
+            None => (0, 0),
+        };
+
         let mut misc = Misc::new();
         misc.set_switch_display(SwitchDisplay {
             display,
+            width: w,
+            height: h,
             ..Default::default()
         });
         let mut msg_out = Message::new();
@@ -831,12 +886,32 @@ impl<T: InvokeUiSession> Session<T> {
         }
     }
 
-    #[inline]
-    pub fn set_custom_resolution(&mut self, wh: Option<(i32, i32)>) {
-        self.lc.write().unwrap().set_custom_resolution(wh);
+    pub fn handle_peer_switch_display(&self, display: &SwitchDisplay) {
+        self.ui_handler.switch_display(display);
+
+        if self.last_change_display.lock().unwrap().is_the_same_record(
+            display.display,
+            display.width,
+            display.height,
+        ) {
+            let custom_resolution = if display.width != display.original_resolution.width
+                || display.height != display.original_resolution.height
+            {
+                Some((display.width, display.height))
+            } else {
+                None
+            };
+            self.lc
+                .write()
+                .unwrap()
+                .set_custom_resolution(display.display, custom_resolution);
+        }
     }
 
-    pub fn change_resolution(&self, width: i32, height: i32) {
+    pub fn change_resolution(&self, display: i32, width: i32, height: i32) {
+        *self.last_change_display.lock().unwrap() =
+            ChangeDisplayRecord::new(display, width, height);
+
         let mut misc = Misc::new();
         misc.set_change_resolution(Resolution {
             width,
