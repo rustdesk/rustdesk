@@ -40,8 +40,6 @@ use common::*;
 pub mod cli;
 #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
 pub mod core_main;
-#[cfg(all(windows, feature = "hbbs"))]
-mod hbbs;
 mod lang;
 #[cfg(windows)]
 mod license;

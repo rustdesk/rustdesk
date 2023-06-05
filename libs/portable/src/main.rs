@@ -1,6 +1,7 @@
 #![windows_subsystem = "windows"]
 
 use std::{
+    os::windows::process::CommandExt,
     path::PathBuf,
     process::{Command, Stdio},
 };
@@ -40,17 +41,18 @@ fn setup(reader: BinaryReader, dir: Option<PathBuf>, clear: bool) -> Option<Path
 fn execute(path: PathBuf, args: Vec<String>) {
     println!("executing {}", path.display());
     // setup env
-    let exe = std::env::current_exe().unwrap();
-    let exe_name = exe.file_name().unwrap();
+    let exe = std::env::current_exe().unwrap_or_default();
+    let exe_name = exe.file_name().unwrap_or_default();
     // run executable
     Command::new(path)
         .args(args)
+        .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
         .env(APPNAME_RUNTIME_ENV_KEY, exe_name)
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .output()
-        .expect(&format!("failed to execute {:?}", exe_name));
+        .ok();
 }
 
 fn main() {
@@ -84,7 +86,7 @@ fn main() {
 }
 
 mod windows {
-    use std::{fs, path::PathBuf, process::Command};
+    use std::{fs, os::windows::process::CommandExt, path::PathBuf, process::Command};
 
     // Used for privacy mode(magnifier impl).
     pub const RUNTIME_BROKER_EXE: &'static str = "C:\\Windows\\System32\\RuntimeBroker.exe";
@@ -105,6 +107,7 @@ mod windows {
         }
         let _allow_err = Command::new("taskkill")
             .args(&["/F", "/IM", "RuntimeBroker_rustdesk.exe"])
+            .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
             .output();
         let _allow_err = std::fs::copy(src, &format!("{}\\{}", dir.to_string_lossy(), tgt));
     }

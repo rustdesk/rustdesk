@@ -17,7 +17,6 @@ path = "src/naming.rs"
 
 [features]
 inline = []
-hbbs = []
 cli = []
 flutter_texture_render = []
 appimage = []
@@ -92,9 +91,7 @@ arboard = "3.2"
 system_shutdown = "4.0"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-trayicon = { git = "https://github.com/open-trade/trayicon-rs", features = ["winit"] }
-winit = "0.26"
-winapi = { version = "0.3", features = ["winuser", "wincrypt"] }
+winapi = { version = "0.3", features = ["winuser", "wincrypt", "shellscalingapi"] }
 winreg = "0.10"
 windows-service = "0.6"
 virtual_display = { path = "libs/virtual_display", optional = true }
@@ -113,7 +110,7 @@ dark-light = "1.0"
 fruitbasket = "0.10"
 objc_id = "0.1"
 
-[target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
+[target.'cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))'.dependencies]
 tray-icon = "0.5"
 tao = { git = "https://github.com/Kingtous/tao", branch = "muda" }
 image = "0.24"
@@ -133,9 +130,6 @@ users = { version = "0.11" }
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.13"
 jni = "0.21"
-
-[target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
-flutter_rust_bridge = "1.75"
 
 [workspace]
 members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/virtual_display/dylib", "libs/portable"]

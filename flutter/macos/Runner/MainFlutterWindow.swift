@@ -22,7 +22,7 @@ import texture_rgba_renderer
 class MainFlutterWindow: NSWindow {
     override func awakeFromNib() {
         if (!rustdesk_core_main()){
-            print("Rustdesk core returns false, exiting without launching Flutter app.")
+            // print("Rustdesk core returns false, exiting without launching Flutter app.")
             NSApplication.shared.terminate(self)
         }
         let flutterViewController = FlutterViewController.init()

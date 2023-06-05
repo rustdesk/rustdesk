@@ -1,94 +1,3 @@
-#[cfg(target_os = "windows")]
-use super::ui_interface::get_option_opt;
-#[cfg(target_os = "windows")]
-use std::sync::{Arc, Mutex};
-#[cfg(target_os = "windows")]
-use trayicon::{MenuBuilder, TrayIconBuilder};
-#[cfg(target_os = "windows")]
-use winit::{
-    event::Event,
-    event_loop::{ControlFlow, EventLoop},
-};
-
-#[cfg(target_os = "windows")]
-#[derive(Clone, Eq, PartialEq, Debug)]
-enum Events {
-    DoubleClickTrayIcon,
-    StopService,
-    StartService,
-}
-
-#[cfg(target_os = "windows")]
-pub fn start_tray() {
-    let event_loop = EventLoop::<Events>::with_user_event();
-    let proxy = event_loop.create_proxy();
-    let icon = include_bytes!("../res/tray-icon.ico");
-    let mut tray_icon = TrayIconBuilder::new()
-        .sender_winit(proxy)
-        .icon_from_buffer(icon)
-        .tooltip("RustDesk")
-        .on_double_click(Events::DoubleClickTrayIcon)
-        .build()
-        .unwrap();
-    let old_state = Arc::new(Mutex::new(0));
-    let _sender = crate::ui_interface::SENDER.lock().unwrap();
-    event_loop.run(move |event, _, control_flow| {
-        if get_option_opt("ipc-closed").is_some() {
-            *control_flow = ControlFlow::Exit;
-            return;
-        } else {
-            *control_flow = ControlFlow::Wait;
-        }
-        let stopped = is_service_stopped();
-        let state = if stopped { 2 } else { 1 };
-        let old = *old_state.lock().unwrap();
-        if state != old {
-            hbb_common::log::info!("State changed");
-            let mut m = MenuBuilder::new();
-            if state == 2 {
-                m = m.item(
-                    &crate::client::translate("Start Service".to_owned()),
-                    Events::StartService,
-                );
-            } else {
-                m = m.item(
-                    &crate::client::translate("Stop service".to_owned()),
-                    Events::StopService,
-                );
-            }
-            tray_icon.set_menu(&m).ok();
-            *old_state.lock().unwrap() = state;
-        }
-
-        match event {
-            Event::UserEvent(e) => match e {
-                Events::DoubleClickTrayIcon => {
-                    crate::run_me(Vec::<&str>::new()).ok();
-                }
-                Events::StopService => {
-                    crate::ipc::set_option("stop-service", "Y");
-                }
-                Events::StartService => {
-                    crate::ipc::set_option("stop-service", "");
-                }
-            },
-            _ => (),
-        }
-    });
-}
-
-/// Check if service is stoped.
-/// Return [`true`] if service is stoped, [`false`] otherwise.
-#[inline]
-#[cfg(target_os = "windows")]
-fn is_service_stopped() -> bool {
-    if let Some(v) = get_option_opt("stop-service") {
-        v == "Y"
-    } else {
-        false
-    }
-}
-
 /// Start a tray icon in Linux
 ///
 /// [Block]
@@ -96,13 +5,13 @@ fn is_service_stopped() -> bool {
 #[cfg(target_os = "linux")]
 pub fn start_tray() {}
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 pub fn start_tray() {
     use hbb_common::{allow_err, log};
     allow_err!(make_tray());
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 pub fn make_tray() -> hbb_common::ResultType<()> {
     // https://github.com/tauri-apps/tray-icon/blob/dev/examples/tao.rs
     use hbb_common::anyhow::Context;
@@ -111,13 +20,21 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
         menu::{Menu, MenuEvent, MenuItem},
         ClickEvent, TrayEvent, TrayIconBuilder,
     };
-    let mode = dark_light::detect();
-    const LIGHT: &[u8] = include_bytes!("../res/mac-tray-light-x2.png");
-    const DARK: &[u8] = include_bytes!("../res/mac-tray-dark-x2.png");
-    let icon = match mode {
-        dark_light::Mode::Dark => LIGHT,
-        _ => DARK,
-    };
+    let icon;
+    #[cfg(target_os = "macos")]
+    {
+        let mode = dark_light::detect();
+        const LIGHT: &[u8] = include_bytes!("../res/mac-tray-light-x2.png");
+        const DARK: &[u8] = include_bytes!("../res/mac-tray-dark-x2.png");
+        icon = match mode {
+            dark_light::Mode::Dark => LIGHT,
+            _ => DARK,
+        };
+    }
+    #[cfg(target_os = "windows")]
+    {
+        icon = include_bytes!("../res/tray-icon.ico");
+    }
     let (icon_rgba, icon_width, icon_height) = {
         let image = image::load_from_memory(icon)
             .context("Failed to open icon path")?
@@ -153,6 +70,7 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
 
     event_loop.run(move |_event, _, control_flow| {
         if !docker_hiden {
+            #[cfg(target_os = "macos")]
             crate::platform::macos::hide_dock();
             docker_hiden = true;
         }
@@ -160,14 +78,20 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
 
         if let Ok(event) = menu_channel.try_recv() {
             if event.id == quit_i.id() {
+                #[cfg(target_os = "macos")]
                 crate::platform::macos::uninstall(false);
+                #[cfg(any(target_os = "linux", target_os = "windows"))]
+                crate::platform::uninstall_service(false).ok();
             }
             println!("{event:?}");
         }
 
         if let Ok(event) = tray_channel.try_recv() {
             if event.event == ClickEvent::Double {
+                #[cfg(target_os = "macos")]
                 crate::platform::macos::handle_application_should_open_untitled_file();
+                #[cfg(target_os = "windows")]
+                crate::run_me(Vec::<&str>::new()).ok();
             }
         }
     });

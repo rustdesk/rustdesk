@@ -74,28 +74,7 @@ pub fn install_me(_options: String, _path: String, _silent: bool, _debug: bool) 
 
 #[inline]
 pub fn update_me(_path: String) {
-    #[cfg(target_os = "linux")]
-    {
-        allow_err!(crate::platform::linux::exec_privileged(&[
-            "apt", "install", "-f", &_path
-        ]));
-        allow_err!(std::fs::remove_file(&_path));
-        allow_err!(crate::run_me(Vec::<&str>::new()));
-    }
-    #[cfg(windows)]
-    {
-        let mut path = _path;
-        if path.is_empty() {
-            if let Ok(tmp) = std::env::current_exe() {
-                path = tmp.to_string_lossy().to_string();
-            }
-        }
-        std::process::Command::new(path)
-            .arg("--update")
-            .spawn()
-            .ok();
-        std::process::exit(0);
-    }
+    goto_install();
 }
 
 #[inline]
@@ -296,11 +275,24 @@ pub fn set_options(m: HashMap<String, String>) {
 #[inline]
 pub fn set_option(key: String, value: String) {
     let mut options = OPTIONS.lock().unwrap();
-    #[cfg(target_os = "macos")]
     if &key == "stop-service" {
-        let is_stop = value == "Y";
-        if is_stop && crate::platform::macos::uninstall(true) {
-            return;
+        #[cfg(target_os = "macos")]
+        {
+            let is_stop = value == "Y";
+            if is_stop && crate::platform::macos::uninstall(true) {
+                return;
+            }
+        }
+        #[cfg(any(target_os = "windows"))]
+        {
+            if crate::platform::is_installed() {
+                if value == "Y" {
+                    crate::platform::install_service().ok();
+                } else {
+                    crate::platform::uninstall_service(true).ok();
+                }
+                return;
+            }
         }
     }
     if value.is_empty() {
@@ -396,10 +388,8 @@ pub fn is_installed_lower_version() -> bool {
     return false;
     #[cfg(windows)]
     {
-        let installed_version = crate::platform::windows::get_installed_version();
-        let a = hbb_common::get_version_number(crate::VERSION);
-        let b = hbb_common::get_version_number(&installed_version);
-        return a > b;
+        let b = crate::platform::windows::get_reg("BuildDate");
+        return crate::BUILD_DATE.cmp(&b).is_gt();
     }
 }
 
