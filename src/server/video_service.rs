@@ -495,11 +495,14 @@ fn check_get_displays_changed_msg() -> Option<Message> {
     Some(msg_out)
 }
 
+#[cfg(all(windows, feature = "virtual_display_driver"))]
+pub fn try_plug_out_virtual_display() {
+    let _res = virtual_display_manager::plug_out_headless();
+}
+
 fn run(sp: GenericService) -> ResultType<()> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let _wake_lock = get_wake_lock();
-    #[cfg(all(windows, feature = "virtual_display_driver"))]
-    let _res = virtual_display_manager::plug_out_headless();
 
     // ensure_inited() is needed because release_resource() may be called.
     #[cfg(target_os = "linux")]
@@ -1013,10 +1016,6 @@ fn try_get_displays() -> ResultType<Vec<Display>> {
         if let Err(e) = virtual_display_manager::plug_in_headless() {
             log::error!("plug in headless failed {}", e);
         } else {
-            displays = Display::all()?;
-        }
-    } else {
-        if virtual_display_manager::plug_out_headless() {
             displays = Display::all()?;
         }
     }
