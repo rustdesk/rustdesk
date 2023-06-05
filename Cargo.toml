@@ -111,8 +111,8 @@ fruitbasket = "0.10"
 objc_id = "0.1"
 
 [target.'cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))'.dependencies]
-tray-icon = "0.5"
-tao = { git = "https://github.com/Kingtous/tao", branch = "muda" }
+tray-icon = "0.4"
+tao = { git = "https://github.com/rustdesk-org/tao", branch = "muda" }
 image = "0.24"
 
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -136,7 +136,7 @@ members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "lib
 exclude = ["vdi/host", "examples/custom_plugin"]
 
 [package.metadata.winres]
-LegalCopyright = "Copyright © 2022 Purslane, Inc."
+LegalCopyright = "Copyright © 2023 Purslane, Inc."
 # this FileDescription overrides package.description
 FileDescription = "RustDesk"
 

@@ -3565,9 +3565,9 @@ dependencies = [
 
 [[package]]
 name = "muda"
-version = "0.5.0"
+version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3c820db003e601413e835a33b10cf51452b6415ef34ff1d862401826431c675"
+checksum = "1a3ef954ff22d2646c21ae64171b76d6e1202d214c6d3867305489d04a06db6a"
 dependencies = [
  "cocoa",
  "crossbeam-channel",
@@ -3580,7 +3580,7 @@ dependencies = [
  "once_cell",
  "png",
  "thiserror",
- "windows-sys 0.48.0",
+ "windows-sys 0.45.0",
 ]
 
 [[package]]
@@ -5698,8 +5698,8 @@ dependencies = [
 
 [[package]]
 name = "tao"
-version = "0.18.1"
-source = "git+https://github.com/Kingtous/tao?branch=muda#dea701661a182cf2d944d5d05b5d299c78079871"
+version = "0.19.1"
+source = "git+https://github.com/rustdesk-org/tao?branch=muda#173f128608d282dc4036f213c1c42137464ff096"
 dependencies = [
  "bitflags",
  "cairo-rs",
@@ -5744,7 +5744,7 @@ dependencies = [
 [[package]]
 name = "tao-macros"
 version = "0.1.1"
-source = "git+https://github.com/Kingtous/tao?branch=muda#dea701661a182cf2d944d5d05b5d299c78079871"
+source = "git+https://github.com/rustdesk-org/tao?branch=muda#173f128608d282dc4036f213c1c42137464ff096"
 dependencies = [
  "proc-macro2 1.0.56",
  "quote 1.0.27",
@@ -6099,9 +6099,9 @@ dependencies = [
 
 [[package]]
 name = "tray-icon"
-version = "0.5.1"
+version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e0a1ba93b51da357afb4064093d925ded565154aca52f60d5a088b826150d7a8"
+checksum = "405009de7f59e6dafff7afc04e1bff017d5e1531359bd05a1c52375b6f8b3716"
 dependencies = [
  "cocoa",
  "core-graphics",
@@ -6113,7 +6113,7 @@ dependencies = [
  "once_cell",
  "png",
  "thiserror",
- "windows-sys 0.48.0",
+ "windows-sys 0.45.0",
 ]
 
 [[package]]
