@@ -91,7 +91,16 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
                 #[cfg(target_os = "macos")]
                 crate::platform::macos::handle_application_should_open_untitled_file();
                 #[cfg(target_os = "windows")]
-                crate::run_me(Vec::<&str>::new()).ok();
+                {
+                    use std::os::windows::process::CommandExt;
+                    use std::process::Command;
+                    Command::new("cmd")
+                        .arg("/c")
+                        .arg("start rustdesk://")
+                        .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
+                        .spawn()
+                        .ok();
+                }
             }
         }
     });
