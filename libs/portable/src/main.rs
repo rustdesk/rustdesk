@@ -44,10 +44,11 @@ fn execute(path: PathBuf, args: Vec<String>) {
     let exe = std::env::current_exe().unwrap_or_default();
     let exe_name = exe.file_name().unwrap_or_default();
     // run executable
-    Command::new(path)
-        .args(args)
-        .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
-        .env(APPNAME_RUNTIME_ENV_KEY, exe_name)
+    let mut cmd = Command::new(path);
+    cmd.args(args);
+    #[cfg(windows)]
+    cmd.creation_flags(winapi::um::winbase::CREATE_NO_WINDOW);
+    cmd.env(APPNAME_RUNTIME_ENV_KEY, exe_name)
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
@@ -85,6 +86,7 @@ fn main() {
     }
 }
 
+#[cfg(windows)]
 mod windows {
     use std::{fs, os::windows::process::CommandExt, path::PathBuf, process::Command};
 
