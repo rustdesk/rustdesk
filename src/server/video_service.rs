@@ -340,16 +340,6 @@ fn create_capturer(
     };
 }
 
-// to-do: do not close if in privacy mode.
-#[cfg(all(windows, feature = "virtual_display_driver"))]
-fn ensure_close_virtual_device() -> ResultType<()> {
-    let num_displays = Display::all()?.len();
-    if num_displays > 1 {
-        let _res = virtual_display_manager::plug_out_headless();
-    }
-    Ok(())
-}
-
 // This function works on privacy mode. Windows only for now.
 pub fn test_create_capturer(privacy_mode_id: i32, timeout_millis: u64) -> bool {
     let test_begin = Instant::now();
@@ -509,7 +499,7 @@ fn run(sp: GenericService) -> ResultType<()> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let _wake_lock = get_wake_lock();
     #[cfg(all(windows, feature = "virtual_display_driver"))]
-    ensure_close_virtual_device()?;
+    let _res = virtual_display_manager::plug_out_headless();
 
     // ensure_inited() is needed because release_resource() may be called.
     #[cfg(target_os = "linux")]
@@ -993,18 +983,39 @@ fn try_get_displays() -> ResultType<Vec<Display>> {
     Ok(Display::all()?)
 }
 
+#[inline]
+#[cfg(windows)]
+fn no_displays(displays: &Vec<Display>) -> bool {
+    let display_len = displays.len();
+    if display_len == 0 {
+        true
+    } else if display_len == 1 {
+        let display = &displays[0];
+        let dummy_display_side_max_size = 800;
+        display.width() < dummy_display_side_max_size
+            && display.height() < dummy_display_side_max_size
+    } else {
+        false
+    }
+}
+
+#[inline]
+#[cfg(not(windows))]
+fn no_displays(displays: &Vec<Display>) -> bool {
+    displays.is_empty()
+}
+
 #[cfg(all(windows, feature = "virtual_display_driver"))]
 fn try_get_displays() -> ResultType<Vec<Display>> {
     let mut displays = Display::all()?;
-    if displays.len() == 0 {
+    if no_displays(&displays) {
         log::debug!("no displays, create virtual display");
         if let Err(e) = virtual_display_manager::plug_in_headless() {
             log::error!("plug in headless failed {}", e);
         } else {
             displays = Display::all()?;
         }
-    } else if displays.len() > 1 {
-        // If more than one displays exists, close RustDeskVirtualDisplay
+    } else {
         if virtual_display_manager::plug_out_headless() {
             displays = Display::all()?;
         }
