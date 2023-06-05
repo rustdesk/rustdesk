@@ -2171,7 +2171,7 @@ impl Connection {
         // After the connection is established, the resolution is changed by another message.
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if let Some(custom_resolution) = o.custom_resolution.as_ref() {
-            if Self::alive_conns().len() > 0 {
+            if Self::alive_conns().len() == 1 {
                 if custom_resolution.width > 0 && custom_resolution.height > 0 {
                     self.change_resolution(&custom_resolution);
                 }
