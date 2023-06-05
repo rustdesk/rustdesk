@@ -263,9 +263,9 @@ pub struct PeerConfig {
     #[serde(
         default,
         deserialize_with = "deserialize_hashmap_resolutions",
-        skip_serializing_if = "HashMap::is_empty",
+        skip_serializing_if = "HashMap::is_empty"
     )]
-    pub custom_resolutions: HashMap<i32, Resolution>,
+    pub custom_resolutions: HashMap<String, Resolution>,
 
     // The other scalar value must before this
     #[serde(default, deserialize_with = "PeerConfig::deserialize_options")]
@@ -1509,7 +1509,7 @@ deserialize_default!(deserialize_option_string, Option<String>);
 deserialize_default!(deserialize_hashmap_string_string,  HashMap<String, String>);
 deserialize_default!(deserialize_hashmap_string_bool,  HashMap<String, bool>);
 deserialize_default!(deserialize_hashmap_string_configoidcprovider,  HashMap<String, ConfigOidcProvider>);
-deserialize_default!(deserialize_hashmap_resolutions, HashMap<i32, Resolution>);
+deserialize_default!(deserialize_hashmap_resolutions, HashMap<String, Resolution>);
 
 #[cfg(test)]
 mod tests {

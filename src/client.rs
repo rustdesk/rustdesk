@@ -1591,12 +1591,13 @@ impl LoginConfigHandler {
     pub fn get_custom_resolution(&self, display: i32) -> Option<(i32, i32)> {
         self.config
             .custom_resolutions
-            .get(&display)
+            .get(&display.to_string())
             .map(|r| (r.w, r.h))
     }
 
     #[inline]
     pub fn set_custom_resolution(&mut self, display: i32, wh: Option<(i32, i32)>) {
+        let display = display.to_string();
         let mut config = self.load_config();
         match wh {
             Some((w, h)) => {

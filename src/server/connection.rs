@@ -1795,11 +1795,14 @@ impl Connection {
                         video_service::switch_display(s.display).await;
                         #[cfg(not(any(target_os = "android", target_os = "ios")))]
                         if s.width != 0 && s.height != 0 {
-                            self.change_resolution(&Resolution {
-                                width: s.width,
-                                height: s.height,
-                                ..Default::default()
-                            });
+                            self.change_resolution(
+                                &Resolution {
+                                    width: s.width,
+                                    height: s.height,
+                                    ..Default::default()
+                                },
+                                false,
+                            );
                         }
                     }
                     Some(misc::Union::ChatMessage(c)) => {
@@ -1902,7 +1905,7 @@ impl Connection {
                         }
                     }
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                    Some(misc::Union::ChangeResolution(r)) => self.change_resolution(&r),
+                    Some(misc::Union::ChangeResolution(r)) => self.change_resolution(&r, false),
                     #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     Some(misc::Union::PluginRequest(p)) => {
@@ -1945,9 +1948,13 @@ impl Connection {
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    fn change_resolution(&mut self, r: &Resolution) {
+    fn change_resolution(&mut self, r: &Resolution, first_display: bool) {
         if self.keyboard {
-            if let Ok(name) = video_service::get_current_display_name() {
+            if let Ok((_, current, display)) = video_service::get_current_display() {
+                if first_display && current != 0 {
+                    return;
+                }
+                let name = display.name();
                 #[cfg(all(windows, feature = "virtual_display_driver"))]
                 if let Some(_ok) =
                     crate::virtual_display_manager::change_resolution_if_is_virtual_display(
@@ -2173,7 +2180,7 @@ impl Connection {
         if let Some(custom_resolution) = o.custom_resolution.as_ref() {
             if Self::alive_conns().len() > 0 {
                 if custom_resolution.width > 0 && custom_resolution.height > 0 {
-                    self.change_resolution(&custom_resolution);
+                    self.change_resolution(&custom_resolution, true);
                 }
             }
         }
