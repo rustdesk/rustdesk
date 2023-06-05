@@ -287,11 +287,13 @@ class _InstallPageBodyState extends State<_InstallPageBody>
       final btns = [
         dialogButton(
           'Cancel',
+          icon: Icon(Icons.close_rounded),
           onPressed: () => gFFI.dialogManager.dismissByTag(tag),
           isOutline: true,
         ),
         dialogButton(
           'OK',
+          icon: Icon(Icons.done_rounded),
           onPressed: () {
             gFFI.dialogManager.dismissByTag(tag);
             do_install();
