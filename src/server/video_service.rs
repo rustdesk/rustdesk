@@ -506,6 +506,8 @@ fn check_get_displays_changed_msg() -> Option<Message> {
 }
 
 fn run(sp: GenericService) -> ResultType<()> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let _wake_lock = get_wake_lock();
     #[cfg(all(windows, feature = "virtual_display_driver"))]
     ensure_close_virtual_device()?;
 
@@ -1059,4 +1061,17 @@ fn start_uac_elevation_check() {
             });
         }
     });
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn get_wake_lock() -> crate::platform::WakeLock {
+    let (display, idle, sleep) = if cfg!(windows) {
+        (true, false, false)
+    } else if cfg!(linux) {
+        (false, false, true)
+    } else {
+        //macos
+        (true, false, false)
+    };
+    crate::platform::WakeLock::new(display, idle, sleep)
 }

@@ -40,7 +40,9 @@ use winapi::{
         winbase::*,
         wingdi::*,
         winnt::{
-            TokenElevation, HANDLE, PROCESS_QUERY_LIMITED_INFORMATION, TOKEN_ELEVATION, TOKEN_QUERY,
+            TokenElevation, ES_AWAYMODE_REQUIRED, ES_CONTINUOUS, ES_DISPLAY_REQUIRED,
+            ES_SYSTEM_REQUIRED, HANDLE, PROCESS_QUERY_LIMITED_INFORMATION, TOKEN_ELEVATION,
+            TOKEN_QUERY,
         },
         winreg::HKEY_CURRENT_USER,
         winuser::*,
@@ -2120,6 +2122,30 @@ pub fn is_process_consent_running() -> ResultType<bool> {
         .creation_flags(CREATE_NO_WINDOW)
         .output()?;
     Ok(output.status.success() && !output.stdout.is_empty())
+}
+pub struct WakeLock;
+// Failed to compile keepawake-rs on i686
+impl WakeLock {
+    pub fn new(display: bool, idle: bool, sleep: bool) -> Self {
+        let mut flag = ES_CONTINUOUS;
+        if display {
+            flag |= ES_DISPLAY_REQUIRED;
+        }
+        if idle {
+            flag |= ES_SYSTEM_REQUIRED;
+        }
+        if sleep {
+            flag |= ES_AWAYMODE_REQUIRED;
+        }
+        unsafe { SetThreadExecutionState(flag) };
+        WakeLock {}
+    }
+}
+
+impl Drop for WakeLock {
+    fn drop(&mut self) {
+        unsafe { SetThreadExecutionState(ES_CONTINUOUS) };
+    }
 }
 
 pub fn uninstall_service(show_new_window: bool) -> ResultType<()> {
