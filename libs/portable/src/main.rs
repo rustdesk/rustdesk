@@ -1,7 +1,6 @@
 #![windows_subsystem = "windows"]
 
 use std::{
-    os::windows::process::CommandExt,
     path::PathBuf,
     process::{Command, Stdio},
 };
@@ -47,7 +46,10 @@ fn execute(path: PathBuf, args: Vec<String>) {
     let mut cmd = Command::new(path);
     cmd.args(args);
     #[cfg(windows)]
-    cmd.creation_flags(winapi::um::winbase::CREATE_NO_WINDOW);
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(winapi::um::winbase::CREATE_NO_WINDOW);
+    }
     cmd.env(APPNAME_RUNTIME_ENV_KEY, exe_name)
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
