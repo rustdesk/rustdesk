@@ -145,7 +145,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         || self.handler.is_rdp();
                     if !is_conn_not_default {
                         (self.client_conn_id, rx_clip_client_lock) =
-                            clipboard::get_rx_cliprdr_client(&self.handler.id);
+                            clipboard::get_rx_cliprdr_client(&self.handler.session_id);
                     };
                 }
                 #[cfg(windows)]
@@ -262,7 +262,7 @@ impl<T: InvokeUiSession> Remote<T> {
             }
         }
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        Client::try_stop_clipboard(&self.handler.id);
+        Client::try_stop_clipboard(&self.handler.session_id);
     }
 
     fn handle_job_status(&mut self, id: i32, file_num: i32, err: Option<String>) {

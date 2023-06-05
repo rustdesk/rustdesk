@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 
 void handlePluginEvent(
   Map<String, dynamic> evt,
-  String peer,
   Function(Map<String, dynamic> e) handleMsgBox,
 ) {
   Map<String, dynamic>? content;

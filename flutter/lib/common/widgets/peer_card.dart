@@ -735,7 +735,6 @@ abstract class BasePeerCard extends StatelessWidget {
             }
             await bind.mainRemovePeer(id: id);
           }
-          removePreference(id);
           await reloadFunc();
           close();
         }

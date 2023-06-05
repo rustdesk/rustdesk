@@ -104,9 +104,10 @@ class PlatformFFI {
     return res;
   }
 
-  Uint8List? getRgba(String id, int bufSize) {
+  Uint8List? getRgba(SessionID sessionId, int bufSize) {
     if (_session_get_rgba == null) return null;
-    var a = id.toNativeUtf8();
+    final sessionIdStr = sessionId.toString();
+    var a = sessionIdStr.toNativeUtf8();
     try {
       final buffer = _session_get_rgba!(a);
       if (buffer == nullptr) {
@@ -119,24 +120,27 @@ class PlatformFFI {
     }
   }
 
-  int? getRgbaSize(String id) {
+  int? getRgbaSize(SessionID sessionId) {
     if (_session_get_rgba_size == null) return null;
-    var a = id.toNativeUtf8();
+    final sessionIdStr = sessionId.toString();
+    var a = sessionIdStr.toNativeUtf8();
     final bufferSize = _session_get_rgba_size!(a);
     malloc.free(a);
     return bufferSize;
   }
 
-  void nextRgba(String id) {
+  void nextRgba(SessionID sessionId) {
     if (_session_next_rgba == null) return;
-    final a = id.toNativeUtf8();
+    final sessionIdStr = sessionId.toString();
+    final a = sessionIdStr.toNativeUtf8();
     _session_next_rgba!(a);
     malloc.free(a);
   }
 
-  void registerTexture(String id, int ptr) {
+  void registerTexture(SessionID sessionId, int ptr) {
     if (_session_register_texture == null) return;
-    final a = id.toNativeUtf8();
+    final sessionIdStr = sessionId.toString();
+    final a = sessionIdStr.toNativeUtf8();
     _session_register_texture!(a, ptr);
     malloc.free(a);
   }

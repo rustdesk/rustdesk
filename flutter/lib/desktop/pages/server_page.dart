@@ -30,7 +30,7 @@ class _DesktopServerPageState extends State<DesktopServerPage>
   final tabController = gFFI.serverModel.tabController;
   @override
   void initState() {
-    gFFI.ffiModel.updateEventListener("");
+    gFFI.ffiModel.updateEventListener(gFFI.sessionId, "");
     windowManager.addListener(this);
     tabController.onRemoved = (_, id) {
       onRemoveId(id);

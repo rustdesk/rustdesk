@@ -5,7 +5,7 @@ use hbb_common::{
         mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
         Mutex as TokioMutex,
     },
-    ResultType,
+    ResultType, SessionID,
 };
 use serde_derive::{Deserialize, Serialize};
 use std::{
@@ -59,7 +59,7 @@ struct ConnEnabled {
 }
 
 struct MsgChannel {
-    peer_id: String,
+    session_uuid: SessionID,
     conn_id: i32,
     sender: UnboundedSender<ClipboardFile>,
     receiver: Arc<TokioMutex<UnboundedReceiver<ClipboardFile>>>,
@@ -78,20 +78,23 @@ lazy_static::lazy_static! {
     static ref PROCESS_SIDE: RwLock<ProcessSide> = RwLock::new(ProcessSide::UnknownSide);
 }
 
-pub fn get_client_conn_id(peer_id: &str) -> Option<i32> {
+pub fn get_client_conn_id(session_uuid: &SessionID) -> Option<i32> {
     VEC_MSG_CHANNEL
         .read()
         .unwrap()
         .iter()
-        .find(|x| x.peer_id == peer_id.to_owned())
+        .find(|x| x.session_uuid == session_uuid.to_owned())
         .map(|x| x.conn_id)
 }
 
 pub fn get_rx_cliprdr_client(
-    peer_id: &str,
+    session_uuid: &SessionID,
 ) -> (i32, Arc<TokioMutex<UnboundedReceiver<ClipboardFile>>>) {
     let mut lock = VEC_MSG_CHANNEL.write().unwrap();
-    match lock.iter().find(|x| x.peer_id == peer_id.to_owned()) {
+    match lock
+        .iter()
+        .find(|x| x.session_uuid == session_uuid.to_owned())
+    {
         Some(msg_channel) => (msg_channel.conn_id, msg_channel.receiver.clone()),
         None => {
             let (sender, receiver) = unbounded_channel();
@@ -99,7 +102,7 @@ pub fn get_rx_cliprdr_client(
             let receiver2 = receiver.clone();
             let conn_id = lock.len() as i32 + 1;
             let msg_channel = MsgChannel {
-                peer_id: peer_id.to_owned(),
+                session_uuid: session_uuid.to_owned(),
                 conn_id,
                 sender,
                 receiver,
@@ -119,7 +122,7 @@ pub fn get_rx_cliprdr_server(conn_id: i32) -> Arc<TokioMutex<UnboundedReceiver<C
             let receiver = Arc::new(TokioMutex::new(receiver));
             let receiver2 = receiver.clone();
             let msg_channel = MsgChannel {
-                peer_id: "".to_owned(),
+                session_uuid: SessionID::nil(),
                 conn_id,
                 sender,
                 receiver,

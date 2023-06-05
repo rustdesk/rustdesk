@@ -275,7 +275,7 @@ class PluginItem extends StatelessWidget {
   }
 }
 
-void handleReloading(Map<String, dynamic> evt, String peer) {
+void handleReloading(Map<String, dynamic> evt) {
   if (evt['id'] == null || evt['location'] == null) {
     return;
   }
@@ -295,7 +295,7 @@ void handleReloading(Map<String, dynamic> evt, String peer) {
   }
 }
 
-void handleOption(Map<String, dynamic> evt, String peer) {
+void handleOption(Map<String, dynamic> evt) {
   updateOption(
       evt['location'], evt['id'], evt['peer'] ?? '', evt['key'], evt['value']);
 }

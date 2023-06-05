@@ -58,6 +58,7 @@ dependencies = [
  "anyhow",
  "atomic",
  "chrono",
+ "uuid",
 ]
 
 [[package]]
@@ -2103,6 +2104,7 @@ dependencies = [
  "log",
  "parking_lot",
  "threadpool",
+ "uuid",
  "wasm-bindgen",
  "web-sys",
 ]
@@ -2878,6 +2880,7 @@ dependencies = [
  "tokio-socks",
  "tokio-util",
  "toml 0.7.3",
+ "uuid",
  "winapi 0.3.9",
  "zstd 0.12.3+zstd.1.5.2",
 ]

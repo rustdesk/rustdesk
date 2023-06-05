@@ -110,12 +110,12 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
     return Platform.isMacOS || kUseCompatibleUiMode
         ? tabWidget
         : Obx(
-          () => SubWindowDragToResizeArea(
+            () => SubWindowDragToResizeArea(
               child: tabWidget,
               resizeEdgeSize: stateGlobal.resizeEdgeSize.value,
               windowId: stateGlobal.windowId,
             ),
-        );
+          );
   }
 
   void onRemoveId(String id) {

@@ -449,7 +449,8 @@ class _FileManagerViewState extends State<FileManagerView> {
                           padding: EdgeInsets.all(8.0),
                           child: FutureBuilder<String>(
                               future: bind.sessionGetPlatform(
-                                  id: _ffi.id, isRemote: !isLocal),
+                                  sessionId: _ffi.sessionId,
+                                  isRemote: !isLocal),
                               builder: (context, snapshot) {
                                 if (snapshot.hasData &&
                                     snapshot.data!.isNotEmpty) {

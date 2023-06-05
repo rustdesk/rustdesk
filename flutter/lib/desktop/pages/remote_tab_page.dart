@@ -56,7 +56,11 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     if (peerId != null) {
       ConnectionTypeState.init(peerId);
       tabController.onSelected = (_, id) {
-        bind.setCurSessionId(id: id);
+        final remotePage = tabController.state.value.tabs
+            .firstWhere((tab) => tab.key == id)
+            .page as RemotePage;
+        final ffi = remotePage.ffi;
+        bind.setCurSessionId(sessionId: ffi.sessionId);
         WindowController.fromWindowId(windowId())
             .setTitle(getWindowNameWithId(id));
       };
@@ -243,6 +247,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     final ffi = remotePage.ffi;
     final pi = ffi.ffiModel.pi;
     final perms = ffi.ffiModel.permissions;
+    final sessionId = ffi.sessionId;
     menu.addAll([
       MenuEntryButton<String>(
         childBuilder: (TextStyle? style) => Text(
@@ -282,6 +287,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       menu.add(MenuEntryDivider<String>());
       menu.add(RemoteMenuEntry.showRemoteCursor(
         key,
+        sessionId,
         padding,
         dismissFunc: cancelFunc,
       ));
@@ -289,15 +295,15 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
 
     if (perms['keyboard'] != false && !ffi.ffiModel.viewOnly) {
       if (perms['clipboard'] != false) {
-        menu.add(RemoteMenuEntry.disableClipboard(key, padding,
+        menu.add(RemoteMenuEntry.disableClipboard(sessionId, padding,
             dismissFunc: cancelFunc));
       }
 
-      menu.add(
-          RemoteMenuEntry.insertLock(key, padding, dismissFunc: cancelFunc));
+      menu.add(RemoteMenuEntry.insertLock(sessionId, padding,
+          dismissFunc: cancelFunc));
 
       if (pi.platform == kPeerPlatformLinux || pi.sasEnabled) {
-        menu.add(RemoteMenuEntry.insertCtrlAltDel(key, padding,
+        menu.add(RemoteMenuEntry.insertCtrlAltDel(sessionId, padding,
             dismissFunc: cancelFunc));
       }
     }
