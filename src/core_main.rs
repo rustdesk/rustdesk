@@ -151,6 +151,10 @@ pub fn core_main() -> Option<Vec<String>> {
                 #[cfg(windows)]
                 hbb_common::allow_err!(crate::platform::windows::install_cert(&args[1]));
                 return None;
+            } else if args[0] == "--uninstall-cert" {
+                #[cfg(windows)]
+                hbb_common::allow_err!(crate::platform::windows::uninstall_cert());
+                return None;
             } else if args[0] == "--portable-service" {
                 crate::platform::elevate_or_run_as_system(
                     click_setup,
