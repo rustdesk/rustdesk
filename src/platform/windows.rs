@@ -1917,6 +1917,7 @@ pub(super) fn change_resolution_directly(
     let device_name = str_to_device_name(name);
     unsafe {
         let mut dm: DEVMODEW = std::mem::zeroed();
+        dm.dmSize = std::mem::size_of::<DEVMODEW>() as _;
         dm.dmPelsWidth = width as _;
         dm.dmPelsHeight = height as _;
         dm.dmFields = DM_PELSHEIGHT | DM_PELSWIDTH;
