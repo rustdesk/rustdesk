@@ -62,7 +62,9 @@ lazy_static::lazy_static! {
 }
 
 lazy_static::lazy_static! {
+    // Is server process, with "--server" args
     static ref IS_SERVER: bool = std::env::args().nth(1) == Some("--server".to_owned());
+    // Is server logic running. The server code can invoked to run by the main process if --server is not running.
     static ref SERVER_RUNNING: Arc<RwLock<bool>> = Default::default();
 }
 
@@ -101,9 +103,16 @@ pub fn set_server_running(b: bool) {
     *SERVER_RUNNING.write().unwrap() = b;
 }
 
+// is server process, with "--server" args
 #[inline]
 pub fn is_server() -> bool {
-    *IS_SERVER || *SERVER_RUNNING.read().unwrap()
+    *IS_SERVER
+}
+
+// Is server logic running. 
+#[inline]
+pub fn is_server_running() -> bool {
+    *SERVER_RUNNING.read().unwrap()
 }
 
 #[inline]
