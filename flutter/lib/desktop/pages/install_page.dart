@@ -251,7 +251,7 @@ class _InstallPageBodyState extends State<_InstallPageBody>
                 ],
               )
             ],
-          ).paddingSymmetric(horizontal: 8 * em, vertical: 2 * em),
+          ).paddingSymmetric(horizontal: 4 * em, vertical: 3 * em),
         ));
   }
 
