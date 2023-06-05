@@ -371,7 +371,7 @@ fn load_plugin_path(path: &str) -> ResultType<()> {
     PLUGIN_INFO.write().unwrap().insert(id.clone(), plugin_info);
 
     let init_info = serde_json::to_string(&InitInfo {
-        is_server: crate::common::is_server(),
+        is_server: super::is_server_running(),
     })?;
     let init_data = InitData {
         version: str_to_cstr_ret(crate::VERSION),
@@ -389,7 +389,7 @@ fn load_plugin_path(path: &str) -> ResultType<()> {
         log::error!("Failed to init plugin '{}', {}", desc.meta().id, e);
     }
 
-    if is_server() {
+    if super::is_server_running() {
         super::config::ManagerConfig::add_plugin(&desc.meta().id)?;
     }
 
