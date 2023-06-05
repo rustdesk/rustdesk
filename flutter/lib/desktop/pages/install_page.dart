@@ -149,62 +149,59 @@ class _InstallPageBodyState extends State<_InstallPageBody>
                       .marginOnly(left: em))
                 ],
               ).marginSymmetric(vertical: 2 * em),
-              TextButton(
-                onPressed: () => startmenu.value = !startmenu.value,
+              InkWell(
+                borderRadius: BorderRadius.circular(6),
+                onTap: () => startmenu.value = !startmenu.value,
                 child: Row(
                   children: [
                     Obx(() => Checkbox(
+                        visualDensity:
+                            VisualDensity(horizontal: -4, vertical: -4),
                         value: startmenu.value,
                         onChanged: (b) {
                           if (b != null) startmenu.value = b;
-                        })),
-                    RichText(
-                      text: TextSpan(
-                        text: translate('Create start menu shortcuts'),
-                        style: DefaultTextStyle.of(context).style,
-                      ),
-                    ),
+                        }).marginOnly(right: 8)),
+                    Expanded(
+                        child: Text(translate('Create start menu shortcuts'))),
                   ],
                 ),
-              ),
-              TextButton(
-                onPressed: () => desktopicon.value = !desktopicon.value,
+              ).marginOnly(bottom: 7),
+              InkWell(
+                borderRadius: BorderRadius.circular(6),
+                onTap: () => desktopicon.value = !desktopicon.value,
                 child: Row(
                   children: [
                     Obx(() => Checkbox(
+                        visualDensity:
+                            VisualDensity(horizontal: -4, vertical: -4),
                         value: desktopicon.value,
                         onChanged: (b) {
                           if (b != null) desktopicon.value = b;
-                        })),
-                    RichText(
-                      text: TextSpan(
-                        text: translate('Create desktop icon'),
-                        style: DefaultTextStyle.of(context).style,
-                      ),
-                    ),
+                        }).marginOnly(right: 8)),
+                    Expanded(child: Text(translate('Create desktop icon'))),
                   ],
                 ),
               ),
               Offstage(
                 offstage: !Platform.isWindows,
-                child: TextButton(
-                  onPressed: () => driverCert.value = !driverCert.value,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(6),
+                  onTap: () => driverCert.value = !driverCert.value,
                   child: Row(
                     children: [
                       Obx(() => Checkbox(
+                          visualDensity:
+                              VisualDensity(horizontal: -4, vertical: -4),
                           value: driverCert.value,
                           onChanged: (b) {
                             if (b != null) driverCert.value = b;
-                          })),
-                      RichText(
-                        text: TextSpan(
-                          text: translate('idd_driver_tip'),
-                          style: DefaultTextStyle.of(context).style,
-                        ),
+                          }).marginOnly(right: 8)),
+                      Expanded(
+                        child: Text(translate('idd_driver_tip')),
                       ),
                     ],
                   ),
-                ),
+                ).marginOnly(top: 7),
               ),
               InkWell(
                   hoverColor: Colors.transparent,
