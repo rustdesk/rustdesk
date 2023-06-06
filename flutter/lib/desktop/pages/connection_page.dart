@@ -274,12 +274,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                 offstage: !svcStopped.value,
                 child: InkWell(
                         onTap: () async {
-                          bool checked = !bind.mainIsInstalled() ||
-                              await bind.mainCheckSuperUserPermission();
-                          if (checked) {
-                            bind.mainSetOption(key: "stop-service", value: "");
-                            bind.mainSetOption(key: "access-mode", value: "");
-                          }
+                          await start_service(true);
                         },
                         child: Text(translate("Start Service"),
                             style: TextStyle(

@@ -247,6 +247,9 @@ class _General extends StatefulWidget {
 }
 
 class _GeneralState extends State<_General> {
+  final RxBool serviceStop = Get.find<RxBool>(tag: 'stop-service');
+  RxBool serviceBtnEabled = true.obs;
+
   @override
   Widget build(BuildContext context) {
     final scrollController = ScrollController();
@@ -256,6 +259,7 @@ class _GeneralState extends State<_General> {
           physics: DraggableNeverScrollableScrollPhysics(),
           controller: scrollController,
           children: [
+            service(),
             theme(),
             hwcodec(),
             audio(context),
@@ -289,6 +293,21 @@ class _GeneralState extends State<_General> {
           groupValue: current,
           label: 'Follow System',
           onChanged: onChanged),
+    ]);
+  }
+
+  Widget service() {
+    return _Card(title: 'Service', children: [
+      Obx(() => _Button(serviceStop.value ? 'Start' : 'Stop', () {
+            () async {
+              serviceBtnEabled.value = false;
+              await start_service(serviceStop.value);
+              // enable the button after 1 second
+              Future.delayed(const Duration(seconds: 1), () {
+                serviceBtnEabled.value = true;
+              });
+            }();
+          }, enabled: serviceBtnEabled.value))
     ]);
   }
 
@@ -457,7 +476,6 @@ enum _AccessMode {
   custom,
   full,
   view,
-  deny,
 }
 
 class _Safety extends StatefulWidget {
@@ -510,22 +528,18 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
   }
 
   Widget _permissions(context, bool stopService) {
-    bool enabled = !locked;
+    bool enabled = !locked && stopService;
     return futureBuilder(future: () async {
       return await bind.mainGetOption(key: 'access-mode');
     }(), hasData: (data) {
       String accessMode = data! as String;
       _AccessMode mode;
-      if (stopService) {
-        mode = _AccessMode.deny;
+      if (accessMode == 'full') {
+        mode = _AccessMode.full;
+      } else if (accessMode == 'view') {
+        mode = _AccessMode.view;
       } else {
-        if (accessMode == 'full') {
-          mode = _AccessMode.full;
-        } else if (accessMode == 'view') {
-          mode = _AccessMode.view;
-        } else {
-          mode = _AccessMode.custom;
-        }
+        mode = _AccessMode.custom;
       }
       String initialKey;
       bool? fakeValue;
@@ -542,10 +556,6 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
           initialKey = 'view';
           fakeValue = false;
           break;
-        case _AccessMode.deny:
-          initialKey = 'deny';
-          fakeValue = false;
-          break;
       }
 
       return _Card(title: 'Permissions', children: [
@@ -554,34 +564,19 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
               '',
               'full',
               'view',
-              'deny'
             ],
             values: [
               translate('Custom'),
               translate('Full Access'),
               translate('Screen Share'),
-              translate('Deny remote access'),
             ],
             enabled: enabled,
             initialKey: initialKey,
             onChanged: (mode) async {
-              String modeValue;
-              bool stopService;
-              if (mode == 'deny') {
-                modeValue = '';
-                stopService = true;
-              } else {
-                modeValue = mode;
-                stopService = false;
-              }
-              await bind.mainSetOption(key: 'access-mode', value: modeValue);
-              await bind.mainSetOption(
-                  key: 'stop-service',
-                  value: bool2option('stop-service', stopService));
+              await bind.mainSetOption(key: 'access-mode', value: mode);
               setState(() {});
             }).marginOnly(left: _kContentHMargin),
         Offstage(
-          offstage: mode == _AccessMode.deny,
           child: Column(
             children: [
               _OptionCheckBox(

@@ -2043,3 +2043,12 @@ void onCopyFingerprint(String value) {
     showToast(translate("no fingerprints"));
   }
 }
+
+Future<void> start_service(bool is_start) async {
+  bool checked = !bind.mainIsInstalled() ||
+      !Platform.isMacOS ||
+      await bind.mainCheckSuperUserPermission();
+  if (checked) {
+    bind.mainSetOption(key: "stop-service", value: is_start ? "" : "Y");
+  }
+}
