@@ -639,6 +639,10 @@ impl Connection {
         if active_conns_lock.is_empty() {
             video_service::reset_resolutions();
         }
+        #[cfg(all(windows, feature = "virtual_display_driver"))]
+        if active_conns_lock.is_empty() {
+            video_service::try_plug_out_virtual_display();
+        }
         log::info!("#{} connection loop exited", id);
     }
 

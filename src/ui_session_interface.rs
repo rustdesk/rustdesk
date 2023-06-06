@@ -911,16 +911,16 @@ impl<T: InvokeUiSession> Session<T> {
     pub fn change_resolution(&self, display: i32, width: i32, height: i32) {
         *self.last_change_display.lock().unwrap() =
             ChangeDisplayRecord::new(display, width, height);
-        self.do_change_resolution(display, width, height);
+        self.do_change_resolution(width, height);
     }
 
     fn try_change_init_resolution(&self, display: i32) {
         if let Some((w, h)) = self.lc.read().unwrap().get_custom_resolution(display) {
-            self.do_change_resolution(display, w, h);
+            self.do_change_resolution(w, h);
         }
     }
 
-    fn do_change_resolution(&self, display: i32, width: i32, height: i32) {
+    fn do_change_resolution(&self, width: i32, height: i32) {
         let mut misc = Misc::new();
         misc.set_change_resolution(Resolution {
             width,
