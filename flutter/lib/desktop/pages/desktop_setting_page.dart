@@ -523,10 +523,6 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
   }
 
   Widget permissions(context) {
-    return Obx(() => _permissions(context));
-  }
-
-  Widget _permissions(context) {
     bool enabled = !locked;
     return futureBuilder(future: () async {
       return await bind.mainGetOption(key: 'access-mode');
@@ -575,36 +571,30 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
               await bind.mainSetOption(key: 'access-mode', value: mode);
               setState(() {});
             }).marginOnly(left: _kContentHMargin),
-        Offstage(
-          child: Column(
-            children: [
-              _OptionCheckBox(
-                  context, 'Enable Keyboard/Mouse', 'enable-keyboard',
-                  enabled: enabled, fakeValue: fakeValue),
-              _OptionCheckBox(context, 'Enable Clipboard', 'enable-clipboard',
-                  enabled: enabled, fakeValue: fakeValue),
-              _OptionCheckBox(
-                  context, 'Enable File Transfer', 'enable-file-transfer',
-                  enabled: enabled, fakeValue: fakeValue),
-              _OptionCheckBox(context, 'Enable Audio', 'enable-audio',
-                  enabled: enabled, fakeValue: fakeValue),
-              _OptionCheckBox(context, 'Enable TCP Tunneling', 'enable-tunnel',
-                  enabled: enabled, fakeValue: fakeValue),
-              _OptionCheckBox(
-                  context, 'Enable Remote Restart', 'enable-remote-restart',
-                  enabled: enabled, fakeValue: fakeValue),
-              _OptionCheckBox(
-                  context, 'Enable Recording Session', 'enable-record-session',
-                  enabled: enabled, fakeValue: fakeValue),
-              _OptionCheckBox(
-                  context,
-                  'Enable remote configuration modification',
-                  'allow-remote-config-modification',
-                  enabled: enabled,
-                  fakeValue: fakeValue),
-            ],
-          ),
-        )
+        Column(
+          children: [
+            _OptionCheckBox(context, 'Enable Keyboard/Mouse', 'enable-keyboard',
+                enabled: enabled, fakeValue: fakeValue),
+            _OptionCheckBox(context, 'Enable Clipboard', 'enable-clipboard',
+                enabled: enabled, fakeValue: fakeValue),
+            _OptionCheckBox(
+                context, 'Enable File Transfer', 'enable-file-transfer',
+                enabled: enabled, fakeValue: fakeValue),
+            _OptionCheckBox(context, 'Enable Audio', 'enable-audio',
+                enabled: enabled, fakeValue: fakeValue),
+            _OptionCheckBox(context, 'Enable TCP Tunneling', 'enable-tunnel',
+                enabled: enabled, fakeValue: fakeValue),
+            _OptionCheckBox(
+                context, 'Enable Remote Restart', 'enable-remote-restart',
+                enabled: enabled, fakeValue: fakeValue),
+            _OptionCheckBox(
+                context, 'Enable Recording Session', 'enable-record-session',
+                enabled: enabled, fakeValue: fakeValue),
+            _OptionCheckBox(context, 'Enable remote configuration modification',
+                'allow-remote-config-modification',
+                enabled: enabled, fakeValue: fakeValue),
+          ],
+        ),
       ]);
     });
   }
