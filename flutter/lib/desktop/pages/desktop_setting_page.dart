@@ -1976,9 +1976,6 @@ void changeSocks5Proxy() async {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(
-              height: 8.0,
-            ),
             Row(
               children: [
                 ConstrainedBox(
@@ -2033,9 +2030,10 @@ void changeSocks5Proxy() async {
                       )),
                 ),
               ],
-            ).marginOnly(bottom: 8),
+            ),
             Offstage(
-                offstage: !isInProgress, child: const LinearProgressIndicator())
+                offstage: !isInProgress,
+                child: const LinearProgressIndicator().marginOnly(top: 8))
           ],
         ),
       ),
