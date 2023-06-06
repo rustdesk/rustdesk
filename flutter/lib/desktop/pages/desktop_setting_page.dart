@@ -490,7 +490,6 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
   bool get wantKeepAlive => true;
   bool locked = bind.mainIsInstalled();
   final scrollController = ScrollController();
-  final RxBool serviceStop = Get.find<RxBool>(tag: 'stop-service');
 
   @override
   Widget build(BuildContext context) {
@@ -524,11 +523,11 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
   }
 
   Widget permissions(context) {
-    return Obx(() => _permissions(context, serviceStop.value));
+    return Obx(() => _permissions(context));
   }
 
-  Widget _permissions(context, bool stopService) {
-    bool enabled = !locked && stopService;
+  Widget _permissions(context) {
+    bool enabled = !locked;
     return futureBuilder(future: () async {
       return await bind.mainGetOption(key: 'access-mode');
     }(), hasData: (data) {
