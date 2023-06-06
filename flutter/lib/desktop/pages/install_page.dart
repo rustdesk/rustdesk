@@ -208,10 +208,12 @@ class _InstallPageBodyState extends State<_InstallPageBody>
               Row(
                 children: [
                   Expanded(
-                      child: Obx(() => Offstage(
-                            offstage: !showProgress.value,
-                            child: LinearProgressIndicator(),
-                          ))),
+                    child: Obx(() => Offstage(
+                          offstage: !showProgress.value,
+                          child:
+                              LinearProgressIndicator().marginOnly(right: 10),
+                        )),
+                  ),
                   Obx(
                     () => OutlinedButton.icon(
                       icon: Icon(Icons.close_rounded, size: 16),
