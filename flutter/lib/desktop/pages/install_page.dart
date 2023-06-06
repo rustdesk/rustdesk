@@ -97,6 +97,29 @@ class _InstallPageBodyState extends State<_InstallPageBody>
     windowManager.close();
   }
 
+  InkWell Option(RxBool option, {String label = ''}) {
+    return InkWell(
+      // todo mouseCursor: "SystemMouseCursors.forbidden" or no cursor on btnEnabled == false
+      borderRadius: BorderRadius.circular(6),
+      onTap: () => btnEnabled.value ? option.value = !option.value : null,
+      child: Row(
+        children: [
+          Obx(
+            () => Checkbox(
+              visualDensity: VisualDensity(horizontal: -4, vertical: -4),
+              value: option.value,
+              onChanged: (v) =>
+                  btnEnabled.value ? option.value = !option.value : null,
+            ).marginOnly(right: 8),
+          ),
+          Expanded(
+            child: Text(translate(label)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final double em = 13;
@@ -132,60 +155,13 @@ class _InstallPageBodyState extends State<_InstallPageBody>
                   )
                 ],
               ).marginSymmetric(vertical: 2 * em),
-              InkWell(
-                borderRadius: BorderRadius.circular(6),
-                onTap: () => startmenu.value = !startmenu.value,
-                child: Row(
-                  children: [
-                    Obx(() => Checkbox(
-                        visualDensity:
-                            VisualDensity(horizontal: -4, vertical: -4),
-                        value: startmenu.value,
-                        onChanged: (b) {
-                          if (b != null) startmenu.value = b;
-                        }).marginOnly(right: 8)),
-                    Expanded(
-                        child: Text(translate('Create start menu shortcuts'))),
-                  ],
-                ),
-              ).marginOnly(bottom: 7),
-              InkWell(
-                borderRadius: BorderRadius.circular(6),
-                onTap: () => desktopicon.value = !desktopicon.value,
-                child: Row(
-                  children: [
-                    Obx(() => Checkbox(
-                        visualDensity:
-                            VisualDensity(horizontal: -4, vertical: -4),
-                        value: desktopicon.value,
-                        onChanged: (b) {
-                          if (b != null) desktopicon.value = b;
-                        }).marginOnly(right: 8)),
-                    Expanded(child: Text(translate('Create desktop icon'))),
-                  ],
-                ),
-              ),
+              Option(startmenu, label: 'Create start menu shortcuts')
+                  .marginOnly(bottom: 7),
+              Option(desktopicon, label: 'Create desktop icon'),
               Offstage(
                 offstage: !Platform.isWindows,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(6),
-                  onTap: () => driverCert.value = !driverCert.value,
-                  child: Row(
-                    children: [
-                      Obx(() => Checkbox(
-                          visualDensity:
-                              VisualDensity(horizontal: -4, vertical: -4),
-                          value: driverCert.value,
-                          onChanged: (b) {
-                            if (b != null) driverCert.value = b;
-                          }).marginOnly(right: 8)),
-                      Expanded(
-                        child: Text(translate('idd_driver_tip')),
-                      ),
-                    ],
-                  ),
-                ).marginOnly(top: 7),
-              ),
+                child: Option(driverCert, label: 'idd_driver_tip'),
+              ).marginOnly(top: 7),
               Container(
                   padding: EdgeInsets.all(12),
                   decoration: BoxDecoration(
