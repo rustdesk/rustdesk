@@ -995,8 +995,8 @@ fn no_displays(displays: &Vec<Display>) -> bool {
     } else if display_len == 1 {
         let display = &displays[0];
         let dummy_display_side_max_size = 800;
-        display.width() < dummy_display_side_max_size
-            && display.height() < dummy_display_side_max_size
+        display.width() <= dummy_display_side_max_size
+            && display.height() <= dummy_display_side_max_size
     } else {
         false
     }
