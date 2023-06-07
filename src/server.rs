@@ -74,6 +74,18 @@ lazy_static::lazy_static! {
     pub static ref CLIENT_SERVER: ServerPtr = new();
 }
 
+pub const MOUSE_TYPE_MOVE: i32 = 0;
+pub const MOUSE_TYPE_DOWN: i32 = 1;
+pub const MOUSE_TYPE_UP: i32 = 2;
+pub const MOUSE_TYPE_WHEEL: i32 = 3;
+pub const MOUSE_TYPE_TRACKPAD: i32 = 4;
+
+pub const MOUSE_BUTTON_LEFT: i32 = 0x01;
+pub const MOUSE_BUTTON_RIGHT: i32 = 0x02;
+pub const MOUSE_BUTTON_WHEEL: i32 = 0x04;
+pub const MOUSE_BUTTON_BACK: i32 = 0x08;
+pub const MOUSE_BUTTON_FORWARD: i32 = 0x10;
+
 pub struct Server {
     connections: ConnMap,
     services: HashMap<&'static str, Box<dyn Service>>,

@@ -6,7 +6,7 @@ use crate::{
     common::make_fd_to_json,
     flutter::{self, SESSIONS},
     flutter::{session_add, session_start_},
-    server::input_service::{
+    server::{
         MOUSE_BUTTON_BACK, MOUSE_BUTTON_FORWARD, MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT,
         MOUSE_BUTTON_WHEEL, MOUSE_TYPE_DOWN, MOUSE_TYPE_TRACKPAD, MOUSE_TYPE_UP, MOUSE_TYPE_WHEEL,
     },
