@@ -17,6 +17,7 @@ use std::{
     thread,
     time::{self, Duration, Instant},
 };
+#[cfg(windows)]
 use winapi::um::winuser::WHEEL_DELTA;
 
 const INVALID_CURSOR_POS: i32 = i32::MIN;
