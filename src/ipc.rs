@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::atomic::Ordering};
+use std::{
+    collections::HashMap,
+    sync::atomic::{AtomicBool, Ordering},
+};
 #[cfg(not(windows))]
 use std::{fs::File, io::prelude::*};
 
@@ -38,6 +41,7 @@ pub enum PrivacyModeState {
 }
 // IPC actions here.
 pub const IPC_ACTION_CLOSE: &str = "close";
+pub static EXIT_RECV_CLOSE: AtomicBool = AtomicBool::new(true);
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "t", content = "c")]
@@ -334,9 +338,11 @@ async fn handle(data: Data, stream: &mut Connection) {
         }
         Data::Close => {
             log::info!("Receive close message");
-            #[cfg(not(target_os = "android"))]
-            crate::server::input_service::fix_key_down_timeout_at_exit();
-            std::process::exit(0);
+            if EXIT_RECV_CLOSE.load(Ordering::SeqCst) {
+                #[cfg(not(target_os = "android"))]
+                crate::server::input_service::fix_key_down_timeout_at_exit();
+                std::process::exit(0);
+            }
         }
         Data::OnlineStatus(_) => {
             let x = config::ONLINE

@@ -21,7 +21,7 @@ use std::{
     os::windows::process::CommandExt,
     path::*,
     ptr::null_mut,
-    sync::{Arc, Mutex},
+    sync::{atomic::Ordering, Arc, Mutex},
     time::{Duration, Instant},
 };
 use winapi::{
@@ -947,7 +947,7 @@ pub fn update_me() -> ResultType<()> {
         cur_pid = get_current_pid(),
     );
     run_cmds(cmds, false, "update")?;
-    run_after_run_cmds(false)?;
+    run_after_run_cmds(false);
     std::process::Command::new(&exe)
         .args(&["--remove", &src_exe])
         .spawn()?;
@@ -1143,7 +1143,7 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
         import_config = get_import_config(&exe),
     );
     run_cmds(cmds, debug, "install")?;
-    run_after_run_cmds(silent)?;
+    run_after_run_cmds(silent);
     Ok(())
 }
 
@@ -2152,6 +2152,7 @@ impl Drop for WakeLock {
 }
 
 pub fn uninstall_service(show_new_window: bool) -> ResultType<()> {
+    log::info!("Uninstalling service...");
     let filter = format!(" /FI \"PID ne {}\"", get_current_pid());
     Config::set_option("stop-service".into(), "Y".into());
     let cmds = format!(
@@ -2168,25 +2169,27 @@ pub fn uninstall_service(show_new_window: bool) -> ResultType<()> {
         Config::set_option("stop-service".into(), "".into());
         bail!(err);
     }
-    run_after_run_cmds(!show_new_window)?;
+    run_after_run_cmds(!show_new_window);
     std::process::exit(0);
 }
 
 pub fn install_service() -> ResultType<()> {
+    log::info!("Installing service...");
     let (_, _, _, exe) = get_install_info();
     let tmp_path = std::env::temp_dir().to_string_lossy().to_string();
     let tray_shortcut = get_tray_shortcut(&exe, &tmp_path)?;
     let filter = format!(" /FI \"PID ne {}\"", get_current_pid());
     Config::set_option("stop-service".into(), "".into());
+    crate::ipc::EXIT_RECV_CLOSE.store(false, Ordering::Relaxed);
     let cmds = format!(
         "
 chcp 65001
+taskkill /F /IM {app_name}.exe{filter}
 cscript \"{tray_shortcut}\"
 copy /Y \"{tmp_path}\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\\"
 {import_config}
 {create_service}
 if exist \"{tray_shortcut}\" del /f /q \"{tray_shortcut}\"
-taskkill /F /IM {app_name}.exe{filter}
     ",
         app_name = crate::get_app_name(),
         import_config = get_import_config(&exe),
@@ -2194,9 +2197,10 @@ taskkill /F /IM {app_name}.exe{filter}
     );
     if let Err(err) = run_cmds(cmds, false, "install") {
         Config::set_option("stop-service".into(), "Y".into());
+        crate::ipc::EXIT_RECV_CLOSE.store(true, Ordering::Relaxed);
         bail!(err);
     }
-    run_after_run_cmds(false)?;
+    run_after_run_cmds(false);
     std::process::exit(0);
 }
 
@@ -2224,6 +2228,8 @@ oLink.Save
 
 fn get_import_config(exe: &str) -> String {
     format!("
+sc stop {app_name}
+sc delete {app_name}
 sc create {app_name} binpath= \"\\\"{exe}\\\" --import-config \\\"{config_path}\\\"\" start= auto DisplayName= \"{app_name} Service\"
 sc start {app_name}
 sc stop {app_name}
@@ -2249,17 +2255,20 @@ sc start {app_name}
     }
 }
 
-fn run_after_run_cmds(silent: bool) -> ResultType<()> {
+fn run_after_run_cmds(silent: bool) {
     let (_, _, _, exe) = get_install_info();
-    std::thread::sleep(std::time::Duration::from_millis(2000));
     if !silent {
-        std::process::Command::new(&exe).spawn()?;
+        log::debug!("Spawn new window");
+        allow_err!(std::process::Command::new("cmd")
+            .arg("/c")
+            .arg("timeout /t 2 & start rustdesk://")
+            .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
+            .spawn());
     }
     if Config::get_option("stop-service") != "Y" {
-        std::process::Command::new(&exe).arg("--tray").spawn()?;
+        allow_err!(std::process::Command::new(&exe).arg("--tray").spawn());
     }
-    std::thread::sleep(std::time::Duration::from_millis(1000));
-    Ok(())
+     std::thread::sleep(std::time::Duration::from_millis(300));
 }
 
 #[cfg(test)]

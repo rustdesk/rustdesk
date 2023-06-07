@@ -59,6 +59,7 @@ pub fn get_id() -> String {
 #[inline]
 pub fn goto_install() {
     allow_err!(crate::run_me(vec!["--install"]));
+    std::process::exit(0);
 }
 
 #[inline]
@@ -277,19 +278,17 @@ pub fn set_option(key: String, value: String) {
                 return;
             }
         }
-        /*
         #[cfg(any(target_os = "windows"))]
         {
             if crate::platform::is_installed() {
                 if value == "Y" {
-                    crate::platform::install_service().ok();
+                    allow_err!(crate::platform::uninstall_service(true));
                 } else {
-                    crate::platform::uninstall_service(true).ok();
+                    allow_err!(crate::platform::install_service());
                 }
                 return;
             }
         }
-        */
     }
     if value.is_empty() {
         options.remove(&key);

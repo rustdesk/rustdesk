@@ -202,7 +202,10 @@ class ServerModel with ChangeNotifier {
         temporaryPassword.isNotEmpty) {
       _serverPasswd.text = temporaryPassword;
     }
-    if (verificationMethod == kUsePermanentPassword ||
+    var stopped = option2bool(
+        "stop-service", await bind.mainGetOption(key: "stop-service"));
+    if (stopped ||
+        verificationMethod == kUsePermanentPassword ||
         _approveMode == 'click') {
       _serverPasswd.text = '-';
     }
