@@ -24,6 +24,7 @@ import '../../common/shared_state.dart';
 import '../../utils/image.dart';
 import '../widgets/remote_toolbar.dart';
 import '../widgets/kb_layout_type_chooser.dart';
+import '../widgets/tabbar_widget.dart';
 
 final SimpleWrapper<bool> _firstEnterImage = SimpleWrapper(false);
 
@@ -33,6 +34,7 @@ class RemotePage extends StatefulWidget {
     required this.id,
     required this.password,
     required this.menubarState,
+    required this.tabController,
     this.switchUuid,
     this.forceRelay,
   }) : super(key: key);
@@ -43,6 +45,7 @@ class RemotePage extends StatefulWidget {
   final String? switchUuid;
   final bool? forceRelay;
   final SimpleWrapper<State<RemotePage>?> _lastState = SimpleWrapper(null);
+  final DesktopTabController tabController;
 
   FFI get ffi => (_lastState.value! as _RemotePageState)._ffi;
 
@@ -146,6 +149,7 @@ class _RemotePageState extends State<RemotePage>
     // }
 
     _blockableOverlayState.applyFfi(_ffi);
+    widget.tabController.onSelected?.call(widget.id);
   }
 
   @override

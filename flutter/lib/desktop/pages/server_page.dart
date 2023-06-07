@@ -35,9 +35,6 @@ class _DesktopServerPageState extends State<DesktopServerPage>
     tabController.onRemoved = (_, id) {
       onRemoveId(id);
     };
-    tabController.onSelected = (_, id) {
-      windowManager.setTitle(getWindowNameWithId(id));
-    };
     super.initState();
   }
 
@@ -100,8 +97,17 @@ class ConnectionManagerState extends State<ConnectionManager> {
   @override
   void initState() {
     gFFI.serverModel.updateClientState();
-    gFFI.serverModel.tabController.onSelected = (index, _) =>
-        gFFI.chatModel.changeCurrentID(gFFI.serverModel.clients[index].id);
+    gFFI.serverModel.tabController.onSelected = (client_id_str) {
+      final client_id = int.tryParse(client_id_str);
+      if (client_id != null) {
+        gFFI.chatModel.changeCurrentID(client_id);
+        final client =
+            gFFI.serverModel.clients.firstWhereOrNull((e) => e.id == client_id);
+        if (client != null) {
+          windowManager.setTitle(getWindowNameWithId(client.peerId));
+        }
+      }
+    };
     gFFI.chatModel.isConnManager = true;
     super.initState();
   }
@@ -328,6 +334,7 @@ class _CmHeaderState extends State<_CmHeader>
         _time.value = _time.value + 1;
       }
     });
+    gFFI.serverModel.tabController.onSelected?.call(client.id.toString());
   }
 
   @override

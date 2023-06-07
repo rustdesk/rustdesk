@@ -55,12 +55,14 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     final peerId = params['id'];
     if (peerId != null) {
       ConnectionTypeState.init(peerId);
-      tabController.onSelected = (_, id) {
+      tabController.onSelected = (id) {
         final remotePage = tabController.state.value.tabs
-            .firstWhere((tab) => tab.key == id)
-            .page as RemotePage;
-        final ffi = remotePage.ffi;
-        bind.setCurSessionId(sessionId: ffi.sessionId);
+            .firstWhereOrNull((tab) => tab.key == id)
+            ?.page;
+        if (remotePage is RemotePage) {
+          final ffi = remotePage.ffi;
+          bind.setCurSessionId(sessionId: ffi.sessionId);
+        }
         WindowController.fromWindowId(windowId())
             .setTitle(getWindowNameWithId(id));
       };
@@ -75,6 +77,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           id: peerId,
           password: params['password'],
           menubarState: _menubarState,
+          tabController: tabController,
           switchUuid: params['switch_uuid'],
           forceRelay: params['forceRelay'],
         ),
@@ -111,6 +114,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             id: id,
             password: args['password'],
             menubarState: _menubarState,
+            tabController: tabController,
             switchUuid: switchUuid,
             forceRelay: args['forceRelay'],
           ),

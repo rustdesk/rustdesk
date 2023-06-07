@@ -17,7 +17,6 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 import 'package:get/get_rx/src/rx_workers/utils/debouncer.dart';
 import 'package:scroll_pos/scroll_pos.dart';
-import 'package:uuid/uuid.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../utils/multi_window_manager.dart';
@@ -28,7 +27,7 @@ const double _kDividerIndent = 10;
 const double _kActionIconSize = 12;
 
 class TabInfo {
-  final String key;
+  final String key; // Notice: cm use client_id.toString() as key
   final String label;
   final IconData? selectedIcon;
   final IconData? unselectedIcon;
@@ -97,7 +96,7 @@ class DesktopTabController {
 
   /// index, key
   Function(int, String)? onRemoved;
-  Function(int, String)? onSelected;
+  Function(String)? onSelected;
 
   DesktopTabController(
       {required this.tabType, this.onRemoved, this.onSelected});
@@ -119,7 +118,8 @@ class DesktopTabController {
       assert(toIndex >= 0);
     }
     try {
-      jumpTo(toIndex);
+      // tabPage has not been initialized, call `onSelected` at the end of initState
+      jumpTo(toIndex, callOnSelected: false);
     } catch (e) {
       // call before binding controller will throw
       debugPrint("Failed to jumpTo: $e");
@@ -144,7 +144,9 @@ class DesktopTabController {
     onRemoved?.call(index, key);
   }
 
-  void jumpTo(int index) {
+  /// For addTab, tabPage has not been initialized, set [callOnSelected] to false,
+  /// and call [onSelected] at the end of initState
+  void jumpTo(int index, {bool callOnSelected = true}) {
     if (!isDesktop || index < 0) return;
     state.update((val) {
       val!.selected = index;
@@ -160,16 +162,12 @@ class DesktopTabController {
         }
       }));
     });
-    if (state.value.tabs.length > index) {
-      final key = state.value.tabs[index].key;
-      onSelected?.call(index, key);
+    if (callOnSelected) {
+      if (state.value.tabs.length > index) {
+        final key = state.value.tabs[index].key;
+        onSelected?.call(key);
+      }
     }
-  }
-
-  void jumpBy(String key) {
-    if (!isDesktop) return;
-    final index = state.value.tabs.indexWhere((tab) => tab.key == key);
-    jumpTo(index);
   }
 
   void closeBy(String? key) {

@@ -49,10 +49,15 @@ enum MouseFocusScope {
 }
 
 class FileManagerPage extends StatefulWidget {
-  const FileManagerPage({Key? key, required this.id, this.forceRelay})
+  const FileManagerPage(
+      {Key? key,
+      required this.id,
+      required this.tabController,
+      this.forceRelay})
       : super(key: key);
   final String id;
   final bool? forceRelay;
+  final DesktopTabController tabController;
 
   @override
   State<StatefulWidget> createState() => _FileManagerPageState();
@@ -85,6 +90,7 @@ class _FileManagerPageState extends State<FileManagerPage>
     }
     debugPrint("File manager page init success with id ${widget.id}");
     _ffi.dialogManager.setOverlayState(_overlayKeyState);
+    widget.tabController.onSelected?.call(widget.id);
   }
 
   @override

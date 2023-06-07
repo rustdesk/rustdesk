@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
@@ -27,9 +28,14 @@ class _PortForward {
 
 class PortForwardPage extends StatefulWidget {
   const PortForwardPage(
-      {Key? key, required this.id, required this.isRDP, this.forceRelay})
+      {Key? key,
+      required this.id,
+      required this.tabController,
+      required this.isRDP,
+      this.forceRelay})
       : super(key: key);
   final String id;
+  final DesktopTabController tabController;
   final bool isRDP;
   final bool? forceRelay;
 
@@ -58,6 +64,7 @@ class _PortForwardPageState extends State<PortForwardPage>
       Wakelock.enable();
     }
     debugPrint("Port forward page init success with id ${widget.id}");
+    widget.tabController.onSelected?.call(widget.id);
   }
 
   @override
