@@ -363,7 +363,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Disconnect all devices?", "Tüm cihazların bağlantısını kes?"),
         ("Clear", "Temizle"),
         ("Audio Input Device", "Ses Giriş Aygıtı"),
-        ("Deny remote access", "Uzak erişime izin verme"),
         ("Use IP Whitelisting", "IP Beyaz Listeyi Kullan"),
         ("Network", "Ağ"),
         ("Enable RDP", "RDP Aktif Et"),
