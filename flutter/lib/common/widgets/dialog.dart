@@ -674,100 +674,115 @@ void showRequestElevationDialog(String id, OverlayDialogManager dialogManager) {
     }
   }
 
-  const minTextStyle = TextStyle(fontSize: 14);
+  // TODO get from theme
+  final double fontSizeNote = 13.00;
 
-  var content = Obx(() => Column(children: [
-        Row(
-          children: [
-            Radio(
-                value: '',
-                groupValue: groupValue.value,
-                onChanged: onRadioChanged),
-            Expanded(
-                child:
-                    Text(translate('Ask the remote user for authentication'))),
-          ],
-        ),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: Text(
-                  translate(
-                      'Choose this if the remote account is administrator'),
-                  style: TextStyle(fontSize: 13))
-              .marginOnly(left: 40),
-        ).marginOnly(bottom: 15),
-        Row(
-          children: [
-            Radio(
-                value: 'logon',
-                groupValue: groupValue.value,
-                onChanged: onRadioChanged),
-            Expanded(
-              child: Text(translate(
-                  'Transmit the username and password of administrator')),
-            )
-          ],
-        ),
-        Row(
-          children: [
-            Expanded(
-                flex: 1,
+  Widget OptionRequestPermissions = Obx(
+    () => Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Radio(
+          visualDensity: VisualDensity(horizontal: -4, vertical: -4),
+          value: '',
+          groupValue: groupValue.value,
+          onChanged: onRadioChanged,
+        ).marginOnly(right: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              InkWell(
+                hoverColor: Colors.transparent,
+                onTap: () => groupValue.value = '',
                 child: Text(
-                  '${translate('Username')}:',
-                  style: minTextStyle,
-                ).marginOnly(right: 10)),
-            Expanded(
-              flex: 3,
-              child: TextField(
-                controller: userController,
-                style: minTextStyle,
-                decoration: InputDecoration(
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(vertical: 15),
-                    hintText: translate('eg: admin'),
-                    errorText: errUser.isEmpty ? null : errUser.value),
-                onChanged: (s) {
-                  if (s.isNotEmpty) {
-                    errUser.value = '';
-                  }
-                },
+                  translate('Ask the remote user for authentication'),
+                ),
+              ).marginOnly(bottom: 10),
+              Text(
+                translate('Choose this if the remote account is administrator'),
+                style: TextStyle(fontSize: fontSizeNote),
               ),
-            )
-          ],
-        ).marginOnly(left: 40),
-        Row(
-          children: [
-            Expanded(
-                flex: 1,
-                child: Text(
-                  '${translate('Password')}:',
-                  style: minTextStyle,
-                ).marginOnly(right: 10)),
-            Expanded(
-              flex: 3,
-              child: TextField(
-                controller: pwdController,
-                obscureText: true,
-                style: minTextStyle,
-                decoration: InputDecoration(
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(vertical: 15),
-                    errorText: errPwd.isEmpty ? null : errPwd.value),
-                onChanged: (s) {
-                  if (s.isNotEmpty) {
-                    errPwd.value = '';
-                  }
-                },
-              ),
+            ],
+          ).marginOnly(top: 3),
+        ),
+      ],
+    ),
+  );
+
+  Widget OptionCredentials = Obx(
+    () => Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Radio(
+          visualDensity: VisualDensity(horizontal: -4, vertical: -4),
+          value: 'logon',
+          groupValue: groupValue.value,
+          onChanged: onRadioChanged,
+        ).marginOnly(right: 10),
+        Expanded(
+          child: InkWell(
+            hoverColor: Colors.transparent,
+            onTap: () => onRadioChanged('logon'),
+            child: Text(
+              translate('Transmit the username and password of administrator'),
             ),
-          ],
-        ).marginOnly(left: 40),
-        Align(
-            alignment: Alignment.centerLeft,
-            child: Text(translate('still_click_uac_tip'),
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold))
-                .marginOnly(top: 20)),
-      ]));
+          ).marginOnly(top: 4),
+        ),
+      ],
+    ),
+  );
+
+  Widget UacNote = Container(
+    padding: EdgeInsets.fromLTRB(10, 8, 8, 8),
+    decoration: BoxDecoration(
+      color: MyTheme.currentThemeMode() == ThemeMode.dark
+          ? Color.fromARGB(135, 87, 87, 90)
+          : Colors.grey[100],
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: Colors.grey),
+    ),
+    child: Row(
+      children: [
+        Icon(Icons.info_outline_rounded, size: 20).marginOnly(right: 10),
+        Expanded(
+          child: Text(
+            translate('still_click_uac_tip'),
+            style: TextStyle(
+                fontSize: fontSizeNote, fontWeight: FontWeight.normal),
+          ),
+        )
+      ],
+    ),
+  );
+
+  var content = Obx(
+    () => Column(
+      children: [
+        OptionRequestPermissions.marginOnly(bottom: 15),
+        OptionCredentials,
+        Offstage(
+          offstage: 'logon' != groupValue.value,
+          child: Column(
+            children: [
+              UacNote.marginOnly(bottom: 10),
+              DialogTextField(
+                controller: userController,
+                title: translate('Username'),
+                hintText: translate('eg: admin'),
+                prefixIcon: DialogTextField.kUsernameIcon,
+                errorText: errUser.isEmpty ? null : errUser.value,
+              ),
+              PasswordWidget(
+                controller: pwdController,
+                autoFocus: false,
+                errorText: errPwd.isEmpty ? null : errPwd.value,
+              ),
+            ],
+          ).marginOnly(left: isDesktop ? 35 : 0),
+        ).marginOnly(top: 10),
+      ],
+    ),
+  );
 
   dialogManager.dismissAll();
   dialogManager.show(tag: '$id-request-elevation', (setState, close, context) {
@@ -794,8 +809,17 @@ void showRequestElevationDialog(String id, OverlayDialogManager dialogManager) {
       title: Text(translate('Request Elevation')),
       content: content,
       actions: [
-        dialogButton('Cancel', onPressed: close, isOutline: true),
-        dialogButton('OK', onPressed: submit),
+        dialogButton(
+          'Cancel',
+          icon: Icon(Icons.close_rounded),
+          onPressed: close,
+          isOutline: true,
+        ),
+        dialogButton(
+          'OK',
+          icon: Icon(Icons.done_rounded),
+          onPressed: submit,
+        )
       ],
       onSubmit: submit,
       onCancel: close,
@@ -878,8 +902,8 @@ void showWaitAcceptDialog(String id, String type, String title, String text,
 
 void showRestartRemoteDevice(
     PeerInfo pi, String id, OverlayDialogManager dialogManager) async {
-  final res =
-      await dialogManager.show<bool>((setState, close, context) => CustomAlertDialog(
+  final res = await dialogManager
+      .show<bool>((setState, close, context) => CustomAlertDialog(
             title: Row(children: [
               Icon(Icons.warning_rounded, color: Colors.redAccent, size: 28),
               Flexible(
