@@ -1002,12 +1002,6 @@ fn no_displays(displays: &Vec<Display>) -> bool {
     }
 }
 
-#[inline]
-#[cfg(not(windows))]
-fn no_displays(displays: &Vec<Display>) -> bool {
-    displays.is_empty()
-}
-
 #[cfg(all(windows, feature = "virtual_display_driver"))]
 fn try_get_displays() -> ResultType<Vec<Display>> {
     let mut displays = Display::all()?;
