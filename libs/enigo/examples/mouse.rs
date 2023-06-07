@@ -1,4 +1,5 @@
 use enigo::{Enigo, MouseButton, MouseControllable};
+use winapi::um::winuser::WHEEL_DELTA;
 use std::thread;
 use std::time::Duration;
 
@@ -11,30 +12,22 @@ fn main() {
     enigo.mouse_move_to(500, 200);
     thread::sleep(wait_time);
 
-    enigo.mouse_down(MouseButton::Left).ok();
-    thread::sleep(wait_time);
-
-    enigo.mouse_move_relative(100, 100);
-    thread::sleep(wait_time);
-
-    enigo.mouse_up(MouseButton::Left);
-    thread::sleep(wait_time);
 
     enigo.mouse_click(MouseButton::Left);
     thread::sleep(wait_time);
 
     #[cfg(not(target_os = "macos"))]
     {
-        enigo.mouse_scroll_x(2);
+        enigo.mouse_scroll_x(2 * WHEEL_DELTA as i32);
         thread::sleep(wait_time);
 
-        enigo.mouse_scroll_x(-2);
+        enigo.mouse_scroll_x(-2 * WHEEL_DELTA as i32);
         thread::sleep(wait_time);
 
-        enigo.mouse_scroll_y(2);
+        enigo.mouse_scroll_y(2 * WHEEL_DELTA as i32);
         thread::sleep(wait_time);
 
-        enigo.mouse_scroll_y(-2);
+        enigo.mouse_scroll_y(-2 * WHEEL_DELTA as i32);
         thread::sleep(wait_time);
     }
 }

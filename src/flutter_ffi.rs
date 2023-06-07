@@ -6,6 +6,10 @@ use crate::{
     common::make_fd_to_json,
     flutter::{self, SESSIONS},
     flutter::{session_add, session_start_},
+    server::input_service::{
+        MOUSE_BUTTON_BACK, MOUSE_BUTTON_FORWARD, MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT,
+        MOUSE_BUTTON_WHEEL, MOUSE_TYPE_DOWN, MOUSE_TYPE_TRACKPAD, MOUSE_TYPE_UP, MOUSE_TYPE_WHEEL,
+    },
     ui_interface::{self, *},
 };
 use flutter_rust_bridge::{StreamSink, SyncReturn};
@@ -1054,20 +1058,20 @@ pub fn session_send_mouse(id: String, msg: String) {
         let mut mask = 0;
         if let Some(_type) = m.get("type") {
             mask = match _type.as_str() {
-                "down" => 1,
-                "up" => 2,
-                "wheel" => 3,
-                "trackpad" => 4,
+                "down" => MOUSE_TYPE_DOWN,
+                "up" => MOUSE_TYPE_UP,
+                "wheel" => MOUSE_TYPE_WHEEL,
+                "trackpad" => MOUSE_TYPE_TRACKPAD,
                 _ => 0,
             };
         }
         if let Some(buttons) = m.get("buttons") {
             mask |= match buttons.as_str() {
-                "left" => 0x01,
-                "right" => 0x02,
-                "wheel" => 0x04,
-                "back" => 0x08,
-                "forward" => 0x10,
+                "left" => MOUSE_BUTTON_LEFT,
+                "right" => MOUSE_BUTTON_RIGHT,
+                "wheel" => MOUSE_BUTTON_WHEEL,
+                "back" => MOUSE_BUTTON_BACK,
+                "forward" => MOUSE_BUTTON_FORWARD,
                 _ => 0,
             } << 3;
         }
