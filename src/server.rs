@@ -8,6 +8,8 @@ use std::{
 use bytes::Bytes;
 
 pub use connection::*;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use hbb_common::config::Config2;
 use hbb_common::tcp::{self, new_listener};
 use hbb_common::{
     allow_err,
@@ -22,8 +24,6 @@ use hbb_common::{
     sodiumoxide::crypto::{box_, sign},
     timeout, tokio, ResultType, Stream,
 };
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use hbb_common::{anyhow::anyhow, config::Config2};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use service::ServiceTmpl;
 use service::{GenericService, Service, Subscriber};
@@ -73,6 +73,18 @@ lazy_static::lazy_static! {
     // - record local audio, and send to remote
     pub static ref CLIENT_SERVER: ServerPtr = new();
 }
+
+pub const MOUSE_TYPE_MOVE: i32 = 0;
+pub const MOUSE_TYPE_DOWN: i32 = 1;
+pub const MOUSE_TYPE_UP: i32 = 2;
+pub const MOUSE_TYPE_WHEEL: i32 = 3;
+pub const MOUSE_TYPE_TRACKPAD: i32 = 4;
+
+pub const MOUSE_BUTTON_LEFT: i32 = 0x01;
+pub const MOUSE_BUTTON_RIGHT: i32 = 0x02;
+pub const MOUSE_BUTTON_WHEEL: i32 = 0x04;
+pub const MOUSE_BUTTON_BACK: i32 = 0x08;
+pub const MOUSE_BUTTON_FORWARD: i32 = 0x10;
 
 pub struct Server {
     connections: ConnMap,
