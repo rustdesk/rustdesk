@@ -50,6 +50,7 @@ mod port_forward;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub mod plugin;
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod tray;
 
 mod ui_cm_interface;
