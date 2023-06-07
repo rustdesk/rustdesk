@@ -1141,7 +1141,7 @@ pub fn install_service() -> bool {
     }
     log::info!("Installing service...");
     let home = std::env::var("HOME").unwrap_or_default();
-    let cp = if home != "/root" {
+    let cp = if home != "/root" && !Config::get().is_empty() {
         format!("cp -f {home}/.config/rustdesk/RustDesk.toml /root/.config/rustdesk/; cp -f {home}/.config/rustdesk/RustDesk2.toml /root/.config/rustdesk/;")
     } else {
         "".to_owned()
