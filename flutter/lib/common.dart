@@ -848,6 +848,7 @@ class CustomAlertDialog extends StatelessWidget {
       if (!scopeNode.hasFocus) scopeNode.requestFocus();
     });
     bool tabTapped = false;
+    if (isMobile) gFFI.invokeMethod("enable_soft_keyboard", true);
 
     return FocusScope(
       node: scopeNode,
