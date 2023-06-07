@@ -21,11 +21,9 @@ static mut LAYOUT: HKL = std::ptr::null_mut();
 pub const ENIGO_INPUT_EXTRA_VALUE: ULONG_PTR = 100;
 
 fn mouse_event(flags: u32, data: u32, dx: i32, dy: i32) -> DWORD {
-    let mut input: INPUT = unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
-    input.type_ = INPUT_MOUSE;
+    let mut u = INPUT_u::default();
     unsafe {
-        let dst_ptr = (&mut input.u as *mut _) as *mut u8;
-        let m = MOUSEINPUT {
+        *u.mi_mut() = MOUSEINPUT {
             dx,
             dy,
             mouseData: data,
@@ -33,9 +31,11 @@ fn mouse_event(flags: u32, data: u32, dx: i32, dy: i32) -> DWORD {
             time: 0,
             dwExtraInfo: ENIGO_INPUT_EXTRA_VALUE,
         };
-        let src_ptr = (&m as *const _) as *const u8;
-        std::ptr::copy_nonoverlapping(src_ptr, dst_ptr, size_of::<MOUSEINPUT>());
     }
+    let mut input = INPUT {
+        type_: INPUT_MOUSE,
+        u,
+    };
     unsafe { SendInput(1, &mut input as LPINPUT, size_of::<INPUT>() as c_int) }
 }
 
@@ -154,8 +154,8 @@ impl MouseControllable for Enigo {
                 }
             },
             match button {
-                MouseButton::Back => XBUTTON1 as _,
-                MouseButton::Forward => XBUTTON2 as _,
+                MouseButton::Back => XBUTTON1 as u32 * WHEEL_DELTA as u32,
+                MouseButton::Forward => XBUTTON2 as u32 * WHEEL_DELTA as u32,
                 _ => 0,
             },
             0,
@@ -199,11 +199,11 @@ impl MouseControllable for Enigo {
     }
 
     fn mouse_scroll_x(&mut self, length: i32) {
-        mouse_event(MOUSEEVENTF_HWHEEL, unsafe { transmute(length * 120) }, 0, 0);
+        mouse_event(MOUSEEVENTF_HWHEEL, length as _, 0, 0);
     }
 
     fn mouse_scroll_y(&mut self, length: i32) {
-        mouse_event(MOUSEEVENTF_WHEEL, unsafe { transmute(length * 120) }, 0, 0);
+        mouse_event(MOUSEEVENTF_WHEEL, length as _, 0, 0);
     }
 }
 

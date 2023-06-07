@@ -17,8 +17,21 @@ use std::{
     thread,
     time::{self, Duration, Instant},
 };
+use winapi::um::winuser::WHEEL_DELTA;
 
 const INVALID_CURSOR_POS: i32 = i32::MIN;
+
+pub const MOUSE_TYPE_MOVE: i32 = 0;
+pub const MOUSE_TYPE_DOWN: i32 = 1;
+pub const MOUSE_TYPE_UP: i32 = 2;
+pub const MOUSE_TYPE_WHEEL: i32 = 3;
+pub const MOUSE_TYPE_TRACKPAD: i32 = 4;
+
+pub const MOUSE_BUTTON_LEFT: i32 = 0x01;
+pub const MOUSE_BUTTON_RIGHT: i32 = 0x02;
+pub const MOUSE_BUTTON_WHEEL: i32 = 0x04;
+pub const MOUSE_BUTTON_BACK: i32 = 0x08;
+pub const MOUSE_BUTTON_FORWARD: i32 = 0x10;
 
 #[derive(Default)]
 struct StateCursor {
@@ -777,7 +790,7 @@ pub fn handle_mouse_(evt: &MouseEvent, conn: i32) {
         }
     }
     match evt_type {
-        0 => {
+        MOUSE_TYPE_MOVE => {
             en.mouse_move_to(evt.x, evt.y);
             *LATEST_PEER_INPUT_CURSOR.lock().unwrap() = Input {
                 conn,
@@ -786,43 +799,43 @@ pub fn handle_mouse_(evt: &MouseEvent, conn: i32) {
                 y: evt.y,
             };
         }
-        1 => match buttons {
-            0x01 => {
+        MOUSE_TYPE_DOWN => match buttons {
+            MOUSE_BUTTON_LEFT => {
                 allow_err!(en.mouse_down(MouseButton::Left));
             }
-            0x02 => {
+            MOUSE_BUTTON_RIGHT => {
                 allow_err!(en.mouse_down(MouseButton::Right));
             }
-            0x04 => {
+            MOUSE_BUTTON_WHEEL => {
                 allow_err!(en.mouse_down(MouseButton::Middle));
             }
-            0x08 => {
+            MOUSE_BUTTON_BACK => {
                 allow_err!(en.mouse_down(MouseButton::Back));
             }
-            0x10 => {
+            MOUSE_BUTTON_FORWARD => {
                 allow_err!(en.mouse_down(MouseButton::Forward));
             }
             _ => {}
         },
-        2 => match buttons {
-            0x01 => {
+        MOUSE_TYPE_UP => match buttons {
+            MOUSE_BUTTON_LEFT => {
                 en.mouse_up(MouseButton::Left);
             }
-            0x02 => {
+            MOUSE_BUTTON_RIGHT => {
                 en.mouse_up(MouseButton::Right);
             }
-            0x04 => {
+            MOUSE_BUTTON_WHEEL => {
                 en.mouse_up(MouseButton::Middle);
             }
-            0x08 => {
+            MOUSE_BUTTON_BACK => {
                 en.mouse_up(MouseButton::Back);
             }
-            0x10 => {
+            MOUSE_BUTTON_FORWARD => {
                 en.mouse_up(MouseButton::Forward);
             }
             _ => {}
         },
-        3 | 4 => {
+        MOUSE_TYPE_WHEEL | MOUSE_TYPE_TRACKPAD => {
             #[allow(unused_mut)]
             let mut x = evt.x;
             #[allow(unused_mut)]
@@ -857,13 +870,19 @@ pub fn handle_mouse_(evt: &MouseEvent, conn: i32) {
                 }
             }
 
+            #[cfg(windows)]
+            if evt_type == MOUSE_TYPE_WHEEL {
+                x *= WHEEL_DELTA as i32;
+                y *= WHEEL_DELTA as i32;
+            }
+
             #[cfg(not(target_os = "macos"))]
             {
-                if x != 0 {
-                    en.mouse_scroll_x(x);
-                }
                 if y != 0 {
                     en.mouse_scroll_y(y);
+                }
+                if x != 0 {
+                    en.mouse_scroll_x(x);
                 }
             }
         }
