@@ -2151,7 +2151,7 @@ impl Drop for WakeLock {
     }
 }
 
-pub fn uninstall_service(show_new_window: bool) -> ResultType<()> {
+pub fn uninstall_service(show_new_window: bool) -> bool {
     log::info!("Uninstalling service...");
     let filter = format!(" /FI \"PID ne {}\"", get_current_pid());
     Config::set_option("stop-service".into(), "Y".into());
@@ -2167,13 +2167,14 @@ pub fn uninstall_service(show_new_window: bool) -> ResultType<()> {
     );
     if let Err(err) = run_cmds(cmds, false, "uninstall") {
         Config::set_option("stop-service".into(), "".into());
-        bail!(err);
+        log::debug!("{err}");
+        return true;
     }
     run_after_run_cmds(!show_new_window);
     std::process::exit(0);
 }
 
-pub fn install_service() -> ResultType<()> {
+pub fn install_service() -> bool {
     log::info!("Installing service...");
     let (_, _, _, exe) = get_install_info();
     let tmp_path = std::env::temp_dir().to_string_lossy().to_string();
@@ -2198,7 +2199,8 @@ if exist \"{tray_shortcut}\" del /f /q \"{tray_shortcut}\"
     if let Err(err) = run_cmds(cmds, false, "install") {
         Config::set_option("stop-service".into(), "Y".into());
         crate::ipc::EXIT_RECV_CLOSE.store(true, Ordering::Relaxed);
-        bail!(err);
+        log::debug!("{err}");
+        return true;
     }
     run_after_run_cmds(false);
     std::process::exit(0);

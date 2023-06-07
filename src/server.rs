@@ -388,7 +388,7 @@ pub async fn start_server(is_server: bool) {
         if crate::platform::current_is_wayland() {
             allow_err!(input_service::setup_uinput(0, 1920, 0, 1080).await);
         }
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         tokio::spawn(async { sync_and_watch_config_dir().await });
         crate::RendezvousMediator::start_all().await;
     } else {
@@ -460,7 +460,7 @@ pub async fn start_ipc_url_server() {
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 async fn sync_and_watch_config_dir() {
     if crate::platform::is_root() {
         return;

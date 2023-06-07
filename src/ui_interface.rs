@@ -278,13 +278,17 @@ pub fn set_option(key: String, value: String) {
                 return;
             }
         }
-        #[cfg(any(target_os = "windows"))]
+        #[cfg(any(target_os = "windows", target_os = "linux"))]
         {
             if crate::platform::is_installed() {
                 if value == "Y" {
-                    allow_err!(crate::platform::uninstall_service(true));
+                    if crate::platform::uninstall_service(true) {
+                        return;
+                    }
                 } else {
-                    allow_err!(crate::platform::install_service());
+                    if crate::platform::install_service() {
+                        return;
+                    }
                 }
                 return;
             }
