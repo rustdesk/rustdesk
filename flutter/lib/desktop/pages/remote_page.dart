@@ -24,6 +24,7 @@ import '../../common/shared_state.dart';
 import '../../utils/image.dart';
 import '../widgets/remote_toolbar.dart';
 import '../widgets/kb_layout_type_chooser.dart';
+import '../widgets/tabbar_widget.dart';
 
 final SimpleWrapper<bool> _firstEnterImage = SimpleWrapper(false);
 
@@ -33,6 +34,7 @@ class RemotePage extends StatefulWidget {
     required this.id,
     required this.password,
     required this.menubarState,
+    required this.tabController,
     this.switchUuid,
     this.forceRelay,
   }) : super(key: key);
@@ -43,6 +45,7 @@ class RemotePage extends StatefulWidget {
   final String? switchUuid;
   final bool? forceRelay;
   final SimpleWrapper<State<RemotePage>?> _lastState = SimpleWrapper(null);
+  final DesktopTabController tabController;
 
   FFI get ffi => (_lastState.value! as _RemotePageState)._ffi;
 
@@ -75,6 +78,8 @@ class _RemotePageState extends State<RemotePage>
   Function(bool)? _onEnterOrLeaveImage4Menubar;
 
   late FFI _ffi;
+
+  SessionID get sessionId => _ffi.sessionId;
 
   void _initStates(String id) {
     initSharedStates(id);
@@ -117,19 +122,19 @@ class _RemotePageState extends State<RemotePage>
         debugPrint("id: $id, texture_key: $_textureKey");
         if (id != -1) {
           final ptr = await textureRenderer.getTexturePtr(_textureKey);
-          platformFFI.registerTexture(widget.id, ptr);
+          platformFFI.registerTexture(sessionId, ptr);
           _textureId.value = id;
         }
       });
     }
-    _ffi.ffiModel.updateEventListener(widget.id);
+    _ffi.ffiModel.updateEventListener(sessionId, widget.id);
     bind.pluginSyncUi(syncTo: kAppTypeDesktopRemote);
-    _ffi.qualityMonitorModel.checkShowQualityMonitor(widget.id);
+    _ffi.qualityMonitorModel.checkShowQualityMonitor(sessionId);
     // Session option should be set after models.dart/FFI.start
     _showRemoteCursor.value = bind.sessionGetToggleOptionSync(
-        id: widget.id, arg: 'show-remote-cursor');
-    _zoomCursor.value =
-        bind.sessionGetToggleOptionSync(id: widget.id, arg: 'zoom-cursor');
+        sessionId: sessionId, arg: 'show-remote-cursor');
+    _zoomCursor.value = bind.sessionGetToggleOptionSync(
+        sessionId: sessionId, arg: 'zoom-cursor');
     DesktopMultiWindow.addListener(this);
     // if (!_isCustomCursorInited) {
     //   customCursorController.registerNeedUpdateCursorCallback(
@@ -144,6 +149,7 @@ class _RemotePageState extends State<RemotePage>
     // }
 
     _blockableOverlayState.applyFfi(_ffi);
+    widget.tabController.onSelected?.call(widget.id);
   }
 
   @override
@@ -203,11 +209,11 @@ class _RemotePageState extends State<RemotePage>
   void dispose() {
     debugPrint("REMOTE PAGE dispose ${widget.id}");
     if (useTextureRender) {
-      platformFFI.registerTexture(widget.id, 0);
+      platformFFI.registerTexture(sessionId, 0);
       textureRenderer.closeTexture(_textureKey);
     }
     // ensure we leave this session, this is a double check
-    bind.sessionEnterOrLeave(id: widget.id, enter: false);
+    bind.sessionEnterOrLeave(sessionId: sessionId, enter: false);
     DesktopMultiWindow.removeListener(this);
     _ffi.dialogManager.hideMobileActionsOverlay();
     _ffi.recordingModel.onClose();
@@ -278,7 +284,7 @@ class _RemotePageState extends State<RemotePage>
     super.build(context);
     return WillPopScope(
         onWillPop: () async {
-          clientClose(widget.id, _ffi.dialogManager);
+          clientClose(sessionId, _ffi.dialogManager);
           return false;
         },
         child: MultiProvider(providers: [
@@ -305,7 +311,7 @@ class _RemotePageState extends State<RemotePage>
       if (!_rawKeyFocusNode.hasFocus) {
         _rawKeyFocusNode.requestFocus();
       }
-      bind.sessionEnterOrLeave(id: widget.id, enter: true);
+      bind.sessionEnterOrLeave(sessionId: sessionId, enter: true);
     }
   }
 
@@ -325,7 +331,7 @@ class _RemotePageState extends State<RemotePage>
     }
     // See [onWindowBlur].
     if (!Platform.isWindows) {
-      bind.sessionEnterOrLeave(id: widget.id, enter: false);
+      bind.sessionEnterOrLeave(sessionId: sessionId, enter: false);
     }
   }
 

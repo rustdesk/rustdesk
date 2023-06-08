@@ -43,15 +43,17 @@ pub use directories_next;
 pub use libc;
 pub mod keyboard;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub use sysinfo;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use dlopen;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub use sysinfo;
 pub use toml;
+pub use uuid;
 
 #[cfg(feature = "quic")]
 pub type Stream = quic::Connection;
 #[cfg(not(feature = "quic"))]
 pub type Stream = tcp::FramedStream;
+pub type SessionID = uuid::Uuid;
 
 #[inline]
 pub async fn sleep(sec: f32) {
@@ -395,7 +397,7 @@ mod test {
         assert!(!is_ipv6_str("[1:2::0]:"));
         assert!(!is_ipv6_str("1:2::0]:1"));
     }
-    
+
     #[test]
     fn test_ipv4() {
         assert!(is_ipv4_str("1.2.3.4"));
@@ -409,7 +411,7 @@ mod test {
         assert!(!is_ipv4_str("192.168.0.256"));
         assert!(!is_ipv4_str("192.168.0.1/24"));
         assert!(!is_ipv4_str("192.168.0."));
-        assert!(!is_ipv4_str("192.168..1"));   
+        assert!(!is_ipv4_str("192.168..1"));
     }
 
     #[test]

@@ -59,9 +59,13 @@ class InputModel {
 
   get id => parent.target?.id ?? "";
 
+  late final SessionID sessionId;
+
   bool get keyboardPerm => parent.target!.ffiModel.keyboard;
 
-  InputModel(this.parent);
+  InputModel(this.parent) {
+    sessionId = parent.target!.sessionId;
+  }
 
   KeyEventResult handleRawKeyEvent(FocusNode data, RawKeyEvent e) {
     if (isDesktop && !stateGlobal.grabKeyboard) {
@@ -70,7 +74,7 @@ class InputModel {
 
     // * Currently mobile does not enable map mode
     if (isDesktop) {
-      bind.sessionGetKeyboardMode(id: id).then((result) {
+      bind.sessionGetKeyboardMode(sessionId: sessionId).then((result) {
         keyboardMode = result.toString();
       });
     }
@@ -169,7 +173,7 @@ class InputModel {
       lockModes |= (1 << scrolllock);
     }
     bind.sessionHandleFlutterKeyEvent(
-        id: id,
+        sessionId: sessionId,
         name: name,
         platformCode: platformCode,
         positionCode: positionCode,
@@ -204,7 +208,7 @@ class InputModel {
   void inputKey(String name, {bool? down, bool? press}) {
     if (!keyboardPerm) return;
     bind.sessionInputKey(
-        id: id,
+        sessionId: sessionId,
         name: name,
         down: down ?? false,
         press: press ?? true,
@@ -264,7 +268,7 @@ class InputModel {
   /// Send scroll event with scroll distance [y].
   void scroll(int y) {
     bind.sessionSendMouse(
-        id: id,
+        sessionId: sessionId,
         msg: json
             .encode(modify({'id': id, 'type': 'wheel', 'y': y.toString()})));
   }
@@ -287,7 +291,7 @@ class InputModel {
   void sendMouse(String type, MouseButtons button) {
     if (!keyboardPerm) return;
     bind.sessionSendMouse(
-        id: id,
+        sessionId: sessionId,
         msg: json.encode(modify({'type': type, 'buttons': button.value})));
   }
 
@@ -297,7 +301,7 @@ class InputModel {
       resetModifiers();
     }
     _flingTimer?.cancel();
-    bind.sessionEnterOrLeave(id: id, enter: enter);
+    bind.sessionEnterOrLeave(sessionId: sessionId, enter: enter);
   }
 
   /// Send mouse movement event with distance in [x] and [y].
@@ -306,7 +310,8 @@ class InputModel {
     var x2 = x.toInt();
     var y2 = y.toInt();
     bind.sessionSendMouse(
-        id: id, msg: json.encode(modify({'x': '$x2', 'y': '$y2'})));
+        sessionId: sessionId,
+        msg: json.encode(modify({'x': '$x2', 'y': '$y2'})));
   }
 
   void onPointHoverImage(PointerHoverEvent e) {
@@ -333,7 +338,8 @@ class InputModel {
     var y = delta.dy.toInt();
     if (x != 0 || y != 0) {
       bind.sessionSendMouse(
-          id: id, msg: '{"type": "trackpad", "x": "$x", "y": "$y"}');
+          sessionId: sessionId,
+          msg: '{"type": "trackpad", "x": "$x", "y": "$y"}');
     }
   }
 
@@ -364,7 +370,8 @@ class InputModel {
       }
 
       bind.sessionSendMouse(
-          id: id, msg: '{"type": "trackpad", "x": "$dx", "y": "$dy"}');
+          sessionId: sessionId,
+          msg: '{"type": "trackpad", "x": "$dx", "y": "$dy"}');
       _scheduleFling(x, y, delay);
     });
   }
@@ -439,7 +446,8 @@ class InputModel {
         dy = 1;
       }
       bind.sessionSendMouse(
-          id: id, msg: '{"type": "wheel", "x": "$dx", "y": "$dy"}');
+          sessionId: sessionId,
+          msg: '{"type": "wheel", "x": "$dx", "y": "$dy"}');
     }
   }
 
@@ -632,7 +640,7 @@ class InputModel {
         break;
     }
     evt['buttons'] = buttons;
-    bind.sessionSendMouse(id: id, msg: json.encode(evt));
+    bind.sessionSendMouse(sessionId: sessionId, msg: json.encode(evt));
   }
 
   /// Web only
