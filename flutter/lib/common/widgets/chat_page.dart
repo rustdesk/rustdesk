@@ -54,16 +54,14 @@ class ChatPage extends StatelessWidget implements PageShape {
               children: [
                 LayoutBuilder(builder: (context, constraints) {
                   final chat = DashChat(
-                    onSend: (chatMsg) {
-                      chatModel.send(chatMsg);
-                      chatModel.inputNode.requestFocus();
-                    },
+                    onSend: chatModel.send,
                     currentUser: chatModel.me,
                     messages:
                         chatModel.messages[chatModel.currentID]?.chatMessages ??
                             [],
                     inputOptions: InputOptions(
                       focusNode: chatModel.inputNode,
+                      textController: chatModel.textController,
                       inputTextStyle: TextStyle(
                           fontSize: 14,
                           color: Theme.of(context).textTheme.titleLarge?.color),
