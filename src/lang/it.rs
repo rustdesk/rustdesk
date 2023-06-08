@@ -470,7 +470,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Your Device", "Questo dispositivo"),
         ("empty_recent_tip", "Non c'è nessuna sessione recente!\nPianificane una."),
         ("empty_favorite_tip", "Ancora nessuna connessione?\nTrova qualcuno con cui connetterti e aggiungilo ai preferiti!"),
-        ("empty_lan_tip", "Sembra proprio che non sia stato rilevata nessuna connessione."),
+        ("empty_lan_tip", "Sembra proprio che non sia stata rilevata nessuna connessione."),
         ("empty_address_book_tip", "Sembra che per ora nella rubrica non ci siano connessioni."),
         ("eg: admin", "es: admin"),
         ("Empty Username", "Nome utente vuoto"),
