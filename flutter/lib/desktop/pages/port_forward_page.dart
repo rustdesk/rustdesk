@@ -70,7 +70,7 @@ class _PortForwardPageState extends State<PortForwardPage>
   @override
   void dispose() {
     _ffi.close();
-    _ffi.dialogManager.dismissAll();
+    _ffi.dialogManager.dismissAll(stop: true);
     if (!Platform.isLinux) {
       Wakelock.disable();
     }

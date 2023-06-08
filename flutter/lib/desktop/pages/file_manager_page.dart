@@ -97,7 +97,7 @@ class _FileManagerPageState extends State<FileManagerPage>
   void dispose() {
     model.close().whenComplete(() {
       _ffi.close();
-      _ffi.dialogManager.dismissAll();
+      _ffi.dialogManager.dismissAll(stop: true);
       if (!Platform.isLinux) {
         Wakelock.disable();
       }

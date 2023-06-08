@@ -220,7 +220,7 @@ class _RemotePageState extends State<RemotePage>
     _rawKeyFocusNode.dispose();
     _ffi.close();
     _timer?.cancel();
-    _ffi.dialogManager.dismissAll();
+    _ffi.dialogManager.dismissAll(stop: true);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
         overlays: SystemUiOverlay.values);
     if (!Platform.isLinux) {
