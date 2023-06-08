@@ -600,16 +600,12 @@ class OverlayDialogManager {
   int _tagCount = 0;
 
   OverlayEntry? _mobileActionsOverlayEntry;
-  bool _stop = false;
 
   void setOverlayState(OverlayKeyState overlayKeyState) {
     _overlayKeyState = overlayKeyState;
   }
 
-  void dismissAll({bool? stop}) {
-    if (stop != null) {
-      _stop = stop;
-    }
+  void dismissAll() {
     _dialogs.forEach((key, value) {
       value.complete(null);
       BackButtonInterceptor.removeByName(key);
@@ -629,7 +625,6 @@ class OverlayDialogManager {
       String? tag,
       bool useAnimation = true,
       bool forceGlobal = false}) {
-    if (_stop) return Future(() => null);
     final overlayState =
         forceGlobal ? globalKey.currentState?.overlay : _overlayKeyState.state;
 
