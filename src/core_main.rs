@@ -180,11 +180,14 @@ pub fn core_main() -> Option<Vec<String>> {
             #[cfg(any(target_os = "linux", target_os = "windows"))]
             {
                 #[cfg(target_os = "linux")]
-                if crate::platform::is_root() {
-                    hbb_common::allow_err!(crate::platform::run_as_user(vec!["--tray"], None));
-                } else {
-                    hbb_common::allow_err!(crate::run_me(vec!["--tray"]));
-                }
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(3));
+                    if crate::platform::is_root() {
+                        hbb_common::allow_err!(crate::platform::run_as_user(vec!["--tray"], None));
+                    } else {
+                        hbb_common::allow_err!(crate::run_me(vec!["--tray"]));
+                    }
+                });
                 crate::start_server(true);
                 return None;
             }
