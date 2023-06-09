@@ -38,7 +38,7 @@ import 'platform_model.dart';
 
 typedef HandleMsgBox = Function(Map<String, dynamic> evt, String id);
 typedef ReconnectHandle = Function(OverlayDialogManager, SessionID, bool);
-final _waitForImage = <String, bool>{};
+final _waitForImage = <UuidValue, bool>{};
 
 class FfiModel with ChangeNotifier {
   PeerInfo _pi = PeerInfo();
@@ -491,7 +491,7 @@ class FfiModel with ChangeNotifier {
         parent.target?.dialogManager.showLoading(
             translate('Connected, waiting for image...'),
             onCancel: closeConnection);
-        _waitForImage[peerId] = true;
+        _waitForImage[sessionId] = true;
         _reconnects = 1;
       }
       Map<String, dynamic> features = json.decode(evt['features']);
@@ -637,14 +637,14 @@ class ImageModel with ChangeNotifier {
   addCallbackOnFirstImage(Function(String) cb) => callbacksOnFirstImage.add(cb);
 
   onRgba(Uint8List rgba) {
-    final waitforImage = _waitForImage[id];
+    final waitforImage = _waitForImage[sessionId];
     if (waitforImage == null) {
       debugPrint('Exception, peer $id not found for waiting image');
       return;
     }
 
     if (waitforImage == true) {
-      _waitForImage[id] = false;
+      _waitForImage[sessionId] = false;
       parent.target?.dialogManager.dismissAll();
       if (isDesktop) {
         for (final cb in callbacksOnFirstImage) {
@@ -1584,6 +1584,7 @@ class FFI {
   var id = '';
   var version = '';
   var connType = ConnType.defaultConn;
+  var closed = false;
 
   /// dialogManager use late to ensure init after main page binding [globalKey]
   late final dialogManager = OverlayDialogManager();
@@ -1655,13 +1656,16 @@ class FFI {
     );
     final stream = bind.sessionStart(sessionId: sessionId, id: id);
     final cb = ffiModel.startEventListener(sessionId, id);
-    () async {
-      final useTextureRender = bind.mainUseTextureRender();
-      // Preserved for the rgba data.
-      await for (final message in stream) {
+    final useTextureRender = bind.mainUseTextureRender();
+    // Preserved for the rgba data.
+    stream.listen((message) {
+      if (closed) return;
+      () async {
         if (message is EventToUI_Event) {
           if (message.field0 == "close") {
-            break;
+            closed = true;
+            debugPrint('Exit session event loop');
+            return;
           }
 
           Map<String, dynamic>? event;
@@ -1675,8 +1679,8 @@ class FFI {
           }
         } else if (message is EventToUI_Rgba) {
           if (useTextureRender) {
-            if (_waitForImage[id]!) {
-              _waitForImage[id] = false;
+            if (_waitForImage[sessionId]!) {
+              _waitForImage[sessionId] = false;
               dialogManager.dismissAll();
               for (final cb in imageModel.callbacksOnFirstImage) {
                 cb(id);
@@ -1696,9 +1700,8 @@ class FFI {
             }
           }
         }
-      }
-      debugPrint('Exit session event loop');
-    }();
+      }();
+    });
     // every instance will bind a stream
     this.id = id;
   }
@@ -1716,6 +1719,7 @@ class FFI {
 
   /// Close the remote session.
   Future<void> close() async {
+    closed = true;
     chatModel.close();
     if (imageModel.image != null && !isWebDesktop) {
       await setCanvasConfig(
