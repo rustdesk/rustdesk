@@ -1054,6 +1054,7 @@ pub async fn get_next_nonkeyexchange_msg(
     None
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn check_process(arg: &str, same_uid: bool) -> bool {
     use hbb_common::sysinfo::{ProcessExt, System, SystemExt};
     let mut sys = System::new();
