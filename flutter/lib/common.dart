@@ -1598,18 +1598,25 @@ bool parseRustdeskUri(String uriPath) {
 bool callUniLinksUriHandler(Uri uri) {
   debugPrint("uni links called: $uri");
   // new connection
+  String peerId;
   if (uri.authority == "connection" && uri.path.startsWith("/new/")) {
-    final peerId = uri.path.substring("/new/".length);
-    var param = uri.queryParameters;
-    String? switch_uuid = param["switch_uuid"];
-    String? password = param["password"];
-    Future.delayed(Duration.zero, () {
-      rustDeskWinManager.newRemoteDesktop(peerId,
-          password: password, switch_uuid: switch_uuid);
-    });
-    return true;
+    peerId = uri.path.substring("/new/".length);
+  } else if (uri.authority == "connect") {
+    peerId = uri.path.substring(1);
+  } else if (uri.authority.length > 2 && uri.path.length <= 1) {
+    // "/" or ""
+    peerId = uri.authority;
+  } else {
+    return false;
   }
-  return false;
+  var param = uri.queryParameters;
+  String? switch_uuid = param["switch_uuid"];
+  String? password = param["password"];
+  Future.delayed(Duration.zero, () {
+    rustDeskWinManager.newRemoteDesktop(peerId,
+        password: password, switch_uuid: switch_uuid);
+  });
+  return true;
 }
 
 connectMainDesktop(String id,
