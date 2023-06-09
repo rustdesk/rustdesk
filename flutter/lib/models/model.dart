@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -39,6 +38,7 @@ import 'platform_model.dart';
 typedef HandleMsgBox = Function(Map<String, dynamic> evt, String id);
 typedef ReconnectHandle = Function(OverlayDialogManager, SessionID, bool);
 final _waitForImage = <UuidValue, bool>{};
+final _constSessionId = Uuid().v4obj();
 
 class FfiModel with ChangeNotifier {
   PeerInfo _pi = PeerInfo();
@@ -1580,7 +1580,6 @@ enum ConnType { defaultConn, fileTransfer, portForward, rdp }
 
 /// Flutter state manager and data communication with the Rust core.
 class FFI {
-  final sessionId = Uuid().v4obj();
   var id = '';
   var version = '';
   var connType = ConnType.defaultConn;
@@ -1589,6 +1588,7 @@ class FFI {
   /// dialogManager use late to ensure init after main page binding [globalKey]
   late final dialogManager = OverlayDialogManager();
 
+  late final SessionID sessionId;
   late final ImageModel imageModel; // session
   late final FfiModel ffiModel; // session
   late final CursorModel cursorModel; // session
@@ -1606,6 +1606,7 @@ class FFI {
   late final ElevationModel elevationModel; // session
 
   FFI() {
+    sessionId = isDesktop ? Uuid().v4obj() : _constSessionId;
     imageModel = ImageModel(WeakReference(this));
     ffiModel = FfiModel(WeakReference(this));
     cursorModel = CursorModel(WeakReference(this));
