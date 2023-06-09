@@ -1136,7 +1136,7 @@ pub fn uninstall_service(show_new_window: bool) -> bool {
     log::info!("Uninstalling service...");
     let cp = switch_service(true);
     if !run_cmds_pkexec(&format!(
-        "{cp} systemctl disable rustdesk; systemctl stop rustdesk"
+        "systemctl disable rustdesk; systemctl stop rustdesk; {cp}"
     )) {
         Config::set_option("stop-service".into(), "".into());
         return true;
