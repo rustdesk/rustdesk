@@ -89,25 +89,24 @@ class ChatModel with ChangeNotifier {
   ChatModel(this.parent) {
     sessionId = parent.target!.sessionId;
     inputNode = FocusNode(
-      onKey: (node, event) {
+      onKey: (_, event) {
         bool isShiftPressed = event.isKeyPressed(LogicalKeyboardKey.shiftLeft);
         bool isEnterPressed = event.isKeyPressed(LogicalKeyboardKey.enter);
 
-        String trimmedText = textController.text.trim();
-
-        // don't send empty message
-        if (trimmedText.isEmpty) {
-          textController.text = trimmedText;
+        // don't send empty messages
+        if (isEnterPressed && isEnterPressed && textController.text.isEmpty) {
+          return KeyEventResult.handled;
         }
 
         if (isEnterPressed && !isShiftPressed) {
           final ChatMessage message = ChatMessage(
-            text: trimmedText,
+            text: textController.text,
             user: me,
             createdAt: DateTime.now(),
           );
           send(message);
-          textController.text = "";
+          textController.clear();
+          return KeyEventResult.handled;
         }
 
         return KeyEventResult.ignored;
@@ -335,16 +334,18 @@ class ChatModel with ChangeNotifier {
   }
 
   send(ChatMessage message) {
-    if (message.text.isNotEmpty) {
-      _messages[_currentID]?.insert(message);
-      if (_currentID == clientModeID) {
-        if (parent.target != null) {
-          bind.sessionSendChat(sessionId: sessionId, text: message.text);
-        }
-      } else {
-        bind.cmSendChat(connId: _currentID, msg: message.text);
-      }
+    String trimmedText = message.text.trim();
+    if (trimmedText.isEmpty) {
+      return;
     }
+    message.text = trimmedText;
+    _messages[_currentID]?.insert(message);
+    if (_currentID == clientModeID && parent.target != null) {
+      bind.sessionSendChat(sessionId: sessionId, text: message.text);
+    } else {
+      bind.cmSendChat(connId: _currentID, msg: message.text);
+    }
+
     notifyListeners();
     inputNode.requestFocus();
   }
