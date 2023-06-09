@@ -1631,6 +1631,7 @@ class FFI {
       String? switchUuid,
       String? password,
       bool? forceRelay}) {
+    closed = false;
     assert(!(isFileTransfer && isPortForward), 'more than one connect type');
     if (isFileTransfer) {
       connType = ConnType.fileTransfer;
