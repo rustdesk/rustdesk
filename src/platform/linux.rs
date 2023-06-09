@@ -11,6 +11,7 @@ use hbb_common::{
 };
 use std::{
     cell::RefCell,
+    io::Write,
     path::{Path, PathBuf},
     process::{Child, Command},
     string::String,
@@ -1169,4 +1170,25 @@ fn check_if_stop_service() {
             "systemctl disable rustdesk; systemctl stop rustdesk"
         ));
     }
+}
+
+pub fn check_autostart_config() -> ResultType<()> {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let path = format!("{home}/.config/autostart");
+    let file = format!("{path}/rustdesk.desktop");
+    std::fs::create_dir_all(&path).ok();
+    if !Path::new(&file).exists() {
+        // write text to the desktop file
+        let mut file = std::fs::File::create(&file)?;
+        file.write_all(
+            "
+[Desktop Entry]
+Type=Application
+Exec=rustdesk --tray
+NoDisplay=false
+        "
+            .as_bytes(),
+        )?;
+    }
+    Ok(())
 }
