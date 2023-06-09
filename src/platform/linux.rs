@@ -1144,7 +1144,7 @@ pub fn uninstall_service(show_new_window: bool) -> bool {
     if show_new_window {
         run_me_with(2);
     }
-    std::process::exit(0);
+    true
 }
 
 pub fn install_service() -> bool {

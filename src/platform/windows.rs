@@ -2171,7 +2171,7 @@ pub fn uninstall_service(show_new_window: bool) -> bool {
         return true;
     }
     run_after_run_cmds(!show_new_window);
-    std::process::exit(0);
+    true
 }
 
 pub fn install_service() -> bool {

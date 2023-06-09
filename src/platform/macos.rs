@@ -182,7 +182,7 @@ pub fn is_installed_daemon(prompt: bool) -> bool {
     false
 }
 
-pub fn uninstall(show_new_window: bool) -> bool {
+pub fn uninstall_service(show_new_window: bool) -> bool {
     // to-do: do together with win/linux about refactory start/stop service
     if !is_installed_daemon(false) {
         return false;
