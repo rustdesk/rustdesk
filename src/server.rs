@@ -62,6 +62,9 @@ pub mod video_service;
 pub type Childs = Arc<Mutex<Vec<std::process::Child>>>;
 type ConnMap = HashMap<i32, ConnInner>;
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+const CONFIG_SYNC_INTERVAL_SECS: f32 = 0.3;
+
 lazy_static::lazy_static! {
     pub static ref CHILD_PROCESS: Childs = Default::default();
     pub static ref CONN_COUNT: Arc<Mutex<usize>> = Default::default();
@@ -477,7 +480,7 @@ async fn sync_and_watch_config_dir() {
     log::debug!("#tries of ipc service connection: {}", tries);
     use hbb_common::sleep;
     for i in 1..=tries {
-        sleep(i as f32 * 0.3).await;
+        sleep(i as f32 * CONFIG_SYNC_INTERVAL_SECS).await;
         match crate::ipc::connect(1000, "_service").await {
             Ok(mut conn) => {
                 if !synced {
@@ -508,7 +511,7 @@ async fn sync_and_watch_config_dir() {
                 }
 
                 loop {
-                    sleep(0.3).await;
+                    sleep(CONFIG_SYNC_INTERVAL_SECS).await;
                     let cfg = (Config::get(), Config2::get());
                     if cfg != cfg0 {
                         log::info!("config updated, sync to root");
