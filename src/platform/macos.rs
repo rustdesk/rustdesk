@@ -577,19 +577,10 @@ pub fn hide_dock() {
 }
 
 fn check_main_window() -> bool {
-    use hbb_common::sysinfo::{ProcessExt, System, SystemExt};
-    let mut sys = System::new();
-    sys.refresh_processes();
-    let app = format!("/Applications/{}.app", crate::get_app_name());
-    let my_uid = sys
-        .process((std::process::id() as usize).into())
-        .map(|x| x.user_id())
-        .unwrap_or_default();
-    for (_, p) in sys.processes().iter() {
-        if p.cmd().len() == 1 && p.user_id() == my_uid && p.cmd()[0].contains(&app) {
-            return true;
-        }
+    if crate::check_process("", true) {
+        return true;
     }
+    let app = format!("/Applications/{}.app", crate::get_app_name());
     std::process::Command::new("open")
         .args(["-n", &app])
         .status()

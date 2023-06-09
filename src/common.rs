@@ -123,7 +123,7 @@ pub fn is_server() -> bool {
     *IS_SERVER
 }
 
-// Is server logic running. 
+// Is server logic running.
 #[inline]
 pub fn is_server_running() -> bool {
     *SERVER_RUNNING.read().unwrap()
@@ -1052,4 +1052,37 @@ pub async fn get_next_nonkeyexchange_msg(
         break;
     }
     None
+}
+
+pub fn check_process(arg: &str, same_uid: bool) -> bool {
+    use hbb_common::sysinfo::{ProcessExt, System, SystemExt};
+    let mut sys = System::new();
+    sys.refresh_processes();
+    let app = std::env::current_exe()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
+    if app.is_empty() {
+        return false;
+    }
+    let my_uid = sys
+        .process((std::process::id() as usize).into())
+        .map(|x| x.user_id())
+        .unwrap_or_default();
+    for (_, p) in sys.processes().iter() {
+        if same_uid && p.user_id() != my_uid {
+            continue;
+        }
+        if p.cmd().is_empty() || p.cmd()[0] != app {
+            continue;
+        }
+        if arg.is_empty() {
+            if p.cmd().len() == 1 {
+                return true;
+            }
+        } else if p.cmd().len() > 1 && p.cmd()[1] == arg {
+            return true;
+        }
+    }
+    false
 }
