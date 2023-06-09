@@ -450,16 +450,22 @@ class _PeerSortDropdownState extends State<PeerSortDropdown> {
 
   @override
   Widget build(BuildContext context) {
+    final enableStyle = TextStyle(
+        color: Theme.of(context).textTheme.titleLarge?.color,
+        fontSize: MenuConfig.fontSize,
+        fontWeight: FontWeight.normal);
+    final disableStyle = TextStyle(
+        color: Colors.grey,
+        fontSize: MenuConfig.fontSize,
+        fontWeight: FontWeight.normal);
     List<PopupMenuEntry> items = List.empty(growable: true);
     items.add(PopupMenuItem(
         enabled: false,
-        child: Text(
-          translate("Sort by"),
-          style: TextStyle(fontWeight: FontWeight.bold),
-        )));
+        child: Text(translate("Sort by"), style: disableStyle)));
     for (var e in PeerSortType.values) {
       items.add(PopupMenuItem(
-          child: Obx(() => getRadio(Text(translate(e)), e, peerSort.value,
+          child: Obx(() => getRadio(
+                  Text(translate(e), style: enableStyle), e, peerSort.value,
                   (String? v) async {
                 if (v != null) {
                   peerSort.value = v;
