@@ -94,6 +94,13 @@ pub fn core_main() -> Option<Vec<String>> {
         }
     }
     hbb_common::init_log(false, &log_name);
+
+    // linux uni (url) go here.
+    #[cfg(all(target_os = "linux", feature = "flutter"))]
+    if args.len() > 0 && args[0].starts_with("rustdesk:") {
+        return try_send_by_dbus(args[0].clone());
+    }
+
     #[cfg(windows)]
     if !crate::platform::is_installed()
         && args.is_empty()
@@ -343,20 +350,8 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
     );
 
     #[cfg(target_os = "linux")]
-    {
-        use crate::dbus::invoke_new_connection;
+    return try_send_by_dbus(uni_links);
 
-        match invoke_new_connection(uni_links) {
-            Ok(()) => {
-                return None;
-            }
-            Err(err) => {
-                log::error!("{}", err.as_ref());
-                // return Some to invoke this new connection by self
-                return Some(Vec::new());
-            }
-        }
-    }
     #[cfg(windows)]
     {
         use winapi::um::winuser::WM_USER;
@@ -376,5 +371,21 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
         } else {
             None
         };
+    }
+}
+
+#[cfg(all(target_os = "linux", feature = "flutter"))]
+fn try_send_by_dbus(uni_links: String) -> Option<Vec<String>> {
+    use crate::dbus::invoke_new_connection;
+
+    match invoke_new_connection(uni_links) {
+        Ok(()) => {
+            return None;
+        }
+        Err(err) => {
+            log::error!("{}", err.as_ref());
+            // return Some to invoke this url by self
+            return Some(Vec::new());
+        }
     }
 }

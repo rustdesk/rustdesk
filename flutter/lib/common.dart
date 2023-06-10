@@ -549,6 +549,7 @@ void window_on_top(int? id) {
     return;
   }
   if (id == null) {
+    print("Bring window on top");
     // main window
     windowManager.restore();
     windowManager.show();

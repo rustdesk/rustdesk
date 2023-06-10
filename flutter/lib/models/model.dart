@@ -198,11 +198,6 @@ class FfiModel with ChangeNotifier {
         updateBlockInputState(evt, peerId);
       } else if (name == 'update_privacy_mode') {
         updatePrivacyMode(evt, sessionId, peerId);
-      } else if (name == 'new_connection') {
-        var uni_links = evt['uni_links'].toString();
-        if (uni_links.startsWith(kUniLinksPrefix)) {
-          parseRustdeskUri(uni_links);
-        }
       } else if (name == 'alias') {
         handleAliasChanged(evt);
       } else if (name == 'show_elevation') {
@@ -217,6 +212,7 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'portable_service_running') {
         parent.target?.elevationModel.onPortableServiceRunning(evt);
       } else if (name == 'on_url_scheme_received') {
+        // currently comes from "_url" ipc of mac and dbus of linux
         onUrlSchemeReceived(evt);
       } else if (name == 'on_voice_call_waiting') {
         // Waiting for the response from the peer.
@@ -252,25 +248,20 @@ class FfiModel with ChangeNotifier {
 
   onUrlSchemeReceived(Map<String, dynamic> evt) {
     final url = evt['url'].toString().trim();
-    // If we invoke uri with blank path, we just bring the main window to the top.
-    if (url.isEmpty) {
-      window_on_top(null);
-    } else if (url.startsWith(kUniLinksPrefix)) {
-      parseRustdeskUri(url);
-    } else {
-      // action
-      switch (url) {
-        case kUrlActionClose:
-          debugPrint("closing all instances");
-          Future.microtask(() async {
-            await rustDeskWinManager.closeAllSubWindows();
-            windowManager.close();
-          });
-          break;
-        default:
-          debugPrint("Unknown url received: $url");
-          break;
-      }
+    if (url.startsWith(kUniLinksPrefix) && parseRustdeskUri(url)) {
+      return;
+    }
+    switch (url) {
+      case kUrlActionClose:
+        debugPrint("closing all instances");
+        Future.microtask(() async {
+          await rustDeskWinManager.closeAllSubWindows();
+          windowManager.close();
+        });
+        break;
+      default:
+        window_on_top(null);
+        break;
     }
   }
 

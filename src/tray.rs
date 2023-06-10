@@ -74,9 +74,14 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
                 .spawn()
                 .ok();
         }
-        // xdg-open?
         #[cfg(target_os = "linux")]
-        crate::run_me::<&str>(vec![]).ok();
+        if !std::process::Command::new("xdg-open")
+            .arg("rustdesk://")
+            .spawn()
+            .is_ok()
+        {
+            crate::run_me::<&str>(vec![]).ok();
+        }
     };
 
     event_loop.run(move |_event, _, control_flow| {
@@ -92,7 +97,6 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
         if let Ok(event) = menu_channel.try_recv() {
             if event.id == quit_i.id() {
                 crate::platform::uninstall_service(false);
-                *control_flow = ControlFlow::Exit;
             } else if event.id == open_i.id() {
                 open_func();
             }
