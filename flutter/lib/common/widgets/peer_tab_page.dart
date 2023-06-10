@@ -450,75 +450,49 @@ class _PeerSortDropdownState extends State<PeerSortDropdown> {
 
   @override
   Widget build(BuildContext context) {
-    final deco = BoxDecoration(
-      color: Theme.of(context).colorScheme.background,
-      borderRadius: BorderRadius.circular(5),
-    );
+    final enableStyle = TextStyle(
+        color: Theme.of(context).textTheme.titleLarge?.color,
+        fontSize: MenuConfig.fontSize,
+        fontWeight: FontWeight.normal);
+    final disableStyle = TextStyle(
+        color: Colors.grey,
+        fontSize: MenuConfig.fontSize,
+        fontWeight: FontWeight.normal);
+    List<PopupMenuEntry> items = List.empty(growable: true);
+    items.add(PopupMenuItem(
+        enabled: false,
+        child: Text(translate("Sort by"), style: disableStyle)));
+    for (var e in PeerSortType.values) {
+      items.add(PopupMenuItem(
+          child: Obx(() => getRadio(
+                  Text(translate(e), style: enableStyle), e, peerSort.value,
+                  (String? v) async {
+                if (v != null) {
+                  peerSort.value = v;
+                  await bind.setLocalFlutterConfig(
+                    k: "peer-sorting",
+                    v: peerSort.value,
+                  );
+                }
+              }))));
+    }
 
-    final translated_text = {
-      for (var e in PeerSortType.values) e: translate(e)
-    };
-
-    final double max_width =
-        50 + translated_text.values.map((e) => e.length).reduce(max) * 10;
-    return Container(
-      padding: EdgeInsets.all(4.0),
-      decoration: deco,
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton2<String>(
-            onChanged: (v) async {
-              if (v != null) {
-                setState(() => peerSort.value = v);
-                await bind.setLocalFlutterConfig(
-                  k: "peer-sorting",
-                  v: peerSort.value,
-                );
-              }
-            },
-            customButton: Icon(
-              Icons.sort,
-              size: 18,
-            ),
-            isExpanded: true,
-            dropdownStyleData: DropdownStyleData(
-              decoration: BoxDecoration(
-                color: Theme.of(context).cardColor,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              width: max_width,
-            ),
-            items: [
-              DropdownMenuItem<String>(
-                alignment: Alignment.center,
-                child: Text(
-                  translate("Sort by"),
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                enabled: false,
-              ),
-              ...translated_text.entries
-                  .map<DropdownMenuItem<String>>(
-                    (MapEntry entry) => DropdownMenuItem<String>(
-                      value: entry.key,
-                      child: Row(
-                        children: [
-                          Icon(
-                            entry.key == peerSort.value
-                                ? Icons.radio_button_checked_rounded
-                                : Icons.radio_button_off_rounded,
-                            size: 18,
-                          ).paddingOnly(right: 12),
-                          Text(
-                            entry.value,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                  .toList(),
-            ]),
+    return InkWell(
+      child: Icon(
+        Icons.sort,
+        size: 18,
       ),
+      onTapDown: (details) {
+        final x = details.globalPosition.dx;
+        final y = details.globalPosition.dy;
+        final menuPos = RelativeRect.fromLTRB(x, y, x, y);
+        showMenu(
+          context: context,
+          position: menuPos,
+          items: items,
+          elevation: 8,
+        );
+      },
     );
   }
 }

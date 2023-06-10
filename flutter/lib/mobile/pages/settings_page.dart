@@ -317,8 +317,8 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                   await AndroidPermissionManager.request(
                       kRequestIgnoreBatteryOptimizations);
                 } else {
-                  final res = await gFFI.dialogManager
-                      .show<bool>((setState, close, context) => CustomAlertDialog(
+                  final res = await gFFI.dialogManager.show<bool>(
+                      (setState, close, context) => CustomAlertDialog(
                             title: Text(translate("Open System Setting")),
                             content: Text(translate(
                                 "android_open_battery_optimizations_tip")),
@@ -506,12 +506,12 @@ void showLanguageSettings(OverlayDialogManager dialogManager) async {
     final langs = json.decode(await bind.mainGetLangs()) as List<dynamic>;
     var lang = bind.mainGetLocalOption(key: "lang");
     dialogManager.show((setState, close, context) {
-      setLang(v) {
+      setLang(v) async {
         if (lang != v) {
           setState(() {
             lang = v;
           });
-          bind.mainSetLocalOption(key: "lang", value: v);
+          await bind.mainSetLocalOption(key: "lang", value: v);
           HomePage.homeKey.currentState?.refreshPages();
           Future.delayed(Duration(milliseconds: 200), close);
         }
