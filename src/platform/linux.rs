@@ -1096,7 +1096,7 @@ pub fn run_cmds_pkexec(cmds: &str) -> bool {
     if let Ok(output) = std::process::Command::new("pkexec")
         .arg("sh")
         .arg("-c")
-        .arg(&format!("{cmds};echo {DONE}"))
+        .arg(&format!("{cmds} echo {DONE}"))
         .output()
     {
         let out = String::from_utf8_lossy(&output.stdout);
@@ -1155,7 +1155,7 @@ pub fn install_service() -> bool {
     log::info!("Installing service...");
     let cp = switch_service(false);
     if !run_cmds_pkexec(&format!(
-        "{cp}systemctl enable rustdesk; systemctl start rustdesk"
+        "{cp} systemctl enable rustdesk; systemctl start rustdesk;"
     )) {
         Config::set_option("stop-service".into(), "Y".into());
         return true;
