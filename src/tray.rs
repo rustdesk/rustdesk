@@ -12,17 +12,17 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
         TrayEvent, TrayIconBuilder,
     };
     let icon;
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
         let mode = dark_light::detect();
-        const LIGHT: &[u8] = include_bytes!("../res/mac-tray-light-x2.png");
-        const DARK: &[u8] = include_bytes!("../res/mac-tray-dark-x2.png");
+        const LIGHT: &[u8] = include_bytes!("../res/outlined-tray-light-x2.png");
+        const DARK: &[u8] = include_bytes!("../res/outlined-tray-dark-x2.png");
         icon = match mode {
             dark_light::Mode::Dark => LIGHT,
             _ => DARK,
         };
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
     {
         icon = include_bytes!("../res/tray-icon.ico");
     }
@@ -74,6 +74,7 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
                 .spawn()
                 .ok();
         }
+        // xdg-open?
         #[cfg(target_os = "linux")]
         if !std::process::Command::new("xdg-open")
             .arg("rustdesk://")
