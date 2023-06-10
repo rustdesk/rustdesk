@@ -283,7 +283,7 @@ pub fn set_option(key: String, value: String) {
             if crate::platform::is_installed() {
                 if value == "Y" {
                     if crate::platform::uninstall_service(true) {
-                        std::process::exit(0);
+                        return;
                     }
                 } else {
                     if crate::platform::install_service() {
