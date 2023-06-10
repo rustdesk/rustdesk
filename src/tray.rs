@@ -96,6 +96,10 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
 
         if let Ok(event) = menu_channel.try_recv() {
             if event.id == quit_i.id() {
+                if !crate::check_process("--server", false) {
+                    *control_flow = ControlFlow::Exit;
+                    return;
+                }
                 crate::platform::uninstall_service(false);
             } else if event.id == open_i.id() {
                 open_func();
