@@ -28,7 +28,7 @@ flutter = ["flutter_rust_bridge"]
 default = ["use_dasp"]
 hwcodec = ["scrap/hwcodec"]
 mediacodec = ["scrap/mediacodec"]
-linux_headless = ["pam" ]
+linux_headless = ["pam"]
 virtual_display_driver = ["virtual_display"]
 plugin_framework = []
 linux-pkg-config = ["magnum-opus/linux-pkg-config", "scrap/linux-pkg-config"]
@@ -127,6 +127,8 @@ dbus = "0.9"
 dbus-crossroads = "0.5"
 pam = { git="https://github.com/fufesou/pam", optional = true }
 users = { version = "0.11" }
+dark-light = "1.0"
+
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.13"
