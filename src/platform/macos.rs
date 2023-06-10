@@ -354,7 +354,7 @@ pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
         // let cs: id = msg_send![class!(NSColorSpace), sRGBColorSpace];
         for y in 0..(size.height as _) {
             for x in 0..(size.width as _) {
-                let color: id = msg_send![rep, colorAtX:x y:y];
+                let color: id = msg_send![rep, colorAtX:x as cocoa::foundation::NSInteger y:y as cocoa::foundation::NSInteger];
                 // let color: id = msg_send![color, colorUsingColorSpace: cs];
                 if color == nil {
                     continue;
