@@ -1059,25 +1059,26 @@ pub fn check_process(arg: &str, same_uid: bool) -> bool {
     use hbb_common::sysinfo::{ProcessExt, System, SystemExt};
     let mut sys = System::new();
     sys.refresh_processes();
-    let app = std::env::current_exe()
-        .unwrap_or_default()
-        .to_string_lossy()
-        .to_string();
-    if app.is_empty() {
-        return false;
+    let mut path = std::env::current_exe().unwrap_or_default();
+    if let Ok(linked) = path.read_link() {
+        path = linked;
     }
     let my_uid = sys
         .process((std::process::id() as usize).into())
         .map(|x| x.user_id())
         .unwrap_or_default();
     for (_, p) in sys.processes().iter() {
+        let mut cur_path = p.exe().to_path_buf();
+        if let Ok(linked) = cur_path.read_link() {
+            cur_path = linked;
+        }
+        if cur_path != path {
+            continue;
+        }
         if p.pid().to_string() == std::process::id().to_string() {
             continue;
         }
         if same_uid && p.user_id() != my_uid {
-            continue;
-        }
-        if p.exe().to_string_lossy() != app {
             continue;
         }
         let parg = if p.cmd().len() <= 1 { "" } else { &p.cmd()[1] };
