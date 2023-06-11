@@ -508,5 +508,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("resolution_original_tip", "وضوح اصلی"),
         ("resolution_fit_local_tip", "متناسب با وضوح محلی"),
         ("resolution_custom_tip", "وضوح سفارشی"),
+        ("Collapse toolbar", ""),
     ].iter().cloned().collect();
 }

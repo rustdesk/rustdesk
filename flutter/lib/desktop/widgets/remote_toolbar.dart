@@ -56,7 +56,8 @@ class MenubarState {
 
   _initSet(bool s, bool p) {
     // Show remubar when connection is established.
-    show = RxBool(true);
+    show =
+        RxBool(bind.mainGetUserDefaultOption(key: 'collapse_toolbar') != 'Y');
     _pin = RxBool(p);
   }
 
