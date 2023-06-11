@@ -291,33 +291,74 @@ pub struct PeerInfoSerde {
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
 pub struct ConfigOidc {
-    #[serde(default, deserialize_with = "deserialize_usize")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "deserialize_usize"
+    )]
     pub max_auth_count: usize,
-    #[serde(default, deserialize_with = "deserialize_string")]
+    #[serde(
+        default,
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "deserialize_string"
+    )]
     pub callback_url: String,
     #[serde(
         default,
+        skip_serializing_if = "HashMap::is_empty",
         deserialize_with = "deserialize_hashmap_string_configoidcprovider"
     )]
     pub providers: HashMap<String, ConfigOidcProvider>,
 }
 
+fn is_default<T: PartialEq + Default>(v: &T) -> bool {
+    *v == T::default()
+}
+
 #[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
 pub struct ConfigOidcProvider {
     // seconds. 0 means never expires
-    #[serde(default, deserialize_with = "deserialize_u32")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "deserialize_u32"
+    )]
     pub refresh_token_expires_in: u32,
-    #[serde(default, deserialize_with = "deserialize_string")]
+    #[serde(
+        default,
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "deserialize_string"
+    )]
     pub client_id: String,
-    #[serde(default, deserialize_with = "deserialize_string")]
+    #[serde(
+        default,
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "deserialize_string"
+    )]
     pub client_secret: String,
-    #[serde(default, deserialize_with = "deserialize_option_string")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_option_string"
+    )]
     pub issuer: Option<String>,
-    #[serde(default, deserialize_with = "deserialize_option_string")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_option_string"
+    )]
     pub authorization_endpoint: Option<String>,
-    #[serde(default, deserialize_with = "deserialize_option_string")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_option_string"
+    )]
     pub token_endpoint: Option<String>,
-    #[serde(default, deserialize_with = "deserialize_option_string")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_option_string"
+    )]
     pub userinfo_endpoint: Option<String>,
 }
 
