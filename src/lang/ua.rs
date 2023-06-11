@@ -508,5 +508,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("resolution_original_tip", "Початкова роздільна здатність"),
         ("resolution_fit_local_tip", "Припасувати поточну роздільну здатність"),
         ("resolution_custom_tip", "Користувацька роздільна здатність"),
+        ("Collapse toolbar", ""),
     ].iter().cloned().collect();
 }

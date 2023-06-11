@@ -508,5 +508,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("resolution_original_tip", "原始分辨率"),
         ("resolution_fit_local_tip", "适应本地分辨率"),
         ("resolution_custom_tip", "自定义分辨率"),
+        ("Collapse toolbar", "折叠工具栏"),
     ].iter().cloned().collect();
 }

@@ -103,6 +103,8 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         final switchUuid = args['switch_uuid'];
         window_on_top(windowId());
         ConnectionTypeState.init(id);
+        _menubarState.setShow(
+            bind.mainGetUserDefaultOption(key: 'collapse_toolbar') != 'Y');
         tabController.add(TabInfo(
           key: id,
           label: id,
