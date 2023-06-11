@@ -33,7 +33,7 @@ class RemotePage extends StatefulWidget {
     Key? key,
     required this.id,
     required this.password,
-    required this.menubarState,
+    required this.toolbarState,
     required this.tabController,
     this.switchUuid,
     this.forceRelay,
@@ -41,7 +41,7 @@ class RemotePage extends StatefulWidget {
 
   final String id;
   final String? password;
-  final MenubarState menubarState;
+  final ToolbarState toolbarState;
   final String? switchUuid;
   final bool? forceRelay;
   final SimpleWrapper<State<RemotePage>?> _lastState = SimpleWrapper(null);
@@ -75,7 +75,7 @@ class _RemotePageState extends State<RemotePage>
 
   final FocusNode _rawKeyFocusNode = FocusNode(debugLabel: "rawkeyFocusNode");
 
-  Function(bool)? _onEnterOrLeaveImage4Menubar;
+  Function(bool)? _onEnterOrLeaveImage4Toolbar;
 
   late FFI _ffi;
 
@@ -265,14 +265,14 @@ class _RemotePageState extends State<RemotePage>
                 child: getBodyForDesktop(context))),
         upperLayer: [
           OverlayEntry(
-              builder: (context) => RemoteMenubar(
+              builder: (context) => RemoteToolbar(
                     id: widget.id,
                     ffi: _ffi,
-                    state: widget.menubarState,
+                    state: widget.toolbarState,
                     onEnterOrLeaveImageSetter: (func) =>
-                        _onEnterOrLeaveImage4Menubar = func,
+                        _onEnterOrLeaveImage4Toolbar = func,
                     onEnterOrLeaveImageCleaner: () =>
-                        _onEnterOrLeaveImage4Menubar = null,
+                        _onEnterOrLeaveImage4Toolbar = null,
                   ))
         ],
       ),
@@ -299,9 +299,9 @@ class _RemotePageState extends State<RemotePage>
   void enterView(PointerEnterEvent evt) {
     _cursorOverImage.value = true;
     _firstEnterImage.value = true;
-    if (_onEnterOrLeaveImage4Menubar != null) {
+    if (_onEnterOrLeaveImage4Toolbar != null) {
       try {
-        _onEnterOrLeaveImage4Menubar!(true);
+        _onEnterOrLeaveImage4Toolbar!(true);
       } catch (e) {
         //
       }
@@ -322,9 +322,9 @@ class _RemotePageState extends State<RemotePage>
 
     _cursorOverImage.value = false;
     _firstEnterImage.value = false;
-    if (_onEnterOrLeaveImage4Menubar != null) {
+    if (_onEnterOrLeaveImage4Toolbar != null) {
       try {
-        _onEnterOrLeaveImage4Menubar!(false);
+        _onEnterOrLeaveImage4Toolbar!(false);
       } catch (e) {
         //
       }

@@ -456,20 +456,28 @@ class _PeerSortDropdownState extends State<PeerSortDropdown> {
         fontWeight: FontWeight.normal);
     List<PopupMenuEntry> items = List.empty(growable: true);
     items.add(PopupMenuItem(
-        enabled: false, child: Text(translate("Sort by"), style: style)));
+        height: 36,
+        enabled: false,
+        child: Text(translate("Sort by"), style: style)));
     for (var e in PeerSortType.values) {
       items.add(PopupMenuItem(
-          child: Obx(() =>
-              getRadio(Text(translate(e), style: style), e, peerSort.value,
-                  (String? v) async {
-                if (v != null) {
-                  peerSort.value = v;
-                  await bind.setLocalFlutterConfig(
-                    k: "peer-sorting",
-                    v: peerSort.value,
-                  );
-                }
-              }))));
+          height: 36,
+          child: Obx(() => Center(
+                child: SizedBox(
+                  height: 36,
+                  child: getRadio(
+                      Text(translate(e), style: style), e, peerSort.value,
+                      dense: true, (String? v) async {
+                    if (v != null) {
+                      peerSort.value = v;
+                      await bind.setLocalFlutterConfig(
+                        k: "peer-sorting",
+                        v: peerSort.value,
+                      );
+                    }
+                  }),
+                ),
+              ))));
     }
 
     var menuPos = RelativeRect.fromLTRB(0, 0, 0, 0);

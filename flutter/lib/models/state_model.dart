@@ -14,7 +14,7 @@ class StateGlobal {
   final RxBool _showTabBar = true.obs;
   final RxDouble _resizeEdgeSize = RxDouble(kWindowEdgeSize);
   final RxDouble _windowBorderWidth = RxDouble(kWindowBorderWidth);
-  final RxBool showRemoteMenuBar = false.obs;
+  final RxBool showRemoteToolBar = false.obs;
   final RxInt displaysCount = 0.obs;
 
   // Use for desktop -> remote toolbar -> resolution
