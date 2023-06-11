@@ -835,12 +835,13 @@ pub fn handle_mouse_(evt: &MouseEvent, conn: i32) {
                 x = -x;
                 y = -y;
             }
+
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            let is_track_pad = evt_type == MOUSE_TYPE_TRACKPAD;
+
             #[cfg(target_os = "macos")]
             {
                 // TODO: support track pad on win.
-                let is_track_pad = evt
-                    .modifiers
-                    .contains(&EnumOrUnknown::new(ControlKey::Scroll));
 
                 // fix shift + scroll(down/up)
                 if !is_track_pad
@@ -861,7 +862,7 @@ pub fn handle_mouse_(evt: &MouseEvent, conn: i32) {
             }
 
             #[cfg(windows)]
-            if evt_type == MOUSE_TYPE_WHEEL {
+            if is_track_pad {
                 x *= WHEEL_DELTA as i32;
                 y *= WHEEL_DELTA as i32;
             }
