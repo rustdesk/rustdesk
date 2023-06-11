@@ -614,11 +614,6 @@ impl Enigo {
             scroll_direction *= -1;
         }
 
-        // fix scroll distance for track pad
-        if is_track_pad {
-            length *= 3;
-        }
-
         if let Some(src) = self.event_source.as_ref() {
             for _ in 0..length {
                 unsafe {
