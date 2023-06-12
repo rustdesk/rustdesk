@@ -1384,9 +1384,13 @@ impl Connection {
                 return true;
             }
 
-            if !hbb_common::is_ipv4_str(&lr.username) && lr.username != Config::get_id() {
+            if !hbb_common::is_ip_str(&lr.username)
+                && !hbb_common::is_domain_port_str(&lr.username)
+                && lr.username != Config::get_id()
+            {
                 self.send_login_error(crate::client::LOGIN_MSG_OFFLINE)
                     .await;
+                return false;
             } else if password::approve_mode() == ApproveMode::Click
                 || password::approve_mode() == ApproveMode::Both && !password::has_valid_password()
             {
