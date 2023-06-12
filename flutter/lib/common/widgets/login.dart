@@ -147,7 +147,7 @@ class _WidgetOPState extends State<WidgetOP> {
       final authBody = resultMap['auth_body'];
       if (_stateMsg != stateMsg || _failedMsg != failedMsg) {
         if (_url.isEmpty && url != null && url.isNotEmpty) {
-          launchUrl(Uri.parse(url));
+          launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
           _url = url;
         }
         if (authBody != null) {
