@@ -862,7 +862,7 @@ pub fn handle_mouse_(evt: &MouseEvent, conn: i32) {
             }
 
             #[cfg(windows)]
-            if is_track_pad {
+            if !is_track_pad {
                 x *= WHEEL_DELTA as i32;
                 y *= WHEEL_DELTA as i32;
             }
