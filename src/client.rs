@@ -53,10 +53,10 @@ use scrap::{
     ImageFormat, ImageRgb,
 };
 
-use crate::common::{self, is_keyboard_mode_supported};
+use crate::is_keyboard_mode_supported;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::common::{check_clipboard, ClipboardContext, CLIPBOARD_INTERVAL};
+use crate::{check_clipboard, ClipboardContext, CLIPBOARD_INTERVAL};
 #[cfg(not(feature = "flutter"))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::ui_session_interface::SessionPermissionConfig;
@@ -305,7 +305,7 @@ impl Client {
             });
             socket.send(&msg_out).await?;
             if let Some(msg_in) =
-                crate::common::get_next_nonkeyexchange_msg(&mut socket, Some(i * 6000)).await
+                crate::get_next_nonkeyexchange_msg(&mut socket, Some(i * 6000)).await
             {
                 match msg_in.union {
                     Some(rendezvous_message::Union::PunchHoleResponse(ph)) => {
@@ -1656,7 +1656,7 @@ impl LoginConfigHandler {
             }
         } else {
             let keyboard_modes =
-                common::get_supported_keyboard_modes(get_version_number(&pi.version));
+                crate::get_supported_keyboard_modes(get_version_number(&pi.version));
             let current_mode = &KeyboardMode::from_str(&config.keyboard_mode).unwrap_or_default();
             if !keyboard_modes.contains(current_mode) {
                 config.keyboard_mode = KeyboardMode::Legacy.to_string();
@@ -1695,7 +1695,7 @@ impl LoginConfigHandler {
         password: Vec<u8>,
     ) -> Message {
         #[cfg(any(target_os = "android", target_os = "ios"))]
-        let my_id = Config::get_id_or(crate::common::DEVICE_ID.lock().unwrap().clone());
+        let my_id = Config::get_id_or(crate::DEVICE_ID.lock().unwrap().clone());
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let my_id = Config::get_id();
         let mut lr = LoginRequest {
@@ -1908,10 +1908,10 @@ pub async fn handle_test_delay(t: TestDelay, peer: &mut Stream) {
 #[cfg(all(target_os = "macos"))]
 fn check_scroll_on_mac(mask: i32, x: i32, y: i32) -> bool {
     // flutter version we set mask type bit to 4 when track pad scrolling.
-    if mask & 7 == crate::common::input::MOUSE_TYPE_TRACKPAD {
+    if mask & 7 == crate::input::MOUSE_TYPE_TRACKPAD {
         return true;
     }
-    if mask & 3 != crate::common::input::MOUSE_TYPE_WHEEL {
+    if mask & 3 != crate::input::MOUSE_TYPE_WHEEL {
         return false;
     }
     let btn = mask >> 3;
@@ -1975,7 +1975,7 @@ pub fn send_mouse(
     #[cfg(all(target_os = "macos", not(feature = "flutter")))]
     if check_scroll_on_mac(mask, x, y) {
         let factor = 3;
-        mouse_event.mask = crate::common::input::MOUSE_TYPE_TRACKPAD;
+        mouse_event.mask = crate::input::MOUSE_TYPE_TRACKPAD;
         mouse_event.x *= factor;
         mouse_event.y *= factor;
     }
