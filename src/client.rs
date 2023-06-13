@@ -53,11 +53,7 @@ use scrap::{
     ImageFormat, ImageRgb,
 };
 
-use crate::common::{
-    self,
-    input::{MOUSE_TYPE_TRACKPAD, MOUSE_TYPE_WHEEL},
-    is_keyboard_mode_supported,
-};
+use crate::common::{self, is_keyboard_mode_supported};
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::common::{check_clipboard, ClipboardContext, CLIPBOARD_INTERVAL};
@@ -1912,10 +1908,10 @@ pub async fn handle_test_delay(t: TestDelay, peer: &mut Stream) {
 #[cfg(all(target_os = "macos"))]
 fn check_scroll_on_mac(mask: i32, x: i32, y: i32) -> bool {
     // flutter version we set mask type bit to 4 when track pad scrolling.
-    if mask & 7 == MOUSE_TYPE_TRACKPAD {
+    if mask & 7 == crate::common::input::MOUSE_TYPE_TRACKPAD {
         return true;
     }
-    if mask & 3 != MOUSE_TYPE_WHEEL {
+    if mask & 3 != crate::common::input::MOUSE_TYPE_WHEEL {
         return false;
     }
     let btn = mask >> 3;
@@ -1979,7 +1975,7 @@ pub fn send_mouse(
     #[cfg(all(target_os = "macos", not(feature = "flutter")))]
     if check_scroll_on_mac(mask, x, y) {
         let factor = 3;
-        mouse_event.mask = MOUSE_TYPE_TRACKPAD;
+        mouse_event.mask = crate::common::input::MOUSE_TYPE_TRACKPAD;
         mouse_event.x *= factor;
         mouse_event.y *= factor;
     }
