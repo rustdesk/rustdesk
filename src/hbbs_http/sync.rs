@@ -1,13 +1,13 @@
 use std::{collections::HashMap, sync::Mutex, time::Duration};
 
+#[cfg(not(any(target_os = "ios")))]
+use crate::Connection;
 use hbb_common::{
     config::{Config, LocalConfig},
     tokio::{self, sync::broadcast, time::Instant},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-#[cfg(not(any(target_os = "ios")))]
-use crate::Connection;
 
 const TIME_HEARTBEAT: Duration = Duration::from_secs(30);
 const TIME_CONN: Duration = Duration::from_secs(3);
@@ -36,7 +36,9 @@ fn start_hbbs_sync() -> broadcast::Sender<Vec<i32>> {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StrategyOptions {
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub config_options: HashMap<String, String>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub extra: HashMap<String, String>,
 }
 
