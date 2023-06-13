@@ -1911,11 +1911,13 @@ Widget dialogButton(String text,
           ? OutlinedButton(
               onPressed: onPressed,
               child: Text(translate(text), style: style),
+              style: OutlinedButton.styleFrom().merge(buttonStyle),
             )
           : OutlinedButton.icon(
               icon: icon,
               onPressed: onPressed,
               label: Text(translate(text), style: style),
+              style: OutlinedButton.styleFrom().merge(buttonStyle),
             );
     } else {
       return icon == null
