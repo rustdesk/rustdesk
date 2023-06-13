@@ -746,3 +746,54 @@ Future<void> showClientsMayNotBeChangedAlert(FFI? ffi) async {
     );
   });
 }
+
+class TrustedClient {
+  String name = '';
+  String peerId = '';
+  DateTime time = DateTime.now();
+
+  TrustedClient(this.name, this.peerId, this.time);
+
+  TrustedClient.fromJson(Map<String, dynamic> json)
+      : name = json['name'],
+        peerId = json['peer_id'],
+        time = DateTime.parse(json['time']);
+
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'peer_id': peerId,
+        'time': time.toIso8601String(),
+      };
+}
+
+class TrustedClientsController {
+  static Future<List> getClients() async {
+    String clientsData = await bind.mainGetOption(key: 'trusted-clients');
+    return '' != clientsData
+        ? json
+            .decode(clientsData)
+            .map((client) => TrustedClient.fromJson(client))
+            .toList() //.sort((a, b) => a.time.compareTo(b.time))
+        : [];
+  }
+
+  static Future<void> add(client) async {
+    List clients = await getClients();
+    clients.add(client);
+    return bind.mainSetOption(
+        key: 'trusted-clients', value: json.encode(clients));
+  }
+
+  static Future<void> remove(client) async {
+    List clients = await getClients();
+    return bind.mainSetOption(
+        key: 'trusted-clients',
+        value: json
+            .encode(clients.where((c) => c.peerId != client.peerId).toList()));
+  }
+
+  static Future<bool> isTrusted(client) async {
+    List clients = await getClients();
+    return clients.where((c) => c.peerId == client.peerId).length == 1;
+  }
+}
