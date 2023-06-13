@@ -22,6 +22,8 @@ import 'package:window_manager/window_manager.dart';
 import '../../common/widgets/dialog.dart';
 import '../../common/widgets/login.dart';
 
+import 'settings/sections/trusted_clients.dart';
+
 const double _kTabWidth = 200;
 const double _kTabHeight = 42;
 const double _kCardFixedWidth = 540;
@@ -509,6 +511,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                   absorbing: locked,
                   child: Column(children: [
                     permissions(context),
+                    SectionTrustedClients(),
                     password(context),
                     _Card(title: 'ID', children: [changeId()]),
                     more(context),
