@@ -12,6 +12,9 @@ import 'package:flutter_hbb/common/widgets/dialogs/widgets/title.dart';
 import 'package:flutter_hbb/common/widgets/dialogs/widgets/buttons.dart';
 import 'package:flutter_hbb/desktop/pages/settings/widgets/section.dart';
 
+// TODO remove
+import 'package:flutter_hbb/desktop/widgets/dialogs/confirm_accept_connection.dart';
+
 class SectionTrustedClients extends StatefulWidget {
   SectionTrustedClients({Key? key}) : super(key: key);
 
@@ -157,7 +160,15 @@ class SectionTrustedClientsState extends State<SectionTrustedClients> {
                     () => remove(client),
                   ).marginOnly(bottom: 8)),
               // TODO remove, dev only ---------------------------------------------
-              ElevatedButton(onPressed: add, child: Text('dev add'))
+              Row(
+                children: [
+                  ElevatedButton(onPressed: add, child: Text('item++')),
+                  ElevatedButton(
+                      onPressed: () => showConfirmAcceptConnection(clients[0]),
+                      child: Text('dialog')),
+                ],
+              ),
+              // TODO remove, dev only ---------------------------------------------
             ],
           ),
         )
