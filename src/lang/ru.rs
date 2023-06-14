@@ -509,5 +509,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("resolution_fit_local_tip", "Соответствие локальному разрешению"),
         ("resolution_custom_tip", "Произвольное разрешение"),
         ("Collapse toolbar", "Свернуть панель инструментов"),
+        ("Accept and Elevate", ""),
+        ("accept_and_elevate_btn_tooltip", ""),
     ].iter().cloned().collect();
 }

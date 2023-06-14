@@ -69,5 +69,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("resolution_original_tip", "Original resolution"),
         ("resolution_fit_local_tip", "Fit local resolution"),
         ("resolution_custom_tip", "Custom resolution"),
+        ("accept_and_elevate_btn_tooltip", "Accept the connection and elevate UAC permissions."),
         ].iter().cloned().collect();
 }
