@@ -135,7 +135,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Refresh", "Обновить"),
         ("ID does not exist", "ID не существует"),
         ("Failed to connect to rendezvous server", "Невозможно подключиться к промежуточному серверу"),
-        ("Please try later", "Пожалуйста, попробуйте позже"),
+        ("Please try later", "Попробуйте позже"),
         ("Remote desktop is offline", "Удалённый рабочий стол не в сети"),
         ("Key mismatch", "Несоответствие ключей"),
         ("Timeout", "Истекло время ожидания"),
@@ -509,7 +509,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("resolution_fit_local_tip", "Соответствие локальному разрешению"),
         ("resolution_custom_tip", "Произвольное разрешение"),
         ("Collapse toolbar", "Свернуть панель инструментов"),
-        ("Accept and Elevate", ""),
-        ("accept_and_elevate_btn_tooltip", ""),
+        ("Accept and Elevate", "Принять и повысить"),
+        ("accept_and_elevate_btn_tooltip", "Разрешить подключение и повысить права UAC."),
     ].iter().cloned().collect();
 }
