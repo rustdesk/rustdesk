@@ -133,9 +133,9 @@ class UserModel {
   }
 
   static Future<List<dynamic>> queryLoginOptions() async {
-    final url = await bind.mainGetApiServer();
-    final resp = await http.get(Uri.parse('$url/api/login-options'));
     try {
+      final url = await bind.mainGetApiServer();
+      final resp = await http.get(Uri.parse('$url/api/login-options'));
       return jsonDecode(resp.body);
     } catch (e) {
       print("queryLoginOptions: jsonDecode resp body failed: ${e.toString()}");
