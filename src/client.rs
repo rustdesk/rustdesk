@@ -1905,7 +1905,7 @@ pub async fn handle_test_delay(t: TestDelay, peer: &mut Stream) {
 
 /// Whether is track pad scrolling.
 #[inline]
-#[cfg(all(target_os = "macos"))]
+#[cfg(all(target_os = "macos", not(feature = "flutter")))]
 fn check_scroll_on_mac(mask: i32, x: i32, y: i32) -> bool {
     // flutter version we set mask type bit to 4 when track pad scrolling.
     if mask & 7 == crate::input::MOUSE_TYPE_TRACKPAD {

@@ -1218,21 +1218,13 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
       return _localResolution!;
     }
 
-    squareDistance(Resolution lhs, Resolution rhs) =>
-        (lhs.width - rhs.width) * (lhs.width - rhs.width) +
-        (lhs.height - rhs.height) * (lhs.height - rhs.height);
-
-    Resolution res = Resolution(display.width, display.height);
     for (final r in resolutions) {
-      if (r.width <= _localResolution!.width &&
-          r.height <= _localResolution!.height) {
-        if (squareDistance(r, _localResolution!) <
-            squareDistance(res, _localResolution!)) {
-          res = r;
-        }
+      if (r.width == _localResolution!.width && r.height == _localResolution!.height) {
+        return r;
       }
     }
-    return res;
+  
+    return null;
   }
 
   bool _isRemoteResolutionFitLocal() {

@@ -563,56 +563,6 @@ async fn direct_server(server: ServerPtr) {
     }
 }
 
-#[inline]
-pub fn get_broadcast_port() -> u16 {
-    (RENDEZVOUS_PORT + 3) as _
-}
-
-pub fn get_mac() -> String {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    if let Ok(Some(mac)) = mac_address::get_mac_address() {
-        mac.to_string()
-    } else {
-        "".to_owned()
-    }
-    #[cfg(any(target_os = "android", target_os = "ios"))]
-    "".to_owned()
-}
-
-#[allow(dead_code)]
-fn lan_discovery() -> ResultType<()> {
-    let addr = SocketAddr::from(([0, 0, 0, 0], get_broadcast_port()));
-    let socket = std::net::UdpSocket::bind(addr)?;
-    socket.set_read_timeout(Some(std::time::Duration::from_millis(1000)))?;
-    log::info!("lan discovery listener started");
-    loop {
-        let mut buf = [0; 2048];
-        if let Ok((len, addr)) = socket.recv_from(&mut buf) {
-            if let Ok(msg_in) = Message::parse_from_bytes(&buf[0..len]) {
-                match msg_in.union {
-                    Some(rendezvous_message::Union::PeerDiscovery(p)) => {
-                        if p.cmd == "ping" {
-                            let mut msg_out = Message::new();
-                            let peer = PeerDiscovery {
-                                cmd: "pong".to_owned(),
-                                mac: get_mac(),
-                                id: Config::get_id(),
-                                hostname: whoami::hostname(),
-                                username: crate::platform::get_active_username(),
-                                platform: whoami::platform().to_string(),
-                                ..Default::default()
-                            };
-                            msg_out.set_peer_discovery(peer);
-                            socket.send_to(&msg_out.write_to_bytes()?, addr).ok();
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        }
-    }
-}
-
 #[tokio::main(flavor = "current_thread")]
 pub async fn query_online_states<F: FnOnce(Vec<String>, Vec<String>)>(ids: Vec<String>, f: F) {
     let test = false;
