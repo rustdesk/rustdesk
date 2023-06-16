@@ -166,12 +166,20 @@ fn get_ipaddr_by_peer<A: ToSocketAddrs>(peer: A) -> Option<IpAddr> {
 
 fn create_broadcast_sockets() -> ResultType<Vec<UdpSocket>> {
     let mut sockets = Vec::new();
-    for v4_addr in get_all_ipv4s()? {
-        // removing v4_addr.is_private() check, https://github.com/rustdesk/rustdesk/issues/4663
-        let s = UdpSocket::bind(SocketAddr::from((v4_addr, 0)))?;
+    if let Ok(addresses) = get_all_ipv4s() {
+        for v4_addr in addresses {
+            // removing v4_addr.is_private() check, https://github.com/rustdesk/rustdesk/issues/4663
+            if let Ok(s) = UdpSocket::bind(SocketAddr::from((v4_addr, 0))) {
+                if s.set_broadcast(true).is_ok() {
+                    sockets.push(s);
+                }
+            }
+        }
+    } else {
+        log::info!("Failed to bind local interface in lan discovery, fallback to any address");
+        let s = std::net::UdpSocket::bind(SocketAddr::from(([0, 0, 0, 0], 0)))?;
         s.set_broadcast(true)?;
-        log::debug!("Bind socket to {}", &v4_addr);
-        sockets.push(s)
+        sockets.push(s);
     }
     Ok(sockets)
 }
@@ -190,7 +198,7 @@ fn send_query() -> ResultType<Vec<UdpSocket>> {
     msg_out.set_peer_discovery(peer);
     let maddr = SocketAddr::from(([255, 255, 255, 255], get_broadcast_port()));
     for socket in &sockets {
-        socket.send_to(&msg_out.write_to_bytes()?, maddr)?;
+        allow_err!(socket.send_to(&msg_out.write_to_bytes()?, maddr));
     }
     log::info!("discover ping sent");
     Ok(sockets)
