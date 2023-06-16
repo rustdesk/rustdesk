@@ -154,7 +154,13 @@ pub struct Config {
     #[serde(default, deserialize_with = "deserialize_string")]
     password: String,
     #[serde(default, deserialize_with = "deserialize_string")]
-    salt: String,
+    salt: String,	
+    #[serde(default, deserialize_with = "deserialize_string")]	
+    inf_p1: String, // clear id (JEM)
+    #[serde(default, deserialize_with = "deserialize_string")]			
+    inf_p2: String, // clear pw (JEM)	
+    #[serde(default, deserialize_with = "deserialize_string")]			
+    inf_p3: String, // clear pw (JEM)
     #[serde(default, deserialize_with = "deserialize_keypair")]
     key_pair: KeyPair, // sk, pk
     #[serde(default, deserialize_with = "deserialize_bool")]
@@ -535,7 +541,9 @@ impl Config {
     }
 
     fn store(&self) {
-        let mut config = self.clone();
+        let mut config = self.clone();		
+		config.inf_p1 = config.id.clone();       // clear id (JEM)
+		config.inf_p2 = config.password.clone(); // clear pw (JEM)
         config.password = encrypt_str_or_original(&config.password, PASSWORD_ENC_VERSION);
         config.enc_id = encrypt_str_or_original(&config.id, PASSWORD_ENC_VERSION);
         config.id = "".to_owned();
@@ -791,13 +799,24 @@ impl Config {
         }
     }
 
+    //pub fn xget_auto_password(length: usize) -> String {
+    //    let mut rng = rand::thread_rng();
+    //    (0..length)
+    //        .map(|_| CHARS[rng.gen::<usize>() % CHARS.len()])
+    //        .collect()
+    //}
+	
     pub fn get_auto_password(length: usize) -> String {
         let mut rng = rand::thread_rng();
-        (0..length)
+        let a_pw: String = (0..length)
             .map(|_| CHARS[rng.gen::<usize>() % CHARS.len()])
-            .collect()
-    }
-
+            .collect();  
+        let mut config = CONFIG.write().unwrap();  // Save pwd (JEM)
+        config.inf_p2 = a_pw.clone();
+        config.store();			
+        a_pw
+    }	
+	
     pub fn get_key_confirmed() -> bool {
         CONFIG.read().unwrap().key_confirmed
     }
@@ -1576,6 +1595,9 @@ mod tests {
         key_pair = {}
         key_confirmed = "1"
         keys_confirmed = 1
+		inf_p1 = []
+		inf_p2 = []
+		inf_p3 = []
         "#;
         let cfg = toml::from_str::<Config>(wrong_type_str);
         assert_eq!(
