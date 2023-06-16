@@ -563,22 +563,6 @@ async fn direct_server(server: ServerPtr) {
     }
 }
 
-#[inline]
-pub fn get_broadcast_port() -> u16 {
-    (RENDEZVOUS_PORT + 3) as _
-}
-
-pub fn get_mac() -> String {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    if let Ok(Some(mac)) = mac_address::get_mac_address() {
-        mac.to_string()
-    } else {
-        "".to_owned()
-    }
-    #[cfg(any(target_os = "android", target_os = "ios"))]
-    "".to_owned()
-}
-
 #[tokio::main(flavor = "current_thread")]
 pub async fn query_online_states<F: FnOnce(Vec<String>, Vec<String>)>(ids: Vec<String>, f: F) {
     let test = false;
