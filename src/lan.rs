@@ -61,8 +61,8 @@ pub(super) fn start_listening() -> ResultType<()> {
 
 #[tokio::main(flavor = "current_thread")]
 pub async fn discover() -> ResultType<()> {
-    let sockets = send_query()?;
-    let rx = spawn_wait_responses(sockets);
+    let vec_socket_mac = send_query()?;
+    let rx = spawn_wait_responses(vec_socket_mac);
     handle_received_peers(rx).await?;
 
     log::info!("discover ping done");
@@ -154,29 +154,36 @@ fn get_ipaddr_by_peer<A: ToSocketAddrs>(peer: A) -> Option<IpAddr> {
     };
 }
 
-fn create_broadcast_sockets() -> Vec<UdpSocket> {
-    let mut ipv4s = Vec::new();
+fn create_broadcast_sockets() -> Vec<(UdpSocket, Option<String>)> {
+    let mut vec_ip_mac: Vec<(Ipv4Addr, Option<String>)> = Vec::new();
     for interface in default_net::get_interfaces() {
         for ipv4 in &interface.ipv4 {
-            ipv4s.push(ipv4.addr.clone());
+            let mac = interface
+                .mac_addr
+                .as_ref()
+                .map(|x| x.to_string())
+                .unwrap_or_default();
+            vec_ip_mac.push((ipv4.addr.clone(), Some(mac)));
         }
     }
-    ipv4s.push(Ipv4Addr::UNSPECIFIED); // for robustness
-    let mut sockets = Vec::new();
-    for v4_addr in ipv4s {
+    vec_ip_mac.push((Ipv4Addr::UNSPECIFIED, None)); // for robustness
+
+    let mut vec_socket_mac = Vec::new();
+    for (v4_addr, mac) in vec_ip_mac {
         // removing v4_addr.is_private() check, https://github.com/rustdesk/rustdesk/issues/4663
         if let Ok(s) = UdpSocket::bind(SocketAddr::from((v4_addr, 0))) {
             if s.set_broadcast(true).is_ok() {
-                sockets.push(s);
+                vec_socket_mac.push((s, mac));
             }
         }
     }
-    sockets
+
+    vec_socket_mac
 }
 
-fn send_query() -> ResultType<Vec<UdpSocket>> {
-    let sockets = create_broadcast_sockets();
-    if sockets.is_empty() {
+fn send_query() -> ResultType<Vec<(UdpSocket, Option<String>)>> {
+    let vec_socket_mac = create_broadcast_sockets();
+    if vec_socket_mac.is_empty() {
         bail!("Found no bindable ipv4 addresses");
     }
 
@@ -188,21 +195,22 @@ fn send_query() -> ResultType<Vec<UdpSocket>> {
     msg_out.set_peer_discovery(peer);
     let out = msg_out.write_to_bytes()?;
     let maddr = SocketAddr::from(([255, 255, 255, 255], get_broadcast_port()));
-    for socket in &sockets {
+    for (socket, _) in &vec_socket_mac {
         allow_err!(socket.send_to(&out, maddr));
     }
     log::info!("discover ping sent");
-    Ok(sockets)
+    Ok(vec_socket_mac)
 }
 
 fn wait_response(
-    socket: UdpSocket,
+    (socket, mut mac): (UdpSocket, Option<String>),
     timeout: Option<std::time::Duration>,
     tx: UnboundedSender<config::DiscoveryPeer>,
 ) -> ResultType<()> {
     let mut last_recv_time = Instant::now();
 
     socket.set_read_timeout(timeout)?;
+
     loop {
         let mut buf = [0; 2048];
         if let Ok((len, addr)) = socket.recv_from(&mut buf) {
@@ -211,13 +219,17 @@ fn wait_response(
                     Some(rendezvous_message::Union::PeerDiscovery(p)) => {
                         last_recv_time = Instant::now();
                         if p.cmd == "pong" {
-                            let mac = if let Some(self_addr) = get_ipaddr_by_peer(&addr) {
-                                get_mac(&self_addr)
-                            } else {
-                                "".to_owned()
+                            if mac.is_none() {
+                                let tmp = if let Some(self_addr) = get_ipaddr_by_peer(&addr) {
+                                    get_mac(&self_addr)
+                                } else {
+                                    "".to_owned()
+                                };
+                                mac = Some(tmp);
                             };
+                            let local_mac = mac.clone().unwrap_or_default();
 
-                            if mac != p.mac {
+                            if local_mac.is_empty() && p.mac.is_empty() || local_mac != p.mac {
                                 allow_err!(tx.send(config::DiscoveryPeer {
                                     id: p.id.clone(),
                                     ip_mac: HashMap::from([
@@ -242,13 +254,15 @@ fn wait_response(
     Ok(())
 }
 
-fn spawn_wait_responses(sockets: Vec<UdpSocket>) -> UnboundedReceiver<config::DiscoveryPeer> {
+fn spawn_wait_responses(
+    vec_socket_mac: Vec<(UdpSocket, Option<String>)>,
+) -> UnboundedReceiver<config::DiscoveryPeer> {
     let (tx, rx) = unbounded_channel::<_>();
-    for socket in sockets {
+    for socket_mac in vec_socket_mac {
         let tx_clone = tx.clone();
         std::thread::spawn(move || {
             allow_err!(wait_response(
-                socket,
+                socket_mac,
                 Some(std::time::Duration::from_millis(10)),
                 tx_clone
             ));
