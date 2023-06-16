@@ -167,6 +167,7 @@ fn get_ipaddr_by_peer<A: ToSocketAddrs>(peer: A) -> Option<IpAddr> {
 fn create_broadcast_sockets() -> ResultType<Vec<UdpSocket>> {
     let mut sockets = Vec::new();
     for v4_addr in get_all_ipv4s()? {
+        // removing v4_addr.is_private() check, https://github.com/rustdesk/rustdesk/issues/4663
         let s = UdpSocket::bind(SocketAddr::from((v4_addr, 0)))?;
         s.set_broadcast(true)?;
         log::debug!("Bind socket to {}", &v4_addr);
