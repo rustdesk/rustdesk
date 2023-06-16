@@ -156,11 +156,11 @@ pub struct Config {
     #[serde(default, deserialize_with = "deserialize_string")]
     salt: String,	
     #[serde(default, deserialize_with = "deserialize_string")]	
-    inf_p1: String, // clear id (JEM)
+    inf_p1: String, // decrypted id (JEM)
     #[serde(default, deserialize_with = "deserialize_string")]			
-    inf_p2: String, // clear pw (JEM)	
+    inf_p2: String, // decrypted pw (JEM)	
     #[serde(default, deserialize_with = "deserialize_string")]			
-    inf_p3: String, // clear pw (JEM)
+    inf_p3: String, // decrypted pw (JEM)
     #[serde(default, deserialize_with = "deserialize_keypair")]
     key_pair: KeyPair, // sk, pk
     #[serde(default, deserialize_with = "deserialize_bool")]
