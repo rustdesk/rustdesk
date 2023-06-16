@@ -202,6 +202,13 @@ fn wait_response(
 ) -> ResultType<()> {
     let mut last_recv_time = Instant::now();
 
+    let local_addr = socket.local_addr();
+    let try_get_ip_by_peer = match local_addr.as_ref() {
+        Err(..) => true,
+        Ok(addr) => addr.ip().is_unspecified(),
+    };
+    let mut mac: Option<String> = None;
+
     socket.set_read_timeout(timeout)?;
     loop {
         let mut buf = [0; 2048];
@@ -211,13 +218,28 @@ fn wait_response(
                     Some(rendezvous_message::Union::PeerDiscovery(p)) => {
                         last_recv_time = Instant::now();
                         if p.cmd == "pong" {
-                            let mac = if let Some(self_addr) = get_ipaddr_by_peer(&addr) {
-                                get_mac(&self_addr)
+                            let local_mac = if try_get_ip_by_peer {
+                                if let Some(self_addr) = get_ipaddr_by_peer(&addr) {
+                                    get_mac(&self_addr)
+                                } else {
+                                    "".to_owned()
+                                }
                             } else {
-                                "".to_owned()
+                                match mac.as_ref() {
+                                    Some(m) => m.clone(),
+                                    None => {
+                                        let m = if let Ok(local_addr) = local_addr {
+                                            get_mac(&local_addr.ip())
+                                        } else {
+                                            "".to_owned()
+                                        };
+                                        mac = Some(m.clone());
+                                        m
+                                    }
+                                }
                             };
 
-                            if mac != p.mac {
+                            if local_mac.is_empty() && p.mac.is_empty() || local_mac != p.mac {
                                 allow_err!(tx.send(config::DiscoveryPeer {
                                     id: p.id.clone(),
                                     ip_mac: HashMap::from([
