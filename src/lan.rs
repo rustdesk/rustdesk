@@ -207,11 +207,7 @@ fn wait_response(
         Err(..) => true,
         Ok(addr) => addr.ip().is_unspecified(),
     };
-    let mac = if let Ok(local_addr) = local_addr {
-        get_mac(&local_addr.ip())
-    } else {
-        "".to_owned()
-    };
+    let mut mac: Option<String> = None;
 
     socket.set_read_timeout(timeout)?;
     loop {
@@ -229,7 +225,18 @@ fn wait_response(
                                     "".to_owned()
                                 }
                             } else {
-                                mac.clone()
+                                match mac.as_ref() {
+                                    Some(m) => m.clone(),
+                                    None => {
+                                        let m = if let Ok(local_addr) = local_addr {
+                                            get_mac(&local_addr.ip())
+                                        } else {
+                                            "".to_owned()
+                                        };
+                                        mac = Some(m.clone());
+                                        m
+                                    }
+                                }
                             };
 
                             if local_mac.is_empty() && p.mac.is_empty() || local_mac != p.mac {
