@@ -231,7 +231,9 @@ class _PeerTabPageState extends State<PeerTabPage>
       if (model.visibleOrderedTabs.contains(model.currentTab)) {
         child = entries[model.currentTab].widget;
       } else {
-        model.setCurrentTab(model.visibleOrderedTabs[0]);
+        Future.delayed(Duration.zero, () {
+          model.setCurrentTab(model.visibleOrderedTabs[0]);
+        });
         child = entries[0].widget;
       }
     }

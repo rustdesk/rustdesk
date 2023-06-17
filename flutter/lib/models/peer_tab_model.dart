@@ -88,8 +88,9 @@ class PeerTabModel with ChangeNotifier {
             groupTabIndex) {
       _currentTab = groupTabIndex;
     }
-    if (gFFI.userModel.isAdmin.isFalse && gFFI.userModel.groupName.isNotEmpty) {
-      tabNames[groupTabIndex] = gFFI.userModel.groupName.value;
+    if (gFFI.userModel.isAdmin.isFalse &&
+        gFFI.groupModel.groupName.isNotEmpty) {
+      tabNames[groupTabIndex] = gFFI.groupModel.groupName.value;
     } else {
       tabNames[groupTabIndex] = defaultGroupTabname;
     }
@@ -221,7 +222,7 @@ class PeerTabModel with ChangeNotifier {
   // return true if hide group card
   bool _filterGroupCard() {
     if (gFFI.groupModel.users.isEmpty ||
-        (gFFI.userModel.isAdmin.isFalse && gFFI.userModel.groupName.isEmpty)) {
+        (gFFI.userModel.isAdmin.isFalse && gFFI.groupModel.groupName.isEmpty)) {
       return true;
     } else {
       return false;

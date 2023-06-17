@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/common/hbbs/hbbs.dart';
 import 'package:flutter_hbb/common/widgets/peers_view.dart';
 import 'package:get/get.dart';
 
@@ -37,13 +38,13 @@ class _MyGroupState extends State<MyGroup> {
 
   Future<Widget> buildBody(BuildContext context) async {
     return Obx(() {
-      if (gFFI.groupModel.userLoading.value) {
+      if (gFFI.groupModel.groupLoading.value) {
         return const Center(
           child: CircularProgressIndicator(),
         );
       }
-      if (gFFI.groupModel.userLoadError.isNotEmpty) {
-        return _buildShowError(gFFI.groupModel.userLoadError.value);
+      if (gFFI.groupModel.groupLoadError.isNotEmpty) {
+        return _buildShowError(gFFI.groupModel.groupLoadError.value);
       }
       if (isDesktop) {
         return _buildDesktop();
@@ -187,16 +188,17 @@ class _MyGroupState extends State<MyGroup> {
                 }
                 return true;
               })
-              .map((e) => _buildUserItem(e.name))
+              .map((e) => _buildUserItem(e))
               .toList());
     });
   }
 
-  Widget _buildUserItem(String username) {
+  Widget _buildUserItem(UserPayload user) {
+    final username = user.name;
     return InkWell(onTap: () {
       if (selectedUser.value != username) {
         selectedUser.value = username;
-        gFFI.groupModel.pullUserPeers(username);
+        gFFI.groupModel.pullUserPeers(user);
       }
     }, child: Obx(
       () {
