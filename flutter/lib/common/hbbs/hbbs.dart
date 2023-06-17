@@ -15,19 +15,19 @@ class HttpType {
 }
 
 class UserPayload {
+  String id = '';
   String name = '';
   String email = '';
   String note = '';
   int? status;
-  String grp = '';
   bool isAdmin = false;
 
   UserPayload.fromJson(Map<String, dynamic> json)
-      : name = json['name'] ?? '',
+      : id = json['id'] ?? '',
+        name = json['name'] ?? '',
         email = json['email'] ?? '',
         note = json['note'] ?? '',
         status = json['status'],
-        grp = json['grp'] ?? '',
         isAdmin = json['is_admin'] == true;
 }
 

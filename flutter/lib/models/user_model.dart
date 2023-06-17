@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/hbbs/hbbs.dart';
 import 'package:flutter_hbb/common/widgets/peer_tab_page.dart';
 import 'package:get/get.dart';
@@ -12,7 +13,6 @@ import 'platform_model.dart';
 
 class UserModel {
   final RxString userName = ''.obs;
-  final RxString groupName = ''.obs;
   final RxBool isAdmin = false.obs;
   WeakReference<FFI> parent;
 
@@ -61,13 +61,11 @@ class UserModel {
     await gFFI.abModel.reset();
     await gFFI.groupModel.reset();
     userName.value = '';
-    groupName.value = '';
     gFFI.peerTabModel.check_dynamic_tabs();
   }
 
   Future<void> _parseAndUpdateUser(UserPayload user) async {
     userName.value = user.name;
-    groupName.value = user.grp;
     isAdmin.value = user.isAdmin;
   }
 
