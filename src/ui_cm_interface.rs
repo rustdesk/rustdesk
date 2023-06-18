@@ -419,6 +419,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                 }
                 Some(data) = self.rx.recv() => {
                     if let Data::SwitchPermission{name, enabled} = &data {
+                        #[cfg(windows)]
                         if name == "file" {
                             self.file_transfer_enabled = *enabled;
                         }

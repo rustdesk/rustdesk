@@ -62,7 +62,9 @@ impl ContextSend {
         if lock.addr != 0 {
             unsafe {
                 let mut context = Box::from_raw(lock.addr as *mut CliprdrClientContext);
-                f(&mut context)
+                let code = f(&mut context);
+                std::mem::forget(context);
+                code
             }
         } else {
             0
