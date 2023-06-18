@@ -202,7 +202,6 @@ pub enum Data {
     SyncConfig(Option<Box<(Config, Config2)>>),
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     ClipboardFile(ClipboardFile),
-    ClipboardFileEnabled(bool),
     PrivacyModeState((i32, PrivacyModeState)),
     TestRendezvousServer,
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -242,7 +241,7 @@ pub async fn start(postfix: &str) -> ResultType<()> {
                         loop {
                             match stream.next().await {
                                 Err(err) => {
-                                    log::trace!("ipc{} connection closed: {}", postfix, err);
+                                    log::trace!("ipc '{}' connection closed: {}", postfix, err);
                                     break;
                                 }
                                 Ok(Some(data)) => {

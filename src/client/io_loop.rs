@@ -6,7 +6,7 @@ use std::sync::{
 };
 
 #[cfg(windows)]
-use clipboard::{cliprdr::CliprdrClientContext, ContextSend};
+use clipboard::{cliprdr::CliprdrClientContext, ClipboardFile, ContextSend};
 use crossbeam_queue::ArrayQueue;
 use hbb_common::config::{PeerConfig, TransferSerde};
 use hbb_common::fs::{
@@ -58,7 +58,7 @@ pub struct Remote<T: InvokeUiSession> {
     last_update_jobs_status: (Instant, HashMap<i32, u64>),
     first_frame: bool,
     #[cfg(windows)]
-    client_conn_id: i32, // used for clipboard
+    client_conn_id: i32, // used for file clipboard
     data_count: Arc<AtomicUsize>,
     frame_count: Arc<AtomicUsize>,
     video_format: CodecFormat,
@@ -207,7 +207,15 @@ impl<T: InvokeUiSession> Remote<T> {
                             #[cfg(windows)]
                             match _msg {
                                 Some(clip) => {
-                                    allow_err!(peer.send(&crate::clipboard_file::clip_2_msg(clip)).await);
+                                    let mut send_msg = true;
+                                    if clip.is_stopping_allowed() {
+                                        if !(*self.handler.server_file_transfer_enabled.read().unwrap() && self.handler.lc.read().unwrap().enable_file_transfer.v) {
+                                            send_msg = false;
+                                        }
+                                    }
+                                    if send_msg {
+                                        allow_err!(peer.send(&crate::clipboard_file::clip_2_msg(clip)).await);
+                                    }
                                 }
                                 None => {
                                     // unreachable!()
@@ -389,6 +397,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     .handle_login_from_ui(os_username, os_password, password, remember, peer)
                     .await;
             }
+            #[cfg(not(feature = "flutter"))]
             Data::ToggleClipboardFile => {
                 self.check_clipboard_file_context();
             }
@@ -938,6 +947,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                     Some(login_response::Union::PeerInfo(pi)) => {
                         self.handler.handle_peer_info(pi);
+                        #[cfg(not(feature = "flutter"))]
                         self.check_clipboard_file_context();
                         if !(self.handler.is_file_transfer() || self.handler.is_port_forward()) {
                             #[cfg(feature = "flutter")]
@@ -1188,7 +1198,6 @@ impl<T: InvokeUiSession> Remote<T> {
                                 if !p.enabled && self.handler.is_file_transfer() {
                                     return true;
                                 }
-                                self.check_clipboard_file_context();
                                 self.handler.set_permission("file", p.enabled);
                             }
                             Ok(Permission::Restart) => {
@@ -1525,12 +1534,13 @@ impl<T: InvokeUiSession> Remote<T> {
         true
     }
 
+    #[cfg(not(feature = "flutter"))]
     fn check_clipboard_file_context(&self) {
         #[cfg(windows)]
         {
             let enabled = *self.handler.server_file_transfer_enabled.read().unwrap()
                 && self.handler.lc.read().unwrap().enable_file_transfer.v;
-            ContextSend::enable(enabled);
+            ContextSend::enable(enabled, false, false);
         }
     }
 

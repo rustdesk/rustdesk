@@ -191,8 +191,6 @@ extern "C"
     typedef UINT (*pcCliprdrServerFileContentsResponse)(
         CliprdrClientContext *context, const CLIPRDR_FILE_CONTENTS_RESPONSE *fileContentsResponse);
 
-    typedef BOOL (*pcCheckEnabled)(UINT32 connID);
-
     // TODO: hide more members of clipboard context
     struct _cliprdr_client_context
     {
@@ -200,7 +198,6 @@ extern "C"
         BOOL enableFiles;
         BOOL enableOthers;
 
-        pcCheckEnabled CheckEnabled;
         pcCliprdrServerCapabilities ServerCapabilities;
         pcCliprdrClientCapabilities ClientCapabilities;
         pcCliprdrMonitorReady MonitorReady;

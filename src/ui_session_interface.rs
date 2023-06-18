@@ -198,6 +198,7 @@ impl<T: InvokeUiSession> Session<T> {
 
     pub fn toggle_option(&mut self, name: String) {
         let msg = self.lc.write().unwrap().toggle_option(name.clone());
+        #[cfg(not(feature = "flutter"))]
         if name == "enable-file-transfer" {
             self.send(Data::ToggleClipboardFile);
         }

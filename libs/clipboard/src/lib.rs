@@ -10,7 +10,6 @@ use hbb_common::{
 use serde_derive::{Deserialize, Serialize};
 use std::{
     boxed::Box,
-    collections::HashMap,
     ffi::{CStr, CString},
     sync::{Arc, Mutex, RwLock},
 };
@@ -53,11 +52,6 @@ pub enum ClipboardFile {
     },
 }
 
-#[derive(Default)]
-struct ConnEnabled {
-    conn_enabled: HashMap<i32, bool>,
-}
-
 struct MsgChannel {
     session_uuid: SessionID,
     conn_id: i32,
@@ -65,17 +59,20 @@ struct MsgChannel {
     receiver: Arc<TokioMutex<UnboundedReceiver<ClipboardFile>>>,
 }
 
-#[derive(PartialEq)]
-pub enum ProcessSide {
-    UnknownSide,
-    ClientSide,
-    ServerSide,
-}
-
 lazy_static::lazy_static! {
     static ref VEC_MSG_CHANNEL: RwLock<Vec<MsgChannel>> = Default::default();
-    static ref CLIP_CONN_ENABLED: Mutex<ConnEnabled> = Mutex::new(ConnEnabled::default());
-    static ref PROCESS_SIDE: RwLock<ProcessSide> = RwLock::new(ProcessSide::UnknownSide);
+    static ref CLIENT_CONN_ID_COUNTER: Mutex<i32> = Mutex::new(0);
+}
+
+impl ClipboardFile {
+    pub fn is_stopping_allowed(&self) -> bool {
+        match self {
+            ClipboardFile::MonitorReady
+            | ClipboardFile::FormatList { .. }
+            | ClipboardFile::FormatDataRequest { .. } => true,
+            _ => false,
+        }
+    }
 }
 
 pub fn get_client_conn_id(session_uuid: &SessionID) -> Option<i32> {
@@ -85,6 +82,12 @@ pub fn get_client_conn_id(session_uuid: &SessionID) -> Option<i32> {
         .iter()
         .find(|x| x.session_uuid == session_uuid.to_owned())
         .map(|x| x.conn_id)
+}
+
+fn get_conn_id() -> i32 {
+    let mut lock = CLIENT_CONN_ID_COUNTER.lock().unwrap();
+    *lock += 1;
+    *lock
 }
 
 pub fn get_rx_cliprdr_client(
@@ -100,7 +103,7 @@ pub fn get_rx_cliprdr_client(
             let (sender, receiver) = unbounded_channel();
             let receiver = Arc::new(TokioMutex::new(receiver));
             let receiver2 = receiver.clone();
-            let conn_id = lock.len() as i32 + 1;
+            let conn_id = get_conn_id();
             let msg_channel = MsgChannel {
                 session_uuid: session_uuid.to_owned(),
                 conn_id,
@@ -143,13 +146,6 @@ fn send_data(conn_id: i32, data: ClipboardFile) {
         .find(|x| x.conn_id == conn_id)
     {
         allow_err!(msg_channel.sender.send(data));
-    }
-}
-
-pub fn set_conn_enabled(conn_id: i32, enabled: bool) {
-    let mut lock = CLIP_CONN_ENABLED.lock().unwrap();
-    if conn_id != 0 {
-        let _ = lock.conn_enabled.insert(conn_id, enabled);
     }
 }
 
@@ -430,14 +426,10 @@ pub fn server_file_contents_response(
 pub fn create_cliprdr_context(
     enable_files: bool,
     enable_others: bool,
-    process_side: ProcessSide,
 ) -> ResultType<Box<CliprdrClientContext>> {
-    *PROCESS_SIDE.write().unwrap() = process_side;
-
     Ok(CliprdrClientContext::create(
         enable_files,
         enable_others,
-        Some(check_enabled),
         Some(client_format_list),
         Some(client_format_list_response),
         Some(client_format_data_request),
@@ -445,24 +437,6 @@ pub fn create_cliprdr_context(
         Some(client_file_contents_request),
         Some(client_file_contents_response),
     )?)
-}
-
-extern "C" fn check_enabled(conn_id: UINT32) -> BOOL {
-    if *PROCESS_SIDE.read().unwrap() == ProcessSide::ClientSide {
-        return TRUE;
-    }
-
-    let lock = CLIP_CONN_ENABLED.lock().unwrap();
-    let mut connd_enabled = false;
-    if conn_id != 0 {
-        if let Some(true) = lock.conn_enabled.get(&(conn_id as i32)) {
-            connd_enabled = true;
-        }
-    } else {
-        connd_enabled = true;
-    }
-
-    return if connd_enabled { TRUE } else { FALSE };
 }
 
 extern "C" fn client_format_list(

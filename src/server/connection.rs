@@ -282,6 +282,7 @@ impl Connection {
             keyboard: Connection::permission("enable-keyboard"),
             clipboard: Connection::permission("enable-clipboard"),
             audio: Connection::permission("enable-audio"),
+            // to-do: make sure is the option correct here
             file: Connection::permission("enable-file-transfer"),
             restart: Connection::permission("enable-remote-restart"),
             recording: Connection::permission("enable-record-session"),
@@ -424,7 +425,6 @@ impl Connection {
                             } else if &name == "file" {
                                 conn.file = enabled;
                                 conn.send_permission(Permission::File, enabled).await;
-                                conn.send_to_cm(ipc::Data::ClipboardFileEnabled(conn.file_transfer_enabled()));
                             } else if &name == "restart" {
                                 conn.restart = enabled;
                                 conn.send_permission(Permission::Restart, enabled).await;
@@ -437,9 +437,9 @@ impl Connection {
                             allow_err!(conn.stream.send_raw(bytes).await);
                         }
                         #[cfg(windows)]
-                        ipc::Data::ClipboardFile(_clip) => {
-                            if conn.file_transfer_enabled() {
-                                allow_err!(conn.stream.send(&clip_2_msg(_clip)).await);
+                        ipc::Data::ClipboardFile(clip) => {
+                            if !clip.is_stopping_allowed() || conn.file_transfer_enabled() {
+                                allow_err!(conn.stream.send(&clip_2_msg(clip)).await);
                             }
                         }
                         ipc::Data::PrivacyModeState((_, state)) => {
@@ -1136,7 +1136,7 @@ impl Connection {
             clipboard: self.clipboard,
             audio: self.audio,
             file: self.file,
-            file_transfer_enabled: self.file_transfer_enabled(),
+            file_transfer_enabled: self.file,
             restart: self.restart,
             recording: self.recording,
             from_switch: self.from_switch,
@@ -1636,11 +1636,9 @@ impl Connection {
                     }
                 }
                 Some(message::Union::Cliprdr(_clip)) => {
-                    if self.file_transfer_enabled() {
-                        #[cfg(windows)]
-                        if let Some(clip) = msg_2_clip(_clip) {
-                            self.send_to_cm(ipc::Data::ClipboardFile(clip))
-                        }
+                    #[cfg(windows)]
+                    if let Some(clip) = msg_2_clip(_clip) {
+                        self.send_to_cm(ipc::Data::ClipboardFile(clip))
                     }
                 }
                 Some(message::Union::FileAction(fa)) => {
@@ -2073,9 +2071,6 @@ impl Connection {
         if let Ok(q) = o.enable_file_transfer.enum_value() {
             if q != BoolOption::NotSet {
                 self.enable_file_transfer = q == BoolOption::Yes;
-                self.send_to_cm(ipc::Data::ClipboardFileEnabled(
-                    self.file_transfer_enabled(),
-                ));
             }
         }
         if let Ok(q) = o.disable_clipboard.enum_value() {

@@ -681,10 +681,6 @@ static HRESULT STDMETHODCALLTYPE CliprdrDataObject_GetData(IDataObject *This, FO
 	}
 
 	clipboard = (wfClipboard *)instance->m_pData;
-	if (!clipboard->context->CheckEnabled(instance->m_connID))
-	{
-		return E_INVALIDARG;
-	}
 
 	if (!clipboard)
 		return E_INVALIDARG;
@@ -1470,14 +1466,7 @@ static UINT cliprdr_send_data_request(UINT32 connID, wfClipboard *clipboard, UIN
 		DWORD waitRes = WaitForSingleObject(clipboard->response_data_event, 50);
 		if (waitRes == WAIT_TIMEOUT)
 		{
-			if (clipboard->context->CheckEnabled(connID))
-			{
-				continue;
-			}
-			else
-			{
-				break;
-			}
+			continue;
 		}
 
 		if (waitRes != WAIT_OBJECT_0)
@@ -1542,14 +1531,7 @@ UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, co
 		DWORD waitRes = WaitForSingleObject(clipboard->req_fevent, 50);
 		if (waitRes == WAIT_TIMEOUT)
 		{
-			if (clipboard->context->CheckEnabled(connID))
-			{
-				continue;
-			}
-			else
-			{
-				break;
-			}
+			continue;
 		}
 
 		if (waitRes != WAIT_OBJECT_0)

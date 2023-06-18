@@ -1,28 +1,36 @@
 use crate::cliprdr::*;
 use hbb_common::log;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 lazy_static::lazy_static! {
-    static ref CONTEXT_SEND: ContextSend = ContextSend{addr: Mutex::new(0)};
+    static ref CONTEXT_SEND: Arc<Mutex<ContextSend>> = Arc::new(Mutex::new(ContextSend::new()));
 }
 
 pub struct ContextSend {
-    addr: Mutex<u64>,
+    server_enabled: bool,
+    addr: u64,
 }
 
 impl ContextSend {
-    pub fn is_enabled() -> bool {
-        *CONTEXT_SEND.addr.lock().unwrap() != 0
+    fn new() -> Self {
+        Self {
+            server_enabled: false,
+            addr: 0,
+        }
     }
 
-    pub fn enable(enabled: bool) {
-        let mut lock = CONTEXT_SEND.addr.lock().unwrap();
+    pub fn is_server_enabled() -> bool {
+        CONTEXT_SEND.lock().unwrap().server_enabled
+    }
+
+    pub fn enable(enabled: bool, is_server_side: bool, is_server_process: bool) {
+        let mut lock = CONTEXT_SEND.lock().unwrap();
         if enabled {
-            if *lock == 0 {
-                match crate::create_cliprdr_context(true, false, crate::ProcessSide::ClientSide) {
+            if lock.addr == 0 {
+                match crate::create_cliprdr_context(true, false) {
                     Ok(context) => {
                         log::info!("clipboard context for file transfer created.");
-                        *lock = Box::into_raw(context) as _;
+                        lock.addr = Box::into_raw(context) as _;
                     }
                     Err(err) => {
                         log::error!(
@@ -32,25 +40,29 @@ impl ContextSend {
                     }
                 }
             }
+            if is_server_side {
+                lock.server_enabled = true;
+            }
         } else {
-            if *lock != 0 {
-                unsafe {
-                    let _ = Box::from_raw(*lock as *mut CliprdrClientContext);
+            if lock.addr != 0 {
+                if is_server_process {
+                    unsafe {
+                        let _ = Box::from_raw(lock.addr as *mut CliprdrClientContext);
+                    }
+                    log::info!("clipboard context for file transfer destroyed.");
+                    lock.addr = 0;
                 }
-                log::info!("clipboard context for file transfer destroyed.");
-                *lock = 0;
+                lock.server_enabled = false;
             }
         }
     }
 
     pub fn proc<F: FnOnce(&mut Box<CliprdrClientContext>) -> u32>(f: F) -> u32 {
-        let mut lock = CONTEXT_SEND.addr.lock().unwrap();
-        if *lock != 0 {
+        let lock = CONTEXT_SEND.lock().unwrap();
+        if lock.addr != 0 {
             unsafe {
-                let mut context = Box::from_raw(*lock as *mut CliprdrClientContext);
-                let res = f(&mut context);
-                *lock = Box::into_raw(context) as _;
-                res
+                let mut context = Box::from_raw(lock.addr as *mut CliprdrClientContext);
+                f(&mut context)
             }
         } else {
             0
