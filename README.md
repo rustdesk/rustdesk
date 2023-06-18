@@ -91,7 +91,9 @@ sudo zypper install gcc-c++ git curl wget nasm yasm gcc gtk3-devel clang libxcb-
 
 ```sh
 sudo yum -y install gcc-c++ git curl wget nasm yasm gcc gtk3-devel clang libxcb-devel libxdo-devel libXfixes-devel pulseaudio-libs-devel cmake alsa-lib-devel
-sudo yum -y install libXtst-devel gstreamer1-devel gstreamer1-plugins-base-devel libvdpau libvdpau-devel libva-devel llvm7.0-devel ninja-build
+sudo yum -y install libXtst-devel gstreamer1-devel gstreamer1-plugins-base-devel libvdpau libvdpau-devel libva-devel \
+llvm7.0-devel ninja-build opus-devel libyuv-devel libvpx-devel libaom-devel
+
 ```
 
 ### Arch (Manjaro)
