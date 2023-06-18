@@ -76,7 +76,7 @@ class GroupModel {
             });
         final resp = await http.get(uri, headers: getHttpHeaders());
         if (resp.body.isNotEmpty && resp.body.toLowerCase() != "null") {
-          Map<String, dynamic> json = jsonDecode(resp.body);
+          Map<String, dynamic> json = jsonDecode(utf8.decode(resp.bodyBytes));
           if (json.containsKey('error')) {
             throw json['error'];
           } else {
@@ -119,7 +119,7 @@ class GroupModel {
       if (status == 401 || status == 400) {
         return false;
       }
-      final data = json.decode(response.body);
+      final data = json.decode(utf8.decode(response.bodyBytes));
       final error = data['error'];
       if (error != null) {
         throw error;
@@ -159,7 +159,7 @@ class GroupModel {
             });
         final resp = await http.get(uri, headers: getHttpHeaders());
         if (resp.body.isNotEmpty && resp.body.toLowerCase() != "null") {
-          Map<String, dynamic> json = jsonDecode(resp.body);
+          Map<String, dynamic> json = jsonDecode(utf8.decode(resp.bodyBytes));
           if (json.containsKey('error')) {
             throw json['error'];
           } else {

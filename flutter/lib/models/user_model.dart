@@ -41,7 +41,7 @@ class UserModel {
         reset();
         return;
       }
-      final data = json.decode(response.body);
+      final data = json.decode(utf8.decode(response.bodyBytes));
       final error = data['error'];
       if (error != null) {
         throw error;
@@ -105,7 +105,7 @@ class UserModel {
 
     final Map<String, dynamic> body;
     try {
-      body = jsonDecode(resp.body);
+      body = jsonDecode(utf8.decode(resp.bodyBytes));
     } catch (e) {
       print("login: jsonDecode resp body failed: ${e.toString()}");
       rethrow;
