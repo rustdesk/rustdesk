@@ -439,9 +439,10 @@ impl Connection {
                         #[cfg(windows)]
                         ipc::Data::ClipboardFile(clip) => {
                             let is_stopping_allowed = clip.is_stopping_allowed();
+                            let is_clipboard_enabled = clipboard::ContextSend::is_server_enabled();
                             let file_transfer_enabled = conn.file_transfer_enabled();
-                            let stop = is_stopping_allowed && !file_transfer_enabled;
-                            log::debug!("Process clipboard message from cm, stop: {}, is_stopping_allowed: {}, file_transfer_enabled: {}", stop, is_stopping_allowed, file_transfer_enabled);
+                            let stop = is_stopping_allowed && !(is_clipboard_enabled && file_transfer_enabled);
+                            log::debug!("Process clipboard message from cm, stop: {}, is_stopping_allowed: {}, is_clipboard_enabled: {}, file_transfer_enabled: {}", stop, is_stopping_allowed, is_clipboard_enabled, file_transfer_enabled);
                             if !stop {
                                 allow_err!(conn.stream.send(&clip_2_msg(clip)).await);
                             }
@@ -1639,7 +1640,8 @@ impl Connection {
                         update_clipboard(_cb, None);
                     }
                 }
-                Some(message::Union::Cliprdr(_clip)) => {
+                Some(message::Union::Cliprdr(_clip)) =>
+                {
                     #[cfg(windows)]
                     if let Some(clip) = msg_2_clip(_clip) {
                         self.send_to_cm(ipc::Data::ClipboardFile(clip))

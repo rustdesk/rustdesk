@@ -19,6 +19,7 @@ impl ContextSend {
         }
     }
 
+    #[inline]
     pub fn is_server_enabled() -> bool {
         CONTEXT_SEND.lock().unwrap().server_enabled
     }
