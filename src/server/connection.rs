@@ -439,8 +439,8 @@ impl Connection {
                         #[cfg(windows)]
                         ipc::Data::ClipboardFile(clip) => {
                             let is_stopping_allowed = clip.is_stopping_allowed();
-                            let enable_file_transfer = conn.file_transfer_enabled();
-                            let stop = is_stopping_allowed && !enable_file_transfer;
+                            let file_transfer_enabled = conn.file_transfer_enabled();
+                            let stop = is_stopping_allowed && !file_transfer_enabled;
                             log::debug!("Process clipboard message from cm, stop: {}, is_stopping_allowed: {}, file_transfer_enabled: {}", stop, is_stopping_allowed, file_transfer_enabled);
                             if !stop {
                                 allow_err!(conn.stream.send(&clip_2_msg(clip)).await);
