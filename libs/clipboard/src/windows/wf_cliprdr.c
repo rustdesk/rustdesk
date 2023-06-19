@@ -1446,7 +1446,7 @@ static UINT cliprdr_send_format_list(wfClipboard *clipboard, UINT32 connID)
 
 UINT wait_response_event(wfClipboard *clipboard, HANDLE event, void *data)
 {
-	UINT rc = ERROR_INTERNAL_ERROR;
+	UINT rc = ERROR_SUCCESS;
 	clipboard->context->IsStopped = FALSE;
 	// with default 3min timeout
 	for (int i = 0; i < 20 * 60 * 3; i++)
@@ -1460,6 +1460,7 @@ UINT wait_response_event(wfClipboard *clipboard, HANDLE event, void *data)
 		if (clipboard->context->IsStopped == TRUE)
 		{
 			wf_do_empty_cliprdr(clipboard);
+			rc = ERROR_INTERNAL_ERROR;
 		}
 
 		if (waitRes != WAIT_OBJECT_0)
