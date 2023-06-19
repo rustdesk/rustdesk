@@ -1556,18 +1556,23 @@ impl<T: InvokeUiSession> Remote<T> {
 
     #[cfg(windows)]
     fn handle_cliprdr_msg(&self, clip: hbb_common::message_proto::Cliprdr) {
-        if !self.handler.lc.read().unwrap().disable_clipboard.v {
-            #[cfg(feature = "flutter")]
-            if let Some(hbb_common::message_proto::cliprdr::Union::FormatList(_)) = &clip.union {
-                if self.client_conn_id
-                    != clipboard::get_client_conn_id(&crate::flutter::get_cur_session_id())
-                        .unwrap_or(0)
-                {
-                    return;
-                }
+        #[cfg(feature = "flutter")]
+        if let Some(hbb_common::message_proto::cliprdr::Union::FormatList(_)) = &clip.union {
+            if self.client_conn_id
+                != clipboard::get_client_conn_id(&crate::flutter::get_cur_session_id()).unwrap_or(0)
+            {
+                return;
             }
+        }
 
-            if let Some(clip) = crate::clipboard_file::msg_2_clip(clip) {
+        if let Some(clip) = crate::clipboard_file::msg_2_clip(clip) {
+            let is_stopping_allowed = clip.is_stopping_allowed_from_peer();
+            let file_transfer_enabled = self.handler.lc.read().unwrap().enable_file_transfer.v;
+            let stop = is_stopping_allowed && !file_transfer_enabled;
+            log::debug!(
+                "Process clipboard message from server peer, stop: {}, is_stopping_allowed: {}, file_transfer_enabled: {}",
+                stop, is_stopping_allowed, file_transfer_enabled);
+            if !stop {
                 ContextSend::proc(|context: &mut Box<CliprdrClientContext>| -> u32 {
                     clipboard::server_clip_file(context, self.client_conn_id, clip)
                 });

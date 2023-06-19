@@ -438,15 +438,7 @@ impl Connection {
                         }
                         #[cfg(windows)]
                         ipc::Data::ClipboardFile(clip) => {
-                            let is_stopping_allowed = clip.is_stopping_allowed();
-                            let file_transfer_enabled = conn.file_transfer_enabled();
-                            let stop = is_stopping_allowed && !file_transfer_enabled;
-                            log::debug!("Process clipboard message from cm, stop: {}, is_stopping_allowed: {}, file_transfer_enabled: {}", stop, is_stopping_allowed, file_transfer_enabled);
-                            if stop {
-                                clipboard::ContextSend::set_is_stopped();
-                            } else {
-                                allow_err!(conn.stream.send(&clip_2_msg(clip)).await);
-                            }
+                            allow_err!(conn.stream.send(&clip_2_msg(clip)).await);
                         }
                         ipc::Data::PrivacyModeState((_, state)) => {
                             let msg_out = match state {
@@ -2078,6 +2070,9 @@ impl Connection {
         if let Ok(q) = o.enable_file_transfer.enum_value() {
             if q != BoolOption::NotSet {
                 self.enable_file_transfer = q == BoolOption::Yes;
+                self.send_to_cm(ipc::Data::ClipboardFileEnabled(
+                    self.file_transfer_enabled(),
+                ));
             }
         }
         if let Ok(q) = o.disable_clipboard.enum_value() {

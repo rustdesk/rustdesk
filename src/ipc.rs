@@ -202,6 +202,7 @@ pub enum Data {
     SyncConfig(Option<Box<(Config, Config2)>>),
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     ClipboardFile(ClipboardFile),
+    ClipboardFileEnabled(bool),
     PrivacyModeState((i32, PrivacyModeState)),
     TestRendezvousServer,
     #[cfg(not(any(target_os = "android", target_os = "ios")))]

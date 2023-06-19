@@ -72,6 +72,8 @@ struct IpcTaskRunner<T: InvokeUiCM> {
     conn_id: i32,
     #[cfg(windows)]
     file_transfer_enabled: bool,
+    #[cfg(windows)]
+    file_transfer_enabled_peer: bool,
 }
 
 lazy_static::lazy_static! {
@@ -401,11 +403,13 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                 Data::ClipboardFile(_clip) => {
                                     #[cfg(windows)]
                                     {
-                                        let is_stopping_allowed = _clip.is_stopping_allowed();
+                                        let is_stopping_allowed = _clip.is_stopping_allowed_from_peer();
                                         let is_clipboard_enabled = ContextSend::is_cm_enabled();
                                         let file_transfer_enabled = self.file_transfer_enabled;
                                         let stop = !is_stopping_allowed && !(is_clipboard_enabled && file_transfer_enabled);
-                                        log::debug!("Process clipboard message from peer, stop: {}, is_stopping_allowed: {}, is_clipboard_enabled: {}, file_transfer_enabled: {}", stop, is_stopping_allowed, is_clipboard_enabled, file_transfer_enabled);
+                                        log::debug!(
+                                            "Process clipboard message from client peer, stop: {}, is_stopping_allowed: {}, is_clipboard_enabled: {}, file_transfer_enabled: {}",
+                                            stop, is_stopping_allowed, is_clipboard_enabled, file_transfer_enabled);
                                         if stop {
                                             ContextSend::set_is_stopped();
                                         } else {
@@ -414,6 +418,12 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                                 clipboard::server_clip_file(context, conn_id, _clip)
                                             });
                                         }
+                                    }
+                                }
+                                Data::ClipboardFileEnabled(_enabled) => {
+                                    #[cfg(windows)]
+                                    {
+                                        self.file_transfer_enabled_peer =_enabled;
                                     }
                                 }
                                 Data::Theme(dark) => {
@@ -461,8 +471,11 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                             let is_stopping_allowed = _clip.is_stopping_allowed();
                             let is_clipboard_enabled = ContextSend::is_cm_enabled();
                             let file_transfer_enabled = self.file_transfer_enabled;
-                            let stop = is_stopping_allowed && !(is_clipboard_enabled && file_transfer_enabled);
-                            log::debug!("Process clipboard message from cm, stop: {}, is_stopping_allowed: {}, is_clipboard_enabled: {}, file_transfer_enabled: {}", stop, is_stopping_allowed, is_clipboard_enabled, file_transfer_enabled);
+                            let file_transfer_enabled_peer = self.file_transfer_enabled_peer;
+                            let stop = is_stopping_allowed && !(is_clipboard_enabled && file_transfer_enabled && file_transfer_enabled_peer);
+                            log::debug!(
+                                "Process clipboard message from cm, stop: {}, is_stopping_allowed: {}, is_clipboard_enabled: {}, file_transfer_enabled: {}, file_transfer_enabled_peer: {}",
+                                stop, is_stopping_allowed, is_clipboard_enabled, file_transfer_enabled, file_transfer_enabled_peer);
                             if stop {
                                 ContextSend::set_is_stopped();
                             } else {
@@ -492,6 +505,8 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
             conn_id: 0,
             #[cfg(windows)]
             file_transfer_enabled: false,
+            #[cfg(windows)]
+            file_transfer_enabled_peer: false,
         };
 
         while task_runner.running {

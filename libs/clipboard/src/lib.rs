@@ -75,6 +75,13 @@ impl ClipboardFile {
             _ => false,
         }
     }
+
+    pub fn is_stopping_allowed_from_peer(&self) -> bool {
+        match self {
+            ClipboardFile::MonitorReady | ClipboardFile::FormatList { .. } => true,
+            _ => false,
+        }
+    }
 }
 
 pub fn get_client_conn_id(session_uuid: &SessionID) -> Option<i32> {
