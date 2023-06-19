@@ -123,7 +123,7 @@ pub fn core_main() -> Option<Vec<String>> {
     init_plugins(&args);
     if args.is_empty() {
         #[cfg(windows)]
-        clipboard::ContextSend::enable(true, false, false);
+        clipboard::ContextSend::enable(true);
         std::thread::spawn(move || crate::start_server(false));
     } else {
         #[cfg(windows)]

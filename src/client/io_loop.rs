@@ -1550,7 +1550,7 @@ impl<T: InvokeUiSession> Remote<T> {
         {
             let enabled = *self.handler.server_file_transfer_enabled.read().unwrap()
                 && self.handler.lc.read().unwrap().enable_file_transfer.v;
-            ContextSend::enable(enabled, false, false);
+            ContextSend::enable(enabled);
         }
     }
 

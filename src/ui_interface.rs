@@ -882,11 +882,7 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
                                 {
                                     let b = OPTIONS.lock().unwrap().get("enable-file-transfer").map(|x| x.to_string()).unwrap_or_default();
                                     if b != enable_file_transfer {
-                                        clipboard::ContextSend::enable(
-                                            b.is_empty(),
-                                            true,
-                                            crate::is_server(),
-                                        );
+                                        clipboard::ContextSend::enable(b.is_empty());
                                         enable_file_transfer = b;
                                     }
                                 }

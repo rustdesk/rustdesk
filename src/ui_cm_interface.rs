@@ -338,7 +338,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
 
         #[cfg(windows)]
         {
-            if ContextSend::is_cm_enabled() {
+            if ContextSend::is_enabled() {
                 allow_err!(
                     self.stream
                         .send(&Data::ClipboardFile(clipboard::ClipboardFile::MonitorReady))
@@ -404,7 +404,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                     #[cfg(windows)]
                                     {
                                         let is_stopping_allowed = _clip.is_stopping_allowed_from_peer();
-                                        let is_clipboard_enabled = ContextSend::is_cm_enabled();
+                                        let is_clipboard_enabled = ContextSend::is_enabled();
                                         let file_transfer_enabled = self.file_transfer_enabled;
                                         let stop = !is_stopping_allowed && !(is_clipboard_enabled && file_transfer_enabled);
                                         log::debug!(
@@ -469,7 +469,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                         #[cfg(windows)]
                         {
                             let is_stopping_allowed = _clip.is_stopping_allowed();
-                            let is_clipboard_enabled = ContextSend::is_cm_enabled();
+                            let is_clipboard_enabled = ContextSend::is_enabled();
                             let file_transfer_enabled = self.file_transfer_enabled;
                             let file_transfer_enabled_peer = self.file_transfer_enabled_peer;
                             let stop = is_stopping_allowed && !(is_clipboard_enabled && file_transfer_enabled && file_transfer_enabled_peer);
@@ -537,11 +537,7 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
     });
 
     #[cfg(target_os = "windows")]
-    ContextSend::enable(
-        Config::get_option("enable-file-transfer").is_empty(),
-        true,
-        crate::is_server(),
-    );
+    ContextSend::enable(Config::get_option("enable-file-transfer").is_empty());
 
     match ipc::new_listener("_cm").await {
         Ok(mut incoming) => {
