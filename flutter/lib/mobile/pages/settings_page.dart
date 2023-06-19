@@ -47,6 +47,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _localIP = "";
   var _directAccessPort = "";
   var _fingerprint = "";
+  var _buildDate = "";
 
   @override
   void initState() {
@@ -141,6 +142,12 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
       if (_fingerprint != fingerprint) {
         update = true;
         _fingerprint = fingerprint;
+      }
+
+      final buildDate = await bind.mainGetBuildDate();
+      if (_buildDate != buildDate) {
+        update = true;
+        _buildDate = buildDate;
       }
 
       if (update) {
@@ -470,6 +477,13 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                       )),
                 ),
                 leading: Icon(Icons.info)),
+            SettingsTile.navigation(
+                title: Text(translate("Build Date")),
+                value: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Text(_buildDate),
+                ),
+                leading: Icon(Icons.query_builder)),
             SettingsTile.navigation(
                 onPressed: (context) => onCopyFingerprint(_fingerprint),
                 title: Text(translate("Fingerprint")),
