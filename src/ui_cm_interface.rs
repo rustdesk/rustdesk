@@ -326,6 +326,17 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
             (_tx_clip, rx_clip) = unbounded_channel::<i32>();
         }
 
+        #[cfg(windows)]
+        {
+            if ContextSend::is_server_enabled() {
+                allow_err!(
+                    self.stream
+                        .send(&Data::ClipboardFile(clipboard::ClipboardFile::MonitorReady))
+                        .await
+                );
+            }
+        }
+
         self.running = false;
         loop {
             tokio::select! {
