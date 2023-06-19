@@ -207,13 +207,12 @@ impl<T: InvokeUiSession> Remote<T> {
                             #[cfg(windows)]
                             match _msg {
                                 Some(clip) => {
-                                    let mut send_msg = true;
-                                    if clip.is_stopping_allowed() {
-                                        if !(*self.handler.server_file_transfer_enabled.read().unwrap() && self.handler.lc.read().unwrap().enable_file_transfer.v) {
-                                            send_msg = false;
-                                        }
-                                    }
-                                    if send_msg {
+                                    let is_stopping_allowed = clip.is_stopping_allowed();
+                                    let server_file_transfer_enabled = *self.handler.server_file_transfer_enabled.read().unwrap();
+                                    let enable_file_transfer = self.handler.lc.read().unwrap().enable_file_transfer.v;
+                                    let stop = is_stopping_allowed && !(server_file_transfer_enabled && enable_file_transfer);
+                                    log::debug!("Process clipboard message from system, stop: {}, is_stopping_allowed: {}, server_file_transfer_enabled: {}, file_transfer_enabled: {}", stop, is_stopping_allowed, server_file_transfer_enabled, file_transfer_enabled);
+                                    if !stop {
                                         allow_err!(peer.send(&crate::clipboard_file::clip_2_msg(clip)).await);
                                     }
                                 }

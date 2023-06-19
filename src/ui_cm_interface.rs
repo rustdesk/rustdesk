@@ -16,7 +16,7 @@ use crate::ipc::Connection;
 #[cfg(not(any(target_os = "ios")))]
 use crate::ipc::{self, Data};
 #[cfg(windows)]
-use clipboard::{cliprdr::CliprdrClientContext, empty_clipboard, ContextSend};
+use clipboard::{cliprdr::CliprdrClientContext, ContextSend};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::tokio::sync::mpsc::unbounded_channel;
 #[cfg(windows)]
@@ -382,7 +382,11 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                 Data::ClipboardFile(_clip) => {
                                     #[cfg(windows)]
                                     {
-                                        if !_clip.is_stopping_allowed() || self.file_transfer_enabled {
+                                        let is_stopping_allowed = _clip.is_stopping_allowed();
+                                        let file_transfer_enabled = self.file_transfer_enabled;
+                                        let stop = is_stopping_allowed && !file_transfer_enabled;
+                                        log::debug!("Process clipboard message from peer, stop: {}, is_stopping_allowed: {}, file_transfer_enabled: {}", stop, is_stopping_allowed, file_transfer_enabled);
+                                        if !stop {
                                             let conn_id = self.conn_id;
                                             ContextSend::proc(|context: &mut Box<CliprdrClientContext>| -> u32 {
                                                 clipboard::server_clip_file(context, conn_id, _clip)
@@ -431,8 +435,14 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                 clip_file = rx_clip.recv() => match clip_file {
                     Some(_clip) => {
                         #[cfg(windows)]
-                        if !_clip.is_stopping_allowed() || self.file_transfer_enabled {
-                            allow_err!(self.tx.send(Data::ClipboardFile(_clip)));
+                        {
+                            let is_stopping_allowed = _clip.is_stopping_allowed();
+                            let file_transfer_enabled = self.file_transfer_enabled;
+                            let stop = is_stopping_allowed && !file_transfer_enabled;
+                            log::debug!("Process clipboard message from cm, stop: {}, is_stopping_allowed: {}, file_transfer_enabled: {}", stop, is_stopping_allowed, file_transfer_enabled);
+                            if !stop {
+                                allow_err!(self.tx.send(Data::ClipboardFile(_clip)));
+                            }
                         }
                     }
                     None => {

@@ -485,9 +485,9 @@ extern "C" fn client_format_list(
     let data = ClipboardFile::FormatList { format_list };
     // no need to handle result here
     if conn_id == 0 {
-        VEC_MSG_CHANNEL
-            .read()
-            .unwrap()
+        // msg_channel is used for debug, VEC_MSG_CHANNEL cannot be inspected by the debugger.
+        let msg_channel = VEC_MSG_CHANNEL.read().unwrap();
+        msg_channel
             .iter()
             .for_each(|msg_channel| allow_err!(msg_channel.sender.send(data.clone())));
     } else {
