@@ -7,24 +7,24 @@ lazy_static::lazy_static! {
 }
 
 pub struct ContextSend {
-    server_enabled: bool,
+    cm_enabled: bool,
     addr: u64,
 }
 
 impl ContextSend {
     fn new() -> Self {
         Self {
-            server_enabled: false,
+            cm_enabled: false,
             addr: 0,
         }
     }
 
     #[inline]
-    pub fn is_server_enabled() -> bool {
-        CONTEXT_SEND.lock().unwrap().server_enabled
+    pub fn is_cm_enabled() -> bool {
+        CONTEXT_SEND.lock().unwrap().cm_enabled
     }
 
-    pub fn enable(enabled: bool, is_server_side: bool, is_server_process: bool) {
+    pub fn enable(enabled: bool, is_cm_side: bool, is_server_process: bool) {
         let mut lock = CONTEXT_SEND.lock().unwrap();
         if enabled {
             if lock.addr == 0 {
@@ -41,8 +41,8 @@ impl ContextSend {
                     }
                 }
             }
-            if is_server_side {
-                lock.server_enabled = true;
+            if is_cm_side {
+                lock.cm_enabled = true;
             }
         } else {
             if lock.addr != 0 {
@@ -53,7 +53,7 @@ impl ContextSend {
                     log::info!("clipboard context for file transfer destroyed.");
                     lock.addr = 0;
                 }
-                lock.server_enabled = false;
+                lock.cm_enabled = false;
             }
         }
     }
