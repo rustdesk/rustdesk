@@ -6,7 +6,7 @@ use std::sync::{
 };
 
 #[cfg(windows)]
-use clipboard::{cliprdr::CliprdrClientContext, ClipboardFile, ContextSend};
+use clipboard::{cliprdr::CliprdrClientContext, empty_clipboard, ContextSend};
 use crossbeam_queue::ArrayQueue;
 use hbb_common::config::{PeerConfig, TransferSerde};
 use hbb_common::fs::{
@@ -270,6 +270,15 @@ impl<T: InvokeUiSession> Remote<T> {
         }
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         Client::try_stop_clipboard(&self.handler.session_id);
+
+        #[cfg(windows)]
+        {
+            let conn_id = self.client_conn_id;
+            ContextSend::proc(|context: &mut Box<CliprdrClientContext>| -> u32 {
+                empty_clipboard(context, conn_id);
+                0
+            });
+        }
     }
 
     fn handle_job_status(&mut self, id: i32, file_num: i32, err: Option<String>) {

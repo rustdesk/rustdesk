@@ -16,7 +16,7 @@ use crate::ipc::Connection;
 #[cfg(not(any(target_os = "ios")))]
 use crate::ipc::{self, Data};
 #[cfg(windows)]
-use clipboard::{cliprdr::CliprdrClientContext, ContextSend};
+use clipboard::{cliprdr::CliprdrClientContext, empty_clipboard, ContextSend};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::tokio::sync::mpsc::unbounded_channel;
 #[cfg(windows)]
@@ -169,6 +169,14 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
                 .unwrap()
                 .get_mut(&id)
                 .map(|c| c.disconnected = true);
+        }
+
+        #[cfg(windows)]
+        {
+            ContextSend::proc(|context: &mut Box<CliprdrClientContext>| -> u32 {
+                empty_clipboard(context, id);
+                0
+            });
         }
 
         #[cfg(any(target_os = "android"))]
