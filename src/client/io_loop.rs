@@ -212,7 +212,9 @@ impl<T: InvokeUiSession> Remote<T> {
                                     let file_transfer_enabled = self.handler.lc.read().unwrap().enable_file_transfer.v;
                                     let stop = is_stopping_allowed && !(server_file_transfer_enabled && file_transfer_enabled);
                                     log::debug!("Process clipboard message from system, stop: {}, is_stopping_allowed: {}, server_file_transfer_enabled: {}, file_transfer_enabled: {}", stop, is_stopping_allowed, server_file_transfer_enabled, file_transfer_enabled);
-                                    if !stop {
+                                    if stop {
+                                        ContextSend::set_is_stopped();
+                                    } else {
                                         allow_err!(peer.send(&crate::clipboard_file::clip_2_msg(clip)).await);
                                     }
                                 }

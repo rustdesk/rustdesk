@@ -406,7 +406,9 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                         let file_transfer_enabled = self.file_transfer_enabled;
                                         let stop = !is_stopping_allowed && !(is_clipboard_enabled && file_transfer_enabled);
                                         log::debug!("Process clipboard message from peer, stop: {}, is_stopping_allowed: {}, is_clipboard_enabled: {}, file_transfer_enabled: {}", stop, is_stopping_allowed, is_clipboard_enabled, file_transfer_enabled);
-                                        if !stop {
+                                        if stop {
+                                            ContextSend::set_is_stopped();
+                                        } else {
                                             let conn_id = self.conn_id;
                                             ContextSend::proc(|context: &mut Box<CliprdrClientContext>| -> u32 {
                                                 clipboard::server_clip_file(context, conn_id, _clip)
@@ -461,7 +463,9 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                             let file_transfer_enabled = self.file_transfer_enabled;
                             let stop = is_stopping_allowed && !(is_clipboard_enabled && file_transfer_enabled);
                             log::debug!("Process clipboard message from cm, stop: {}, is_stopping_allowed: {}, is_clipboard_enabled: {}, file_transfer_enabled: {}", stop, is_stopping_allowed, is_clipboard_enabled, file_transfer_enabled);
-                            if !stop {
+                            if stop {
+                                ContextSend::set_is_stopped();
+                            } else {
                                 allow_err!(self.tx.send(Data::ClipboardFile(_clip)));
                             }
                         }

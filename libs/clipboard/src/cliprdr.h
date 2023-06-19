@@ -194,10 +194,11 @@ extern "C"
     // TODO: hide more members of clipboard context
     struct _cliprdr_client_context
     {
-        void *custom;
-        BOOL enableFiles;
-        BOOL enableOthers;
+        void *Custom;
+        BOOL EnableFiles;
+        BOOL EnableOthers;
 
+        BOOL IsStopped;
         pcCliprdrServerCapabilities ServerCapabilities;
         pcCliprdrClientCapabilities ClientCapabilities;
         pcCliprdrMonitorReady MonitorReady;
@@ -219,7 +220,7 @@ extern "C"
         pcCliprdrClientFileContentsResponse ClientFileContentsResponse;
         pcCliprdrServerFileContentsResponse ServerFileContentsResponse;
 
-        UINT32 lastRequestedFormatId;
+        UINT32 LastRequestedFormatId;
     };
 
 #ifdef __cplusplus

@@ -24,6 +24,13 @@ impl ContextSend {
         CONTEXT_SEND.lock().unwrap().cm_enabled
     }
 
+    pub fn set_is_stopped() {
+        let _res = Self::proc(|c| {
+            c.IsStopped = TRUE;
+            0
+        });
+    }
+
     pub fn enable(enabled: bool, is_cm_side: bool, is_server_process: bool) {
         let mut lock = CONTEXT_SEND.lock().unwrap();
         if enabled {

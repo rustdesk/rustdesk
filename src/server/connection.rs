@@ -442,7 +442,9 @@ impl Connection {
                             let file_transfer_enabled = conn.file_transfer_enabled();
                             let stop = is_stopping_allowed && !file_transfer_enabled;
                             log::debug!("Process clipboard message from cm, stop: {}, is_stopping_allowed: {}, file_transfer_enabled: {}", stop, is_stopping_allowed, file_transfer_enabled);
-                            if !stop {
+                            if stop {
+                                clipboard::ContextSend::set_is_stopped();
+                            } else {
                                 allow_err!(conn.stream.send(&clip_2_msg(clip)).await);
                             }
                         }

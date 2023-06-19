@@ -449,9 +449,10 @@ pub type pcCliprdrServerFileContentsResponse = ::std::option::Option<
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct _cliprdr_client_context {
-    pub custom: *mut ::std::os::raw::c_void,
-    pub enableFiles: BOOL,
-    pub enableOthers: BOOL,
+    pub Custom: *mut ::std::os::raw::c_void,
+    pub EnableFiles: BOOL,
+    pub EnableOthers: BOOL,
+    pub IsStopped: BOOL,
     pub ServerCapabilities: pcCliprdrServerCapabilities,
     pub ClientCapabilities: pcCliprdrClientCapabilities,
     pub MonitorReady: pcCliprdrMonitorReady,
@@ -472,7 +473,7 @@ pub struct _cliprdr_client_context {
     pub ServerFileContentsRequest: pcCliprdrServerFileContentsRequest,
     pub ClientFileContentsResponse: pcCliprdrClientFileContentsResponse,
     pub ServerFileContentsResponse: pcCliprdrServerFileContentsResponse,
-    pub lastRequestedFormatId: UINT32,
+    pub LastRequestedFormatId: UINT32,
 }
 
 // #[link(name = "user32")]
@@ -480,10 +481,7 @@ pub struct _cliprdr_client_context {
 extern "C" {
     pub(crate) fn init_cliprdr(context: *mut CliprdrClientContext) -> BOOL;
     pub(crate) fn uninit_cliprdr(context: *mut CliprdrClientContext) -> BOOL;
-    pub(crate) fn empty_cliprdr(
-        context: *mut CliprdrClientContext,
-        connID: UINT32,
-    ) -> BOOL;
+    pub(crate) fn empty_cliprdr(context: *mut CliprdrClientContext, connID: UINT32) -> BOOL;
 }
 
 #[derive(Error, Debug)]
@@ -508,9 +506,10 @@ impl CliprdrClientContext {
         client_file_contents_response: pcCliprdrClientFileContentsResponse,
     ) -> Result<Box<Self>, CliprdrError> {
         let context = CliprdrClientContext {
-            custom: 0 as *mut _,
-            enableFiles: if enable_files { TRUE } else { FALSE },
-            enableOthers: if enable_others { TRUE } else { FALSE },
+            Custom: 0 as *mut _,
+            EnableFiles: if enable_files { TRUE } else { FALSE },
+            EnableOthers: if enable_others { TRUE } else { FALSE },
+            IsStopped: FALSE,
             ServerCapabilities: None,
             ClientCapabilities: None,
             MonitorReady: None,
@@ -531,7 +530,7 @@ impl CliprdrClientContext {
             ServerFileContentsRequest: None,
             ClientFileContentsResponse: client_file_contents_response,
             ServerFileContentsResponse: None,
-            lastRequestedFormatId: 0,
+            LastRequestedFormatId: 0,
         };
         let mut context = Box::new(context);
         unsafe {
