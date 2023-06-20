@@ -13,6 +13,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../consts.dart';
 import '../common.dart';
 import '../common/widgets/overlay.dart';
+import '../main.dart';
 import 'model.dart';
 
 class MessageBody {
@@ -288,6 +289,10 @@ class ChatModel with ChangeNotifier {
       return;
     }
     if (text.isEmpty) return;
+    if (desktopType == DesktopType.cm) {
+      await showCmWindow();
+    }
+
     // mobile: first message show overlay icon
     if (!isDesktop && chatIconOverlayEntry == null) {
       showChatIconOverlay();

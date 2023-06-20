@@ -224,9 +224,9 @@ class ServerModel with ChangeNotifier {
       _hideCm = hideCm;
       if (desktopType == DesktopType.cm) {
         if (hideCm) {
-          hideCmWindow();
+          await hideCmWindow();
         } else {
-          showCmWindow();
+          await showCmWindow();
         }
       }
       update = true;
