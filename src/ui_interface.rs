@@ -857,6 +857,8 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
     let mut rx = rx;
     let mut mouse_time = 0;
     let mut id = "".to_owned();
+    let mut enable_file_transfer = "".to_owned();
+
     loop {
         if let Ok(mut c) = ipc::connect(1000, "").await {
             let mut timer = time::interval(time::Duration::from_secs(1));
@@ -875,6 +877,15 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
                             Ok(Some(ipc::Data::Options(Some(v)))) => {
                                 *OPTIONS.lock().unwrap() = v;
                                 *OPTION_SYNCED.lock().unwrap() = true;
+
+                                #[cfg(target_os="windows")]
+                                {
+                                    let b = OPTIONS.lock().unwrap().get("enable-file-transfer").map(|x| x.to_string()).unwrap_or_default();
+                                    if b != enable_file_transfer {
+                                        clipboard::ContextSend::enable(b.is_empty());
+                                        enable_file_transfer = b;
+                                    }
+                                }
                             }
                             Ok(Some(ipc::Data::Config((name, Some(value))))) => {
                                 if name == "id" {

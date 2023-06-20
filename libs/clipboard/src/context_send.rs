@@ -11,15 +11,23 @@ pub struct ContextSend {
 }
 
 impl ContextSend {
+    #[inline]
     pub fn is_enabled() -> bool {
         *CONTEXT_SEND.addr.lock().unwrap() != 0
+    }
+
+    pub fn set_is_stopped() {
+        let _res = Self::proc(|c| {
+            c.IsStopped = TRUE;
+            0
+        });
     }
 
     pub fn enable(enabled: bool) {
         let mut lock = CONTEXT_SEND.addr.lock().unwrap();
         if enabled {
             if *lock == 0 {
-                match crate::create_cliprdr_context(true, false, crate::ProcessSide::ClientSide) {
+                match crate::create_cliprdr_context(true, false) {
                     Ok(context) => {
                         log::info!("clipboard context for file transfer created.");
                         *lock = Box::into_raw(context) as _;
@@ -44,13 +52,13 @@ impl ContextSend {
     }
 
     pub fn proc<F: FnOnce(&mut Box<CliprdrClientContext>) -> u32>(f: F) -> u32 {
-        let mut lock = CONTEXT_SEND.addr.lock().unwrap();
+        let lock = CONTEXT_SEND.addr.lock().unwrap();
         if *lock != 0 {
             unsafe {
                 let mut context = Box::from_raw(*lock as *mut CliprdrClientContext);
-                let res = f(&mut context);
-                *lock = Box::into_raw(context) as _;
-                res
+                let code = f(&mut context);
+                std::mem::forget(context);
+                code
             }
         } else {
             0

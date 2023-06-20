@@ -122,6 +122,8 @@ pub fn core_main() -> Option<Vec<String>> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     init_plugins(&args);
     if args.is_empty() {
+        #[cfg(windows)]
+        clipboard::ContextSend::enable(true);
         std::thread::spawn(move || crate::start_server(false));
     } else {
         #[cfg(windows)]

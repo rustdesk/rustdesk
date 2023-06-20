@@ -10,7 +10,6 @@ use hbb_common::{
 use serde_derive::{Deserialize, Serialize};
 use std::{
     boxed::Box,
-    collections::HashMap,
     ffi::{CStr, CString},
     sync::{Arc, Mutex, RwLock},
 };
@@ -18,6 +17,8 @@ use std::{
 pub mod cliprdr;
 pub mod context_send;
 pub use context_send::*;
+
+const ERR_CODE_SERVER_FUNCTION_NONE: u32 = 0x00000001;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "t", content = "c")]
@@ -53,11 +54,6 @@ pub enum ClipboardFile {
     },
 }
 
-#[derive(Default)]
-struct ConnEnabled {
-    conn_enabled: HashMap<i32, bool>,
-}
-
 struct MsgChannel {
     session_uuid: SessionID,
     conn_id: i32,
@@ -65,17 +61,27 @@ struct MsgChannel {
     receiver: Arc<TokioMutex<UnboundedReceiver<ClipboardFile>>>,
 }
 
-#[derive(PartialEq)]
-pub enum ProcessSide {
-    UnknownSide,
-    ClientSide,
-    ServerSide,
-}
-
 lazy_static::lazy_static! {
     static ref VEC_MSG_CHANNEL: RwLock<Vec<MsgChannel>> = Default::default();
-    static ref CLIP_CONN_ENABLED: Mutex<ConnEnabled> = Mutex::new(ConnEnabled::default());
-    static ref PROCESS_SIDE: RwLock<ProcessSide> = RwLock::new(ProcessSide::UnknownSide);
+    static ref CLIENT_CONN_ID_COUNTER: Mutex<i32> = Mutex::new(0);
+}
+
+impl ClipboardFile {
+    pub fn is_stopping_allowed(&self) -> bool {
+        match self {
+            ClipboardFile::MonitorReady
+            | ClipboardFile::FormatList { .. }
+            | ClipboardFile::FormatDataRequest { .. } => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_stopping_allowed_from_peer(&self) -> bool {
+        match self {
+            ClipboardFile::MonitorReady | ClipboardFile::FormatList { .. } => true,
+            _ => false,
+        }
+    }
 }
 
 pub fn get_client_conn_id(session_uuid: &SessionID) -> Option<i32> {
@@ -85,6 +91,12 @@ pub fn get_client_conn_id(session_uuid: &SessionID) -> Option<i32> {
         .iter()
         .find(|x| x.session_uuid == session_uuid.to_owned())
         .map(|x| x.conn_id)
+}
+
+fn get_conn_id() -> i32 {
+    let mut lock = CLIENT_CONN_ID_COUNTER.lock().unwrap();
+    *lock += 1;
+    *lock
 }
 
 pub fn get_rx_cliprdr_client(
@@ -100,7 +112,7 @@ pub fn get_rx_cliprdr_client(
             let (sender, receiver) = unbounded_channel();
             let receiver = Arc::new(TokioMutex::new(receiver));
             let receiver2 = receiver.clone();
-            let conn_id = lock.len() as i32 + 1;
+            let conn_id = get_conn_id();
             let msg_channel = MsgChannel {
                 session_uuid: session_uuid.to_owned(),
                 conn_id,
@@ -143,13 +155,6 @@ fn send_data(conn_id: i32, data: ClipboardFile) {
         .find(|x| x.conn_id == conn_id)
     {
         allow_err!(msg_channel.sender.send(data));
-    }
-}
-
-pub fn set_conn_enabled(conn_id: i32, enabled: bool) {
-    let mut lock = CLIP_CONN_ENABLED.lock().unwrap();
-    if conn_id != 0 {
-        let _ = lock.conn_enabled.insert(conn_id, enabled);
     }
 }
 
@@ -251,8 +256,12 @@ pub fn server_monitor_ready(context: &mut Box<CliprdrClientContext>, conn_id: i3
             msgFlags: 0 as UINT16,
             dataLen: 0 as UINT32,
         };
-        let ret = ((**context).MonitorReady.unwrap())(&mut (**context), &monitor_ready);
-        ret as u32
+        if let Some(f) = (**context).MonitorReady {
+            let ret = f(&mut (**context), &monitor_ready);
+            ret as u32
+        } else {
+            ERR_CODE_SERVER_FUNCTION_NONE
+        }
     }
 }
 
@@ -293,7 +302,11 @@ pub fn server_format_list(
             formats: formats.as_mut_ptr(),
         };
 
-        let ret = ((**context).ServerFormatList.unwrap())(&mut (**context), &format_list);
+        let ret = if let Some(f) = (**context).ServerFormatList {
+            f(&mut (**context), &format_list)
+        } else {
+            ERR_CODE_SERVER_FUNCTION_NONE
+        };
 
         for f in formats {
             if !f.formatName.is_null() {
@@ -319,10 +332,11 @@ pub fn server_format_list_response(
             dataLen: 0 as UINT32,
         };
 
-        let ret =
-            (**context).ServerFormatListResponse.unwrap()(&mut (**context), &format_list_response);
-
-        ret as u32
+        if let Some(f) = (**context).ServerFormatListResponse {
+            f(&mut (**context), &format_list_response)
+        } else {
+            ERR_CODE_SERVER_FUNCTION_NONE
+        }
     }
 }
 
@@ -339,9 +353,11 @@ pub fn server_format_data_request(
             dataLen: 0 as UINT32,
             requestedFormatId: requested_format_id as UINT32,
         };
-        let ret =
-            ((**context).ServerFormatDataRequest.unwrap())(&mut (**context), &format_data_request);
-        ret as u32
+        if let Some(f) = (**context).ServerFormatDataRequest {
+            f(&mut (**context), &format_data_request)
+        } else {
+            ERR_CODE_SERVER_FUNCTION_NONE
+        }
     }
 }
 
@@ -359,11 +375,11 @@ pub fn server_format_data_response(
             dataLen: format_data.len() as UINT32,
             requestedFormatData: format_data.as_mut_ptr(),
         };
-        let ret = ((**context).ServerFormatDataResponse.unwrap())(
-            &mut (**context),
-            &format_data_response,
-        );
-        ret as u32
+        if let Some(f) = (**context).ServerFormatDataResponse {
+            f(&mut (**context), &format_data_response)
+        } else {
+            ERR_CODE_SERVER_FUNCTION_NONE
+        }
     }
 }
 
@@ -394,11 +410,11 @@ pub fn server_file_contents_request(
             haveClipDataId: if have_clip_data_id { TRUE } else { FALSE },
             clipDataId: clip_data_id as UINT32,
         };
-        let ret = ((**context).ServerFileContentsRequest.unwrap())(
-            &mut (**context),
-            &file_contents_request,
-        );
-        ret as u32
+        if let Some(f) = (**context).ServerFileContentsRequest {
+            f(&mut (**context), &file_contents_request)
+        } else {
+            ERR_CODE_SERVER_FUNCTION_NONE
+        }
     }
 }
 
@@ -419,25 +435,21 @@ pub fn server_file_contents_response(
             cbRequested: requested_data.len() as UINT32,
             requestedData: requested_data.as_mut_ptr(),
         };
-        let ret = ((**context).ServerFileContentsResponse.unwrap())(
-            &mut (**context),
-            &file_contents_response,
-        );
-        ret as u32
+        if let Some(f) = (**context).ServerFileContentsResponse {
+            f(&mut (**context), &file_contents_response)
+        } else {
+            ERR_CODE_SERVER_FUNCTION_NONE
+        }
     }
 }
 
 pub fn create_cliprdr_context(
     enable_files: bool,
     enable_others: bool,
-    process_side: ProcessSide,
 ) -> ResultType<Box<CliprdrClientContext>> {
-    *PROCESS_SIDE.write().unwrap() = process_side;
-
     Ok(CliprdrClientContext::create(
         enable_files,
         enable_others,
-        Some(check_enabled),
         Some(client_format_list),
         Some(client_format_list_response),
         Some(client_format_data_request),
@@ -445,24 +457,6 @@ pub fn create_cliprdr_context(
         Some(client_file_contents_request),
         Some(client_file_contents_response),
     )?)
-}
-
-extern "C" fn check_enabled(conn_id: UINT32) -> BOOL {
-    if *PROCESS_SIDE.read().unwrap() == ProcessSide::ClientSide {
-        return TRUE;
-    }
-
-    let lock = CLIP_CONN_ENABLED.lock().unwrap();
-    let mut connd_enabled = false;
-    if conn_id != 0 {
-        if let Some(true) = lock.conn_enabled.get(&(conn_id as i32)) {
-            connd_enabled = true;
-        }
-    } else {
-        connd_enabled = true;
-    }
-
-    return if connd_enabled { TRUE } else { FALSE };
 }
 
 extern "C" fn client_format_list(
@@ -498,9 +492,9 @@ extern "C" fn client_format_list(
     let data = ClipboardFile::FormatList { format_list };
     // no need to handle result here
     if conn_id == 0 {
-        VEC_MSG_CHANNEL
-            .read()
-            .unwrap()
+        // msg_channel is used for debug, VEC_MSG_CHANNEL cannot be inspected by the debugger.
+        let msg_channel = VEC_MSG_CHANNEL.read().unwrap();
+        msg_channel
             .iter()
             .for_each(|msg_channel| allow_err!(msg_channel.sender.send(data.clone())));
     } else {
