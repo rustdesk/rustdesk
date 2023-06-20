@@ -568,9 +568,12 @@ static CliprdrStream *CliprdrStream_New(UINT32 connID, ULONG index, void *pData,
 					success = TRUE;
 				}
 
-				instance->m_lSize.QuadPart = *((LONGLONG *)clipboard->req_fdata);
-				free(clipboard->req_fdata);
-				clipboard->req_fdata = NULL;
+				if (clipboard->req_fdata != NULL)
+				{
+					instance->m_lSize.QuadPart = *((LONGLONG *)clipboard->req_fdata);
+					free(clipboard->req_fdata);
+					clipboard->req_fdata = NULL;
+				}
 			}
 			else
 				success = TRUE;
@@ -1544,7 +1547,7 @@ UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, co
 		return rc;
 	}
 
-	return wait_response_event(clipboard, clipboard->req_fevent, (void**)&clipboard->req_fdata);
+	return wait_response_event(clipboard, clipboard->req_fevent, (void **)&clipboard->req_fdata);
 }
 
 static UINT cliprdr_send_response_filecontents(
@@ -2792,6 +2795,13 @@ exit:
 
 	if (pDataObj)
 		IDataObject_Release(pDataObj);
+
+	// https://learn.microsoft.com/en-us/windows/win32/api/objidl/nf-objidl-idataobject-getdata#:~:text=value%20of%20its-,pUnkForRelease,-member.%20If%20pUnkForRelease
+	if (pStreamStc && vStgMedium.pUnkForRelease == NULL)
+	{
+		IStream_Release(pStreamStc);
+		pStreamStc = NULL;
+	}
 
 	if (rc != CHANNEL_RC_OK)
 	{
