@@ -1242,9 +1242,9 @@ function on_email_check(last_msg) {
             var url = handler.get_api_server();
             httpRequest(url + "/api/login", #post, {username: last_msg.user.name, id: my_id, uuid: handler.get_uuid(), type: 'email_code', trustThisDevice: false, verificationCode: code, deviceInfo: getDeviceInfo()}, 
                 function(data) {
-                    if (data.type != 'access_token') {
+                    if (data.error) {
                         abLoading = false;
-                        show_progress(false, "Failed, bad response from server.");
+                        show_progress(false, data.error);
                         return;
                     }
                     handler.set_local_option("access_token", data.access_token);
