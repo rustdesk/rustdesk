@@ -848,6 +848,10 @@ pub fn get_fingerprint() -> String {
     return ipc::get_fingerprint();
 }
 
+pub fn get_hostname() -> String {
+    crate::common::hostname()
+}
+
 // notice: avoiding create ipc connection repeatedly,
 // because windows named pipe has serious memory leak issue.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]

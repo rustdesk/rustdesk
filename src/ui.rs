@@ -589,6 +589,10 @@ impl UI {
     fn handle_relay_id(&self, id: String) -> String {
         handle_relay_id(id)
     }
+
+    fn get_hostname(&self) -> String {
+        get_hostname()
+    }
 }
 
 impl sciter::EventHandler for UI {
@@ -673,6 +677,7 @@ impl sciter::EventHandler for UI {
         fn get_langs();
         fn default_video_save_directory();
         fn handle_relay_id(String);
+        fn get_hostname();
     }
 }
 
