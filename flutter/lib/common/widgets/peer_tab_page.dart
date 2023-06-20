@@ -41,8 +41,6 @@ EdgeInsets? _menuPadding() {
 
 class _PeerTabPageState extends State<PeerTabPage>
     with SingleTickerProviderStateMixin {
-  bool _hideSort = gFFI.peerTabModel.currentTab == 0;
-
   final List<_TabEntry> entries = [
     _TabEntry(
         RecentPeersView(
@@ -87,7 +85,6 @@ class _PeerTabPageState extends State<PeerTabPage>
     if (tabIndex < entries.length) {
       gFFI.peerTabModel.setCurrentTab(tabIndex);
       entries[tabIndex].load();
-      _hideSort = tabIndex == 0;
     }
   }
 
@@ -115,7 +112,7 @@ class _PeerTabPageState extends State<PeerTabPage>
                     child: _createPeerViewTypeSwitch(context)
                         .marginOnly(left: 13)),
                 Offstage(
-                  offstage: _hideSort,
+                  offstage: gFFI.peerTabModel.currentTab == 0,
                   child: PeerSortDropdown().marginOnly(left: 8),
                 ),
               ],
