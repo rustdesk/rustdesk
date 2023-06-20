@@ -98,7 +98,7 @@ class _AddressBookState extends State<AddressBook> {
                     width: double.infinity,
                     height: double.infinity,
                     decoration: BoxDecoration(
-                        border: Border.all(color: MyTheme.darkGray),
+                        border: Border.all(color: MyTheme.border),
                         borderRadius: BorderRadius.circular(2)),
                     child: _buildTags(),
                   ).marginSymmetric(vertical: 8.0),
@@ -430,7 +430,9 @@ class AddressBookTag extends StatelessWidget {
         () => Container(
           decoration: BoxDecoration(
               color: tags.contains(name) ? Colors.blue : null,
-              border: Border.all(color: MyTheme.darkGray),
+              border: tags.contains(name)
+                  ? null
+                  : Border.all(color: MyTheme.border),
               borderRadius: BorderRadius.circular(6)),
           margin: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
           padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 8.0),
