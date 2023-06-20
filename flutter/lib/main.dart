@@ -224,36 +224,54 @@ void runConnectionManagerScreen(bool hide) async {
     MyTheme.currentThemeMode(),
   );
   if (hide) {
-    hideCmWindow();
+    await hideCmWindow(isStartup: true);
   } else {
-    showCmWindow();
+    await showCmWindow(isStartup: true);
   }
   // Start the uni links handler and redirect links to Native, not for Flutter.
   _uniLinkSubscription = listenUniLinks(handleByFlutter: false);
 }
 
-void showCmWindow() {
-  WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
-      size: kConnectionManagerWindowSizeClosedChat);
-  windowManager.waitUntilReadyToShow(windowOptions, () async {
-    bind.mainHideDocker();
-    await windowManager.show();
-    await Future.wait([windowManager.focus(), windowManager.setOpacity(1)]);
-    // ensure initial window size to be changed
-    await windowManager.setSizeAlignment(
-        kConnectionManagerWindowSizeClosedChat, Alignment.topRight);
-  });
+showCmWindow({bool isStartup = false}) async {
+  if (isStartup) {
+    WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
+        size: kConnectionManagerWindowSizeClosedChat);
+    windowManager.waitUntilReadyToShow(windowOptions, () async {
+      bind.mainHideDocker();
+      await windowManager.show();
+      await Future.wait([windowManager.focus(), windowManager.setOpacity(1)]);
+      // ensure initial window size to be changed
+      await windowManager.setSizeAlignment(
+          kConnectionManagerWindowSizeClosedChat, Alignment.topRight);
+    });
+  } else {
+    if (await windowManager.getOpacity() != 1) {
+      await windowManager.setOpacity(1);
+      await windowManager.focus();
+      await windowManager.minimize(); //needed
+      await windowManager.setSizeAlignment(
+          kConnectionManagerWindowSizeClosedChat, Alignment.topRight);
+      window_on_top(null);
+    }
+  }
 }
 
-void hideCmWindow() {
-  WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
-      size: kConnectionManagerWindowSizeClosedChat);
-  windowManager.setOpacity(0);
-  windowManager.waitUntilReadyToShow(windowOptions, () async {
+hideCmWindow({bool isStartup = false}) async {
+  if (isStartup) {
+    WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
+        size: kConnectionManagerWindowSizeClosedChat);
+    windowManager.setOpacity(0);
+    windowManager.waitUntilReadyToShow(windowOptions, () async {
+      bind.mainHideDocker();
+      await windowManager.minimize();
+      await windowManager.hide();
+    });
+  } else {
+    await windowManager.setOpacity(0);
     bind.mainHideDocker();
     await windowManager.minimize();
     await windowManager.hide();
-  });
+  }
 }
 
 void _runApp(
