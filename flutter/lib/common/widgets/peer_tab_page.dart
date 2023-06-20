@@ -41,7 +41,7 @@ EdgeInsets? _menuPadding() {
 
 class _PeerTabPageState extends State<PeerTabPage>
     with SingleTickerProviderStateMixin {
-  bool _hideSort = bind.getLocalFlutterConfig(k: 'peer-tab-index') == '0';
+  bool _hideSort = gFFI.peerTabModel.currentTab == 0;
 
   final List<_TabEntry> entries = [
     _TabEntry(
