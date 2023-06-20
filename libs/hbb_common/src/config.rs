@@ -44,7 +44,6 @@ lazy_static::lazy_static! {
     static ref CONFIG: Arc<RwLock<Config>> = Arc::new(RwLock::new(Config::load()));
     static ref CONFIG2: Arc<RwLock<Config2>> = Arc::new(RwLock::new(Config2::load()));
     static ref LOCAL_CONFIG: Arc<RwLock<LocalConfig>> = Arc::new(RwLock::new(LocalConfig::load()));
-    pub static ref CONFIG_OIDC: Arc<RwLock<ConfigOidc>> = Arc::new(RwLock::new(ConfigOidc::load()));
     pub static ref ONLINE: Arc<Mutex<HashMap<String, i64>>> = Default::default();
     pub static ref PROD_RENDEZVOUS_SERVER: Arc<RwLock<String>> = Arc::new(RwLock::new(match option_env!("RENDEZVOUS_SERVER") {
         Some(key) if !key.is_empty() => key,
@@ -300,79 +299,6 @@ pub struct PeerInfoSerde {
     pub hostname: String,
     #[serde(default, deserialize_with = "deserialize_string")]
     pub platform: String,
-}
-
-#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
-pub struct ConfigOidc {
-    #[serde(
-        default,
-        skip_serializing_if = "is_default",
-        deserialize_with = "deserialize_usize"
-    )]
-    pub max_auth_count: usize,
-    #[serde(
-        default,
-        skip_serializing_if = "String::is_empty",
-        deserialize_with = "deserialize_string"
-    )]
-    pub callback_url: String,
-    #[serde(
-        default,
-        skip_serializing_if = "HashMap::is_empty",
-        deserialize_with = "deserialize_hashmap_string_configoidcprovider"
-    )]
-    pub providers: HashMap<String, ConfigOidcProvider>,
-}
-
-fn is_default<T: PartialEq + Default>(v: &T) -> bool {
-    *v == T::default()
-}
-
-#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
-pub struct ConfigOidcProvider {
-    // seconds. 0 means never expires
-    #[serde(
-        default,
-        skip_serializing_if = "is_default",
-        deserialize_with = "deserialize_u32"
-    )]
-    pub refresh_token_expires_in: u32,
-    #[serde(
-        default,
-        skip_serializing_if = "String::is_empty",
-        deserialize_with = "deserialize_string"
-    )]
-    pub client_id: String,
-    #[serde(
-        default,
-        skip_serializing_if = "String::is_empty",
-        deserialize_with = "deserialize_string"
-    )]
-    pub client_secret: String,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        deserialize_with = "deserialize_option_string"
-    )]
-    pub issuer: Option<String>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        deserialize_with = "deserialize_option_string"
-    )]
-    pub authorization_endpoint: Option<String>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        deserialize_with = "deserialize_option_string"
-    )]
-    pub token_endpoint: Option<String>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        deserialize_with = "deserialize_option_string"
-    )]
-    pub userinfo_endpoint: Option<String>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
@@ -1512,30 +1438,6 @@ impl UserDefaultConfig {
     }
 }
 
-impl ConfigOidc {
-    fn suffix() -> &'static str {
-        "_oidc"
-    }
-
-    fn load() -> Self {
-        Config::load_::<Self>(Self::suffix())._load_env()
-    }
-
-    fn _load_env(mut self) -> Self {
-        use std::env;
-        for (k, v) in &mut self.providers {
-            if let Ok(client_id) = env::var(format!("OIDC-{}-CLIENT-ID", k.to_uppercase())) {
-                v.client_id = client_id;
-            }
-            if let Ok(client_secret) = env::var(format!("OIDC-{}-CLIENT-SECRET", k.to_uppercase()))
-            {
-                v.client_secret = client_secret;
-            }
-        }
-        self
-    }
-}
-
 // use default value when field type is wrong
 macro_rules! deserialize_default {
     ($func_name:ident, $return_type:ty) => {
@@ -1551,18 +1453,14 @@ macro_rules! deserialize_default {
 deserialize_default!(deserialize_string, String);
 deserialize_default!(deserialize_bool, bool);
 deserialize_default!(deserialize_i32, i32);
-deserialize_default!(deserialize_u32, u32);
-deserialize_default!(deserialize_usize, usize);
 deserialize_default!(deserialize_vec_u8, Vec<u8>);
 deserialize_default!(deserialize_vec_string, Vec<String>);
 deserialize_default!(deserialize_vec_i32_string_i32, Vec<(i32, String, i32)>);
 deserialize_default!(deserialize_vec_discoverypeer, Vec<DiscoveryPeer>);
 deserialize_default!(deserialize_keypair, KeyPair);
 deserialize_default!(deserialize_size, Size);
-deserialize_default!(deserialize_option_string, Option<String>);
-deserialize_default!(deserialize_hashmap_string_string,  HashMap<String, String>);
+deserialize_default!(deserialize_hashmap_string_string, HashMap<String, String>);
 deserialize_default!(deserialize_hashmap_string_bool,  HashMap<String, bool>);
-deserialize_default!(deserialize_hashmap_string_configoidcprovider,  HashMap<String, ConfigOidcProvider>);
 deserialize_default!(deserialize_hashmap_resolutions, HashMap<String, Resolution>);
 
 #[cfg(test)]
