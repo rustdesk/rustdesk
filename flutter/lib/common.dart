@@ -1332,7 +1332,13 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
       break;
     default:
       final wc = WindowController.fromWindowId(windowId!);
-      final frame = await wc.getFrame();
+      final Rect frame;
+      try {
+        frame = await wc.getFrame();
+      } catch (e) {
+        debugPrint("Failed to get frame of window $windowId, it may be hidden");
+        return;
+      }
       final position = frame.topLeft;
       final sz = frame.size;
       final isMaximized = await wc.isMaximized();
