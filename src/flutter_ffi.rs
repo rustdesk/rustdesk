@@ -592,7 +592,7 @@ pub fn main_get_default_sound_input() -> Option<String> {
 }
 
 pub fn main_get_hostname() -> SyncReturn<String> {
-    SyncReturn(crate::common::hostname())
+    SyncReturn(get_hostname())
 }
 
 pub fn main_change_id(new_id: String) {
