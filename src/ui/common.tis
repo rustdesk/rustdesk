@@ -427,7 +427,7 @@ function httpRequest(url, type, params, _onSuccess, _onError, headers="") {
         if (status == " ") self.timer(0.1s, check_status);
         else {
             try {
-                var data = JSON.parse(status);
+                var data = JSON.parse(status || "{}");
                 _onSuccess(data);
             } catch (e) {
                 _onError(status, 0);
