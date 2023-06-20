@@ -221,7 +221,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Remember me", "記住我"),
         ("Trust this device", "信任此裝置"),
         ("Verification code", "驗證碼"),
-        ("verification_tip", "檢測到新裝置登入，已向註冊電子信箱發送了登入驗證碼，請輸入驗證碼以繼續登入"),
+        ("verification_tip", "已向註冊電子信箱發送了登入驗證碼，請輸入驗證碼以繼續登入"),
         ("Logout", "登出"),
         ("Tags", "標籤"),
         ("Search ID", "搜尋 ID"),

@@ -416,7 +416,7 @@ Future<bool?> loginDialog() async {
             password: password.text,
             id: await bind.mainGetMyId(),
             uuid: await bind.mainGetUuid(),
-            autoLogin: true,
+            trustThisDevice: false,
             type: HttpType.kAuthReqTypeAccount));
 
         switch (resp.type) {
@@ -476,7 +476,9 @@ Future<bool?> loginDialog() async {
                   ConfigOP(op: 'GitHub', iconWidth: 20),
                   ConfigOP(op: 'Google', iconWidth: 20),
                   ConfigOP(op: 'Okta', iconWidth: 38),
-                ].where((op) => oidcOptions.contains(op.op.toLowerCase())).toList(),
+                ]
+                    .where((op) => oidcOptions.contains(op.op.toLowerCase()))
+                    .toList(),
                 curOP: curOP,
                 cbLogin: (String username) {
                   gFFI.userModel.userName.value = username;
@@ -524,7 +526,7 @@ Future<bool?> loginDialog() async {
 }
 
 Future<bool?> verificationCodeDialog(UserPayload? user) async {
-  var autoLogin = true;
+  var trustThisDevice = false;
   var isInProgress = false;
   String? errorText;
 
@@ -557,7 +559,7 @@ Future<bool?> verificationCodeDialog(UserPayload? user) async {
             username: user?.name,
             id: await bind.mainGetMyId(),
             uuid: await bind.mainGetUuid(),
-            autoLogin: autoLogin,
+            trustThisDevice: trustThisDevice,
             type: HttpType.kAuthReqTypeEmailCode));
 
         switch (resp.type) {
@@ -605,6 +607,7 @@ Future<bool?> verificationCodeDialog(UserPayload? user) async {
               focusNode: focusNode,
               helperText: translate('verification_tip'),
             ),
+            /*
             CheckboxListTile(
               contentPadding: const EdgeInsets.all(0),
               dense: true,
@@ -612,12 +615,13 @@ Future<bool?> verificationCodeDialog(UserPayload? user) async {
               title: Row(children: [
                 Expanded(child: Text(translate("Trust this device")))
               ]),
-              value: autoLogin,
+              value: trustThisDevice,
               onChanged: (v) {
                 if (v == null) return;
-                setState(() => autoLogin = !autoLogin);
+                setState(() => trustThisDevice = !trustThisDevice);
               },
             ),
+            */
             Offstage(
                 offstage: !isInProgress,
                 child: const LinearProgressIndicator()),

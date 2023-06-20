@@ -37,7 +37,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("hide_cm_tip", "Allow hiding only if accepting sessions via password and using permanent password"),
         ("wayland_experiment_tip", "Wayland support is in experimental stage, please use X11 if you require unattended access."),
         ("Slogan_tip", "Made with heart in this chaotic world!"),
-        ("verification_tip", "A new device has been detected, and a verification code has been sent to the registered email address, enter the verification code to continue logging in."),
+        ("verification_tip", "A verification code has been sent to the registered email address, enter the verification code to continue logging in."),
         ("software_render_tip", "If you're using Nvidia graphics card under Linux and the remote window closes immediately after connecting, switching to the open-source Nouveau driver and choosing to use software rendering may help. A software restart is required."),
         ("config_input", "In order to control remote desktop with keyboard, you need to grant RustDesk \"Input Monitoring\" permissions."),
         ("request_elevation_tip", "You can also request elevation if there is someone on the remote side."),
