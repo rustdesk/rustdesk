@@ -168,6 +168,7 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
 
   Widget _buildPeersView(Peers peers) {
     _loaded = true;
+    final updateEvent = peers.event;
     final body = ObxValue<RxList>((filters) {
       return FutureBuilder<List<Peer>>(
         builder: (context, snapshot) {
@@ -191,7 +192,14 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
                     )
                   : SizedBox(width: mobileWidth, child: visibilityChild));
             }
-            return Wrap(spacing: space, runSpacing: space, children: cards);
+            final child =
+                Wrap(spacing: space, runSpacing: space, children: cards);
+            if (updateEvent == UpdateEvent.load) {
+              _curPeers.clear();
+              _curPeers.addAll(peers.map((e) => e.id));
+              _queryOnlines(true);
+            }
+            return child;
           } else {
             return const Center(
               child: CircularProgressIndicator(),
@@ -205,26 +213,19 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
     return body;
   }
 
-  // ignore: todo
-  // TODO: variables walk through async tasks?
+  final _queryInterval = const Duration(seconds: 20);
+
   void _startCheckOnlines() {
-    final queryInterval = const Duration(seconds: 20);
     () async {
       while (!_exit) {
         final now = DateTime.now();
         if (!setEquals(_curPeers, _lastQueryPeers)) {
           if (now.difference(_lastChangeTime) > const Duration(seconds: 1)) {
-            if (_curPeers.isNotEmpty) {
-              platformFFI.ffiBind
-                  .queryOnlines(ids: _curPeers.toList(growable: false));
-              _lastQueryPeers = {..._curPeers};
-              _lastQueryTime = DateTime.now().subtract(queryInterval);
-              _queryCount = 0;
-            }
+            _queryOnlines(false);
           }
         } else {
           if (_queryCount < _maxQueryCount) {
-            if (now.difference(_lastQueryTime) >= queryInterval) {
+            if (now.difference(_lastQueryTime) >= _queryInterval) {
               if (_curPeers.isNotEmpty) {
                 platformFFI.ffiBind
                     .queryOnlines(ids: _curPeers.toList(growable: false));
@@ -237,6 +238,19 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
         await Future.delayed(const Duration(milliseconds: 300));
       }
     }();
+  }
+
+  _queryOnlines(bool isLoadEvent) {
+    if (_curPeers.isNotEmpty) {
+      platformFFI.ffiBind.queryOnlines(ids: _curPeers.toList(growable: false));
+      _lastQueryPeers = {..._curPeers};
+      if (isLoadEvent) {
+        _lastChangeTime = DateTime.now();
+      } else {
+        _lastQueryTime = DateTime.now().subtract(_queryInterval);
+      }
+      _queryCount = 0;
+    }
   }
 
   Future<List<Peer>>? matchPeers(
