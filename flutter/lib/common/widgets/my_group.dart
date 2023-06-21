@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/hbbs/hbbs.dart';
+import 'package:flutter_hbb/common/widgets/login.dart';
 import 'package:flutter_hbb/common/widgets/peers_view.dart';
-import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
 
 import '../../common.dart';
@@ -28,24 +28,20 @@ class _MyGroupState extends State<MyGroup> {
 
   @override
   Widget build(BuildContext context) {
-    return Obx(() => Offstage(
-          offstage: stateGlobal.svcStatus.value != SvcStatus.ready,
-          child: FutureBuilder<Widget>(
-              future: buildBody(context),
-              builder: (context, snapshot) {
-                if (snapshot.hasData) {
-                  return snapshot.data!;
-                } else {
-                  return const Offstage();
-                }
-              }),
-        ));
+    return Obx(() {
+      // use username to be same with ab
+      if (gFFI.userModel.userName.value.isEmpty) {
+        return Center(
+            child: ElevatedButton(
+                onPressed: loginDialog, child: Text(translate("Login"))));
+      }
+      return buildBody(context);
+    });
   }
 
-  Future<Widget> buildBody(BuildContext context) async {
+  Widget buildBody(BuildContext context) {
     return Obx(() {
-      if (gFFI.groupModel.groupLoading.value ||
-          gFFI.groupModel.peerLoading.value) {
+      if (gFFI.groupModel.groupLoading.value) {
         return const Center(
           child: CircularProgressIndicator(),
         );
@@ -109,9 +105,9 @@ class _MyGroupState extends State<MyGroup> {
         Expanded(
           child: Align(
               alignment: Alignment.topLeft,
-              child: MyGroupPeerView(
+              child: Obx(() => MyGroupPeerView(
                   menuPadding: widget.menuPadding,
-                  initPeers: gFFI.groupModel.peersShow)),
+                  initPeers: gFFI.groupModel.peersShow.value))),
         )
       ],
     );
@@ -147,9 +143,9 @@ class _MyGroupState extends State<MyGroup> {
         Expanded(
           child: Align(
               alignment: Alignment.topLeft,
-              child: MyGroupPeerView(
+              child: Obx(() => MyGroupPeerView(
                   menuPadding: widget.menuPadding,
-                  initPeers: gFFI.groupModel.peersShow)),
+                  initPeers: gFFI.groupModel.peersShow.value))),
         )
       ],
     );
