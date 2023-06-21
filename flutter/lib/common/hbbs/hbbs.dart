@@ -123,7 +123,6 @@ class LoginResponse {
   LoginResponse.fromJson(Map<String, dynamic> json) {
     access_token = json['access_token'];
     type = json['type'];
-    print('REMOVE ME ================== $json');
     user = json['user'] != null ? UserPayload.fromJson(json['user']) : null;
   }
 }

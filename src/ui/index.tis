@@ -1175,8 +1175,11 @@ function check_if_overlay() {
 checkConnectStatus();
 
 function set_local_user_info(user) {
-  var user_info = {name: user.name, status: user.status};
-  handler.set_local_option("user_info", JSON.stringify(user_info));
+    var user_info = {name: user.name};
+    if (user.status) {
+        user_info.status = user.status;
+    }
+    handler.set_local_option("user_info", JSON.stringify(user_info));
 }
 
 function login() {
