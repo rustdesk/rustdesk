@@ -14,7 +14,6 @@ import 'platform_model.dart';
 class UserModel {
   final RxString userName = ''.obs;
   final RxBool isAdmin = false.obs;
-  final RxBool fromServer = false.obs;
   WeakReference<FFI> parent;
 
   UserModel(this.parent);
@@ -85,7 +84,6 @@ class UserModel {
   _parseAndUpdateUser(UserPayload user) {
     userName.value = user.name;
     isAdmin.value = user.isAdmin;
-    fromServer.value = true;
   }
 
   Future<void> _updateOtherModels() async {

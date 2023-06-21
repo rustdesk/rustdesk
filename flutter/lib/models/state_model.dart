@@ -6,6 +6,8 @@ import 'package:get/get.dart';
 
 import '../consts.dart';
 
+enum SvcStatus { notReady, connecting, ready }
+
 class StateGlobal {
   int _windowId = -1;
   bool _fullscreen = false;
@@ -16,6 +18,7 @@ class StateGlobal {
   final RxDouble _windowBorderWidth = RxDouble(kWindowBorderWidth);
   final RxBool showRemoteToolBar = false.obs;
   final RxInt displaysCount = 0.obs;
+  final svcStatus = SvcStatus.notReady.obs;
 
   // Use for desktop -> remote toolbar -> resolution
   final Map<String, Map<int, String?>> _lastResolutionGroupValues = {};

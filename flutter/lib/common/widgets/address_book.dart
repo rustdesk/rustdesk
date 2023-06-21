@@ -3,6 +3,7 @@ import 'package:flutter_hbb/common/formatter/id_formatter.dart';
 import 'package:flutter_hbb/common/widgets/peer_card.dart';
 import 'package:flutter_hbb/common/widgets/peers_view.dart';
 import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
+import 'package:flutter_hbb/models/state_model.dart';
 import '../../consts.dart';
 import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
 import 'package:get/get.dart';
@@ -29,15 +30,18 @@ class _AddressBookState extends State<AddressBook> {
   }
 
   @override
-  Widget build(BuildContext context) => FutureBuilder<Widget>(
-      future: buildBody(context),
-      builder: (context, snapshot) {
-        if (snapshot.hasData) {
-          return snapshot.data!;
-        } else {
-          return const Offstage();
-        }
-      });
+  Widget build(BuildContext context) => Obx(() => Offstage(
+        offstage: stateGlobal.svcStatus.value != SvcStatus.ready,
+        child: FutureBuilder<Widget>(
+            future: buildBody(context),
+            builder: (context, snapshot) {
+              if (snapshot.hasData) {
+                return snapshot.data!;
+              } else {
+                return const Offstage();
+              }
+            }),
+      ));
 
   Future<Widget> buildBody(BuildContext context) async {
     return Obx(() {
@@ -54,7 +58,7 @@ class _AddressBookState extends State<AddressBook> {
         if (gFFI.abModel.abError.isNotEmpty) {
           return _buildShowError(gFFI.abModel.abError.value);
         }
-        if (gFFI.userModel.fromServer.isFalse) {
+        if (gFFI.abModel.fromServer.isFalse) {
           return Offstage();
         }
         return isDesktop
