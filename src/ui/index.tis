@@ -1292,6 +1292,9 @@ function refreshCurrentUser() {
     app.update();
     httpRequest(handler.get_api_server() + "/api/currentUser", #post, {id: my_id, uuid: handler.get_uuid()}, function(data) {
         if (data.error) {
+            if (data.error == 'Invalid token') {
+              reset_token();
+            }
             handleAbError(data.error);
             return;
         }
