@@ -54,6 +54,9 @@ class _AddressBookState extends State<AddressBook> {
         if (gFFI.abModel.abError.isNotEmpty) {
           return _buildShowError(gFFI.abModel.abError.value);
         }
+        if (gFFI.userModel.fromServer.isFalse) {
+          return Offstage();
+        }
         return isDesktop
             ? _buildAddressBookDesktop()
             : _buildAddressBookMobile();

@@ -96,7 +96,7 @@ class ConfigOP {
 class WidgetOP extends StatefulWidget {
   final ConfigOP config;
   final RxString curOP;
-  final Function(String) cbLogin;
+  final Function(Map<String, dynamic>) cbLogin;
   const WidgetOP({
     Key? key,
     required this.config,
@@ -153,9 +153,8 @@ class _WidgetOPState extends State<WidgetOP> {
         }
         if (authBody != null) {
           _updateTimer?.cancel();
-          final String username = authBody['user']['name'];
           widget.curOP.value = '';
-          widget.cbLogin(username);
+          widget.cbLogin(authBody as Map<String, dynamic>);
         }
 
         setState(() {
@@ -255,7 +254,7 @@ class _WidgetOPState extends State<WidgetOP> {
 class LoginWidgetOP extends StatelessWidget {
   final List<ConfigOP> ops;
   final RxString curOP;
-  final Function(String) cbLogin;
+  final Function(Map<String, dynamic>) cbLogin;
 
   LoginWidgetOP({
     Key? key,
@@ -368,7 +367,8 @@ const kAuthReqTypeOidc = 'oidc/';
 /// common login dialog for desktop
 /// call this directly
 Future<bool?> loginDialog() async {
-  var username = TextEditingController();
+  var username =
+      TextEditingController(text: UserModel.getLocalUserInfo()?['name'] ?? '');
   var password = TextEditingController();
   final userFocusNode = FocusNode()..requestFocus();
   Timer(Duration(milliseconds: 100), () => userFocusNode..requestFocus());
@@ -480,8 +480,17 @@ Future<bool?> loginDialog() async {
                     .where((op) => oidcOptions.contains(op.op.toLowerCase()))
                     .toList(),
                 curOP: curOP,
-                cbLogin: (String username) {
-                  gFFI.userModel.userName.value = username;
+                cbLogin: (Map<String, dynamic> authBody) {
+                  try {
+                    final loginResp =
+                        gFFI.userModel.getLoginResponseFromAuthBody(authBody);
+                    if (loginResp.access_token != null) {
+                      bind.mainSetLocalOption(
+                          key: 'access_token', value: loginResp.access_token!);
+                    }
+                  } catch (e) {
+                    debugPrint('Failed too parse oidc login body: "$authBody"');
+                  }
                   close(true);
                 },
               ),
@@ -567,6 +576,7 @@ Future<bool?> verificationCodeDialog(UserPayload? user) async {
             if (resp.access_token != null) {
               await bind.mainSetLocalOption(
                   key: 'access_token', value: resp.access_token!);
+              gFFI.userModel.refreshCurrentUser();
               close(true);
               return;
             }
