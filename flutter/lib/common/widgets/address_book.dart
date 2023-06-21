@@ -125,7 +125,6 @@ class _AddressBookState extends State<AddressBook> {
             ),
           ),
         ),
-        Divider(),
         _buildPeersViews()
       ],
     );
