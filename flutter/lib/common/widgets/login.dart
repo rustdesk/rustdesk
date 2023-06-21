@@ -576,7 +576,6 @@ Future<bool?> verificationCodeDialog(UserPayload? user) async {
             if (resp.access_token != null) {
               await bind.mainSetLocalOption(
                   key: 'access_token', value: resp.access_token!);
-              gFFI.userModel.refreshCurrentUser();
               close(true);
               return;
             }
