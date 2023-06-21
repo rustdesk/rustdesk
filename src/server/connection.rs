@@ -828,9 +828,6 @@ impl Connection {
 
     async fn on_open(&mut self, addr: SocketAddr) -> bool {
         log::debug!("#{} Connection opened from {}.", self.inner.id, addr);
-        if !self.check_privacy_mode_on().await {
-            return false;
-        }
         if !self.check_whitelist(&addr).await {
             return false;
         }
@@ -1344,7 +1341,11 @@ impl Connection {
                         }
                     }
                 }
-                _ => {}
+                _ => {
+                    if !self.check_privacy_mode_on().await {
+                        return false;
+                    }
+                }
             }
 
             #[cfg(all(target_os = "linux", feature = "linux_headless"))]
