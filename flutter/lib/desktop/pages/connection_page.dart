@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/scroll_wrapper.dart';
 import 'package:flutter_hbb/models/state_model.dart';
+import 'package:flutter_hbb/models/user_model.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:window_manager/window_manager.dart';
@@ -339,7 +340,6 @@ class _ConnectionPageState extends State<ConnectionPage>
       stateGlobal.svcStatus.value = SvcStatus.ready;
       if (preStatus != SvcStatus.ready) {
         gFFI.userModel.refreshCurrentUser();
-        gFFI.groupModel.pull();
       }
     } else {
       stateGlobal.svcStatus.value = SvcStatus.notReady;
@@ -347,6 +347,9 @@ class _ConnectionPageState extends State<ConnectionPage>
     if (stateGlobal.svcStatus.value != SvcStatus.ready) {
       gFFI.userModel.isAdmin.value = false;
       gFFI.groupModel.reset();
+    }
+    if (preStatus != stateGlobal.svcStatus.value) {
+      UserModel.updateOtherModels();
     }
     svcIsUsingPublicServer.value = await bind.mainIsUsingPublicServer();
   }

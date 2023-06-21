@@ -21,7 +21,7 @@ class UserModel {
   void refreshCurrentUser() async {
     final token = bind.mainGetLocalOption(key: 'access_token');
     if (token == '') {
-      await _updateOtherModels();
+      await updateOtherModels();
       return;
     }
     _updateLocalUserInfo();
@@ -53,7 +53,7 @@ class UserModel {
     } catch (e) {
       print('Failed to refreshCurrentUser: $e');
     } finally {
-      await _updateOtherModels();
+      await updateOtherModels();
     }
   }
 
@@ -86,7 +86,8 @@ class UserModel {
     isAdmin.value = user.isAdmin;
   }
 
-  Future<void> _updateOtherModels() async {
+  // update ab and group status
+  static Future<void> updateOtherModels() async {
     await gFFI.abModel.pullAb();
     await gFFI.groupModel.pull();
   }
