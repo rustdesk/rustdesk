@@ -125,6 +125,16 @@ class _PeerTabPageState extends State<PeerTabPage>
   }
 
   Widget _createSwitchBar(BuildContext context) {
+    getListener({required Key key, required Widget child, required int index}) {
+      if (isMobile) {
+        return ReorderableDelayedDragStartListener(
+            key: key, child: child, index: index);
+      } else {
+        return ReorderableDragStartListener(
+            key: key, child: child, index: index);
+      }
+    }
+
     final model = Provider.of<PeerTabModel>(context);
     int indexCounter = -1;
     return ReorderableListView(
@@ -137,7 +147,7 @@ class _PeerTabPageState extends State<PeerTabPage>
         scrollController: model.sc,
         children: model.visibleOrderedTabs.map((t) {
           indexCounter++;
-          return ReorderableDragStartListener(
+          return getListener(
             key: ValueKey(t),
             index: indexCounter,
             child: VisibilityDetector(
