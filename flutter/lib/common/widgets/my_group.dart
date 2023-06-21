@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/hbbs/hbbs.dart';
 import 'package:flutter_hbb/common/widgets/peers_view.dart';
+import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
 
 import '../../common.dart';
@@ -26,15 +27,20 @@ class _MyGroupState extends State<MyGroup> {
   }
 
   @override
-  Widget build(BuildContext context) => FutureBuilder<Widget>(
-      future: buildBody(context),
-      builder: (context, snapshot) {
-        if (snapshot.hasData) {
-          return snapshot.data!;
-        } else {
-          return const Offstage();
-        }
-      });
+  Widget build(BuildContext context) {
+    return Obx(() => Offstage(
+          offstage: stateGlobal.svcStatus.value != SvcStatus.ready,
+          child: FutureBuilder<Widget>(
+              future: buildBody(context),
+              builder: (context, snapshot) {
+                if (snapshot.hasData) {
+                  return snapshot.data!;
+                } else {
+                  return const Offstage();
+                }
+              }),
+        ));
+  }
 
   Future<Widget> buildBody(BuildContext context) async {
     return Obx(() {

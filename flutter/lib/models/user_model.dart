@@ -24,6 +24,7 @@ class UserModel {
       await _updateOtherModels();
       return;
     }
+    _updateLocalUserInfo();
     final url = await bind.mainGetApiServer();
     final body = {
       'id': await bind.mainGetMyId(),
@@ -48,11 +49,27 @@ class UserModel {
       }
 
       final user = UserPayload.fromJson(data);
-      await _parseAndUpdateUser(user);
+      _parseAndUpdateUser(user);
     } catch (e) {
       print('Failed to refreshCurrentUser: $e');
     } finally {
       await _updateOtherModels();
+    }
+  }
+
+  static Map<String, dynamic>? getLocalUserInfo() {
+    try {
+      return json.decode(bind.mainGetLocalOption(key: 'user_info'));
+    } catch (e) {
+      print('Failed to get local user info: $e');
+    }
+    return null;
+  }
+
+  _updateLocalUserInfo() {
+    final userInfo = getLocalUserInfo();
+    if (userInfo != null) {
+      userName.value = userInfo['name'];
     }
   }
 
@@ -64,7 +81,7 @@ class UserModel {
     gFFI.peerTabModel.check_dynamic_tabs();
   }
 
-  Future<void> _parseAndUpdateUser(UserPayload user) async {
+  _parseAndUpdateUser(UserPayload user) {
     userName.value = user.name;
     isAdmin.value = user.isAdmin;
   }
@@ -110,11 +127,14 @@ class UserModel {
       print("login: jsonDecode resp body failed: ${e.toString()}");
       rethrow;
     }
-
     if (resp.statusCode != 200) {
       throw RequestException(resp.statusCode, body['error'] ?? '');
     }
 
+    return getLoginResponseFromAuthBody(body);
+  }
+
+  LoginResponse getLoginResponseFromAuthBody(Map<String, dynamic> body) {
     final LoginResponse loginResponse;
     try {
       loginResponse = LoginResponse.fromJson(body);
@@ -124,7 +144,7 @@ class UserModel {
     }
 
     if (loginResponse.user != null) {
-      await _parseAndUpdateUser(loginResponse.user!);
+      _parseAndUpdateUser(loginResponse.user!);
     }
 
     return loginResponse;

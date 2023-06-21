@@ -10,12 +10,13 @@ import 'package:http/http.dart' as http;
 import '../common.dart';
 
 class AbModel {
-  var abLoading = false.obs;
-  var abError = "".obs;
-  var tags = [].obs;
-  var peers = List<Peer>.empty(growable: true).obs;
+  final abLoading = false.obs;
+  final abError = "".obs;
+  final tags = [].obs;
+  final RxBool fromServer = false.obs;
+  final peers = List<Peer>.empty(growable: true).obs;
 
-  var selectedTags = List<String>.empty(growable: true).obs;
+  final selectedTags = List<String>.empty(growable: true).obs;
 
   WeakReference<FFI> parent;
 
@@ -49,8 +50,10 @@ class AbModel {
             }
           }
         }
+        fromServer.value = true;
         return resp.body;
       } else {
+        fromServer.value = true;
         return "";
       }
     } catch (err) {
