@@ -16,8 +16,9 @@ class GroupModel {
   final RxString groupName = ''.obs;
   final RxString groupId = ''.obs;
   final RxList<UserPayload> users = RxList.empty(growable: true);
-  final RxList<PeerPayload> peerPayloads = RxList.empty(growable: true);
-  final RxList<Peer> peersShow = RxList.empty(growable: true);
+  final List<Peer> peersShow = List.empty(growable: true);
+  final RxString selectedUser = ''.obs;
+  final RxString searchUserText = ''.obs;
   WeakReference<FFI> parent;
 
   GroupModel(this.parent);
@@ -30,7 +31,6 @@ class GroupModel {
     groupName.value = '';
     groupId.value = '';
     users.clear();
-    peerPayloads.clear();
     peersShow.clear();
   }
 
@@ -45,7 +45,7 @@ class GroupModel {
         return;
       }
     } catch (e) {
-      debugPrintStack(label: '$e');
+      debugPrint('$e');
       reset();
       return;
     }
@@ -98,7 +98,7 @@ class GroupModel {
         }
       } while (current * pageSize < total);
     } catch (err) {
-      debugPrintStack(label: '$err');
+      debugPrint('$err');
       groupLoadError.value = err.toString();
     } finally {
       groupLoading.value = false;
@@ -128,23 +128,30 @@ class GroupModel {
       groupId.value = data['id'] ?? '';
       return groupId.value.isNotEmpty && groupName.isNotEmpty;
     } catch (e) {
-      debugPrintStack(label: '$e');
+      debugPrint('$e');
     } finally {}
 
     return false;
   }
 
-  Future<void> pullUserPeers(UserPayload user) async {
-    peerPayloads.clear();
+  Future<void> pullUserPeers() async {
     peersShow.clear();
     peerLoading.value = true;
     peerLoadError.value = "";
+    List<PeerPayload> peerPayloads = List.empty(growable: true);
     final api = "${await bind.mainGetApiServer()}/api/peers";
     try {
       var uri0 = Uri.parse(api);
       final pageSize = 20;
       var total = 0;
       int current = 0;
+      var queryParameters = {
+        'current': current.toString(),
+        'pageSize': pageSize.toString(),
+      };
+      if (!gFFI.userModel.isAdmin.value) {
+        queryParameters.addAll({'grp': groupId.value});
+      }
       do {
         current += 1;
         var uri = Uri(
@@ -152,11 +159,7 @@ class GroupModel {
             host: uri0.host,
             path: uri0.path,
             port: uri0.port,
-            queryParameters: {
-              'current': current.toString(),
-              'pageSize': pageSize.toString(),
-              'target_user': user.id,
-            });
+            queryParameters: queryParameters);
         final resp = await http.get(uri, headers: getHttpHeaders());
         if (resp.body.isNotEmpty && resp.body.toLowerCase() != "null") {
           Map<String, dynamic> json = jsonDecode(utf8.decode(resp.bodyBytes));
@@ -180,7 +183,7 @@ class GroupModel {
         }
       } while (current * pageSize < total);
     } catch (err) {
-      debugPrintStack(label: '$err');
+      debugPrint('$err');
       peerLoadError.value = err.toString();
     } finally {
       peerLoading.value = false;
