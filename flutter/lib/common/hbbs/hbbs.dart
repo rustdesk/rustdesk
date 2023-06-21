@@ -48,7 +48,7 @@ class PeerPayload {
         note = json['note'] ?? '';
 
   static Peer toPeer(PeerPayload p) {
-    return Peer.fromJson({"id": p.id});
+    return Peer.fromJson({"id": p.id, "username": p.user_name});
   }
 }
 

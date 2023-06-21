@@ -441,10 +441,25 @@ class MyGroupPeerView extends BasePeersView {
           key: key,
           name: 'my group peer',
           loadEvent: 'load_my_group_peers',
+          peerFilter: filter,
           peerCardBuilder: (Peer peer) => MyGroupPeerCard(
             peer: peer,
             menuPadding: menuPadding,
           ),
           initPeers: initPeers,
         );
+
+  static bool filter(Peer peer) {
+    if (gFFI.groupModel.searchUserText.isNotEmpty) {
+      if (!peer.username.contains(gFFI.groupModel.searchUserText)) {
+        return false;
+      }
+    }
+    if (gFFI.groupModel.selectedUser.isNotEmpty) {
+      if (gFFI.groupModel.selectedUser.value != peer.username) {
+        return false;
+      }
+    }
+    return true;
+  }
 }

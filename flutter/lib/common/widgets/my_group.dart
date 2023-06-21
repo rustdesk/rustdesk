@@ -16,8 +16,8 @@ class MyGroup extends StatefulWidget {
 }
 
 class _MyGroupState extends State<MyGroup> {
-  static final RxString selectedUser = ''.obs;
-  static final RxString searchUserText = ''.obs;
+  RxString get selectedUser => gFFI.groupModel.selectedUser;
+  RxString get searchUserText => gFFI.groupModel.searchUserText;
   static TextEditingController searchUserController = TextEditingController();
 
   @override
@@ -37,8 +37,10 @@ class _MyGroupState extends State<MyGroup> {
       });
 
   Future<Widget> buildBody(BuildContext context) async {
+    gFFI.groupModel.pullUserPeers();
     return Obx(() {
-      if (gFFI.groupModel.groupLoading.value) {
+      if (gFFI.groupModel.groupLoading.value ||
+          gFFI.groupModel.peerLoading.value) {
         return const Center(
           child: CircularProgressIndicator(),
         );
@@ -70,85 +72,81 @@ class _MyGroupState extends State<MyGroup> {
   }
 
   Widget _buildDesktop() {
-    return Obx(
-      () => Row(
-        children: [
-          Card(
-            margin: EdgeInsets.symmetric(horizontal: 4.0),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: BorderSide(
-                    color: Theme.of(context).scaffoldBackgroundColor)),
-            child: Container(
-              width: 200,
-              height: double.infinity,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-              child: Column(
-                children: [
-                  _buildLeftHeader(),
-                  Expanded(
-                    child: Container(
-                      width: double.infinity,
-                      height: double.infinity,
-                      decoration:
-                          BoxDecoration(borderRadius: BorderRadius.circular(2)),
-                      child: _buildUserContacts(),
-                    ).marginSymmetric(vertical: 8.0),
-                  )
-                ],
-              ),
+    return Row(
+      children: [
+        Card(
+          margin: EdgeInsets.symmetric(horizontal: 4.0),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side:
+                  BorderSide(color: Theme.of(context).scaffoldBackgroundColor)),
+          child: Container(
+            width: 200,
+            height: double.infinity,
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+            child: Column(
+              children: [
+                _buildLeftHeader(),
+                Expanded(
+                  child: Container(
+                    width: double.infinity,
+                    height: double.infinity,
+                    decoration:
+                        BoxDecoration(borderRadius: BorderRadius.circular(2)),
+                    child: _buildUserContacts(),
+                  ).marginSymmetric(vertical: 8.0),
+                )
+              ],
             ),
-          ).marginOnly(right: 8.0),
-          Expanded(
-            child: Align(
-                alignment: Alignment.topLeft,
-                child: MyGroupPeerView(
-                    menuPadding: widget.menuPadding,
-                    initPeers: gFFI.groupModel.peersShow.value)),
-          )
-        ],
-      ),
+          ),
+        ).marginOnly(right: 8.0),
+        Expanded(
+          child: Align(
+              alignment: Alignment.topLeft,
+              child: MyGroupPeerView(
+                  menuPadding: widget.menuPadding,
+                  initPeers: gFFI.groupModel.peersShow)),
+        )
+      ],
     );
   }
 
   Widget _buildMobile() {
-    return Obx(
-      () => Column(
-        children: [
-          Card(
-            margin: EdgeInsets.symmetric(horizontal: 4.0),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: BorderSide(
-                    color: Theme.of(context).scaffoldBackgroundColor)),
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildLeftHeader(),
-                  Container(
-                    width: double.infinity,
-                    decoration:
-                        BoxDecoration(borderRadius: BorderRadius.circular(4)),
-                    child: _buildUserContacts(),
-                  ).marginSymmetric(vertical: 8.0)
-                ],
-              ),
+    return Column(
+      children: [
+        Card(
+          margin: EdgeInsets.symmetric(horizontal: 4.0),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side:
+                  BorderSide(color: Theme.of(context).scaffoldBackgroundColor)),
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildLeftHeader(),
+                Container(
+                  width: double.infinity,
+                  decoration:
+                      BoxDecoration(borderRadius: BorderRadius.circular(4)),
+                  child: _buildUserContacts(),
+                ).marginSymmetric(vertical: 8.0)
+              ],
             ),
           ),
-          Divider(),
-          Expanded(
-            child: Align(
-                alignment: Alignment.topLeft,
-                child: MyGroupPeerView(
-                    menuPadding: widget.menuPadding,
-                    initPeers: gFFI.groupModel.peersShow.value)),
-          )
-        ],
-      ),
+        ),
+        Divider(),
+        Expanded(
+          child: Align(
+              alignment: Alignment.topLeft,
+              child: MyGroupPeerView(
+                  menuPadding: widget.menuPadding,
+                  initPeers: gFFI.groupModel.peersShow)),
+        )
+      ],
     );
   }
 
@@ -198,7 +196,8 @@ class _MyGroupState extends State<MyGroup> {
     return InkWell(onTap: () {
       if (selectedUser.value != username) {
         selectedUser.value = username;
-        gFFI.groupModel.pullUserPeers(user);
+      } else {
+        selectedUser.value = '';
       }
     }, child: Obx(
       () {
