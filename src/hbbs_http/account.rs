@@ -60,8 +60,6 @@ pub struct UserInfo {
     #[serde(default)]
     pub settings: UserSettings,
     #[serde(default)]
-    pub login_ip_whitelist: Vec<WhitelistItem>,
-    #[serde(default)]
     pub login_device_whitelist: Vec<WhitelistItem>,
     #[serde(default)]
     pub other: HashMap<String, String>,
@@ -83,14 +81,6 @@ pub enum UserStatus {
     Unverified = -1,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize_repr, Deserialize_repr)]
-#[repr(i64)]
-pub enum UserRole {
-    Owner = 10,
-    Admin = 1,
-    Member = 0,
-}
-
 #[derive(Debug, Clone, Deserialize)]
 pub struct UserPayload {
     pub name: String,
@@ -98,8 +88,8 @@ pub struct UserPayload {
     pub note: Option<String>,
     pub status: UserStatus,
     pub info: UserInfo,
-    pub role: UserRole,
     pub is_admin: bool,
+    pub third_auth_type: Option<String>,
     // helper field for serialize
     #[serde(default)]
     pub ser_store_local: bool,
@@ -148,8 +138,8 @@ impl serde::Serialize for UserPayload {
             state.serialize_field("note", &self.note)?;
             state.serialize_field("status", &self.status)?;
             state.serialize_field("info", &self.info)?;
-            state.serialize_field("role", &self.role)?;
             state.serialize_field("is_admin", &self.is_admin)?;
+            state.serialize_field("third_auth_type", &self.third_auth_type)?;
             state.end()
         }
     }

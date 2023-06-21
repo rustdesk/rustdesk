@@ -1174,6 +1174,11 @@ function check_if_overlay() {
 
 checkConnectStatus();
 
+function set_local_user_info(user) {
+  var user_info = {name: user.name, status: user.status};
+  handler.set_local_option("user_info", JSON.stringify(user_info));
+}
+
 function login() {
     var name0 = getUserName();
     var pass0 = '';
@@ -1209,7 +1214,7 @@ function login() {
                 return;
             }
             handler.set_local_option("access_token", data.access_token);
-            handler.set_local_option("user_info", JSON.stringify(data.user));
+            set_local_user_info(data.user);
             show_progress(-1);
             myIdMenu.update();
             getAb();
@@ -1248,7 +1253,7 @@ function on_email_check(last_msg) {
                         return;
                     }
                     handler.set_local_option("access_token", data.access_token);
-                    handler.set_local_option("user_info", JSON.stringify(data.user));
+                    set_local_user_info(data.user);
                     show_progress(-1);
                     myIdMenu.update();
                     getAb();
@@ -1298,7 +1303,7 @@ function refreshCurrentUser() {
             handleAbError(data.error);
             return;
         }
-        handler.set_local_option("user_info", JSON.stringify(data));
+        set_local_user_info(data);
         myIdMenu.update();
         getAb();
     }, function(err, status) {
