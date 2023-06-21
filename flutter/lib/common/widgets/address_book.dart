@@ -30,43 +30,28 @@ class _AddressBookState extends State<AddressBook> {
   }
 
   @override
-  Widget build(BuildContext context) => Obx(() => Offstage(
-        offstage: stateGlobal.svcStatus.value != SvcStatus.ready,
-        child: FutureBuilder<Widget>(
-            future: buildBody(context),
-            builder: (context, snapshot) {
-              if (snapshot.hasData) {
-                return snapshot.data!;
-              } else {
-                return const Offstage();
-              }
-            }),
-      ));
-
-  Future<Widget> buildBody(BuildContext context) async {
-    return Obx(() {
-      if (gFFI.userModel.userName.value.isEmpty) {
-        return Center(
-            child: ElevatedButton(
-                onPressed: loginDialog, child: Text(translate("Login"))));
-      } else {
-        if (gFFI.abModel.abLoading.value) {
-          return const Center(
-            child: CircularProgressIndicator(),
-          );
+  Widget build(BuildContext context) => Obx(() {
+        if (gFFI.userModel.userName.value.isEmpty) {
+          return Center(
+              child: ElevatedButton(
+                  onPressed: loginDialog, child: Text(translate("Login"))));
+        } else {
+          if (gFFI.abModel.abLoading.value) {
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
+          }
+          if (gFFI.abModel.abError.isNotEmpty) {
+            return _buildShowError(gFFI.abModel.abError.value);
+          }
+          if (gFFI.abModel.fromServer.isFalse) {
+            return Offstage();
+          }
+          return isDesktop
+              ? _buildAddressBookDesktop()
+              : _buildAddressBookMobile();
         }
-        if (gFFI.abModel.abError.isNotEmpty) {
-          return _buildShowError(gFFI.abModel.abError.value);
-        }
-        if (gFFI.abModel.fromServer.isFalse) {
-          return Offstage();
-        }
-        return isDesktop
-            ? _buildAddressBookDesktop()
-            : _buildAddressBookMobile();
-      }
-    });
-  }
+      });
 
   Widget _buildShowError(String error) {
     return Center(

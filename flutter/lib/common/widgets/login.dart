@@ -526,9 +526,7 @@ Future<bool?> loginDialog() async {
   });
 
   if (res != null) {
-    // update ab and group status
-    await gFFI.abModel.pullAb();
-    await gFFI.groupModel.pull();
+    await UserModel.updateOtherModels();
   }
 
   return res;
