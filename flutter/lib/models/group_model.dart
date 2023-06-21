@@ -103,6 +103,7 @@ class GroupModel {
     } finally {
       groupLoading.value = false;
       gFFI.peerTabModel.check_dynamic_tabs();
+      _pullUserPeers();
     }
   }
 
@@ -134,7 +135,7 @@ class GroupModel {
     return false;
   }
 
-  Future<void> pullUserPeers() async {
+  Future<void> _pullUserPeers() async {
     peersShow.clear();
     peerLoading.value = true;
     peerLoadError.value = "";

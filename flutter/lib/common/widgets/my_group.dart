@@ -37,7 +37,7 @@ class _MyGroupState extends State<MyGroup> {
       });
 
   Future<Widget> buildBody(BuildContext context) async {
-    gFFI.groupModel.pullUserPeers();
+    gFFI.groupModel.pull();
     return Obx(() {
       if (gFFI.groupModel.groupLoading.value ||
           gFFI.groupModel.peerLoading.value) {
