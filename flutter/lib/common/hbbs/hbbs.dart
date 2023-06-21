@@ -14,6 +14,8 @@ class HttpType {
   static const kAuthResTypeEmailCheck = "email_check";
 }
 
+// to-do: The UserPayload does not contain all the fields of the user.
+// Is all the fields of the user needed?
 class UserPayload {
   String id = '';
   String name = '';
@@ -29,6 +31,16 @@ class UserPayload {
         note = json['note'] ?? '',
         status = json['status'],
         isAdmin = json['is_admin'] == true;
+
+  Map<String, dynamic> toJson() {
+    final Map<String, dynamic> map = {
+      'name': name,
+    };
+    if (status != null) {
+      map['status'] = status!;
+    }
+    return map;
+  }
 }
 
 class PeerPayload {

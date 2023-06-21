@@ -4,6 +4,7 @@ use hbb_common::{
     log, ResultType,
 };
 use reqwest::blocking::Client;
+use serde::ser::SerializeStruct;
 use serde_derive::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::{
@@ -90,7 +91,7 @@ pub enum UserRole {
     Member = 0,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct UserPayload {
     pub name: String,
     pub email: Option<String>,
@@ -99,6 +100,9 @@ pub struct UserPayload {
     pub info: UserInfo,
     pub role: UserRole,
     pub is_admin: bool,
+    // helper field for serialize
+    #[serde(default)]
+    pub ser_store_local: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -125,6 +129,30 @@ pub struct AuthResult {
     pub failed_msg: String,
     pub url: Option<String>,
     pub auth_body: Option<AuthBody>,
+}
+
+impl serde::Serialize for UserPayload {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        if self.ser_store_local {
+            let mut state = serializer.serialize_struct("UserPayload", 1)?;
+            state.serialize_field("name", &self.name)?;
+            state.serialize_field("status", &self.status)?;
+            state.end()
+        } else {
+            let mut state = serializer.serialize_struct("UserPayload", 7)?;
+            state.serialize_field("name", &self.name)?;
+            state.serialize_field("email", &self.email)?;
+            state.serialize_field("note", &self.note)?;
+            state.serialize_field("status", &self.status)?;
+            state.serialize_field("info", &self.info)?;
+            state.serialize_field("role", &self.role)?;
+            state.serialize_field("is_admin", &self.is_admin)?;
+            state.end()
+        }
+    }
 }
 
 impl OidcSession {
@@ -226,16 +254,18 @@ impl OidcSession {
         let query_timeout = OIDC_SESSION.read().unwrap().query_timeout;
         while OIDC_SESSION.read().unwrap().keep_querying && begin.elapsed() < query_timeout {
             match Self::query(&code_url.code, &id, &uuid) {
-                Ok(HbbHttpResponse::<_>::Data(auth_body)) => {
+                Ok(HbbHttpResponse::<_>::Data(mut auth_body)) => {
                     if remember_me {
                         LocalConfig::set_option(
                             "access_token".to_owned(),
                             auth_body.access_token.clone(),
                         );
+                        auth_body.user.ser_store_local = true;
                         LocalConfig::set_option(
                             "user_info".to_owned(),
                             serde_json::to_string(&auth_body.user).unwrap_or_default(),
                         );
+                        auth_body.user.ser_store_local = false;
                     }
                     OIDC_SESSION
                         .write()

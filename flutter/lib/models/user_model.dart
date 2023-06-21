@@ -75,6 +75,7 @@ class UserModel {
 
   Future<void> reset() async {
     await bind.mainSetLocalOption(key: 'access_token', value: '');
+    await bind.mainSetLocalOption(key: 'user_info', value: '');
     await gFFI.abModel.reset();
     await gFFI.groupModel.reset();
     userName.value = '';
