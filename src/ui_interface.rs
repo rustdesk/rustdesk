@@ -822,7 +822,11 @@ pub fn account_auth_cancel() {
 
 #[cfg(feature = "flutter")]
 pub fn account_auth_result() -> String {
-    serde_json::to_string(&account::OidcSession::get_result()).unwrap_or_default()
+    let mut auth_result = account::OidcSession::get_result();
+    if let Some(auth) = auth_result.auth_body.as_mut() {
+        auth.user.ser_store_local = false;
+    }
+    serde_json::to_string(&auth_result).unwrap_or_default()
 }
 
 #[cfg(feature = "flutter")]

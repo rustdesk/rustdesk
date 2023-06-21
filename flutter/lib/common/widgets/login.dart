@@ -424,6 +424,8 @@ Future<bool?> loginDialog() async {
             if (resp.access_token != null) {
               await bind.mainSetLocalOption(
                   key: 'access_token', value: resp.access_token!);
+              await bind.mainSetLocalOption(
+                  key: 'user_info', value: jsonEncode(resp.user ?? {}));
               close(true);
               return;
             }
@@ -482,12 +484,8 @@ Future<bool?> loginDialog() async {
                 curOP: curOP,
                 cbLogin: (Map<String, dynamic> authBody) {
                   try {
-                    final loginResp =
-                        gFFI.userModel.getLoginResponseFromAuthBody(authBody);
-                    if (loginResp.access_token != null) {
-                      bind.mainSetLocalOption(
-                          key: 'access_token', value: loginResp.access_token!);
-                    }
+                    // access_token is already stored in the rust side.
+                    gFFI.userModel.getLoginResponseFromAuthBody(authBody);
                   } catch (e) {
                     debugPrint('Failed too parse oidc login body: "$authBody"');
                   }
