@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/hbbs/hbbs.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
@@ -158,7 +159,8 @@ class UserModel {
       final resp = await http.get(Uri.parse('$url/api/login-options'));
       return jsonDecode(resp.body);
     } catch (e) {
-      debugPrint("queryLoginOptions: jsonDecode resp body failed: ${e.toString()}");
+      debugPrint(
+          "queryLoginOptions: jsonDecode resp body failed: ${e.toString()}");
       return [];
     }
   }
