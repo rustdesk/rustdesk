@@ -101,13 +101,15 @@ class LoginRequest {
 
   Map<String, dynamic> toJson() {
     final Map<String, dynamic> data = <String, dynamic>{};
-    data['username'] = username ?? '';
-    data['password'] = password ?? '';
-    data['id'] = id ?? '';
-    data['uuid'] = uuid ?? '';
-    data['trustThisDevice'] = trustThisDevice ?? '';
-    data['type'] = type ?? '';
-    data['verificationCode'] = verificationCode ?? '';
+    if (username != null) data['username'] = username;
+    if (password != null) data['password'] = password;
+    if (id != null) data['id'] = id;
+    if (uuid != null) data['uuid'] = uuid;
+    if (trustThisDevice != null) data['trustThisDevice'] = trustThisDevice;
+    if (type != null) data['type'] = type;
+    if (verificationCode != null) {
+      data['verificationCode'] = verificationCode;
+    }
     data['deviceInfo'] = deviceInfo;
     return data;
   }
