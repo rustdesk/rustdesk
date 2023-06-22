@@ -10,6 +10,8 @@ import '../common.dart';
 import 'model.dart';
 import 'platform_model.dart';
 
+bool refresing_user = false;
+
 class UserModel {
   final RxString userName = ''.obs;
   final RxBool isAdmin = false.obs;
@@ -29,13 +31,16 @@ class UserModel {
       'id': await bind.mainGetMyId(),
       'uuid': await bind.mainGetUuid()
     };
+    if (refresing_user) return;
     try {
+      refresing_user = true;
       final response = await http.post(Uri.parse('$url/api/currentUser'),
           headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $token'
           },
           body: json.encode(body));
+      refresing_user = false;
       final status = response.statusCode;
       if (status == 401 || status == 400) {
         reset();
@@ -52,6 +57,7 @@ class UserModel {
     } catch (e) {
       debugPrint('Failed to refreshCurrentUser: $e');
     } finally {
+      refresing_user = false;
       await updateOtherModels();
     }
   }

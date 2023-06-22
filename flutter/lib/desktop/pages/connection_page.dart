@@ -253,7 +253,8 @@ class _ConnectionPageState extends State<ConnectionPage>
                 width: 8,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(4),
-                  color: svcStopped.value || stateGlobal.svcStatus.value == SvcStatus.connecting
+                  color: svcStopped.value ||
+                          stateGlobal.svcStatus.value == SvcStatus.connecting
                       ? kColorWarn
                       : (stateGlobal.svcStatus.value == SvcStatus.ready
                           ? Color.fromARGB(255, 50, 190, 166)
