@@ -818,7 +818,6 @@ impl Connection {
                 .await;
             Self::post_alarm_audit(
                 AlarmAuditType::IpWhitelist, //"ip whitelist",
-                true,
                 json!({ "ip":addr.ip() }),
             );
             return false;
@@ -905,7 +904,7 @@ impl Connection {
         });
     }
 
-    pub fn post_alarm_audit(typ: AlarmAuditType, from_remote: bool, info: Value) {
+    pub fn post_alarm_audit(typ: AlarmAuditType, info: Value) {
         let url = crate::get_audit_server(
             Config::get_option("api-server"),
             Config::get_option("custom-rendezvous-server"),
@@ -918,7 +917,6 @@ impl Connection {
         v["id"] = json!(Config::get_id());
         v["uuid"] = json!(crate::encode64(hbb_common::get_uuid()));
         v["typ"] = json!(typ as i8);
-        v["from_remote"] = json!(from_remote);
         v["info"] = serde_json::Value::String(info.to_string());
         tokio::spawn(async move {
             allow_err!(Self::post_audit_async(url, v).await);
@@ -1447,7 +1445,6 @@ impl Connection {
                         .await;
                     Self::post_alarm_audit(
                         AlarmAuditType::ManyWrongPassword,
-                        true,
                         json!({
                                     "ip":self.ip,
                         }),
@@ -1456,7 +1453,6 @@ impl Connection {
                     self.send_login_error("Please try 1 minute later").await;
                     Self::post_alarm_audit(
                         AlarmAuditType::FrequentAttempt,
-                        true,
                         json!({
                                     "ip":self.ip,
                         }),
