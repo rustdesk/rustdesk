@@ -51,17 +51,21 @@ class UserModel {
       final user = UserPayload.fromJson(data);
       _parseAndUpdateUser(user);
     } catch (e) {
-      print('Failed to refreshCurrentUser: $e');
+      debugPrint('Failed to refreshCurrentUser: $e');
     } finally {
       await updateOtherModels();
     }
   }
 
   static Map<String, dynamic>? getLocalUserInfo() {
+    final userInfo = bind.mainGetLocalOption(key: 'user_info');
+    if (userInfo == '') {
+      return null;
+    }
     try {
-      return json.decode(bind.mainGetLocalOption(key: 'user_info'));
+      return json.decode(userInfo);
     } catch (e) {
-      print('Failed to get local user info: $e');
+      debugPrint('Failed to get local user info "$userInfo": $e');
     }
     return null;
   }
@@ -108,7 +112,7 @@ class UserModel {
               headers: authHeaders)
           .timeout(Duration(seconds: 2));
     } catch (e) {
-      print("request /api/logout failed: err=$e");
+      debugPrint("request /api/logout failed: err=$e");
     } finally {
       await reset();
       gFFI.dialogManager.dismissByTag(tag);
@@ -126,7 +130,7 @@ class UserModel {
     try {
       body = jsonDecode(utf8.decode(resp.bodyBytes));
     } catch (e) {
-      print("login: jsonDecode resp body failed: ${e.toString()}");
+      debugPrint("login: jsonDecode resp body failed: ${e.toString()}");
       rethrow;
     }
     if (resp.statusCode != 200) {
@@ -141,7 +145,7 @@ class UserModel {
     try {
       loginResponse = LoginResponse.fromJson(body);
     } catch (e) {
-      print("login: jsonDecode LoginResponse failed: ${e.toString()}");
+      debugPrint("login: jsonDecode LoginResponse failed: ${e.toString()}");
       rethrow;
     }
 
@@ -158,7 +162,7 @@ class UserModel {
       final resp = await http.get(Uri.parse('$url/api/login-options'));
       return jsonDecode(resp.body);
     } catch (e) {
-      print("queryLoginOptions: jsonDecode resp body failed: ${e.toString()}");
+      debugPrint("queryLoginOptions: jsonDecode resp body failed: ${e.toString()}");
       return [];
     }
   }
