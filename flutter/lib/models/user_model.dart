@@ -64,7 +64,7 @@ class UserModel {
     try {
       return json.decode(userInfo);
     } catch (e) {
-      debugPrint('Failed to get local user info "$userInfo": $e');
+      debugPrint('Failed to get local user info, json decode "$userInfo": $e');
     }
     return null;
   }
