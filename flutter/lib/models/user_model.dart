@@ -64,7 +64,7 @@ class UserModel {
     try {
       return json.decode(userInfo);
     } catch (e) {
-      debugPrint('Failed to get local user info, json decode "$userInfo": $e');
+      debugPrint('Failed to get local user info "$userInfo": $e');
     }
     return null;
   }
@@ -132,6 +132,9 @@ class UserModel {
     }
     if (resp.statusCode != 200) {
       throw RequestException(resp.statusCode, body['error'] ?? '');
+    }
+    if (body['error'] != null) {
+      throw RequestException(0, body['error']);
     }
 
     return getLoginResponseFromAuthBody(body);

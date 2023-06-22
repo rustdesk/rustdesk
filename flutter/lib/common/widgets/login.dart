@@ -444,10 +444,8 @@ Future<bool?> loginDialog() async {
         }
       } on RequestException catch (err) {
         passwordMsg = translate(err.cause);
-        debugPrintStack(label: err.toString());
       } catch (err) {
         passwordMsg = "Unknown Error: $err";
-        debugPrintStack(label: err.toString());
       }
       curOP.value = '';
       setState(() => isInProgress = false);
@@ -582,10 +580,8 @@ Future<bool?> verificationCodeDialog(UserPayload? user) async {
         }
       } on RequestException catch (err) {
         errorText = translate(err.cause);
-        debugPrintStack(label: err.toString());
       } catch (err) {
         errorText = "Unknown Error: $err";
-        debugPrintStack(label: err.toString());
       }
 
       setState(() => isInProgress = false);
