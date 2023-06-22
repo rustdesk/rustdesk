@@ -71,7 +71,6 @@ class _AddressBookState extends State<AddressBook> {
     return Row(
       children: [
         Container(
-          margin: EdgeInsets.symmetric(horizontal: 4.0),
           decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
               border:
@@ -79,22 +78,21 @@ class _AddressBookState extends State<AddressBook> {
           child: Container(
             width: 180,
             height: double.infinity,
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+            padding: const EdgeInsets.all(8.0),
             child: Column(
               children: [
-                _buildTagHeader(),
+                _buildTagHeader().marginOnly(left: 8.0, right: 0),
                 Expanded(
                   child: Container(
                     width: double.infinity,
                     height: double.infinity,
                     child: _buildTags(),
-                  ).marginSymmetric(vertical: 8.0),
+                  ),
                 )
               ],
             ),
           ),
-        ).marginOnly(right: 8.0),
+        ).marginOnly(right: 12.0),
         _buildPeersViews()
       ],
     );
@@ -104,26 +102,24 @@ class _AddressBookState extends State<AddressBook> {
     return Column(
       children: [
         Container(
-          margin: EdgeInsets.symmetric(horizontal: 1.0),
           decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(6),
               border:
                   Border.all(color: Theme.of(context).colorScheme.background)),
           child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+            padding: const EdgeInsets.all(8.0),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _buildTagHeader(),
+                _buildTagHeader().marginOnly(left: 8.0, right: 0),
                 Container(
                   width: double.infinity,
                   child: _buildTags(),
-                ).marginSymmetric(vertical: 8.0),
+                ),
               ],
             ),
           ),
-        ),
+        ).marginOnly(bottom: 12.0),
         _buildPeersViews()
       ],
     );
