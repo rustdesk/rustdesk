@@ -30,7 +30,6 @@ class _AddressBookState extends State<AddressBook> {
 
   @override
   Widget build(BuildContext context) => Obx(() {
-    debugPrint('REMOVE ME =========================== AddressBook ${gFFI.userModel.userName.value} ${gFFI.abModel.abLoading} ${gFFI.abModel.abError} ${gFFI.abModel.fromServer} ${isDesktop}');
         if (gFFI.userModel.userName.value.isEmpty) {
           return Center(
               child: ElevatedButton(

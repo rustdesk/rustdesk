@@ -125,10 +125,6 @@ class StateGlobal {
       gFFI.userModel.isAdmin.value = false;
       gFFI.groupModel.reset();
     }
-    debugPrint('REMOVE ME ========================== $preStatus -> ${stateGlobal.svcStatus.value}');
-    if (preStatus != stateGlobal.svcStatus.value) {
-      UserModel.updateOtherModels();
-    }
     stateGlobal.svcIsUsingPublicServer.value =
         await bind.mainIsUsingPublicServer();
   }

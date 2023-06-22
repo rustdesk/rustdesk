@@ -929,14 +929,14 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
                                     *TEMPORARY_PASSWD.lock().unwrap() = value;
                                 }
                             }
-                            Ok(Some(ipc::Data::OnlineStatus(Some((mut x, c))))) => {
+                            Ok(Some(ipc::Data::OnlineStatus(Some((mut x, _c))))) => {
                                 if x > 0 {
                                     x = 1
                                 }
                                 *UI_STATUS.lock().unwrap() = UiStatus {
                                     status_num: x as _,
                                     #[cfg(not(feature = "flutter"))]
-                                    key_confirmed: c,
+                                    key_confirmed: _c,
                                     #[cfg(all(
                                         not(any(target_os = "android", target_os = "ios")),
                                         feature = "flutter"
