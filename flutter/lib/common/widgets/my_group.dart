@@ -75,17 +75,14 @@ class _MyGroupState extends State<MyGroup> {
   Widget _buildDesktop() {
     return Row(
       children: [
-        Card(
-          margin: EdgeInsets.symmetric(horizontal: 4.0),
-          shape: RoundedRectangleBorder(
+        Container(
+          decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
-              side:
-                  BorderSide(color: Theme.of(context).scaffoldBackgroundColor)),
+              border:
+                  Border.all(color: Theme.of(context).colorScheme.background)),
           child: Container(
-            width: 200,
+            width: 150,
             height: double.infinity,
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
             child: Column(
               children: [
                 _buildLeftHeader(),
@@ -93,15 +90,13 @@ class _MyGroupState extends State<MyGroup> {
                   child: Container(
                     width: double.infinity,
                     height: double.infinity,
-                    decoration:
-                        BoxDecoration(borderRadius: BorderRadius.circular(2)),
                     child: _buildUserContacts(),
-                  ).marginSymmetric(vertical: 8.0),
+                  ),
                 )
               ],
             ),
           ),
-        ).marginOnly(right: 8.0),
+        ).marginOnly(right: 12.0),
         Expanded(
           child: Align(
               alignment: Alignment.topLeft,
@@ -116,30 +111,24 @@ class _MyGroupState extends State<MyGroup> {
   Widget _buildMobile() {
     return Column(
       children: [
-        Card(
-          margin: EdgeInsets.symmetric(horizontal: 4.0),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side:
-                  BorderSide(color: Theme.of(context).scaffoldBackgroundColor)),
+        Container(
+          decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(6),
+              border:
+                  Border.all(color: Theme.of(context).colorScheme.background)),
           child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 _buildLeftHeader(),
                 Container(
                   width: double.infinity,
-                  decoration:
-                      BoxDecoration(borderRadius: BorderRadius.circular(4)),
                   child: _buildUserContacts(),
-                ).marginSymmetric(vertical: 8.0)
+                )
               ],
             ),
           ),
-        ),
-        Divider(),
+        ).marginOnly(bottom: 12.0),
         Expanded(
           child: Align(
               alignment: Alignment.topLeft,
@@ -161,6 +150,7 @@ class _MyGroupState extends State<MyGroup> {
             searchUserText.value = value;
           },
           decoration: InputDecoration(
+            filled: false,
             prefixIcon: Icon(
               Icons.search_rounded,
               color: Theme.of(context).hintColor,
@@ -214,7 +204,7 @@ class _MyGroupState extends State<MyGroup> {
           child: Container(
             child: Row(
               children: [
-                Icon(Icons.person_outline_rounded, color: Colors.grey, size: 16)
+                Icon(Icons.person_rounded, color: Colors.grey, size: 16)
                     .marginOnly(right: 4),
                 Expanded(child: Text(username)),
               ],
@@ -222,6 +212,6 @@ class _MyGroupState extends State<MyGroup> {
           ),
         );
       },
-    )).marginSymmetric(horizontal: 12);
+    )).marginSymmetric(horizontal: 12).marginOnly(bottom: 6);
   }
 }
