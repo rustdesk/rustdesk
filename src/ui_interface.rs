@@ -1,9 +1,3 @@
-use std::{
-    collections::HashMap,
-    process::Child,
-    sync::{Arc, Mutex},
-};
-
 #[cfg(any(target_os = "android", target_os = "ios"))]
 use hbb_common::password_security;
 use hbb_common::{
@@ -15,6 +9,12 @@ use hbb_common::{
 use hbb_common::{
     sleep,
     tokio::{sync::mpsc, time},
+};
+use serde_derive::Serialize;
+use std::{
+    collections::HashMap,
+    process::Child,
+    sync::{Arc, Mutex},
 };
 
 use hbb_common::{
@@ -32,10 +32,34 @@ use crate::ipc;
 type Message = RendezvousMessage;
 
 pub type Children = Arc<Mutex<(bool, HashMap<(String, String), Child>)>>;
-type Status = (i32, bool, i64, String); // (status_num, key_confirmed, mouse_time, id)
+
+#[derive(Clone, Debug, Serialize)]
+pub struct UiStatus {
+    pub status_num: i32,
+    #[cfg(not(feature = "flutter"))]
+    pub key_confirmed: bool,
+    #[cfg(all(
+        not(any(target_os = "android", target_os = "ios")),
+        feature = "flutter"
+    ))]
+    pub mouse_time: i64,
+    #[cfg(not(feature = "flutter"))]
+    pub id: String,
+}
 
 lazy_static::lazy_static! {
-    static ref UI_STATUS : Arc<Mutex<Status>> = Arc::new(Mutex::new((0, false, 0, "".to_owned())));
+    static ref UI_STATUS : Arc<Mutex<UiStatus>> = Arc::new(Mutex::new(UiStatus{
+        status_num: 0,
+        #[cfg(not(feature = "flutter"))]
+        key_confirmed: false,
+        #[cfg(all(
+            not(any(target_os = "android", target_os = "ios")),
+            feature = "flutter"
+        ))]
+        mouse_time: 0,
+        #[cfg(not(feature = "flutter"))]
+        id: "".to_owned(),
+    }));
     static ref OPTIONS : Arc<Mutex<HashMap<String, String>>> = Arc::new(Mutex::new(Config::get_options()));
     static ref ASYNC_JOB_STATUS : Arc<Mutex<String>> = Default::default();
     static ref TEMPORARY_PASSWD : Arc<Mutex<String>> = Arc::new(Mutex::new("".to_owned()));
@@ -393,15 +417,20 @@ pub fn is_installed_lower_version() -> bool {
 }
 
 #[inline]
+#[cfg(all(
+    not(any(target_os = "android", target_os = "ios")),
+    feature = "flutter"
+))]
 pub fn get_mouse_time() -> f64 {
-    let ui_status = UI_STATUS.lock().unwrap();
-    let res = ui_status.2 as f64;
-    return res;
+    UI_STATUS.lock().unwrap().mouse_time as f64
 }
 
 #[inline]
 pub fn check_mouse_time() {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(all(
+        not(any(target_os = "android", target_os = "ios")),
+        feature = "flutter"
+    ))]
     {
         let sender = SENDER.lock().unwrap();
         allow_err!(sender.send(ipc::Data::MouseMoveTime(0)));
@@ -409,10 +438,8 @@ pub fn check_mouse_time() {
 }
 
 #[inline]
-pub fn get_connect_status() -> Status {
-    let ui_statue = UI_STATUS.lock().unwrap();
-    let res = ui_statue.clone();
-    res
+pub fn get_connect_status() -> UiStatus {
+    UI_STATUS.lock().unwrap().clone()
 }
 
 #[inline]
@@ -874,9 +901,13 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
                                 log::error!("ipc connection closed: {}", err);
                                 break;
                             }
+                            #[cfg(all(
+                                not(any(target_os = "android", target_os = "ios")),
+                                feature = "flutter"
+                            ))]
                             Ok(Some(ipc::Data::MouseMoveTime(v))) => {
                                 mouse_time = v;
-                                UI_STATUS.lock().unwrap().2 = v;
+                                UI_STATUS.lock().unwrap().mouse_time = v;
                             }
                             Ok(Some(ipc::Data::Options(Some(v)))) => {
                                 *OPTIONS.lock().unwrap() = v;
@@ -902,8 +933,18 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
                                 if x > 0 {
                                     x = 1
                                 }
-                                key_confirmed = c;
-                                *UI_STATUS.lock().unwrap() = (x as _, key_confirmed, mouse_time, id.clone());
+                                *UI_STATUS.lock().unwrap() = UiStatus {
+                                    status_num: x as _,
+                                    #[cfg(not(feature = "flutter"))]
+                                    key_confirmed: c,
+                                    #[cfg(all(
+                                        not(any(target_os = "android", target_os = "ios")),
+                                        feature = "flutter"
+                                    ))]
+                                    mouse_time,
+                                    #[cfg(not(feature = "flutter"))]
+                                    id: id.clone(),
+                                };
                             }
                             _ => {}
                         }
@@ -927,7 +968,18 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
                 .insert("ipc-closed".to_owned(), "Y".to_owned());
             break;
         }
-        *UI_STATUS.lock().unwrap() = (-1, key_confirmed, mouse_time, id.clone());
+        *UI_STATUS.lock().unwrap() = UiStatus {
+            status_num: -1,
+            #[cfg(not(feature = "flutter"))]
+            key_confirmed,
+            #[cfg(all(
+                not(any(target_os = "android", target_os = "ios")),
+                feature = "flutter"
+            ))]
+            mouse_time,
+            #[cfg(not(feature = "flutter"))]
+            id: id.clone(),
+        };
         sleep(1.).await;
     }
 }

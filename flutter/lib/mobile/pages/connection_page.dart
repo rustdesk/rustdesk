@@ -11,6 +11,7 @@ import '../../common/widgets/login.dart';
 import '../../common/widgets/peer_tab_page.dart';
 import '../../consts.dart';
 import '../../models/model.dart';
+import '../../models/state_model.dart';
 import '../../models/platform_model.dart';
 import 'home_page.dart';
 import 'scan_page.dart';
@@ -54,6 +55,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
         }
       }();
     }
+    stateGlobal.startSvcStatusTimer();
     if (isAndroid) {
       Timer(const Duration(seconds: 5), () async {
         _updateUrl = await bind.mainGetSoftwareUpdateUrl();
@@ -180,6 +182,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
   @override
   void dispose() {
     _idController.dispose();
+    stateGlobal.cancelSvcStatusTimer();
     super.dispose();
   }
 }

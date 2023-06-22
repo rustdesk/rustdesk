@@ -57,6 +57,7 @@ class AbModel {
         return "";
       }
     } catch (err) {
+      debugPrint('REMOVE ME ====================== err $err');
       err.printError();
       abError.value = err.toString();
     } finally {

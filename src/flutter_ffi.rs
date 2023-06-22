@@ -14,12 +14,11 @@ use flutter_rust_bridge::{StreamSink, SyncReturn};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::allow_err;
 use hbb_common::{
-    config::{self, LocalConfig, PeerConfig, PeerInfoSerde, ONLINE},
+    config::{self, get_online_statue, LocalConfig, PeerConfig, PeerInfoSerde},
     fs, log,
     message_proto::KeyboardMode,
     ResultType,
 };
-use serde_json::json;
 use std::{
     collections::HashMap,
     ffi::{CStr, CString},
@@ -680,14 +679,18 @@ pub fn main_get_lan_peers() -> String {
 }
 
 pub fn main_get_connect_status() -> String {
-    let status = get_connect_status();
-    // (status_num, key_confirmed, mouse_time, id)
-    let mut m = serde_json::Map::new();
-    m.insert("status_num".to_string(), json!(status.0));
-    m.insert("key_confirmed".to_string(), json!(status.1));
-    m.insert("mouse_time".to_string(), json!(status.2));
-    m.insert("id".to_string(), json!(status.3));
-    serde_json::to_string(&m).unwrap_or("".to_string())
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        serde_json::to_string(&get_connect_status()).unwrap_or("".to_string())
+    }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let mut state = get_online_statue();
+        if state > 0 {
+            state = 1;
+        }
+        serde_json::json!({ "status_num": get_online_statue() }).to_string()
+    }
 }
 
 pub fn main_check_connect_status() {
@@ -996,7 +999,7 @@ pub fn main_get_fingerprint() -> String {
 }
 
 pub fn main_get_online_statue() -> i64 {
-    ONLINE.lock().unwrap().values().max().unwrap_or(&0).clone()
+    get_online_statue()
 }
 
 pub fn cm_get_clients_state() -> String {
@@ -1194,7 +1197,15 @@ pub fn main_check_mouse_time() {
 }
 
 pub fn main_get_mouse_time() -> f64 {
-    get_mouse_time()
+    let mut mouse_time = 0.0;
+    #[cfg(all(
+        not(any(target_os = "android", target_os = "ios")),
+        feature = "flutter"
+    ))]
+    {
+        mouse_time = get_mouse_time();
+    }
+    mouse_time
 }
 
 pub fn main_wol(id: String) {
