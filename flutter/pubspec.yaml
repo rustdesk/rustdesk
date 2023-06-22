@@ -145,6 +145,9 @@ flutter:
     - family: PeerSearchbar
       fonts:
         - asset: assets/peer_searchbar.ttf
+    - family: AddressBook
+      fonts:
+        - asset: assets/address_book.ttf
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/assets-and-images/#resolution-aware.

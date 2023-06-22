@@ -1,9 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/hbbs/hbbs.dart';
-import 'package:flutter_hbb/common/widgets/peer_tab_page.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 
@@ -83,7 +81,6 @@ class UserModel {
     await gFFI.abModel.reset();
     await gFFI.groupModel.reset();
     userName.value = '';
-    gFFI.peerTabModel.check_dynamic_tabs();
   }
 
   _parseAndUpdateUser(UserPayload user) {
@@ -93,8 +90,7 @@ class UserModel {
 
   // update ab and group status
   static Future<void> updateOtherModels() async {
-    await gFFI.abModel.pullAb();
-    await gFFI.groupModel.pull();
+    await Future.wait([gFFI.abModel.pullAb(), gFFI.groupModel.pull()]);
   }
 
   Future<void> logOut() async {

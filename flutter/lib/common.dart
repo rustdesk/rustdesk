@@ -94,6 +94,8 @@ class IconFont {
   static const IconData menu = IconData(0xe628, fontFamily: _family1);
   static const IconData search = IconData(0xe6a4, fontFamily: _family2);
   static const IconData roundClose = IconData(0xe6ed, fontFamily: _family2);
+  static const IconData addressBook =
+      IconData(0xe602, fontFamily: "AddressBook");
 }
 
 class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
