@@ -134,7 +134,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                   Divider().paddingOnly(right: 12),
                 ])),
                 SliverFillRemaining(
-                  hasScrollBody: false,
+                  hasScrollBody: true,
                   child: PeerTabPage().paddingOnly(right: 12.0),
                 )
               ],
@@ -243,8 +243,10 @@ class _ConnectionPageState extends State<ConnectionPage>
 
   Widget buildStatus() {
     final em = 14.0;
-    return ConstrainedBox(
-      constraints: BoxConstraints.tightFor(height: 3 * em),
+    return Container(
+      height: 3 * em,
+      color: Theme.of(context)
+          .scaffoldBackgroundColor, // has to set this if using hasScrollBody in above silvers
       child: Obx(() => Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
