@@ -186,7 +186,6 @@ pub enum Data {
     },
     SystemInfo(Option<String>),
     ClickTime(i64),
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     MouseMoveTime(i64),
     Authorize,
     Close,
@@ -333,7 +332,6 @@ async fn handle(data: Data, stream: &mut Connection) {
             let t = crate::server::CLICK_TIME.load(Ordering::SeqCst);
             allow_err!(stream.send(&Data::ClickTime(t)).await);
         }
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         Data::MouseMoveTime(_) => {
             let t = crate::server::MOUSE_MOVE_TIME.load(Ordering::SeqCst);
             allow_err!(stream.send(&Data::MouseMoveTime(t)).await);
@@ -347,7 +345,13 @@ async fn handle(data: Data, stream: &mut Connection) {
             }
         }
         Data::OnlineStatus(_) => {
-            let x = config::get_online_statue();
+            let x = config::ONLINE
+                .lock()
+                .unwrap()
+                .values()
+                .max()
+                .unwrap_or(&0)
+                .clone();
             let confirmed = Config::get_key_confirmed();
             allow_err!(stream.send(&Data::OnlineStatus(Some((x, confirmed)))).await);
         }
