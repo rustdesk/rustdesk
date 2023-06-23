@@ -10,7 +10,6 @@ import '../consts.dart';
 import '../common.dart';
 
 import './platform_model.dart';
-import './user_model.dart';
 
 enum SvcStatus { notReady, connecting, ready }
 
@@ -27,7 +26,6 @@ class StateGlobal {
 
   final svcStatus = SvcStatus.notReady.obs;
   final svcIsUsingPublicServer = true.obs;
-  Timer? _svcStatusTimer;
 
   // Use for desktop -> remote toolbar -> resolution
   final Map<String, Map<int, String?>> _lastResolutionGroupValues = {};
@@ -91,17 +89,6 @@ class StateGlobal {
         }
       });
     }
-  }
-
-  startSvcStatusTimer() {
-    _svcStatusTimer = periodic_immediate(Duration(seconds: 1), () async {
-      updateSvcStatus();
-    });
-  }
-
-  cancelSvcStatusTimer() {
-    _svcStatusTimer?.cancel();
-    _svcStatusTimer = null;
   }
 
   updateSvcStatus() async {

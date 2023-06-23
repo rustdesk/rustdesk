@@ -1,5 +1,6 @@
 // main window right pane
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:auto_size_text/auto_size_text.dart';
@@ -34,6 +35,8 @@ class _ConnectionPageState extends State<ConnectionPage>
   /// Nested scroll controller
   final _scrollController = ScrollController();
 
+  Timer? _svcStatusTimer;
+
   final RxBool _idInputFocused = false.obs;
   final FocusNode _idFocusNode = FocusNode();
 
@@ -54,7 +57,9 @@ class _ConnectionPageState extends State<ConnectionPage>
         }
       }();
     }
-    stateGlobal.startSvcStatusTimer();
+    _svcStatusTimer = periodic_immediate(Duration(seconds: 1), () async {
+      stateGlobal.updateSvcStatus();
+    });
     _idFocusNode.addListener(() {
       _idInputFocused.value = _idFocusNode.hasFocus;
       // select all to faciliate removing text, just following the behavior of address input of chrome
@@ -67,7 +72,8 @@ class _ConnectionPageState extends State<ConnectionPage>
   @override
   void dispose() {
     _idController.dispose();
-    stateGlobal.cancelSvcStatusTimer();
+    _svcStatusTimer?.cancel();
+    _svcStatusTimer = null;
     windowManager.removeListener(this);
     super.dispose();
   }
