@@ -196,7 +196,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable Direct IP Access", "Habilitar acceso IP directo"),
         ("Rename", "Renombrar"),
         ("Space", "Espacio"),
-        ("Create Desktop Shortcut", "Crear acceso directo del escritorio"),
+        ("Create Desktop Shortcut", "Crear acceso directo en el escritorio"),
         ("Change Path", "Cambiar ruta"),
         ("Create Folder", "Crear carpeta"),
         ("Please enter the folder name", "Por favor introduzca el nombre de la carpeta"),
