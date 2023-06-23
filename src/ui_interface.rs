@@ -438,6 +438,7 @@ pub fn check_mouse_time() {
 }
 
 #[inline]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn get_connect_status() -> UiStatus {
     UI_STATUS.lock().unwrap().clone()
 }
@@ -884,10 +885,13 @@ pub fn get_hostname() -> String {
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tokio::main(flavor = "current_thread")]
 async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc::Data>) {
+    #[cfg(not(feature = "flutter"))]
     let mut key_confirmed = false;
     let mut rx = rx;
     let mut mouse_time = 0;
+    #[cfg(not(feature = "flutter"))]
     let mut id = "".to_owned();
+    #[cfg(target_os="windows")]
     let mut enable_file_transfer = "".to_owned();
 
     loop {
@@ -924,7 +928,10 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
                             }
                             Ok(Some(ipc::Data::Config((name, Some(value))))) => {
                                 if name == "id" {
-                                    id = value;
+                                    #[cfg(not(feature = "flutter"))]
+                                    {
+                                        id = value;
+                                    }
                                 } else if name == "temporary-password" {
                                     *TEMPORARY_PASSWD.lock().unwrap() = value;
                                 }
@@ -932,6 +939,10 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
                             Ok(Some(ipc::Data::OnlineStatus(Some((mut x, _c))))) => {
                                 if x > 0 {
                                     x = 1
+                                }
+                                #[cfg(not(feature = "flutter"))]
+                                {
+                                    key_confirmed = _c;
                                 }
                                 *UI_STATUS.lock().unwrap() = UiStatus {
                                     status_num: x as _,

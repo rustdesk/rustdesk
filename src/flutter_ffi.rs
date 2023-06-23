@@ -689,7 +689,7 @@ pub fn main_get_connect_status() -> String {
         if state > 0 {
             state = 1;
         }
-        serde_json::json!({ "status_num": get_online_statue() }).to_string()
+        serde_json::json!({ "status_num": state }).to_string()
     }
 }
 
@@ -1197,15 +1197,20 @@ pub fn main_check_mouse_time() {
 }
 
 pub fn main_get_mouse_time() -> f64 {
-    let mut mouse_time = 0.0;
     #[cfg(all(
         not(any(target_os = "android", target_os = "ios")),
         feature = "flutter"
     ))]
     {
-        mouse_time = get_mouse_time();
+        get_mouse_time()
     }
-    mouse_time
+    #[cfg(not(all(
+        not(any(target_os = "android", target_os = "ios")),
+        feature = "flutter"
+    )))]
+    {
+        0.0
+    }
 }
 
 pub fn main_wol(id: String) {
