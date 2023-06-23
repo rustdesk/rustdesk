@@ -388,7 +388,7 @@ class _PeerSortDropdownState extends State<PeerSortDropdown> {
     var menuPos = RelativeRect.fromLTRB(0, 0, 0, 0);
     return InkWell(
       child: Icon(
-        Icons.sort,
+        Icons.sort_rounded,
         size: 18,
       ),
       onTapDown: (details) {
