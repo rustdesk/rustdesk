@@ -151,6 +151,7 @@ void runMobileApp() async {
   await initEnv(kAppTypeMain);
   if (isAndroid) androidChannelInit();
   platformFFI.syncAndroidServiceAppDirConfigPath();
+  gFFI.userModel.refreshCurrentUser();
   runApp(App());
 }
 
