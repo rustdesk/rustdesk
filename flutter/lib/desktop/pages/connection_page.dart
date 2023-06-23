@@ -1,7 +1,6 @@
 // main window right pane
 
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:auto_size_text/auto_size_text.dart';
@@ -9,7 +8,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/scroll_wrapper.dart';
 import 'package:flutter_hbb/models/state_model.dart';
-import 'package:flutter_hbb/models/user_model.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:window_manager/window_manager.dart';
@@ -37,13 +35,12 @@ class _ConnectionPageState extends State<ConnectionPage>
   /// Nested scroll controller
   final _scrollController = ScrollController();
 
-  Timer? _updateTimer;
+  Timer? _svcStatusTimer;
 
   final RxBool _idInputFocused = false.obs;
   final FocusNode _idFocusNode = FocusNode();
 
   var svcStopped = Get.find<RxBool>(tag: 'stop-service');
-  var svcIsUsingPublicServer = true.obs;
 
   bool isWindowMinimized = false;
 
@@ -60,8 +57,8 @@ class _ConnectionPageState extends State<ConnectionPage>
         }
       }();
     }
-    _updateTimer = periodic_immediate(Duration(seconds: 1), () async {
-      updateStatus();
+    _svcStatusTimer = periodic_immediate(Duration(seconds: 1), () async {
+      stateGlobal.updateSvcStatus();
     });
     _idFocusNode.addListener(() {
       _idInputFocused.value = _idFocusNode.hasFocus;
@@ -75,7 +72,8 @@ class _ConnectionPageState extends State<ConnectionPage>
   @override
   void dispose() {
     _idController.dispose();
-    _updateTimer?.cancel();
+    _svcStatusTimer?.cancel();
+    _svcStatusTimer = null;
     windowManager.removeListener(this);
     super.dispose();
   }
@@ -288,7 +286,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                 child: Offstage(
                   offstage: !(!svcStopped.value &&
                       stateGlobal.svcStatus.value == SvcStatus.ready &&
-                      svcIsUsingPublicServer.value),
+                      stateGlobal.svcIsUsingPublicServer.value),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
@@ -326,32 +324,5 @@ class _ConnectionPageState extends State<ConnectionPage>
         launchUrlString(url);
       }
     });
-  }
-
-  updateStatus() async {
-    final status =
-        jsonDecode(await bind.mainGetConnectStatus()) as Map<String, dynamic>;
-    final statusNum = status['status_num'] as int;
-    final preStatus = stateGlobal.svcStatus.value;
-    if (statusNum == 0) {
-      stateGlobal.svcStatus.value = SvcStatus.connecting;
-    } else if (statusNum == -1) {
-      stateGlobal.svcStatus.value = SvcStatus.notReady;
-    } else if (statusNum == 1) {
-      stateGlobal.svcStatus.value = SvcStatus.ready;
-      if (preStatus != SvcStatus.ready) {
-        gFFI.userModel.refreshCurrentUser();
-      }
-    } else {
-      stateGlobal.svcStatus.value = SvcStatus.notReady;
-    }
-    if (stateGlobal.svcStatus.value != SvcStatus.ready) {
-      gFFI.userModel.isAdmin.value = false;
-      gFFI.groupModel.reset();
-    }
-    if (preStatus != stateGlobal.svcStatus.value) {
-      UserModel.updateOtherModels();
-    }
-    svcIsUsingPublicServer.value = await bind.mainIsUsingPublicServer();
   }
 }

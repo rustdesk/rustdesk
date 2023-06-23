@@ -11,6 +11,7 @@ import '../../common/widgets/dialog.dart';
 import '../../consts.dart';
 import '../../models/platform_model.dart';
 import '../../models/server_model.dart';
+import '../../models/state_model.dart';
 import 'home_page.dart';
 
 class ServerPage extends StatefulWidget implements PageShape {
@@ -200,7 +201,6 @@ class ServerInfo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isPermanent = model.verificationMethod == kUsePermanentPassword;
-    final serverModel = Provider.of<ServerModel>(context);
 
     const Color colorPositive = Colors.green;
     const Color colorNegative = Colors.red;
@@ -216,28 +216,29 @@ class ServerInfo extends StatelessWidget {
       showToast(translate('Copied'));
     }
 
-    Widget ConnectionStateNotification() {
-      if (serverModel.connectStatus == -1) {
-        return Row(children: [
-          const Icon(Icons.warning_amber_sharp,
-                  color: colorNegative, size: iconSize)
-              .marginOnly(right: iconMarginRight),
-          Expanded(child: Text(translate('not_ready_status')))
-        ]);
-      } else if (serverModel.connectStatus == 0) {
-        return Row(children: [
-          SizedBox(width: 20, height: 20, child: CircularProgressIndicator())
-              .marginOnly(left: 4, right: iconMarginRight),
-          Expanded(child: Text(translate('connecting_status')))
-        ]);
-      } else {
-        return Row(children: [
-          const Icon(Icons.check, color: colorPositive, size: iconSize)
-              .marginOnly(right: iconMarginRight),
-          Expanded(child: Text(translate('Ready')))
-        ]);
-      }
-    }
+    Widget ConnectionStateNotification() => Obx(() {
+          if (stateGlobal.svcStatus.value == SvcStatus.notReady) {
+            return Row(children: [
+              const Icon(Icons.warning_amber_sharp,
+                      color: colorNegative, size: iconSize)
+                  .marginOnly(right: iconMarginRight),
+              Expanded(child: Text(translate('not_ready_status')))
+            ]);
+          } else if (stateGlobal.svcStatus.value == SvcStatus.connecting) {
+            return Row(children: [
+              SizedBox(
+                      width: 20, height: 20, child: CircularProgressIndicator())
+                  .marginOnly(left: 4, right: iconMarginRight),
+              Expanded(child: Text(translate('connecting_status')))
+            ]);
+          } else {
+            return Row(children: [
+              const Icon(Icons.check, color: colorPositive, size: iconSize)
+                  .marginOnly(right: iconMarginRight),
+              Expanded(child: Text(translate('Ready')))
+            ]);
+          }
+        });
 
     return PaddingCard(
         title: translate('Your Device'),

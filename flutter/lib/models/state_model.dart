@@ -1,10 +1,15 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:async';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../consts.dart';
+import '../common.dart';
+
+import './platform_model.dart';
 
 enum SvcStatus { notReady, connecting, ready }
 
@@ -18,7 +23,9 @@ class StateGlobal {
   final RxDouble _windowBorderWidth = RxDouble(kWindowBorderWidth);
   final RxBool showRemoteToolBar = false.obs;
   final RxInt displaysCount = 0.obs;
+
   final svcStatus = SvcStatus.notReady.obs;
+  final svcIsUsingPublicServer = true.obs;
 
   // Use for desktop -> remote toolbar -> resolution
   final Map<String, Map<int, String?>> _lastResolutionGroupValues = {};
@@ -82,6 +89,31 @@ class StateGlobal {
         }
       });
     }
+  }
+
+  updateSvcStatus() async {
+    final status =
+        jsonDecode(await bind.mainGetConnectStatus()) as Map<String, dynamic>;
+    final statusNum = status['status_num'] as int;
+    final preStatus = stateGlobal.svcStatus.value;
+    if (statusNum == 0) {
+      stateGlobal.svcStatus.value = SvcStatus.connecting;
+    } else if (statusNum == -1) {
+      stateGlobal.svcStatus.value = SvcStatus.notReady;
+    } else if (statusNum == 1) {
+      stateGlobal.svcStatus.value = SvcStatus.ready;
+      if (preStatus != SvcStatus.ready) {
+        gFFI.userModel.refreshCurrentUser();
+      }
+    } else {
+      stateGlobal.svcStatus.value = SvcStatus.notReady;
+    }
+    if (stateGlobal.svcStatus.value != SvcStatus.ready) {
+      gFFI.userModel.isAdmin.value = false;
+      gFFI.groupModel.reset();
+    }
+    stateGlobal.svcIsUsingPublicServer.value =
+        await bind.mainIsUsingPublicServer();
   }
 
   StateGlobal._();
