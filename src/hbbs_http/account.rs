@@ -216,7 +216,7 @@ impl OidcSession {
         let query_timeout = OIDC_SESSION.read().unwrap().query_timeout;
         while OIDC_SESSION.read().unwrap().keep_querying && begin.elapsed() < query_timeout {
             match Self::query(&code_url.code, &id, &uuid) {
-                Ok(HbbHttpResponse::<_>::Data(auth_body)) => {
+                Ok(HbbHttpResponse::<_>::Data(mut auth_body)) => {
                     if remember_me {
                         LocalConfig::set_option(
                             "access_token".to_owned(),

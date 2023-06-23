@@ -362,9 +362,9 @@ impl UI {
     fn get_connect_status(&mut self) -> Value {
         let mut v = Value::array(0);
         let x = get_connect_status();
-        v.push(x.status_num);
-        v.push(x.key_confirmed);
-        v.push(x.id);
+        v.push(x.0);
+        v.push(x.1);
+        v.push(x.3);
         v
     }
 
