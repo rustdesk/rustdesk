@@ -12,7 +12,6 @@ import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 
 import '../../common.dart';
-import '../../models/group_model.dart';
 import '../../models/platform_model.dart';
 
 class PeerTabPage extends StatefulWidget {
