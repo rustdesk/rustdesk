@@ -164,6 +164,7 @@ class _AddressBookState extends State<AddressBook> {
           alignment: Alignment.topLeft,
           child: Obx(() => AddressBookPeersView(
                 menuPadding: widget.menuPadding,
+                // ignore: invalid_use_of_protected_member
                 initPeers: gFFI.abModel.peers.value,
               ))),
     );

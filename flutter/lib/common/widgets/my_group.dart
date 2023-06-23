@@ -102,6 +102,7 @@ class _MyGroupState extends State<MyGroup> {
               alignment: Alignment.topLeft,
               child: Obx(() => MyGroupPeerView(
                   menuPadding: widget.menuPadding,
+                  // ignore: invalid_use_of_protected_member
                   initPeers: gFFI.groupModel.peersShow.value))),
         )
       ],
@@ -134,6 +135,7 @@ class _MyGroupState extends State<MyGroup> {
               alignment: Alignment.topLeft,
               child: Obx(() => MyGroupPeerView(
                   menuPadding: widget.menuPadding,
+                  // ignore: invalid_use_of_protected_member
                   initPeers: gFFI.groupModel.peersShow.value))),
         )
       ],

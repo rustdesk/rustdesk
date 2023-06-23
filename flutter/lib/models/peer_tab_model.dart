@@ -16,7 +16,7 @@ class PeerTabModel with ChangeNotifier {
     'Favorites',
     'Discovered',
     'Address Book',
-    defaultGroupTabname,
+    //defaultGroupTabname,
   ];
   final List<IconData> icons = [
     Icons.access_time_filled,
