@@ -345,13 +345,6 @@ class _ConnectionPageState extends State<ConnectionPage>
     } else {
       stateGlobal.svcStatus.value = SvcStatus.notReady;
     }
-    if (stateGlobal.svcStatus.value != SvcStatus.ready) {
-      gFFI.userModel.isAdmin.value = false;
-      gFFI.groupModel.reset();
-    }
-    if (preStatus != stateGlobal.svcStatus.value) {
-      UserModel.updateOtherModels();
-    }
     svcIsUsingPublicServer.value = await bind.mainIsUsingPublicServer();
   }
 }
