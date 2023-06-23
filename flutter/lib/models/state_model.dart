@@ -95,7 +95,7 @@ class StateGlobal {
 
   startSvcStatusTimer() {
     _svcStatusTimer = periodic_immediate(Duration(seconds: 1), () async {
-      _updateSvcStatus();
+      updateSvcStatus();
     });
   }
 
@@ -104,7 +104,7 @@ class StateGlobal {
     _svcStatusTimer = null;
   }
 
-  _updateSvcStatus() async {
+  updateSvcStatus() async {
     final status =
         jsonDecode(await bind.mainGetConnectStatus()) as Map<String, dynamic>;
     final statusNum = status['status_num'] as int;

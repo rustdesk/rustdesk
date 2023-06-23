@@ -201,7 +201,6 @@ class ServerInfo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isPermanent = model.verificationMethod == kUsePermanentPassword;
-    final serverModel = Provider.of<ServerModel>(context);
 
     const Color colorPositive = Colors.green;
     const Color colorNegative = Colors.red;
