@@ -1567,7 +1567,6 @@ impl Connection {
                         if is_left_up(&me) {
                             CLICK_TIME.store(get_time(), Ordering::SeqCst);
                         } else {
-                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
                             MOUSE_MOVE_TIME.store(get_time(), Ordering::SeqCst);
                         }
                         self.input_mouse(me, self.inner.id());
