@@ -14,7 +14,7 @@ use flutter_rust_bridge::{StreamSink, SyncReturn};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::allow_err;
 use hbb_common::{
-    config::{self, get_online_statue, LocalConfig, PeerConfig, PeerInfoSerde},
+    config::{self, LocalConfig, PeerConfig, PeerInfoSerde},
     fs, log,
     message_proto::KeyboardMode,
     ResultType,
