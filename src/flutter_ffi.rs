@@ -685,7 +685,7 @@ pub fn main_get_connect_status() -> String {
     }
     #[cfg(any(target_os = "android", target_os = "ios"))]
     {
-        let mut state = get_online_statue();
+        let mut state = hbb_common::config::get_online_statue();
         if state > 0 {
             state = 1;
         }
