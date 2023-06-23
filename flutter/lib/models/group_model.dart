@@ -18,6 +18,7 @@ class GroupModel {
   final RxString selectedUser = ''.obs;
   final RxString searchUserText = ''.obs;
   WeakReference<FFI> parent;
+  var initialized = false;
 
   GroupModel(this.parent);
 
@@ -26,13 +27,16 @@ class GroupModel {
     groupId.value = '';
     users.clear();
     peersShow.clear();
+    initialized = false;
   }
 
-  Future<void> pull() async {
+  Future<void> pull({force = true}) async {
+    if (!force && initialized) return;
     groupLoading.value = true;
     groupLoadError.value = "";
     await _pull();
     groupLoading.value = false;
+    initialized = true;
   }
 
   Future<void> _pull() async {

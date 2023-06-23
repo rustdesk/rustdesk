@@ -22,7 +22,7 @@ class PeerTabPage extends StatefulWidget {
 
 class _TabEntry {
   final Widget widget;
-  final Function() load;
+  final Function({dynamic hint}) load;
   _TabEntry(this.widget, this.load);
 }
 
@@ -52,12 +52,12 @@ class _PeerTabPageState extends State<PeerTabPage>
         AddressBook(
           menuPadding: _menuPadding(),
         ),
-        () => gFFI.abModel.pullAb()),
+        ({dynamic hint}) => gFFI.abModel.pullAb(force: hint == null)),
     _TabEntry(
       MyGroup(
         menuPadding: _menuPadding(),
       ),
-      () => gFFI.groupModel.pull(),
+      ({dynamic hint}) => gFFI.groupModel.pull(force: hint == null),
     ),
   ];
 
@@ -75,7 +75,7 @@ class _PeerTabPageState extends State<PeerTabPage>
   Future<void> handleTabSelection(int tabIndex) async {
     if (tabIndex < entries.length) {
       gFFI.peerTabModel.setCurrentTab(tabIndex);
-      entries[tabIndex].load();
+      entries[tabIndex].load(hint: false);
     }
   }
 
