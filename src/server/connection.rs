@@ -63,10 +63,7 @@ lazy_static::lazy_static! {
     static ref SWITCH_SIDES_UUID: Arc::<Mutex<HashMap<String, (Instant, uuid::Uuid)>>> = Default::default();
 }
 pub static CLICK_TIME: AtomicI64 = AtomicI64::new(0);
-#[cfg(all(
-    not(any(target_os = "android", target_os = "ios")),
-    feature = "flutter"
-))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub static MOUSE_MOVE_TIME: AtomicI64 = AtomicI64::new(0);
 
 #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
@@ -1570,10 +1567,7 @@ impl Connection {
                         if is_left_up(&me) {
                             CLICK_TIME.store(get_time(), Ordering::SeqCst);
                         } else {
-                            #[cfg(all(
-                                not(any(target_os = "android", target_os = "ios")),
-                                feature = "flutter"
-                            ))]
+                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
                             MOUSE_MOVE_TIME.store(get_time(), Ordering::SeqCst);
                         }
                         self.input_mouse(me, self.inner.id());
