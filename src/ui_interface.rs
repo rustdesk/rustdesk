@@ -38,10 +38,7 @@ pub struct UiStatus {
     pub status_num: i32,
     #[cfg(not(feature = "flutter"))]
     pub key_confirmed: bool,
-    #[cfg(all(
-        not(any(target_os = "android", target_os = "ios")),
-        feature = "flutter"
-    ))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub mouse_time: i64,
     #[cfg(not(feature = "flutter"))]
     pub id: String,
@@ -52,10 +49,7 @@ lazy_static::lazy_static! {
         status_num: 0,
         #[cfg(not(feature = "flutter"))]
         key_confirmed: false,
-        #[cfg(all(
-            not(any(target_os = "android", target_os = "ios")),
-            feature = "flutter"
-        ))]
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         mouse_time: 0,
         #[cfg(not(feature = "flutter"))]
         id: "".to_owned(),
@@ -417,20 +411,14 @@ pub fn is_installed_lower_version() -> bool {
 }
 
 #[inline]
-#[cfg(all(
-    not(any(target_os = "android", target_os = "ios")),
-    feature = "flutter"
-))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn get_mouse_time() -> f64 {
     UI_STATUS.lock().unwrap().mouse_time as f64
 }
 
 #[inline]
 pub fn check_mouse_time() {
-    #[cfg(all(
-        not(any(target_os = "android", target_os = "ios")),
-        feature = "flutter"
-    ))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         let sender = SENDER.lock().unwrap();
         allow_err!(sender.send(ipc::Data::MouseMoveTime(0)));
@@ -891,7 +879,7 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
     let mut mouse_time = 0;
     #[cfg(not(feature = "flutter"))]
     let mut id = "".to_owned();
-    #[cfg(target_os="windows")]
+    #[cfg(target_os = "windows")]
     let mut enable_file_transfer = "".to_owned();
 
     loop {
@@ -905,10 +893,7 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
                                 log::error!("ipc connection closed: {}", err);
                                 break;
                             }
-                            #[cfg(all(
-                                not(any(target_os = "android", target_os = "ios")),
-                                feature = "flutter"
-                            ))]
+                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
                             Ok(Some(ipc::Data::MouseMoveTime(v))) => {
                                 mouse_time = v;
                                 UI_STATUS.lock().unwrap().mouse_time = v;
@@ -948,10 +933,7 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
                                     status_num: x as _,
                                     #[cfg(not(feature = "flutter"))]
                                     key_confirmed: _c,
-                                    #[cfg(all(
-                                        not(any(target_os = "android", target_os = "ios")),
-                                        feature = "flutter"
-                                    ))]
+                                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
                                     mouse_time,
                                     #[cfg(not(feature = "flutter"))]
                                     id: id.clone(),
@@ -983,10 +965,7 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
             status_num: -1,
             #[cfg(not(feature = "flutter"))]
             key_confirmed,
-            #[cfg(all(
-                not(any(target_os = "android", target_os = "ios")),
-                feature = "flutter"
-            ))]
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             mouse_time,
             #[cfg(not(feature = "flutter"))]
             id: id.clone(),

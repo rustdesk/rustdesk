@@ -1197,17 +1197,11 @@ pub fn main_check_mouse_time() {
 }
 
 pub fn main_get_mouse_time() -> f64 {
-    #[cfg(all(
-        not(any(target_os = "android", target_os = "ios")),
-        feature = "flutter"
-    ))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         get_mouse_time()
     }
-    #[cfg(not(all(
-        not(any(target_os = "android", target_os = "ios")),
-        feature = "flutter"
-    )))]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     {
         0.0
     }
