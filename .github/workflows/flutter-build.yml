@@ -86,7 +86,7 @@ jobs:
       - name: Install vcpkg dependencies
         run: |
           cd C:\
-          git clone https://github.com/Kingtous/rustdesk_thirdpary_lib --depth=1 
+          git clone https://github.com/rustdesk-org/rustdesk_thirdpary_lib --depth=1 
           
       - name: Build rustdesk
         env:
@@ -153,7 +153,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Install LLVM and Clang
-        uses: Kingtous/install-llvm-action-32bit@master
+        uses: rustdesk-org/install-llvm-action-32bit@master
         with:
           version: ${{ env.LLVM_VERSION }}
 
@@ -178,7 +178,7 @@ jobs:
       - name: Install vcpkg dependencies
         run: |
           cd C:\
-          git clone https://github.com/Kingtous/rustdesk_thirdpary_lib --depth=1 
+          git clone https://github.com/rustdesk-org/rustdesk_thirdpary_lib --depth=1 
 
       - name: Build rustdesk
         id: build
@@ -405,7 +405,7 @@ jobs:
         shell: bash
         run: |
           pushd /opt
-          sudo git clone https://github.com/Kingtous/rustdesk_thirdparty_lib.git --depth=1
+          sudo git clone https://github.com/rustdesk-org/rustdesk_thirdparty_lib.git --depth=1
 
       - name: Restore bridge files
         uses: actions/download-artifact@master
@@ -505,7 +505,7 @@ jobs:
         shell: bash
         run: |
           pushd /opt
-          git clone https://github.com/Kingtous/rustdesk_thirdparty_lib.git --depth=1
+          git clone https://github.com//rustdesk-orgrustdesk_thirdparty_lib.git --depth=1
 
       - name: Restore bridge files
         uses: actions/download-artifact@master
@@ -722,7 +722,7 @@ jobs:
           name: vcpkg-artifact-${{ matrix.job.arch }}
           path: /opt/artifacts/vcpkg/installed
 
-      - uses: Kingtous/run-on-arch-action@amd64-support
+      - uses: rustdesk-org/run-on-arch-action@amd64-support
         name: Build rustdesk library for ${{ matrix.job.arch }}
         id: vcpkg
         with:
@@ -893,7 +893,7 @@ jobs:
           name: vcpkg-artifact-${{ matrix.job.arch }}
           path: /opt/artifacts/vcpkg/installed
 
-      - uses: Kingtous/run-on-arch-action@amd64-support
+      - uses: rustdesk-org/run-on-arch-action@amd64-support
         name: Build rustdesk library for ${{ matrix.job.arch }}
         id: vcpkg
         with:
@@ -1030,7 +1030,7 @@ jobs:
           name: vcpkg-artifact-${{ matrix.job.arch }}
           path: /opt/artifacts/vcpkg/installed
 
-      - uses: Kingtous/run-on-arch-action@amd64-support
+      - uses: rustdesk-org/run-on-arch-action@amd64-support
         name: Build rustdesk sciter binary for ${{ matrix.job.arch }}
         id: vcpkg
         with:
@@ -1178,7 +1178,7 @@ jobs:
             git reset --hard ${{ env.FLUTTER_ELINUX_COMMIT_ID }} 
           popd
 
-      - uses: Kingtous/run-on-arch-action@amd64-support
+      - uses: rustdesk-org/run-on-arch-action@amd64-support
         name: Build rustdesk binary for ${{ matrix.job.arch }}
         id: vcpkg
         with:
@@ -1424,7 +1424,7 @@ jobs:
           name: librustdesk-${{ matrix.job.arch }}-${{ matrix.job.extra-build-features }}.so
           path: ./target/release/
 
-      - uses: Kingtous/run-on-arch-action@amd64-support
+      - uses: rustdesk-org/run-on-arch-action@amd64-support
         name: Build rustdesk binary for ${{ matrix.job.arch }}
         id: vcpkg
         with:
@@ -1613,7 +1613,7 @@ jobs:
   #       run: |
   #         mv rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb rustdesk-${{ env.VERSION }}.deb
 
-  #     - uses: Kingtous/run-on-arch-action@amd64-support
+  #     - uses: rustdesk-org/run-on-arch-action@amd64-support
   #       name: Build rustdesk flatpak package for ${{ matrix.job.arch }}
   #       id: rpm
   #       with:
@@ -1674,7 +1674,7 @@ jobs:
         run: |
           mv rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb rustdesk-${{ env.VERSION }}.deb
 
-      - uses: Kingtous/run-on-arch-action@amd64-support
+      - uses: rustdesk-org/run-on-arch-action@amd64-support
         name: Build rustdesk flatpak package for ${{ matrix.job.arch }}
         id: rpm
         with:
