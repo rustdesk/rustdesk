@@ -31,7 +31,6 @@ class ServerModel with ChangeNotifier {
   bool _fileOk = false;
   bool _showElevation = false;
   bool _hideCm = false;
-  int _connectStatus = 0; // Rendezvous Server status
   String _verificationMethod = "";
   String _temporaryPasswordLength = "";
   String _approveMode = "";
@@ -60,8 +59,6 @@ class ServerModel with ChangeNotifier {
   bool get showElevation => _showElevation;
 
   bool get hideCm => _hideCm;
-
-  int get connectStatus => _connectStatus;
 
   String get verificationMethod {
     final index = [
@@ -120,15 +117,6 @@ class ServerModel with ChangeNotifier {
     _serverId = IDTextEditingController(text: _emptyIdShow);
 
     timerCallback() async {
-      var status = await bind.mainGetOnlineStatue();
-      if (status > 0) {
-        status = 1;
-      }
-      if (status != _connectStatus) {
-        _connectStatus = status;
-        notifyListeners();
-      }
-
       if (desktopType == DesktopType.cm) {
         final res = await bind.cmCheckClientsLength(length: _clients.length);
         if (res != null) {

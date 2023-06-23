@@ -998,10 +998,6 @@ pub fn main_get_fingerprint() -> String {
     get_fingerprint()
 }
 
-pub fn main_get_online_statue() -> i64 {
-    get_online_statue()
-}
-
 pub fn cm_get_clients_state() -> String {
     crate::ui_cm_interface::get_clients_state()
 }
