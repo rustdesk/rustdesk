@@ -56,7 +56,7 @@ pub struct WhitelistItem {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct UserInfo {
-    #[serde(default)]
+    #[serde(default, flatten)]
     pub settings: UserSettings,
     #[serde(default)]
     pub login_device_whitelist: Vec<WhitelistItem>,
