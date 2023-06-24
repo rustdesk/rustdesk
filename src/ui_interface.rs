@@ -949,11 +949,11 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
 
 #[allow(dead_code)]
 pub fn option_synced() -> bool {
-    #[cfg(not(any(target_os = "android", feature = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os= "ios")))]
     {
         OPTION_SYNCED.lock().unwrap().clone()
     }
-    #[cfg(any(target_os = "android", feature = "ios"))]
+    #[cfg(any(target_os = "android", target_os= "ios"))]
     {
         true
     }

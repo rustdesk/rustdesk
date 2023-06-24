@@ -86,7 +86,7 @@ jobs:
       - name: Install vcpkg dependencies
         run: |
           cd C:\
-          git clone https://github.com/rustdesk-org/rustdesk_thirdpary_lib --depth=1 
+          git clone https://github.com/Kingtous/rustdesk_thirdpary_lib --depth=1 
           
       - name: Build rustdesk
         env:
@@ -178,7 +178,7 @@ jobs:
       - name: Install vcpkg dependencies
         run: |
           cd C:\
-          git clone https://github.com/rustdesk-org/rustdesk_thirdpary_lib --depth=1 
+          git clone https://github.com/Kingtous/rustdesk_thirdpary_lib --depth=1 
 
       - name: Build rustdesk
         id: build
