@@ -1666,7 +1666,7 @@ pub mod server_side {
         _class: JClass,
     ) {
         log::debug!("startService from jvm");
-        set_option("stop-service".into(), "".into());
+        crate::ui_interface::set_option("stop-service".into(), "".into());
         crate::rendezvous_mediator::RendezvousMediator::restart();
     }
 
