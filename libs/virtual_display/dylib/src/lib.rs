@@ -1,7 +1,8 @@
 #[cfg(windows)]
 pub mod win10;
-
-use hbb_common::{bail, lazy_static, ResultType};
+#[cfg(windows)]
+use hbb_common::lazy_static;
+use hbb_common::{bail, ResultType};
 use std::path::Path;
 
 #[cfg(windows)]

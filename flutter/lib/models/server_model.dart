@@ -120,12 +120,11 @@ class ServerModel with ChangeNotifier {
     _serverId = IDTextEditingController(text: _emptyIdShow);
 
     timerCallback() async {
-      var status = await bind.mainGetOnlineStatue();
-      if (status > 0) {
-        status = 1;
-      }
-      if (status != _connectStatus) {
-        _connectStatus = status;
+      final connectionStatus =
+          jsonDecode(await bind.mainGetConnectStatus()) as Map<String, dynamic>;
+      final statusNum = connectionStatus['status_num'] as int;
+      if (statusNum != _connectStatus) {
+        _connectStatus = statusNum;
         notifyListeners();
       }
 
