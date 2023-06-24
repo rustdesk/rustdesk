@@ -1164,7 +1164,7 @@ pub fn main_get_data_dir_ios() -> SyncReturn<String> {
 pub fn main_stop_service() {
     #[cfg(target_os = "android")]
     {
-        config::Config::set_option("stop-service".into(), "Y".into());
+        set_option("stop-service".into(), "Y".into());
         crate::rendezvous_mediator::RendezvousMediator::restart();
     }
 }
@@ -1172,7 +1172,7 @@ pub fn main_stop_service() {
 pub fn main_start_service() {
     #[cfg(target_os = "android")]
     {
-        config::Config::set_option("stop-service".into(), "".into());
+        set_option("stop-service".into(), "".into());
         crate::rendezvous_mediator::RendezvousMediator::restart();
     }
 }
@@ -1666,7 +1666,7 @@ pub mod server_side {
         _class: JClass,
     ) {
         log::debug!("startService from jvm");
-        config::Config::set_option("stop-service".into(), "".into());
+        set_option("stop-service".into(), "".into());
         crate::rendezvous_mediator::RendezvousMediator::restart();
     }
 
