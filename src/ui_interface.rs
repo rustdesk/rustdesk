@@ -36,14 +36,14 @@ type Status = (i32, bool, i64, String); // (status_num, key_confirmed, mouse_tim
 
 lazy_static::lazy_static! {
     static ref UI_STATUS : Arc<Mutex<Status>> = Arc::new(Mutex::new((0, false, 0, "".to_owned())));
-    static ref OPTIONS : Arc<Mutex<HashMap<String, String>>> = Arc::new(Mutex::new(Config::get_options()));
     static ref ASYNC_JOB_STATUS : Arc<Mutex<String>> = Default::default();
     static ref TEMPORARY_PASSWD : Arc<Mutex<String>> = Arc::new(Mutex::new("".to_owned()));
-    pub static ref OPTION_SYNCED : Arc<Mutex<bool>> = Default::default();
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 lazy_static::lazy_static! {
+    static ref OPTION_SYNCED: Arc<Mutex<bool>> = Default::default();
+    static ref OPTIONS : Arc<Mutex<HashMap<String, String>>> = Arc::new(Mutex::new(Config::get_options()));
     pub static ref SENDER : Mutex<mpsc::UnboundedSender<ipc::Data>> = Mutex::new(check_connect_status(true));
 }
 
@@ -112,17 +112,19 @@ pub fn get_license() -> String {
 }
 
 #[inline]
-pub fn get_option(key: String) -> String {
-    get_option_(&key)
-}
-
-#[inline]
-fn get_option_(key: &str) -> String {
+pub fn get_option<T: AsRef<str>>(key: T) -> String {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
     let map = OPTIONS.lock().unwrap();
-    if let Some(v) = map.get(key) {
+    if let Some(v) = map.get(key.as_ref()) {
         v.to_owned()
     } else {
         "".to_owned()
+    }
+    }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        Config::get_option(key.as_ref())
     }
 }
 
@@ -192,12 +194,21 @@ pub fn set_peer_option(id: String, name: String, value: String) {
 #[inline]
 pub fn using_public_server() -> bool {
     option_env!("RENDEZVOUS_SERVER").unwrap_or("").is_empty()
-        && crate::get_custom_rendezvous_server(get_option_("custom-rendezvous-server")).is_empty()
+        && crate::get_custom_rendezvous_server(get_option("custom-rendezvous-server")).is_empty()
 }
 
 #[inline]
 pub fn get_options() -> String {
-    let options = OPTIONS.lock().unwrap();
+    let options = {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+    OPTIONS.lock().unwrap()
+    }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        Config::get_options()
+    }
+    };
     let mut m = serde_json::Map::new();
     for (k, v) in options.iter() {
         m.insert(k.into(), v.to_owned().into());
@@ -260,16 +271,17 @@ pub fn get_sound_inputs() -> Vec<String> {
 
 #[inline]
 pub fn set_options(m: HashMap<String, String>) {
-    *OPTIONS.lock().unwrap() = m.clone();
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+    *OPTIONS.lock().unwrap() = m.clone();
     ipc::set_options(m).ok();
+    }
     #[cfg(any(target_os = "android", target_os = "ios"))]
     Config::set_options(m);
 }
 
 #[inline]
 pub fn set_option(key: String, value: String) {
-    let mut options = OPTIONS.lock().unwrap();
     if &key == "stop-service" {
         #[cfg(target_os = "macos")]
         {
@@ -294,13 +306,16 @@ pub fn set_option(key: String, value: String) {
             }
         }
     }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+    let mut options = OPTIONS.lock().unwrap();
     if value.is_empty() {
         options.remove(&key);
     } else {
         options.insert(key.clone(), value.clone());
     }
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     ipc::set_options(options.clone()).ok();
+    }
     #[cfg(any(target_os = "android", target_os = "ios"))]
     Config::set_option(key, value);
 }
@@ -729,8 +744,8 @@ pub fn default_video_save_directory() -> String {
 #[inline]
 pub fn get_api_server() -> String {
     crate::get_api_server(
-        get_option_("api-server"),
-        get_option_("custom-rendezvous-server"),
+        get_option("api-server"),
+        get_option("custom-rendezvous-server"),
     )
 }
 
@@ -934,7 +949,14 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
 
 #[allow(dead_code)]
 pub fn option_synced() -> bool {
-    OPTION_SYNCED.lock().unwrap().clone()
+    #[cfg(not(any(target_os = "android", feature = "flutter")))]
+    {
+        OPTION_SYNCED.lock().unwrap().clone()
+    }
+    #[cfg(any(target_os = "android", feature = "flutter"))]
+    {
+        true
+    }
 }
 
 #[cfg(any(target_os = "android", feature = "flutter"))]
