@@ -505,7 +505,7 @@ jobs:
         shell: bash
         run: |
           pushd /opt
-          git clone https://github.com//rustdesk-orgrustdesk_thirdparty_lib.git --depth=1
+          git clone https://github.com/rustdesk-org/rustdesk_thirdparty_lib.git --depth=1
 
       - name: Restore bridge files
         uses: actions/download-artifact@master
