@@ -86,7 +86,7 @@ class _PeerTabPageState extends State<PeerTabPage>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
-          height: 28,
+          height: 32,
           child: Container(
             padding: isDesktop ? null : EdgeInsets.symmetric(horizontal: 2),
             child: Row(
@@ -114,40 +114,40 @@ class _PeerTabPageState extends State<PeerTabPage>
   Widget _createSwitchBar(BuildContext context) {
     final model = Provider.of<PeerTabModel>(context);
 
-    getTabChild(int t) {
-      final color = model.currentTab == t
-          ? MyTheme.tabbar(context).selectedTextColor
-          : MyTheme.tabbar(context).unSelectedTextColor
-        ?..withOpacity(0.5);
-      return Obx(() => Tooltip(
-            message: model.tabTooltip(t, gFFI.groupModel.groupName.value),
-            child: Icon(model.tabIcon(t), color: color),
-          ));
-    }
-
     return ListView(
         scrollDirection: Axis.horizontal,
         physics: NeverScrollableScrollPhysics(),
         children: model.indexs.map((t) {
-          return InkWell(
-            child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                decoration: BoxDecoration(
-                  color: model.currentTab == t
-                      ? Theme.of(context).colorScheme.background
-                      : null,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Align(
-                  alignment: Alignment.center,
-                  child: getTabChild(t),
-                )),
-            onTap: () async {
-              await handleTabSelection(t);
-              await bind.setLocalFlutterConfig(
-                  k: 'peer-tab-index', v: t.toString());
-            },
-          );
+          final selected = model.currentTab == t;
+          final color = selected
+              ? MyTheme.tabbar(context).selectedTextColor
+              : MyTheme.tabbar(context).unSelectedTextColor
+            ?..withOpacity(0.5);
+          final hover = false.obs;
+          final deco = BoxDecoration(
+              color: Theme.of(context).colorScheme.background,
+              borderRadius: BorderRadius.circular(6));
+          final decoBorder = BoxDecoration(
+              border: Border(
+            bottom: BorderSide(width: 2, color: color!),
+          ));
+          return Obx(() => InkWell(
+                child: Container(
+                  decoration:
+                      selected ? decoBorder : (hover.value ? deco : null),
+                  child: Tooltip(
+                    message:
+                        model.tabTooltip(t, gFFI.groupModel.groupName.value),
+                    child: Icon(model.tabIcon(t), color: color),
+                  ).paddingSymmetric(horizontal: 4),
+                ).paddingSymmetric(horizontal: 4),
+                onTap: () async {
+                  await handleTabSelection(t);
+                  await bind.setLocalFlutterConfig(
+                      k: 'peer-tab-index', v: t.toString());
+                },
+                onHover: (value) => hover.value = value,
+              ));
         }).toList());
   }
 
