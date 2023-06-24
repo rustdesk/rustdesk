@@ -197,17 +197,19 @@ class _PeerTabPageState extends State<PeerTabPage>
 
   Widget _createPeerViewTypeSwitch(BuildContext context) {
     final textColor = Theme.of(context).textTheme.titleLarge?.color;
+    final types = [PeerUiType.grid, PeerUiType.list];
+    final hover = false.obs;
     final deco = BoxDecoration(
       color: Theme.of(context).colorScheme.background,
       borderRadius: BorderRadius.circular(5),
     );
-    final types = [PeerUiType.grid, PeerUiType.list];
 
     return Obx(
       () => Container(
         padding: EdgeInsets.all(4.0),
-        decoration: deco,
+        decoration: hover.value ? deco : null,
         child: InkWell(
+            onHover: (value) => hover.value = value,
             onTap: () async {
               final type = types.elementAt(
                   peerCardUiType.value == types.elementAt(0) ? 1 : 0);
@@ -217,7 +219,7 @@ class _PeerTabPageState extends State<PeerTabPage>
             },
             child: Icon(
               peerCardUiType.value == PeerUiType.grid
-                  ? Icons.list
+                  ? Icons.view_list_rounded
                   : Icons.grid_view_rounded,
               size: 18,
               color: textColor,
