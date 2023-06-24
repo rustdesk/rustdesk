@@ -56,7 +56,7 @@ pub struct WhitelistItem {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct UserInfo {
-    #[serde(default)]
+    #[serde(default, flatten)]
     pub settings: UserSettings,
     #[serde(default)]
     pub login_device_whitelist: Vec<WhitelistItem>,
@@ -83,11 +83,16 @@ pub enum UserStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserPayload {
     pub name: String,
+    #[serde(default)]
     pub email: Option<String>,
+    #[serde(default)]
     pub note: Option<String>,
+    #[serde(default)]
     pub status: UserStatus,
     pub info: UserInfo,
+    #[serde(default)]
     pub is_admin: bool,
+    #[serde(default)]
     pub third_auth_type: Option<String>,
 }
 
@@ -115,6 +120,12 @@ pub struct AuthResult {
     pub failed_msg: String,
     pub url: Option<String>,
     pub auth_body: Option<AuthBody>,
+}
+
+impl Default for UserStatus {
+    fn default() -> Self {
+        UserStatus::Normal
+    }
 }
 
 impl OidcSession {
@@ -216,7 +227,7 @@ impl OidcSession {
         let query_timeout = OIDC_SESSION.read().unwrap().query_timeout;
         while OIDC_SESSION.read().unwrap().keep_querying && begin.elapsed() < query_timeout {
             match Self::query(&code_url.code, &id, &uuid) {
-                Ok(HbbHttpResponse::<_>::Data(mut auth_body)) => {
+                Ok(HbbHttpResponse::<_>::Data(auth_body)) => {
                     if remember_me {
                         LocalConfig::set_option(
                             "access_token".to_owned(),
