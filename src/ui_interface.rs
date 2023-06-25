@@ -64,6 +64,8 @@ lazy_static::lazy_static! {
     pub static ref SENDER : Mutex<mpsc::UnboundedSender<ipc::Data>> = Mutex::new(check_connect_status(true));
 }
 
+const INIT_ASYNC_JOB_STATUS: &str = " ";
+
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[inline]
 pub fn get_id() -> String {
@@ -635,13 +637,23 @@ pub fn get_uuid() -> String {
     crate::encode64(hbb_common::get_uuid())
 }
 
+#[inline]
+pub fn get_init_async_job_status() -> String {
+    INIT_ASYNC_JOB_STATUS.to_string()
+}
+
+#[inline]
+pub fn reset_async_job_status() {
+    *ASYNC_JOB_STATUS.lock().unwrap() = get_init_async_job_status();
+}
+
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[inline]
 pub fn change_id(id: String) {
-    *ASYNC_JOB_STATUS.lock().unwrap() = " ".to_owned();
+    reset_async_job_status();
     let old_id = get_id();
     std::thread::spawn(move || {
-        *ASYNC_JOB_STATUS.lock().unwrap() = change_id_shared(id, old_id).to_owned();
+        change_id_shared(id, old_id).to_owned();
     });
 }
 
@@ -1012,8 +1024,13 @@ pub(crate) async fn send_to_cm(data: &ipc::Data) {
 const INVALID_FORMAT: &'static str = "Invalid format";
 const UNKNOWN_ERROR: &'static str = "Unknown error";
 
+#[inline]
 #[tokio::main(flavor = "current_thread")]
-pub async fn change_id_shared(id: String, old_id: String) -> &'static str {
+pub async fn change_id_shared(id: String, old_id: String) {
+    *ASYNC_JOB_STATUS.lock().unwrap() = change_id_shared_(id, old_id).await.to_owned();
+}
+
+pub async fn change_id_shared_(id: String, old_id: String) -> &'static str {
     if !hbb_common::is_valid_custom_id(&id) {
         return INVALID_FORMAT;
     }
