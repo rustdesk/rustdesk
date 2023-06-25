@@ -542,6 +542,7 @@ impl UI {
     }
 
     fn change_id(&self, id: String) {
+        reset_async_job_status();
         let old_id = self.get_id();
         change_id_shared(id, old_id);
     }
