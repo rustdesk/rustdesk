@@ -6,10 +6,16 @@ use std::{
 
 #[cfg(feature = "hwcodec")]
 use crate::hwcodec::*;
+
 #[cfg(feature = "mediacodec")]
 use crate::mediacodec::{
-    MediaCodecDecoder, MediaCodecDecoders, H264_DECODER_SUPPORT, H265_DECODER_SUPPORT,
+    XMediaCodecDecoder as MediaCodecDecoder, XMediaCodecDecoder as MediaCodecDecoders,
+    H264_DECODER_SUPPORT, H265_DECODER_SUPPORT, VP8_DECODER_SUPPORT, VP9_DECODER_SUPPORT
 };
+
+#[cfg(feature = "mediacodec")]
+use crate::CodecFormat;
+
 use crate::{
     aom::{self, AomDecoder, AomDecoderConfig, AomEncoder, AomEncoderConfig},
     common::GoogleImage,
@@ -299,11 +305,7 @@ impl Decoder {
             #[cfg(feature = "hwcodec")]
             i420: vec![],
             #[cfg(feature = "mediacodec")]
-            media_codec: if enable_hwcodec_option() {
-                MediaCodecDecoder::new_decoders()
-            } else {
-                MediaCodecDecoders::default()
-            },
+            media_codec:  MediaCodecDecoders::default(),
         }
     }
 
@@ -315,9 +317,23 @@ impl Decoder {
     ) -> ResultType<bool> {
         match frame {
             video_frame::Union::Vp8s(vp8s) => {
+                #[cfg(feature = "mediacodec")]
+                if VP8_DECODER_SUPPORT.load(std::sync::atomic::Ordering::SeqCst) {
+                    Decoder::handle_mediacodec_video_frame(&CodecFormat::VP8, &mut self.media_codec, vp8s, rgb)
+                } else {
+                    Decoder::handle_vpxs_video_frame(&mut self.vp8, vp8s, rgb)
+                }
+                #[cfg(not(feature = "mediacodec"))]
                 Decoder::handle_vpxs_video_frame(&mut self.vp8, vp8s, rgb)
             }
             video_frame::Union::Vp9s(vp9s) => {
+                #[cfg(feature = "mediacodec")]
+                if VP9_DECODER_SUPPORT.load(std::sync::atomic::Ordering::SeqCst) {
+                    Decoder::handle_mediacodec_video_frame(&CodecFormat::VP9, &mut self.media_codec, vp9s, rgb)
+                } else {
+                    Decoder::handle_vpxs_video_frame(&mut self.vp9, vp9s, rgb)
+                }
+                #[cfg(not(feature = "mediacodec"))]
                 Decoder::handle_vpxs_video_frame(&mut self.vp9, vp9s, rgb)
             }
             video_frame::Union::Av1s(av1s) => {
@@ -341,19 +357,11 @@ impl Decoder {
             }
             #[cfg(feature = "mediacodec")]
             video_frame::Union::H264s(h264s) => {
-                if let Some(decoder) = &mut self.media_codec.h264 {
-                    Decoder::handle_mediacodec_video_frame(decoder, h264s, rgb)
-                } else {
-                    Err(anyhow!("don't support h264!"))
-                }
+                Decoder::handle_mediacodec_video_frame(&CodecFormat::H264, &mut self.media_codec, h264s, rgb)
             }
             #[cfg(feature = "mediacodec")]
             video_frame::Union::H265s(h265s) => {
-                if let Some(decoder) = &mut self.media_codec.h265 {
-                    Decoder::handle_mediacodec_video_frame(decoder, h265s, rgb)
-                } else {
-                    Err(anyhow!("don't support h265!"))
-                }
+                Decoder::handle_mediacodec_video_frame(&CodecFormat::H265, &mut self.media_codec, h265s, rgb)
             }
             _ => Err(anyhow!("unsupported video frame type!")),
         }
@@ -432,13 +440,14 @@ impl Decoder {
     // rgb [in/out] fmt and stride must be set in ImageRgb
     #[cfg(feature = "mediacodec")]
     fn handle_mediacodec_video_frame(
+        codec_format: &CodecFormat,
         decoder: &mut MediaCodecDecoder,
         frames: &EncodedVideoFrames,
         rgb: &mut ImageRgb,
     ) -> ResultType<bool> {
         let mut ret = false;
-        for h264 in frames.frames.iter() {
-            return decoder.decode(&h264.data, rgb);
+        for frame in frames.frames.iter() {
+            return decoder.decode(codec_format, &frame.data, rgb, &frame.key, &frame.pts);
         }
         return Ok(false);
     }
