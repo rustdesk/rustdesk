@@ -3,7 +3,6 @@ import 'package:flutter_hbb/common/formatter/id_formatter.dart';
 import 'package:flutter_hbb/common/widgets/peer_card.dart';
 import 'package:flutter_hbb/common/widgets/peers_view.dart';
 import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
-import 'package:flutter_hbb/models/state_model.dart';
 import '../../consts.dart';
 import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
 import 'package:get/get.dart';
@@ -30,43 +29,25 @@ class _AddressBookState extends State<AddressBook> {
   }
 
   @override
-  Widget build(BuildContext context) => Obx(() => Offstage(
-        offstage: stateGlobal.svcStatus.value != SvcStatus.ready,
-        child: FutureBuilder<Widget>(
-            future: buildBody(context),
-            builder: (context, snapshot) {
-              if (snapshot.hasData) {
-                return snapshot.data!;
-              } else {
-                return const Offstage();
-              }
-            }),
-      ));
-
-  Future<Widget> buildBody(BuildContext context) async {
-    return Obx(() {
-      if (gFFI.userModel.userName.value.isEmpty) {
-        return Center(
-            child: ElevatedButton(
-                onPressed: loginDialog, child: Text(translate("Login"))));
-      } else {
-        if (gFFI.abModel.abLoading.value) {
-          return const Center(
-            child: CircularProgressIndicator(),
-          );
+  Widget build(BuildContext context) => Obx(() {
+        if (gFFI.userModel.userName.value.isEmpty) {
+          return Center(
+              child: ElevatedButton(
+                  onPressed: loginDialog, child: Text(translate("Login"))));
+        } else {
+          if (gFFI.abModel.abLoading.value) {
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
+          }
+          if (gFFI.abModel.abError.isNotEmpty) {
+            return _buildShowError(gFFI.abModel.abError.value);
+          }
+          return isDesktop
+              ? _buildAddressBookDesktop()
+              : _buildAddressBookMobile();
         }
-        if (gFFI.abModel.abError.isNotEmpty) {
-          return _buildShowError(gFFI.abModel.abError.value);
-        }
-        if (gFFI.abModel.fromServer.isFalse) {
-          return Offstage();
-        }
-        return isDesktop
-            ? _buildAddressBookDesktop()
-            : _buildAddressBookMobile();
-      }
-    });
-  }
+      });
 
   Widget _buildShowError(String error) {
     return Center(
@@ -86,34 +67,29 @@ class _AddressBookState extends State<AddressBook> {
   Widget _buildAddressBookDesktop() {
     return Row(
       children: [
-        Card(
-          margin: EdgeInsets.symmetric(horizontal: 4.0),
-          shape: RoundedRectangleBorder(
+        Container(
+          decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
-              side:
-                  BorderSide(color: Theme.of(context).scaffoldBackgroundColor)),
+              border:
+                  Border.all(color: Theme.of(context).colorScheme.background)),
           child: Container(
-            width: 200,
+            width: 150,
             height: double.infinity,
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+            padding: const EdgeInsets.all(8.0),
             child: Column(
               children: [
-                _buildTagHeader(),
+                _buildTagHeader().marginOnly(left: 8.0, right: 0),
                 Expanded(
                   child: Container(
                     width: double.infinity,
                     height: double.infinity,
-                    decoration: BoxDecoration(
-                        border: Border.all(color: MyTheme.border),
-                        borderRadius: BorderRadius.circular(2)),
                     child: _buildTags(),
-                  ).marginSymmetric(vertical: 8.0),
+                  ),
                 )
               ],
             ),
           ),
-        ).marginOnly(right: 8.0),
+        ).marginOnly(right: 12.0),
         _buildPeersViews()
       ],
     );
@@ -122,31 +98,25 @@ class _AddressBookState extends State<AddressBook> {
   Widget _buildAddressBookMobile() {
     return Column(
       children: [
-        Card(
-          margin: EdgeInsets.symmetric(horizontal: 1.0),
-          shape: RoundedRectangleBorder(
+        Container(
+          decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(6),
-              side:
-                  BorderSide(color: Theme.of(context).scaffoldBackgroundColor)),
+              border:
+                  Border.all(color: Theme.of(context).colorScheme.background)),
           child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+            padding: const EdgeInsets.all(8.0),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _buildTagHeader(),
+                _buildTagHeader().marginOnly(left: 8.0, right: 0),
                 Container(
                   width: double.infinity,
-                  decoration: BoxDecoration(
-                      border: Border.all(color: MyTheme.darkGray),
-                      borderRadius: BorderRadius.circular(4)),
                   child: _buildTags(),
-                ).marginSymmetric(vertical: 8.0),
+                ),
               ],
             ),
           ),
-        ),
-        Divider(),
+        ).marginOnly(bottom: 12.0),
         _buildPeersViews()
       ],
     );
@@ -164,7 +134,7 @@ class _AddressBookState extends State<AddressBook> {
               menuPos = RelativeRect.fromLTRB(x, y, x, y);
             },
             onPointerUp: (_) => _showMenu(menuPos),
-            child: ActionMore()),
+            child: build_more(context, invert: true)),
       ],
     );
   }
@@ -194,6 +164,7 @@ class _AddressBookState extends State<AddressBook> {
           alignment: Alignment.topLeft,
           child: Obx(() => AddressBookPeersView(
                 menuPadding: widget.menuPadding,
+                // ignore: invalid_use_of_protected_member
                 initPeers: gFFI.abModel.peers.value,
               ))),
     );
@@ -436,10 +407,9 @@ class AddressBookTag extends StatelessWidget {
       child: Obx(
         () => Container(
           decoration: BoxDecoration(
-              color: tags.contains(name) ? Colors.blue : null,
-              border: tags.contains(name)
-                  ? null
-                  : Border.all(color: MyTheme.border),
+              color: tags.contains(name)
+                  ? Colors.blue
+                  : Theme.of(context).colorScheme.background,
               borderRadius: BorderRadius.circular(6)),
           margin: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
           padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 8.0),

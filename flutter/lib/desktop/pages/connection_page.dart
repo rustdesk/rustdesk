@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/scroll_wrapper.dart';
 import 'package:flutter_hbb/models/state_model.dart';
+import 'package:flutter_hbb/models/user_model.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:window_manager/window_manager.dart';
@@ -242,8 +243,8 @@ class _ConnectionPageState extends State<ConnectionPage>
 
   Widget buildStatus() {
     final em = 14.0;
-    return ConstrainedBox(
-      constraints: BoxConstraints.tightFor(height: 3 * em),
+    return Container(
+      height: 3 * em,
       child: Obx(() => Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -252,7 +253,8 @@ class _ConnectionPageState extends State<ConnectionPage>
                 width: 8,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(4),
-                  color: svcStopped.value || stateGlobal.svcStatus.value == SvcStatus.connecting
+                  color: svcStopped.value ||
+                          stateGlobal.svcStatus.value == SvcStatus.connecting
                       ? kColorWarn
                       : (stateGlobal.svcStatus.value == SvcStatus.ready
                           ? Color.fromARGB(255, 50, 190, 166)
@@ -339,14 +341,9 @@ class _ConnectionPageState extends State<ConnectionPage>
       stateGlobal.svcStatus.value = SvcStatus.ready;
       if (preStatus != SvcStatus.ready) {
         gFFI.userModel.refreshCurrentUser();
-        gFFI.groupModel.pull();
       }
     } else {
       stateGlobal.svcStatus.value = SvcStatus.notReady;
-    }
-    if (stateGlobal.svcStatus.value != SvcStatus.ready) {
-      gFFI.userModel.isAdmin.value = false;
-      gFFI.groupModel.reset();
     }
     svcIsUsingPublicServer.value = await bind.mainIsUsingPublicServer();
   }

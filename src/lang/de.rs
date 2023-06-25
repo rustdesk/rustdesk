@@ -221,7 +221,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Remember me", "Login merken"),
         ("Trust this device", "Diesem Gerät vertrauen"),
         ("Verification code", "Verifizierungscode"),
-        ("verification_tip", "Es wurde ein neues Gerät erkannt und ein Verifizierungscode an die registrierte E-Mail-Adresse gesendet. Geben Sie den Verifizierungscode ein, um sich erneut anzumelden."),
+        ("verification_tip", "Ein Verifizierungscode wurde an die registrierte E-Mail-Adresse gesendet. Geben Sie den Verifizierungscode ein, um sich erneut anzumelden."),
         ("Logout", "Abmelden"),
         ("Tags", "Schlagworte"),
         ("Search ID", "ID suchen"),

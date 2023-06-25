@@ -82,7 +82,7 @@ function editOSPassword(login=false) {
         if (!res) return;
         var a0 = handler.get_option('auto-login') != '';
         var p = (res.password || '').trim();
-        var a = res.auto_login || false;
+        var a = res.autoLogin || false;
         if (p == p0 && a == a0) return;
         if (p != p0) handler.set_option('os-password', p);
         if (a != a0) handler.set_option('auto-login', a ? 'Y' : '');

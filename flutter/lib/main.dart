@@ -33,9 +33,6 @@ int? kWindowId;
 WindowType? kWindowType;
 late List<String> kBootArgs;
 
-/// Uni links.
-StreamSubscription? _uniLinkSubscription;
-
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   debugPrint("launch args: $args");
@@ -123,7 +120,6 @@ void runMainApp(bool startService) async {
   // trigger connection status updater
   await bind.mainCheckConnectStatus();
   if (startService) {
-    // await windowManager.ensureInitialized();
     gFFI.serverModel.startService();
     bind.pluginSyncUi(syncTo: kAppTypeMain);
     bind.pluginListReload();
@@ -155,6 +151,7 @@ void runMobileApp() async {
   await initEnv(kAppTypeMain);
   if (isAndroid) androidChannelInit();
   platformFFI.syncAndroidServiceAppDirConfigPath();
+  gFFI.userModel.refreshCurrentUser();
   runApp(App());
 }
 
@@ -229,7 +226,7 @@ void runConnectionManagerScreen(bool hide) async {
     await showCmWindow(isStartup: true);
   }
   // Start the uni links handler and redirect links to Native, not for Flutter.
-  _uniLinkSubscription = listenUniLinks(handleByFlutter: false);
+  listenUniLinks(handleByFlutter: false);
 }
 
 showCmWindow({bool isStartup = false}) async {

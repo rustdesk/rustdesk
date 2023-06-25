@@ -21,7 +21,6 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 import 'package:texture_rgba_renderer/texture_rgba_renderer.dart';
 import 'package:uni_links/uni_links.dart';
-import 'package:uni_links_desktop/uni_links_desktop.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 import 'package:win32/win32.dart' as win32;
@@ -94,6 +93,8 @@ class IconFont {
   static const IconData menu = IconData(0xe628, fontFamily: _family1);
   static const IconData search = IconData(0xe6a4, fontFamily: _family2);
   static const IconData roundClose = IconData(0xe6ed, fontFamily: _family2);
+  static const IconData addressBook =
+      IconData(0xe602, fontFamily: "AddressBook");
 }
 
 class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
@@ -884,7 +885,7 @@ class CustomAlertDialog extends StatelessWidget {
             child: content,
           ),
           actions: actions,
-          titlePadding: MyTheme.dialogTitlePadding(content: content != null),
+          titlePadding: MyTheme.dialogTitlePadding(),
           contentPadding:
               MyTheme.dialogContentPadding(actions: actions is List),
           actionsPadding: MyTheme.dialogActionsPadding(),
@@ -1262,6 +1263,9 @@ Future<bool> matchPeer(String searchText, Peer peer) async {
 
 /// Get the image for the current [platform].
 Widget getPlatformImage(String platform, {double size = 50}) {
+  if (platform.isEmpty) {
+    return Container(width: size, height: size);
+  }
   if (platform == kPeerPlatformMacOS) {
     platform = 'mac';
   } else if (platform != kPeerPlatformLinux &&

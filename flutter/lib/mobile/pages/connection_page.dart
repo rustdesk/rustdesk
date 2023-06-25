@@ -173,7 +173,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
       ),
     );
     return Align(
-        alignment: Alignment.topLeft,
+        alignment: Alignment.topCenter,
         child: Container(constraints: kMobilePageConstraints, child: w));
   }
 

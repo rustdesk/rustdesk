@@ -416,7 +416,7 @@ Future<bool?> loginDialog() async {
             password: password.text,
             id: await bind.mainGetMyId(),
             uuid: await bind.mainGetUuid(),
-            trustThisDevice: false,
+            autoLogin: true,
             type: HttpType.kAuthReqTypeAccount));
 
         switch (resp.type) {
@@ -424,6 +424,8 @@ Future<bool?> loginDialog() async {
             if (resp.access_token != null) {
               await bind.mainSetLocalOption(
                   key: 'access_token', value: resp.access_token!);
+              await bind.mainSetLocalOption(
+                  key: 'user_info', value: jsonEncode(resp.user ?? {}));
               close(true);
               return;
             }
@@ -442,10 +444,8 @@ Future<bool?> loginDialog() async {
         }
       } on RequestException catch (err) {
         passwordMsg = translate(err.cause);
-        debugPrintStack(label: err.toString());
       } catch (err) {
         passwordMsg = "Unknown Error: $err";
-        debugPrintStack(label: err.toString());
       }
       curOP.value = '';
       setState(() => isInProgress = false);
@@ -482,12 +482,8 @@ Future<bool?> loginDialog() async {
                 curOP: curOP,
                 cbLogin: (Map<String, dynamic> authBody) {
                   try {
-                    final loginResp =
-                        gFFI.userModel.getLoginResponseFromAuthBody(authBody);
-                    if (loginResp.access_token != null) {
-                      bind.mainSetLocalOption(
-                          key: 'access_token', value: loginResp.access_token!);
-                    }
+                    // access_token is already stored in the rust side.
+                    gFFI.userModel.getLoginResponseFromAuthBody(authBody);
                   } catch (e) {
                     debugPrint('Failed too parse oidc login body: "$authBody"');
                   }
@@ -526,16 +522,14 @@ Future<bool?> loginDialog() async {
   });
 
   if (res != null) {
-    // update ab and group status
-    await gFFI.abModel.pullAb();
-    await gFFI.groupModel.pull();
+    await UserModel.updateOtherModels();
   }
 
   return res;
 }
 
 Future<bool?> verificationCodeDialog(UserPayload? user) async {
-  var trustThisDevice = false;
+  var autoLogin = true;
   var isInProgress = false;
   String? errorText;
 
@@ -568,7 +562,7 @@ Future<bool?> verificationCodeDialog(UserPayload? user) async {
             username: user?.name,
             id: await bind.mainGetMyId(),
             uuid: await bind.mainGetUuid(),
-            trustThisDevice: trustThisDevice,
+            autoLogin: autoLogin,
             type: HttpType.kAuthReqTypeEmailCode));
 
         switch (resp.type) {
@@ -586,10 +580,8 @@ Future<bool?> verificationCodeDialog(UserPayload? user) async {
         }
       } on RequestException catch (err) {
         errorText = translate(err.cause);
-        debugPrintStack(label: err.toString());
       } catch (err) {
         errorText = "Unknown Error: $err";
-        debugPrintStack(label: err.toString());
       }
 
       setState(() => isInProgress = false);

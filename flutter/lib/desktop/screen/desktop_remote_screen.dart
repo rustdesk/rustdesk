@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/desktop/pages/remote_tab_page.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
-import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:provider/provider.dart';
 

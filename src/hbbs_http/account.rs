@@ -56,10 +56,8 @@ pub struct WhitelistItem {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct UserInfo {
-    #[serde(default)]
+    #[serde(default, flatten)]
     pub settings: UserSettings,
-    #[serde(default)]
-    pub login_ip_whitelist: Vec<WhitelistItem>,
     #[serde(default)]
     pub login_device_whitelist: Vec<WhitelistItem>,
     #[serde(default)]
@@ -82,23 +80,20 @@ pub enum UserStatus {
     Unverified = -1,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize_repr, Deserialize_repr)]
-#[repr(i64)]
-pub enum UserRole {
-    Owner = 10,
-    Admin = 1,
-    Member = 0,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserPayload {
     pub name: String,
+    #[serde(default)]
     pub email: Option<String>,
+    #[serde(default)]
     pub note: Option<String>,
+    #[serde(default)]
     pub status: UserStatus,
     pub info: UserInfo,
-    pub role: UserRole,
+    #[serde(default)]
     pub is_admin: bool,
+    #[serde(default)]
+    pub third_auth_type: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -125,6 +120,12 @@ pub struct AuthResult {
     pub failed_msg: String,
     pub url: Option<String>,
     pub auth_body: Option<AuthBody>,
+}
+
+impl Default for UserStatus {
+    fn default() -> Self {
+        UserStatus::Normal
+    }
 }
 
 impl OidcSession {
@@ -234,7 +235,7 @@ impl OidcSession {
                         );
                         LocalConfig::set_option(
                             "user_info".to_owned(),
-                            serde_json::to_string(&auth_body.user).unwrap_or_default(),
+                            serde_json::json!({ "name": auth_body.user.name, "status": auth_body.user.status }).to_string(),
                         );
                     }
                     OIDC_SESSION

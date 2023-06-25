@@ -204,6 +204,7 @@ typedef LabelGetter = Rx<String> Function(String key);
 int _lastClickTime =
     DateTime.now().millisecondsSinceEpoch - bind.getDoubleClickTime() - 1000;
 
+// ignore: must_be_immutable
 class DesktopTab extends StatelessWidget {
   final bool showLogo;
   final bool showTitle;

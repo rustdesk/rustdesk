@@ -568,11 +568,11 @@ def main():
     #rcodesign sign --p12-file ~/.p12/rustdesk-developer-id.p12 --p12-password-file ~/.p12/.cert-pass --code-signature-flags runtime ./rustdesk-{1}.dmg
     codesign -s "Developer ID Application: {0}" --force --options runtime ./rustdesk-{1}.dmg
     # https://appstoreconnect.apple.com/access/api
-    # https://gregoryszorc.com/docs/apple-codesign/0.16.0/apple_codesign_rcodesign.html#notarizing-and-stapling
-    # p8 file is generated when you generate api key, download and put it under ~/.private_keys/
-    rcodesign notarize --api-issuer {2} --api-key {3} --staple ./rustdesk-{1}.dmg
+    # https://gregoryszorc.com/docs/apple-codesign/stable/apple_codesign_getting_started.html#apple-codesign-app-store-connect-api-key
+    # p8 file is generated when you generate api key (can download only once)
+    rcodesign notary-submit --api-key-path ../.p12/api-key.json  --staple rustdesk-{1}.dmg
     # verify:  spctl -a -t exec -v /Applications/RustDesk.app
-    '''.format(pa, version, os.environ.get('api-issuer'), os.environ.get('api-key')))
+    '''.format(pa, version))
                 else:
                     print('Not signed')
             else:

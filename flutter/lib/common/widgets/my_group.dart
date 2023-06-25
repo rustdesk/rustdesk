@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/hbbs/hbbs.dart';
+import 'package:flutter_hbb/common/widgets/login.dart';
 import 'package:flutter_hbb/common/widgets/peers_view.dart';
-import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
 
 import '../../common.dart';
@@ -28,24 +28,20 @@ class _MyGroupState extends State<MyGroup> {
 
   @override
   Widget build(BuildContext context) {
-    return Obx(() => Offstage(
-          offstage: stateGlobal.svcStatus.value != SvcStatus.ready,
-          child: FutureBuilder<Widget>(
-              future: buildBody(context),
-              builder: (context, snapshot) {
-                if (snapshot.hasData) {
-                  return snapshot.data!;
-                } else {
-                  return const Offstage();
-                }
-              }),
-        ));
+    return Obx(() {
+      // use username to be same with ab
+      if (gFFI.userModel.userName.value.isEmpty) {
+        return Center(
+            child: ElevatedButton(
+                onPressed: loginDialog, child: Text(translate("Login"))));
+      }
+      return buildBody(context);
+    });
   }
 
-  Future<Widget> buildBody(BuildContext context) async {
+  Widget buildBody(BuildContext context) {
     return Obx(() {
-      if (gFFI.groupModel.groupLoading.value ||
-          gFFI.groupModel.peerLoading.value) {
+      if (gFFI.groupModel.groupLoading.value) {
         return const Center(
           child: CircularProgressIndicator(),
         );
@@ -79,17 +75,14 @@ class _MyGroupState extends State<MyGroup> {
   Widget _buildDesktop() {
     return Row(
       children: [
-        Card(
-          margin: EdgeInsets.symmetric(horizontal: 4.0),
-          shape: RoundedRectangleBorder(
+        Container(
+          decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
-              side:
-                  BorderSide(color: Theme.of(context).scaffoldBackgroundColor)),
+              border:
+                  Border.all(color: Theme.of(context).colorScheme.background)),
           child: Container(
-            width: 200,
+            width: 150,
             height: double.infinity,
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
             child: Column(
               children: [
                 _buildLeftHeader(),
@@ -97,21 +90,20 @@ class _MyGroupState extends State<MyGroup> {
                   child: Container(
                     width: double.infinity,
                     height: double.infinity,
-                    decoration:
-                        BoxDecoration(borderRadius: BorderRadius.circular(2)),
                     child: _buildUserContacts(),
-                  ).marginSymmetric(vertical: 8.0),
+                  ),
                 )
               ],
             ),
           ),
-        ).marginOnly(right: 8.0),
+        ).marginOnly(right: 12.0),
         Expanded(
           child: Align(
               alignment: Alignment.topLeft,
-              child: MyGroupPeerView(
+              child: Obx(() => MyGroupPeerView(
                   menuPadding: widget.menuPadding,
-                  initPeers: gFFI.groupModel.peersShow)),
+                  // ignore: invalid_use_of_protected_member
+                  initPeers: gFFI.groupModel.peersShow.value))),
         )
       ],
     );
@@ -120,36 +112,31 @@ class _MyGroupState extends State<MyGroup> {
   Widget _buildMobile() {
     return Column(
       children: [
-        Card(
-          margin: EdgeInsets.symmetric(horizontal: 4.0),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side:
-                  BorderSide(color: Theme.of(context).scaffoldBackgroundColor)),
+        Container(
+          decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(6),
+              border:
+                  Border.all(color: Theme.of(context).colorScheme.background)),
           child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 _buildLeftHeader(),
                 Container(
                   width: double.infinity,
-                  decoration:
-                      BoxDecoration(borderRadius: BorderRadius.circular(4)),
                   child: _buildUserContacts(),
-                ).marginSymmetric(vertical: 8.0)
+                )
               ],
             ),
           ),
-        ),
-        Divider(),
+        ).marginOnly(bottom: 12.0),
         Expanded(
           child: Align(
               alignment: Alignment.topLeft,
-              child: MyGroupPeerView(
+              child: Obx(() => MyGroupPeerView(
                   menuPadding: widget.menuPadding,
-                  initPeers: gFFI.groupModel.peersShow)),
+                  // ignore: invalid_use_of_protected_member
+                  initPeers: gFFI.groupModel.peersShow.value))),
         )
       ],
     );
@@ -165,6 +152,7 @@ class _MyGroupState extends State<MyGroup> {
             searchUserText.value = value;
           },
           decoration: InputDecoration(
+            filled: false,
             prefixIcon: Icon(
               Icons.search_rounded,
               color: Theme.of(context).hintColor,
@@ -218,7 +206,7 @@ class _MyGroupState extends State<MyGroup> {
           child: Container(
             child: Row(
               children: [
-                Icon(Icons.person_outline_rounded, color: Colors.grey, size: 16)
+                Icon(Icons.person_rounded, color: Colors.grey, size: 16)
                     .marginOnly(right: 4),
                 Expanded(child: Text(username)),
               ],
@@ -226,6 +214,6 @@ class _MyGroupState extends State<MyGroup> {
           ),
         );
       },
-    )).marginSymmetric(horizontal: 12);
+    )).marginSymmetric(horizontal: 12).marginOnly(bottom: 6);
   }
 }

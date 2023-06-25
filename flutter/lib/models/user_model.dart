@@ -3,13 +3,14 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/hbbs/hbbs.dart';
-import 'package:flutter_hbb/common/widgets/peer_tab_page.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 
 import '../common.dart';
 import 'model.dart';
 import 'platform_model.dart';
+
+bool refresing_user = false;
 
 class UserModel {
   final RxString userName = ''.obs;
@@ -21,7 +22,7 @@ class UserModel {
   void refreshCurrentUser() async {
     final token = bind.mainGetLocalOption(key: 'access_token');
     if (token == '') {
-      await _updateOtherModels();
+      await updateOtherModels();
       return;
     }
     _updateLocalUserInfo();
@@ -30,13 +31,16 @@ class UserModel {
       'id': await bind.mainGetMyId(),
       'uuid': await bind.mainGetUuid()
     };
+    if (refresing_user) return;
     try {
+      refresing_user = true;
       final response = await http.post(Uri.parse('$url/api/currentUser'),
           headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $token'
           },
           body: json.encode(body));
+      refresing_user = false;
       final status = response.statusCode;
       if (status == 401 || status == 400) {
         reset();
@@ -51,17 +55,22 @@ class UserModel {
       final user = UserPayload.fromJson(data);
       _parseAndUpdateUser(user);
     } catch (e) {
-      print('Failed to refreshCurrentUser: $e');
+      debugPrint('Failed to refreshCurrentUser: $e');
     } finally {
-      await _updateOtherModels();
+      refresing_user = false;
+      await updateOtherModels();
     }
   }
 
   static Map<String, dynamic>? getLocalUserInfo() {
+    final userInfo = bind.mainGetLocalOption(key: 'user_info');
+    if (userInfo == '') {
+      return null;
+    }
     try {
-      return json.decode(bind.mainGetLocalOption(key: 'user_info'));
+      return json.decode(userInfo);
     } catch (e) {
-      print('Failed to get local user info: $e');
+      debugPrint('Failed to get local user info "$userInfo": $e');
     }
     return null;
   }
@@ -75,10 +84,10 @@ class UserModel {
 
   Future<void> reset() async {
     await bind.mainSetLocalOption(key: 'access_token', value: '');
+    await bind.mainSetLocalOption(key: 'user_info', value: '');
     await gFFI.abModel.reset();
     await gFFI.groupModel.reset();
     userName.value = '';
-    gFFI.peerTabModel.check_dynamic_tabs();
   }
 
   _parseAndUpdateUser(UserPayload user) {
@@ -86,9 +95,9 @@ class UserModel {
     isAdmin.value = user.isAdmin;
   }
 
-  Future<void> _updateOtherModels() async {
-    await gFFI.abModel.pullAb();
-    await gFFI.groupModel.pull();
+  // update ab and group status
+  static Future<void> updateOtherModels() async {
+    await Future.wait([gFFI.abModel.pullAb(), gFFI.groupModel.pull()]);
   }
 
   Future<void> logOut() async {
@@ -106,7 +115,7 @@ class UserModel {
               headers: authHeaders)
           .timeout(Duration(seconds: 2));
     } catch (e) {
-      print("request /api/logout failed: err=$e");
+      debugPrint("request /api/logout failed: err=$e");
     } finally {
       await reset();
       gFFI.dialogManager.dismissByTag(tag);
@@ -124,11 +133,14 @@ class UserModel {
     try {
       body = jsonDecode(utf8.decode(resp.bodyBytes));
     } catch (e) {
-      print("login: jsonDecode resp body failed: ${e.toString()}");
+      debugPrint("login: jsonDecode resp body failed: ${e.toString()}");
       rethrow;
     }
     if (resp.statusCode != 200) {
       throw RequestException(resp.statusCode, body['error'] ?? '');
+    }
+    if (body['error'] != null) {
+      throw RequestException(0, body['error']);
     }
 
     return getLoginResponseFromAuthBody(body);
@@ -139,7 +151,7 @@ class UserModel {
     try {
       loginResponse = LoginResponse.fromJson(body);
     } catch (e) {
-      print("login: jsonDecode LoginResponse failed: ${e.toString()}");
+      debugPrint("login: jsonDecode LoginResponse failed: ${e.toString()}");
       rethrow;
     }
 
@@ -156,7 +168,8 @@ class UserModel {
       final resp = await http.get(Uri.parse('$url/api/login-options'));
       return jsonDecode(resp.body);
     } catch (e) {
-      print("queryLoginOptions: jsonDecode resp body failed: ${e.toString()}");
+      debugPrint(
+          "queryLoginOptions: jsonDecode resp body failed: ${e.toString()}");
       return [];
     }
   }
