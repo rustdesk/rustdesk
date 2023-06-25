@@ -6,6 +6,7 @@ use hbb_common::{
     directories_next, log, tokio,
 };
 use hbb_common::{
+    bytes::Bytes,
     config::{CONNECT_TIMEOUT, RENDEZVOUS_PORT},
     futures::future::join_all,
     rendezvous_proto::*,
@@ -653,7 +654,7 @@ pub fn change_id(id: String) {
     reset_async_job_status();
     let old_id = get_id();
     std::thread::spawn(move || {
-        change_id_shared(id, old_id).to_owned();
+        change_id_shared(id, old_id);
     });
 }
 
@@ -1036,9 +1037,9 @@ pub async fn change_id_shared_(id: String, old_id: String) -> &'static str {
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    let uuid = machine_uid::get().unwrap_or("".to_owned());
+    let uuid = Bytes::from(machine_uid::get().unwrap_or("".to_owned()).as_bytes().to_vec());
     #[cfg(any(target_os = "android", target_os = "ios"))]
-    let uuid = crate::encode64(hbb_common::get_uuid());
+    let uuid = Bytes::from(hbb_common::get_uuid());
 
     if uuid.is_empty() {
         log::error!("Failed to change id, uuid is_empty");
@@ -1082,7 +1083,7 @@ async fn check_id(
     rendezvous_server: String,
     old_id: String,
     id: String,
-    uuid: String,
+    uuid: Bytes,
 ) -> &'static str {
     if let Ok(mut socket) = hbb_common::socket_client::connect_tcp(
         crate::check_port(rendezvous_server, RENDEZVOUS_PORT),
@@ -1094,7 +1095,7 @@ async fn check_id(
         msg_out.set_register_pk(RegisterPk {
             old_id,
             id,
-            uuid: uuid.into(),
+            uuid,
             ..Default::default()
         });
         let mut ok = false;
