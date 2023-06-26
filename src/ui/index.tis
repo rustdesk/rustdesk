@@ -316,7 +316,7 @@ class MyIdMenu: Reactor.Component {
                 {username ? 
                 <li #logout>{translate('Logout')} ({username})</li> :
                 <li #login>{translate('Login')}</li>}
-                {handler.is_ok_change_id() && key_confirmed ? <li #change-id>{translate('Change ID')}</li> : ""}
+                {handler.is_ok_change_id() && key_confirmed && connect_status > 0 ? <li #change-id>{translate('Change ID')}</li> : ""}
                 <div .separator />
                 <li #allow-darktheme><span>{svg_checkmark}</span>{translate('Dark Theme')}</li>
                 <Languages />
@@ -1117,6 +1117,7 @@ function checkConnectStatus() {
         if (tmp[0] != connect_status) {
             connect_status = tmp[0];
             app.connect_status.update();
+            myIdMenu.update();
         }
         if (tmp[1] != key_confirmed) {
             key_confirmed = tmp[1];

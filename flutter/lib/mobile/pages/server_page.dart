@@ -25,8 +25,10 @@ class ServerPage extends StatefulWidget implements PageShape {
     PopupMenuButton<String>(
         icon: const Icon(Icons.more_vert),
         itemBuilder: (context) {
+          final serverModel = Provider.of<ServerModel>(context);
           return [
             PopupMenuItem(
+              enabled: serverModel.connectStatus > 0,
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               value: "changeID",
               child: Text(translate("Change ID")),

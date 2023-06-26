@@ -519,7 +519,9 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
   }
 
   Widget changeId() {
-    return _Button('Change ID', changeIdDialog, enabled: !locked);
+    final serverModel = Provider.of<ServerModel>(context);
+    return _Button('Change ID', changeIdDialog,
+        enabled: !locked && serverModel.connectStatus > 0);
   }
 
   Widget permissions(context) {
