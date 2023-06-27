@@ -72,8 +72,8 @@ fn new_socket(addr: std::net::SocketAddr, reuse: bool) -> Result<TcpSocket, std:
         // almost equals to unix's reuse_port + reuse_address,
         // though may introduce nondeterministic behavior
         #[cfg(unix)]
-        socket.set_reuseport(true)?;
-        socket.set_reuseaddr(true)?;
+        socket.set_reuseport(true).ok();
+        socket.set_reuseaddr(true).ok();
     }
     socket.bind(addr)?;
     Ok(socket)
@@ -260,6 +260,8 @@ pub async fn listen_any(port: u16) -> ResultType<TcpListener> {
     if let Ok(mut socket) = TcpSocket::new_v6() {
         #[cfg(unix)]
         {
+            socket.set_reuseport(true).ok();
+            socket.set_reuseaddr(true).ok();
             use std::os::unix::io::{FromRawFd, IntoRawFd};
             let raw_fd = socket.into_raw_fd();
             let sock2 = unsafe { socket2::Socket::from_raw_fd(raw_fd) };
@@ -283,9 +285,11 @@ pub async fn listen_any(port: u16) -> ResultType<TcpListener> {
             }
         }
     }
-    let s = TcpSocket::new_v4()?;
-    s.bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port))?;
-    Ok(s.listen(DEFAULT_BACKLOG)?)
+    Ok(new_socket(
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port),
+        true,
+    )?
+    .listen(DEFAULT_BACKLOG)?)
 }
 
 impl Unpin for DynTcpStream {}
