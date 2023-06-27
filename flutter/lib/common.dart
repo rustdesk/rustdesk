@@ -1444,7 +1444,9 @@ Future<Offset?> _adjustRestoreMainWindowOffset(
 /// Restore window position and size on start
 /// Note that windowId must be provided if it's subwindow
 Future<bool> restoreWindowPosition(WindowType type, {int? windowId}) async {
-  if (bind.mainGetEnv("DISABLE_RUSTDESK_RESTORE_WINDOW_POSITION").isNotEmpty) {
+  if (bind
+      .mainGetEnv(key: "DISABLE_RUSTDESK_RESTORE_WINDOW_POSITION")
+      .isNotEmpty) {
     return false;
   }
   if (type != WindowType.Main && windowId == null) {
