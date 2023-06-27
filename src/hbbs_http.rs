@@ -19,6 +19,9 @@ impl<T: DeserializeOwned> TryFrom<Response> for HbbHttpResponse<T> {
     type Error = reqwest::Error;
 
     fn try_from(resp: Response) -> Result<Self, <Self as TryFrom<Response>>::Error> {
+        if !resp.status().is_success() {
+            return Ok(Self::Error(format!("Failed to request, http status: {}", resp.status())));
+        }
         let map = resp.json::<Map<String, Value>>()?;
         if let Some(error) = map.get("error") {
             if let Some(err) = error.as_str() {
