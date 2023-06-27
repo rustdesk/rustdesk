@@ -718,6 +718,10 @@ pub fn main_get_local_option(key: String) -> SyncReturn<String> {
     SyncReturn(get_local_option(key))
 }
 
+pub fn main_get_env(key: String) -> SyncReturn<String> {
+    SyncReturn(std::env::var(key).unwrap_or_default())
+}
+
 pub fn main_set_local_option(key: String, value: String) {
     set_local_option(key, value)
 }
