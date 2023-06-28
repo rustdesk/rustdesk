@@ -520,7 +520,8 @@ class ServerModel with ChangeNotifier {
         ),
         actions: [
           dialogButton("Dismiss", onPressed: cancel, isOutline: true),
-          dialogButton("Accept", onPressed: submit),
+          if (approveMode != 'password')
+            dialogButton("Accept", onPressed: submit),
         ],
         onSubmit: submit,
         onCancel: cancel,
