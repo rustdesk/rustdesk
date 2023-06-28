@@ -205,11 +205,13 @@ class _RemotePageState extends State<RemotePage>
   }
 
   @override
-  void dispose() {
+  Future<void> dispose() async {
     debugPrint("REMOTE PAGE dispose ${widget.id}");
     if (useTextureRender) {
       platformFFI.registerTexture(sessionId, 0);
-      textureRenderer.closeTexture(_textureKey);
+      // sleep for a while to avoid the texture is used after it's unregistered.
+      await Future.delayed(Duration(milliseconds: 100));
+      await textureRenderer.closeTexture(_textureKey);
     }
     // ensure we leave this session, this is a double check
     bind.sessionEnterOrLeave(sessionId: sessionId, enter: false);
@@ -217,17 +219,17 @@ class _RemotePageState extends State<RemotePage>
     _ffi.dialogManager.hideMobileActionsOverlay();
     _ffi.recordingModel.onClose();
     _rawKeyFocusNode.dispose();
-    _ffi.close();
+    await _ffi.close();
     _timer?.cancel();
     _ffi.dialogManager.dismissAll();
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
         overlays: SystemUiOverlay.values);
     if (!Platform.isLinux) {
-      Wakelock.disable();
+      await Wakelock.disable();
     }
-    Get.delete<FFI>(tag: widget.id);
-    super.dispose();
+    await Get.delete<FFI>(tag: widget.id);
     removeSharedStates(widget.id);
+    super.dispose();
   }
 
   Widget buildBody(BuildContext context) {
