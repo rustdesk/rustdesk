@@ -1,6 +1,5 @@
 import Cocoa
 import AVFoundation
-import Foundation
 import FlutterMacOS
 import desktop_multi_window
 // import bitsdojo_window_macos
@@ -22,10 +21,7 @@ import texture_rgba_renderer
 
 class MainFlutterWindow: NSWindow {
     override func awakeFromNib() {
-        if (!rustdesk_core_main()){
-            Process.terminate()
-            return
-        }
+        rustdesk_core_main();
         let flutterViewController = FlutterViewController.init()
         let windowFrame = self.frame
         self.contentViewController = flutterViewController
