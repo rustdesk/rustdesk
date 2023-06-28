@@ -336,6 +336,14 @@ class InputModel {
     _trackpadLastDelta = delta;
     var x = delta.dx.toInt();
     var y = delta.dy.toInt();
+    if (x == 0 && y == 0) {
+      final thr = 0.1;
+      if (delta.dx.abs() > delta.dy.abs()) {
+        x = delta.dx > thr ? 1 : (delta.dx < -thr ? -1 : 0);
+      } else {
+        y = delta.dy > thr ? 1 : (delta.dy < -thr ? -1 : 0);
+      }
+    }
     if (x != 0 || y != 0) {
       bind.sessionSendMouse(
           sessionId: sessionId,
