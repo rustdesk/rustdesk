@@ -1100,7 +1100,7 @@ showSetOSAccount(
 
 showAuditDialog(SessionID sessionId, dialogManager) async {
   final controller = TextEditingController();
-  dialogManager.show((setState, close) {
+  dialogManager.show((setState, close, context) {
     submit() {
       var text = controller.text.trim();
       if (text != '') {

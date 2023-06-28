@@ -1403,7 +1403,7 @@ class _AccountState extends State<_Account> {
           child: Column(
             children: [
               text('Username', gFFI.userModel.userName.value),
-              text('Group', gFFI.groupModel.groupName.value),
+              // text('Group', gFFI.groupModel.groupName.value),
             ],
           ),
         )).marginOnly(left: 18, top: 16);
