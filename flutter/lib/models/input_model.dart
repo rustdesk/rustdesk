@@ -335,7 +335,7 @@ class InputModel {
   // https://docs.flutter.dev/release/breaking-changes/trackpad-gestures
   // TODO(support zoom in/out)
   void onPointerPanZoomUpdate(PointerPanZoomUpdateEvent e) {
-    var delta = e.panDelta;
+    final delta = e.panDelta;
     _trackpadLastDelta = delta;
 
     var x = delta.dx.toInt();
