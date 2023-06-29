@@ -998,6 +998,16 @@ Widget msgboxIcon(String type) {
 
 // title should be null
 Widget msgboxContent(String type, String title, String text) {
+  String translateText(String text) {
+    List<String> words = text.split(' ');
+    if (words.isNotEmpty && words[0].endsWith('_tip')) {
+      words[0] = translate(words[0]);
+      return words.join(' ');
+    } else {
+      return translate(text);
+    }
+  }
+
   return Row(
     children: [
       msgboxIcon(type),
@@ -1009,7 +1019,7 @@ Widget msgboxContent(String type, String title, String text) {
               translate(title),
               style: TextStyle(fontSize: 21),
             ).marginOnly(bottom: 10),
-            Text(translate(text), style: const TextStyle(fontSize: 15)),
+            Text(translateText(text), style: const TextStyle(fontSize: 15)),
           ],
         ),
       ),

@@ -1493,7 +1493,7 @@ UINT wait_response_event(wfClipboard *clipboard, HANDLE event, void **data)
 	{
 		NOTIFICATION_MESSAGE msg;
 		msg.type = 2;
-		msg.msg = "timeout waiting for response";
+		msg.msg = "clipboard_wait_response_timeout_tip";
 		msg.details = NULL;
 		clipboard->context->NotifyClipboardMsg(&msg);
 		rc = ERROR_INTERNAL_ERROR;

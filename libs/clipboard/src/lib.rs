@@ -1,6 +1,6 @@
 use cliprdr::*;
 use hbb_common::{
-    allow_err, log,
+    allow_err, lazy_static, log,
     tokio::sync::{
         mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
         Mutex as TokioMutex,
@@ -19,6 +19,13 @@ pub mod context_send;
 pub use context_send::*;
 
 const ERR_CODE_SERVER_FUNCTION_NONE: u32 = 0x00000001;
+const ERR_CODE_INVALID_PARAMETER: u32 = 0x00000002;
+
+pub type FnNotifyCallback = fn(r#type: u32, msg: &str, details: &str) -> u32;
+
+lazy_static::lazy_static! {
+    static ref NOTIFY_CALLBACK: Arc<Mutex<Option<FnNotifyCallback>>> = Default::default();
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "t", content = "c")]
@@ -462,11 +469,31 @@ pub fn create_cliprdr_context(
     )?)
 }
 
-extern "C" fn notify_callback(
-    msg: *const NOTIFICATION_MESSAGE,
-) -> UINT {
+pub fn set_notify_callback(cb: FnNotifyCallback) {
+    NOTIFY_CALLBACK.lock().unwrap().replace(cb);
+}
+
+extern "C" fn notify_callback(msg: *const NOTIFICATION_MESSAGE) -> UINT {
     log::debug!("notify_callback called");
-    0
+    if let Some(cb) = NOTIFY_CALLBACK.lock().unwrap().as_ref() {
+        unsafe {
+            let msg = &*msg;
+            let details = if msg.details.is_null() {
+                Ok("")
+            } else {
+                CStr::from_ptr(msg.details as _).to_str()
+            };
+            match (CStr::from_ptr(msg.msg as _).to_str(), details) {
+                (Ok(m), Ok(d)) => cb(msg.r#type, m, d),
+                _ => {
+                    log::error!("notify_callback: failed to convert msg");
+                    ERR_CODE_INVALID_PARAMETER
+                }
+            }
+        }
+    } else {
+        ERR_CODE_SERVER_FUNCTION_NONE
+    }
 }
 
 extern "C" fn client_format_list(
