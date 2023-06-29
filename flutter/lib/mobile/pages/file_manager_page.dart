@@ -131,6 +131,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
           ),
           actions: [
             PopupMenuButton<String>(
+                tooltip: "",
                 icon: Icon(Icons.more_vert),
                 itemBuilder: (context) {
                   return [
@@ -473,6 +474,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                               setState(() {});
                             })
                         : PopupMenuButton<String>(
+                            tooltip: "",
                             icon: Icon(Icons.more_vert),
                             itemBuilder: (context) {
                               return [
@@ -585,6 +587,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                 onPressed: controller.goToParentDirectory,
               ),
               PopupMenuButton<SortBy>(
+                  tooltip: "",
                   icon: Icon(Icons.sort),
                   itemBuilder: (context) {
                     return SortBy.values
