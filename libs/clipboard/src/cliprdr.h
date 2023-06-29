@@ -199,6 +199,7 @@ extern "C"
         BOOL EnableOthers;
 
         BOOL IsStopped;
+        UINT32 ResponseWaitTimeoutSecs;
         pcCliprdrServerCapabilities ServerCapabilities;
         pcCliprdrClientCapabilities ClientCapabilities;
         pcCliprdrMonitorReady MonitorReady;

@@ -1453,10 +1453,11 @@ UINT wait_response_event(wfClipboard *clipboard, HANDLE event, void **data)
 {
 	UINT rc = ERROR_SUCCESS;
 	clipboard->context->IsStopped = FALSE;
-	// with default 3min timeout
-	for (int i = 0; i < 20 * 60 * 3; i++)
+	DWORD waitOnceTimeoutMillis = 50;
+	int waitCount = 1000 * clipboard->context->ResponseWaitTimeoutSecs / waitOnceTimeoutMillis;
+	for (int i = 0; i < waitCount * 3; i++)
 	{
-		DWORD waitRes = WaitForSingleObject(event, 50);
+		DWORD waitRes = WaitForSingleObject(event, waitOnceTimeoutMillis);
 		if (waitRes == WAIT_TIMEOUT && clipboard->context->IsStopped == FALSE)
 		{
 			continue;
