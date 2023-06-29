@@ -488,7 +488,11 @@ extern "C" fn notify_callback(conn_id: UINT32, msg: *const NOTIFICATION_MESSAGE)
                     }
                 );
                 let title = "Clipboard";
-                let text = format!("{}: {}", m, d);
+                let text = if d.is_empty() {
+                    m.to_string()
+                } else {
+                    format!("{} {}", m, d)
+                };
                 ClipboardFile::NotifyCallback {
                     r#type: msgtype,
                     title: title.to_string(),

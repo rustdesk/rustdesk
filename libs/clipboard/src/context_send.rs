@@ -2,7 +2,7 @@ use crate::cliprdr::*;
 use hbb_common::log;
 use std::sync::Mutex;
 
-const CLIPBOARD_RESPONSE_WAIT_TIMEOUT_SECS: u32 = 0;
+const CLIPBOARD_RESPONSE_WAIT_TIMEOUT_SECS: u32 = 30;
 
 lazy_static::lazy_static! {
     static ref CONTEXT_SEND: ContextSend = ContextSend{addr: Mutex::new(0)};
