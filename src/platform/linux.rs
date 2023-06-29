@@ -667,8 +667,12 @@ pub fn check_super_user_permission() -> ResultType<bool> {
     } else {
         arg = "echo";
     }
-    let status = exec_privileged(&[arg])?.wait()?;
-    Ok(status.success() && status.code() == Some(0))
+    // https://github.com/rustdesk/rustdesk/issues/2756
+    if let Ok(status) = Command::new("pkexec").arg(arg).status() {
+        Ok(status.code() != Some(126))
+    } else {
+        Ok(true)
+    }
 }
 
 pub fn elevate(args: Vec<&str>) -> ResultType<bool> {
