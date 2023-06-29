@@ -478,7 +478,7 @@ extern "C" fn notify_callback(conn_id: UINT32, msg: *const NOTIFICATION_MESSAGE)
         match (CStr::from_ptr(msg.msg as _).to_str(), details) {
             (Ok(m), Ok(d)) => {
                 let msgtype = format!(
-                    "{}-nocancel-nook-hasclose",
+                    "custom-{}-nocancel-nook-hasclose",
                     if msg.r#type == 0 {
                         "info"
                     } else if msg.r#type == 1 {
