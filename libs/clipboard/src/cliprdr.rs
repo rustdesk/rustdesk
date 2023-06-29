@@ -324,6 +324,14 @@ pub struct _CLIPRDR_FILE_CONTENTS_RESPONSE {
 }
 pub type CLIPRDR_FILE_CONTENTS_RESPONSE = _CLIPRDR_FILE_CONTENTS_RESPONSE;
 pub type CliprdrClientContext = _cliprdr_client_context;
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct _NOTIFICATION_MESSAGE {
+    pub r#type: UINT32, // 0 - info, 1 - warning, 2 - error
+    pub msg: *const BYTE,
+    pub details: *const BYTE,
+}
+pub type NOTIFICATION_MESSAGE = _NOTIFICATION_MESSAGE;
 pub type pcCliprdrServerCapabilities = ::std::option::Option<
     unsafe extern "C" fn(
         context: *mut CliprdrClientContext,
@@ -348,6 +356,8 @@ pub type pcCliprdrTempDirectory = ::std::option::Option<
         tempDirectory: *const CLIPRDR_TEMP_DIRECTORY,
     ) -> UINT,
 >;
+pub type pcNotifyClipboardMsg =
+    ::std::option::Option<unsafe extern "C" fn(msg: *const NOTIFICATION_MESSAGE) -> UINT>;
 pub type pcCliprdrClientFormatList = ::std::option::Option<
     unsafe extern "C" fn(
         context: *mut CliprdrClientContext,
@@ -458,6 +468,7 @@ pub struct _cliprdr_client_context {
     pub ClientCapabilities: pcCliprdrClientCapabilities,
     pub MonitorReady: pcCliprdrMonitorReady,
     pub TempDirectory: pcCliprdrTempDirectory,
+    pub NotifyClipboardMsg: pcNotifyClipboardMsg,
     pub ClientFormatList: pcCliprdrClientFormatList,
     pub ServerFormatList: pcCliprdrServerFormatList,
     pub ClientFormatListResponse: pcCliprdrClientFormatListResponse,
@@ -499,6 +510,8 @@ impl CliprdrClientContext {
     pub fn create(
         enable_files: bool,
         enable_others: bool,
+        response_wait_timeout_secs: u32,
+        notify_callback: pcNotifyClipboardMsg,
         client_format_list: pcCliprdrClientFormatList,
         client_format_list_response: pcCliprdrClientFormatListResponse,
         client_format_data_request: pcCliprdrClientFormatDataRequest,
@@ -511,11 +524,12 @@ impl CliprdrClientContext {
             EnableFiles: if enable_files { TRUE } else { FALSE },
             EnableOthers: if enable_others { TRUE } else { FALSE },
             IsStopped: FALSE,
-            ResponseWaitTimeoutSecs: 60,
+            ResponseWaitTimeoutSecs: response_wait_timeout_secs,
             ServerCapabilities: None,
             ClientCapabilities: None,
             MonitorReady: None,
             TempDirectory: None,
+            NotifyClipboardMsg: notify_callback,
             ClientFormatList: client_format_list,
             ServerFormatList: None,
             ClientFormatListResponse: client_format_list_response,

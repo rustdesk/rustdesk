@@ -150,6 +150,15 @@ extern "C"
 
     typedef struct _cliprdr_client_context CliprdrClientContext;
 
+    struct _NOTIFICATION_MESSAGE
+    {
+        // 0 - info, 1 - warning, 2 - error
+        UINT32 type;
+        char *msg;
+        char *details;
+    };
+    typedef struct _NOTIFICATION_MESSAGE NOTIFICATION_MESSAGE;
+
     typedef UINT (*pcCliprdrServerCapabilities)(CliprdrClientContext *context,
                                                 const CLIPRDR_CAPABILITIES *capabilities);
     typedef UINT (*pcCliprdrClientCapabilities)(CliprdrClientContext *context,
@@ -158,6 +167,9 @@ extern "C"
                                           const CLIPRDR_MONITOR_READY *monitorReady);
     typedef UINT (*pcCliprdrTempDirectory)(CliprdrClientContext *context,
                                            const CLIPRDR_TEMP_DIRECTORY *tempDirectory);
+
+    typedef UINT (*pcNotifyClipboardMsg)(const NOTIFICATION_MESSAGE *msg);
+
     typedef UINT (*pcCliprdrClientFormatList)(CliprdrClientContext *context,
                                               const CLIPRDR_FORMAT_LIST *formatList);
     typedef UINT (*pcCliprdrServerFormatList)(CliprdrClientContext *context,
@@ -204,6 +216,7 @@ extern "C"
         pcCliprdrClientCapabilities ClientCapabilities;
         pcCliprdrMonitorReady MonitorReady;
         pcCliprdrTempDirectory TempDirectory;
+        pcNotifyClipboardMsg NotifyClipboardMsg;
         pcCliprdrClientFormatList ClientFormatList;
         pcCliprdrServerFormatList ServerFormatList;
         pcCliprdrClientFormatListResponse ClientFormatListResponse;
@@ -229,4 +242,3 @@ extern "C"
 #endif
 
 #endif // WF_CLIPRDR_H__
-

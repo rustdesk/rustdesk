@@ -1455,7 +1455,8 @@ UINT wait_response_event(wfClipboard *clipboard, HANDLE event, void **data)
 	clipboard->context->IsStopped = FALSE;
 	DWORD waitOnceTimeoutMillis = 50;
 	int waitCount = 1000 * clipboard->context->ResponseWaitTimeoutSecs / waitOnceTimeoutMillis;
-	for (int i = 0; i < waitCount * 3; i++)
+	int i = 0;
+	for (; i < waitCount; i++)
 	{
 		DWORD waitRes = WaitForSingleObject(event, waitOnceTimeoutMillis);
 		if (waitRes == WAIT_TIMEOUT && clipboard->context->IsStopped == FALSE)
@@ -1486,6 +1487,16 @@ UINT wait_response_event(wfClipboard *clipboard, HANDLE event, void **data)
 		}
 
 		return rc;
+	}
+
+	if (i == waitCount)
+	{
+		NOTIFICATION_MESSAGE msg;
+		msg.type = 2;
+		msg.msg = "timeout waiting for response";
+		msg.details = NULL;
+		clipboard->context->NotifyClipboardMsg(&msg);
+		rc = ERROR_INTERNAL_ERROR;
 	}
 
 	if ((*data) != NULL)
