@@ -10,6 +10,8 @@ import 'package:get/get.dart';
 import '../../common.dart';
 import 'login.dart';
 
+final hideAbTagsPanel = false.obs;
+
 class AddressBook extends StatefulWidget {
   final EdgeInsets? menuPadding;
   const AddressBook({Key? key, this.menuPadding}) : super(key: key);
@@ -67,7 +69,9 @@ class _AddressBookState extends State<AddressBook> {
   Widget _buildAddressBookDesktop() {
     return Row(
       children: [
-        Container(
+        Offstage(
+          offstage: hideAbTagsPanel.value,
+          child: Container(
           decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
               border:
@@ -89,7 +93,7 @@ class _AddressBookState extends State<AddressBook> {
               ],
             ),
           ),
-        ).marginOnly(right: 12.0),
+        ).marginOnly(right: 12.0)),
         _buildPeersViews()
       ],
     );

@@ -69,6 +69,8 @@ class _PeerTabPageState extends State<PeerTabPage>
           ? PeerUiType.list
           : PeerUiType.grid;
     }
+    hideAbTagsPanel.value =
+        bind.mainGetLocalOption(key: "hideAbTagsPanel").isNotEmpty;
     super.initState();
   }
 
@@ -101,6 +103,28 @@ class _PeerTabPageState extends State<PeerTabPage>
                 Offstage(
                   offstage: gFFI.peerTabModel.currentTab == 0,
                   child: PeerSortDropdown().marginOnly(left: 8),
+                ),
+                Offstage(
+                  offstage: gFFI.peerTabModel.currentTab != 3,
+                  child: InkWell(
+                    child: Obx(() => Container(
+                        padding: EdgeInsets.all(4.0),
+                        decoration: hideAbTagsPanel.value
+                            ? null
+                            : BoxDecoration(
+                                color: Theme.of(context).colorScheme.background,
+                                borderRadius: BorderRadius.circular(6)),
+                        child: Icon(
+                          Icons.tag_rounded,
+                          size: 18,
+                        ))),
+                    onTap: () async {
+                      await bind.mainSetLocalOption(
+                          key: "hideAbTagsPanel",
+                          value: hideAbTagsPanel.value ? "" : "Y");
+                      hideAbTagsPanel.value = !hideAbTagsPanel.value;
+                    },
+                  ).marginOnly(left: 8),
                 ),
               ],
             ),
