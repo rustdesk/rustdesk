@@ -999,7 +999,7 @@ Widget msgboxIcon(String type) {
 // title should be null
 Widget msgboxContent(String type, String title, String text) {
   String translateText(String text) {
-    if (text.indexOf('Failed') == 0 && text.contains(': ')) {
+    if (text.indexOf('Failed') == 0 && text.indexOf(': ') > 0) {
       List<String> words = text.split(': ');
       for (var i = 0; i < words.length; ++i) {
         words[i] = translate(words[i]);
