@@ -288,8 +288,8 @@ class MyTheme {
     tabBarTheme: const TabBarTheme(
       labelColor: Colors.black87,
     ),
-    splashColor: Colors.transparent,
-    highlightColor: Colors.transparent,
+    splashColor: isDesktop ? Colors.transparent : null,
+    highlightColor: isDesktop ? Colors.transparent : null,
     splashFactory: isDesktop ? NoSplash.splashFactory : null,
     textButtonTheme: isDesktop
         ? TextButtonThemeData(
@@ -377,8 +377,8 @@ class MyTheme {
     scrollbarTheme: ScrollbarThemeData(
       thumbColor: MaterialStateProperty.all(Colors.grey[500]),
     ),
-    splashColor: Colors.transparent,
-    highlightColor: Colors.transparent,
+    splashColor: isDesktop ? Colors.transparent : null,
+    highlightColor: isDesktop ? Colors.transparent : null,
     splashFactory: isDesktop ? NoSplash.splashFactory : null,
     textButtonTheme: isDesktop
         ? TextButtonThemeData(
