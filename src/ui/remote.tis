@@ -522,6 +522,7 @@ handler.updateQualityStatus = function(speed, fps, delay, bitrate, codec_format)
     bitrate ? qualityMonitorData[3] = bitrate:null;
     codec_format ? qualityMonitorData[4] = codec_format:null;
     qualityMonitor.update();
+    if (codec_format) header.update();
 }
 
 handler.setPermission = function(name, enabled) {

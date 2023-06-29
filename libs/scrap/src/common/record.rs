@@ -101,6 +101,9 @@ impl DerefMut for Recorder {
 
 impl Recorder {
     pub fn new(mut ctx: RecorderContext) -> ResultType<Self> {
+        if ctx.format == CodecFormat::AV1 {
+            bail!("not support av1 recording");
+        }
         ctx.set_filename()?;
         let recorder = match ctx.format {
             CodecFormat::VP8 | CodecFormat::VP9 => Recorder {
