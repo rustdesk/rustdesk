@@ -40,7 +40,7 @@ InstallDir "$PROGRAMFILES64\${PRODUCT_NAME}"
 ####################################################################
 # Pages
 
-!define MUI_ICON "tray-icon.ico"
+!define MUI_ICON "icon.ico"
 !define MUI_ABORTWARNING
 !define MUI_LANGDLL_ALLLANGUAGES
 !define MUI_FINISHPAGE_SHOWREADME ""
