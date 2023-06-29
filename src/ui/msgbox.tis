@@ -5,6 +5,15 @@ function translate_text(text) {
             fds[i] = translate(fds[i]);
         }
         text = fds.join(': ');
+    } else {
+        var fds = text.split(' ');
+        if (fds.length > 1 && fds[0].slice(-4) === '_tip') {
+            fds[0] = translate(fds[0]);
+            var rest = text.substring(fds[0].length + 1);
+            text = fds[0] + ' ' + translate(rest);
+        } else {
+            text = translate(text);
+        }
     }
     return text;
 }

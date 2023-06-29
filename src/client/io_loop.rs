@@ -206,16 +206,21 @@ impl<T: InvokeUiSession> Remote<T> {
                         _msg = rx_clip_client.recv() => {
                             #[cfg(windows)]
                             match _msg {
-                                Some(clip) => {
-                                    let is_stopping_allowed = clip.is_stopping_allowed();
-                                    let server_file_transfer_enabled = *self.handler.server_file_transfer_enabled.read().unwrap();
-                                    let file_transfer_enabled = self.handler.lc.read().unwrap().enable_file_transfer.v;
-                                    let stop = is_stopping_allowed && !(server_file_transfer_enabled && file_transfer_enabled);
-                                    log::debug!("Process clipboard message from system, stop: {}, is_stopping_allowed: {}, server_file_transfer_enabled: {}, file_transfer_enabled: {}", stop, is_stopping_allowed, server_file_transfer_enabled, file_transfer_enabled);
-                                    if stop {
-                                        ContextSend::set_is_stopped();
-                                    } else {
-                                        allow_err!(peer.send(&crate::clipboard_file::clip_2_msg(clip)).await);
+                                Some(clip) => match clip {
+                                    clipboard::ClipboardFile::NotifyCallback{r#type, title, text} => {
+                                        self.handler.msgbox(&r#type, &title, &text, "");
+                                    }
+                                    _ => {
+                                        let is_stopping_allowed = clip.is_stopping_allowed();
+                                        let server_file_transfer_enabled = *self.handler.server_file_transfer_enabled.read().unwrap();
+                                        let file_transfer_enabled = self.handler.lc.read().unwrap().enable_file_transfer.v;
+                                        let stop = is_stopping_allowed && !(server_file_transfer_enabled && file_transfer_enabled);
+                                        log::debug!("Process clipboard message from system, stop: {}, is_stopping_allowed: {}, server_file_transfer_enabled: {}, file_transfer_enabled: {}", stop, is_stopping_allowed, server_file_transfer_enabled, file_transfer_enabled);
+                                        if stop {
+                                            ContextSend::set_is_stopped();
+                                        } else {
+                                            allow_err!(peer.send(&crate::clipboard_file::clip_2_msg(clip)).await);
+                                        }
                                     }
                                 }
                                 None => {

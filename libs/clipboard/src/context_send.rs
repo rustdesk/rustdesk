@@ -2,6 +2,8 @@ use crate::cliprdr::*;
 use hbb_common::log;
 use std::sync::Mutex;
 
+const CLIPBOARD_RESPONSE_WAIT_TIMEOUT_SECS: u32 = 30;
+
 lazy_static::lazy_static! {
     static ref CONTEXT_SEND: ContextSend = ContextSend{addr: Mutex::new(0)};
 }
@@ -27,7 +29,11 @@ impl ContextSend {
         let mut lock = CONTEXT_SEND.addr.lock().unwrap();
         if enabled {
             if *lock == 0 {
-                match crate::create_cliprdr_context(true, false) {
+                match crate::create_cliprdr_context(
+                    true,
+                    false,
+                    CLIPBOARD_RESPONSE_WAIT_TIMEOUT_SECS,
+                ) {
                     Ok(context) => {
                         log::info!("clipboard context for file transfer created.");
                         *lock = Box::into_raw(context) as _;

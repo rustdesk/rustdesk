@@ -987,7 +987,7 @@ fn try_get_displays() -> ResultType<Vec<Display>> {
 }
 
 #[inline]
-#[cfg(windows)]
+#[cfg(all(windows, feature = "virtual_display_driver"))]
 fn no_displays(displays: &Vec<Display>) -> bool {
     let display_len = displays.len();
     if display_len == 0 {
