@@ -23,6 +23,7 @@ class ChatPage extends StatelessWidget implements PageShape {
   @override
   final appBarActions = [
     PopupMenuButton<int>(
+        tooltip: "",
         icon: Icon(Icons.group),
         itemBuilder: (context) {
           // only mobile need [appBarActions], just bind gFFI.chatModel

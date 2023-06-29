@@ -215,6 +215,7 @@ class _WebMenuState extends State<WebMenu> {
   Widget build(BuildContext context) {
     Provider.of<FfiModel>(context);
     return PopupMenuButton<String>(
+        tooltip: "",
         icon: const Icon(Icons.more_vert),
         itemBuilder: (context) {
           return (isIOS

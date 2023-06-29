@@ -23,6 +23,7 @@ class ServerPage extends StatefulWidget implements PageShape {
   @override
   final appBarActions = [
     PopupMenuButton<String>(
+        tooltip: "",
         icon: const Icon(Icons.more_vert),
         itemBuilder: (context) {
           listTile(String text, bool checked) {
