@@ -70,5 +70,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("resolution_fit_local_tip", "Fit local resolution"),
         ("resolution_custom_tip", "Custom resolution"),
         ("accept_and_elevate_btn_tooltip", "Accept the connection and elevate UAC permissions."),
+        ("clipboard_wait_response_timeout_tip", "Timed out waiting for copy response."),
         ].iter().cloned().collect();
 }

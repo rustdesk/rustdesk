@@ -1102,6 +1102,7 @@ fn msgbox_clipboard_(channel: &str, r#type: u32, msg: &str, details: &str) -> u3
     );
     let text = format!("{} {}", msg, details);
     if let Ok(event) = serde_json::ser::to_string(&HashMap::from([
+        ("name", "msgbox"),
         ("type", &msgtype as &str),
         ("title", "clipboard"),
         ("text", &text),

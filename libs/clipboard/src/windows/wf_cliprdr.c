@@ -1497,9 +1497,13 @@ UINT wait_response_event(wfClipboard *clipboard, HANDLE event, void **data)
 		msg.details = NULL;
 		clipboard->context->NotifyClipboardMsg(&msg);
 		rc = ERROR_INTERNAL_ERROR;
-	}
 
-	if ((*data) != NULL)
+		if (!ResetEvent(event))
+		{
+			// NOTE: critical error here, crash may be better
+		}
+	}
+	else if ((*data) != NULL)
 	{
 		if (!ResetEvent(event))
 		{

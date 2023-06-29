@@ -511,5 +511,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Collapse toolbar", "Comprimi barra strumenti"),
         ("Accept and Elevate", "Accetta ed eleva"),
         ("accept_and_elevate_btn_tooltip", "Accetta la connessione ed eleva le autorizzazioni UAC."),
+        ("clipboard_wait_response_timeout_tip", ""),
     ].iter().cloned().collect();
 }

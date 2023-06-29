@@ -511,5 +511,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Collapse toolbar", "折叠工具栏"),
         ("Accept and Elevate", "接受并提权"),
         ("accept_and_elevate_btn_tooltip", "接受连接并提升 UAC 权限"),
+        ("clipboard_wait_response_timeout_tip", "等待拷贝响应超时"),
     ].iter().cloned().collect();
 }
