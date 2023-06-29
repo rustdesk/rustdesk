@@ -13,6 +13,8 @@ use hbb_common::platform::register_breakdown_handler;
 /// If it returns [`Some`], then the process will continue, and flutter gui will be started.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn core_main() -> Option<Vec<String>> {
+    use crate::flutter;
+
     let mut args = Vec::new();
     let mut flutter_args = Vec::new();
     let mut i = 0;
@@ -123,7 +125,17 @@ pub fn core_main() -> Option<Vec<String>> {
     init_plugins(&args);
     if args.is_empty() {
         #[cfg(windows)]
-        clipboard::ContextSend::enable(true);
+        {
+            clipboard::ContextSend::enable(true);
+            #[cfg(feature = "flutter")]
+            {
+                clipboard::set_notify_callback(flutter::msgbox_clipboard_remote);
+            }
+            #[cfg(not(feature = "flutter"))]
+            {
+                // notify callback for non-flutter is not supported.
+            }
+        }
         std::thread::spawn(move || crate::start_server(false));
     } else {
         #[cfg(windows)]

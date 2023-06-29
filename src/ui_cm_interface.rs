@@ -538,6 +538,14 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
 
     #[cfg(target_os = "windows")]
     ContextSend::enable(Config::get_option("enable-file-transfer").is_empty());
+    #[cfg(feature = "flutter")]
+    {
+        clipboard::set_notify_callback(crate::flutter::msgbox_clipboard_cm);
+    }
+    #[cfg(not(feature = "flutter"))]
+    {
+        // notify callback for non-flutter is not supported.
+    }
 
     match ipc::new_listener("_cm").await {
         Ok(mut incoming) => {
