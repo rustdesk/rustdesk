@@ -78,7 +78,7 @@ fn install_oboe() {
 
 #[cfg(feature = "flutter")]
 fn gen_flutter_rust_bridge() {
-    if std::env::var("IGNORE_FFIGEN").is_ok() {
+    if std::env::var("RUN_FFIGEN").is_ok() {
         return;
     }
     use lib_flutter_rust_bridge_codegen::{

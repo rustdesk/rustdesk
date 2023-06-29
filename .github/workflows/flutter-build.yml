@@ -426,11 +426,6 @@ jobs:
           prefix-key: rustdesk-lib-cache
           key: ${{ matrix.job.target }}-${{ matrix.job.extra-build-features }}
 
-      - name: Disable rust bridge build
-        shell: bash
-        run: |
-          sed -i build.rs.bak "s/gen_flutter_rust_bridge();/\/\//g" build.rs
-
       - name: Build rustdesk lib
         env:
           VCPKG_ROOT: /opt/rustdesk_thirdparty_lib/vcpkg
@@ -524,10 +519,6 @@ jobs:
         with:
           prefix-key: rustdesk-lib-cache
           key: ${{ matrix.job.target }}-${{ matrix.job.extra-build-features }}
-
-      - name: Disable rust bridge build
-        run: |
-          sed -i "s/gen_flutter_rust_bridge();/\/\//g" build.rs
 
       - name: Build rustdesk lib
         env:
@@ -706,7 +697,6 @@ jobs:
 
       - name: Disable rust bridge build
         run: |
-          sed -i "s/gen_flutter_rust_bridge();/\/\//g" build.rs
           # only build cdylib
           sed -i  "s/\[\"cdylib\", \"staticlib\", \"rlib\"\]/\[\"cdylib\"\]/g" Cargo.toml
 
@@ -877,7 +867,6 @@ jobs:
 
       - name: Disable rust bridge build
         run: |
-          sed -i "s/gen_flutter_rust_bridge();/\/\//g" build.rs
           # only build cdylib
           sed -i  "s/\[\"cdylib\", \"staticlib\", \"rlib\"\]/\[\"cdylib\"\]/g" Cargo.toml
 
