@@ -1089,41 +1089,6 @@ pub fn stop_global_event_stream(app_type: String) {
     let _ = GLOBAL_EVENT_STREAM.write().unwrap().remove(&app_type);
 }
 
-fn msgbox_clipboard_(channel: &str, r#type: u32, msg: &str, details: &str) -> u32 {
-    let msgtype = format!(
-        "{}-nocancel-nook-hasclose",
-        if r#type == 0 {
-            "info"
-        } else if r#type == 1 {
-            "warn"
-        } else {
-            "error"
-        }
-    );
-    let text = format!("{} {}", msg, details);
-    if let Ok(event) = serde_json::ser::to_string(&HashMap::from([
-        ("name", "msgbox"),
-        ("type", &msgtype as &str),
-        ("title", "clipboard"),
-        ("text", &text),
-        ("link", ""),
-        ("hasRetry", ""),
-    ])) {
-        push_global_event(channel, event);
-    }
-    0
-}
-
-#[inline]
-pub fn msgbox_clipboard_remote(r#type: u32, msg: &str, details: &str) -> u32 {
-    msgbox_clipboard_(APP_TYPE_DESKTOP_REMOTE, r#type, msg, details)
-}
-
-#[inline]
-pub fn msgbox_clipboard_cm(r#type: u32, msg: &str, details: &str) -> u32 {
-    msgbox_clipboard_(APP_TYPE_CM, r#type, msg, details)
-}
-
 #[no_mangle]
 unsafe extern "C" fn get_rgba() {}
 

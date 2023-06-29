@@ -21,15 +21,14 @@ pub use context_send::*;
 const ERR_CODE_SERVER_FUNCTION_NONE: u32 = 0x00000001;
 const ERR_CODE_INVALID_PARAMETER: u32 = 0x00000002;
 
-pub type FnNotifyCallback = fn(r#type: u32, msg: &str, details: &str) -> u32;
-
-lazy_static::lazy_static! {
-    static ref NOTIFY_CALLBACK: Arc<Mutex<Option<FnNotifyCallback>>> = Default::default();
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "t", content = "c")]
 pub enum ClipboardFile {
+    NotifyCallback {
+        r#type: String,
+        title: String,
+        text: String,
+    },
     MonitorReady,
     FormatList {
         format_list: Vec<(i32, String)>,
@@ -174,41 +173,40 @@ pub fn server_clip_file(
     conn_id: i32,
     msg: ClipboardFile,
 ) -> u32 {
+    let mut ret = 0;
     match msg {
+        ClipboardFile::NotifyCallback { .. } => {
+            // unreachable
+        }
         ClipboardFile::MonitorReady => {
             log::debug!("server_monitor_ready called");
-            let ret = server_monitor_ready(context, conn_id);
+            ret = server_monitor_ready(context, conn_id);
             log::debug!("server_monitor_ready called, return {}", ret);
-            ret
         }
         ClipboardFile::FormatList { format_list } => {
             log::debug!("server_format_list called");
-            let ret = server_format_list(context, conn_id, format_list);
+            ret = server_format_list(context, conn_id, format_list);
             log::debug!("server_format_list called, return {}", ret);
-            ret
         }
         ClipboardFile::FormatListResponse { msg_flags } => {
             log::debug!("format_list_response called");
-            let ret = server_format_list_response(context, conn_id, msg_flags);
+            ret = server_format_list_response(context, conn_id, msg_flags);
             log::debug!("server_format_list_response called, return {}", ret);
-            ret
         }
         ClipboardFile::FormatDataRequest {
             requested_format_id,
         } => {
             log::debug!("format_data_request called");
-            let ret = server_format_data_request(context, conn_id, requested_format_id);
+            ret = server_format_data_request(context, conn_id, requested_format_id);
             log::debug!("server_format_data_request called, return {}", ret);
-            ret
         }
         ClipboardFile::FormatDataResponse {
             msg_flags,
             format_data,
         } => {
             log::debug!("format_data_response called");
-            let ret = server_format_data_response(context, conn_id, msg_flags, format_data);
+            ret = server_format_data_response(context, conn_id, msg_flags, format_data);
             log::debug!("server_format_data_response called, return {}", ret);
-            ret
         }
         ClipboardFile::FileContentsRequest {
             stream_id,
@@ -221,7 +219,7 @@ pub fn server_clip_file(
             clip_data_id,
         } => {
             log::debug!("file_contents_request called");
-            let ret = server_file_contents_request(
+            ret = server_file_contents_request(
                 context,
                 conn_id,
                 stream_id,
@@ -234,7 +232,6 @@ pub fn server_clip_file(
                 clip_data_id,
             );
             log::debug!("server_file_contents_request called, return {}", ret);
-            ret
         }
         ClipboardFile::FileContentsResponse {
             msg_flags,
@@ -242,7 +239,7 @@ pub fn server_clip_file(
             requested_data,
         } => {
             log::debug!("file_contents_response called");
-            let ret = server_file_contents_response(
+            ret = server_file_contents_response(
                 context,
                 conn_id,
                 msg_flags,
@@ -250,9 +247,9 @@ pub fn server_clip_file(
                 requested_data,
             );
             log::debug!("server_file_contents_response called, return {}", ret);
-            ret
         }
     }
+    ret
 }
 
 pub fn server_monitor_ready(context: &mut Box<CliprdrClientContext>, conn_id: i32) -> u32 {
@@ -469,31 +466,45 @@ pub fn create_cliprdr_context(
     )?)
 }
 
-pub fn set_notify_callback(cb: FnNotifyCallback) {
-    NOTIFY_CALLBACK.lock().unwrap().replace(cb);
-}
-
-extern "C" fn notify_callback(msg: *const NOTIFICATION_MESSAGE) -> UINT {
+extern "C" fn notify_callback(conn_id: UINT32, msg: *const NOTIFICATION_MESSAGE) -> UINT {
     log::debug!("notify_callback called");
-    if let Some(cb) = NOTIFY_CALLBACK.lock().unwrap().as_ref() {
-        unsafe {
-            let msg = &*msg;
-            let details = if msg.details.is_null() {
-                Ok("")
-            } else {
-                CStr::from_ptr(msg.details as _).to_str()
-            };
-            match (CStr::from_ptr(msg.msg as _).to_str(), details) {
-                (Ok(m), Ok(d)) => cb(msg.r#type, m, d),
-                _ => {
-                    log::error!("notify_callback: failed to convert msg");
-                    ERR_CODE_INVALID_PARAMETER
+    let data = unsafe {
+        let msg = &*msg;
+        let details = if msg.details.is_null() {
+            Ok("")
+        } else {
+            CStr::from_ptr(msg.details as _).to_str()
+        };
+        match (CStr::from_ptr(msg.msg as _).to_str(), details) {
+            (Ok(m), Ok(d)) => {
+                let msgtype = format!(
+                    "{}-nocancel-nook-hasclose",
+                    if msg.r#type == 0 {
+                        "info"
+                    } else if msg.r#type == 1 {
+                        "warn"
+                    } else {
+                        "error"
+                    }
+                );
+                let title = "Clipboard";
+                let text = format!("{}: {}", m, d);
+                ClipboardFile::NotifyCallback {
+                    r#type: msgtype,
+                    title: title.to_string(),
+                    text,
                 }
             }
+            _ => {
+                log::error!("notify_callback: failed to convert msg");
+                return ERR_CODE_INVALID_PARAMETER;
+            }
         }
-    } else {
-        ERR_CODE_SERVER_FUNCTION_NONE
-    }
+    };
+    // no need to handle result here
+    send_data(conn_id as _, data);
+
+    0
 }
 
 extern "C" fn client_format_list(

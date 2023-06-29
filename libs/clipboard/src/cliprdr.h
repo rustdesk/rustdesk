@@ -168,7 +168,7 @@ extern "C"
     typedef UINT (*pcCliprdrTempDirectory)(CliprdrClientContext *context,
                                            const CLIPRDR_TEMP_DIRECTORY *tempDirectory);
 
-    typedef UINT (*pcNotifyClipboardMsg)(const NOTIFICATION_MESSAGE *msg);
+    typedef UINT (*pcNotifyClipboardMsg)(UINT32 connID, const NOTIFICATION_MESSAGE *msg);
 
     typedef UINT (*pcCliprdrClientFormatList)(CliprdrClientContext *context,
                                               const CLIPRDR_FORMAT_LIST *formatList);

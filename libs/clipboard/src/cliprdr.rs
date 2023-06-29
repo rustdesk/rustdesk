@@ -357,7 +357,7 @@ pub type pcCliprdrTempDirectory = ::std::option::Option<
     ) -> UINT,
 >;
 pub type pcNotifyClipboardMsg =
-    ::std::option::Option<unsafe extern "C" fn(msg: *const NOTIFICATION_MESSAGE) -> UINT>;
+    ::std::option::Option<unsafe extern "C" fn(connID: UINT32, msg: *const NOTIFICATION_MESSAGE) -> UINT>;
 pub type pcCliprdrClientFormatList = ::std::option::Option<
     unsafe extern "C" fn(
         context: *mut CliprdrClientContext,

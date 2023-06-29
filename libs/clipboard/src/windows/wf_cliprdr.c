@@ -1449,7 +1449,7 @@ static UINT cliprdr_send_format_list(wfClipboard *clipboard, UINT32 connID)
 	return rc;
 }
 
-UINT wait_response_event(wfClipboard *clipboard, HANDLE event, void **data)
+UINT wait_response_event(UINT32 connID, wfClipboard *clipboard, HANDLE event, void **data)
 {
 	UINT rc = ERROR_SUCCESS;
 	clipboard->context->IsStopped = FALSE;
@@ -1495,7 +1495,7 @@ UINT wait_response_event(wfClipboard *clipboard, HANDLE event, void **data)
 		msg.type = 2;
 		msg.msg = "clipboard_wait_response_timeout_tip";
 		msg.details = NULL;
-		clipboard->context->NotifyClipboardMsg(&msg);
+		clipboard->context->NotifyClipboardMsg(connID, &msg);
 		rc = ERROR_INTERNAL_ERROR;
 
 		if (!ResetEvent(event))
@@ -1535,7 +1535,7 @@ static UINT cliprdr_send_data_request(UINT32 connID, wfClipboard *clipboard, UIN
 		return rc;
 	}
 
-	wait_response_event(clipboard, clipboard->response_data_event, &clipboard->hmem);
+	wait_response_event(connID, clipboard, clipboard->response_data_event, &clipboard->hmem);
 }
 
 UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, const void *streamid, ULONG index,
@@ -1563,7 +1563,7 @@ UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, co
 		return rc;
 	}
 
-	return wait_response_event(clipboard, clipboard->req_fevent, (void **)&clipboard->req_fdata);
+	return wait_response_event(connID, clipboard, clipboard->req_fevent, (void **)&clipboard->req_fdata);
 }
 
 static UINT cliprdr_send_response_filecontents(
