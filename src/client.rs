@@ -619,15 +619,16 @@ impl Client {
                 ..Default::default()
             });
             socket.send(&msg_out).await?;
-            if let Some(Ok(bytes)) = socket.next_timeout(CONNECT_TIMEOUT).await {
-                if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
-                    if let Some(rendezvous_message::Union::RelayResponse(rs)) = msg_in.union {
-                        if !rs.refuse_reason.is_empty() {
-                            bail!(rs.refuse_reason);
-                        }
-                        succeed = true;
-                        break;
+
+            if let Some(msg_in) =
+                crate::get_next_nonkeyexchange_msg(&mut socket, Some(CONNECT_TIMEOUT)).await
+            {
+                if let Some(rendezvous_message::Union::RelayResponse(rs)) = msg_in.union {
+                    if !rs.refuse_reason.is_empty() {
+                        bail!(rs.refuse_reason);
                     }
+                    succeed = true;
+                    break;
                 }
             }
         }
