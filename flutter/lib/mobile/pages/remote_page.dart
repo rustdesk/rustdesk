@@ -76,6 +76,8 @@ class _RemotePageState extends State<RemotePage> {
 
   @override
   Future<void> dispose() async {
+    // https://github.com/flutter/flutter/issues/64935
+    super.dispose();
     gFFI.dialogManager.hideMobileActionsOverlay();
     gFFI.inputModel.listenToMouse(false);
     await gFFI.invokeMethod("enable_soft_keyboard", true);
@@ -89,7 +91,6 @@ class _RemotePageState extends State<RemotePage> {
     await Wakelock.disable();
     await keyboardSubscription.cancel();
     removeSharedStates(widget.id);
-    super.dispose();
   }
 
   void onSoftKeyboardChanged(bool visible) {

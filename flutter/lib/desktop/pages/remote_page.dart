@@ -206,6 +206,8 @@ class _RemotePageState extends State<RemotePage>
 
   @override
   Future<void> dispose() async {
+    // https://github.com/flutter/flutter/issues/64935
+    super.dispose();
     debugPrint("REMOTE PAGE dispose ${widget.id}");
     if (useTextureRender) {
       platformFFI.registerTexture(sessionId, 0);
@@ -229,7 +231,6 @@ class _RemotePageState extends State<RemotePage>
     }
     await Get.delete<FFI>(tag: widget.id);
     removeSharedStates(widget.id);
-    super.dispose();
   }
 
   Widget buildBody(BuildContext context) {
