@@ -114,7 +114,7 @@ objc_id = "0.1"
 tray-icon = { git = "https://github.com/rustdesk-org/tray-icon" }
 tao = { git = "https://github.com/rustdesk-org/tao", branch = "muda" }
 image = "0.24"
-keepawake = { git = "https://github.com/rustdesk-org/keepawake-rs" }
+keepawake = { git = "https://github.com/segevfiner/keepawake-rs" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 psimple = { package = "libpulse-simple-binding", version = "2.27" }
