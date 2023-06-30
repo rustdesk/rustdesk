@@ -3298,8 +3298,8 @@ dependencies = [
 
 [[package]]
 name = "keepawake"
-version = "0.4.2"
-source = "git+https://github.com/segevfiner/keepawake-rs#ade0b2baa1440807c8089e9ed24e5d722468651e"
+version = "0.4.3"
+source = "git+https://github.com/rustdesk-org/keepawake-rs#ac395ef826b32a077bc5d2fe108cf71fde8fe2e6"
 dependencies = [
  "anyhow",
  "apple-sys",
