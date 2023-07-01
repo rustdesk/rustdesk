@@ -378,7 +378,10 @@ Future<bool?> loginDialog() async {
   var isInProgress = false;
   final RxString curOP = ''.obs;
 
-  final loginOptions = await UserModel.queryLoginOptions();
+  final loginOptions = [].obs;
+  Future.delayed(Duration.zero, () async {
+    loginOptions.value = await UserModel.queryLoginOptions();
+  });
 
   final res = await gFFI.dialogManager.show<bool>((setState, close, context) {
     username.addListener(() {
@@ -451,48 +454,50 @@ Future<bool?> loginDialog() async {
       setState(() => isInProgress = false);
     }
 
-    final oidcOptions = loginOptions
-        .where((opt) => opt.startsWith(kAuthReqTypeOidc))
-        .map((opt) => opt.substring(kAuthReqTypeOidc.length))
-        .toList();
-
-    thirdAuthWidget() => Offstage(
-          offstage: oidcOptions.isEmpty,
-          child: Column(
-            children: [
-              const SizedBox(
-                height: 8.0,
-              ),
-              Center(
-                  child: Text(
-                translate('or'),
-                style: TextStyle(fontSize: 16),
-              )),
-              const SizedBox(
-                height: 8.0,
-              ),
-              LoginWidgetOP(
-                ops: [
-                  ConfigOP(op: 'GitHub', iconWidth: 20),
-                  ConfigOP(op: 'Google', iconWidth: 20),
-                  ConfigOP(op: 'Okta', iconWidth: 38),
-                ]
-                    .where((op) => oidcOptions.contains(op.op.toLowerCase()))
-                    .toList(),
-                curOP: curOP,
-                cbLogin: (Map<String, dynamic> authBody) {
-                  try {
-                    // access_token is already stored in the rust side.
-                    gFFI.userModel.getLoginResponseFromAuthBody(authBody);
-                  } catch (e) {
-                    debugPrint('Failed too parse oidc login body: "$authBody"');
-                  }
-                  close(true);
-                },
-              ),
-            ],
-          ),
-        );
+    thirdAuthWidget() => Obx(() {
+          final oidcOptions = loginOptions
+              .where((opt) => opt.startsWith(kAuthReqTypeOidc))
+              .map((opt) => opt.substring(kAuthReqTypeOidc.length))
+              .toList();
+          return Offstage(
+            offstage: oidcOptions.isEmpty,
+            child: Column(
+              children: [
+                const SizedBox(
+                  height: 8.0,
+                ),
+                Center(
+                    child: Text(
+                  translate('or'),
+                  style: TextStyle(fontSize: 16),
+                )),
+                const SizedBox(
+                  height: 8.0,
+                ),
+                LoginWidgetOP(
+                  ops: [
+                    ConfigOP(op: 'GitHub', iconWidth: 20),
+                    ConfigOP(op: 'Google', iconWidth: 20),
+                    ConfigOP(op: 'Okta', iconWidth: 38),
+                  ]
+                      .where((op) => oidcOptions.contains(op.op.toLowerCase()))
+                      .toList(),
+                  curOP: curOP,
+                  cbLogin: (Map<String, dynamic> authBody) {
+                    try {
+                      // access_token is already stored in the rust side.
+                      gFFI.userModel.getLoginResponseFromAuthBody(authBody);
+                    } catch (e) {
+                      debugPrint(
+                          'Failed to parse oidc login body: "$authBody"');
+                    }
+                    close(true);
+                  },
+                ),
+              ],
+            ),
+          );
+        });
 
     return CustomAlertDialog(
       title: Text(translate('Login')),
