@@ -510,7 +510,9 @@ Future<bool?> loginDialog() async {
           child: Icon(
             Icons.close,
             size: 22,
-            color: Colors.black54,
+            color: MyTheme.currentThemeMode() == ThemeMode.dark
+                ? Colors.white70
+                : Colors.black54,
           ),
           onTap: onDialogCancel,
           hoverColor: Colors.red,
