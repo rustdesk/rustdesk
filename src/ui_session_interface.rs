@@ -49,7 +49,7 @@ const CHANGE_RESOLUTION_VALID_TIMEOUT_SECS: u64 = 15;
 
 #[derive(Clone, Default)]
 pub struct Session<T: InvokeUiSession> {
-    pub session_id: SessionID,
+    pub session_id: SessionID, // different from the one in LoginConfigHandler, used for flutter UI message pass
     pub id: String, // peer id
     pub password: String,
     pub args: Vec<String>,
@@ -312,8 +312,7 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn get_audit_server(&self, typ: String) -> String {
-        if self.lc.read().unwrap().conn_id <= 0
-            || LocalConfig::get_option("access_token").is_empty()
+        if LocalConfig::get_option("access_token").is_empty()
         {
             return "".to_owned();
         }
@@ -327,9 +326,9 @@ impl<T: InvokeUiSession> Session<T> {
     pub fn send_note(&self, note: String) {
         let url = self.get_audit_server("conn".to_string());
         let id = self.id.clone();
-        let conn_id = self.lc.read().unwrap().conn_id;
+        let session_id = self.lc.read().unwrap().session_id;
         std::thread::spawn(move || {
-            send_note(url, id, conn_id, note);
+            send_note(url, id, session_id, note);
         });
     }
 
@@ -1347,7 +1346,7 @@ async fn start_one_port_forward<T: InvokeUiSession>(
 }
 
 #[tokio::main(flavor = "current_thread")]
-async fn send_note(url: String, id: String, conn_id: i32, note: String) {
-    let body = serde_json::json!({ "id": id, "conn_id": conn_id, "note": note });
+async fn send_note(url: String, id: String, sid: u64, note: String) {
+    let body = serde_json::json!({ "id": id, "session_id": sid, "note": note });
     allow_err!(crate::post_request(url, body.to_string(), "").await);
 }

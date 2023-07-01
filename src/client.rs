@@ -1073,9 +1073,8 @@ pub struct LoginConfigHandler {
     config: PeerConfig,
     pub port_forward: (String, i32),
     pub version: i64,
-    pub conn_id: i32,
     features: Option<Features>,
-    session_id: u64,
+    pub session_id: u64, // used for local <-> server communication
     pub supported_encoding: SupportedEncoding,
     pub restarting_remote_device: bool,
     pub force_relay: bool,
@@ -1123,7 +1122,11 @@ impl LoginConfigHandler {
         let config = self.load_config();
         self.remember = !config.password.is_empty();
         self.config = config;
-        self.session_id = rand::random();
+        let mut sid = rand::random();
+        if sid == 0 { // you won the lottery
+            sid = 1;
+        }
+        self.session_id = sid;
         self.supported_encoding = Default::default();
         self.restarting_remote_device = false;
         self.force_relay = !self.get_option("force-always-relay").is_empty() || force_relay;
@@ -1669,7 +1672,6 @@ impl LoginConfigHandler {
                 config.keyboard_mode = KeyboardMode::Legacy.to_string();
             }
         }
-        self.conn_id = pi.conn_id;
         // no matter if change, for update file time
         self.save_config(config);
         self.supported_encoding = pi.encoding.clone().unwrap_or_default();

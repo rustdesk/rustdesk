@@ -39,8 +39,6 @@ pub type NotifyMessageBox = fn(String, String, String, String) -> dyn Future<Out
 pub const CLIPBOARD_NAME: &'static str = "clipboard";
 pub const CLIPBOARD_INTERVAL: u64 = 333;
 
-pub const SYNC_PEER_INFO_DISPLAYS: i32 = 1;
-
 #[cfg(all(target_os = "macos", feature = "flutter_texture_render"))]
 // https://developer.apple.com/forums/thread/712709
 // Memory alignment should be multiple of 64.

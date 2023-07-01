@@ -97,7 +97,6 @@ message PeerInfo {
   int32 current_display = 5;
   bool sas_enabled = 6;
   string version = 7;
-  int32 conn_id = 8;
   Features features = 9;
   SupportedEncoding encoding = 10;
   SupportedResolutions resolutions = 11;

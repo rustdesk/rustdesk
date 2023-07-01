@@ -61,7 +61,7 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
     let mut docker_hiden = false;
 
     let open_func = move || {
-        #[cfg(not(feature = "flutter"))]
+        if cfg!(not(feature = "flutter"))
         {
         crate::run_me::<&str>(vec![]).ok();
         return;

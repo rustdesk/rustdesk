@@ -484,7 +484,6 @@ fn check_get_displays_changed_msg() -> Option<Message> {
     let displays = check_displays_new()?;
     let (current, displays) = get_displays_2(&displays);
     let mut pi = PeerInfo {
-        conn_id: crate::SYNC_PEER_INFO_DISPLAYS,
         ..Default::default()
     };
     pi.displays = displays.clone();

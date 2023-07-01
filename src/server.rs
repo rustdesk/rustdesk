@@ -90,7 +90,7 @@ pub fn new() -> ServerPtr {
     let mut server = Server {
         connections: HashMap::new(),
         services: HashMap::new(),
-        id_count: 0,
+        id_count: hbb_common::rand::random::<i32>() % 1000,
     };
     server.add_service(Box::new(audio_service::new()));
     server.add_service(Box::new(video_service::new()));
