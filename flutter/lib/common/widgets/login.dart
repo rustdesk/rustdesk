@@ -499,8 +499,28 @@ Future<bool?> loginDialog() async {
           );
         });
 
+    final title = Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          translate('Login'),
+        ).marginOnly(top: MyTheme.dialogPadding),
+        TextButton(
+          child: Icon(
+            Icons.close,
+            size: 20,
+            color: Colors.black54,
+          ),
+          onPressed: onDialogCancel,
+        ).marginOnly(top: 5),
+      ],
+    );
+    final titlePadding = EdgeInsets.fromLTRB(MyTheme.dialogPadding, 0, 0, 0);
+
     return CustomAlertDialog(
-      title: Text(translate('Login')),
+      title: title,
+      titlePadding: titlePadding,
       contentBoxConstraints: BoxConstraints(minWidth: 400),
       content: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -521,7 +541,6 @@ Future<bool?> loginDialog() async {
           thirdAuthWidget(),
         ],
       ),
-      actions: [dialogButton('Close', onPressed: onDialogCancel)],
       onCancel: onDialogCancel,
     );
   });
