@@ -507,13 +507,31 @@ Future<bool?> loginDialog() async {
           translate('Login'),
         ).marginOnly(top: MyTheme.dialogPadding),
         TextButton(
+          style: ButtonStyle(
+            overlayColor: MaterialStateProperty.resolveWith<Color?>(
+              (Set<MaterialState> states) {
+                if (states.contains(MaterialState.hovered)) {
+                  return Colors.red;
+                }
+                return null;
+              },
+            ),
+            padding: MaterialStateProperty.all<EdgeInsetsGeometry>(
+                EdgeInsets.all(5)),
+            minimumSize: MaterialStateProperty.all(
+              Size(0, 0),
+            ),
+            shape: MaterialStateProperty.all(RoundedRectangleBorder(
+                side: BorderSide.none,
+                borderRadius: BorderRadius.all(Radius.circular(5)))),
+          ),
           child: Icon(
             Icons.close,
-            size: 20,
+            size: 22,
             color: Colors.black54,
           ),
           onPressed: onDialogCancel,
-        ).marginOnly(top: 5),
+        ).marginOnly(top: 5, right: 5),
       ],
     );
     final titlePadding = EdgeInsets.fromLTRB(MyTheme.dialogPadding, 0, 0, 0);
