@@ -310,7 +310,7 @@ pub struct TransferSerde {
 }
 
 #[inline]
-pub fn get_online_statue() -> i64 {
+pub fn get_online_state() -> i64 {
     *ONLINE.lock().unwrap().values().max().unwrap_or(&0)
 }
 
