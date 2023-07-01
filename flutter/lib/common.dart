@@ -828,6 +828,7 @@ class CustomAlertDialog extends StatelessWidget {
   const CustomAlertDialog(
       {Key? key,
       this.title,
+      this.titlePadding,
       required this.content,
       this.actions,
       this.contentPadding,
@@ -837,6 +838,7 @@ class CustomAlertDialog extends StatelessWidget {
       : super(key: key);
 
   final Widget? title;
+  final EdgeInsetsGeometry? titlePadding;
   final Widget content;
   final List<Widget>? actions;
   final double? contentPadding;
@@ -885,7 +887,7 @@ class CustomAlertDialog extends StatelessWidget {
             child: content,
           ),
           actions: actions,
-          titlePadding: MyTheme.dialogTitlePadding(),
+          titlePadding: titlePadding ?? MyTheme.dialogTitlePadding(),
           contentPadding:
               MyTheme.dialogContentPadding(actions: actions is List),
           actionsPadding: MyTheme.dialogActionsPadding(),
