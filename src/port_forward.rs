@@ -192,7 +192,7 @@ async fn connect_and_login_2(
                 }
                 Ok(Some(Err(err))) => {
                     log::error!("Connection closed: {}", err);
-                    interface.set_force_relay(direct, received);
+                    interface.set_force_relay(direct, received, err.to_string());
                     bail!("Connection closed: {}", err);
                 }
                 _ => {

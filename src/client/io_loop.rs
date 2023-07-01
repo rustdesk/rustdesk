@@ -161,7 +161,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                 match res {
                                     Err(err) => {
                                         log::error!("Connection closed: {}", err);
-                                        self.handler.set_force_relay(direct, received);
+                                        self.handler.set_force_relay(direct, received, err.to_string());
                                         let msgtype = "error";
                                         let title = "Connection Error";
                                         let text = err.to_string();
