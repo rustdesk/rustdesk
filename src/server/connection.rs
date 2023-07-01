@@ -1269,13 +1269,7 @@ impl Connection {
     }
 
     async fn handle_login_request_without_validation(&mut self, lr: &LoginRequest) {
-        let changed = lr.session_id != self.lr.session_id;
         self.lr = lr.clone();
-        if changed {
-            self.post_conn_audit(json!({
-                "action": "update_session_id",
-            }));
-        }
         if let Some(o) = lr.option.as_ref() {
             self.options_in_login = Some(o.clone());
             if let Some(q) = o.supported_decoding.clone().take() {
