@@ -509,15 +509,15 @@ Future<bool?> loginDialog() async {
         InkWell(
           child: Icon(
             Icons.close,
-            size: 22,
-            color: MyTheme.currentThemeMode() == ThemeMode.dark
-                ? Colors.white70
-                : Colors.black54,
+            size: 25,
+            // No need to handle the branch of null.
+            // Because we can ensure the color is not null when debug.
+            color: Theme.of(context).textTheme.titleLarge?.color?.withOpacity(0.55),
           ),
           onTap: onDialogCancel,
           hoverColor: Colors.red,
           borderRadius: BorderRadius.circular(5),
-        ).marginOnly(top: 5, right: 5),
+        ).marginOnly(top: 10, right: 15),
       ],
     );
     final titlePadding = EdgeInsets.fromLTRB(MyTheme.dialogPadding, 0, 0, 0);
