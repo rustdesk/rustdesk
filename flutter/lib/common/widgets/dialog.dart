@@ -1098,14 +1098,13 @@ showSetOSAccount(
   });
 }
 
-showAuditDialog(SessionID sessionId, dialogManager) async {
-  final controller = TextEditingController();
-  dialogManager.show((setState, close, context) {
+showAuditDialog(FFI ffi) async {
+  final controller = TextEditingController(text: ffi.auditNote);
+  ffi.dialogManager.show((setState, close, context) {
     submit() {
-      var text = controller.text.trim();
-      if (text != '') {
-        bind.sessionSendNote(sessionId: sessionId, note: text);
-      }
+      var text = controller.text;
+      bind.sessionSendNote(sessionId: ffi.sessionId, note: text);
+      ffi.auditNote = text;
       close();
     }
 
