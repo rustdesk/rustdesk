@@ -146,12 +146,6 @@ impl<T: InvokeUiSession> Session<T> {
         self.lc.read().unwrap().conn_type.eq(&ConnType::RDP)
     }
 
-    pub fn set_connection_info(&mut self, direct: bool, received: bool) {
-        let mut lc = self.lc.write().unwrap();
-        lc.direct = Some(direct);
-        lc.received = received;
-    }
-
     pub fn get_view_style(&self) -> String {
         self.lc.read().unwrap().view_style.clone()
     }
@@ -940,38 +934,6 @@ impl<T: InvokeUiSession> Session<T> {
     pub fn close_voice_call(&self) {
         self.send(Data::CloseVoiceCall);
     }
-
-    pub fn show_relay_hint(
-        &mut self,
-        last_recv_time: tokio::time::Instant,
-        msgtype: &str,
-        title: &str,
-        text: &str,
-    ) -> bool {
-        let duration = Duration::from_secs(3);
-        let counter_interval = 3;
-        let lock = self.lc.read().unwrap();
-        let success_time = lock.success_time;
-        let direct = lock.direct.unwrap_or(false);
-        let received = lock.received;
-        drop(lock);
-        if let Some(success_time) = success_time {
-            if direct && last_recv_time.duration_since(success_time) < duration {
-                let retry_for_relay = direct && !received;
-                let retry = check_if_retry(msgtype, title, text, retry_for_relay);
-                if retry && !retry_for_relay {
-                    self.lc.write().unwrap().direct_error_counter += 1;
-                    if self.lc.read().unwrap().direct_error_counter % counter_interval == 0 {
-                        #[cfg(feature = "flutter")]
-                        return true;
-                    }
-                }
-            } else {
-                self.lc.write().unwrap().direct_error_counter = 0;
-            }
-        }
-        false
-    }
 }
 
 pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
@@ -1059,9 +1021,9 @@ impl<T: InvokeUiSession> Interface for Session<T> {
     }
 
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str) {
-        let direct = self.lc.read().unwrap().direct.unwrap_or_default();
+        let direct = self.lc.read().unwrap().direct;
         let received = self.lc.read().unwrap().received;
-        let retry_for_relay = direct && !received;
+        let retry_for_relay = direct == Some(true) && !received;
         let retry = check_if_retry(msgtype, title, text, retry_for_relay);
         self.ui_handler.msgbox(msgtype, title, text, link, retry);
     }
@@ -1118,7 +1080,6 @@ impl<T: InvokeUiSession> Interface for Session<T> {
                 "Connected, waiting for image...",
                 "",
             );
-            self.lc.write().unwrap().success_time = Some(tokio::time::Instant::now());
         }
         self.on_connected(self.lc.read().unwrap().conn_type);
         #[cfg(windows)]

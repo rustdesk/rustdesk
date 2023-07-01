@@ -124,7 +124,7 @@ impl<T: InvokeUiSession> Remote<T> {
         {
             Ok((mut peer, direct, pk)) => {
                 self.handler.set_connection_type(peer.is_secured(), direct); // flutter -> connection_ready
-                self.handler.set_connection_info(direct, false);
+                self.handler.update_direct(Some(direct));
                 if conn_type == ConnType::DEFAULT_CONN {
                     self.handler
                         .set_fingerprint(crate::common::pk_to_fingerprint(pk.unwrap_or_default()));
@@ -160,24 +160,14 @@ impl<T: InvokeUiSession> Remote<T> {
                             if let Some(res) = res {
                                 match res {
                                     Err(err) => {
-                                        log::error!("Connection closed: {}", err);
-                                        self.handler.set_force_relay(direct, received, err.to_string());
-                                        let msgtype = "error";
-                                        let title = "Connection Error";
-                                        let text = err.to_string();
-                                        let show_relay_hint = self.handler.show_relay_hint(last_recv_time, msgtype, title, &text);
-                                        if show_relay_hint{
-                                            self.handler.msgbox("relay-hint", title, &text, "");
-                                        } else {
-                                            self.handler.msgbox(msgtype, title, &text, "");
-                                        }
+                                        self.handler.on_establish_connection_error(err.to_string());
                                         break;
                                     }
                                     Ok(ref bytes) => {
                                         last_recv_time = Instant::now();
                                         if !received {
                                             received = true;
-                                            self.handler.set_connection_info(direct, true);
+                                            self.handler.update_received(true);
                                         }
                                         self.data_count.fetch_add(bytes.len(), Ordering::Relaxed);
                                         if !self.handle_msg_from_peer(bytes, &mut peer).await {
@@ -271,8 +261,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 }
             }
             Err(err) => {
-                self.handler
-                    .msgbox("error", "Connection Error", &err.to_string(), "");
+                self.handler.on_establish_connection_error(err.to_string());
             }
         }
         #[cfg(not(any(target_os = "android", target_os = "ios")))]

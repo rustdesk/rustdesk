@@ -350,7 +350,7 @@ class FfiModel with ChangeNotifier {
     } else if (type == 'elevation-error') {
       showElevationError(sessionId, type, title, text, dialogManager);
     } else if (type == 'relay-hint') {
-      showRelayHintDialog(sessionId, type, title, text, dialogManager);
+      showRelayHintDialog(sessionId, type, title, text, dialogManager, peerId);
     } else {
       var hasRetry = evt['hasRetry'] == 'true';
       showMsgBox(sessionId, type, title, text, link, hasRetry, dialogManager);
@@ -383,7 +383,7 @@ class FfiModel with ChangeNotifier {
   }
 
   void showRelayHintDialog(SessionID sessionId, String type, String title,
-      String text, OverlayDialogManager dialogManager) {
+      String text, OverlayDialogManager dialogManager, String peerId) {
     dialogManager.show(tag: '$sessionId-$type', (setState, close, context) {
       onClose() {
         closeConnection();
@@ -392,25 +392,24 @@ class FfiModel with ChangeNotifier {
 
       final style =
           ElevatedButton.styleFrom(backgroundColor: Colors.green[700]);
+      var hint = "\n\n${translate('relay_hint_tip')}";
+      if (text.contains("10054") || text.contains("104")) {
+        hint = "";
+      }
+      final alreadyForceAlwaysRelay = bind
+          .mainGetPeerOptionSync(id: peerId, key: 'force-always-relay')
+          .isNotEmpty;
       return CustomAlertDialog(
         title: null,
-        content: msgboxContent(type, title,
-            "${translate(text)}\n\n${translate('relay_hint_tip')}"),
+        content: msgboxContent(type, title, "${translate(text)}$hint"),
         actions: [
           dialogButton('Close', onPressed: onClose, isOutline: true),
           dialogButton('Retry',
               onPressed: () => reconnect(dialogManager, sessionId, false)),
-          dialogButton('Connect via relay',
-              onPressed: () => reconnect(dialogManager, sessionId, true),
-              buttonStyle: style),
-          dialogButton('Always connect via relay', onPressed: () {
-            const option = 'force-always-relay';
-            bind.sessionPeerOption(
-                sessionId: sessionId,
-                name: option,
-                value: bool2option(option, true));
-            reconnect(dialogManager, sessionId, true);
-          }, buttonStyle: style),
+          if (!alreadyForceAlwaysRelay)
+            dialogButton('Connect via relay',
+                onPressed: () => reconnect(dialogManager, sessionId, true),
+                buttonStyle: style),
         ],
         onCancel: onClose,
       );
