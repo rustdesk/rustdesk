@@ -72,6 +72,7 @@ lazy_static::lazy_static! {
     // for all initiative connections.
     //
     // [Note]
+    // ugly
     // Now we use this [`CLIENT_SERVER`] to do following operations:
     // - record local audio, and send to remote
     pub static ref CLIENT_SERVER: ServerPtr = new();
@@ -90,7 +91,7 @@ pub fn new() -> ServerPtr {
     let mut server = Server {
         connections: HashMap::new(),
         services: HashMap::new(),
-        id_count: hbb_common::rand::random::<i32>() % 1000,
+        id_count: hbb_common::rand::random::<i32>() % 1000 + 1000, // ensure positive
     };
     server.add_service(Box::new(audio_service::new()));
     server.add_service(Box::new(video_service::new()));
@@ -128,11 +129,7 @@ pub async fn create_tcp_connection(
     secure: bool,
 ) -> ResultType<()> {
     let mut stream = stream;
-    let id = {
-        let mut w = server.write().unwrap();
-        w.id_count += 1;
-        w.id_count
-    };
+    let id = server.write().unwrap().get_new_id();
     let (sk, pk) = Config::get_key_pair();
     if secure && pk.len() == sign::PUBLICKEYBYTES && sk.len() == sign::SECRETKEYBYTES {
         let mut sk_ = [0u8; sign::SECRETKEYBYTES];
@@ -305,9 +302,8 @@ impl Server {
 
     // get a new unique id
     pub fn get_new_id(&mut self) -> i32 {
-        let new_id = self.id_count;
         self.id_count += 1;
-        new_id
+        self.id_count 
     }
 }
 
