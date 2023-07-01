@@ -55,11 +55,11 @@ use scrap::{
 
 use crate::is_keyboard_mode_supported;
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::{check_clipboard, ClipboardContext, CLIPBOARD_INTERVAL};
 #[cfg(not(feature = "flutter"))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::ui_session_interface::SessionPermissionConfig;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::{check_clipboard, ClipboardContext, CLIPBOARD_INTERVAL};
 
 pub use super::lang::*;
 
@@ -535,7 +535,7 @@ impl Client {
                 let bytes = match res {
                     Ok(bytes) => bytes,
                     Err(err) => {
-                        interface.set_force_relay(direct, false);
+                        interface.set_force_relay(direct, false, err.to_string());
                         bail!("{}", err);
                     }
                 };
@@ -1760,12 +1760,14 @@ impl LoginConfigHandler {
         msg_out
     }
 
-    pub fn set_force_relay(&mut self, direct: bool, received: bool) {
+    pub fn set_force_relay(&mut self, direct: bool, received: bool, err: String) {
         self.force_relay = false;
         if direct && !received {
             let errno = errno::errno().0;
             // TODO: check mac and ios
-            if cfg!(windows) && errno == 10054 || !cfg!(windows) && errno == 104 {
+            if cfg!(windows) && (errno == 10054 || err.contains("10054"))
+                || !cfg!(windows) && (errno == 104 || err.contains("104"))
+            {
                 self.force_relay = true;
                 self.set_option("force-always-relay".to_owned(), "Y".to_owned());
             }
@@ -2315,11 +2317,11 @@ pub trait Interface: Send + Clone + 'static + Sized {
     async fn handle_test_delay(&mut self, t: TestDelay, peer: &mut Stream);
 
     fn get_login_config_handler(&self) -> Arc<RwLock<LoginConfigHandler>>;
-    fn set_force_relay(&self, direct: bool, received: bool) {
+    fn set_force_relay(&self, direct: bool, received: bool, err: String) {
         self.get_login_config_handler()
             .write()
             .unwrap()
-            .set_force_relay(direct, received);
+            .set_force_relay(direct, received, err);
     }
     fn is_force_relay(&self) -> bool {
         self.get_login_config_handler().read().unwrap().force_relay
