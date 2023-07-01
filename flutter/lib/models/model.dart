@@ -1575,6 +1575,7 @@ class FFI {
   var version = '';
   var connType = ConnType.defaultConn;
   var closed = false;
+  var auditNote = '';
 
   /// dialogManager use late to ensure init after main page binding [globalKey]
   late final dialogManager = OverlayDialogManager();
@@ -1624,6 +1625,7 @@ class FFI {
       String? password,
       bool? forceRelay}) {
     closed = false;
+    auditNote = '';
     assert(!(isFileTransfer && isPortForward), 'more than one connect type');
     if (isFileTransfer) {
       connType = ConnType.fileTransfer;

@@ -116,7 +116,7 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
     v.add(
       TTextMenu(
           child: Text(translate('Note')),
-          onPressed: () => showAuditDialog(sessionId, ffi.dialogManager)),
+          onPressed: () => showAuditDialog(ffi)),
     );
   }
   // divider

@@ -342,8 +342,8 @@ class Header: Reactor.Component {
          <textarea .outline-focus spellcheck="false" name="text" novalue="input note here" style="overflow: scroll-indicator; width:*; height: 140px; font-size: 1.2em; padding: 0.5em;">{self.conn_note}</textarea>
           </div>, "", function(res=null) {
             if (!res) return;
-            if (!res.text) return;
-            self.conn_note = res.text;
+            if (res.text == null || res.text == undefined) return;
+            self.conn_note = res.text ?? "";
             handler.send_note(res.text);
           }, 280);
     }
