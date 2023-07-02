@@ -149,7 +149,7 @@ pub fn decrypt_vec_or_original(v: &[u8], current_version: &str) -> (Vec<u8>, boo
 }
 
 fn encrypt(v: &[u8]) -> Result<String, ()> {
-    if !v.is_empty() {
+    if !v.is_empty() && v.len() <= 128 {
         symmetric_crypt(v, true).map(|v| base64::encode(v, base64::Variant::Original))
     } else {
         Err(())
