@@ -7,7 +7,7 @@ use std::{
         atomic::{AtomicUsize, Ordering},
         Arc, Mutex, RwLock,
     },
-    time::{Duration, SystemTime},
+    time::SystemTime,
 };
 
 use async_trait::async_trait;
