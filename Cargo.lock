@@ -3598,9 +3598,10 @@ dependencies = [
 [[package]]
 name = "machine-uid"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26141aceb9f046065617266f41a4a652e4583da643472a10a89b4b3664d99eb6"
+source = "git+https://github.com/21pages/machine-uid#381ff579c1dc3a6c54db9dfec47c44bcb0246542"
 dependencies = [
+ "bindgen 0.59.2",
+ "cc",
  "winreg 0.11.0",
 ]
 
@@ -5191,7 +5192,6 @@ dependencies = [
  "libpulse-binding",
  "libpulse-simple-binding",
  "mac_address",
- "machine-uid",
  "magnum-opus",
  "mouce",
  "num_cpus",
