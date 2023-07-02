@@ -80,7 +80,6 @@ cpal = "0.15"
 ringbuf = "0.3"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
-machine-uid = "0.3"
 mac_address = "1.1"
 sciter-rs = { git = "https://github.com/open-trade/rust-sciter", branch = "dyn" }
 sys-locale = "0.3"

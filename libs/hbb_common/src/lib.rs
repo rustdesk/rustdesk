@@ -45,6 +45,8 @@ pub mod keyboard;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use dlopen;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub use machine_uid;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use sysinfo;
 pub use toml;
 pub use uuid;

@@ -552,7 +552,7 @@ impl UI {
     }
 
     fn is_ok_change_id(&self) -> bool {
-        machine_uid::get().is_ok()
+        hbb_common::machine_uid::get().is_ok()
     }
 
     fn get_async_job_status(&self) -> String {

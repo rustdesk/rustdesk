@@ -1037,7 +1037,12 @@ pub async fn change_id_shared_(id: String, old_id: String) -> &'static str {
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    let uuid = Bytes::from(machine_uid::get().unwrap_or("".to_owned()).as_bytes().to_vec());
+    let uuid = Bytes::from(
+        hbb_common::machine_uid::get()
+            .unwrap_or("".to_owned())
+            .as_bytes()
+            .to_vec(),
+    );
     #[cfg(any(target_os = "android", target_os = "ios"))]
     let uuid = Bytes::from(hbb_common::get_uuid());
 
