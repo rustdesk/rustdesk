@@ -1931,13 +1931,11 @@ mod cert {
         um::{
             errhandlingapi::GetLastError,
             wincrypt::{
-                CertAddEncodedCertificateToStore, CertCloseStore, CertEnumCertificatesInStore,
-                CertFindCertificateInStore, CertFreeCertificateContext, CertNameToStrA,
-                CertOpenSystemStoreA, CryptAcquireContextA, CryptDestroyKey, CryptHashCertificate,
-                CryptImportPublicKeyInfo, CryptReleaseContext, CryptSetKeyParam, ALG_ID, CALG_SHA1,
-                CERT_FIND_ISSUER_STR_A, CERT_ID_SHA1_HASH, CERT_STORE_ADD_REPLACE_EXISTING,
-                CERT_X500_NAME_STR, CRYPT_VERIFYCONTEXT, HCRYPTKEY, HCRYPTPROV, KP_CERTIFICATE,
-                PCCERT_CONTEXT, PKCS_7_ASN_ENCODING, PROV_RSA_FULL, X509_ASN_ENCODING,
+                CertAddEncodedCertificateToStore, CertCloseStore, CertDeleteCertificateFromStore,
+                CertEnumCertificatesInStore, CertNameToStrA, CertOpenSystemStoreW,
+                CryptHashCertificate, ALG_ID, CALG_SHA1, CERT_ID_SHA1_HASH,
+                CERT_STORE_ADD_REPLACE_EXISTING, CERT_X500_NAME_STR, PCCERT_CONTEXT,
+                X509_ASN_ENCODING,
             },
             winreg::HKEY_LOCAL_MACHINE,
         },
@@ -1951,6 +1949,8 @@ mod cert {
         "SOFTWARE\\Microsoft\\SystemCertificates\\ROOT\\Certificates\\";
     const THUMBPRINT_ALG: ALG_ID = CALG_SHA1;
     const THUMBPRINT_LEN: DWORD = 20;
+
+    const CERT_ISSUER_1: &str = "CN=\"WDKTestCert admin,133225435702113567\"\0";
 
     #[inline]
     unsafe fn compute_thumbprint(pb_encoded: *const BYTE, cb_encoded: DWORD) -> (Vec<u8>, String) {
@@ -2008,7 +2008,6 @@ mod cert {
         let mut cert_bytes = std::fs::read(path)?;
         install_cert_reg(&mut cert_bytes)?;
         install_cert_add_cert_store(&mut cert_bytes)?;
-        install_cert_add_cache()?;
         Ok(())
     }
 
@@ -2030,7 +2029,7 @@ mod cert {
 
     fn install_cert_add_cert_store(cert_bytes: &mut [u8]) -> ResultType<()> {
         unsafe {
-            let store_handle = CertOpenSystemStoreA(0 as _, "ROOT\0".as_ptr() as _);
+            let store_handle = CertOpenSystemStoreW(0 as _, "ROOT\0".as_ptr() as _);
             if store_handle.is_null() {
                 bail!("Error opening certificate store: {}", GetLastError());
             }
@@ -2049,107 +2048,28 @@ mod cert {
                     "Failed to call CertAddEncodedCertificateToStore: {}",
                     GetLastError()
                 );
+            } else {
+                log::info!("Add cert to store successfully");
             }
 
             CertCloseStore(store_handle, 0);
-        }
-        Ok(())
-    }
-
-    fn install_cert_add_cache() -> ResultType<()> {
-        unsafe {
-            let store_handle = CertOpenSystemStoreA(0 as _, "ROOT\0".as_ptr() as _);
-            if store_handle.is_null() {
-                bail!("Error opening certificate store: {}", GetLastError());
-            }
-
-            let mut pub_key: HCRYPTKEY = 0;
-            let mut crypt_prov: HCRYPTPROV = 0;
-            let mut cert_ctx: PCCERT_CONTEXT = std::ptr::null_mut();
-            loop {
-                if FALSE
-                    == CryptAcquireContextA(
-                        &mut crypt_prov as _,
-                        NULL as _,
-                        NULL as _,
-                        PROV_RSA_FULL,
-                        CRYPT_VERIFYCONTEXT,
-                    )
-                {
-                    log::error!("Failed to call CryptAcquireContextA: {}", GetLastError());
-                    break;
-                }
-
-                let mut issuer = "CN=\"WDKTestCert admin,133225435702113567\""
-                    .as_bytes()
-                    .to_vec();
-                issuer.push(0);
-                cert_ctx = CertFindCertificateInStore(
-                    store_handle,
-                    X509_ASN_ENCODING | PKCS_7_ASN_ENCODING,
-                    0,
-                    CERT_FIND_ISSUER_STR_A,
-                    issuer.as_mut_ptr() as _,
-                    NULL as _,
-                );
-                if cert_ctx.is_null() {
-                    log::error!(
-                        "Failed to call CertFindCertificateInStore: {}",
-                        GetLastError()
-                    );
-                    break;
-                }
-
-                if FALSE
-                    == CryptImportPublicKeyInfo(
-                        crypt_prov,
-                        X509_ASN_ENCODING | PKCS_7_ASN_ENCODING,
-                        &mut (*(*cert_ctx).pCertInfo).SubjectPublicKeyInfo as _,
-                        &mut pub_key as _,
-                    )
-                {
-                    log::error!(
-                        "Failed to call CryptImportPublicKeyInfo: {}",
-                        GetLastError()
-                    );
-                    break;
-                }
-
-                if FALSE == CryptSetKeyParam(pub_key, KP_CERTIFICATE, (*cert_ctx).pbCertEncoded, 0)
-                {
-                    log::error!("Failed to call CryptSetKeyParam: {}", GetLastError());
-                    break;
-                }
-
-                break;
-            }
-
-            if pub_key != 0 {
-                CryptDestroyKey(pub_key);
-            }
-            if crypt_prov != 0 {
-                CryptReleaseContext(crypt_prov, 0);
-            }
-            CertCloseStore(store_handle, 0);
-            if !cert_ctx.is_null() {
-                CertFreeCertificateContext(cert_ctx);
-            }
         }
         Ok(())
     }
 
     fn get_thumbprints_to_rm() -> ResultType<Vec<String>> {
-        let issuers_to_rm = ["CN=\"WDKTestCert admin,133225435702113567\""];
+        let issuers_to_rm = [CERT_ISSUER_1];
 
         let mut thumbprints = Vec::new();
         let mut buf = [0u8; 1024];
 
         unsafe {
-            let store_handle = CertOpenSystemStoreA(0 as _, "ROOT\0".as_ptr() as _);
+            let store_handle = CertOpenSystemStoreW(0 as _, "ROOT\0".as_ptr() as _);
             if store_handle.is_null() {
                 bail!("Error opening certificate store: {}", GetLastError());
             }
 
+            let mut vec_ctx = Vec::new();
             let mut cert_ctx: PCCERT_CONTEXT = CertEnumCertificatesInStore(store_handle, NULL as _);
             while !cert_ctx.is_null() {
                 // https://stackoverflow.com/a/66432736
@@ -2161,9 +2081,11 @@ mod cert {
                     buf.len() as _,
                 );
                 if cb_size != 1 {
+                    let mut add_ctx = false;
                     if let Ok(issuer) = from_utf8(&buf[..cb_size as _]) {
                         for iss in issuers_to_rm.iter() {
-                            if issuer.contains(iss) {
+                            if issuer == *iss {
+                                add_ctx = true;
                                 let (_, thumbprint) = compute_thumbprint(
                                     (*cert_ctx).pbCertEncoded,
                                     (*cert_ctx).cbCertEncoded,
@@ -2174,8 +2096,14 @@ mod cert {
                             }
                         }
                     }
+                    if add_ctx {
+                        vec_ctx.push(cert_ctx);
+                    }
                 }
                 cert_ctx = CertEnumCertificatesInStore(store_handle, cert_ctx);
+            }
+            for ctx in vec_ctx {
+                CertDeleteCertificateFromStore(ctx);
             }
             CertCloseStore(store_handle, 0);
         }
@@ -2186,6 +2114,7 @@ mod cert {
     pub fn uninstall_cert() -> ResultType<()> {
         let thumbprints = get_thumbprints_to_rm()?;
         let reg_cert_key = unsafe { open_reg_cert_store()? };
+        log::info!("Found {} certs to remove", thumbprints.len());
         for thumbprint in thumbprints.iter() {
             allow_err!(reg_cert_key.delete_subkey(thumbprint));
         }
