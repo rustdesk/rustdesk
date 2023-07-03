@@ -27,8 +27,6 @@ env:
   # To make a custom build with your own servers set the below secret values
   RS_PUB_KEY: '${{ secrets.RS_PUB_KEY }}'
   RENDEZVOUS_SERVER: '${{ secrets.RENDEZVOUS_SERVER }}'
-
-vars:
   UPLOAD_ARTIFACT: "${{ inputs.upload-artifact }}"
 
 jobs:
@@ -97,7 +95,7 @@ jobs:
 
       - name: Sign rustdesk files
         uses: GermanBluefox/code-sign-action@v7
-        if: vars.UPLOAD_ARTIFACT == 'true'
+        if: env.UPLOAD_ARTIFACT == 'true'
         with:
           certificate: '${{ secrets.WINDOWS_PFX_BASE64 }}'
           password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
@@ -108,7 +106,7 @@ jobs:
 
       - name: Build self-extracted executable
         shell: bash
-        if: vars.UPLOAD_ARTIFACT == 'true'
+        if: env.UPLOAD_ARTIFACT == 'true'
         run: |
           pushd ./libs/portable
           python3 ./generate.py -f ../../flutter/build/windows/runner/Release/ -o . -e ../../flutter/build/windows/runner/Release/rustdesk.exe
@@ -118,7 +116,7 @@ jobs:
 
       - name: Sign rustdesk self-extracted file
         uses: GermanBluefox/code-sign-action@v7
-        if: vars.UPLOAD_ARTIFACT == 'true'
+        if: env.UPLOAD_ARTIFACT == 'true'
         with:
           certificate: '${{ secrets.WINDOWS_PFX_BASE64 }}'
           password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
@@ -129,7 +127,7 @@ jobs:
 
       - name: Publish Release
         uses: softprops/action-gh-release@v1
-        if: vars.UPLOAD_ARTIFACT == 'true'
+        if: env.UPLOAD_ARTIFACT == 'true'
         with:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
@@ -199,7 +197,7 @@ jobs:
 
       - name: Sign rustdesk files
         uses: GermanBluefox/code-sign-action@v7
-        if: vars.UPLOAD_ARTIFACT == 'true'
+        if: env.UPLOAD_ARTIFACT == 'true'
         with:
           certificate: '${{ secrets.WINDOWS_PFX_BASE64 }}'
           password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
@@ -230,7 +228,7 @@ jobs:
 
       - name: Publish Release
         uses: softprops/action-gh-release@v1
-        if: vars.UPLOAD_ARTIFACT == 'true'
+        if: env.UPLOAD_ARTIFACT == 'true'
         with:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
@@ -361,7 +359,7 @@ jobs:
           done
 
       - name: Publish DMG package
-        if: vars.UPLOAD_ARTIFACT == 'true'
+        if: env.UPLOAD_ARTIFACT == 'true'
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
@@ -440,14 +438,14 @@ jobs:
           flutter build ipa --release --obfuscate --split-debug-info=./split-debug-info --no-codesign
       
       # - name: Upload Artifacts
-      #   # if: env.ANDROID_SIGNING_KEY != null && vars.UPLOAD_ARTIFACT == 'true'
+      #   # if: env.ANDROID_SIGNING_KEY != null && env.UPLOAD_ARTIFACT == 'true'
       #   uses: actions/upload-artifact@master
       #   with:
       #     name: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk
       #     path: flutter/build/ios/ipa/*.ipa
 
       # - name: Publish ipa package
-      #   # if: env.ANDROID_SIGNING_KEY != null && vars.UPLOAD_ARTIFACT == 'true'
+      #   # if: env.ANDROID_SIGNING_KEY != null && env.UPLOAD_ARTIFACT == 'true'
       #   uses: softprops/action-gh-release@v1
       #   with:
       #     prerelease: true
@@ -588,14 +586,14 @@ jobs:
           BUILD_TOOLS_VERSION: "30.0.2"
 
       - name: Upload Artifacts
-        if: env.ANDROID_SIGNING_KEY != null && vars.UPLOAD_ARTIFACT == 'true'
+        if: env.ANDROID_SIGNING_KEY != null && env.UPLOAD_ARTIFACT == 'true'
         uses: actions/upload-artifact@master
         with:
           name: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk
           path: ${{steps.sign-rustdesk.outputs.signedReleaseFile}}
 
       - name: Publish signed apk package
-        if: env.ANDROID_SIGNING_KEY != null && vars.UPLOAD_ARTIFACT == 'true'
+        if: env.ANDROID_SIGNING_KEY != null && env.UPLOAD_ARTIFACT == 'true'
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
@@ -604,7 +602,7 @@ jobs:
             ${{steps.sign-rustdesk.outputs.signedReleaseFile}}
 
       - name: Publish unsigned apk package
-        if: env.ANDROID_SIGNING_KEY == null && vars.UPLOAD_ARTIFACT == 'true'
+        if: env.ANDROID_SIGNING_KEY == null && env.UPLOAD_ARTIFACT == 'true'
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
@@ -784,7 +782,6 @@ jobs:
     needs: [generate-bridge-linux, build-vcpkg-deps-linux]
     name: build-rust-lib ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: ${{ matrix.job.os }}
-    if: ${{ vars.UPLOAD_ARTIFACT == 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -947,7 +944,6 @@ jobs:
     needs: [build-vcpkg-deps-linux]
     name: build-rustdesk(sciter) ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: ${{ matrix.job.os }}
-    if: ${{ vars.UPLOAD_ARTIFACT == 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -1087,7 +1083,7 @@ jobs:
           done
 
       - name: Publish debian package
-        if: matrix.job.extra-build-features == '' && vars.UPLOAD_ARTIFACT == 'true'
+        if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true'
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
@@ -1106,7 +1102,6 @@ jobs:
     needs: [build-rustdesk-lib-linux-arm]
     name: build-rustdesk ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: ubuntu-20.04 # 20.04 has more performance on arm build
-    if: ${{ vars.UPLOAD_ARTIFACT == 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -1260,7 +1255,7 @@ jobs:
           done
 
       - name: Publish debian package
-        if: matrix.job.extra-build-features == '' && vars.UPLOAD_ARTIFACT == 'true'
+        if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true'
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
@@ -1283,7 +1278,7 @@ jobs:
           sudo appimage-builder --skip-tests --recipe ./AppImageBuilder-${{ matrix.job.arch }}.yml
 
       - name: Publish appimage package
-        if: matrix.job.extra-build-features == 'appimage' && vars.UPLOAD_ARTIFACT == 'true'
+        if: matrix.job.extra-build-features == 'appimage' && env.UPLOAD_ARTIFACT == 'true'
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
@@ -1357,7 +1352,7 @@ jobs:
       #       res/rustdesk*.zst
 
       - name: Publish fedora28/centos8 package
-        if: matrix.job.extra-build-features == '' && vars.UPLOAD_ARTIFACT == 'true'
+        if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true'
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
@@ -1480,7 +1475,7 @@ jobs:
           done
 
       - name: Publish debian package
-        if: matrix.job.extra-build-features == '' && vars.UPLOAD_ARTIFACT == 'true'
+        if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true'
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
@@ -1539,7 +1534,7 @@ jobs:
             cd res && HBB=`pwd`/.. FLUTTER=1 makepkg -f
 
       - name: Publish archlinux package
-        if: matrix.job.extra-build-features == '' && vars.UPLOAD_ARTIFACT == 'true'
+        if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true'
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
@@ -1548,7 +1543,7 @@ jobs:
             res/rustdesk*.zst
 
       - name: Build appimage package
-        if: matrix.job.extra-build-features == 'appimage' && vars.UPLOAD_ARTIFACT == 'true'
+        if: matrix.job.extra-build-features == 'appimage' && env.UPLOAD_ARTIFACT == 'true'
         shell: bash
         run: |
           # set-up appimage-builder
@@ -1562,7 +1557,7 @@ jobs:
           sudo appimage-builder --skip-tests --recipe ./AppImageBuilder-x86_64.yml
 
       - name: Publish appimage package
-        if: matrix.job.extra-build-features == 'appimage' && vars.UPLOAD_ARTIFACT == 'true'
+        if: matrix.job.extra-build-features == 'appimage' && env.UPLOAD_ARTIFACT == 'true'
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
@@ -1571,7 +1566,7 @@ jobs:
             ./appimage/rustdesk-${{ env.VERSION }}-*.AppImage
 
       - name: Publish fedora28/centos8 package
-        if: matrix.job.extra-build-features == '' && vars.UPLOAD_ARTIFACT == 'true'
+        if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true'
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
@@ -1700,7 +1695,7 @@ jobs:
 
       - name: Publish flatpak package
         uses: softprops/action-gh-release@v1
-        if: vars.UPLOAD_ARTIFACT == 'true'
+        if: env.UPLOAD_ARTIFACT == 'true'
         with:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
