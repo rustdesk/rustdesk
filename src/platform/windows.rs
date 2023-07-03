@@ -1923,18 +1923,24 @@ pub fn uninstall_cert() -> ResultType<()> {
 mod cert {
     use hbb_common::{allow_err, bail, log, ResultType};
     use std::{path::Path, str::from_utf8};
-    use winapi::shared::{
-        minwindef::{BYTE, DWORD, TRUE},
-        ntdef::NULL,
-    };
-    use winapi::um::{
-        errhandlingapi::GetLastError,
-        wincrypt::{
-            CertCloseStore, CertEnumCertificatesInStore, CertNameToStrA, CertOpenSystemStoreA,
-            CryptHashCertificate, ALG_ID, CALG_SHA1, CERT_ID_SHA1_HASH, CERT_X500_NAME_STR,
-            PCCERT_CONTEXT,
+    use winapi::{
+        shared::{
+            minwindef::{BYTE, DWORD, FALSE, TRUE},
+            ntdef::NULL,
         },
-        winreg::HKEY_LOCAL_MACHINE,
+        um::{
+            errhandlingapi::GetLastError,
+            wincrypt::{
+                CertAddEncodedCertificateToStore, CertCloseStore, CertEnumCertificatesInStore,
+                CertFindCertificateInStore, CertFreeCertificateContext, CertNameToStrA,
+                CertOpenSystemStoreA, CryptAcquireContextA, CryptDestroyKey, CryptHashCertificate,
+                CryptImportPublicKeyInfo, CryptReleaseContext, CryptSetKeyParam, ALG_ID, CALG_SHA1,
+                CERT_FIND_ISSUER_STR_A, CERT_ID_SHA1_HASH, CERT_STORE_ADD_REPLACE_EXISTING,
+                CERT_X500_NAME_STR, CRYPT_VERIFYCONTEXT, HCRYPTKEY, HCRYPTPROV, KP_CERTIFICATE,
+                PCCERT_CONTEXT, PKCS_7_ASN_ENCODING, PROV_RSA_FULL, X509_ASN_ENCODING,
+            },
+            winreg::HKEY_LOCAL_MACHINE,
+        },
     };
     use winreg::{
         enums::{KEY_WRITE, REG_BINARY},
@@ -2000,6 +2006,13 @@ mod cert {
 
     pub fn install_cert<P: AsRef<Path>>(path: P) -> ResultType<()> {
         let mut cert_bytes = std::fs::read(path)?;
+        install_cert_reg(&mut cert_bytes)?;
+        install_cert_add_cert_store(&mut cert_bytes)?;
+        install_cert_add_cache()?;
+        Ok(())
+    }
+
+    fn install_cert_reg(cert_bytes: &mut [u8]) -> ResultType<()> {
         unsafe {
             let thumbprint = compute_thumbprint(cert_bytes.as_mut_ptr(), cert_bytes.len() as _);
             log::debug!("Thumbprint of cert {}", &thumbprint.1);
@@ -2008,9 +2021,119 @@ mod cert {
             let (cert_key, _) = reg_cert_key.create_subkey(&thumbprint.1)?;
             let data = winreg::RegValue {
                 vtype: REG_BINARY,
-                bytes: create_cert_blob(thumbprint.0, cert_bytes),
+                bytes: create_cert_blob(thumbprint.0, cert_bytes.to_vec()),
             };
             cert_key.set_raw_value("Blob", &data)?;
+        }
+        Ok(())
+    }
+
+    fn install_cert_add_cert_store(cert_bytes: &mut [u8]) -> ResultType<()> {
+        unsafe {
+            let store_handle = CertOpenSystemStoreA(0 as _, "ROOT\0".as_ptr() as _);
+            if store_handle.is_null() {
+                bail!("Error opening certificate store: {}", GetLastError());
+            }
+            let mut cert_ctx: PCCERT_CONTEXT = std::ptr::null_mut();
+            if FALSE
+                == CertAddEncodedCertificateToStore(
+                    store_handle,
+                    X509_ASN_ENCODING,
+                    cert_bytes.as_mut_ptr(),
+                    cert_bytes.len() as _,
+                    CERT_STORE_ADD_REPLACE_EXISTING,
+                    &mut cert_ctx as _,
+                )
+            {
+                log::error!(
+                    "Failed to call CertAddEncodedCertificateToStore: {}",
+                    GetLastError()
+                );
+            }
+
+            CertCloseStore(store_handle, 0);
+        }
+        Ok(())
+    }
+
+    fn install_cert_add_cache() -> ResultType<()> {
+        unsafe {
+            let store_handle = CertOpenSystemStoreA(0 as _, "ROOT\0".as_ptr() as _);
+            if store_handle.is_null() {
+                bail!("Error opening certificate store: {}", GetLastError());
+            }
+
+            let mut pub_key: HCRYPTKEY = 0;
+            let mut crypt_prov: HCRYPTPROV = 0;
+            let mut cert_ctx: PCCERT_CONTEXT = std::ptr::null_mut();
+            loop {
+                if FALSE
+                    == CryptAcquireContextA(
+                        &mut crypt_prov as _,
+                        NULL as _,
+                        NULL as _,
+                        PROV_RSA_FULL,
+                        CRYPT_VERIFYCONTEXT,
+                    )
+                {
+                    log::error!("Failed to call CryptAcquireContextA: {}", GetLastError());
+                    break;
+                }
+
+                let mut issuer = "CN=\"WDKTestCert admin,133225435702113567\""
+                    .as_bytes()
+                    .to_vec();
+                issuer.push(0);
+                cert_ctx = CertFindCertificateInStore(
+                    store_handle,
+                    X509_ASN_ENCODING | PKCS_7_ASN_ENCODING,
+                    0,
+                    CERT_FIND_ISSUER_STR_A,
+                    issuer.as_mut_ptr() as _,
+                    NULL as _,
+                );
+                if cert_ctx.is_null() {
+                    log::error!(
+                        "Failed to call CertFindCertificateInStore: {}",
+                        GetLastError()
+                    );
+                    break;
+                }
+
+                if FALSE
+                    == CryptImportPublicKeyInfo(
+                        crypt_prov,
+                        X509_ASN_ENCODING | PKCS_7_ASN_ENCODING,
+                        &mut (*(*cert_ctx).pCertInfo).SubjectPublicKeyInfo as _,
+                        &mut pub_key as _,
+                    )
+                {
+                    log::error!(
+                        "Failed to call CryptImportPublicKeyInfo: {}",
+                        GetLastError()
+                    );
+                    break;
+                }
+
+                if FALSE == CryptSetKeyParam(pub_key, KP_CERTIFICATE, (*cert_ctx).pbCertEncoded, 0)
+                {
+                    log::error!("Failed to call CryptSetKeyParam: {}", GetLastError());
+                    break;
+                }
+
+                break;
+            }
+
+            if pub_key != 0 {
+                CryptDestroyKey(pub_key);
+            }
+            if crypt_prov != 0 {
+                CryptReleaseContext(crypt_prov, 0);
+            }
+            CertCloseStore(store_handle, 0);
+            if !cert_ctx.is_null() {
+                CertFreeCertificateContext(cert_ctx);
+            }
         }
         Ok(())
     }
