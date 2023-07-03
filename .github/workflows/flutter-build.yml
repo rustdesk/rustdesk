@@ -782,7 +782,7 @@ jobs:
     needs: [generate-bridge-linux, build-vcpkg-deps-linux]
     name: build-rust-lib ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: ${{ matrix.job.os }}
-    if: env.UPLOAD_ARTIFACT == 'true'
+    if: {{ env.UPLOAD_ARTIFACT == 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -945,7 +945,7 @@ jobs:
     needs: [build-vcpkg-deps-linux]
     name: build-rustdesk(sciter) ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: ${{ matrix.job.os }}
-    if: env.UPLOAD_ARTIFACT == 'true'
+    if: {{ env.UPLOAD_ARTIFACT == 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -1104,7 +1104,7 @@ jobs:
     needs: [build-rustdesk-lib-linux-arm]
     name: build-rustdesk ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: ubuntu-20.04 # 20.04 has more performance on arm build
-    if: env.UPLOAD_ARTIFACT == 'true'
+    if: {{ env.UPLOAD_ARTIFACT == 'true' }}
     strategy:
       fail-fast: false
       matrix:
