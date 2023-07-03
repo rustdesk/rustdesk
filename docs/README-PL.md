@@ -37,8 +37,6 @@ Poniżej znajdują się serwery, z których można korzystać za darmo, może si
 | Korea Płd. (Seul) | AWS lightsail | 1 vCPU / 0.5GB RAM |
 | Niemcy | Hetzner | 2 vCPU / 4GB RAM |
 | Niemcy | Codext | 4 vCPU / 8GB RAM |
-| Finlandia (Helsinki) | [Netlock](https://netlockendpoint.com) | 4 vCPU / 8GB RAM |
-| USA (Ashburn) | [Netlock](https://netlockendpoint.com) | 4 vCPU / 8GB RAM |
 | Ukraina (Kijów) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
 
 ## Konterner Programisty (Dev Container)

@@ -32,8 +32,6 @@ RustDesk는 모든 기여를 환영합니다. 기여하고자 한다면 [`docs/C
 | Seoul | AWS lightsail | 1 vCPU / 0.5GB RAM |
 | Germany | Hetzner | 2 vCPU / 4GB RAM |
 | Germany | Codext | 4 vCPU / 8GB RAM |
-| Finland (Helsinki) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
-| USA (Ashburn) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
 
 ## 의존관계
 

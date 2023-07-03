@@ -35,8 +35,6 @@ Hieronder staan de servers die u gratis gebruikt, ze kunnen in de loop van de ti
 | Seoul | AWS lightsail | 1 vCPU / 0.5GB RAM |
 | Duitsland | Hetzner | 2 vCPU / 4GB RAM |
 | Duitsland | Codext | 4 vCPU / 8GB RAM |
-| Finland (Helsinki) | [Netlock](https://netlockendpoint.com) | 4 vCPU / 8GB RAM |
-| USA (Ashburn) | [Netlock](https://netlockendpoint.com) | 4 vCPU / 8GB RAM |
 | Oekraine (Kyiv) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
 
 ## Dev Container

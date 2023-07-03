@@ -33,8 +33,6 @@
 | کره‌ی جنوبی، سئول | AWS lightsail | 1 vCPU / 0.5GB RAM |
 | آلمان | Hetzner | 2 vCPU / 4GB RAM |
 | آلمان | Codext | 4 vCPU / 8GB RAM |
-| فنلاند، هلسینکی | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
-| ایالات متحده، اَشبرن | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
 
 ## وابستگی ها
 
