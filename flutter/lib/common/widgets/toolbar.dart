@@ -11,6 +11,8 @@ import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
 
+bool isEditOsPassword = false;
+
 class TTextMenu {
   final Widget child;
   final VoidCallback onPressed;
@@ -66,14 +68,33 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
         child: Row(children: [
           Text(translate(pi.is_headless ? 'OS Account' : 'OS Password')),
           Offstage(
-              offstage: isDesktop,
+            offstage: isDesktop,
+            child: InkWell(
+              onTap: () =>
+                  showSetOSPassword(sessionId, false, ffi.dialogManager, null),
               child:
-                  Icon(Icons.edit, color: MyTheme.accent).marginOnly(left: 12))
+                  Icon(Icons.edit, color: MyTheme.accent).marginOnly(left: 12),
+            ),
+          )
         ]),
         trailingIcon: Transform.scale(scale: 0.8, child: Icon(Icons.edit)),
         onPressed: () => pi.is_headless
             ? showSetOSAccount(sessionId, ffi.dialogManager)
-            : showSetOSPassword(sessionId, false, ffi.dialogManager)),
+            : () async {
+                if (isEditOsPassword) {
+                  isEditOsPassword = false;
+                  return;
+                }
+                final password = await bind.sessionGetOption(
+                        sessionId: sessionId, arg: 'os-password') ??
+                    '';
+                if (password.isEmpty) {
+                  showSetOSPassword(sessionId, true, ffi.dialogManager, password);
+                } else {
+                  bind.sessionInputOsPassword(
+                      sessionId: sessionId, value: password);
+                }
+              }),
   );
   // paste
   if (isMobile && perms['keyboard'] != false && perms['clipboard'] != false) {

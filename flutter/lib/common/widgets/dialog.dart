@@ -943,15 +943,14 @@ showSetOSPassword(
   SessionID sessionId,
   bool login,
   OverlayDialogManager dialogManager,
+  String? osPassword,
 ) async {
   final controller = TextEditingController();
-  var password =
-      await bind.sessionGetOption(sessionId: sessionId, arg: 'os-password') ??
-          '';
+  osPassword ??= await bind.sessionGetOption(sessionId: sessionId, arg: 'os-password') ?? '';
   var autoLogin =
       await bind.sessionGetOption(sessionId: sessionId, arg: 'auto-login') !=
           '';
-  controller.text = password;
+  controller.text = osPassword;
   dialogManager.show((setState, close, context) {
     submit() {
       var text = controller.text.trim();
