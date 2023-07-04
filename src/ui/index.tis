@@ -54,7 +54,7 @@ class ConnectStatus: Reactor.Component {
     }
 
     event click $(#setup-server) () {
-        handler.open_url("https://rustdesk.com/blog/id-relay-set/");
+        handler.open_url("https://rustdesk.com/docs/en/self-host/");
     }
 }
 

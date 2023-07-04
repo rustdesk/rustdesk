@@ -320,7 +320,7 @@ class _ConnectionPageState extends State<ConnectionPage>
   }
 
   void onUsePublicServerGuide() {
-    const url = "https://rustdesk.com/blog/id-relay-set/";
+    const url = "https://rustdesk.com/docs/en/self-host/";
     canLaunchUrlString(url).then((can) {
       if (can) {
         launchUrlString(url);
