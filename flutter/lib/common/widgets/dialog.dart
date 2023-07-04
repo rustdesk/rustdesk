@@ -944,6 +944,7 @@ showSetOSPassword(
   bool login,
   OverlayDialogManager dialogManager,
   String? osPassword,
+  Function()? closeCallback,
 ) async {
   final controller = TextEditingController();
   osPassword ??= await bind.sessionGetOption(sessionId: sessionId, arg: 'os-password') ?? '';
@@ -952,6 +953,10 @@ showSetOSPassword(
           '';
   controller.text = osPassword;
   dialogManager.show((setState, close, context) {
+    closeWithCallback([dynamic]) {
+      close();
+      if (closeCallback != null) closeCallback();
+    }
     submit() {
       var text = controller.text.trim();
       bind.sessionPeerOption(
@@ -963,7 +968,7 @@ showSetOSPassword(
       if (text != '' && login) {
         bind.sessionInputOsPassword(sessionId: sessionId, value: text);
       }
-      close();
+      closeWithCallback();
     }
 
     return CustomAlertDialog(
@@ -997,7 +1002,7 @@ showSetOSPassword(
         dialogButton(
           "Cancel",
           icon: Icon(Icons.close_rounded),
-          onPressed: close,
+          onPressed: closeWithCallback,
           isOutline: true,
         ),
         dialogButton(
@@ -1007,7 +1012,7 @@ showSetOSPassword(
         ),
       ],
       onSubmit: submit,
-      onCancel: close,
+      onCancel: closeWithCallback,
     );
   });
 }

@@ -46,6 +46,28 @@ class TToggleMenu {
       {required this.child, required this.value, required this.onChanged});
 }
 
+handleOsPasswordEditIcon(
+    SessionID sessionId, OverlayDialogManager dialogManager) {
+  isEditOsPassword = true;
+  showSetOSPassword(sessionId, false, dialogManager, null, () => isEditOsPassword = false);
+}
+
+handleOsPasswordAction(
+    SessionID sessionId, OverlayDialogManager dialogManager) async {
+  if (isEditOsPassword) {
+    isEditOsPassword = false;
+    return;
+  }
+  final password =
+      await bind.sessionGetOption(sessionId: sessionId, arg: 'os-password') ??
+          '';
+  if (password.isEmpty) {
+    showSetOSPassword(sessionId, true, dialogManager, password, () => isEditOsPassword = false);
+  } else {
+    bind.sessionInputOsPassword(sessionId: sessionId, value: password);
+  }
+}
+
 List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
   final ffiModel = ffi.ffiModel;
   final pi = ffiModel.pi;
@@ -65,36 +87,26 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
   // osAccount / osPassword
   v.add(
     TTextMenu(
-        child: Row(children: [
-          Text(translate(pi.is_headless ? 'OS Account' : 'OS Password')),
-          Offstage(
-            offstage: isDesktop,
-            child: InkWell(
-              onTap: () =>
-                  showSetOSPassword(sessionId, false, ffi.dialogManager, null),
-              child:
-                  Icon(Icons.edit, color: MyTheme.accent).marginOnly(left: 12),
-            ),
-          )
-        ]),
-        trailingIcon: Transform.scale(scale: 0.8, child: Icon(Icons.edit)),
-        onPressed: () => pi.is_headless
-            ? showSetOSAccount(sessionId, ffi.dialogManager)
-            : () async {
-                if (isEditOsPassword) {
-                  isEditOsPassword = false;
-                  return;
-                }
-                final password = await bind.sessionGetOption(
-                        sessionId: sessionId, arg: 'os-password') ??
-                    '';
-                if (password.isEmpty) {
-                  showSetOSPassword(sessionId, true, ffi.dialogManager, password);
-                } else {
-                  bind.sessionInputOsPassword(
-                      sessionId: sessionId, value: password);
-                }
-              }),
+      child: Row(children: [
+        Text(translate(pi.is_headless ? 'OS Account' : 'OS Password')),
+        Offstage(
+          offstage: isDesktop,
+          child: Icon(Icons.edit, color: MyTheme.accent).marginOnly(left: 12),
+        )
+      ]),
+      trailingIcon: Transform.scale(
+        scale: 0.8,
+        child: InkWell(
+          onTap: () => pi.is_headless
+              ? showSetOSAccount(sessionId, ffi.dialogManager)
+              : handleOsPasswordEditIcon(sessionId, ffi.dialogManager),
+          child: Icon(Icons.edit),
+        ),
+      ),
+      onPressed: () => pi.is_headless
+          ? showSetOSAccount(sessionId, ffi.dialogManager)
+          : handleOsPasswordAction(sessionId, ffi.dialogManager),
+    ),
   );
   // paste
   if (isMobile && perms['keyboard'] != false && perms['clipboard'] != false) {
