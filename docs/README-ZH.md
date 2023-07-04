@@ -26,7 +26,6 @@ Chat with us: [知乎](https://www.zhihu.com/people/rustdesk) | [Discord](https:
 
 | Location | Vendor | Specification |
 | --------- | ------------- | ------------------ |
-| Seoul | AWS lightsail | 1 vCPU / 0.5GB RAM |
 | Germany | Hetzner | 2 vCPU / 4GB RAM |
 | Germany | Codext | 4 vCPU / 8GB RAM |
 

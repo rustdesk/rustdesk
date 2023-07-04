@@ -34,7 +34,6 @@ RustDesk welcomes contribution from everyone. See [CONTRIBUTING.md](docs/CONTRIB
 Below are the servers you are using for free, they may change over time. If you are not close to one of these, your network may be slow.
 | Location | Vendor | Specification |
 | --------- | ------------- | ------------------ |
-| South Korea (Seoul) | [AWS lightsail](https://aws.amazon.com) | 1 vCPU / 0.5 GB RAM |
 | Germany | [Hetzner](https://www.hetzner.com) | 2 vCPU / 4 GB RAM |
 | Germany | [Codext](https://codext.de) | 4 vCPU / 8 GB RAM |
 | Ukraine (Kyiv) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4 GB RAM |

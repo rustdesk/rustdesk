@@ -34,7 +34,6 @@ RustDesk zaprasza do współpracy każdego. Zobacz [`docs/CONTRIBUTING-PL.md`](C
 Poniżej znajdują się serwery, z których można korzystać za darmo, może się to zmienić z upływem czasu. Jeśli nie znajdujesz się w pobliżu jednego z nich, Twoja prędkość połączenia może być niska.
 | Lokalizacja | Dostawca | Specyfikacja |
 | --------- | ------------- | ------------------ |
-| Korea Płd. (Seul) | AWS lightsail | 1 vCPU / 0.5GB RAM |
 | Niemcy | Hetzner | 2 vCPU / 4GB RAM |
 | Niemcy | Codext | 4 vCPU / 8GB RAM |
 | Ukraina (Kijów) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |

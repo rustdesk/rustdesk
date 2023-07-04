@@ -24,7 +24,6 @@ RustDesk accoglie il contributo di tutti. Per ulteriori informazioni su come ini
 Qui sotto trovate i server che possono essere usati gratuitamente, la lista potrebbe cambiare nel tempo. Se non si è vicini a uno di questi server, la vostra connessione potrebbe essere lenta.
 | Posizione | Vendor | Specifiche |
 | --------- | ------------- | ------------------ |
-| Seoul | AWS lightsail | 1 vCPU / 0.5GB RAM |
 | Germany | Hetzner | 2 vCPU / 4GB RAM |
 | Germany | Codext | 4 vCPU / 8GB RAM |
 | Ukraine (Kyiv) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |

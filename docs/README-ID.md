@@ -24,7 +24,6 @@ RustDesk menyambut baik kontribusi dari semua orang. Lihat [`docs/CONTRIBUTING.m
 Di bawah ini adalah server yang bisa Anda gunakan secara gratis, dapat berubah seiring waktu. Jika Anda tidak dekat dengan salah satu dari ini, jaringan Anda mungkin lambat.
 | Lokasi | Vendor | Spesifikasi |
 | --------- | ------------- | ------------------ |
-| Seoul | AWS lightsail | 1 vCPU / 0.5GB RAM |
 | Germany | Hetzner | 2 vCPU / 4GB RAM |
 | Germany | Codext | 4 vCPU / 8GB RAM |
 | Ukraine (Kyiv) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
