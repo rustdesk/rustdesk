@@ -160,8 +160,22 @@ class ConnectionManagerState extends State<ConnectionManager> {
                         child: label),
                     Obx(() => Offstage(
                         offstage:
-                            !(client?.hasUnreadChatMessage.value ?? false),
-                        child: Icon(Icons.circle, color: Colors.red, size: 10)))
+                            !((client?.unreadChatMessageCount.value ?? 0) > 0),
+                        child: Container(
+                          width: 16,
+                          height: 16,
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Center(
+                            child: Text(
+                                "${client?.unreadChatMessageCount.value ?? 0}",
+                                maxLines: 1,
+                                style: TextStyle(
+                                    color: Colors.white, fontSize: 10)),
+                          ),
+                        ).marginOnly(left: 4)))
                   ],
                 );
               },
