@@ -453,7 +453,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Voice call", "語音通話"),
         ("Text chat", "文字聊天"),
         ("Stop voice call", "停止語音通話"),
-        ("relay_hint_tip", "可能無法直接連線，可以嘗試中繼連線。\n另外，如果想要直接使用中繼連線，可以在 ID 後面新增/r，或者在卡片選項裡選擇強制走中繼連線。"),
+        ("relay_hint_tip", "可能無法直接連線，可以嘗試中繼連線。\n另外，如果想要直接使用中繼連線，可以在 ID 後面新增/r，如果最近訪問裏存在該卡片，也可以在卡片選項裏選擇強制走中繼連接。"),
         ("Reconnect", "重新連線"),
         ("Codec", "編解碼器"),
         ("Resolution", "解析度"),
