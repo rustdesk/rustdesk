@@ -101,6 +101,11 @@ class ConnectionManagerState extends State<ConnectionManager> {
       final client_id = int.tryParse(client_id_str);
       if (client_id != null) {
         gFFI.chatModel.changeCurrentID(client_id);
+        final client =
+            gFFI.serverModel.clients.firstWhereOrNull((e) => e.id == client_id);
+        if (client != null) {
+          windowManager.setTitle(getWindowNameWithId(client.peerId));
+        }
       }
     };
     gFFI.chatModel.isConnManager = true;
