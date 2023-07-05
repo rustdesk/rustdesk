@@ -15,7 +15,7 @@ env:
   # for arm64 linux
   FLUTTER_ELINUX_VERSION: "3.10.5"
   FLUTTER_ELINUX_COMMIT_ID: "410b3ca42f2cd0c485edf517a1666652bab442d4"
-  TAG_NAME: "nightly"
+  TAG_NAME: "${{ inputs.upload-tag }}"
   # vcpkg version: 2023.04.15
   # for multiarch gcc compatibility
   VCPKG_COMMIT_ID: "501db0f17ef6df184fcdbfbe0f87cde2313b6ab1"
