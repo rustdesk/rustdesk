@@ -184,7 +184,9 @@ class ConnectionManagerState extends State<ConnectionManager> {
                   Consumer<ChatModel>(
                     builder: (_, model, child) => model.isShowCMChatPage
                         ? Expanded(
-                            child: ChatPage(),
+                            child: buildRemoteBlock(
+                              child: ChatPage(),
+                            ),
                             flex: (kConnectionManagerWindowSizeOpenChat.width -
                                     kConnectionManagerWindowSizeClosedChat
                                         .width)

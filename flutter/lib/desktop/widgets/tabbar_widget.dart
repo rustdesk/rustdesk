@@ -295,37 +295,16 @@ class DesktopTab extends StatelessWidget {
     if (tabType != DesktopTabType.main) {
       return child;
     }
-    var block = false.obs;
-    return Obx(() => MouseRegion(
-          onEnter: (_) async {
-            var access_mode = await bind.mainGetOption(key: 'access-mode');
-            var option = option2bool(
-                'allow-remote-config-modification',
-                await bind.mainGetOption(
-                    key: 'allow-remote-config-modification'));
-            if (access_mode == 'view' || (access_mode.isEmpty && !option)) {
-              var time0 = DateTime.now().millisecondsSinceEpoch;
-              await bind.mainCheckMouseTime();
-              Timer(const Duration(milliseconds: 120), () async {
-                var d = time0 - await bind.mainGetMouseTime();
-                if (d < 120) {
-                  block.value = true;
-                }
-              });
-            }
-          },
-          onExit: (_) => block.value = false,
-          child: Stack(
-            children: [
-              child,
-              Offstage(
-                  offstage: !block.value,
-                  child: Container(
-                    color: Colors.black.withOpacity(0.5),
-                  )),
-            ],
-          ),
-        ));
+    return buildRemoteBlock(
+        child: child,
+        use: () async {
+          var access_mode = await bind.mainGetOption(key: 'access-mode');
+          var option = option2bool(
+              'allow-remote-config-modification',
+              await bind.mainGetOption(
+                  key: 'allow-remote-config-modification'));
+          return access_mode == 'view' || (access_mode.isEmpty && !option);
+        });
   }
 
   List<Widget> _tabWidgets = [];
