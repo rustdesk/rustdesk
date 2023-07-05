@@ -1054,7 +1054,7 @@ dependencies = [
 [[package]]
 name = "confy"
 version = "0.4.0-2"
-source = "git+https://github.com/open-trade/confy#9f231b2039cf8a8f8cdf6b829c5ac0016e146077"
+source = "git+https://github.com/open-trade/confy#7855cd3c32b1a60b44e5076ee8f6b4131da10350"
 dependencies = [
  "directories-next",
  "serde 1.0.163",
