@@ -1031,8 +1031,12 @@ impl PeerConfig {
                         };
 
                         let c = PeerConfig::load(&id_decoded_string);
+                        if c.info.platform.is_empty() {
+                            fs::remove_file(p).ok();
+                        }
                         (id_decoded_string, t, c)
                     })
+                    .filter(|p| !p.2.info.platform.is_empty())
                     .collect();
                 peers.sort_unstable_by(|a, b| b.1.cmp(&a.1));
                 return peers;
