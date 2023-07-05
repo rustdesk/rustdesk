@@ -453,7 +453,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Voice call", "Chiamata vocale"),
         ("Text chat", "Chat testuale"),
         ("Stop voice call", "Interrompi chiamata vocale"),
-        ("relay_hint_tip", "Se non è possibile connettersi direttamente, puoi provare a farlo tramite relay.\nInoltre, se si vuoi usare il relay al primo tentativo, è possibile aggiungere all'ID il suffisso '/r\' o selezionare nella scheda peer l'opzione 'Collegati sempre tramite relay'."),
+        ("relay_hint_tip", "Se non è possibile connettersi direttamente, puoi provare a farlo tramite relay.\nInoltre, se si vuoi usare il relay al primo tentativo, è possibile aggiungere all'ID il suffisso '/r\' o selezionare nella scheda se esiste l'opzione 'Collegati sempre tramite relay'."),
         ("Reconnect", "Riconnetti"),
         ("Codec", "Codec"),
         ("Resolution", "Risoluzione"),
