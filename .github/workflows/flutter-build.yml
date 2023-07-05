@@ -6,6 +6,9 @@ on:
       upload-artifact:
         type: boolean
         default: true
+      upload-tag:
+        type: string
+        default: "nightly"
 
 env:
   CARGO_NDK_VERSION: "3.1.2"
