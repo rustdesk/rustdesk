@@ -434,7 +434,6 @@ Future<bool?> loginDialog() async {
             }
             break;
           case HttpType.kAuthResTypeEmailCheck:
-            setState(() => isInProgress = false);
             close(true);
             verificationCodeDialog(resp.user);
             break;
