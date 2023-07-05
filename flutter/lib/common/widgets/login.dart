@@ -435,11 +435,8 @@ Future<bool?> loginDialog() async {
             break;
           case HttpType.kAuthResTypeEmailCheck:
             setState(() => isInProgress = false);
-            final res = await verificationCodeDialog(resp.user);
-            if (res == true) {
-              close(true);
-              return;
-            }
+            close(true);
+            verificationCodeDialog(resp.user);
             break;
           default:
             passwordMsg = "Failed, bad response from server";
