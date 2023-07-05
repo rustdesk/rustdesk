@@ -44,7 +44,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("wait_accept_uac_tip", "Please wait for the remote user to accept the UAC dialog."),
         ("still_click_uac_tip", "Still requires the remote user to click OK on the UAC window of running RustDesk."),
         ("config_microphone", "In order to speak remotely, you need to grant RustDesk \"Record Audio\" permissions."),
-        ("relay_hint_tip", "It may not be possible to connect directly; you can try connecting via relay. Additionally, if you want to use a relay on your first attempt, you can add the \"/r\" suffix to the ID or select the option \"Always connect via relay\" in the card of recent sessions."),
+        ("relay_hint_tip", "It may not be possible to connect directly; you can try connecting via relay. Additionally, if you want to use a relay on your first attempt, you can add the \"/r\" suffix to the ID or select the option \"Always connect via relay\" in the card of recent sessions if it exists."),
         ("No transfers in progress", ""),
         ("idd_driver_tip", "Install virtual display driver which is used when you have no physical displays."),
         ("confirm_idd_driver_tip", "The option to install the virtual display driver is checked. Note that a test certificate will be installed to trust the virtual display driver. This test certificate will only be used to trust Rustdesk drivers."),
