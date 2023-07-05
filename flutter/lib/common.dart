@@ -545,16 +545,25 @@ closeConnection({String? id}) {
   }
 }
 
-void window_on_top(int? id) {
+void window_on_top(int? id) async {
   if (!isDesktop) {
     return;
   }
   if (id == null) {
     print("Bring window on top");
     // main window
-    windowManager.restore();
-    windowManager.show();
-    windowManager.focus();
+    if (desktopType == DesktopType.cm &&
+        !(await windowManager.isMinimized() ||
+            !await windowManager.isVisible())) {
+      await windowManager.setAlwaysOnTop(true);
+      Future.delayed(Duration(microseconds: 500), () async {
+        windowManager.setAlwaysOnTop(false);
+      });
+    } else {
+      windowManager.restore();
+      windowManager.show();
+      windowManager.focus();
+    }
     rustDeskWinManager.registerActiveWindow(kWindowMainId);
   } else {
     WindowController.fromWindowId(id)
@@ -2100,4 +2109,34 @@ Future<void> start_service(bool is_start) async {
   if (checked) {
     bind.mainSetOption(key: "stop-service", value: is_start ? "" : "Y");
   }
+}
+
+typedef Future<bool> WhetherUseRemoteBlock();
+Widget buildRemoteBlock({required Widget child, WhetherUseRemoteBlock? use}) {
+  var block = false.obs;
+  return Obx(() => MouseRegion(
+        onEnter: (_) async {
+          if (use != null && !await use()) {
+            block.value = false;
+            return;
+          }
+          var time0 = DateTime.now().millisecondsSinceEpoch;
+          await bind.mainCheckMouseTime();
+          Timer(const Duration(milliseconds: 120), () async {
+            var d = time0 - await bind.mainGetMouseTime();
+            if (d < 120) {
+              block.value = true;
+            }
+          });
+        },
+        onExit: (event) => block.value = false,
+        child: Stack(children: [
+          child,
+          Offstage(
+              offstage: !block.value,
+              child: Container(
+                color: Colors.black.withOpacity(0.5),
+              )),
+        ]),
+      ));
 }

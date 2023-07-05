@@ -318,7 +318,7 @@ class ChatModel with ChangeNotifier {
         final currentSelectedTab =
             session.serverModel.tabController.state.value.selectedTabInfo;
         if (currentSelectedTab.key != id.toString() && inputNode.hasFocus) {
-          client.hasUnreadChatMessage.value = true;
+          client.unreadChatMessageCount.value += 1;
         } else {
           parent.target?.serverModel.jumpTo(id);
           toId = id;

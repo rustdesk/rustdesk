@@ -463,8 +463,8 @@ class ServerModel with ChangeNotifier {
         label: client.name,
         closable: false,
         onTap: () {
-          if (client.hasUnreadChatMessage.value) {
-            client.hasUnreadChatMessage.value = false;
+          if (client.unreadChatMessageCount.value > 0) {
+            client.unreadChatMessageCount.value = 0;
             final chatModel = parent.target!.chatModel;
             chatModel.showChatPage(client.id);
           }
@@ -643,7 +643,7 @@ class Client {
   bool inVoiceCall = false;
   bool incomingVoiceCall = false;
 
-  RxBool hasUnreadChatMessage = false.obs;
+  RxInt unreadChatMessageCount = 0.obs;
 
   Client(this.id, this.authorized, this.isFileTransfer, this.name, this.peerId,
       this.keyboard, this.clipboard, this.audio);
