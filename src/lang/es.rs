@@ -208,7 +208,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("x11 expected", "x11 necesario"),
         ("Port", "Puerto"),
         ("Settings", "Ajustes"),
-        ("Username", " Nombre de usuario"),
+        ("Username", "Nombre de usuario"),
         ("Invalid port", "Puerto incorrecto"),
         ("Closed manually by the peer", "Cerrado manualmente por el par"),
         ("Enable remote configuration modification", "Habilitar modificación remota de configuración"),
