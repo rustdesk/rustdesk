@@ -187,6 +187,10 @@ class DesktopTabController {
     state.value.tabs.clear();
     state.refresh();
   }
+
+  Widget? widget(String key) {
+    return state.value.tabs.firstWhereOrNull((tab) => tab.key == key)?.page;
+  }
 }
 
 class TabThemeConf {

@@ -1,10 +1,14 @@
 import 'dart:async';
 
 import 'package:dash_chat_2/dash_chat_2.dart';
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:draggable_float_widget/draggable_float_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hbb/common/shared_state.dart';
+import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get_rx/src/rx_types/rx_types.dart';
 import 'package:get/get.dart';
 import 'package:window_manager/window_manager.dart';
@@ -309,6 +313,29 @@ class ChatModel with ChangeNotifier {
         id: session.id,
       );
       toId = id;
+
+      if (isDesktop) {
+        if (Get.isRegistered<DesktopTabController>()) {
+          DesktopTabController tabController = Get.find<DesktopTabController>();
+          var index = tabController.state.value.tabs
+              .indexWhere((e) => e.key == session.id);
+          final notSelected =
+              index >= 0 && tabController.state.value.selected != index;
+          // minisized: top and switch tab
+          // not minisized: add count
+          if (await WindowController.fromWindowId(stateGlobal.windowId)
+              .isMinimized()) {
+            window_on_top(stateGlobal.windowId);
+            if (notSelected) {
+              tabController.jumpTo(index);
+            }
+          } else {
+            if (notSelected) {
+              UnreadChatCountState.find(session.id).value += 1;
+            }
+          }
+        }
+      }
     } else {
       final client =
           session.serverModel.clients.firstWhere((client) => client.id == id);

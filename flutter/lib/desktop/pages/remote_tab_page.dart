@@ -56,15 +56,14 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     if (peerId != null) {
       ConnectionTypeState.init(peerId);
       tabController.onSelected = (id) {
-        final remotePage = tabController.state.value.tabs
-            .firstWhereOrNull((tab) => tab.key == id)
-            ?.page;
+        final remotePage = tabController.widget(id);
         if (remotePage is RemotePage) {
           final ffi = remotePage.ffi;
           bind.setCurSessionId(sessionId: ffi.sessionId);
         }
         WindowController.fromWindowId(windowId())
             .setTitle(getWindowNameWithId(id));
+        UnreadChatCountState.find(id).value = 0;
       };
       tabController.add(TabInfo(
         key: peerId,
@@ -206,6 +205,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
                       ).paddingOnly(right: 5),
                     ),
                     label,
+                    unreadMessageCountBuilder(UnreadChatCountState.find(key)),
                   ],
                 );
 
