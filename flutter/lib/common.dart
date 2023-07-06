@@ -2140,3 +2140,20 @@ Widget buildRemoteBlock({required Widget child, WhetherUseRemoteBlock? use}) {
         ]),
       ));
 }
+
+Widget unreadMessageCountBuilder(RxInt? count) {
+  return Obx(() => Offstage(
+      offstage: !((count?.value ?? 0) > 0),
+      child: Container(
+        width: 16,
+        height: 16,
+        decoration: BoxDecoration(
+          color: Colors.red,
+          shape: BoxShape.circle,
+        ),
+        child: Center(
+          child: Text("${count?.value ?? 0}",
+              maxLines: 1, style: TextStyle(color: Colors.white, fontSize: 10)),
+        ),
+      ).marginOnly(left: 4)));
+}
