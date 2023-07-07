@@ -552,18 +552,9 @@ void window_on_top(int? id) async {
   if (id == null) {
     print("Bring window on top");
     // main window
-    if (!Platform.isMacOS && desktopType == DesktopType.cm &&
-        !(await windowManager.isMinimized() ||
-            !await windowManager.isVisible())) {
-      await windowManager.setAlwaysOnTop(true);
-      Future.delayed(Duration(microseconds: 500), () async {
-        windowManager.setAlwaysOnTop(false);
-      });
-    } else {
-      windowManager.restore();
-      windowManager.show();
-      windowManager.focus();
-    }
+    windowManager.restore();
+    windowManager.show();
+    windowManager.focus();
     rustDeskWinManager.registerActiveWindow(kWindowMainId);
   } else {
     WindowController.fromWindowId(id)
