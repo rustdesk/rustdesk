@@ -1593,6 +1593,7 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
   List<String>? args;
   if (cmdArgs != null) {
     args = cmdArgs;
+    // rustdesk <uri link>
     if (args.isNotEmpty && args[0].startsWith(kUniLinksPrefix)) {
       final uri = Uri.tryParse(args[0]);
       if (uri != null) {
@@ -1701,6 +1702,10 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
     if (uri.path.length > 1) {
       id = uri.path.substring(1);
     }
+  } else if (uri.authority.length > 2 && uri.path.length <= 1) {
+    // rustdesk://<connect-id>
+    command = '--connect';
+    id = uri.authority;
   }
 
   List<String> args = List.empty(growable: true);
