@@ -552,7 +552,7 @@ void window_on_top(int? id) async {
   if (id == null) {
     print("Bring window on top");
     // main window
-    if (desktopType == DesktopType.cm &&
+    if (!Platform.isMacOS && desktopType == DesktopType.cm &&
         !(await windowManager.isMinimized() ||
             !await windowManager.isVisible())) {
       await windowManager.setAlwaysOnTop(true);
