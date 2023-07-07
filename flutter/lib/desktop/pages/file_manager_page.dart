@@ -52,10 +52,12 @@ class FileManagerPage extends StatefulWidget {
   const FileManagerPage(
       {Key? key,
       required this.id,
+      required this.password,
       required this.tabController,
       this.forceRelay})
       : super(key: key);
   final String id;
+  final String? password;
   final bool? forceRelay;
   final DesktopTabController tabController;
 
@@ -79,7 +81,10 @@ class _FileManagerPageState extends State<FileManagerPage>
   void initState() {
     super.initState();
     _ffi = FFI();
-    _ffi.start(widget.id, isFileTransfer: true, forceRelay: widget.forceRelay);
+    _ffi.start(widget.id,
+        isFileTransfer: true,
+        password: widget.password,
+        forceRelay: widget.forceRelay);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _ffi.dialogManager
           .showLoading(translate('Connecting...'), onCancel: closeConnection);
