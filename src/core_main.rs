@@ -19,15 +19,23 @@ pub fn core_main() -> Option<Vec<String>> {
     let mut _is_elevate = false;
     let mut _is_run_as_system = false;
     let mut _is_quick_support = false;
-    let mut _is_flutter_connect = false;
+    let mut _is_flutter_invoke_new_connection = false;
     let mut arg_exe = Default::default();
     for arg in std::env::args() {
         if i == 0 {
             arg_exe = arg;
         } else if i > 0 {
             #[cfg(feature = "flutter")]
-            if arg == "--connect" || arg == "--play" {
-                _is_flutter_connect = true;
+            if [
+                "--connect",
+                "--play",
+                "--file-transfer",
+                "--port-forward",
+                "--rdp",
+            ]
+            .contains(&arg.as_str())
+            {
+                _is_flutter_invoke_new_connection = true;
             }
             if arg == "--elevate" {
                 _is_elevate = true;
@@ -63,7 +71,7 @@ pub fn core_main() -> Option<Vec<String>> {
         }
     }
     #[cfg(feature = "flutter")]
-    if _is_flutter_connect {
+    if _is_flutter_invoke_new_connection {
         return core_main_invoke_new_connection(std::env::args());
     }
     let click_setup = cfg!(windows) && args.is_empty() && crate::common::is_setup(&arg_exe);
@@ -318,38 +326,48 @@ fn import_config(path: &str) {
 /// If it returns [`Some`], then the process will continue, and flutter gui will be started.
 #[cfg(feature = "flutter")]
 fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<String>> {
-    args.position(|element| {
-        return element == "--connect" || element == "--play";
-    })?;
-    let mut peer_id = args.next().unwrap_or("".to_string());
-    if peer_id.is_empty() {
-        eprintln!("please provide a valid peer id");
-        return None;
-    }
-    let app_name = crate::get_app_name();
-    let ext = format!(".{}", app_name.to_lowercase());
-    if peer_id.ends_with(&ext) {
-        peer_id = peer_id.replace(&ext, "");
-    }
-    let mut switch_uuid = None;
-    while let Some(item) = args.next() {
-        if item == "--switch_uuid" {
-            switch_uuid = args.next();
+    let mut authority = None;
+    let mut id = None;
+    let mut param_array = vec![];
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--connect" | "--play" | "--file-transfer" | "--port-forward" | "--rdp" => {
+                authority = Some((&arg.to_string()[2..]).to_owned());
+                id = args.next();
+            }
+            "--password" => {
+                if let Some(password) = args.next() {
+                    param_array.push(format!("password={password}"));
+                }
+            }
+            "--relay" => {
+                param_array.push(format!("relay=true"));
+            }
+            // inner
+            "--switch_uuid" => {
+                if let Some(switch_uuid) = args.next() {
+                    param_array.push(format!("switch_uuid={switch_uuid}"));
+                }
+            }
+            _ => {}
         }
     }
-    let mut param_array = vec![];
-    if switch_uuid.is_some() {
-        let switch_uuid = switch_uuid.map_or("".to_string(), |p| format!("switch_uuid={}", p));
-        param_array.push(switch_uuid);
+    let mut uni_links = Default::default();
+    if let Some(authority) = authority {
+        if let Some(mut id) = id {
+            let app_name = crate::get_app_name();
+            let ext = format!(".{}", app_name.to_lowercase());
+            if id.ends_with(&ext) {
+                id = id.replace(&ext, "");
+            }
+            let params = param_array.join("&");
+            let params_flag = if params.is_empty() { "" } else { "?" };
+            uni_links = format!("rustdesk://{}/{}{}{}", authority, id, params_flag, params);
+        }
     }
-
-    let params = param_array.join("&");
-    let params_flag = if params.is_empty() { "" } else { "?" };
-    #[allow(unused)]
-    let uni_links = format!(
-        "rustdesk://connection/new/{}{}{}",
-        peer_id, params_flag, params
-    );
+    if uni_links.is_empty() {
+        return None;
+    }
 
     #[cfg(target_os = "linux")]
     return try_send_by_dbus(uni_links);

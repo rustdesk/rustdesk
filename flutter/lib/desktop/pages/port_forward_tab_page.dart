@@ -43,6 +43,7 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
         page: PortForwardPage(
           key: ValueKey(params['id']),
           id: params['id'],
+          password: params['password'],
           tabController: tabController,
           isRDP: isRDP,
           forceRelay: params['forceRelay'],
@@ -77,6 +78,7 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
             page: PortForwardPage(
               key: ValueKey(args['id']),
               id: id,
+              password: args['password'],
               isRDP: isRDP,
               tabController: tabController,
               forceRelay: args['forceRelay'],

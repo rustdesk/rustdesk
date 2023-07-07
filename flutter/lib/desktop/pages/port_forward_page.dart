@@ -28,11 +28,13 @@ class PortForwardPage extends StatefulWidget {
   const PortForwardPage(
       {Key? key,
       required this.id,
+      required this.password,
       required this.tabController,
       required this.isRDP,
       this.forceRelay})
       : super(key: key);
   final String id;
+  final String password;
   final DesktopTabController tabController;
   final bool isRDP;
   final bool? forceRelay;
@@ -55,6 +57,7 @@ class _PortForwardPageState extends State<PortForwardPage>
     _ffi = FFI();
     _ffi.start(widget.id,
         isPortForward: true,
+        password: widget.password,
         forceRelay: widget.forceRelay,
         isRdp: widget.isRDP);
     Get.put(_ffi, tag: 'pf_${widget.id}');
