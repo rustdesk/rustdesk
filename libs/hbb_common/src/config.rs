@@ -82,6 +82,7 @@ const CHARS: &[char] = &[
 ];
 
 pub const RENDEZVOUS_SERVERS: &[&str] = &[
+    "rs-ny.rustdesk.com",
     "rs-sg.rustdesk.com",
 ];
 
