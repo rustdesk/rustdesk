@@ -6,6 +6,18 @@ use hbb_common::log;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::platform::register_breakdown_handler;
 
+#[macro_export]
+macro_rules! my_println{
+    ($($arg:tt)*) => {
+        #[cfg(not(windows))]
+        println!("{}", format_args!($($arg)*));
+        #[cfg(windows)]
+        crate::platform::message_box(
+            &format!("{}", format_args!($($arg)*))
+        );
+    };
+}
+
 /// shared by flutter and sciter main function
 ///
 /// [Note]
@@ -83,7 +95,7 @@ pub fn core_main() -> Option<Vec<String>> {
         args.clear();
     }
     if args.len() > 0 && args[0] == "--version" {
-        println!("{}", crate::VERSION);
+        my_println!("{}", crate::VERSION);
         return None;
     }
     #[cfg(windows)]
@@ -225,16 +237,18 @@ pub fn core_main() -> Option<Vec<String>> {
             if args.len() == 2 {
                 if crate::platform::is_root() {
                     crate::ipc::set_permanent_password(args[1].to_owned()).unwrap();
+                    my_println!("Done!");
                 } else {
-                    println!("Administrative privileges required!");
+                    my_println!("Administrative privileges required!");
                 }
             }
             return None;
         } else if args[0] == "--get-id" {
+            #[cfg(windows)]
             if crate::platform::is_root() {
-                println!("{}", crate::ipc::get_id());
+                my_println!("{}", crate::ipc::get_id());
             } else {
-                println!("Permission denied!");
+                my_println!("Permission denied!");
             }
             return None;
         } else if args[0] == "--check-hwcodec-config" {

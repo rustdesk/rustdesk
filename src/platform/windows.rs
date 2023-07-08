@@ -2297,3 +2297,26 @@ mod tests {
         assert_eq!(chr, None)
     }
 }
+
+pub fn message_box(text: &str) {
+    let mut text = text.to_owned();
+    if !text.ends_with("!") {
+        use arboard::Clipboard as ClipboardContext;
+        match ClipboardContext::new() {
+            Ok(mut ctx) => {
+                ctx.set_text(&text).ok();
+                text = format!("{}\n\nAbove text has been copied to clipboard", &text);
+            }
+            _ => {}
+        }
+    }
+    let text = text
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect::<Vec<u16>>();
+    let caption = "RustDesk Output"
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect::<Vec<u16>>();
+    unsafe { MessageBoxW(std::ptr::null_mut(), text.as_ptr(), caption.as_ptr(), MB_OK) };
+}
