@@ -910,7 +910,7 @@ pub mod connection_manager {
 
     #[inline]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    pub fn start_listen_ipc_thread() {
+    fn start_listen_ipc_thread() {
         start_listen_ipc(true);
     }
 
@@ -931,8 +931,22 @@ pub mod connection_manager {
         }
     }
 
-    #[cfg(target_os = "windows")]
+    extern "C" fn cm_clear_hook() {
+        #[cfg(target_os = "windows")]
+        crate::privacy_win_mag::stop();
+    }
+
+    #[inline]
+    pub fn cm_init() {
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        start_listen_ipc_thread();
+        #[cfg(target_os = "windows")]
+        shutdown_hooks::add_shutdown_hook(cm_clear_hook);
+    }
+
+    #[inline]
     pub fn cm_clear() {
+        #[cfg(target_os = "windows")]
         crate::privacy_win_mag::stop();
     }
 

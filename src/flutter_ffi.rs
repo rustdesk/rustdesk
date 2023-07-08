@@ -1448,13 +1448,13 @@ pub fn main_use_texture_render() -> SyncReturn<bool> {
     }
 }
 
-pub fn cm_start_listen_ipc_thread() {
+pub fn cm_init() {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    crate::flutter::connection_manager::start_listen_ipc_thread();
+    crate::flutter::connection_manager::cm_init();
 }
 
 pub fn cm_clear() {
-    #[cfg(target_os = "windows")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     crate::flutter::connection_manager::cm_clear();
 }
 
