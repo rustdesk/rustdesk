@@ -931,23 +931,10 @@ pub mod connection_manager {
         }
     }
 
-    extern "C" fn cm_clear_hook() {
-        #[cfg(target_os = "windows")]
-        crate::privacy_win_mag::stop();
-    }
-
     #[inline]
     pub fn cm_init() {
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         start_listen_ipc_thread();
-        #[cfg(target_os = "windows")]
-        shutdown_hooks::add_shutdown_hook(cm_clear_hook);
-    }
-
-    #[inline]
-    pub fn cm_clear() {
-        #[cfg(target_os = "windows")]
-        crate::privacy_win_mag::stop();
     }
 
     #[cfg(target_os = "android")]

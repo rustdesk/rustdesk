@@ -1453,11 +1453,6 @@ pub fn cm_init() {
     crate::flutter::connection_manager::cm_init();
 }
 
-pub fn cm_clear() {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    crate::flutter::connection_manager::cm_clear();
-}
-
 /// Start an ipc server for receiving the url scheme.
 ///
 /// * Should only be called in the main flutter window.
