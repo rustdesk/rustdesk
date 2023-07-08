@@ -104,6 +104,12 @@ class ConnectionManagerState extends State<ConnectionManager> {
         final client =
             gFFI.serverModel.clients.firstWhereOrNull((e) => e.id == client_id);
         if (client != null) {
+          if (client.unreadChatMessageCount.value > 0) {
+            Future.delayed(Duration.zero, () {
+              client.unreadChatMessageCount.value = 0;
+              gFFI.chatModel.showChatPage(client.id);
+            });
+          }
           windowManager.setTitle(getWindowNameWithId(client.peerId));
         }
       }
@@ -168,7 +174,13 @@ class ConnectionManagerState extends State<ConnectionManager> {
                     builder: (_, model, child) => model.isShowCMChatPage
                         ? Expanded(
                             child: buildRemoteBlock(
-                              child: ChatPage(),
+                              child: Container(
+                                  decoration: BoxDecoration(
+                                      border: Border(
+                                          right: BorderSide(
+                                              color: Theme.of(context)
+                                                  .dividerColor))),
+                                  child: ChatPage()),
                             ),
                             flex: (kConnectionManagerWindowSizeOpenChat.width -
                                     kConnectionManagerWindowSizeClosedChat
