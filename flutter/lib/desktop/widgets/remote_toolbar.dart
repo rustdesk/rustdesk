@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'dart:ui' as ui;
+import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -111,6 +113,13 @@ class _ToolbarTheme {
   static const double buttonVMargin = 6;
   static const double iconRadius = 8;
   static const double elevation = 3;
+
+  static const Color bordDark = MyTheme.bordDark;
+  static const Color bordLight = MyTheme.bordLight;
+
+  static const Color dividerDark = MyTheme.dividerDark;
+  static const Color dividerLight = MyTheme.dividerLight;
+  static const double dividerSpaceToAction = 8;
 }
 
 typedef DismissFunc = void Function();
@@ -477,7 +486,12 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
           ),
         ),
       ),
-      dividerTheme: DividerThemeData(space: 4),
+      dividerTheme: DividerThemeData(
+        space: _ToolbarTheme.dividerSpaceToAction,
+        color: MyTheme.currentThemeMode() == ThemeMode.light
+            ? _ToolbarTheme.dividerLight
+            : _ToolbarTheme.dividerDark,
+      ),
       menuBarTheme: MenuBarThemeData(
           style: MenuStyle(
         padding: MaterialStatePropertyAll(EdgeInsets.zero),
@@ -1635,7 +1649,16 @@ class _IconSubmenuButtonState extends State<_IconSubmenuButton> {
         width: _ToolbarTheme.buttonSize,
         height: _ToolbarTheme.buttonSize,
         child: SubmenuButton(
-            menuStyle: widget.menuStyle,
+            menuStyle: widget.menuStyle ??
+                MenuStyle(
+                  side: MaterialStateProperty.all(BorderSide(
+                    width: 1,
+                    color: MyTheme.currentThemeMode() == ThemeMode.light
+                        ? _ToolbarTheme.bordLight
+                        : _ToolbarTheme.bordDark,
+                  )),
+                  visualDensity: VisualDensity.comfortable,
+                ),
             style: ButtonStyle(
                 backgroundColor: MaterialStatePropertyAll(Colors.transparent),
                 padding: MaterialStatePropertyAll(EdgeInsets.zero),
