@@ -235,20 +235,23 @@ pub fn core_main() -> Option<Vec<String>> {
             return None;
         } else if args[0] == "--password" {
             if args.len() == 2 {
-                if crate::platform::is_root() {
+                if crate::platform::is_installed()
+                    && crate::platform::check_super_user_permission().unwrap_or_default()
+                {
                     crate::ipc::set_permanent_password(args[1].to_owned()).unwrap();
                     my_println!("Done!");
                 } else {
-                    my_println!("Administrative privileges required!");
+                    my_println!("Installation and administrative privileges required!");
                 }
             }
             return None;
         } else if args[0] == "--get-id" {
-            #[cfg(windows)]
-            if crate::platform::is_root() {
+            if crate::platform::is_installed()
+                && crate::platform::check_super_user_permission().unwrap_or_default()
+            {
                 my_println!("{}", crate::ipc::get_id());
             } else {
-                my_println!("Permission denied!");
+                my_println!("Installation and administrative privileges required!");
             }
             return None;
         } else if args[0] == "--check-hwcodec-config" {
