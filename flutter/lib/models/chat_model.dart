@@ -234,13 +234,21 @@ class ChatModel with ChangeNotifier {
   }
 
   showChatPage(int id) async {
-    if (isConnManager) {
-      if (!_isShowCMChatPage) {
-        await toggleCMChatPage(id);
+    if (isDesktop) {
+      if (isConnManager) {
+        if (!_isShowCMChatPage) {
+          await toggleCMChatPage(id);
+        }
+      } else {
+        if (_isChatOverlayHide()) {
+          await toggleChatOverlay();
+        }
       }
     } else {
-      if (_isChatOverlayHide()) {
-        await toggleChatOverlay();
+      if (id == clientModeID) {
+        if (_isChatOverlayHide()) {
+          await toggleChatOverlay();
+        }
       }
     }
   }
