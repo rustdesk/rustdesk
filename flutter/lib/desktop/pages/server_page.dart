@@ -183,19 +183,14 @@ class ConnectionManagerState extends State<ConnectionManager> {
                                                   .dividerColor))),
                                   child: ChatPage()),
                             ),
-                            flex: (kConnectionManagerWindowSizeOpenChat.width -
-                                    kConnectionManagerWindowSizeClosedChat
-                                        .width)
-                                .toInt(),
                           )
                         : Offstage(),
                   ),
-                  Expanded(
-                      child: pageView,
-                      flex: kConnectionManagerWindowSizeClosedChat.width
-                              .toInt() -
-                          4 // prevent stretch of the page view when chat is open,
-                      ),
+                  SizedBox(
+                    width: kConnectionManagerWindowSizeClosedChat.width -
+                        10, // 10 is from overflow
+                    child: pageView,
+                  )
                 ],
               ),
             ),
