@@ -150,10 +150,11 @@ class ConnectionManagerState extends State<ConnectionManager> {
               showClose: true,
               onWindowCloseButton: handleWindowCloseButton,
               controller: serverModel.tabController,
+              selectedBorderColor: MyTheme.accent,
               maxLabelWidth: 100,
               tail: buildScrollJumper(),
               selectedTabBackgroundColor:
-                  Theme.of(context).hintColor.withOpacity(0.2),
+                  Theme.of(context).hintColor.withOpacity(0),
               tabBuilder: (key, icon, label, themeConf) {
                 final client = serverModel.clients
                     .firstWhereOrNull((client) => client.id.toString() == key);
