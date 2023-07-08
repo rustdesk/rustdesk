@@ -59,6 +59,12 @@ struct WindowHandlers {
 
 impl Drop for WindowHandlers {
     fn drop(&mut self) {
+        self.reset();
+    }
+}
+
+impl WindowHandlers {
+    fn reset(&mut self) {
         unsafe {
             if self.hthread != 0 {
                 CloseHandle(self.hthread as _);
@@ -255,6 +261,10 @@ pub fn start() -> ResultType<()> {
     }
 
     Ok(())
+}
+
+pub fn stop() {
+    WND_HANDLERS.lock().unwrap().reset();
 }
 
 unsafe fn inject_dll<'a>(hproc: HANDLE, hthread: HANDLE, dll_file: &'a str) -> ResultType<()> {

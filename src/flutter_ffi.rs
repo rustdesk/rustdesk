@@ -1453,6 +1453,11 @@ pub fn cm_start_listen_ipc_thread() {
     crate::flutter::connection_manager::start_listen_ipc_thread();
 }
 
+pub fn cm_clear() {
+    #[cfg(target_os = "windows")]
+    crate::flutter::connection_manager::cm_clear();
+}
+
 /// Start an ipc server for receiving the url scheme.
 ///
 /// * Should only be called in the main flutter window.

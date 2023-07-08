@@ -40,6 +40,7 @@ class _DesktopServerPageState extends State<DesktopServerPage>
 
   @override
   void dispose() {
+    bind.cmClear();
     windowManager.removeListener(this);
     super.dispose();
   }
