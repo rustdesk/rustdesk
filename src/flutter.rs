@@ -931,6 +931,11 @@ pub mod connection_manager {
         }
     }
 
+    #[cfg(target_os = "windows")]
+    pub fn cm_clear() {
+        crate::privacy_win_mag::stop();
+    }
+
     #[cfg(target_os = "android")]
     use hbb_common::tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 

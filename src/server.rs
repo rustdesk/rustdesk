@@ -303,7 +303,7 @@ impl Server {
     // get a new unique id
     pub fn get_new_id(&mut self) -> i32 {
         self.id_count += 1;
-        self.id_count 
+        self.id_count
     }
 }
 
@@ -389,6 +389,8 @@ pub async fn start_server(is_server: bool) {
         }
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         tokio::spawn(async { sync_and_watch_config_dir().await });
+        #[cfg(target_os = "windows")]
+        crate::platform::try_kill_broker();
         crate::RendezvousMediator::start_all().await;
     } else {
         match crate::ipc::connect(1000, "").await {
