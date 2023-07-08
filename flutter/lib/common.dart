@@ -176,6 +176,10 @@ class MyTheme {
   static const Color dark = Colors.black87;
   static const Color button = Color(0xFF2C8CFF);
   static const Color hoverBorder = Color(0xFF999999);
+  static const Color bordDark = Colors.white24;
+  static const Color bordLight = Colors.black26;
+  static const Color dividerDark = Colors.white38;
+  static const Color dividerLight = Colors.black38;
 
   // ListTile
   static const ListTileThemeData listTileTheme = ListTileThemeData(
