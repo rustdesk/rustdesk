@@ -511,6 +511,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Collapse toolbar", "جمع کردن نوار ابزار"),
         ("Accept and Elevate", "بپذیرید و افزایش دهید"),
         ("accept_and_elevate_btn_tooltip", "را افزایش دهید UAC اتصال را بپذیرید و مجوزهای."),
-        ("clipboard_wait_response_timeout_tip", ""),
+        ("clipboard_wait_response_timeout_tip", "زمان انتظار برای مشخص شدن وضعیت کپی تمام شد."),
     ].iter().cloned().collect();
 }
