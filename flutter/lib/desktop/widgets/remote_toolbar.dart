@@ -126,6 +126,23 @@ class _ToolbarTheme {
       ? EdgeInsets.fromLTRB(4, 12, 4, 12)
       : EdgeInsets.fromLTRB(6, 14, 6, 14);
   static const double menuButtonBorderRadius = 3.0;
+
+  static final defaultMenuStyle = MenuStyle(
+    side: MaterialStateProperty.all(BorderSide(
+      width: 1,
+      color: MyTheme.currentThemeMode() == ThemeMode.light
+          ? _ToolbarTheme.bordLight
+          : _ToolbarTheme.bordDark,
+    )),
+    shape: MaterialStatePropertyAll(RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(_ToolbarTheme.menuBorderRadius))),
+    padding: MaterialStateProperty.all(_ToolbarTheme.menuPadding),
+  );
+  static final defaultMenuButtonStyle = ButtonStyle(
+    backgroundColor: MaterialStatePropertyAll(Colors.transparent),
+    padding: MaterialStatePropertyAll(EdgeInsets.zero),
+    overlayColor: MaterialStatePropertyAll(Colors.transparent),
+  );
 }
 
 typedef DismissFunc = void Function();
@@ -1658,23 +1675,8 @@ class _IconSubmenuButtonState extends State<_IconSubmenuButton> {
         width: _ToolbarTheme.buttonSize,
         height: _ToolbarTheme.buttonSize,
         child: SubmenuButton(
-            menuStyle: widget.menuStyle ??
-                MenuStyle(
-                    side: MaterialStateProperty.all(BorderSide(
-                      width: 1,
-                      color: MyTheme.currentThemeMode() == ThemeMode.light
-                          ? _ToolbarTheme.bordLight
-                          : _ToolbarTheme.bordDark,
-                    )),
-                    shape: MaterialStatePropertyAll(RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(
-                            _ToolbarTheme.menuBorderRadius))),
-                    padding:
-                        MaterialStateProperty.all(_ToolbarTheme.menuPadding)),
-            style: ButtonStyle(
-                backgroundColor: MaterialStatePropertyAll(Colors.transparent),
-                padding: MaterialStatePropertyAll(EdgeInsets.zero),
-                overlayColor: MaterialStatePropertyAll(Colors.transparent)),
+            menuStyle: widget.menuStyle ?? _ToolbarTheme.defaultMenuStyle,
+            style: _ToolbarTheme.defaultMenuButtonStyle,
             onHover: (value) => setState(() {
                   hover = value;
                 }),
@@ -1716,6 +1718,7 @@ class _SubmenuButton extends StatelessWidget {
       child: child,
       menuChildren:
           menuChildren.map((e) => _buildPointerTrackWidget(e, ffi)).toList(),
+      menuStyle: _ToolbarTheme.defaultMenuStyle,
     );
   }
 }
