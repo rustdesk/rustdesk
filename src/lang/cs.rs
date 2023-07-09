@@ -233,6 +233,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Username missed", "Chybí uživatelské jméno"),
         ("Password missed", "Chybí heslo"),
         ("Wrong credentials", "Nesprávné přihlašovací údaje"),
+        ("Verification code wrong or timeout", ""),
         ("Edit Tag", "Upravit štítek"),
         ("Unremember Password", "Přestat si heslo pamatovat"),
         ("Favorites", "Oblíbené"),
