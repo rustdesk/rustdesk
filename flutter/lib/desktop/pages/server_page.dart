@@ -100,14 +100,14 @@ class ConnectionManagerState extends State<ConnectionManager> {
     gFFI.serverModel.tabController.onSelected = (client_id_str) {
       final client_id = int.tryParse(client_id_str);
       if (client_id != null) {
-        gFFI.chatModel.changeCurrentID(client_id);
         final client =
             gFFI.serverModel.clients.firstWhereOrNull((e) => e.id == client_id);
         if (client != null) {
+          gFFI.chatModel.changeCurrentID(MessageKey(client.peerId, client.id));
           if (client.unreadChatMessageCount.value > 0) {
             Future.delayed(Duration.zero, () {
               client.unreadChatMessageCount.value = 0;
-              gFFI.chatModel.showChatPage(client.id);
+              gFFI.chatModel.showChatPage(MessageKey(client.peerId, client.id));
             });
           }
           windowManager.setTitle(getWindowNameWithId(client.peerId));
@@ -444,7 +444,8 @@ class _CmHeaderState extends State<_CmHeader>
             child: IconButton(
               onPressed: () => checkClickTime(
                 client.id,
-                () => gFFI.chatModel.toggleCMChatPage(client.id),
+                () => gFFI.chatModel
+                    .toggleCMChatPage(MessageKey(client.peerId, client.id)),
               ),
               icon: SvgPicture.asset('assets/chat2.svg'),
               splashRadius: kDesktopIconButtonSplashRadius,

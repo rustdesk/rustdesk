@@ -7,10 +7,15 @@ import 'package:provider/provider.dart';
 
 import '../../mobile/pages/home_page.dart';
 
+enum ChatPageType {
+  mobileMain,
+}
+
 class ChatPage extends StatelessWidget implements PageShape {
   late final ChatModel chatModel;
+  final ChatPageType? type;
 
-  ChatPage({ChatModel? chatModel}) {
+  ChatPage({ChatModel? chatModel, this.type}) {
     this.chatModel = chatModel ?? gFFI.chatModel;
   }
 
@@ -22,7 +27,7 @@ class ChatPage extends StatelessWidget implements PageShape {
 
   @override
   final appBarActions = [
-    PopupMenuButton<int>(
+    PopupMenuButton<MessageKey>(
         tooltip: "",
         icon: Icon(Icons.group),
         itemBuilder: (context) {
@@ -31,8 +36,15 @@ class ChatPage extends StatelessWidget implements PageShape {
           return chatModel.messages.entries.map((entry) {
             final id = entry.key;
             final user = entry.value.chatUser;
-            return PopupMenuItem<int>(
-              child: Text("${user.firstName}   ${user.id}"),
+            return PopupMenuItem<MessageKey>(
+              child: Row(
+                children: [
+                  Icon(id.isOut ? Icons.call_made : Icons.call_received,
+                          color: MyTheme.accent)
+                      .marginOnly(right: 6),
+                  Text("${user.firstName}   ${user.id}"),
+                ],
+              ),
               value: id,
             );
           }).toList();
@@ -57,9 +69,9 @@ class ChatPage extends StatelessWidget implements PageShape {
                   final chat = DashChat(
                     onSend: chatModel.send,
                     currentUser: chatModel.me,
-                    messages:
-                        chatModel.messages[chatModel.currentID]?.chatMessages ??
-                            [],
+                    messages: chatModel
+                            .messages[chatModel.currentKey]?.chatMessages ??
+                        [],
                     inputOptions: InputOptions(
                       focusNode: chatModel.inputNode,
                       textController: chatModel.textController,
@@ -128,7 +140,8 @@ class ChatPage extends StatelessWidget implements PageShape {
                   return SelectionArea(child: chat);
                 }),
                 desktopType == DesktopType.cm ||
-                        chatModel.currentID == ChatModel.clientModeID
+                        type != ChatPageType.mobileMain ||
+                        currentUser == null
                     ? SizedBox.shrink()
                     : Padding(
                         padding: EdgeInsets.all(12),

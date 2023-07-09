@@ -20,6 +20,24 @@ import '../common/widgets/overlay.dart';
 import '../main.dart';
 import 'model.dart';
 
+class MessageKey {
+  final String peerId;
+  final int connId;
+  bool get isOut => connId != ChatModel.clientModeID;
+
+  MessageKey(this.peerId, this.connId);
+
+  @override
+  bool operator ==(other) {
+    return other is MessageKey &&
+        other.peerId == peerId &&
+        other.isOut == isOut;
+  }
+
+  @override
+  int get hashCode => peerId.hashCode ^ isOut.hashCode;
+}
+
 class MessageBody {
   ChatUser chatUser;
   List<ChatMessage> chatMessages;
@@ -61,15 +79,14 @@ class ChatModel with ChangeNotifier {
     firstName: translate("Me"),
   );
 
-  late final Map<int, MessageBody> _messages = {}..[clientModeID] =
-      MessageBody(me, []);
+  late final Map<MessageKey, MessageBody> _messages = {};
 
-  var _currentID = clientModeID;
+  MessageKey _currentKey = MessageKey('', clientModeID);
   late bool _isShowCMChatPage = false;
 
-  Map<int, MessageBody> get messages => _messages;
+  Map<MessageKey, MessageBody> get messages => _messages;
 
-  int get currentID => _currentID;
+  MessageKey get currentKey => _currentKey;
 
   bool get isShowCMChatPage => _isShowCMChatPage;
 
@@ -119,15 +136,7 @@ class ChatModel with ChangeNotifier {
     );
   }
 
-  ChatUser get currentUser {
-    final user = messages[currentID]?.chatUser;
-    if (user == null) {
-      _currentID = clientModeID;
-      return me;
-    } else {
-      return user;
-    }
-  }
+  ChatUser? get currentUser => _messages[_currentKey]?.chatUser;
 
   showChatIconOverlay({Offset offset = const Offset(200, 50)}) {
     if (chatIconOverlayEntry != null) {
@@ -233,11 +242,11 @@ class ChatModel with ChangeNotifier {
     }
   }
 
-  showChatPage(int id) async {
+  showChatPage(MessageKey key) async {
     if (isDesktop) {
       if (isConnManager) {
         if (!_isShowCMChatPage) {
-          await toggleCMChatPage(id);
+          await toggleCMChatPage(key);
         }
       } else {
         if (_isChatOverlayHide()) {
@@ -245,7 +254,7 @@ class ChatModel with ChangeNotifier {
         }
       }
     } else {
-      if (id == clientModeID) {
+      if (key.connId == clientModeID) {
         if (_isChatOverlayHide()) {
           await toggleChatOverlay();
         }
@@ -253,9 +262,9 @@ class ChatModel with ChangeNotifier {
     }
   }
 
-  toggleCMChatPage(int id) async {
-    if (gFFI.chatModel.currentID != id) {
-      gFFI.chatModel.changeCurrentID(id);
+  toggleCMChatPage(MessageKey key) async {
+    if (gFFI.chatModel.currentKey != key) {
+      gFFI.chatModel.changeCurrentID(key);
     }
     if (_isShowCMChatPage) {
       _isShowCMChatPage = !_isShowCMChatPage;
@@ -273,23 +282,26 @@ class ChatModel with ChangeNotifier {
     }
   }
 
-  changeCurrentID(int id) {
-    if (_messages.containsKey(id)) {
-      _currentID = id;
+  changeCurrentID(MessageKey key) {
+    updateConnIdOfKey(key);
+    if (_messages.containsKey(key)) {
+      _currentKey = key;
       notifyListeners();
     } else {
-      final client = parent.target?.serverModel.clients
-          .firstWhere((client) => client.id == id);
-      if (client == null) {
-        return debugPrint(
-            "Failed to changeCurrentID,remote user doesn't exist");
+      String? peerName;
+      if (key.connId == clientModeID) {
+        peerName = parent.target?.ffiModel.pi.username;
+      } else {
+        peerName = parent.target?.serverModel.clients
+            .firstWhereOrNull((client) => client.peerId == key.peerId)
+            ?.name;
       }
       final chatUser = ChatUser(
-        id: client.peerId,
-        firstName: client.name,
+        id: key.peerId,
+        firstName: peerName,
       );
-      _messages[id] = MessageBody(chatUser, []);
-      _currentID = id;
+      _messages[key] = MessageBody(chatUser, []);
+      _currentKey = key;
       notifyListeners();
     }
   }
@@ -304,23 +316,33 @@ class ChatModel with ChangeNotifier {
     if (desktopType == DesktopType.cm) {
       await showCmWindow();
     }
+    String? peerId;
+    if (id == clientModeID) {
+      peerId = session.id;
+    } else {
+      peerId = session.serverModel.clients
+          .firstWhereOrNull((e) => e.id == id)
+          ?.peerId;
+    }
+    if (peerId == null) {
+      debugPrint("Failed to receive msg, peerId is null");
+      return;
+    }
+
+    final messagekey = MessageKey(peerId, id);
 
     // mobile: first message show overlay icon
-    if (!isDesktop && chatIconOverlayEntry == null) {
+    if (!isDesktop && chatIconOverlayEntry == null && id == clientModeID) {
       showChatIconOverlay();
     }
     // show chat page
-    await showChatPage(id);
-
-    int toId = currentID;
-
+    await showChatPage(messagekey);
     late final ChatUser chatUser;
     if (id == clientModeID) {
       chatUser = ChatUser(
         firstName: session.ffiModel.pi.username,
-        id: session.id,
+        id: peerId,
       );
-      toId = id;
 
       if (isDesktop) {
         if (Get.isRegistered<DesktopTabController>()) {
@@ -339,14 +361,18 @@ class ChatModel with ChangeNotifier {
             }
           } else {
             if (notSelected) {
-              UnreadChatCountState.find(session.id).value += 1;
+              UnreadChatCountState.find(peerId).value += 1;
             }
           }
         }
       }
     } else {
-      final client =
-          session.serverModel.clients.firstWhere((client) => client.id == id);
+      final client = session.serverModel.clients
+          .firstWhereOrNull((client) => client.id == id);
+      if (client == null) {
+        debugPrint("Failed to receive msg, client is null");
+        return;
+      }
       if (isDesktop) {
         window_on_top(null);
         // disable auto jumpTo other tab when hasFocus, and mark unread message
@@ -356,20 +382,13 @@ class ChatModel with ChangeNotifier {
           client.unreadChatMessageCount.value += 1;
         } else {
           parent.target?.serverModel.jumpTo(id);
-          toId = id;
         }
-      } else {
-        toId = id;
       }
       chatUser = ChatUser(id: client.peerId, firstName: client.name);
     }
-
-    if (!_messages.containsKey(id)) {
-      _messages[id] = MessageBody(chatUser, []);
-    }
-    _messages[id]!.insert(
+    _currentKey = messagekey;
+    insertMessage(_currentKey,
         ChatMessage(text: text, user: chatUser, createdAt: DateTime.now()));
-    _currentID = toId;
     notifyListeners();
   }
 
@@ -379,15 +398,35 @@ class ChatModel with ChangeNotifier {
       return;
     }
     message.text = trimmedText;
-    _messages[_currentID]?.insert(message);
-    if (_currentID == clientModeID && parent.target != null) {
+    insertMessage(_currentKey, message);
+    if (_currentKey.connId == clientModeID && parent.target != null) {
       bind.sessionSendChat(sessionId: sessionId, text: message.text);
     } else {
-      bind.cmSendChat(connId: _currentID, msg: message.text);
+      bind.cmSendChat(connId: _currentKey.connId, msg: message.text);
     }
 
     notifyListeners();
     inputNode.requestFocus();
+  }
+
+  insertMessage(MessageKey key, ChatMessage message) {
+    updateConnIdOfKey(key);
+    if (!_messages.containsKey(key)) {
+      _messages[key] = MessageBody(message.user, []);
+    }
+    _messages[key]?.insert(message);
+  }
+
+  updateConnIdOfKey(MessageKey key) {
+    if (_messages.keys
+            .toList()
+            .firstWhereOrNull((e) => e == key && e.connId != key.connId) !=
+        null) {
+      final old = _messages.remove(key);
+      if (old != null) {
+        _messages[key] = old;
+      }
+    }
   }
 
   close() {
