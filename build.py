@@ -285,7 +285,7 @@ Version: %s
 Architecture: %s
 Maintainer: rustdesk <info@rustdesk.com>
 Homepage: https://rustdesk.com
-Depends: libgtk-3-0, libxcb-randr0, libxdo3, libxfixes3, libxcb-shape0, libxcb-xfixes0, libasound2, libsystemd0, curl, libva-drm2, libva-x11-2, libvdpau1, libgstreamer-plugins-base1.0-0, libpam0g
+Depends: libgtk-3-0, libxcb-randr0, libxdo3, libxfixes3, libxcb-shape0, libxcb-xfixes0, libasound2, libsystemd0, curl, libva-drm2, libva-x11-2, libvdpau1, libgstreamer-plugins-base1.0-0, libpam0g, libappindicator3-1
 Description: A remote control software.
 
 """ % (version, get_arch())
