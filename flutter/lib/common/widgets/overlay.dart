@@ -32,7 +32,7 @@ class DraggableChatWindow extends StatelessWidget {
         width: width,
         height: height,
         builder: (context, onPanUpdate) {
-          return isIOS
+          final child = isIOS
               ? ChatPage(chatModel: chatModel)
               : Scaffold(
                   resizeToAvoidBottomInset: false,
@@ -44,6 +44,10 @@ class DraggableChatWindow extends StatelessWidget {
                   ),
                   body: ChatPage(chatModel: chatModel),
                 );
+          return Container(
+              decoration:
+                  BoxDecoration(border: Border.all(color: MyTheme.border)),
+              child: child);
         });
   }
 
