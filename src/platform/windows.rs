@@ -2161,9 +2161,11 @@ pub fn uninstall_service(show_new_window: bool) -> bool {
     sc stop {app_name}
     sc delete {app_name}
     if exist \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{app_name} Tray.lnk\" del /f /q \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{app_name} Tray.lnk\"
+    taskkill /F /IM {broker_exe}
     taskkill /F /IM {app_name}.exe{filter}
     ",
         app_name = crate::get_app_name(),
+        broker_exe = WIN_MAG_INJECTED_PROCESS_EXE,
     );
     if let Err(err) = run_cmds(cmds, false, "uninstall") {
         Config::set_option("stop-service".into(), "".into());
@@ -2271,6 +2273,15 @@ fn run_after_run_cmds(silent: bool) {
         allow_err!(std::process::Command::new(&exe).arg("--tray").spawn());
     }
     std::thread::sleep(std::time::Duration::from_millis(300));
+}
+
+#[inline]
+pub fn try_kill_broker() {
+    allow_err!(run_cmds(
+        format!("taskkill /F /IM {}", WIN_MAG_INJECTED_PROCESS_EXE),
+        false,
+        "kill_broker"
+    ));
 }
 
 #[cfg(test)]
