@@ -120,6 +120,10 @@ class _ToolbarTheme {
   static const Color dividerDark = MyTheme.dividerDark;
   static const Color dividerLight = MyTheme.dividerLight;
   static const double dividerSpaceToAction = 8;
+
+  static const double menuBorderRadius = 5.0;
+  static EdgeInsets menuPadding = Platform.isWindows ? EdgeInsets.fromLTRB(4, 12, 4, 12) : EdgeInsets.fromLTRB(6, 18, 6, 18);
+  static const double menuButtonBorderRadius = 3.0;
 }
 
 typedef DismissFunc = void Function();
@@ -484,6 +488,8 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
           textStyle: MaterialStatePropertyAll(
             TextStyle(fontWeight: FontWeight.normal),
           ),
+          shape: MaterialStatePropertyAll(RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(_ToolbarTheme.menuButtonBorderRadius))),
         ),
       ),
       dividerTheme: DividerThemeData(
@@ -1651,14 +1657,15 @@ class _IconSubmenuButtonState extends State<_IconSubmenuButton> {
         child: SubmenuButton(
             menuStyle: widget.menuStyle ??
                 MenuStyle(
-                  side: MaterialStateProperty.all(BorderSide(
-                    width: 1,
-                    color: MyTheme.currentThemeMode() == ThemeMode.light
-                        ? _ToolbarTheme.bordLight
-                        : _ToolbarTheme.bordDark,
-                  )),
-                  visualDensity: VisualDensity.comfortable,
-                ),
+                    side: MaterialStateProperty.all(BorderSide(
+                      width: 1,
+                      color: MyTheme.currentThemeMode() == ThemeMode.light
+                          ? _ToolbarTheme.bordLight
+                          : _ToolbarTheme.bordDark,
+                    )),
+                    shape: MaterialStatePropertyAll(RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(_ToolbarTheme.menuBorderRadius))),
+                    padding: MaterialStateProperty.all(_ToolbarTheme.menuPadding)),
             style: ButtonStyle(
                 backgroundColor: MaterialStatePropertyAll(Colors.transparent),
                 padding: MaterialStatePropertyAll(EdgeInsets.zero),
