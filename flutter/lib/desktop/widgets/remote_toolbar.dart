@@ -119,10 +119,12 @@ class _ToolbarTheme {
 
   static const Color dividerDark = MyTheme.dividerDark;
   static const Color dividerLight = MyTheme.dividerLight;
-  static const double dividerSpaceToAction = 8;
+  static double dividerSpaceToAction = Platform.isWindows ? 8 : 14;
 
-  static const double menuBorderRadius = 5.0;
-  static EdgeInsets menuPadding = Platform.isWindows ? EdgeInsets.fromLTRB(4, 12, 4, 12) : EdgeInsets.fromLTRB(6, 18, 6, 18);
+  static double menuBorderRadius = Platform.isWindows ? 5.0 : 7.0;
+  static EdgeInsets menuPadding = Platform.isWindows
+      ? EdgeInsets.fromLTRB(4, 12, 4, 12)
+      : EdgeInsets.fromLTRB(6, 14, 6, 14);
   static const double menuButtonBorderRadius = 3.0;
 }
 
@@ -489,7 +491,8 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
             TextStyle(fontWeight: FontWeight.normal),
           ),
           shape: MaterialStatePropertyAll(RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(_ToolbarTheme.menuButtonBorderRadius))),
+              borderRadius:
+                  BorderRadius.circular(_ToolbarTheme.menuButtonBorderRadius))),
         ),
       ),
       dividerTheme: DividerThemeData(
@@ -1664,8 +1667,10 @@ class _IconSubmenuButtonState extends State<_IconSubmenuButton> {
                           : _ToolbarTheme.bordDark,
                     )),
                     shape: MaterialStatePropertyAll(RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(_ToolbarTheme.menuBorderRadius))),
-                    padding: MaterialStateProperty.all(_ToolbarTheme.menuPadding)),
+                        borderRadius: BorderRadius.circular(
+                            _ToolbarTheme.menuBorderRadius))),
+                    padding:
+                        MaterialStateProperty.all(_ToolbarTheme.menuPadding)),
             style: ButtonStyle(
                 backgroundColor: MaterialStatePropertyAll(Colors.transparent),
                 padding: MaterialStatePropertyAll(EdgeInsets.zero),
