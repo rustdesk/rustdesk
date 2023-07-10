@@ -29,20 +29,36 @@ class ChatPage extends StatelessWidget implements PageShape {
   final appBarActions = [
     PopupMenuButton<MessageKey>(
         tooltip: "",
-        icon: Icon(Icons.group),
+        icon: Stack(
+          children: [
+            Icon(Icons.group),
+            Positioned(
+                top: 0,
+                right: 0,
+                child: unreadMessageCountBuilder(gFFI.chatModel.mobileUnreadSum,
+                    marginLeft: 0, size: 12, fontSize: 8))
+          ],
+        ),
         itemBuilder: (context) {
           // only mobile need [appBarActions], just bind gFFI.chatModel
           final chatModel = gFFI.chatModel;
           return chatModel.messages.entries.map((entry) {
             final id = entry.key;
             final user = entry.value.chatUser;
+            final client = gFFI.serverModel.clients
+                .firstWhereOrNull((e) => e.id == id.connId);
             return PopupMenuItem<MessageKey>(
               child: Row(
                 children: [
-                  Icon(id.isOut ? Icons.call_made : Icons.call_received,
+                  Icon(
+                          id.isOut
+                              ? Icons.call_made_rounded
+                              : Icons.call_received_rounded,
                           color: MyTheme.accent)
                       .marginOnly(right: 6),
                   Text("${user.firstName}   ${user.id}"),
+                  if (client != null)
+                    unreadMessageCountBuilder(client.unreadChatMessageCount)
                 ],
               ),
               value: id,
@@ -72,6 +88,11 @@ class ChatPage extends StatelessWidget implements PageShape {
                     messages: chatModel
                             .messages[chatModel.currentKey]?.chatMessages ??
                         [],
+                    readOnly: type == ChatPageType.mobileMain &&
+                        (chatModel.currentKey.connId ==
+                                ChatModel.clientModeID ||
+                            gFFI.serverModel.clients.every(
+                                (e) => e.id != chatModel.currentKey.connId)),
                     inputOptions: InputOptions(
                       focusNode: chatModel.inputNode,
                       textController: chatModel.textController,
@@ -147,6 +168,11 @@ class ChatPage extends StatelessWidget implements PageShape {
                         padding: EdgeInsets.all(12),
                         child: Row(
                           children: [
+                            Icon(
+                                chatModel.currentKey.isOut
+                                    ? Icons.call_made_rounded
+                                    : Icons.call_received_rounded,
+                                color: MyTheme.accent),
                             Icon(Icons.account_circle, color: MyTheme.accent80),
                             SizedBox(width: 5),
                             Text(

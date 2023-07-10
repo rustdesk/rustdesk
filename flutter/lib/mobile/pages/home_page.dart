@@ -22,6 +22,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   var _selectedIndex = 0;
+  int get selectedIndex => _selectedIndex;
   final List<PageShape> _pages = [];
 
   void refreshPages() {
@@ -82,6 +83,8 @@ class _HomePageState extends State<HomePage> {
                 gFFI.chatModel.hideChatWindowOverlay();
               }
               _selectedIndex = index;
+              gFFI.chatModel
+                  .mobileClearClientUnread(gFFI.chatModel.currentKey.connId);
             }),
           ),
           body: _pages.elementAt(_selectedIndex),

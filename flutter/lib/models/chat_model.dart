@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
+import 'package:flutter_hbb/mobile/pages/home_page.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get_rx/src/rx_types/rx_types.dart';
@@ -67,6 +68,7 @@ class ChatModel with ChangeNotifier {
   Rx<VoiceCallStatus> get voiceCallStatus => _voiceCallStatus;
 
   TextEditingController textController = TextEditingController();
+  RxInt mobileUnreadSum = 0.obs;
 
   @override
   void dispose() {
@@ -304,6 +306,7 @@ class ChatModel with ChangeNotifier {
       _currentKey = key;
       notifyListeners();
     }
+    mobileClearClientUnread(key.connId);
   }
 
   receive(int id, String text) async {
@@ -383,12 +386,22 @@ class ChatModel with ChangeNotifier {
         } else {
           parent.target?.serverModel.jumpTo(id);
         }
+      } else {
+        if (HomePage.homeKey.currentState?.selectedIndex != 1 ||
+            _currentKey.peerId != client.peerId) {
+          client.unreadChatMessageCount.value += 1;
+          mobileUpdateUnreadSum();
+        }
       }
       chatUser = ChatUser(id: client.peerId, firstName: client.name);
     }
-    _currentKey = messagekey;
-    insertMessage(_currentKey,
+    insertMessage(messagekey,
         ChatMessage(text: text, user: chatUser, createdAt: DateTime.now()));
+    if (id == clientModeID || _currentKey.peerId.isEmpty) {
+      // Invalid
+      _currentKey = messagekey;
+      mobileClearClientUnread(messagekey.connId);
+    }
     notifyListeners();
   }
 
@@ -426,6 +439,32 @@ class ChatModel with ChangeNotifier {
       if (old != null) {
         _messages[key] = old;
       }
+    }
+    if (_currentKey == key) {
+      _currentKey = key; // hash != assign
+    }
+  }
+
+  void mobileUpdateUnreadSum() {
+    if (!isMobile) return;
+    var sum = 0;
+    parent.target?.serverModel.clients
+        .map((e) => sum += e.unreadChatMessageCount.value)
+        .toList();
+    Future.delayed(Duration.zero, () {
+      mobileUnreadSum.value = sum;
+    });
+  }
+
+  void mobileClearClientUnread(int id) {
+    if (!isMobile) return;
+    final client = parent.target?.serverModel.clients
+        .firstWhereOrNull((client) => client.id == id);
+    if (client != null) {
+      Future.delayed(Duration.zero, () {
+        client.unreadChatMessageCount.value = 0;
+        mobileUpdateUnreadSum();
+      });
     }
   }
 
