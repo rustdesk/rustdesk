@@ -1453,7 +1453,8 @@ class _ChatMenuState extends State<_ChatMenu> {
             initPos = Offset(pos.dx, pos.dy + _ToolbarTheme.dividerHeight);
           }
 
-          widget.ffi.chatModel.changeCurrentID(ChatModel.clientModeID);
+          widget.ffi.chatModel.changeCurrentID(
+              MessageKey(widget.ffi.id, ChatModel.clientModeID));
           widget.ffi.chatModel.toggleChatOverlay(chatInitPos: initPos);
         });
   }

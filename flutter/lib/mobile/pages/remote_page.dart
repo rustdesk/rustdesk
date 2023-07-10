@@ -351,8 +351,8 @@ class _RemotePageState extends State<RemotePage> {
                             color: Colors.white,
                             icon: Icon(Icons.message),
                             onPressed: () {
-                              gFFI.chatModel
-                                  .changeCurrentID(ChatModel.clientModeID);
+                              gFFI.chatModel.changeCurrentID(MessageKey(
+                                  widget.id, ChatModel.clientModeID));
                               gFFI.chatModel.toggleChatOverlay();
                             },
                           )

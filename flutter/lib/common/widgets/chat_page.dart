@@ -7,10 +7,15 @@ import 'package:provider/provider.dart';
 
 import '../../mobile/pages/home_page.dart';
 
+enum ChatPageType {
+  mobileMain,
+}
+
 class ChatPage extends StatelessWidget implements PageShape {
   late final ChatModel chatModel;
+  final ChatPageType? type;
 
-  ChatPage({ChatModel? chatModel}) {
+  ChatPage({ChatModel? chatModel, this.type}) {
     this.chatModel = chatModel ?? gFFI.chatModel;
   }
 
@@ -22,17 +27,40 @@ class ChatPage extends StatelessWidget implements PageShape {
 
   @override
   final appBarActions = [
-    PopupMenuButton<int>(
+    PopupMenuButton<MessageKey>(
         tooltip: "",
-        icon: Icon(Icons.group),
+        icon: Stack(
+          children: [
+            Icon(Icons.group),
+            Positioned(
+                top: 0,
+                right: 0,
+                child: unreadMessageCountBuilder(gFFI.chatModel.mobileUnreadSum,
+                    marginLeft: 0, size: 12, fontSize: 8))
+          ],
+        ),
         itemBuilder: (context) {
           // only mobile need [appBarActions], just bind gFFI.chatModel
           final chatModel = gFFI.chatModel;
           return chatModel.messages.entries.map((entry) {
             final id = entry.key;
             final user = entry.value.chatUser;
-            return PopupMenuItem<int>(
-              child: Text("${user.firstName}   ${user.id}"),
+            final client = gFFI.serverModel.clients
+                .firstWhereOrNull((e) => e.id == id.connId);
+            return PopupMenuItem<MessageKey>(
+              child: Row(
+                children: [
+                  Icon(
+                          id.isOut
+                              ? Icons.call_made_rounded
+                              : Icons.call_received_rounded,
+                          color: MyTheme.accent)
+                      .marginOnly(right: 6),
+                  Text("${user.firstName}   ${user.id}"),
+                  if (client != null)
+                    unreadMessageCountBuilder(client.unreadChatMessageCount)
+                ],
+              ),
               value: id,
             );
           }).toList();
@@ -57,9 +85,14 @@ class ChatPage extends StatelessWidget implements PageShape {
                   final chat = DashChat(
                     onSend: chatModel.send,
                     currentUser: chatModel.me,
-                    messages:
-                        chatModel.messages[chatModel.currentID]?.chatMessages ??
-                            [],
+                    messages: chatModel
+                            .messages[chatModel.currentKey]?.chatMessages ??
+                        [],
+                    readOnly: type == ChatPageType.mobileMain &&
+                        (chatModel.currentKey.connId ==
+                                ChatModel.clientModeID ||
+                            gFFI.serverModel.clients.every(
+                                (e) => e.id != chatModel.currentKey.connId)),
                     inputOptions: InputOptions(
                       focusNode: chatModel.inputNode,
                       textController: chatModel.textController,
@@ -128,12 +161,18 @@ class ChatPage extends StatelessWidget implements PageShape {
                   return SelectionArea(child: chat);
                 }),
                 desktopType == DesktopType.cm ||
-                        chatModel.currentID == ChatModel.clientModeID
+                        type != ChatPageType.mobileMain ||
+                        currentUser == null
                     ? SizedBox.shrink()
                     : Padding(
                         padding: EdgeInsets.all(12),
                         child: Row(
                           children: [
+                            Icon(
+                                chatModel.currentKey.isOut
+                                    ? Icons.call_made_rounded
+                                    : Icons.call_received_rounded,
+                                color: MyTheme.accent),
                             Icon(Icons.account_circle, color: MyTheme.accent80),
                             SizedBox(width: 5),
                             Text(

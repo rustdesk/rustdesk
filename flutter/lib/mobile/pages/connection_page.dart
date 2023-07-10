@@ -37,6 +37,7 @@ class ConnectionPage extends StatefulWidget implements PageShape {
 class _ConnectionPageState extends State<ConnectionPage> {
   /// Controller for the id input bar.
   final _idController = IDTextEditingController();
+  final RxBool _idEmpty = true.obs;
 
   /// Update url. If it's not null, means an update is available.
   var _updateUrl = '';
@@ -60,6 +61,10 @@ class _ConnectionPageState extends State<ConnectionPage> {
         if (_updateUrl.isNotEmpty) setState(() {});
       });
     }
+
+    _idController.addListener(() {
+      _idEmpty.value = _idController.text.isEmpty;
+    });
   }
 
   @override
@@ -158,6 +163,14 @@ class _ConnectionPageState extends State<ConnectionPage> {
                   ),
                 ),
               ),
+              Obx(() => Offstage(
+                    offstage: _idEmpty.value,
+                    child: IconButton(
+                        onPressed: () {
+                          _idController.clear();
+                        },
+                        icon: Icon(Icons.clear, color: MyTheme.darkGray)),
+                  )),
               SizedBox(
                 width: 60,
                 height: 60,
