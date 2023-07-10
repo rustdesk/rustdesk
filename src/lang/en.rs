@@ -15,7 +15,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("whitelist_tip", "Only whitelisted IP can access me"),
         ("whitelist_sep", "Separated by comma, semicolon, spaces or new line"),
         ("Wrong credentials", "Wrong username or password"),
-        ("The verification code is incorrect or has expired", "The verification code is wrong or timeout"),
         ("invalid_http", "must start with http:// or https://"),
         ("install_daemon_tip", "For starting on boot, you need to install system service."),
         ("android_input_permission_tip1", "In order for a remote device to control your Android device via mouse or touch, you need to allow RustDesk to use the \"Accessibility\" service."),
