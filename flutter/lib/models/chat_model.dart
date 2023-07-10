@@ -12,6 +12,7 @@ import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get_rx/src/rx_types/rx_types.dart';
 import 'package:get/get.dart';
+import 'package:uuid/uuid.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -77,13 +78,13 @@ class ChatModel with ChangeNotifier {
   }
 
   final ChatUser me = ChatUser(
-    id: "",
+    id: Uuid().v4().toString(),
     firstName: translate("Me"),
   );
 
   late final Map<MessageKey, MessageBody> _messages = {};
 
-  MessageKey _currentKey = MessageKey('', clientModeID);
+  MessageKey _currentKey = MessageKey('', -2); // -2 is invalid value
   late bool _isShowCMChatPage = false;
 
   Map<MessageKey, MessageBody> get messages => _messages;
@@ -266,7 +267,7 @@ class ChatModel with ChangeNotifier {
 
   toggleCMChatPage(MessageKey key) async {
     if (gFFI.chatModel.currentKey != key) {
-      gFFI.chatModel.changeCurrentID(key);
+      gFFI.chatModel.changeCurrentKey(key);
     }
     if (_isShowCMChatPage) {
       _isShowCMChatPage = !_isShowCMChatPage;
@@ -284,28 +285,29 @@ class ChatModel with ChangeNotifier {
     }
   }
 
-  changeCurrentID(MessageKey key) {
+  changeCurrentKey(MessageKey key) {
     updateConnIdOfKey(key);
-    if (_messages.containsKey(key)) {
-      _currentKey = key;
-      notifyListeners();
+    String? peerName;
+    if (key.connId == clientModeID) {
+      peerName = parent.target?.ffiModel.pi.username;
     } else {
-      String? peerName;
-      if (key.connId == clientModeID) {
-        peerName = parent.target?.ffiModel.pi.username;
-      } else {
-        peerName = parent.target?.serverModel.clients
-            .firstWhereOrNull((client) => client.peerId == key.peerId)
-            ?.name;
-      }
+      peerName = parent.target?.serverModel.clients
+          .firstWhereOrNull((client) => client.peerId == key.peerId)
+          ?.name;
+    }
+    if (!_messages.containsKey(key)) {
       final chatUser = ChatUser(
         id: key.peerId,
         firstName: peerName,
       );
       _messages[key] = MessageBody(chatUser, []);
-      _currentKey = key;
-      notifyListeners();
+    } else {
+      if (peerName != null && peerName.isNotEmpty) {
+        _messages[key]?.chatUser.firstName = peerName;
+      }
     }
+    _currentKey = key;
+    notifyListeners();
     mobileClearClientUnread(key.connId);
   }
 
@@ -388,7 +390,7 @@ class ChatModel with ChangeNotifier {
         }
       } else {
         if (HomePage.homeKey.currentState?.selectedIndex != 1 ||
-            _currentKey.peerId != client.peerId) {
+            _currentKey != messagekey) {
           client.unreadChatMessageCount.value += 1;
           mobileUpdateUnreadSum();
         }
@@ -398,7 +400,7 @@ class ChatModel with ChangeNotifier {
     insertMessage(messagekey,
         ChatMessage(text: text, user: chatUser, createdAt: DateTime.now()));
     if (id == clientModeID || _currentKey.peerId.isEmpty) {
-      // Invalid
+      // client or invalid
       _currentKey = messagekey;
       mobileClearClientUnread(messagekey.connId);
     }
@@ -435,12 +437,12 @@ class ChatModel with ChangeNotifier {
             .toList()
             .firstWhereOrNull((e) => e == key && e.connId != key.connId) !=
         null) {
-      final old = _messages.remove(key);
-      if (old != null) {
-        _messages[key] = old;
+      final value = _messages.remove(key);
+      if (value != null) {
+        _messages[key] = value;
       }
     }
-    if (_currentKey == key) {
+    if (_currentKey == key || _currentKey.peerId.isEmpty) {
       _currentKey = key; // hash != assign
     }
   }
