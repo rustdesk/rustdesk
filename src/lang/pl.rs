@@ -233,6 +233,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Username missed", "Nieprawidłowe nazwa użytkownika"),
         ("Password missed", "Nieprawidłowe hasło"),
         ("Wrong credentials", "Błędne dane uwierzytelniające"),
+        ("Verification code wrong or timeout", ""),
         ("Edit Tag", "Edytuj tag"),
         ("Unremember Password", "Zapomnij hasło"),
         ("Favorites", "Ulubione"),
