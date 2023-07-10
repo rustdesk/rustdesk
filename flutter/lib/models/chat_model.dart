@@ -270,16 +270,16 @@ class ChatModel with ChangeNotifier {
       gFFI.chatModel.changeCurrentKey(key);
     }
     if (_isShowCMChatPage) {
-      _isShowCMChatPage = !_isShowCMChatPage;
-      notifyListeners();
-      await windowManager.show();
       await windowManager.setSizeAlignment(
           kConnectionManagerWindowSizeClosedChat, Alignment.topRight);
+      await windowManager.show();
+      _isShowCMChatPage = !_isShowCMChatPage;
+      notifyListeners();
     } else {
       requestChatInputFocus();
-      await windowManager.show();
       await windowManager.setSizeAlignment(
           kConnectionManagerWindowSizeOpenChat, Alignment.topRight);
+      await windowManager.show();
       _isShowCMChatPage = !_isShowCMChatPage;
       notifyListeners();
     }

@@ -185,7 +185,7 @@ class ConnectionManagerState extends State<ConnectionManager> {
                                       ChatPage(type: ChatPageType.desktopCM)),
                             ),
                           )
-                        : Offstage(),
+                        : Expanded(child: Container()),
                   ),
                   SizedBox(
                     width: kConnectionManagerWindowSizeClosedChat.width -
