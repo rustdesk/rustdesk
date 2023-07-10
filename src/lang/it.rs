@@ -513,9 +513,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Accept and Elevate", "Accetta ed eleva"),
         ("accept_and_elevate_btn_tooltip", "Accetta la connessione ed eleva le autorizzazioni UAC."),
         ("clipboard_wait_response_timeout_tip", "Timeout attesa risposta della copia."),
-        ("Incoming connection", ""),
-        ("Outgoing connection", ""),
-        ("Exit", ""),
-        ("Open", ""),
-    ].iter().cloned().collect();
+        ("Incoming connection", "Connessioni in entrata"),
+        ("Outgoing connection", "Conenssioni in uscita"),
+        ("Exit", "Esci da RustDesk"),
+        ("Open", "Apri RustDesk"),
+   ].iter().cloned().collect();
 }
