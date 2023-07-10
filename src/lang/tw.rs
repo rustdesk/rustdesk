@@ -513,5 +513,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Accept and Elevate", ""),
         ("accept_and_elevate_btn_tooltip", ""),
         ("clipboard_wait_response_timeout_tip", ""),
+        ("incomming connection", "收到的連接"),
+        ("outgoing connection", "發起的連接"),
     ].iter().cloned().collect();
 }

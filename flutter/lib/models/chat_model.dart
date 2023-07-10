@@ -25,7 +25,7 @@ import 'model.dart';
 class MessageKey {
   final String peerId;
   final int connId;
-  bool get isOut => connId != ChatModel.clientModeID;
+  bool get isOut => connId == ChatModel.clientModeID;
 
   MessageKey(this.peerId, this.connId);
 

@@ -205,7 +205,8 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
                       ).paddingOnly(right: 5),
                     ),
                     label,
-                    unreadMessageCountBuilder(UnreadChatCountState.find(key)),
+                    unreadMessageCountBuilder(UnreadChatCountState.find(key))
+                        .marginOnly(left: 4),
                   ],
                 );
 

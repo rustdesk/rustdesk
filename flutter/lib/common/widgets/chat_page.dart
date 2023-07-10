@@ -24,22 +24,14 @@ class ChatPage extends StatelessWidget implements PageShape {
   final title = translate("Chat");
 
   @override
-  final icon = Icon(Icons.chat);
+  final icon = unreadTopRightBuilder(gFFI.chatModel.mobileUnreadSum);
 
   @override
   final appBarActions = [
     PopupMenuButton<MessageKey>(
         tooltip: "",
-        icon: Stack(
-          children: [
-            Icon(Icons.group),
-            Positioned(
-                top: 0,
-                right: 0,
-                child: unreadMessageCountBuilder(gFFI.chatModel.mobileUnreadSum,
-                    marginLeft: 0, size: 12, fontSize: 8))
-          ],
-        ),
+        icon: unreadTopRightBuilder(gFFI.chatModel.mobileUnreadSum,
+            icon: Icon(Icons.group)),
         itemBuilder: (context) {
           // only mobile need [appBarActions], just bind gFFI.chatModel
           final chatModel = gFFI.chatModel;
@@ -65,10 +57,12 @@ class ChatPage extends StatelessWidget implements PageShape {
                       width: 10,
                       height: 10,
                       decoration: BoxDecoration(
-                          shape: BoxShape.circle, color: Colors.green),
+                          shape: BoxShape.circle,
+                          color: Color.fromARGB(255, 46, 205, 139)),
                     ).marginSymmetric(horizontal: 2),
                   if (client != null)
                     unreadMessageCountBuilder(client.unreadChatMessageCount)
+                        .marginOnly(left: 4)
                 ],
               ),
               value: key,
@@ -88,7 +82,6 @@ class ChatPage extends StatelessWidget implements PageShape {
         color: Theme.of(context).scaffoldBackgroundColor,
         child: Consumer<ChatModel>(
           builder: (context, chatModel, child) {
-            final currentUser = chatModel.currentUser;
             final readOnly = type == ChatPageType.mobileMain &&
                     (chatModel.currentKey.connId == ChatModel.clientModeID ||
                         gFFI.serverModel.clients.every((e) =>
@@ -177,28 +170,6 @@ class ChatPage extends StatelessWidget implements PageShape {
                   );
                   return SelectionArea(child: chat);
                 }),
-                desktopType == DesktopType.cm ||
-                        type != ChatPageType.mobileMain ||
-                        currentUser == null
-                    ? SizedBox.shrink()
-                    : Padding(
-                        padding: EdgeInsets.all(12),
-                        child: Row(
-                          children: [
-                            Icon(
-                                chatModel.currentKey.isOut
-                                    ? Icons.call_made_rounded
-                                    : Icons.call_received_rounded,
-                                color: MyTheme.accent),
-                            Icon(Icons.account_circle, color: MyTheme.accent80),
-                            SizedBox(width: 5),
-                            Text(
-                              "${currentUser.firstName}   ${currentUser.id}",
-                              style: TextStyle(color: MyTheme.accent),
-                            ),
-                          ],
-                        ),
-                      ),
               ],
             ).paddingOnly(bottom: 8);
           },

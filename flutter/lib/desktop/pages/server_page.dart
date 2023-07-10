@@ -165,7 +165,8 @@ class ConnectionManagerState extends State<ConnectionManager> {
                         message: key,
                         waitDuration: Duration(seconds: 1),
                         child: label),
-                    unreadMessageCountBuilder(client?.unreadChatMessageCount),
+                    unreadMessageCountBuilder(client?.unreadChatMessageCount)
+                        .marginOnly(left: 4),
                   ],
                 );
               },
