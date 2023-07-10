@@ -233,7 +233,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Username missed", "Üres felhasználónév"),
         ("Password missed", "Üres jelszó"),
         ("Wrong credentials", "Hibás felhasználónév vagy jelszó"),
-        ("Verification code wrong or timeout", ""),
+        ("The verification code is incorrect or has expired", ""),
         ("Edit Tag", "Címke szerkesztése"),
         ("Unremember Password", "A jelszó megjegyzésének törlése"),
         ("Favorites", "Kedvencek"),

@@ -233,7 +233,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Username missed", "Chýba užívateľské meno"),
         ("Password missed", "Chýba heslo"),
         ("Wrong credentials", "Nesprávne prihlasovacie údaje"),
-        ("Verification code wrong or timeout", ""),
+        ("The verification code is incorrect or has expired", ""),
         ("Edit Tag", "Upraviť štítok"),
         ("Unremember Password", "Zabudnúť heslo"),
         ("Favorites", "Obľúbené"),
