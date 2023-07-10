@@ -165,7 +165,8 @@ class ConnectionManagerState extends State<ConnectionManager> {
                         message: key,
                         waitDuration: Duration(seconds: 1),
                         child: label),
-                    unreadMessageCountBuilder(client?.unreadChatMessageCount),
+                    unreadMessageCountBuilder(client?.unreadChatMessageCount)
+                        .marginOnly(left: 4),
                   ],
                 );
               },
@@ -185,7 +186,7 @@ class ConnectionManagerState extends State<ConnectionManager> {
                                       ChatPage(type: ChatPageType.desktopCM)),
                             ),
                           )
-                        : Offstage(),
+                        : Expanded(child: Container()),
                   ),
                   SizedBox(
                     width: kConnectionManagerWindowSizeClosedChat.width -

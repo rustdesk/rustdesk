@@ -428,7 +428,8 @@ class ConnectionManager extends StatelessWidget {
                                       bar.onTap!(1);
                                     }
                                   },
-                                  icon: const Icon(Icons.chat)))
+                                  icon: unreadTopRightBuilder(
+                                      client.unreadChatMessageCount)))
                     ],
                   ),
                   client.authorized

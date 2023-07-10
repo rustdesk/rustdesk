@@ -2194,7 +2194,7 @@ Widget buildRemoteBlock({required Widget child, WhetherUseRemoteBlock? use}) {
 }
 
 Widget unreadMessageCountBuilder(RxInt? count,
-    {double? size, double? fontSize, double? marginLeft}) {
+    {double? size, double? fontSize}) {
   return Obx(() => Offstage(
       offstage: !((count?.value ?? 0) > 0),
       child: Container(
@@ -2209,5 +2209,18 @@ Widget unreadMessageCountBuilder(RxInt? count,
               maxLines: 1,
               style: TextStyle(color: Colors.white, fontSize: fontSize ?? 10)),
         ),
-      ).marginOnly(left: marginLeft ?? 4)));
+      )));
+}
+
+Widget unreadTopRightBuilder(RxInt? count,
+    {Widget? icon, double? size, double? fontSize}) {
+  return Stack(
+    children: [
+      icon ?? Icon(Icons.chat),
+      Positioned(
+          top: 0,
+          right: 0,
+          child: unreadMessageCountBuilder(count, size: 12, fontSize: 8))
+    ],
+  );
 }
