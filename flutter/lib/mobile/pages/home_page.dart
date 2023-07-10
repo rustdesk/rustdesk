@@ -108,8 +108,8 @@ class _HomePageState extends State<HomePage> {
         children: [
           Tooltip(
             message: currentKey.isOut
-                ? translate('outgoing connection')
-                : translate('incomming connection'),
+                ? translate('Outgoing connection')
+                : translate('Incoming connection'),
             child: Icon(
               currentKey.isOut
                   ? Icons.call_made_rounded

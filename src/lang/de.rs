@@ -513,7 +513,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Accept and Elevate", "Akzeptieren und Rechte erhöhen"),
         ("accept_and_elevate_btn_tooltip", "Akzeptieren Sie die Verbindung und erhöhen Sie die UAC-Berechtigungen."),
         ("clipboard_wait_response_timeout_tip", "Zeitüberschreitung beim Warten auf die Antwort der Kopie."),
-        ("incomming connection", ""),
-        ("outgoing connection", ""),
+        ("Incoming connection", ""),
+        ("Outgoing connection", ""),
+        ("Exit", ""),
+        ("Open", ""),
     ].iter().cloned().collect();
 }
