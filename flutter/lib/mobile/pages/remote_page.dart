@@ -72,6 +72,8 @@ class _RemotePageState extends State<RemotePage> {
         keyboardVisibilityController.onChange.listen(onSoftKeyboardChanged);
     _blockableOverlayState.applyFfi(gFFI);
     initSharedStates(widget.id);
+    gFFI.chatModel
+        .changeCurrentKey(MessageKey(widget.id, ChatModel.clientModeID));
   }
 
   @override
@@ -351,7 +353,7 @@ class _RemotePageState extends State<RemotePage> {
                             color: Colors.white,
                             icon: Icon(Icons.message),
                             onPressed: () {
-                              gFFI.chatModel.changeCurrentID(MessageKey(
+                              gFFI.chatModel.changeCurrentKey(MessageKey(
                                   widget.id, ChatModel.clientModeID));
                               gFFI.chatModel.toggleChatOverlay();
                             },

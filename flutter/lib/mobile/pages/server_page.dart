@@ -420,7 +420,7 @@ class ConnectionManager extends StatelessWidget {
                               ? const SizedBox.shrink()
                               : IconButton(
                                   onPressed: () {
-                                    gFFI.chatModel.changeCurrentID(
+                                    gFFI.chatModel.changeCurrentKey(
                                         MessageKey(client.peerId, client.id));
                                     final bar = navigationBarKey.currentWidget;
                                     if (bar != null) {

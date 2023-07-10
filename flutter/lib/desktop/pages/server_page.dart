@@ -103,7 +103,7 @@ class ConnectionManagerState extends State<ConnectionManager> {
         final client =
             gFFI.serverModel.clients.firstWhereOrNull((e) => e.id == client_id);
         if (client != null) {
-          gFFI.chatModel.changeCurrentID(MessageKey(client.peerId, client.id));
+          gFFI.chatModel.changeCurrentKey(MessageKey(client.peerId, client.id));
           if (client.unreadChatMessageCount.value > 0) {
             Future.delayed(Duration.zero, () {
               client.unreadChatMessageCount.value = 0;
@@ -181,7 +181,8 @@ class ConnectionManagerState extends State<ConnectionManager> {
                                           right: BorderSide(
                                               color: Theme.of(context)
                                                   .dividerColor))),
-                                  child: ChatPage()),
+                                  child:
+                                      ChatPage(type: ChatPageType.desktopCM)),
                             ),
                           )
                         : Offstage(),
