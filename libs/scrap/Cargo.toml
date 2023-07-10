@@ -13,6 +13,7 @@ edition = "2018"
 wayland = ["gstreamer", "gstreamer-app", "gstreamer-video", "dbus", "tracing"]
 mediacodec = ["ndk"]
 linux-pkg-config = ["dep:pkg-config"]
+msys2-pkg-config = ["dep:pkg-config"]
 
 [dependencies]
 block = "0.1"

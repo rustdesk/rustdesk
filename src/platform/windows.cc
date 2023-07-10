@@ -9,6 +9,11 @@
 #include <shlobj.h> // NOLINT(build/include_order)
 #include <userenv.h>
 #include <versionhelpers.h>
+// msys2 build support
+#ifdef __MINGW64__
+#include <algorithm>
+#include <sas.h>
+#endif
 
 void flog(char const *fmt, ...)
 {
@@ -425,7 +430,7 @@ extern "C"
         {
             if (buf)
             {
-                nout = min(nin, n);
+                nout = std::min(static_cast<DWORD>(nin), n);
                 memcpy(bufin, buf, nout);
                 WTSFreeMemory(buf);
             }

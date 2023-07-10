@@ -4,7 +4,10 @@ use std::{
     println,
 };
 
-#[cfg(all(target_os = "linux", feature = "linux-pkg-config"))]
+#[cfg(
+    any(
+        all(target_os = "linux", feature = "linux-pkg-config")
+        ,all(target_os = "windows", feature = "msys2-pkg-config")))]
 fn link_pkg_config(name: &str) -> Vec<PathBuf> {
     // sometimes an override is needed
     let pc_name = match name {
@@ -15,10 +18,12 @@ fn link_pkg_config(name: &str) -> Vec<PathBuf> {
         .expect(format!(
             "unable to find '{pc_name}' development headers with pkg-config (feature linux-pkg-config is enabled).
             try installing '{pc_name}-dev' from your system package manager.").as_str());
-
     lib.include_paths
 }
-#[cfg(not(all(target_os = "linux", feature = "linux-pkg-config")))]
+#[cfg(
+    not(any(
+        all(target_os = "linux", feature = "linux-pkg-config")
+        ,all(target_os = "windows", feature = "msys2-pkg-config"))))]
 fn link_pkg_config(_name: &str) -> Vec<PathBuf> {
     unimplemented!()
 }
@@ -127,7 +132,9 @@ fn link_homebrew_m1(name: &str) -> PathBuf {
 fn find_package(name: &str) -> Vec<PathBuf> {
     let no_pkg_config_var_name = format!("NO_PKG_CONFIG_{name}");
     println!("cargo:rerun-if-env-changed={no_pkg_config_var_name}");
-    if cfg!(all(target_os = "linux", feature = "linux-pkg-config"))
+    if cfg!(any(
+                all(target_os = "linux", feature = "linux-pkg-config")
+                ,all(target_os = "windows", feature = "msys2-pkg-config")))
         && std::env::var(no_pkg_config_var_name).as_deref() != Ok("1")
     {
         link_pkg_config(name)

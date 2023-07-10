@@ -639,6 +639,13 @@ async fn send_close_async(postfix: &str) -> ResultType<()> {
 // https://docs.microsoft.com/en-us/windows/win32/api/sas/nf-sas-sendsas
 // https://www.cnblogs.com/doutu/p/4892726.html
 fn send_sas() {
+    #[cfg(feature = "msys2-pkg-config")]
+    // Sas.h is included in windows.cc, so just link to it.
+    #[link(name = "windows")]
+    extern "C" {
+        pub fn SendSAS(AsUser: BOOL);
+    }
+    #[cfg(not(feature = "msys2-pkg-config"))]
     #[link(name = "sas")]
     extern "system" {
         pub fn SendSAS(AsUser: BOOL);

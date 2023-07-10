@@ -1,7 +1,11 @@
 #[cfg(windows)]
 fn build_windows() {
     let file = "src/platform/windows.cc";
-    cc::Build::new().file(file).compile("windows");
+    let mut builder = cc::Build::new();
+    builder.cpp(true)
+        .flag_if_supported("-std=c++11")
+        .file(file);
+    builder.compile("windows");
     println!("cargo:rustc-link-lib=WtsApi32");
     println!("cargo:rerun-if-changed={}", file);
 }

@@ -25,6 +25,12 @@
 #define CINTERFACE
 #define COBJMACROS
 
+#ifndef INITGUID
+#define INITGUID
+#endif
+
+#include <wincodec.h>
+#include <objidl.h>
 #include <ole2.h>
 #include <shlobj.h>
 #include <windows.h>

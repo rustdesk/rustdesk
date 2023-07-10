@@ -31,6 +31,8 @@ mediacodec = ["scrap/mediacodec"]
 linux_headless = ["pam" ]
 virtual_display_driver = ["virtual_display"]
 plugin_framework = []
+pkg-config = ["msys2-pkg-config", "linux-pkg-config"]
+msys2-pkg-config = ["magnum-opus/msys2-pkg-config", "scrap/msys2-pkg-config"]
 linux-pkg-config = ["magnum-opus/linux-pkg-config", "scrap/linux-pkg-config"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -49,7 +51,7 @@ sha2 = "0.10"
 repng = "0.2"
 parity-tokio-ipc = { git = "https://github.com/open-trade/parity-tokio-ipc" }
 runas = "1.0"
-magnum-opus = { git = "https://github.com/rustdesk/magnum-opus" }
+magnum-opus = { git = "https://github.com/clslaid/magnum-opus", branch = "msys2-build-support" }
 dasp = { version = "0.11", features = ["signal", "interpolate-linear", "interpolate"], optional = true }
 rubato = { version = "0.12", optional = true }
 samplerate = { version = "0.2", optional = true }

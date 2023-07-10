@@ -3091,7 +3091,7 @@ dependencies = [
 [[package]]
 name = "impersonate_system"
 version = "0.1.0"
-source = "git+https://github.com/21pages/impersonate-system#84b401893d5b6628c8b33b295328d13fbbe2674b"
+source = "git+https://github.com/21pages/impersonate-system#2f429010a5a10b1fe5eceb553c6672fd53d20167"
 dependencies = [
  "cc",
 ]
@@ -3607,7 +3607,7 @@ dependencies = [
 [[package]]
 name = "magnum-opus"
 version = "0.4.0"
-source = "git+https://github.com/rustdesk/magnum-opus#5cd2bf989c148662fa3a2d9d539a71d71fd1d256"
+source = "git+https://github.com/clslaid/magnum-opus?branch=msys2-build-support#325da906c2c0668978851cf1fd49661bdd0a075c"
 dependencies = [
  "bindgen 0.59.2",
  "pkg-config",
