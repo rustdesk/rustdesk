@@ -43,8 +43,6 @@ class _RemotePageState extends State<RemotePage> {
   double _mouseScrollIntegral = 0; // mouse scroll speed controller
   Orientation? _currentOrientation;
 
-  final _blockableOverlayState = BlockableOverlayState();
-
   final keyboardVisibilityController = KeyboardVisibilityController();
   late final StreamSubscription<bool> keyboardSubscription;
   final FocusNode _mobileFocusNode = FocusNode();
@@ -70,7 +68,6 @@ class _RemotePageState extends State<RemotePage> {
     gFFI.qualityMonitorModel.checkShowQualityMonitor(sessionId);
     keyboardSubscription =
         keyboardVisibilityController.onChange.listen(onSoftKeyboardChanged);
-    _blockableOverlayState.applyFfi(gFFI);
     initSharedStates(widget.id);
     gFFI.chatModel
         .changeCurrentKey(MessageKey(widget.id, ChatModel.clientModeID));

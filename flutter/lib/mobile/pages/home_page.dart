@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/common/widgets/overlay.dart';
 import 'package:flutter_hbb/mobile/pages/server_page.dart';
 import 'package:flutter_hbb/mobile/pages/settings_page.dart';
 import 'package:get/get.dart';
@@ -25,6 +26,7 @@ class _HomePageState extends State<HomePage> {
   var _selectedIndex = 0;
   int get selectedIndex => _selectedIndex;
   final List<PageShape> _pages = [];
+  final _blockableOverlayState = BlockableOverlayState();
 
   void refreshPages() {
     setState(() {
@@ -36,6 +38,7 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     initPages();
+    _blockableOverlayState.applyFfi(gFFI);
   }
 
   void initPages() {

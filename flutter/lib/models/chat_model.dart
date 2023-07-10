@@ -70,6 +70,7 @@ class ChatModel with ChangeNotifier {
 
   TextEditingController textController = TextEditingController();
   RxInt mobileUnreadSum = 0.obs;
+  MessageKey? latestReceivedKey;
 
   @override
   void dispose() {
@@ -194,6 +195,12 @@ class ChatModel with ChangeNotifier {
 
     final overlayState = _blockableOverlayState?.state;
     if (overlayState == null) return;
+    if (isMobile &&
+        !gFFI.chatModel.currentKey.isOut && // not in remote page
+        gFFI.chatModel.latestReceivedKey != null) {
+      gFFI.chatModel.changeCurrentKey(gFFI.chatModel.latestReceivedKey!);
+      gFFI.chatModel.mobileClearClientUnread(gFFI.chatModel.currentKey.connId);
+    }
     final overlay = OverlayEntry(builder: (context) {
       return Listener(
           onPointerDown: (_) {
@@ -337,7 +344,7 @@ class ChatModel with ChangeNotifier {
     final messagekey = MessageKey(peerId, id);
 
     // mobile: first message show overlay icon
-    if (!isDesktop && chatIconOverlayEntry == null && id == clientModeID) {
+    if (!isDesktop && chatIconOverlayEntry == null) {
       showChatIconOverlay();
     }
     // show chat page
@@ -404,6 +411,7 @@ class ChatModel with ChangeNotifier {
       _currentKey = messagekey;
       mobileClearClientUnread(messagekey.connId);
     }
+    latestReceivedKey = messagekey;
     notifyListeners();
   }
 
