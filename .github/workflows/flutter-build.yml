@@ -459,6 +459,7 @@ jobs:
     
 
   build-rustdesk-android:
+    if: ${{ matrix.job.arch == 'armv7' || inputs.upload-artifact == 'true' }}
     needs: [generate-bridge-linux]
     name: build rustdesk android apk ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: ${{ matrix.job.os }}
@@ -480,7 +481,6 @@ jobs:
               extra-build-features: "",
               openssl-arch: android-arm
             }
-    if: ${{ matrix.job.arch == 'armv7' || inputs.upload-artifact == 'true' }}
     steps:
       - name: Install dependencies
         run: |
