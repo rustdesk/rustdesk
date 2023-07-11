@@ -454,7 +454,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Voice call", "Sprachanruf"),
         ("Text chat", "Text-Chat"),
         ("Stop voice call", "Sprachanruf beenden"),
-        ("relay_hint_tip", "Wenn eine direkte Verbindung nicht möglich ist, können Sie versuchen, eine Verbindung über einen Relay-Server herzustellen. \nWenn Sie eine Relay-Verbindung beim ersten Versuch herstellen möchten, können Sie das Suffix \"/r\" an die ID anhängen oder die Option \"Immer über Relay-Server verbinden\" in der Liste der letzten Sitzungen auswählen, sofern diese vorhanden sind."),
+        ("relay_hint_tip", "Wenn eine direkte Verbindung nicht möglich ist, können Sie versuchen, eine Verbindung über einen Relay-Server herzustellen. \nWenn Sie eine Relay-Verbindung beim ersten Versuch herstellen möchten, können Sie das Suffix \"/r\" an die ID anhängen oder die Option \"Immer über Relay-Server verbinden\" in der Liste der letzten Sitzungen auswählen, sofern diese vorhanden ist."),
         ("Reconnect", "Erneut verbinden"),
         ("Codec", "Codec"),
         ("Resolution", "Auflösung"),
