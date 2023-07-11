@@ -2277,11 +2277,11 @@ fn run_after_run_cmds(silent: bool) {
 
 #[inline]
 pub fn try_kill_broker() {
-    allow_err!(run_cmds(
-        format!("taskkill /F /IM {}", WIN_MAG_INJECTED_PROCESS_EXE),
-        false,
-        "kill_broker"
-    ));
+    allow_err!(std::process::Command::new("cmd")
+        .arg("/c")
+        .arg(&format!("taskkill /F /IM {}", WIN_MAG_INJECTED_PROCESS_EXE))
+        .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
+        .spawn());
 }
 
 #[cfg(test)]
