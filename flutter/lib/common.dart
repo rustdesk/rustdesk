@@ -2212,8 +2212,7 @@ Widget unreadMessageCountBuilder(RxInt? count,
       )));
 }
 
-Widget unreadTopRightBuilder(RxInt? count,
-    {Widget? icon, double? size, double? fontSize}) {
+Widget unreadTopRightBuilder(RxInt? count, {Widget? icon}) {
   return Stack(
     children: [
       icon ?? Icon(Icons.chat),

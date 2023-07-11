@@ -185,14 +185,19 @@ class ConnectionManagerState extends State<ConnectionManager> {
                                   child:
                                       ChatPage(type: ChatPageType.desktopCM)),
                             ),
+                            flex: (kConnectionManagerWindowSizeOpenChat.width -
+                                    kConnectionManagerWindowSizeClosedChat
+                                        .width)
+                                .toInt(),
                           )
                         : Offstage(),
                   ),
-                  SizedBox(
-                    width: kConnectionManagerWindowSizeClosedChat.width -
-                        10, // 10 is from overflow
-                    child: pageView,
-                  )
+                  Expanded(
+                      child: pageView,
+                      flex: kConnectionManagerWindowSizeClosedChat.width
+                              .toInt() -
+                          4 // prevent stretch of the page view when chat is open,
+                      ),
                 ],
               ),
             ),
