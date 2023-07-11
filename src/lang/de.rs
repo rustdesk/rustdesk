@@ -454,7 +454,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Voice call", "Sprachanruf"),
         ("Text chat", "Text-Chat"),
         ("Stop voice call", "Sprachanruf beenden"),
-        ("relay_hint_tip", "Wenn eine direkte Verbindung nicht möglich ist, können Sie versuchen, eine Verbindung über einen Relay-Server herzustellen. \nWenn Sie eine Relay-Verbindung beim ersten Versuch herstellen möchten, können Sie das Suffix \"/r\" an die ID anhängen oder die Option \"Immer über Relay-Server verbinden\" auf der Gegenstelle auswählen."),
+        ("relay_hint_tip", "Wenn eine direkte Verbindung nicht möglich ist, können Sie versuchen, eine Verbindung über einen Relay-Server herzustellen. \nWenn Sie eine Relay-Verbindung beim ersten Versuch herstellen möchten, können Sie das Suffix \"/r\" an die ID anhängen oder die Option \"Immer über Relay-Server verbinden\" in der Liste der letzten Sitzungen auswählen, sofern diese vorhanden sind."),
         ("Reconnect", "Erneut verbinden"),
         ("Codec", "Codec"),
         ("Resolution", "Auflösung"),
@@ -513,9 +513,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Accept and Elevate", "Akzeptieren und Rechte erhöhen"),
         ("accept_and_elevate_btn_tooltip", "Akzeptieren Sie die Verbindung und erhöhen Sie die UAC-Berechtigungen."),
         ("clipboard_wait_response_timeout_tip", "Zeitüberschreitung beim Warten auf die Antwort der Kopie."),
-        ("Incoming connection", ""),
-        ("Outgoing connection", ""),
-        ("Exit", ""),
-        ("Open", ""),
+        ("Incoming connection", "Eingehende Verbindung"),
+        ("Outgoing connection", "Ausgehende Verbindung"),
+        ("Exit", "Beenden"),
+        ("Open", "Öffnen"),
     ].iter().cloned().collect();
 }
