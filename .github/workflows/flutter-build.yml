@@ -377,6 +377,7 @@ jobs:
     uses: ./.github/workflows/bridge.yml
 
   build-rustdesk-ios:
+    if: ${{ inputs.upload-artifact == 'true' }}
     needs: [generate-bridge-linux]
     name: build rustdesk ios ipa ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: ${{ matrix.job.os }}
@@ -479,6 +480,7 @@ jobs:
               extra-build-features: "",
               openssl-arch: android-arm
             }
+    if: ${{ matrix.job.arch == 'armv7' || inputs.upload-artifact == 'true' }}
     steps:
       - name: Install dependencies
         run: |
@@ -782,6 +784,7 @@ jobs:
           path: target/release/liblibrustdesk.so
 
   build-rustdesk-lib-linux-arm:
+    if: ${{ inputs.upload-artifact == 'true' }}
     needs: [generate-bridge-linux, build-vcpkg-deps-linux]
     name: build-rust-lib ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: ${{ matrix.job.os }}
@@ -944,6 +947,7 @@ jobs:
           path: target/release/liblibrustdesk.so
 
   build-rustdesk-sciter-arm:
+    if: ${{ inputs.upload-artifact == 'true' }}
     needs: [build-vcpkg-deps-linux]
     name: build-rustdesk(sciter) ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: ${{ matrix.job.os }}
@@ -1102,6 +1106,7 @@ jobs:
           path: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.deb
 
   build-rustdesk-linux-arm:
+    if: ${{ inputs.upload-artifact == 'true' }}
     needs: [build-rustdesk-lib-linux-arm]
     name: build-rustdesk ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: ubuntu-20.04 # 20.04 has more performance on arm build
