@@ -34,7 +34,7 @@ class PortForwardPage extends StatefulWidget {
       this.forceRelay})
       : super(key: key);
   final String id;
-  final String password;
+  final String? password;
   final DesktopTabController tabController;
   final bool isRDP;
   final bool? forceRelay;
