@@ -46,7 +46,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("config_microphone", "In order to speak remotely, you need to grant RustDesk \"Record Audio\" permissions."),
         ("relay_hint_tip", "It may not be possible to connect directly; you can try connecting via relay. Additionally, if you want to use a relay on your first attempt, you can add the \"/r\" suffix to the ID or select the option \"Always connect via relay\" in the card of recent sessions if it exists."),
         ("No transfers in progress", ""),
-        ("install_cert_tip", "Install RustDesk certificate."),
+        ("install_cert_tip", "Install RustDesk certificate"),
         ("comfirm_install_cert_tip", "This certificate is a RustDesk testing certificate, and you can trust this certificate. The certificate will be used for trusting and installing RustDesk drivers."),
         ("empty_recent_tip", "Oops, no recent sessions!\nTime to plan a new one."),
         ("empty_favorite_tip", "No favorite peers yet?\nLet's find someone to connect with and add it to your favorites!"),
