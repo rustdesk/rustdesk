@@ -160,7 +160,7 @@ class _InstallPageBodyState extends State<_InstallPageBody>
               Option(desktopicon, label: 'Create desktop icon'),
               Offstage(
                 offstage: !Platform.isWindows,
-                child: Option(driverCert, label: 'idd_driver_tip'),
+                child: Option(driverCert, label: 'install_cert_tip'),
               ).marginOnly(top: 7),
               Container(
                   padding: EdgeInsets.all(12),
@@ -282,7 +282,7 @@ class _InstallPageBodyState extends State<_InstallPageBody>
           title: null,
           content: SelectionArea(
               child:
-                  msgboxContent('info', 'Warning', 'confirm_idd_driver_tip')),
+                  msgboxContent('info', 'Warning', 'comfirm_install_cert_tip')),
           actions: btns,
           onCancel: close,
         ),
