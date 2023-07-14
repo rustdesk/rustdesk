@@ -1233,7 +1233,7 @@ jobs:
             pushd ~/rpmbuild/RPMS/${{ matrix.job.arch }}
             mkdir -p /opt/artifacts/rpm
             for name in rustdesk*??.rpm; do
-                mv "$name" "/opt/artifacts/rpm/${name%%.rpm}-fedora28-centos8.rpm" 
+                mv "$name" "/opt/artifacts/rpm/${name%%.rpm}.rpm" 
             done
             # rpm suse package
             echo -e "start packaging suse package"
@@ -1358,7 +1358,7 @@ jobs:
       #     files: |
       #       res/rustdesk*.zst
 
-      - name: Publish fedora28/centos8 package
+      - name: Publish fedora package
         if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true'
         uses: softprops/action-gh-release@v1
         with:
@@ -1457,7 +1457,7 @@ jobs:
             pushd ~/rpmbuild/RPMS/${{ matrix.job.arch }}
             mkdir -p /opt/artifacts/rpm
             for name in rustdesk*??.rpm; do
-                mv "$name" "/opt/artifacts/rpm/${name%%.rpm}-fedora28-centos8.rpm" 
+                mv "$name" "/opt/artifacts/rpm/${name%%.rpm}.rpm" 
             done
             # rpm suse package
             pushd /workspace
@@ -1572,7 +1572,7 @@ jobs:
           files: |
             ./appimage/rustdesk-${{ env.VERSION }}-*.AppImage
 
-      - name: Publish fedora28/centos8 package
+      - name: Publish fedora package
         if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true'
         uses: softprops/action-gh-release@v1
         with:
