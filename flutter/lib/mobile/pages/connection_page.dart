@@ -275,7 +275,7 @@ class _WebMenuState extends State<WebMenu> {
             if (gFFI.userModel.userName.value.isEmpty) {
               loginDialog();
             } else {
-              gFFI.userModel.logOut();
+              logOutConfirmDialog();
             }
           }
           if (value == 'scan') {

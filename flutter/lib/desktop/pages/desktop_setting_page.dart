@@ -1385,7 +1385,7 @@ class _AccountState extends State<_Account> {
         () => {
               gFFI.userModel.userName.value.isEmpty
                   ? loginDialog()
-                  : gFFI.userModel.logOut()
+                  : logOutConfirmDialog()
             }));
   }
 
@@ -1503,7 +1503,7 @@ class _PluginState extends State<_Plugin> {
         () => {
               gFFI.userModel.userName.value.isEmpty
                   ? loginDialog()
-                  : gFFI.userModel.logOut()
+                  : logOutConfirmDialog()
             }));
   }
 }

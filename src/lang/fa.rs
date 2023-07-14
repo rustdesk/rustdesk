@@ -517,5 +517,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Outgoing connection", "اتصال خروجی"),
         ("Exit", "خروج"),
         ("Open", "باز کردن"),
+        ("logout_tip", ""),
     ].iter().cloned().collect();
 }
