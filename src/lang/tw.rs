@@ -517,5 +517,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Outgoing connection", "發起的連接"),
         ("Exit", "退出"),
         ("Open", "開啟"),
+        ("logout_tip", "確定要退出登錄嗎？"),
     ].iter().cloned().collect();
 }

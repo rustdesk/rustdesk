@@ -517,5 +517,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Outgoing connection", "Conenssioni in uscita"),
         ("Exit", "Esci da RustDesk"),
         ("Open", "Apri RustDesk"),
+        ("logout_tip", ""),
     ].iter().cloned().collect();
 }

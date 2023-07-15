@@ -392,7 +392,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                 if (gFFI.userModel.userName.value.isEmpty) {
                   loginDialog();
                 } else {
-                  gFFI.userModel.logOut();
+                  logOutConfirmDialog();
                 }
               },
             ),

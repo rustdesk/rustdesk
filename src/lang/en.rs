@@ -71,5 +71,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("resolution_custom_tip", "Custom resolution"),
         ("accept_and_elevate_btn_tooltip", "Accept the connection and elevate UAC permissions."),
         ("clipboard_wait_response_timeout_tip", "Timed out waiting for copy response."),
+        ("logout_tip", "Are you sure you want to log out?")
         ].iter().cloned().collect();
 }
