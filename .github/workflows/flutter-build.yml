@@ -719,7 +719,7 @@ jobs:
         id: vcpkg
         with:
           arch: ${{ matrix.job.arch }}
-          distro: ubuntu20.04
+          distro: ubuntu18.04
           # not ready yet
           # distro: ubuntu18.04-rustdesk
           githubToken: ${{ github.token }}
@@ -1423,7 +1423,7 @@ jobs:
         id: vcpkg
         with:
           arch: ${{ matrix.job.arch }}
-          distro: ubuntu20.04
+          distro: ubuntu18.04
           githubToken: ${{ github.token }}
           setup: |
             ls -l "${PWD}"
@@ -1612,7 +1612,7 @@ jobs:
   #       id: rpm
   #       with:
   #         arch: ${{ matrix.job.arch }}
-  #         distro: ubuntu20.04
+  #         distro: ubuntu18.04
   #         githubToken: ${{ github.token }}
   #         setup: |
   #           ls -l "${PWD}"
@@ -1673,7 +1673,7 @@ jobs:
         id: rpm
         with:
           arch: ${{ matrix.job.arch }}
-          distro: ubuntu20.04
+          distro: ubuntu18.04
           githubToken: ${{ github.token }}
           setup: |
             ls -l "${PWD}"
