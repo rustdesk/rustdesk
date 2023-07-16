@@ -1116,21 +1116,21 @@ jobs:
           - {
               arch: aarch64,
               target: aarch64-unknown-linux-gnu,
-              os: ubuntu-20.04, # just for naming package, not running host
+              os: ubuntu-18.04, # just for naming package, not running host
               use-cross: true,
               extra-build-features: "",
             }
           - {
               arch: aarch64,
               target: aarch64-unknown-linux-gnu,
-              os: ubuntu-20.04, # just for naming package, not running host
+              os: ubuntu-18.04, # just for naming package, not running host
               use-cross: true,
               extra-build-features: "appimage",
             }
           # - {
           #     arch: aarch64,
           #     target: aarch64-unknown-linux-gnu,
-          #     os: ubuntu-20.04, # just for naming package, not running host
+          #     os: ubuntu-18.04, # just for naming package, not running host
           #     use-cross: true,
           #     extra-build-features: "flatpak",
           #   }
@@ -1380,19 +1380,19 @@ jobs:
           - {
               arch: x86_64,
               target: x86_64-unknown-linux-gnu,
-              os: ubuntu-20.04, 
+              os: ubuntu-18.04, 
               extra-build-features: "",
             }
           - {
               arch: x86_64,
               target: x86_64-unknown-linux-gnu,
-              os: ubuntu-20.04,
+              os: ubuntu-18.04,
               extra-build-features: "flatpak",
             }
           - {
               arch: x86_64,
               target: x86_64-unknown-linux-gnu,
-              os: ubuntu-20.04,
+              os: ubuntu-18.04,
               extra-build-features: "appimage",
             }
           # - { target: x86_64-unknown-linux-musl   , os: ubuntu-20.04, use-cross: true }
@@ -1591,7 +1591,7 @@ jobs:
   #     fail-fast: false
   #     matrix:
   #       job:
-  #         # - { target: aarch64-unknown-linux-gnu   , os: ubuntu-20.04, arch: arm64 }
+  #         # - { target: aarch64-unknown-linux-gnu   , os: ubuntu-18.04, arch: arm64 }
   #         - { target: aarch64-unknown-linux-gnu, os: ubuntu-20.04, arch: arm64  }
   #   steps:
   #     - name: Checkout source code
@@ -1653,7 +1653,7 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { target: x86_64-unknown-linux-gnu, os: ubuntu-20.04, arch: x86_64 }
+          - { target: x86_64-unknown-linux-gnu, os: ubuntu-18.04, arch: x86_64 }
     steps:
       - name: Checkout source code
         uses: actions/checkout@v3
