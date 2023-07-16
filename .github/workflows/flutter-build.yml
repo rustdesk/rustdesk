@@ -682,21 +682,6 @@ jobs:
           key: ${{ matrix.job.target }}-${{ matrix.job.extra-build-features }}
           cache-directories: "/opt/rust-registry"
 
-      - name: Install local registry
-        run: |
-          mkdir -p /opt/rust-registry
-          cargo install cargo-local-registry
-
-      - name: Build local registry
-        uses: nick-fields/retry@v2
-        id: build-local-registry
-        continue-on-error: true
-        with:
-          max_attempts: 3
-          timeout_minutes: 15
-          retry_on: error
-          command: cargo local-registry --sync ./Cargo.lock /opt/rust-registry
-
       - name: Disable rust bridge build
         run: |
           # only build cdylib
@@ -746,19 +731,15 @@ jobs:
             # rust
             pushd /opt
             # do not use rustup, because memory overflow in qemu
-            wget -O rust.tar.gz https://static.rust-lang.org/dist/rust-1.70.0-${{ matrix.job.target }}.tar.gz
+            wget -O rust.tar.gz https://static.rust-lang.org/dist/rust-1.71.0-${{ matrix.job.target }}.tar.gz
             tar -zxvf rust.tar.gz > /dev/null && rm rust.tar.gz
-            cd rust-1.70.0-${{ matrix.job.target }} && ./install.sh
-            rm -rf rust-1.70.0-${{ matrix.job.target }}
+            cd rust-1.71.0-${{ matrix.job.target }} && ./install.sh
+            rm -rf rust-1.71.0-${{ matrix.job.target }}
             # edit config
             mkdir -p ~/.cargo/
             echo """
               [source.crates-io]
               registry = 'https://github.com/rust-lang/crates.io-index'
-              replace-with = 'local-registry'
-
-              [source.local-registry]
-              local-registry = '/opt/rust-registry/'
             """ > ~/.cargo/config
             cat ~/.cargo/config
             # start build
@@ -853,21 +834,6 @@ jobs:
           key: ${{ matrix.job.target }}-${{ matrix.job.extra-build-features }}
           cache-directories: "/opt/rust-registry"
 
-      - name: Install local registry
-        run: |
-          mkdir -p /opt/rust-registry
-          cargo install cargo-local-registry
-
-      - name: Build local registry
-        uses: nick-fields/retry@v2
-        id: build-local-registry
-        continue-on-error: true
-        with:
-          max_attempts: 3
-          timeout_minutes: 15
-          retry_on: error
-          command: cargo local-registry --sync ./Cargo.lock /opt/rust-registry
-
       - name: Disable rust bridge build
         run: |
           # only build cdylib
@@ -915,19 +881,15 @@ jobs:
             # rust
             pushd /opt
             # do not use rustup, because memory overflow in qemu
-            wget -O rust.tar.gz https://static.rust-lang.org/dist/rust-1.70.0-${{ matrix.job.target }}.tar.gz
+            wget -O rust.tar.gz https://static.rust-lang.org/dist/rust-1.71.0-${{ matrix.job.target }}.tar.gz
             tar -zxvf rust.tar.gz > /dev/null && rm rust.tar.gz
-            cd rust-1.70.0-${{ matrix.job.target }} && ./install.sh
-            rm -rf rust-1.70.0-${{ matrix.job.target }}
+            cd rust-1.71.0-${{ matrix.job.target }} && ./install.sh
+            rm -rf rust-1.71.0-${{ matrix.job.target }}
             # edit config
             mkdir -p ~/.cargo/
             echo """
               [source.crates-io]
               registry = 'https://github.com/rust-lang/crates.io-index'
-              replace-with = 'local-registry'
-
-              [source.local-registry]
-              local-registry = '/opt/rust-registry/'
             """ > ~/.cargo/config
             cat ~/.cargo/config
             # start build
@@ -1002,21 +964,6 @@ jobs:
           key: ${{ matrix.job.target }}-${{ matrix.job.extra-build-features }}
           cache-directories: "/opt/rust-registry"
 
-      - name: Install local registry
-        run: |
-          mkdir -p /opt/rust-registry
-          cargo install cargo-local-registry
-
-      - name: Build local registry
-        uses: nick-fields/retry@v2
-        id: build-local-registry
-        continue-on-error: true
-        with:
-          max_attempts: 3
-          timeout_minutes: 15
-          retry_on: error
-          command: cargo local-registry --sync ./Cargo.lock /opt/rust-registry
-
       - name: Restore vcpkg files
         uses: actions/download-artifact@master
         with:
@@ -1048,19 +995,15 @@ jobs:
             # rust
             pushd /opt
             # do not use rustup, because memory overflow in qemu
-            wget -O rust.tar.gz https://static.rust-lang.org/dist/rust-1.70.0-${{ matrix.job.target }}.tar.gz
+            wget -O rust.tar.gz https://static.rust-lang.org/dist/rust-1.71.0-${{ matrix.job.target }}.tar.gz
             tar -zxvf rust.tar.gz > /dev/null && rm rust.tar.gz
-            cd rust-1.70.0-${{ matrix.job.target }} && ./install.sh
-            rm -rf rust-1.70.0-${{ matrix.job.target }}
+            cd rust-1.71.0-${{ matrix.job.target }} && ./install.sh
+            rm -rf rust-1.71.0-${{ matrix.job.target }}
             # edit config
             mkdir -p ~/.cargo/
             echo """
               [source.crates-io]
               registry = 'https://github.com/rust-lang/crates.io-index'
-              replace-with = 'local-registry'
-
-              [source.local-registry]
-              local-registry = '/opt/rust-registry/'
             """ > ~/.cargo/config
             cat ~/.cargo/config
             
