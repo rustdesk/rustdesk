@@ -332,9 +332,9 @@ pub fn check_config_process() {
     use hbb_common::sysinfo::{ProcessExt, System, SystemExt};
 
     std::thread::spawn(move || {
-        // Remove to avoid checking process errors
+        // Clear to avoid checking process errors
         // But when the program is just started, the configuration file has not been updated, and the new connection will read an empty configuration
-        HwCodecConfig::remove();
+        HwCodecConfig::clear();
         if let Ok(exe) = std::env::current_exe() {
             if let Some(file_name) = exe.file_name().to_owned() {
                 let s = System::new_all();
