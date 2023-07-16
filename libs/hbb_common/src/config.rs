@@ -399,10 +399,10 @@ impl Config2 {
 pub fn load_path<T: serde::Serialize + serde::de::DeserializeOwned + Default + std::fmt::Debug>(
     file: PathBuf,
 ) -> T {
-    let cfg = match confy::load_path(file) {
+    let cfg = match confy::load_path(&file) {
         Ok(config) => config,
         Err(err) => {
-            log::error!("Failed to load config: {}", err);
+            log::error!("Failed to load config '{}': {}", file.as_os_str().to_str().unwrap_or(""), err);
             T::default()
         }
     };
@@ -958,7 +958,7 @@ impl PeerConfig {
                 config
             }
             Err(err) => {
-                log::error!("Failed to load config: {}", err);
+                log::error!("Failed to load peer config '{}': {}", id, err);
                 Default::default()
             }
         }

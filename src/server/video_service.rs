@@ -623,6 +623,8 @@ fn run(sp: GenericService) -> ResultType<()> {
             bail!("SWITCH");
         }
         if c.current != *CURRENT_DISPLAY.lock().unwrap() {
+            #[cfg(target_os = "linux")]
+            wayland::clear();
             *SWITCH.lock().unwrap() = true;
             bail!("SWITCH");
         }
@@ -657,6 +659,8 @@ fn run(sp: GenericService) -> ResultType<()> {
             if let Some(msg_out) = check_get_displays_changed_msg() {
                 sp.send(msg_out);
                 log::info!("Displays changed");
+                #[cfg(target_os = "linux")]
+                wayland::clear();
                 *SWITCH.lock().unwrap() = true;
                 bail!("SWITCH");
             }
@@ -734,6 +738,8 @@ fn run(sp: GenericService) -> ResultType<()> {
             Err(err) => {
                 if check_display_changed(c.ndisplay, c.current, c.width, c.height) {
                     log::info!("Displays changed");
+                    #[cfg(target_os = "linux")]
+                    wayland::clear();
                     *SWITCH.lock().unwrap() = true;
                     bail!("SWITCH");
                 }
