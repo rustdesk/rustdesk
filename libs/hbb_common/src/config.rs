@@ -402,7 +402,7 @@ pub fn load_path<T: serde::Serialize + serde::de::DeserializeOwned + Default + s
     let cfg = match confy::load_path(&file) {
         Ok(config) => config,
         Err(err) => {
-            log::error!("Failed to load config '{}': {}", file.as_os_str().to_str().unwrap_or(""), err);
+            log::error!("Failed to load config '{}': {}", file.display(), err);
             T::default()
         }
     };
