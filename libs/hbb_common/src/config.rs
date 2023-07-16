@@ -81,10 +81,7 @@ const CHARS: &[char] = &[
     'm', 'n', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
 ];
 
-pub const RENDEZVOUS_SERVERS: &[&str] = &[
-    "rs-ny.rustdesk.com",
-    "rs-sg.rustdesk.com",
-];
+pub const RENDEZVOUS_SERVERS: &[&str] = &["rs-ny.rustdesk.com", "rs-sg.rustdesk.com"];
 
 pub const RS_PUB_KEY: &str = match option_env!("RS_PUB_KEY") {
     Some(key) if !key.is_empty() => key,
@@ -1350,8 +1347,8 @@ impl HwCodecConfig {
         Config::store_(self, "_hwcodec");
     }
 
-    pub fn remove() {
-        std::fs::remove_file(Config::file_("_hwcodec")).ok();
+    pub fn clear() {
+        HwCodecConfig::default().store();
     }
 
     /// refresh current global HW_CODEC_CONFIG, usually uesd after HwCodecConfig::remove()
