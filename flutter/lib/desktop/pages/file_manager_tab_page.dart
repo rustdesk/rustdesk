@@ -44,6 +44,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
         page: FileManagerPage(
           key: ValueKey(params['id']),
           id: params['id'],
+          password: params['password'],
           tabController: tabController,
           forceRelay: params['forceRelay'],
         )));
@@ -72,6 +73,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
             page: FileManagerPage(
               key: ValueKey(id),
               id: id,
+              password: args['password'],
               tabController: tabController,
               forceRelay: args['forceRelay'],
             )));

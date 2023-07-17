@@ -81,11 +81,7 @@ const CHARS: &[char] = &[
     'm', 'n', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
 ];
 
-pub const RENDEZVOUS_SERVERS: &[&str] = &[
-    "rs-ny.rustdesk.com",
-    "rs-sg.rustdesk.com",
-    "rs-cn.rustdesk.com",
-];
+pub const RENDEZVOUS_SERVERS: &[&str] = &["rs-ny.rustdesk.com", "rs-sg.rustdesk.com"];
 
 pub const RS_PUB_KEY: &str = match option_env!("RS_PUB_KEY") {
     Some(key) if !key.is_empty() => key,
@@ -400,10 +396,10 @@ impl Config2 {
 pub fn load_path<T: serde::Serialize + serde::de::DeserializeOwned + Default + std::fmt::Debug>(
     file: PathBuf,
 ) -> T {
-    let cfg = match confy::load_path(file) {
+    let cfg = match confy::load_path(&file) {
         Ok(config) => config,
         Err(err) => {
-            log::error!("Failed to load config: {}", err);
+            log::error!("Failed to load config '{}': {}", file.display(), err);
             T::default()
         }
     };
@@ -959,7 +955,7 @@ impl PeerConfig {
                 config
             }
             Err(err) => {
-                log::error!("Failed to load config: {}", err);
+                log::error!("Failed to load peer config '{}': {}", id, err);
                 Default::default()
             }
         }
@@ -1351,8 +1347,8 @@ impl HwCodecConfig {
         Config::store_(self, "_hwcodec");
     }
 
-    pub fn remove() {
-        std::fs::remove_file(Config::file_("_hwcodec")).ok();
+    pub fn clear() {
+        HwCodecConfig::default().store();
     }
 
     /// refresh current global HW_CODEC_CONFIG, usually uesd after HwCodecConfig::remove()

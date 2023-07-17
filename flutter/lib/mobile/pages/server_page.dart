@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/mobile/widgets/dialog.dart';
+import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 
@@ -419,14 +420,16 @@ class ConnectionManager extends StatelessWidget {
                               ? const SizedBox.shrink()
                               : IconButton(
                                   onPressed: () {
-                                    gFFI.chatModel.changeCurrentID(client.id);
+                                    gFFI.chatModel.changeCurrentKey(
+                                        MessageKey(client.peerId, client.id));
                                     final bar = navigationBarKey.currentWidget;
                                     if (bar != null) {
                                       bar as BottomNavigationBar;
                                       bar.onTap!(1);
                                     }
                                   },
-                                  icon: const Icon(Icons.chat)))
+                                  icon: unreadTopRightBuilder(
+                                      client.unreadChatMessageCount)))
                     ],
                   ),
                   client.authorized

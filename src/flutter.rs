@@ -910,7 +910,7 @@ pub mod connection_manager {
 
     #[inline]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    pub fn start_listen_ipc_thread() {
+    fn start_listen_ipc_thread() {
         start_listen_ipc(true);
     }
 
@@ -929,6 +929,12 @@ pub mod connection_manager {
         } else {
             start_ipc(cm);
         }
+    }
+
+    #[inline]
+    pub fn cm_init() {
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        start_listen_ipc_thread();
     }
 
     #[cfg(target_os = "android")]

@@ -2559,6 +2559,10 @@ mod raii {
             if active_conns_lock.is_empty() {
                 video_service::try_plug_out_virtual_display();
             }
+            #[cfg(all(windows))]
+            if active_conns_lock.is_empty() {
+                crate::privacy_win_mag::stop();
+            }
         }
     }
 }

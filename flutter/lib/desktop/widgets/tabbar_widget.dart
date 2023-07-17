@@ -225,6 +225,7 @@ class DesktopTab extends StatelessWidget {
   final double? maxLabelWidth;
   final Color? selectedTabBackgroundColor;
   final Color? unSelectedTabBackgroundColor;
+  final Color? selectedBorderColor;
 
   final DesktopTabController controller;
 
@@ -252,6 +253,7 @@ class DesktopTab extends StatelessWidget {
     this.maxLabelWidth,
     this.selectedTabBackgroundColor,
     this.unSelectedTabBackgroundColor,
+    this.selectedBorderColor,
   }) : super(key: key) {
     tabType = controller.tabType;
     isMainWindow = tabType == DesktopTabType.main ||
@@ -413,15 +415,17 @@ class DesktopTab extends StatelessWidget {
                               }
                             },
                             child: _ListView(
-                                controller: controller,
-                                tabBuilder: tabBuilder,
-                                tabMenuBuilder: tabMenuBuilder,
-                                labelGetter: labelGetter,
-                                maxLabelWidth: maxLabelWidth,
-                                selectedTabBackgroundColor:
-                                    selectedTabBackgroundColor,
-                                unSelectedTabBackgroundColor:
-                                    unSelectedTabBackgroundColor))),
+                              controller: controller,
+                              tabBuilder: tabBuilder,
+                              tabMenuBuilder: tabMenuBuilder,
+                              labelGetter: labelGetter,
+                              maxLabelWidth: maxLabelWidth,
+                              selectedTabBackgroundColor:
+                                  selectedTabBackgroundColor,
+                              unSelectedTabBackgroundColor:
+                                  unSelectedTabBackgroundColor,
+                              selectedBorderColor: selectedBorderColor,
+                            ))),
                   ],
                 ))),
         // hide simulated action buttons when we in compatible ui mode, because of reusing system title bar.
@@ -724,6 +728,7 @@ class _ListView extends StatelessWidget {
   final LabelGetter? labelGetter;
   final double? maxLabelWidth;
   final Color? selectedTabBackgroundColor;
+  final Color? selectedBorderColor;
   final Color? unSelectedTabBackgroundColor;
 
   Rx<DesktopTabState> get state => controller.state;
@@ -736,6 +741,7 @@ class _ListView extends StatelessWidget {
     this.maxLabelWidth,
     this.selectedTabBackgroundColor,
     this.unSelectedTabBackgroundColor,
+    this.selectedBorderColor,
   });
 
   /// Check whether to show ListView
@@ -788,6 +794,7 @@ class _ListView extends StatelessWidget {
                   selectedTabBackgroundColor: selectedTabBackgroundColor ??
                       MyTheme.tabbar(context).selectedTabBackgroundColor,
                   unSelectedTabBackgroundColor: unSelectedTabBackgroundColor,
+                  selectedBorderColor: selectedBorderColor,
                 );
               }).toList()));
   }
@@ -808,6 +815,7 @@ class _Tab extends StatefulWidget {
   final double? maxLabelWidth;
   final Color? selectedTabBackgroundColor;
   final Color? unSelectedTabBackgroundColor;
+  final Color? selectedBorderColor;
 
   const _Tab({
     Key? key,
@@ -825,6 +833,7 @@ class _Tab extends StatefulWidget {
     this.maxLabelWidth,
     this.selectedTabBackgroundColor,
     this.unSelectedTabBackgroundColor,
+    this.selectedBorderColor,
   }) : super(key: key);
 
   @override
@@ -915,35 +924,46 @@ class _TabState extends State<_Tab> with RestorationMixin {
         },
         onTap: () => widget.onTap(),
         child: Container(
-          color: isSelected
-              ? widget.selectedTabBackgroundColor
-              : widget.unSelectedTabBackgroundColor,
-          child: Row(
-            children: [
-              SizedBox(
-                  height: _kTabBarHeight,
-                  child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        _buildTabContent(),
-                        Obx((() => _CloseButton(
-                              visible: hover.value && widget.closable,
-                              tabSelected: isSelected,
-                              onClose: () => widget.onClose(),
-                            )))
-                      ])).paddingOnly(left: 10, right: 5),
-              Offstage(
-                offstage: !showDivider,
-                child: VerticalDivider(
-                  width: 1,
-                  indent: _kDividerIndent,
-                  endIndent: _kDividerIndent,
-                  color: MyTheme.tabbar(context).dividerColor,
-                ),
-              )
-            ],
-          ),
-        ),
+            decoration: isSelected && widget.selectedBorderColor != null
+                ? BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(
+                        color: widget.selectedBorderColor!,
+                        width: 1,
+                      ),
+                    ),
+                  )
+                : null,
+            child: Container(
+              color: isSelected
+                  ? widget.selectedTabBackgroundColor
+                  : widget.unSelectedTabBackgroundColor,
+              child: Row(
+                children: [
+                  SizedBox(
+                      height: _kTabBarHeight,
+                      child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            _buildTabContent(),
+                            Obx((() => _CloseButton(
+                                  visible: hover.value && widget.closable,
+                                  tabSelected: isSelected,
+                                  onClose: () => widget.onClose(),
+                                )))
+                          ])).paddingOnly(left: 10, right: 5),
+                  Offstage(
+                    offstage: !showDivider,
+                    child: VerticalDivider(
+                      width: 1,
+                      indent: _kDividerIndent,
+                      endIndent: _kDividerIndent,
+                      color: MyTheme.tabbar(context).dividerColor,
+                    ),
+                  )
+                ],
+              ),
+            )),
       ),
     );
   }
@@ -1099,14 +1119,14 @@ class TabbarTheme extends ThemeExtension<TabbarTheme> {
       selectedIconColor: Color.fromARGB(255, 26, 26, 26),
       unSelectedIconColor: Color.fromARGB(255, 96, 96, 96),
       dividerColor: Color.fromARGB(255, 238, 238, 238),
-      hoverColor: Color.fromARGB(51, 158, 158, 158),
-      closeHoverColor: Color.fromARGB(255, 224, 224, 224),
-      selectedTabBackgroundColor: Color.fromARGB(255, 240, 240, 240));
+      hoverColor: Colors.white54,
+      closeHoverColor: Colors.white,
+      selectedTabBackgroundColor: Colors.white54);
 
   static const dark = TabbarTheme(
       selectedTabIconColor: MyTheme.accent,
       unSelectedTabIconColor: Color.fromARGB(255, 30, 65, 98),
-      selectedTextColor: Color.fromARGB(255, 255, 255, 255),
+      selectedTextColor: Colors.white,
       unSelectedTextColor: Color.fromARGB(255, 192, 192, 192),
       selectedIconColor: Color.fromARGB(255, 192, 192, 192),
       unSelectedIconColor: Color.fromARGB(255, 255, 255, 255),

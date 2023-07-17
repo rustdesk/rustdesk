@@ -6,6 +6,18 @@ use hbb_common::log;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::platform::register_breakdown_handler;
 
+#[macro_export]
+macro_rules! my_println{
+    ($($arg:tt)*) => {
+        #[cfg(not(windows))]
+        println!("{}", format_args!($($arg)*));
+        #[cfg(windows)]
+        crate::platform::message_box(
+            &format!("{}", format_args!($($arg)*))
+        );
+    };
+}
+
 /// shared by flutter and sciter main function
 ///
 /// [Note]
@@ -19,15 +31,23 @@ pub fn core_main() -> Option<Vec<String>> {
     let mut _is_elevate = false;
     let mut _is_run_as_system = false;
     let mut _is_quick_support = false;
-    let mut _is_flutter_connect = false;
+    let mut _is_flutter_invoke_new_connection = false;
     let mut arg_exe = Default::default();
     for arg in std::env::args() {
         if i == 0 {
             arg_exe = arg;
         } else if i > 0 {
             #[cfg(feature = "flutter")]
-            if arg == "--connect" || arg == "--play" {
-                _is_flutter_connect = true;
+            if [
+                "--connect",
+                "--play",
+                "--file-transfer",
+                "--port-forward",
+                "--rdp",
+            ]
+            .contains(&arg.as_str())
+            {
+                _is_flutter_invoke_new_connection = true;
             }
             if arg == "--elevate" {
                 _is_elevate = true;
@@ -43,9 +63,9 @@ pub fn core_main() -> Option<Vec<String>> {
     }
     #[cfg(any(target_os = "linux", target_os = "windows"))]
     if args.is_empty() {
-        #[cfg(target_os = "linux")]
-        hbb_common::allow_err!(crate::platform::check_autostart_config());
         if crate::check_process("--server", false) && !crate::check_process("--tray", true) {
+            #[cfg(target_os = "linux")]
+            hbb_common::allow_err!(crate::platform::check_autostart_config());
             hbb_common::allow_err!(crate::run_me(vec!["--tray"]));
         }
     }
@@ -63,7 +83,7 @@ pub fn core_main() -> Option<Vec<String>> {
         }
     }
     #[cfg(feature = "flutter")]
-    if _is_flutter_connect {
+    if _is_flutter_invoke_new_connection {
         return core_main_invoke_new_connection(std::env::args());
     }
     let click_setup = cfg!(windows) && args.is_empty() && crate::common::is_setup(&arg_exe);
@@ -75,6 +95,7 @@ pub fn core_main() -> Option<Vec<String>> {
         args.clear();
     }
     if args.len() > 0 && args[0] == "--version" {
+        // not use my_println here, because check super use using this command, no dialog expected
         println!("{}", crate::VERSION);
         return None;
     }
@@ -215,18 +236,23 @@ pub fn core_main() -> Option<Vec<String>> {
             return None;
         } else if args[0] == "--password" {
             if args.len() == 2 {
-                if crate::platform::is_root() {
+                if crate::platform::is_installed()
+                    && crate::platform::check_super_user_permission().unwrap_or_default()
+                {
                     crate::ipc::set_permanent_password(args[1].to_owned()).unwrap();
+                    my_println!("Done!");
                 } else {
-                    println!("Administrative privileges required!");
+                    my_println!("Installation and administrative privileges required!");
                 }
             }
             return None;
         } else if args[0] == "--get-id" {
-            if crate::platform::is_root() {
-                println!("{}", crate::ipc::get_id());
+            if crate::platform::is_installed()
+                && crate::platform::check_super_user_permission().unwrap_or_default()
+            {
+                my_println!("{}", crate::ipc::get_id());
             } else {
-                println!("Permission denied!");
+                my_println!("Installation and administrative privileges required!");
             }
             return None;
         } else if args[0] == "--check-hwcodec-config" {
@@ -318,38 +344,48 @@ fn import_config(path: &str) {
 /// If it returns [`Some`], then the process will continue, and flutter gui will be started.
 #[cfg(feature = "flutter")]
 fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<String>> {
-    args.position(|element| {
-        return element == "--connect" || element == "--play";
-    })?;
-    let mut peer_id = args.next().unwrap_or("".to_string());
-    if peer_id.is_empty() {
-        eprintln!("please provide a valid peer id");
-        return None;
-    }
-    let app_name = crate::get_app_name();
-    let ext = format!(".{}", app_name.to_lowercase());
-    if peer_id.ends_with(&ext) {
-        peer_id = peer_id.replace(&ext, "");
-    }
-    let mut switch_uuid = None;
-    while let Some(item) = args.next() {
-        if item == "--switch_uuid" {
-            switch_uuid = args.next();
+    let mut authority = None;
+    let mut id = None;
+    let mut param_array = vec![];
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--connect" | "--play" | "--file-transfer" | "--port-forward" | "--rdp" => {
+                authority = Some((&arg.to_string()[2..]).to_owned());
+                id = args.next();
+            }
+            "--password" => {
+                if let Some(password) = args.next() {
+                    param_array.push(format!("password={password}"));
+                }
+            }
+            "--relay" => {
+                param_array.push(format!("relay=true"));
+            }
+            // inner
+            "--switch_uuid" => {
+                if let Some(switch_uuid) = args.next() {
+                    param_array.push(format!("switch_uuid={switch_uuid}"));
+                }
+            }
+            _ => {}
         }
     }
-    let mut param_array = vec![];
-    if switch_uuid.is_some() {
-        let switch_uuid = switch_uuid.map_or("".to_string(), |p| format!("switch_uuid={}", p));
-        param_array.push(switch_uuid);
+    let mut uni_links = Default::default();
+    if let Some(authority) = authority {
+        if let Some(mut id) = id {
+            let app_name = crate::get_app_name();
+            let ext = format!(".{}", app_name.to_lowercase());
+            if id.ends_with(&ext) {
+                id = id.replace(&ext, "");
+            }
+            let params = param_array.join("&");
+            let params_flag = if params.is_empty() { "" } else { "?" };
+            uni_links = format!("rustdesk://{}/{}{}{}", authority, id, params_flag, params);
+        }
     }
-
-    let params = param_array.join("&");
-    let params_flag = if params.is_empty() { "" } else { "?" };
-    #[allow(unused)]
-    let uni_links = format!(
-        "rustdesk://connection/new/{}{}{}",
-        peer_id, params_flag, params
-    );
+    if uni_links.is_empty() {
+        return None;
+    }
 
     #[cfg(target_os = "linux")]
     return try_send_by_dbus(uni_links);

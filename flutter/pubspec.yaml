@@ -16,7 +16,7 @@ publish_to: "none" # Remove this line if you wish to publish to pub.dev
 # Read more about iOS versioning at
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # 1.1.9-1 works for android, but for ios it becomes 1.1.91, need to set it to 1.1.9-a.1 for iOS, will get 1.1.9.1, but iOS store not allow 4 numbers
-version: 1.2.0
+version: 1.2.1
 
 environment:
   sdk: ">=2.17.0"
@@ -96,6 +96,7 @@ dependencies:
   percent_indicator: ^4.2.2
   dropdown_button2: ^2.0.0
   uuid: ^3.0.7
+  auto_size_text_field: ^2.2.1
 
 dev_dependencies:
   icons_launcher: ^2.0.4

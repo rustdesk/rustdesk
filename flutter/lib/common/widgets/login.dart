@@ -675,3 +675,22 @@ Future<bool?> verificationCodeDialog(UserPayload? user) async {
 
   return res;
 }
+
+void logOutConfirmDialog() {
+  gFFI.dialogManager.show((setState, close, context) {
+    submit() {
+      close();
+      gFFI.userModel.logOut();
+    }
+
+    return CustomAlertDialog(
+      content: Text(translate("logout_tip")),
+      actions: [
+        dialogButton(translate("Cancel"), onPressed: close, isOutline: true),
+        dialogButton(translate("OK"), onPressed: submit),
+      ],
+      onSubmit: submit,
+      onCancel: close,
+    );
+  });
+}

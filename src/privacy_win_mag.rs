@@ -21,7 +21,7 @@ use winapi::{
         libloaderapi::{GetModuleHandleA, GetModuleHandleExA, GetProcAddress},
         memoryapi::{VirtualAllocEx, WriteProcessMemory},
         processthreadsapi::{
-            CreateProcessAsUserW, GetCurrentThreadId, QueueUserAPC, ResumeThread,
+            CreateProcessAsUserW, GetCurrentThreadId, QueueUserAPC, ResumeThread, TerminateProcess,
             PROCESS_INFORMATION, STARTUPINFOW,
         },
         winbase::{WTSGetActiveConsoleSessionId, CREATE_SUSPENDED, DETACHED_PROCESS},
@@ -46,7 +46,6 @@ pub const GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS: u32 = 4;
 const WM_USER_EXIT_HOOK: u32 = WM_USER + 1;
 
 lazy_static::lazy_static! {
-    static ref DLL_FOUND: Mutex<bool> = Mutex::new(false);
     static ref CONN_ID: Mutex<i32> = Mutex::new(0);
     static ref CUR_HOOK_THREAD_ID: Mutex<DWORD> = Mutex::new(0);
     static ref WND_HANDLERS: Mutex<WindowHandlers> = Mutex::new(WindowHandlers{hthread: 0, hprocess: 0});
@@ -59,16 +58,27 @@ struct WindowHandlers {
 
 impl Drop for WindowHandlers {
     fn drop(&mut self) {
+        self.reset();
+    }
+}
+
+impl WindowHandlers {
+    fn reset(&mut self) {
         unsafe {
+            if self.hprocess != 0 {
+                let _res = TerminateProcess(self.hprocess as _, 0);
+                CloseHandle(self.hprocess as _);
+            }
+            self.hprocess = 0;
             if self.hthread != 0 {
                 CloseHandle(self.hthread as _);
             }
             self.hthread = 0;
-            if self.hprocess != 0 {
-                CloseHandle(self.hprocess as _);
-            }
-            self.hprocess = 0;
         }
+    }
+
+    fn is_default(&self) -> bool {
+        self.hthread == 0 && self.hprocess == 0
     }
 }
 
@@ -85,7 +95,7 @@ pub fn turn_on_privacy(conn_id: i32) -> ResultType<bool> {
         );
     }
 
-    if !*DLL_FOUND.lock().unwrap() {
+    if WND_HANDLERS.lock().unwrap().is_default() {
         log::info!("turn_on_privacy, dll not found when started, try start");
         start()?;
         std::thread::sleep(std::time::Duration::from_millis(1_000));
@@ -155,8 +165,6 @@ pub fn start() -> ResultType<()> {
             dll_file.to_string_lossy().as_ref()
         );
     }
-
-    *DLL_FOUND.lock().unwrap() = true;
 
     let hwnd = wait_find_privacy_hwnd(1_000)?;
     if !hwnd.is_null() {
@@ -255,6 +263,11 @@ pub fn start() -> ResultType<()> {
     }
 
     Ok(())
+}
+
+#[inline]
+pub fn stop() {
+    WND_HANDLERS.lock().unwrap().reset();
 }
 
 unsafe fn inject_dll<'a>(hproc: HANDLE, hthread: HANDLE, dll_file: &'a str) -> ResultType<()> {

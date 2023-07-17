@@ -160,7 +160,7 @@ class _InstallPageBodyState extends State<_InstallPageBody>
               Option(desktopicon, label: 'Create desktop icon'),
               Offstage(
                 offstage: !Platform.isWindows,
-                child: Option(driverCert, label: 'idd_driver_tip'),
+                child: Option(driverCert, label: 'install_cert_tip'),
               ).marginOnly(top: 7),
               Container(
                   padding: EdgeInsets.all(12),
@@ -183,9 +183,9 @@ class _InstallPageBodyState extends State<_InstallPageBody>
                           InkWell(
                             hoverColor: Colors.transparent,
                             onTap: () =>
-                                launchUrlString('https://rustdesk.com/privacy'),
+                                launchUrlString('https://rustdesk.com/privacy.html'),
                             child: Tooltip(
-                              message: 'https://rustdesk.com/privacy',
+                              message: 'https://rustdesk.com/privacy.html',
                               child: Row(children: [
                                 Icon(Icons.launch_outlined, size: 16)
                                     .marginOnly(right: 5),
@@ -282,7 +282,7 @@ class _InstallPageBodyState extends State<_InstallPageBody>
           title: null,
           content: SelectionArea(
               child:
-                  msgboxContent('info', 'Warning', 'confirm_idd_driver_tip')),
+                  msgboxContent('info', 'Warning', 'comfirm_install_cert_tip')),
           actions: btns,
           onCancel: close,
         ),
