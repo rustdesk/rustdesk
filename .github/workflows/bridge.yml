@@ -42,7 +42,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           prefix-key: bridge-${{ matrix.job.os }}
-          workspace: "/tmp/flutter_rust_bridge/frb_codegen"
 
       - name: Cache Bridge
         id: cache-bridge
