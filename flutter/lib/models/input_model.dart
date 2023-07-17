@@ -477,7 +477,6 @@ class InputModel {
       } else if (dy < 0) {
         dy = 1;
       }
-      debugPrint('REMOVE ME ================== onPointerSignalImage');
       bind.sessionSendMouse(
           sessionId: sessionId,
           msg: '{"type": "wheel", "x": "$dx", "y": "$dy"}');
