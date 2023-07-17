@@ -268,6 +268,14 @@ class InputModel {
     sendMouse('up', button);
   }
 
+  void tapDown(MouseButtons button) {
+    sendMouse('down', button);
+  }
+
+    void tapUp(MouseButtons button) {
+    sendMouse('up', button);
+  }
+
   /// Send scroll event with scroll distance [y].
   void scroll(int y) {
     bind.sessionSendMouse(
@@ -429,7 +437,7 @@ class InputModel {
   }
 
   void onPointDownImage(PointerDownEvent e) {
-    debugPrint("onPointDownImage");
+    debugPrint("onPointDownImage ${e.kind}");
     _stopFling = true;
     if (e.kind != ui.PointerDeviceKind.mouse) {
       if (isPhysicalMouse.value) {

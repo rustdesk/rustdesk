@@ -337,6 +337,17 @@ class _RemotePageState extends State<RemotePage>
     }
   }
 
+  Widget _buildRawTouchAndPointerRegion(
+    Widget child,
+    PointerEnterEventListener? onEnter,
+    PointerExitEventListener? onExit,
+  ) {
+    return RawTouchGestureDetectorRegion(
+      child: _buildRawPointerMouseRegion(child, onEnter, onExit),
+      ffi: _ffi,
+    );
+  }
+
   Widget _buildRawPointerMouseRegion(
     Widget child,
     PointerEnterEventListener? onEnter,
@@ -384,7 +395,7 @@ class _RemotePageState extends State<RemotePage>
           textureId: _textureId,
           useTextureRender: useTextureRender,
           listenerBuilder: (child) =>
-              _buildRawPointerMouseRegion(child, enterView, leaveView),
+              _buildRawTouchAndPointerRegion(child, enterView, leaveView),
         );
       }))
     ];
@@ -401,7 +412,7 @@ class _RemotePageState extends State<RemotePage>
       Positioned(
         top: 10,
         right: 10,
-        child: _buildRawPointerMouseRegion(
+        child: _buildRawTouchAndPointerRegion(
             QualityMonitor(_ffi.qualityMonitorModel), null, null),
       ),
     );
