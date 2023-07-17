@@ -1265,7 +1265,6 @@ class CursorModel with ChangeNotifier {
   }
 
   updatePan(double dx, double dy, bool touchMode) {
-    if (parent.target?.imageModel.image == null) return;
     if (touchMode) {
       final scale = parent.target?.canvasModel.scale ?? 1.0;
       _x += dx / scale;
@@ -1274,6 +1273,7 @@ class CursorModel with ChangeNotifier {
       notifyListeners();
       return;
     }
+    if (parent.target?.imageModel.image == null) return;
     final scale = parent.target?.canvasModel.scale ?? 1.0;
     dx /= scale;
     dy /= scale;
