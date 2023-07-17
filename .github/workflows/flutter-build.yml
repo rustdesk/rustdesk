@@ -682,21 +682,6 @@ jobs:
           key: ${{ matrix.job.target }}-${{ matrix.job.extra-build-features }}
           cache-directories: "/opt/rust-registry"
 
-      - name: Install local registry
-        run: |
-          mkdir -p /opt/rust-registry
-          cargo install cargo-local-registry
-
-      - name: Build local registry
-        uses: nick-fields/retry@v2
-        id: build-local-registry
-        continue-on-error: true
-        with:
-          max_attempts: 3
-          timeout_minutes: 15
-          retry_on: error
-          command: cargo local-registry --sync ./Cargo.lock /opt/rust-registry
-
       - name: Disable rust bridge build
         run: |
           # only build cdylib
@@ -755,10 +740,6 @@ jobs:
             echo """
               [source.crates-io]
               registry = 'https://github.com/rust-lang/crates.io-index'
-              replace-with = 'local-registry'
-
-              [source.local-registry]
-              local-registry = '/opt/rust-registry/'
             """ > ~/.cargo/config
             cat ~/.cargo/config
             # start build
@@ -853,21 +834,6 @@ jobs:
           key: ${{ matrix.job.target }}-${{ matrix.job.extra-build-features }}
           cache-directories: "/opt/rust-registry"
 
-      - name: Install local registry
-        run: |
-          mkdir -p /opt/rust-registry
-          cargo install cargo-local-registry
-
-      - name: Build local registry
-        uses: nick-fields/retry@v2
-        id: build-local-registry
-        continue-on-error: true
-        with:
-          max_attempts: 3
-          timeout_minutes: 15
-          retry_on: error
-          command: cargo local-registry --sync ./Cargo.lock /opt/rust-registry
-
       - name: Disable rust bridge build
         run: |
           # only build cdylib
@@ -924,10 +890,6 @@ jobs:
             echo """
               [source.crates-io]
               registry = 'https://github.com/rust-lang/crates.io-index'
-              replace-with = 'local-registry'
-
-              [source.local-registry]
-              local-registry = '/opt/rust-registry/'
             """ > ~/.cargo/config
             cat ~/.cargo/config
             # start build
@@ -1002,21 +964,6 @@ jobs:
           key: ${{ matrix.job.target }}-${{ matrix.job.extra-build-features }}
           cache-directories: "/opt/rust-registry"
 
-      - name: Install local registry
-        run: |
-          mkdir -p /opt/rust-registry
-          cargo install cargo-local-registry
-
-      - name: Build local registry
-        uses: nick-fields/retry@v2
-        id: build-local-registry
-        continue-on-error: true
-        with:
-          max_attempts: 3
-          timeout_minutes: 15
-          retry_on: error
-          command: cargo local-registry --sync ./Cargo.lock /opt/rust-registry
-
       - name: Restore vcpkg files
         uses: actions/download-artifact@master
         with:
@@ -1057,10 +1004,6 @@ jobs:
             echo """
               [source.crates-io]
               registry = 'https://github.com/rust-lang/crates.io-index'
-              replace-with = 'local-registry'
-
-              [source.local-registry]
-              local-registry = '/opt/rust-registry/'
             """ > ~/.cargo/config
             cat ~/.cargo/config
             
