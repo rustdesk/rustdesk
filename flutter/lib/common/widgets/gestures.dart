@@ -113,13 +113,14 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
   }
 
   void onOneFingerStartDebounce(ScaleUpdateDetails d) {
-    final start = (ScaleUpdateDetails d) {
+    start(ScaleUpdateDetails d) {
       _currentState = GestureState.oneFingerPan;
       if (onOneFingerPanStart != null) {
         onOneFingerPanStart!(DragStartDetails(
             localPosition: d.localFocalPoint, globalPosition: d.focalPoint));
       }
-    };
+    }
+
     if (_currentState != GestureState.none) {
       _debounceTimer = Timer(Duration(milliseconds: 200), () {
         start(d);
@@ -132,13 +133,14 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
   }
 
   void onTwoFingerStartDebounce(ScaleUpdateDetails d) {
-    final start = (ScaleUpdateDetails d) {
+    start(ScaleUpdateDetails d) {
       _currentState = GestureState.twoFingerScale;
       if (onTwoFingerScaleStart != null) {
         onTwoFingerScaleStart!(ScaleStartDetails(
             localFocalPoint: d.localFocalPoint, focalPoint: d.focalPoint));
       }
-    };
+    }
+
     if (_currentState == GestureState.threeFingerVerticalDrag) {
       _debounceTimer = Timer(Duration(milliseconds: 200), () {
         start(d);
@@ -266,11 +268,12 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
           if (!_isStart) {
             _resolve();
           }
-          if (onHoldDragUpdate != null)
+          if (onHoldDragUpdate != null) {
             onHoldDragUpdate!(DragUpdateDetails(
                 globalPosition: event.position,
                 localPosition: event.localPosition,
                 delta: event.delta));
+          }
         }
       }
     } else if (event is PointerCancelEvent) {
@@ -498,8 +501,9 @@ class DoubleFinerTapGestureRecognizer extends GestureRecognizer {
       debugPrint("PointerUpEvent");
       _upTap.add(tracker.pointer);
     } else if (event is PointerMoveEvent) {
-      if (!tracker.isWithinGlobalTolerance(event, kDoubleTapTouchSlop))
+      if (!tracker.isWithinGlobalTolerance(event, kDoubleTapTouchSlop)) {
         _reject(tracker);
+      }
     } else if (event is PointerCancelEvent) {
       _reject(tracker);
     }

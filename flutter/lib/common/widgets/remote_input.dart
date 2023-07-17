@@ -53,15 +53,15 @@ class RawTouchGestureDetectorRegion extends StatefulWidget {
       _RawTouchGestureDetectorRegionState();
 }
 
-  /// touchMode only:
-  ///   LongPress -> right click
-  ///   OneFingerPan -> start/end -> left down start/end
-  ///   onDoubleTapDown -> move to
-  ///   onLongPressDown => move to
-  ///
-  /// mouseMode only:
-  ///   DoubleFiner -> right click
-  ///   HoldDrag -> left drag
+/// touchMode only:
+///   LongPress -> right click
+///   OneFingerPan -> start/end -> left down start/end
+///   onDoubleTapDown -> move to
+///   onLongPressDown => move to
+///
+/// mouseMode only:
+///   DoubleFiner -> right click
+///   HoldDrag -> left drag
 class _RawTouchGestureDetectorRegionState
     extends State<RawTouchGestureDetectorRegion> {
   Offset _cacheLongPressPosition = Offset(0, 0);
@@ -139,6 +139,9 @@ class _RawTouchGestureDetectorRegionState
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
     }
+    if (isDesktop) {
+      return;
+    }
     if (handleTouch) {
       ffi.cursorModel
           .move(_cacheLongPressPosition.dx, _cacheLongPressPosition.dy);
@@ -151,7 +154,7 @@ class _RawTouchGestureDetectorRegionState
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
     }
-    if (!handleTouch) {
+    if (isDesktop || !handleTouch) {
       inputModel.tap(MouseButtons.right);
     }
   }
@@ -190,8 +193,8 @@ class _RawTouchGestureDetectorRegionState
       return;
     }
     if (handleTouch) {
-      ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
       inputModel.sendMouse('down', MouseButtons.left);
+      ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
     } else {
       final offset = ffi.cursorModel.offset;
       final cursorX = offset.dx;
@@ -250,6 +253,7 @@ class _RawTouchGestureDetectorRegionState
       _scale = 1;
       bind.sessionSetViewStyle(sessionId: sessionId, value: "");
     }
+     inputModel.sendMouse('up', MouseButtons.left);
   }
 
   get onHoldDragCancel => null;
