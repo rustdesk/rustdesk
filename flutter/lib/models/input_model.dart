@@ -55,6 +55,8 @@ class InputModel {
   final _trackpadSpeed = 0.06;
   var _trackpadScrollUnsent = Offset.zero;
 
+  var _lastScale = 1.0;
+
   // mouse
   final isPhysicalMouse = false.obs;
   int _lastButtons = 0;
@@ -272,7 +274,7 @@ class InputModel {
     sendMouse('down', button);
   }
 
-    void tapUp(MouseButtons button) {
+  void tapUp(MouseButtons button) {
     sendMouse('up', button);
   }
 
@@ -337,12 +339,15 @@ class InputModel {
   }
 
   void onPointerPanZoomStart(PointerPanZoomStartEvent e) {
+    _lastScale = 1.0;
     _stopFling = true;
   }
 
   // https://docs.flutter.dev/release/breaking-changes/trackpad-gestures
-  // TODO(support zoom in/out)
   void onPointerPanZoomUpdate(PointerPanZoomUpdateEvent e) {
+    final scale = ((e.scale - _lastScale) * 100).toInt();
+    _lastScale = e.scale;
+
     final delta = e.panDelta;
     _trackpadLastDelta = delta;
 
@@ -366,7 +371,7 @@ class InputModel {
     if (x != 0 || y != 0) {
       bind.sessionSendMouse(
           sessionId: sessionId,
-          msg: '{"type": "trackpad", "x": "$x", "y": "$y"}');
+          msg: '{"type": "trackpad", "x": "$x", "y": "$y", "scale": "$scale"}');
     }
   }
 

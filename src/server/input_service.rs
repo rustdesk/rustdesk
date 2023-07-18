@@ -759,7 +759,7 @@ pub fn handle_mouse_(evt: &MouseEvent, conn: i32) {
     let mut en = ENIGO.lock().unwrap();
     #[cfg(not(target_os = "macos"))]
     let mut to_release = Vec::new();
-    if evt_type == 1 {
+    if evt_type == MOUSE_TYPE_DOWN {
         fix_modifiers(&evt.modifiers[..], &mut en, 0);
         #[cfg(target_os = "macos")]
         en.reset_flag();
@@ -883,6 +883,15 @@ pub fn handle_mouse_(evt: &MouseEvent, conn: i32) {
     for key in to_release {
         en.key_up(key.clone());
     }
+    handle_mouse_scale(evt.scale);
+}
+
+#[cfg(target_os = "windows")]
+fn handle_mouse_scale(scale: i32) {
+    let mut en = ENIGO.lock().unwrap();
+    en.key_down(Key::Control);
+    en.mouse_scroll_y(scale);
+    en.key_up(Key::Control);
 }
 
 pub fn is_enter(evt: &KeyEvent) -> bool {

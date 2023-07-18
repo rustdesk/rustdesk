@@ -1103,8 +1103,12 @@ pub fn session_send_mouse(session_id: SessionID, msg: String) {
                 _ => 0,
             } << 3;
         }
+        let scale = m
+            .get("scale")
+            .map(|x| x.parse::<i32>().unwrap_or(0))
+            .unwrap_or(0);
         if let Some(session) = SESSIONS.read().unwrap().get(&session_id) {
-            session.send_mouse(mask, x, y, alt, ctrl, shift, command);
+            session.send_mouse(mask, x, y, scale, alt, ctrl, shift, command);
         }
     }
 }

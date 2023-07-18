@@ -116,6 +116,7 @@ message MouseEvent {
   sint32 x = 2;
   sint32 y = 3;
   repeated ControlKey modifiers = 4;
+  sint32 scale = 5;
 }
 
 enum KeyboardMode{

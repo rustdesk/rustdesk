@@ -1,3 +1,4 @@
+use crate::input::{MOUSE_BUTTON_LEFT, MOUSE_TYPE_DOWN, MOUSE_TYPE_UP};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use std::{collections::HashMap, sync::atomic::AtomicBool};
 use std::{
@@ -50,7 +51,7 @@ const CHANGE_RESOLUTION_VALID_TIMEOUT_SECS: u64 = 15;
 #[derive(Clone, Default)]
 pub struct Session<T: InvokeUiSession> {
     pub session_id: SessionID, // different from the one in LoginConfigHandler, used for flutter UI message pass
-    pub id: String, // peer id
+    pub id: String,            // peer id
     pub password: String,
     pub args: Vec<String>,
     pub lc: Arc<RwLock<LoginConfigHandler>>,
@@ -306,8 +307,7 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn get_audit_server(&self, typ: String) -> String {
-        if LocalConfig::get_option("access_token").is_empty()
-        {
+        if LocalConfig::get_option("access_token").is_empty() {
             return "".to_owned();
         }
         crate::get_audit_server(
@@ -695,6 +695,7 @@ impl<T: InvokeUiSession> Session<T> {
         mask: i32,
         x: i32,
         y: i32,
+        scale: i32,
         alt: bool,
         ctrl: bool,
         shift: bool,
@@ -713,15 +714,28 @@ impl<T: InvokeUiSession> Session<T> {
         let (alt, ctrl, shift, command) =
             keyboard::client::get_modifiers_state(alt, ctrl, shift, command);
 
-        send_mouse(mask, x, y, alt, ctrl, shift, command, self);
+        send_mouse(mask, x, y, scale, alt, ctrl, shift, command, self);
         // on macos, ctrl + left button down = right button down, up won't emit, so we need to
         // emit up myself if peer is not macos
         // to-do: how about ctrl + left from win to macos
         if cfg!(target_os = "macos") {
             let buttons = mask >> 3;
             let evt_type = mask & 0x7;
-            if buttons == 1 && evt_type == 1 && ctrl && self.peer_platform() != "Mac OS" {
-                self.send_mouse((1 << 3 | 2) as _, x, y, alt, ctrl, shift, command);
+            if buttons == MOUSE_BUTTON_LEFT
+                && evt_type == MOUSE_TYPE_DOWN
+                && ctrl
+                && self.peer_platform() != "Mac OS"
+            {
+                self.send_mouse(
+                    (MOUSE_BUTTON_LEFT << 3 | MOUSE_TYPE_UP) as _,
+                    x,
+                    y,
+                    scale,
+                    alt,
+                    ctrl,
+                    shift,
+                    command,
+                );
             }
         }
     }

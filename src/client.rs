@@ -1109,7 +1109,8 @@ impl LoginConfigHandler {
         self.remember = !config.password.is_empty();
         self.config = config;
         let mut sid = rand::random();
-        if sid == 0 { // you won the lottery
+        if sid == 0 {
+            // you won the lottery
             sid = 1;
         }
         self.session_id = sid;
@@ -1928,6 +1929,7 @@ pub fn send_mouse(
     mask: i32,
     x: i32,
     y: i32,
+    scale: i32,
     alt: bool,
     ctrl: bool,
     shift: bool,
@@ -1939,6 +1941,7 @@ pub fn send_mouse(
         mask,
         x,
         y,
+        scale,
         ..Default::default()
     };
     if alt {
@@ -1971,12 +1974,12 @@ pub fn send_mouse(
 ///
 /// * `interface` - The interface for sending data.
 fn activate_os(interface: &impl Interface) {
-    send_mouse(0, 0, 0, false, false, false, false, interface);
+    send_mouse(0, 0, 0, 0, false, false, false, false, interface);
     std::thread::sleep(Duration::from_millis(50));
-    send_mouse(0, 3, 3, false, false, false, false, interface);
+    send_mouse(0, 3, 3, 0, false, false, false, false, interface);
     std::thread::sleep(Duration::from_millis(50));
-    send_mouse(1 | 1 << 3, 0, 0, false, false, false, false, interface);
-    send_mouse(2 | 1 << 3, 0, 0, false, false, false, false, interface);
+    send_mouse(1 | 1 << 3, 0, 0, 0, false, false, false, false, interface);
+    send_mouse(2 | 1 << 3, 0, 0, 0, false, false, false, false, interface);
     /*
     let mut key_event = KeyEvent::new();
     // do not use Esc, which has problem with Linux
