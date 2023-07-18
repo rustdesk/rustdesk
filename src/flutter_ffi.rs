@@ -1069,6 +1069,24 @@ pub fn main_start_dbus_server() {
     }
 }
 
+pub fn session_send_pointer(session_id: SessionID, msg: String) {
+    if let Ok(m) = serde_json::from_str::<HashMap<String, serde_json::Value>>(&msg) {
+        let alt = m.get("alt").is_some();
+        let ctrl = m.get("ctrl").is_some();
+        let shift = m.get("shift").is_some();
+        let command = m.get("command").is_some();
+        if let Some(touch_event) = m.get("touch") {
+            if let Some(scale) = touch_event.get("scale") {
+                if let Some(session) = SESSIONS.read().unwrap().get(&session_id) {
+                    if let Some(scale) = scale.as_i64() {
+                        session.send_touch_scale(scale as _, alt, ctrl, shift, command);
+                    }
+                }
+            }
+        }
+    }
+}
+
 pub fn session_send_mouse(session_id: SessionID, msg: String) {
     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(&msg) {
         let alt = m.get("alt").is_some();
@@ -1103,12 +1121,8 @@ pub fn session_send_mouse(session_id: SessionID, msg: String) {
                 _ => 0,
             } << 3;
         }
-        let scale = m
-            .get("scale")
-            .map(|x| x.parse::<i32>().unwrap_or(0))
-            .unwrap_or(0);
         if let Some(session) = SESSIONS.read().unwrap().get(&session_id) {
-            session.send_mouse(mask, x, y, scale, alt, ctrl, shift, command);
+            session.send_mouse(mask, x, y, alt, ctrl, shift, command);
         }
     }
 }

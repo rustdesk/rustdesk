@@ -1929,7 +1929,6 @@ pub fn send_mouse(
     mask: i32,
     x: i32,
     y: i32,
-    scale: i32,
     alt: bool,
     ctrl: bool,
     shift: bool,
@@ -1941,7 +1940,6 @@ pub fn send_mouse(
         mask,
         x,
         y,
-        scale,
         ..Default::default()
     };
     if alt {
@@ -1968,18 +1966,54 @@ pub fn send_mouse(
     interface.send(Data::Message(msg_out));
 }
 
+#[inline]
+pub fn send_touch(
+    mut evt: TouchEvent,
+    alt: bool,
+    ctrl: bool,
+    shift: bool,
+    command: bool,
+    interface: &impl Interface,
+) {
+    let mut msg_out = Message::new();
+    if alt {
+        evt.modifiers.push(ControlKey::Alt.into());
+    }
+    if shift {
+        evt.modifiers.push(ControlKey::Shift.into());
+    }
+    if ctrl {
+        evt.modifiers.push(ControlKey::Control.into());
+    }
+    if command {
+        evt.modifiers.push(ControlKey::Meta.into());
+    }
+    #[cfg(all(target_os = "macos", not(feature = "flutter")))]
+    if check_scroll_on_mac(mask, x, y) {
+        let factor = 3;
+        mouse_event.mask = crate::input::MOUSE_TYPE_TRACKPAD;
+        mouse_event.x *= factor;
+        mouse_event.y *= factor;
+    }
+    msg_out.set_pointer_device_event(PointerDeviceEvent {
+        union: Some(pointer_device_event::Union::TouchEvent(evt)),
+        ..Default::default()
+    });
+    interface.send(Data::Message(msg_out));
+}
+
 /// Activate OS by sending mouse movement.
 ///
 /// # Arguments
 ///
 /// * `interface` - The interface for sending data.
 fn activate_os(interface: &impl Interface) {
-    send_mouse(0, 0, 0, 0, false, false, false, false, interface);
+    send_mouse(0, 0, 0, false, false, false, false, interface);
     std::thread::sleep(Duration::from_millis(50));
-    send_mouse(0, 3, 3, 0, false, false, false, false, interface);
+    send_mouse(0, 3, 3, false, false, false, false, interface);
     std::thread::sleep(Duration::from_millis(50));
-    send_mouse(1 | 1 << 3, 0, 0, 0, false, false, false, false, interface);
-    send_mouse(2 | 1 << 3, 0, 0, 0, false, false, false, false, interface);
+    send_mouse(1 | 1 << 3, 0, 0, false, false, false, false, interface);
+    send_mouse(2 | 1 << 3, 0, 0, false, false, false, false, interface);
     /*
     let mut key_event = KeyEvent::new();
     // do not use Esc, which has problem with Linux

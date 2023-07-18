@@ -345,8 +345,19 @@ class InputModel {
 
   // https://docs.flutter.dev/release/breaking-changes/trackpad-gestures
   void onPointerPanZoomUpdate(PointerPanZoomUpdateEvent e) {
-    final scale = ((e.scale - _lastScale) * 100).toInt();
+    debugPrint(
+        'REMOVE ME =============================== onPointerPanZoomUpdate ${e.scale}');
+    final scale = ((e.scale - _lastScale) * 1000).toInt();
     _lastScale = e.scale;
+
+    if (scale != 0) {
+      bind.sessionSendPointer(
+          sessionId: sessionId,
+          msg: json.encode({
+            'touch': {'scale': scale}
+          }));
+      return;
+    }
 
     final delta = e.panDelta;
     _trackpadLastDelta = delta;
@@ -371,7 +382,7 @@ class InputModel {
     if (x != 0 || y != 0) {
       bind.sessionSendMouse(
           sessionId: sessionId,
-          msg: '{"type": "trackpad", "x": "$x", "y": "$y", "scale": "$scale"}');
+          msg: '{"type": "trackpad", "x": "$x", "y": "$y"}');
     }
   }
 
@@ -427,6 +438,12 @@ class InputModel {
   }
 
   void onPointerPanZoomEnd(PointerPanZoomEndEvent e) {
+    bind.sessionSendPointer(
+        sessionId: sessionId,
+        msg: json.encode({
+          'touch': {'scale': 0}
+        }));
+
     waitLastFlingDone();
     _stopFling = false;
 

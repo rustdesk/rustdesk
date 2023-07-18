@@ -35,8 +35,8 @@ use hbb_common::{
 use crate::client::io_loop::Remote;
 use crate::client::{
     check_if_retry, handle_hash, handle_login_error, handle_login_from_ui, handle_test_delay,
-    input_os_password, load_config, send_mouse, start_video_audio_threads, FileManager, Key,
-    LoginConfigHandler, QualityStatus, KEY_MAP,
+    input_os_password, load_config, send_mouse, send_touch, start_video_audio_threads, FileManager,
+    Key, LoginConfigHandler, QualityStatus, KEY_MAP,
 };
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::common::GrabState;
@@ -690,12 +690,23 @@ impl<T: InvokeUiSession> Session<T> {
         self.send_key_event(&key_event);
     }
 
+    pub fn send_touch_scale(&self, scale: i32, alt: bool, ctrl: bool, shift: bool, command: bool) {
+        let scale_evt = TouchScaleUpdate {
+            scale,
+            ..Default::default()
+        };
+        let evt = TouchEvent {
+            union: Some(touch_event::Union::ScaleUpdate(scale_evt)),
+            ..Default::default()
+        };
+        send_touch(evt, alt, ctrl, shift, command, self);
+    }
+
     pub fn send_mouse(
         &self,
         mask: i32,
         x: i32,
         y: i32,
-        scale: i32,
         alt: bool,
         ctrl: bool,
         shift: bool,
@@ -714,7 +725,7 @@ impl<T: InvokeUiSession> Session<T> {
         let (alt, ctrl, shift, command) =
             keyboard::client::get_modifiers_state(alt, ctrl, shift, command);
 
-        send_mouse(mask, x, y, scale, alt, ctrl, shift, command, self);
+        send_mouse(mask, x, y, alt, ctrl, shift, command, self);
         // on macos, ctrl + left button down = right button down, up won't emit, so we need to
         // emit up myself if peer is not macos
         // to-do: how about ctrl + left from win to macos
@@ -730,7 +741,6 @@ impl<T: InvokeUiSession> Session<T> {
                     (MOUSE_BUTTON_LEFT << 3 | MOUSE_TYPE_UP) as _,
                     x,
                     y,
-                    scale,
                     alt,
                     ctrl,
                     shift,

@@ -7,7 +7,11 @@ use crate::input::*;
 #[cfg(target_os = "macos")]
 use dispatch::Queue;
 use enigo::{Enigo, Key, KeyboardControllable, MouseButton, MouseControllable};
-use hbb_common::{get_time, protobuf::EnumOrUnknown};
+use hbb_common::{
+    get_time,
+    message_proto::{pointer_device_event::Union::TouchEvent, touch_event::Union::ScaleUpdate},
+    protobuf::EnumOrUnknown,
+};
 use rdev::{self, EventType, Key as RdevKey, KeyCode, RawKey};
 #[cfg(target_os = "macos")]
 use rdev::{CGEventSourceStateID, CGEventTapLocation, VirtualInput};
@@ -523,6 +527,21 @@ pub fn handle_mouse(evt: &MouseEvent, conn: i32) {
     handle_mouse_(evt, conn);
 }
 
+// to-do: merge handle_mouse and handle_pointer
+pub fn handle_pointer(evt: &PointerDeviceEvent, conn: i32) {
+    #[cfg(target_os = "macos")]
+    if !is_server() {
+        // having GUI, run main GUI thread, otherwise crash
+        let evt = evt.clone();
+        QUEUE.exec_async(move || handle_pointer_(&evt, conn));
+        return;
+    }
+    #[cfg(windows)]
+    crate::portable_service::client::handle_pointer(evt, conn);
+    #[cfg(not(windows))]
+    handle_pointer_(evt, conn);
+}
+
 pub fn fix_key_down_timeout_loop() {
     std::thread::spawn(move || loop {
         std::thread::sleep(std::time::Duration::from_millis(10_000));
@@ -743,7 +762,7 @@ fn active_mouse_(conn: i32) -> bool {
     }
 }
 
-pub fn handle_mouse_(evt: &MouseEvent, conn: i32) {
+pub fn handle_pointer_(evt: &PointerDeviceEvent, conn: i32) {
     if !active_mouse_(conn) {
         return;
     }
@@ -752,12 +771,25 @@ pub fn handle_mouse_(evt: &MouseEvent, conn: i32) {
         return;
     }
 
-    if evt.scale != 0 {
-        #[cfg(target_os = "windows")]
-        {
-            handle_scale(evt.scale);
-            return;
-        }
+    match &evt.union {
+        Some(TouchEvent(evt)) => match &evt.union {
+            Some(ScaleUpdate(_scale_evt)) => {
+                #[cfg(target_os = "windows")]
+                handle_scale(_scale_evt.scale);
+            }
+            _ => {}
+        },
+        _ => {}
+    }
+}
+
+pub fn handle_mouse_(evt: &MouseEvent, conn: i32) {
+    if !active_mouse_(conn) {
+        return;
+    }
+
+    if EXITING.load(Ordering::SeqCst) {
+        return;
     }
 
     #[cfg(windows)]
@@ -896,10 +928,13 @@ pub fn handle_mouse_(evt: &MouseEvent, conn: i32) {
 #[cfg(target_os = "windows")]
 fn handle_scale(scale: i32) {
     let mut en = ENIGO.lock().unwrap();
-    if en.key_down(Key::Control).is_ok() {
-        en.mouse_scroll_y(scale);
+    if scale == 0 {
+        en.key_up(Key::Control);
+    } else {
+        if en.key_down(Key::Control).is_ok() {
+            en.mouse_scroll_y(scale);
+        }
     }
-    en.key_up(Key::Control);
 }
 
 pub fn is_enter(evt: &KeyEvent) -> bool {
