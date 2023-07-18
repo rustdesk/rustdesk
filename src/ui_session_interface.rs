@@ -35,8 +35,8 @@ use hbb_common::{
 use crate::client::io_loop::Remote;
 use crate::client::{
     check_if_retry, handle_hash, handle_login_error, handle_login_from_ui, handle_test_delay,
-    input_os_password, load_config, send_mouse, send_touch, start_video_audio_threads, FileManager,
-    Key, LoginConfigHandler, QualityStatus, KEY_MAP,
+    input_os_password, load_config, send_mouse, send_pointer_device_event,
+    start_video_audio_threads, FileManager, Key, LoginConfigHandler, QualityStatus, KEY_MAP,
 };
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::common::GrabState;
@@ -695,11 +695,11 @@ impl<T: InvokeUiSession> Session<T> {
             scale,
             ..Default::default()
         };
-        let evt = TouchEvent {
-            union: Some(touch_event::Union::ScaleUpdate(scale_evt)),
-            ..Default::default()
-        };
-        send_touch(evt, alt, ctrl, shift, command, self);
+        let mut touch_evt = TouchEvent::new();
+        touch_evt.set_scale_update(scale_evt);
+        let mut evt = PointerDeviceEvent::new();
+        evt.set_touch_event(touch_evt);
+        send_pointer_device_event(evt, alt, ctrl, shift, command, self);
     }
 
     pub fn send_mouse(

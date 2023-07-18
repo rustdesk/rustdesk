@@ -122,13 +122,13 @@ message TouchEvent {
   oneof union {
     TouchScaleUpdate scale_update = 1;
   }
-  repeated ControlKey modifiers = 2;
 }
 
 message PointerDeviceEvent {
   oneof union {
     TouchEvent touch_event = 1;
   }
+  repeated ControlKey modifiers = 2;
 }
 
 message MouseEvent {

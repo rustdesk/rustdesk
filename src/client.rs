@@ -1967,8 +1967,8 @@ pub fn send_mouse(
 }
 
 #[inline]
-pub fn send_touch(
-    mut evt: TouchEvent,
+pub fn send_pointer_device_event(
+    mut evt: PointerDeviceEvent,
     alt: bool,
     ctrl: bool,
     shift: bool,
@@ -1995,10 +1995,7 @@ pub fn send_touch(
         mouse_event.x *= factor;
         mouse_event.y *= factor;
     }
-    msg_out.set_pointer_device_event(PointerDeviceEvent {
-        union: Some(pointer_device_event::Union::TouchEvent(evt)),
-        ..Default::default()
-    });
+    msg_out.set_pointer_device_event(evt);
     interface.send(Data::Message(msg_out));
 }
 
