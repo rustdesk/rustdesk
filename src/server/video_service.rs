@@ -515,9 +515,10 @@ fn run(sp: GenericService) -> ResultType<()> {
 
     let mut video_qos = VIDEO_QOS.lock().unwrap();
     video_qos.set_size(c.width as _, c.height as _);
+    video_qos.refresh();
     let mut spf = video_qos.spf();
-    let bitrate = video_qos.generate_bitrate()?;
-    let abr = video_qos.check_abr_config();
+    let bitrate = video_qos.bitrate();
+    let abr = VideoQoS::abr_enabled();
     drop(video_qos);
     log::info!("init bitrate={}, abr enabled:{}", bitrate, abr);
 
@@ -608,13 +609,15 @@ fn run(sp: GenericService) -> ResultType<()> {
         check_uac_switch(c.privacy_mode_id, c._capturer_privacy_mode_id)?;
 
         let mut video_qos = VIDEO_QOS.lock().unwrap();
-        if video_qos.check_if_updated() && video_qos.target_bitrate > 0 {
+        if video_qos.check_if_updated() {
             log::debug!(
                 "qos is updated, target_bitrate:{}, fps:{}",
-                video_qos.target_bitrate,
-                video_qos.fps
+                video_qos.bitrate(),
+                video_qos.fps()
             );
-            allow_err!(encoder.set_bitrate(video_qos.target_bitrate));
+            if video_qos.bitrate() > 0 {
+                allow_err!(encoder.set_bitrate(video_qos.bitrate()));
+            }
             spf = video_qos.spf();
         }
         drop(video_qos);

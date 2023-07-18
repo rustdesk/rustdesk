@@ -1820,7 +1820,7 @@ where
                                 );
                             }
                             // Clear to get real-time fps
-                            if count > 300 {
+                            if count > 150 {
                                 count = 0;
                                 duration = Duration::ZERO;
                             }

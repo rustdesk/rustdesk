@@ -155,6 +155,7 @@ pub struct Connection {
     restart: bool,
     recording: bool,
     last_test_delay: i64,
+    network_delay: Option<u32>,
     lock_after_session_end: bool,
     show_remote_cursor: bool,
     // by peer
@@ -292,6 +293,7 @@ impl Connection {
             restart: Connection::permission("enable-remote-restart"),
             recording: Connection::permission("enable-record-session"),
             last_test_delay: 0,
+            network_delay: None,
             lock_after_session_end: false,
             show_remote_cursor: false,
             ip: "".to_owned(),
@@ -597,8 +599,8 @@ impl Connection {
                         let qos = video_service::VIDEO_QOS.lock().unwrap();
                         msg_out.set_test_delay(TestDelay{
                             time,
-                            last_delay:qos.current_delay,
-                            target_bitrate:qos.target_bitrate,
+                            last_delay:conn.network_delay.unwrap_or_default(),
+                            target_bitrate:qos.bitrate(),
                             ..Default::default()
                         });
                         conn.inner.send(msg_out.into());
@@ -622,7 +624,6 @@ impl Connection {
         );
         video_service::notify_video_frame_fetched(id, None);
         scrap::codec::Encoder::update(id, scrap::codec::EncodingUpdate::Remove);
-        video_service::VIDEO_QOS.lock().unwrap().reset();
         if conn.authorized {
             password::update_temporary_password();
         }
@@ -1550,7 +1551,8 @@ impl Connection {
                 video_service::VIDEO_QOS
                     .lock()
                     .unwrap()
-                    .update_network_delay(new_delay);
+                    .user_network_delay(self.inner.id(), new_delay);
+                self.network_delay = Some(new_delay);
             }
         } else if let Some(message::Union::SwitchSidesResponse(_s)) = msg.union {
             #[cfg(feature = "flutter")]
@@ -1929,6 +1931,10 @@ impl Connection {
                             crate::plugin::handle_client_event(&p.id, &self.lr.my_id, &p.content);
                         self.send(msg).await;
                     }
+                    Some(misc::Union::FullSpeedFps(fps)) => video_service::VIDEO_QOS
+                        .lock()
+                        .unwrap()
+                        .user_full_speed_fps(self.inner.id(), fps),
                     _ => {}
                 },
                 Some(message::Union::AudioFrame(frame)) => {
@@ -2043,14 +2049,14 @@ impl Connection {
                 video_service::VIDEO_QOS
                     .lock()
                     .unwrap()
-                    .update_image_quality(image_quality);
+                    .user_image_quality(self.inner.id(), image_quality);
             }
         }
         if o.custom_fps > 0 {
             video_service::VIDEO_QOS
                 .lock()
                 .unwrap()
-                .update_user_fps(o.custom_fps as _);
+                .user_custom_fps(self.inner.id(), o.custom_fps as _);
         }
         if let Some(q) = o.supported_decoding.clone().take() {
             scrap::codec::Encoder::update(self.inner.id(), scrap::codec::EncodingUpdate::New(q));
@@ -2581,6 +2587,10 @@ mod raii {
             if active_conns_lock.is_empty() {
                 crate::privacy_win_mag::stop();
             }
+            video_service::VIDEO_QOS
+                .lock()
+                .unwrap()
+                .on_connection_close(self.0);
         }
     }
 }
