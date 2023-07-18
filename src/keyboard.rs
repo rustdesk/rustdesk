@@ -708,7 +708,7 @@ pub fn legacy_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Vec<KeyEv
         Key::Final => Some(ControlKey::Final),
         Key::Hanja => Some(ControlKey::Hanja),
         Key::Hanji => Some(ControlKey::Hanja),
-        Key::Convert => Some(ControlKey::Convert),
+        Key::Lang2 => Some(ControlKey::Convert),
         Key::Print => Some(ControlKey::Print),
         Key::Select => Some(ControlKey::Select),
         Key::Execute => Some(ControlKey::Execute),
