@@ -1,9 +1,9 @@
 use super::*;
-use crate::input::*;
 #[cfg(target_os = "macos")]
 use crate::common::is_server;
 #[cfg(target_os = "linux")]
 use crate::common::IS_X11;
+use crate::input::*;
 #[cfg(target_os = "macos")]
 use dispatch::Queue;
 use enigo::{Enigo, Key, KeyboardControllable, MouseButton, MouseControllable};
@@ -752,6 +752,14 @@ pub fn handle_mouse_(evt: &MouseEvent, conn: i32) {
         return;
     }
 
+    if evt.scale != 0 {
+        #[cfg(target_os = "windows")]
+        {
+            handle_scale(evt.scale);
+            return;
+        }
+    }
+
     #[cfg(windows)]
     crate::platform::windows::try_change_desktop();
     let buttons = evt.mask >> 3;
@@ -883,14 +891,14 @@ pub fn handle_mouse_(evt: &MouseEvent, conn: i32) {
     for key in to_release {
         en.key_up(key.clone());
     }
-    handle_mouse_scale(evt.scale);
 }
 
 #[cfg(target_os = "windows")]
-fn handle_mouse_scale(scale: i32) {
+fn handle_scale(scale: i32) {
     let mut en = ENIGO.lock().unwrap();
-    en.key_down(Key::Control);
-    en.mouse_scroll_y(scale);
+    if en.key_down(Key::Control).is_ok() {
+        en.mouse_scroll_y(scale);
+    }
     en.key_up(Key::Control);
 }
 
