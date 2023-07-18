@@ -78,7 +78,7 @@ mod webrtc {
         } else {
             // Use 2 threads for low res on ARM.
             #[cfg(any(target_arch = "arm", target_arch = "aarch64", target_os = "android"))]
-            if width * height >= 320 * 180 && number_of_cores > 2 {
+            if (width * height >= 320 * 180 && number_of_cores > 2) {
                 return 2;
             }
             // 1 thread less than VGA.

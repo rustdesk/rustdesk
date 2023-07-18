@@ -101,8 +101,10 @@ fn test_vpx(
     let config = EncoderCfg::VPX(VpxEncoderConfig {
         width: width as _,
         height: height as _,
+        timebase: [1, 1000],
         bitrate: bitrate_k as _,
         codec: codec_id,
+        num_threads: (num_cpus::get() / 2) as _,
     });
     let mut encoder = VpxEncoder::new(config).unwrap();
     let mut vpxs = vec![];

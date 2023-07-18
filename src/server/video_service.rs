@@ -535,12 +535,14 @@ fn run(sp: GenericService) -> ResultType<()> {
             EncoderCfg::VPX(VpxEncoderConfig {
                 width: c.width as _,
                 height: c.height as _,
+                timebase: [1, 1000], // Output timestamp precision
                 bitrate,
                 codec: if name == scrap::CodecName::VP8 {
                     VpxVideoCodecId::VP8
                 } else {
                     VpxVideoCodecId::VP9
                 },
+                num_threads: (num_cpus::get() / 2) as _,
             })
         }
         scrap::CodecName::AV1 => EncoderCfg::AOM(AomEncoderConfig {
