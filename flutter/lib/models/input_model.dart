@@ -345,8 +345,6 @@ class InputModel {
 
   // https://docs.flutter.dev/release/breaking-changes/trackpad-gestures
   void onPointerPanZoomUpdate(PointerPanZoomUpdateEvent e) {
-    debugPrint(
-        'REMOVE ME =============================== onPointerPanZoomUpdate ${e.scale}');
     final scale = ((e.scale - _lastScale) * 1000).toInt();
     _lastScale = e.scale;
 
