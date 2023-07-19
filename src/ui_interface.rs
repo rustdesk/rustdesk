@@ -1027,8 +1027,10 @@ const UNKNOWN_ERROR: &'static str = "Unknown error";
 
 #[inline]
 #[tokio::main(flavor = "current_thread")]
-pub async fn change_id_shared(id: String, old_id: String) {
-    *ASYNC_JOB_STATUS.lock().unwrap() = change_id_shared_(id, old_id).await.to_owned();
+pub async fn change_id_shared(id: String, old_id: String) -> String {
+    let res = change_id_shared_(id, old_id).await.to_owned();
+    *ASYNC_JOB_STATUS.lock().unwrap() = res.clone();
+    res
 }
 
 pub async fn change_id_shared_(id: String, old_id: String) -> &'static str {

@@ -53,20 +53,23 @@ pub fn get_license_from_string(s: &str) -> ResultType<License> {
         let strs: Vec<&str> = stripped.split(",").collect();
         let mut host = "";
         let mut key = "";
+        let mut api = "";
         let strs_iter = strs.iter();
         for el in strs_iter {
             if el.starts_with("host=") {
                 host = &el[5..el.len()];
             }
-
             if el.starts_with("key=") {
                 key = &el[4..el.len()];
+            }
+            if el.starts_with("api=") {
+                api = &el[4..el.len()];
             }
         }
         return Ok(License {
             host: host.to_owned(),
             key: key.to_owned(),
-            api: "".to_owned(),
+            api: api.to_owned(),
         });
     } else {
         let strs = if s.contains("-licensed-") {
@@ -110,12 +113,14 @@ mod test {
         );
         // key in these tests is "foobar.,2" base64 encoded
         assert_eq!(
-            get_license_from_string("rustdesk-host=server.example.net,key=Zm9vYmFyLiwyCg==.exe")
-                .unwrap(),
+            get_license_from_string(
+                "rustdesk-host=server.example.net,api=abc,key=Zm9vYmFyLiwyCg==.exe"
+            )
+            .unwrap(),
             License {
                 host: "server.example.net".to_owned(),
                 key: "Zm9vYmFyLiwyCg==".to_owned(),
-                api: "".to_owned(),
+                api: "abc".to_owned(),
             }
         );
         assert_eq!(
