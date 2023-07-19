@@ -42,7 +42,7 @@ pub struct HwEncoderConfig {
     pub name: String,
     pub width: usize,
     pub height: usize,
-    pub bitrate: i32,
+    pub quality: Quality,
 }
 
 #[derive(Debug, Clone)]
@@ -61,7 +61,9 @@ pub trait EncoderApi {
 
     fn use_yuv(&self) -> bool;
 
-    fn set_bitrate(&mut self, bitrate: u32) -> ResultType<()>;
+    fn set_quality(&mut self, quality: Quality) -> ResultType<()>;
+
+    fn bitrate(&self) -> u32;
 }
 
 pub struct Encoder {
@@ -470,4 +472,34 @@ fn enable_hwcodec_option() -> bool {
         return v != "N";
     }
     return true; // default is true
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Quality {
+    Best,
+    Balanced,
+    Low,
+    Custom(u32),
+}
+
+impl Default for Quality {
+    fn default() -> Self {
+        Self::Balanced
+    }
+}
+
+pub fn base_bitrate(width: u32, height: u32) -> u32 {
+    #[allow(unused_mut)]
+    let mut base_bitrate = ((width * height) / 1000) as u32; // same as 1.1.9
+    if base_bitrate == 0 {
+        base_bitrate = 1920 * 1080 / 1000;
+    }
+    #[cfg(target_os = "android")]
+    {
+        // fix when android screen shrinks
+        let fix = crate::Display::fix_quality() as u32;
+        log::debug!("Android screen, fix quality:{}", fix);
+        base_bitrate = base_bitrate * fix;
+    }
+    base_bitrate
 }

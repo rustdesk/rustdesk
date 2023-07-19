@@ -196,6 +196,7 @@ pub struct Connection {
     #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
     tx_desktop_ready: mpsc::Sender<()>,
     closed: bool,
+    delay_response_instant: Instant,
 }
 
 impl ConnInner {
@@ -326,6 +327,7 @@ impl Connection {
             #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
             tx_desktop_ready: _tx_desktop_ready,
             closed: false,
+            delay_response_instant: Instant::now(),
         };
         if !conn.on_open(addr).await {
             conn.closed = true;
@@ -593,18 +595,19 @@ impl Connection {
                         break;
                     }
                     let time = get_time();
+                    let mut qos = video_service::VIDEO_QOS.lock().unwrap();
                     if time > 0 && conn.last_test_delay == 0 {
                         conn.last_test_delay = time;
                         let mut msg_out = Message::new();
-                        let qos = video_service::VIDEO_QOS.lock().unwrap();
                         msg_out.set_test_delay(TestDelay{
                             time,
                             last_delay:conn.network_delay.unwrap_or_default(),
-                            target_bitrate:qos.bitrate(),
+                            target_bitrate: qos.bitrate(),
                             ..Default::default()
                         });
                         conn.inner.send(msg_out.into());
                     }
+                    qos.user_delay_response_elapsed(conn.inner.id(), conn.delay_response_instant.elapsed().as_millis());
                 }
             }
         }
@@ -1188,7 +1191,9 @@ impl Connection {
     #[inline]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn input_pointer(&self, msg: PointerDeviceEvent, conn_id: i32) {
-        self.tx_input.send(MessageInput::Pointer((msg, conn_id))).ok();
+        self.tx_input
+            .send(MessageInput::Pointer((msg, conn_id)))
+            .ok();
     }
 
     #[inline]
@@ -1553,6 +1558,7 @@ impl Connection {
                     .unwrap()
                     .user_network_delay(self.inner.id(), new_delay);
                 self.network_delay = Some(new_delay);
+                self.delay_response_instant = Instant::now();
             }
         } else if let Some(message::Union::SwitchSidesResponse(_s)) = msg.union {
             #[cfg(feature = "flutter")]
@@ -1590,7 +1596,8 @@ impl Connection {
                         self.input_mouse(me, self.inner.id());
                     }
                 }
-                Some(message::Union::PointerDeviceEvent(pde)) => {
+                Some(message::Union::PointerDeviceEvent(pde)) =>
+                {
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     if self.peer_keyboard_enabled() {
                         MOUSE_MOVE_TIME.store(get_time(), Ordering::SeqCst);

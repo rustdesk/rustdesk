@@ -1,5 +1,5 @@
 use crate::{
-    codec::{EncoderApi, EncoderCfg},
+    codec::{base_bitrate, EncoderApi, EncoderCfg},
     hw, ImageFormat, ImageRgb, HW_STRIDE_ALIGN,
 };
 use hbb_common::{
@@ -34,6 +34,9 @@ pub struct HwEncoder {
     yuv: Vec<u8>,
     pub format: DataFormat,
     pub pixfmt: AVPixelFormat,
+    width: u32,
+    height: u32,
+    bitrate: u32, //kbs
 }
 
 impl EncoderApi for HwEncoder {
@@ -43,13 +46,19 @@ impl EncoderApi for HwEncoder {
     {
         match cfg {
             EncoderCfg::HW(config) => {
+                let b = Self::convert_quality(config.quality);
+                let base_bitrate = base_bitrate(config.width as _, config.height as _);
+                let mut bitrate = base_bitrate * b / 100;
+                if base_bitrate <= 0 {
+                    bitrate = base_bitrate;
+                }
                 let ctx = EncodeContext {
                     name: config.name.clone(),
                     width: config.width as _,
                     height: config.height as _,
                     pixfmt: DEFAULT_PIXFMT,
                     align: HW_STRIDE_ALIGN as _,
-                    bitrate: config.bitrate * 1000,
+                    bitrate: bitrate as i32 * 1000,
                     timebase: DEFAULT_TIME_BASE,
                     gop: DEFAULT_GOP,
                     quality: DEFAULT_HW_QUALITY,
@@ -70,6 +79,9 @@ impl EncoderApi for HwEncoder {
                         yuv: vec![],
                         format,
                         pixfmt: ctx.pixfmt,
+                        width: ctx.width as _,
+                        height: ctx.height as _,
+                        bitrate,
                     }),
                     Err(_) => Err(anyhow!(format!("Failed to create encoder"))),
                 }
@@ -114,9 +126,18 @@ impl EncoderApi for HwEncoder {
         false
     }
 
-    fn set_bitrate(&mut self, bitrate: u32) -> ResultType<()> {
-        self.encoder.set_bitrate((bitrate * 1000) as _).ok();
+    fn set_quality(&mut self, quality: crate::codec::Quality) -> ResultType<()> {
+        let b = Self::convert_quality(quality);
+        let bitrate = base_bitrate(self.width as _, self.height as _) * b / 100;
+        if bitrate > 0 {
+            self.encoder.set_bitrate((bitrate * 1000) as _).ok();
+            self.bitrate = bitrate;
+        }
         Ok(())
+    }
+
+    fn bitrate(&self) -> u32 {
+        self.bitrate
     }
 }
 
@@ -157,6 +178,16 @@ impl HwEncoder {
                 Ok(data)
             }
             Err(_) => Ok(Vec::<EncodeFrame>::new()),
+        }
+    }
+
+    pub fn convert_quality(quality: crate::codec::Quality) -> u32 {
+        use crate::codec::Quality;
+        match quality {
+            Quality::Best => 150,
+            Quality::Balanced => 100,
+            Quality::Low => 50,
+            Quality::Custom(b) => b,
         }
     }
 }
