@@ -13,3 +13,5 @@ jobs:
     with:
       upload-artifact: true
       upload-tag: "nightly" 
+permissions:
+  contents: write
