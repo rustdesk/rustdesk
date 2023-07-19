@@ -25,6 +25,8 @@ macro_rules! my_println{
 /// If it returns [`Some`], then the process will continue, and flutter gui will be started.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn core_main() -> Option<Vec<String>> {
+    #[cfg(windows)]
+    crate::platform::windows::bootstrap();
     let mut args = Vec::new();
     let mut flutter_args = Vec::new();
     let mut i = 0;

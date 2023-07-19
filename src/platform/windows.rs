@@ -927,35 +927,6 @@ pub fn copy_exe_cmd(src_exe: &str, exe: &str, path: &str) -> String {
     )
 }
 
-/* // update_me has bad compatibility, so disable it.
-pub fn update_me() -> ResultType<()> {
-    let (_, path, _, exe) = get_install_info();
-    let src_exe = std::env::current_exe()?.to_str().unwrap_or("").to_owned();
-    let cmds = format!(
-        "
-        chcp 65001
-        sc stop {app_name}
-        taskkill /F /IM {broker_exe}
-        taskkill /F /IM {app_name}.exe /FI \"PID ne {cur_pid}\"
-        {copy_exe}
-        sc start {app_name}
-        {lic}
-    ",
-        copy_exe = copy_exe_cmd(&src_exe, &exe, &path),
-        broker_exe = WIN_MAG_INJECTED_PROCESS_EXE,
-        app_name = crate::get_app_name(),
-        lic = register_licence(),
-        cur_pid = get_current_pid(),
-    );
-    run_cmds(cmds, false, "update")?;
-    run_after_run_cmds(false);
-    std::process::Command::new(&exe)
-        .args(&["--remove", &src_exe])
-        .spawn()?;
-    Ok(())
-}
-*/
-
 fn get_after_install(exe: &str) -> String {
     let app_name = crate::get_app_name();
     let ext = app_name.to_lowercase();
@@ -1093,6 +1064,15 @@ if exist \"{tmp_path}\\{app_name} Tray.lnk\" del /f /q \"{tmp_path}\\{app_name} 
         "".to_owned()
     };
 
+    // potential bug here: if run_cmd cancelled, but config file is changed.
+    if let Ok(lic) = crate::platform::windows::get_license_from_exe_name() {
+        if !lic.host.is_empty() {
+            Config::set_option("key".into(), lic.key);
+            Config::set_option("custom-rendezvous-server".into(), lic.host);
+            Config::set_option("api-server".into(), lic.api);
+        }
+    }
+
     let cmds = format!(
         "
 {uninstall_str}
@@ -1113,7 +1093,6 @@ reg add {subkey} /f /v VersionBuild /t REG_DWORD /d {version_build}
 reg add {subkey} /f /v UninstallString /t REG_SZ /d \"\\\"{exe}\\\" --uninstall\"
 reg add {subkey} /f /v EstimatedSize /t REG_DWORD /d {size}
 reg add {subkey} /f /v WindowsInstaller /t REG_DWORD /d 0
-{lic}
 cscript \"{mk_shortcut}\"
 cscript \"{uninstall_shortcut}\"
 cscript \"{tray_shortcut}\"
@@ -1128,7 +1107,6 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
     ",
         version=crate::VERSION,
         build_date=crate::BUILD_DATE,
-        lic=register_licence(),
         after_install=get_after_install(&exe),
         sleep=if debug {
             "timeout 300"
@@ -1347,7 +1325,7 @@ fn get_reg_of(subkey: &str, name: &str) -> String {
     "".to_owned()
 }
 
-fn get_license_from_exe_name() -> ResultType<License> {
+pub fn get_license_from_exe_name() -> ResultType<License> {
     let mut exe = std::env::current_exe()?.to_str().unwrap_or("").to_owned();
     // if defined portable appname entry, replace original executable name with it.
     if let Ok(portable_exe) = std::env::var(PORTABLE_APPNAME_RUNTIME_ENV_KEY) {
@@ -1362,42 +1340,9 @@ pub fn is_win_server() -> bool {
     unsafe { is_windows_server() > 0 }
 }
 
-pub fn get_license() -> Option<License> {
-    let mut lic: License = Default::default();
-    if let Ok(tmp) = get_license_from_exe_name() {
-        lic = tmp;
-    } else {
-        lic.key = get_reg("Key");
-        lic.host = get_reg("Host");
-        lic.api = get_reg("Api");
-    }
-    if lic.key.is_empty() || lic.host.is_empty() {
-        return None;
-    }
-    Some(lic)
-}
-
 pub fn bootstrap() {
-    if let Some(lic) = get_license() {
-        *config::PROD_RENDEZVOUS_SERVER.write().unwrap() = lic.host.clone();
-    }
-}
-
-fn register_licence() -> String {
-    let (subkey, _, _, _) = get_install_info();
     if let Ok(lic) = get_license_from_exe_name() {
-        format!(
-            "
-        reg add {subkey} /f /v Key /t REG_SZ /d \"{key}\"
-        reg add {subkey} /f /v Host /t REG_SZ /d \"{host}\"
-        reg add {subkey} /f /v Api /t REG_SZ /d \"{api}\"
-    ",
-            key = &lic.key,
-            host = &lic.host,
-            api = &lic.api,
-        )
-    } else {
-        "".to_owned()
+        *config::EXE_RENDEZVOUS_SERVER.write().unwrap() = lic.host.clone();
     }
 }
 

@@ -379,8 +379,6 @@ pub async fn start_server(is_server: bool) {
                 std::process::exit(-1);
             }
         });
-        #[cfg(windows)]
-        crate::platform::windows::bootstrap();
         input_service::fix_key_down_timeout_loop();
         crate::hbbs_http::sync::start();
         #[cfg(target_os = "linux")]

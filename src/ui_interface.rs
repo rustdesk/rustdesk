@@ -118,7 +118,7 @@ pub fn show_run_without_install() -> bool {
 #[inline]
 pub fn get_license() -> String {
     #[cfg(windows)]
-    if let Some(lic) = crate::platform::windows::get_license() {
+    if let Ok(lic) = crate::platform::windows::get_license_from_exe_name() {
         #[cfg(feature = "flutter")]
         return format!("Key: {}\nHost: {}\nApi: {}", lic.key, lic.host, lic.api);
         // default license format is html formed (sciter)
