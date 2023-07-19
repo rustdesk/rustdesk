@@ -9,7 +9,7 @@ use hbb_common::{
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-const TIME_HEARTBEAT: Duration = Duration::from_secs(30);
+const TIME_HEARTBEAT: Duration = Duration::from_secs(15);
 const TIME_CONN: Duration = Duration::from_secs(3);
 
 #[cfg(not(any(target_os = "ios")))]
@@ -17,7 +17,7 @@ lazy_static::lazy_static! {
     static ref SENDER : Mutex<broadcast::Sender<Vec<i32>>> = Mutex::new(start_hbbs_sync());
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "ios")))]
 pub fn start() {
     let _sender = SENDER.lock().unwrap();
 }
@@ -52,7 +52,6 @@ async fn start_hbbs_sync_async() {
             tokio::select! {
                 _ = interval.tick() => {
                     let url = heartbeat_url();
-                    let modified_at = LocalConfig::get_option("strategy_timestamp").parse::<i64>().unwrap_or(0);
                     if !url.is_empty() {
                         let conns = Connection::alive_conns();
                         if conns.is_empty() && last_send.elapsed() < TIME_HEARTBEAT {
@@ -65,6 +64,7 @@ async fn start_hbbs_sync_async() {
                         if !conns.is_empty() {
                             v["conns"] = json!(conns);
                         }
+                        let modified_at = LocalConfig::get_option("strategy_timestamp").parse::<i64>().unwrap_or(0);
                         v["modified_at"] = json!(modified_at);
                         if let Ok(s) = crate::post_request(url.clone(), v.to_string(), "").await {
                             if let Ok(mut rsp) = serde_json::from_str::<HashMap::<&str, Value>>(&s) {

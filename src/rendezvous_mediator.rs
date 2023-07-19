@@ -52,6 +52,7 @@ impl RendezvousMediator {
     }
 
     pub async fn start_all() {
+        crate::hbbs_http::sync::start();
         let mut nat_tested = false;
         check_zombie();
         let server = new_server();

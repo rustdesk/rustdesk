@@ -380,7 +380,6 @@ pub async fn start_server(is_server: bool) {
             }
         });
         input_service::fix_key_down_timeout_loop();
-        crate::hbbs_http::sync::start();
         #[cfg(target_os = "linux")]
         if crate::platform::current_is_wayland() {
             allow_err!(input_service::setup_uinput(0, 1920, 0, 1080).await);
