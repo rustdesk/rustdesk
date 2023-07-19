@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
@@ -230,10 +232,18 @@ class _RawTouchGestureDetectorRegionState
       return;
     }
     if (isDesktop) {
-      // to-do
+      final scale = ((d.scale - _scale) * 1000).toInt();
+      _scale = d.scale;
+
+      if (scale != 0) {
+        bind.sessionSendPointer(
+            sessionId: sessionId,
+            msg: json.encode({
+              'touch': {'scale': scale}
+            }));
+      }
     } else {
       // mobile
-      // to-do: Is this correct?
       ffi.canvasModel.updateScale(d.scale / _scale);
       _scale = d.scale;
       ffi.canvasModel.panX(d.focalPointDelta.dx);
@@ -246,14 +256,17 @@ class _RawTouchGestureDetectorRegionState
       return;
     }
     if (isDesktop) {
-      // to-do
+      bind.sessionSendPointer(
+          sessionId: sessionId,
+          msg: json.encode({
+            'touch': {'scale': 0}
+          }));
     } else {
       // mobile
-      // to-do: Is this correct?
       _scale = 1;
       bind.sessionSetViewStyle(sessionId: sessionId, value: "");
     }
-     inputModel.sendMouse('up', MouseButtons.left);
+    inputModel.sendMouse('up', MouseButtons.left);
   }
 
   get onHoldDragCancel => null;

@@ -152,6 +152,7 @@ pub enum DataPortableService {
     Pong,
     ConnCount(Option<usize>),
     Mouse((Vec<u8>, i32)),
+    Pointer((Vec<u8>, i32)),
     Key(Vec<u8>),
     RequestStart,
     WillClose,

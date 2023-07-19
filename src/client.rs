@@ -1109,7 +1109,8 @@ impl LoginConfigHandler {
         self.remember = !config.password.is_empty();
         self.config = config;
         let mut sid = rand::random();
-        if sid == 0 { // you won the lottery
+        if sid == 0 {
+            // you won the lottery
             sid = 1;
         }
         self.session_id = sid;
@@ -1962,6 +1963,39 @@ pub fn send_mouse(
     }
     interface.swap_modifier_mouse(&mut mouse_event);
     msg_out.set_mouse_event(mouse_event);
+    interface.send(Data::Message(msg_out));
+}
+
+#[inline]
+pub fn send_pointer_device_event(
+    mut evt: PointerDeviceEvent,
+    alt: bool,
+    ctrl: bool,
+    shift: bool,
+    command: bool,
+    interface: &impl Interface,
+) {
+    let mut msg_out = Message::new();
+    if alt {
+        evt.modifiers.push(ControlKey::Alt.into());
+    }
+    if shift {
+        evt.modifiers.push(ControlKey::Shift.into());
+    }
+    if ctrl {
+        evt.modifiers.push(ControlKey::Control.into());
+    }
+    if command {
+        evt.modifiers.push(ControlKey::Meta.into());
+    }
+    #[cfg(all(target_os = "macos", not(feature = "flutter")))]
+    if check_scroll_on_mac(mask, x, y) {
+        let factor = 3;
+        mouse_event.mask = crate::input::MOUSE_TYPE_TRACKPAD;
+        mouse_event.x *= factor;
+        mouse_event.y *= factor;
+    }
+    msg_out.set_pointer_device_event(evt);
     interface.send(Data::Message(msg_out));
 }
 
