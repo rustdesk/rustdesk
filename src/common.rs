@@ -833,14 +833,14 @@ pub fn is_setup(name: &str) -> bool {
 }
 
 pub fn get_custom_rendezvous_server(custom: String) -> String {
-    if !custom.is_empty() {
-        return custom;
-    }
     #[cfg(windows)]
-    if let Some(lic) = crate::platform::windows::get_license() {
+    if let Ok(lic) = crate::platform::windows::get_license_from_exe_name() {
         if !lic.host.is_empty() {
             return lic.host.clone();
         }
+    }
+    if !custom.is_empty() {
+        return custom;
     }
     if !config::PROD_RENDEZVOUS_SERVER.read().unwrap().is_empty() {
         return config::PROD_RENDEZVOUS_SERVER.read().unwrap().clone();
@@ -849,14 +849,14 @@ pub fn get_custom_rendezvous_server(custom: String) -> String {
 }
 
 pub fn get_api_server(api: String, custom: String) -> String {
-    if !api.is_empty() {
-        return api.to_owned();
-    }
     #[cfg(windows)]
-    if let Some(lic) = crate::platform::windows::get_license() {
+    if let Ok(lic) = crate::platform::windows::get_license_from_exe_name() {
         if !lic.api.is_empty() {
             return lic.api.clone();
         }
+    }
+    if !api.is_empty() {
+        return api.to_owned();
     }
     let api = option_env!("API_SERVER").unwrap_or_default();
     if !api.is_empty() {
@@ -982,6 +982,10 @@ pub fn decode64<T: AsRef<[u8]>>(input: T) -> Result<Vec<u8>, base64::DecodeError
 }
 
 pub async fn get_key(sync: bool) -> String {
+    #[cfg(windows)]
+    if let Ok(lic) = crate::platform::windows::get_license_from_exe_name() {
+        return lic.key;
+    }
     #[cfg(target_os = "ios")]
     let mut key = Config::get_option("key");
     #[cfg(not(target_os = "ios"))]
@@ -991,12 +995,6 @@ pub async fn get_key(sync: bool) -> String {
         let mut options = crate::ipc::get_options_async().await;
         options.remove("key").unwrap_or_default()
     };
-    if key.is_empty() {
-        #[cfg(windows)]
-        if let Some(lic) = crate::platform::windows::get_license() {
-            return lic.key;
-        }
-    }
     if key.is_empty() && !option_env!("RENDEZVOUS_SERVER").unwrap_or("").is_empty() {
         key = config::RS_PUB_KEY.to_owned();
     }

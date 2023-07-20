@@ -49,6 +49,7 @@ lazy_static::lazy_static! {
         Some(key) if !key.is_empty() => key,
         _ => "",
     }.to_owned()));
+    pub static ref EXE_RENDEZVOUS_SERVER: Arc<RwLock<String>> = Default::default();
     pub static ref APP_NAME: Arc<RwLock<String>> = Arc::new(RwLock::new("RustDesk".to_owned()));
     static ref KEY_PAIR: Arc<Mutex<Option<KeyPair>>> = Default::default();
     static ref HW_CODEC_CONFIG: Arc<RwLock<HwCodecConfig>> = Arc::new(RwLock::new(HwCodecConfig::load()));
@@ -604,7 +605,10 @@ impl Config {
     }
 
     pub fn get_rendezvous_server() -> String {
-        let mut rendezvous_server = Self::get_option("custom-rendezvous-server");
+        let mut rendezvous_server = EXE_RENDEZVOUS_SERVER.read().unwrap().clone();
+        if rendezvous_server.is_empty() {
+            rendezvous_server = Self::get_option("custom-rendezvous-server");
+        }
         if rendezvous_server.is_empty() {
             rendezvous_server = PROD_RENDEZVOUS_SERVER.read().unwrap().clone();
         }
@@ -624,6 +628,10 @@ impl Config {
     }
 
     pub fn get_rendezvous_servers() -> Vec<String> {
+        let s = EXE_RENDEZVOUS_SERVER.read().unwrap().clone();
+        if !s.is_empty() {
+            return vec![s];
+        }
         let s = Self::get_option("custom-rendezvous-server");
         if !s.is_empty() {
             return vec![s];

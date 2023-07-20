@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -21,9 +20,8 @@ import '../../models/input_model.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../../utils/image.dart';
-import '../widgets/gestures.dart';
 
-final initText = '\1' * 1024;
+final initText = '1' * 1024;
 
 class RemotePage extends StatefulWidget {
   RemotePage({Key? key, required this.id}) : super(key: key);
@@ -39,8 +37,6 @@ class _RemotePageState extends State<RemotePage> {
   bool _showBar = !isWebDesktop;
   bool _showGestureHelp = false;
   String _value = '';
-  double _scale = 1;
-  double _mouseScrollIntegral = 0; // mouse scroll speed controller
   Orientation? _currentOrientation;
 
   final keyboardVisibilityController = KeyboardVisibilityController();
@@ -267,11 +263,17 @@ class _RemotePageState extends State<RemotePage> {
                                 gFFI.canvasModel.updateViewStyle();
                               });
                             }
-                            return Obx(() => Container(
+                            return Obx(
+                              () => Container(
                                 color: MyTheme.canvasColor,
                                 child: inputModel.isPhysicalMouse.value
                                     ? getBodyForMobile()
-                                    : getBodyForMobileWithGesture()));
+                                    : RawTouchGestureDetectorRegion(
+                                        child: getBodyForMobile(),
+                                        ffi: gFFI,
+                                      ),
+                              ),
+                            );
                           })));
               })
             ],
@@ -375,120 +377,6 @@ class _RemotePageState extends State<RemotePage> {
         ],
       ),
     );
-  }
-
-  /// touchMode only:
-  ///   LongPress -> right click
-  ///   OneFingerPan -> start/end -> left down start/end
-  ///   onDoubleTapDown -> move to
-  ///   onLongPressDown => move to
-  ///
-  /// mouseMode only:
-  ///   DoubleFiner -> right click
-  ///   HoldDrag -> left drag
-
-  Offset _cacheLongPressPosition = Offset(0, 0);
-  Widget getBodyForMobileWithGesture() {
-    final touchMode = gFFI.ffiModel.touchMode;
-    return getMixinGestureDetector(
-        child: getBodyForMobile(),
-        onTapUp: (d) {
-          if (touchMode) {
-            gFFI.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
-            inputModel.tap(MouseButtons.left);
-          } else {
-            inputModel.tap(MouseButtons.left);
-          }
-        },
-        onDoubleTapDown: (d) {
-          if (touchMode) {
-            gFFI.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
-          }
-        },
-        onDoubleTap: () {
-          inputModel.tap(MouseButtons.left);
-          inputModel.tap(MouseButtons.left);
-        },
-        onLongPressDown: (d) {
-          if (touchMode) {
-            gFFI.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
-            _cacheLongPressPosition = d.localPosition;
-          }
-        },
-        onLongPress: () {
-          if (touchMode) {
-            gFFI.cursorModel
-                .move(_cacheLongPressPosition.dx, _cacheLongPressPosition.dy);
-          }
-          inputModel.tap(MouseButtons.right);
-        },
-        onDoubleFinerTap: (d) {
-          if (!touchMode) {
-            inputModel.tap(MouseButtons.right);
-          }
-        },
-        onHoldDragStart: (d) {
-          if (!touchMode) {
-            inputModel.sendMouse('down', MouseButtons.left);
-          }
-        },
-        onHoldDragUpdate: (d) {
-          if (!touchMode) {
-            gFFI.cursorModel.updatePan(d.delta.dx, d.delta.dy, touchMode);
-          }
-        },
-        onHoldDragEnd: (_) {
-          if (!touchMode) {
-            inputModel.sendMouse('up', MouseButtons.left);
-          }
-        },
-        onOneFingerPanStart: (d) {
-          if (touchMode) {
-            gFFI.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
-            inputModel.sendMouse('down', MouseButtons.left);
-          } else {
-            final offset = gFFI.cursorModel.offset;
-            final cursorX = offset.dx;
-            final cursorY = offset.dy;
-            final visible =
-                gFFI.cursorModel.getVisibleRect().inflate(1); // extend edges
-            final size = MediaQueryData.fromWindow(ui.window).size;
-            if (!visible.contains(Offset(cursorX, cursorY))) {
-              gFFI.cursorModel.move(size.width / 2, size.height / 2);
-            }
-          }
-        },
-        onOneFingerPanUpdate: (d) {
-          gFFI.cursorModel.updatePan(d.delta.dx, d.delta.dy, touchMode);
-        },
-        onOneFingerPanEnd: (d) {
-          if (touchMode) {
-            inputModel.sendMouse('up', MouseButtons.left);
-          }
-        },
-        // scale + pan event
-        onTwoFingerScaleUpdate: (d) {
-          gFFI.canvasModel.updateScale(d.scale / _scale);
-          _scale = d.scale;
-          gFFI.canvasModel.panX(d.focalPointDelta.dx);
-          gFFI.canvasModel.panY(d.focalPointDelta.dy);
-        },
-        onTwoFingerScaleEnd: (d) {
-          _scale = 1;
-          bind.sessionSetViewStyle(sessionId: sessionId, value: "");
-        },
-        onThreeFingerVerticalDragUpdate: gFFI.ffiModel.isPeerAndroid
-            ? null
-            : (d) {
-                _mouseScrollIntegral += d.delta.dy / 4;
-                if (_mouseScrollIntegral > 1) {
-                  inputModel.scroll(1);
-                  _mouseScrollIntegral = 0;
-                } else if (_mouseScrollIntegral < -1) {
-                  inputModel.scroll(-1);
-                  _mouseScrollIntegral = 0;
-                }
-              });
   }
 
   Widget getBodyForMobile() {

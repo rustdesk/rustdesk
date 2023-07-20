@@ -52,6 +52,7 @@ impl RendezvousMediator {
     }
 
     pub async fn start_all() {
+        crate::hbbs_http::sync::start();
         let mut nat_tested = false;
         check_zombie();
         let server = new_server();
@@ -503,7 +504,8 @@ async fn direct_server(server: ServerPtr) {
     let mut listener = None;
     let mut port = 0;
     loop {
-        let disabled = Config::get_option("direct-server").is_empty();
+        let disabled = Config::get_option("direct-server").is_empty()
+            || !Config::get_option("stop-service").is_empty();
         if !disabled && listener.is_none() {
             port = get_direct_port();
             match hbb_common::tcp::listen_any(port as _).await {

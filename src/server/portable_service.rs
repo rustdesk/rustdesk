@@ -222,6 +222,8 @@ mod utils {
 
 // functions called in separate SYSTEM user process.
 pub mod server {
+    use hbb_common::message_proto::PointerDeviceEvent;
+
     use super::*;
 
     lazy_static::lazy_static! {
@@ -466,6 +468,11 @@ pub mod server {
                                             crate::input_service::handle_mouse_(&evt, conn);
                                         }
                                     }
+                                    Pointer((v, conn)) => {
+                                        if let Ok(evt) = PointerDeviceEvent::parse_from_bytes(&v) {
+                                            crate::input_service::handle_pointer_(&evt, conn);
+                                        }
+                                    }
                                     Key(v) => {
                                         if let Ok(evt) = KeyEvent::parse_from_bytes(&v) {
                                             crate::input_service::handle_key_(&evt);
@@ -499,7 +506,7 @@ pub mod server {
 
 // functions called in main process.
 pub mod client {
-    use hbb_common::anyhow::Context;
+    use hbb_common::{anyhow::Context, message_proto::PointerDeviceEvent};
 
     use super::*;
 
@@ -864,6 +871,14 @@ pub mod client {
         ))))
     }
 
+    fn handle_pointer_(evt: &PointerDeviceEvent, conn: i32) -> ResultType<()> {
+        let mut v = vec![];
+        evt.write_to_vec(&mut v)?;
+        ipc_send(Data::DataPortableService(DataPortableService::Pointer((
+            v, conn,
+        ))))
+    }
+
     fn handle_key_(evt: &KeyEvent) -> ResultType<()> {
         let mut v = vec![];
         evt.write_to_vec(&mut v)?;
@@ -907,6 +922,15 @@ pub mod client {
             handle_mouse_(evt, conn).ok();
         } else {
             crate::input_service::handle_mouse_(evt, conn);
+        }
+    }
+
+    pub fn handle_pointer(evt: &PointerDeviceEvent, conn: i32) {
+        if RUNNING.lock().unwrap().clone() {
+            crate::input_service::update_latest_input_cursor_time(conn);
+            handle_pointer_(evt, conn).ok();
+        } else {
+            crate::input_service::handle_pointer_(evt, conn);
         }
     }
 

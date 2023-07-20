@@ -115,6 +115,8 @@ enum MessageInput {
     Mouse((MouseEvent, i32)),
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     Key((KeyEvent, bool)),
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    Pointer((PointerDeviceEvent, i32)),
     BlockOn,
     BlockOff,
     #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
@@ -668,6 +670,9 @@ impl Connection {
                             handle_key(&msg);
                         }
                     }
+                    MessageInput::Pointer((msg, id)) => {
+                        handle_pointer(&msg, id);
+                    }
                     MessageInput::BlockOn => {
                         if crate::platform::block_input(true) {
                             block_input_mode = true;
@@ -1181,6 +1186,12 @@ impl Connection {
 
     #[inline]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    fn input_pointer(&self, msg: PointerDeviceEvent, conn_id: i32) {
+        self.tx_input.send(MessageInput::Pointer((msg, conn_id))).ok();
+    }
+
+    #[inline]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn input_key(&self, msg: KeyEvent, press: bool) {
         self.tx_input.send(MessageInput::Key((msg, press))).ok();
     }
@@ -1575,6 +1586,13 @@ impl Connection {
                             MOUSE_MOVE_TIME.store(get_time(), Ordering::SeqCst);
                         }
                         self.input_mouse(me, self.inner.id());
+                    }
+                }
+                Some(message::Union::PointerDeviceEvent(pde)) => {
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    if self.peer_keyboard_enabled() {
+                        MOUSE_MOVE_TIME.store(get_time(), Ordering::SeqCst);
+                        self.input_pointer(pde, self.inner.id());
                     }
                 }
                 #[cfg(any(target_os = "android", target_os = "ios"))]

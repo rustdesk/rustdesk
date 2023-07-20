@@ -25,6 +25,8 @@ macro_rules! my_println{
 /// If it returns [`Some`], then the process will continue, and flutter gui will be started.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn core_main() -> Option<Vec<String>> {
+    #[cfg(windows)]
+    crate::platform::windows::bootstrap();
     let mut args = Vec::new();
     let mut flutter_args = Vec::new();
     let mut i = 0;
@@ -253,6 +255,45 @@ pub fn core_main() -> Option<Vec<String>> {
                 my_println!("{}", crate::ipc::get_id());
             } else {
                 my_println!("Installation and administrative privileges required!");
+            }
+            return None;
+        } else if args[0] == "--set-id" {
+            if args.len() == 2 {
+                if crate::platform::is_installed()
+                    && crate::platform::check_super_user_permission().unwrap_or_default()
+                {
+                    let old_id = crate::ipc::get_id();
+                    let mut res = crate::ui_interface::change_id_shared(args[1].to_owned(), old_id);
+                    if res.is_empty() {
+                        res = "Done!".to_owned();
+                    }
+                    my_println!("{}", res);
+                } else {
+                    my_println!("Installation and administrative privileges required!");
+                }
+            }
+            return None;
+        } else if args[0] == "--config" {
+            if args.len() == 2 {
+                if crate::platform::is_installed()
+                    && crate::platform::check_super_user_permission().unwrap_or_default()
+                {
+                    // arg: starting with `host=`, e.g. `host=127.0.0.1,api=https://test.com,key=asfs`,
+                    // or the filename (without ext) used in renaming exe.
+                    let name = format!("{}.exe", args[1]);
+                    if let Ok(lic) = crate::license::get_license_from_string(&name) {
+                        if !lic.host.is_empty() {
+                            crate::ui_interface::set_option("key".into(), lic.key);
+                            crate::ui_interface::set_option(
+                                "custom-rendezvous-server".into(),
+                                lic.host,
+                            );
+                            crate::ui_interface::set_option("api-server".into(), lic.api);
+                        }
+                    }
+                } else {
+                    my_println!("Installation and administrative privileges required!");
+                }
             }
             return None;
         } else if args[0] == "--check-hwcodec-config" {

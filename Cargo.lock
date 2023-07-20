@@ -4894,7 +4894,7 @@ dependencies = [
 [[package]]
 name = "rdev"
 version = "0.5.0-2"
-source = "git+https://github.com/fufesou/rdev#ab48d5798c86303b9398727684509b1b43ecfdab"
+source = "git+https://github.com/fufesou/rdev#66c55439b0daf8836b188ddff47a497711cf164e"
 dependencies = [
  "cocoa",
  "core-foundation",

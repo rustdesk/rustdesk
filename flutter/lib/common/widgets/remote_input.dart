@@ -1,7 +1,15 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/gestures.dart';
 
-import '../../models/input_model.dart';
+import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/models/model.dart';
+import 'package:flutter_hbb/models/input_model.dart';
+
+import './gestures.dart';
 
 class RawKeyFocusScope extends StatelessWidget {
   final FocusNode? focusNode;
@@ -30,6 +38,305 @@ class RawKeyFocusScope extends StatelessWidget {
   }
 }
 
+class RawTouchGestureDetectorRegion extends StatefulWidget {
+  final Widget child;
+  final FFI ffi;
+
+  late final InputModel inputModel = ffi.inputModel;
+  late final FfiModel ffiModel = ffi.ffiModel;
+
+  RawTouchGestureDetectorRegion({
+    required this.child,
+    required this.ffi,
+  });
+
+  @override
+  State<RawTouchGestureDetectorRegion> createState() =>
+      _RawTouchGestureDetectorRegionState();
+}
+
+/// touchMode only:
+///   LongPress -> right click
+///   OneFingerPan -> start/end -> left down start/end
+///   onDoubleTapDown -> move to
+///   onLongPressDown => move to
+///
+/// mouseMode only:
+///   DoubleFiner -> right click
+///   HoldDrag -> left drag
+class _RawTouchGestureDetectorRegionState
+    extends State<RawTouchGestureDetectorRegion> {
+  Offset _cacheLongPressPosition = Offset(0, 0);
+  double _mouseScrollIntegral = 0; // mouse scroll speed controller
+  double _scale = 1;
+
+  PointerDeviceKind? lastDeviceKind;
+
+  FFI get ffi => widget.ffi;
+  FfiModel get ffiModel => widget.ffiModel;
+  InputModel get inputModel => widget.inputModel;
+  bool get handleTouch => isDesktop || ffiModel.touchMode;
+  SessionID get sessionId => ffi.sessionId;
+
+  @override
+  Widget build(BuildContext context) {
+    return RawGestureDetector(
+      child: widget.child,
+      gestures: makeGestures(context),
+    );
+  }
+
+  onTapDown(TapDownDetails d) {
+    lastDeviceKind = d.kind;
+    if (lastDeviceKind != PointerDeviceKind.touch) {
+      return;
+    }
+    if (handleTouch) {
+      ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
+    }
+    inputModel.tapDown(MouseButtons.left);
+  }
+
+  onTapUp(TapUpDetails d) {
+    if (lastDeviceKind != PointerDeviceKind.touch) {
+      return;
+    }
+    if (handleTouch) {
+      ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
+    }
+    inputModel.tapUp(MouseButtons.left);
+  }
+
+  onDoubleTapDown(TapDownDetails d) {
+    lastDeviceKind = d.kind;
+    if (lastDeviceKind != PointerDeviceKind.touch) {
+      return;
+    }
+    if (handleTouch) {
+      ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
+    }
+  }
+
+  onDoubleTap() {
+    if (lastDeviceKind != PointerDeviceKind.touch) {
+      return;
+    }
+    inputModel.tap(MouseButtons.left);
+    inputModel.tap(MouseButtons.left);
+  }
+
+  onLongPressDown(LongPressDownDetails d) {
+    lastDeviceKind = d.kind;
+    if (lastDeviceKind != PointerDeviceKind.touch) {
+      return;
+    }
+    if (handleTouch) {
+      ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
+      _cacheLongPressPosition = d.localPosition;
+    }
+  }
+
+  // for mobiles
+  onLongPress() {
+    if (lastDeviceKind != PointerDeviceKind.touch) {
+      return;
+    }
+    if (isDesktop) {
+      return;
+    }
+    if (handleTouch) {
+      ffi.cursorModel
+          .move(_cacheLongPressPosition.dx, _cacheLongPressPosition.dy);
+    }
+    inputModel.tap(MouseButtons.right);
+  }
+
+  onDoubleFinerTap(TapDownDetails d) {
+    lastDeviceKind = d.kind;
+    if (lastDeviceKind != PointerDeviceKind.touch) {
+      return;
+    }
+    if (isDesktop || !handleTouch) {
+      inputModel.tap(MouseButtons.right);
+    }
+  }
+
+  onHoldDragStart(DragStartDetails d) {
+    lastDeviceKind = d.kind;
+    if (lastDeviceKind != PointerDeviceKind.touch) {
+      return;
+    }
+    if (!handleTouch) {
+      inputModel.sendMouse('down', MouseButtons.left);
+    }
+  }
+
+  onHoldDragUpdate(DragUpdateDetails d) {
+    if (lastDeviceKind != PointerDeviceKind.touch) {
+      return;
+    }
+    if (!handleTouch) {
+      ffi.cursorModel.updatePan(d.delta.dx, d.delta.dy, handleTouch);
+    }
+  }
+
+  onHoldDragEnd(DragEndDetails d) {
+    if (lastDeviceKind != PointerDeviceKind.touch) {
+      return;
+    }
+    if (!handleTouch) {
+      inputModel.sendMouse('up', MouseButtons.left);
+    }
+  }
+
+  onOneFingerPanStart(BuildContext context, DragStartDetails d) {
+    lastDeviceKind = d.kind ?? lastDeviceKind;
+    if (lastDeviceKind != PointerDeviceKind.touch) {
+      return;
+    }
+    if (handleTouch) {
+      inputModel.sendMouse('down', MouseButtons.left);
+      ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
+    } else {
+      final offset = ffi.cursorModel.offset;
+      final cursorX = offset.dx;
+      final cursorY = offset.dy;
+      final visible =
+          ffi.cursorModel.getVisibleRect().inflate(1); // extend edges
+      final size = MediaQueryData.fromView(View.of(context)).size;
+      if (!visible.contains(Offset(cursorX, cursorY))) {
+        ffi.cursorModel.move(size.width / 2, size.height / 2);
+      }
+    }
+  }
+
+  onOneFingerPanUpdate(DragUpdateDetails d) {
+    if (lastDeviceKind != PointerDeviceKind.touch) {
+      return;
+    }
+    ffi.cursorModel.updatePan(d.delta.dx, d.delta.dy, handleTouch);
+  }
+
+  onOneFingerPanEnd(DragEndDetails d) {
+    if (lastDeviceKind != PointerDeviceKind.touch) {
+      return;
+    }
+    if (handleTouch) {
+      inputModel.sendMouse('up', MouseButtons.left);
+    }
+  }
+
+  // scale + pan event
+  onTwoFingerScaleUpdate(ScaleUpdateDetails d) {
+    if (lastDeviceKind != PointerDeviceKind.touch) {
+      return;
+    }
+    if (isDesktop) {
+      final scale = ((d.scale - _scale) * 1000).toInt();
+      _scale = d.scale;
+
+      if (scale != 0) {
+        bind.sessionSendPointer(
+            sessionId: sessionId,
+            msg: json.encode({
+              'touch': {'scale': scale}
+            }));
+      }
+    } else {
+      // mobile
+      ffi.canvasModel.updateScale(d.scale / _scale);
+      _scale = d.scale;
+      ffi.canvasModel.panX(d.focalPointDelta.dx);
+      ffi.canvasModel.panY(d.focalPointDelta.dy);
+    }
+  }
+
+  onTwoFingerScaleEnd(ScaleEndDetails d) {
+    if (lastDeviceKind != PointerDeviceKind.touch) {
+      return;
+    }
+    if (isDesktop) {
+      bind.sessionSendPointer(
+          sessionId: sessionId,
+          msg: json.encode({
+            'touch': {'scale': 0}
+          }));
+    } else {
+      // mobile
+      _scale = 1;
+      bind.sessionSetViewStyle(sessionId: sessionId, value: "");
+    }
+    inputModel.sendMouse('up', MouseButtons.left);
+  }
+
+  get onHoldDragCancel => null;
+  get onThreeFingerVerticalDragUpdate => ffi.ffiModel.isPeerAndroid
+      ? null
+      : (d) {
+          _mouseScrollIntegral += d.delta.dy / 4;
+          if (_mouseScrollIntegral > 1) {
+            inputModel.scroll(1);
+            _mouseScrollIntegral = 0;
+          } else if (_mouseScrollIntegral < -1) {
+            inputModel.scroll(-1);
+            _mouseScrollIntegral = 0;
+          }
+        };
+
+  makeGestures(BuildContext context) {
+    return <Type, GestureRecognizerFactory>{
+      // Official
+      TapGestureRecognizer:
+          GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
+              () => TapGestureRecognizer(), (instance) {
+        instance
+          ..onTapDown = onTapDown
+          ..onTapUp = onTapUp;
+      }),
+      DoubleTapGestureRecognizer:
+          GestureRecognizerFactoryWithHandlers<DoubleTapGestureRecognizer>(
+              () => DoubleTapGestureRecognizer(), (instance) {
+        instance
+          ..onDoubleTapDown = onDoubleTapDown
+          ..onDoubleTap = onDoubleTap;
+      }),
+      LongPressGestureRecognizer:
+          GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
+              () => LongPressGestureRecognizer(), (instance) {
+        instance
+          ..onLongPressDown = onLongPressDown
+          ..onLongPress = onLongPress;
+      }),
+      // Customized
+      HoldTapMoveGestureRecognizer:
+          GestureRecognizerFactoryWithHandlers<HoldTapMoveGestureRecognizer>(
+              () => HoldTapMoveGestureRecognizer(),
+              (instance) => instance
+                ..onHoldDragStart = onHoldDragStart
+                ..onHoldDragUpdate = onHoldDragUpdate
+                ..onHoldDragCancel = onHoldDragCancel
+                ..onHoldDragEnd = onHoldDragEnd),
+      DoubleFinerTapGestureRecognizer:
+          GestureRecognizerFactoryWithHandlers<DoubleFinerTapGestureRecognizer>(
+              () => DoubleFinerTapGestureRecognizer(), (instance) {
+        instance.onDoubleFinerTap = onDoubleFinerTap;
+      }),
+      CustomTouchGestureRecognizer:
+          GestureRecognizerFactoryWithHandlers<CustomTouchGestureRecognizer>(
+              () => CustomTouchGestureRecognizer(), (instance) {
+        instance.onOneFingerPanStart =
+            (DragStartDetails d) => onOneFingerPanStart(context, d);
+        instance
+          ..onOneFingerPanUpdate = onOneFingerPanUpdate
+          ..onOneFingerPanEnd = onOneFingerPanEnd
+          ..onTwoFingerScaleUpdate = onTwoFingerScaleUpdate
+          ..onTwoFingerScaleEnd = onTwoFingerScaleEnd
+          ..onThreeFingerVerticalDragUpdate = onThreeFingerVerticalDragUpdate;
+      }),
+    };
+  }
+}
+
 class RawPointerMouseRegion extends StatelessWidget {
   final InputModel inputModel;
   final Widget child;
@@ -39,36 +346,39 @@ class RawPointerMouseRegion extends StatelessWidget {
   final PointerDownEventListener? onPointerDown;
   final PointerUpEventListener? onPointerUp;
 
-  RawPointerMouseRegion(
-      {this.onEnter,
-      this.onExit,
-      this.cursor,
-      this.onPointerDown,
-      this.onPointerUp,
-      required this.inputModel,
-      required this.child});
+  RawPointerMouseRegion({
+    this.onEnter,
+    this.onExit,
+    this.cursor,
+    this.onPointerDown,
+    this.onPointerUp,
+    required this.inputModel,
+    required this.child,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Listener(
-        onPointerHover: inputModel.onPointHoverImage,
-        onPointerDown: (evt) {
-          onPointerDown?.call(evt);
-          inputModel.onPointDownImage(evt);
-        },
-        onPointerUp: (evt) {
-          onPointerUp?.call(evt);
-          inputModel.onPointUpImage(evt);
-        },
-        onPointerMove: inputModel.onPointMoveImage,
-        onPointerSignal: inputModel.onPointerSignalImage,
-        onPointerPanZoomStart: inputModel.onPointerPanZoomStart,
-        onPointerPanZoomUpdate: inputModel.onPointerPanZoomUpdate,
-        onPointerPanZoomEnd: inputModel.onPointerPanZoomEnd,
-        child: MouseRegion(
-            cursor: cursor ?? MouseCursor.defer,
-            onEnter: onEnter,
-            onExit: onExit,
-            child: child));
+      onPointerHover: inputModel.onPointHoverImage,
+      onPointerDown: (evt) {
+        onPointerDown?.call(evt);
+        inputModel.onPointDownImage(evt);
+      },
+      onPointerUp: (evt) {
+        onPointerUp?.call(evt);
+        inputModel.onPointUpImage(evt);
+      },
+      onPointerMove: inputModel.onPointMoveImage,
+      onPointerSignal: inputModel.onPointerSignalImage,
+      onPointerPanZoomStart: inputModel.onPointerPanZoomStart,
+      onPointerPanZoomUpdate: inputModel.onPointerPanZoomUpdate,
+      onPointerPanZoomEnd: inputModel.onPointerPanZoomEnd,
+      child: MouseRegion(
+        cursor: cursor ?? MouseCursor.defer,
+        onEnter: onEnter,
+        onExit: onExit,
+        child: child,
+      ),
+    );
   }
 }
