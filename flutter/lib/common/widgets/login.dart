@@ -12,6 +12,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../common.dart';
 import './dialog.dart';
 
+const kOpSvgList = ['github', 'google', 'apple', 'okta', 'facebook', 'azure'];
+
 class _IconOP extends StatelessWidget {
   final String op;
   final String? icon;
@@ -25,11 +27,12 @@ class _IconOP extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final svgFile = kOpSvgList.contains(op.toLowerCase()) ? op.toLowerCase() : 'default';
     return Container(
       margin: margin,
       child: icon == null
           ? SvgPicture.asset(
-              'assets/auth-${op.toLowerCase()}.svg',
+              'assets/auth-$svgFile.svg',
               width: 20,
             )
           : SvgPicture.string(
