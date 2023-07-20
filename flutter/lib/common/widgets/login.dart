@@ -66,7 +66,7 @@ class ButtonOP extends StatelessWidget {
         width: 200,
         child: Obx(() => ElevatedButton(
             style: ElevatedButton.styleFrom(
-              primary: curOP.value.isEmpty || curOP.value == op
+              backgroundColor: curOP.value.isEmpty || curOP.value == op
                   ? primaryColor
                   : Colors.grey,
             ).copyWith(elevation: ButtonStyleButton.allOrNull(0.0)),
@@ -74,17 +74,21 @@ class ButtonOP extends StatelessWidget {
             child: Row(
               children: [
                 SizedBox(
-                    width: 30,
-                    child: _IconOP(
-                      op: op,
-                      icon: icon,
-                      margin: EdgeInsets.only(right: 5),
-                    )),
+                  width: 30,
+                  child: _IconOP(
+                    op: op,
+                    icon: icon,
+                    margin: EdgeInsets.only(right: 5),
+                  ),
+                ),
                 Expanded(
-                    child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Center(
-                            child: Text('${translate("Continue with")} ${toCapitalized(op)}')))),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Center(
+                        child: Text(
+                            '${translate("Continue with")} ${op.toLowerCase() == "github" ? "GitHub" : toCapitalized(op)}')),
+                  ),
+                ),
               ],
             ))),
       ),
