@@ -163,15 +163,15 @@ class UserModel {
     return loginResponse;
   }
 
-  static Future<List<dynamic>> queryLoginOptions() async {
+  static Future<List<dynamic>> queryOidcLoginOptions() async {
     try {
       final url = await bind.mainGetApiServer();
       if (url.trim().isEmpty) return [];
-      final resp = await http.get(Uri.parse('$url/api/login-options'));
+      final resp = await http.get(Uri.parse('$url/api/oidc/login-options'));
       return jsonDecode(resp.body);
     } catch (e) {
       debugPrint(
-          "queryLoginOptions: jsonDecode resp body failed: ${e.toString()}");
+          "queryOidcLoginOptions: jsonDecode resp body failed: ${e.toString()}");
       return [];
     }
   }
