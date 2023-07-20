@@ -1,5 +1,5 @@
 use crate::{
-    codec::{base_bitrate, EncoderApi, EncoderCfg},
+    codec::{base_bitrate, codec_thread_num, EncoderApi, EncoderCfg},
     hw, ImageFormat, ImageRgb, HW_STRIDE_ALIGN,
 };
 use hbb_common::{
@@ -63,6 +63,7 @@ impl EncoderApi for HwEncoder {
                     gop: DEFAULT_GOP,
                     quality: DEFAULT_HW_QUALITY,
                     rc: DEFAULT_RC,
+                    thread_count: codec_thread_num() as _, // ffmpeg's thread_count is used for cpu
                 };
                 let format = match Encoder::format_from_name(config.name.clone()) {
                     Ok(format) => format,
@@ -239,6 +240,7 @@ impl HwDecoder {
         let ctx = DecodeContext {
             name: info.name.clone(),
             device_type: info.hwdevice.clone(),
+            thread_count: codec_thread_num() as _,
         };
         match Decoder::new(ctx) {
             Ok(decoder) => Ok(HwDecoder { decoder, info }),
@@ -335,6 +337,7 @@ pub fn check_config() {
         gop: DEFAULT_GOP,
         quality: DEFAULT_HW_QUALITY,
         rc: DEFAULT_RC,
+        thread_count: 4,
     };
     let encoders = CodecInfo::score(Encoder::available_encoders(ctx));
     let decoders = CodecInfo::score(Decoder::available_decoders());

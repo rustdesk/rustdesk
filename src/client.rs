@@ -24,6 +24,8 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 pub use file_trait::FileManager;
+#[cfg(windows)]
+use hbb_common::tokio;
 #[cfg(not(feature = "flutter"))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::tokio::sync::mpsc::UnboundedSender;
@@ -1788,6 +1790,8 @@ where
     let mut skip_beginning = 0;
 
     std::thread::spawn(move || {
+        #[cfg(windows)]
+        sync_cpu_usage();
         let mut video_handler = VideoHandler::new();
         loop {
             if let Ok(data) = video_receiver.recv() {
@@ -1869,6 +1873,39 @@ pub fn start_audio_thread() -> MediaSender {
         log::info!("Audio decoder loop exits");
     });
     audio_sender
+}
+
+#[cfg(windows)]
+fn sync_cpu_usage() {
+    use std::sync::Once;
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        let t = std::thread::spawn(do_sync_cpu_usage);
+        t.join().ok();
+    });
+}
+
+#[cfg(windows)]
+#[tokio::main(flavor = "current_thread")]
+async fn do_sync_cpu_usage() {
+    use crate::ipc::{connect, Data};
+    let start = std::time::Instant::now();
+    match connect(50, "").await {
+        Ok(mut conn) => {
+            if conn.send(&&Data::SyncWinCpuUsage(None)).await.is_ok() {
+                if let Ok(Some(data)) = conn.next_timeout(50).await {
+                    match data {
+                        Data::SyncWinCpuUsage(cpu_usage) => {
+                            hbb_common::platform::windows::sync_cpu_usage(cpu_usage);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+    log::info!("{:?} used to sync cpu usage", start.elapsed());
 }
 
 /// Handle latency test.

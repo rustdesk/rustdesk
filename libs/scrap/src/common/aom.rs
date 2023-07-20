@@ -6,7 +6,7 @@
 
 include!(concat!(env!("OUT_DIR"), "/aom_ffi.rs"));
 
-use crate::codec::{base_bitrate, Quality};
+use crate::codec::{base_bitrate, codec_thread_num, Quality};
 use crate::{codec::EncoderApi, EncodeFrame, STRIDE_ALIGN};
 use crate::{common::GoogleImage, generate_call_macro, generate_call_ptr_macro, Error, Result};
 use hbb_common::{
@@ -68,25 +68,6 @@ mod webrtc {
     pub const DEFAULT_Q_MAX: u32 = 56; // no more than 63
     pub const DEFAULT_Q_MIN: u32 = 12; // no more than 63, litter than q_max
 
-    fn number_of_threads(width: u32, height: u32, number_of_cores: usize) -> u32 {
-        // Keep the number of encoder threads equal to the possible number of
-        // column/row tiles, which is (1, 2, 4, 8). See comments below for
-        // AV1E_SET_TILE_COLUMNS/ROWS.
-        if width * height >= 640 * 360 && number_of_cores > 4 {
-            return 4;
-        } else if width * height >= 320 * 180 && number_of_cores > 2 {
-            return 2;
-        } else {
-            // Use 2 threads for low res on ARM.
-            #[cfg(any(target_arch = "arm", target_arch = "aarch64", target_os = "android"))]
-            if width * height >= 320 * 180 && number_of_cores > 2 {
-                return 2;
-            }
-            // 1 thread less than VGA.
-            return 1;
-        }
-    }
-
     // Only positive speeds, range for real-time coding currently is: 6 - 8.
     // Lower means slower/better quality, higher means fastest/lower quality.
     fn get_cpu_speed(width: u32, height: u32) -> u32 {
@@ -120,7 +101,7 @@ mod webrtc {
         // Overwrite default config with input encoder settings & RTC-relevant values.
         c.g_w = cfg.width;
         c.g_h = cfg.height;
-        c.g_threads = number_of_threads(cfg.width, cfg.height, num_cpus::get());
+        c.g_threads = codec_thread_num() as _;
         c.g_timebase.num = 1;
         c.g_timebase.den = kRtpTicksPerSecond;
         c.g_input_bit_depth = kBitDepth;
@@ -415,24 +396,16 @@ impl<'a> Iterator for EncodeFrames<'a> {
     }
 }
 
-pub struct AomDecoderConfig {
-    pub num_threads: u32,
-}
-
 pub struct AomDecoder {
     ctx: aom_codec_ctx_t,
 }
 
 impl AomDecoder {
-    pub fn new(cfg: AomDecoderConfig) -> Result<Self> {
+    pub fn new() -> Result<Self> {
         let i = call_aom_ptr!(aom_codec_av1_dx());
         let mut ctx = Default::default();
         let cfg = aom_codec_dec_cfg_t {
-            threads: if cfg.num_threads == 0 {
-                num_cpus::get() as _
-            } else {
-                cfg.num_threads
-            },
+            threads: codec_thread_num() as _,
             w: 0,
             h: 0,
             allow_lowbitdepth: 1,

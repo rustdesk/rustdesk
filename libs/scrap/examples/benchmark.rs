@@ -1,8 +1,8 @@
 use docopt::Docopt;
 use hbb_common::env_logger::{init_from_env, Env, DEFAULT_FILTER_ENV};
 use scrap::{
-    aom::{AomDecoder, AomDecoderConfig, AomEncoder, AomEncoderConfig},
-    codec::{EncoderApi, EncoderCfg, Quality as Q},
+    aom::{AomDecoder, AomEncoder, AomEncoderConfig},
+    codec::{codec_thread_num, EncoderApi, EncoderCfg, Quality as Q},
     Capturer, Display, TraitCapturer, VpxDecoder, VpxDecoderConfig, VpxEncoder, VpxEncoderConfig,
     VpxVideoCodecId::{self, *},
     STRIDE_ALIGN,
@@ -117,7 +117,6 @@ fn test_vpx(
         timebase: [1, 1000],
         quality,
         codec: codec_id,
-        num_threads: (num_cpus::get() / 2) as _,
     });
     let mut encoder = VpxEncoder::new(config).unwrap();
     let mut vpxs = vec![];
@@ -144,11 +143,7 @@ fn test_vpx(
         size / yuv_count
     );
 
-    let mut decoder = VpxDecoder::new(VpxDecoderConfig {
-        codec: codec_id,
-        num_threads: (num_cpus::get() / 2) as _,
-    })
-    .unwrap();
+    let mut decoder = VpxDecoder::new(VpxDecoderConfig { codec: codec_id }).unwrap();
     let start = Instant::now();
     for vpx in vpxs {
         let _ = decoder.decode(&vpx);
@@ -186,10 +181,7 @@ fn test_av1(yuvs: &Vec<Vec<u8>>, width: usize, height: usize, quality: Q, yuv_co
         start.elapsed() / yuv_count as _,
         size / yuv_count
     );
-    let mut decoder = AomDecoder::new(AomDecoderConfig {
-        num_threads: (num_cpus::get() / 2) as _,
-    })
-    .unwrap();
+    let mut decoder = AomDecoder::new().unwrap();
     let start = Instant::now();
     for av1 in av1s {
         let _ = decoder.decode(&av1);
@@ -237,6 +229,7 @@ mod hw {
             gop: 60,
             quality: Quality_Default,
             rc: RC_DEFAULT,
+            thread_count: codec_thread_num() as _,
         };
 
         let encoders = Encoder::available_encoders(ctx.clone());
@@ -289,6 +282,7 @@ mod hw {
         let ctx = DecodeContext {
             name: info.name,
             device_type: info.hwdevice,
+            thread_count: codec_thread_num() as _,
         };
 
         let mut decoder = Decoder::new(ctx.clone()).unwrap();

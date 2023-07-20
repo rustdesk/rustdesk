@@ -362,14 +362,7 @@ pub async fn start_server(is_server: bool) {
         log::info!("DISPLAY={:?}", std::env::var("DISPLAY"));
         log::info!("XAUTHORITY={:?}", std::env::var("XAUTHORITY"));
     }
-    #[cfg(feature = "hwcodec")]
-    {
-        use std::sync::Once;
-        static ONCE: Once = Once::new();
-        ONCE.call_once(|| {
-            scrap::hwcodec::check_config_process();
-        })
-    }
+    call_once_each_process();
 
     if is_server {
         crate::common::set_server_running(true);
@@ -529,4 +522,17 @@ async fn sync_and_watch_config_dir() {
         }
     }
     log::warn!("skipped config sync");
+}
+
+fn call_once_each_process() {
+    use std::sync::Once;
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        #[cfg(feature = "hwcodec")]
+        scrap::hwcodec::check_config_process();
+        #[cfg(windows)]
+        unsafe {
+            hbb_common::platform::windows::start_cpu_performance_monitor();
+        }
+    })
 }

@@ -541,7 +541,6 @@ fn run(sp: GenericService) -> ResultType<()> {
                 } else {
                     VpxVideoCodecId::VP9
                 },
-                num_threads: (num_cpus::get() / 2) as _,
             })
         }
         scrap::CodecName::AV1 => EncoderCfg::AOM(AomEncoderConfig {

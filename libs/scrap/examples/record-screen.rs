@@ -116,7 +116,6 @@ fn main() -> io::Result<()> {
         timebase: [1, 1000],
         quality,
         codec: vpx_codec,
-        num_threads: 0,
     }))
     .unwrap();
 

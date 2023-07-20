@@ -7,7 +7,7 @@ use hbb_common::log;
 use hbb_common::message_proto::{EncodedVideoFrame, EncodedVideoFrames, Message, VideoFrame};
 use hbb_common::ResultType;
 
-use crate::codec::{base_bitrate, EncoderApi, Quality};
+use crate::codec::{base_bitrate, codec_thread_num, EncoderApi, Quality};
 use crate::{GoogleImage, STRIDE_ALIGN};
 
 use super::vpx::{vp8e_enc_control_id::*, vpx_codec_err_t::*, *};
@@ -71,11 +71,7 @@ impl EncoderApi for VpxEncoder {
                 // When the data buffer falls below this percentage of fullness, a dropped frame is indicated. Set the threshold to zero (0) to disable this feature.
                 // In dynamic scenes, low bitrate gets low fps while high bitrate gets high fps.
                 c.rc_dropframe_thresh = 25;
-                c.g_threads = if config.num_threads == 0 {
-                    num_cpus::get() as _
-                } else {
-                    config.num_threads
-                };
+                c.g_threads = codec_thread_num() as _;
                 c.g_error_resilient = VPX_ERROR_RESILIENT_DEFAULT;
                 // https://developers.google.com/media/vp9/bitrate-modes/
                 // Constant Bitrate mode (CBR) is recommended for live streaming with VP9.
@@ -353,13 +349,11 @@ pub struct VpxEncoderConfig {
     pub quality: Quality,
     /// The codec
     pub codec: VpxVideoCodecId,
-    pub num_threads: u32,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct VpxDecoderConfig {
     pub codec: VpxVideoCodecId,
-    pub num_threads: u32,
 }
 
 pub struct EncodeFrames<'a> {
@@ -406,11 +400,7 @@ impl VpxDecoder {
         };
         let mut ctx = Default::default();
         let cfg = vpx_codec_dec_cfg_t {
-            threads: if config.num_threads == 0 {
-                num_cpus::get() as _
-            } else {
-                config.num_threads
-            },
+            threads: codec_thread_num() as _,
             w: 0,
             h: 0,
         };

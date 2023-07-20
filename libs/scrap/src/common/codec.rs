@@ -11,14 +11,12 @@ use crate::mediacodec::{
     MediaCodecDecoder, MediaCodecDecoders, H264_DECODER_SUPPORT, H265_DECODER_SUPPORT,
 };
 use crate::{
-    aom::{self, AomDecoder, AomDecoderConfig, AomEncoder, AomEncoderConfig},
+    aom::{self, AomDecoder, AomEncoder, AomEncoderConfig},
     common::GoogleImage,
     vpxcodec::{self, VpxDecoder, VpxDecoderConfig, VpxEncoder, VpxEncoderConfig, VpxVideoCodecId},
     CodecName, ImageRgb,
 };
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use hbb_common::sysinfo::{System, SystemExt};
 use hbb_common::{
     anyhow::anyhow,
     config::PeerConfig,
@@ -31,10 +29,15 @@ use hbb_common::{
 };
 #[cfg(any(feature = "hwcodec", feature = "mediacodec"))]
 use hbb_common::{config::Config2, lazy_static};
+use hbb_common::{
+    sysinfo::{System, SystemExt},
+    tokio::time::Instant,
+};
 
 lazy_static::lazy_static! {
     static ref PEER_DECODINGS: Arc<Mutex<HashMap<i32, SupportedDecoding>>> = Default::default();
     static ref CODEC_NAME: Arc<Mutex<CodecName>> = Arc::new(Mutex::new(CodecName::VP9));
+    static ref THREAD_LOG_TIME: Arc<Mutex<Option<Instant>>> = Arc::new(Mutex::new(None));
 }
 
 #[derive(Debug, Clone)]
@@ -192,7 +195,6 @@ impl Encoder {
 
         #[allow(unused_mut)]
         let mut auto_codec = CodecName::VP9;
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if vp8_useable && System::new_all().total_memory() <= 4 * 1024 * 1024 * 1024 {
             // 4 Gb
             auto_codec = CodecName::VP8
@@ -276,18 +278,13 @@ impl Decoder {
     pub fn new() -> Decoder {
         let vp8 = VpxDecoder::new(VpxDecoderConfig {
             codec: VpxVideoCodecId::VP8,
-            num_threads: (num_cpus::get() / 2) as _,
         })
         .unwrap();
         let vp9 = VpxDecoder::new(VpxDecoderConfig {
             codec: VpxVideoCodecId::VP9,
-            num_threads: (num_cpus::get() / 2) as _,
         })
         .unwrap();
-        let av1 = AomDecoder::new(AomDecoderConfig {
-            num_threads: (num_cpus::get() / 2) as _,
-        })
-        .unwrap();
+        let av1 = AomDecoder::new().unwrap();
         Decoder {
             vp8,
             vp9,
@@ -502,4 +499,43 @@ pub fn base_bitrate(width: u32, height: u32) -> u32 {
         base_bitrate = base_bitrate * fix;
     }
     base_bitrate
+}
+
+pub fn codec_thread_num() -> usize {
+    let max: usize = num_cpus::get();
+    let mut res = 0;
+    let info;
+    #[cfg(windows)]
+    {
+        let percent = hbb_common::platform::windows::cpu_uage_one_minute();
+        info = format!("cpu usage:{:?}", percent);
+        if let Some(pecent) = percent {
+            if pecent < 100.0 {
+                res = ((100.0 - pecent) * (max as f64) / 200.0).round() as usize;
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let s = System::new_all();
+        // https://man7.org/linux/man-pages/man3/getloadavg.3.html
+        let avg = s.load_average();
+        info = format!("cpu loadavg:{}", avg.one);
+        res = (((max as f64) - avg.one) * 0.5).round() as usize;
+    }
+    res = if res > 0 && res <= max / 2 {
+        res
+    } else {
+        std::cmp::max(1, max / 2)
+    };
+    // avoid frequent log
+    let log = match THREAD_LOG_TIME.lock().unwrap().clone() {
+        Some(instant) => instant.elapsed().as_secs() > 1,
+        None => true,
+    };
+    if log {
+        log::info!("cpu num: {max}, {info}, codec thread: {res}");
+        *THREAD_LOG_TIME.lock().unwrap() = Some(Instant::now());
+    }
+    res
 }
