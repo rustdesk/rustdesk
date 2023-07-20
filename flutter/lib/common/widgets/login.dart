@@ -12,7 +12,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../common.dart';
 import './dialog.dart';
 
-const kOpSvgList = ['github', 'google', 'apple', 'okta', 'facebook', 'azure'];
+const kOpSvgList = ['github', 'google', 'apple', 'okta', 'facebook', 'azure', 'auth0'];
 
 class _IconOP extends StatelessWidget {
   final String op;
