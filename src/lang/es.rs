@@ -512,11 +512,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Collapse toolbar", "Contraer barra de herramientas"),
         ("Accept and Elevate", "Aceptar y Elevar"),
         ("accept_and_elevate_btn_tooltip", "Aceptar la conexión y elevar permisos UAC."),
-        ("clipboard_wait_response_timeout_tip", ""),
-        ("Incoming connection", ""),
-        ("Outgoing connection", ""),
-        ("Exit", ""),
-        ("Open", ""),
-        ("logout_tip", ""),
+        ("clipboard_wait_response_timeout_tip", "Tiempo de espera para copia agotado."),
+        ("Incoming connection", "Conexión entrante"),
+        ("Outgoing connection", "Conexión saliente"),
+        ("Exit", "Salir"),
+        ("Open", "Abrir"),
+        ("logout_tip", "¿Seguro que deseas cerrar sesión?"),
     ].iter().cloned().collect();
 }
