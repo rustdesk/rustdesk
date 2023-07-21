@@ -120,6 +120,7 @@ class ChatPage extends StatelessWidget implements PageShape {
                           borderSide: const BorderSide(
                             width: 1,
                             style: BorderStyle.solid,
+                            color: MyTheme.accent,
                           ),
                         ),
                       ),
