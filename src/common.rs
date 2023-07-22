@@ -625,6 +625,12 @@ pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>, boo
     let (mut a, mut b) = get_rendezvous_server_(ms_timeout);
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let (mut a, mut b) = get_rendezvous_server_(ms_timeout).await;
+    #[cfg(windows)]
+    if let Ok(lic) = crate::platform::get_license_from_exe_name() {
+        if !lic.host.is_empty() {
+            a = lic.host;
+        }
+    }
     let mut b: Vec<String> = b
         .drain(..)
         .map(|x| socket_client::check_port(x, config::RENDEZVOUS_PORT))
@@ -741,6 +747,29 @@ pub fn hostname() -> String {
     return whoami::hostname();
     #[cfg(any(target_os = "android", target_os = "ios"))]
     return DEVICE_NAME.lock().unwrap().clone();
+}
+
+#[inline]
+pub fn get_sysinfo() -> serde_json::Value {
+    use hbb_common::sysinfo::{CpuExt, System, SystemExt};
+    let system = System::new_all();
+    let memory = system.total_memory();
+    let memory = (memory as f64 / 1024. / 1024. / 1024. * 100 as f64).round() / 100.;
+    let cpus = system.cpus();
+    let cpu_name = cpus.first().map(|x| x.brand()).unwrap_or_default();
+    let cpu_name = cpu_name.trim_end();
+    let cpu_freq = cpus.first().map(|x| x.frequency()).unwrap_or_default();
+    let num_cpus = num_cpus::get();
+    let num_pcpus = num_cpus::get_physical();
+    let os = system.name().unwrap_or(system.distribution_id());
+    let os = format!("{} {}", os, system.os_version().unwrap_or_default());
+    let hostname = system.host_name();
+    serde_json::json!({
+        "cpu": format!("{cpu_name}, {cpu_freq}MHz, {num_cpus}/{num_pcpus} cores"),
+        "memory": format!("{memory}GB"),
+        "os": os,
+        "hostname": hostname,
+    })
 }
 
 #[inline]
@@ -984,7 +1013,9 @@ pub fn decode64<T: AsRef<[u8]>>(input: T) -> Result<Vec<u8>, base64::DecodeError
 pub async fn get_key(sync: bool) -> String {
     #[cfg(windows)]
     if let Ok(lic) = crate::platform::windows::get_license_from_exe_name() {
-        return lic.key;
+        if !lic.key.is_empty() {
+            return lic.key;
+        }
     }
     #[cfg(target_os = "ios")]
     let mut key = Config::get_option("key");

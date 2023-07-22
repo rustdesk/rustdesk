@@ -280,7 +280,11 @@ pub fn core_main() -> Option<Vec<String>> {
                 {
                     // arg: starting with `host=`, e.g. `host=127.0.0.1,api=https://test.com,key=asfs`,
                     // or the filename (without ext) used in renaming exe.
-                    let name = format!("{}.exe", args[1]);
+                    let name = if args[1].ends_with(".exe") {
+                        args[1].to_owned()
+                    } else {
+                        format!("{}.exe", args[1])
+                    };
                     if let Ok(lic) = crate::license::get_license_from_string(&name) {
                         if !lic.host.is_empty() {
                             crate::ui_interface::set_option("key".into(), lic.key);

@@ -89,7 +89,9 @@ impl RendezvousMediator {
                 for host in servers.clone() {
                     let server = server.clone();
                     futs.push(tokio::spawn(async move {
-                        allow_err!(Self::start(server, host).await);
+                        if let Err(err) = Self::start(server, host).await {
+                            log::error!("rendezvous mediator error: {err}");
+                        }
                         // SHOULD_EXIT here is to ensure once one exits, the others also exit.
                         SHOULD_EXIT.store(true, Ordering::SeqCst);
                     }));
