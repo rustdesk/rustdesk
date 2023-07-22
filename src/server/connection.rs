@@ -665,11 +665,11 @@ impl Connection {
                     }
                     MessageInput::Key((mut msg, press)) => {
                         // todo: press and down have similar meanings.
-                        if press && msg.mode.unwrap() == KeyboardMode::Legacy {
+                        if press && msg.mode.enum_value() == Ok(KeyboardMode::Legacy) {
                             msg.down = true;
                         }
                         handle_key(&msg);
-                        if press && msg.mode.unwrap() == KeyboardMode::Legacy {
+                        if press && msg.mode.enum_value() == Ok(KeyboardMode::Legacy) {
                             msg.down = false;
                             handle_key(&msg);
                         }
@@ -1621,11 +1621,11 @@ impl Connection {
                             me.press
                         };
 
-                        let key = match me.mode.enum_value_or_default() {
-                            KeyboardMode::Map => {
+                        let key = match me.mode.enum_value() {
+                            Ok(KeyboardMode::Map) => {
                                 Some(crate::keyboard::keycode_to_rdev_key(me.chr()))
                             }
-                            KeyboardMode::Translate => {
+                            Ok(KeyboardMode::Translate) => {
                                 if let Some(key_event::Union::Chr(code)) = me.union {
                                     Some(crate::keyboard::keycode_to_rdev_key(code & 0x0000FFFF))
                                 } else {
@@ -1908,11 +1908,9 @@ impl Connection {
                             // Drop the audio sender previously.
                             drop(std::mem::replace(&mut self.audio_sender, None));
                             self.audio_sender = Some(start_audio_thread());
-                            allow_err!(self
-                                .audio_sender
+                            self.audio_sender
                                 .as_ref()
-                                .unwrap()
-                                .send(MediaData::AudioFormat(format)));
+                                .map(|a| allow_err!(a.send(MediaData::AudioFormat(format))));
                         }
                     }
                     #[cfg(feature = "flutter")]
@@ -2341,6 +2339,8 @@ async fn start_ipc(
     mut _rx_desktop_ready: mpsc::Receiver<()>,
     tx_stream_ready: mpsc::Sender<()>,
 ) -> ResultType<()> {
+    use hbb_common::anyhow::anyhow;
+
     loop {
         if !crate::platform::is_prelogin() {
             break;
@@ -2434,7 +2434,7 @@ async fn start_ipc(
     }
 
     let _res = tx_stream_ready.send(()).await;
-    let mut stream = stream.unwrap();
+    let mut stream = stream.ok_or(anyhow!("none stream"))?;
     loop {
         tokio::select! {
             res = stream.next() => {

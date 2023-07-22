@@ -144,7 +144,7 @@ pub fn capture_cursor_embedded() -> bool {
 
 #[inline]
 pub fn notify_video_frame_fetched(conn_id: i32, frame_tm: Option<Instant>) {
-    FRAME_FETCHED_NOTIFIER.0.send((conn_id, frame_tm)).unwrap()
+    FRAME_FETCHED_NOTIFIER.0.send((conn_id, frame_tm)).ok();
 }
 
 #[inline]

@@ -19,20 +19,19 @@ use crate::{
 
 use hbb_common::{
     anyhow::anyhow,
+    bail,
     config::PeerConfig,
     log,
     message_proto::{
         supported_decoding::PreferCodec, video_frame, EncodedVideoFrames, Message,
         SupportedDecoding, SupportedEncoding,
     },
+    sysinfo::{System, SystemExt},
+    tokio::time::Instant,
     ResultType,
 };
 #[cfg(any(feature = "hwcodec", feature = "mediacodec"))]
 use hbb_common::{config::Config2, lazy_static};
-use hbb_common::{
-    sysinfo::{System, SystemExt},
-    tokio::time::Instant,
-};
 
 lazy_static::lazy_static! {
     static ref PEER_DECODINGS: Arc<Mutex<HashMap<i32, SupportedDecoding>>> = Default::default();
@@ -88,9 +87,9 @@ impl DerefMut for Encoder {
 }
 
 pub struct Decoder {
-    vp8: VpxDecoder,
-    vp9: VpxDecoder,
-    av1: AomDecoder,
+    vp8: Option<VpxDecoder>,
+    vp9: Option<VpxDecoder>,
+    av1: Option<AomDecoder>,
     #[cfg(feature = "hwcodec")]
     hw: HwDecoders,
     #[cfg(feature = "hwcodec")]
@@ -279,12 +278,12 @@ impl Decoder {
         let vp8 = VpxDecoder::new(VpxDecoderConfig {
             codec: VpxVideoCodecId::VP8,
         })
-        .unwrap();
+        .ok();
         let vp9 = VpxDecoder::new(VpxDecoderConfig {
             codec: VpxVideoCodecId::VP9,
         })
-        .unwrap();
-        let av1 = AomDecoder::new().unwrap();
+        .ok();
+        let av1 = AomDecoder::new().ok();
         Decoder {
             vp8,
             vp9,
@@ -314,13 +313,25 @@ impl Decoder {
     ) -> ResultType<bool> {
         match frame {
             video_frame::Union::Vp8s(vp8s) => {
-                Decoder::handle_vpxs_video_frame(&mut self.vp8, vp8s, rgb)
+                if let Some(vp8) = &mut self.vp8 {
+                    Decoder::handle_vpxs_video_frame(vp8, vp8s, rgb)
+                } else {
+                    bail!("vp8 decoder not available");
+                }
             }
             video_frame::Union::Vp9s(vp9s) => {
-                Decoder::handle_vpxs_video_frame(&mut self.vp9, vp9s, rgb)
+                if let Some(vp9) = &mut self.vp9 {
+                    Decoder::handle_vpxs_video_frame(vp9, vp9s, rgb)
+                } else {
+                    bail!("vp9 decoder not available");
+                }
             }
             video_frame::Union::Av1s(av1s) => {
-                Decoder::handle_av1s_video_frame(&mut self.av1, av1s, rgb)
+                if let Some(av1) = &mut self.av1 {
+                    Decoder::handle_av1s_video_frame(av1, av1s, rgb)
+                } else {
+                    bail!("av1 decoder not available");
+                }
             }
             #[cfg(feature = "hwcodec")]
             video_frame::Union::H264s(h264s) => {

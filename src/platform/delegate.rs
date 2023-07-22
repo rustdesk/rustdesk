@@ -64,11 +64,10 @@ impl AppHandler for Rc<Host> {
 
 // https://github.com/xi-editor/druid/blob/master/druid-shell/src/platform/mac/application.rs
 pub unsafe fn set_delegate(handler: Option<Box<dyn AppHandler>>) {
-    let decl = ClassDecl::new("AppDelegate", class!(NSObject));
-    if decl.is_none() {
+    let Some(mut decl) = ClassDecl::new("AppDelegate", class!(NSObject)) else {
+        log::error!("Failed to new AppDelegate");
         return;
-    }
-    let mut decl = decl.unwrap();
+    };
     decl.add_ivar::<*mut c_void>(APP_HANDLER_IVAR);
 
     decl.add_method(
@@ -116,7 +115,10 @@ pub unsafe fn set_delegate(handler: Option<Box<dyn AppHandler>>) {
     let handler_ptr = Box::into_raw(Box::new(state));
     (*delegate).set_ivar(APP_HANDLER_IVAR, handler_ptr as *mut c_void);
     // Set the url scheme handler
-    let cls = Class::get("NSAppleEventManager").unwrap();
+    let Some(cls) = Class::get("NSAppleEventManager") else {
+        log::error!("Failed to get NSAppleEventManager");
+        return;
+    };
     let manager: *mut Object = msg_send![cls, sharedAppleEventManager];
     let _: () = msg_send![manager,
                               setEventHandler: delegate
@@ -199,10 +201,10 @@ fn service_should_handle_reopen(
     _sel: Sel,
     _sender: id,
     _has_visible_windows: BOOL,
-  ) -> BOOL {
+) -> BOOL {
     log::debug!("Invoking the main rustdesk process");
-    std::thread::spawn(move || crate::handle_url_scheme("".to_string())); 
-    // Prevent default logic. 
+    std::thread::spawn(move || crate::handle_url_scheme("".to_string()));
+    // Prevent default logic.
     NO
 }
 

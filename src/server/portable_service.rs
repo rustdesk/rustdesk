@@ -231,7 +231,13 @@ pub mod server {
     }
 
     pub fn run_portable_service() {
-        let shmem = Arc::new(SharedMemory::open_existing(SHMEM_NAME).unwrap());
+        let shmem = match SharedMemory::open_existing(SHMEM_NAME) {
+            Ok(shmem) => Arc::new(shmem),
+            Err(e) => {
+                log::error!("Failed to open existing shared memory: {:?}", e);
+                return;
+            }
+        };
         let shmem1 = shmem.clone();
         let shmem2 = shmem.clone();
         let mut threads = vec![];
@@ -249,7 +255,7 @@ pub mod server {
         }));
         let record_pos_handle = crate::input_service::try_start_record_cursor_pos();
         for th in threads.drain(..) {
-            th.join().unwrap();
+            th.join().ok();
             log::info!("thread joined");
         }
 
@@ -319,7 +325,11 @@ pub mod server {
                 }
                 if c.is_none() {
                     *crate::video_service::CURRENT_DISPLAY.lock().unwrap() = current_display;
-                    let (_, _current, display) = get_current_display().unwrap();
+                    let Ok((_, _current, display)) = get_current_display() else {
+                        log::error!("Failed to get current display");
+                        *EXIT.lock().unwrap() = true;
+                        return;
+                    };
                     display_width = display.width();
                     display_height = display.height();
                     match Capturer::new(display, use_yuv) {
@@ -380,8 +390,8 @@ pub mod server {
                         continue;
                     }
                 }
-                match c.as_mut().unwrap().frame(spf) {
-                    Ok(f) => {
+                match c.as_mut().map(|f| f.frame(spf)) {
+                    Some(Ok(f)) => {
                         utils::set_frame_info(
                             &shmem,
                             FrameInfo {
@@ -396,7 +406,7 @@ pub mod server {
                         first_frame_captured = true;
                         dxgi_failed_times = 0;
                     }
-                    Err(e) => {
+                    Some(Err(e)) => {
                         if e.kind() != std::io::ErrorKind::WouldBlock {
                             // DXGI_ERROR_INVALID_CALL after each success on Microsoft GPU driver
                             // log::error!("capture frame failed:{:?}", e);
@@ -406,7 +416,8 @@ pub mod server {
                                 std::thread::sleep(spf);
                                 continue;
                             }
-                            if !c.as_ref().unwrap().is_gdi() {
+                            if c.as_ref().map(|c| c.is_gdi()) == Some(false) {
+                                // nog gdi
                                 dxgi_failed_times += 1;
                             }
                             if dxgi_failed_times > MAX_DXGI_FAIL_TIME {
@@ -417,6 +428,9 @@ pub mod server {
                         } else {
                             shmem.write(ADDR_CAPTURE_WOULDBLOCK, &utils::i32_to_vec(TRUE));
                         }
+                    }
+                    _ => {
+                        println!("unreachable!");
                     }
                 }
             }

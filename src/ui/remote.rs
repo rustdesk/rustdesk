@@ -377,7 +377,7 @@ impl sciter::EventHandler for SciterSession {
                 let source = Element::from(source);
                 use sciter::dom::ELEMENT_AREAS;
                 let flags = ELEMENT_AREAS::CONTENT_BOX as u32 | ELEMENT_AREAS::SELF_RELATIVE as u32;
-                let rc = source.get_location(flags).unwrap();
+                let rc = source.get_location(flags).unwrap_or_default();
                 log::debug!(
                     "[video] start video thread on <{}> which is about {:?} pixels",
                     source,

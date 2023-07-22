@@ -6,7 +6,9 @@ use crate::{
     privacy_win_mag::{self, WIN_MAG_INJECTED_PROCESS_EXE},
 };
 use hbb_common::{
-    allow_err, bail,
+    allow_err,
+    anyhow::anyhow,
+    bail,
     config::{self, Config},
     log,
     message_proto::Resolution,
@@ -848,10 +850,9 @@ pub fn check_update_broker_process() -> ResultType<()> {
     let origin_process_exe = privacy_win_mag::ORIGIN_PROCESS_EXE;
 
     let exe_file = std::env::current_exe()?;
-    if exe_file.parent().is_none() {
+    let Some(cur_dir) = exe_file.parent() else {
         bail!("Cannot get parent of current exe file");
-    }
-    let cur_dir = exe_file.parent().unwrap();
+    };
     let cur_exe = cur_dir.join(process_exe);
 
     if !std::path::Path::new(&cur_exe).exists() {
@@ -902,29 +903,29 @@ fn get_install_info_with_subkey(subkey: String) -> (String, String, String, Stri
     (subkey, path, start_menu, exe)
 }
 
-pub fn copy_raw_cmd(src_raw: &str, _raw: &str, _path: &str) -> String {
+pub fn copy_raw_cmd(src_raw: &str, _raw: &str, _path: &str) -> ResultType<String> {
     let main_raw = format!(
         "XCOPY \"{}\" \"{}\" /Y /E /H /C /I /K /R /Z",
         PathBuf::from(src_raw)
             .parent()
-            .unwrap()
+            .ok_or(anyhow!("Can't get parent directory of {src_raw}"))?
             .to_string_lossy()
             .to_string(),
         _path
     );
-    return main_raw;
+    return Ok(main_raw);
 }
 
-pub fn copy_exe_cmd(src_exe: &str, exe: &str, path: &str) -> String {
-    let main_exe = copy_raw_cmd(src_exe, exe, path);
-    format!(
+pub fn copy_exe_cmd(src_exe: &str, exe: &str, path: &str) -> ResultType<String> {
+    let main_exe = copy_raw_cmd(src_exe, exe, path)?;
+    Ok(format!(
         "
         {main_exe}
         copy /Y \"{ORIGIN_PROCESS_EXE}\" \"{path}\\{broker_exe}\"
         ",
         ORIGIN_PROCESS_EXE = privacy_win_mag::ORIGIN_PROCESS_EXE,
         broker_exe = privacy_win_mag::INJECTED_PROCESS_EXE,
-    )
+    ))
 }
 
 fn get_after_install(exe: &str) -> String {
@@ -1118,7 +1119,7 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
         } else {
             &dels
         },
-        copy_exe = copy_exe_cmd(&src_exe, &exe, &path),
+        copy_exe = copy_exe_cmd(&src_exe, &exe, &path)?,
         import_config = get_import_config(&exe),
     );
     run_cmds(cmds, debug, "install")?;
@@ -1200,7 +1201,7 @@ fn write_cmds(cmds: String, ext: &str, tip: &str) -> ResultType<std::path::PathB
     tmp.push(format!("{}_{}.{}", crate::get_app_name(), tip, ext));
     let mut file = std::fs::File::create(&tmp)?;
     if ext == "bat" {
-        let tmp2 = get_undone_file(&tmp);
+        let tmp2 = get_undone_file(&tmp)?;
         std::fs::File::create(&tmp2).ok();
         cmds = format!(
             "
@@ -1231,18 +1232,20 @@ fn to_le(v: &mut [u16]) -> &[u8] {
     unsafe { v.align_to().1 }
 }
 
-fn get_undone_file(tmp: &PathBuf) -> PathBuf {
+fn get_undone_file(tmp: &PathBuf) -> ResultType<PathBuf> {
     let mut tmp1 = tmp.clone();
     tmp1.set_file_name(format!(
         "{}.undone",
-        tmp.file_name().unwrap().to_string_lossy()
+        tmp.file_name()
+            .ok_or(anyhow!("Failed to get filename of {:?}", tmp))?
+            .to_string_lossy()
     ));
-    tmp1
+    Ok(tmp1)
 }
 
 fn run_cmds(cmds: String, show: bool, tip: &str) -> ResultType<()> {
     let tmp = write_cmds(cmds, "bat", tip)?;
-    let tmp2 = get_undone_file(&tmp);
+    let tmp2 = get_undone_file(&tmp)?;
     let tmp_fn = tmp.to_str().unwrap_or("");
     let res = runas::Command::new("cmd")
         .args(&["/C", &tmp_fn])

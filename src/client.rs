@@ -317,19 +317,20 @@ impl Client {
                             if !ph.other_failure.is_empty() {
                                 bail!(ph.other_failure);
                             }
-                            match ph.failure.enum_value_or_default() {
-                                punch_hole_response::Failure::ID_NOT_EXIST => {
+                            match ph.failure.enum_value() {
+                                Ok(punch_hole_response::Failure::ID_NOT_EXIST) => {
                                     bail!("ID does not exist");
                                 }
-                                punch_hole_response::Failure::OFFLINE => {
+                                Ok(punch_hole_response::Failure::OFFLINE) => {
                                     bail!("Remote desktop is offline");
                                 }
-                                punch_hole_response::Failure::LICENSE_MISMATCH => {
+                                Ok(punch_hole_response::Failure::LICENSE_MISMATCH) => {
                                     bail!("Key mismatch");
                                 }
-                                punch_hole_response::Failure::LICENSE_OVERUSE => {
+                                Ok(punch_hole_response::Failure::LICENSE_OVERUSE) => {
                                     bail!("Key overuse");
                                 }
+                                _ => bail!("other punch hole failure"),
                             }
                         } else {
                             peer_nat_type = ph.nat_type();
@@ -470,11 +471,8 @@ impl Client {
                 )
                 .await;
                 interface.update_direct(Some(false));
-                if conn.is_err() {
-                    bail!(
-                        "Failed to connect via relay server: {}",
-                        conn.err().unwrap()
-                    );
+                if let Err(e) = conn {
+                    bail!("Failed to connect via relay server: {}", e);
                 }
                 direct = false;
             } else {
@@ -507,11 +505,13 @@ impl Client {
         });
         let mut sign_pk = None;
         let mut option_pk = None;
-        if !signed_id_pk.is_empty() && rs_pk.is_some() {
-            if let Ok((id, pk)) = decode_id_pk(&signed_id_pk, &rs_pk.unwrap()) {
-                if id == peer_id {
-                    sign_pk = Some(sign::PublicKey(pk));
-                    option_pk = Some(pk.to_vec());
+        if !signed_id_pk.is_empty() {
+            if let Some(rs_pk) = rs_pk {
+                if let Ok((id, pk)) = decode_id_pk(&signed_id_pk, &rs_pk) {
+                    if id == peer_id {
+                        sign_pk = Some(sign::PublicKey(pk));
+                        option_pk = Some(pk.to_vec());
+                    }
                 }
             }
             if sign_pk.is_none() {
