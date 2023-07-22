@@ -761,8 +761,8 @@ pub fn get_sysinfo() -> serde_json::Value {
     let cpu_freq = cpus.first().map(|x| x.frequency()).unwrap_or_default();
     let num_cpus = num_cpus::get();
     let num_pcpus = num_cpus::get_physical();
-    let os = system.name().unwrap_or(system.distribution_id());
-    let os = format!("{} {}", os, system.os_version().unwrap_or_default());
+    let os = system.distribution_id();
+    let os = format!("{} / {}", os, system.long_os_version().unwrap_or_default());
     let hostname = system.host_name();
     serde_json::json!({
         "cpu": format!("{cpu_name}, {cpu_freq}MHz, {num_cpus}/{num_pcpus} cores"),

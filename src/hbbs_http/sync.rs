@@ -65,7 +65,7 @@ async fn start_hbbs_sync_async() {
                 }
                 if !info_uploaded.0 && info_uploaded.2.map(|x| x.elapsed() >= UPLOAD_SYSINFO_TIMEOUT).unwrap_or(true){
                     let mut v = crate::get_sysinfo();
-                    v["verion"] = json!(crate::VERSION);
+                    v["version"] = json!(crate::VERSION);
                     v["id"] = json!(Config::get_id());
                     v["uuid"] = json!(crate::encode64(hbb_common::get_uuid()));
                     match crate::post_request(url.replace("heartbeat", "sysinfo"), v.to_string(), "").await {
