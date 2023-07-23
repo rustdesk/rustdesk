@@ -525,75 +525,80 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
 
   Widget permissions(context) {
     bool enabled = !locked;
-    String accessMode = bind.mainGetOptionSync(key: 'access-mode');
-    _AccessMode mode;
-    if (accessMode == 'full') {
-      mode = _AccessMode.full;
-    } else if (accessMode == 'view') {
-      mode = _AccessMode.view;
-    } else {
-      mode = _AccessMode.custom;
-    }
-    String initialKey;
-    bool? fakeValue;
-    switch (mode) {
-      case _AccessMode.custom:
-        initialKey = '';
-        fakeValue = null;
-        break;
-      case _AccessMode.full:
-        initialKey = 'full';
-        fakeValue = true;
-        break;
-      case _AccessMode.view:
-        initialKey = 'view';
-        fakeValue = false;
-        break;
+    // Simple temp wrapper for PR check
+    tmpWrapper() {
+      String accessMode = bind.mainGetOptionSync(key: 'access-mode');
+      _AccessMode mode;
+      if (accessMode == 'full') {
+        mode = _AccessMode.full;
+      } else if (accessMode == 'view') {
+        mode = _AccessMode.view;
+      } else {
+        mode = _AccessMode.custom;
+      }
+      String initialKey;
+      bool? fakeValue;
+      switch (mode) {
+        case _AccessMode.custom:
+          initialKey = '';
+          fakeValue = null;
+          break;
+        case _AccessMode.full:
+          initialKey = 'full';
+          fakeValue = true;
+          break;
+        case _AccessMode.view:
+          initialKey = 'view';
+          fakeValue = false;
+          break;
+      }
+
+      return _Card(title: 'Permissions', children: [
+        _ComboBox(
+            keys: [
+              '',
+              'full',
+              'view',
+            ],
+            values: [
+              translate('Custom'),
+              translate('Full Access'),
+              translate('Screen Share'),
+            ],
+            enabled: enabled,
+            initialKey: initialKey,
+            onChanged: (mode) async {
+              await bind.mainSetOption(key: 'access-mode', value: mode);
+              setState(() {});
+            }).marginOnly(left: _kContentHMargin),
+        Column(
+          children: [
+            _OptionCheckBox(context, 'Enable Keyboard/Mouse', 'enable-keyboard',
+                enabled: enabled, fakeValue: fakeValue),
+            _OptionCheckBox(context, 'Enable Clipboard', 'enable-clipboard',
+                enabled: enabled, fakeValue: fakeValue),
+            _OptionCheckBox(
+                context, 'Enable File Transfer', 'enable-file-transfer',
+                enabled: enabled, fakeValue: fakeValue),
+            _OptionCheckBox(context, 'Enable Audio', 'enable-audio',
+                enabled: enabled, fakeValue: fakeValue),
+            _OptionCheckBox(context, 'Enable TCP Tunneling', 'enable-tunnel',
+                enabled: enabled, fakeValue: fakeValue),
+            _OptionCheckBox(
+                context, 'Enable Remote Restart', 'enable-remote-restart',
+                enabled: enabled, fakeValue: fakeValue),
+            _OptionCheckBox(
+                context, 'Enable Recording Session', 'enable-record-session',
+                enabled: enabled, fakeValue: fakeValue),
+            _OptionCheckBox(context, 'Enable remote configuration modification',
+                'allow-remote-config-modification',
+                enabled: enabled, fakeValue: fakeValue),
+          ],
+        ),
+      ]);
     }
 
-    return _Card(title: 'Permissions', children: [
-      _ComboBox(
-          keys: [
-            '',
-            'full',
-            'view',
-          ],
-          values: [
-            translate('Custom'),
-            translate('Full Access'),
-            translate('Screen Share'),
-          ],
-          enabled: enabled,
-          initialKey: initialKey,
-          onChanged: (mode) async {
-            await bind.mainSetOption(key: 'access-mode', value: mode);
-            setState(() {});
-          }).marginOnly(left: _kContentHMargin),
-      Column(
-        children: [
-          _OptionCheckBox(context, 'Enable Keyboard/Mouse', 'enable-keyboard',
-              enabled: enabled, fakeValue: fakeValue),
-          _OptionCheckBox(context, 'Enable Clipboard', 'enable-clipboard',
-              enabled: enabled, fakeValue: fakeValue),
-          _OptionCheckBox(
-              context, 'Enable File Transfer', 'enable-file-transfer',
-              enabled: enabled, fakeValue: fakeValue),
-          _OptionCheckBox(context, 'Enable Audio', 'enable-audio',
-              enabled: enabled, fakeValue: fakeValue),
-          _OptionCheckBox(context, 'Enable TCP Tunneling', 'enable-tunnel',
-              enabled: enabled, fakeValue: fakeValue),
-          _OptionCheckBox(
-              context, 'Enable Remote Restart', 'enable-remote-restart',
-              enabled: enabled, fakeValue: fakeValue),
-          _OptionCheckBox(
-              context, 'Enable Recording Session', 'enable-record-session',
-              enabled: enabled, fakeValue: fakeValue),
-          _OptionCheckBox(context, 'Enable remote configuration modification',
-              'allow-remote-config-modification',
-              enabled: enabled, fakeValue: fakeValue),
-        ],
-      ),
-    ]);
+    return tmpWrapper();
   }
 
   Widget password(BuildContext context) {
@@ -752,93 +757,105 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
       _OptionCheckBox(context, 'Enable Direct IP Access', 'direct-server',
           update: update, enabled: !locked),
       () {
-        bool enabled = option2bool(
-            'direct-server', bind.mainGetOptionSync(key: 'direct-server'));
-        if (!enabled) applyEnabled.value = false;
-        controller.text = bind.mainGetOptionSync(key: 'direct-access-port');
-        return Offstage(
-          offstage: !enabled,
-          child: _SubLabeledWidget(
-            context,
-            'Port',
-            Row(children: [
-              SizedBox(
-                width: 95,
-                child: TextField(
-                  controller: controller,
-                  enabled: enabled && !locked,
-                  onChanged: (_) => applyEnabled.value = true,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(
-                        r'^([0-9]|[1-9]\d|[1-9]\d{2}|[1-9]\d{3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$')),
-                  ],
-                  decoration: const InputDecoration(
-                    hintText: '21118',
-                    contentPadding:
-                        EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-                  ),
-                ).marginOnly(right: 15),
-              ),
-              Obx(() => ElevatedButton(
-                    onPressed: applyEnabled.value && enabled && !locked
-                        ? () async {
-                            applyEnabled.value = false;
-                            await bind.mainSetOption(
-                                key: 'direct-access-port',
-                                value: controller.text);
-                          }
-                        : null,
-                    child: Text(
-                      translate('Apply'),
+        // Simple temp wrapper for PR check
+        tmpWrapper() {
+          bool enabled = option2bool(
+              'direct-server', bind.mainGetOptionSync(key: 'direct-server'));
+          if (!enabled) applyEnabled.value = false;
+          controller.text = bind.mainGetOptionSync(key: 'direct-access-port');
+          return Offstage(
+            offstage: !enabled,
+            child: _SubLabeledWidget(
+              context,
+              'Port',
+              Row(children: [
+                SizedBox(
+                  width: 95,
+                  child: TextField(
+                    controller: controller,
+                    enabled: enabled && !locked,
+                    onChanged: (_) => applyEnabled.value = true,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(
+                          r'^([0-9]|[1-9]\d|[1-9]\d{2}|[1-9]\d{3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$')),
+                    ],
+                    decoration: const InputDecoration(
+                      hintText: '21118',
+                      contentPadding:
+                          EdgeInsets.symmetric(vertical: 12, horizontal: 12),
                     ),
-                  ))
-            ]),
-            enabled: enabled && !locked,
-          ),
-        );
+                  ).marginOnly(right: 15),
+                ),
+                Obx(() => ElevatedButton(
+                      onPressed: applyEnabled.value && enabled && !locked
+                          ? () async {
+                              applyEnabled.value = false;
+                              await bind.mainSetOption(
+                                  key: 'direct-access-port',
+                                  value: controller.text);
+                            }
+                          : null,
+                      child: Text(
+                        translate('Apply'),
+                      ),
+                    ))
+              ]),
+              enabled: enabled && !locked,
+            ),
+          );
+        }
+
+        return tmpWrapper();
       }(),
     ];
   }
 
   Widget whitelist() {
     bool enabled = !locked;
-    RxBool hasWhitelist =
-        bind.mainGetOptionSync(key: 'whitelist').isNotEmpty.obs;
-    update() async {
-      hasWhitelist.value = bind.mainGetOptionSync(key: 'whitelist').isNotEmpty;
-    }
+    // Simple temp wrapper for PR check
+    tmpWrapper() {
+      RxBool hasWhitelist =
+          bind.mainGetOptionSync(key: 'whitelist').isNotEmpty.obs;
+      update() async {
+        hasWhitelist.value =
+            bind.mainGetOptionSync(key: 'whitelist').isNotEmpty;
+      }
 
-    onChanged(bool? checked) async {
-      changeWhiteList(callback: update);
-    }
+      onChanged(bool? checked) async {
+        changeWhiteList(callback: update);
+      }
 
-    return GestureDetector(
-      child: Tooltip(
-        message: translate('whitelist_tip'),
-        child: Obx(() => Row(
-              children: [
-                Checkbox(
-                        value: hasWhitelist.value,
-                        onChanged: enabled ? onChanged : null)
-                    .marginOnly(right: 5),
-                Offstage(
-                  offstage: !hasWhitelist.value,
-                  child: const Icon(Icons.warning_amber_rounded,
-                          color: Color.fromARGB(255, 255, 204, 0))
+      return GestureDetector(
+        child: Tooltip(
+          message: translate('whitelist_tip'),
+          child: Obx(() => Row(
+                children: [
+                  Checkbox(
+                          value: hasWhitelist.value,
+                          onChanged: enabled ? onChanged : null)
                       .marginOnly(right: 5),
-                ),
-                Expanded(
-                    child: Text(
-                  translate('Use IP Whitelisting'),
-                  style: TextStyle(color: _disabledTextColor(context, enabled)),
-                ))
-              ],
-            )),
-      ),
-      onTap: () {
-        onChanged(!hasWhitelist.value);
-      },
-    ).marginOnly(left: _kCheckBoxLeftMargin);
+                  Offstage(
+                    offstage: !hasWhitelist.value,
+                    child: const Icon(Icons.warning_amber_rounded,
+                            color: Color.fromARGB(255, 255, 204, 0))
+                        .marginOnly(right: 5),
+                  ),
+                  Expanded(
+                      child: Text(
+                    translate('Use IP Whitelisting'),
+                    style:
+                        TextStyle(color: _disabledTextColor(context, enabled)),
+                  ))
+                ],
+              )),
+        ),
+        onTap: () {
+          onChanged(!hasWhitelist.value);
+        },
+      ).marginOnly(left: _kCheckBoxLeftMargin);
+    }
+
+    return tmpWrapper();
   }
 
   Widget hide_cm(bool enabled) {
@@ -923,150 +940,156 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
   }
 
   server(bool enabled) {
-    // Setting page is not modal, oldOptions should only be used when getting options, never when setting.
-    Map<String, dynamic> oldOptions =
-        jsonDecode(bind.mainGetOptionsSync() as String);
-    old(String key) {
-      return (oldOptions[key] ?? '').trim();
-    }
+    // Simple temp wrapper for PR check
+    tmpWrapper() {
+      // Setting page is not modal, oldOptions should only be used when getting options, never when setting.
+      Map<String, dynamic> oldOptions =
+          jsonDecode(bind.mainGetOptionsSync() as String);
+      old(String key) {
+        return (oldOptions[key] ?? '').trim();
+      }
 
-    RxString idErrMsg = ''.obs;
-    RxString relayErrMsg = ''.obs;
-    RxString apiErrMsg = ''.obs;
-    var idController =
-        TextEditingController(text: old('custom-rendezvous-server'));
-    var relayController = TextEditingController(text: old('relay-server'));
-    var apiController = TextEditingController(text: old('api-server'));
-    var keyController = TextEditingController(text: old('key'));
+      RxString idErrMsg = ''.obs;
+      RxString relayErrMsg = ''.obs;
+      RxString apiErrMsg = ''.obs;
+      var idController =
+          TextEditingController(text: old('custom-rendezvous-server'));
+      var relayController = TextEditingController(text: old('relay-server'));
+      var apiController = TextEditingController(text: old('api-server'));
+      var keyController = TextEditingController(text: old('key'));
 
-    set(String idServer, String relayServer, String apiServer,
-        String key) async {
-      idServer = idServer.trim();
-      relayServer = relayServer.trim();
-      apiServer = apiServer.trim();
-      key = key.trim();
-      if (idServer.isNotEmpty) {
-        idErrMsg.value =
-            translate(await bind.mainTestIfValidServer(server: idServer));
-        if (idErrMsg.isNotEmpty) {
-          return false;
+      set(String idServer, String relayServer, String apiServer,
+          String key) async {
+        idServer = idServer.trim();
+        relayServer = relayServer.trim();
+        apiServer = apiServer.trim();
+        key = key.trim();
+        if (idServer.isNotEmpty) {
+          idErrMsg.value =
+              translate(await bind.mainTestIfValidServer(server: idServer));
+          if (idErrMsg.isNotEmpty) {
+            return false;
+          }
+        }
+        if (relayServer.isNotEmpty) {
+          relayErrMsg.value =
+              translate(await bind.mainTestIfValidServer(server: relayServer));
+          if (relayErrMsg.isNotEmpty) {
+            return false;
+          }
+        }
+        if (apiServer.isNotEmpty) {
+          if (!apiServer.startsWith('http://') &&
+              !apiServer.startsWith('https://')) {
+            apiErrMsg.value =
+                '${translate("API Server")}: ${translate("invalid_http")}';
+            return false;
+          }
+        }
+        final old = await bind.mainGetOption(key: 'custom-rendezvous-server');
+        if (old.isNotEmpty && old != idServer) {
+          await gFFI.userModel.logOut();
+        }
+        // should set one by one
+        await bind.mainSetOption(
+            key: 'custom-rendezvous-server', value: idServer);
+        await bind.mainSetOption(key: 'relay-server', value: relayServer);
+        await bind.mainSetOption(key: 'api-server', value: apiServer);
+        await bind.mainSetOption(key: 'key', value: key);
+        return true;
+      }
+
+      submit() async {
+        bool result = await set(idController.text, relayController.text,
+            apiController.text, keyController.text);
+        if (result) {
+          setState(() {});
+          showToast(translate('Successful'));
+        } else {
+          showToast(translate('Failed'));
         }
       }
-      if (relayServer.isNotEmpty) {
-        relayErrMsg.value =
-            translate(await bind.mainTestIfValidServer(server: relayServer));
-        if (relayErrMsg.isNotEmpty) {
-          return false;
-        }
-      }
-      if (apiServer.isNotEmpty) {
-        if (!apiServer.startsWith('http://') &&
-            !apiServer.startsWith('https://')) {
-          apiErrMsg.value =
-              '${translate("API Server")}: ${translate("invalid_http")}';
-          return false;
-        }
-      }
-      final old = await bind.mainGetOption(key: 'custom-rendezvous-server');
-      if (old.isNotEmpty && old != idServer) {
-        await gFFI.userModel.logOut();
-      }
-      // should set one by one
-      await bind.mainSetOption(
-          key: 'custom-rendezvous-server', value: idServer);
-      await bind.mainSetOption(key: 'relay-server', value: relayServer);
-      await bind.mainSetOption(key: 'api-server', value: apiServer);
-      await bind.mainSetOption(key: 'key', value: key);
-      return true;
-    }
 
-    submit() async {
-      bool result = await set(idController.text, relayController.text,
-          apiController.text, keyController.text);
-      if (result) {
-        setState(() {});
-        showToast(translate('Successful'));
-      } else {
-        showToast(translate('Failed'));
-      }
-    }
-
-    import() {
-      Clipboard.getData(Clipboard.kTextPlain).then((value) {
-        final text = value?.text;
-        if (text != null && text.isNotEmpty) {
-          try {
-            final sc = ServerConfig.decode(text);
-            if (sc.idServer.isNotEmpty) {
-              idController.text = sc.idServer;
-              relayController.text = sc.relayServer;
-              apiController.text = sc.apiServer;
-              keyController.text = sc.key;
-              Future<bool> success =
-                  set(sc.idServer, sc.relayServer, sc.apiServer, sc.key);
-              success.then((value) {
-                if (value) {
-                  showToast(
-                      translate('Import server configuration successfully'));
-                } else {
-                  showToast(translate('Invalid server configuration'));
-                }
-              });
-            } else {
+      import() {
+        Clipboard.getData(Clipboard.kTextPlain).then((value) {
+          final text = value?.text;
+          if (text != null && text.isNotEmpty) {
+            try {
+              final sc = ServerConfig.decode(text);
+              if (sc.idServer.isNotEmpty) {
+                idController.text = sc.idServer;
+                relayController.text = sc.relayServer;
+                apiController.text = sc.apiServer;
+                keyController.text = sc.key;
+                Future<bool> success =
+                    set(sc.idServer, sc.relayServer, sc.apiServer, sc.key);
+                success.then((value) {
+                  if (value) {
+                    showToast(
+                        translate('Import server configuration successfully'));
+                  } else {
+                    showToast(translate('Invalid server configuration'));
+                  }
+                });
+              } else {
+                showToast(translate('Invalid server configuration'));
+              }
+            } catch (e) {
               showToast(translate('Invalid server configuration'));
             }
-          } catch (e) {
-            showToast(translate('Invalid server configuration'));
+          } else {
+            showToast(translate('Clipboard is empty'));
           }
-        } else {
-          showToast(translate('Clipboard is empty'));
-        }
-      });
-    }
+        });
+      }
 
-    export() {
-      final text = ServerConfig(
-              idServer: idController.text,
-              relayServer: relayController.text,
-              apiServer: apiController.text,
-              key: keyController.text)
-          .encode();
-      debugPrint("ServerConfig export: $text");
+      export() {
+        final text = ServerConfig(
+                idServer: idController.text,
+                relayServer: relayController.text,
+                apiServer: apiController.text,
+                key: keyController.text)
+            .encode();
+        debugPrint("ServerConfig export: $text");
 
-      Clipboard.setData(ClipboardData(text: text));
-      showToast(translate('Export server configuration successfully'));
-    }
+        Clipboard.setData(ClipboardData(text: text));
+        showToast(translate('Export server configuration successfully'));
+      }
 
-    bool secure = !enabled;
-    return _Card(title: 'ID/Relay Server', title_suffix: [
-      Tooltip(
-        message: translate('Import Server Config'),
-        child: IconButton(
-            icon: Icon(Icons.paste, color: Colors.grey),
-            onPressed: enabled ? import : null),
-      ),
-      Tooltip(
-          message: translate('Export Server Config'),
+      bool secure = !enabled;
+      return _Card(title: 'ID/Relay Server', title_suffix: [
+        Tooltip(
+          message: translate('Import Server Config'),
           child: IconButton(
-              icon: Icon(Icons.copy, color: Colors.grey),
-              onPressed: enabled ? export : null)),
-    ], children: [
-      Column(
-        children: [
-          Obx(() => _LabeledTextField(context, 'ID Server', idController,
-              idErrMsg.value, enabled, secure)),
-          Obx(() => _LabeledTextField(context, 'Relay Server', relayController,
-              relayErrMsg.value, enabled, secure)),
-          Obx(() => _LabeledTextField(context, 'API Server', apiController,
-              apiErrMsg.value, enabled, secure)),
-          _LabeledTextField(context, 'Key', keyController, '', enabled, secure),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [_Button('Apply', submit, enabled: enabled)],
-          ).marginOnly(top: 10),
-        ],
-      )
-    ]);
+              icon: Icon(Icons.paste, color: Colors.grey),
+              onPressed: enabled ? import : null),
+        ),
+        Tooltip(
+            message: translate('Export Server Config'),
+            child: IconButton(
+                icon: Icon(Icons.copy, color: Colors.grey),
+                onPressed: enabled ? export : null)),
+      ], children: [
+        Column(
+          children: [
+            Obx(() => _LabeledTextField(context, 'ID Server', idController,
+                idErrMsg.value, enabled, secure)),
+            Obx(() => _LabeledTextField(context, 'Relay Server',
+                relayController, relayErrMsg.value, enabled, secure)),
+            Obx(() => _LabeledTextField(context, 'API Server', apiController,
+                apiErrMsg.value, enabled, secure)),
+            _LabeledTextField(
+                context, 'Key', keyController, '', enabled, secure),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [_Button('Apply', submit, enabled: enabled)],
+            ).marginOnly(top: 10),
+          ],
+        )
+      ]);
+    }
+
+    return tmpWrapper();
   }
 }
 
