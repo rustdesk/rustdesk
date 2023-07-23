@@ -385,20 +385,17 @@ class _GeneralState extends State<_General> {
 
   Widget record(BuildContext context) {
     return futureBuilder(future: () async {
-      String customDirectory =
-          await bind.mainGetOption(key: 'video-save-directory');
       String defaultDirectory = await bind.mainDefaultVideoSaveDirectory();
-      String dir;
-      if (customDirectory.isNotEmpty) {
-        dir = customDirectory;
-      } else {
-        dir = defaultDirectory;
-      }
       // canLaunchUrl blocked on windows portable, user SYSTEM
-      return {'dir': dir, 'canlaunch': true};
+      return {'dir': defaultDirectory, 'canlaunch': true};
     }(), hasData: (data) {
       Map<String, dynamic> map = data as Map<String, dynamic>;
       String dir = map['dir']!;
+      String customDirectory =
+          bind.mainGetOptionSync(key: 'video-save-directory');
+      if (customDirectory.isNotEmpty) {
+        dir = customDirectory;
+      }
       bool canlaunch = map['canlaunch']! as bool;
 
       return _Card(title: 'Recording', children: [
@@ -444,8 +441,7 @@ class _GeneralState extends State<_General> {
   Widget language() {
     return futureBuilder(future: () async {
       String langs = await bind.mainGetLangs();
-      String lang = bind.mainGetLocalOption(key: kCommConfKeyLang);
-      return {'langs': langs, 'lang': lang};
+      return {'langs': langs};
     }(), hasData: (res) {
       Map<String, String> data = res as Map<String, String>;
       List<dynamic> langsList = jsonDecode(data['langs']!);
@@ -454,7 +450,7 @@ class _GeneralState extends State<_General> {
       List<String> values = langsMap.values.toList();
       keys.insert(0, '');
       values.insert(0, translate('Default'));
-      String currentKey = data['lang']!;
+      String currentKey = bind.mainGetLocalOption(key: kCommConfKeyLang);
       if (!keys.contains(currentKey)) {
         currentKey = '';
       }
@@ -529,10 +525,9 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
 
   Widget permissions(context) {
     bool enabled = !locked;
-    return futureBuilder(future: () async {
-      return await bind.mainGetOption(key: 'access-mode');
-    }(), hasData: (data) {
-      String accessMode = data! as String;
+    // Simple temp wrapper for PR check
+    tmpWrapper() {
+      String accessMode = bind.mainGetOptionSync(key: 'access-mode');
       _AccessMode mode;
       if (accessMode == 'full') {
         mode = _AccessMode.full;
@@ -601,7 +596,9 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
           ],
         ),
       ]);
-    });
+    }
+
+    return tmpWrapper();
   }
 
   Widget password(BuildContext context) {
@@ -759,17 +756,13 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     return [
       _OptionCheckBox(context, 'Enable Direct IP Access', 'direct-server',
           update: update, enabled: !locked),
-      futureBuilder(
-        future: () async {
-          String enabled = await bind.mainGetOption(key: 'direct-server');
-          String port = await bind.mainGetOption(key: 'direct-access-port');
-          return {'enabled': enabled, 'port': port};
-        }(),
-        hasData: (data) {
-          bool enabled =
-              option2bool('direct-server', data['enabled'].toString());
+      () {
+        // Simple temp wrapper for PR check
+        tmpWrapper() {
+          bool enabled = option2bool(
+              'direct-server', bind.mainGetOptionSync(key: 'direct-server'));
           if (!enabled) applyEnabled.value = false;
-          controller.text = data['port'].toString();
+          controller.text = bind.mainGetOptionSync(key: 'direct-access-port');
           return Offstage(
             offstage: !enabled,
             child: _SubLabeledWidget(
@@ -810,20 +803,22 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
               enabled: enabled && !locked,
             ),
           );
-        },
-      ),
+        }
+
+        return tmpWrapper();
+      }(),
     ];
   }
 
   Widget whitelist() {
     bool enabled = !locked;
-    return futureBuilder(future: () async {
-      return await bind.mainGetOption(key: 'whitelist');
-    }(), hasData: (data) {
-      RxBool hasWhitelist = (data as String).isNotEmpty.obs;
+    // Simple temp wrapper for PR check
+    tmpWrapper() {
+      RxBool hasWhitelist =
+          bind.mainGetOptionSync(key: 'whitelist').isNotEmpty.obs;
       update() async {
         hasWhitelist.value =
-            (await bind.mainGetOption(key: 'whitelist')).isNotEmpty;
+            bind.mainGetOptionSync(key: 'whitelist').isNotEmpty;
       }
 
       onChanged(bool? checked) async {
@@ -858,7 +853,9 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
           onChanged(!hasWhitelist.value);
         },
       ).marginOnly(left: _kCheckBoxLeftMargin);
-    });
+    }
+
+    return tmpWrapper();
   }
 
   Widget hide_cm(bool enabled) {
@@ -943,11 +940,11 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
   }
 
   server(bool enabled) {
-    return futureBuilder(future: () async {
-      return await bind.mainGetOptions();
-    }(), hasData: (data) {
+    // Simple temp wrapper for PR check
+    tmpWrapper() {
       // Setting page is not modal, oldOptions should only be used when getting options, never when setting.
-      Map<String, dynamic> oldOptions = jsonDecode(data! as String);
+      Map<String, dynamic> oldOptions =
+          jsonDecode(bind.mainGetOptionsSync() as String);
       old(String key) {
         return (oldOptions[key] ?? '').trim();
       }
@@ -1090,7 +1087,9 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
           ],
         )
       ]);
-    });
+    }
+
+    return tmpWrapper();
   }
 }
 
@@ -1662,53 +1661,47 @@ Widget _OptionCheckBox(BuildContext context, String label, String key,
     bool enabled = true,
     Icon? checkedIcon,
     bool? fakeValue}) {
-  return futureBuilder(
-      future: bind.mainGetOption(key: key),
-      hasData: (data) {
-        bool value = option2bool(key, data.toString());
-        if (reverse) value = !value;
-        var ref = value.obs;
-        onChanged(option) async {
-          if (option != null) {
-            ref.value = option;
-            if (reverse) option = !option;
-            String value = bool2option(key, option);
-            await bind.mainSetOption(key: key, value: value);
-            update?.call();
+  bool value = mainGetBoolOptionSync(key);
+  if (reverse) value = !value;
+  var ref = value.obs;
+  onChanged(option) async {
+    if (option != null) {
+      if (reverse) option = !option;
+      await mainSetBoolOption(key, option);
+      ref.value = mainGetBoolOptionSync(key);
+      update?.call();
+    }
+  }
+
+  if (fakeValue != null) {
+    ref.value = fakeValue;
+    enabled = false;
+  }
+
+  return GestureDetector(
+    child: Obx(
+      () => Row(
+        children: [
+          Checkbox(value: ref.value, onChanged: enabled ? onChanged : null)
+              .marginOnly(right: 5),
+          Offstage(
+            offstage: !ref.value || checkedIcon == null,
+            child: checkedIcon?.marginOnly(right: 5),
+          ),
+          Expanded(
+              child: Text(
+            translate(label),
+            style: TextStyle(color: _disabledTextColor(context, enabled)),
+          ))
+        ],
+      ),
+    ).marginOnly(left: _kCheckBoxLeftMargin),
+    onTap: enabled
+        ? () {
+            onChanged(!ref.value);
           }
-        }
-
-        if (fakeValue != null) {
-          ref.value = fakeValue;
-          enabled = false;
-        }
-
-        return GestureDetector(
-          child: Obx(
-            () => Row(
-              children: [
-                Checkbox(
-                        value: ref.value, onChanged: enabled ? onChanged : null)
-                    .marginOnly(right: 5),
-                Offstage(
-                  offstage: !ref.value || checkedIcon == null,
-                  child: checkedIcon?.marginOnly(right: 5),
-                ),
-                Expanded(
-                    child: Text(
-                  translate(label),
-                  style: TextStyle(color: _disabledTextColor(context, enabled)),
-                ))
-              ],
-            ),
-          ).marginOnly(left: _kCheckBoxLeftMargin),
-          onTap: enabled
-              ? () {
-                  onChanged(!ref.value);
-                }
-              : null,
-        );
-      });
+        : null,
+  );
 }
 
 // ignore: non_constant_identifier_names
