@@ -46,6 +46,11 @@ pub mod aom;
 pub mod record;
 mod vpx;
 
+#[cfg(feature = "mediacodec")]
+use mediacodec::{
+    H264_MIME_TYPE, H265_MIME_TYPE,VP8_MIME_TYPE,VP9_MIME_TYPE,
+};
+
 #[repr(usize)]
 #[derive(Copy, Clone)]
 pub enum ImageFormat {
@@ -147,6 +152,19 @@ pub enum CodecFormat {
     H264,
     H265,
     Unknown,
+}
+
+#[cfg(feature = "mediacodec")]
+impl CodecFormat {
+    pub fn to_mime_type(&self) -> &'static str {
+        match self {
+            CodecFormat::H264 => H264_MIME_TYPE,
+            CodecFormat::H265 => H265_MIME_TYPE,
+            CodecFormat::VP8 => VP8_MIME_TYPE,
+            CodecFormat::VP9 => VP9_MIME_TYPE,
+            _ => "unknown",
+        }
+    }
 }
 
 impl From<&VideoFrame> for CodecFormat {
