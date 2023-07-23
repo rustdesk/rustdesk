@@ -233,7 +233,7 @@ pub fn get_options() -> String {
     for (k, v) in options.iter() {
         m.insert(k.into(), v.to_owned().into());
     }
-    serde_json::to_string(&m).unwrap()
+    serde_json::to_string(&m).unwrap_or_default()
 }
 
 #[inline]
@@ -1112,23 +1112,23 @@ async fn check_id(
             {
                 match msg_in.union {
                     Some(rendezvous_message::Union::RegisterPkResponse(rpr)) => {
-                        match rpr.result.enum_value_or_default() {
-                            register_pk_response::Result::OK => {
+                        match rpr.result.enum_value() {
+                            Ok(register_pk_response::Result::OK) => {
                                 ok = true;
                             }
-                            register_pk_response::Result::ID_EXISTS => {
+                            Ok(register_pk_response::Result::ID_EXISTS) => {
                                 return "Not available";
                             }
-                            register_pk_response::Result::TOO_FREQUENT => {
+                            Ok(register_pk_response::Result::TOO_FREQUENT) => {
                                 return "Too frequent";
                             }
-                            register_pk_response::Result::NOT_SUPPORT => {
+                            Ok(register_pk_response::Result::NOT_SUPPORT) => {
                                 return "server_not_support";
                             }
-                            register_pk_response::Result::SERVER_ERROR => {
+                            Ok(register_pk_response::Result::SERVER_ERROR) => {
                                 return "Server error";
                             }
-                            register_pk_response::Result::INVALID_ID_FORMAT => {
+                            Ok(register_pk_response::Result::INVALID_ID_FORMAT) => {
                                 return INVALID_FORMAT;
                             }
                             _ => {}

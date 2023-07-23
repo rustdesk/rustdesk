@@ -728,7 +728,9 @@ pub fn get_double_click_time() -> u32 {
     // g_object_get (settings, "gtk-double-click-time", &double_click_time, NULL);
     unsafe {
         let mut double_click_time = 0u32;
-        let property = std::ffi::CString::new("gtk-double-click-time").unwrap();
+        let Ok(property) = std::ffi::CString::new("gtk-double-click-time") else {
+            return 0;
+        };
         let settings = gtk_settings_get_default();
         g_object_get(
             settings,
@@ -801,7 +803,10 @@ pub fn resolutions(name: &str) -> Vec<Resolution> {
                     if let Some(resolutions) = caps.name("resolutions") {
                         let resolution_pat =
                             r"\s*(?P<width>\d+)x(?P<height>\d+)\s+(?P<rates>(\d+\.\d+\D*)+)\s*\n";
-                        let resolution_re = Regex::new(&format!(r"{}", resolution_pat)).unwrap();
+                        let Ok(resolution_re) = Regex::new(&format!(r"{}", resolution_pat)) else {
+                            log::error!("Regex new failed");
+                            return vec![];
+                        };
                         for resolution_caps in resolution_re.captures_iter(resolutions.as_str()) {
                             if let Some((width, height)) =
                                 get_width_height_from_captures(&resolution_caps)

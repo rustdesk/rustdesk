@@ -6,6 +6,7 @@
 
 include!(concat!(env!("OUT_DIR"), "/aom_ffi.rs"));
 
+use crate::codec::{base_bitrate, codec_thread_num, Quality};
 use crate::{codec::EncoderApi, EncodeFrame, STRIDE_ALIGN};
 use crate::{common::GoogleImage, generate_call_macro, generate_call_ptr_macro, Error, Result};
 use hbb_common::{
@@ -43,7 +44,7 @@ impl Default for aom_image_t {
 pub struct AomEncoderConfig {
     pub width: u32,
     pub height: u32,
-    pub bitrate: u32,
+    pub quality: Quality,
 }
 
 pub struct AomEncoder {
@@ -56,7 +57,6 @@ pub struct AomEncoder {
 mod webrtc {
     use super::*;
 
-    const kQpMin: u32 = 10;
     const kUsageProfile: u32 = AOM_USAGE_REALTIME;
     const kMinQindex: u32 = 145; // Min qindex threshold for QP scaling.
     const kMaxQindex: u32 = 205; // Max qindex threshold for QP scaling.
@@ -65,26 +65,8 @@ mod webrtc {
     const kRtpTicksPerSecond: i32 = 90000;
     const kMinimumFrameRate: f64 = 1.0;
 
-    const kQpMax: u32 = 25; // to-do: webrtc use dynamic value, no more than 63
-
-    fn number_of_threads(width: u32, height: u32, number_of_cores: usize) -> u32 {
-        // Keep the number of encoder threads equal to the possible number of
-        // column/row tiles, which is (1, 2, 4, 8). See comments below for
-        // AV1E_SET_TILE_COLUMNS/ROWS.
-        if width * height >= 640 * 360 && number_of_cores > 4 {
-            return 4;
-        } else if width * height >= 320 * 180 && number_of_cores > 2 {
-            return 2;
-        } else {
-            // Use 2 threads for low res on ARM.
-            #[cfg(any(target_arch = "arm", target_arch = "aarch64", target_os = "android"))]
-            if width * height >= 320 * 180 && number_of_cores > 2 {
-                return 2;
-            }
-            // 1 thread less than VGA.
-            return 1;
-        }
-    }
+    pub const DEFAULT_Q_MAX: u32 = 56; // no more than 63
+    pub const DEFAULT_Q_MIN: u32 = 12; // no more than 63, litter than q_max
 
     // Only positive speeds, range for real-time coding currently is: 6 - 8.
     // Lower means slower/better quality, higher means fastest/lower quality.
@@ -119,14 +101,26 @@ mod webrtc {
         // Overwrite default config with input encoder settings & RTC-relevant values.
         c.g_w = cfg.width;
         c.g_h = cfg.height;
-        c.g_threads = number_of_threads(cfg.width, cfg.height, num_cpus::get());
+        c.g_threads = codec_thread_num() as _;
         c.g_timebase.num = 1;
         c.g_timebase.den = kRtpTicksPerSecond;
-        c.rc_target_bitrate = cfg.bitrate; // kilobits/sec.
         c.g_input_bit_depth = kBitDepth;
         c.kf_mode = aom_kf_mode::AOM_KF_DISABLED;
-        c.rc_min_quantizer = kQpMin;
-        c.rc_max_quantizer = kQpMax;
+        let (q_min, q_max, b) = AomEncoder::convert_quality(cfg.quality);
+        if q_min > 0 && q_min < q_max && q_max < 64 {
+            c.rc_min_quantizer = q_min;
+            c.rc_max_quantizer = q_max;
+        } else {
+            c.rc_min_quantizer = DEFAULT_Q_MIN;
+            c.rc_max_quantizer = DEFAULT_Q_MAX;
+        }
+        let base_bitrate = base_bitrate(cfg.width as _, cfg.height as _);
+        let bitrate = base_bitrate * b / 100;
+        if bitrate > 0 {
+            c.rc_target_bitrate = bitrate;
+        } else {
+            c.rc_target_bitrate = base_bitrate;
+        }
         c.rc_undershoot_pct = 50;
         c.rc_overshoot_pct = 50;
         c.rc_buf_initial_sz = 600;
@@ -259,11 +253,24 @@ impl EncoderApi for AomEncoder {
         true
     }
 
-    fn set_bitrate(&mut self, bitrate: u32) -> ResultType<()> {
-        let mut new_enc_cfg = unsafe { *self.ctx.config.enc.to_owned() };
-        new_enc_cfg.rc_target_bitrate = bitrate;
-        call_aom!(aom_codec_enc_config_set(&mut self.ctx, &new_enc_cfg));
-        return Ok(());
+    fn set_quality(&mut self, quality: Quality) -> ResultType<()> {
+        let mut c = unsafe { *self.ctx.config.enc.to_owned() };
+        let (q_min, q_max, b) = Self::convert_quality(quality);
+        if q_min > 0 && q_min < q_max && q_max < 64 {
+            c.rc_min_quantizer = q_min;
+            c.rc_max_quantizer = q_max;
+        }
+        let bitrate = base_bitrate(self.width as _, self.height as _) * b / 100;
+        if bitrate > 0 {
+            c.rc_target_bitrate = bitrate;
+        }
+        call_aom!(aom_codec_enc_config_set(&mut self.ctx, &c));
+        Ok(())
+    }
+
+    fn bitrate(&self) -> u32 {
+        let c = unsafe { *self.ctx.config.enc.to_owned() };
+        c.rc_target_bitrate
     }
 }
 
@@ -319,6 +326,35 @@ impl AomEncoder {
             ..Default::default()
         }
     }
+
+    pub fn convert_quality(quality: Quality) -> (u32, u32, u32) {
+        // we can use lower bitrate for av1
+        match quality {
+            Quality::Best => (12, 25, 100),
+            Quality::Balanced => (12, 35, 100 * 2 / 3),
+            Quality::Low => (18, 45, 50),
+            Quality::Custom(b) => {
+                let (q_min, q_max) = Self::calc_q_values(b);
+                (q_min, q_max, b)
+            }
+        }
+    }
+
+    #[inline]
+    fn calc_q_values(b: u32) -> (u32, u32) {
+        let b = std::cmp::min(b, 200);
+        let q_min1: i32 = 24;
+        let q_min2 = 12;
+        let q_max1 = 45;
+        let q_max2 = 25;
+
+        let t = b as f32 / 200.0;
+
+        let q_min: u32 = ((1.0 - t) * q_min1 as f32 + t * q_min2 as f32).round() as u32;
+        let q_max = ((1.0 - t) * q_max1 as f32 + t * q_max2 as f32).round() as u32;
+
+        (q_min, q_max)
+    }
 }
 
 impl Drop for AomEncoder {
@@ -360,24 +396,16 @@ impl<'a> Iterator for EncodeFrames<'a> {
     }
 }
 
-pub struct AomDecoderConfig {
-    pub num_threads: u32,
-}
-
 pub struct AomDecoder {
     ctx: aom_codec_ctx_t,
 }
 
 impl AomDecoder {
-    pub fn new(cfg: AomDecoderConfig) -> Result<Self> {
+    pub fn new() -> Result<Self> {
         let i = call_aom_ptr!(aom_codec_av1_dx());
         let mut ctx = Default::default();
         let cfg = aom_codec_dec_cfg_t {
-            threads: if cfg.num_threads == 0 {
-                num_cpus::get() as _
-            } else {
-                cfg.num_threads
-            },
+            threads: codec_thread_num() as _,
             w: 0,
             h: 0,
             allow_lowbitdepth: 1,

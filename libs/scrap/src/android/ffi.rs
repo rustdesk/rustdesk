@@ -99,9 +99,11 @@ pub extern "system" fn Java_com_carriez_flutter_1hbb_MainService_onVideoFrameUpd
     buffer: JObject,
 ) {
     let jb = JByteBuffer::from(buffer);
-    let data = env.get_direct_buffer_address(&jb).unwrap();
-    let len = env.get_direct_buffer_capacity(&jb).unwrap();
-    VIDEO_RAW.lock().unwrap().update(data, len);
+    if let Ok(data) = env.get_direct_buffer_address(&jb) {
+        if let Ok(len) = env.get_direct_buffer_capacity(&jb) {
+            VIDEO_RAW.lock().unwrap().update(data, len);
+        }
+    }
 }
 
 #[no_mangle]
@@ -111,9 +113,11 @@ pub extern "system" fn Java_com_carriez_flutter_1hbb_MainService_onAudioFrameUpd
     buffer: JObject,
 ) {
     let jb = JByteBuffer::from(buffer);
-    let data = env.get_direct_buffer_address(&jb).unwrap();
-    let len = env.get_direct_buffer_capacity(&jb).unwrap();
-    AUDIO_RAW.lock().unwrap().update(data, len);
+    if let Ok(data) = env.get_direct_buffer_address(&jb) {
+        if let Ok(len) = env.get_direct_buffer_capacity(&jb) {
+            AUDIO_RAW.lock().unwrap().update(data, len);
+        }
+    }
 }
 
 #[no_mangle]
@@ -142,12 +146,12 @@ pub extern "system" fn Java_com_carriez_flutter_1hbb_MainService_init(
     ctx: JObject,
 ) {
     log::debug!("MainService init from java");
-    let jvm = env.get_java_vm().unwrap();
-
-    *JVM.write().unwrap() = Some(jvm);
-
-    let context = env.new_global_ref(ctx).unwrap();
-    *MAIN_SERVICE_CTX.write().unwrap() = Some(context);
+    if let Ok(jvm) = env.get_java_vm() {
+        *JVM.write().unwrap() = Some(jvm);
+        if let Ok(context) = env.new_global_ref(ctx) {
+            *MAIN_SERVICE_CTX.write().unwrap() = Some(context);
+        }
+    }
 }
 
 pub fn call_main_service_mouse_input(mask: i32, x: i32, y: i32) -> JniResult<()> {

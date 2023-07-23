@@ -4,6 +4,9 @@ pub mod linux;
 #[cfg(target_os = "macos")]
 pub mod macos;
 
+#[cfg(target_os = "windows")]
+pub mod windows;
+
 #[cfg(not(debug_assertions))]
 use crate::{config::Config, log};
 #[cfg(not(debug_assertions))]

@@ -124,8 +124,16 @@ pub fn start(args: &mut [String]) {
             crate::platform::windows::enable_lowlevel_keyboard(hw as _);
         }
         let mut iter = args.iter();
-        let cmd = iter.next().unwrap().clone();
-        let id = iter.next().unwrap().clone();
+        let Some(cmd) = iter.next() else {
+            log::error!("Failed to get cmd arg");
+            return;
+        };
+        let cmd = cmd.to_owned();
+        let Some(id) = iter.next() else {
+            log::error!("Failed to get id arg");
+            return;
+        };
+        let id = id.to_owned();
         let pass = iter.next().unwrap_or(&"".to_owned()).clone();
         let args: Vec<String> = iter.map(|x| x.clone()).collect();
         frame.set_title(&id);
@@ -259,7 +267,8 @@ impl UI {
     }
 
     fn get_options(&self) -> Value {
-        let hashmap: HashMap<String, String> = serde_json::from_str(&get_options()).unwrap();
+        let hashmap: HashMap<String, String> =
+            serde_json::from_str(&get_options()).unwrap_or_default();
         let mut m = Value::map();
         for (k, v) in hashmap {
             m.set_item(k, v);

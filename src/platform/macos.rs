@@ -74,7 +74,7 @@ pub fn is_can_input_monitoring(prompt: bool) -> bool {
 // remove just one app from all the permissions: tccutil reset All com.carriez.rustdesk
 pub fn is_can_screen_recording(prompt: bool) -> bool {
     // we got some report that we show no permission even after set it, so we try to use new api for screen recording check
-    // the new api is only available on macOS >= 10.15, but on stackoverflow, some people said it works on >= 10.16 (crash on 10.15), 
+    // the new api is only available on macOS >= 10.15, but on stackoverflow, some people said it works on >= 10.16 (crash on 10.15),
     // but also some said it has bug on 10.16, so we just use it on 11.0.
     unsafe {
         if CanUseNewApiForScreenCaptureCheck() == YES {
@@ -146,14 +146,26 @@ pub fn is_installed_daemon(prompt: bool) -> bool {
         return true;
     }
 
-    let install_script = PRIVILEGES_SCRIPTS_DIR.get_file("install.scpt").unwrap();
-    let install_script_body = install_script.contents_utf8().unwrap();
+    let Some(install_script) = PRIVILEGES_SCRIPTS_DIR.get_file("install.scpt") else {
+        return false;
+    };
+    let Some(install_script_body) = install_script.contents_utf8() else {
+        return false;
+    };
 
-    let daemon_plist = PRIVILEGES_SCRIPTS_DIR.get_file(&daemon).unwrap();
-    let daemon_plist_body = daemon_plist.contents_utf8().unwrap();
+    let Some(daemon_plist) = PRIVILEGES_SCRIPTS_DIR.get_file(&daemon) else {
+        return false;
+    };
+    let Some(daemon_plist_body) = daemon_plist.contents_utf8() else {
+        return false;
+    };
 
-    let agent_plist = PRIVILEGES_SCRIPTS_DIR.get_file(&agent).unwrap();
-    let agent_plist_body = agent_plist.contents_utf8().unwrap();
+    let Some(agent_plist) = PRIVILEGES_SCRIPTS_DIR.get_file(&agent) else {
+        return false;
+    };
+    let Some(agent_plist_body) = agent_plist.contents_utf8() else {
+        return false;
+    };
 
     std::thread::spawn(move || {
         match std::process::Command::new("osascript")
@@ -198,8 +210,12 @@ pub fn uninstall_service(show_new_window: bool) -> bool {
         return false;
     }
 
-    let script_file = PRIVILEGES_SCRIPTS_DIR.get_file("uninstall.scpt").unwrap();
-    let script_body = script_file.contents_utf8().unwrap();
+    let Some(script_file) = PRIVILEGES_SCRIPTS_DIR.get_file("uninstall.scpt") else {
+        return false;
+    };
+    let Some(script_body) = script_file.contents_utf8() else {
+        return false;
+    };
 
     std::thread::spawn(move || {
         match std::process::Command::new("osascript")

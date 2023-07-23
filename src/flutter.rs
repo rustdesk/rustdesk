@@ -104,7 +104,10 @@ fn rust_args_to_c_args(args: Vec<String>, outlen: *mut c_int) -> *mut *mut c_cha
 
     // Let's fill a vector with null-terminated strings
     for s in args {
-        v.push(CString::new(s).unwrap());
+        match CString::new(s) {
+            Ok(s) => v.push(s),
+            Err(_) => return std::ptr::null_mut() as _,
+        }
     }
 
     // Turning each null-terminated string into a pointer.

@@ -30,7 +30,12 @@ fn prompt_input() -> u8 {
 unsafe fn plug_in(index: idd::UINT, edid: idd::UINT) {
     println!("Plug in monitor begin");
     if idd::FALSE == idd::MonitorPlugIn(index, edid, 25) {
-        println!("{}", CStr::from_ptr(idd::GetLastMsg()).to_str().unwrap());
+        println!(
+            "{}",
+            CStr::from_ptr(idd::GetLastMsg())
+                .to_str()
+                .unwrap_or_default()
+        );
     } else {
         println!("Plug in monitor done");
 
@@ -46,7 +51,12 @@ unsafe fn plug_in(index: idd::UINT, edid: idd::UINT) {
             sync: 60 as idd::DWORD,
         });
         if idd::FALSE == idd::MonitorModesUpdate(index, modes.len() as u32, modes.as_mut_ptr()) {
-            println!("{}", CStr::from_ptr(idd::GetLastMsg()).to_str().unwrap());
+            println!(
+                "{}",
+                CStr::from_ptr(idd::GetLastMsg())
+                    .to_str()
+                    .unwrap_or_default()
+            );
         }
     }
 }
@@ -55,7 +65,12 @@ unsafe fn plug_in(index: idd::UINT, edid: idd::UINT) {
 unsafe fn plug_out(index: idd::UINT) {
     println!("Plug out monitor begin");
     if idd::FALSE == idd::MonitorPlugOut(index) {
-        println!("{}", CStr::from_ptr(idd::GetLastMsg()).to_str().unwrap());
+        println!(
+            "{}",
+            CStr::from_ptr(idd::GetLastMsg())
+                .to_str()
+                .unwrap_or_default()
+        );
     } else {
         println!("Plug out monitor done");
     }
@@ -64,7 +79,13 @@ unsafe fn plug_out(index: idd::UINT) {
 fn main() {
     #[cfg(windows)]
     {
-        let abs_path = Path::new(DRIVER_INSTALL_PATH).canonicalize().unwrap();
+        let abs_path = match Path::new(DRIVER_INSTALL_PATH).canonicalize() {
+            Ok(p) => p,
+            Err(e) => {
+                println!("Failed to get absolute path of driver install: {:?}", e);
+                return;
+            }
+        };
 
         unsafe {
             let invalid_device = 0 as idd::HSWDEVICE;
@@ -86,7 +107,12 @@ fn main() {
                         if idd::InstallUpdate(full_inf_path.as_ptr() as _, &mut reboot_required)
                             == idd::FALSE
                         {
-                            println!("{}", CStr::from_ptr(idd::GetLastMsg()).to_str().unwrap());
+                            println!(
+                                "{}",
+                                CStr::from_ptr(idd::GetLastMsg())
+                                    .to_str()
+                                    .unwrap_or_default()
+                            );
                         } else {
                             println!(
                                 "Install or update driver done, reboot is {} required",
@@ -104,7 +130,12 @@ fn main() {
                         if idd::Uninstall(full_inf_path.as_ptr() as _, &mut reboot_required)
                             == idd::FALSE
                         {
-                            println!("{}", CStr::from_ptr(idd::GetLastMsg()).to_str().unwrap());
+                            println!(
+                                "{}",
+                                CStr::from_ptr(idd::GetLastMsg())
+                                    .to_str()
+                                    .unwrap_or_default()
+                            );
                         } else {
                             println!(
                                 "Uninstall driver done, reboot is {} required",
@@ -123,7 +154,12 @@ fn main() {
                             continue;
                         }
                         if idd::FALSE == idd::DeviceCreate(&mut h_sw_device) {
-                            println!("{}", CStr::from_ptr(idd::GetLastMsg()).to_str().unwrap());
+                            println!(
+                                "{}",
+                                CStr::from_ptr(idd::GetLastMsg())
+                                    .to_str()
+                                    .unwrap_or_default()
+                            );
                             idd::DeviceClose(h_sw_device);
                             h_sw_device = invalid_device;
                         } else {
