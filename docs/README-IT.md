@@ -18,9 +18,9 @@ Funziona immediatamente, nessuna configurazione richiesta. Hai il pieno controll
 Puoi usare il nostro server rendezvous/relay, [configurare il tuo server](https://rustdesk.com/server) o [realizzare il tuo server rendezvous/relay](https://github.com/rustdesk/rustdesk-server-demo).
 
 RustDesk accoglie il contributo di tutti. 
-Per ulteriori informazioni su come inizare a contribuire, vedi [`docs/CONTRIBUTING.md`](CONTRIBUTING.md).
+Per ulteriori informazioni su come iniziare a contribuire, vedi [`docs/CONTRIBUTING-IT.md`](CONTRIBUTING.md).
 
-[**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
+[**DOWNLOAD PROGRAMMA**](https://github.com/rustdesk/rustdesk/releases)
 
 ## Server pubblici gratuiti
 
@@ -113,7 +113,7 @@ VCPKG_ROOT=$HOME/vcpkg cargo run
 ### Cambiare Wayland in X11 (Xorg)
 
 RustDesk non supporta Wayland. 
-Controlla [quei](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) per configurare Xorg come sessione predefinita di GNOME.
+Controlla [qui](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) per configurare Xorg come sessione predefinita di GNOME.
 
 ## Come compilare con Docker
 
