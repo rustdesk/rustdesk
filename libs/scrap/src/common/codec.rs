@@ -514,10 +514,11 @@ pub fn base_bitrate(width: u32, height: u32) -> u32 {
 
 pub fn codec_thread_num() -> usize {
     let max: usize = num_cpus::get();
-    let mut res = 0;
+    let mut res;
     let info;
     #[cfg(windows)]
     {
+        res = 0;
         let percent = hbb_common::platform::windows::cpu_uage_one_minute();
         info = format!("cpu usage:{:?}", percent);
         if let Some(pecent) = percent {
@@ -545,7 +546,7 @@ pub fn codec_thread_num() -> usize {
         None => true,
     };
     if log {
-        log::info!("cpu num: {max}, {info}, codec thread: {res}");
+        log::info!("cpu num:{max}, {info}, codec thread:{res}");
         *THREAD_LOG_TIME.lock().unwrap() = Some(Instant::now());
     }
     res
