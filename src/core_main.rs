@@ -84,6 +84,10 @@ pub fn core_main() -> Option<Vec<String>> {
             std::env::remove_var(k);
         }
     }
+    #[cfg(windows)]
+    if args.contains(&"--connect".to_string()) {
+        hbb_common::platform::windows::start_cpu_performance_monitor();
+    }
     #[cfg(feature = "flutter")]
     if _is_flutter_invoke_new_connection {
         return core_main_invoke_new_connection(std::env::args());

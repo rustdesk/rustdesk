@@ -2,7 +2,7 @@ use docopt::Docopt;
 use hbb_common::env_logger::{init_from_env, Env, DEFAULT_FILTER_ENV};
 use scrap::{
     aom::{AomDecoder, AomEncoder, AomEncoderConfig},
-    codec::{codec_thread_num, EncoderApi, EncoderCfg, Quality as Q},
+    codec::{EncoderApi, EncoderCfg, Quality as Q},
     Capturer, Display, TraitCapturer, VpxDecoder, VpxDecoderConfig, VpxEncoder, VpxEncoderConfig,
     VpxVideoCodecId::{self, *},
     STRIDE_ALIGN,
@@ -202,6 +202,7 @@ mod hw {
         RateControl::*,
     };
     use scrap::{
+        codec::codec_thread_num,
         convert::{
             hw::{hw_bgra_to_i420, hw_bgra_to_nv12},
             i420_to_bgra,

@@ -364,8 +364,8 @@ pub fn check_config() {
 
 pub fn check_config_process() {
     use hbb_common::sysinfo::{ProcessExt, System, SystemExt};
-
-    std::thread::spawn(move || {
+    use std::sync::Once;
+    let f = || {
         // Clear to avoid checking process errors
         // But when the program is just started, the configuration file has not been updated, and the new connection will read an empty configuration
         HwCodecConfig::clear();
@@ -393,7 +393,9 @@ pub fn check_config_process() {
                     allow_err!(child.kill());
                     std::thread::sleep(std::time::Duration::from_millis(30));
                     match child.try_wait() {
-                        Ok(Some(status)) => log::info!("Check hwcodec config, exit with: {status}"),
+                        Ok(Some(status)) => {
+                            log::info!("Check hwcodec config, exit with: {status}")
+                        }
                         Ok(None) => {
                             log::info!(
                                 "Check hwcodec config, status not ready yet, let's really wait"
@@ -409,5 +411,9 @@ pub fn check_config_process() {
                 }
             }
         };
+    };
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        std::thread::spawn(f);
     });
 }

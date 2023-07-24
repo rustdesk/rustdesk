@@ -42,7 +42,7 @@ impl Drop for RAIIPDHQuery {
     }
 }
 
-pub unsafe fn start_cpu_performance_monitor() {
+pub fn start_cpu_performance_monitor() {
     // Code from:
     // https://learn.microsoft.com/en-us/windows/win32/perfctrs/collecting-performance-data
     // https://learn.microsoft.com/en-us/windows/win32/api/pdh/nf-pdh-pdhcollectquerydataex
@@ -50,7 +50,7 @@ pub unsafe fn start_cpu_performance_monitor() {
     // https://aaron-margosis.medium.com/task-managers-cpu-numbers-are-all-but-meaningless-2d165b421e43
     // Therefore we should compare with Precess Explorer rather than taskManager
 
-    std::thread::spawn(|| {
+    let f = || unsafe {
         // load avg or cpu usage, test with prime95.
         // Prefer cpu usage because we can get accurate value from Precess Explorer.
         // const COUNTER_PATH: &'static str = "\\System\\Processor Queue Length\0";
@@ -80,7 +80,7 @@ pub unsafe fn start_cpu_performance_monitor() {
         let mut counter_value: PDH_FMT_COUNTERVALUE = std::mem::zeroed();
         let event = CreateEventA(std::ptr::null_mut(), FALSE, FALSE, std::ptr::null() as _);
         if event.is_null() {
-            log::error!("CreateEventA failed: 0x{:X}", ret);
+            log::error!("CreateEventA failed");
             return;
         }
         let _event: RAIIHandle = RAIIHandle(event);
@@ -126,6 +126,11 @@ pub unsafe fn start_cpu_performance_monitor() {
             queue.push_back(counter_value.u.doubleValue().clone());
             recent_valid.push_back(true);
         }
+    };
+    use std::sync::Once;
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        std::thread::spawn(f);
     });
 }
 
