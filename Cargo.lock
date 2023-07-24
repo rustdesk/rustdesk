@@ -2988,7 +2988,7 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 [[package]]
 name = "hwcodec"
 version = "0.1.1"
-source = "git+https://github.com/21pages/hwcodec?branch=stable#d5daa75d8cb273781dc21676cb00edda5a4cf8b9"
+source = "git+https://github.com/21pages/hwcodec?branch=stable#82cdc15457e42feaf14e1b38622506b2d54baf76"
 dependencies = [
  "bindgen 0.59.2",
  "cc",
