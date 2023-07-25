@@ -245,8 +245,11 @@ pub fn core_main() -> Option<Vec<String>> {
                 if crate::platform::is_installed()
                     && crate::platform::check_super_user_permission().unwrap_or_default()
                 {
-                    crate::ipc::set_permanent_password(args[1].to_owned()).unwrap();
-                    my_println!("Done!");
+                    if let Err(err) = crate::ipc::set_permanent_password(args[1].to_owned()) {
+                        my_println!("{err}");
+                    } else {
+                        my_println!("Done!");
+                    }
                 } else {
                     my_println!("Installation and administrative privileges required!");
                 }
