@@ -478,6 +478,8 @@ class WindowActionPanel extends StatefulWidget {
 
 class WindowActionPanelState extends State<WindowActionPanel>
     with MultiWindowListener, WindowListener {
+  final _saveFrameDebounce = Debouncer(delay: Duration(seconds: 1));
+
   @override
   void initState() {
     super.initState();
@@ -535,6 +537,26 @@ class WindowActionPanelState extends State<WindowActionPanel>
     }
     _setMaximize(false);
     super.onWindowUnmaximize();
+  }
+
+  _saveFrame() async {
+    if (widget.tabType == DesktopTabType.main) {
+      await saveWindowPosition(WindowType.Main);
+    } else if (kWindowType != null && kWindowId != null) {
+      await saveWindowPosition(kWindowType!, windowId: kWindowId);
+    }
+  }
+
+  @override
+  void onWindowMoved() {
+    _saveFrameDebounce.call(_saveFrame);
+    super.onWindowMoved();
+  }
+
+  @override
+  void onWindowResized() {
+    _saveFrameDebounce.call(_saveFrame);
+    super.onWindowMoved();
   }
 
   @override

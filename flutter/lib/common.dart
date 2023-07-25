@@ -1383,12 +1383,17 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
         return;
       }
       final position = frame.topLeft;
+      if (position.dx < 0 || position.dy < 0) {
+        debugPrint("Window $windowId is hidden, ignoring position restoration");
+        return;
+      }
+
       final sz = frame.size;
       final isMaximized = await wc.isMaximized();
       final pos = LastWindowPosition(
           sz.width, sz.height, position.dx, position.dy, isMaximized);
       debugPrint(
-          "saving frame: $windowId: ${pos.width}/${pos.height}, offset:${pos.offsetWidth}/${pos.offsetHeight}");
+          "Saving frame: $windowId: ${pos.width}/${pos.height}, offset:${pos.offsetWidth}/${pos.offsetHeight}");
       await bind.setLocalFlutterConfig(
           k: kWindowPrefix + type.name, v: pos.toString());
       break;
@@ -1864,10 +1869,7 @@ Future<void> onActiveWindowChanged() async {
   if (rustDeskWinManager.getActiveWindows().isEmpty) {
     // close all sub windows
     try {
-      await Future.wait([
-        saveWindowPosition(WindowType.Main),
-        rustDeskWinManager.closeAllSubWindows()
-      ]);
+      await rustDeskWinManager.closeAllSubWindows();
     } catch (err) {
       debugPrintStack(label: "$err");
     } finally {
