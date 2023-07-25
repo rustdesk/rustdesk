@@ -1337,7 +1337,7 @@ class LastWindowPosition {
       return LastWindowPosition(m["width"], m["height"], m["offsetWidth"],
           m["offsetHeight"], m["isMaximized"]);
     } catch (e) {
-      debugPrintStack(label: e.toString());
+      debugPrintStack(label: 'Failed to load LastWindowPosition "$content" ${e.toString()}');
       return null;
     }
   }

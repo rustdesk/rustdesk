@@ -93,8 +93,8 @@ class _RawTouchGestureDetectorRegionState
     }
     if (handleTouch) {
       ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
+      inputModel.tapDown(MouseButtons.left);
     }
-    inputModel.tapDown(MouseButtons.left);
   }
 
   onTapUp(TapUpDetails d) {
@@ -107,6 +107,13 @@ class _RawTouchGestureDetectorRegionState
     inputModel.tapUp(MouseButtons.left);
   }
 
+  onTap() {
+    if (lastDeviceKind != PointerDeviceKind.touch) {
+      return;
+    }
+    inputModel.tap(MouseButtons.left);
+  }
+
   onDoubleTapDown(TapDownDetails d) {
     lastDeviceKind = d.kind;
     if (lastDeviceKind != PointerDeviceKind.touch) {
@@ -114,6 +121,9 @@ class _RawTouchGestureDetectorRegionState
     }
     if (handleTouch) {
       ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
+    }
+    if (!ffiModel.touchMode) {
+      inputModel.tapDown(MouseButtons.left);
     }
   }
 
@@ -156,7 +166,7 @@ class _RawTouchGestureDetectorRegionState
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
     }
-    if (isDesktop || !handleTouch) {
+    if (isDesktop || !ffiModel.touchMode) {
       inputModel.tap(MouseButtons.right);
     }
   }
@@ -291,7 +301,8 @@ class _RawTouchGestureDetectorRegionState
               () => TapGestureRecognizer(), (instance) {
         instance
           ..onTapDown = onTapDown
-          ..onTapUp = onTapUp;
+          ..onTapUp = onTapUp
+          ..onTap = onTap;
       }),
       DoubleTapGestureRecognizer:
           GestureRecognizerFactoryWithHandlers<DoubleTapGestureRecognizer>(
