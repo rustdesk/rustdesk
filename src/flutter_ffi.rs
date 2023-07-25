@@ -606,6 +606,10 @@ pub fn main_get_option(key: String) -> String {
     get_option(key)
 }
 
+pub fn main_get_option_sync(key: String) -> SyncReturn<String> {
+    SyncReturn(get_option(key))
+}
+
 pub fn main_get_error() -> String {
     get_error()
 }
@@ -624,6 +628,10 @@ pub fn main_set_option(key: String, value: String) {
 
 pub fn main_get_options() -> String {
     get_options()
+}
+
+pub fn main_get_options_sync() -> SyncReturn<String> {
+    SyncReturn(get_options())
 }
 
 pub fn main_set_options(json: String) {

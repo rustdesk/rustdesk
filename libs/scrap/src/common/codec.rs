@@ -11,22 +11,23 @@ use crate::mediacodec::{
     MediaCodecDecoder, MediaCodecDecoders, H264_DECODER_SUPPORT, H265_DECODER_SUPPORT,
 };
 use crate::{
-    aom::{self, AomDecoder, AomDecoderConfig, AomEncoder, AomEncoderConfig},
+    aom::{self, AomDecoder, AomEncoder, AomEncoderConfig},
     common::GoogleImage,
     vpxcodec::{self, VpxDecoder, VpxDecoderConfig, VpxEncoder, VpxEncoderConfig, VpxVideoCodecId},
     CodecName, ImageRgb,
 };
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use hbb_common::sysinfo::{System, SystemExt};
 use hbb_common::{
     anyhow::anyhow,
+    bail,
     config::PeerConfig,
     log,
     message_proto::{
         supported_decoding::PreferCodec, video_frame, EncodedVideoFrames, Message,
         SupportedDecoding, SupportedEncoding,
     },
+    sysinfo::{System, SystemExt},
+    tokio::time::Instant,
     ResultType,
 };
 #[cfg(any(feature = "hwcodec", feature = "mediacodec"))]
@@ -35,6 +36,7 @@ use hbb_common::{config::Config2, lazy_static};
 lazy_static::lazy_static! {
     static ref PEER_DECODINGS: Arc<Mutex<HashMap<i32, SupportedDecoding>>> = Default::default();
     static ref CODEC_NAME: Arc<Mutex<CodecName>> = Arc::new(Mutex::new(CodecName::VP9));
+    static ref THREAD_LOG_TIME: Arc<Mutex<Option<Instant>>> = Arc::new(Mutex::new(None));
 }
 
 #[derive(Debug, Clone)]
@@ -42,7 +44,7 @@ pub struct HwEncoderConfig {
     pub name: String,
     pub width: usize,
     pub height: usize,
-    pub bitrate: i32,
+    pub quality: Quality,
 }
 
 #[derive(Debug, Clone)]
@@ -61,7 +63,9 @@ pub trait EncoderApi {
 
     fn use_yuv(&self) -> bool;
 
-    fn set_bitrate(&mut self, bitrate: u32) -> ResultType<()>;
+    fn set_quality(&mut self, quality: Quality) -> ResultType<()>;
+
+    fn bitrate(&self) -> u32;
 }
 
 pub struct Encoder {
@@ -83,9 +87,9 @@ impl DerefMut for Encoder {
 }
 
 pub struct Decoder {
-    vp8: VpxDecoder,
-    vp9: VpxDecoder,
-    av1: AomDecoder,
+    vp8: Option<VpxDecoder>,
+    vp9: Option<VpxDecoder>,
+    av1: Option<AomDecoder>,
     #[cfg(feature = "hwcodec")]
     hw: HwDecoders,
     #[cfg(feature = "hwcodec")]
@@ -190,7 +194,6 @@ impl Encoder {
 
         #[allow(unused_mut)]
         let mut auto_codec = CodecName::VP9;
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if vp8_useable && System::new_all().total_memory() <= 4 * 1024 * 1024 * 1024 {
             // 4 Gb
             auto_codec = CodecName::VP8
@@ -274,18 +277,13 @@ impl Decoder {
     pub fn new() -> Decoder {
         let vp8 = VpxDecoder::new(VpxDecoderConfig {
             codec: VpxVideoCodecId::VP8,
-            num_threads: (num_cpus::get() / 2) as _,
         })
-        .unwrap();
+        .ok();
         let vp9 = VpxDecoder::new(VpxDecoderConfig {
             codec: VpxVideoCodecId::VP9,
-            num_threads: (num_cpus::get() / 2) as _,
         })
-        .unwrap();
-        let av1 = AomDecoder::new(AomDecoderConfig {
-            num_threads: (num_cpus::get() / 2) as _,
-        })
-        .unwrap();
+        .ok();
+        let av1 = AomDecoder::new().ok();
         Decoder {
             vp8,
             vp9,
@@ -315,13 +313,25 @@ impl Decoder {
     ) -> ResultType<bool> {
         match frame {
             video_frame::Union::Vp8s(vp8s) => {
-                Decoder::handle_vpxs_video_frame(&mut self.vp8, vp8s, rgb)
+                if let Some(vp8) = &mut self.vp8 {
+                    Decoder::handle_vpxs_video_frame(vp8, vp8s, rgb)
+                } else {
+                    bail!("vp8 decoder not available");
+                }
             }
             video_frame::Union::Vp9s(vp9s) => {
-                Decoder::handle_vpxs_video_frame(&mut self.vp9, vp9s, rgb)
+                if let Some(vp9) = &mut self.vp9 {
+                    Decoder::handle_vpxs_video_frame(vp9, vp9s, rgb)
+                } else {
+                    bail!("vp9 decoder not available");
+                }
             }
             video_frame::Union::Av1s(av1s) => {
-                Decoder::handle_av1s_video_frame(&mut self.av1, av1s, rgb)
+                if let Some(av1) = &mut self.av1 {
+                    Decoder::handle_av1s_video_frame(av1, av1s, rgb)
+                } else {
+                    bail!("av1 decoder not available");
+                }
             }
             #[cfg(feature = "hwcodec")]
             video_frame::Union::H264s(h264s) => {
@@ -470,4 +480,73 @@ fn enable_hwcodec_option() -> bool {
         return v != "N";
     }
     return true; // default is true
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Quality {
+    Best,
+    Balanced,
+    Low,
+    Custom(u32),
+}
+
+impl Default for Quality {
+    fn default() -> Self {
+        Self::Balanced
+    }
+}
+
+pub fn base_bitrate(width: u32, height: u32) -> u32 {
+    #[allow(unused_mut)]
+    let mut base_bitrate = ((width * height) / 1000) as u32; // same as 1.1.9
+    if base_bitrate == 0 {
+        base_bitrate = 1920 * 1080 / 1000;
+    }
+    #[cfg(target_os = "android")]
+    {
+        // fix when android screen shrinks
+        let fix = crate::Display::fix_quality() as u32;
+        log::debug!("Android screen, fix quality:{}", fix);
+        base_bitrate = base_bitrate * fix;
+    }
+    base_bitrate
+}
+
+pub fn codec_thread_num() -> usize {
+    let max: usize = num_cpus::get();
+    let mut res;
+    let info;
+    #[cfg(windows)]
+    {
+        res = 0;
+        let percent = hbb_common::platform::windows::cpu_uage_one_minute();
+        info = format!("cpu usage:{:?}", percent);
+        if let Some(pecent) = percent {
+            if pecent < 100.0 {
+                res = ((100.0 - pecent) * (max as f64) / 200.0).round() as usize;
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let s = System::new_all();
+        // https://man7.org/linux/man-pages/man3/getloadavg.3.html
+        let avg = s.load_average();
+        info = format!("cpu loadavg:{}", avg.one);
+        res = (((max as f64) - avg.one) * 0.5).round() as usize;
+    }
+    res = std::cmp::min(res, max / 2);
+    if res == 0 {
+        res = 1;
+    }
+    // avoid frequent log
+    let log = match THREAD_LOG_TIME.lock().unwrap().clone() {
+        Some(instant) => instant.elapsed().as_secs() > 1,
+        None => true,
+    };
+    if log {
+        log::info!("cpu num:{max}, {info}, codec thread:{res}");
+        *THREAD_LOG_TIME.lock().unwrap() = Some(Instant::now());
+    }
+    res
 }

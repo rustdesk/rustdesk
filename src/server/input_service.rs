@@ -1497,11 +1497,11 @@ pub fn handle_key_(evt: &KeyEvent) {
         _ => {}
     };
 
-    match evt.mode.unwrap() {
-        KeyboardMode::Map => {
+    match evt.mode.enum_value() {
+        Ok(KeyboardMode::Map) => {
             map_keyboard_mode(evt);
         }
-        KeyboardMode::Translate => {
+        Ok(KeyboardMode::Translate) => {
             translate_keyboard_mode(evt);
         }
         _ => {

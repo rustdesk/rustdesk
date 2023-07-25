@@ -7,18 +7,20 @@ use hbb_common::log;
 use hbb_common::message_proto::{EncodedVideoFrame, EncodedVideoFrames, Message, VideoFrame};
 use hbb_common::ResultType;
 
-use crate::codec::EncoderApi;
+use crate::codec::{base_bitrate, codec_thread_num, EncoderApi, Quality};
 use crate::{GoogleImage, STRIDE_ALIGN};
 
-use super::vpx::{vpx_codec_err_t::*, *};
+use super::vpx::{vp8e_enc_control_id::*, vpx_codec_err_t::*, *};
 use crate::{generate_call_macro, generate_call_ptr_macro, Error, Result};
 use hbb_common::bytes::Bytes;
-use std::os::raw::c_uint;
+use std::os::raw::{c_int, c_uint};
 use std::{ptr, slice};
 
 generate_call_macro!(call_vpx, false);
-generate_call_macro!(call_vpx_allow_err, true);
 generate_call_ptr_macro!(call_vpx_ptr);
+
+const DEFAULT_QP_MAX: u32 = 56; // no more than 63
+const DEFAULT_QP_MIN: u32 = 12; // no more than 63
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum VpxVideoCodecId {
@@ -54,11 +56,52 @@ impl EncoderApi for VpxEncoder {
                     VpxVideoCodecId::VP8 => call_vpx_ptr!(vpx_codec_vp8_cx()),
                     VpxVideoCodecId::VP9 => call_vpx_ptr!(vpx_codec_vp9_cx()),
                 };
+                let mut c = unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
+                call_vpx!(vpx_codec_enc_config_default(i, &mut c, 0));
 
-                let c = match config.codec {
-                    VpxVideoCodecId::VP8 => webrtc::vp8::enc_cfg(i, &config)?,
-                    VpxVideoCodecId::VP9 => webrtc::vp9::enc_cfg(i, &config)?,
-                };
+                // https://www.webmproject.org/docs/encoder-parameters/
+                // default: c.rc_min_quantizer = 0, c.rc_max_quantizer = 63
+                // try rc_resize_allowed later
+
+                c.g_w = config.width;
+                c.g_h = config.height;
+                c.g_timebase.num = config.timebase[0];
+                c.g_timebase.den = config.timebase[1];
+                c.rc_undershoot_pct = 95;
+                // When the data buffer falls below this percentage of fullness, a dropped frame is indicated. Set the threshold to zero (0) to disable this feature.
+                // In dynamic scenes, low bitrate gets low fps while high bitrate gets high fps.
+                c.rc_dropframe_thresh = 25;
+                c.g_threads = codec_thread_num() as _;
+                c.g_error_resilient = VPX_ERROR_RESILIENT_DEFAULT;
+                // https://developers.google.com/media/vp9/bitrate-modes/
+                // Constant Bitrate mode (CBR) is recommended for live streaming with VP9.
+                c.rc_end_usage = vpx_rc_mode::VPX_CBR;
+                // c.kf_min_dist = 0;
+                // c.kf_max_dist = 999999;
+                c.kf_mode = vpx_kf_mode::VPX_KF_DISABLED; // reduce bandwidth a lot
+                let (q_min, q_max, b) = Self::convert_quality(config.quality);
+                if q_min > 0 && q_min < q_max && q_max < 64 {
+                    c.rc_min_quantizer = q_min;
+                    c.rc_max_quantizer = q_max;
+                } else {
+                    c.rc_min_quantizer = DEFAULT_QP_MIN;
+                    c.rc_max_quantizer = DEFAULT_QP_MAX;
+                }
+                let base_bitrate = base_bitrate(config.width as _, config.height as _);
+                let bitrate = base_bitrate * b / 100;
+                if bitrate > 0 {
+                    c.rc_target_bitrate = bitrate;
+                } else {
+                    c.rc_target_bitrate = base_bitrate;
+                }
+
+                /*
+                The VPX encoder supports two-pass encoding for rate control purposes.
+                In two-pass encoding, the entire encoding process is performed twice.
+                The first pass generates new control parameters for the second pass.
+
+                This approach enables the best PSNR at the same bit rate.
+                */
 
                 let mut ctx = Default::default();
                 call_vpx!(vpx_codec_enc_init_ver(
@@ -68,9 +111,50 @@ impl EncoderApi for VpxEncoder {
                     0,
                     VPX_ENCODER_ABI_VERSION as _
                 ));
-                match config.codec {
-                    VpxVideoCodecId::VP8 => webrtc::vp8::set_control(&mut ctx, &c)?,
-                    VpxVideoCodecId::VP9 => webrtc::vp9::set_control(&mut ctx, &c)?,
+
+                if config.codec == VpxVideoCodecId::VP9 {
+                    // set encoder internal speed settings
+                    // in ffmpeg, it is --speed option
+                    /*
+                    set to 0 or a positive value 1-16, the codec will try to adapt its
+                    complexity depending on the time it spends encoding. Increasing this
+                    number will make the speed go up and the quality go down.
+                    Negative values mean strict enforcement of this
+                    while positive values are adaptive
+                    */
+                    /* https://developers.google.com/media/vp9/live-encoding
+                    Speed 5 to 8 should be used for live / real-time encoding.
+                    Lower numbers (5 or 6) are higher quality but require more CPU power.
+                    Higher numbers (7 or 8) will be lower quality but more manageable for lower latency
+                    use cases and also for lower CPU power devices such as mobile.
+                    */
+                    call_vpx!(vpx_codec_control_(&mut ctx, VP8E_SET_CPUUSED as _, 7,));
+                    // set row level multi-threading
+                    /*
+                    as some people in comments and below have already commented,
+                    more recent versions of libvpx support -row-mt 1 to enable tile row
+                    multi-threading. This can increase the number of tiles by up to 4x in VP9
+                    (since the max number of tile rows is 4, regardless of video height).
+                    To enable this, use -tile-rows N where N is the number of tile rows in
+                    log2 units (so -tile-rows 1 means 2 tile rows and -tile-rows 2 means 4 tile
+                    rows). The total number of active threads will then be equal to
+                    $tile_rows * $tile_columns
+                    */
+                    call_vpx!(vpx_codec_control_(
+                        &mut ctx,
+                        VP9E_SET_ROW_MT as _,
+                        1 as c_int
+                    ));
+
+                    call_vpx!(vpx_codec_control_(
+                        &mut ctx,
+                        VP9E_SET_TILE_COLUMNS as _,
+                        4 as c_int
+                    ));
+                } else if config.codec == VpxVideoCodecId::VP8 {
+                    // https://github.com/webmproject/libvpx/blob/972149cafeb71d6f08df89e91a0130d6a38c4b15/vpx/vp8cx.h#L172
+                    // https://groups.google.com/a/webmproject.org/g/webm-discuss/c/DJhSrmfQ61M
+                    call_vpx!(vpx_codec_control_(&mut ctx, VP8E_SET_CPUUSED as _, 12,));
                 }
 
                 Ok(Self {
@@ -108,11 +192,24 @@ impl EncoderApi for VpxEncoder {
         true
     }
 
-    fn set_bitrate(&mut self, bitrate: u32) -> ResultType<()> {
-        let mut new_enc_cfg = unsafe { *self.ctx.config.enc.to_owned() };
-        new_enc_cfg.rc_target_bitrate = bitrate;
-        call_vpx!(vpx_codec_enc_config_set(&mut self.ctx, &new_enc_cfg));
-        return Ok(());
+    fn set_quality(&mut self, quality: Quality) -> ResultType<()> {
+        let mut c = unsafe { *self.ctx.config.enc.to_owned() };
+        let (q_min, q_max, b) = Self::convert_quality(quality);
+        if q_min > 0 && q_min < q_max && q_max < 64 {
+            c.rc_min_quantizer = q_min;
+            c.rc_max_quantizer = q_max;
+        }
+        let bitrate = base_bitrate(self.width as _, self.height as _) * b / 100;
+        if bitrate > 0 {
+            c.rc_target_bitrate = bitrate;
+        }
+        call_vpx!(vpx_codec_enc_config_set(&mut self.ctx, &c));
+        Ok(())
+    }
+
+    fn bitrate(&self) -> u32 {
+        let c = unsafe { *self.ctx.config.enc.to_owned() };
+        c.rc_target_bitrate
     }
 }
 
@@ -189,6 +286,34 @@ impl VpxEncoder {
             ..Default::default()
         }
     }
+
+    fn convert_quality(quality: Quality) -> (u32, u32, u32) {
+        match quality {
+            Quality::Best => (6, 45, 150),
+            Quality::Balanced => (12, 56, 100 * 2 / 3),
+            Quality::Low => (18, 56, 50),
+            Quality::Custom(b) => {
+                let (q_min, q_max) = Self::calc_q_values(b);
+                (q_min, q_max, b)
+            }
+        }
+    }
+
+    #[inline]
+    fn calc_q_values(b: u32) -> (u32, u32) {
+        let b = std::cmp::min(b, 200);
+        let q_min1: i32 = 36;
+        let q_min2 = 12;
+        let q_max1 = 56;
+        let q_max2 = 37;
+
+        let t = b as f32 / 200.0;
+
+        let q_min: u32 = ((1.0 - t) * q_min1 as f32 + t * q_min2 as f32).round() as u32;
+        let q_max = ((1.0 - t) * q_max1 as f32 + t * q_max2 as f32).round() as u32;
+
+        (q_min, q_max)
+    }
 }
 
 impl Drop for VpxEncoder {
@@ -218,8 +343,10 @@ pub struct VpxEncoderConfig {
     pub width: c_uint,
     /// The height (in pixels).
     pub height: c_uint,
-    /// The target bitrate (in kilobits per second).
-    pub bitrate: c_uint,
+    /// The timebase numerator and denominator (in seconds).
+    pub timebase: [c_int; 2],
+    /// The image quality
+    pub quality: Quality,
     /// The codec
     pub codec: VpxVideoCodecId,
 }
@@ -227,7 +354,6 @@ pub struct VpxEncoderConfig {
 #[derive(Clone, Copy, Debug)]
 pub struct VpxDecoderConfig {
     pub codec: VpxVideoCodecId,
-    pub num_threads: u32,
 }
 
 pub struct EncodeFrames<'a> {
@@ -274,11 +400,7 @@ impl VpxDecoder {
         };
         let mut ctx = Default::default();
         let cfg = vpx_codec_dec_cfg_t {
-            threads: if config.num_threads == 0 {
-                num_cpus::get() as _
-            } else {
-                config.num_threads
-            },
+            threads: codec_thread_num() as _,
             w: 0,
             h: 0,
         };
@@ -417,371 +539,3 @@ impl Drop for Image {
 }
 
 unsafe impl Send for vpx_codec_ctx_t {}
-
-mod webrtc {
-    use super::*;
-
-    const K_QP_MAX: u32 = 25; // worth adjusting
-    const MODE: VideoCodecMode = VideoCodecMode::KScreensharing;
-    const K_RTP_TICKS_PER_SECOND: i32 = 90000;
-    const NUMBER_OF_TEMPORAL_LAYERS: u32 = 1;
-    const DENOISING_ON: bool = true;
-    const FRAME_DROP_ENABLED: bool = false;
-
-    #[allow(dead_code)]
-    #[derive(Debug, PartialEq, Eq)]
-    enum VideoCodecMode {
-        KRealtimeVideo,
-        KScreensharing,
-    }
-
-    #[allow(dead_code)]
-    #[derive(Debug, PartialEq, Eq)]
-    enum VideoCodecComplexity {
-        KComplexityLow = -1,
-        KComplexityNormal = 0,
-        KComplexityHigh = 1,
-        KComplexityHigher = 2,
-        KComplexityMax = 3,
-    }
-
-    // https://webrtc.googlesource.com/src/+/refs/heads/main/modules/video_coding/codecs/vp9/libvpx_vp9_encoder.cc
-    pub mod vp9 {
-        use super::*;
-        const SVC: bool = false;
-        // https://webrtc.googlesource.com/src/+/refs/heads/main/api/video_codecs/video_encoder.cc#35
-        const KEY_FRAME_INTERVAL: u32 = 3000;
-        const ADAPTIVE_QP_MODE: bool = true;
-
-        pub fn enc_cfg(
-            i: *const vpx_codec_iface_t,
-            cfg: &VpxEncoderConfig,
-        ) -> ResultType<vpx_codec_enc_cfg_t> {
-            let mut c: vpx_codec_enc_cfg_t =
-                unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
-            call_vpx!(vpx_codec_enc_config_default(i, &mut c, 0));
-
-            // kProfile0
-            c.g_bit_depth = vpx_bit_depth::VPX_BITS_8;
-            c.g_profile = 0;
-            c.g_input_bit_depth = 8;
-
-            c.g_w = cfg.width;
-            c.g_h = cfg.height;
-            c.rc_target_bitrate = cfg.bitrate; // in kbit/s
-            c.g_error_resilient = if SVC { VPX_ERROR_RESILIENT_DEFAULT } else { 0 };
-            c.g_timebase.num = 1;
-            c.g_timebase.den = K_RTP_TICKS_PER_SECOND;
-            c.g_lag_in_frames = 0;
-            c.rc_dropframe_thresh = if FRAME_DROP_ENABLED { 30 } else { 0 };
-            c.rc_end_usage = vpx_rc_mode::VPX_CBR;
-            c.g_pass = vpx_enc_pass::VPX_RC_ONE_PASS;
-            c.rc_min_quantizer = if MODE == VideoCodecMode::KScreensharing {
-                8
-            } else {
-                2
-            };
-            c.rc_max_quantizer = K_QP_MAX;
-            c.rc_undershoot_pct = 50;
-            c.rc_overshoot_pct = 50;
-            c.rc_buf_initial_sz = 500;
-            c.rc_buf_optimal_sz = 600;
-            c.rc_buf_sz = 1000;
-            // Key-frame interval is enforced manually by this wrapper.
-            c.kf_mode = vpx_kf_mode::VPX_KF_DISABLED;
-            // TODO(webm:1592): work-around for libvpx issue, as it can still
-            // put some key-frames at will even in VPX_KF_DISABLED kf_mode.
-            c.kf_max_dist = KEY_FRAME_INTERVAL;
-            c.kf_min_dist = c.kf_max_dist;
-            c.rc_resize_allowed = 0;
-            // Determine number of threads based on the image size and #cores.
-            c.g_threads = number_of_threads(c.g_w, c.g_h, num_cpus::get());
-
-            c.temporal_layering_mode =
-                vp9e_temporal_layering_mode::VP9E_TEMPORAL_LAYERING_MODE_NOLAYERING as _;
-            c.ts_number_layers = 1;
-            c.ts_rate_decimator[0] = 1;
-            c.ts_periodicity = 1;
-            c.ts_layer_id[0] = 0;
-
-            Ok(c)
-        }
-
-        pub fn set_control(ctx: *mut vpx_codec_ctx_t, cfg: &vpx_codec_enc_cfg_t) -> ResultType<()> {
-            use vp8e_enc_control_id::*;
-
-            macro_rules! call_ctl {
-                ($ctx:expr, $vpxe:expr, $arg:expr) => {{
-                    call_vpx_allow_err!(vpx_codec_control_($ctx, $vpxe as i32, $arg));
-                }};
-            }
-            call_ctl!(
-                ctx,
-                VP8E_SET_MAX_INTRA_BITRATE_PCT,
-                max_intra_target(cfg.rc_buf_optimal_sz)
-            );
-            call_ctl!(ctx, VP9E_SET_AQ_MODE, if ADAPTIVE_QP_MODE { 3 } else { 0 });
-            call_ctl!(ctx, VP9E_SET_FRAME_PARALLEL_DECODING, 0);
-            #[cfg(not(any(target_arch = "arm", target_arch = "aarch64", target_os = "android")))]
-            call_ctl!(ctx, VP9E_SET_SVC_GF_TEMPORAL_REF, 0);
-            call_ctl!(
-                ctx,
-                VP8E_SET_CPUUSED,
-                get_default_performance_flags(cfg.g_w, cfg.g_h).0
-            );
-            call_ctl!(ctx, VP9E_SET_TILE_COLUMNS, cfg.g_threads >> 1);
-            // Turn on row-based multithreading.
-            call_ctl!(ctx, VP9E_SET_ROW_MT, 1);
-            let denoising = DENOISING_ON
-                && allow_denoising()
-                && get_default_performance_flags(cfg.g_w, cfg.g_h).1;
-            call_ctl!(
-                ctx,
-                VP9E_SET_NOISE_SENSITIVITY,
-                if denoising { 1 } else { 0 }
-            );
-            if MODE == VideoCodecMode::KScreensharing {
-                call_ctl!(ctx, VP9E_SET_TUNE_CONTENT, 1);
-            }
-            // Enable encoder skip of static/low content blocks.
-            call_ctl!(ctx, VP8E_SET_STATIC_THRESHOLD, 1);
-
-            Ok(())
-        }
-
-        // return (base_layer_speed, allow_denoising)
-        fn get_default_performance_flags(width: u32, height: u32) -> (u32, bool) {
-            if cfg!(any(
-                target_arch = "arm",
-                target_arch = "aarch64",
-                target_os = "android"
-            )) {
-                (8, true)
-            } else if width * height < 352 * 288 {
-                (5, true)
-            } else if width * height < 1920 * 1080 {
-                (7, true)
-            } else {
-                (9, false)
-            }
-        }
-
-        fn allow_denoising() -> bool {
-            // Do not enable the denoiser on ARM since optimization is pending.
-            // Denoiser is on by default on other platforms.
-            if cfg!(any(
-                target_arch = "arm",
-                target_arch = "aarch64",
-                target_os = "android"
-            )) {
-                false
-            } else {
-                true
-            }
-        }
-
-        fn number_of_threads(width: u32, height: u32, number_of_cores: usize) -> u32 {
-            // Keep the number of encoder threads equal to the possible number of column
-            // tiles, which is (1, 2, 4, 8). See comments below for VP9E_SET_TILE_COLUMNS.
-            if width * height >= 1280 * 720 && number_of_cores > 4 {
-                return 4;
-            } else if width * height >= 640 * 360 && number_of_cores > 2 {
-                return 2;
-            } else {
-                // Use 2 threads for low res on ARM.
-                #[cfg(any(target_arch = "arm", target_arch = "aarch64", target_os = "android"))]
-                if width * height >= 320 * 180 && number_of_cores > 2 {
-                    return 2;
-                }
-                // 1 thread less than VGA.
-                return 1;
-            }
-        }
-    }
-
-    // https://webrtc.googlesource.com/src/+/refs/heads/main/modules/video_coding/codecs/vp8/libvpx_vp8_encoder.cc
-    pub mod vp8 {
-        use super::*;
-        // https://webrtc.googlesource.com/src/+/refs/heads/main/api/video_codecs/video_encoder.cc#23
-        const DISABLE_KEY_FRAME_INTERVAL: bool = true;
-        const KEY_FRAME_INTERVAL: u32 = 3000;
-        const COMPLEXITY: VideoCodecComplexity = VideoCodecComplexity::KComplexityNormal;
-        const K_TOKEN_PARTITIONS: vp8e_token_partitions =
-            vp8e_token_partitions::VP8_ONE_TOKENPARTITION;
-
-        pub fn enc_cfg(
-            i: *const vpx_codec_iface_t,
-            cfg: &VpxEncoderConfig,
-        ) -> ResultType<vpx_codec_enc_cfg_t> {
-            let mut c: vpx_codec_enc_cfg_t =
-                unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
-            call_vpx!(vpx_codec_enc_config_default(i, &mut c, 0));
-
-            c.g_w = cfg.width;
-            c.g_h = cfg.height;
-            c.g_timebase.num = 1;
-            c.g_timebase.den = K_RTP_TICKS_PER_SECOND;
-            c.g_lag_in_frames = 0;
-            c.g_error_resilient = if NUMBER_OF_TEMPORAL_LAYERS > 1 {
-                VPX_ERROR_RESILIENT_DEFAULT
-            } else {
-                0
-            };
-            c.rc_end_usage = vpx_rc_mode::VPX_CBR;
-            c.g_pass = vpx_enc_pass::VPX_RC_ONE_PASS;
-            c.rc_resize_allowed = 0;
-            c.rc_min_quantizer = if MODE == VideoCodecMode::KScreensharing {
-                12
-            } else {
-                2
-            };
-            c.rc_max_quantizer = K_QP_MAX;
-            c.rc_undershoot_pct = 100;
-            c.rc_overshoot_pct = 15;
-            c.rc_buf_initial_sz = 500;
-            c.rc_buf_optimal_sz = 600;
-            c.rc_buf_sz = 1000;
-            if !DISABLE_KEY_FRAME_INTERVAL && KEY_FRAME_INTERVAL > 0 {
-                c.kf_mode = vpx_kf_mode::VPX_KF_AUTO;
-                c.kf_max_dist = KEY_FRAME_INTERVAL;
-            } else {
-                c.kf_mode = vpx_kf_mode::VPX_KF_DISABLED;
-            }
-            c.g_threads = number_of_threads(c.g_w, c.g_h, num_cpus::get());
-            c.rc_target_bitrate = cfg.bitrate;
-            c.rc_dropframe_thresh = if FRAME_DROP_ENABLED { 30 } else { 0 };
-
-            Ok(c)
-        }
-
-        pub fn set_control(ctx: *mut vpx_codec_ctx_t, cfg: &vpx_codec_enc_cfg_t) -> ResultType<()> {
-            use vp8e_enc_control_id::*;
-
-            macro_rules! call_ctl {
-                ($ctx:expr, $vpxe:expr, $arg:expr) => {{
-                    call_vpx_allow_err!(vpx_codec_control_($ctx, $vpxe as i32, $arg));
-                }};
-            }
-            call_ctl!(
-                ctx,
-                VP8E_SET_STATIC_THRESHOLD,
-                if MODE == VideoCodecMode::KScreensharing {
-                    100
-                } else {
-                    1
-                }
-            );
-            call_ctl!(
-                ctx,
-                VP8E_SET_CPUUSED,
-                get_cpu_speed(cfg.g_w, cfg.g_h, num_cpus::get())
-            );
-
-            call_ctl!(ctx, VP8E_SET_TOKEN_PARTITIONS, K_TOKEN_PARTITIONS);
-            call_ctl!(
-                ctx,
-                VP8E_SET_MAX_INTRA_BITRATE_PCT,
-                max_intra_target(cfg.rc_buf_optimal_sz)
-            );
-            call_ctl!(
-                ctx,
-                VP8E_SET_SCREEN_CONTENT_MODE,
-                if MODE == VideoCodecMode::KScreensharing {
-                    2 // On with more aggressive rate control.
-                } else {
-                    0
-                }
-            );
-
-            Ok(())
-        }
-
-        fn get_cpu_speed_default() -> i32 {
-            match COMPLEXITY {
-                VideoCodecComplexity::KComplexityHigh => -5,
-                VideoCodecComplexity::KComplexityHigher => -4,
-                VideoCodecComplexity::KComplexityMax => -3,
-                _ => -6,
-            }
-        }
-
-        fn get_cpu_speed(width: u32, height: u32, number_of_cores: usize) -> i32 {
-            if cfg!(any(
-                target_arch = "arm",
-                target_arch = "aarch64",
-                target_os = "android"
-            )) {
-                if number_of_cores <= 3 {
-                    -12
-                } else if width * height <= 352 * 288 {
-                    -8
-                } else if width * height <= 640 * 480 {
-                    -10
-                } else {
-                    -12
-                }
-            } else {
-                let cpu_speed_default = get_cpu_speed_default();
-                if width * height < 352 * 288 {
-                    if cpu_speed_default < -4 {
-                        -4
-                    } else {
-                        cpu_speed_default
-                    }
-                } else {
-                    cpu_speed_default
-                }
-            }
-        }
-
-        fn number_of_threads(width: u32, height: u32, cpus: usize) -> u32 {
-            if cfg!(target_os = "android") {
-                if width * height >= 320 * 180 {
-                    if cpus >= 4 {
-                        // 3 threads for CPUs with 4 and more cores since most of times only 4
-                        // cores will be active.
-                        3
-                    } else if cpus == 3 || cpus == 2 {
-                        2
-                    } else {
-                        1
-                    }
-                } else {
-                    1
-                }
-            } else {
-                if width * height >= 1920 * 1080 && cpus > 8 {
-                    8 // 8 threads for 1080p on high perf machines.
-                } else if width * height > 1280 * 960 && cpus >= 6 {
-                    // 3 threads for 1080p.
-                    return 3;
-                } else if width * height > 640 * 480 && cpus >= 3 {
-                    // Default 2 threads for qHD/HD, but allow 3 if core count is high enough,
-                    // as this will allow more margin for high-core/low clock machines or if
-                    // not built with highest optimization.
-                    if cpus >= 6 {
-                        3
-                    } else {
-                        2
-                    }
-                } else {
-                    // 1 thread for VGA or less.
-                    1
-                }
-            }
-        }
-    }
-
-    fn max_intra_target(optimal_buffer_size: u32) -> u32 {
-        const MAX_FRAMERATE: u32 = 60; // TODO
-        let scale_par: f32 = 0.5;
-        let target_pct: u32 =
-            ((optimal_buffer_size as f32) * scale_par * MAX_FRAMERATE as f32 / 10.0) as u32;
-        let min_intra_size: u32 = 300;
-        if target_pct < min_intra_size {
-            min_intra_size
-        } else {
-            target_pct
-        }
-    }
-}

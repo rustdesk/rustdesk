@@ -662,6 +662,8 @@ message Misc {
     Resolution change_resolution = 24;
     PluginRequest plugin_request = 25;
     PluginFailure plugin_failure = 26;
+    uint32 full_speed_fps = 27;
+    uint32 auto_adjust_fps = 28;
   }
 }
 

@@ -89,7 +89,9 @@ impl RendezvousMediator {
                 for host in servers.clone() {
                     let server = server.clone();
                     futs.push(tokio::spawn(async move {
-                        allow_err!(Self::start(server, host).await);
+                        if let Err(err) = Self::start(server, host).await {
+                            log::error!("rendezvous mediator error: {err}");
+                        }
                         // SHOULD_EXIT here is to ensure once one exits, the others also exit.
                         SHOULD_EXIT.store(true, Ordering::SeqCst);
                     }));
@@ -184,16 +186,18 @@ impl RendezvousMediator {
                                     }
                                     Some(rendezvous_message::Union::RegisterPkResponse(rpr)) => {
                                         update_latency();
-                                        match rpr.result.enum_value_or_default() {
-                                            register_pk_response::Result::OK => {
+                                        match rpr.result.enum_value() {
+                                            Ok(register_pk_response::Result::OK) => {
                                                 Config::set_key_confirmed(true);
                                                 Config::set_host_key_confirmed(&rz.host_prefix, true);
                                                 *SOLVING_PK_MISMATCH.lock().unwrap() = "".to_owned();
                                             }
-                                            register_pk_response::Result::UUID_MISMATCH => {
+                                            Ok(register_pk_response::Result::UUID_MISMATCH) => {
                                                 allow_err!(rz.handle_uuid_mismatch(&mut socket).await);
                                             }
-                                            _ => {}
+                                            _ => {
+                                                log::error!("unknown RegisterPkResponse");
+                                            }
                                         }
                                     }
                                     Some(rendezvous_message::Union::PunchHole(ph)) => {
@@ -374,7 +378,7 @@ impl RendezvousMediator {
 
     async fn handle_punch_hole(&self, ph: PunchHole, server: ServerPtr) -> ResultType<()> {
         let relay_server = self.get_relay_server(ph.relay_server);
-        if ph.nat_type.enum_value_or_default() == NatType::SYMMETRIC
+        if ph.nat_type.enum_value() == Ok(NatType::SYMMETRIC)
             || Config::get_nat_type() == NatType::SYMMETRIC as i32
         {
             let uuid = Uuid::new_v4().to_string();
@@ -513,7 +517,7 @@ async fn direct_server(server: ServerPtr) {
                     listener = Some(l);
                     log::info!(
                         "Direct server listening on: {:?}",
-                        listener.as_ref().unwrap().local_addr()
+                        listener.as_ref().map(|l| l.local_addr())
                     );
                 }
                 Err(err) => {

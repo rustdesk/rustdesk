@@ -1,8 +1,8 @@
 use docopt::Docopt;
 use hbb_common::env_logger::{init_from_env, Env, DEFAULT_FILTER_ENV};
 use scrap::{
-    aom::{AomDecoder, AomDecoderConfig, AomEncoder, AomEncoderConfig},
-    codec::{EncoderApi, EncoderCfg},
+    aom::{AomDecoder, AomEncoder, AomEncoderConfig},
+    codec::{EncoderApi, EncoderCfg, Quality as Q},
     Capturer, Display, TraitCapturer, VpxDecoder, VpxDecoderConfig, VpxEncoder, VpxEncoderConfig,
     VpxVideoCodecId::{self, *},
     STRIDE_ALIGN,
@@ -15,13 +15,14 @@ const USAGE: &'static str = "
 Codec benchmark.
 
 Usage:
-  benchmark [--count=COUNT] [--bitrate=KBS] [--hw-pixfmt=PIXFMT]
+  benchmark [--count=COUNT] [--quality=QUALITY] [--hw-pixfmt=PIXFMT]
   benchmark (-h | --help)
 
 Options:
   -h --help             Show this screen.
   --count=COUNT         Capture frame count [default: 100].
-  --bitrate=KBS         Video bitrate in kilobits per second [default: 5000].
+  --quality=QUALITY     Video quality [default: Balanced].
+                        Valid values: Best, Balanced, Low.
   --hw-pixfmt=PIXFMT    Hardware codec pixfmt. [default: i420]
                         Valid values: i420, nv12.
 ";
@@ -29,7 +30,7 @@ Options:
 #[derive(Debug, serde::Deserialize)]
 struct Args {
     flag_count: usize,
-    flag_bitrate: usize,
+    flag_quality: Quality,
     flag_hw_pixfmt: Pixfmt,
 }
 
@@ -39,20 +40,32 @@ enum Pixfmt {
     NV12,
 }
 
+#[derive(Debug, serde::Deserialize)]
+enum Quality {
+    Best,
+    Balanced,
+    Low,
+}
+
 fn main() {
     init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "info"));
     let args: Args = Docopt::new(USAGE)
         .and_then(|d| d.deserialize())
         .unwrap_or_else(|e| e.exit());
-    let bitrate_k = args.flag_bitrate;
+    let quality = args.flag_quality;
     let yuv_count = args.flag_count;
     let (yuvs, width, height) = capture_yuv(yuv_count);
     println!(
-        "benchmark {}x{} bitrate:{}k hw_pixfmt:{:?}",
-        width, height, bitrate_k, args.flag_hw_pixfmt
+        "benchmark {}x{} quality:{:?}k hw_pixfmt:{:?}",
+        width, height, quality, args.flag_hw_pixfmt
     );
-    [VP8, VP9].map(|c| test_vpx(c, &yuvs, width, height, bitrate_k, yuv_count));
-    test_av1(&yuvs, width, height, bitrate_k, yuv_count);
+    let quality = match quality {
+        Quality::Best => Q::Best,
+        Quality::Balanced => Q::Balanced,
+        Quality::Low => Q::Low,
+    };
+    [VP8, VP9].map(|c| test_vpx(c, &yuvs, width, height, quality, yuv_count));
+    test_av1(&yuvs, width, height, quality, yuv_count);
     #[cfg(feature = "hwcodec")]
     {
         use hwcodec::AVPixelFormat;
@@ -61,7 +74,7 @@ fn main() {
             Pixfmt::NV12 => AVPixelFormat::AV_PIX_FMT_NV12,
         };
         let yuvs = hw::vpx_yuv_to_hw_yuv(yuvs, width, height, hw_pixfmt);
-        hw::test(&yuvs, width, height, bitrate_k, yuv_count, hw_pixfmt);
+        hw::test(&yuvs, width, height, quality, yuv_count, hw_pixfmt);
     }
 }
 
@@ -95,13 +108,14 @@ fn test_vpx(
     yuvs: &Vec<Vec<u8>>,
     width: usize,
     height: usize,
-    bitrate_k: usize,
+    quality: Q,
     yuv_count: usize,
 ) {
     let config = EncoderCfg::VPX(VpxEncoderConfig {
         width: width as _,
         height: height as _,
-        bitrate: bitrate_k as _,
+        timebase: [1, 1000],
+        quality,
         codec: codec_id,
     });
     let mut encoder = VpxEncoder::new(config).unwrap();
@@ -129,11 +143,7 @@ fn test_vpx(
         size / yuv_count
     );
 
-    let mut decoder = VpxDecoder::new(VpxDecoderConfig {
-        codec: codec_id,
-        num_threads: (num_cpus::get() / 2) as _,
-    })
-    .unwrap();
+    let mut decoder = VpxDecoder::new(VpxDecoderConfig { codec: codec_id }).unwrap();
     let start = Instant::now();
     for vpx in vpxs {
         let _ = decoder.decode(&vpx);
@@ -146,11 +156,11 @@ fn test_vpx(
     );
 }
 
-fn test_av1(yuvs: &Vec<Vec<u8>>, width: usize, height: usize, bitrate_k: usize, yuv_count: usize) {
+fn test_av1(yuvs: &Vec<Vec<u8>>, width: usize, height: usize, quality: Q, yuv_count: usize) {
     let config = EncoderCfg::AOM(AomEncoderConfig {
         width: width as _,
         height: height as _,
-        bitrate: bitrate_k as _,
+        quality,
     });
     let mut encoder = AomEncoder::new(config).unwrap();
     let start = Instant::now();
@@ -171,10 +181,7 @@ fn test_av1(yuvs: &Vec<Vec<u8>>, width: usize, height: usize, bitrate_k: usize, 
         start.elapsed() / yuv_count as _,
         size / yuv_count
     );
-    let mut decoder = AomDecoder::new(AomDecoderConfig {
-        num_threads: (num_cpus::get() / 2) as _,
-    })
-    .unwrap();
+    let mut decoder = AomDecoder::new().unwrap();
     let start = Instant::now();
     for av1 in av1s {
         let _ = decoder.decode(&av1);
@@ -195,6 +202,7 @@ mod hw {
         RateControl::*,
     };
     use scrap::{
+        codec::codec_thread_num,
         convert::{
             hw::{hw_bgra_to_i420, hw_bgra_to_nv12},
             i420_to_bgra,
@@ -206,21 +214,23 @@ mod hw {
         yuvs: &Vec<Vec<u8>>,
         width: usize,
         height: usize,
-        bitrate_k: usize,
+        quality: Q,
         yuv_count: usize,
         pixfmt: AVPixelFormat,
     ) {
+        let bitrate = scrap::hwcodec::HwEncoder::convert_quality(quality);
         let ctx = EncodeContext {
             name: String::from(""),
             width: width as _,
             height: height as _,
             pixfmt,
             align: 0,
-            bitrate: (bitrate_k * 1000) as _,
+            bitrate: bitrate as i32 * 1000,
             timebase: [1, 30],
             gop: 60,
             quality: Quality_Default,
             rc: RC_DEFAULT,
+            thread_count: codec_thread_num() as _,
         };
 
         let encoders = Encoder::available_encoders(ctx.clone());
@@ -273,6 +283,7 @@ mod hw {
         let ctx = DecodeContext {
             name: info.name,
             device_type: info.hwdevice,
+            thread_count: codec_thread_num() as _,
         };
 
         let mut decoder = Decoder::new(ctx.clone()).unwrap();

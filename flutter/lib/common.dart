@@ -1269,6 +1269,19 @@ String bool2option(String option, bool b) {
   return res;
 }
 
+mainSetBoolOption(String key, bool value) async {
+  String v = bool2option(key, value);
+  await bind.mainSetOption(key: key, value: v);
+}
+
+Future<bool> mainGetBoolOption(String key) async {
+  return option2bool(key, await bind.mainGetOption(key: key));
+}
+
+bool mainGetBoolOptionSync(String key) {
+  return option2bool(key, bind.mainGetOptionSync(key: key));
+}
+
 Future<bool> matchPeer(String searchText, Peer peer) async {
   if (searchText.isEmpty) {
     return true;

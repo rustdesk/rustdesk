@@ -363,13 +363,9 @@ pub async fn start_server(is_server: bool) {
         log::info!("XAUTHORITY={:?}", std::env::var("XAUTHORITY"));
     }
     #[cfg(feature = "hwcodec")]
-    {
-        use std::sync::Once;
-        static ONCE: Once = Once::new();
-        ONCE.call_once(|| {
-            scrap::hwcodec::check_config_process();
-        })
-    }
+    scrap::hwcodec::check_config_process();
+    #[cfg(windows)]
+    hbb_common::platform::windows::start_cpu_performance_monitor();
 
     if is_server {
         crate::common::set_server_running(true);

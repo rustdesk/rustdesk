@@ -144,7 +144,7 @@ pub fn capture_cursor_embedded() -> bool {
 
 #[inline]
 pub fn notify_video_frame_fetched(conn_id: i32, frame_tm: Option<Instant>) {
-    FRAME_FETCHED_NOTIFIER.0.send((conn_id, frame_tm)).unwrap()
+    FRAME_FETCHED_NOTIFIER.0.send((conn_id, frame_tm)).ok();
 }
 
 #[inline]
@@ -514,12 +514,12 @@ fn run(sp: GenericService) -> ResultType<()> {
     let mut c = get_capturer(true, last_portable_service_running)?;
 
     let mut video_qos = VIDEO_QOS.lock().unwrap();
-    video_qos.set_size(c.width as _, c.height as _);
-    let mut spf = video_qos.spf();
-    let bitrate = video_qos.generate_bitrate()?;
-    let abr = video_qos.check_abr_config();
+    video_qos.refresh(None);
+    let mut spf;
+    let mut quality = video_qos.quality();
+    let abr = VideoQoS::abr_enabled();
     drop(video_qos);
-    log::info!("init bitrate={}, abr enabled:{}", bitrate, abr);
+    log::info!("init quality={:?}, abr enabled:{}", quality, abr);
 
     let encoder_cfg = match Encoder::negotiated_codec() {
         scrap::CodecName::H264(name) | scrap::CodecName::H265(name) => {
@@ -527,14 +527,15 @@ fn run(sp: GenericService) -> ResultType<()> {
                 name,
                 width: c.width,
                 height: c.height,
-                bitrate: bitrate as _,
+                quality,
             })
         }
         name @ (scrap::CodecName::VP8 | scrap::CodecName::VP9) => {
             EncoderCfg::VPX(VpxEncoderConfig {
                 width: c.width as _,
                 height: c.height as _,
-                bitrate,
+                timebase: [1, 1000], // Output timestamp precision
+                quality,
                 codec: if name == scrap::CodecName::VP8 {
                     VpxVideoCodecId::VP8
                 } else {
@@ -545,7 +546,7 @@ fn run(sp: GenericService) -> ResultType<()> {
         scrap::CodecName::AV1 => EncoderCfg::AOM(AomEncoderConfig {
             width: c.width as _,
             height: c.height as _,
-            bitrate: bitrate as _,
+            quality,
         }),
     };
 
@@ -555,6 +556,7 @@ fn run(sp: GenericService) -> ResultType<()> {
         Err(err) => bail!("Failed to create encoder: {}", err),
     }
     c.set_use_yuv(encoder.use_yuv());
+    VIDEO_QOS.lock().unwrap().store_bitrate(encoder.bitrate());
 
     if *SWITCH.lock().unwrap() {
         log::debug!("Broadcasting display switch");
@@ -608,14 +610,12 @@ fn run(sp: GenericService) -> ResultType<()> {
         check_uac_switch(c.privacy_mode_id, c._capturer_privacy_mode_id)?;
 
         let mut video_qos = VIDEO_QOS.lock().unwrap();
-        if video_qos.check_if_updated() && video_qos.target_bitrate > 0 {
-            log::debug!(
-                "qos is updated, target_bitrate:{}, fps:{}",
-                video_qos.target_bitrate,
-                video_qos.fps
-            );
-            allow_err!(encoder.set_bitrate(video_qos.target_bitrate));
-            spf = video_qos.spf();
+        spf = video_qos.spf();
+        if quality != video_qos.quality() {
+            log::debug!("quality: {:?} -> {:?}", quality, video_qos.quality());
+            quality = video_qos.quality();
+            allow_err!(encoder.set_quality(quality));
+            video_qos.store_bitrate(encoder.bitrate());
         }
         drop(video_qos);
 
