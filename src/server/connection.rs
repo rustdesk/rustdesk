@@ -1940,6 +1940,10 @@ impl Connection {
                         .lock()
                         .unwrap()
                         .user_full_speed_fps(self.inner.id(), fps),
+                    Some(misc::Union::AutoAdjustFps(fps)) => video_service::VIDEO_QOS
+                        .lock()
+                        .unwrap()
+                        .user_auto_adjust_fps(self.inner.id(), fps),
                     _ => {}
                 },
                 Some(message::Union::AudioFrame(frame)) => {

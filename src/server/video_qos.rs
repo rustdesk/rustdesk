@@ -31,6 +31,7 @@ struct Delay {
 #[derive(Default, Debug, Copy, Clone)]
 struct UserData {
     full_speed_fps: Option<u32>,
+    auto_adjust_fps: Option<u32>,
     custom_fps: Option<u32>,
     quality: Option<(i64, Quality)>, // (time, quality)
     delay: Option<Delay>,
@@ -90,11 +91,15 @@ pub enum RefreshType {
 
 impl VideoQoS {
     pub fn spf(&self) -> Duration {
-        Duration::from_secs_f32(1. / (self.fps as f32))
+        Duration::from_secs_f32(1. / (self.fps() as f32))
     }
 
     pub fn fps(&self) -> u32 {
-        self.fps
+        if self.fps >= MIN_FPS && self.fps <= MAX_FPS {
+            self.fps
+        } else {
+            FPS
+        }
     }
 
     pub fn store_bitrate(&mut self, bitrate: u32) {
@@ -118,6 +123,12 @@ impl VideoQoS {
         let user_fps = |u: &UserData| {
             // full_speed_fps
             let mut fps = u.full_speed_fps.unwrap_or_default() * 9 / 10;
+            // auto adjust fps
+            if let Some(auto_adjust_fps) = u.auto_adjust_fps {
+                if fps == 0 || auto_adjust_fps < fps {
+                    fps = auto_adjust_fps;
+                }
+            }
             // custom_fps
             if let Some(custom_fps) = u.custom_fps {
                 if fps == 0 || custom_fps < fps {
@@ -128,7 +139,7 @@ impl VideoQoS {
             if let Some(delay) = u.delay {
                 fps = match delay.state {
                     DelayState::Normal => fps,
-                    DelayState::LowDelay => fps,
+                    DelayState::LowDelay => fps * 3 / 4,
                     DelayState::HighDelay => fps / 2,
                     DelayState::Broken => fps / 4,
                 }
@@ -181,7 +192,11 @@ impl VideoQoS {
             if delay != DelayState::Normal {
                 match self.quality {
                     Quality::Best => {
-                        quality = Quality::Balanced;
+                        quality = if delay == DelayState::Broken {
+                            Quality::Low
+                        } else {
+                            Quality::Balanced
+                        };
                     }
                     Quality::Balanced => {
                         quality = Quality::Low;
@@ -252,6 +267,21 @@ impl VideoQoS {
                 id,
                 UserData {
                     full_speed_fps: Some(full_speed_fps),
+                    ..Default::default()
+                },
+            );
+        }
+        self.refresh(None);
+    }
+
+    pub fn user_auto_adjust_fps(&mut self, id: i32, fps: u32) {
+        if let Some(user) = self.users.get_mut(&id) {
+            user.auto_adjust_fps = Some(fps);
+        } else {
+            self.users.insert(
+                id,
+                UserData {
+                    auto_adjust_fps: Some(fps),
                     ..Default::default()
                 },
             );

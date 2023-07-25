@@ -535,11 +535,10 @@ pub fn codec_thread_num() -> usize {
         info = format!("cpu loadavg:{}", avg.one);
         res = (((max as f64) - avg.one) * 0.5).round() as usize;
     }
-    res = if res > 0 && res <= max / 2 {
-        res
-    } else {
-        std::cmp::max(1, max / 2)
-    };
+    res = std::cmp::min(res, max / 2);
+    if res == 0 {
+        res = 1;
+    }
     // avoid frequent log
     let log = match THREAD_LOG_TIME.lock().unwrap().clone() {
         Some(instant) => instant.elapsed().as_secs() > 1,

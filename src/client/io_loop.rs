@@ -895,7 +895,9 @@ impl<T: InvokeUiSession> Remote<T> {
         }
         // decrease judgement
         let debounce = if decode_fps > 10 { decode_fps / 2 } else { 5 }; // 500ms
-        let should_decrease = len >= debounce && len > ctl.last_queue_size + 5; // exceed debounce or still caching
+        let should_decrease = len >= debounce // exceed debounce
+            && len > ctl.last_queue_size + 5 // still caching
+            && !ctl.last_custom_fps.unwrap_or(i32::MAX) < limited_fps as i32; // NOT already set a smaller one
 
         // increase judgement
         if len <= 1 {
@@ -919,10 +921,15 @@ impl<T: InvokeUiSession> Remote<T> {
             }
             // send custom fps
             let mut misc = Misc::new();
-            misc.set_option(OptionMessage {
-                custom_fps,
-                ..Default::default()
-            });
+            if version > hbb_common::get_version_number("1.2.1") {
+                // avoid confusion with custom image quality fps
+                misc.set_auto_adjust_fps(custom_fps as _);
+            } else {
+                misc.set_option(OptionMessage {
+                    custom_fps,
+                    ..Default::default()
+                });
+            }
             let mut msg = Message::new();
             msg.set_misc(misc);
             self.sender.send(Data::Message(msg)).ok();
