@@ -103,25 +103,27 @@ class _AddressBookState extends State<AddressBook> {
   Widget _buildAddressBookMobile() {
     return Column(
       children: [
-        Container(
-          decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(6),
-              border:
-                  Border.all(color: Theme.of(context).colorScheme.background)),
-          child: Container(
-            padding: const EdgeInsets.all(8.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildTagHeader().marginOnly(left: 8.0, right: 0),
-                Container(
-                  width: double.infinity,
-                  child: _buildTags(),
+        Offstage(
+            offstage: hideAbTagsPanel.value,
+            child: Container(
+              decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                      color: Theme.of(context).colorScheme.background)),
+              child: Container(
+                padding: const EdgeInsets.all(8.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildTagHeader().marginOnly(left: 8.0, right: 0),
+                    Container(
+                      width: double.infinity,
+                      child: _buildTags(),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-        ).marginOnly(bottom: 12.0),
+              ),
+            ).marginOnly(bottom: 12.0)),
         _buildPeersViews()
       ],
     );
