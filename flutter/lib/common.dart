@@ -1350,7 +1350,9 @@ class LastWindowPosition {
       return LastWindowPosition(m["width"], m["height"], m["offsetWidth"],
           m["offsetHeight"], m["isMaximized"]);
     } catch (e) {
-      debugPrintStack(label: 'Failed to load LastWindowPosition "$content" ${e.toString()}');
+      debugPrintStack(
+          label:
+              'Failed to load LastWindowPosition "$content" ${e.toString()}');
       return null;
     }
   }
@@ -1370,10 +1372,6 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
   switch (type) {
     case WindowType.Main:
       position = await windowManager.getPosition();
-      if (position.dx < 0 || position.dy < 0) {
-        debugPrint("Main window is hidden, ignoring position restoration");
-        return;
-      }
       sz = await windowManager.getSize();
       isMaximized = await windowManager.isMaximized();
       break;
@@ -1387,10 +1385,6 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
         return;
       }
       position = frame.topLeft;
-      if (position.dx < 0 || position.dy < 0) {
-        debugPrint("Window $windowId is hidden, ignoring position restoration");
-        return;
-      }
       sz = frame.size;
       isMaximized = await wc.isMaximized();
       break;
@@ -1408,12 +1402,12 @@ Future<Size> _adjustRestoreMainWindowSize(double? width, double? height) async {
   const double minWidth = 600;
   const double minHeight = 100;
   double maxWidth = (((isDesktop || isWebDesktop)
-          ? kDesktopMaxDisplayWidth
-          : kMobileMaxDisplayWidth))
+          ? kDesktopMaxDisplaySize
+          : kMobileMaxDisplaySize))
       .toDouble();
   double maxHeight = ((isDesktop || isWebDesktop)
-          ? kDesktopMaxDisplayHeight
-          : kMobileMaxDisplayHeight)
+          ? kDesktopMaxDisplaySize
+          : kMobileMaxDisplaySize)
       .toDouble();
 
   if (isDesktop || isWebDesktop) {
@@ -1434,59 +1428,72 @@ Future<Size> _adjustRestoreMainWindowSize(double? width, double? height) async {
   double restoreHeight = height ?? defaultHeight;
 
   if (restoreWidth < minWidth) {
-    restoreWidth = minWidth;
+    restoreWidth = defaultWidth;
   }
   if (restoreHeight < minHeight) {
-    restoreHeight = minHeight;
+    restoreHeight = defaultHeight;
   }
   if (restoreWidth > maxWidth) {
-    restoreWidth = maxWidth;
+    restoreWidth = defaultWidth;
   }
   if (restoreHeight > maxHeight) {
-    restoreHeight = maxHeight;
+    restoreHeight = defaultHeight;
   }
   return Size(restoreWidth, restoreHeight);
 }
 
 /// return null means center
 Future<Offset?> _adjustRestoreMainWindowOffset(
-    double? left, double? top) async {
-  if (left == null || top == null) {
-    await windowManager.center();
-  } else {
-    double windowLeft = max(0.0, left);
-    double windowTop = max(0.0, top);
+  double? left,
+  double? top,
+  double? width,
+  double? height,
+) async {
+  if (left == null || top == null || width == null || height == null) {
+    return null;
+  }
 
-    double frameLeft = double.infinity;
-    double frameTop = double.infinity;
-    double frameRight = ((isDesktop || isWebDesktop)
-            ? kDesktopMaxDisplayWidth
-            : kMobileMaxDisplayWidth)
-        .toDouble();
-    double frameBottom = ((isDesktop || isWebDesktop)
-            ? kDesktopMaxDisplayHeight
-            : kMobileMaxDisplayHeight)
-        .toDouble();
+  double? frameLeft;
+  double? frameTop;
+  double? frameRight;
+  double? frameBottom;
 
-    if (isDesktop || isWebDesktop) {
-      for (final screen in await window_size.getScreenList()) {
-        frameLeft = min(screen.visibleFrame.left, frameLeft);
-        frameTop = min(screen.visibleFrame.top, frameTop);
-        frameRight = max(screen.visibleFrame.right, frameRight);
-        frameBottom = max(screen.visibleFrame.bottom, frameBottom);
-      }
-    }
-
-    if (windowLeft < frameLeft ||
-        windowLeft > frameRight ||
-        windowTop < frameTop ||
-        windowTop > frameBottom) {
-      return null;
-    } else {
-      return Offset(windowLeft, windowTop);
+  if (isDesktop || isWebDesktop) {
+    for (final screen in await window_size.getScreenList()) {
+      frameLeft = frameLeft == null
+          ? screen.visibleFrame.left
+          : min(screen.visibleFrame.left, frameLeft);
+      frameTop = frameTop == null
+          ? screen.visibleFrame.top
+          : min(screen.visibleFrame.top, frameTop);
+      frameRight = frameRight == null
+          ? screen.visibleFrame.right
+          : max(screen.visibleFrame.right, frameRight);
+      frameBottom = frameBottom == null
+          ? screen.visibleFrame.bottom
+          : max(screen.visibleFrame.bottom, frameBottom);
     }
   }
-  return null;
+  if (frameLeft == null) {
+    frameLeft = 0.0;
+    frameTop = 0.0;
+    frameRight = ((isDesktop || isWebDesktop)
+            ? kDesktopMaxDisplaySize
+            : kMobileMaxDisplaySize)
+        .toDouble();
+    frameBottom = ((isDesktop || isWebDesktop)
+            ? kDesktopMaxDisplaySize
+            : kMobileMaxDisplaySize)
+        .toDouble();
+  }
+  if (left > frameRight! ||
+      top > frameBottom! ||
+      (left + width) < frameLeft ||
+      (top + height) < frameTop!) {
+    return null;
+  } else {
+    return Offset(left, top);
+  }
 }
 
 /// Restore window position and size on start
@@ -1516,7 +1523,11 @@ Future<bool> restoreWindowPosition(WindowType type, {int? windowId}) async {
         final size =
             await _adjustRestoreMainWindowSize(lpos.width, lpos.height);
         final offset = await _adjustRestoreMainWindowOffset(
-            lpos.offsetWidth, lpos.offsetHeight);
+          lpos.offsetWidth,
+          lpos.offsetHeight,
+          size.width,
+          size.height,
+        );
         await windowManager.setSize(size);
         if (offset == null) {
           await windowManager.center();
@@ -1533,7 +1544,11 @@ Future<bool> restoreWindowPosition(WindowType type, {int? windowId}) async {
         final size =
             await _adjustRestoreMainWindowSize(lpos.width, lpos.height);
         final offset = await _adjustRestoreMainWindowOffset(
-            lpos.offsetWidth, lpos.offsetHeight);
+          lpos.offsetWidth,
+          lpos.offsetHeight,
+          size.width,
+          size.height,
+        );
         debugPrint(
             "restore lpos: ${size.width}/${size.height}, offset:${offset?.dx}/${offset?.dy}");
         if (offset == null) {
