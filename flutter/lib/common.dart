@@ -1363,15 +1363,19 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
     debugPrint(
         "Error: windowId cannot be null when saving positions for sub window");
   }
+
+  late Offset position;
+  late Size sz;
+  late bool isMaximized;
   switch (type) {
     case WindowType.Main:
-      final position = await windowManager.getPosition();
-      final sz = await windowManager.getSize();
-      final isMaximized = await windowManager.isMaximized();
-      final pos = LastWindowPosition(
-          sz.width, sz.height, position.dx, position.dy, isMaximized);
-      await bind.setLocalFlutterConfig(
-          k: kWindowPrefix + type.name, v: pos.toString());
+      position = await windowManager.getPosition();
+      if (position.dx < 0 || position.dy < 0) {
+        debugPrint("Main window is hidden, ignoring position restoration");
+        return;
+      }
+      sz = await windowManager.getSize();
+      isMaximized = await windowManager.isMaximized();
       break;
     default:
       final wc = WindowController.fromWindowId(windowId!);
@@ -1382,17 +1386,22 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
         debugPrint("Failed to get frame of window $windowId, it may be hidden");
         return;
       }
-      final position = frame.topLeft;
-      final sz = frame.size;
-      final isMaximized = await wc.isMaximized();
-      final pos = LastWindowPosition(
-          sz.width, sz.height, position.dx, position.dy, isMaximized);
-      debugPrint(
-          "saving frame: $windowId: ${pos.width}/${pos.height}, offset:${pos.offsetWidth}/${pos.offsetHeight}");
-      await bind.setLocalFlutterConfig(
-          k: kWindowPrefix + type.name, v: pos.toString());
+      position = frame.topLeft;
+      if (position.dx < 0 || position.dy < 0) {
+        debugPrint("Window $windowId is hidden, ignoring position restoration");
+        return;
+      }
+      sz = frame.size;
+      isMaximized = await wc.isMaximized();
       break;
   }
+
+  final pos = LastWindowPosition(
+      sz.width, sz.height, position.dx, position.dy, isMaximized);
+  debugPrint(
+      "Saving frame: $windowId: ${pos.width}/${pos.height}, offset:${pos.offsetWidth}/${pos.offsetHeight}");
+  await bind.setLocalFlutterConfig(
+      k: kWindowPrefix + type.name, v: pos.toString());
 }
 
 Future<Size> _adjustRestoreMainWindowSize(double? width, double? height) async {
@@ -1864,10 +1873,14 @@ Future<void> onActiveWindowChanged() async {
   if (rustDeskWinManager.getActiveWindows().isEmpty) {
     // close all sub windows
     try {
-      await Future.wait([
-        saveWindowPosition(WindowType.Main),
-        rustDeskWinManager.closeAllSubWindows()
-      ]);
+      if (Platform.isLinux) {
+        await Future.wait([
+          saveWindowPosition(WindowType.Main),
+          rustDeskWinManager.closeAllSubWindows()
+        ]);
+      } else {
+        await rustDeskWinManager.closeAllSubWindows();
+      }
     } catch (err) {
       debugPrintStack(label: "$err");
     } finally {
