@@ -29,6 +29,7 @@ class AbModel {
 
   final selectedTags = List<String>.empty(growable: true).obs;
   var initialized = false;
+  var licensedDevices = 0;
 
   WeakReference<FFI> parent;
 
@@ -52,6 +53,10 @@ class AbModel {
         if (json.containsKey('error')) {
           abError.value = json['error'];
         } else if (json.containsKey('data')) {
+          try {
+            gFFI.abModel.licensedDevices = json['licensed_devices'];
+            // ignore: empty_catches
+          } catch (e) {}
           final data = jsonDecode(json['data']);
           if (data != null) {
             tags.clear();
@@ -92,6 +97,15 @@ class AbModel {
       'tags': tags,
     });
     peers.add(peer);
+  }
+
+  bool isFull(bool warn) {
+    final res = licensedDevices > 0 && peers.length >= licensedDevices;
+    if (res && warn) {
+      BotToast.showText(
+          contentColor: Colors.red, text: translate("exceed_max_devices"));
+    }
+    return res;
   }
 
   void addPeer(Peer peer) {

@@ -241,6 +241,9 @@ class _AddressBookState extends State<AddressBook> {
   }
 
   void abAddId() async {
+    if (gFFI.abModel.isFull(true)) {
+      return;
+    }
     var isInProgress = false;
     IDTextEditingController idController = IDTextEditingController(text: '');
     TextEditingController aliasController = TextEditingController(text: '');

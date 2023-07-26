@@ -521,5 +521,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Service", "Сервис"),
         ("Start", "Запустить"),
         ("Stop", "Остановить"),
+        ("exceed_max_devices", ""),
+        ("Sync with recent sessions", ""),
+        ("Sort tags", ""),
     ].iter().cloned().collect();
 }
