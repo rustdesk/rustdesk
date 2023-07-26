@@ -3,7 +3,8 @@ import 'package:flutter_hbb/common/formatter/id_formatter.dart';
 import 'package:flutter_hbb/common/widgets/peer_card.dart';
 import 'package:flutter_hbb/common/widgets/peers_view.dart';
 import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
-import '../../consts.dart';
+import 'package:flutter_hbb/models/ab_model.dart';
+import 'package:flutter_hbb/models/platform_model.dart';
 import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
 import 'package:get/get.dart';
 
@@ -70,30 +71,30 @@ class _AddressBookState extends State<AddressBook> {
     return Row(
       children: [
         Offstage(
-          offstage: hideAbTagsPanel.value,
-          child: Container(
-          decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              border:
-                  Border.all(color: Theme.of(context).colorScheme.background)),
-          child: Container(
-            width: 150,
-            height: double.infinity,
-            padding: const EdgeInsets.all(8.0),
-            child: Column(
-              children: [
-                _buildTagHeader().marginOnly(left: 8.0, right: 0),
-                Expanded(
-                  child: Container(
-                    width: double.infinity,
-                    height: double.infinity,
-                    child: _buildTags(),
-                  ),
-                )
-              ],
-            ),
-          ),
-        ).marginOnly(right: 12.0)),
+            offstage: hideAbTagsPanel.value,
+            child: Container(
+              decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                      color: Theme.of(context).colorScheme.background)),
+              child: Container(
+                width: 150,
+                height: double.infinity,
+                padding: const EdgeInsets.all(8.0),
+                child: Column(
+                  children: [
+                    _buildTagHeader().marginOnly(left: 8.0, right: 0),
+                    Expanded(
+                      child: Container(
+                        width: double.infinity,
+                        height: double.infinity,
+                        child: _buildTags(),
+                      ),
+                    )
+                  ],
+                ),
+              ),
+            ).marginOnly(right: 12.0)),
         _buildPeersViews()
       ],
     );
@@ -144,9 +145,16 @@ class _AddressBookState extends State<AddressBook> {
   }
 
   Widget _buildTags() {
-    return Obx(
-      () => Wrap(
-        children: gFFI.abModel.tags
+    return Obx(() {
+      final List tags;
+      if (gFFI.abModel.sortTags.value) {
+        tags = gFFI.abModel.tags.toList();
+        tags.sort();
+      } else {
+        tags = gFFI.abModel.tags;
+      }
+      return Wrap(
+        children: tags
             .map((e) => AddressBookTag(
                 name: e,
                 tags: gFFI.abModel.selectedTags,
@@ -158,8 +166,8 @@ class _AddressBookState extends State<AddressBook> {
                   }
                 }))
             .toList(),
-      ),
-    );
+      );
+    });
   }
 
   Widget _buildPeersViews() {
@@ -174,11 +182,44 @@ class _AddressBookState extends State<AddressBook> {
     );
   }
 
+  @protected
+  MenuEntryBase<String> syncMenuItem() {
+    return MenuEntrySwitch<String>(
+      switchType: SwitchType.scheckbox,
+      text: translate('Sync with recent sessions'),
+      getter: () async {
+        return shouldSyncAb();
+      },
+      setter: (bool v) async {
+        bind.mainSetLocalOption(key: syncAbOption, value: v ? 'Y' : '');
+      },
+      dismissOnClicked: true,
+    );
+  }
+
+  @protected
+  MenuEntryBase<String> sortMenuItem() {
+    return MenuEntrySwitch<String>(
+      switchType: SwitchType.scheckbox,
+      text: translate('Sort tags'),
+      getter: () async {
+        return shouldSortTags();
+      },
+      setter: (bool v) async {
+        bind.mainSetLocalOption(key: sortAbTagsOption, value: v ? 'Y' : '');
+        gFFI.abModel.sortTags.value = v;
+      },
+      dismissOnClicked: true,
+    );
+  }
+
   void _showMenu(RelativeRect pos) {
     final items = [
       getEntry(translate("Add ID"), abAddId),
       getEntry(translate("Add Tag"), abAddTag),
       getEntry(translate("Unselect all tags"), gFFI.abModel.unsetSelectedTags),
+      sortMenuItem(),
+      syncMenuItem(),
     ];
 
     mod_menu.showMenu(
@@ -458,7 +499,6 @@ MenuEntryButton<String> getEntry(String title, VoidCallback proc) {
       style: style,
     ),
     proc: proc,
-    padding: kDesktopMenuPadding,
     dismissOnClicked: true,
   );
 }

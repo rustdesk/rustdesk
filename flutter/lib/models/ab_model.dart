@@ -10,11 +10,22 @@ import 'package:http/http.dart' as http;
 
 import '../common.dart';
 
+final syncAbOption = 'sync-ab-with-recent-sessions';
+bool shouldSyncAb() {
+  return bind.mainGetLocalOption(key: syncAbOption).isNotEmpty;
+}
+
+final sortAbTagsOption = 'sync-ab-tags';
+bool shouldSortTags() {
+  return bind.mainGetLocalOption(key: sortAbTagsOption).isNotEmpty;
+}
+
 class AbModel {
   final abLoading = false.obs;
   final abError = "".obs;
   final tags = [].obs;
   final peers = List<Peer>.empty(growable: true).obs;
+  final sortTags = shouldSortTags().obs;
 
   final selectedTags = List<String>.empty(growable: true).obs;
   var initialized = false;
