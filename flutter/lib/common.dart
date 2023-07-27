@@ -1389,6 +1389,13 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
       isMaximized = await wc.isMaximized();
       break;
   }
+  if (Platform.isWindows) {
+    const kMinOffset = -10000;
+    if (position.dx < kMinOffset || position.dy < kMinOffset) {
+      debugPrint("Invalid position: $position, ignore saving position");
+      return;
+    }
+  }
 
   final pos = LastWindowPosition(
       sz.width, sz.height, position.dx, position.dy, isMaximized);

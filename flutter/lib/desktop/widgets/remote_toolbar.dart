@@ -360,6 +360,9 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
 
   triggerAutoHide() => _debouncerHide.value = _debouncerHide.value + 1;
 
+  void _minimize() async =>
+      await WindowController.fromWindowId(windowId).minimize();
+
   @override
   initState() {
     super.initState();
@@ -467,6 +470,12 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       toolbarItems.add(_VoiceCallMenu(id: widget.id, ffi: widget.ffi));
     }
     toolbarItems.add(_RecordMenu(ffi: widget.ffi));
+    if (!isWebDesktop) {
+      toolbarItems.add(_MinimizeMenu(
+        state: widget.state,
+        onPressed: _minimize,
+      ));
+    }
     toolbarItems.add(_CloseMenu(id: widget.id, ffi: widget.ffi));
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -546,6 +555,30 @@ class _PinMenu extends StatelessWidget {
             state.pin ? _ToolbarTheme.hoverBlueColor : Colors.grey[850]!,
       ),
     );
+  }
+}
+
+class _MinimizeMenu extends StatelessWidget {
+  final ToolbarState state;
+  final Function() onPressed;
+  bool get isFullscreen => stateGlobal.fullscreen;
+  const _MinimizeMenu({
+    Key? key,
+    required this.state,
+    required this.onPressed,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Offstage(
+        offstage: !isFullscreen,
+        child: _IconMenuButton(
+          assetName: 'assets/minimize_black_24dp.svg',
+          tooltip: 'Minimize',
+          onPressed: onPressed,
+          color: _ToolbarTheme.blueColor,
+          hoverColor: _ToolbarTheme.hoverBlueColor,
+        ));
   }
 }
 
@@ -1597,11 +1630,11 @@ class _IconMenuButtonState extends State<_IconMenuButton> {
     final icon = widget.icon ??
         SvgPicture.asset(
           widget.assetName!,
-          color: Colors.white,
+          colorFilter: ColorFilter.mode(Colors.white, BlendMode.srcIn),
           width: _ToolbarTheme.buttonSize,
           height: _ToolbarTheme.buttonSize,
         );
-    final button = SizedBox(
+    var button = SizedBox(
       width: _ToolbarTheme.buttonSize,
       height: _ToolbarTheme.buttonSize,
       child: MenuItemButton(
@@ -1625,6 +1658,12 @@ class _IconMenuButtonState extends State<_IconMenuButton> {
     ).marginSymmetric(
         horizontal: widget.hMargin ?? _ToolbarTheme.buttonHMargin,
         vertical: widget.vMargin ?? _ToolbarTheme.buttonVMargin);
+    if (widget.tooltip != null) {
+      button = Tooltip(
+        message: widget.tooltip!,
+        child: button,
+      );
+    }
     if (widget.topLevel) {
       return MenuBar(children: [button]);
     } else {
